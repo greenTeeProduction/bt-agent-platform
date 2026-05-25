@@ -44,6 +44,8 @@ func resolveTree(id string) *evolution.SerializableNode {
 	if id == "kanban:monitor"     { return evolution.KanbanBoardMonitorTree() }
 	if id == "kanban:workflow"    { return evolution.KanbanWorkflowTree() }
 	if id == "kanban:autopilot"   { return evolution.KanbanAutoPilotTree() }
+	// NotebookLM tree
+	if id == "notebooklm"          { return evolution.NotebookLMTree() }
 	// godev
 	if id == "godev" {
 		return evolution.GoDeveloperTree()

@@ -1036,6 +1036,23 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool {
 			return b.ChainState != nil && b.ChainState["has_api_issues"] == true
 		}
+	// --- NotebookLM conditions ---
+	case "IsIngestTask":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "ingest", "import", "add source", "push", "notebooklm")
+		}
+	case "IsQueryTask":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "ask", "query", "question", "research", "analyze")
+		}
+	case "IsStudioTask":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "podcast", "briefing", "FAQ", "audio", "timeline", "create", "studio")
+		}
+	case "IsResearchTask":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "research", "web search", "discover", "find sources", "deep research")
+		}
 	// --- Kanban conditions ---
 	case "IsKanbanTask":
 		return func(b *Blackboard) bool {
