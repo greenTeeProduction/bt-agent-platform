@@ -1,0 +1,10 @@
+.gitignore
+bin/
+*.exe
+*.test
+*.out
+/tmp/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
