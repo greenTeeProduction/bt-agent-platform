@@ -1,0 +1,27 @@
+name: incident-response
+description: Automated incident response — detect, diagnose, notify, and fix
+version: "1.0.0"
+steps:
+  - id: detect
+    kind: agent
+    agent: system-monitor
+    input: "Check system health: {{.input}}"
+    on_failure: abort
+
+  - id: diagnose
+    kind: agent
+    agent: daily-researcher
+    input: "Diagnose the following issue: {{.prev.detect.output}}"
+    on_failure: skip
+
+  - id: notify
+    kind: agent
+    agent: notification-router
+    input: "Route alert: {{.prev.diagnose.output}}"
+    on_failure: skip
+
+  - id: fix
+    kind: agent
+    agent: code-reviewer
+    input: "Apply fix for: {{.prev.diagnose.output}}"
+    on_failure: retry
