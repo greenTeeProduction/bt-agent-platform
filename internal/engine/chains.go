@@ -98,6 +98,7 @@ func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -132,6 +133,7 @@ Answer:`, context, query)
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -170,6 +172,7 @@ Otherwise, respond directly.`, toolDesc, prompt)
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -205,6 +208,7 @@ Assistant:`, cfg.SystemMsg, history, userMsg)
 	bb.ChainState["conv_history"] = history + fmt.Sprintf("User: %s\nAssistant: %s\n", userMsg, result)
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -233,6 +237,7 @@ Respond in valid JSON format only, no other text.`, prompt, schemaDesc)
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -274,6 +279,7 @@ Provide a comprehensive answer. If the information is insufficient, state what's
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = result
+	bb.Results = append(bb.Results, result)
 	return 1
 }
 
@@ -463,6 +469,7 @@ Final Answer:`, task, scratchpad)
 
 	bb.Outcome = "chain_success"
 	bb.Result = finalAnswer
+	bb.Results = append(bb.Results, finalAnswer)
 	return 1
 }
 

@@ -46,6 +46,7 @@ func resolveTree(id string) *evolution.SerializableNode {
 	if id == "kanban:autopilot"   { return evolution.KanbanAutoPilotTree() }
 	// NotebookLM tree
 	if id == "notebooklm"          { return evolution.NotebookLMTree() }
+	if id == "hermes_obsidian"     { return evolution.HermesObsidianOptimizerTree() }
 	// godev
 	if id == "godev" {
 		return evolution.GoDeveloperTree()
@@ -782,38 +783,6 @@ func main() {
 				"tree_id": treeID, "node_count": evolution.CountNodes(tree),
 				"parents": []string{params.ParentA, params.ParentB},
 				"category": treeID[:strings.Index(treeID, ":")],
-			})
-			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
-		})
-
-	// --- Decision Tree optimizer ---
-
-	server.RegisterTool("bt_dt_optimize", "Optimize tree Selectors using decision tree algorithms (information gain, Gini impurity, path pruning)",
-		map[string]mcp.Property{
-			"tree": {Type: "string", Description: "Tree ID to optimize"},
-		},
-		[]string{"tree"},
-		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Tree string `json:"tree"` }
-			json.Unmarshal(args, &params)
-			t := resolveTree(params.Tree)
-			if t == nil {
-				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
-			}
-
-			opt := evolution.NewBTOptimizer()
-			report := opt.AnalyzeTree(t, params.Tree)
-
-			data, _ := json.Marshal(map[string]interface{}{
-				"tree": params.Tree,
-				"node_count": report.NodeCount,
-				"entropy": fmt.Sprintf("%.3f", report.Entropy),
-				"gini_impurity": fmt.Sprintf("%.3f", report.Gini),
-				"best_split": report.BestSplit,
-				"reorder_changes": report.ReorderChanges,
-				"dead_paths_removed": report.DeadPathsRemoved,
-				"overlapping_paths": report.OverlappingPaths,
-				"overall_score": fmt.Sprintf("%.1f/10", report.OverallScore),
 			})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})

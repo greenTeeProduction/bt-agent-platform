@@ -51,6 +51,7 @@ type Blackboard struct {
 	ChainMemory  any            // langchaingo memory (ConversationBuffer, etc.)
 	ChainTools   []any          // langchaingo tools available to chains
 	ChainState   map[string]any // arbitrary chain execution state
+	Results      []string       // accumulated results from all chain actions
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -1035,6 +1036,41 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "HasAPIIssues":
 		return func(b *Blackboard) bool {
 			return b.ChainState != nil && b.ChainState["has_api_issues"] == true
+		}
+	// --- Auto Research conditions ---
+	case "IsDeepResearchDay":
+		return func(b *Blackboard) bool {
+			// Sunday only
+			return true // let the cron schedule handle this, always route
+		}
+	case "IsDailyResearch":
+		return func(b *Blackboard) bool {
+			return true // daily fallback
+		}
+	case "HasNewAlgorithm":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "implement", "new algorithm", "research", "create")
+		}
+	case "HasImprovement":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "improve", "enhance", "optimize", "tune")
+		}
+	case "NeedsIntegration":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "integrate", "connect", "pipeline", "wire")
+		}
+	// --- Hermes+Obsidian conditions ---
+	case "NeedsSweep":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "sweep", "update notes", "refresh", "maintain")
+		}
+	case "NeedsAudit":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "audit", "review", "check", "verify", "assess", "gap")
+		}
+	case "NeedsPublish":
+		return func(b *Blackboard) bool {
+			return containsAny(b.Task, "publish", "export", "generate", "report", "slide", "briefing")
 		}
 	// --- NotebookLM conditions ---
 	case "IsIngestTask":

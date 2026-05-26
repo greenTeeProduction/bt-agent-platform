@@ -19,6 +19,12 @@ func main() {
 	result := engine.RunTask(bb, cmd)
 	fmt.Printf("Outcome: %s\n", bb.Outcome)
 	fmt.Println("─── Report ───")
-	fmt.Println(bb.Result)
+	if len(bb.Results) > 0 {
+		for i, r := range bb.Results {
+			fmt.Printf("[Phase %d] %s\n\n", i+1, r)
+		}
+	} else {
+		fmt.Println(bb.Result)
+	}
 	if result != "" { fmt.Println(result) }
 }

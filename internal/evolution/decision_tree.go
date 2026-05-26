@@ -19,8 +19,8 @@ type PathStats struct {
 	TotalTasks   int     `json:"total_tasks"`   // total tasks seen by this selector
 }
 
-// SelectorStats holds decision-tree statistics for a Selector node.
-type SelectorStats struct {
+// DTSelectorStats holds decision-tree statistics for a Selector node.
+type DTSelectorStats struct {
 	NodeName    string      `json:"node_name"`
 	Paths       []PathStats  `json:"paths"`
 	TotalTasks  int          `json:"total_tasks"`
@@ -28,18 +28,18 @@ type SelectorStats struct {
 
 // DTAnalyzer computes decision-tree metrics for behavior trees.
 type DTAnalyzer struct {
-	Stats map[string]*SelectorStats `json:"stats"` // selector name → stats
+	Stats map[string]*DTSelectorStats `json:"stats"` // selector name → stats
 }
 
 // NewDTAnalyzer creates a new decision tree analyzer.
 func NewDTAnalyzer() *DTAnalyzer {
-	return &DTAnalyzer{Stats: make(map[string]*SelectorStats)}
+	return &DTAnalyzer{Stats: make(map[string]*DTSelectorStats)}
 }
 
 // RecordHit records that a Selector path was chosen and whether it succeeded.
 func (d *DTAnalyzer) RecordHit(selectorName, pathName, condition string, success bool) {
 	if _, ok := d.Stats[selectorName]; !ok {
-		d.Stats[selectorName] = &SelectorStats{NodeName: selectorName}
+		d.Stats[selectorName] = &DTSelectorStats{NodeName: selectorName}
 	}
 	ss := d.Stats[selectorName]
 	ss.TotalTasks++
@@ -297,7 +297,7 @@ func (o *BTOptimizer) mergeNode(node *SerializableNode, merged *int) {
 }
 
 // pathHitRatio returns the fraction of tasks that hit this path.
-func (o *BTOptimizer) pathHitRatio(ss *SelectorStats, pathName string) float64 {
+func (o *BTOptimizer) pathHitRatio(ss *DTSelectorStats, pathName string) float64 {
 	if ss == nil || ss.TotalTasks == 0 { return 0 }
 	for _, p := range ss.Paths {
 		if p.PathName == pathName {
