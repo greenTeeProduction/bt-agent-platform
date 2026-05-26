@@ -1,0 +1,20 @@
+name: notification-router
+description: Routes alerts and notifications to the right platform based on severity and type
+version: "1.0.0"
+tree: domain:trading_signal
+schedule: on_demand
+inputs:
+  - name: alert
+    type: text
+    required: true
+    description: Alert payload with severity, message, and target
+outputs:
+  - name: routing_report
+    type: json
+    description: Where the alert was routed and delivery status
+quality:
+  min_length: 40
+  required_keywords: ["routed", "delivered"]
+metadata:
+  category: devops
+  tags: "notifications,alerts,routing"

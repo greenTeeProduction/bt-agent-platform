@@ -1,0 +1,20 @@
+name: daily-researcher
+description: Runs daily research pipeline — web search, NotebookLM query, vault save
+version: "1.0.0"
+tree: research:deep_research
+schedule: "0 8 * * *"
+inputs:
+  - name: topic
+    type: text
+    required: true
+    description: Research topic for the day
+outputs:
+  - name: findings
+    type: markdown
+    description: Daily research findings with citations
+quality:
+  min_length: 200
+  required_sections: ["Findings", "Sources", "Action Items"]
+metadata:
+  category: research
+  tags: "research,daily,notebooklm"

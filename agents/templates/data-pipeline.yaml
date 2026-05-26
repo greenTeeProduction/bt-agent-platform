@@ -1,0 +1,25 @@
+name: data-pipeline
+description: Runs ETL workflows — extract from source, transform, validate, and load to destination
+version: "1.0.0"
+tree: domain:data_pipeline
+schedule: on_demand
+inputs:
+  - name: source
+    type: text
+    required: true
+    description: Data source URL or file path
+  - name: transform
+    type: text
+    required: false
+    default: "passthrough"
+    description: Transformation to apply
+outputs:
+  - name: result
+    type: json
+    description: Pipeline execution report
+quality:
+  min_length: 50
+  required_keywords: ["extracted", "transformed", "loaded"]
+metadata:
+  category: data-science
+  tags: "etl,data,pipeline"
