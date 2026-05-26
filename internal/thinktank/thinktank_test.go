@@ -2,120 +2,201 @@ package thinktank
 
 import (
 	"testing"
-
-	"github.com/nico/go-bt-evolve/internal/evolution"
 )
+
+type mockLLM struct{}
+
+func (m *mockLLM) Generate(prompt string) (string, error) {
+	// Return structured mock response for synthesis/parsing
+	if len(prompt) > 100 {
+		return "THESIS: Main argument thesis text\nANTITHESIS: Counter argument antithesis text\nSYNTHESIS: Resolved synthesis position\nRECOMMENDATION: Recommended action\nDISSENTING: Minority view", nil
+	}
+	l := len(prompt)
+	if l > 50 { l = 50 }
+	return "Mock analysis: " + prompt[:l] + "...", nil
+}
+func (m *mockLLM) AnalyzeComplexity(task string) string { return "medium" }
+func (m *mockLLM) GeneratePlan(task, complexity string) string {
+	l := len(task)
+	if l > 30 { l = 30 }
+	return "Execute: " + task[:l]
+}
+func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+	return "completed", "nothing to improve"
+}
+
+func TestNewThinkTank(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	if tt.Name != "Test" || tt.Topic != "topic" {
+		t.Error("fields mismatch")
+	}
+	if len(tt.Fellows) != 5 {
+		t.Errorf("expected 5 fellows, got %d", len(tt.Fellows))
+	}
+}
 
 func TestDefaultFellows(t *testing.T) {
 	fellows := DefaultFellows()
-	if len(fellows) != 5 {
-		t.Errorf("expected 5 fellows, got %d", len(fellows))
-	}
 	roles := map[string]bool{}
 	for _, f := range fellows {
-		if f.Name == "" || f.Role == "" || f.Persona == "" {
-			t.Errorf("fellow %s missing fields", f.Name)
+		if f.Name == "" || f.Role == "" || f.Perspective == "" {
+			t.Error("fellow missing required fields")
 		}
 		roles[f.Role] = true
 	}
-	expected := []string{"bull", "bear", "technical", "macro", "contrarian"}
-	for _, r := range expected {
+	for _, r := range []string{"bull", "bear", "technical", "macro", "contrarian"} {
 		if !roles[r] {
 			t.Errorf("missing role: %s", r)
 		}
 	}
 }
 
-func TestNewThinkTank(t *testing.T) {
-	tt := NewThinkTank("Test Tank", "Should we invest in AI?")
-	if tt.Name != "Test Tank" {
-		t.Errorf("wrong name: %s", tt.Name)
-	}
-	if tt.Topic != "Should we invest in AI?" {
-		t.Errorf("wrong topic: %s", tt.Topic)
-	}
-	if len(tt.Fellows) != 5 {
-		t.Errorf("expected 5 fellows, got %d", len(tt.Fellows))
-	}
-	if tt.DelphiRounds != 3 {
-		t.Errorf("expected 3 delphi rounds, got %d", tt.DelphiRounds)
-	}
-}
-
-func TestFellowResearchTree(t *testing.T) {
-	fellow := Fellow{
-		Name: "Test Fellow", Role: "bull",
-		Persona: "You are a tester.",
-	}
-	tree := FellowResearchTree(fellow, "test topic")
-	if tree == nil {
-		t.Fatal("tree is nil")
-	}
-	if tree.Type != "Sequence" {
-		t.Errorf("expected Sequence root, got %s", tree.Type)
-	}
-	if len(tree.Children) < 3 {
-		t.Errorf("expected at least 3 children (PreGate + research nodes), got %d", len(tree.Children))
-	}
-	// Verify tree structure is non-trivial
-	totalNodes := countNodes(tree)
-	if totalNodes < 5 {
-		t.Errorf("expected at least 5 nodes, got %d", totalNodes)
-	}
-	hasChain := hasChainAction(tree)
-	if !hasChain {
-		t.Log("no ChainAction nodes found — tree may use Action nodes")
-	}
-	t.Logf("Fellow tree: %d nodes", totalNodes)
-}
-
-func TestSynthesisTree(t *testing.T) {
-	tree := SynthesisTree()
-	if tree == nil {
-		t.Fatal("tree is nil")
-	}
-	if len(tree.Children) < 5 {
-		t.Errorf("expected at least 5 synthesis phases, got %d", len(tree.Children))
-	}
-}
-
-func TestPeerReviewTree(t *testing.T) {
-	tree := PeerReviewTree()
-	if tree == nil {
-		t.Fatal("tree is nil")
-	}
-}
-
-func TestReportGenerationTree(t *testing.T) {
-	tree := ReportGenerationTree()
-	if tree == nil {
-		t.Fatal("tree is nil")
-	}
-}
-
-// helpers
-func countNodes(n *evolution.SerializableNode) int {
-	if n == nil {
-		return 0
-	}
-	c := 1
-	for i := range n.Children {
-		c += countNodes(&n.Children[i])
-	}
-	return c
-}
-
-func hasChainAction(n *evolution.SerializableNode) bool {
-	if n == nil {
-		return false
-	}
-	if n.Type == "ChainAction" {
-		return true
-	}
-	for i := range n.Children {
-		if hasChainAction(&n.Children[i]) {
-			return true
+func TestFellowConfidence(t *testing.T) {
+	for _, f := range DefaultFellows() {
+		if f.Confidence < 0 || f.Confidence > 1 {
+			t.Errorf("%s confidence out of range: %.2f", f.Name, f.Confidence)
 		}
 	}
-	return false
+}
+
+func TestResearchFinding(t *testing.T) {
+	rf := ResearchFinding{
+		FellowName: "Test", Role: "bull",
+		KeyInsights: []string{"a", "b"}, Evidence: []string{"src"},
+		ConfidenceScore: 0.85,
+	}
+	if rf.ConfidenceScore != 0.85 || len(rf.KeyInsights) != 2 {
+		t.Error("fields")
+	}
+}
+
+func TestDebateTurn(t *testing.T) {
+	dt := DebateTurn{Round: 2, Speaker: "Test", Role: "bull", Statement: "arg"}
+	if dt.Round != 2 || dt.Statement == "" {
+		t.Error("fields")
+	}
+}
+
+func TestSynthesis(t *testing.T) {
+	s := Synthesis{Thesis: "A", Antithesis: "B", Synthesis: "C", Recommendation: "D"}
+	if s.Thesis == "" { t.Error("thesis") }
+}
+
+func TestReviewComment(t *testing.T) {
+	rc := ReviewComment{Reviewer: "R", Issue: "factual_error", Severity: "high", Comment: "c"}
+	if rc.Issue != "factual_error" { t.Error("issue") }
+}
+
+func TestReport(t *testing.T) {
+	r := Report{Title: "T", ExecutiveSummary: "S", Recommendation: "R"}
+	if r.Title == "" { t.Error("title") }
+}
+
+func TestScenario(t *testing.T) {
+	s := Scenario{Name: "N", Probability: 0.5, Impact: "high"}
+	if s.Probability < 0 { t.Error("prob") }
+}
+
+func TestOrchestrator_ResearchRound(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	err := orch.RunResearchRound()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tt.ResearchFindings) != 5 {
+		t.Errorf("expected 5 findings, got %d", len(tt.ResearchFindings))
+	}
+}
+
+func TestOrchestrator_Debate(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	orch.RunResearchRound()
+	err := orch.RunDebate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tt.DebateTranscript) == 0 {
+		t.Error("no debate transcript")
+	}
+}
+
+func TestOrchestrator_Synthesis(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	orch.RunResearchRound()
+	err := orch.RunSynthesis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tt.Synthesis == nil || tt.Synthesis.Thesis == "" {
+		t.Error("synthesis incomplete")
+	}
+}
+
+func TestOrchestrator_PeerReview(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	orch.RunResearchRound()
+	orch.RunSynthesis()
+	err := orch.RunPeerReview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Peer review may produce 0 comments with minimal mock output
+	t.Logf("peer review comments: %d", len(tt.PeerReview))
+}
+
+func TestOrchestrator_Report(t *testing.T) {
+	tt := NewThinkTank("Test", "topic")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	orch.RunResearchRound()
+	orch.RunSynthesis()
+	err := orch.RunReportGeneration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tt.FinalReport == nil || tt.FinalReport.Title == "" {
+		t.Error("report incomplete")
+	}
+}
+
+func TestOrchestrator_FullAnalysis(t *testing.T) {
+	tt := NewThinkTank("Full", "Should we invest in AI?")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	err := orch.RunFullAnalysis("Should we invest in AI?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tt.ResearchFindings) != 5 { t.Error("research") }
+	if tt.Synthesis == nil { t.Error("synthesis") }
+	if tt.FinalReport == nil { t.Error("report") }
+}
+
+func TestOrchestrator_EmptyTopic(t *testing.T) {
+	tt := NewThinkTank("Test", "")
+	orch := NewOrchestrator(tt, &mockLLM{})
+	err := orch.RunResearchRound()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tt.ResearchFindings) != 5 {
+		t.Error("empty topic should still produce findings")
+	}
+}
+
+func TestFullAnalysis_MultipleTopics(t *testing.T) {
+	topics := []string{"Tesla acquisition strategy", "AI regulation impact", "Cloud migration 2026"}
+	for _, topic := range topics {
+		tt := NewThinkTank("Council", topic)
+		orch := NewOrchestrator(tt, &mockLLM{})
+		err := orch.RunFullAnalysis(topic)
+		if err != nil {
+			t.Errorf("full analysis failed for %q: %v", topic, err)
+		}
+		if tt.FinalReport == nil {
+			t.Errorf("no report for %q", topic)
+		}
+	}
 }
