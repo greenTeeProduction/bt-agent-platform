@@ -135,7 +135,7 @@ func DefaultTree() *SerializableNode {
 							{
 								Type: "ChainAction",
 								Name: "agent:Complete this task: {{.Task}}. Use available tools. Think step by step and provide a thorough answer.",
-								Metadata: map[string]any{"max_tokens": float64(10)},
+								Metadata: map[string]any{"max_tokens": float64(2048)},
 							},
 						},
 					},
@@ -144,17 +144,17 @@ func DefaultTree() *SerializableNode {
 			{
 				Type: "Action",
 				Name: "ReflectOnOutcome",
-				Description: "Generate reflection: what went well, what to improve",
+				Description: "Generate reflection and validate output quality",
 			},
 			{
 				Type: "Selector",
 				Name: "OutcomeSelector",
 				Children: []SerializableNode{
-					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded"},
+					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded and output is valid"},
 					{
 						Type: "ChainAction",
 						Name: "agent:Self-correct the previous task. Fix errors and produce a correct answer.",
-						Metadata: map[string]any{"max_tokens": float64(5)},
+						Metadata: map[string]any{"max_tokens": float64(2048)},
 					},
 					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},
 				},

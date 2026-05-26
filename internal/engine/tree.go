@@ -52,6 +52,7 @@ type Blackboard struct {
 	ChainTools   []any          // langchaingo tools available to chains
 	ChainState   map[string]any // arbitrary chain execution state
 	Results      []string       // accumulated results from all chain actions
+	QualityScore float64        // 0.0-1.0 output quality score
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -109,6 +110,14 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "ReflectOnOutcome":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			wentWell, toImprove := bb.LLM.Reflect(bb.Task, bb.Outcome, bb.Plan)
+
+			// Validate output quality — mark as failure if output is garbage
+			if !validateOutputQuality(bb) {
+				bb.Outcome = string(reflection.Failure)
+				bb.Result = fmt.Sprintf("OUTPUT QUALITY FAILED (score=%.1f): %s", bb.QualityScore, bb.Result)
+				toImprove = "Output quality below threshold — retry with more detail"
+			}
+
 			record := &reflection.Record{
 				Task:          bb.Task,
 				Plan:          bb.Plan,
@@ -887,6 +896,10 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool {
 			return b.Outcome == string(reflection.Success)
 		}
+	case "ValidateOutput":
+		return func(b *Blackboard) bool {
+			return validateOutputQuality(b)
+		}
 	// --- Go developer conditions ---
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
@@ -1308,6 +1321,57 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 // RunTask executes a task through the behavior tree to completion.
 // Multi-tick decorators (Repeat) return 0 (Running) between ticks, so we loop
 // until the tree reaches a terminal state (1=Success or -1=Failure).
+// validateOutputQuality checks if the agent's output meets minimum quality standards.
+// Returns true if the output is acceptable; false if it appears to be garbage.
+// This prevents agents reporting "success" with truncated/garbage output
+// (e.g., max_tokens=10 producing a few words).
+func validateOutputQuality(b *Blackboard) bool {
+	result := b.Result
+	if b.Result == "" && len(b.Results) > 0 {
+		// Use accumulated results if Result is empty
+		result = b.Results[len(b.Results)-1]
+	}
+
+	// 1. Minimum length check
+	if len(result) < 30 {
+		b.QualityScore = 0.0
+		return false
+	}
+
+	// 2. Error pattern check
+	lowerResult := strings.ToLower(result)
+	errorPatterns := []string{
+		"i cannot", "i can't", "unable to", "error:", "failed to",
+		"i don't know", "i'm not sure", "not implemented",
+	}
+	for _, p := range errorPatterns {
+		if strings.Contains(lowerResult, p) {
+			b.QualityScore = 0.1
+			return false
+		}
+	}
+
+	// 3. Structure check (bonus for structured output)
+	score := 0.5 // baseline for meeting minimum length + no errors
+	if strings.Contains(result, "#") || strings.Contains(result, "**") {
+		score += 0.2 // has markdown structure
+	}
+	if strings.Contains(result, "- ") || strings.Contains(result, "* ") {
+		score += 0.1 // has bullet points
+	}
+	if len(result) > 200 {
+		score += 0.1 // substantive length
+	}
+	if strings.Contains(result, "```") {
+		score += 0.1 // contains code blocks
+	}
+	if score > 1.0 {
+		score = 1.0
+	}
+	b.QualityScore = score
+	return score >= 0.5
+}
+
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	start := time.Now()
 
