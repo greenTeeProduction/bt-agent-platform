@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Message is a JSON-RPC 2.0 message.
@@ -61,11 +62,13 @@ type ToolHandler func(args json.RawMessage) *ToolResult
 
 // Server is a minimal MCP JSON-RPC 2.0 stdio server.
 type Server struct {
-	name    string
-	tools   []ToolDef
-	handler map[string]ToolHandler
-	in      *bufio.Reader
-	out     io.Writer
+	name          string
+	tools         []ToolDef
+	handler       map[string]ToolHandler
+	in            *bufio.Reader
+	out           io.Writer
+	sanitizeArgs  bool
+	apiKey        string
 }
 
 // NewServer creates a new MCP server.
@@ -109,6 +112,54 @@ func (s *Server) Run() error {
 	}
 }
 
+// SetSecurity enables argument sanitization and optional API key validation.
+// When sanitize is true, tool call arguments are sanitized before reaching handlers.
+// When apiKey is non-empty, every tools/call request must include a matching
+// "bt_api_key" in its params. If both are disabled (default), no security is applied.
+func (s *Server) SetSecurity(sanitize bool, apiKey string) {
+	s.sanitizeArgs = sanitize
+	s.apiKey = apiKey
+}
+
+// sanitizeArg recursively sanitizes JSON values by stripping null bytes,
+// ANSI escape sequences, and control characters from strings.
+func sanitizeArg(v interface{}) interface{} {
+	switch val := v.(type) {
+	case string:
+		s := strings.ReplaceAll(val, "\x00", "")
+		// Strip ANSI escape sequences
+		for strings.Contains(s, "\x1b[") {
+			start := strings.Index(s, "\x1b[")
+			end := start + 2
+			for end < len(s) && (s[end] >= '0' && s[end] <= '9' || s[end] == ';' || s[end] == '[') {
+				end++
+			}
+			if end < len(s) {
+				end++
+			}
+			if end > len(s) {
+				end = len(s)
+			}
+			s = s[:start] + s[end:]
+		}
+		return strings.TrimSpace(s)
+	case map[string]interface{}:
+		out := make(map[string]interface{})
+		for k, v2 := range val {
+			out[k] = sanitizeArg(v2)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(val))
+		for i, item := range val {
+			out[i] = sanitizeArg(item)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
 func (s *Server) handleMessage(data []byte) {
 	var msg Message
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -148,6 +199,30 @@ func (s *Server) handleMessage(data []byte) {
 		if params.Name == "" {
 			s.writeError(msg.ID, -32602, "Invalid params: missing tool name")
 			return
+		}
+
+		// ── Security: API key validation (stderr only, no stdout data leakage) ──
+		if s.apiKey != "" {
+			var authParams struct {
+				BtAPIKey string `json:"bt_api_key"`
+			}
+			json.Unmarshal(msg.Params, &authParams)
+			if authParams.BtAPIKey != s.apiKey {
+				fmt.Fprintf(os.Stderr, "mcp: tools/call denied (bad api key) for tool=%s\n", params.Name)
+				s.writeError(msg.ID, -32001, "Authentication required: invalid or missing bt_api_key")
+				return
+			}
+		}
+
+		// ── Security: sanitize arguments ──
+		if s.sanitizeArgs {
+			var rawArgs interface{}
+			if err := json.Unmarshal(params.Arguments, &rawArgs); err == nil {
+				cleaned := sanitizeArg(rawArgs)
+				if data, err := json.Marshal(cleaned); err == nil {
+					params.Arguments = data
+				}
+			}
 		}
 
 		handler, ok := s.handler[params.Name]

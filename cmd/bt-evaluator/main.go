@@ -155,6 +155,7 @@ func main() {
 		})
 
 	fmt.Fprintf(os.Stderr, "go-bt-evaluator (Stockfish-style): 5 tools. Listening on stdin...\n")
+	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)

@@ -190,6 +190,7 @@ func main() {
 		})
 
 	fmt.Fprintf(os.Stderr, "go-bt-langagent: 7 tools + 3 MCP tools. Listening on stdin...\n")
+	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)

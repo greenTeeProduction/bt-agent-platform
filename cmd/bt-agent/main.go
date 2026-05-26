@@ -980,6 +980,8 @@ func main() {
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
+	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
+
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
