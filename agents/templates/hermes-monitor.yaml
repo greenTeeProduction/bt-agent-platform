@@ -1,0 +1,20 @@
+name: hermes-monitor
+description: Hermes system health agent — disk, memory, BT processes, cron jobs
+version: "1.0.0"
+tree: domain:agent_monitor
+schedule: "every 30m"
+inputs:
+  - name: targets
+    type: text
+    required: false
+    default: "disk,memory,bt-processes,cron-jobs"
+outputs:
+  - name: health_report
+    type: markdown
+quality:
+  min_length: 80
+  required_sections: ["Status", "Alerts"]
+  blocked_patterns: ["error: timeout"]
+metadata:
+  category: hermes-builtin
+  tags: "monitoring,health,hermes"

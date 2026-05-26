@@ -1,0 +1,18 @@
+name: hermes-code-reviewer
+description: Hermes code review agent — PR review, bug detection, security audit
+version: "1.0.0"
+tree: domain:code_review
+schedule: on_demand
+inputs:
+  - name: code
+    type: text
+    required: true
+outputs:
+  - name: report
+    type: markdown
+quality:
+  min_length: 100
+  required_sections: ["Bugs", "Security", "Style"]
+metadata:
+  category: hermes-builtin
+  tags: "code-review,hermes"

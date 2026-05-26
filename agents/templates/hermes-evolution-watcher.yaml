@@ -1,0 +1,19 @@
+name: hermes-evolution-watcher
+description: Watches BT evolution cycles, gardener health, and self-evolution status
+version: "1.0.0"
+tree: domain:agent_monitor
+schedule: "every 2h"
+inputs:
+  - name: check
+    type: text
+    required: false
+    default: "Check BT gardener cycles, evolution status, tree fitness trends"
+outputs:
+  - name: evolution_report
+    type: markdown
+quality:
+  min_length: 100
+  required_sections: ["Gardener", "Evolution", "Trees", "Recommendations"]
+metadata:
+  category: hermes-builtin
+  tags: "evolution,monitoring,hermes"
