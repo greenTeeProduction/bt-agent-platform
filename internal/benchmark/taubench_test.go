@@ -105,6 +105,7 @@ func TestTauBench_Retail(t *testing.T) {
 }
 
 func TestTauBench_MultiDomain(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
 	allEntries := DefaultTauBenchEntries()
 	if len(allEntries) != 10 {
 		t.Fatalf("expected 10 total entries (5 airline + 5 retail), got %d", len(allEntries))

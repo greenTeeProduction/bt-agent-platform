@@ -49,6 +49,7 @@ func TestToolBench_APISelection(t *testing.T) {
 }
 
 func TestToolBench_EvaluateWithGoDevTree(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent ToolBench test in short mode") }
 	tree := evolution.GoDeveloperTree()
 	entries := BuiltinToolBench()
 	mock := DefaultLLM()
