@@ -180,6 +180,7 @@ func GoDeveloperTree() *SerializableNode {
 				Type: "Sequence",
 				Name: "PreGate",
 				Children: []SerializableNode{
+					{Type: "Condition", Name: "HasClearTask", Description: "Check task has sufficient context, a verb, and a clear goal — >10 chars and not ambiguous"},
 					{Type: "Condition", Name: "ValidateInput", Description: "Check input is non-empty"},
 					{Type: "Condition", Name: "IsGoRelated", Description: "Check if task involves Go code or concepts"},
 					{Type: "Action", Name: "SetupDevTools", Description: "Populate bb.ChainTools with go_build, go_test, go_vet, web_search"},
@@ -238,7 +239,7 @@ func GoDeveloperTree() *SerializableNode {
 								Type: "ChainAction",
 								Name: "agent:Complete this Go development task: {{.Task}}. Use available tools if needed. Provide a complete solution.",
 								Metadata: map[string]any{
-									"max_tokens": float64(10),
+									"max_tokens": float64(400),
 								},
 							},
 						},
@@ -261,7 +262,7 @@ func GoDeveloperTree() *SerializableNode {
 						Type: "ChainAction",
 						Name: "agent:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
 						Metadata: map[string]any{
-							"max_tokens": float64(5),
+							"max_tokens": float64(400),
 						},
 					},
 					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},

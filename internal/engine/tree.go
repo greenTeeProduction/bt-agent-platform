@@ -901,6 +901,45 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return validateOutputQuality(b)
 		}
 	// --- Go developer conditions ---
+	case "HasClearTask":
+		return func(b *Blackboard) bool {
+			task := strings.TrimSpace(b.Task)
+			if len(task) < 5 {
+				return false
+			}
+			lower := strings.ToLower(task)
+			// Reject pure gibberish (no alphabetic content)
+			hasAlpha := false
+			for _, c := range lower {
+				if c >= 'a' && c <= 'z' {
+					hasAlpha = true
+					break
+				}
+			}
+			if !hasAlpha {
+				return false
+			}
+			// Accept if it has an action verb OR is a clear question/statement
+			verbs := []string{"build", "fix", "add", "create", "implement", "write", "debug",
+				"test", "deploy", "review", "refactor", "analyze", "optimize", "update",
+				"remove", "migrate", "upgrade", "configure", "setup", "run", "design",
+				"explain", "show", "find", "generate", "make", "check", "search", "list"}
+			for _, v := range verbs {
+				if strings.Contains(lower, v) {
+					return true
+				}
+			}
+			// Accept knowledge questions / how-to / what-is patterns
+			questionPatterns := []string{"what ", "how ", "why ", "best practice", "example",
+				"difference", "compare", "tutorial", "guide", "document", "summary",
+				"overview", "architecture", "pattern", "convention", "idiom", "benchmark"}
+			for _, p := range questionPatterns {
+				if strings.Contains(lower, p) {
+					return true
+				}
+			}
+			return false
+		}
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)
