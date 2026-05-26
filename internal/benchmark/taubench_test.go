@@ -10,6 +10,7 @@ import (
 )
 
 func TestTauBench_Airline(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
 	entries := BuiltinTauBenchAirline()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 airline entries, got %d", len(entries))
@@ -60,6 +61,7 @@ func TestTauBench_Airline(t *testing.T) {
 }
 
 func TestTauBench_Retail(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
 	entries := BuiltinTauBenchRetail()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 retail entries, got %d", len(entries))
