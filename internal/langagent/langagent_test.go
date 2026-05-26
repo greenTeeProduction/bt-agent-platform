@@ -2,6 +2,7 @@ package langagent
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -53,11 +54,11 @@ func (m *mockModel) GenerateContent(ctx context.Context, msgs []llms.MessageCont
 func newTestStores(t *testing.T) (*reflection.Store, *evolution.TreeStore) {
 	t.Helper()
 	dir := t.TempDir()
-	refStore, err := reflection.NewStore(dir)
+	refStore, err := reflection.NewStore(filepath.Join(dir, "reflections"))
 	if err != nil {
 		t.Fatalf("new reflection store: %v", err)
 	}
-	treeStore, err := evolution.NewTreeStore(dir)
+	treeStore, err := evolution.NewTreeStore(filepath.Join(dir, "trees"))
 	if err != nil {
 		t.Fatalf("new tree store: %v", err)
 	}
