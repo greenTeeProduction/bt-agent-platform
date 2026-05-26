@@ -10,6 +10,7 @@ import (
 )
 
 func TestTeslaFullAnalysis(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
 		t.Skipf("Ollama unavailable: %v", err)
@@ -63,6 +64,7 @@ func trunc(s string, n int) string {
 }
 
 func TestTeslaPitchAgent(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
 		t.Skipf("Ollama unavailable: %v", err)
@@ -79,15 +81,19 @@ func TestTeslaPitchAgent(t *testing.T) {
 }
 
 func TestTeslaEarnings(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	runTeslaTree(t, "earnings_reviewer", EarningsReviewerTree())
 }
 func TestTeslaMarket(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	runTeslaTree(t, "market_researcher", MarketResearcherTree())
 }
 func TestTeslaModel(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	runTeslaTree(t, "model_builder", ModelBuilderTree())
 }
 func TestTeslaValuation(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	runTeslaTree(t, "valuation_reviewer", ValuationReviewerTree())
 }
 

@@ -7,6 +7,7 @@ import (
 )
 
 func TestTeslaDeepResearch(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil { t.Skipf("Ollama: %v", err); return }
 
@@ -21,6 +22,7 @@ func TestTeslaDeepResearch(t *testing.T) {
 }
 
 func TestTeslaQuickResearch(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil { t.Skipf("Ollama: %v", err); return }
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// Use GoDev tree — it has 5 strategy paths. Match BFCL entries to those paths.
 	suite := &BFCLSuite{
 		Name: "bfcl_godev",
@@ -39,6 +40,7 @@ func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
 }
 
 func TestBFCL_Relevance_NoFalsePositives(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// GoDev tree correctly rejects non-Go tasks at PreGate.
 	// "tell me a joke" has no Go keywords → IsGoRelated fails → PreGate fails → failure.
 	// This is CORRECT behavior for a specialized tree.
@@ -65,6 +67,7 @@ func TestBFCL_Relevance_NoFalsePositives(t *testing.T) {
 }
 
 func TestBFCL_Multiple_Routing(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// Use code_review tree which has multiple strategy paths
 	suite := &BFCLSuite{
 		Name: "bfcl_multiple_cr",
@@ -87,6 +90,7 @@ func TestBFCL_Multiple_Routing(t *testing.T) {
 }
 
 func TestGAIA_DeepResearch(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	entries := BuiltinGAIADev()
 	tree := research.DeepResearchTree()
 	mock := DefaultLLM()
@@ -111,6 +115,7 @@ func TestGAIA_DeepResearch(t *testing.T) {
 }
 
 func TestBFCL_CodeReview_Routing(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// Test BFCL routing on the code_review domain tree
 	tree := domains.CodeReviewTree()
 	mock := DefaultLLM()
@@ -137,6 +142,7 @@ func TestBFCL_CodeReview_Routing(t *testing.T) {
 }
 
 func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// Run BFCL Simple against all domain trees, measure which tree has best routing
 	type treeScore struct {
 		name     string
@@ -176,6 +182,7 @@ func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
 }
 
 func TestSWELite_IssueAnalysis(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	entries := BuiltinSWELite()
 	if len(entries) < 3 {
 		t.Fatal("expected at least 3 SWE entries")
