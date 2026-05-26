@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -818,6 +820,163 @@ func main() {
 			status := "approved"
 			if params.Action == "reject" { status = "rejected" }
 			data, _ := json.Marshal(map[string]interface{}{"task_id": params.TaskID, "status": status})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	// --- Agent Platform Integration Tools ---
+	// Initialize agent registry and history
+	agentHome, _ := os.UserHomeDir()
+	agentReg, _ := agent.NewRegistry(agentHome + "/.go-bt-evolve/agents")
+	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
+
+	server.RegisterTool("bt_agent_create", "Create a new agent from a template or custom definition",
+		map[string]mcp.Property{
+			"name":        {Type: "string", Description: "Agent name"},
+			"description": {Type: "string", Description: "Agent description"},
+			"tree":        {Type: "string", Description: "Tree ID (e.g., domain:code_review, research:deep_research)"},
+			"schedule":    {Type: "string", Description: "Schedule (on_demand, every 1h, 0 9 * * *)"},
+			"from_template": {Type: "string", Description: "Create from template name instead of custom"},
+		},
+		[]string{"name", "tree"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct {
+				Name         string `json:"name"`
+				Description  string `json:"description"`
+				Tree         string `json:"tree"`
+				Schedule     string `json:"schedule"`
+				FromTemplate string `json:"from_template"`
+			}
+			json.Unmarshal(args, &params)
+			if params.Schedule == "" { params.Schedule = "on_demand" }
+
+			var inst *agent.Instance
+			var err error
+			if params.FromTemplate != "" {
+				tmplDir := agentHome + "/go-bt-evolve/agents/templates"
+				cat := agent.NewCatalog(agentReg, tmplDir)
+				inst, err = cat.InstallFromTemplate(params.FromTemplate)
+			} else {
+				def := agent.Definition{Name: params.Name, Description: params.Description, Tree: params.Tree, Schedule: params.Schedule}
+				inst, err = agentReg.Create(def)
+			}
+			if err != nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			data, _ := json.Marshal(map[string]interface{}{
+				"status": "created", "agent": inst.Definition.Name, "tree": inst.Definition.Tree, "id": inst.ID,
+			})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_agent_list", "List all installed agents with their status and stats",
+		nil, nil,
+		func(args json.RawMessage) *mcp.ToolResult {
+			var result []map[string]interface{}
+			for _, inst := range agentReg.List() {
+				stats := agentHist.Stats(inst.Definition.Name)
+				result = append(result, map[string]interface{}{
+					"name": inst.Definition.Name, "description": inst.Definition.Description,
+					"tree": inst.Definition.Tree, "state": inst.State,
+					"total_runs": stats.TotalRuns, "success_rate": stats.SuccessRate,
+					"avg_quality": stats.AvgQuality, "last_run": stats.LastRun,
+				})
+			}
+			data, _ := json.Marshal(result)
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_agent_run", "Run an agent with a task immediately",
+		map[string]mcp.Property{
+			"agent": {Type: "string", Description: "Agent name or tree ID to run"},
+			"task":  {Type: "string", Description: "Task to execute"},
+		},
+		[]string{"agent", "task"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct{ Agent string `json:"agent"`; Task string `json:"task"` }
+			json.Unmarshal(args, &params)
+			bb := &engine.Blackboard{Task: params.Task, LLM: llmClient}
+			tree := resolveTree(params.Agent)
+			if tree == nil {
+				inst, err := agentReg.Get(params.Agent)
+				if err != nil {
+					data, _ := json.Marshal(map[string]string{"error": "agent not found: " + params.Agent})
+					return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+				}
+				tree = resolveTree(inst.Definition.Tree)
+			}
+			if tree == nil {
+				data, _ := json.Marshal(map[string]string{"error": "no tree found for: " + params.Agent})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			start := time.Now()
+			bt := engine.BuildTree(tree, bb)
+			outcome := engine.RunTask(bb, bt)
+			duration := time.Since(start)
+			agentHist.Record(agent.RunRecord{
+				AgentName: params.Agent, Task: params.Task, Outcome: outcome,
+				Output: bb.Result, Duration: duration.String(), Quality: bb.QualityScore,
+				StartedAt: start, EndedAt: time.Now(),
+			})
+			data, _ := json.Marshal(map[string]interface{}{
+				"outcome": outcome, "result": bb.Result, "quality": bb.QualityScore, "duration": duration.String(),
+			})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_agent_history", "View run history for an agent",
+		map[string]mcp.Property{
+			"agent": {Type: "string", Description: "Agent name"},
+			"limit": {Type: "integer", Description: "Max records (default 10)"},
+		},
+		[]string{"agent"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct{ Agent string `json:"agent"`; Limit int `json:"limit"` }
+			json.Unmarshal(args, &params)
+			if params.Limit <= 0 { params.Limit = 10 }
+			runs := agentHist.List(params.Agent, params.Limit)
+			stats := agentHist.Stats(params.Agent)
+			data, _ := json.Marshal(map[string]interface{}{
+				"agent": params.Agent, "stats": stats, "runs": runs,
+			})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_agent_schedule", "Schedule an agent for recurring execution",
+		map[string]mcp.Property{
+			"agent":    {Type: "string", Description: "Agent name"},
+			"schedule": {Type: "string", Description: "Cron expression (every 1h, 0 9 * * *)"},
+			"timeout":  {Type: "string", Description: "Max run duration (30m, 2h)"},
+		},
+		[]string{"agent", "schedule"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct{ Agent string `json:"agent"`; Schedule string `json:"schedule"`; Timeout string `json:"timeout"` }
+			json.Unmarshal(args, &params)
+			if params.Timeout == "" { params.Timeout = "2h" }
+			sched := agent.NewScheduler(agent.SchedulerConfig{Registry: agentReg, History: agentHist})
+			job, err := sched.Schedule(params.Agent, params.Schedule, params.Timeout, 3)
+			if err != nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			data, _ := json.Marshal(map[string]interface{}{
+				"status": "scheduled", "job_id": job.ID, "agent": job.AgentName,
+				"schedule": job.Schedule, "next_run": job.NextRun,
+			})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_agent_delete", "Delete an agent",
+		map[string]mcp.Property{"agent": {Type: "string", Description: "Agent name"}},
+		[]string{"agent"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct{ Agent string `json:"agent"` }
+			json.Unmarshal(args, &params)
+			if err := agentReg.Delete(params.Agent); err != nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			data, _ := json.Marshal(map[string]string{"status": "deleted", "agent": params.Agent})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
