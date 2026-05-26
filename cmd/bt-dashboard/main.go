@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/metrics"
+	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
 )
@@ -48,19 +51,30 @@ func init() {
 
 
 func main() {
+	port := os.Getenv("BT_DASHBOARD_PORT")
+	if port == "" { port = "9800" }
+
+	// Structured logging
+	slog.Info("BT Dashboard starting", "port", port)
+
 	kg = knowledge.BuildKnowledgeGraph()
 	var err error
 	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
-	if err != nil { sharedLLM = nil }
-	port := os.Getenv("BT_DASHBOARD_PORT")
-	if port == "" { port = "9800" }
+	if err != nil {
+		slog.Warn("Ollama unavailable", "error", err)
+		sharedLLM = nil
+	}
 
 	// API key from env — if set, all /api/* endpoints require X-API-Key header
 	apiKey := os.Getenv("BT_API_KEY")
 
+	// Rate limiter: 100 req/sec per client, burst 20
+	rateLimiter := security.NewRateLimiter(100, 20)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveDashboard)
 	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -74,9 +88,15 @@ func main() {
 	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
 	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
 
+	// Middleware stack: metrics → sanitize → rate limit
+	var handler http.Handler = mux
+	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
+	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
+	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
+
 	addr := ":" + port
-	fmt.Printf("BT Studio Dashboard → http://localhost%s\n", addr)
-	http.ListenAndServe(addr, mux)
+	slog.Info("BT Studio Dashboard ready", "addr", addr)
+	http.ListenAndServe(addr, handler)
 }
 
 func serveDashboard(w http.ResponseWriter, r *http.Request) {

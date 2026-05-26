@@ -196,8 +196,8 @@
     "hash": "c24db2bc27edb556cbd8a3a76e61c265"
   },
   "/home/nico/go-bt-evolve/internal/engine/tree.go": {
-    "mtime": 1779823906.2748518,
-    "hash": "5b16018566e00dd4cb8164b207b9fd7c"
+    "mtime": 1779833929.6059427,
+    "hash": "e975b8d3665df1a1f56fe4cdd11807eb"
   },
   "/home/nico/go-bt-evolve/internal/engine/coverage_test.go": {
     "mtime": 1779827299.9187274,
@@ -332,8 +332,8 @@
     "hash": "804f83e000eb8eee0feefc8f5489f991"
   },
   "/home/nico/go-bt-evolve/internal/evolution/mutate.go": {
-    "mtime": 1779823768.2867563,
-    "hash": "19c5b097b3586644694df655b487259d"
+    "mtime": 1779833817.9411843,
+    "hash": "f9e7412e496868890e5a1532486eac38"
   },
   "/home/nico/go-bt-evolve/internal/evolution/learning.go": {
     "mtime": 1779722479.6905782,
