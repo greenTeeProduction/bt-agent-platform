@@ -14,6 +14,10 @@ type ConditionFunc func(*Blackboard) bool
 var actionRegistry = map[string]ActionFunc{}
 var conditionRegistry = map[string]ConditionFunc{}
 
+func init() {
+	registerGoapNodes()
+}
+
 // RegisterAction adds an action handler to the registry.
 func RegisterAction(name string, fn ActionFunc) {
 	actionRegistry[name] = fn

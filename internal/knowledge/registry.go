@@ -365,6 +365,54 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 		},
 	})
 
+	// ── GOAP DOMAIN TREES ─────────────────────────────────────────────────
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:goap_planning",
+		Category:    "domain",
+		Name:        "GOAP Planning",
+		Description: "Goal-Oriented Action Planning: multi-step sequential task planning",
+		NodeCount:   12,
+		Keywords:    []string{"goap", "plan", "planning", "goal", "action", "sequential", "multi-step"},
+		Capabilities: []Capability{
+			{Action: "plan_actions", Domain: "engineering", Strength: 0.9},
+			{Action: "execute_sequence", Domain: "engineering", Strength: 0.85},
+			{Action: "multi_step_task", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:goap_research",
+		Category:    "domain",
+		Name:        "GOAP Research",
+		Description: "GOAP multi-phase research: literature → hypothesis → experiment → conclusions",
+		NodeCount:   12,
+		Keywords:    []string{"goap", "research", "literature", "hypothesis", "experiment", "scientific"},
+		Capabilities: []Capability{
+			{Action: "research_pipeline", Domain: "research", Strength: 0.9},
+			{Action: "scientific_method", Domain: "research", Strength: 0.85},
+			{Action: "literature_review", Domain: "research", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:goap_devops",
+		Category:    "domain",
+		Name:        "GOAP DevOps",
+		Description: "GOAP CI/CD pipeline: checkout → lint → test → build → deploy → smoke test",
+		NodeCount:   12,
+		Keywords:    []string{"goap", "devops", "ci", "cd", "pipeline", "deploy", "build", "test"},
+		Capabilities: []Capability{
+			{Action: "ci_cd_pipeline", Domain: "engineering", Strength: 0.9},
+			{Action: "deploy_service", Domain: "engineering", Strength: 0.85},
+			{Action: "build_project", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	// GOAP cross-domain relationships
+	kg.Connect("domain:goap_planning", "domain:goap_research", "specializes")
+	kg.Connect("domain:goap_planning", "domain:goap_devops", "specializes")
+
 	// ── STARTUP TREES ───────────────────────────────────────────────────────
 
 	kg.Register(&TreeMeta{
@@ -614,5 +662,5 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	return kg
 }
 
-// GlobalGraph is the pre-built knowledge graph containing all 37 behavior trees.
+// GlobalGraph is the pre-built knowledge graph containing all 40 behavior trees.
 var GlobalGraph = BuildKnowledgeGraph()

@@ -86,8 +86,8 @@ func serveDashboard(w http.ResponseWriter, r *http.Request) {
 
 func handleSummary(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_trees": 38, "categories": map[string]int{
-			"core": 2, "finance": 10, "research": 2, "domain": 10, "startup": 6, "thinktank": 5, "evolution": 3,
+		"total_trees": 41, "categories": map[string]int{
+			"core": 2, "finance": 10, "research": 2, "domain": 13, "startup": 6, "thinktank": 5, "evolution": 3,
 		}, "mcp_tools": 26, "model": "qwen3.6:35b-a3b",
 	})
 }
@@ -558,12 +558,12 @@ function renderTab(tab){
 }
 
 function renderOverview(){
-  const cats={core:2,finance:10,domain:10,research:2,startup:6,thinktank:5,evolution:3};
+  const cats={core:2,finance:10,domain:13,research:2,startup:6,thinktank:5,evolution:3};
   const t=state.company||{};
   return `+"`"+`
-    <div class="header"><h1>Dashboard</h1><div class="header-stats"><span class="status-dot"></span>Live · 38 trees · qwen3.6:35b</div></div>
+    <div class="header"><h1>Dashboard</h1><div class="header-stats"><span class="status-dot"></span>Live · 41 trees · qwen3.6:35b</div></div>
     <div class="grid-4">
-      <div class="stat-card green"><div class="label">Behavior Trees</div><div class="value">38</div><div class="trend">7 categories</div></div>
+      <div class="stat-card green"><div class="label">Behavior Trees</div><div class="value">41</div><div class="trend">7 categories</div></div>
       <div class="stat-card blue"><div class="label">MCP Tools</div><div class="value">26</div><div class="trend">4 servers</div></div>
       <div class="stat-card amber"><div class="label">ThinkTank Fellows</div><div class="value">5</div><div class="trend">Active</div></div>
       <div class="stat-card purple"><div class="label">Company MRR</div><div class="value">$`+"${Math.round((t.mrr||0)/1000)}"+`k</div><div class="trend">Seed stage</div></div>
