@@ -55,20 +55,24 @@ func main() {
 	port := os.Getenv("BT_DASHBOARD_PORT")
 	if port == "" { port = "9800" }
 
+	// API key from env — if set, all /api/* endpoints require X-API-Key header
+	apiKey := os.Getenv("BT_API_KEY")
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveDashboard)
-	mux.HandleFunc("/api/summary", handleSummary)
-	mux.HandleFunc("/api/trees", handleTrees)
-	mux.HandleFunc("/api/thinktank/fellows", handleFellows)
-	mux.HandleFunc("/api/thinktank/analyze", handleAnalyze)
-	mux.HandleFunc("/api/company/default", handleDefaultCompany)
-	mux.HandleFunc("/api/tasks", handleTasks)
-	mux.HandleFunc("/api/tasks/approve", handleTaskApprove)
-	mux.HandleFunc("/api/tasks/reject", handleTaskReject)
-	mux.HandleFunc("/api/sprint/execute", handleSprintExecute)
-	mux.HandleFunc("/api/sprint/status", handleSprintStatus)
-	mux.HandleFunc("/api/tree/structure", handleTreeStructure)
-	mux.HandleFunc("/api/chat", handleChat)
+	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
+	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
+	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
+	mux.HandleFunc("/api/thinktank/analyze", authMiddleware(apiKey, handleAnalyze))
+	mux.HandleFunc("/api/company/default", authMiddleware(apiKey, handleDefaultCompany))
+	mux.HandleFunc("/api/tasks", authMiddleware(apiKey, handleTasks))
+	mux.HandleFunc("/api/tasks/approve", authMiddleware(apiKey, handleTaskApprove))
+	mux.HandleFunc("/api/tasks/reject", authMiddleware(apiKey, handleTaskReject))
+	mux.HandleFunc("/api/sprint/execute", authMiddleware(apiKey, handleSprintExecute))
+	mux.HandleFunc("/api/sprint/status", authMiddleware(apiKey, handleSprintStatus))
+	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
+	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
 
 	addr := ":" + port
 	fmt.Printf("BT Studio Dashboard → http://localhost%s\n", addr)
@@ -1072,5 +1076,37 @@ document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=
 init();
 </script>
 </body>
-</html>`+"`"+`
-`
+` + "\x60"
+
+// --- Security & Health ---
+
+// authMiddleware wraps a handler with optional API key authentication.
+// If apiKey is empty, all requests pass through (no auth required).
+// If apiKey is set, requests must include X-API-Key header matching the key.
+func authMiddleware(apiKey string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if apiKey == "" {
+			next(w, r)
+			return
+		}
+		provided := r.Header.Get("X-API-Key")
+		if provided != apiKey {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing or invalid X-API-Key header"})
+			return
+		}
+		next(w, r)
+	}
+}
+
+// handleHealth returns platform health status.
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "ok",
+		"version":  "1.0.0",
+		"uptime":   "operational",
+		"packages": 19,
+		"trees":    38,
+	})
+}
