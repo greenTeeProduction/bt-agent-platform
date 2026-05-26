@@ -298,6 +298,7 @@ func TestTauBench_TaskLoading(t *testing.T) {
 }
 
 func TestTauBench_EmptyEntries(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
 	// Evaluate with empty entries should not panic
 	tree := evolution.GoDeveloperTree()
 	mock := DefaultLLM()
