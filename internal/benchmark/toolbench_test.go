@@ -72,6 +72,7 @@ func TestToolBench_EvaluateWithGoDevTree(t *testing.T) {
 }
 
 func TestToolBench_EvaluateWithCodeReviewTree(t *testing.T) {
+	if testing.Short() { t.Skip("skipping Ollama-dependent ToolBench test in short mode") }
 	tree := domains.CodeReviewTree()
 	entries := BuiltinToolBench()
 	mock := DefaultLLM()
