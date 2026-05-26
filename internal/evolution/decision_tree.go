@@ -340,10 +340,32 @@ func conditionOverlap(a, b string) float64 {
 
 func wordSet(s string) map[string]bool {
 	words := make(map[string]bool)
-	for _, w := range strings.Fields(strings.ToLower(s)) {
-		w = strings.Trim(w, ",.!?;:\"")
-		if len(w) > 2 { words[w] = true }
+	// Split camelCase into individual words: "IsCodeReview" → ["Is", "Code", "Review"]
+	parts := splitCamelCase(s)
+	for _, part := range parts {
+		w := strings.ToLower(strings.Trim(part, ",.!?;:\""))
+		if len(w) > 2 {
+			words[w] = true
+		}
 	}
+	return words
+}
+
+// splitCamelCase splits a camelCase string into words.
+// "IsCodeReview" → ["Is", "Code", "Review"]
+func splitCamelCase(s string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	var words []string
+	start := 0
+	for i := 1; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			words = append(words, s[start:i])
+			start = i
+		}
+	}
+	words = append(words, s[start:])
 	return words
 }
 
