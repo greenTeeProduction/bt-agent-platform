@@ -46,11 +46,21 @@ func BuildChainAction(cfg ChainConfig, bb *Blackboard) *btleaf.Action[Blackboard
 	return btleaf.NewAction(fn)
 }
 
-// buildChainActionFn creates the inner action function.
+// buildChainActionFn creates the inner action function with panic recovery.
 func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[Blackboard]) int {
-	return func(ctx *btcore.BTContext[Blackboard]) int {
+	return func(ctx *btcore.BTContext[Blackboard]) (result int) {
 		start := time.Now()
 		defer func() { bb.DurationMs = time.Since(start).Milliseconds() }()
+
+		// Panic recovery: chain actions call LLMs and external tools — assume they WILL panic.
+		// Recover, log, and return failure so the BT's retry/escalation logic can handle it.
+		defer func() {
+			if r := recover(); r != nil {
+				bb.Outcome = "chain_panic"
+				bb.Result = fmt.Sprintf("PANIC in chain '%s': %v", cfg.ChainType, r)
+				result = -1
+			}
+		}()
 
 		switch ChainKind(cfg.ChainType) {
 		case ChainLLMCall:

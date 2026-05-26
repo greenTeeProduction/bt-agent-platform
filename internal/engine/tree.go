@@ -1375,6 +1375,14 @@ func validateOutputQuality(b *Blackboard) bool {
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	start := time.Now()
 
+	// Panic recovery at the tree level — if the entire BT crashes, capture it.
+	defer func() {
+		if r := recover(); r != nil {
+			bb.Outcome = string(reflection.Failure)
+			bb.Result = fmt.Sprintf("TREE PANIC: %v", r)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	btCtx := btcore.NewBTContext(ctx, bb)
