@@ -88,17 +88,41 @@ func main() {
 	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
 	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
 
+	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
+	tlsCert := os.Getenv("BT_TLS_CERT")
+	tlsKey := os.Getenv("BT_TLS_KEY")
+	tlsEnabled := tlsCert != "" && tlsKey != ""
+
+	// Security headers — enable HSTS when TLS is active
+	secCfg := security.DefaultSecurityHeaders()
+	if tlsEnabled {
+		secCfg.EnableHSTS = true
+	}
+
 	// Middleware stack: security headers → cors → metrics → sanitize → rate limit
 	var handler http.Handler = mux
-	handler = security.SecurityHeadersMiddleware(security.DefaultSecurityHeaders())(handler)
+	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.CrossOriginMiddleware("*", "GET, POST, PUT, DELETE, OPTIONS")(handler)
 	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
 	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
 
+	// Security: enforce TLS. When cert+key are configured via env vars,
+	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
 	addr := ":" + port
-	slog.Info("BT Studio Dashboard ready", "addr", addr)
-	http.ListenAndServe(addr, handler)
+	if tlsEnabled {
+		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
+		if err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, handler); err != nil {
+			slog.Error("Dashboard server failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		slog.Warn("BT Studio Dashboard ready (HTTP — set BT_TLS_CERT+BT_TLS_KEY for TLS)", "addr", addr)
+		if err := http.ListenAndServe(addr, handler); err != nil {
+			slog.Error("Dashboard server failed", "error", err)
+			os.Exit(1)
+		}
+	}
 }
 
 func serveDashboard(w http.ResponseWriter, r *http.Request) {

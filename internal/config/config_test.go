@@ -111,3 +111,67 @@ func TestEnvBool(t *testing.T) {
 		}
 	}
 }
+
+func TestTLS_Defaults(t *testing.T) {
+	os.Unsetenv("BT_TLS_CERT")
+	os.Unsetenv("BT_TLS_KEY")
+
+	c, _ := Load()
+	if c.TLSEnabled() {
+		t.Error("expected TLSEnabled()=false by default")
+	}
+	if err := c.Validate(); err != nil {
+		t.Errorf("valid config (no TLS) should pass validation, got: %v", err)
+	}
+}
+
+func TestTLS_Enabled(t *testing.T) {
+	os.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
+	os.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
+	defer os.Unsetenv("BT_TLS_CERT")
+	defer os.Unsetenv("BT_TLS_KEY")
+
+	c, _ := Load()
+	if !c.TLSEnabled() {
+		t.Error("expected TLSEnabled()=true when both cert and key set")
+	}
+	if c.TLSCert != "/etc/certs/server.crt" {
+		t.Errorf("expected TLSCert='/etc/certs/server.crt', got %s", c.TLSCert)
+	}
+	if c.TLSKey != "/etc/certs/server.key" {
+		t.Errorf("expected TLSKey='/etc/certs/server.key', got %s", c.TLSKey)
+	}
+	if err := c.Validate(); err != nil {
+		t.Errorf("valid TLS config should pass validation, got: %v", err)
+	}
+}
+
+func TestTLS_MissingKey(t *testing.T) {
+	os.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
+	os.Unsetenv("BT_TLS_KEY")
+	defer os.Unsetenv("BT_TLS_CERT")
+
+	c, _ := Load()
+	if c.TLSEnabled() {
+		t.Error("expected TLSEnabled()=false when only cert set")
+	}
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when cert set but key missing")
+	}
+}
+
+func TestTLS_MissingCert(t *testing.T) {
+	os.Unsetenv("BT_TLS_CERT")
+	os.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
+	defer os.Unsetenv("BT_TLS_KEY")
+
+	c, _ := Load()
+	if c.TLSEnabled() {
+		t.Error("expected TLSEnabled()=false when only key set")
+	}
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when key set but cert missing")
+	}
+}

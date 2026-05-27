@@ -16,6 +16,8 @@ type Config struct {
 	// Server
 	DashboardPort int    `env:"BT_DASHBOARD_PORT" default:"9800"`
 	APIKey        string `env:"BT_API_KEY" default:""`
+	TLSCert       string `env:"BT_TLS_CERT" default:""`
+	TLSKey        string `env:"BT_TLS_KEY" default:""`
 
 	// LLM
 	OllamaHost  string `env:"OLLAMA_HOST" default:"http://localhost:11434"`
@@ -80,6 +82,8 @@ func Load() (*Config, error) {
 	// Server
 	c.DashboardPort = envInt("BT_DASHBOARD_PORT", 9800)
 	c.APIKey = os.Getenv("BT_API_KEY")
+	c.TLSCert = os.Getenv("BT_TLS_CERT")
+	c.TLSKey = os.Getenv("BT_TLS_KEY")
 
 	// LLM
 	c.OllamaHost = envStr("OLLAMA_HOST", "http://localhost:11434")
@@ -152,11 +156,20 @@ func (c *Config) Validate() error {
 	if c.OllamaModel == "" {
 		errs = append(errs, ValidationError{"OllamaModel", "must not be empty"})
 	}
+	// TLS: if cert is set, key must also be set, and vice versa
+	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
+		errs = append(errs, ValidationError{"TLS", "both BT_TLS_CERT and BT_TLS_KEY must be set for TLS"})
+	}
 
 	if len(errs) > 0 {
 		return errs
 	}
 	return nil
+}
+
+// TLSEnabled returns true when both cert and key paths are configured.
+func (c *Config) TLSEnabled() bool {
+	return c.TLSCert != "" && c.TLSKey != ""
 }
 
 // FeatureFlags returns a map of all feature flags for dashboard display.
