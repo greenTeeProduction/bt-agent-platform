@@ -1,9 +1,14 @@
 // Package config provides environment-based configuration for the Go BT framework.
 // All values have defaults, are overrideable via environment variables, and are
 // validated on load. Supports feature flags for gradual rollout.
+//
+// Config file support: set BT_CONFIG_FILE to a JSON file path. File values
+// are loaded first, then environment variables override them. This enables
+// team-shared base configs with per-deployment env overrides.
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,44 +19,47 @@ import (
 // Config holds all runtime configuration for the BT platform.
 type Config struct {
 	// Server
-	DashboardPort int    `env:"BT_DASHBOARD_PORT" default:"9800"`
-	APIKey        string `env:"BT_API_KEY" default:""`
-	TLSCert       string `env:"BT_TLS_CERT" default:""`
-	TLSKey        string `env:"BT_TLS_KEY" default:""`
+	DashboardPort int    `json:"dashboard_port" env:"BT_DASHBOARD_PORT" default:"9800"`
+	APIKey        string `json:"api_key,omitempty" env:"BT_API_KEY" default:""`
+	TLSCert       string `json:"tls_cert,omitempty" env:"BT_TLS_CERT" default:""`
+	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	OllamaHost  string `env:"OLLAMA_HOST" default:"http://localhost:11434"`
-	OllamaModel string `env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
-	LLMTimeout  int    `env:"BT_LLM_TIMEOUT" default:"300"` // seconds
+	OllamaHost  string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
+	OllamaModel string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
+	LLMTimeout  int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"` // seconds
 
 	// Rate Limiting
-	RateLimitRPS   float64 `env:"BT_RATE_LIMIT_RPS" default:"100"`
-	RateLimitBurst int     `env:"BT_RATE_LIMIT_BURST" default:"20"`
+	RateLimitRPS   float64 `json:"rate_limit_rps" env:"BT_RATE_LIMIT_RPS" default:"100"`
+	RateLimitBurst int     `json:"rate_limit_burst" env:"BT_RATE_LIMIT_BURST" default:"20"`
 
 	// Feature Flags
-	GardenerEnabled   bool `env:"BT_FEATURE_GARDENER" default:"true"`
-	SchedulerEnabled  bool `env:"BT_FEATURE_SCHEDULER" default:"true"`
-	AutoEvolveEnabled bool `env:"BT_FEATURE_AUTO_EVOLVE" default:"false"`
-	KanbanEnabled     bool `env:"BT_FEATURE_KANBAN" default:"true"`
-	ThinktankEnabled  bool `env:"BT_FEATURE_THINKTANK" default:"true"`
-	StartupSimEnabled  bool `env:"BT_FEATURE_STARTUP_SIM" default:"true"`
+	GardenerEnabled   bool `json:"gardener_enabled" env:"BT_FEATURE_GARDENER" default:"true"`
+	SchedulerEnabled  bool `json:"scheduler_enabled" env:"BT_FEATURE_SCHEDULER" default:"true"`
+	AutoEvolveEnabled bool `json:"auto_evolve_enabled" env:"BT_FEATURE_AUTO_EVOLVE" default:"false"`
+	KanbanEnabled     bool `json:"kanban_enabled" env:"BT_FEATURE_KANBAN" default:"true"`
+	ThinktankEnabled  bool `json:"thinktank_enabled" env:"BT_FEATURE_THINKTANK" default:"true"`
+	StartupSimEnabled  bool `json:"startup_sim_enabled" env:"BT_FEATURE_STARTUP_SIM" default:"true"`
 
 	// Persistence
-	ReflectionsDir string `env:"BT_REFLECTIONS_DIR" default:""`   // defaults to ~/.go-bt-reflections
-	AgentDefsDir   string `env:"BT_AGENT_DEFS_DIR" default:""`    // defaults to ~/.go-bt-evolve/agents
-	HistoryDir     string `env:"BT_HISTORY_DIR" default:""`       // defaults to ~/.go-bt-evolve/history
-	LogDir         string `env:"BT_LOG_DIR" default:""`           // defaults to ~/.go-bt-evolve/logs
+	ReflectionsDir string `json:"reflections_dir,omitempty" env:"BT_REFLECTIONS_DIR" default:""`
+	AgentDefsDir   string `json:"agent_defs_dir,omitempty" env:"BT_AGENT_DEFS_DIR" default:""`
+	HistoryDir     string `json:"history_dir,omitempty" env:"BT_HISTORY_DIR" default:""`
+	LogDir         string `json:"log_dir,omitempty" env:"BT_LOG_DIR" default:""`
 
 	// Gardener
-	GardenerCycleInterval int `env:"BT_GARDENER_CYCLE" default:"300"` // seconds (5 min)
-	GardenerMutationsPer  int `env:"BT_GARDENER_MUTATIONS" default:"2"`
-	GardenerMaxNodes      int `env:"BT_GARDENER_MAX_NODES" default:"20"` // multiplier on original
+	GardenerCycleInterval int `json:"gardener_cycle_interval" env:"BT_GARDENER_CYCLE" default:"300"` // seconds
+	GardenerMutationsPer  int `json:"gardener_mutations_per" env:"BT_GARDENER_MUTATIONS" default:"2"`
+	GardenerMaxNodes      int `json:"gardener_max_nodes" env:"BT_GARDENER_MAX_NODES" default:"20"` // multiplier
 
 	// Scheduler
-	SchedulerCheckInterval int `env:"BT_SCHEDULER_INTERVAL" default:"60"` // seconds
+	SchedulerCheckInterval int `json:"scheduler_check_interval" env:"BT_SCHEDULER_INTERVAL" default:"60"` // seconds
 
 	// Validation
-	MaxBodySize int64 `env:"BT_MAX_BODY_SIZE" default:"1048576"` // 1 MB
+	MaxBodySize int64 `json:"max_body_size" env:"BT_MAX_BODY_SIZE" default:"1048576"` // 1 MB
+
+	// Metadata
+	ConfigFile string `json:"-" env:"BT_CONFIG_FILE" default:""` // path to JSON config file
 }
 
 // ValidationError represents a configuration validation error.
@@ -76,50 +84,302 @@ func (e ValidationErrors) Error() string {
 }
 
 // Load reads configuration from environment variables with defaults.
+// If BT_CONFIG_FILE is set, loads base values from the JSON file first,
+// then environment variables override any file values.
 func Load() (*Config, error) {
-	c := &Config{}
+	c := newDefaultConfig()
 
-	// Server
-	c.DashboardPort = envInt("BT_DASHBOARD_PORT", 9800)
-	c.APIKey = os.Getenv("BT_API_KEY")
-	c.TLSCert = os.Getenv("BT_TLS_CERT")
-	c.TLSKey = os.Getenv("BT_TLS_KEY")
+	// 1. Load from config file if BT_CONFIG_FILE is set
+	configFile := os.Getenv("BT_CONFIG_FILE")
+	if configFile != "" {
+		c.ConfigFile = configFile
+		if err := loadFile(configFile, c); err != nil {
+			return nil, fmt.Errorf("config file %s: %w", configFile, err)
+		}
+	}
 
-	// LLM
-	c.OllamaHost = envStr("OLLAMA_HOST", "http://localhost:11434")
-	c.OllamaModel = envStr("BT_OLLAMA_MODEL", "qwen3.6:35b-a3b")
-	c.LLMTimeout = envInt("BT_LLM_TIMEOUT", 300)
+	// 2. Apply environment variable overrides
+	applyEnvOverrides(c)
 
-	// Rate Limiting
-	c.RateLimitRPS = envFloat("BT_RATE_LIMIT_RPS", 100)
-	c.RateLimitBurst = envInt("BT_RATE_LIMIT_BURST", 20)
-
-	// Feature Flags
-	c.GardenerEnabled = envBool("BT_FEATURE_GARDENER", true)
-	c.SchedulerEnabled = envBool("BT_FEATURE_SCHEDULER", true)
-	c.AutoEvolveEnabled = envBool("BT_FEATURE_AUTO_EVOLVE", false)
-	c.KanbanEnabled = envBool("BT_FEATURE_KANBAN", true)
-	c.ThinktankEnabled = envBool("BT_FEATURE_THINKTANK", true)
-	c.StartupSimEnabled = envBool("BT_FEATURE_STARTUP_SIM", true)
-
-	// Persistence
-	c.ReflectionsDir = os.Getenv("BT_REFLECTIONS_DIR")
-	c.AgentDefsDir = os.Getenv("BT_AGENT_DEFS_DIR")
-	c.HistoryDir = os.Getenv("BT_HISTORY_DIR")
-	c.LogDir = os.Getenv("BT_LOG_DIR")
-
-	// Gardener
-	c.GardenerCycleInterval = envInt("BT_GARDENER_CYCLE", 300)
-	c.GardenerMutationsPer = envInt("BT_GARDENER_MUTATIONS", 2)
-	c.GardenerMaxNodes = envInt("BT_GARDENER_MAX_NODES", 20)
-
-	// Scheduler
-	c.SchedulerCheckInterval = envInt("BT_SCHEDULER_INTERVAL", 60)
-
-	// Validation
-	c.MaxBodySize = int64(envInt("BT_MAX_BODY_SIZE", 1048576))
+	// 3. Validate
+	if err := c.Validate(); err != nil {
+		return c, err
+	}
 
 	return c, nil
+}
+
+// LoadFile loads configuration from a JSON file, then applies any
+// environment variable overrides on top. This is useful for explicit
+// config file loading without relying on the BT_CONFIG_FILE env var.
+func LoadFile(path string) (*Config, error) {
+	c := newDefaultConfig()
+	c.ConfigFile = path
+	if err := loadFile(path, c); err != nil {
+		return nil, err
+	}
+	applyEnvOverrides(c)
+	return c, nil
+}
+
+// newDefaultConfig returns a Config with all default values set.
+func newDefaultConfig() *Config {
+	return &Config{
+		DashboardPort:          9800,
+		OllamaHost:             "http://localhost:11434",
+		OllamaModel:            "qwen3.6:35b-a3b",
+		LLMTimeout:             300,
+		RateLimitRPS:           100,
+		RateLimitBurst:         20,
+		GardenerEnabled:        true,
+		SchedulerEnabled:       true,
+		KanbanEnabled:          true,
+		ThinktankEnabled:       true,
+		StartupSimEnabled:      true,
+		GardenerCycleInterval:  300,
+		GardenerMutationsPer:   2,
+		GardenerMaxNodes:       20,
+		SchedulerCheckInterval: 60,
+		MaxBodySize:            1048576,
+	}
+}
+
+// loadFile reads a JSON config file and merges non-zero values into c.
+// Zero values in the file are skipped — defaults take precedence.
+// Only file-specified fields override defaults; env vars are applied later.
+func loadFile(path string, c *Config) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read: %w", err)
+	}
+
+	// Unmarshal into a temporary Config with zero values so we can
+	// detect which fields were actually set in the file.
+	var fileCfg Config
+	if err := json.Unmarshal(data, &fileCfg); err != nil {
+		return fmt.Errorf("parse JSON: %w", err)
+	}
+
+	// Merge: file values override defaults, but only non-zero values.
+	// Zero values in the file mean "use default".
+	mergeFileConfig(c, &fileCfg)
+	return nil
+}
+
+// mergeFileConfig merges file-provided values into the config.
+// Only non-zero values from the file are applied; zero values are
+// treated as "not specified" and keep the default.
+func mergeFileConfig(c *Config, file *Config) {
+	if file.DashboardPort != 0 {
+		c.DashboardPort = file.DashboardPort
+	}
+	if file.APIKey != "" {
+		c.APIKey = file.APIKey
+	}
+	if file.TLSCert != "" {
+		c.TLSCert = file.TLSCert
+	}
+	if file.TLSKey != "" {
+		c.TLSKey = file.TLSKey
+	}
+	if file.OllamaHost != "" {
+		c.OllamaHost = file.OllamaHost
+	}
+	if file.OllamaModel != "" {
+		c.OllamaModel = file.OllamaModel
+	}
+	if file.LLMTimeout != 0 {
+		c.LLMTimeout = file.LLMTimeout
+	}
+	if file.RateLimitRPS != 0 {
+		c.RateLimitRPS = file.RateLimitRPS
+	}
+	if file.RateLimitBurst != 0 {
+		c.RateLimitBurst = file.RateLimitBurst
+	}
+	// Feature flags: use explicit boolean check since false is valid
+	if file.GardenerEnabled || hasExplicitField(file, "gardener_enabled") {
+		c.GardenerEnabled = file.GardenerEnabled
+	}
+	if file.SchedulerEnabled || hasExplicitField(file, "scheduler_enabled") {
+		c.SchedulerEnabled = file.SchedulerEnabled
+	}
+	if file.AutoEvolveEnabled || hasExplicitField(file, "auto_evolve_enabled") {
+		c.AutoEvolveEnabled = file.AutoEvolveEnabled
+	}
+	if file.KanbanEnabled || hasExplicitField(file, "kanban_enabled") {
+		c.KanbanEnabled = file.KanbanEnabled
+	}
+	if file.ThinktankEnabled || hasExplicitField(file, "thinktank_enabled") {
+		c.ThinktankEnabled = file.ThinktankEnabled
+	}
+	if file.StartupSimEnabled || hasExplicitField(file, "startup_sim_enabled") {
+		c.StartupSimEnabled = file.StartupSimEnabled
+	}
+	if file.ReflectionsDir != "" {
+		c.ReflectionsDir = file.ReflectionsDir
+	}
+	if file.AgentDefsDir != "" {
+		c.AgentDefsDir = file.AgentDefsDir
+	}
+	if file.HistoryDir != "" {
+		c.HistoryDir = file.HistoryDir
+	}
+	if file.LogDir != "" {
+		c.LogDir = file.LogDir
+	}
+	if file.GardenerCycleInterval != 0 {
+		c.GardenerCycleInterval = file.GardenerCycleInterval
+	}
+	if file.GardenerMutationsPer != 0 {
+		c.GardenerMutationsPer = file.GardenerMutationsPer
+	}
+	if file.GardenerMaxNodes != 0 {
+		c.GardenerMaxNodes = file.GardenerMaxNodes
+	}
+	if file.SchedulerCheckInterval != 0 {
+		c.SchedulerCheckInterval = file.SchedulerCheckInterval
+	}
+	if file.MaxBodySize != 0 {
+		c.MaxBodySize = file.MaxBodySize
+	}
+}
+
+// hasExplicitField checks whether a JSON file explicitly set a boolean field.
+// Since Go's json decoder treats missing bools as false, we re-parse into
+// a raw map to check field presence for booleans.
+func hasExplicitField(cfg *Config, field string) bool {
+	// Re-marshal and check — this is only called for booleans
+	// where false is a valid explicit setting.
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return false
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	_, ok := raw[field]
+	return ok
+}
+
+// applyEnvOverrides applies environment variable overrides on top of c.
+func applyEnvOverrides(c *Config) {
+	// Server
+	if v := os.Getenv("BT_DASHBOARD_PORT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.DashboardPort = n
+		}
+	}
+	if v := os.Getenv("BT_API_KEY"); v != "" {
+		c.APIKey = v
+	}
+	if v := os.Getenv("BT_TLS_CERT"); v != "" {
+		c.TLSCert = v
+	}
+	if v := os.Getenv("BT_TLS_KEY"); v != "" {
+		c.TLSKey = v
+	}
+
+	// LLM
+	if v := os.Getenv("OLLAMA_HOST"); v != "" {
+		c.OllamaHost = v
+	}
+	if v := os.Getenv("BT_OLLAMA_MODEL"); v != "" {
+		c.OllamaModel = v
+	}
+	if v := os.Getenv("BT_LLM_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.LLMTimeout = n
+		}
+	}
+
+	// Rate Limiting
+	if v := os.Getenv("BT_RATE_LIMIT_RPS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.RateLimitRPS = f
+		}
+	}
+	if v := os.Getenv("BT_RATE_LIMIT_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.RateLimitBurst = n
+		}
+	}
+
+	// Feature Flags
+	if v := os.Getenv("BT_FEATURE_GARDENER"); v != "" {
+		c.GardenerEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_FEATURE_SCHEDULER"); v != "" {
+		c.SchedulerEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_FEATURE_AUTO_EVOLVE"); v != "" {
+		c.AutoEvolveEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_FEATURE_KANBAN"); v != "" {
+		c.KanbanEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_FEATURE_THINKTANK"); v != "" {
+		c.ThinktankEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_FEATURE_STARTUP_SIM"); v != "" {
+		c.StartupSimEnabled = parseBool(v)
+	}
+
+	// Persistence
+	if v := os.Getenv("BT_REFLECTIONS_DIR"); v != "" {
+		c.ReflectionsDir = v
+	}
+	if v := os.Getenv("BT_AGENT_DEFS_DIR"); v != "" {
+		c.AgentDefsDir = v
+	}
+	if v := os.Getenv("BT_HISTORY_DIR"); v != "" {
+		c.HistoryDir = v
+	}
+	if v := os.Getenv("BT_LOG_DIR"); v != "" {
+		c.LogDir = v
+	}
+
+	// Gardener
+	if v := os.Getenv("BT_GARDENER_CYCLE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.GardenerCycleInterval = n
+		}
+	}
+	if v := os.Getenv("BT_GARDENER_MUTATIONS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.GardenerMutationsPer = n
+		}
+	}
+	if v := os.Getenv("BT_GARDENER_MAX_NODES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.GardenerMaxNodes = n
+		}
+	}
+
+	// Scheduler
+	if v := os.Getenv("BT_SCHEDULER_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.SchedulerCheckInterval = n
+		}
+	}
+
+	// Validation
+	if v := os.Getenv("BT_MAX_BODY_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.MaxBodySize = int64(n)
+		}
+	}
+}
+
+// parseBool parses a boolean string value (1/true/yes/on → true).
+func parseBool(v string) bool {
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // Validate checks all configuration values and returns validation errors.
@@ -182,6 +442,18 @@ func (c *Config) FeatureFlags() map[string]bool {
 		"thinktank":   c.ThinktankEnabled,
 		"startup_sim":  c.StartupSimEnabled,
 	}
+}
+
+// SaveFile writes the current configuration to a JSON file for sharing/review.
+func (c *Config) SaveFile(path string) error {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
