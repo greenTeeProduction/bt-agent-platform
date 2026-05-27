@@ -459,3 +459,55 @@ func TestSetSecurity_NestedArgs(t *testing.T) {
 		t.Errorf("expected sanitized array value, got %q", text)
 	}
 }
+
+func TestRateLimiting(t *testing.T) {
+	s, buf := testServer()
+	s.SetRateLimit(2, 3) // 2 tokens/sec, burst 3
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// First 3 requests (burst) should succeed
+	for i := 1; i <= 3; i++ {
+		buf.Reset()
+		req := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"ping","arguments":{}}}`, i))
+		s.handleMessage(req)
+		msgs := readMessages(t, buf)
+		if len(msgs) != 1 || msgs[0].Error != nil {
+			t.Fatalf("request %d (burst) should succeed, got error: %+v", i, msgs)
+		}
+	}
+
+	// 4th request exceeds burst, should be rate limited
+	buf.Reset()
+	req := []byte(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ping","arguments":{}}}`)
+	s.handleMessage(req)
+	msgs := readMessages(t, buf)
+	if msgs[0].Error == nil {
+		t.Fatal("4th request should be rate limited")
+	}
+	if msgs[0].Error.Message != "Rate limit exceeded. Retry later." {
+		t.Errorf("unexpected rate limit error: %s", msgs[0].Error.Message)
+	}
+}
+
+func TestRateLimitingDisabled(t *testing.T) {
+	s, buf := testServer()
+	// No rate limit set — default should allow all requests
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// 10 requests should all succeed
+	for i := 1; i <= 10; i++ {
+		buf.Reset()
+		req := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"ping","arguments":{}}}`, i))
+		s.handleMessage(req)
+		msgs := readMessages(t, buf)
+		if len(msgs) != 1 || msgs[0].Error != nil {
+			t.Fatalf("request %d should succeed without rate limiting, got: %+v", i, msgs)
+		}
+	}
+}

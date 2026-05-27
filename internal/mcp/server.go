@@ -7,6 +7,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/security"
 )
 
 // Message is a JSON-RPC 2.0 message.
@@ -67,8 +70,10 @@ type Server struct {
 	handler       map[string]ToolHandler
 	in            *bufio.Reader
 	out           io.Writer
+	mu            sync.Mutex // protects out writes (concurrent handlers)
 	sanitizeArgs  bool
 	apiKey        string
+	rateLimiter   *security.RateLimiter
 }
 
 // NewServer creates a new MCP server.
@@ -96,7 +101,14 @@ func (s *Server) RegisterTool(name, description string, props map[string]Propert
 }
 
 // Run starts the MCP server loop, reading from stdin and writing to stdout.
+// Handlers run concurrently so slow operations (Ollama calls) don't block
+// other requests. A concurrency limiter prevents unbounded goroutine growth.
 func (s *Server) Run() error {
+	// Concurrency limiter: max 3 simultaneous tool calls.
+	// Beyond this, requests are rejected with a busy signal instead of
+	// queuing indefinitely and causing gateway timeouts.
+	sem := make(chan struct{}, 3)
+
 	for {
 		line, err := s.in.ReadBytes('\n')
 		if err != nil {
@@ -108,7 +120,30 @@ func (s *Server) Run() error {
 		if len(line) == 0 {
 			continue
 		}
-		s.handleMessage(line)
+
+		// Fast-path: handle initialize/list/notifications synchronously.
+		// These never block and must complete before tools/call can work.
+		var msg Message
+		if err := json.Unmarshal(line, &msg); err != nil {
+			s.writeError(nil, -32700, "Parse error: "+err.Error())
+			continue
+		}
+
+		if msg.Method == "tools/call" {
+			// Acquire semaphore slot; if full, reject with busy signal.
+			select {
+			case sem <- struct{}{}:
+				go func(data []byte) {
+					defer func() { <-sem }()
+					s.handleMessage(data)
+				}(line)
+			default:
+				s.writeError(msg.ID, -32000, "Server busy: max 3 concurrent tool calls. Retry in a few seconds.")
+			}
+		} else {
+			// Non-blocking methods: handle inline.
+			s.handleMessage(line)
+		}
 	}
 }
 
@@ -119,6 +154,18 @@ func (s *Server) Run() error {
 func (s *Server) SetSecurity(sanitize bool, apiKey string) {
 	s.sanitizeArgs = sanitize
 	s.apiKey = apiKey
+}
+
+// SetRateLimit enables time-based rate limiting on tools/call requests.
+// rate=tokens/second, burst=max burst size. Uses the security package's
+// token bucket implementation with the server name as the client key.
+// Set to 0 to disable (default: no rate limiting).
+func (s *Server) SetRateLimit(rate float64, burst int) {
+	if rate <= 0 || burst <= 0 {
+		s.rateLimiter = nil
+		return
+	}
+	s.rateLimiter = security.NewRateLimiter(rate, burst)
 }
 
 // sanitizeArg recursively sanitizes JSON values by stripping null bytes,
@@ -214,6 +261,13 @@ func (s *Server) handleMessage(data []byte) {
 			}
 		}
 
+		// ── Security: time-based rate limiting ──
+		if s.rateLimiter != nil && !s.rateLimiter.Allow(s.name) {
+			fmt.Fprintf(os.Stderr, "mcp: tools/call rate limited for tool=%s\n", params.Name)
+			s.writeError(msg.ID, -32000, "Rate limit exceeded. Retry later.")
+			return
+		}
+
 		// ── Security: sanitize arguments ──
 		if s.sanitizeArgs {
 			var rawArgs interface{}
@@ -243,6 +297,8 @@ func (s *Server) handleMessage(data []byte) {
 }
 
 func (s *Server) writeResult(id interface{}, result interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	msg := Message{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -253,6 +309,8 @@ func (s *Server) writeResult(id interface{}, result interface{}) {
 }
 
 func (s *Server) writeError(id interface{}, code int, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	msg := Message{
 		JSONRPC: "2.0",
 		ID:      id,

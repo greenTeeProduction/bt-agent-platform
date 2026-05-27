@@ -22,7 +22,77 @@ import (
 	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
+	btcore "github.com/rvitorper/go-bt/core"
 )
+
+func init() {
+	// ── Telegram Clarify — quality gate conditions ──
+	engine.RegisterCondition("IsTelegram", func(b *engine.Blackboard) bool {
+		if platform, ok := b.ChainState["platform"]; ok {
+			if p, ok := platform.(string); ok && p == "telegram" {
+				return true
+			}
+		}
+		return false
+	})
+
+	engine.RegisterCondition("HasQuestion", func(b *engine.Blackboard) bool {
+		response := b.Result
+		if response == "" {
+			response = b.Task
+		}
+		markers := []string{"?", "should I", "should we",
+			"which ", "what ", "how ", "why ", "when ", "where ",
+			"do you want", "would you like", "choose ", "pick ", "select "}
+		lower := strings.ToLower(response)
+		for _, m := range markers {
+			if strings.Contains(lower, m) {
+				return true
+			}
+		}
+		return false
+	})
+
+	engine.RegisterCondition("IsClarifyUsed", func(b *engine.Blackboard) bool {
+		if used, ok := b.ChainState["clarify_used"]; ok {
+			if v, ok := used.(bool); ok && v {
+				return true
+			}
+		}
+		return strings.Contains(strings.ToLower(b.Result), "clarify") ||
+			strings.Contains(strings.ToLower(b.Result), "multiple choice")
+	})
+
+	// ── Telegram Clarify — quality gate actions ──
+	engine.RegisterAction("MarkClarifyOK", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		b := ctx.Blackboard
+		b.Outcome = "success"
+		b.ChainState["telegram_clarify_ok"] = true
+		return 1
+	})
+
+	engine.RegisterAction("ReportClarifyViolation", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		b := ctx.Blackboard
+		b.ChainState["telegram_clarify_violation"] = true
+		b.ChainState["telegram_clarify_fix"] = "Use clarify(question=..., choices=[...]) instead of plain text"
+		b.Outcome = "violation"
+		return 1
+	})
+
+	engine.RegisterAction("SuggestFix", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		b := ctx.Blackboard
+		if s, ok := b.ChainState["telegram_clarify_suggestion"]; ok {
+			if str, ok := s.(string); ok {
+				b.Result = str
+				b.Outcome = "success"
+				return 1
+			}
+		}
+		b.Result = "Use clarify(question=\"...\", choices=[\"Option A\", \"Option B\"])"
+		b.Outcome = "success"
+		return 1
+	})
+}
 
 // resolveTree maps a tree identifier string to the actual tree object.
 func resolveTree(id string) *evolution.SerializableNode {
@@ -91,6 +161,10 @@ func resolveTree(id string) *evolution.SerializableNode {
 		case "peer_review": return thinktank.PeerReviewTree()
 		case "report": return thinktank.ReportGenerationTree()
 		}
+	}
+	// telegram:clarify — quality gate for Telegram responses
+	if id == "telegram:clarify" {
+		return evolution.TelegramClarifyTree()
 	}
 	// merged universal tree
 	if id == "merged" {
@@ -995,6 +1069,7 @@ func main() {
 		})
 
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
+	server.SetRateLimit(2, 5) // 2 req/s, burst 5
 
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)

@@ -160,6 +160,8 @@ func main() {
 
 	btlog.Info("bt-evaluator: 5 tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
+	server.SetRateLimit(5, 10) // 5 req/s, burst 10 (evaluator is fast, no Ollama)
+
 	if err := server.Run(); err != nil {
 		btlog.Error("bt-evaluator: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)

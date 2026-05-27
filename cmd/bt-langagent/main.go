@@ -196,6 +196,8 @@ func main() {
 
 	btlog.Info("bt-langagent: 3 MCP tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
+	server.SetRateLimit(2, 5) // 2 req/s, burst 5
+
 	if err := server.Run(); err != nil {
 		btlog.Error("bt-langagent: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
