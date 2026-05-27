@@ -3,6 +3,7 @@
 package security
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -175,4 +176,150 @@ func SanitizeInput(input string) string {
 	}
 	// Trim excessive whitespace
 	return strings.TrimSpace(s)
+}
+
+// ─── Security Headers ───────────────────────────────────────────────────────
+
+// SecurityHeadersConfig controls which security headers are set and their values.
+// Zero values disable the respective header (except HSTS which is opt-in).
+type SecurityHeadersConfig struct {
+	// HSTS is opt-in — only set when serving over HTTPS/Tailscale.
+	EnableHSTS         bool
+	HSTSMaxAge         int    // seconds, default 31536000 (1 year)
+	HSTSIncludeSub     bool   // includeSubDomains
+	FrameOptions       string // default "DENY"
+	CSP                string // Content-Security-Policy value
+	ReferrerPolicy     string // default "strict-origin-when-cross-origin"
+	PermissionsPolicy  string // Permissions-Policy header value
+}
+
+// DefaultSecurityHeaders returns a production-ready default configuration.
+func DefaultSecurityHeaders() SecurityHeadersConfig {
+	return SecurityHeadersConfig{
+		EnableHSTS:        false, // opt-in — only for HTTPS deployments
+		HSTSMaxAge:        31536000,
+		FrameOptions:      "DENY",
+		CSP:               "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+		ReferrerPolicy:    "strict-origin-when-cross-origin",
+		PermissionsPolicy: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+	}
+}
+
+// SecurityHeadersMiddleware adds standard HTTP security headers to every response.
+// Use DefaultSecurityHeaders() for production defaults or pass a custom config.
+func SecurityHeadersMiddleware(cfg SecurityHeadersConfig) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+
+			// Prevent MIME-type sniffing
+			h.Set("X-Content-Type-Options", "nosniff")
+
+			// Prevent clickjacking
+			if cfg.FrameOptions != "" {
+				h.Set("X-Frame-Options", cfg.FrameOptions)
+			}
+
+			// Enable browser XSS auditor
+			h.Set("X-XSS-Protection", "1; mode=block")
+
+			// HSTS (opt-in — only for HTTPS)
+			if cfg.EnableHSTS {
+				policy := "max-age=" + itoa(cfg.HSTSMaxAge)
+				if cfg.HSTSIncludeSub {
+					policy += "; includeSubDomains"
+				}
+				h.Set("Strict-Transport-Security", policy)
+			}
+
+			// Content Security Policy
+			if cfg.CSP != "" {
+				h.Set("Content-Security-Policy", cfg.CSP)
+			}
+
+			// Referrer Policy
+			if cfg.ReferrerPolicy != "" {
+				h.Set("Referrer-Policy", cfg.ReferrerPolicy)
+			}
+
+			// Permissions Policy
+			if cfg.PermissionsPolicy != "" {
+				h.Set("Permissions-Policy", cfg.PermissionsPolicy)
+			}
+
+			// Disable caching of API responses by default
+			h.Set("Cache-Control", "no-store, max-age=0")
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CrossOriginMiddleware adds CORS headers for browser-based access.
+// origins is a comma-separated list of allowed origins (use "*" for any).
+// methods is a comma-separated list of allowed HTTP methods.
+func CrossOriginMiddleware(origins, methods string) func(http.Handler) http.Handler {
+	if origins == "" {
+		origins = "*"
+	}
+	if methods == "" {
+		methods = "GET, POST, PUT, DELETE, OPTIONS"
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", origins)
+			h.Set("Access-Control-Allow-Methods", methods)
+			h.Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
+			h.Set("Access-Control-Max-Age", "86400")
+
+			// Handle preflight
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequestTimeoutMiddleware enforces a maximum duration for request processing.
+func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+
+			done := make(chan struct{})
+			go func() {
+				next.ServeHTTP(w, r.WithContext(ctx))
+				close(done)
+			}()
+
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusGatewayTimeout)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "request_timeout",
+					"message": "Request exceeded maximum processing time.",
+				})
+			}
+		})
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	return s
 }

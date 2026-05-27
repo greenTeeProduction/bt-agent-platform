@@ -88,8 +88,10 @@ func main() {
 	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
 	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
 
-	// Middleware stack: metrics → sanitize → rate limit
+	// Middleware stack: security headers → cors → metrics → sanitize → rate limit
 	var handler http.Handler = mux
+	handler = security.SecurityHeadersMiddleware(security.DefaultSecurityHeaders())(handler)
+	handler = security.CrossOriginMiddleware("*", "GET, POST, PUT, DELETE, OPTIONS")(handler)
 	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
 	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection

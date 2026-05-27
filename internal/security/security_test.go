@@ -143,3 +143,165 @@ func TestSanitizeMiddleware_BodyTooLarge(t *testing.T) {
 		t.Errorf("expected 413, got %d", rec.Code)
 	}
 }
+
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	cfg := DefaultSecurityHeaders()
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+
+	h := rec.Header()
+	tests := []struct{ header, expected string }{
+		{"X-Content-Type-Options", "nosniff"},
+		{"X-Frame-Options", "DENY"},
+		{"X-XSS-Protection", "1; mode=block"},
+		{"Referrer-Policy", "strict-origin-when-cross-origin"},
+		{"Cache-Control", "no-store, max-age=0"},
+	}
+	for _, tt := range tests {
+		if got := h.Get(tt.header); got != tt.expected {
+			t.Errorf("%s = %q, want %q", tt.header, got, tt.expected)
+		}
+	}
+
+	// CSP should be present
+	if csp := h.Get("Content-Security-Policy"); csp == "" {
+		t.Error("Content-Security-Policy should be set")
+	}
+	// Permissions-Policy should be present
+	if pp := h.Get("Permissions-Policy"); pp == "" {
+		t.Error("Permissions-Policy should be set")
+	}
+	// HSTS should NOT be set by default
+	if h.Get("Strict-Transport-Security") != "" {
+		t.Error("HSTS should not be set with defaults")
+	}
+}
+
+func TestSecurityHeadersMiddleware_HSTS(t *testing.T) {
+	cfg := SecurityHeadersConfig{
+		EnableHSTS:     true,
+		HSTSMaxAge:     31536000,
+		HSTSIncludeSub: true,
+	}
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	hsts := rec.Header().Get("Strict-Transport-Security")
+	if hsts == "" {
+		t.Error("HSTS should be set when enabled")
+	}
+	if !strings.Contains(hsts, "max-age=31536000") {
+		t.Errorf("HSTS should include max-age, got %q", hsts)
+	}
+	if !strings.Contains(hsts, "includeSubDomains") {
+		t.Errorf("HSTS should include subdomains, got %q", hsts)
+	}
+}
+
+func TestSecurityHeadersMiddleware_CustomConfig(t *testing.T) {
+	cfg := SecurityHeadersConfig{
+		FrameOptions:     "SAMEORIGIN",
+		ReferrerPolicy:   "no-referrer",
+		CSP:              "default-src 'none'",
+	}
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Errorf("X-Frame-Options = %q, want SAMEORIGIN", got)
+	}
+	if got := rec.Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+		t.Errorf("CSP = %q, want 'default-src 'none''", got)
+	}
+	if rec.Header().Get("Permissions-Policy") != "" {
+		t.Error("Permissions-Policy should be empty when not configured")
+	}
+}
+
+func TestCrossOriginMiddleware(t *testing.T) {
+	handler := CrossOriginMiddleware("*", "GET, POST")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("ACAO = %q, want *", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST" {
+		t.Errorf("ACAM = %q, want GET, POST", got)
+	}
+}
+
+func TestCrossOriginMiddleware_Preflight(t *testing.T) {
+	handler := CrossOriginMiddleware("https://example.com", "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called for OPTIONS preflight")
+	}))
+
+	req := httptest.NewRequest("OPTIONS", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("expected 204 for preflight, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+		t.Errorf("ACAO = %q, want https://example.com", got)
+	}
+}
+
+func TestRequestTimeoutMiddleware(t *testing.T) {
+	handler := RequestTimeoutMiddleware(50 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("fast handler should return 200, got %d", rec.Code)
+	}
+}
+
+func TestRequestTimeoutMiddleware_Timeout(t *testing.T) {
+	handler := RequestTimeoutMiddleware(10 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond) // exceeds timeout
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Errorf("slow handler should return 504, got %d", rec.Code)
+	}
+}
