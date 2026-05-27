@@ -521,3 +521,224 @@ func TestConcurrencyLimiter_MultipleReleaseNoUnderflow(t *testing.T) {
 		t.Errorf("expected 0 active after multiple releases, got %d", active)
 	}
 }
+
+// ─── AgentExecutor Tests ─────────────────────────────────────────────────────
+
+func TestLocalExecutor_Execute(t *testing.T) {
+	expected := &AgentResult{
+		Agent:        "test-agent",
+		Task:         "echo hello",
+		Output:       "hello",
+		Success:      true,
+		QualityScore: 0.95,
+	}
+	exec := NewLocalExecutor("local-1", func(agent, task string) (*AgentResult, error) {
+		return expected, nil
+	})
+
+	result, err := exec.Execute("test-agent", "echo hello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Agent != expected.Agent {
+		t.Errorf("expected agent %q, got %q", expected.Agent, result.Agent)
+	}
+	if result.Output != expected.Output {
+		t.Errorf("expected output %q, got %q", expected.Output, result.Output)
+	}
+	if !result.Success {
+		t.Error("expected success=true")
+	}
+}
+
+func TestLocalExecutor_Health(t *testing.T) {
+	exec := NewLocalExecutor("local-1", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true}, nil
+	})
+	if err := exec.Health(); err != nil {
+		t.Errorf("healthy executor should return nil, got %v", err)
+	}
+}
+
+func TestLocalExecutor_WithHealthCheck(t *testing.T) {
+	exec := NewLocalExecutor("local-1", nil).
+		WithHealthCheck(func() error { return errors.New("unhealthy") })
+	if err := exec.Health(); err == nil {
+		t.Error("unhealthy executor should return error")
+	}
+}
+
+func TestLocalExecutor_String(t *testing.T) {
+	exec := NewLocalExecutor("local-1", nil)
+	if s := exec.String(); s != "local-1" {
+		t.Errorf("expected 'local-1', got %q", s)
+	}
+}
+
+func TestAgentRouter_RoundRobinRouting(t *testing.T) {
+	callCount := map[string]int{}
+	makeExec := func(name string) *LocalExecutor {
+		return NewLocalExecutor(name, func(agent, task string) (*AgentResult, error) {
+			callCount[name]++
+			return &AgentResult{Agent: agent, Task: task, Success: true}, nil
+		})
+	}
+
+	e1 := makeExec("e1")
+	e2 := makeExec("e2")
+	e3 := makeExec("e3")
+	router := NewAgentRouter(e1, e2, e3)
+
+	// Execute 6 tasks — each executor should get 2 (round-robin)
+	for i := 0; i < 6; i++ {
+		_, err := router.Execute("agent", "task")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	if callCount["e1"] != 2 || callCount["e2"] != 2 || callCount["e3"] != 2 {
+		t.Errorf("expected each executor called 2 times, got e1=%d e2=%d e3=%d",
+			callCount["e1"], callCount["e2"], callCount["e3"])
+	}
+}
+
+func TestAgentRouter_FallbackToLocalWhenUnhealthy(t *testing.T) {
+	healthy := NewLocalExecutor("healthy", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "remote"}, nil
+	})
+	unhealthy := NewLocalExecutor("unhealthy", nil).
+		WithHealthCheck(func() error { return errors.New("down") })
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "local"}, nil
+	})
+
+	router := NewAgentRouter(unhealthy)
+	router.SetLocal(local)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Output != "local" {
+		t.Errorf("expected fallback to local, got %q", result.Output)
+	}
+
+	// Now add a healthy executor
+	router.Add(healthy)
+	result2, err := router.Execute("agent", "task2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result2.Output != "remote" {
+		t.Errorf("expected remote execution, got %q", result2.Output)
+	}
+}
+
+func TestAgentRouter_NoExecutorsWhenEmpty(t *testing.T) {
+	router := NewAgentRouter()
+	_, err := router.Execute("agent", "task")
+	if err == nil {
+		t.Error("expected error when no executors available")
+	}
+}
+
+func TestAgentRouter_Health(t *testing.T) {
+	healthy := NewLocalExecutor("healthy", nil)
+	unhealthy := NewLocalExecutor("unhealthy", nil).
+		WithHealthCheck(func() error { return errors.New("down") })
+
+	router := NewAgentRouter(unhealthy, unhealthy)
+	if err := router.Health(); err == nil {
+		t.Error("expected unhealthy with all executors down")
+	}
+
+	router.Add(healthy)
+	if err := router.Health(); err != nil {
+		t.Errorf("expected healthy after adding healthy executor, got %v", err)
+	}
+}
+
+func TestAgentRouter_EmptyHealth(t *testing.T) {
+	router := NewAgentRouter()
+	if err := router.Health(); err == nil {
+		t.Error("empty router should report unhealthy")
+	}
+}
+
+func TestAgentRouter_Executors(t *testing.T) {
+	e1 := NewLocalExecutor("e1", nil)
+	e2 := NewLocalExecutor("e2", nil)
+	router := NewAgentRouter(e1, e2)
+
+	executors := router.Executors()
+	if len(executors) != 2 {
+		t.Errorf("expected 2 executors, got %d", len(executors))
+	}
+}
+
+func TestAgentRouter_HealthyExecutors(t *testing.T) {
+	healthy := NewLocalExecutor("healthy", nil)
+	unhealthy := NewLocalExecutor("unhealthy", nil).
+		WithHealthCheck(func() error { return errors.New("down") })
+
+	router := NewAgentRouter(healthy, unhealthy)
+	healthyList := router.HealthyExecutors()
+	if len(healthyList) != 1 {
+		t.Errorf("expected 1 healthy executor, got %d", len(healthyList))
+	}
+	if healthyList[0].String() != "healthy" {
+		t.Errorf("expected 'healthy', got %q", healthyList[0].String())
+	}
+}
+
+func TestAgentRouter_String(t *testing.T) {
+	e1 := NewLocalExecutor("e1", nil)
+	e2 := NewLocalExecutor("e2", nil)
+	router := NewAgentRouter(e1, e2)
+
+	s := router.String()
+	if s != "AgentRouter(executors=2, local=e1)" {
+		t.Errorf("unexpected String() output: %q", s)
+	}
+}
+
+func TestAgentRouter_GracefulDegradation(t *testing.T) {
+	// All remote executors fail health, but local fallback works
+	remote1 := NewLocalExecutor("remote-1", nil).
+		WithHealthCheck(func() error { return errors.New("network timeout") })
+	remote2 := NewLocalExecutor("remote-2", nil).
+		WithHealthCheck(func() error { return errors.New("connection refused") })
+	local := NewLocalExecutor("local-fallback", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "degraded but working"}, nil
+	})
+
+	router := NewAgentRouter(remote1, remote2)
+	router.SetLocal(local)
+
+	result, err := router.Execute("agent", "critical-task")
+	if err != nil {
+		t.Fatalf("graceful degradation should not error: %v", err)
+	}
+	if result.Output != "degraded but working" {
+		t.Errorf("expected degraded output, got %q", result.Output)
+	}
+}
+
+func TestAgentExecutor_AgentResultFields(t *testing.T) {
+	result := &AgentResult{
+		Agent:        "test",
+		Task:         "do things",
+		Output:       "done",
+		Duration:     150 * time.Millisecond,
+		Success:      true,
+		QualityScore: 0.88,
+	}
+
+	if result.Duration != 150*time.Millisecond {
+		t.Error("duration field not preserved")
+	}
+	if result.QualityScore != 0.88 {
+		t.Error("quality_score field not preserved")
+	}
+}

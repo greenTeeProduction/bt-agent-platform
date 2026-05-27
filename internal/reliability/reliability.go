@@ -665,6 +665,184 @@ func (pq *PriorityQueue) load() {
 	json.Unmarshal(data, &pq.heap)
 }
 
+// ─── Agent Executor ──────────────────────────────────────────────────────────
+
+// AgentResult encapsulates the result of an agent execution.
+type AgentResult struct {
+	Agent        string        `json:"agent"`
+	Task         string        `json:"task"`
+	Output       string        `json:"output"`
+	Duration     time.Duration `json:"duration"`
+	Success      bool          `json:"success"`
+	Error        string        `json:"error,omitempty"`
+	QualityScore float64       `json:"quality_score"`
+}
+
+// AgentExecutor defines the interface for executing agent tasks.
+// Implementations can be local (in-process), HTTP remote, or gRPC remote,
+// enabling horizontal scaling and distributed execution.
+type AgentExecutor interface {
+	// Execute runs a task on the named agent and returns the result.
+	Execute(agent, task string) (*AgentResult, error)
+
+	// Health checks whether the executor backend is reachable and healthy.
+	Health() error
+
+	// String returns a human-readable identifier for this executor.
+	String() string
+}
+
+// LocalExecutor executes agent tasks in-process via a callback function.
+// This is the default executor for single-node deployments.
+type LocalExecutor struct {
+	name    string
+	execute func(agent, task string) (*AgentResult, error)
+	healthy func() error
+}
+
+// NewLocalExecutor creates a local executor with the given execute callback.
+func NewLocalExecutor(name string, executeFn func(agent, task string) (*AgentResult, error)) *LocalExecutor {
+	return &LocalExecutor{
+		name:    name,
+		execute: executeFn,
+		healthy: func() error { return nil },
+	}
+}
+
+// WithHealthCheck sets a custom health check function.
+func (le *LocalExecutor) WithHealthCheck(fn func() error) *LocalExecutor {
+	le.healthy = fn
+	return le
+}
+
+// Execute runs the agent task via the local callback.
+func (le *LocalExecutor) Execute(agent, task string) (*AgentResult, error) {
+	return le.execute(agent, task)
+}
+
+// Health checks the local executor's health.
+func (le *LocalExecutor) Health() error {
+	if le.healthy != nil {
+		return le.healthy()
+	}
+	return nil
+}
+
+// String returns the executor identifier.
+func (le *LocalExecutor) String() string {
+	return le.name
+}
+
+// AgentRouter distributes agent tasks across multiple executors with
+// health-aware round-robin routing and graceful degradation.
+// When all remote executors are unhealthy, falls back to local execution.
+type AgentRouter struct {
+	mu        sync.RWMutex
+	executors []AgentExecutor
+	next      int
+	local     AgentExecutor // fallback
+}
+
+// NewAgentRouter creates a router with the given executors.
+// The first executor is used as the local fallback if none is explicitly set.
+func NewAgentRouter(executors ...AgentExecutor) *AgentRouter {
+	r := &AgentRouter{
+		executors: executors,
+	}
+	if len(executors) > 0 {
+		r.local = executors[0]
+	}
+	return r
+}
+
+// Add adds an executor to the router.
+func (r *AgentRouter) Add(e AgentExecutor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.executors = append(r.executors, e)
+	if r.local == nil {
+		r.local = e
+	}
+}
+
+// SetLocal sets the fallback executor used when all others are unhealthy.
+func (r *AgentRouter) SetLocal(e AgentExecutor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.local = e
+}
+
+// Execute routes a task to a healthy executor using round-robin.
+// Falls back to local executor if all remote executors are unhealthy.
+func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
+	r.mu.Lock()
+	executors := make([]AgentExecutor, len(r.executors))
+	copy(executors, r.executors)
+	start := r.next
+	r.next = (r.next + 1) % max(1, len(executors))
+	r.mu.Unlock()
+
+	// Round-robin through executors, trying each once
+	for i := 0; i < len(executors); i++ {
+		idx := (start + i) % len(executors)
+		e := executors[idx]
+		if err := e.Health(); err == nil {
+			return e.Execute(agent, task)
+		}
+	}
+
+	// All remote executors unhealthy — fall back to local
+	if r.local != nil {
+		return r.local.Execute(agent, task)
+	}
+
+	return nil, fmt.Errorf("no healthy executor available for agent %q", agent)
+}
+
+// Health returns nil if at least one executor is healthy.
+func (r *AgentRouter) Health() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, e := range r.executors {
+		if e.Health() == nil {
+			return nil
+		}
+	}
+	if r.local != nil {
+		return r.local.Health()
+	}
+	return fmt.Errorf("no executors configured")
+}
+
+// String returns a summary of the router configuration.
+func (r *AgentRouter) String() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return fmt.Sprintf("AgentRouter(executors=%d, local=%s)", len(r.executors), r.local.String())
+}
+
+// Executors returns the current list of executors.
+func (r *AgentRouter) Executors() []AgentExecutor {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]AgentExecutor, len(r.executors))
+	copy(result, r.executors)
+	return result
+}
+
+// HealthyExecutors returns only executors that pass their health check.
+func (r *AgentRouter) HealthyExecutors() []AgentExecutor {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var healthy []AgentExecutor
+	for _, e := range r.executors {
+		if e.Health() == nil {
+			healthy = append(healthy, e)
+		}
+	}
+	return healthy
+}
+
 // ─── Concurrency Limiter ─────────────────────────────────────────────────────
 
 // ConcurrencyLimiter caps concurrent execution to maxConcurrent.
