@@ -933,13 +933,13 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			verbs := []string{"build", "fix", "add", "create", "implement", "write", "debug",
 				"test", "deploy", "review", "refactor", "analyze", "optimize", "update",
 				"remove", "migrate", "upgrade", "configure", "setup", "run", "design",
-				"explain", "show", "find", "generate", "make", "check", "search", "list"}
+				"explain", "show", "find", "generate", "make", "check", "search", "list",
+				"audit", "summarize", "investigate", "research", "evaluate", "validate"}
 			for _, v := range verbs {
 				if strings.Contains(lower, v) {
 					return true
 				}
 			}
-			// Accept knowledge questions / how-to / what-is patterns
 			questionPatterns := []string{"what ", "how ", "why ", "best practice", "example",
 				"difference", "compare", "tutorial", "guide", "document", "summary",
 				"overview", "architecture", "pattern", "convention", "idiom", "benchmark"}
@@ -962,7 +962,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsCodeReview":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "review", "audit", "inspect", "lint", "vet", "staticcheck", "code review")
+			return containsAny(b.Task, "review", "inspect", "lint", "vet", "staticcheck", "code review")
 		}
 	case "NeedsCompilation":
 		return func(b *Blackboard) bool {
@@ -1192,7 +1192,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	// --- Kanban conditions ---
 	case "IsKanbanTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "card", "kanban", "board", "focalboard", "column", "card-", "BACKLOG", "TODO", "IN PROGRESS")
+			return containsAny(strings.ToLower(b.Task), "card", "kanban", "board", "focalboard", "column", "backlog", "todo", "in progress", "sprint", "status", "move", "assign")
 		}
 	case "IsBoardCheck":
 		return func(b *Blackboard) bool {
@@ -1307,7 +1307,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsBugCheck":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "bug", "fix", "error", "crash", "null", "race") }
 	case "IsSecurityCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "security", "exploit", "vuln", "injection", "xss") }
+		return func(b *Blackboard) bool { return containsAny(strings.ToLower(b.Task), "security", "exploit", "vulnerability", "penetration", "auth", "audit", "xss", "sql injection", "csrf", "owasp", "injection") }
 	case "IsStyleCheck":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "style", "lint", "format", "naming", "clean") }
 	case "IsCIBuildTask":
