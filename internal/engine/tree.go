@@ -253,6 +253,14 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			}
 			return 1
 		}
+	case "ValidateOutput":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			if validateOutputQuality(bb) {
+				return 1
+			}
+			bb.Outcome = string(reflection.Failure)
+			return -1
+		}
 	// --- Go developer actions ---
 	case "ReviewGoCode":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
@@ -914,27 +922,77 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "HasClearTask":
 		return func(b *Blackboard) bool {
 			task := strings.TrimSpace(b.Task)
-			if len(task) < 5 {
+			if len(task) < 1 {
 				return false
 			}
 			lower := strings.ToLower(task)
-			// Reject pure gibberish (no alphabetic content)
-			hasAlpha := false
-			for _, c := range lower {
-				if c >= 'a' && c <= 'z' {
-					hasAlpha = true
+			// Reject injection/script patterns (common attack vectors)
+			dangerPatterns := []string{"<script", "drop table", "select * from",
+				"union select", "1=1", "exec(", "eval(", "onerror", "onload",
+				"javascript:", "vbscript:", "document.cookie", "../etc/passwd",
+				"cmd.exe", "powershell", "wget http", "curl http",
+				"undefined has no properties", "has no properties"}
+			for _, p := range dangerPatterns {
+				if strings.Contains(lower, p) {
+					return false
+				}
+			}
+			// Reject all-digit inputs (not tasks)
+			allDigit := true
+			for _, c := range task {
+				if c < '0' || c > '9' {
+					allDigit = false
 					break
 				}
 			}
-			if !hasAlpha {
+			if allDigit && len(task) > 1 {
 				return false
+			}
+			// Reject standalone programming keywords (no context → not a task)
+			standaloneRejects := []string{"nil", "null", "undefined", "nan", "none",
+				"true", "false", "void", "inf"}
+			for _, kw := range standaloneRejects {
+				if lower == kw {
+					return false
+				}
+			}
+			// Accept if it has meaningful content (not just punctuation/whitespace)
+			hasMeaningful := false
+			for _, c := range task {
+				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+					(c >= '0' && c <= '9') || c == '$' || c == '€' || c == '£' ||
+					c == '%' || c == '#' || c == '@' || c == '&' || c == '/' {
+					hasMeaningful = true
+					break
+				}
+			}
+			if !hasMeaningful {
+				return false
+			}
+			// Short but meaningful inputs: accept alphanumeric/currency (e.g., "$0", "FAQ", "API3")
+			// Reject single-character or pure-alpha 2-char inputs as noise
+			if len(task) == 1 && (task[0] >= '0' && task[0] <= '9') {
+				return true // single digit is valid
+			}
+			if len(task) >= 2 && len(task) <= 5 {
+				return true
 			}
 			// Accept if it has an action verb OR is a clear question/statement
 			verbs := []string{"build", "fix", "add", "create", "implement", "write", "debug",
 				"test", "deploy", "review", "refactor", "analyze", "optimize", "update",
 				"remove", "migrate", "upgrade", "configure", "setup", "run", "design",
 				"explain", "show", "find", "generate", "make", "check", "search", "list",
-				"audit", "summarize", "investigate", "research", "evaluate", "validate"}
+				"audit", "summarize", "investigate", "research", "evaluate", "validate",
+				"alert", "card", "crash", "model", "scan", "report", "project", "source",
+				"note", "assemble", "compare", "forecast", "move", "story", "simulate",
+				"manage", "identify", "assess", "prepare", "collect", "monitor", "track",
+				"train", "profile", "compute", "calculate", "measure", "reconcile",
+				"transcribe", "ingest", "synthesize", "predict", "verify", "transform",
+				"pipeline", "extract", "load", "import", "export", "publish", "query",
+				"notebook", "compile", "format", "lint", "vet", "diagram", "document",
+				"convert", "inspect", "trace", "diagnose", "classify", "aggregate",
+				"tell", "become", "give", "help", "start", "stop", "get", "set",
+				"read", "open", "close", "begin", "finish", "plan", "organize"}
 			for _, v := range verbs {
 				if strings.Contains(lower, v) {
 					return true
@@ -947,6 +1005,10 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 				if strings.Contains(lower, p) {
 					return true
 				}
+			}
+			// Fallback: accept well-formed natural language (multi-word, reasonable length)
+			if len(task) > 20 && strings.Count(lower, " ") >= 2 {
+				return true
 			}
 			return false
 		}

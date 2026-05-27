@@ -109,8 +109,8 @@ func TestMergedTree_Structure(t *testing.T) {
 
 	for _, child := range tree.Children {
 		if child.Name == "StrategyRouter" {
-			if len(child.Children) != 13 {
-				t.Errorf("expected 13 strategy paths, got %d", len(child.Children))
+			if len(child.Children) != 20 {
+				t.Errorf("expected 20 strategy paths, got %d", len(child.Children))
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func TestMergedTree_Structure(t *testing.T) {
 	if nodes < 30 {
 		t.Errorf("expected >= 30 nodes, got %d", nodes)
 	}
-	t.Logf("Tree: %d nodes, %d strategy paths, sections: %v", nodes, 13, sections)
+	t.Logf("Tree: %d nodes, %d strategy paths, sections: %v", nodes, 20, sections)
 }
 
 func TestMergedTree_PreGate(t *testing.T) {

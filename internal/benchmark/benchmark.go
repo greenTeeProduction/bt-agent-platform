@@ -70,6 +70,10 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		duration := time.Since(start).Milliseconds()
 
 		success := bb.Outcome == "success"
+		if tc.ShouldReject {
+			// Adversarial rejection tasks: pass when correctly rejected (PreGate blocks them)
+			success = !success
+		}
 		if success {
 			successes++
 		}

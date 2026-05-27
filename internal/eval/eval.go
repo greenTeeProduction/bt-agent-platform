@@ -29,12 +29,13 @@ type PlatformEvalResult struct {
 
 // SuiteEvalResult is the result for a single suite.
 type SuiteEvalResult struct {
-	Name        string  `json:"name"`
-	TotalTasks  int     `json:"total_tasks"`
-	Passed      int     `json:"passed"`
-	Failed      int     `json:"failed"`
-	SuccessRate float64 `json:"success_rate"`
-	AvgDuration float64 `json:"avg_duration_ms"`
+	Name        string             `json:"name"`
+	TotalTasks  int                `json:"total_tasks"`
+	Passed      int                `json:"passed"`
+	Failed      int                `json:"failed"`
+	SuccessRate float64            `json:"success_rate"`
+	AvgDuration float64            `json:"avg_duration_ms"`
+	Results     []benchmark.Result `json:"results,omitempty"`
 }
 
 // PlatformScorecard maps use cases to scores.
@@ -70,7 +71,7 @@ func (m *EvalMockLLM) Reflect(task, outcome, plan string) (string, string) { ret
 func treeForSuite(name string) *evolution.SerializableNode {
 	switch name {
 	case "godev":
-		return evolution.GoDeveloperTree()
+		return evolution.MergedTree() // Uses GoDevPath condition routing
 	case "code_review":
 		return evolution.MergedTree() // Uses CodeReviewPath
 	case "devops_ci":
@@ -160,6 +161,7 @@ func RunPlatformEval() *PlatformEvalResult {
 			Failed:      failed,
 			SuccessRate: rate,
 			AvgDuration: metrics.AvgDurationMs,
+			Results:     metrics.Results,
 		})
 	}
 
@@ -254,7 +256,7 @@ func (r *PlatformEvalResult) FormatReport() string {
 	sb.WriteString(fmt.Sprintf("Overall Success Rate: %.1f%% | Avg Duration: %.0fms\n\n",
 		r.SuccessRate, r.AvgDurationMs))
 
-	sb.WriteString("--- Suite Results ---\n")
+	sb.WriteString("\n--- Suite Results ---\n")
 	for _, s := range r.BySuite {
 		icon := "✓"
 		if s.SuccessRate < 70 {
@@ -265,6 +267,20 @@ func (r *PlatformEvalResult) FormatReport() string {
 		}
 		sb.WriteString(fmt.Sprintf("%s %-24s %2d/%2d (%.0f%%) %5.0fms\n",
 			icon, s.Name, s.Passed, s.TotalTasks, s.SuccessRate, s.AvgDuration))
+	}
+
+	sb.WriteString("\n--- Task Failures (<100% suites) ---\n")
+	for _, suite := range r.BySuite {
+		if suite.SuccessRate >= 100.0 {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("\n[%s] %d/%d passed:\n", suite.Name, suite.Passed, suite.TotalTasks))
+		for _, res := range suite.Results {
+			if !res.Success {
+				sb.WriteString(fmt.Sprintf("  ✗ %-60s outcome=%-10s path=%-20s\n",
+					truncateForReport(res.Task, 58), res.Outcome, res.Path))
+			}
+		}
 	}
 
 	sb.WriteString("\n--- Top 20 Use Cases (ranked by automation fit) ---\n")
@@ -289,4 +305,11 @@ func (r *PlatformEvalResult) FormatReport() string {
 func (r *PlatformEvalResult) JSON() string {
 	b, _ := json.MarshalIndent(r, "", "  ")
 	return string(b)
+}
+
+func truncateForReport(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
