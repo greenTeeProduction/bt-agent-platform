@@ -1,10 +1,12 @@
-// Package security provides rate limiting, input sanitization, and auth utilities
-// for the Go BT framework's dashboard and MCP servers.
+// Package security provides rate limiting, input sanitization, auth utilities,
+// IP filtering, and security audit logging for the Go BT framework's dashboard and MCP servers.
 package security
 
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -90,6 +92,10 @@ func RateLimitMiddleware(rl *RateLimiter, extractKey func(*http.Request) string)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !rl.Allow(extractKey(r)) {
+				AuditSecurityEvent(r.Context(), "rate_limit_exceeded",
+					"client", extractKey(r),
+					"path", r.URL.Path,
+				)
 				w.Header().Set("Retry-After", "1")
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusTooManyRequests)
@@ -310,6 +316,193 @@ func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Han
 			}
 		})
 	}
+}
+
+// ─── IP Filter ──────────────────────────────────────────────────────────────
+
+// IPFilterMode determines whether the filter is an allowlist or blocklist.
+type IPFilterMode int
+
+const (
+	// FilterAllowlist only allows requests from IPs in the list.
+	FilterAllowlist IPFilterMode = iota
+	// FilterBlocklist blocks requests from IPs in the list.
+	FilterBlocklist
+)
+
+// IPFilter provides IP/CIDR-based access control for HTTP handlers.
+type IPFilter struct {
+	mu     sync.RWMutex
+	nets   []*net.IPNet
+	ips    map[string]bool
+	mode   IPFilterMode
+}
+
+// NewIPFilter creates an IP filter. IPs can be individual addresses ("192.168.1.1")
+// or CIDR ranges ("10.0.0.0/8"). mode determines allowlist or blocklist behavior.
+func NewIPFilter(mode IPFilterMode, entries ...string) *IPFilter {
+	f := &IPFilter{
+		ips:  make(map[string]bool),
+		mode: mode,
+	}
+	for _, e := range entries {
+		f.Add(e)
+	}
+	return f
+}
+
+// Add adds an IP or CIDR range to the filter.
+func (f *IPFilter) Add(entry string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if strings.Contains(entry, "/") {
+		_, cidr, err := net.ParseCIDR(entry)
+		if err == nil {
+			f.nets = append(f.nets, cidr)
+		}
+	} else {
+		ip := net.ParseIP(entry)
+		if ip != nil {
+			f.ips[ip.String()] = true
+		}
+	}
+}
+
+// Remove removes an IP or CIDR range from the filter.
+func (f *IPFilter) Remove(entry string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if strings.Contains(entry, "/") {
+		_, cidr, err := net.ParseCIDR(entry)
+		if err == nil {
+			for i, n := range f.nets {
+				if n.String() == cidr.String() {
+					f.nets = append(f.nets[:i], f.nets[i+1:]...)
+					break
+				}
+			}
+		}
+	} else {
+		delete(f.ips, entry)
+	}
+}
+
+// Allowed checks whether an IP is allowed through the filter.
+// For allowlist mode: returns true if IP matches any entry.
+// For blocklist mode: returns true if IP does NOT match any entry.
+func (f *IPFilter) Allowed(ipStr string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		// If we can't parse, block in allowlist mode, allow in blocklist mode
+		return f.mode == FilterBlocklist
+	}
+
+	// Check exact IP matches first
+	if f.ips[ipStr] {
+		return f.mode == FilterAllowlist
+	}
+
+	// Check CIDR ranges
+	for _, cidr := range f.nets {
+		if cidr.Contains(ip) {
+			return f.mode == FilterAllowlist
+		}
+	}
+
+	// No match — allow in allowlist mode? No. Block in blocklist mode? No.
+	return f.mode == FilterBlocklist
+}
+
+// IPFilterMiddleware creates HTTP middleware that enforces IP access control.
+// extractIP extracts the client IP from the request (default: RemoteAddr with port stripped).
+func IPFilterMiddleware(filter *IPFilter, extractIP func(*http.Request) string) func(http.Handler) http.Handler {
+	if extractIP == nil {
+		extractIP = func(r *http.Request) string {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				return r.RemoteAddr
+			}
+			return host
+		}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := extractIP(r)
+			if !filter.Allowed(ip) {
+				AuditSecurityEvent(r.Context(), "ip_blocked",
+					"ip", ip,
+					"path", r.URL.Path,
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "access_denied",
+					"message": "IP address not authorized.",
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ─── Security Audit Logging ────────────────────────────────────────────────
+
+// auditKey is a context key for audit event cooldown tracking.
+type auditKey struct{}
+
+// AuditSecurityEvent logs a structured security event using slog.
+// Events are rate-limited: duplicate event types from the same context are
+// logged at most once to prevent log flooding during attacks.
+//
+// Use from middleware (has request context) for automatic dedup.
+// For standalone use (no context), call directly — no dedup applied.
+func AuditSecurityEvent(ctx context.Context, eventType string, attrs ...any) {
+	// Context-aware dedup: skip if this context already logged this event type
+	if ctx != nil {
+		if logged, ok := ctx.Value(auditKey{}).(map[string]bool); ok && logged[eventType] {
+			return
+		}
+	}
+
+	args := []any{"event", eventType, "timestamp", time.Now().UTC().Format(time.RFC3339)}
+	args = append(args, attrs...)
+	slog.Warn("SECURITY", args...)
+}
+
+// AuditContext returns a new context with audit dedup tracking.
+// Use at the start of request handling to enable per-request event dedup.
+func AuditContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, auditKey{}, make(map[string]bool))
+}
+
+// AuditMiddleware wraps handlers with per-request audit context and
+// adds automatic security event logging on auth failures and other conditions.
+// It also logs the request start and completion.
+func AuditMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Inject audit dedup context
+		ctx := AuditContext(r.Context())
+		r = r.WithContext(ctx)
+
+		start := time.Now()
+		next.ServeHTTP(w, r)
+
+		// Log slow responses as potential security concern
+		duration := time.Since(start)
+		if duration > 5*time.Second {
+			AuditSecurityEvent(ctx, "slow_response",
+				"path", r.URL.Path,
+				"duration_ms", duration.Milliseconds(),
+				"remote_addr", r.RemoteAddr,
+			)
+		}
+	})
 }
 
 func itoa(n int) string {

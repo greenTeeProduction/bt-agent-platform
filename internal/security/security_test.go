@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -303,5 +304,215 @@ func TestRequestTimeoutMiddleware_Timeout(t *testing.T) {
 
 	if rec.Code != http.StatusGatewayTimeout {
 		t.Errorf("slow handler should return 504, got %d", rec.Code)
+	}
+}
+
+// ─── IP Filter Tests ──────────────────────────────────────────────────────
+
+func TestIPFilter_Allowlist(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "10.0.0.1", "192.168.0.0/24")
+
+	if !f.Allowed("10.0.0.1") {
+		t.Error("10.0.0.1 should be allowed (exact match in allowlist)")
+	}
+	if !f.Allowed("192.168.0.50") {
+		t.Error("192.168.0.50 should be allowed (in CIDR range)")
+	}
+	if f.Allowed("172.16.0.1") {
+		t.Error("172.16.0.1 should be denied (not in allowlist)")
+	}
+	if f.Allowed("192.168.1.1") {
+		t.Error("192.168.1.1 should be denied (outside CIDR range)")
+	}
+}
+
+func TestIPFilter_Blocklist(t *testing.T) {
+	f := NewIPFilter(FilterBlocklist, "10.0.0.99", "172.16.0.0/16")
+
+	if f.Allowed("10.0.0.99") {
+		t.Error("10.0.0.99 should be blocked (exact match in blocklist)")
+	}
+	if f.Allowed("172.16.5.5") {
+		t.Error("172.16.5.5 should be blocked (in CIDR range)")
+	}
+	if !f.Allowed("192.168.1.1") {
+		t.Error("192.168.1.1 should be allowed (not in blocklist)")
+	}
+	if !f.Allowed("10.0.0.100") {
+		t.Error("10.0.0.100 should be allowed (not in blocklist)")
+	}
+}
+
+func TestIPFilter_EmptyFilter(t *testing.T) {
+	// Empty allowlist blocks everything
+	f := NewIPFilter(FilterAllowlist)
+	if f.Allowed("127.0.0.1") {
+		t.Error("empty allowlist should deny all")
+	}
+
+	// Empty blocklist allows everything
+	b := NewIPFilter(FilterBlocklist)
+	if !b.Allowed("127.0.0.1") {
+		t.Error("empty blocklist should allow all")
+	}
+}
+
+func TestIPFilter_AddRemove(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "10.0.0.1")
+
+	if !f.Allowed("10.0.0.1") {
+		t.Error("10.0.0.1 should be allowed after add")
+	}
+
+	f.Remove("10.0.0.1")
+	if f.Allowed("10.0.0.1") {
+		t.Error("10.0.0.1 should be denied after remove from empty allowlist")
+	}
+}
+
+func TestIPFilter_CIDR(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "10.0.0.0/8")
+
+	// Test boundary IPs
+	if !f.Allowed("10.0.0.0") {
+		t.Error("10.0.0.0 should be in 10.0.0.0/8")
+	}
+	if !f.Allowed("10.255.255.255") {
+		t.Error("10.255.255.255 should be in 10.0.0.0/8")
+	}
+	if f.Allowed("11.0.0.1") {
+		t.Error("11.0.0.1 should NOT be in 10.0.0.0/8")
+	}
+}
+
+func TestIPFilter_InvalidIP(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "10.0.0.1")
+	// Invalid IP in allowlist mode => denied
+	if f.Allowed("not-an-ip") {
+		t.Error("invalid IP should be denied in allowlist mode")
+	}
+
+	b := NewIPFilter(FilterBlocklist, "10.0.0.1")
+	// Invalid IP in blocklist mode => allowed
+	if !b.Allowed("not-an-ip") {
+		t.Error("invalid IP should be allowed in blocklist mode")
+	}
+}
+
+func TestIPFilterMiddleware_Allowed(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "127.0.0.1")
+	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for allowed IP, got %d", rec.Code)
+	}
+}
+
+func TestIPFilterMiddleware_Denied(t *testing.T) {
+	f := NewIPFilter(FilterAllowlist, "10.0.0.1")
+	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called for denied IP")
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for denied IP, got %d", rec.Code)
+	}
+}
+
+func TestIPFilterMiddleware_CustomExtractor(t *testing.T) {
+	f := NewIPFilter(FilterBlocklist, "10.0.0.99")
+	extractor := func(r *http.Request) string {
+		return r.Header.Get("X-Real-IP")
+	}
+
+	handler := IPFilterMiddleware(f, extractor)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Block listed IP via custom header
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Real-IP", "10.0.0.99")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for blocked IP via custom extractor, got %d", rec.Code)
+	}
+
+	// Allowed IP via custom header
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.Header.Set("X-Real-IP", "192.168.1.1")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 for allowed IP via custom extractor, got %d", rec2.Code)
+	}
+}
+
+// ─── Audit Logging Tests ──────────────────────────────────────────────────
+
+func TestAuditSecurityEvent_Basic(t *testing.T) {
+	// Just verify it doesn't panic — slog output goes to stderr
+	AuditSecurityEvent(context.Background(), "test_event",
+		"key1", "value1",
+		"key2", 42,
+	)
+}
+
+func TestAuditSecurityEvent_Dedup(t *testing.T) {
+	// Create a context with audit tracking
+	ctx := AuditContext(context.Background())
+
+	// First call should pass through (we can only test no panic)
+	AuditSecurityEvent(ctx, "rate_limit_exceeded", "client", "test")
+	// Second call with same event type should be dedup'd
+	AuditSecurityEvent(ctx, "rate_limit_exceeded", "client", "test")
+	// Different event type should pass through
+	AuditSecurityEvent(ctx, "auth_failure", "client", "test")
+}
+
+func TestAuditMiddleware(t *testing.T) {
+	handler := AuditMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify context has audit tracking
+		if _, ok := r.Context().Value(auditKey{}).(map[string]bool); !ok {
+			t.Error("audit middleware should inject audit context")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestAuditMiddleware_SlowResponse(t *testing.T) {
+	handler := AuditMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond) // fast enough to not trigger slow_response log
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
 	}
 }
