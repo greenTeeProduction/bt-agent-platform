@@ -92,6 +92,10 @@ func resolveTree(id string) *evolution.SerializableNode {
 		case "report": return thinktank.ReportGenerationTree()
 		}
 	}
+	// merged universal tree
+	if id == "merged" {
+		return evolution.MergedTree()
+	}
 	return nil
 }
 

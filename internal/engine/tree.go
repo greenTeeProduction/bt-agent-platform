@@ -163,6 +163,16 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			}
 			return 1
 		}
+	case "SetupUniversalTools":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			bb.ChainTools = []any{
+				toolStub{name: "web_search", desc: "Search the web for information, facts, and sources"},
+				toolStub{name: "code_exec", desc: "Execute code and return output"},
+				toolStub{name: "file_ops", desc: "Read and write files"},
+				toolStub{name: "calculator", desc: "Perform mathematical calculations and data analysis"},
+			}
+			return 1
+		}
 	case "SetupResearchTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
@@ -966,6 +976,44 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool {
 			return containsAny(b.Task, "what is", "how to", "explain", "best practice", "pattern", "idiom", "convention")
 		}
+	// --- Merged universal conditions ---
+	case "IsDevOps":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"deploy", "build", "pipeline", "ci/cd", "ci ", "docker",
+				"kubernetes", "k8s", "terraform", "ansible", "jenkins",
+				"github actions", "gitlab ci", "circleci", "infrastructure", "devops")
+		}
+	case "IsDataTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"etl", "pipeline", "data ", "transform", "extract",
+				"load", "schema", "dataset", "csv", "parquet", "sql")
+		}
+	case "IsAnalysisTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"strategy", "analysis", "analyze", "foresight", "scenario",
+				"implications", "forecast", "roadmap", "synthesis", "think tank")
+		}
+	case "IsRefactoring":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"refactor", "restructure", "clean up", "improve",
+				"modernize", "migrate", "simplify")
+		}
+	case "IsQuestion":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"what ", "how ", "why ", "explain", "define",
+				"difference", "compare", "best practice", "example")
+		}
+	case "IsIncident":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"crash", "error", "timeout", "incident", "outage",
+				"down", "broken", "failure", "panic", "oom")
+		}
 	// --- Finance conditions ---
 	case "IsFinanceTask":
 		return func(b *Blackboard) bool {
@@ -1300,8 +1348,6 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool { return containsAny(b.Task, "secret", "credential", "key", "token", "password") }
 	case "IsThreatModel":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "threat", "model", "attack", "stride") }
-	case "IsDataTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "data", "etl", "pipeline", "csv", "sql", "database") }
 	case "IsExtractRequest":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "extract", "ingest", "load") }
 	case "IsTransformRequest":
