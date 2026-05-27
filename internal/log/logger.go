@@ -13,9 +13,11 @@ import (
 var (
 	mu     sync.Mutex
 	logger *slog.Logger
+	rotWriter io.WriteCloser // rotating writer, closed on shutdown
 )
 
-// Init initializes the logger with output to ~/.go-bt-evolve/logs/bt.log.
+// Init initializes the logger with output to ~/.go-bt-evolve/logs/bt.log
+// with automatic log rotation (10MB max per file, 5 backups kept).
 // Falls back to stderr if the log directory cannot be created.
 func Init() {
 	mu.Lock()
@@ -37,17 +39,29 @@ func Init() {
 		return
 	}
 
-	f, err := os.OpenFile(filepath.Join(logDir, "bt.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logPath := filepath.Join(logDir, "bt.log")
+	rw, err := NewRotatingWriter(logPath)
 	if err != nil {
 		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 		return
 	}
+	rotWriter = rw
 
-	// Write to both file and stderr
-	w := io.MultiWriter(f, os.Stderr)
+	// Write to both rotating file and stderr
+	w := io.MultiWriter(rw, os.Stderr)
 	logger = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
+}
+
+// Shutdown closes the rotating writer. Call before program exit.
+func Shutdown() {
+	mu.Lock()
+	defer mu.Unlock()
+	if rotWriter != nil {
+		rotWriter.Close()
+		rotWriter = nil
+	}
 }
 
 // L returns the global logger. Calls Init() if not initialized.
