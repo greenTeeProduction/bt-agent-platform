@@ -470,17 +470,6 @@ func AgentMonitorSuite() Suite {
 	}
 }
 
-// AllSuites returns all benchmark suites.
-func AllSuites() []Suite {
-	return []Suite{
-		GoDevSuite(),
-		CodeReviewSuite(),
-		DevOpsSuite(),
-		FinanceSuite(),
-		AgentMonitorSuite(),
-	}
-}
-
 // SuiteForTree returns the best benchmark suite for a given tree name.
 func SuiteForTree(treeName string) Suite {
 	switch {
