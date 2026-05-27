@@ -13,10 +13,14 @@ import (
 
 // TaskCase is a single benchmark task with expected routing.
 type TaskCase struct {
-	Task           string `json:"task"`
-	ExpectedPath   string `json:"expected_path"`   // which strategy path should handle this
-	MinResultLen   int    `json:"min_result_len"`  // minimum output length expected
-	ShouldSucceed  bool   `json:"should_succeed"`   // expected outcome
+	Task           string   `json:"task"`
+	ExpectedPath   string   `json:"expected_path"`   // which strategy path should handle this
+	PossiblePaths  []string `json:"possible_paths,omitempty"` // multiple acceptable paths for ambiguous tasks
+	MinResultLen   int      `json:"min_result_len"`  // minimum output length expected
+	ShouldSucceed  bool     `json:"should_succeed"`   // expected outcome
+	ShouldReject   bool     `json:"should_reject"`    // PreGate should reject this
+	MinQualityScore float64 `json:"min_quality_score,omitempty"` // minimum quality score expected
+	Difficulty     string   `json:"difficulty,omitempty"` // easy | medium | hard | adversarial
 }
 
 // Suite is a collection of benchmark tasks for a specific domain.
