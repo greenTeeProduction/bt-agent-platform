@@ -8,11 +8,15 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 func main() {
+	btlog.Init()
+	btlog.Info("bt-evaluator starting", "version", "1.0.0", "binary", "go-bt-evaluator")
+
 	home, _ := os.UserHomeDir()
 	refDir := filepath.Join(home, ".go-bt-reflections")
 
@@ -154,9 +158,10 @@ func main() {
 			}}}
 		})
 
-	fmt.Fprintf(os.Stderr, "go-bt-evaluator (Stockfish-style): 5 tools. Listening on stdin...\n")
+	btlog.Info("bt-evaluator: 5 tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	if err := server.Run(); err != nil {
+		btlog.Error("bt-evaluator: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}

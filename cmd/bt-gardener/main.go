@@ -12,6 +12,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 
 	"github.com/tmc/langchaingo/agents"
@@ -103,6 +104,9 @@ func (t *GardenerRecommendTool) Call(ctx context.Context, input string) (string,
 }
 
 func main() {
+	btlog.Init()
+	btlog.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
+
 	home, _ := os.UserHomeDir()
 	refDir := filepath.Join(home, ".go-bt-reflections")
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
@@ -163,6 +167,7 @@ Question: {{.input}}`,
 	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
 
+	btlog.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", 2)
 	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, 5min cycle, langchain analysis every 5th cycle\n", registry.Count())
 	fmt.Fprintf(os.Stderr, "Metrics dir: %s\n", metricsDir)
 
@@ -190,6 +195,7 @@ Question: {{.input}}`,
 
 		results, err := g.RunCycle()
 		if err != nil {
+			btlog.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			continue
 		}
@@ -202,6 +208,7 @@ Question: {{.input}}`,
 					r.TreeName, r.BaseFitness, r.NewFitness, r.Delta, r.Mutations)
 			}
 		}
+		btlog.Info("bt-gardener: cycle complete", "cycle", cycleCount, "improved", improved, "total", len(results))
 		fmt.Fprintf(os.Stderr, "Improved: %d/%d\n", improved, len(results))
 
 		// Every 5 cycles, run langchain analysis

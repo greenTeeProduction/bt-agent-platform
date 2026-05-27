@@ -12,6 +12,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/factory"
 	"github.com/nico/go-bt-evolve/internal/langagent"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 
@@ -19,9 +20,13 @@ import (
 )
 
 func main() {
+	btlog.Init()
+	btlog.Info("bt-langagent starting", "version", "1.0.0", "binary", "go-bt-langagent")
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		btlog.Error("failed to get home directory", "error", err)
 		os.Exit(1)
 	}
 
@@ -189,9 +194,10 @@ func main() {
 			}
 		})
 
-	fmt.Fprintf(os.Stderr, "go-bt-langagent: 7 tools + 3 MCP tools. Listening on stdin...\n")
+	btlog.Info("bt-langagent: 3 MCP tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	if err := server.Run(); err != nil {
+		btlog.Error("bt-langagent: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}

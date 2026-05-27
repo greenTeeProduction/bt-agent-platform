@@ -16,6 +16,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/finance"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 	"github.com/nico/go-bt-evolve/internal/research"
@@ -95,9 +96,13 @@ func resolveTree(id string) *evolution.SerializableNode {
 }
 
 func main() {
+	btlog.Init()
+	btlog.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		btlog.Error("failed to get home directory", "error", err)
 		os.Exit(1)
 	}
 
@@ -203,8 +208,11 @@ func main() {
 		func(args json.RawMessage) *mcp.ToolResult {
 			var params struct{ Task string `json:"task"` }
 			if err := json.Unmarshal(args, &params); err != nil {
+				btlog.Error("bt_run_task: invalid arguments", "error", err)
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf("Error: %v", err)}}}
 			}
+			btlog.Info("bt_run_task: executing", "task", params.Task)
+			start := time.Now()
 			bb.Task = params.Task
 			bb.Complexity = ""
 			bb.Plan = ""
@@ -213,10 +221,12 @@ func main() {
 			bb.KgResults = ""
 			bb.CachedResult = ""
 			result := engine.RunTask(bb, bt)
+			duration := time.Since(start)
 			if bb.Outcome == string(reflection.Failure) {
 				bb.FailureCount = refStore.CountFailures()
+				btlog.Warn("bt_run_task: failed", "task", params.Task, "outcome", bb.Outcome, "duration_ms", duration.Milliseconds())
 			} else {
-				bb.FailureCount = 0
+				btlog.Info("bt_run_task: completed", "task", params.Task, "outcome", bb.Outcome, "duration_ms", duration.Milliseconds())
 			}
 			response := fmt.Sprintf(`{"result": %q, "outcome": %q, "complexity": %q, "duration_ms": %d, "plan": %q}`,
 				result, bb.Outcome, bb.Complexity, bb.DurationMs, bb.Plan)
