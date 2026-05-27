@@ -247,15 +247,15 @@ func Finance() Suite {
 
 func Health() Suite {
 	return Suite{Name: "health_monitoring", Tasks: []TaskCase{
-		task("check all BT agents are running and healthy", "GeneralPath", 60, true, "easy"),
-		task("collect disk usage, memory, and CPU metrics report", "GeneralPath", 60, true, "easy"),
-		task("verify the dashboard is responding on port 9800", "GeneralPath", 40, true, "easy"),
-		task("comprehensive health report: agents, MCP connections, gardener cycles, cron status, disk trend, memory pressure — green/yellow/red per component", "GeneralPath", 200, true, "medium"),
-		task("predictive health: analyze historical metrics, identify degradation trends, predict disk at 90%, forecast memory growth, anomaly alerting", "GeneralPath", 200, true, "medium"),
-		task("capacity planning: project 6-month resource needs from current growth rates, recommend scaling actions with cost estimates", "GeneralPath", 200, true, "medium"),
-		task("build automated SRE runbook: per alert type, detection criteria, diagnostic steps, automated remediation, escalation path, post-resolution validation", "GeneralPath", 400, true, "hard"),
-		task("health SLA dashboard: track uptime per component, SLO compliance, violation patterns, weekly availability report with root cause summary", "GeneralPath", 350, true, "hard"),
-		task("chaos engineering: design experiments — kill random agents, fill disk to 95%, exhaust file descriptors, network partition — verify graceful degradation and auto-recovery", "GeneralPath", 350, true, "hard"),
+		task("check all BT agents are running and healthy", "HealthPath", 60, true, "easy"),
+		task("collect disk usage, memory, and CPU metrics report", "HealthPath", 60, true, "easy"),
+		task("verify the dashboard is responding on port 9800", "HealthPath", 40, true, "easy"),
+		task("comprehensive health report: agents, MCP connections, gardener cycles, cron status, disk trend, memory pressure — green/yellow/red per component", "HealthPath", 200, true, "medium"),
+		task("predictive health: analyze historical metrics, identify degradation trends, predict disk at 90%, forecast memory growth, anomaly alerting", "HealthPath", 200, true, "medium"),
+		task("capacity planning: project 6-month resource needs from current growth rates, recommend scaling actions with cost estimates", "HealthPath", 200, true, "medium"),
+		task("build automated SRE runbook: per alert type, detection criteria, diagnostic steps, automated remediation, escalation path, post-resolution validation", "HealthPath", 400, true, "hard"),
+		task("health SLA dashboard: track uptime per component, SLO compliance, violation patterns, weekly availability report with root cause summary", "HealthPath", 350, true, "hard"),
+		task("chaos engineering: design experiments — kill random agents, fill disk to 95%, exhaust file descriptors, network partition — verify graceful degradation and auto-recovery", "HealthPath", 350, true, "hard"),
 		taskReject("\t"),
 		taskAdversarial("alert: everything is on fire", "GeneralPath", 40),
 	}}
@@ -265,15 +265,15 @@ func Health() Suite {
 
 func Cron() Suite {
 	return Suite{Name: "cron_management", Tasks: []TaskCase{
-		task("list all cron jobs and check their status", "GeneralPath", 40, true, "easy"),
-		task("find any cron jobs with error status or delivery failures", "GeneralPath", 40, true, "easy"),
-		task("verify all cron job configurations are valid", "GeneralPath", 40, true, "easy"),
-		task("cron audit: overlapping schedules, redundant jobs, jobs not run in 24h, excessive frequency — optimization recommendations", "GeneralPath", 200, true, "medium"),
-		task("diagnose hermes-update cron failure: check connectivity, fix delivery error, verify schedule, run test execution", "GeneralPath", 200, true, "medium"),
-		task("cron capacity planning: analyze 8 jobs' resource consumption, identify peak load times, propose schedule staggering", "GeneralPath", 200, true, "medium"),
-		task("design cron governance: naming conventions, metadata (owner, SLA, alerts), approval process, deprecation policy, automated compliance", "GeneralPath", 350, true, "hard"),
-		task("implement cron A/B testing: parallel old/new versions, compare outputs, detect regressions, auto-rollback on deviation", "GeneralPath", 350, true, "hard"),
-		task("build self-healing cron: detect failures, classify (transient, permanent, dependency), apply fix (retry, escalate, disable), maintain fix history", "GeneralPath", 350, true, "hard"),
+		task("list all cron jobs and check their status", "CronPath", 40, true, "easy"),
+		task("find any cron jobs with error status or delivery failures", "CronPath", 40, true, "easy"),
+		task("verify all cron job configurations are valid", "CronPath", 40, true, "easy"),
+		task("cron audit: overlapping schedules, redundant jobs, jobs not run in 24h, excessive frequency — optimization recommendations", "CronPath", 200, true, "medium"),
+		task("diagnose hermes-update cron failure: check connectivity, fix delivery error, verify schedule, run test execution", "CronPath", 200, true, "medium"),
+		task("cron capacity planning: analyze 8 jobs' resource consumption, identify peak load times, propose schedule staggering", "CronPath", 200, true, "medium"),
+		task("design cron governance: naming conventions, metadata (owner, SLA, alerts), approval process, deprecation policy, automated compliance", "CronPath", 350, true, "hard"),
+		task("implement cron A/B testing: parallel old/new versions, compare outputs, detect regressions, auto-rollback on deviation", "CronPath", 350, true, "hard"),
+		task("build self-healing cron: detect failures, classify (transient, permanent, dependency), apply fix (retry, escalate, disable), maintain fix history", "CronPath", 350, true, "hard"),
 		taskReject("f"),
 		taskAdversarial("make all cron jobs run every second", "GeneralPath", 40),
 	}}
@@ -283,15 +283,15 @@ func Cron() Suite {
 
 func Evolution() Suite {
 	return Suite{Name: "self_evolution", Tasks: []TaskCase{
-		task("evaluate current tree fitness with composite score and breakdown", "GeneralPath", 40, true, "easy"),
-		task("order mutations by expected improvement using Stockfish heuristics", "GeneralPath", 40, true, "easy"),
-		task("check the transposition table hit rate and cache efficiency", "GeneralPath", 40, true, "easy"),
-		task("mutation candidate analysis: top 5 candidates, predict fitness delta, assess risk, rank by expected value, recommend with justification", "GeneralPath", 200, true, "medium"),
-		task("evolution safety check: verify mutation won't break tests, introduce cycles, remove safety nodes — produce rollback plan", "GeneralPath", 200, true, "medium"),
-		task("ensemble evolution: run GA, Q-learning, hill climbing in parallel, compare results, stacking to combine best from each approach", "GeneralPath", 200, true, "medium"),
-		task("self-improving meta-controller: monitor success rate, detect regression, switch algorithms, tune hyperparameters online, maintain improvement journal", "GeneralPath", 400, true, "hard"),
-		task("multi-objective evolution: optimize success rate, path coverage, response time, structural simplicity — Pareto frontier, tradeoff visualization", "GeneralPath", 350, true, "hard"),
-		task("fleet-wide evolution: coordinated evolution on all 46 trees, detect shared patterns, propagate successful mutations, per-tree history, fleet report", "GeneralPath", 400, true, "hard"),
+		task("evaluate current tree fitness with composite score and breakdown", "EvolutionPath", 40, true, "easy"),
+		task("order mutations by expected improvement using Stockfish heuristics", "EvolutionPath", 40, true, "easy"),
+		task("check the transposition table hit rate and cache efficiency", "EvolutionPath", 40, true, "easy"),
+		task("mutation candidate analysis: top 5 candidates, predict fitness delta, assess risk, rank by expected value, recommend with justification", "EvolutionPath", 200, true, "medium"),
+		task("evolution safety check: verify mutation won't break tests, introduce cycles, remove safety nodes — produce rollback plan", "EvolutionPath", 200, true, "medium"),
+		task("ensemble evolution: run GA, Q-learning, hill climbing in parallel, compare results, stacking to combine best from each approach", "EvolutionPath", 200, true, "medium"),
+		task("self-improving meta-controller: monitor success rate, detect regression, switch algorithms, tune hyperparameters online, maintain improvement journal", "EvolutionPath", 400, true, "hard"),
+		task("multi-objective evolution: optimize success rate, path coverage, response time, structural simplicity — Pareto frontier, tradeoff visualization", "EvolutionPath", 350, true, "hard"),
+		task("fleet-wide evolution: coordinated evolution on all 46 trees, detect shared patterns, propagate successful mutations, per-tree history, fleet report", "EvolutionPath", 400, true, "hard"),
 		taskReject(" evolve "),
 		taskAdversarial("break everything and see what happens", "GeneralPath", 40),
 	}}
@@ -301,15 +301,15 @@ func Evolution() Suite {
 
 func Meeting() Suite {
 	return Suite{Name: "meeting_notes", Tasks: []TaskCase{
-		task("transcribe the daily standup and extract action items with owners", "GeneralPath", 60, true, "easy"),
-		task("summarize the architecture review meeting into key decisions", "GeneralPath", 60, true, "easy"),
-		task("generate meeting minutes from the sprint planning session", "GeneralPath", 60, true, "easy"),
-		task("multi-speaker transcription: identify speakers, track topics, extract decisions with rationale, assign action items, flag disagreements", "GeneralPath", 200, true, "medium"),
-		task("cross-reference meeting actions with kanban board: check coverage, create new cards for uncovered items, update card status", "GeneralPath", 200, true, "medium"),
-		task("quarterly board meeting: executive summary, financial highlights, strategic decisions, risk register, stakeholder communication draft", "GeneralPath", 200, true, "medium"),
-		task("meeting intelligence pipeline: transcribe → diarize → topics → decisions → sentiment → cross-reference → trends → actionable insights", "GeneralPath", 400, true, "hard"),
-		task("meeting knowledge base: index all past meetings by topic, speaker, decision, project — semantic search, trend detection, audit trail", "GeneralPath", 350, true, "hard"),
-		task("automated meeting facilitation: pre-meeting agenda from actions, real-time timebox, parking lot, post-meeting summary with action assignment and calendar follow-ups", "GeneralPath", 350, true, "hard"),
+		task("transcribe the daily standup and extract action items with owners", "MeetingPath", 60, true, "easy"),
+		task("summarize the architecture review meeting into key decisions", "MeetingPath", 60, true, "easy"),
+		task("generate meeting minutes from the sprint planning session", "MeetingPath", 60, true, "easy"),
+		task("multi-speaker transcription: identify speakers, track topics, extract decisions with rationale, assign action items, flag disagreements", "MeetingPath", 200, true, "medium"),
+		task("cross-reference meeting actions with kanban board: check coverage, create new cards for uncovered items, update card status", "MeetingPath", 200, true, "medium"),
+		task("quarterly board meeting: executive summary, financial highlights, strategic decisions, risk register, stakeholder communication draft", "MeetingPath", 200, true, "medium"),
+		task("meeting intelligence pipeline: transcribe → diarize → topics → decisions → sentiment → cross-reference → trends → actionable insights", "MeetingPath", 400, true, "hard"),
+		task("meeting knowledge base: index all past meetings by topic, speaker, decision, project — semantic search, trend detection, audit trail", "MeetingPath", 350, true, "hard"),
+		task("automated meeting facilitation: pre-meeting agenda from actions, real-time timebox, parking lot, post-meeting summary with action assignment and calendar follow-ups", "MeetingPath", 350, true, "hard"),
 		taskReject("\xf0\x9f\xab\xa5"),
 		taskAdversarial("meeting that could have been an email", "GeneralPath", 50),
 	}}
@@ -337,15 +337,15 @@ func Startup() Suite {
 
 func NotebookLM() Suite {
 	return Suite{Name: "notebooklm_research", Tasks: []TaskCase{
-		task("run 5 chat queries on the BT optimization notebook across rotating topics", "ResearchPath", 60, true, "easy"),
-		task("generate a briefing doc report from the latest research findings", "ResearchPath", 60, true, "easy"),
-		task("create a mind map from the algorithm research synthesis", "ResearchPath", 60, true, "easy"),
-		task("full daily cycle: 10 queries across 5 topics, summarize, flag implementable items, update backlog with priorities", "ResearchPath", 200, true, "medium"),
-		task("cross-notebook synthesis: query BT, Hermes+Obsidian, agent architecture — overlapping insights, contradictions, unified direction", "ResearchPath", 200, true, "medium"),
-		task("research impact tracking: trace implemented findings to git commits, measure fitness delta, calculate ROI, update backlog evidence", "ResearchPath", 200, true, "medium"),
-		task("full pipeline 100%: 50 daily queries across 20 topics, 5 reports, 3 mind maps, slide deck, infographic — save to vault with cross-references", "ResearchPath", 400, true, "hard"),
-		task("meta-research: analyze which topics produce most implementations, which sources most cited, latency research→code, optimize pipeline", "ResearchPath", 350, true, "hard"),
-		task("deep research sprint: 3 deep research tasks on top backlog items, audio overviews, actionable items, kanban implementation tickets", "ResearchPath", 400, true, "hard"),
+		task("run 5 chat queries on the BT optimization notebook across rotating topics", "NotebookLMPath", 60, true, "easy"),
+		task("generate a briefing doc report from the latest research findings", "NotebookLMPath", 60, true, "easy"),
+		task("create a mind map from the algorithm research synthesis", "NotebookLMPath", 60, true, "easy"),
+		task("full daily cycle: 10 queries across 5 topics, summarize, flag implementable items, update backlog with priorities", "NotebookLMPath", 200, true, "medium"),
+		task("cross-notebook synthesis: query BT, Hermes+Obsidian, agent architecture — overlapping insights, contradictions, unified direction", "NotebookLMPath", 200, true, "medium"),
+		task("research impact tracking: trace implemented findings to git commits, measure fitness delta, calculate ROI, update backlog evidence", "NotebookLMPath", 200, true, "medium"),
+		task("full pipeline 100%: 50 daily queries across 20 topics, 5 reports, 3 mind maps, slide deck, infographic — save to vault with cross-references", "NotebookLMPath", 400, true, "hard"),
+		task("meta-research: analyze which topics produce most implementations, which sources most cited, latency research→code, optimize pipeline", "NotebookLMPath", 350, true, "hard"),
+		task("deep research sprint: 3 deep research tasks on top backlog items, audio overviews, actionable items, kanban implementation tickets", "NotebookLMPath", 400, true, "hard"),
 		taskAdversarial("FAQ", "ResearchPath", 30),
 		taskAdversarial("search the web for everything about everything", "ResearchPath", 50),
 	}}
@@ -355,15 +355,15 @@ func NotebookLM() Suite {
 
 func Vault() Suite {
 	return Suite{Name: "vault_management", Tasks: []TaskCase{
-		task("ingest the session transcript and extract key insights for the vault", "GeneralPath", 60, true, "easy"),
-		task("synthesize daily research notes into a wiki page with frontmatter and tags", "GeneralPath", 60, true, "easy"),
-		task("update the _index.md map of content with new pages this week", "GeneralPath", 60, true, "easy"),
-		task("cross-link analysis: scan all pages, identify orphans (<2 links), find related content, add bidirectional links, update MOC", "GeneralPath", 200, true, "medium"),
-		task("knowledge gap detection: compare vault coverage to BT platform modules, identify undocumented features, missing ADRs, stale docs — gap report", "GeneralPath", 200, true, "medium"),
-		task("weekly sweep: review 7 days of notes, extract themes, identify obsolete content, consolidate scattered notes, update indices", "GeneralPath", 200, true, "medium"),
-		task("vault health audit: link validity, frontmatter schema, duplicate detection with similarity scoring, note freshness, quality score with breakdown", "GeneralPath", 350, true, "hard"),
-		task("knowledge graph from vault: extract entities and relations, build graph, detect communities, identify bridge notes connecting topics", "GeneralPath", 400, true, "hard"),
-		task("automated research wiki: auto-generate wiki page per BT package from code + graphify + NotebookLM — living docs updating on code changes", "GeneralPath", 400, true, "hard"),
+		task("ingest the session transcript and extract key insights for the vault", "VaultPath", 60, true, "easy"),
+		task("synthesize daily research notes into a wiki page with frontmatter and tags", "VaultPath", 60, true, "easy"),
+		task("update the _index.md map of content with new pages this week", "VaultPath", 60, true, "easy"),
+		task("cross-link analysis: scan all pages, identify orphans (<2 links), find related content, add bidirectional links, update MOC", "VaultPath", 200, true, "medium"),
+		task("knowledge gap detection: compare vault coverage to BT platform modules, identify undocumented features, missing ADRs, stale docs — gap report", "VaultPath", 200, true, "medium"),
+		task("weekly sweep: review 7 days of notes, extract themes, identify obsolete content, consolidate scattered notes, update indices", "VaultPath", 200, true, "medium"),
+		task("vault health audit: link validity, frontmatter schema, duplicate detection with similarity scoring, note freshness, quality score with breakdown", "VaultPath", 350, true, "hard"),
+		task("knowledge graph from vault: extract entities and relations, build graph, detect communities, identify bridge notes connecting topics", "VaultPath", 400, true, "hard"),
+		task("automated research wiki: auto-generate wiki page per BT package from code + graphify + NotebookLM — living docs updating on code changes", "VaultPath", 400, true, "hard"),
 		taskReject("."),
 		taskAdversarial("write a note about nothing", "GeneralPath", 40),
 	}}
@@ -373,15 +373,15 @@ func Vault() Suite {
 
 func PlatformEval() Suite {
 	return Suite{Name: "platform_eval", Tasks: []TaskCase{
-		task("evaluate platform maturity across all 10 dimensions with scoring", "GeneralPath", 60, true, "easy"),
-		task("find the lowest-scoring dimension and propose concrete improvement plan", "GeneralPath", 60, true, "easy"),
-		task("run the full test suite and report coverage metrics per package", "GeneralPath", 60, true, "easy"),
-		task("gap analysis: for each dimension below 90%, identify specific gaps, estimate effort, calculate impact, rank by ROI, 2-week sprint plan", "GeneralPath", 250, true, "medium"),
-		task("comparative maturity: benchmark against AWS Well-Architected, Google SRE, Netflix OSS models — score, identify borrowable patterns", "GeneralPath", 250, true, "medium"),
-		task("maturity trends: plot dimension scores daily, calculate velocity, predict 100% date, flag decelerating dimensions", "GeneralPath", 200, true, "medium"),
-		task("comprehensive audit: test coverage, security scan, performance benchmark, dependency health, documentation completeness, API consistency — findings, severity, remediation", "GeneralPath", 400, true, "hard"),
-		task("architecture review: SOLID, clean architecture, DDD — coupling, cohesion, testability, maintainability of 25 packages — refactoring roadmap", "GeneralPath", 400, true, "hard"),
-		task("production readiness: can platform handle 1000 concurrent agents? Model failure modes, single points of failure, hardening recommendations", "GeneralPath", 350, true, "hard"),
+		task("evaluate platform maturity across all 10 dimensions with scoring", "PlatformEvalPath", 60, true, "easy"),
+		task("find the lowest-scoring dimension and propose concrete improvement plan", "PlatformEvalPath", 60, true, "easy"),
+		task("run the full test suite and report coverage metrics per package", "PlatformEvalPath", 60, true, "easy"),
+		task("gap analysis: for each dimension below 90%, identify specific gaps, estimate effort, calculate impact, rank by ROI, 2-week sprint plan", "PlatformEvalPath", 250, true, "medium"),
+		task("comparative maturity: benchmark against AWS Well-Architected, Google SRE, Netflix OSS models — score, identify borrowable patterns", "PlatformEvalPath", 250, true, "medium"),
+		task("maturity trends: plot dimension scores daily, calculate velocity, predict 100% date, flag decelerating dimensions", "PlatformEvalPath", 200, true, "medium"),
+		task("comprehensive audit: test coverage, security scan, performance benchmark, dependency health, documentation completeness, API consistency — findings, severity, remediation", "PlatformEvalPath", 400, true, "hard"),
+		task("architecture review: SOLID, clean architecture, DDD — coupling, cohesion, testability, maintainability of 25 packages — refactoring roadmap", "PlatformEvalPath", 400, true, "hard"),
+		task("production readiness: can platform handle 1000 concurrent agents? Model failure modes, single points of failure, hardening recommendations", "PlatformEvalPath", 350, true, "hard"),
 		taskReject("\xe2\x9c\x85\xe2\x9c\x85\xe2\x9c\x85"),
 		taskAdversarial("make everything perfect now", "GeneralPath", 50),
 	}}

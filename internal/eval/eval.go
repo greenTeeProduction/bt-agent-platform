@@ -55,7 +55,12 @@ type UseCaseScore struct {
 type EvalMockLLM struct{}
 
 func (m *EvalMockLLM) Generate(prompt string) (string, error) {
-	return "EVAL_OUTPUT: Comprehensive response with details, examples, and actionable recommendations. This output meets the minimum length requirement for quality validation gates.", nil
+	return "EVAL_OUTPUT: This is a comprehensive response that addresses all aspects of the task in detail. " +
+		"It includes thorough analysis, specific recommendations, actionable steps, and supporting evidence. " +
+		"The response covers architecture considerations, implementation patterns, edge cases, and validation criteria. " +
+		"Each finding is documented with clear rationale and priority ranking. The output meets all quality standards " +
+		"for production-grade evaluation results with complete documentation and traceable decision logic. " +
+		"This ensures the response exceeds the minimum length requirement for the quality validation gate.", nil
 }
 func (m *EvalMockLLM) AnalyzeComplexity(task string) string    { return "medium" }
 func (m *EvalMockLLM) GeneratePlan(task, complexity string) string { return "plan: " + task }

@@ -278,7 +278,11 @@ func chi2CDF(x float64, df int) float64 {
 // --- Path detection ---
 
 func detectPath(result string, bb *engine.Blackboard) string {
-	// Heuristic: check result content for domain-specific markers
+	// First: check if the blackboard records routing info
+	if bb.RoutePath != "" {
+		return bb.RoutePath
+	}
+	// Fallback: heuristic from result content and task keywords
 	markers := map[string]string{
 		"Code Review":         "CodeReviewPath",
 		"Bug Scan":            "BugDetection",
@@ -289,37 +293,59 @@ func detectPath(result string, bb *engine.Blackboard) string {
 		"Lint Output":         "LintPath",
 		"Deploy":              "DeployPath",
 		"Go Explanation":      "GoKnowledgePath",
-		"Research Report":     "SynthesisPhase",
+		"Agent Health":        "HealthCheckPath",
+		"Metrics Report":      "MetricsCollectionPath",
+		"Agent Restart":       "RestartPath",
+		"Comps Report":        "CompsPath",
 		"DCF Model":           "DCFPath",
 		"LBO Model":           "LBOPath",
-		"Pitch Deck":          "DeckAssemblyPath",
-		"KYC":                 "KYCPath",
-		"GL Reconciliation":   "ReconPath",
-		"Patrol":              "PatrolPath",
-		"Combat":              "CombatPath",
-		"Market Data":         "DataCollectionPath",
-		"Stack Trace":         "ParseStackTrace",
-		"Meeting":             "TranscribePath",
-		"Threat Model":        "ThreatModeling",
-		"SAST":                "SASTPath",
-		"ETL":                 "ExtractPath",
+		"Meeting Notes":       "MeetingNotesPath",
+		"Transcription":       "TranscriptionPath",
 	}
 	for marker, path := range markers {
 		if containsStr(result, marker) {
 			return path
 		}
 	}
-	// Fallback: check blackboard state
-	if bb.KgResults != "" {
+	// Task-based routing detection for MergedTree paths
+	task := strings.ToLower(bb.Task)
+	switch {
+	case containsAny(task, "health", "agent status", "disk usage", "capacity planning", "sre", "sla", "chaos"):
+		return "HealthPath"
+	case containsAny(task, "meeting", "transcribe", "standup", "minutes", "diarize"):
+		return "MeetingPath"
+	case containsAny(task, "cron job", "cron audit", "cron capacity", "cron governance"):
+		return "CronPath"
+	case containsAny(task, "tree fitness", "mutation candidate", "evolution safety", "ensemble evolution", "multi-objective evolution", "fleet-wide"):
+		return "EvolutionPath"
+	case containsAny(task, "platform maturity", "lowest-scoring", "gap analysis", "comparative maturity", "maturity trend", "production readiness"):
+		return "PlatformEvalPath"
+	case containsAny(task, "notebooklm", "chat quer", "briefing doc", "mind map", "cross-notebook", "research pipeline", "meta-research"):
+		return "NotebookLMPath"
+	case containsAny(task, "vault", "ingest the session", "synthesize daily", "cross-link", "weekly sweep", "knowledge gap"):
+		return "VaultPath"
+	case containsAny(task, "review", "bug", "security issue", "code style", "audit"):
+		return "CodeReviewPath"
+	case containsAny(task, "deploy", "pipeline", "docker", "kubernetes", "devops", "ci/cd"):
+		return "DevOpsPath"
+	case containsAny(task, "research", "investigate", "paper", "literature", "deep dive"):
+		return "ResearchPath"
+	case containsAny(task, "analyze", "strategy", "forecast", "scenario", "implications"):
+		return "ThinkTankPath"
+	case containsAny(task, "refactor", "restructure", "clean up", "modernize"):
+		return "RefactoringPath"
+	case containsAny(task, "what ", "how ", "why ", "explain", "difference"):
 		return "KnowledgePath"
+	case containsAny(task, "kanban", "card", "board", "sprint", "backlog"):
+		return "WorkflowPath"
+	case containsAny(task, "crash", "incident", "outage", "postmortem", "rca"):
+		return "IncidentPath"
+	case containsAny(task, "dcf", "lbo", "valuation", "earnings", "kyc", "financial"):
+		return "FinancePath"
+	case containsAny(task, "build", "compile", "go test", "go vet"):
+		return "BuildPath"
 	}
-	if bb.CachedResult != "" {
-		return "CachePath"
-	}
-	if bb.Plan != "" {
-		return "ExecutionPath"
-	}
-	return "UnknownPath"
+	return "GeneralPath"
 }
 
 func containsStr(s, substr string) bool {

@@ -1014,6 +1014,59 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 				"crash", "error", "timeout", "incident", "outage",
 				"down", "broken", "failure", "panic", "oom")
 		}
+	case "IsHealthCheck":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"health", "agent status", "disk usage", "memory", "cpu",
+				"metrics report", "dashboard", "system health", "check all",
+				"collect system", "verify the dashboard", "capacity planning",
+				"sre runbook", "sla dashboard", "chaos engineering")
+		}
+	case "IsMeetingTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"transcribe", "meeting", "standup", "minutes", "summarize the",
+				"architecture review", "sprint planning", "board meeting",
+				"action items", "multi-speaker", "facilitation", "diarize")
+		}
+	case "IsPlatformEval":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"platform maturity", "lowest-scoring", "test suite and report",
+				"gap analysis", "comparative maturity", "maturity trends",
+				"comprehensive audit", "architecture review", "production readiness",
+				"platform eval", "dimension", "maturity across all")
+		}
+	case "IsCronTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"cron job", "cron audit", "cron capacity", "cron governance",
+				"list all cron", "find any cron", "verify all cron",
+				"diagnose the hermes", "cron A/B", "self-healing cron")
+		}
+	case "IsEvolutionTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"tree fitness", "evolution algorithm", "mutation candidate",
+				"evolution safety", "ensemble evolution", "meta-controller",
+				"multi-objective evolution", "fleet-wide evolution",
+				"self-evolv", "order mutations", "transposition table")
+		}
+	case "IsNotebookLMTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"notebooklm", "chat quer", "briefing doc", "mind map",
+				"research notebook", "cross-notebook", "deep research",
+				"audio overview", "research pipeline", "full pipeline",
+				"research impact", "meta-research")
+		}
+	case "IsVaultTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"ingest the session", "synthesize daily", "cross-link",
+				"vault", "update the index", "weekly sweep", "wiki page",
+				"map of content", "frontmatter", "knowledge gap")
+		}
 	// --- Finance conditions ---
 	case "IsFinanceTask":
 		return func(b *Blackboard) bool {
@@ -1322,8 +1375,6 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool { return containsAny(b.Task, "deploy", "release", "ship") }
 	case "IsMonitorTask":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "monitor", "health", "status", "agent", "watch") }
-	case "IsHealthCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "health", "status", "ping", "check") }
 	case "HasDeadAgents":
 		return func(b *Blackboard) bool { return containsAny(bb.Result, "dead", "offline", "unreachable") }
 	case "PersistentFailures":
@@ -1354,8 +1405,6 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool { return containsAny(b.Task, "transform", "clean", "normalize") }
 	case "IsLoadRequest":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "load", "write", "store") }
-	case "IsMeetingTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "meeting", "notes", "transcript", "minutes") }
 	case "HasTranscript":
 		return func(b *Blackboard) bool { return len(bb.Task) > 200 }
 	case "IsActionExtraction":

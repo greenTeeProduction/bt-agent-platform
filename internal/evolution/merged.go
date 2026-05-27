@@ -175,7 +175,91 @@ func MergedTree() *SerializableNode {
 							},
 						},
 					},
-					// Path 13: General (catch-all)
+					// Path 13: Health Monitoring
+					{
+						Type: "Sequence", Name: "HealthPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsHealthCheck", Description: "health/monitoring/capacity/alert keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Monitor system health: {{.Task}}. Check agents, disk, memory, CPU, cron jobs, dashboard. Provide health report with status indicators.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 14: Meeting Notes
+					{
+						Type: "Sequence", Name: "MeetingPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsMeetingTask", Description: "transcribe/meeting/standup/minutes keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Process meeting: {{.Task}}. Transcribe, extract action items, summarize decisions, assign owners, generate minutes.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 15: Platform Evaluation
+					{
+						Type: "Sequence", Name: "PlatformEvalPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsPlatformEval", Description: "platform maturity/dimension/gap analysis keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Evaluate the platform: {{.Task}}. Score dimensions, identify gaps, estimate effort, rank by ROI, produce improvement plan.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 16: Cron Job Management
+					{
+						Type: "Sequence", Name: "CronPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsCronTask", Description: "cron job/audit/capacity/governance keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Manage cron jobs: {{.Task}}. List, audit, optimize schedules, detect failures, propose improvements.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 17: Self-Evolution
+					{
+						Type: "Sequence", Name: "EvolutionPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsEvolutionTask", Description: "tree fitness/mutation/evolution/ensemble keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Evolve the platform: {{.Task}}. Evaluate fitness, order mutations, apply improvements, validate, commit.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 18: NotebookLM Research
+					{
+						Type: "Sequence", Name: "NotebookLMPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsNotebookLMTask", Description: "notebooklm/chat query/mind map/research pipeline keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Run NotebookLM research: {{.Task}}. Query notebooks, generate reports, mind maps, artifacts. Save to vault.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 19: Vault Management
+					{
+						Type: "Sequence", Name: "VaultPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsVaultTask", Description: "vault/ingest/synthesize/cross-link/index keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Manage the vault: {{.Task}}. Ingest, synthesize, cross-link, update indices, run sweeps, maintain knowledge graph.",
+								Metadata: map[string]any{"max_tokens": float64(1024)},
+							},
+						},
+					},
+					// Path 20: General (catch-all)
 					{
 						Type: "Sequence", Name: "GeneralPath",
 						Children: []SerializableNode{
