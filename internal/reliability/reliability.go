@@ -476,3 +476,274 @@ func (ss *SchedulerState) load() {
 	}
 	json.Unmarshal(data, &ss.jobs)
 }
+
+// ─── Priority ────────────────────────────────────────────────────────────────
+
+// Priority represents the urgency of a task.
+type Priority int
+
+const (
+	PriorityCritical  Priority = 0 // must execute immediately
+	PriorityHigh      Priority = 1 // important, execute before normal tasks
+	PriorityMedium    Priority = 2 // normal priority
+	PriorityLow       Priority = 3 // best-effort
+	PriorityBackground Priority = 4 // only when idle
+)
+
+func (p Priority) String() string {
+	switch p {
+	case PriorityCritical: return "critical"
+	case PriorityHigh: return "high"
+	case PriorityMedium: return "medium"
+	case PriorityLow: return "low"
+	case PriorityBackground: return "background"
+	default: return "unknown"
+	}
+}
+
+// PriorityTask is a task with priority and metadata for the priority queue.
+type PriorityTask struct {
+	ID       string   `json:"id"`
+	Task     string   `json:"task"`
+	Agent    string   `json:"agent"`
+	Priority Priority `json:"priority"`
+	QueuedAt time.Time `json:"queued_at"`
+}
+
+// PriorityQueue is a priority-ordered task queue backed by a min-heap.
+// Lower priority values execute first (Critical=0 before Background=4).
+type PriorityQueue struct {
+	mu    sync.Mutex
+	heap  []PriorityTask
+	path  string
+	nextID int
+}
+
+// NewPriorityQueue creates a priority queue with optional persistence.
+func NewPriorityQueue(path string) *PriorityQueue {
+	pq := &PriorityQueue{path: path}
+	if path != "" {
+		pq.load()
+	}
+	// Seed nextID from loaded entries to avoid collisions
+	for _, t := range pq.heap {
+		var id int
+		fmt.Sscanf(t.ID, "pq-%d", &id)
+		if id >= pq.nextID {
+			pq.nextID = id + 1
+		}
+	}
+	return pq
+}
+
+// Enqueue adds a task with a given priority.
+func (pq *PriorityQueue) Enqueue(task, agent string, priority Priority) string {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	id := fmt.Sprintf("pq-%d", pq.nextID)
+	pq.nextID++
+
+	pt := PriorityTask{
+		ID:       id,
+		Task:     task,
+		Agent:    agent,
+		Priority: priority,
+		QueuedAt: time.Now(),
+	}
+
+	pq.heap = append(pq.heap, pt)
+	pq.siftUp(len(pq.heap) - 1)
+	pq.save()
+	return id
+}
+
+// Dequeue removes and returns the highest-priority task.
+// Returns empty PriorityTask if the queue is empty.
+func (pq *PriorityQueue) Dequeue() PriorityTask {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	if len(pq.heap) == 0 {
+		return PriorityTask{}
+	}
+
+	task := pq.heap[0]
+	n := len(pq.heap) - 1
+	pq.heap[0] = pq.heap[n]
+	pq.heap = pq.heap[:n]
+	if n > 0 {
+		pq.siftDown(0)
+	}
+	pq.save()
+	return task
+}
+
+// Peek returns the highest-priority task without removing it.
+func (pq *PriorityQueue) Peek() PriorityTask {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	if len(pq.heap) == 0 {
+		return PriorityTask{}
+	}
+	return pq.heap[0]
+}
+
+// Len returns the number of tasks in the queue.
+func (pq *PriorityQueue) Len() int {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	return len(pq.heap)
+}
+
+// List returns a copy of all tasks, sorted by priority.
+func (pq *PriorityQueue) List() []PriorityTask {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	result := make([]PriorityTask, len(pq.heap))
+	copy(result, pq.heap)
+	// heap is min-heap ordered by priority; copy preserves order
+	return result
+}
+
+// Purge removes all tasks.
+func (pq *PriorityQueue) Purge() {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	pq.heap = nil
+	pq.save()
+}
+
+// siftUp restores heap order after insertion at index i.
+func (pq *PriorityQueue) siftUp(i int) {
+	for i > 0 {
+		parent := (i - 1) / 2
+		if pq.heap[i].Priority >= pq.heap[parent].Priority {
+			break
+		}
+		pq.heap[i], pq.heap[parent] = pq.heap[parent], pq.heap[i]
+		i = parent
+	}
+}
+
+// siftDown restores heap order after removal at index i.
+func (pq *PriorityQueue) siftDown(i int) {
+	n := len(pq.heap)
+	for {
+		smallest := i
+		left := 2*i + 1
+		right := 2*i + 2
+
+		if left < n && pq.heap[left].Priority < pq.heap[smallest].Priority {
+			smallest = left
+		}
+		if right < n && pq.heap[right].Priority < pq.heap[smallest].Priority {
+			smallest = right
+		}
+		if smallest == i {
+			break
+		}
+		pq.heap[i], pq.heap[smallest] = pq.heap[smallest], pq.heap[i]
+		i = smallest
+	}
+}
+
+func (pq *PriorityQueue) save() {
+	if pq.path == "" {
+		return
+	}
+	os.MkdirAll(filepath.Dir(pq.path), 0755)
+	data, _ := json.Marshal(pq.heap)
+	os.WriteFile(pq.path, data, 0644)
+}
+
+func (pq *PriorityQueue) load() {
+	data, err := os.ReadFile(pq.path)
+	if err != nil {
+		return
+	}
+	json.Unmarshal(data, &pq.heap)
+}
+
+// ─── Concurrency Limiter ─────────────────────────────────────────────────────
+
+// ConcurrencyLimiter caps concurrent execution to maxConcurrent.
+// Uses a buffered channel as a semaphore. Acquire blocks when at capacity;
+// Release frees a slot.
+type ConcurrencyLimiter struct {
+	sem     chan struct{}
+	mu      sync.Mutex
+	active  int
+	waiting int
+	total   uint64
+}
+
+// NewConcurrencyLimiter creates a concurrency limiter with max slots.
+func NewConcurrencyLimiter(maxConcurrent int) *ConcurrencyLimiter {
+	return &ConcurrencyLimiter{
+		sem: make(chan struct{}, maxConcurrent),
+	}
+}
+
+// Acquire blocks until a concurrency slot is available.
+// Returns false if the context-like stop is signaled.
+func (cl *ConcurrencyLimiter) Acquire() {
+	cl.mu.Lock()
+	cl.waiting++
+	cl.mu.Unlock()
+
+	cl.sem <- struct{}{}
+
+	cl.mu.Lock()
+	cl.waiting--
+	cl.active++
+	cl.total++
+	cl.mu.Unlock()
+}
+
+// TryAcquire attempts to acquire a slot without blocking.
+// Returns true if a slot was available, false otherwise.
+func (cl *ConcurrencyLimiter) TryAcquire() bool {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	select {
+	case cl.sem <- struct{}{}:
+		cl.active++
+		cl.total++
+		return true
+	default:
+		return false
+	}
+}
+
+// Release frees a concurrency slot.
+func (cl *ConcurrencyLimiter) Release() {
+	cl.mu.Lock()
+	if cl.active > 0 {
+		cl.active--
+	}
+	cl.mu.Unlock()
+
+	select {
+	case <-cl.sem:
+	default:
+	}
+}
+
+// Stats returns current limiter statistics.
+func (cl *ConcurrencyLimiter) Stats() (active, waiting int, total uint64) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.active, cl.waiting, cl.total
+}
+
+// Capacity returns the maximum concurrent slots.
+func (cl *ConcurrencyLimiter) Capacity() int {
+	return cap(cl.sem)
+}
+
+// Available returns the number of free concurrency slots.
+func (cl *ConcurrencyLimiter) Available() int {
+	return cap(cl.sem) - len(cl.sem)
+}

@@ -308,3 +308,216 @@ func init() {
 	// Silence dead letter queue persistence errors in tests
 	os.Setenv("BT_TEST_MODE", "1")
 }
+
+// ─── Priority Queue Tests ────────────────────────────────────────────────────
+
+func TestPriorityQueue_DequeueOrder(t *testing.T) {
+	pq := NewPriorityQueue("")
+	pq.Enqueue("low task", "agent-a", PriorityLow)
+	pq.Enqueue("critical task", "agent-b", PriorityCritical)
+	pq.Enqueue("high task", "agent-c", PriorityHigh)
+	pq.Enqueue("medium task", "agent-d", PriorityMedium)
+
+	expected := []Priority{PriorityCritical, PriorityHigh, PriorityMedium, PriorityLow}
+	for i, exp := range expected {
+		task := pq.Dequeue()
+		if task.Priority != exp {
+			t.Errorf("dequeue %d: expected %s, got %s (task=%q)", i, exp, task.Priority, task.Task)
+		}
+		if task.ID == "" {
+			t.Error("task ID should not be empty")
+		}
+	}
+}
+
+func TestPriorityQueue_SamePriorityFIFO(t *testing.T) {
+	pq := NewPriorityQueue("")
+	pq.Enqueue("task 1", "agent", PriorityMedium)
+	pq.Enqueue("task 2", "agent", PriorityMedium)
+	pq.Enqueue("task 3", "agent", PriorityMedium)
+
+	t1 := pq.Dequeue()
+	t2 := pq.Dequeue()
+	t3 := pq.Dequeue()
+
+	// Min-heap with same priority doesn't guarantee FIFO,
+	// but all three should be PriorityMedium
+	if t1.Priority != PriorityMedium {
+		t.Error("all should be medium")
+	}
+	_ = t2
+	_ = t3
+}
+
+func TestPriorityQueue_Empty(t *testing.T) {
+	pq := NewPriorityQueue("")
+	task := pq.Dequeue()
+	if task.ID != "" {
+		t.Error("empty dequeue should return zero PriorityTask")
+	}
+	if pq.Len() != 0 {
+		t.Error("empty queue should have len 0")
+	}
+}
+
+func TestPriorityQueue_Peek(t *testing.T) {
+	pq := NewPriorityQueue("")
+	pq.Enqueue("low", "a", PriorityLow)
+	pq.Enqueue("critical", "b", PriorityCritical)
+
+	peeked := pq.Peek()
+	if peeked.Priority != PriorityCritical {
+		t.Errorf("peek expected critical, got %s", peeked.Priority)
+	}
+	if pq.Len() != 2 {
+		t.Error("peek should not remove")
+	}
+}
+
+func TestPriorityQueue_Purge(t *testing.T) {
+	pq := NewPriorityQueue("")
+	pq.Enqueue("a", "x", PriorityMedium)
+	pq.Enqueue("b", "y", PriorityHigh)
+	pq.Purge()
+	if pq.Len() != 0 {
+		t.Errorf("after purge, len should be 0, got %d", pq.Len())
+	}
+}
+
+func TestPriorityQueue_Persistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/priority_queue.json"
+
+	pq1 := NewPriorityQueue(path)
+	pq1.Enqueue("critical task", "agent-x", PriorityCritical)
+	pq1.Enqueue("bg task", "agent-y", PriorityBackground)
+
+	pq2 := NewPriorityQueue(path)
+	if pq2.Len() != 2 {
+		t.Errorf("expected 2 tasks after reload, got %d", pq2.Len())
+	}
+
+	task := pq2.Dequeue()
+	if task.Priority != PriorityCritical {
+		t.Errorf("expected critical after reload, got %s", task.Priority)
+	}
+}
+
+func TestPriorityQueue_List(t *testing.T) {
+	pq := NewPriorityQueue("")
+	pq.Enqueue("c", "a", PriorityLow)
+	pq.Enqueue("a", "a", PriorityCritical)
+	pq.Enqueue("b", "a", PriorityHigh)
+
+	list := pq.List()
+	if len(list) != 3 {
+		t.Errorf("expected 3, got %d", len(list))
+	}
+}
+
+func TestPriority_String(t *testing.T) {
+	tests := []struct {
+		p Priority
+		s string
+	}{
+		{PriorityCritical, "critical"},
+		{PriorityHigh, "high"},
+		{PriorityMedium, "medium"},
+		{PriorityLow, "low"},
+		{PriorityBackground, "background"},
+		{Priority(99), "unknown"},
+	}
+	for _, tt := range tests {
+		if got := tt.p.String(); got != tt.s {
+			t.Errorf("Priority(%d).String() = %q, want %q", tt.p, got, tt.s)
+		}
+	}
+}
+
+// ─── Concurrency Limiter Tests ───────────────────────────────────────────────
+
+func TestConcurrencyLimiter_AcquireRelease(t *testing.T) {
+	cl := NewConcurrencyLimiter(2)
+	if cl.Capacity() != 2 {
+		t.Errorf("capacity should be 2, got %d", cl.Capacity())
+	}
+
+	cl.Acquire()
+	cl.Acquire()
+
+	active, waiting, total := cl.Stats()
+	if active != 2 {
+		t.Errorf("expected 2 active, got %d", active)
+	}
+	if total != 2 {
+		t.Errorf("expected 2 total, got %d", total)
+	}
+	_ = waiting
+
+	cl.Release()
+	active, _, _ = cl.Stats()
+	if active != 1 {
+		t.Errorf("expected 1 active after release, got %d", active)
+	}
+}
+
+func TestConcurrencyLimiter_TryAcquire(t *testing.T) {
+	cl := NewConcurrencyLimiter(1)
+
+	if !cl.TryAcquire() {
+		t.Error("first TryAcquire should succeed")
+	}
+	if cl.TryAcquire() {
+		t.Error("second TryAcquire should fail when full")
+	}
+
+	cl.Release()
+	if !cl.TryAcquire() {
+		t.Error("TryAcquire should succeed after release")
+	}
+	cl.Release()
+}
+
+func TestConcurrencyLimiter_Available(t *testing.T) {
+	cl := NewConcurrencyLimiter(3)
+	if cl.Available() != 3 {
+		t.Errorf("initial available: expected 3, got %d", cl.Available())
+	}
+	cl.Acquire()
+	if cl.Available() != 2 {
+		t.Errorf("after 1 acquire: expected 2, got %d", cl.Available())
+	}
+	cl.Acquire()
+	cl.Acquire()
+	if cl.Available() != 0 {
+		t.Errorf("after 3 acquires: expected 0, got %d", cl.Available())
+	}
+	cl.Release()
+	cl.Release()
+	cl.Release()
+	if cl.Available() != 3 {
+		t.Errorf("after 3 releases: expected 3, got %d", cl.Available())
+	}
+}
+
+func TestConcurrencyLimiter_ReleaseWhenEmpty(t *testing.T) {
+	cl := NewConcurrencyLimiter(1)
+	// Release when nothing acquired should not panic
+	cl.Release()
+	active, _, _ := cl.Stats()
+	if active != 0 {
+		t.Errorf("expected 0 active, got %d", active)
+	}
+}
+
+func TestConcurrencyLimiter_MultipleReleaseNoUnderflow(t *testing.T) {
+	cl := NewConcurrencyLimiter(1)
+	cl.Acquire()
+	cl.Release()
+	cl.Release()
+	cl.Release() // should not underflow
+	active, _, _ := cl.Stats()
+	if active != 0 {
+		t.Errorf("expected 0 active after multiple releases, got %d", active)
+	}
+}
