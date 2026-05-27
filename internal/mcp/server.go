@@ -2,12 +2,14 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/security"
 )
@@ -74,6 +76,7 @@ type Server struct {
 	sanitizeArgs  bool
 	apiKey        string
 	rateLimiter   *security.RateLimiter
+	auditEnabled  bool
 }
 
 // NewServer creates a new MCP server.
@@ -147,13 +150,15 @@ func (s *Server) Run() error {
 	}
 }
 
-// SetSecurity enables argument sanitization and optional API key validation.
+// SetSecurity enables argument sanitization, audit logging, and optional API key validation.
 // When sanitize is true, tool call arguments are sanitized before reaching handlers.
 // When apiKey is non-empty, every tools/call request must include a matching
 // "bt_api_key" in its params. If both are disabled (default), no security is applied.
+// Audit logging is automatically enabled when SetSecurity is called.
 func (s *Server) SetSecurity(sanitize bool, apiKey string) {
 	s.sanitizeArgs = sanitize
 	s.apiKey = apiKey
+	s.auditEnabled = sanitize || apiKey != ""
 }
 
 // SetRateLimit enables time-based rate limiting on tools/call requests.
@@ -166,6 +171,14 @@ func (s *Server) SetRateLimit(rate float64, burst int) {
 		return
 	}
 	s.rateLimiter = security.NewRateLimiter(rate, burst)
+}
+
+// SetAudit enables or disables structured security audit logging via
+// the security package's slog-based AuditSecurityEvent. When enabled,
+// auth failures, rate limit hits, and tool call execution are logged as
+// structured SECURITY events. Enabled by default when SetSecurity is called.
+func (s *Server) SetAudit(enabled bool) {
+	s.auditEnabled = enabled
 }
 
 // sanitizeArg recursively sanitizes JSON values by stripping null bytes,
@@ -248,22 +261,36 @@ func (s *Server) handleMessage(data []byte) {
 			return
 		}
 
-		// ── Security: API key validation (stderr only, no stdout data leakage) ──
+		// ── Security: API key validation with audit logging ──
 		if s.apiKey != "" {
 			var authParams struct {
 				BtAPIKey string `json:"bt_api_key"`
 			}
 			json.Unmarshal(msg.Params, &authParams)
 			if authParams.BtAPIKey != s.apiKey {
-				fmt.Fprintf(os.Stderr, "mcp: tools/call denied (bad api key) for tool=%s\n", params.Name)
+				if s.auditEnabled {
+					security.AuditSecurityEvent(context.Background(), "mcp_auth_failure",
+						"server", s.name,
+						"tool", params.Name,
+					)
+				} else {
+					fmt.Fprintf(os.Stderr, "mcp: tools/call denied (bad api key) for tool=%s\n", params.Name)
+				}
 				s.writeError(msg.ID, -32001, "Authentication required: invalid or missing bt_api_key")
 				return
 			}
 		}
 
-		// ── Security: time-based rate limiting ──
+		// ── Security: time-based rate limiting with audit logging ──
 		if s.rateLimiter != nil && !s.rateLimiter.Allow(s.name) {
-			fmt.Fprintf(os.Stderr, "mcp: tools/call rate limited for tool=%s\n", params.Name)
+			if s.auditEnabled {
+				security.AuditSecurityEvent(context.Background(), "mcp_rate_limit_exceeded",
+					"server", s.name,
+					"tool", params.Name,
+				)
+			} else {
+				fmt.Fprintf(os.Stderr, "mcp: tools/call rate limited for tool=%s\n", params.Name)
+			}
 			s.writeError(msg.ID, -32000, "Rate limit exceeded. Retry later.")
 			return
 		}
@@ -285,7 +312,20 @@ func (s *Server) handleMessage(data []byte) {
 			return
 		}
 
+		// Execute the tool, recording timing for audit.
+		start := time.Now()
 		result := handler(params.Arguments)
+		elapsed := time.Since(start)
+
+		// ── Security: audit tool execution ──
+		if s.auditEnabled {
+			security.AuditSecurityEvent(context.Background(), "mcp_tool_call",
+				"server", s.name,
+				"tool", params.Name,
+				"duration_ms", elapsed.Milliseconds(),
+			)
+		}
+
 		s.writeResult(msg.ID, result)
 
 	case "notifications/initialized":
