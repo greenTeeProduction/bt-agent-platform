@@ -65,9 +65,11 @@ func (e *QueueError) Unwrap() error {
 }
 
 // Compile-time interface compliance checks.
-// These ensure the file-backed implementations satisfy the interfaces,
+// These ensure all backend implementations satisfy the interfaces,
 // and will catch regressions if the method signatures change.
 var (
 	_ Queue             = (*TaskQueue)(nil)
+	_ Queue             = (*RedisQueue)(nil)
 	_ PriorityTaskQueue = (*PriorityQueue)(nil)
+	_ PriorityTaskQueue = (*RedisPriorityQueue)(nil)
 )
