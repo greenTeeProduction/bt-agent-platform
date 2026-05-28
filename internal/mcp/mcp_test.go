@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -509,5 +511,91 @@ func TestRateLimitingDisabled(t *testing.T) {
 		if len(msgs) != 1 || msgs[0].Error != nil {
 			t.Fatalf("request %d should succeed without rate limiting, got: %+v", i, msgs)
 		}
+	}
+}
+
+func TestMaxMessageSize_RejectsOversized(t *testing.T) {
+	// Use a pipe to feed stdin with oversized data.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	s := &Server{
+		name:           "test-server",
+		handler:        make(map[string]ToolHandler),
+		in:             r,
+		out:            io.Discard,
+		maxMessageSize: 128, // cap at 128 bytes
+	}
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// Write a valid small message first
+	go func() {
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+		// Then write an oversized message (200 bytes of JSON cruft)
+		big := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{"data":"%s"}}}`, strings.Repeat("x", 180))
+		fmt.Fprintln(w, big)
+		w.Close()
+	}()
+
+	err = s.Run()
+	// Scanner should return bufio.ErrTooLong when hitting the oversized line
+	if err == nil {
+		t.Fatal("expected error for oversized message, got nil")
+	}
+	if !strings.Contains(err.Error(), "too long") {
+		t.Errorf("expected 'too long' error, got: %v", err)
+	}
+}
+
+func TestMaxMessageSize_AllowsNormalSized(t *testing.T) {
+	// Messages under the limit should be processed normally.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	buf := &bytes.Buffer{}
+	s := &Server{
+		name:           "test-server",
+		handler:        make(map[string]ToolHandler),
+		in:             r,
+		out:            buf,
+		maxMessageSize: 1 << 20, // 1 MB
+	}
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	go func() {
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}`)
+		w.Close()
+	}()
+
+	err = s.Run()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have 2 responses (initialize + tools/call)
+	msgs := readMessages(t, buf)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 responses, got %d", len(msgs))
+	}
+	// First response: initialize result
+	if msgs[0].Error != nil {
+		t.Errorf("unexpected error on initialize: %v", msgs[0].Error)
+	}
+	// Second response: tools/call result
+	if msgs[1].Error != nil {
+		t.Errorf("unexpected error on tools/call: %v", msgs[1].Error)
 	}
 }

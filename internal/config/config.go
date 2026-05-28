@@ -25,9 +25,13 @@ type Config struct {
 	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	OllamaHost  string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
-	OllamaModel string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
-	LLMTimeout  int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"` // seconds
+	LLMProvider  string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek
+	OllamaHost   string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
+	OllamaModel  string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
+	DeepSeekHost string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
+	DeepSeekModel string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
+	DeepSeekKey   string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
+	LLMTimeout    int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"` // seconds
 
 	// Rate Limiting
 	RateLimitRPS   float64 `json:"rate_limit_rps" env:"BT_RATE_LIMIT_RPS" default:"100"`
@@ -130,8 +134,11 @@ func LoadFile(path string) (*Config, error) {
 func newDefaultConfig() *Config {
 	return &Config{
 		DashboardPort:          9800,
+		LLMProvider:            "ollama",
 		OllamaHost:             "http://localhost:11434",
 		OllamaModel:            "qwen3.6:35b-a3b",
+		DeepSeekHost:           "https://api.deepseek.com/v1",
+		DeepSeekModel:          "deepseek-v4-flash",
 		LLMTimeout:             300,
 		RateLimitRPS:           100,
 		RateLimitBurst:         20,
@@ -191,6 +198,18 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 	if file.OllamaModel != "" {
 		c.OllamaModel = file.OllamaModel
+	}
+	if file.LLMProvider != "" {
+		c.LLMProvider = file.LLMProvider
+	}
+	if file.DeepSeekHost != "" {
+		c.DeepSeekHost = file.DeepSeekHost
+	}
+	if file.DeepSeekModel != "" {
+		c.DeepSeekModel = file.DeepSeekModel
+	}
+	if file.DeepSeekKey != "" {
+		c.DeepSeekKey = file.DeepSeekKey
 	}
 	if file.LLMTimeout != 0 {
 		c.LLMTimeout = file.LLMTimeout
@@ -286,11 +305,26 @@ func applyEnvOverrides(c *Config) {
 	}
 
 	// LLM
+	if v := os.Getenv("BT_LLM_PROVIDER"); v != "" {
+		c.LLMProvider = v
+	}
 	if v := os.Getenv("OLLAMA_HOST"); v != "" {
 		c.OllamaHost = v
 	}
 	if v := os.Getenv("BT_OLLAMA_MODEL"); v != "" {
 		c.OllamaModel = v
+	}
+	if v := os.Getenv("BT_DEEPSEEK_HOST"); v != "" {
+		c.DeepSeekHost = v
+	}
+	if v := os.Getenv("BT_DEEPSEEK_MODEL"); v != "" {
+		c.DeepSeekModel = v
+	}
+	if v := os.Getenv("BT_DEEPSEEK_KEY"); v != "" {
+		c.DeepSeekKey = v
+	} else if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
+		// Fallback: read from Hermes's env
+		c.DeepSeekKey = v
 	}
 	if v := os.Getenv("BT_LLM_TIMEOUT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -417,8 +451,11 @@ func (c *Config) Validate() error {
 	if c.MaxBodySize < 1024 || c.MaxBodySize > 100*1024*1024 {
 		errs = append(errs, ValidationError{"MaxBodySize", "must be between 1024 and 104857600 (100MB)"})
 	}
-	if c.OllamaModel == "" {
-		errs = append(errs, ValidationError{"OllamaModel", "must not be empty"})
+	if c.OllamaModel == "" && c.LLMProvider == "ollama" {
+		errs = append(errs, ValidationError{"OllamaModel", "must not be empty when LLMProvider is ollama"})
+	}
+	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" {
+		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama' or 'deepseek'"})
 	}
 	// TLS: if cert is set, key must also be set, and vice versa
 	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {

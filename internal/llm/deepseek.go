@@ -129,7 +129,52 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 
 // AnalyzeComplexity estimates task complexity (1-5).
 func (d *DeepSeekClient) AnalyzeComplexity(task string) string {
-	if len(task) < 50 { return "low" }
-	if len(task) < 200 { return "medium" }
+	if len(task) < 50 {
+		return "low"
+	}
+	if len(task) < 200 {
+		return "medium"
+	}
 	return "high"
+}
+
+// GeneratePlan creates an execution plan for a task.
+func (d *DeepSeekClient) GeneratePlan(task, complexity string) string {
+	prompt := fmt.Sprintf(
+		`Create a step-by-step execution plan for this %s-complexity task.
+Task: %s
+Plan:`, complexity, task,
+	)
+	result, err := d.Generate(prompt)
+	if err != nil {
+		return fmt.Sprintf("1. Analyze: %s\n2. Execute: %s\n3. Verify result", task, task)
+	}
+	return result
+}
+
+// Reflect generates a reflection (what went well, what to improve) on a completed task.
+func (d *DeepSeekClient) Reflect(task, outcome, plan string) (wentWell string, toImprove string) {
+	prompt := fmt.Sprintf(
+		`Task: %s
+Plan: %s
+Outcome: %s
+
+Analyze what went well and what could be improved. Respond in exactly this format:
+WENT_WELL: <text>
+TO_IMPROVE: <text>`,
+		task, plan, outcome,
+	)
+	result, err := d.Generate(prompt)
+	if err != nil {
+		return "task completed", "better error handling"
+	}
+	wentWell = extractSection(result, "WENT_WELL:")
+	toImprove = extractSection(result, "TO_IMPROVE:")
+	if wentWell == "" {
+		wentWell = "task completed"
+	}
+	if toImprove == "" {
+		toImprove = "better error handling"
+	}
+	return
 }

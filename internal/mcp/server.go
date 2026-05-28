@@ -68,16 +68,17 @@ type ToolHandler func(args json.RawMessage) *ToolResult
 
 // Server is a minimal MCP JSON-RPC 2.0 stdio server.
 type Server struct {
-	name          string
-	tools         []ToolDef
-	handler       map[string]ToolHandler
-	in            *bufio.Reader
-	out           io.Writer
-	mu            sync.Mutex // protects out writes (concurrent handlers)
-	sanitizeArgs  bool
-	apiKey        string
-	rateLimiter   *security.RateLimiter
-	auditEnabled  bool
+	name           string
+	tools          []ToolDef
+	handler        map[string]ToolHandler
+	in             io.Reader // stdin reader (os.Stdin by default, overridable for tests)
+	out            io.Writer
+	mu             sync.Mutex // protects out writes (concurrent handlers)
+	sanitizeArgs   bool
+	apiKey         string
+	rateLimiter    *security.RateLimiter
+	auditEnabled   bool
+	maxMessageSize int // max bytes per JSON-RPC line (0 = default 1MB)
 }
 
 // NewServer creates a new MCP server.
@@ -85,7 +86,7 @@ func NewServer(name string) *Server {
 	return &Server{
 		name:    name,
 		handler: make(map[string]ToolHandler),
-		in:      bufio.NewReader(os.Stdin),
+		in:      os.Stdin,
 		out:     os.Stdout,
 	}
 }
@@ -107,28 +108,45 @@ func (s *Server) RegisterTool(name, description string, props map[string]Propert
 // Run starts the MCP server loop, reading from stdin and writing to stdout.
 // Handlers run concurrently so slow operations (Ollama calls) don't block
 // other requests. A concurrency limiter prevents unbounded goroutine growth.
+// Message size is capped via SetMaxMessageSize (default 1MB) to prevent
+// memory exhaustion DoS attacks from oversized stdin lines.
 func (s *Server) Run() error {
 	// Concurrency limiter: max 3 simultaneous tool calls.
 	// Beyond this, requests are rejected with a busy signal instead of
 	// queuing indefinitely and causing gateway timeouts.
 	sem := make(chan struct{}, 3)
+	var wg sync.WaitGroup // tracks in-flight goroutines for clean shutdown
 
-	for {
-		line, err := s.in.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return fmt.Errorf("read stdin: %w", err)
-		}
+	// Use a Scanner with a max buffer to enforce message size limits.
+	// Default is 1MB — MCP JSON-RPC messages should never be that large.
+	maxSize := s.maxMessageSize
+	if maxSize <= 0 {
+		maxSize = 1 << 20 // 1 MB default
+	}
+
+	// Allow test override of stdin via s.in, otherwise read from os.Stdin.
+	var reader io.Reader = os.Stdin
+	if s.in != nil {
+		reader = s.in
+	}
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(nil, maxSize) // nil = default initial buffer, maxSize = hard ceiling
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
 
+		// Copy line data — scanner.Bytes() is only valid until next Scan().
+		data := make([]byte, len(line))
+		copy(data, line)
+
 		// Fast-path: handle initialize/list/notifications synchronously.
 		// These never block and must complete before tools/call can work.
 		var msg Message
-		if err := json.Unmarshal(line, &msg); err != nil {
+		if err := json.Unmarshal(data, &msg); err != nil {
 			s.writeError(nil, -32700, "Parse error: "+err.Error())
 			continue
 		}
@@ -137,18 +155,27 @@ func (s *Server) Run() error {
 			// Acquire semaphore slot; if full, reject with busy signal.
 			select {
 			case sem <- struct{}{}:
-				go func(data []byte) {
+				wg.Add(1)
+				go func(d []byte) {
+					defer wg.Done()
 					defer func() { <-sem }()
-					s.handleMessage(data)
-				}(line)
+					s.handleMessage(d)
+				}(data)
 			default:
 				s.writeError(msg.ID, -32000, "Server busy: max 3 concurrent tool calls. Retry in a few seconds.")
 			}
 		} else {
 			// Non-blocking methods: handle inline.
-			s.handleMessage(line)
+			s.handleMessage(data)
 		}
 	}
+
+	if err := scanner.Err(); err != nil {
+		wg.Wait() // flush in-flight handlers
+		return fmt.Errorf("read stdin: %w", err)
+	}
+	wg.Wait() // flush in-flight handlers
+	return nil
 }
 
 // SetSecurity enables argument sanitization, audit logging, and optional API key validation.
@@ -180,6 +207,14 @@ func (s *Server) SetRateLimit(rate float64, burst int) {
 // structured SECURITY events. Enabled by default when SetSecurity is called.
 func (s *Server) SetAudit(enabled bool) {
 	s.auditEnabled = enabled
+}
+
+// SetMaxMessageSize sets the maximum size in bytes for a single JSON-RPC
+// message line read from stdin. Messages exceeding this size are rejected
+// with a parse error. A value <= 0 uses the default of 1 MB. This prevents
+// memory exhaustion DoS attacks via oversized stdin lines.
+func (s *Server) SetMaxMessageSize(size int) {
+	s.maxMessageSize = size
 }
 
 // sanitizeArg recursively sanitizes JSON values by stripping null bytes,

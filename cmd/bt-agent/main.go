@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -178,6 +179,17 @@ func main() {
 	btlog.Init()
 	btlog.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
 
+	// Load configuration (env vars + BT_CONFIG_FILE)
+	cfg, err := config.Load()
+	if err != nil {
+		btlog.Warn("config validation warning, using defaults", "error", err)
+		cfg, _ = config.Load() // second attempt: no error return needed
+		if cfg == nil {
+			fmt.Fprintf(os.Stderr, "fatal: config load failed\n")
+			os.Exit(1)
+		}
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -196,11 +208,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	llmClient, err := llm.NewClient(llm.DefaultConfig())
+	llmClient, err := llm.NewProvider(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fatal: llm provider: %v\n", err)
 		os.Exit(1)
 	}
+	btlog.Info("llm provider initialized", "provider", cfg.LLMProvider)
 
 	agentFactory, err := factory.NewAgentFactory(llmClient, home)
 	if err != nil {
@@ -1092,6 +1105,7 @@ func main() {
 
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5) // 2 req/s, burst 5
+	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
 
 	// ── Tracing: initialize global tracer (console → shared log) ──
 	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")

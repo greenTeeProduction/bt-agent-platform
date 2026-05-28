@@ -198,6 +198,7 @@ func main() {
 	btlog.Info("bt-langagent: 3 MCP tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5) // 2 req/s, burst 5
+	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
 
 	// ── Tracing: initialize global tracer ──
 	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
