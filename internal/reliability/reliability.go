@@ -5,6 +5,7 @@ package reliability
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -284,7 +285,15 @@ func (wp *WorkerPool) worker() {
 			wp.mu.Lock()
 			wp.active++
 			wp.mu.Unlock()
-			task()
+			// Recover from task panics so the worker stays alive.
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("WorkerPool: task panicked (worker recovered): %v", r)
+					}
+				}()
+				task()
+			}()
 			wp.mu.Lock()
 			wp.active--
 			wp.completed++

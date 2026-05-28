@@ -177,3 +177,113 @@ func TestScheduler_RunNow(t *testing.T) {
 		t.Fatalf("expected 1 history record, got %d", len(runs))
 	}
 }
+
+func TestScheduler_RunJobPanicRecovery(t *testing.T) {
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "panic-agent", Tree: "domain:default", Version: "1.0.0"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry:     reg,
+		History:      hist,
+		TickInterval: 100 * time.Millisecond,
+	})
+
+	// Runner that panics
+	panickingRunner := func(ctx RunContext) (string, string, error) {
+		panic("agent-crash")
+	}
+
+	// Schedule a job to run now (empty NextRun)
+	job, err := sched.Schedule("panic-agent", "every 1h", "30m", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job.NextRun = time.Time{} // force immediate
+
+	// Start the scheduler in a goroutine
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sched.Start(panickingRunner)
+	}()
+
+	// Wait for at least one tick
+	time.Sleep(500 * time.Millisecond)
+	sched.Stop()
+
+	<-done
+
+	// The scheduler should still be functional — not dead
+	jobs := sched.ListJobs()
+	if len(jobs) != 1 {
+		t.Errorf("scheduler lost jobs after panic: %d", len(jobs))
+	}
+
+	// History should record the panic
+	runs := hist.List("panic-agent", 5)
+	if len(runs) == 0 {
+		t.Fatal("no history records — panic was not recorded")
+	}
+	if runs[0].Outcome != "panic" {
+		t.Errorf("expected outcome 'panic', got %q", runs[0].Outcome)
+	}
+}
+
+func TestScheduler_NormalJobAfterPanic(t *testing.T) {
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "good-agent", Tree: "domain:default", Version: "1.0.0"})
+	reg.Create(Definition{Name: "bad-agent", Tree: "domain:default", Version: "1.0.0"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry:     reg,
+		History:      hist,
+		TickInterval: 100 * time.Millisecond,
+	})
+
+	// Runner that panics for bad-agent, succeeds for good-agent
+	runner := func(ctx RunContext) (string, string, error) {
+		if ctx.AgentName == "bad-agent" {
+			panic("bad-agent-panic")
+		}
+		return "success", "all good", nil
+	}
+
+	job1, _ := sched.Schedule("bad-agent", "every 1h", "30m", 0)
+	job1.NextRun = time.Time{}
+	job2, _ := sched.Schedule("good-agent", "every 1h", "30m", 0)
+	job2.NextRun = time.Time{}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sched.Start(runner)
+	}()
+
+	time.Sleep(800 * time.Millisecond)
+	sched.Stop()
+	<-done
+
+	// Both agents should have runs recorded
+	badRuns := hist.List("bad-agent", 5)
+	goodRuns := hist.List("good-agent", 5)
+
+	if len(badRuns) == 0 {
+		t.Error("bad-agent: no runs recorded")
+	} else if badRuns[0].Outcome != "panic" {
+		t.Errorf("bad-agent: expected 'panic', got %q", badRuns[0].Outcome)
+	}
+
+	if len(goodRuns) == 0 {
+		t.Error("good-agent: no runs — likely scheduler died from bad-agent panic")
+	} else if goodRuns[0].Outcome != "success" {
+		t.Errorf("good-agent: expected 'success', got %q", goodRuns[0].Outcome)
+	}
+}

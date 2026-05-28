@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -10,12 +11,13 @@ import (
 // Scheduler runs agents on cron-like schedules. Supports one-shot, recurring,
 // and long-running agents with checkpoint/resume capability.
 type Scheduler struct {
-	mu      sync.RWMutex
-	reg     *Registry
-	history *History
-	jobs    map[string]*ScheduledJob
-	stopCh  chan struct{}
-	running bool
+	mu           sync.RWMutex
+	reg          *Registry
+	history      *History
+	jobs         map[string]*ScheduledJob
+	stopCh       chan struct{}
+	running      bool
+	tickInterval time.Duration
 }
 
 // ScheduledJob represents a scheduled agent run.
@@ -68,10 +70,11 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		cfg.TickInterval = 1 * time.Minute
 	}
 	return &Scheduler{
-		reg:     cfg.Registry,
-		history: cfg.History,
-		jobs:    make(map[string]*ScheduledJob),
-		stopCh:  make(chan struct{}),
+		reg:          cfg.Registry,
+		history:      cfg.History,
+		jobs:         make(map[string]*ScheduledJob),
+		stopCh:       make(chan struct{}),
+		tickInterval: cfg.TickInterval,
 	}
 }
 
@@ -147,6 +150,9 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 }
 
 // Start begins the scheduler loop. Runs in the background.
+// Panics in the scheduler loop or runner are recovered to prevent
+// the entire scheduler from dying. A single bad job does not take
+// down the system.
 func (s *Scheduler) Start(runner AgentRunner) {
 	s.mu.Lock()
 	if s.running {
@@ -156,7 +162,7 @@ func (s *Scheduler) Start(runner AgentRunner) {
 	s.running = true
 	s.mu.Unlock()
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(s.tickInterval)
 	defer ticker.Stop()
 
 	for {
@@ -164,7 +170,14 @@ func (s *Scheduler) Start(runner AgentRunner) {
 		case <-s.stopCh:
 			return
 		case <-ticker.C:
-			s.tick(runner)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("Scheduler: tick panicked (recovered): %v", r)
+					}
+				}()
+				s.tick(runner)
+			}()
 		}
 	}
 }
@@ -231,7 +244,21 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 
 	start := time.Now()
-	outcome, output, runErr := runner(runCtx)
+
+	// Recover from panics in the runner so one bad agent doesn't
+	// block all subsequent jobs. Panic is recorded as a failure.
+	var outcome, output string
+	var runErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Scheduler: agent %q panicked in runJob (recovered): %v", job.AgentName, r)
+				outcome = "panic"
+				runErr = fmt.Errorf("agent panicked: %v", r)
+			}
+		}()
+		outcome, output, runErr = runner(runCtx)
+	}()
 	duration := time.Since(start)
 
 	// Update job state
