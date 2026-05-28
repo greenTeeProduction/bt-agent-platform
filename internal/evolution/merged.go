@@ -6,7 +6,7 @@ package evolution
 //
 // Structure:
 //   PreGate (6 universal validators)
-//   StrategyRouter (13 ranked paths from all domains)
+//   StrategyRouter (21 ranked paths from all domains)
 //   QualityGate (output validation)
 //   OutcomeSelector (success/retry/escalate)
 //   SelfImprove (adapt on failure patterns)
@@ -259,7 +259,19 @@ func MergedTree() *SerializableNode {
 							},
 						},
 					},
-					// Path 20: General (catch-all)
+					// Path 20: Telegram Clarify — ensure button questions
+					{
+						Type: "Sequence", Name: "TelegramClarifyPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "IsTelegram", Description: "telegram platform/messaging/button keywords"},
+							{
+								Type: "ChainAction",
+								Name: "agent:Validate this Telegram response: {{.Task}}. If the response contains a question to the user, it MUST use the clarify() tool with multiple-choice buttons (1-4 choices). Check: does the response ask the user something? If yes, was clarify() called with concrete choices? If not, rewrite the response to use clarify(question=..., choices=[...]).",
+								Metadata: map[string]any{"max_tokens": float64(400)},
+							},
+						},
+					},
+					// Path 21: General (catch-all)
 					{
 						Type: "Sequence", Name: "GeneralPath",
 						Children: []SerializableNode{

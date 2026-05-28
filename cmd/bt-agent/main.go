@@ -22,6 +22,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -917,6 +918,28 @@ func main() {
 	agentReg, _ := agent.NewRegistry(agentHome + "/.go-bt-evolve/agents")
 	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
 
+	// Start persistent agent scheduler so bt_agent_schedule actually runs jobs.
+	// Previously the scheduler was created per-call and garbage-collected
+	// without ever calling Start(), so scheduled agents never executed.
+	globalSched := agent.NewScheduler(agent.SchedulerConfig{Registry: agentReg, History: agentHist})
+	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
+		bb := &engine.Blackboard{Task: "scheduled run: " + ctx.AgentName, LLM: llmClient}
+		tree := resolveTree(ctx.AgentName)
+		if tree == nil {
+			inst, getErr := agentReg.Get(ctx.AgentName)
+			if getErr != nil {
+				return "failure", "", getErr
+			}
+			tree = resolveTree(inst.Definition.Tree)
+		}
+		if tree == nil {
+			return "failure", "", fmt.Errorf("no tree found for agent %s", ctx.AgentName)
+		}
+		bt := engine.BuildTree(tree, bb)
+		outcome = engine.RunTask(bb, bt)
+		return outcome, bb.Result, nil
+	})
+
 	server.RegisterTool("bt_agent_create", "Create a new agent from a template or custom definition",
 		map[string]mcp.Property{
 			"name":        {Type: "string", Description: "Agent name"},
@@ -1041,8 +1064,7 @@ func main() {
 			var params struct{ Agent string `json:"agent"`; Schedule string `json:"schedule"`; Timeout string `json:"timeout"` }
 			json.Unmarshal(args, &params)
 			if params.Timeout == "" { params.Timeout = "2h" }
-			sched := agent.NewScheduler(agent.SchedulerConfig{Registry: agentReg, History: agentHist})
-			job, err := sched.Schedule(params.Agent, params.Schedule, params.Timeout, 3)
+			job, err := globalSched.Schedule(params.Agent, params.Schedule, params.Timeout, 3)
 			if err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1070,6 +1092,12 @@ func main() {
 
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5) // 2 req/s, burst 5
+
+	// ── Tracing: initialize global tracer (console → shared log) ──
+	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
+	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-agent", f))
+	}
 
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)

@@ -109,8 +109,8 @@ func TestMergedTree_Structure(t *testing.T) {
 
 	for _, child := range tree.Children {
 		if child.Name == "StrategyRouter" {
-			if len(child.Children) != 20 {
-				t.Errorf("expected 20 strategy paths, got %d", len(child.Children))
+			if len(child.Children) != 21 {
+				t.Errorf("expected 21 strategy paths, got %d", len(child.Children))
 			}
 		}
 	}

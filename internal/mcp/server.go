@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/security"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
 // Message is a JSON-RPC 2.0 message.
@@ -314,8 +315,13 @@ func (s *Server) handleMessage(data []byte) {
 
 		// Execute the tool, recording timing for audit.
 		start := time.Now()
+		// ── Tracing: wrap tool execution in a span ──
+		_, span := tracing.StartSpan(context.Background(), "mcp:"+params.Name)
 		result := handler(params.Arguments)
 		elapsed := time.Since(start)
+		span.SetAttribute("tool", params.Name)
+		span.SetAttribute("duration_ms", fmt.Sprintf("%d", elapsed.Milliseconds()))
+		span.End()
 
 		// ── Security: audit tool execution ──
 		if s.auditEnabled {

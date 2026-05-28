@@ -15,6 +15,7 @@ import (
 	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 
 	"github.com/tmc/langchaingo/llms/ollama"
 )
@@ -197,6 +198,12 @@ func main() {
 	btlog.Info("bt-langagent: 3 MCP tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5) // 2 req/s, burst 5
+
+	// ── Tracing: initialize global tracer ──
+	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
+	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-langagent", f))
+	}
 
 	if err := server.Run(); err != nil {
 		btlog.Error("bt-langagent: server error", "error", err)

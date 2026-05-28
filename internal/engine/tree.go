@@ -9,6 +9,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 
 	btcore "github.com/rvitorper/go-bt/core"
 	btcomp "github.com/rvitorper/go-bt/composite"
@@ -1571,6 +1572,15 @@ func validateOutputQuality(b *Blackboard) bool {
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	start := time.Now()
 
+	// ── Tracing: wrap tree execution in a span ──
+	taskName := bb.Task
+	if len(taskName) > 50 {
+		taskName = taskName[:50]
+	}
+	_, span := tracing.StartSpan(context.Background(), "RunTask:"+taskName)
+	defer span.End()
+	span.SetAttribute("task", truncateStrForTree(bb.Task, 80))
+
 	// Panic recovery at the tree level — if the entire BT crashes, capture it.
 	defer func() {
 		if r := recover(); r != nil {
@@ -1601,6 +1611,9 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	} else {
 		bb.Outcome = string(reflection.Partial)
 	}
+
+	span.SetAttribute("outcome", bb.Outcome)
+	span.SetAttribute("duration_ms", fmt.Sprintf("%d", bb.DurationMs))
 
 	return bb.Result
 }
