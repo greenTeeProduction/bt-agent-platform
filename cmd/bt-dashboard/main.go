@@ -12,6 +12,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/metrics"
+	"github.com/nico/go-bt-evolve/internal/monitoring"
 	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -75,6 +76,7 @@ func main() {
 	mux.HandleFunc("/", serveDashboard)
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
+	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -1155,4 +1157,25 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		"packages": 19,
 		"trees":    38,
 	})
+}
+
+// handleAlerts evaluates prometheus alert rules against current metrics and
+// returns which alerts are firing. Public endpoint (no auth) so monitoring
+// tools can scrape it.
+func handleAlerts(w http.ResponseWriter, r *http.Request) {
+	metricsJSON := metrics.MetricsJSON()
+	b, err := json.Marshal(metricsJSON)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	report, err := monitoring.EvaluateFromJSON(b)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
 }

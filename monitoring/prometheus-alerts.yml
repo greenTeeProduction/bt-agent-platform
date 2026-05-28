@@ -1,0 +1,155 @@
+# Prometheus Alert Rules for Go BT Platform
+# These rules are evaluated against metrics exported at /api/metrics.
+# Compatible with Prometheus 2.x and the built-in alert evaluator.
+#
+# Usage with Prometheus:
+#   prometheus --config.file=prometheus.yml
+#   (add this file under rule_files: in prometheus.yml)
+#
+# Usage with built-in alert evaluator:
+#   curl http://localhost:9800/api/alerts
+#   (evaluates all rules against current /api/metrics values)
+
+groups:
+  - name: bt_platform_alerts
+    interval: 60s
+    rules:
+
+      # ─── Agent Health ───────────────────────────────────────────────────
+
+      - alert: BTAgentHighErrorRate
+        expr: |
+          rate(bt_agent_errors_total[5m]) / rate(bt_agent_tasks_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: bt-agent
+        annotations:
+          summary: "Agent {{ $labels.agent }} has high error rate"
+          description: >
+            Agent {{ $labels.agent }} error rate is {{ $value | humanizePercentage }}
+            over the last 5 minutes (threshold: 10%).
+
+      - alert: BTAgentCriticalErrorRate
+        expr: |
+          rate(bt_agent_errors_total[5m]) / rate(bt_agent_tasks_total[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          component: bt-agent
+        annotations:
+          summary: "Agent {{ $labels.agent }} has critical error rate"
+          description: >
+            Agent {{ $labels.agent }} error rate is {{ $value | humanizePercentage }}
+            over the last 5 minutes (threshold: 50%). Immediate investigation required.
+
+      - alert: BTAgentNoActivity
+        expr: |
+          rate(bt_agent_tasks_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: bt-agent
+        annotations:
+          summary: "Agent {{ $labels.agent }} has no activity"
+          description: >
+            Agent {{ $labels.agent }} has not executed any tasks in the last 10 minutes.
+            Check if the agent is stuck, the scheduler is stalled, or the agent has been removed.
+
+      - alert: BTAgentSlowExecution
+        expr: |
+          rate(bt_agent_duration_ms_total[5m]) / rate(bt_agent_tasks_total[5m]) > 300000
+        for: 5m
+        labels:
+          severity: warning
+          component: bt-agent
+        annotations:
+          summary: "Agent {{ $labels.agent }} has slow execution"
+          description: >
+            Agent {{ $labels.agent }} average execution time is
+            {{ $value | humanizeDuration }} (threshold: 5 minutes).
+            May indicate Ollama contention or Jetson CPU saturation.
+
+      # ─── HTTP / Dashboard ───────────────────────────────────────────────
+
+      - alert: BTDashboardHighHTTPErrorRate
+        expr: |
+          rate(bt_http_errors_total[5m]) / rate(bt_http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: dashboard
+        annotations:
+          summary: "Dashboard has high HTTP error rate"
+          description: >
+            Dashboard HTTP error rate is {{ $value | humanizePercentage }}
+            over the last 5 minutes (threshold: 5%).
+
+      - alert: BTDashboardSlowResponses
+        expr: |
+          histogram_quantile(0.95, rate(bt_http_request_duration_ms_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          component: dashboard
+        annotations:
+          summary: "Dashboard p95 latency is high"
+          description: >
+            Dashboard p95 request latency is {{ $value }}ms
+            over the last 5 minutes (threshold: 5 seconds).
+
+      - alert: BTDashboardNoRequests
+        expr: |
+          rate(bt_http_requests_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: info
+          component: dashboard
+        annotations:
+          summary: "Dashboard has received no requests"
+          description: >
+            Dashboard has received no HTTP requests in the last 10 minutes.
+            This may be normal during low-usage periods.
+
+      # ─── Platform Global ────────────────────────────────────────────────
+
+      - alert: BTGlobalErrorSpike
+        expr: |
+          rate(bt_total_errors[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: platform
+        annotations:
+          summary: "Global error spike detected"
+          description: >
+            Platform-wide error rate is {{ $value }} errors/second
+            over the last 5 minutes (threshold: 5/s).
+
+      - alert: BTGlobalNoActivity
+        expr: |
+          rate(bt_total_requests[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: platform
+        annotations:
+          summary: "No platform activity"
+          description: >
+            The entire platform has received no task requests in the last 10 minutes.
+            Check if the Hermes gateway and MCP servers are running.
+
+      # ─── Rates for Alertmanager Silence / Notification ──────────────────
+
+      - alert: BTAlertSuppressionHint
+        expr: |
+          rate(bt_total_requests[1h]) < 0.01
+        for: 30m
+        labels:
+          severity: info
+          component: platform
+        annotations:
+          summary: "Low platform activity — consider suppressing alerts"
+          description: >
+            Platform request rate is below 0.01/s over the last hour.
+            Non-critical alert noise may be unnecessary during idle periods.
