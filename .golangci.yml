@@ -1,0 +1,72 @@
+version: "1"
+
+run:
+  timeout: 5m
+  go: '1.23'
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gocritic
+    - unconvert
+    - goimports
+    - prealloc
+    - bodyclose
+    - nilerr
+    - revive
+  disable-all: false
+  fast: false
+
+linters-settings:
+  gocritic:
+    enabled-checks:
+      - appendCombine
+      - badLock
+      - boolExprSimplify
+      - deferInLoop
+      - equalFold
+      - indexAlloc
+      - nestingReduce
+      - paramTypeCombine
+      - rangeExprCopy
+      - regexpSimplify
+      - sloppyReassign
+      - truncateCmp
+      - unnecessaryDefer
+      - weakCond
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: increment-decrement
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+issues:
+  exclude-dirs:
+    - vendor
+    - .git
+  max-issues-per-linter: 0
+  max-same-issues: 0

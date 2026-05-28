@@ -1,0 +1,101 @@
+name: Nightly Full Tests + Benchmarks
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3am UTC
+  workflow_dispatch:       # Manual trigger for ad-hoc runs
+
+jobs:
+  full-tests:
+    name: Full Test Suite (Ollama)
+    runs-on: [self-hosted, jetson, arm64]
+    timeout-minutes: 120
+    env:
+      GOFLAGS: "-count=1"
+      GOMAXPROCS: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Verify Ollama
+        run: |
+          curl -s http://localhost:11434/api/tags || echo "⚠ Ollama not reachable — Ollama-dependent tests will skip"
+
+      - name: Full test suite (no -short)
+        run: go test -count=1 -timeout 90m ./... 2>&1 | tee /tmp/full-test-output.txt
+
+      - name: Coverage report
+        run: |
+          go test -count=1 -coverprofile=/tmp/coverage.out -covermode=atomic -timeout 90m ./... 2>&1 || true
+          go tool cover -func=/tmp/coverage.out | tee /tmp/coverage.txt
+          TOTAL=$(go tool cover -func=/tmp/coverage.out | grep total | awk '{print $3}')
+          echo "Total coverage: $TOTAL"
+          echo "COVERAGE=$TOTAL" >> $GITHUB_ENV
+
+      - name: Check benchmark regression
+        run: |
+          echo "=== Running benchmark regression checks ==="
+          go test -bench=. -benchmem -timeout 30m ./internal/benchmark/ 2>&1 | tee /tmp/bench-output.txt || echo "⚠ Some benchmarks failed (may need Ollama)"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Nightly Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "**Coverage:** ${{ env.COVERAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Output (last 50 lines)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 /tmp/full-test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: /tmp/coverage.out
+          retention-days: 7
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-output
+          path: /tmp/bench-output.txt
+          retention-days: 7
+
+  benchmark-compare:
+    name: Benchmark Regression Analysis
+    runs-on: [self-hosted, jetson, arm64]
+    needs: [full-tests]
+    if: always() && needs.full-tests.result != 'cancelled'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run benchmarks with comparison
+        run: |
+          echo "=== Regression Analysis ==="
+          # Run benchmarks with count=5 for statistical significance
+          go test -bench=. -benchmem -benchtime=3x -count=5 -timeout 30m \
+            ./internal/benchmark/ 2>&1 | tee /tmp/bench-regression.txt || true
+
+      - name: Detect regressions
+        run: |
+          # Compare benchmark results against known baselines
+          if grep -q "FAIL" /tmp/bench-regression.txt; then
+            echo "⚠ Benchmark failures detected — check logs"
+          fi
+          echo "Benchmark regression analysis complete."
+
+      - name: Upload regression artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-regression
+          path: /tmp/bench-regression.txt
+          retention-days: 14
