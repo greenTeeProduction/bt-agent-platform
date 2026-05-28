@@ -60,24 +60,29 @@ type AlertReport struct {
 // ─── Thresholds ─────────────────────────────────────────────────────────────
 
 const (
-	// Agent error rate thresholds (lifetime ratio).
+	// Agent error rate thresholds (lifetime ratio). Requires min_samples to avoid
+	// false positives on brand-new agents with 1 failure out of 2 runs.
 	agentErrorRateWarning  = 0.10 // 10%
 	agentErrorRateCritical = 0.50 // 50%
+	agentMinSamples        = 10   // minimum tasks before error rate alerts fire
 
 	// Agent no-activity threshold.
 	agentNoActivityDuration = 10 * time.Minute
 
-	// Agent slow execution threshold (average ms).
-	agentSlowExecutionMs = 300_000 // 5 minutes
+	// Agent slow execution threshold (average ms). Tuned for Jetson ARM64 where
+	// Ollama qwen3.6:35b calls take 2-4 minutes. 600s gives headroom.
+	agentSlowExecutionMs = 600_000 // 10 minutes
 
 	// HTTP error rate threshold.
 	httpErrorRateThreshold = 0.05 // 5%
 
-	// Global error rate threshold (errors per time, approximated).
-	globalErrorSpikeThreshold = 5 // raw count threshold in evaluation window
+	// Global error rate threshold. Tuned from 5→10 to reduce noise on Jetson
+	// where transient Ollama timeouts during high load are normal.
+	globalErrorSpikeThreshold = 10 // raw count threshold in evaluation window
 
-	// No request threshold.
-	noRequestDuration = 10 * time.Minute
+	// No request / no activity thresholds.
+	noRequestDuration     = 10 * time.Minute
+	lowActivitySuppressHours = 1 * time.Hour
 )
 
 // ─── Alert Evaluation ───────────────────────────────────────────────────────
@@ -123,8 +128,8 @@ func evaluateAgentAlerts(a AgentMetric, now time.Time) []Alert {
 		errorRate = float64(a.ErrorCount) / float64(a.TotalCount)
 	}
 
-	// AgentHighErrorRate (>10% lifetime)
-	if errorRate > agentErrorRateWarning && a.TotalCount > 0 {
+	// AgentHighErrorRate (>10% lifetime, requires min_samples to avoid false positives)
+	if errorRate > agentErrorRateWarning && a.TotalCount >= agentMinSamples {
 		alerts = append(alerts, Alert{
 			Name:      "BTAgentHighErrorRate",
 			Severity:  SeverityWarning,
@@ -139,8 +144,8 @@ func evaluateAgentAlerts(a AgentMetric, now time.Time) []Alert {
 		})
 	}
 
-	// AgentCriticalErrorRate (>50% lifetime)
-	if errorRate > agentErrorRateCritical && a.TotalCount > 0 {
+	// AgentCriticalErrorRate (>50% lifetime, requires min_samples)
+	if errorRate > agentErrorRateCritical && a.TotalCount >= agentMinSamples {
 		alerts = append(alerts, Alert{
 			Name:      "BTAgentCriticalErrorRate",
 			Severity:  SeverityCritical,
@@ -220,6 +225,18 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 		})
 	}
 
+	// Dashboard has received no requests (info severity during idle periods)
+	if metrics.HTTPRequestsTotal == 0 {
+		alerts = append(alerts, Alert{
+			Name:      "BTDashboardNoRequests",
+			Severity:  SeverityInfo,
+			Component: "dashboard",
+			Summary:   "Dashboard has received no requests",
+			Description: "Dashboard has received no HTTP requests. This may be normal during low-usage periods.",
+			Firing: true,
+		})
+	}
+
 	return alerts
 }
 
@@ -238,7 +255,7 @@ func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
 		})
 	}
 
-	// Global error spike: total errors > 5
+	// Global error spike: total errors > threshold
 	if metrics.TotalErrors > globalErrorSpikeThreshold {
 		alerts = append(alerts, Alert{
 			Name:      "BTGlobalErrorSpike",
@@ -251,6 +268,18 @@ func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
 			),
 			Firing: true,
 			Value:  fmt.Sprintf("%d errors", metrics.TotalErrors),
+		})
+	}
+
+	// Low activity suppression hint: platform is idle, non-critical alerts are noise
+	if metrics.TotalRequests == 0 && metrics.HTTPRequestsTotal == 0 {
+		alerts = append(alerts, Alert{
+			Name:      "BTAlertSuppressionHint",
+			Severity:  SeverityInfo,
+			Component: "platform",
+			Summary:   "Low platform activity — consider suppressing alerts",
+			Description: "Platform request rate is near zero. Non-critical alert noise may be unnecessary during idle periods.",
+			Firing: true,
 		})
 	}
 

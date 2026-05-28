@@ -58,7 +58,7 @@ groups:
 
       - alert: BTAgentSlowExecution
         expr: |
-          rate(bt_agent_duration_ms_total[5m]) / rate(bt_agent_tasks_total[5m]) > 300000
+          rate(bt_agent_duration_ms_total[5m]) / rate(bt_agent_tasks_total[5m]) > 600000
         for: 5m
         labels:
           severity: warning
@@ -67,8 +67,9 @@ groups:
           summary: "Agent {{ $labels.agent }} has slow execution"
           description: >
             Agent {{ $labels.agent }} average execution time is
-            {{ $value | humanizeDuration }} (threshold: 5 minutes).
-            May indicate Ollama contention or Jetson CPU saturation.
+            {{ $value | humanizeDuration }} (threshold: 10 minutes).
+            Tuned for Jetson ARM64 where Ollama calls take 2-4 min.
+            Investigate only if sustained.
 
       # ─── HTTP / Dashboard ───────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ groups:
 
       - alert: BTGlobalErrorSpike
         expr: |
-          rate(bt_total_errors[5m]) > 5
+          rate(bt_total_errors[5m]) > 10
         for: 2m
         labels:
           severity: critical
@@ -124,7 +125,7 @@ groups:
           summary: "Global error spike detected"
           description: >
             Platform-wide error rate is {{ $value }} errors/second
-            over the last 5 minutes (threshold: 5/s).
+            over the last 5 minutes (threshold: 10/s, tuned for Jetson).
 
       - alert: BTGlobalNoActivity
         expr: |
