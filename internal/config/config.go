@@ -112,6 +112,7 @@ func Load() (*Config, error) {
 // LoadFile loads configuration from a JSON file, then applies any
 // environment variable overrides on top. This is useful for explicit
 // config file loading without relying on the BT_CONFIG_FILE env var.
+// Returns validation errors if the loaded config is invalid.
 func LoadFile(path string) (*Config, error) {
 	c := newDefaultConfig()
 	c.ConfigFile = path
@@ -119,6 +120,9 @@ func LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 	applyEnvOverrides(c)
+	if err := c.Validate(); err != nil {
+		return c, err
+	}
 	return c, nil
 }
 
