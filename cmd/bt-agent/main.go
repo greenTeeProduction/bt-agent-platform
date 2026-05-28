@@ -215,6 +215,12 @@ func main() {
 	}
 	btlog.Info("llm provider initialized", "provider", cfg.LLMProvider)
 
+	// ── Graceful Degradation: LLM health monitor ──
+	// Periodically probes Ollama so LLM-dependent tools can fail fast
+	// with a clear degradation message instead of timing out.
+	llmHealth := llm.NewHealthMonitor(cfg.OllamaHost, 30*time.Second)
+	llmHealth.Start()
+
 	agentFactory, err := factory.NewAgentFactory(llmClient, home)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: factory: %v\n", err)
@@ -298,6 +304,9 @@ func main() {
 		map[string]mcp.Property{"task": {Type: "string", Description: "The task to execute"}},
 		[]string{"task"},
 		func(args json.RawMessage) *mcp.ToolResult {
+			if degraded := checkLLMHealth(llmHealth, "bt_run_task"); degraded != nil {
+				return degraded
+			}
 			var params struct{ Task string `json:"task"` }
 			if err := json.Unmarshal(args, &params); err != nil {
 				btlog.Error("bt_run_task: invalid arguments", "error", err)
@@ -649,6 +658,9 @@ func main() {
 		},
 		[]string{"tree", "task"},
 		func(args json.RawMessage) *mcp.ToolResult {
+			if degraded := checkLLMHealth(llmHealth, "bt_delegate_to_tree"); degraded != nil {
+				return degraded
+			}
 			var params struct {
 				Tree string `json:"tree"`
 				Task string `json:"task"`
@@ -1017,6 +1029,9 @@ func main() {
 		},
 		[]string{"agent", "task"},
 		func(args json.RawMessage) *mcp.ToolResult {
+			if degraded := checkLLMHealth(llmHealth, "bt_agent_run"); degraded != nil {
+				return degraded
+			}
 			var params struct{ Agent string `json:"agent"`; Task string `json:"task"` }
 			json.Unmarshal(args, &params)
 			bb := &engine.Blackboard{Task: params.Task, LLM: llmClient}
@@ -1103,6 +1118,17 @@ func main() {
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
+	server.RegisterTool("bt_health", "Health check: reports LLM provider availability and server status",
+		map[string]mcp.Property{},
+		[]string{},
+		func(args json.RawMessage) *mcp.ToolResult {
+			snap := llmHealth.State().Snapshot()
+			snap["server"] = "bt-agent"
+			snap["llm_provider"] = cfg.LLMProvider
+			data, _ := json.Marshal(snap)
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5) // 2 req/s, burst 5
 	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
@@ -1117,4 +1143,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// checkLLMHealth returns a ToolResult with a degradation error if the LLM is
+// unhealthy, or nil if the LLM is available. LLM-dependent tool handlers should
+// call this first to fail fast with a clear message instead of timing out.
+func checkLLMHealth(health *llm.HealthMonitor, toolName string) *mcp.ToolResult {
+	if health == nil {
+		return nil // no health monitor configured, proceed as normal
+	}
+	if !health.IsHealthy() {
+		errMsg := fmt.Sprintf("LLM provider is currently %s — retry later when Ollama is available",
+			health.State().Status().String())
+		data, _ := json.Marshal(map[string]string{"error": errMsg, "tool": toolName, "degraded": "true"})
+		return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+	}
+	return nil
 }
