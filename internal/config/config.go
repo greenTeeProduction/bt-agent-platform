@@ -10,6 +10,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -87,9 +88,16 @@ func (e ValidationErrors) Error() string {
 	return strings.Join(msgs, "; ")
 }
 
-// Load reads configuration from environment variables with defaults.
-// If BT_CONFIG_FILE is set, loads base values from the JSON file first,
-// then environment variables override any file values.
+// Load reads configuration from multiple sources with a defined priority:
+//   1. Hardcoded defaults (newDefaultConfig)
+//   2. JSON config file (BT_CONFIG_FILE env var or explicit path)
+//   3. .env files (BT_DOTENV_FILE env var, then ./.env if it exists)
+//   4. Environment variable overrides (highest priority)
+//
+// .env files are KEY=value format files commonly used for local development
+// and CI/CD. They're applied before environment variables, so env vars
+// always take precedence. This enables deploying the same binary with a
+// .env file in development and environment variables in production.
 func Load() (*Config, error) {
 	c := newDefaultConfig()
 
@@ -102,10 +110,13 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// 2. Apply environment variable overrides
+	// 2. Load .env files (before env vars so env vars override)
+	applyDotEnvFiles(c)
+
+	// 3. Apply environment variable overrides (highest priority)
 	applyEnvOverrides(c)
 
-	// 3. Validate
+	// 4. Validate
 	if err := c.Validate(); err != nil {
 		return c, err
 	}
@@ -408,6 +419,202 @@ func applyEnvOverrides(c *Config) {
 			c.MaxBodySize = int64(n)
 		}
 	}
+}
+
+// ─── .env File Support ──────────────────────────────────────────────────────
+
+// applyDotEnvFiles loads .env files and applies their values to the config.
+// Priority: BT_DOTENV_FILE env var (if set), then ./.env (if it exists).
+// Values from .env files are only applied when the corresponding environment
+// variable is NOT set — environment variables always take precedence.
+func applyDotEnvFiles(c *Config) {
+	dotenvFiles := []string{}
+
+	// 1. Check BT_DOTENV_FILE env var (explicit path)
+	if dotenvFile := os.Getenv("BT_DOTENV_FILE"); dotenvFile != "" {
+		dotenvFiles = append(dotenvFiles, dotenvFile)
+	}
+
+	// 2. Check for .env in current directory
+	if _, err := os.Stat(".env"); err == nil {
+		dotenvFiles = append(dotenvFiles, ".env")
+	}
+
+	for _, path := range dotenvFiles {
+		kv, err := LoadDotEnv(path)
+		if err != nil {
+			// Log but don't fail — .env files are optional
+			log.Printf("[config] warning: loading .env %s: %v", path, err)
+			continue
+		}
+		applyDotEnvToConfig(c, kv)
+	}
+}
+
+// LoadDotEnv reads a .env file and returns a map of KEY=value pairs.
+// Supports:
+//   - Simple assignments: KEY=value
+//   - Quoted values: KEY="value with spaces"
+//   - Single-quoted values: KEY='value'
+//   - Comments: lines starting with # are ignored
+//   - Blank lines are skipped
+//   - Inline comments after values are stripped (outside quotes)
+//   - Export prefix: export KEY=value is normalized to KEY=value
+//   - Multiline values are NOT supported
+func LoadDotEnv(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
+	result := make(map[string]string)
+	lines := strings.Split(string(data), "\n")
+
+	for lineNum, raw := range lines {
+		line := strings.TrimSpace(raw)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Strip export prefix
+		line = strings.TrimPrefix(line, "export ")
+		line = strings.TrimSpace(line)
+
+		// Must have an equals sign
+		eqIdx := strings.IndexByte(line, '=')
+		if eqIdx < 1 {
+			log.Printf("[config] warning: %s:%d: invalid line, skipping: %q", path, lineNum+1, raw)
+			continue
+		}
+
+		key := strings.TrimSpace(line[:eqIdx])
+		val := strings.TrimSpace(line[eqIdx+1:])
+
+		// Strip quotes
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') ||
+				(val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+
+		// Strip inline comments (outside quotes)
+		val = stripInlineComment(val)
+
+		if key != "" {
+			result[key] = val
+		}
+	}
+
+	return result, nil
+}
+
+// stripInlineComment removes everything after an unquoted #.
+func stripInlineComment(val string) string {
+	inSingle := false
+	inDouble := false
+	for i, c := range val {
+		if c == '\'' && !inDouble {
+			inSingle = !inSingle
+		}
+		if c == '"' && !inSingle {
+			inDouble = !inDouble
+		}
+		if c == '#' && !inSingle && !inDouble {
+			return strings.TrimRight(val[:i], " \t")
+		}
+	}
+	return val
+}
+
+// applyDotEnvToConfig applies .env key-value pairs to the config.
+// Only sets a field if the corresponding environment variable is NOT
+// already set — env vars have higher priority.
+func applyDotEnvToConfig(c *Config, kv map[string]string) {
+	applyDotEnvStr := func(envKey, dotenvKey string, setter func(string)) {
+		if os.Getenv(envKey) != "" {
+			return // env var already set; don't override
+		}
+		if v, ok := kv[dotenvKey]; ok {
+			setter(v)
+		}
+	}
+	applyDotEnvInt := func(envKey, dotenvKey string, setter func(int)) {
+		if os.Getenv(envKey) != "" {
+			return
+		}
+		if v, ok := kv[dotenvKey]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				setter(n)
+			}
+		}
+	}
+	applyDotEnvFloat := func(envKey, dotenvKey string, setter func(float64)) {
+		if os.Getenv(envKey) != "" {
+			return
+		}
+		if v, ok := kv[dotenvKey]; ok {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				setter(f)
+			}
+		}
+	}
+	applyDotEnvBool := func(envKey, dotenvKey string, setter func(bool)) {
+		if os.Getenv(envKey) != "" {
+			return
+		}
+		if v, ok := kv[dotenvKey]; ok {
+			setter(parseBool(v))
+		}
+	}
+
+	// Server
+	applyDotEnvInt("BT_DASHBOARD_PORT", "BT_DASHBOARD_PORT", func(v int) { c.DashboardPort = v })
+	applyDotEnvStr("BT_API_KEY", "BT_API_KEY", func(v string) { c.APIKey = v })
+	applyDotEnvStr("BT_TLS_CERT", "BT_TLS_CERT", func(v string) { c.TLSCert = v })
+	applyDotEnvStr("BT_TLS_KEY", "BT_TLS_KEY", func(v string) { c.TLSKey = v })
+
+	// LLM
+	applyDotEnvStr("BT_LLM_PROVIDER", "BT_LLM_PROVIDER", func(v string) { c.LLMProvider = v })
+	applyDotEnvStr("OLLAMA_HOST", "OLLAMA_HOST", func(v string) { c.OllamaHost = v })
+	applyDotEnvStr("BT_OLLAMA_MODEL", "BT_OLLAMA_MODEL", func(v string) { c.OllamaModel = v })
+	applyDotEnvStr("BT_DEEPSEEK_HOST", "BT_DEEPSEEK_HOST", func(v string) { c.DeepSeekHost = v })
+	applyDotEnvStr("BT_DEEPSEEK_MODEL", "BT_DEEPSEEK_MODEL", func(v string) { c.DeepSeekModel = v })
+	applyDotEnvStr("BT_DEEPSEEK_KEY", "BT_DEEPSEEK_KEY", func(v string) { c.DeepSeekKey = v })
+	// Also check the standard DEEPSEEK_API_KEY for .env files (Hermes convention)
+	applyDotEnvStr("DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", func(v string) { c.DeepSeekKey = v })
+	applyDotEnvInt("BT_LLM_TIMEOUT", "BT_LLM_TIMEOUT", func(v int) { c.LLMTimeout = v })
+
+	// Rate Limiting
+	applyDotEnvFloat("BT_RATE_LIMIT_RPS", "BT_RATE_LIMIT_RPS", func(v float64) { c.RateLimitRPS = v })
+	applyDotEnvInt("BT_RATE_LIMIT_BURST", "BT_RATE_LIMIT_BURST", func(v int) { c.RateLimitBurst = v })
+
+	// Feature Flags
+	applyDotEnvBool("BT_FEATURE_GARDENER", "BT_FEATURE_GARDENER", func(v bool) { c.GardenerEnabled = v })
+	applyDotEnvBool("BT_FEATURE_SCHEDULER", "BT_FEATURE_SCHEDULER", func(v bool) { c.SchedulerEnabled = v })
+	applyDotEnvBool("BT_FEATURE_AUTO_EVOLVE", "BT_FEATURE_AUTO_EVOLVE", func(v bool) { c.AutoEvolveEnabled = v })
+	applyDotEnvBool("BT_FEATURE_KANBAN", "BT_FEATURE_KANBAN", func(v bool) { c.KanbanEnabled = v })
+	applyDotEnvBool("BT_FEATURE_THINKTANK", "BT_FEATURE_THINKTANK", func(v bool) { c.ThinktankEnabled = v })
+	applyDotEnvBool("BT_FEATURE_STARTUP_SIM", "BT_FEATURE_STARTUP_SIM", func(v bool) { c.StartupSimEnabled = v })
+
+	// Persistence
+	applyDotEnvStr("BT_REFLECTIONS_DIR", "BT_REFLECTIONS_DIR", func(v string) { c.ReflectionsDir = v })
+	applyDotEnvStr("BT_AGENT_DEFS_DIR", "BT_AGENT_DEFS_DIR", func(v string) { c.AgentDefsDir = v })
+	applyDotEnvStr("BT_HISTORY_DIR", "BT_HISTORY_DIR", func(v string) { c.HistoryDir = v })
+	applyDotEnvStr("BT_LOG_DIR", "BT_LOG_DIR", func(v string) { c.LogDir = v })
+
+	// Gardener
+	applyDotEnvInt("BT_GARDENER_CYCLE", "BT_GARDENER_CYCLE", func(v int) { c.GardenerCycleInterval = v })
+	applyDotEnvInt("BT_GARDENER_MUTATIONS", "BT_GARDENER_MUTATIONS", func(v int) { c.GardenerMutationsPer = v })
+	applyDotEnvInt("BT_GARDENER_MAX_NODES", "BT_GARDENER_MAX_NODES", func(v int) { c.GardenerMaxNodes = v })
+
+	// Scheduler
+	applyDotEnvInt("BT_SCHEDULER_INTERVAL", "BT_SCHEDULER_INTERVAL", func(v int) { c.SchedulerCheckInterval = v })
+
+	// Validation
+	applyDotEnvInt("BT_MAX_BODY_SIZE", "BT_MAX_BODY_SIZE", func(v int) { c.MaxBodySize = int64(v) })
 }
 
 // parseBool parses a boolean string value (1/true/yes/on → true).
