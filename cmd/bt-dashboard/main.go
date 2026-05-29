@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/api"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/metrics"
@@ -77,6 +78,7 @@ func main() {
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
+	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -1179,4 +1181,43 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(report)
+}
+
+// handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.
+// This endpoint is public (no auth) so API consumers can discover the schema.
+func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
+	gen := api.NewOpenAPIGenerator(
+		"BT Platform API",
+		"1.0.0",
+		"Dashboard REST API for the Go Behavior Tree Platform. "+
+			"Manages behavior trees, thinktank analysis, company simulation, "+
+			"task pipelines, sprint execution, and dashboard chat. "+
+			"All /api/* endpoints except /api/health, /api/metrics, /api/alerts, "+
+			"and /api/openapi.json require an X-API-Key header when BT_API_KEY is configured.",
+	)
+	gen.AddServer("http://localhost:9800", "Local development server")
+	gen.AddServer("http://100.123.73.66:9800", "Tailscale production server")
+
+	gen.AddTag("System", "Health, metrics, and alerts")
+	gen.AddTag("Platform", "Platform overview and tree management")
+	gen.AddTag("Trees", "Behavior tree listing and structure")
+	gen.AddTag("Thinktank", "Analytical thinktank with 5 fellows")
+	gen.AddTag("Company", "Startup company state")
+	gen.AddTag("Tasks", "Task pipeline management")
+	gen.AddTag("Sprint", "Sprint execution")
+	gen.AddTag("Chat", "Dashboard AI chat")
+
+	for _, route := range api.DashboardRoutes() {
+		gen.AddRoute(route)
+	}
+
+	data, err := gen.GenerateJSON()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write(data)
 }
