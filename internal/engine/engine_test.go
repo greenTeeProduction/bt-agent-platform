@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/goap"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
@@ -468,4 +470,296 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// ============================================================================
+// Registry tests (register.go)
+// ============================================================================
+
+func TestRegisterAction_And_GetAction(t *testing.T) {
+	// Register a custom action
+	called := false
+	RegisterAction("TestCustomAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		called = true
+		return 1
+	})
+
+	// Retrieve and invoke it
+	fn := GetAction("TestCustomAction", nil)
+	if fn == nil {
+		t.Fatal("GetAction returned nil for registered action")
+	}
+	result := fn(nil)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if !called {
+		t.Error("registered action was not called")
+	}
+}
+
+func TestRegisterCondition_And_GetCondition(t *testing.T) {
+	called := false
+	RegisterCondition("TestCustomCondition", func(b *Blackboard) bool {
+		called = true
+		return true
+	})
+
+	fn := GetCondition("TestCustomCondition", nil)
+	if fn == nil {
+		t.Fatal("GetCondition returned nil for registered condition")
+	}
+	result := fn(&Blackboard{})
+	if !result {
+		t.Error("expected true from registered condition")
+	}
+	if !called {
+		t.Error("registered condition was not called")
+	}
+}
+
+func TestGetAction_Unregistered_NilBlackboard(t *testing.T) {
+	// Unregistered action with nil blackboard returns no-op success
+	fn := GetAction("NonExistentAction", nil)
+	if fn == nil {
+		t.Fatal("GetAction should return a fallback, not nil")
+	}
+	// The no-op fallback returns 1 (success)
+	result := fn(nil)
+	if result != 1 {
+		t.Errorf("expected fallback to return 1, got %d", result)
+	}
+}
+
+func TestGetAction_Unregistered_WithBlackboard(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	// Unregistered action with non-nil blackboard falls back to actionForName
+	fn := GetAction("NonExistentAction", bb)
+	if fn == nil {
+		t.Fatal("GetAction should return a fallback from blackboard, not nil")
+	}
+	// actionForName on unknown name usually returns a no-op but may panic
+	// Just verify we get a callable function
+	_ = fn
+}
+
+func TestGetCondition_Unregistered_NilBlackboard(t *testing.T) {
+	fn := GetCondition("NonExistentCondition", nil)
+	if fn == nil {
+		t.Fatal("GetCondition should return a fallback, not nil")
+	}
+	// The no-op fallback returns true
+	result := fn(&Blackboard{})
+	if !result {
+		t.Error("expected fallback to return true")
+	}
+}
+
+func TestGetCondition_Unregistered_WithBlackboard(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := GetCondition("NonExistentCondition", bb)
+	if fn == nil {
+		t.Fatal("GetCondition should return a fallback from blackboard, not nil")
+	}
+	_ = fn
+}
+
+func TestValidateTree_ValidTree(t *testing.T) {
+	tree := evolution.DefaultTree()
+	missing := ValidateTree(tree)
+	if len(missing) > 0 {
+		t.Errorf("expected no missing nodes in default tree, got: %v", missing)
+	}
+}
+
+func TestValidateTree_NestedChildren(t *testing.T) {
+	// Build a small valid tree that exercises the recursive walk
+	tree := &evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "HasClearTask"},
+			{Type: "Action", Name: "SetupDefaultTools"},
+			{Type: "Selector", Name: "Inner", Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "ExecutePlan"},
+			}},
+		},
+	}
+	missing := ValidateTree(tree)
+	if len(missing) > 0 {
+		t.Errorf("expected no missing nodes, got: %v", missing)
+	}
+}
+
+// ============================================================================
+// GOAP helper tests (goap_nodes.go)
+// ============================================================================
+
+func TestPlanStepsToStrings(t *testing.T) {
+	plan := &goap.Plan{
+		Goal: &goap.Goal{Name: "test_goal"},
+		Steps: []goap.Action{
+			{Name: "step_one", Cost: 1.0},
+			{Name: "step_two", Cost: 2.0},
+			{Name: "step_three", Cost: 3.0},
+		},
+	}
+	steps := planStepsToStrings(plan)
+	if len(steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(steps))
+	}
+	if steps[0] != "step_one" {
+		t.Errorf("expected step_one, got %q", steps[0])
+	}
+	if steps[1] != "step_two" {
+		t.Errorf("expected step_two, got %q", steps[1])
+	}
+	if steps[2] != "step_three" {
+		t.Errorf("expected step_three, got %q", steps[2])
+	}
+}
+
+func TestPlanStepsToStrings_Empty(t *testing.T) {
+	plan := &goap.Plan{
+		Goal:  &goap.Goal{Name: "empty_goal"},
+		Steps: []goap.Action{},
+	}
+	steps := planStepsToStrings(plan)
+	if len(steps) != 0 {
+		t.Errorf("expected 0 steps, got %d", len(steps))
+	}
+}
+
+func TestGetStringSlice_Existing(t *testing.T) {
+	cs := map[string]interface{}{
+		"my_slice": []string{"a", "b", "c"},
+	}
+	result := getStringSlice(cs, "my_slice")
+	if len(result) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(result))
+	}
+	if result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Errorf("unexpected values: %v", result)
+	}
+}
+
+func TestGetStringSlice_MissingKey(t *testing.T) {
+	cs := map[string]interface{}{}
+	result := getStringSlice(cs, "nonexistent")
+	if len(result) != 0 {
+		t.Errorf("expected empty slice, got %v", result)
+	}
+}
+
+func TestGetStringSlice_WrongType(t *testing.T) {
+	cs := map[string]interface{}{
+		"bad_slice": []int{1, 2, 3},
+	}
+	result := getStringSlice(cs, "bad_slice")
+	if len(result) != 0 {
+		t.Errorf("expected empty slice for wrong type, got %v", result)
+	}
+}
+
+func TestGetStringSlice_NilMap(t *testing.T) {
+	result := getStringSlice(nil, "any_key")
+	if len(result) != 0 {
+		t.Errorf("expected empty slice for nil map, got %v", result)
+	}
+}
+
+func TestBuildGoapStepPrompt(t *testing.T) {
+	cs := map[string]interface{}{
+		"goap_step_index": 0,
+	}
+	prompt := buildGoapStepPrompt("fix the bug", "analyze_code", cs)
+	if prompt == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+	if !stringContains(prompt, "fix the bug") {
+		t.Error("prompt should contain the task")
+	}
+	if !stringContains(prompt, "analyze_code") {
+		t.Error("prompt should contain the step name")
+	}
+	if !stringContains(prompt, "GOAP") {
+		t.Error("prompt should mention GOAP")
+	}
+}
+
+func TestWorldStateFromMap(t *testing.T) {
+	input := map[string]interface{}{"key": "value", "num": 42}
+	result := worldStateFromMap(input)
+	if len(result) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(result))
+	}
+	if result["key"] != "value" {
+		t.Errorf("expected 'value', got %v", result["key"])
+	}
+}
+
+func TestStringField_Exists(t *testing.T) {
+	m := map[string]interface{}{"name": "test_value"}
+	result := stringField(m, "name")
+	if result != "test_value" {
+		t.Errorf("expected 'test_value', got %q", result)
+	}
+}
+
+func TestStringField_Missing(t *testing.T) {
+	m := map[string]interface{}{}
+	result := stringField(m, "name")
+	if result != "" {
+		t.Errorf("expected empty string, got %q", result)
+	}
+}
+
+func TestStringField_WrongType(t *testing.T) {
+	m := map[string]interface{}{"name": 42}
+	result := stringField(m, "name")
+	if result != "" {
+		t.Errorf("expected empty string for wrong type, got %q", result)
+	}
+}
+
+func TestFloatField_Exists(t *testing.T) {
+	m := map[string]interface{}{"cost": 3.14}
+	result := floatField(m, "cost", 1.0)
+	if result != 3.14 {
+		t.Errorf("expected 3.14, got %f", result)
+	}
+}
+
+func TestFloatField_IntConversion(t *testing.T) {
+	m := map[string]interface{}{"count": 5}
+	result := floatField(m, "count", 1.0)
+	if result != 5.0 {
+		t.Errorf("expected 5.0, got %f", result)
+	}
+}
+
+func TestFloatField_Missing_UsesDefault(t *testing.T) {
+	m := map[string]interface{}{}
+	result := floatField(m, "cost", 2.5)
+	if result != 2.5 {
+		t.Errorf("expected default 2.5, got %f", result)
+	}
+}
+
+func TestFloatField_WrongType_UsesDefault(t *testing.T) {
+	m := map[string]interface{}{"cost": "expensive"}
+	result := floatField(m, "cost", 0.0)
+	if result != 0.0 {
+		t.Errorf("expected default 0.0 for wrong type, got %f", result)
+	}
+}
+
+// stringContains checks if substr is contained within s.
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
