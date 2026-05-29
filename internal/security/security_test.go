@@ -516,3 +516,131 @@ func TestAuditMiddleware_SlowResponse(t *testing.T) {
 		t.Errorf("expected 200, got %d", rec.Code)
 	}
 }
+
+// ─── Request ID Tests ──────────────────────────────────────────────────────
+
+func TestGenerateRequestID_IsHex(t *testing.T) {
+	id := GenerateRequestID()
+	if len(id) != 16 {
+		t.Errorf("expected 16-char hex ID, got %d chars: %q", len(id), id)
+	}
+	// Verify it's valid hex
+	for _, c := range id {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("expected hex chars only, got %q in %q", c, id)
+		}
+	}
+}
+
+func TestGenerateRequestID_Uniqueness(t *testing.T) {
+	seen := make(map[string]bool)
+	for i := 0; i < 1000; i++ {
+		id := GenerateRequestID()
+		if seen[id] {
+			t.Errorf("duplicate request ID generated: %q", id)
+		}
+		seen[id] = true
+	}
+}
+
+func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := RequestID(r.Context())
+		if id == "" {
+			t.Error("RequestID should not be empty")
+		}
+		if len(id) != 16 {
+			t.Errorf("expected 16-char ID, got %d", len(id))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+
+	respID := rec.Header().Get("X-Request-ID")
+	if respID == "" {
+		t.Error("X-Request-ID response header should be set")
+	}
+	if len(respID) != 16 {
+		t.Errorf("expected 16-char response header ID, got %d", len(respID))
+	}
+}
+
+func TestRequestIDMiddleware_ReusesIncomingID(t *testing.T) {
+	existingID := "req-test-1234567"
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := RequestID(r.Context())
+		if id != existingID {
+			t.Errorf("expected RequestID=%q, got %q", existingID, id)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Request-ID", existingID)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+
+	respID := rec.Header().Get("X-Request-ID")
+	if respID != existingID {
+		t.Errorf("X-Request-ID response header = %q, want %q", respID, existingID)
+	}
+}
+
+func TestRequestID_NoMiddleware(t *testing.T) {
+	// Without the middleware in the chain, RequestID should return ""
+	id := RequestID(context.Background())
+	if id != "" {
+		t.Errorf("expected empty RequestID without middleware, got %q", id)
+	}
+}
+
+func TestRequestIDMiddleware_UniquePerRequest(t *testing.T) {
+	ids := make(map[string]bool)
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := RequestID(r.Context())
+		ids[id] = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for i := 0; i < 100; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+	}
+
+	if len(ids) != 100 {
+		t.Errorf("expected 100 unique IDs across 100 requests, got %d", len(ids))
+	}
+}
+
+func TestGenerateRequestID_NoPanic(t *testing.T) {
+	// GeneateRequestID should never panic, even if crypto/rand fails
+	// (which it won't on modern Linux, but the fallback keeps us safe).
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			id := GenerateRequestID()
+			if id == "" {
+				t.Error("GenerateRequestID returned empty string")
+			}
+		}
+	}()
+	// Wait with timeout
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("GenerateRequestID timed out")
+	}
+}

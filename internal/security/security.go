@@ -4,6 +4,8 @@ package security
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -502,6 +504,70 @@ func AuditMiddleware(next http.Handler) http.Handler {
 				"remote_addr", r.RemoteAddr,
 			)
 		}
+	})
+}
+
+// ─── Request ID Middleware ──────────────────────────────────────────────────
+
+// requestIDKey is a context key for request correlation IDs.
+type requestIDKey struct{}
+
+// RequestID returns the correlation ID for the current request, or "" if none set.
+// Use this in handlers to attach the request ID to structured logs for audit trail
+// correlation across multiple middleware layers and downstream services.
+func RequestID(ctx context.Context) string {
+	if id, ok := ctx.Value(requestIDKey{}).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// GenerateRequestID produces a cryptographically random 16-character hex ID.
+// Uses crypto/rand — suitable for security-sensitive request correlation.
+// This is a public helper so MCP servers can generate their own IDs when not
+// behind the HTTP middleware.
+func GenerateRequestID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand.Read can only fail on Linux if the getrandom()
+		// syscall returns an error (e.g., kernel entropy pool exhaustion).
+		// Fall back to time-based ID as last resort — better than panicking.
+		return "fallback-" + hex.EncodeToString([]byte{
+			byte(time.Now().UnixNano() >> 56),
+			byte(time.Now().UnixNano() >> 48),
+			byte(time.Now().UnixNano() >> 40),
+			byte(time.Now().UnixNano() >> 32),
+			byte(time.Now().UnixNano() >> 24),
+			byte(time.Now().UnixNano() >> 16),
+			byte(time.Now().UnixNano() >> 8),
+			byte(time.Now().UnixNano()),
+		})
+	}
+	return hex.EncodeToString(b)
+}
+
+// RequestIDMiddleware injects a unique correlation ID into every request.
+// The ID is stored in the request context (accessible via RequestID(ctx)) and
+// set as the X-Request-ID response header. If the incoming request already
+// carries an X-Request-ID header, that value is reused — enabling end-to-end
+// tracing across distributed components.
+//
+// Stack position: outermost (right after SecurityHeaders). This ensures
+// the request ID is available to all downstream middleware (CORS, sanitize,
+// rate limit, metrics, auth) and handlers for structured log correlation.
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = GenerateRequestID()
+		}
+
+		// Expose to response so callers can correlate
+		w.Header().Set("X-Request-ID", id)
+
+		// Inject into context for downstream middleware and handlers
+		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
