@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // Scheduler runs agents on cron-like schedules. Supports one-shot, recurring,
@@ -18,6 +20,7 @@ type Scheduler struct {
 	stopCh       chan struct{}
 	running      bool
 	tickInterval time.Duration
+	jobStore     JobStore // optional: persists job state across restarts
 }
 
 // ScheduledJob represents a scheduled agent run.
@@ -59,23 +62,31 @@ type AgentRunner func(ctx RunContext) (outcome, output string, err error)
 
 // SchedulerConfig configures a new scheduler.
 type SchedulerConfig struct {
-	Registry *Registry
-	History  *History
+	Registry     *Registry
+	History      *History
 	TickInterval time.Duration // how often to check for due jobs (default: 1m)
+	JobStore     JobStore      // optional: persists jobs across restarts (nil = in-memory only)
 }
 
 // NewScheduler creates a new agent scheduler.
+// If cfg.JobStore is set, persisted jobs are loaded on startup.
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if cfg.TickInterval == 0 {
 		cfg.TickInterval = 1 * time.Minute
 	}
-	return &Scheduler{
+	s := &Scheduler{
 		reg:          cfg.Registry,
 		history:      cfg.History,
 		jobs:         make(map[string]*ScheduledJob),
 		stopCh:       make(chan struct{}),
 		tickInterval: cfg.TickInterval,
+		jobStore:     cfg.JobStore,
 	}
+	// Restore persisted jobs
+	if cfg.JobStore != nil {
+		s.loadState()
+	}
+	return s
 }
 
 // Schedule adds a recurring job for an agent.
@@ -103,6 +114,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		Active:     true,
 	}
 	s.jobs[job.ID] = job
+	s.saveStateLocked()
 	return job, nil
 }
 
@@ -141,6 +153,16 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 			Quality:   quality,
 			StartedAt: start,
 			EndedAt:   time.Now(),
+		})
+	}
+
+	// Feed back into knowledge graph
+	if inst.Definition.Tree != "" {
+		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{
+			TreeID:   inst.Definition.Tree,
+			Task:     task,
+			Outcome:  outcome,
+			Duration: duration,
 		})
 	}
 
@@ -208,6 +230,7 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 		return fmt.Errorf("job %q not found", jobID)
 	}
 	delete(s.jobs, jobID)
+	s.saveStateLocked()
 	return nil
 }
 
@@ -273,6 +296,9 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 	s.mu.Unlock()
 
+	// Persist updated job state
+	s.saveState()
+
 	// Record history
 	if s.history != nil {
 		quality := 0.0
@@ -293,6 +319,16 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Quality:   quality,
 			StartedAt: start,
 			EndedAt:   time.Now(),
+		})
+	}
+
+	// Feed back into knowledge graph
+	if inst.Definition.Tree != "" {
+		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{
+			TreeID:   inst.Definition.Tree,
+			Task:     "scheduled run",
+			Outcome:  outcome,
+			Duration: duration,
 		})
 	}
 }
@@ -345,4 +381,57 @@ func parseTimeout(timeout string) time.Duration {
 		return 2 * time.Hour
 	}
 	return d
+}
+
+// saveState persists all jobs to the configured JobStore.
+// Safe to call without holding the lock.
+func (s *Scheduler) saveState() {
+	if s.jobStore == nil {
+		return
+	}
+	s.mu.RLock()
+	jobs := make([]ScheduledJob, 0, len(s.jobs))
+	for _, j := range s.jobs {
+		jobs = append(jobs, *j)
+	}
+	s.mu.RUnlock()
+
+	if err := s.jobStore.Save(jobs); err != nil {
+		log.Printf("Scheduler: failed to persist jobs: %v", err)
+	}
+}
+
+// saveStateLocked persists all jobs to the configured JobStore.
+// Caller MUST hold s.mu (write lock). Performs synchronous I/O.
+func (s *Scheduler) saveStateLocked() {
+	if s.jobStore == nil {
+		return
+	}
+	jobs := make([]ScheduledJob, 0, len(s.jobs))
+	for _, j := range s.jobs {
+		jobs = append(jobs, *j)
+	}
+	if err := s.jobStore.Save(jobs); err != nil {
+		log.Printf("Scheduler: failed to persist jobs: %v", err)
+	}
+}
+
+// loadState restores jobs from the configured JobStore.
+// Called during NewScheduler. Errors are logged and ignored —
+// an empty job map is a safe fallback.
+func (s *Scheduler) loadState() {
+	if s.jobStore == nil {
+		return
+	}
+	jobs, err := s.jobStore.Load()
+	if err != nil {
+		log.Printf("Scheduler: failed to load persisted jobs: %v", err)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range jobs {
+		j := jobs[i] // copy
+		s.jobs[j.ID] = &j
+	}
 }
