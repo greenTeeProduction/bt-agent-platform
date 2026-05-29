@@ -78,6 +78,7 @@ func main() {
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
+	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
@@ -1192,7 +1193,7 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 		"Dashboard REST API for the Go Behavior Tree Platform. "+
 			"Manages behavior trees, thinktank analysis, company simulation, "+
 			"task pipelines, sprint execution, and dashboard chat. "+
-			"All /api/* endpoints except /api/health, /api/metrics, /api/alerts, "+
+			"All /api/* endpoints except /api/health, /api/metrics, /api/alerts, /api/alerts/rules, "+
 			"and /api/openapi.json require an X-API-Key header when BT_API_KEY is configured.",
 	)
 	gen.AddServer("http://localhost:9800", "Local development server")
@@ -1218,6 +1219,29 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write(data)
+}
+
+// handleAlertRules serves the raw Prometheus alert rules YAML file so
+// Prometheus or other monitoring tools can scrape it directly.
+// Public endpoint (no auth) — same as /api/alerts, /api/health, /api/metrics.
+func handleAlertRules(w http.ResponseWriter, r *http.Request) {
+	// Look relative to the binary's working directory (repo root)
+	rulesPath := "monitoring/prometheus-alerts.yml"
+
+	// Fallback: if running from outside the repo, try absolute path
+	if _, err := os.Stat(rulesPath); os.IsNotExist(err) {
+		rulesPath = "/home/nico/go-bt-evolve/monitoring/prometheus-alerts.yml"
+	}
+
+	data, err := os.ReadFile(rulesPath)
+	if err != nil {
+		http.Error(w, "alert rules file not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(data)
 }

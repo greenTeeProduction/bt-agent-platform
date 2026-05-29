@@ -39,9 +39,10 @@ type RouteParam struct {
 
 // RouteResponse describes a single response for an API route.
 type RouteResponse struct {
-	StatusCode  int    `json:"status_code"`
-	Description string `json:"description"`
+	StatusCode  int     `json:"status_code"`
+	Description string  `json:"description"`
 	Schema      *Schema `json:"schema,omitempty"`
+	ContentType string  `json:"content_type,omitempty"`
 }
 
 // Route describes a single API endpoint for OpenAPI generation.
@@ -450,6 +451,22 @@ func (rb *RouteBuilder) ErrorResponse(code int, desc string) *RouteBuilder {
 	return rb
 }
 
+// ContentResponse adds a response with a specific content type (non-JSON).
+func (rb *RouteBuilder) ContentResponse(code int, contentType, desc string) *RouteBuilder {
+	resp := RouteResponse{
+		StatusCode:  code,
+		Description: desc,
+		ContentType: contentType,
+		Schema:      StringSchema(desc),
+	}
+	if code == 200 {
+		rb.route.Responses[0] = resp
+	} else {
+		rb.route.Responses = append(rb.route.Responses, resp)
+	}
+	return rb
+}
+
 // WithAuth marks the route as requiring API key authentication.
 func (rb *RouteBuilder) WithAuth() *RouteBuilder {
 	rb.route.Auth = true
@@ -504,6 +521,12 @@ func DashboardRoutes() []Route {
 				}), "List of alert evaluations"),
 				"all_clear": BoolSchema("True when no alerts are firing"),
 			}, "evaluated_at", "total_rules", "firing_count", "all_clear")).Build(),
+
+		NewRoute("/api/alerts/rules", GET).
+			Summary("Alert rules file").
+			Description("Returns the raw Prometheus alert rules YAML file for direct scraping by Prometheus or other monitoring tools.").
+			Tags("System").
+			ContentResponse(200, "text/yaml", "Prometheus alert rules YAML").Build(),
 
 		NewRoute("/api/openapi.json", GET).
 			Summary("OpenAPI specification").
