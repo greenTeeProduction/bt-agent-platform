@@ -45,17 +45,17 @@ func DeepResearchTree() *evolution.SerializableNode {
 			// Replaces: DecomposeQuery → AssessComplexity → SearchBroad → Filter → Extract → CrossRef → GapDetect
 			{
 				Type: "ChainAction",
-				Name: "agent:Research the following topic thoroughly. Search for information, analyze findings, cross-reference facts, and identify any gaps. Produce a comprehensive set of findings with sources.",
+				Name: "llm_call:Research the following topic thoroughly: {{.Task}}. Search for information, analyze findings, cross-reference facts, and identify any gaps. Produce a comprehensive set of findings with sources.",
 				Metadata: map[string]any{
-					"max_tokens":  float64(15),
+					"max_tokens":  float64(2048),
 					"system_msg": "You are a deep research agent. Use web_search to find information, then analyze and cross-reference. Track your sources. Flag any gaps or uncertainties.",
 					"tools":      []any{"web_search"},
 				},
 			},
-			// Phase 4: Synthesize structured report via refine chain
+			// Phase 4: Synthesize structured report from findings
 			{
 				Type: "ChainAction",
-				Name: "refine:Synthesize the research findings into a structured report. Include: Executive Summary, Background, Findings (with citations), Analysis, Conclusion, and Sources. Use the findings from the previous step.",
+				Name: "llm_call:Synthesize the following research findings into a comprehensive structured report. Include: Executive Summary, Background, Findings (with citations), Analysis, Conclusion, and Sources.\n\nRESEARCH FINDINGS:\n{{.Result}}\n\nTASK: {{.Task}}",
 				Metadata: map[string]any{
 					"max_tokens": float64(2048),
 				},
@@ -78,9 +78,9 @@ func DeepResearchTree() *evolution.SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Self-correct the research report. Identify weaknesses, fill gaps, and produce an improved version.",
+						Name: "llm_call:Self-correct the research report. Identify weaknesses, fill gaps, and produce an improved version.",
 						Metadata: map[string]any{
-							"max_tokens": float64(5),
+							"max_tokens": float64(1024),
 						},
 					},
 				},
@@ -107,9 +107,9 @@ func QuickResearchTree() *evolution.SerializableNode {
 			// Agent-based single-pass research (replaces Decompose → Search → Filter → Extract → Structure → Cite)
 			{
 				Type: "ChainAction",
-				Name: "agent:Research {{.Task}} and provide a concise structured answer with sources.",
+				Name: "llm_call:Research {{.Task}} and provide a concise structured answer with sources.",
 				Metadata: map[string]any{
-					"max_tokens":  float64(8),
+					"max_tokens":  float64(1024),
 					"system_msg": "You are a quick research agent. Search for information, synthesize findings, and provide a structured answer with citations. Be concise.",
 					"tools":      []any{"web_search"},
 				},
@@ -128,8 +128,8 @@ func QuickResearchTree() *evolution.SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Fix any issues with the research and produce a corrected answer.",
-						Metadata: map[string]any{"max_tokens": float64(3)},
+						Name: "llm_call:Fix any issues with the research and produce a corrected answer.",
+						Metadata: map[string]any{"max_tokens": float64(1024)},
 					},
 				},
 			},

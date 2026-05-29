@@ -38,7 +38,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsCodeReview", Description: "review/audit/bug/security/style keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Review this code for bugs, security issues, and style problems: {{.Task}}. Provide fixes with before/after examples.",
+								Name: "llm_call:Review this code for bugs, security issues, and style problems: {{.Task}}. Provide fixes with before/after examples.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -50,7 +50,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsGoRelated", Description: "go/golang/.go/goroutine/channel keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Complete this Go development task: {{.Task}}. Use available tools. Provide complete solution.",
+								Name: "llm_call:Complete this Go development task: {{.Task}}. Use available tools. Provide complete solution.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -62,7 +62,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsFinanceTask", Description: "dcf/lbo/valuation/earnings/pitch/kyc/audit keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Complete this financial analysis task: {{.Task}}. Use available tools for research and computation. Provide structured output.",
+								Name: "llm_call:Complete this financial analysis task: {{.Task}}. Use available tools for research and computation. Provide structured output.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -74,7 +74,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsDevOps", Description: "deploy/build/pipeline/ci/cd/docker/kubernetes keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Handle this DevOps task: {{.Task}}. Execute builds, manage deployments, configure pipelines.",
+								Name: "llm_call:Handle this DevOps task: {{.Task}}. Execute builds, manage deployments, configure pipelines.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -86,7 +86,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsSecurityCheck", Description: "security/exploit/vulnerability/penetration/auth keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Perform security analysis: {{.Task}}. Check OWASP Top 10, injection, auth bypass, misconfig. Report findings with severity.",
+								Name: "llm_call:Perform security analysis: {{.Task}}. Check OWASP Top 10, injection, auth bypass, misconfig. Report findings with severity.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -98,7 +98,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsDataTask", Description: "etl/pipeline/data/transform/extract/load/schema keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Design or fix this data pipeline: {{.Task}}. Consider ETL flow, schema, transformations, error handling.",
+								Name: "llm_call:Design or fix this data pipeline: {{.Task}}. Consider ETL flow, schema, transformations, error handling.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -110,7 +110,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsResearchQuery", Description: "research/investigate/analyze/study/explore/find keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Research this topic thoroughly: {{.Task}}. Use web search, synthesize findings, cite sources. Provide executive summary + details.",
+								Name: "llm_call:Research this topic thoroughly: {{.Task}}. Use web search, synthesize findings, cite sources. Provide executive summary + details.",
 								Metadata: map[string]any{"max_tokens": float64(2048)},
 							},
 						},
@@ -122,7 +122,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsAnalysisTask", Description: "strategy/analysis/foresight/scenario/implications/forecast keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Analyze from multiple perspectives (bull, bear, technical, macro, contrarian): {{.Task}}. Identify theses, antitheses, synthesize into recommendation.",
+								Name: "llm_call:Analyze from multiple perspectives (bull, bear, technical, macro, contrarian): {{.Task}}. Identify theses, antitheses, synthesize into recommendation.",
 								Metadata: map[string]any{"max_tokens": float64(2048)},
 							},
 						},
@@ -134,7 +134,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsRefactoring", Description: "refactor/restructure/clean/improve/modernize/migrate keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Refactor this code: {{.Task}}. Improve structure, readability, performance. Preserve behavior. Use idiomatic patterns.",
+								Name: "llm_call:Refactor this code: {{.Task}}. Improve structure, readability, performance. Preserve behavior. Use idiomatic patterns.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -146,7 +146,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsQuestion", Description: "what/how/why/explain/define/difference/best practice keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Answer this question comprehensively: {{.Task}}. Provide examples, context, and references.",
+								Name: "llm_call:Answer this question comprehensively: {{.Task}}. Provide examples, context, and references.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -158,7 +158,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsKanbanTask", Description: "kanban/task/card/board/backlog/sprint/status keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Manage this workflow task: {{.Task}}. Create/update/move cards, check DoR/DoD gates, report status.",
+								Name: "llm_call:Manage this workflow task: {{.Task}}. Create/update/move cards, check DoR/DoD gates, report status.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -170,7 +170,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsIncident", Description: "crash/error/timeout/incident/outage/down/broken/failure keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Investigate this incident: {{.Task}}. Find root cause, assess impact, propose fix and prevention.",
+								Name: "llm_call:Investigate this incident: {{.Task}}. Find root cause, assess impact, propose fix and prevention.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -182,7 +182,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsHealthCheck", Description: "health/monitoring/capacity/alert keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Monitor system health: {{.Task}}. Check agents, disk, memory, CPU, cron jobs, dashboard. Provide health report with status indicators.",
+								Name: "llm_call:Monitor system health: {{.Task}}. Check agents, disk, memory, CPU, cron jobs, dashboard. Provide health report with status indicators.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -194,7 +194,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsMeetingTask", Description: "transcribe/meeting/standup/minutes keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Process meeting: {{.Task}}. Transcribe, extract action items, summarize decisions, assign owners, generate minutes.",
+								Name: "llm_call:Process meeting: {{.Task}}. Transcribe, extract action items, summarize decisions, assign owners, generate minutes.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -206,7 +206,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsPlatformEval", Description: "platform maturity/dimension/gap analysis keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Evaluate the platform: {{.Task}}. Score dimensions, identify gaps, estimate effort, rank by ROI, produce improvement plan.",
+								Name: "llm_call:Evaluate the platform: {{.Task}}. Score dimensions, identify gaps, estimate effort, rank by ROI, produce improvement plan.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -218,7 +218,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsCronTask", Description: "cron job/audit/capacity/governance keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Manage cron jobs: {{.Task}}. List, audit, optimize schedules, detect failures, propose improvements.",
+								Name: "llm_call:Manage cron jobs: {{.Task}}. List, audit, optimize schedules, detect failures, propose improvements.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -230,7 +230,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsEvolutionTask", Description: "tree fitness/mutation/evolution/ensemble keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Evolve the platform: {{.Task}}. Evaluate fitness, order mutations, apply improvements, validate, commit.",
+								Name: "llm_call:Evolve the platform: {{.Task}}. Evaluate fitness, order mutations, apply improvements, validate, commit.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -242,7 +242,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsNotebookLMTask", Description: "notebooklm/chat query/mind map/research pipeline keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Run NotebookLM research: {{.Task}}. Query notebooks, generate reports, mind maps, artifacts. Save to vault.",
+								Name: "llm_call:Run NotebookLM research: {{.Task}}. Query notebooks, generate reports, mind maps, artifacts. Save to vault.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -254,7 +254,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsVaultTask", Description: "vault/ingest/synthesize/cross-link/index keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Manage the vault: {{.Task}}. Ingest, synthesize, cross-link, update indices, run sweeps, maintain knowledge graph.",
+								Name: "llm_call:Manage the vault: {{.Task}}. Ingest, synthesize, cross-link, update indices, run sweeps, maintain knowledge graph.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -266,7 +266,7 @@ func MergedTree() *SerializableNode {
 							{Type: "Condition", Name: "IsTelegram", Description: "telegram platform/messaging/button keywords"},
 							{
 								Type: "ChainAction",
-								Name: "agent:Validate this Telegram response: {{.Task}}. If the response contains a question to the user, it MUST use the clarify() tool with multiple-choice buttons (1-4 choices). Check: does the response ask the user something? If yes, was clarify() called with concrete choices? If not, rewrite the response to use clarify(question=..., choices=[...]).",
+								Name: "llm_call:Validate this Telegram response: {{.Task}}. If the response contains a question to the user, it MUST use the clarify() tool with multiple-choice buttons (1-4 choices). Check: does the response ask the user something? If yes, was clarify() called with concrete choices? If not, rewrite the response to use clarify(question=..., choices=[...]).",
 								Metadata: map[string]any{"max_tokens": float64(400)},
 							},
 						},
@@ -277,7 +277,7 @@ func MergedTree() *SerializableNode {
 						Children: []SerializableNode{
 							{
 								Type: "ChainAction",
-								Name: "agent:Complete this task: {{.Task}}. Use available tools. Provide a thorough, complete solution.",
+								Name: "llm_call:Complete this task: {{.Task}}. Use available tools. Provide a thorough, complete solution.",
 								Metadata: map[string]any{"max_tokens": float64(1024)},
 							},
 						},
@@ -307,12 +307,12 @@ func MergedTree() *SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded with quality output"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
+						Name: "llm_call:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
 						Metadata: map[string]any{"max_tokens": float64(1024)},
 					},
 					{
 						Type: "ChainAction",
-						Name: "agent:Escalate to DeepSeek v4 Pro for difficult task: {{.Task}}. Previous attempt failed. Provide expert-level solution.",
+						Name: "llm_call:Escalate to DeepSeek v4 Pro for difficult task: {{.Task}}. Previous attempt failed. Provide expert-level solution.",
 						Metadata: map[string]any{"max_tokens": float64(2048)},
 					},
 				},

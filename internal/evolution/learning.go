@@ -18,10 +18,14 @@ type Individual struct {
 
 // Population is a generation of individuals.
 type Population struct {
-	Individuals  []Individual `json:"individuals"`
-	Generation   int          `json:"generation"`
-	BestFitness  float64      `json:"best_fitness"`
-	BestTree     *SerializableNode `json:"-"`
+	Individuals     []Individual      `json:"individuals"`
+	Generation      int               `json:"generation"`
+	BestFitness     float64           `json:"best_fitness"`
+	PrevBestFitness float64           `json:"prev_best_fitness"`
+	BestTree        *SerializableNode `json:"-"`
+	TotalMutations  int               `json:"total_mutations"`
+	Regressions     int               `json:"regressions"`
+	NicheDiversityScore float64           `json:"niche_diversity"`
 }
 
 // NewPopulation creates an initial population by mutating a base tree.
@@ -137,6 +141,47 @@ func (p *Population) ConvergenceRate() float64 {
 		return 0
 	}
 	return p.BestFitness / float64(p.Generation)
+}
+
+// RegressionRate returns the percentage of mutations that caused fitness regressions.
+func (p *Population) RegressionRate() float64 {
+	if p.TotalMutations == 0 {
+		return 0
+	}
+	return float64(p.Regressions) / float64(p.TotalMutations) * 100
+}
+
+// NicheDiversity returns the diversity index across niches (0-1).
+// Uses the Herfindahl-Hirschman Index (HHI) inverted: 0 = single niche, 1 = perfectly distributed.
+func (p *Population) NicheDiversity() float64 {
+	// Count individuals per niche based on genome prefix (first 8 chars = niche fingerprint)
+	niches := make(map[string]int)
+	for _, ind := range p.Individuals {
+		prefix := ind.Genome
+		if len(prefix) > 8 {
+			prefix = prefix[:8]
+		}
+		niches[prefix]++
+	}
+	if len(niches) <= 1 {
+		return 0
+	}
+	total := float64(len(p.Individuals))
+	hhi := 0.0
+	for _, count := range niches {
+		share := float64(count) / total
+		hhi += share * share
+	}
+	// Invert HHI so 0 = concentrated, 1 = perfectly diverse
+	n := float64(len(niches))
+	if n <= 1 {
+		return 0
+	}
+	normalized := (1 - hhi) / (1 - 1/n)
+	if normalized > 1 {
+		normalized = 1
+	}
+	return normalized
 }
 
 // ─── Reinforcement Learning Engine ───

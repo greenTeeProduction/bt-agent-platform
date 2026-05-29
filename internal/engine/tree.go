@@ -913,7 +913,8 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "WasSuccessful":
 		return func(b *Blackboard) bool {
-			return b.Outcome == string(reflection.Success)
+			// Accept both tree outcomes (success) and chain outcomes (chain_success)
+			return b.Outcome == string(reflection.Success) || b.Outcome == "chain_success"
 		}
 	case "ValidateOutput":
 		return func(b *Blackboard) bool {
@@ -1383,7 +1384,11 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			lower := strings.ToLower(b.Task)
 			return containsAny(lower, "research", "investigate", "analyze", "what is", "how does",
 				"explain", "compare", "deep dive", "report on", "find out", "look into",
-				"literature", "study", "survey", "overview", "landscape")
+				"literature", "study", "survey", "overview", "landscape",
+				"what are", "who", "when", "where", "why", "top ", "best ",
+				"most popular", "recommend", "suggest", "tell me about",
+				"summarize", "history of", "future of", "trends", "llm",
+				"framework", "python", "rust", "golang", "kubernetes")
 		}
 	case "IsAmbiguousQuery":
 		return func(b *Blackboard) bool {
@@ -1411,7 +1416,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "CheckCoverageCompleteness":
 		return func(b *Blackboard) bool {
-			return bb.Outcome == string(reflection.Success) && len(bb.Result) > 50
+			return (b.Outcome == string(reflection.Success) || b.Outcome == "chain_success") && len(bb.Result) > 50
 		}
 	case "CheckCitationFormat":
 		return func(b *Blackboard) bool {

@@ -134,7 +134,7 @@ func DefaultTree() *SerializableNode {
 						Children: []SerializableNode{
 							{
 								Type: "ChainAction",
-								Name: "agent:Complete this task: {{.Task}}. Use available tools. Think step by step and provide a thorough answer.",
+								Name: "llm_call:Complete this task: {{.Task}}. Use available tools. Think step by step and provide a thorough answer.",
 								Metadata: map[string]any{"max_tokens": float64(2048)},
 							},
 						},
@@ -153,7 +153,7 @@ func DefaultTree() *SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded and output is valid"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Self-correct the previous task. Fix errors and produce a correct answer.",
+						Name: "llm_call:Self-correct the previous task. Fix errors and produce a correct answer.",
 						Metadata: map[string]any{"max_tokens": float64(2048)},
 					},
 					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},
@@ -237,7 +237,7 @@ func GoDeveloperTree() *SerializableNode {
 						Children: []SerializableNode{
 							{
 								Type: "ChainAction",
-								Name: "agent:Complete this Go development task: {{.Task}}. Use available tools if needed. Provide a complete solution.",
+								Name: "llm_call:Complete this Go development task: {{.Task}}. Use available tools if needed. Provide a complete solution.",
 								Metadata: map[string]any{
 									"max_tokens": float64(400),
 								},
@@ -260,7 +260,7 @@ func GoDeveloperTree() *SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
+						Name: "llm_call:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
 						Metadata: map[string]any{
 							"max_tokens": float64(400),
 						},

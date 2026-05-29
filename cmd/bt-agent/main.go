@@ -20,6 +20,7 @@ import (
 	btlog "github.com/nico/go-bt-evolve/internal/log"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -826,6 +827,9 @@ func main() {
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "diversity": pop.Diversity(),
 				"convergence_rate": pop.ConvergenceRate(), "best_nodes": evolution.CountNodes(best),
+				"regression_rate": fmt.Sprintf("%.1f%%", pop.RegressionRate()),
+				"total_mutations": pop.TotalMutations, "regressions": pop.Regressions,
+				"niche_diversity": fmt.Sprintf("%.2f", pop.NicheDiversity()),
 			})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -943,13 +947,24 @@ func main() {
 	agentReg, _ := agent.NewRegistry(agentHome + "/.go-bt-evolve/agents")
 	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
 
+	// DLQ persists failed scheduled runs for inspection and replay.
+	dlq := reliability.NewDeadLetterQueue(agentHome + "/.go-bt-evolve/dead_letter_queue.json")
+
 	// Start persistent agent scheduler so bt_agent_schedule actually runs jobs.
 	// Previously the scheduler was created per-call and garbage-collected
 	// without ever calling Start(), so scheduled agents never executed.
 	globalSched := agent.NewScheduler(agent.SchedulerConfig{Registry: agentReg, History: agentHist})
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
-		bb := &engine.Blackboard{Task: "scheduled run: " + ctx.AgentName, LLM: llmClient}
-		tree := resolveTree(ctx.AgentName)
+		// Build a descriptive task so tree condition nodes can match keywords.
+		// The generic "scheduled run: <name>" was causing empty output on trees
+		// whose StrategyRouter relies on keyword matching (e.g. AgentMonitor).
+		task := "scheduled run: " + ctx.AgentName
+		if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil && inst.Definition.Description != "" {
+			task = inst.Definition.Description + " (" + task + ")"
+		}
+
+		var tree *evolution.SerializableNode
+		tree = resolveTree(ctx.AgentName)
 		if tree == nil {
 			inst, getErr := agentReg.Get(ctx.AgentName)
 			if getErr != nil {
@@ -960,10 +975,50 @@ func main() {
 		if tree == nil {
 			return "failure", "", fmt.Errorf("no tree found for agent %s", ctx.AgentName)
 		}
-		bt := engine.BuildTree(tree, bb)
-		outcome = engine.RunTask(bb, bt)
-		return outcome, bb.Result, nil
+
+		// Retry with exponential backoff: 3 attempts (1s, 2s, 4s base, capped at 30s).
+		// Each attempt builds a fresh Blackboard so tree state doesn't leak across retries.
+		err = reliability.RetryWithBackoff(3, 1*time.Second, 30*time.Second, func() error {
+			bb := &engine.Blackboard{Task: task, LLM: llmClient}
+			bt := engine.BuildTree(tree, bb)
+			_ = engine.RunTask(bb, bt)
+			outcome = bb.Outcome
+			output = bb.Result
+			if bb.Outcome == "success" {
+				return nil
+			}
+			return fmt.Errorf("agent outcome: %s", bb.Outcome)
+		})
+
+		if err != nil {
+			dlq.Push(reliability.DeadLetterEntry{
+				ID:       fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
+				Task:     task,
+				Agent:    ctx.AgentName,
+				Error:    err.Error(),
+				Attempts: 3,
+				FailedAt: time.Now(),
+				Circuit:  "scheduler",
+			})
+		}
+
+		return outcome, output, err
 	})
+
+	// Auto-load agent schedules on startup so they survive bt-agent restarts.
+	// The scheduler's job map is in-memory only — without this, every restart
+	// drops all scheduled agents and they stop executing until bt_agent_schedule
+	// is called again from an external session.
+	for _, inst := range agentReg.List() {
+		sched := inst.Definition.Schedule
+		if sched != "" && sched != "on_demand" {
+			if _, err := globalSched.Schedule(inst.Definition.Name, sched, "2h", 3); err != nil {
+				btlog.Info("auto-schedule failed", "agent", inst.Definition.Name, "error", err)
+			} else {
+				btlog.Info("auto-scheduled agent", "agent", inst.Definition.Name, "schedule", sched)
+			}
+		}
+	}
 
 	server.RegisterTool("bt_agent_create", "Create a new agent from a template or custom definition",
 		map[string]mcp.Property{
@@ -1050,7 +1105,8 @@ func main() {
 			}
 			start := time.Now()
 			bt := engine.BuildTree(tree, bb)
-			outcome := engine.RunTask(bb, bt)
+			_ = engine.RunTask(bb, bt)
+			outcome := bb.Outcome // "success"/"failure"/"partial" from tree terminal code
 			duration := time.Since(start)
 			agentHist.Record(agent.RunRecord{
 				AgentName: params.Agent, Task: params.Task, Outcome: outcome,

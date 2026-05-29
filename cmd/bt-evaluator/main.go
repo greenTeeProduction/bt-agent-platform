@@ -109,6 +109,11 @@ func main() {
 
 			result := evaluator.IterativeDeepening(tree, records, tt, params.MaxDepth)
 
+			// Auto-save TT after every deepen so cache survives restarts
+			if err := tt.Save(); err != nil {
+				btlog.Info("tt auto-save failed", "error", err)
+			}
+
 			out := map[string]interface{}{
 				"depth":           result.Depth,
 				"base_composite":  fmt.Sprintf("%.1f", result.BaseFitness.Composite),

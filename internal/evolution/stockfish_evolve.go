@@ -35,7 +35,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Hash the current behavior tree and look up its fitness score in the transposition table. If found and recent, skip re-evaluation and use cached score. Report: cache_hit or cache_miss.",
+						Name: "llm_call:Hash the current behavior tree and look up its fitness score in the transposition table. If found and recent, skip re-evaluation and use cached score. Report: cache_hit or cache_miss.",
 						Metadata: map[string]any{
 							"max_tokens": float64(3),
 							"system_msg": "You are a Stockfish-style transposition table manager.",
@@ -63,7 +63,7 @@ func StockfishEvolutionTree() *SerializableNode {
 						Children: []SerializableNode{
 							{
 								Type: "ChainAction",
-								Name: "agent:Evaluate the behavior tree's fitness across 5 dimensions: Success Rate (50%), Stability (15%), Path Coverage (15%), Speed (10%), Complexity (10%). Compute composite score on 0-100 centipawn scale. Report: composite score and per-dimension breakdown.",
+								Name: "llm_call:Evaluate the behavior tree's fitness across 5 dimensions: Success Rate (50%), Stability (15%), Path Coverage (15%), Speed (10%), Complexity (10%). Compute composite score on 0-100 centipawn scale. Report: composite score and per-dimension breakdown.",
 								Metadata: map[string]any{
 									"max_tokens": float64(5),
 									"system_msg": "You are a Stockfish evaluator. Score behavior trees like chess positions. Higher is better.",
@@ -82,7 +82,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Run iterative deepening mutation search. Start at depth 1 (single mutations), increase to depth 3 (mutation chains). At each depth: generate candidate mutations, order them by Stockfish heuristics, evaluate top candidates, prune weak branches. Best mutation found so far is the 'principal variation'. Report: best mutation, its score, and depth reached.",
+						Name: "llm_call:Run iterative deepening mutation search. Start at depth 1 (single mutations), increase to depth 3 (mutation chains). At each depth: generate candidate mutations, order them by Stockfish heuristics, evaluate top candidates, prune weak branches. Best mutation found so far is the 'principal variation'. Report: best mutation, its score, and depth reached.",
 						Metadata: map[string]any{
 							"max_tokens": float64(12),
 							"system_msg": "You are an iterative deepening search engine for behavior tree optimization. Search wider at shallow depths, deeper on promising branches.",
@@ -98,7 +98,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Order the candidate mutations using Stockfish move ordering: 1. TT hits (previously evaluated positively), 2. Killer moves (recent successful mutations), 3. History heuristic (mutations with high success rate on similar trees), 4. Capture-like (add_fallback, wrap_retry — structural improvements), 5. Quiet moves (increase_retries, add_before — parameter tweaks). Report ranked list with scores.",
+						Name: "llm_call:Order the candidate mutations using Stockfish move ordering: 1. TT hits (previously evaluated positively), 2. Killer moves (recent successful mutations), 3. History heuristic (mutations with high success rate on similar trees), 4. Capture-like (add_fallback, wrap_retry — structural improvements), 5. Quiet moves (increase_retries, add_before — parameter tweaks). Report ranked list with scores.",
 						Metadata: map[string]any{
 							"max_tokens": float64(8),
 							"system_msg": "You are a Stockfish move ordering engine. Rank mutations by likelihood of improving fitness.",
@@ -114,7 +114,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Apply alpha-beta pruning to the candidate mutations. Establish alpha (best score so far) and beta (opponent's best refutation). Prune any mutation whose upper bound is below alpha. Skip mutations that are provably worse than the current best tree. Report: pruned count and surviving candidates.",
+						Name: "llm_call:Apply alpha-beta pruning to the candidate mutations. Establish alpha (best score so far) and beta (opponent's best refutation). Prune any mutation whose upper bound is below alpha. Skip mutations that are provably worse than the current best tree. Report: pruned count and surviving candidates.",
 						Metadata: map[string]any{
 							"max_tokens": float64(5),
 							"system_msg": "You are an alpha-beta pruning engine. Eliminate mutations that can't improve the tree.",
@@ -130,7 +130,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Apply late move reductions to the remaining candidates. Mutations late in the ordered list get reduced search depth (fewer benchmark tasks, faster evaluation). Only mutations in the top half of the ordered list get full-depth evaluation. This speeds up search without missing strong moves.",
+						Name: "llm_call:Apply late move reductions to the remaining candidates. Mutations late in the ordered list get reduced search depth (fewer benchmark tasks, faster evaluation). Only mutations in the top half of the ordered list get full-depth evaluation. This speeds up search without missing strong moves.",
 						Metadata: map[string]any{
 							"max_tokens": float64(5),
 							"system_msg": "You are a late move reduction engine. Save time on unlikely candidates.",
@@ -146,7 +146,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Apply the best mutation to the behavior tree. Then validate it against benchmark suites (BFCL routing, SWE-bench resolution, τ-bench task completion). Compute the fitness delta. If positive, keep the mutation. If negative, revert and try the next candidate. Report: mutation applied, fitness delta, and whether it improved.",
+						Name: "llm_call:Apply the best mutation to the behavior tree. Then validate it against benchmark suites (BFCL routing, SWE-bench resolution, τ-bench task completion). Compute the fitness delta. If positive, keep the mutation. If negative, revert and try the next candidate. Report: mutation applied, fitness delta, and whether it improved.",
 						Metadata: map[string]any{
 							"max_tokens": float64(8),
 							"system_msg": "You are a mutation validator. Only keep mutations that provably improve benchmark scores.",
@@ -162,7 +162,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Update the Stockfish heuristics based on results: if mutation succeeded, increment history score for this mutation type on this tree type. If it was a new best, mark it as a killer move. Store the new fitness in the transposition table. Age old entries to make room for recent data.",
+						Name: "llm_call:Update the Stockfish heuristics based on results: if mutation succeeded, increment history score for this mutation type on this tree type. If it was a new best, mark it as a killer move. Store the new fitness in the transposition table. Age old entries to make room for recent data.",
 						Metadata: map[string]any{
 							"max_tokens": float64(5),
 							"system_msg": "You are a heuristic update engine. Learn from each mutation attempt.",
@@ -178,7 +178,7 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{
 						Type: "ChainAction",
-						Name: "agent:Generate a Stockfish Evolution Report summarizing: trees evaluated, mutations searched (with pruning stats), best mutation found, fitness improvement, transposition table hit rate, killer moves identified, and recommendations for the next evolution cycle.",
+						Name: "llm_call:Generate a Stockfish Evolution Report summarizing: trees evaluated, mutations searched (with pruning stats), best mutation found, fitness improvement, transposition table hit rate, killer moves identified, and recommendations for the next evolution cycle.",
 						Metadata: map[string]any{
 							"max_tokens": float64(8),
 							"system_msg": "You are a chess engine reporting on a search. Same format: depth reached, nodes searched, principal variation, evaluation.",
@@ -196,7 +196,7 @@ func StockfishEvolutionTree() *SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Evolution attempt failed. Analyze why: was the search depth insufficient? Were all mutations pruned? Was the benchmark suite too narrow? Recommend parameter adjustments for the next cycle.",
+						Name: "llm_call:Evolution attempt failed. Analyze why: was the search depth insufficient? Were all mutations pruned? Was the benchmark suite too narrow? Recommend parameter adjustments for the next cycle.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},
@@ -228,7 +228,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 					{Type: "Action", Name: "InitTranspositionTable"},
 					{
 						Type: "ChainAction",
-						Name: "agent:Initialize the Stockfish evolution loop. Load all registered behavior trees, initialize the transposition table, killer move table, and history heuristic table. Set the evolution interval and max mutations per cycle.",
+						Name: "llm_call:Initialize the Stockfish evolution loop. Load all registered behavior trees, initialize the transposition table, killer move table, and history heuristic table. Set the evolution interval and max mutations per cycle.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},
@@ -247,7 +247,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 							// Step 1: Scan all trees, find weakest
 							{
 								Type: "ChainAction",
-								Name: "agent:Scan all behavior trees in the registry. Evaluate each tree's fitness score. Identify the weakest tree (lowest composite fitness). Also check transposition table for trees that haven't been evaluated recently. Report: weakest tree name, its fitness, and why it was selected.",
+								Name: "llm_call:Scan all behavior trees in the registry. Evaluate each tree's fitness score. Identify the weakest tree (lowest composite fitness). Also check transposition table for trees that haven't been evaluated recently. Report: weakest tree name, its fitness, and why it was selected.",
 								Metadata: map[string]any{
 									"max_tokens": float64(6),
 									"system_msg": "You are a tree selection engine. Focus on the weakest link first.",
@@ -256,7 +256,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 							// Step 2: Run Stockfish evolution on the weakest tree
 							{
 								Type: "ChainAction",
-								Name: "agent:Run the Stockfish evolution pipeline on the selected tree: TT lookup → evaluate fitness → iterative deepening (depth 1-3) → move ordering (killer + history) → alpha-beta prune → late move reduce → apply best → benchmark validate → update heuristics. Report the full search summary.",
+								Name: "llm_call:Run the Stockfish evolution pipeline on the selected tree: TT lookup → evaluate fitness → iterative deepening (depth 1-3) → move ordering (killer + history) → alpha-beta prune → late move reduce → apply best → benchmark validate → update heuristics. Report the full search summary.",
 								Metadata: map[string]any{
 									"max_tokens": float64(15),
 									"system_msg": "You are a Stockfish search engine. Find the best mutation for this tree.",
@@ -274,7 +274,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 											{Type: "Condition", Name: "HasFitnessImproved"},
 											{
 												Type: "ChainAction",
-												Name: "agent:Save the improved tree to disk. Update the killer move table (this mutation type gets a bonus). Update the history heuristic table. Log the improvement with the fitness delta.",
+												Name: "llm_call:Save the improved tree to disk. Update the killer move table (this mutation type gets a bonus). Update the history heuristic table. Log the improvement with the fitness delta.",
 												Metadata: map[string]any{"max_tokens": float64(4)},
 											},
 										},
@@ -285,7 +285,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 										Children: []SerializableNode{
 											{
 												Type: "ChainAction",
-												Name: "agent:No improvement found. Decrease history score for these mutation types on this tree. If this tree has had no improvements for 10+ cycles, consider increasing search depth or trying a different mutation strategy.",
+												Name: "llm_call:No improvement found. Decrease history score for these mutation types on this tree. If this tree has had no improvements for 10+ cycles, consider increasing search depth or trying a different mutation strategy.",
 												Metadata: map[string]any{"max_tokens": float64(4)},
 											},
 										},
@@ -295,7 +295,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 							// Step 4: Periodic TT cleanup
 							{
 								Type: "ChainAction",
-								Name: "agent:Every 10 cycles, clean the transposition table: remove entries older than 100 cycles, keep only the best score per tree, defragment. Report TT statistics: size, hit rate, age distribution.",
+								Name: "llm_call:Every 10 cycles, clean the transposition table: remove entries older than 100 cycles, keep only the best score per tree, defragment. Report TT statistics: size, hit rate, age distribution.",
 								Metadata: map[string]any{
 									"max_tokens": float64(3),
 									"system_msg": "You are a transposition table maintenance engine.",
@@ -304,7 +304,7 @@ func StockfishEvolutionLoop() *SerializableNode {
 							// Step 5: Cycle report
 							{
 								Type: "ChainAction",
-								Name: "agent:Generate a cycle summary: trees processed, mutations tried, improvements found, total fitness gain across all trees, TT hit rate, killer moves active, and estimated time to convergence.",
+								Name: "llm_call:Generate a cycle summary: trees processed, mutations tried, improvements found, total fitness gain across all trees, TT hit rate, killer moves active, and estimated time to convergence.",
 								Metadata: map[string]any{
 									"max_tokens": float64(6),
 									"system_msg": "You are a Stockfish engine reporting search progress. Use chess terminology: depth, nodes, principal variation, evaluation in centipawns.",

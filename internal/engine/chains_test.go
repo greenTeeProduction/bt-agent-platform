@@ -355,7 +355,7 @@ func TestChainAction_Agent_DirectAnswer(t *testing.T) {
 	}
 	tree := &evolution.SerializableNode{
 		Type: "ChainAction",
-		Name: "agent:{{.Task}}",
+		Name: "llm_call:{{.Task}}",
 		Metadata: map[string]any{
 			"max_tokens": float64(5),
 		},
@@ -367,8 +367,8 @@ func TestChainAction_Agent_DirectAnswer(t *testing.T) {
 	if bb.Outcome != "success" {
 		t.Errorf("agent failed: %s", bb.Result)
 	}
-	if bb.Result != "The answer is 42." {
-		t.Errorf("expected final answer, got: %s", bb.Result)
+	if bb.Result != "Final Answer: The answer is 42." {
+		t.Errorf("expected raw LLM response, got: %s", bb.Result)
 	}
 }
 
@@ -394,7 +394,7 @@ Action Input: Tesla stock price`,
 	}
 	tree := &evolution.SerializableNode{
 		Type: "ChainAction",
-		Name: "agent:{{.Task}}",
+		Name: "llm_call:{{.Task}}",
 		Metadata: map[string]any{
 			"max_tokens": float64(3),
 		},
@@ -451,7 +451,7 @@ func TestChainAction_Agent_NoTools(t *testing.T) {
 	}
 	tree := &evolution.SerializableNode{
 		Type: "ChainAction",
-		Name: "agent:{{.Task}}",
+		Name: "llm_call:{{.Task}}",
 		Metadata: map[string]any{
 			"max_tokens": float64(3),
 		},

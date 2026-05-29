@@ -97,7 +97,7 @@ func TestIntegration_AllChainTypes(t *testing.T) {
 			Type: "Sequence", Name: "test",
 			Children: []evolution.SerializableNode{
 				{Type: "Action", Name: "SetupDefaultTools"},
-				{Type: "ChainAction", Name: "agent:Complete: {{.Task}}", Metadata: map[string]any{"max_tokens": float64(128)}},
+				{Type: "ChainAction", Name: "llm_call:Complete: {{.Task}}", Metadata: map[string]any{"max_tokens": float64(128)}},
 			},
 		}, "what is 2+2"},
 		{"refine", &evolution.SerializableNode{

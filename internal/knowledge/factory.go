@@ -176,7 +176,7 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 			Children: []evolution.SerializableNode{
 				{
 					Type: "ChainAction",
-					Name: fmt.Sprintf("agent:Process step %d of the task", i+1),
+					Name: fmt.Sprintf("llm_call:Process step %d of the task", i+1),
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				},
 			},
@@ -209,7 +209,7 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 				Type: "Sequence", Name: "ExecutionPath",
 				Children: []evolution.SerializableNode{{
 					Type: "ChainAction",
-					Name: "agent:Complete this task: {{.Task}}",
+					Name: "llm_call:Complete this task: {{.Task}}",
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				}},
 			},
@@ -262,7 +262,7 @@ func (f *Factory) cloneStrategyRouter(tmpl *TreeTemplate) *evolution.Serializabl
 				Type: "Sequence", Name: "PrimaryPath",
 				Children: []evolution.SerializableNode{{
 					Type: "ChainAction",
-					Name: fmt.Sprintf("agent:Execute the primary workflow for %s", tmpl.Category),
+					Name: fmt.Sprintf("llm_call:Execute the primary workflow for %s", tmpl.Category),
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				}},
 			},
@@ -270,7 +270,7 @@ func (f *Factory) cloneStrategyRouter(tmpl *TreeTemplate) *evolution.Serializabl
 				Type: "Sequence", Name: "FallbackPath",
 				Children: []evolution.SerializableNode{{
 					Type: "ChainAction",
-					Name: "agent:Handle the task using fallback approach",
+					Name: "llm_call:Handle the task using fallback approach",
 					Metadata: map[string]any{"max_tokens": float64(8)},
 				}},
 			},
@@ -303,7 +303,7 @@ func (f *Factory) defaultAgentPath(task string) evolution.SerializableNode {
 		Type: "Sequence", Name: "ExecutionPath",
 		Children: []evolution.SerializableNode{{
 			Type: "ChainAction",
-			Name: fmt.Sprintf("agent:%s", truncateTask(task, 80)),
+			Name: fmt.Sprintf("llm_call:%s", truncateTask(task, 80)),
 			Metadata: map[string]any{"max_tokens": float64(10)},
 		}},
 	}
@@ -316,7 +316,7 @@ func (f *Factory) defaultOutcomeSelector() evolution.SerializableNode {
 			{Type: "Condition", Name: "WasSuccessful"},
 			{
 				Type: "ChainAction",
-				Name: "agent:Self-correct the previous step and fix any issues.",
+				Name: "llm_call:Self-correct the previous step and fix any issues.",
 				Metadata: map[string]any{"max_tokens": float64(5)},
 			},
 		},
