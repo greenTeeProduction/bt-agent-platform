@@ -163,6 +163,8 @@ type CycleMetrics struct {
 	NodesAfter   int     `json:"nodes_after"`
 	Improved     bool    `json:"improved"`
 	DurationMs   int64   `json:"duration_ms"`
+	Rejections   int     `json:"rejections,omitempty"`   // quality gate rejections this cycle
+	Rollbacks    int     `json:"rollbacks,omitempty"`     // quality gate rollbacks this cycle
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -282,6 +284,8 @@ type Config struct {
 	Interval       time.Duration // how often to wake up
 	MaxMutations   int           // max mutations per cycle per tree
 	UseRealLLM     bool          // use real Ollama for benchmark validation (slow but accurate)
+	Gate           *evolution.QualityGate // quality gate for regression detection
+	SnapshotDir    string                 // directory for pre-mutation snapshots
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -330,6 +334,8 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	records, _ := g.cfg.RefStore.LoadAll()
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
+	rejections := 0
+	rollbacks := 0
 
 	// Only cap at extreme bloat (20x original) — trees should be allowed to grow
 	baseNodes := baseNodeCount(entry.Name)
@@ -352,6 +358,15 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		llm = benchmark.DefaultMock()
 	}
 
+	// Snapshot tree before mutations for potential rollback.
+	// Only snapshot if we have a quality gate and snapshot dir configured.
+	var snapshotTaken bool
+	if g.cfg.Gate != nil && g.cfg.SnapshotDir != "" {
+		if _, err := evolution.SnapshotTree(tree, entry.Name, g.cfg.SnapshotDir); err == nil {
+			snapshotTaken = true
+		}
+	}
+
 	applied := 0
 	for i := 0; i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
 		// Idempotency guards
@@ -359,17 +374,49 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) { continue }
 		if candidates[i].Op.Operation == "increase_retries" && getRetryCount(tree, candidates[i].Op.Target) >= 15 { continue }
 		if candidates[i].Op.Operation == "add_fallback" && hasChildNamed(tree, candidates[i].Op.Target, "DefaultFallback") { continue }
-		
+
 		if candidates[i].Score < 0.2 { break }
-		
+
 		// Only apply if benchmark says it helps (quick 2-task validation for speed)
 		score := benchmark.QuickValidate(tree, suite, llm, []evolution.MutationOp{candidates[i].Op})
 		if score < 0 {
 			continue // skip mutations that regress benchmark results
 		}
-		
+
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
+		}
+	}
+
+	// Quality gate: validate that mutations didn't cause regression.
+	// Runs after all mutations are applied to check the combined effect.
+	if applied > 0 && g.cfg.Gate != nil {
+		postFitness := evaluator.EvaluateTree(tree, records)
+		result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)
+
+		switch result {
+		case evolution.GateRejected:
+			// Revert all mutations — restore from snapshot
+			rejections = applied
+			applied = 0
+			if snapshotTaken {
+				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
+					*entry.Tree = *restored
+					tree = entry.Tree
+				}
+			}
+		case evolution.GateRollback:
+			// Regression detected — rollback to pre-mutation snapshot
+			rollbacks = applied
+			applied = 0
+			if snapshotTaken {
+				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
+					*entry.Tree = *restored
+					tree = entry.Tree
+				}
+			}
+		case evolution.GateAccepted:
+			// Passed — persist as normal
 		}
 	}
 
@@ -392,6 +439,7 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		Delta: newFitness.Composite - baseFitness.Composite,
 		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
 		Improved: applied > 0,
+		Rejections: rejections, Rollbacks: rollbacks,
 	}
 }
 
