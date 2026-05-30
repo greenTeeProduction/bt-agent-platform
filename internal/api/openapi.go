@@ -540,6 +540,37 @@ func DashboardRoutes() []Route {
 			Tags("System").
 			ContentResponse(200, "text/html", "Swagger UI HTML page").Build(),
 
+		NewRoute("/api/scalability", GET).
+			Summary("Scalability status").
+			Description("Returns a snapshot of scalability components: worker pool utilization, concurrency limiter stats, queue depth, and agent router health. Public monitoring endpoint.").
+			Tags("System").
+			JSONResponse(200, "Scalability component snapshot", ObjectSchema(map[string]*Schema{
+				"timestamp": StringSchema("ISO 8601 snapshot timestamp"),
+				"worker_pool": ObjectSchema(map[string]*Schema{
+					"workers":   IntSchema("Total workers"),
+					"active":    IntSchema("Currently active workers"),
+					"queued":    IntSchema("Queued tasks"),
+					"total":     IntSchema("Total submitted tasks"),
+					"completed": IntSchema("Total completed tasks"),
+				}, "workers", "active", "queued", "total", "completed"),
+				"concurrency_limiter": ObjectSchema(map[string]*Schema{
+					"active":    IntSchema("Active slots"),
+					"waiting":   IntSchema("Waiting goroutines"),
+					"capacity":  IntSchema("Max concurrent slots"),
+					"available": IntSchema("Free slots"),
+					"total":     IntSchema("Total acquisitions"),
+				}, "active", "waiting", "capacity", "available"),
+				"queue": ObjectSchema(map[string]*Schema{
+					"pending": IntSchema("Pending tasks in queue"),
+					"max_len": IntSchema("Max queue length"),
+				}, "pending"),
+				"router": ObjectSchema(map[string]*Schema{
+					"total":     IntSchema("Total executors"),
+					"healthy":   IntSchema("Healthy executors"),
+					"unhealthy": IntSchema("Unhealthy executors"),
+				}, "total", "healthy", "unhealthy"),
+			}, "timestamp")).Build(),
+
 		// Platform overview
 		NewRoute("/api/summary", GET).
 			Summary("Platform summary").

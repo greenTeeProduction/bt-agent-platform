@@ -85,11 +85,16 @@ See `internal/config/config.go` for full list.
 | `/` | Dashboard HTML |
 | `/api/health` | Health check (public) |
 | `/api/metrics` | Prometheus metrics |
+| `/api/alerts` | Prometheus alert evaluation (public) |
+| `/api/scalability` | Scalability component snapshot (public) |
+| `/api/openapi.json` | OpenAPI 3.0 specification (public) |
+| `/api/swagger` | Swagger UI (public) |
 | `/api/summary` | Platform summary |
 | `/api/trees` | All registered trees |
 | `/api/thinktank/analyze` | Run think tank analysis |
 | `/api/sprint/execute` | Execute company sprint |
 | `/api/chat` | Chat with LLM agents |
+| `/api/dlq` | Dead letter queue management |
 
 ## Links
 

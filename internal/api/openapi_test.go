@@ -566,6 +566,7 @@ func TestDashboardRoutes_GeneratesValidSpec(t *testing.T) {
 		"/api/alerts",
 		"/api/openapi.json",
 		"/api/swagger",
+		"/api/scalability",
 		"/api/summary",
 		"/api/trees",
 		"/api/tree/structure",
@@ -601,6 +602,7 @@ func TestDashboardRoutes_AuthConsistency(t *testing.T) {
 		"/api/alerts":       true,
 		"/api/openapi.json": true,
 		"/api/swagger":      true,
+		"/api/scalability":  true,
 	}
 
 	for path := range spec.Paths {

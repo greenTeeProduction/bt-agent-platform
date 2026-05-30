@@ -102,6 +102,7 @@ func main() {
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
+	mux.HandleFunc("/api/scalability", handleScalability)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -1395,4 +1396,31 @@ func handleAlertRules(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(data)
+}
+
+// handleScalability returns a JSON snapshot of scalability components:
+// worker pool, concurrency limiter, queue depth, and agent router health.
+// Public endpoint (no auth) — same as /api/health, /api/metrics, /api/alerts.
+func handleScalability(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Create a snapshot from currently wired scalability components.
+	// WorkerPool, ConcurrencyLimiter, Queue, and AgentRouter are nil here
+	// (maintained by bt-agent, not the dashboard). When wired, the snapshot
+	// auto-populates with real utilization data.
+	status := reliability.NewScalabilityStatus(
+		nil, // worker pool (managed by bt-agent)
+		nil, // concurrency limiter (managed by bt-agent)
+		0,   // queue pending
+		0,   // queue max len
+		0,   // router total
+		0,   // router healthy
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(status)
 }
