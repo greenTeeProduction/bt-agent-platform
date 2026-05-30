@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"strings"
+
 	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/goap"
 )
@@ -41,7 +43,8 @@ func registerGoapNodes() {
 
 	// --- Conditions ---
 
-	// HasGoapGoal checks whether the blackboard has a GOAP plan ready.
+	// HasGoapGoal checks whether the blackboard has GOAP state AND the task
+	// is complex enough to benefit from multi-step planning (not a simple question).
 	conditionRegistry["HasGoapGoal"] = func(b *Blackboard) bool {
 		cs := b.ChainState
 		if cs == nil {
@@ -55,6 +58,39 @@ func registerGoapNodes() {
 		if b.Task == "" {
 			return false
 		}
+
+		// Reject trivially simple tasks that don't benefit from GOAP:
+		// - Single short sentence with no action verbs or steps
+		// - Pure knowledge questions without multi-step implications
+		lower := strings.ToLower(b.Task)
+		wordCount := len(strings.Fields(b.Task))
+		hasMultiStep := strings.Contains(lower, "and then") ||
+			strings.Contains(lower, "first") ||
+			strings.Contains(lower, "next") ||
+			strings.Contains(lower, "finally") ||
+			strings.Contains(lower, "step") ||
+			strings.Contains(lower, "pipeline") ||
+			strings.Contains(lower, "workflow") ||
+			strings.Contains(lower, "sequence")
+		hasActionVerb := strings.Contains(lower, "build") ||
+			strings.Contains(lower, "create") ||
+			strings.Contains(lower, "implement") ||
+			strings.Contains(lower, "deploy") ||
+			strings.Contains(lower, "migrate") ||
+			strings.Contains(lower, "refactor") ||
+			strings.Contains(lower, "optimize") ||
+			strings.Contains(lower, "fix") ||
+			strings.Contains(lower, "setup") ||
+			strings.Contains(lower, "configure")
+		// Pure knowledge question? (what is, explain, define, etc. without action)
+		isPureQuestion := (strings.HasPrefix(lower, "what ") || strings.HasPrefix(lower, "how ") ||
+			strings.HasPrefix(lower, "explain ") || strings.HasPrefix(lower, "define ")) &&
+			!hasActionVerb && !hasMultiStep && wordCount < 15
+
+		if isPureQuestion {
+			return false // Let keyword routing handle simple questions
+		}
+
 		// Build a goal from the task if not already present
 		if _, ok := cs["goap_current_goal"]; !ok {
 			goal := goap.BuildGoalFromTask(b.Task)
