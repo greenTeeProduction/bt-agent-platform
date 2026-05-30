@@ -780,3 +780,518 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+// ============================================================================
+// containsAnyLower tests (registry.go utility)
+// ============================================================================
+
+func TestContainsAnyLower_BasicMatch(t *testing.T) {
+	if !containsAnyLower("hello world", "hello") {
+		t.Error("expected match for exact substring")
+	}
+}
+
+func TestContainsAnyLower_CaseInsensitive(t *testing.T) {
+	if !containsAnyLower("HELLO WORLD", "hello") {
+		t.Error("expected case-insensitive match")
+	}
+	if !containsAnyLower("hello world", "HELLO") {
+		t.Error("expected case-insensitive match (keyword uppercase)")
+	}
+	if !containsAnyLower("Hello World", "hello") {
+		t.Error("expected case-insensitive match (mixed case)")
+	}
+}
+
+func TestContainsAnyLower_NoMatch(t *testing.T) {
+	if containsAnyLower("hello world", "foo") {
+		t.Error("expected no match for absent keyword")
+	}
+}
+
+func TestContainsAnyLower_MultipleKeywords(t *testing.T) {
+	if !containsAnyLower("The quick brown fox", "lazy", "quick") {
+		t.Error("expected match for second keyword")
+	}
+}
+
+func TestContainsAnyLower_EmptyInput(t *testing.T) {
+	if containsAnyLower("", "hello") {
+		t.Error("expected no match for empty input with long keyword")
+	}
+}
+
+func TestContainsAnyLower_Substring(t *testing.T) {
+	if !containsAnyLower("researching Tesla", "research") {
+		t.Error("expected substring match within longer word")
+	}
+}
+
+func TestContainsAnyLower_NoKeywords(t *testing.T) {
+	if containsAnyLower("hello world") {
+		t.Error("expected false when no keywords provided")
+	}
+}
+
+// ============================================================================
+// validateInputAction tests (registry.go)
+// ============================================================================
+
+func TestValidateInputAction_EmptyTask(t *testing.T) {
+	bb := &Blackboard{Task: ""}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := validateInputAction(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for empty task, got %d", result)
+	}
+}
+
+func TestValidateInputAction_NonEmptyTask(t *testing.T) {
+	bb := &Blackboard{Task: "fix the bug"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := validateInputAction(ctx)
+	if result != 1 {
+		t.Errorf("expected 1 for non-empty task, got %d", result)
+	}
+}
+
+// ============================================================================
+// assignComplexityAction tests (registry.go)
+// ============================================================================
+
+func TestAssignComplexityAction_NoLLM_DefaultsMedium(t *testing.T) {
+	bb := &Blackboard{Task: "test task"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := assignComplexityAction(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Complexity != "medium" {
+		t.Errorf("expected default 'medium', got %q", bb.Complexity)
+	}
+}
+
+func TestAssignComplexityAction_WithLLM(t *testing.T) {
+	mock := &mockLLM{complexity: "high"}
+	bb := &Blackboard{Task: "complex task", LLM: mock}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := assignComplexityAction(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Complexity != "high" {
+		t.Errorf("expected 'high' from LLM, got %q", bb.Complexity)
+	}
+}
+
+// ============================================================================
+// validateOutputAction tests (registry.go)
+// ============================================================================
+
+func TestValidateOutputAction_TooShort(t *testing.T) {
+	bb := &Blackboard{Result: "short"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := validateOutputAction(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for short output, got %d", result)
+	}
+}
+
+func TestValidateOutputAction_Valid(t *testing.T) {
+	bb := &Blackboard{Result: "this is a long enough result with sufficient length"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := validateOutputAction(ctx)
+	if result != 1 {
+		t.Errorf("expected 1 for valid output, got %d", result)
+	}
+}
+
+// ============================================================================
+// actionForName — additional branch coverage for tree.go switch cases
+// ============================================================================
+
+func TestActionForName_SelfCorrect(t *testing.T) {
+	bb := &Blackboard{Task: "fix bug", Plan: "old plan", LLM: &mockLLM{}}
+	fn := bb.actionForName("SelfCorrect")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SelfCorrect")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Result == "" {
+		t.Error("expected result to be set by SelfCorrect with LLM")
+	}
+}
+
+func TestActionForName_EscalateToDeepSeek(t *testing.T) {
+	bb := &Blackboard{Task: "critical issue"}
+	fn := bb.actionForName("EscalateToDeepSeek")
+	if fn == nil {
+		t.Fatal("expected non-nil function for EscalateToDeepSeek")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	// The registry version of EscalateToDeepSeek returns 1 and does nothing to bb.Result
+	// This tests that the action is resolved and calls without panic
+}
+
+func TestActionForName_SetupDefaultTools(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("SetupDefaultTools")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SetupDefaultTools")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	// Registry version is a no-op; tree.go switch version sets ChainTools.
+	// Either way, the function resolves without panic.
+}
+
+func TestActionForName_SetupDevTools(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("SetupDevTools")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SetupDevTools")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+}
+
+func TestActionForName_SetupUniversalTools(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("SetupUniversalTools")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SetupUniversalTools")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+}
+
+func TestActionForName_SetupResearchTools(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("SetupResearchTools")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SetupResearchTools")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+}
+
+func TestActionForName_SetupStartupTools(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("SetupStartupTools")
+	if fn == nil {
+		t.Fatal("expected non-nil function for SetupStartupTools")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+}
+
+func TestActionForName_InitTranspositionTable(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.actionForName("InitTranspositionTable")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	fn(nil)
+	if bb.ChainState == nil {
+		t.Fatal("expected ChainState to be initialized")
+	}
+	if bb.ChainState["tt_hits"].(int) != 0 {
+		t.Error("expected tt_hits=0")
+	}
+	if bb.ChainState["best_fitness"].(float64) != 0.0 {
+		t.Error("expected best_fitness=0.0")
+	}
+}
+
+func TestActionForName_MarkSuccessful(t *testing.T) {
+	bb := &Blackboard{Task: "test", Outcome: string(reflection.Failure)}
+	fn := bb.actionForName("MarkSuccessful")
+	if fn == nil {
+		t.Fatal("expected non-nil function for MarkSuccessful")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Outcome != string(reflection.Success) {
+		t.Errorf("expected outcome=success, got %s", bb.Outcome)
+	}
+}
+
+func TestActionForName_ValidateOutputAction(t *testing.T) {
+	bb := &Blackboard{Result: "valid output with enough text to pass quality checks"}
+	fn := bb.actionForName("ValidateOutput")
+	if fn == nil {
+		t.Fatal("expected non-nil function for ValidateOutput")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1 for valid output, got %d", result)
+	}
+}
+
+// ============================================================================
+// conditionForName — additional branch coverage
+// ============================================================================
+
+func TestConditionForName_ValidateInput(t *testing.T) {
+	bb := &Blackboard{Task: "valid task"}
+	fn := bb.conditionForName("ValidateInput")
+	if fn == nil {
+		t.Fatal("expected non-nil function for ValidateInput")
+	}
+	if !fn(bb) {
+		t.Error("expected true for non-empty task")
+	}
+	bb2 := &Blackboard{Task: ""}
+	if fn(bb2) {
+		t.Error("expected false for empty task")
+	}
+}
+
+func TestConditionForName_CheckPrerequisites(t *testing.T) {
+	bb := &Blackboard{}
+	fn := bb.conditionForName("CheckPrerequisites")
+	if fn == nil {
+		t.Fatal("expected non-nil function for CheckPrerequisites")
+	}
+	if !fn(bb) {
+		t.Error("expected true for CheckPrerequisites")
+	}
+}
+
+func TestConditionForName_CheckCache(t *testing.T) {
+	bb := &Blackboard{CachedResult: "cached data"}
+	fn := bb.conditionForName("CheckCache")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(bb) {
+		t.Error("expected true with CachedResult set")
+	}
+	bb2 := &Blackboard{}
+	if fn(bb2) {
+		t.Error("expected false without CachedResult")
+	}
+}
+
+func TestConditionForName_IsHighPriority(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsHighPriority")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "critical bug fix now"}) {
+		t.Error("expected true for critical task")
+	}
+	if fn(&Blackboard{Task: "routine maintenance"}) {
+		t.Error("expected false for normal task")
+	}
+}
+
+func TestConditionForName_CheckKnowledgeGap(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("CheckKnowledgeGap")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	// Registry version: returns true when KgResults is empty (gap exists)
+	if !fn(&Blackboard{Task: "any task"}) {
+		t.Error("expected true when KgResults is empty (gap)")
+	}
+	// Returns false when KgResults is non-empty (gap filled)
+	if fn(&Blackboard{Task: "any task", KgResults: "some knowledge"}) {
+		t.Error("expected false when KgResults is non-empty")
+	}
+}
+
+func TestConditionForName_IsDevOps(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsDevOps")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "deploy to kubernetes"}) {
+		t.Error("expected true for DevOps task")
+	}
+	if fn(&Blackboard{Task: "write a poem"}) {
+		t.Error("expected false for non-DevOps task")
+	}
+}
+
+func TestConditionForName_IsDataTask(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsDataTask")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "ETL pipeline for CSV data"}) {
+		t.Error("expected true for data task")
+	}
+	if fn(&Blackboard{Task: "review code"}) {
+		t.Error("expected false for non-data task")
+	}
+}
+
+func TestConditionForName_IsRefactoring(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsRefactoring")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "refactor the auth module"}) {
+		t.Error("expected true for refactoring task")
+	}
+	if fn(&Blackboard{Task: "write new feature"}) {
+		t.Error("expected false for non-refactoring task")
+	}
+}
+
+func TestConditionForName_IsIncident(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsIncident")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "production crash on checkout"}) {
+		t.Error("expected true for incident task")
+	}
+	if fn(&Blackboard{Task: "plan the roadmap"}) {
+		t.Error("expected false for non-incident task")
+	}
+}
+
+func TestConditionForName_IsAnalysisTask(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsAnalysisTask")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "strategy analysis for Q4"}) {
+		t.Error("expected true for analysis task")
+	}
+	if fn(&Blackboard{Task: "compile the binary"}) {
+		t.Error("expected false for non-analysis task")
+	}
+}
+
+func TestConditionForName_IsQuestion(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("IsQuestion")
+	if fn == nil {
+		t.Fatal("expected non-nil function")
+	}
+	if !fn(&Blackboard{Task: "what is the best practice"}) {
+		t.Error("expected true for question")
+	}
+	if fn(&Blackboard{Task: "build the application"}) {
+		t.Error("expected false for non-question")
+	}
+}
+
+func TestConditionForName_HasClearTask_RejectsInjection(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("HasClearTask")
+	if fn == nil {
+		t.Fatal("expected non-nil function for HasClearTask")
+	}
+	// Registry version rejects these patterns
+	if fn(&Blackboard{Task: "<script>alert(1)</script>"}) {
+		t.Error("expected false for XSS pattern")
+	}
+	if fn(&Blackboard{Task: "drop table users"}) {
+		t.Error("expected false for SQL injection pattern")
+	}
+}
+
+func TestConditionForName_HasClearTask_RejectsTooShort(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("HasClearTask")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	// Registry version rejects tasks shorter than 3 chars
+	if fn(&Blackboard{Task: "ab"}) {
+		t.Error("expected false for 2 char task")
+	}
+	if fn(&Blackboard{Task: ""}) {
+		t.Error("expected false for empty task")
+	}
+}
+
+func TestConditionForName_HasClearTask_RejectsNoAlpha(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("HasClearTask")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	// Registry version rejects tasks without alphabetic characters
+	if fn(&Blackboard{Task: "12345"}) {
+		t.Error("expected false for all-digit task")
+	}
+	if fn(&Blackboard{Task: "!@#$%"}) {
+		t.Error("expected false for symbols-only task")
+	}
+}
+
+func TestConditionForName_HasClearTask_AcceptsValidTask(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("HasClearTask")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !fn(&Blackboard{Task: "build the authentication module with tests"}) {
+		t.Error("expected true for valid task")
+	}
+	// Short tasks with alphabetic chars and >= 3 length are accepted
+	if !fn(&Blackboard{Task: "Fix"}) {
+		t.Error("expected true for 3-char verb")
+	}
+	if !fn(&Blackboard{Task: "nil"}) {
+		t.Error("expected true for keyword-like task with alpha chars")
+	}
+}
+
+func TestConditionForName_ValidateOutputCondition(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("ValidateOutput")
+	if fn == nil {
+		t.Fatal("expected non-nil function for ValidateOutput condition")
+	}
+	// Short output should fail
+	if fn(&Blackboard{Result: "hi"}) {
+		t.Error("expected false for short output")
+	}
+	// Longer valid output should pass
+	if !fn(&Blackboard{Result: "This is a comprehensive analysis with sufficient detail and structure to pass validation"}) {
+		t.Error("expected true for valid output")
+	}
+}
+
+func TestConditionForName_WasSuccessful(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("WasSuccessful")
+	if fn == nil {
+		t.Fatal("expected non-nil function for WasSuccessful")
+	}
+	if !fn(&Blackboard{Outcome: string(reflection.Success)}) {
+		t.Error("expected true for success outcome")
+	}
+	if fn(&Blackboard{Outcome: string(reflection.Failure)}) {
+		t.Error("expected false for failure outcome")
+	}
+	if !fn(&Blackboard{Outcome: "chain_success"}) {
+		t.Error("expected true for chain_success outcome")
+	}
+}
