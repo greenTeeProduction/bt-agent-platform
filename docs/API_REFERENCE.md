@@ -590,7 +590,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler // X-Request-ID propaga
 ### Dashboard Middleware Stack
 ```go
 // Recommended order:
-//   RequestIDMiddleware → SecurityHeaders → CrossOrigin → Sanitize → RateLimit → IPFilter → Audit → Metrics → Mux
+//   RequestIDMiddleware → TracingMiddleware → SecurityHeaders → CrossOrigin → Sanitize → RateLimit → IPFilter → Audit → Metrics → Mux
 ```
 
 ---
@@ -648,6 +648,9 @@ func NewNoopTracer() Tracer
 func SetGlobalTracer(t Tracer)
 func StartSpan(ctx context.Context, name string) (context.Context, Span)
 func SpanFromContext(ctx context.Context) Span
+
+// HTTP tracing middleware — creates a span for every request
+func TracingMiddleware(next http.Handler) http.Handler
 ```
 
 ---
@@ -831,7 +834,7 @@ func EvaluateFromJSON(data []byte) (AlertReport, error)
 
 `github.com/nico/go-bt-evolve/internal/domains`
 
-10 domain-specific behavior trees. All 100% test-covered.
+11 domain-specific behavior trees. All 100% test-covered.
 
 | Tree | Conditions | Actions | Use Case |
 |---|---|---|---|
@@ -845,6 +848,7 @@ func EvaluateFromJSON(data []byte) (AlertReport, error)
 | `CrashInvestigatorTree()` | IsIncident, HasStackTrace, HasLogs | AnalyzeCrash, IdentifyRootCause, SuggestFix | Incident response |
 | `GameAITree()` | IsNPCBehavior, IsPathfinding, IsDecision | PlanPath, ExecuteBehavior, EvaluateDecision | Game AI |
 | `TradingSignalTree()` | IsTradingSignal | AnalyzeMarket, GenerateSignal, RouteAlert | Trading signals |
+| `AlertRouterTree()` | IsCritical, IsSecurity, IsTrading, IsDiskAlert, IsHealthAlert | RouteToAllChannels, RouteToSecurityChannel, RouteToTradingChannel, RouteToDevOpsChannel, RouteToDefaultChannel | Alert routing |
 
 Call via MCP: `bt_use_domain_tree(tree="code_review")`
 

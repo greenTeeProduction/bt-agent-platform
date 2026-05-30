@@ -17,6 +17,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
 var kg *knowledge.KnowledgeGraph
@@ -60,6 +61,16 @@ func main() {
 	slog.Info("BT Dashboard starting", "port", port)
 
 	kg = knowledge.BuildKnowledgeGraph()
+
+	// Distributed tracing — writes to shared traces log
+	traceLogPath := os.Getenv("HOME") + "/.go-bt-evolve/logs/traces.log"
+	if f, err := os.OpenFile(traceLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-dashboard", f))
+		slog.Info("Tracing enabled", "output", traceLogPath)
+	} else {
+		slog.Warn("Tracing log unavailable", "path", traceLogPath, "error", err)
+	}
+
 	var err error
 	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
 	if err != nil {
@@ -104,10 +115,11 @@ func main() {
 		secCfg.EnableHSTS = true
 	}
 
-	// Middleware stack: security headers → request ID → cors → sanitize → rate limit → metrics
+	// Middleware stack: security headers → request ID → tracing → cors → sanitize → rate limit → metrics
 	var handler http.Handler = mux
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.RequestIDMiddleware(handler)                       // correlation IDs for audit trail
+	handler = tracing.TracingMiddleware(handler)                          // distributed tracing spans per request
 	handler = security.CrossOriginMiddleware("*", "GET, POST, PUT, DELETE, OPTIONS")(handler)
 	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting

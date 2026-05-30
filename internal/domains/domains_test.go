@@ -94,6 +94,7 @@ func tasksForTree() map[string]string {
 		"crash_investigator": "parse this stack trace for crash",
 		"game_ai":            "game: patrol the area",
 		"trading_signal":     "calculate trading signals for AAPL",
+		"alert_router":       "critical disk alert: sda1 at 95%",
 	}
 }
 
@@ -102,8 +103,8 @@ func TestAllDomainTrees(t *testing.T) {
 	tasks := tasksForTree()
 	mock := benchmark.DefaultMock()
 
-	if len(all) != 10 {
-		t.Errorf("expected 10 domain trees, got %d", len(all))
+	if len(all) != 11 {
+		t.Errorf("expected 11 domain trees, got %d", len(all))
 	}
 
 	for name, tree := range all {
