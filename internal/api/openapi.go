@@ -534,6 +534,12 @@ func DashboardRoutes() []Route {
 			Tags("System").
 			JSONResponse(200, "OpenAPI 3.0 JSON specification", StringSchema("OpenAPI JSON document")).Build(),
 
+		NewRoute("/api/swagger", GET).
+			Summary("Swagger UI").
+			Description("Interactive API documentation using Swagger UI. Loads the OpenAPI spec from /api/openapi.json and renders it as a browsable API reference.").
+			Tags("System").
+			ContentResponse(200, "text/html", "Swagger UI HTML page").Build(),
+
 		// Platform overview
 		NewRoute("/api/summary", GET).
 			Summary("Platform summary").
@@ -697,5 +703,52 @@ func DashboardRoutes() []Route {
 				"tab":   StringSchema("Tab identifier echo"),
 			}, "reply")).
 			ErrorResponse(503, "Ollama unavailable").WithAuth().Build(),
+
+		// Dead Letter Queue
+		NewRoute("/api/dlq", GET).
+			Summary("List dead letter queue entries").
+			Description("Returns all failed tasks in the dead letter queue with their IDs, agents, errors, and timestamps.").
+			Tags("Reliability").
+			JSONResponse(200, "DLQ entries list", ObjectSchema(map[string]*Schema{
+				"count": IntSchema("Number of dead letter entries"),
+				"entries": ArraySchema(ObjectSchema(map[string]*Schema{
+					"id":        StringSchema("Entry unique identifier"),
+					"task":      StringSchema("Original task text"),
+					"agent":     StringSchema("Agent name"),
+					"error":     StringSchema("Failure error message"),
+					"attempts":  IntSchema("Number of retry attempts made"),
+					"failed_at": StringSchema("ISO 8601 failure timestamp"),
+					"circuit":   StringSchema("Circuit breaker identifier (optional)"),
+				}), "List of dead letter entries"),
+			}, "count", "entries")).WithAuth().Build(),
+
+		NewRoute("/api/dlq/replay", POST).
+			Summary("Replay a dead letter entry").
+			Description("Removes a specific entry from the DLQ and returns it for re-execution.").
+			Tags("Reliability").
+			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
+			JSONResponse(200, "Replayed entry", ObjectSchema(map[string]*Schema{
+				"status":  StringSchema("'replayed' on success"),
+				"entry": ObjectSchema(map[string]*Schema{
+					"id":        StringSchema("Entry identifier"),
+					"task":      StringSchema("Original task text"),
+					"agent":     StringSchema("Agent name"),
+					"error":     StringSchema("Failure error message"),
+					"attempts":  IntSchema("Number of attempts made"),
+					"failed_at": StringSchema("Failure timestamp"),
+				}, "id", "task"),
+				"pending": IntSchema("Remaining entries in DLQ"),
+			}, "status", "entry", "pending")).
+			ErrorResponse(400, "Missing id parameter").
+			ErrorResponse(404, "Entry not found").WithAuth().Build(),
+
+		NewRoute("/api/dlq/purge", DELETE).
+			Summary("Purge dead letter queue").
+			Description("Removes all entries from the dead letter queue. IRREVERSIBLE.").
+			Tags("Reliability").
+			JSONResponse(200, "Purge confirmation", ObjectSchema(map[string]*Schema{
+				"status":  StringSchema("'purged' on success"),
+				"cleared": IntSchema("Number of entries cleared"),
+			}, "status", "cleared")).WithAuth().Build(),
 	}
 }

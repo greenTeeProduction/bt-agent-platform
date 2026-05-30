@@ -565,6 +565,7 @@ func TestDashboardRoutes_GeneratesValidSpec(t *testing.T) {
 		"/api/metrics",
 		"/api/alerts",
 		"/api/openapi.json",
+		"/api/swagger",
 		"/api/summary",
 		"/api/trees",
 		"/api/tree/structure",
@@ -599,6 +600,7 @@ func TestDashboardRoutes_AuthConsistency(t *testing.T) {
 		"/api/metrics":      true,
 		"/api/alerts":       true,
 		"/api/openapi.json": true,
+		"/api/swagger":      true,
 	}
 
 	for path := range spec.Paths {
@@ -731,6 +733,46 @@ func TestConvenienceSchemaConstructors(t *testing.T) {
 	}
 	if len(o.Properties) != 1 {
 		t.Errorf("expected 1 property")
+	}
+}
+
+func TestDashboardRoutes_SwaggerRoute(t *testing.T) {
+	routes := DashboardRoutes()
+	var swaggerRoute *Route
+	for i := range routes {
+		if routes[i].Path == "/api/swagger" {
+			swaggerRoute = &routes[i]
+			break
+		}
+	}
+	if swaggerRoute == nil {
+		t.Fatal("expected /api/swagger route in DashboardRoutes")
+	}
+	if swaggerRoute.Method != GET {
+		t.Errorf("expected GET method, got %s", swaggerRoute.Method)
+	}
+	if swaggerRoute.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+	if swaggerRoute.Tags == nil || len(swaggerRoute.Tags) == 0 {
+		t.Error("expected tags")
+	}
+	// Swagger UI is a public endpoint — no auth required
+	if swaggerRoute.Auth {
+		t.Error("expected /api/swagger to be a public endpoint (no auth)")
+	}
+	// Should have an HTML content type response
+	found200 := false
+	for _, r := range swaggerRoute.Responses {
+		if r.StatusCode == 200 {
+			found200 = true
+			if r.ContentType != "text/html" {
+				t.Errorf("expected ContentType text/html for 200 response, got %q", r.ContentType)
+			}
+		}
+	}
+	if !found200 {
+		t.Error("expected 200 response for /api/swagger")
 	}
 }
 

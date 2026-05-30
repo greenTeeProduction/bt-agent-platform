@@ -101,6 +101,7 @@ func main() {
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
+	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -1316,6 +1317,61 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(data)
+}
+
+// swaggerUIHTML is a self-contained Swagger UI page that loads the OpenAPI spec
+// from /api/openapi.json. Uses CDN-hosted Swagger UI (no local deps).
+const swaggerUIHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BT Platform API — Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin:0; background: #0f172a; }
+    .swagger-ui .topbar { background-color: #1e293b; }
+    .swagger-ui .topbar .download-url-wrapper .select-label { color: #e2e8f0; }
+    .swagger-ui .info .title { color: #f1f5f9; }
+    .swagger-ui .scheme-container { background: #1e293b; box-shadow: 0 1px 2px 0 rgba(0,0,0,.15); }
+    #swagger-ui { max-width: 1200px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: "/api/openapi.json",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+        layout: "StandaloneLayout",
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        docExpansion: "list",
+        filter: true,
+        showExtensions: true,
+        showCommonExtensions: true,
+        syntaxHighlight: { theme: "monokai" }
+      });
+    };
+  </script>
+</body>
+</html>`
+
+// handleSwagger serves a Swagger UI page that renders the OpenAPI spec
+// from /api/openapi.json. Public endpoint — no auth required (same as
+// /api/health, /api/metrics, /api/alerts, /api/openapi.json).
+func handleSwagger(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write([]byte(swaggerUIHTML))
 }
 
 // handleAlertRules serves the raw Prometheus alert rules YAML file so
