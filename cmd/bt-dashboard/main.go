@@ -14,6 +14,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/metrics"
 	"github.com/nico/go-bt-evolve/internal/monitoring"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -22,6 +23,10 @@ import (
 
 var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
+
+// dlq is the dead letter queue for failed agent tasks.
+// Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
+var dlq *reliability.DeadLetterQueue
 
 // Sprint tracking
 var sprintState = struct {
@@ -61,6 +66,11 @@ func main() {
 	slog.Info("BT Dashboard starting", "port", port)
 
 	kg = knowledge.BuildKnowledgeGraph()
+
+	// Dead letter queue — persisted alongside other agent state
+	dlqPath := os.Getenv("HOME") + "/.go-bt-evolve/dead_letter_queue.json"
+	dlq = reliability.NewDeadLetterQueue(dlqPath)
+	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 
 	// Distributed tracing — writes to shared traces log
 	traceLogPath := os.Getenv("HOME") + "/.go-bt-evolve/logs/traces.log"
@@ -103,6 +113,9 @@ func main() {
 	mux.HandleFunc("/api/sprint/status", authMiddleware(apiKey, handleSprintStatus))
 	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
 	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
+	mux.HandleFunc("/api/dlq", authMiddleware(apiKey, handleDLQ))
+	mux.HandleFunc("/api/dlq/replay", authMiddleware(apiKey, handleDLQReplay))
+	mux.HandleFunc("/api/dlq/purge", authMiddleware(apiKey, handleDLQPurge))
 
 	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
 	tlsCert := os.Getenv("BT_TLS_CERT")
@@ -1197,6 +1210,74 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(report)
 }
 
+// ─── Dead Letter Queue Handlers ────────────────────────────────────────────────
+
+// handleDLQ lists all entries in the dead letter queue.
+func handleDLQ(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	entries := dlq.List()
+	resp := map[string]interface{}{
+		"count":   len(entries),
+		"entries": entries,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleDLQReplay removes an entry from the DLQ and returns it for re-execution.
+func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing id parameter"})
+		return
+	}
+
+	entry, ok := dlq.Replay(id)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "entry not found", "id": id})
+		return
+	}
+
+	resp := map[string]interface{}{
+		"status":  "replayed",
+		"entry":   entry,
+		"pending": dlq.Len(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleDLQPurge removes all entries from the dead letter queue.
+func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	count := dlq.Len()
+	dlq.Purge()
+	resp := map[string]interface{}{
+		"status":  "purged",
+		"removed": count,
+		"pending": 0,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
 // handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.
 // This endpoint is public (no auth) so API consumers can discover the schema.
 func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
@@ -1220,6 +1301,7 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	gen.AddTag("Tasks", "Task pipeline management")
 	gen.AddTag("Sprint", "Sprint execution")
 	gen.AddTag("Chat", "Dashboard AI chat")
+	gen.AddTag("Reliability", "Dead letter queue, circuit breaker")
 
 	for _, route := range api.DashboardRoutes() {
 		gen.AddRoute(route)
