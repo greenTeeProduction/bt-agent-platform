@@ -571,6 +571,103 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// ─── CSRF Protection ────────────────────────────────────────────────────────
+
+// csrfCookieName is the name of the cookie storing the CSRF token.
+const csrfCookieName = "_csrf_token"
+
+// csrfHeaderName is the header clients must send with the token.
+const csrfHeaderName = "X-CSRF-Token"
+
+// safeMethods are HTTP methods that do not require CSRF protection.
+var safeMethods = map[string]bool{
+	http.MethodGet:     true,
+	http.MethodHead:    true,
+	http.MethodOptions: true,
+}
+
+// GenerateCSRFToken produces a cryptographically random 32-byte hex-encoded CSRF token.
+// Suitable for embedding in cookies and validating in request headers.
+func GenerateCSRFToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "fallback-" + hex.EncodeToString([]byte{
+			byte(time.Now().UnixNano() >> 56),
+			byte(time.Now().UnixNano() >> 48),
+			byte(time.Now().UnixNano() >> 40),
+			byte(time.Now().UnixNano() >> 32),
+			byte(time.Now().UnixNano() >> 24),
+			byte(time.Now().UnixNano() >> 16),
+			byte(time.Now().UnixNano() >> 8),
+			byte(time.Now().UnixNano()),
+		})
+	}
+	return hex.EncodeToString(b)
+}
+
+// CSRFMiddleware protects against Cross-Site Request Forgery attacks.
+//
+// For safe methods (GET, HEAD, OPTIONS), the request passes through and a CSRF
+// token cookie is set if one doesn't already exist.
+//
+// For unsafe methods (POST, PUT, DELETE, PATCH), the X-CSRF-Token header must
+// match the _csrf_token cookie. If they don't match (or either is missing),
+// the request is rejected with 403 Forbidden.
+//
+// tokenFn is an optional function to generate tokens. If nil, GenerateCSRFToken is used.
+func CSRFMiddleware(tokenFn func() string) func(http.Handler) http.Handler {
+	if tokenFn == nil {
+		tokenFn = GenerateCSRFToken
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Read existing cookie
+			cookieToken := ""
+			if c, err := r.Cookie(csrfCookieName); err == nil {
+				cookieToken = c.Value
+			}
+
+			// Safe methods: set token cookie if missing, then pass through
+			if safeMethods[r.Method] {
+				if cookieToken == "" {
+					cookieToken = tokenFn()
+					http.SetCookie(w, &http.Cookie{
+						Name:     csrfCookieName,
+						Value:    cookieToken,
+						Path:     "/",
+						HttpOnly: false, // JS must be able to read it for the header
+						Secure:   true,
+						SameSite: http.SameSiteStrictMode,
+						MaxAge:   86400, // 24 hours
+					})
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Unsafe methods: validate token
+			headerToken := r.Header.Get(csrfHeaderName)
+
+			if cookieToken == "" || headerToken == "" || cookieToken != headerToken {
+				AuditSecurityEvent(r.Context(), "csrf_validation_failed",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "csrf_validation_failed",
+					"message": "CSRF token mismatch. Ensure X-CSRF-Token header matches the _csrf_token cookie.",
+				})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
