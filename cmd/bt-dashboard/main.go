@@ -28,6 +28,9 @@ var sharedLLM llm.LLM
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
 var dlq *reliability.DeadLetterQueue
 
+// traceReader reads and parses the shared traces log for the /api/traces endpoint.
+var traceReader *tracing.TraceReader
+
 // Sprint tracking
 var sprintState = struct {
 	sync.Mutex
@@ -81,6 +84,10 @@ func main() {
 		slog.Warn("Tracing log unavailable", "path", traceLogPath, "error", err)
 	}
 
+	// Trace reader for /api/traces endpoint
+	traceReader = tracing.NewTraceReader(traceLogPath)
+	slog.Info("Trace reader initialized", "path", traceLogPath)
+
 	var err error
 	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
 	if err != nil {
@@ -103,6 +110,7 @@ func main() {
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/scalability", handleScalability)
+	mux.HandleFunc("/api/traces", handleTraces)
 	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
 	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
@@ -1423,4 +1431,58 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(status)
+}
+
+// handleTraces returns recent trace entries from the shared traces log as JSON.
+// Supports query params: ?limit=50 (default 50, max 500), ?since=5m (relative duration).
+// Public endpoint (no auth) — monitoring tool compatible.
+func handleTraces(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	if traceReader == nil {
+		http.Error(w, `{"error":"trace reader not initialized"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := fmt.Sscanf(l, "%d", &limit); err != nil || n != 1 || limit < 1 || limit > 500 {
+			http.Error(w, `{"error":"limit must be 1-500"}`, http.StatusBadRequest)
+			return
+		}
+	}
+
+	var entries []tracing.TraceEntry
+	var readErr error
+
+	if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+		dur, err := time.ParseDuration(sinceStr)
+		if err != nil {
+			http.Error(w, `{"error":"invalid since duration: `+err.Error()+`"}`, http.StatusBadRequest)
+			return
+		}
+		since := time.Now().Add(-dur)
+		entries, readErr = traceReader.ReadSince(since, limit)
+	} else {
+		entries, readErr = traceReader.ReadRecent(limit)
+	}
+
+	if readErr != nil {
+		http.Error(w, `{"error":"`+readErr.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if entries == nil {
+		entries = []tracing.TraceEntry{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"count":   len(entries),
+		"entries": entries,
+	})
 }
