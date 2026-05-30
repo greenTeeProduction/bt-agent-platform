@@ -7,6 +7,38 @@ import (
 
 // registerGoapNodes registers all GOAP-related conditions and actions.
 func registerGoapNodes() {
+	// --- Actions ---
+
+	// SetupGoapTools initializes GOAP chain state on the blackboard.
+	// This seeds goap_actions, goap_goals, goap_config so that HasGoapGoal
+	// and PlanGoapActions can operate without external seeding.
+	actionRegistry["SetupGoapTools"] = func(ctx *btcore.BTContext[Blackboard]) int {
+		b := ctx.Blackboard
+		cs := b.ChainState
+		if cs == nil {
+			cs = make(map[string]interface{})
+			b.ChainState = cs
+		}
+
+		// Only seed if not already configured (idempotent)
+		if _, ok := cs["goap_actions"]; ok {
+			return 1
+		}
+
+		// Seed standard GOAP actions for task decomposition
+		cs["goap_actions"] = goap.StandardActions()
+		cs["goap_goals"] = []*goap.Goal{
+			goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"}),
+		}
+		cs["goap_config"] = goap.DefaultGOAPConfig()
+		cs["goap_world_state"] = goap.WorldState{
+			"task":        b.Task,
+			"has_result":  false,
+			"task_status": "pending",
+		}
+		return 1
+	}
+
 	// --- Conditions ---
 
 	// HasGoapGoal checks whether the blackboard has a GOAP plan ready.

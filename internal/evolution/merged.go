@@ -26,14 +26,24 @@ func MergedTree() *SerializableNode {
 					{Type: "Condition", Name: "HasClearTask", Description: "Task has context, verb, clear goal (>5 chars, alphabetic)"},
 					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 					{Type: "Action", Name: "SetupUniversalTools", Description: "shell_exec, http_get, file_read, process_check, disk_usage, memory_usage"},
+					{Type: "Action", Name: "SetupGoapTools", Description: "Initialize GOAP planning state: actions, goals, config, world state"},
 				},
 			},
 
-			// ─── StrategyRouter: 21 domain paths ranked by specificity ──
+			// ─── StrategyRouter: 22 domain paths ranked by specificity ──
 			{
 				Type: "Selector",
 				Name: "StrategyRouter",
 				Children: []SerializableNode{
+					// Path 0: GOAP Planning — dynamic A* plan generation before keyword routing
+					{
+						Type: "Sequence", Name: "GoapPlanningPath",
+						Children: []SerializableNode{
+							{Type: "Condition", Name: "HasGoapGoal", Description: "GOAP state configured and task suitable for multi-step planning"},
+							{Type: "Action", Name: "PlanGoapActions", Description: "Run A* planner to find optimal action sequence. Falls through to keyword paths if no plan found."},
+							chainAgentNode("agent:Execute the GOAP plan: {{.Task}}. The plan has been computed — read the chain state goap_plan and goap_steps. Execute each step in order, using shell_exec/file_read/http_get as needed. After all steps, verify task_status is completed. Report results and final state.", 10, "You are a GOAP plan executor. Execute the pre-computed plan steps sequentially. Use available tools for each step. The plan is in chain state as goap_steps."),
+						},
+					},
 					// Path 1: Code Review
 					{
 						Type: "Sequence", Name: "CodeReviewPath",
