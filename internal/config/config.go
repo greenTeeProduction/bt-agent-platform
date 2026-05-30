@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,52 @@ type Config struct {
 
 	// Metadata
 	ConfigFile string `json:"-" env:"BT_CONFIG_FILE" default:""` // path to JSON config file
+
+	// Paths — resolved file paths (populated by ResolvePaths())
+	Paths PathConfig `json:"paths,omitempty"`
+}
+
+// PathConfig provides resolved file paths for all BT platform components.
+// Use cfg.ResolvePaths() to populate from env vars or defaults.
+type PathConfig struct {
+	HomeDir     string `json:"home_dir"`     // ~/.bt-agent/ or BT_HOME
+	ConfigFile  string `json:"config_file"`  // config.yaml
+	DBFile      string `json:"db_file"`      // agents.db
+	DLQFile     string `json:"dlq_file"`     // dead_letter_queue.json
+	TemplateDir string `json:"template_dir"` // agents/templates/
+	ReflectionsDir string `json:"reflections_dir"`
+	HistoryDir  string `json:"history_dir"`
+	LogDir      string `json:"log_dir"`
+}
+
+// ResolvePaths populates cfg.Paths from env vars (BT_HOME, BT_CONFIG_FILE, etc.)
+// with sensible defaults. Call after Load().
+func (c *Config) ResolvePaths() {
+	home := os.Getenv("BT_HOME")
+	if home == "" {
+		home = filepath.Join(os.Getenv("HOME"), ".bt-agent")
+	}
+	c.Paths.HomeDir = home
+
+	c.Paths.ConfigFile = c.ConfigFile
+	if c.Paths.ConfigFile == "" {
+		c.Paths.ConfigFile = filepath.Join(home, "config.yaml")
+	}
+	c.Paths.DBFile = filepath.Join(home, "agents.db")
+	c.Paths.DLQFile = filepath.Join(home, "dead_letter_queue.json")
+	c.Paths.TemplateDir = filepath.Join(home, "templates")
+	c.Paths.ReflectionsDir = c.ReflectionsDir
+	if c.Paths.ReflectionsDir == "" {
+		c.Paths.ReflectionsDir = filepath.Join(home, "reflections")
+	}
+	c.Paths.HistoryDir = c.HistoryDir
+	if c.Paths.HistoryDir == "" {
+		c.Paths.HistoryDir = filepath.Join(home, "history")
+	}
+	c.Paths.LogDir = c.LogDir
+	if c.Paths.LogDir == "" {
+		c.Paths.LogDir = filepath.Join(home, "logs")
+	}
 }
 
 // ValidationError represents a configuration validation error.
@@ -134,6 +181,35 @@ func LoadFile(path string) (*Config, error) {
 	if err := loadFile(path, c); err != nil {
 		return nil, err
 	}
+	applyEnvOverrides(c)
+	if err := c.Validate(); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+// LoadFileWithDotEnv loads configuration from a JSON config file, then
+// applies values from a .env file BEFORE environment variable overrides.
+// This is the hot-reload equivalent of Load() for ConfigWatcher — it
+// respects the full priority chain: defaults → config.json → .env → env vars.
+//
+// If the .env file doesn't exist or can't be parsed, a warning is logged
+// but loading continues (the .env file is optional). Environment variables
+// always take precedence over .env values.
+func LoadFileWithDotEnv(configPath, dotenvPath string) (*Config, error) {
+	c := newDefaultConfig()
+	c.ConfigFile = configPath
+	if err := loadFile(configPath, c); err != nil {
+		return nil, err
+	}
+
+	// Apply .env file values (before env vars so env vars override)
+	if kv, err := LoadDotEnv(dotenvPath); err == nil {
+		applyDotEnvToConfig(c, kv)
+	} else if !os.IsNotExist(err) {
+		log.Printf("[config] warning: reload .env %s: %v", dotenvPath, err)
+	}
+
 	applyEnvOverrides(c)
 	if err := c.Validate(); err != nil {
 		return c, err

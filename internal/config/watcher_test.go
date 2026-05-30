@@ -444,3 +444,278 @@ func TestConfigWatcher_IntervalEnforcement(t *testing.T) {
 		t.Errorf("expected interval=5s, got %v", w2.interval)
 	}
 }
+
+func TestConfigWatcher_DotEnvHotReload(t *testing.T) {
+	// Test that changing the .env file triggers a reload even when
+	// the JSON config file hasn't changed.
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+	dotenvPath := filepath.Join(dir, ".env")
+
+	// Write initial config with a default port.
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+	// Write initial .env with a feature flag.
+	writeDotenvFile(t, dotenvPath, "BT_FEATURE_STARTUP_SIM=false\n")
+
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond).WithDotEnv(dotenvPath)
+
+	var mu sync.Mutex
+	var gotCfg *Config
+	done := make(chan struct{})
+
+	w.OnChange(func(cfg *Config) {
+		mu.Lock()
+		gotCfg = cfg
+		mu.Unlock()
+		close(done)
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	// Wait for watcher to record initial state.
+	time.Sleep(150 * time.Millisecond)
+
+	// Change ONLY the .env file — flip the feature flag.
+	writeDotenvFile(t, dotenvPath, "BT_FEATURE_STARTUP_SIM=true\n")
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for .env change callback")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotCfg == nil {
+		t.Fatal("callback not invoked")
+	}
+	if gotCfg.DashboardPort != 8000 {
+		t.Errorf("expected DashboardPort=8000 (unchanged), got %d", gotCfg.DashboardPort)
+	}
+	if !gotCfg.StartupSimEnabled {
+		t.Error("expected StartupSimEnabled=true from hot-reloaded .env")
+	}
+}
+
+func TestConfigWatcher_DotEnvChangeDoesNotTriggerOnNoChange(t *testing.T) {
+	// Test that unchanged .env file does NOT trigger a callback.
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+	dotenvPath := filepath.Join(dir, ".env")
+
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+	writeDotenvFile(t, dotenvPath, "BT_FEATURE_AUTO_EVOLVE=true\n")
+
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond).WithDotEnv(dotenvPath)
+
+	fired := false
+	var mu sync.Mutex
+	w.OnChange(func(cfg *Config) {
+		mu.Lock()
+		fired = true
+		mu.Unlock()
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(300 * time.Millisecond)
+
+	mu.Lock()
+	if fired {
+		t.Error("callback should not fire when neither file changed")
+	}
+	mu.Unlock()
+}
+
+func TestConfigWatcher_ConfigChangeWithDotEnv(t *testing.T) {
+	// Test that changing the JSON config still triggers reload
+	// when a .env file is also being watched.
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+	dotenvPath := filepath.Join(dir, ".env")
+
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+	writeDotenvFile(t, dotenvPath, "BT_FEATURE_KANBAN=false\n")
+
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond).WithDotEnv(dotenvPath)
+
+	var mu sync.Mutex
+	var gotCfg *Config
+	done := make(chan struct{})
+
+	w.OnChange(func(cfg *Config) {
+		mu.Lock()
+		gotCfg = cfg
+		mu.Unlock()
+		close(done)
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(150 * time.Millisecond)
+
+	// Change the JSON config — port changes, .env stays the same.
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 9999})
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for config change callback")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotCfg == nil {
+		t.Fatal("callback not invoked")
+	}
+	if gotCfg.DashboardPort != 9999 {
+		t.Errorf("expected DashboardPort=9999, got %d", gotCfg.DashboardPort)
+	}
+	if gotCfg.KanbanEnabled {
+		t.Error("expected KanbanEnabled=false from .env (unchanged)")
+	}
+}
+
+func TestConfigWatcher_DotEnvPriorityChain(t *testing.T) {
+	// Verify the priority chain on .env hot-reload:
+	// defaults → config.json → .env → env vars (highest)
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+	dotenvPath := filepath.Join(dir, ".env")
+
+	// Config file sets port to 8000.
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+	// .env sets port to 7777 (should override config file).
+	writeDotenvFile(t, dotenvPath, "BT_DASHBOARD_PORT=7777\nBT_OLLAMA_MODEL=custom-model:latest\n")
+
+	// Also set an env var for the port (should override everything).
+	t.Setenv("BT_DASHBOARD_PORT", "5555")
+
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond).WithDotEnv(dotenvPath)
+
+	var mu sync.Mutex
+	var gotCfg *Config
+	done := make(chan struct{})
+
+	w.OnChange(func(cfg *Config) {
+		mu.Lock()
+		gotCfg = cfg
+		mu.Unlock()
+		close(done)
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(150 * time.Millisecond)
+
+	// Change .env to update the model (still has port=7777).
+	writeDotenvFile(t, dotenvPath, "BT_DASHBOARD_PORT=7777\nBT_OLLAMA_MODEL=new-model:v2\n")
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for .env change callback")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotCfg == nil {
+		t.Fatal("callback not invoked")
+	}
+	// Env var has highest priority — should keep 5555.
+	if gotCfg.DashboardPort != 5555 {
+		t.Errorf("expected DashboardPort=5555 (env var overrides .env), got %d", gotCfg.DashboardPort)
+	}
+	// .env model should be applied (no env var override for this field).
+	if gotCfg.OllamaModel != "new-model:v2" {
+		t.Errorf("expected OllamaModel=new-model:v2 from .env, got %s", gotCfg.OllamaModel)
+	}
+}
+
+func TestConfigWatcher_BackwardCompatibleNoDotEnv(t *testing.T) {
+	// Verify watchers without WithDotEnv still work exactly as before.
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+
+	// Build WITHOUT WithDotEnv — backward compatible.
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond)
+
+	var mu sync.Mutex
+	var gotCfg *Config
+	done := make(chan struct{})
+
+	w.OnChange(func(cfg *Config) {
+		mu.Lock()
+		gotCfg = cfg
+		mu.Unlock()
+		close(done)
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(150 * time.Millisecond)
+
+	writeConfigFile(t, jsonPath, map[string]any{
+		"dashboard_port":   9000,
+		"gardener_enabled": false,
+	})
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for config change callback")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotCfg == nil {
+		t.Fatal("callback not invoked")
+	}
+	if gotCfg.DashboardPort != 9000 {
+		t.Errorf("expected DashboardPort=9000, got %d", gotCfg.DashboardPort)
+	}
+}
+
+func TestConfigWatcher_DotEnvFileDisappears(t *testing.T) {
+	// Test graceful handling when .env file is deleted after Start().
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "config.json")
+	dotenvPath := filepath.Join(dir, ".env")
+
+	writeConfigFile(t, jsonPath, map[string]any{"dashboard_port": 8000})
+	writeDotenvFile(t, dotenvPath, "BT_FEATURE_GARDENER=false\n")
+
+	w := NewConfigWatcher(jsonPath, 50*time.Millisecond).WithDotEnv(dotenvPath)
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(150 * time.Millisecond)
+
+	// Delete the .env file — should not crash.
+	if err := os.Remove(dotenvPath); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	// The watcher should continue running without panic.
+	if !w.IsRunning() {
+		t.Error("watcher should still be running after .env file disappears")
+	}
+}
+
+// writeDotenvFile writes a .env file and ensures timestamp advances.
+func writeDotenvFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+}

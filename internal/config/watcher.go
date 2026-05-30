@@ -35,14 +35,17 @@ type ChangeCallback func(*Config)
 //	watcher.Start()
 //	defer watcher.Stop()
 type ConfigWatcher struct {
-	mu       sync.Mutex
-	path     string
-	interval time.Duration
-	cbs      []ChangeCallback
-	stopCh   chan struct{}
-	running  bool
-	lastMod  time.Time
-	lastSize int64 // file size for detecting changes within same timestamp second
+	mu            sync.Mutex
+	path          string
+	dotenvPath    string        // optional .env file to watch for hot-reload
+	interval      time.Duration
+	cbs           []ChangeCallback
+	stopCh        chan struct{}
+	running       bool
+	lastMod       time.Time
+	lastSize      int64         // file size for detecting changes within same timestamp second
+	lastDotEnvMod time.Time     // last .env file modification time
+	lastDotEnvSize int64        // last .env file size
 }
 
 // NewConfigWatcher creates a watcher for the given config file.
@@ -59,6 +62,26 @@ func NewConfigWatcher(path string, interval time.Duration) *ConfigWatcher {
 		interval: interval,
 		stopCh:   make(chan struct{}),
 	}
+}
+
+// WithDotEnv enables .env file hot-reload alongside the JSON config file.
+// When the .env file changes on disk, the watcher reloads the full config
+// chain: defaults → config.json → .env → env vars → callbacks.
+//
+// This enables runtime updates to feature flags, LLM settings, and other
+// configuration without process restart — useful for long-running daemons
+// that need to pick up .env changes from configuration management tools
+// or CI/CD pipelines.
+//
+// Usage:
+//
+//	w := NewConfigWatcher("/etc/bt/config.json", 30*time.Second).
+//	    WithDotEnv("/etc/bt/.env")
+func (w *ConfigWatcher) WithDotEnv(path string) *ConfigWatcher {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.dotenvPath = path
+	return w
 }
 
 // OnChange registers a callback invoked when the config file changes.
@@ -84,6 +107,13 @@ func (w *ConfigWatcher) Start() {
 	if fi, err := os.Stat(w.path); err == nil {
 		w.lastMod = fi.ModTime()
 		w.lastSize = fi.Size()
+	}
+	// Record .env initial state if configured.
+	if w.dotenvPath != "" {
+		if fi, err := os.Stat(w.dotenvPath); err == nil {
+			w.lastDotEnvMod = fi.ModTime()
+			w.lastDotEnvSize = fi.Size()
+		}
 	}
 	w.mu.Unlock()
 
@@ -138,44 +168,87 @@ func (w *ConfigWatcher) loop() {
 }
 
 func (w *ConfigWatcher) checkAndReload() {
+	// Check JSON config file.
+	configChanged := false
+	modTime := time.Time{}
+	fileSize := int64(0)
+	dotEnvChanged := false
+
 	fi, err := os.Stat(w.path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("[config-watcher] stat %s: %v", w.path, err)
+	if err == nil {
+		modTime = fi.ModTime()
+		fileSize = fi.Size()
+
+		w.mu.Lock()
+		prevMod := w.lastMod
+		prevSize := w.lastSize
+		w.mu.Unlock()
+
+		// Reload if mod time advanced OR file size changed (handles
+		// filesystems with second-granularity timestamps where rapid
+		// writes produce identical mod times).
+		if modTime.After(prevMod) || fileSize != prevSize {
+			configChanged = true
 		}
+	} else if !os.IsNotExist(err) {
+		log.Printf("[config-watcher] stat %s: %v", w.path, err)
+	}
+
+	// Check .env file if configured.
+	if w.dotenvPath != "" {
+		if dotFi, err := os.Stat(w.dotenvPath); err == nil {
+			dotMod := dotFi.ModTime()
+			dotSize := dotFi.Size()
+
+			w.mu.Lock()
+			prevDotMod := w.lastDotEnvMod
+			prevDotSize := w.lastDotEnvSize
+			w.mu.Unlock()
+
+			if dotMod.After(prevDotMod) || dotSize != prevDotSize {
+				dotEnvChanged = true
+			}
+		}
+	}
+
+	if !configChanged && !dotEnvChanged {
 		return
 	}
 
-	modTime := fi.ModTime()
-	fileSize := fi.Size()
+	// Reload: use LoadFileWithDotEnv if .env file is configured,
+	// otherwise use the standard LoadFile (backward compatible).
+	var cfg *Config
+	var reloadErr error
 
-	w.mu.Lock()
-	prevMod := w.lastMod
-	prevSize := w.lastSize
-	w.mu.Unlock()
-
-	// Reload if mod time advanced OR file size changed (handles
-	// filesystems with second-granularity timestamps where rapid
-	// writes produce identical mod times).
-	if !modTime.After(prevMod) && fileSize == prevSize {
-		return
+	if w.dotenvPath != "" {
+		cfg, reloadErr = LoadFileWithDotEnv(w.path, w.dotenvPath)
+	} else {
+		cfg, reloadErr = LoadFile(w.path)
 	}
 
-	cfg, err := LoadFile(w.path)
-	if err != nil {
-		log.Printf("[config-watcher] reload %s failed: %v (keeping previous config)", w.path, err)
+	if reloadErr != nil {
+		log.Printf("[config-watcher] reload %s failed: %v (keeping previous config)", w.path, reloadErr)
 		return
 	}
 
 	w.mu.Lock()
 	w.lastMod = modTime
 	w.lastSize = fileSize
+	// Update .env tracking if it changed or if we just did a full reload.
+	if configChanged || dotEnvChanged {
+		if w.dotenvPath != "" {
+			if dotFi, err := os.Stat(w.dotenvPath); err == nil {
+				w.lastDotEnvMod = dotFi.ModTime()
+				w.lastDotEnvSize = dotFi.Size()
+			}
+		}
+	}
 	cbs := make([]ChangeCallback, len(w.cbs))
 	copy(cbs, w.cbs)
 	w.mu.Unlock()
 
-	log.Printf("[config-watcher] reloaded %s (%d fields, %d callbacks)",
-		w.path, 26, len(cbs))
+	log.Printf("[config-watcher] reloaded %s (config_changed=%v dotenv_changed=%v, %d callbacks)",
+		w.path, configChanged, dotEnvChanged, len(cbs))
 
 	for _, cb := range cbs {
 		cb(cfg)
