@@ -45,11 +45,11 @@ func DeepResearchTree() *evolution.SerializableNode {
 			// Replaces: DecomposeQuery → AssessComplexity → SearchBroad → Filter → Extract → CrossRef → GapDetect
 			{
 				Type: "ChainAction",
-				Name: "llm_call:Research the following topic thoroughly: {{.Task}}. Search for information, analyze findings, cross-reference facts, and identify any gaps. Produce a comprehensive set of findings with sources.",
+				Name: "agent:Research the following topic thoroughly: {{.Task}}. Search for information, analyze findings, cross-reference facts, and identify any gaps. Produce a comprehensive set of findings with sources.",
 				Metadata: map[string]any{
-					"max_tokens":  float64(2048),
-					"system_msg": "You are a deep research agent. Use web_search to find information, then analyze and cross-reference. Track your sources. Flag any gaps or uncertainties.",
-					"tools":      []any{"web_search"},
+					"max_iterations": float64(10),
+					"system_msg":     "You are a deep research agent. Use shell_exec to search (curl/grep), file_read to inspect local files, and http_get to fetch data. Track your sources. Flag any gaps or uncertainties. When done, produce a Final Answer.",
+					"tools":          []any{"shell_exec", "http_get", "file_read"},
 				},
 			},
 			// Phase 4: Synthesize structured report from findings
@@ -70,21 +70,8 @@ func DeepResearchTree() *evolution.SerializableNode {
 					{Type: "Action", Name: "FlagRemainingGaps", Description: "Note limitations or areas for further research"},
 				},
 			},
-			// Reflect and self-correct
-			{
-				Type: "Selector",
-				Name: "OutcomeSelector",
-				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "WasSuccessful"},
-					{
-						Type: "ChainAction",
-						Name: "llm_call:Self-correct the research report. Identify weaknesses, fill gaps, and produce an improved version.",
-						Metadata: map[string]any{
-							"max_tokens": float64(1024),
-						},
-					},
-				},
-			},
+			// Self-reflection removed — was corrupting output with meta-critique instead of research.
+			// Phase 4 synthesis is the final output. If it fails, the tree fails honestly.
 			{Type: "Action", Name: "UpdateBehaviorTree"},
 		},
 	}
@@ -114,25 +101,15 @@ func QuickResearchTree() *evolution.SerializableNode {
 					"tools":      []any{"web_search"},
 				},
 			},
-			// Refine for quality
+			// Refine moved into a single llm_call: pass previous output via {{.Result}}
 			{
 				Type: "ChainAction",
-				Name: "refine:Improve the answer: make it clearer, verify facts, add missing context.",
+				Name: "llm_call:Improve the following answer — make it clearer, verify facts, add missing context.\n\nANSWER TO IMPROVE:\n{{.Result}}",
 				Metadata: map[string]any{
 					"max_tokens": float64(1024),
 				},
 			},
-			{
-				Type: "Selector", Name: "OutcomeSelector",
-				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "WasSuccessful"},
-					{
-						Type: "ChainAction",
-						Name: "llm_call:Fix any issues with the research and produce a corrected answer.",
-						Metadata: map[string]any{"max_tokens": float64(1024)},
-					},
-				},
-			},
+			// Self-reflection removed — was corrupting output with meta-critique instead of research.
 			{Type: "Action", Name: "UpdateBehaviorTree"},
 		},
 	}

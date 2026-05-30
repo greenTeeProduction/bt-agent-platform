@@ -157,6 +157,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Flush implements http.Flusher so SSE and other streaming endpoints work
+// through the MetricsMiddleware wrapper.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // ─── Prometheus Export ──────────────────────────────────────────────────────
 
 // PrometheusHandler returns an http.Handler that serves metrics in Prometheus text format.

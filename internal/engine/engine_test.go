@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -12,6 +14,7 @@ import (
 )
 
 // mockLLM is a test double that returns predefined responses.
+// Implements the full llm.LLM interface for use as engine.Blackboard.LLM.
 type mockLLM struct {
 	complexity string
 	plan       string
@@ -22,7 +25,16 @@ type mockLLM struct {
 func (m *mockLLM) AnalyzeComplexity(task string) string { return m.complexity }
 func (m *mockLLM) GeneratePlan(task, complexity string) string { return m.plan }
 func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) { return m.wentWell, m.toImprove }
-func (m *mockLLM) Generate(prompt string) (string, error) { return "mock", nil }
+func (m *mockLLM) Generate(prompt string) (string, error) {
+	// Return 40+ chars to pass validateOutputQuality (30-char minimum).
+	return "Mock response with sufficient length for quality validation checks", nil
+}
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func TestRunTask_Success(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -381,7 +393,8 @@ func TestGoDevTree_RetryBehavior(t *testing.T) {
 	}
 }
 
-// retryMockLLM simulates a first failure then success
+// retryMockLLM simulates a first failure then success.
+// Implements the full llm.LLM interface.
 type retryMockLLM struct {
 	complexity string
 	plan       string
@@ -398,7 +411,15 @@ func (m *retryMockLLM) GeneratePlan(task, complexity string) string {
 func (m *retryMockLLM) Reflect(task, outcome, plan string) (string, string) {
 	return m.wentWell, m.toImprove
 }
-func (m *retryMockLLM) Generate(prompt string) (string, error) { return "mock", nil }
+func (m *retryMockLLM) Generate(prompt string) (string, error) {
+	return "RetryMock response with sufficient length for quality validation checks", nil
+}
+func (m *retryMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *retryMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func TestCheckConfidence_ConditionExists(t *testing.T) {
 	tree := evolution.GoDeveloperTree()
@@ -485,7 +506,7 @@ func TestRegisterAction_And_GetAction(t *testing.T) {
 	})
 
 	// Retrieve and invoke it
-	fn := GetAction("TestCustomAction", nil)
+	fn := GetAction("TestCustomAction")
 	if fn == nil {
 		t.Fatal("GetAction returned nil for registered action")
 	}
@@ -505,7 +526,7 @@ func TestRegisterCondition_And_GetCondition(t *testing.T) {
 		return true
 	})
 
-	fn := GetCondition("TestCustomCondition", nil)
+	fn := GetCondition("TestCustomCondition")
 	if fn == nil {
 		t.Fatal("GetCondition returned nil for registered condition")
 	}
@@ -518,50 +539,46 @@ func TestRegisterCondition_And_GetCondition(t *testing.T) {
 	}
 }
 
-func TestGetAction_Unregistered_NilBlackboard(t *testing.T) {
-	// Unregistered action with nil blackboard returns no-op success
-	fn := GetAction("NonExistentAction", nil)
-	if fn == nil {
-		t.Fatal("GetAction should return a fallback, not nil")
+func TestGetAction_Unregistered_ReturnsNil(t *testing.T) {
+	// GetAction returns nil for unregistered names; fallback is in actionForName.
+	fn := GetAction("NonExistentAction")
+	if fn != nil {
+		t.Error("GetAction should return nil for unregistered action")
 	}
-	// The no-op fallback returns 1 (success)
+}
+
+func TestActionForName_Fallback_UnknownAction(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	// actionForName checks GetAction first (nil), then falls through to the switch.
+	// The switch default returns a no-op that returns 1.
+	fn := bb.actionForName("NonExistentAction")
+	if fn == nil {
+		t.Fatal("actionForName should return a fallback, not nil")
+	}
 	result := fn(nil)
 	if result != 1 {
 		t.Errorf("expected fallback to return 1, got %d", result)
 	}
 }
 
-func TestGetAction_Unregistered_WithBlackboard(t *testing.T) {
-	bb := &Blackboard{Task: "test"}
-	// Unregistered action with non-nil blackboard falls back to actionForName
-	fn := GetAction("NonExistentAction", bb)
-	if fn == nil {
-		t.Fatal("GetAction should return a fallback from blackboard, not nil")
+func TestGetCondition_Unregistered_ReturnsNil(t *testing.T) {
+	fn := GetCondition("NonExistentCondition")
+	if fn != nil {
+		t.Error("GetCondition should return nil for unregistered condition")
 	}
-	// actionForName on unknown name usually returns a no-op but may panic
-	// Just verify we get a callable function
-	_ = fn
 }
 
-func TestGetCondition_Unregistered_NilBlackboard(t *testing.T) {
-	fn := GetCondition("NonExistentCondition", nil)
+func TestConditionForName_Fallback_UnknownCondition(t *testing.T) {
+	bb := &Blackboard{Task: "test"}
+	fn := bb.conditionForName("NonExistentCondition")
 	if fn == nil {
-		t.Fatal("GetCondition should return a fallback, not nil")
+		t.Fatal("conditionForName should return a fallback, not nil")
 	}
-	// The no-op fallback returns true
-	result := fn(&Blackboard{})
+	// The switch default returns true (pass-through) for unknown conditions.
+	result := fn(bb)
 	if !result {
-		t.Error("expected fallback to return true")
+		t.Error("expected fallback to return true for unknown condition")
 	}
-}
-
-func TestGetCondition_Unregistered_WithBlackboard(t *testing.T) {
-	bb := &Blackboard{Task: "test"}
-	fn := GetCondition("NonExistentCondition", bb)
-	if fn == nil {
-		t.Fatal("GetCondition should return a fallback from blackboard, not nil")
-	}
-	_ = fn
 }
 
 func TestValidateTree_ValidTree(t *testing.T) {

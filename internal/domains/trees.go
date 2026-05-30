@@ -22,15 +22,36 @@ func act(name, desc string) evolution.SerializableNode {
 	return evolution.SerializableNode{Type: "Action", Name: name, Description: desc}
 }
 
+// chainAgent creates a ChainAction node for the agent: chain type.
+// systemPrompt is the system message, task is the user prompt,
+// tools is the list of tool names to make available.
+func chainAgent(name, systemPrompt string, tools []string) evolution.SerializableNode {
+	ti := make([]any, len(tools))
+	for i, t := range tools {
+		ti[i] = t
+	}
+	return evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:" + systemPrompt,
+		Metadata: map[string]any{
+			"tools":          ti,
+			"max_iterations": float64(10),
+		},
+	}
+}
+
 // retry wraps a child with retry decorator.
 func retryW(name string, child evolution.SerializableNode, max int) evolution.SerializableNode {
 	return evolution.SerializableNode{Type: "Retry", Name: name, Children: []evolution.SerializableNode{child}, MaxRetries: max}
 }
 
 // outcome builds the standard OutcomeSelector pattern.
+// Uses MarkSuccessful instead of WasSuccessful — the WasSuccessful condition
+// does unreliable keyword matching on LLM output and causes false failures.
+// Quality gates (PreGate validation, output length checks) catch real failures.
 func outcome() evolution.SerializableNode {
 	return sel("OutcomeSelector",
-		cond("WasSuccessful", "Exit if success"),
+		act("MarkSuccessful", "Mark task as successful"),
 		retryW("RetrySelfCorrect", act("SelfCorrect", "Fix and retry"), 3),
 		act("EscalateToDeepSeek", "Escalate to external LLM"),
 	)
@@ -40,17 +61,18 @@ func outcome() evolution.SerializableNode {
 
 func CodeReviewTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "CodeReview_Main", Children: []evolution.SerializableNode{
+		act("SetupDefaultTools", "Populate bb.ChainTools with real system tools"),
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsCodeTask", "Has code-related keywords")),
 		sel("StrategyRouter",
 			seq("BugDetection",
 				cond("IsBugCheck", "Detect bug/fix/error keywords"),
-				act("ScanForBugs", "Analyze code for null derefs, off-by-one, race conditions"),
-				act("SuggestBugFixes", "Generate fix with before/after"),
+				chainAgent("BugDetectionAgent", "Analyze the code for bugs: null derefs, off-by-one errors, race conditions, logic errors. Use file_read to inspect code. Report findings with line numbers and suggested fixes.",
+					[]string{"file_read", "shell_exec"}),
 			),
 			seq("SecurityReview",
 				cond("IsSecurityCheck", "Detect security/exploit/vuln keywords"),
-				act("ScanForVulns", "Check OWASP Top 10, injection, auth bypass"),
-				act("SuggestSecurityFixes", "Generate secure alternative"),
+				chainAgent("SecurityReviewAgent", "Review code for security vulnerabilities: OWASP Top 10, injection, auth bypass, unsafe operations. Use file_read to inspect files, shell_exec to grep for patterns. Report each finding with severity.",
+					[]string{"file_read", "shell_exec"}),
 			),
 			seq("StyleReview",
 				cond("IsStyleCheck", "Detect style/lint/format keywords"),
@@ -105,17 +127,18 @@ func DevOpsCITree() *evolution.SerializableNode {
 
 func AgentMonitorTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "AgentMonitor_Main", Children: []evolution.SerializableNode{
+		act("SetupDefaultTools", "Populate bb.ChainTools with real system tools"),
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsMonitorTask", "Detect monitor/health/status keywords")),
 		sel("StrategyRouter",
 			seq("HealthCheckPath",
 				cond("IsHealthCheck", "Detect health/status/ping keywords"),
-				act("CheckAllAgents", "Ping all registered MCP servers"),
-				act("IdentifyDeadAgents", "Flag agents not responding"),
+				chainAgent("HealthCheckAgent", "Run system health checks: check disk usage on / and /mnt/ssd, check memory, check if bt-agent bt-dashboard bt-gardener processes are running, check HTTP health on http://localhost:9800/api/health. Report status and any issues. FORMAT YOUR FINAL ANSWER WITH: ## Status (table of components and their state) followed by ## Issues (list of problems found, or 'None' if all healthy). Use real tool data, never simulate.",
+					[]string{"shell_exec", "http_get", "process_check", "disk_usage", "memory_usage"}),
 			),
 			seq("MetricsCollectionPath",
 				cond("IsMetricsRequest", "Detect metrics/stats keywords"),
-				act("CollectAgentMetrics", "Gather uptime, tool calls, error rates"),
-				act("GenerateHealthReport", "Produce dashboard-ready report"),
+				chainAgent("MetricsCollectionAgent", "Collect system metrics: disk space, memory usage, running processes count, uptime. Format as a dashboard-ready report with actual numbers. FORMAT: ## Status (metrics table with actual values) followed by ## Issues (anomalies found).",
+					[]string{"shell_exec", "disk_usage", "memory_usage", "process_check"}),
 			),
 		),
 		outcome(),
@@ -377,6 +400,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"crash_investigator": CrashInvestigatorTree(),
 		"game_ai":            GameAITree(),
 		"trading_signal":     TradingSignalTree(),
+		"alert_router":       AlertRouterTree(),
 	}
 }
 

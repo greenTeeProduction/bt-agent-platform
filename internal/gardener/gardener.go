@@ -358,6 +358,7 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		if candidates[i].Op.Operation == "add_before" && hasNodeNamed(tree, "CheckConfidence") { continue }
 		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) { continue }
 		if candidates[i].Op.Operation == "increase_retries" && getRetryCount(tree, candidates[i].Op.Target) >= 15 { continue }
+		if candidates[i].Op.Operation == "add_fallback" && hasChildNamed(tree, candidates[i].Op.Target, "DefaultFallback") { continue }
 		
 		if candidates[i].Score < 0.2 { break }
 		
@@ -374,6 +375,12 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 
 	if applied > 0 {
 		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+		// Sync to tree.json so bt-agent picks up mutations on restart
+		treeJSONPath := filepath.Join(g.cfg.Registry.dir, "tree.json")
+		data, _ := json.MarshalIndent(tree, "", "  ")
+		tmp := treeJSONPath + ".tmp"
+		os.WriteFile(tmp, data, 0644)
+		os.Rename(tmp, treeJSONPath)
 	}
 
 	newFitness := evaluator.EvaluateTree(tree, records)
@@ -419,6 +426,19 @@ func hasNodeNamed(tree *evolution.SerializableNode, name string) bool {
 	if tree.Name == name { return true }
 	for i := range tree.Children {
 		if hasNodeNamed(&tree.Children[i], name) { return true }
+	}
+	return false
+}
+
+// hasChildNamed checks if a node with the given name has a direct child with childName.
+func hasChildNamed(tree *evolution.SerializableNode, parentName, childName string) bool {
+	if tree.Name == parentName {
+		for i := range tree.Children {
+			if tree.Children[i].Name == childName { return true }
+		}
+	}
+	for i := range tree.Children {
+		if hasChildNamed(&tree.Children[i], parentName, childName) { return true }
 	}
 	return false
 }

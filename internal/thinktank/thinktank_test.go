@@ -1,10 +1,15 @@
 package thinktank
 
 import (
+	"time"
+	"context"
 	"testing"
 )
 
 type mockLLM struct{}
+
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	// Return structured mock response for synthesis/parsing

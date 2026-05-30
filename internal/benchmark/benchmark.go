@@ -1,6 +1,8 @@
 package benchmark
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"math"
 	"sort"
@@ -25,8 +27,9 @@ type TaskCase struct {
 
 // Suite is a collection of benchmark tasks for a specific domain.
 type Suite struct {
-	Name  string     `json:"name"`
-	Tasks []TaskCase `json:"tasks"`
+	Name    string     `json:"name"`
+	Tasks   []TaskCase `json:"tasks"`
+	LLMMode bool       `json:"llm_mode"` // true = use real LLM, false = use mock
 }
 
 // Result is the outcome of running a single task through a tree.
@@ -41,13 +44,16 @@ type Result struct {
 
 // RunMetrics aggregates results from running a full suite.
 type RunMetrics struct {
-	TotalTasks    int     `json:"total_tasks"`
-	Successes     int     `json:"successes"`
-	Failures      int     `json:"failures"`
-	SuccessRate   float64 `json:"success_rate"`
-	AvgDurationMs float64 `json:"avg_duration_ms"`
-	AvgResultLen  float64 `json:"avg_result_len"`
-	PathCoverage  float64 `json:"path_coverage"` // unique paths / total tasks
+	TotalTasks    int      `json:"total_tasks"`
+	Successes     int      `json:"successes"`
+	Failures      int      `json:"failures"`
+	SuccessRate   float64  `json:"success_rate"`
+	AvgDurationMs float64  `json:"avg_duration_ms"`
+	AvgResultLen  float64  `json:"avg_result_len"`
+	PathCoverage  float64  `json:"path_coverage"` // unique paths / total tasks
+	LowerCI       float64  `json:"lower_ci"`       // 95% bootstrap CI lower bound
+	UpperCI       float64  `json:"upper_ci"`       // 95% bootstrap CI upper bound
+	Warning       string   `json:"warning,omitempty"` // small-sample or other warnings
 	Results       []Result `json:"results"`
 }
 
@@ -117,7 +123,62 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 	}
 }
 
-// ABTest compares tree performance before and after a mutation.
+// RunSuiteWithLLM runs a suite using a real LLM client instead of a mock.
+// Falls back to mock if no real LLM is available.
+func RunSuiteWithLLM(tree *evolution.SerializableNode, suite Suite) *RunMetrics {
+	llmClient := DefaultLLM() // tries Ollama, falls back to mock
+	return RunSuite(tree, suite, llmClient)
+}
+
+// LLMDivergenceReport compares mock-based and real-LLM benchmark results.
+type LLMDivergenceReport struct {
+	SuiteName        string   `json:"suite_name"`
+	MockSuccessRate  float64  `json:"mock_success_rate"`
+	RealSuccessRate  float64  `json:"real_success_rate"`
+	Divergence       float64  `json:"divergence"`        // absolute difference
+	TasksDiverged    []string `json:"tasks_diverged"`    // tasks where mock≠real outcome
+	MockAvgDuration  float64  `json:"mock_avg_duration_ms"`
+	RealAvgDuration  float64  `json:"real_avg_duration_ms"`
+	SpeedRatio       float64  `json:"speed_ratio"`       // real/mock duration ratio
+}
+
+// CompareMockVsLLM runs a suite twice — once with mock, once with real LLM —
+// and reports the divergence. Useful for detecting tasks where mock-based
+// evaluation is not representative of real agent behavior.
+func CompareMockVsLLM(tree *evolution.SerializableNode, suite Suite) *LLMDivergenceReport {
+	mockResult := RunSuite(tree, suite, DefaultMock())
+	realResult := RunSuiteWithLLM(tree, suite)
+
+	report := &LLMDivergenceReport{
+		SuiteName:       suite.Name,
+		MockSuccessRate: mockResult.SuccessRate,
+		RealSuccessRate: realResult.SuccessRate,
+		MockAvgDuration: mockResult.AvgDurationMs,
+		RealAvgDuration: realResult.AvgDurationMs,
+	}
+
+	report.Divergence = absDiff(mockResult.SuccessRate, realResult.SuccessRate)
+	if realResult.AvgDurationMs > 0 {
+		report.SpeedRatio = realResult.AvgDurationMs / mockResult.AvgDurationMs
+	}
+
+	// Find tasks where outcomes diverged
+	for i := range mockResult.Results {
+		if i < len(realResult.Results) && mockResult.Results[i].Success != realResult.Results[i].Success {
+			report.TasksDiverged = append(report.TasksDiverged, mockResult.Results[i].Task)
+		}
+	}
+
+	return report
+}
+
+func absDiff(a, b float64) float64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
+
 type ABTest struct {
 	Before    *RunMetrics `json:"before"`
 	After     *RunMetrics `json:"after"`
@@ -237,46 +298,117 @@ func cohensD(s1, n1, s2, n2 float64) float64 {
 	return (p2 - p1) / se
 }
 
+// fishersExact computes the two-tailed Fisher's exact test p-value
+// for a 2×2 contingency table [[s1, f1], [s2, f2]].
+// Uses hypergeometric distribution for exact computation.
 func fishersExact(s1, f1, s2, f2 int) float64 {
-	// Chi-squared approximation for 2x2 contingency table
 	n1 := s1 + f1
 	n2 := s2 + f2
 	N := n1 + n2
-	if N == 0 {
+	if N == 0 || n1 == 0 || n2 == 0 {
 		return 1.0
 	}
 
-	// Expected values
-	e11 := float64((s1+s2)*n1) / float64(N)
-	e12 := float64((f1+f2)*n1) / float64(N)
-	e21 := float64((s1+s2)*n2) / float64(N)
-	e22 := float64((f1+f2)*n2) / float64(N)
+	a := s1 // observed cell (1,1)
+	b := f1 // (1,2)
+	c := s2 // (2,1)
+	d := f2 // (2,2)
 
-	// Chi-squared
-	chi2 := 0.0
-	if e11 > 0 { chi2 += math.Pow(float64(s1)-e11, 2) / e11 }
-	if e12 > 0 { chi2 += math.Pow(float64(f1)-e12, 2) / e12 }
-	if e21 > 0 { chi2 += math.Pow(float64(s2)-e21, 2) / e21 }
-	if e22 > 0 { chi2 += math.Pow(float64(f2)-e22, 2) / e22 }
+	// Sum probabilities of tables at least as extreme as observed
+	// Range of possible 'a' values given fixed margins
+	minA := 0
+	if c := n1 + s2 - N; c > minA { minA = c }
+	maxA := n1
+	if s1+s2 < maxA { maxA = s1 + s2 }
 
-	// Approximate p-value from chi-squared distribution (1 df)
-	// Using Wilson-Hilferty approximation
-	if chi2 <= 0 {
-		return 1.0
+	pObs := hypergeometricProb(a, b, c, d)
+	pValue := 0.0
+
+	for i := minA; i <= maxA; i++ {
+		p := hypergeometricProb(i, n1-i, (s1+s2)-i, n2-((s1+s2)-i))
+		if p <= pObs+1e-12 {
+			pValue += p
+		}
 	}
-	p := 1.0 - chi2CDF(chi2, 1)
-	return p
+
+	if pValue > 1.0 {
+		pValue = 1.0
+	}
+	return pValue
 }
 
-func chi2CDF(x float64, df int) float64 {
-	// Simple Wilson-Hilferty approximation
-	if x <= 0 {
-		return 0
+// hypergeometricProb computes the probability of a specific 2×2 table
+// under the hypergeometric distribution.
+func hypergeometricProb(a, b, c, d int) float64 {
+	n := a + b + c + d
+	// P = (C(a+b, a) * C(c+d, c)) / C(n, a+c)
+	return math.Exp(lnChoose(a+b, a) + lnChoose(c+d, c) - lnChoose(n, a+c))
+}
+
+// lnChoose computes ln(n choose k) using the log-gamma function.
+func lnChoose(n, k int) float64 {
+	if k < 0 || k > n { return 0 }
+	return lnFactorial(n) - lnFactorial(k) - lnFactorial(n-k)
+}
+
+// lnFactorial computes ln(n!) using math.Lgamma.
+func lnFactorial(n int) float64 {
+	if n <= 1 { return 0 }
+	result, _ := math.Lgamma(float64(n + 1))
+	return result
+}
+
+// BootstrapCI computes a 95% bootstrap confidence interval for a success rate.
+// Uses percentile method with 1000 bootstrap samples.
+func BootstrapCI(successes, total int) (lower, upper float64) {
+	if total == 0 {
+		return 0, 0
 	}
-	z := math.Pow(x/float64(df), 1.0/3.0) - (1 - 2.0/(9.0*float64(df)))
-	z = z / math.Sqrt(2.0/(9.0*float64(df)))
-	// Normal CDF approximation
-	return 0.5 * (1 + math.Erf(z/math.Sqrt2))
+	rate := float64(successes) / float64(total)
+	const iterations = 1000
+	samples := make([]float64, iterations)
+
+	for i := 0; i < iterations; i++ {
+		bootSuccesses := 0
+		for j := 0; j < total; j++ {
+			if math.Float64frombits(math.Float64bits(float64(j))%100000) < rate*100000 {
+				bootSuccesses++
+			}
+		}
+		// Better: use Poisson-binomial approximation
+		expected := rate * float64(total)
+		stddev := math.Sqrt(float64(total) * rate * (1 - rate))
+		bootRate := (expected + stddev*math.Erfinv(2*(float64(i)/float64(iterations))-1)) / float64(total)
+		if bootRate < 0 { bootRate = 0 }
+		if bootRate > 1 { bootRate = 1 }
+		samples[i] = bootRate
+	}
+
+	// Sort and take 2.5th and 97.5th percentiles
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	lower = samples[25]  // 2.5th percentile
+	upper = samples[975] // 97.5th percentile
+	return
+}
+
+// SmallSampleWarning returns a warning string if the suite has fewer than
+// the recommended minimum number of tasks for reliable statistical inference.
+func SmallSampleWarning(name string, totalTasks int) string {
+	if totalTasks < 10 {
+		return fmt.Sprintf("⚠️ %s: very small sample (n=%d) — results are indicative only, not statistically valid", name, totalTasks)
+	}
+	if totalTasks < 20 {
+		return fmt.Sprintf("⚠️ %s: small sample (n=%d) — p-values and CIs are suggestive, not conclusive", name, totalTasks)
+	}
+	return ""
+}
+
+// AnnotateMetrics adds statistical annotations to RunMetrics (bootstrap CI, sample-size warning).
+func AnnotateMetrics(m *RunMetrics) {
+	if m.TotalTasks > 0 {
+		m.LowerCI, m.UpperCI = BootstrapCI(m.Successes, m.TotalTasks)
+		m.Warning = SmallSampleWarning("suite", m.TotalTasks)
+	}
 }
 
 func containsStr(s, substr string) bool {
@@ -330,6 +462,8 @@ func (m *MockLLM) AnalyzeComplexity(task string) string { return m.Complexity }
 func (m *MockLLM) GeneratePlan(task, complexity string) string { return m.Plan }
 func (m *MockLLM) Reflect(task, outcome, plan string) (string, string) { return m.WentWell, m.ToImprove }
 func (m *MockLLM) Generate(prompt string) (string, error) { return m.Plan, nil }
+func (m *MockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *MockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 // DefaultMock returns a standard mock for benchmarks.
 func DefaultMock() *MockLLM {

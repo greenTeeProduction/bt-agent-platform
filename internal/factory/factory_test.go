@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"time"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,6 +15,9 @@ import (
 type mockLLM struct {
 	treeSpecJSON string
 }
+
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	return m.treeSpecJSON, nil

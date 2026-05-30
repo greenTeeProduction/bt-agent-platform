@@ -65,6 +65,7 @@ func TestBTPG_QualityMetrics_AllDomainTrees(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution(t *testing.T) {
+	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
 	tasks := BuiltinBTPGTasks()
 	if len(tasks) != 8 {
 		t.Errorf("expected 8 BTPG tasks, got %d", len(tasks))
@@ -111,6 +112,7 @@ func TestBTPG_TaskExecution(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution_FiveTasks(t *testing.T) {
+	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
 	// Test with subset of 5 tasks as specified
 	tasks := BuiltinBTPGTasks()[:5]
 	tree := evolution.GoDeveloperTree()
@@ -141,6 +143,7 @@ func TestBTPG_EmptyTasks(t *testing.T) {
 }
 
 func TestBTPG_EdgeCaseRobustness(t *testing.T) {
+	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
 	// Tasks that are edge cases should test robustness
 	edgeTasks := []string{
 		"bring coffee",          // very short

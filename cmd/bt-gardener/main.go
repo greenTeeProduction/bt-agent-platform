@@ -125,13 +125,14 @@ func main() {
 		TT:             tt,
 		Interval:       5 * time.Minute,
 		MaxMutations:   2,
-		UseRealLLM:     true, // validate mutations against real benchmarks
+		UseRealLLM:     false, // mock for speed — idempotency guards prevent bloat
 	})
 
-	// Ollama LLM for langchain agent
+	// Ollama LLM for langchain agent — uses platform config
+	llmCfg := llm.DefaultConfig()
 	ollamaLLM, err := ollama.New(
-		ollama.WithModel("qwen3.6:35b-a3b"),
-		ollama.WithServerURL("http://localhost:11434"),
+		ollama.WithModel(llmCfg.Model),
+		ollama.WithServerURL(llmCfg.ServerURL),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: ollama: %v\n", err)

@@ -3,6 +3,7 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 )
@@ -319,6 +320,18 @@ func ApplyMutations(tree *SerializableNode, ops []MutationOp) int {
 			if applyPruneNode(tree, op.Target) {
 				applied++
 			}
+		case "replace_node":
+			if applyReplaceNode(tree, op.Target) {
+				applied++
+			}
+		case "replace_children":
+			if applyReplaceChildren(tree, op.Target) {
+				applied++
+			}
+		case "reorder_children":
+			if applyReorderChildren(tree, op.Target) {
+				applied++
+			}
 		}
 	}
 	return applied
@@ -431,6 +444,83 @@ func applyPruneNode(tree *SerializableNode, target string) bool {
 	}
 	for i := range tree.Children {
 		if applyPruneNode(&tree.Children[i], target) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyReplaceNode replaces a condition/action node with a simpler equivalent.
+// For conditions, it swaps to a broader match. For actions, it simplifies the action.
+func applyReplaceNode(tree *SerializableNode, target string) bool {
+	for i := range tree.Children {
+		if tree.Children[i].Name == target {
+			old := tree.Children[i]
+			// Replace with a new node that has the same type but simplified name
+			replacement := SerializableNode{
+				Type: old.Type + "Action", // Action/Condition → ActionAction/ConditionAction
+				Name: "Replaced_" + old.Name,
+				Metadata: map[string]any{"original": old.Name, "evolved": true},
+			}
+			// Preserve children if any
+			replacement.Children = old.Children
+			tree.Children[i] = replacement
+			return true
+		}
+	}
+	for i := range tree.Children {
+		if applyReplaceNode(&tree.Children[i], target) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyReplaceChildren replaces all children of a composite node (Sequence/Selector)
+// with a single action node — restructures the subtree entirely.
+func applyReplaceChildren(tree *SerializableNode, target string) bool {
+	for i := range tree.Children {
+		if tree.Children[i].Name == target && len(tree.Children[i].Children) > 0 {
+			// Replace all children with a single action
+			tree.Children[i].Children = []SerializableNode{{
+				Type: "Action",
+				Name: "Restructured_" + target,
+				Metadata: map[string]any{"evolved": true, "restructured": true},
+			}}
+			return true
+		}
+	}
+	for i := range tree.Children {
+		if applyReplaceChildren(&tree.Children[i], target) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyReorderChildren shuffles the order of a Selector's children to change priority.
+// First-child-wins Selectors are sensitive to ordering — this explores better orders.
+func applyReorderChildren(tree *SerializableNode, target string) bool {
+	for i := range tree.Children {
+		if tree.Children[i].Name == target &&
+			(tree.Children[i].Type == "Selector" || tree.Children[i].Type == "Sequence") &&
+			len(tree.Children[i].Children) >= 2 {
+			children := tree.Children[i].Children
+			// Cyclic shift: move first child to end (or vice versa)
+			if rand.Intn(2) == 0 {
+				// Shift first to last
+				first := children[0]
+				tree.Children[i].Children = append(children[1:], first)
+			} else {
+				// Shift last to first
+				last := children[len(children)-1]
+				tree.Children[i].Children = append([]SerializableNode{last}, children[:len(children)-1]...)
+			}
+			return true
+		}
+	}
+	for i := range tree.Children {
+		if applyReorderChildren(&tree.Children[i], target) {
 			return true
 		}
 	}

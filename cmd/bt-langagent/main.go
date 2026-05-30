@@ -36,15 +36,16 @@ func main() {
 	treeStore, _ := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 
 	// LLM clients (both our wrapper and langchaingo's native)
-	llmClient, err := llm.NewClient(llm.DefaultConfig())
+	llmCfg := llm.DefaultConfig()
+	llmClient, err := llm.NewClient(llmCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: llm: %v\n", err)
 		os.Exit(1)
 	}
 
 	langLLM, err := ollama.New(
-		ollama.WithModel("qwen3.6:35b-a3b"),
-		ollama.WithServerURL("http://localhost:11434"),
+		ollama.WithModel(llmCfg.Model),
+		ollama.WithServerURL(llmCfg.ServerURL),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: langchain llm: %v\n", err)

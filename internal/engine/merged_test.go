@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"time"
+	"context"
 	"strings"
 	"testing"
 
@@ -8,6 +10,9 @@ import (
 )
 
 type mergedMockLLM struct{}
+
+func (m *mergedMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *mergedMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *mergedMockLLM) Generate(prompt string) (string, error) {
 	return "MOCK_OUTPUT: This is a comprehensive response to the task including details and examples.", nil
@@ -93,7 +98,7 @@ func TestMergedTree_Structure(t *testing.T) {
 		t.Errorf("expected Sequence root, got %s", tree.Type)
 	}
 
-	sections := []string{"PreGate", "StrategyRouter", "OutcomeSelector"}
+	sections := []string{"PreGate", "StrategyRouter", "MarkSuccessful"}
 	for _, name := range sections {
 		found := false
 		for _, child := range tree.Children {

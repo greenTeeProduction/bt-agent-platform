@@ -164,6 +164,16 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 			Outcome:  outcome,
 			Duration: duration,
 		})
+		// Record decision trace for failure explainability
+		runID := fmt.Sprintf("%s-%d", inst.Definition.Tree, start.UnixNano())
+		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
+			RunID:     runID,
+			TreeID:    inst.Definition.Tree,
+			Task:      task,
+			Outcome:   outcome,
+			StartedAt: start,
+			EndedAt:   time.Now(),
+		})
 	}
 
 	_ = inst
@@ -329,6 +339,16 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Task:     "scheduled run",
 			Outcome:  outcome,
 			Duration: duration,
+		})
+		// Record decision trace for failure explainability
+		runID := fmt.Sprintf("%s-sched-%d", inst.Definition.Tree, start.UnixNano())
+		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
+			RunID:     runID,
+			TreeID:    inst.Definition.Tree,
+			Task:      "scheduled run",
+			Outcome:   outcome,
+			StartedAt: start,
+			EndedAt:   time.Now(),
 		})
 	}
 }

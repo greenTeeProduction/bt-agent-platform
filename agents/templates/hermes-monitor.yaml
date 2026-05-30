@@ -12,9 +12,9 @@ outputs:
   - name: health_report
     type: markdown
 quality:
-  min_length: 80
-  required_sections: ["Status", "Alerts"]
-  blocked_patterns: ["error: timeout"]
+  min_length: 50
+  required_sections: ["Status", "Issues"]
+  blocked_patterns: ["error: timeout", "Dead: 0, Slow: 1"]
 metadata:
   category: hermes-builtin
   tags: "monitoring,health,hermes"

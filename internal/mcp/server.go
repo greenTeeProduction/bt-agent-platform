@@ -111,10 +111,10 @@ func (s *Server) RegisterTool(name, description string, props map[string]Propert
 // Message size is capped via SetMaxMessageSize (default 1MB) to prevent
 // memory exhaustion DoS attacks from oversized stdin lines.
 func (s *Server) Run() error {
-	// Concurrency limiter: max 3 simultaneous tool calls.
+	// Concurrency limiter: max 5 simultaneous tool calls.
 	// Beyond this, requests are rejected with a busy signal instead of
 	// queuing indefinitely and causing gateway timeouts.
-	sem := make(chan struct{}, 3)
+	sem := make(chan struct{}, 5)
 	var wg sync.WaitGroup // tracks in-flight goroutines for clean shutdown
 
 	// Use a Scanner with a max buffer to enforce message size limits.

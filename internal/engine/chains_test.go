@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"time"
+	"context"
 	"strings"
 	"testing"
 
@@ -12,6 +14,9 @@ import (
 type chainMockLLM struct {
 	responses map[string]string
 }
+
+func (m *chainMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *chainMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *chainMockLLM) Generate(prompt string) (string, error) {
 	if r, ok := m.responses["generate"]; ok {
@@ -424,6 +429,9 @@ type agentTestMockLLM struct {
 	responses []string
 	callCount *int
 }
+
+func (m *agentTestMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *agentTestMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *agentTestMockLLM) Generate(prompt string) (string, error) {
 	idx := *m.callCount

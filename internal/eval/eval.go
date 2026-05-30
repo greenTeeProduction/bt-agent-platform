@@ -4,6 +4,7 @@
 package eval
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -54,6 +55,9 @@ type UseCaseScore struct {
 
 // EvalMockLLM is a mock that returns sufficiently long output to pass quality gates.
 type EvalMockLLM struct{}
+
+func (m *EvalMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *EvalMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
 
 func (m *EvalMockLLM) Generate(prompt string) (string, error) {
 	return "EVAL_OUTPUT: This is a comprehensive response that addresses all aspects of the task in detail. " +

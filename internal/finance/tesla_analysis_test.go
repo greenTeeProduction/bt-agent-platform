@@ -3,6 +3,7 @@ package finance
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -17,7 +18,11 @@ func TestTeslaFullAnalysis(t *testing.T) {
 		return
 	}
 
-	outFile, _ := os.Create("/tmp/tesla_analysis.txt")
+	outPath := filepath.Join(t.TempDir(), "tesla_analysis.txt")
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		t.Fatalf("failed to create output file: %v", err)
+	}
 	defer outFile.Close()
 
 	task := "Analyze Tesla (TSLA) comprehensively: current stock price and market cap, last 4 quarters earnings (revenue, EPS, margins), key growth drivers (EV deliveries, energy storage, FSD/AI), competitive position vs BYD/Ford/GM/Rivian, balance sheet (cash, debt, FCF), valuation (P/E, EV/EBITDA vs auto industry), risks (China, regulatory, competition, Musk concentration), bull/bear cases with price targets, and investment recommendation with conviction level."
@@ -55,7 +60,7 @@ func TestTeslaFullAnalysis(t *testing.T) {
 		fmt.Fprintf(outFile, "%s\n", output)
 	}
 	fmt.Fprintf(outFile, "\n--- END ---\n")
-	t.Logf("Results written to /tmp/tesla_analysis.txt")
+	t.Logf("Results written to %s", outPath)
 }
 
 func trunc(s string, n int) string {

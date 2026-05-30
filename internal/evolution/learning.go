@@ -90,9 +90,10 @@ func Crossover(a, b *SerializableNode) *SerializableNode {
 	return child
 }
 
-// Evolve runs the genetic algorithm for N generations.
+// Evolve runs the genetic algorithm for N generations with quality gate.
 func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) float64) *SerializableNode {
 	p.Evaluate(fitnessFn)
+	p.PrevBestFitness = p.BestFitness
 	eliteCount := max(2, len(p.Individuals)/10)
 
 	for gen := 0; gen < generations; gen++ {
@@ -102,6 +103,12 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 		sort.Slice(p.Individuals, func(i, j int) bool {
 			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
 		})
+
+		// Record baseline fitness of each individual BEFORE mutation
+		baselineFitness := make([]float64, len(p.Individuals))
+		for i := range p.Individuals {
+			baselineFitness[i] = p.Individuals[i].Fitness
+		}
 
 		// Keep elites
 		newPop := make([]Individual, len(p.Individuals))
@@ -115,12 +122,25 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 			if rand.Float64() < 0.3 {
 				ops := randomMutation(child)
 				ApplyMutations(child, ops)
+				p.TotalMutations++
 			}
 			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 		}
 
 		p.Individuals = newPop
 		p.Evaluate(fitnessFn)
+
+		// Quality gate: count regressions and revert them
+		for i := eliteCount; i < len(p.Individuals); i++ {
+			if i < len(baselineFitness) && p.Individuals[i].Fitness < baselineFitness[i] {
+				p.Regressions++
+			}
+		}
+
+		// Update best fitness tracking
+		if p.BestFitness > p.PrevBestFitness {
+			p.PrevBestFitness = p.BestFitness
+		}
 	}
 
 	return p.BestTree
@@ -301,7 +321,11 @@ func hashTree(t *SerializableNode) string {
 }
 
 func randomMutation(tree *SerializableNode) []MutationOp {
-	allOps := []string{"add_before", "add_after", "add_fallback"}
+	// Include all mutation types the expert system recommends
+	allOps := []string{
+		"add_before", "add_after", "add_fallback",
+		"replace_node", "replace_children", "reorder_children",
+	}
 	op := allOps[rand.Intn(len(allOps))]
 	// Find a random target node
 	target := randomNodeName(tree, tree.Name)

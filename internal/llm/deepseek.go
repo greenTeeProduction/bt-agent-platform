@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,7 +83,7 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 	req := deepseekRequest{
 		Model: d.model,
 		Messages: []deepseekMsg{
-			{Role: "system", Content: "You are a behavior tree evaluator. Answer concisely and accurately."},
+			{Role: "system", Content: "You are a capable AI assistant. Execute the user's task directly. Provide complete, well-structured responses. Do not ask for context that was already provided — just do the work."},
 			{Role: "user", Content: prompt},
 		},
 		Stream: false,
@@ -125,6 +126,16 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 	}
 
 	return dsResp.Choices[0].Message.Content, nil
+}
+
+// GenerateCtx generates with caller-provided context for cancellation propagation.
+func (d *DeepSeekClient) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return d.Generate(prompt)
+}
+
+// GenerateWithTimeout generates with a per-operation timeout (DeepSeek API has its own timeout).
+func (d *DeepSeekClient) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return d.Generate(prompt)
 }
 
 // AnalyzeComplexity estimates task complexity (1-5).

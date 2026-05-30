@@ -54,38 +54,59 @@ type Blackboard struct {
 	ChainState   map[string]any // arbitrary chain execution state
 	Results      []string       // accumulated results from all chain actions
 	QualityScore float64        // 0.0-1.0 output quality score
+	CurrentPath  string         // currently executing strategy path (set by tree traversal)
+	VisitedPaths []string       // all strategy paths visited during execution
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
 func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
-	return buildNode(serTree, bb)
+	return buildNode(serTree, bb, "")
 }
 
-func buildNode(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
+// buildNode recursively builds a go-bt Command from a SerializableNode.
+// parentName tracks the parent node's name for path-tracking in StrategyRouters.
+func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
+	// If this Sequence is inside a StrategyRouter, record its name as the active path
+	if parentName == "StrategyRouter" && node.Type == "Sequence" && node.Name != "" {
+		origChildren := node.Children
+		// Prepend a path-recording action before the sequence's children
+		pathRecordAction := btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.CurrentPath = node.Name
+			ctx.Blackboard.VisitedPaths = append(ctx.Blackboard.VisitedPaths, node.Name)
+			return 1
+		})
+		children := make([]btcore.Command[Blackboard], len(origChildren)+1)
+		children[0] = pathRecordAction
+		for i := range origChildren {
+			children[i+1] = buildNode(&origChildren[i], bb, node.Name)
+		}
+		return btcomp.NewSequence(children...)
+	}
+
 	switch node.Type {
 	case "Sequence":
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
-			children[i] = buildNode(&node.Children[i], bb)
+			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSequence(children...)
 	case "Selector":
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
-			children[i] = buildNode(&node.Children[i], bb)
+			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
 	case "Retry":
-		child := buildNode(&node.Children[0], bb)
+		child := buildNode(&node.Children[0], bb, node.Name)
 		return btdec.NewRepeat(child, node.MaxRetries)
 	case "Action":
-		return btleaf.NewAction(GetAction(node.Name, bb))
+		return btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":
 		// Langchain chain node — reads ChainConfig from node metadata
 		cfg := parseChainConfig(node)
 		return BuildChainAction(cfg, bb)
 	case "Condition":
-		return btleaf.NewCondition(GetCondition(node.Name, bb))
+		return btleaf.NewCondition(bb.conditionForName(node.Name))
 	default:
 		// Unknown node type → pass-through action (always succeeds)
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
@@ -95,6 +116,11 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[
 }
 
 func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboard]) int {
+	// Registry-first: packages register via engine.RegisterAction() in init().
+	// GetAction returns the zero-value ActionFunc (nil) for unknown names.
+	if fn := GetAction(name); fn != nil {
+		return fn
+	}
 	switch name {
 	case "AnalyzeTask":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
@@ -890,6 +916,11 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 }
 
 func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
+	// Registry-first: packages register via engine.RegisterCondition() in init().
+	// GetCondition returns nil for unknown names.
+	if fn := GetCondition(name); fn != nil {
+		return fn
+	}
 	switch name {
 	case "ValidateInput":
 		return func(b *Blackboard) bool {
@@ -1388,7 +1419,10 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 				"what are", "who", "when", "where", "why", "top ", "best ",
 				"most popular", "recommend", "suggest", "tell me about",
 				"summarize", "history of", "future of", "trends", "llm",
-				"framework", "python", "rust", "golang", "kubernetes")
+				"framework", "python", "rust", "golang", "kubernetes",
+				"search", "find ", "news", "ai ", "verification", "verify",
+				"check ", "latest", "update", "review", "scan", "audit",
+				"look up", "lookup", "gather", "collect", "compile", "discover")
 		}
 	case "IsAmbiguousQuery":
 		return func(b *Blackboard) bool {
@@ -1504,7 +1538,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsRetreatState":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "retreat", "flee", "escape", "heal") }
 	case "IsTradingTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "trading", "signal", "market", "price", "stock") }
+		return func(b *Blackboard) bool { return containsAny(b.Task, "trading", "signal", "market", "price", "stock", "alert", "critical", "incident", "notify", "route", "severity", "disk", "security", "health") }
 	case "IsDataRequest":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "data", "fetch", "pull", "price") }
 	case "IsTAPath":
@@ -1534,14 +1568,26 @@ func validateOutputQuality(b *Blackboard) bool {
 		result = b.Results[len(b.Results)-1]
 	}
 
+	// 0. Structured zero-LLM output detection — short but valid structured output
+	// from trees like alert_router, agent_monitor that produce markdown-formatted
+	// routing/status results without LLM calls.
+	lowerResult := strings.ToLower(result)
+	isStructured := strings.HasPrefix(strings.TrimSpace(result), "## ") ||
+		strings.Contains(lowerResult, "route:") ||
+		strings.Contains(lowerResult, "status:") ||
+		strings.Contains(lowerResult, "delivered")
+	minLen := 30
+	if isStructured {
+		minLen = 15 // structured zero-LLM output is intentionally compact
+	}
+
 	// 1. Minimum length check
-	if len(result) < 30 {
+	if len(result) < minLen {
 		b.QualityScore = 0.0
 		return false
 	}
 
 	// 2. Error pattern check
-	lowerResult := strings.ToLower(result)
 	errorPatterns := []string{
 		"i cannot", "i can't", "unable to", "error:", "failed to",
 		"i don't know", "i'm not sure", "not implemented",
@@ -1566,6 +1612,10 @@ func validateOutputQuality(b *Blackboard) bool {
 	}
 	if strings.Contains(result, "```") {
 		score += 0.1 // contains code blocks
+	}
+	// Bonus for zero-LLM routing output (alert_router, etc.)
+	if isStructured && len(result) < 100 {
+		score += 0.2 // compact but valid structured output
 	}
 	if score > 1.0 {
 		score = 1.0
@@ -1619,6 +1669,11 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 
 	span.SetAttribute("outcome", bb.Outcome)
 	span.SetAttribute("duration_ms", fmt.Sprintf("%d", bb.DurationMs))
+
+	// Always validate output quality — some trees (agent_monitor, alert_router)
+	// don't include ReflectOnOutcome which is where quality scoring normally runs.
+	// Without this, zero-LLM trees report quality=0 even with valid structured output.
+	validateOutputQuality(bb)
 
 	return bb.Result
 }

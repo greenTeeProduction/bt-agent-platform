@@ -125,11 +125,11 @@ func TestConnect_Duplicate(t *testing.T) {
 	kg.Register(&TreeMeta{ID: "b", Name: "B", Category: "test"})
 
 	kg.Connect("a", "b", "depends_on")
-	kg.Connect("a", "b", "depends_on") // duplicate
+	kg.Connect("a", "b", "depends_on") // duplicate — should be deduplicated
 	kg.Connect("a", "b", "composes")   // different type
 
-	if len(kg.Edges) != 3 {
-		t.Fatalf("expected 3 edges (duplicates allowed), got %d", len(kg.Edges))
+	if len(kg.Edges) != 2 {
+		t.Fatalf("expected 2 edges (duplicates deduplicated), got %d", len(kg.Edges))
 	}
 }
 

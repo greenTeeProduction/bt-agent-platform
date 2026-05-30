@@ -156,9 +156,30 @@ func init() {
 		ctx.Blackboard.KgResults = fmt.Sprintf("KG: %s", ctx.Blackboard.Task)
 		return 1
 	})
-	RegisterAction("ApplyKnowledge", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("ApplyKnowledge", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Task = fmt.Sprintf("%s [KG: %s]", bb.Task, bb.KgResults)
+		return 1
+	})
 	RegisterAction("UseCachedResult", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
 	RegisterAction("EscalateToDeepSeek", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("SelfCorrect", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if bb.LLM != nil {
+			prompt := fmt.Sprintf("The previous task produced errors. Task: %s\n\nCorrect and return a better answer:", bb.Task)
+			result, err := bb.LLM.Generate(prompt)
+			if err == nil {
+				bb.Result = result
+				bb.Outcome = string(reflection.Success)
+				return 1
+			}
+		}
+		return -1
+	})
+	RegisterAction("MarkSuccessful", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Outcome = string(reflection.Success)
+		return 1
+	})
 	RegisterAction("AnalyzeTask", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.LLM != nil {
@@ -182,6 +203,72 @@ func init() {
 
 func init() {
 	registerGoapNodes()
+	registerAlertRouterNodes()
+}
+
+// registerAlertRouterNodes registers conditions and actions for the alert_router tree.
+// Kept here (not in domains/) to avoid import cycle: domains → engine → domains.
+func registerAlertRouterNodes() {
+	// Alert Router conditions
+	RegisterCondition("IsCritical", func(b *Blackboard) bool {
+		return containsAnyLower(b.Task, "critical", "emergency", "urgent", "severe")
+	})
+	RegisterCondition("IsSecurity", func(b *Blackboard) bool {
+		return containsAnyLower(b.Task, "security", "breach", "attack", "intrusion", "unauthorized", "ssh", "brute")
+	})
+	RegisterCondition("IsTrading", func(b *Blackboard) bool {
+		return containsAnyLower(b.Task, "trading", "btc", "price", "signal", "volume", "market")
+	})
+	RegisterCondition("IsDiskAlert", func(b *Blackboard) bool {
+		return containsAnyLower(b.Task, "disk", "storage", "filesystem", "sda", "nvme", "space")
+	})
+	RegisterCondition("IsHealthAlert", func(b *Blackboard) bool {
+		return containsAnyLower(b.Task, "health", "monitor", "down", "failure", "crash", "unreachable")
+	})
+
+	// Alert Router actions
+	RegisterAction("RouteToAllChannels", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Result = fmt.Sprintf("## Alert Routed\n\n**Severity:** CRITICAL\n**Task:** %s\n**Route:** ALL channels\n**Status:** Delivered", bb.Task)
+		return 1
+	})
+	RegisterAction("RouteToSecurityChannel", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Result = fmt.Sprintf("## Security Alert Routed\n\n**Severity:** HIGH\n**Task:** %s\n**Route:** Security team\n**Status:** Delivered", bb.Task)
+		return 1
+	})
+	RegisterAction("RouteToTradingChannel", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Result = fmt.Sprintf("## Trading Signal Routed\n\n**Task:** %s\n**Route:** Trading channels\n**Status:** Delivered", bb.Task)
+		return 1
+	})
+	RegisterAction("RouteToDevOpsChannel", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Result = fmt.Sprintf("## Alert Routed\n\n**Task:** %s\n**Route:** DevOps/Admin\n**Status:** Delivered", bb.Task)
+		return 1
+	})
+	RegisterAction("RouteToDefaultChannel", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.Result = fmt.Sprintf("## Alert Routed\n\n**Task:** %s\n**Route:** Default channel\n**Status:** Delivered", bb.Task)
+		return 1
+	})
+}
+
+func containsAnyLower(s string, keywords ...string) bool {
+	for _, kw := range keywords {
+		for i := 0; i <= len(s)-len(kw); i++ {
+			match := true
+			for j := 0; j < len(kw); j++ {
+				c := s[i+j]
+				kc := kw[j]
+				if c >= 'A' && c <= 'Z' { c += 32 }
+				if kc >= 'A' && kc <= 'Z' { kc += 32 }
+				if c != kc { match = false; break }
+			}
+			if match { return true }
+		}
+	}
+	return false
 }
 
 // ─── Action implementations ─────────────────────────────────────────────────

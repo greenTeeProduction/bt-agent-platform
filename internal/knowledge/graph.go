@@ -1,6 +1,10 @@
 package knowledge
 
-import "strings"
+import (
+	"strings"
+	"sync"
+	"time"
+)
 
 // TreeMeta describes a behavior tree in the knowledge graph.
 type TreeMeta struct {
@@ -25,6 +29,14 @@ type TreeMeta struct {
 
 	// Tags for discovery
 	Tags []string `json:"tags,omitempty"`
+
+	// Runtime feedback (updated by RecordRun)
+	RunCount     int           `json:"run_count"`
+	LastOutcome  string        `json:"last_outcome"`
+	LastDuration time.Duration `json:"last_duration"`
+
+	// Embedding vector for semantic discovery
+	Embedding Embedding `json:"embedding,omitempty"`
 }
 
 // Capability describes what a tree can do.
@@ -41,7 +53,9 @@ type Relation struct {
 }
 
 // KnowledgeGraph maps all behavior trees and their relationships.
+// Protected by mu for concurrent read/write from scheduler and MCP tools.
 type KnowledgeGraph struct {
+	mu       sync.RWMutex
 	Trees    map[string]*TreeMeta `json:"trees"`
 	Edges    []Edge               `json:"edges"`
 	Synonyms map[string]string    `json:"synonyms"` // capability → tree mapping
@@ -65,6 +79,8 @@ func NewKnowledgeGraph() *KnowledgeGraph {
 
 // Register adds a tree to the knowledge graph.
 func (kg *KnowledgeGraph) Register(tree *TreeMeta) {
+	kg.mu.Lock()
+	defer kg.mu.Unlock()
 	kg.Trees[tree.ID] = tree
 
 	// Index keywords as synonyms → tree
@@ -77,8 +93,16 @@ func (kg *KnowledgeGraph) Register(tree *TreeMeta) {
 	}
 }
 
-// Connect adds a relationship between two trees.
+// Connect adds a relationship between two trees. Deduplicates existing edges.
 func (kg *KnowledgeGraph) Connect(from, to, relType string) {
+	kg.mu.Lock()
+	defer kg.mu.Unlock()
+	// Check for duplicates
+	for _, e := range kg.Edges {
+		if e.From == from && e.To == to && e.Type == relType {
+			return // already exists
+		}
+	}
 	kg.Edges = append(kg.Edges, Edge{
 		From:   from,
 		To:     to,
@@ -90,6 +114,21 @@ func (kg *KnowledgeGraph) Connect(from, to, relType string) {
 // Discover finds the best tree for a given task description.
 // Returns the tree ID and a confidence score (0-1).
 func (kg *KnowledgeGraph) Discover(task string) (treeID string, confidence float64) {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+	// Phase 1: embedding similarity (if embeddings are available)
+	if kg.hasEmbeddings() {
+		if id, conf := kg.discoverWithEmbeddings(task); id != "" {
+			return id, conf
+		}
+	}
+
+	// Phase 2: keyword + capability matching (fallback)
+	return kg.stringMatch(task)
+}
+
+// stringMatch is the keyword-based matching (original implementation).
+func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 	taskLower := strings.ToLower(task)
 
 	// Phase 1: exact keyword match
@@ -150,6 +189,8 @@ func (kg *KnowledgeGraph) matchScore(task string, tree *TreeMeta) float64 {
 
 // ListByCategory returns all trees in a category.
 func (kg *KnowledgeGraph) ListByCategory(category string) []*TreeMeta {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
 	var result []*TreeMeta
 	for _, tree := range kg.Trees {
 		if tree.Category == category {
@@ -161,6 +202,8 @@ func (kg *KnowledgeGraph) ListByCategory(category string) []*TreeMeta {
 
 // Query returns trees matching a capability.
 func (kg *KnowledgeGraph) Query(capability string) []*TreeMeta {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
 	var result []*TreeMeta
 	capLower := strings.ToLower(capability)
 	for _, tree := range kg.Trees {
@@ -177,6 +220,8 @@ func (kg *KnowledgeGraph) Query(capability string) []*TreeMeta {
 
 // Summary returns a human-readable graph summary.
 func (kg *KnowledgeGraph) Summary() string {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
 	categories := make(map[string]int)
 	for _, t := range kg.Trees {
 		categories[t.Category]++
@@ -185,12 +230,34 @@ func (kg *KnowledgeGraph) Summary() string {
 	s := "Knowledge Graph: "
 	first := true
 	for cat, count := range categories {
-		if !first { s += ", " }
+		if !first {
+			s += ", "
+		}
 		s += cat + "(" + itoa(count) + ")"
 		first = false
 	}
 	s += " | " + itoa(len(kg.Trees)) + " trees, " + itoa(len(kg.Edges)) + " edges"
 	return s
+}
+
+// DiscoverRelated returns trees connected to the given tree via edges.
+func (kg *KnowledgeGraph) DiscoverRelated(treeID string) []string {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+	seen := map[string]bool{treeID: true}
+	results := []string{}
+
+	for _, edge := range kg.Edges {
+		if edge.From == treeID && !seen[edge.To] {
+			results = append(results, edge.To)
+			seen[edge.To] = true
+		}
+		if edge.To == treeID && !seen[edge.From] {
+			results = append(results, edge.From)
+			seen[edge.From] = true
+		}
+	}
+	return results
 }
 
 func itoa(n int) string {

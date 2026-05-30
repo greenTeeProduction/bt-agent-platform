@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes">
+<title>BT Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/chat.css">
+</head>
+<body>
+<div class="app">
+  <!-- Mobile overlay -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <h2>BT Studio</h2>
+      <span>Behavior Tree Platform</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="overview"><span class="icon">◈</span> Overview</button>
+      <button class="nav-item" data-tab="thinktank"><span class="icon">◉</span> ThinkTank</button>
+      <button class="nav-item" data-tab="company"><span class="icon">◫</span> Company</button>
+      <button class="nav-item" data-tab="tasks"><span class="icon">☰</span> Tasks</button>
+      <button class="nav-item" data-tab="trees"><span class="icon">❖</span> Trees</button>
+      <button class="nav-item" data-tab="mindmap"><span class="icon">◎</span> MindMap</button>
+      <button class="nav-item" data-tab="evolution"><span class="icon">⟳</span> Evolution</button>
+      <button class="nav-item" data-tab="agents"><span class="icon">🤖</span> Agents</button>
+    </nav>
+    <div class="sidebar-footer">
+      BT Platform v1.0
+      <br><span class="status-dot"></span> Gardener running
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main" id="main-content">
+    <div class="loading">Loading dashboard...</div>
+  </main>
+</div>
+
+<!-- Hamburger (mobile) -->
+<button class="hamburger" id="hamburger-btn" aria-label="Menu">☰</button>
+
+<!-- Chat -->
+<button class="chat-toggle" id="chat-toggle" title="Chat with agent">💬</button>
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-header">
+    <span id="chat-agent-name">BT Studio Assistant</span>
+    <button onclick="toggleChat()">&times;</button>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg agent">Hi! I'm the BT Studio assistant. Ask me anything about the behavior tree framework.</div>
+  </div>
+  <div class="chat-input-row">
+    <input id="chat-input" placeholder="Ask about trees, tasks, evolution..." onkeydown="if(event.key==='Enter')sendChat()">
+    <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
+  </div>
+</div>
+
+<!-- JavaScript -->
+<script src="/static/js/lib/api.js"></script>
+<script src="/static/js/components/toast.js"></script>
+<script src="/static/js/components/chat.js"></script>
+<script src="/static/js/tabs/overview.js"></script>
+<script src="/static/js/tabs/thinktank.js"></script>
+<script src="/static/js/tabs/company.js"></script>
+<script src="/static/js/tabs/tasks.js"></script>
+<script src="/static/js/tabs/trees.js"></script>
+<script src="/static/js/tabs/mindmap.js"></script>
+<script src="/static/js/tabs/evolution.js"></script>
+<script src="/static/js/tabs/agents.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

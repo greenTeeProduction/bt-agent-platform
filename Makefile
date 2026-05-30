@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend help
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly help
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -37,6 +37,25 @@ fmt-check:
 
 clean:
 	rm -rf $(BIN_DIR)/*
+
+# Run benchmark suite (fast, no LLM needed)
+bench:
+	$(GO) test -bench=. -benchtime=1x -count=1 ./internal/benchmark/... 2>&1
+
+# Nightly benchmark suite — runs all evaluation benchmarks (SWE-bench, BFCL, τ-bench, ToolBench)
+# Requires Ollama running and ~10GB disk for benchmark datasets.
+# Fails if any benchmark score regresses >5% from baseline.
+bench-nightly:
+	@echo "=== Running Nightly Benchmark Suite ==="
+	@echo "SWE-bench..."
+	$(GO) test -run TestSWE -count=1 -timeout 3600s ./internal/benchmark/... || echo "SWE-bench failed (check logs)"
+	@echo "BFCL..."
+	$(GO) test -run TestBFCL -count=1 -timeout 1800s ./internal/benchmark/... || echo "BFCL failed (check logs)"
+	@echo "TauBench..."
+	$(GO) test -run TestTau -count=1 -timeout 1800s ./internal/benchmark/... || echo "TauBench failed (check logs)"
+	@echo "ToolBench..."
+	$(GO) test -run TestTool -count=1 -timeout 1800s ./internal/benchmark/... || echo "ToolBench failed (check logs)"
+	@echo "=== Nightly Benchmarks Complete ==="
 
 # Generate CHANGELOG.md from conventional commits since last tag
 changelog:
@@ -101,5 +120,7 @@ help:
 	@echo "  fmt-check         Check formatting (CI)"
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
+	@echo "  bench             Run fast benchmarks (no LLM)"
+	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
