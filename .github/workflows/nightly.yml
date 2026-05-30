@@ -36,10 +36,31 @@ jobs:
           echo "Total coverage: $TOTAL"
           echo "COVERAGE=$TOTAL" >> $GITHUB_ENV
 
-      - name: Check benchmark regression
+      - name: Build benchcmp
+        run: go build -o /tmp/benchcmp ./cmd/benchcmp/
+
+      - name: Run benchmarks and check for regressions
         run: |
-          echo "=== Running benchmark regression checks ==="
+          echo "=== Running benchmarks ==="
           go test -bench=. -benchmem -timeout 30m ./internal/benchmark/ 2>&1 | tee /tmp/bench-output.txt || echo "⚠ Some benchmarks failed (may need Ollama)"
+
+      - name: Detect benchmark regressions
+        run: |
+          if [ -f /home/runner/.go-bt-benchcmp/baseline.json ]; then
+            echo "=== Comparing against baseline ==="
+            cat /tmp/bench-output.txt | /tmp/benchcmp check --warning 15 --critical 30 2>&1 | tee /tmp/bench-regression-report.txt
+            BENCH_EXIT=$?
+            if [ $BENCH_EXIT -eq 2 ]; then
+              echo "::error::Critical benchmark regressions detected!"
+              exit 1
+            elif [ $BENCH_EXIT -eq 1 ]; then
+              echo "::warning::Benchmark warnings detected — review before merging"
+            fi
+          else
+            echo "=== First run — saving baseline ==="
+            cat /tmp/bench-output.txt | /tmp/benchcmp baseline --save
+            echo "Baseline saved. Future runs will compare against this baseline."
+          fi
 
       - name: Summary
         if: always()
@@ -77,6 +98,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build benchcmp
+        run: go build -o /tmp/benchcmp ./cmd/benchcmp/
+
       - name: Run benchmarks with comparison
         run: |
           echo "=== Regression Analysis ==="
@@ -86,11 +110,17 @@ jobs:
 
       - name: Detect regressions
         run: |
-          # Compare benchmark results against known baselines
-          if grep -q "FAIL" /tmp/bench-regression.txt; then
-            echo "⚠ Benchmark failures detected — check logs"
+          if grep -q "^Benchmark" /tmp/bench-regression.txt; then
+            if [ -f /home/runner/.go-bt-benchcmp/baseline.json ]; then
+              echo "=== Comparing against stored baseline ==="
+              cat /tmp/bench-regression.txt | /tmp/benchcmp check --warning 15 --critical 30 2>&1 | tee /tmp/bench-report.txt
+            else
+              echo "=== First regression run — saving baseline ==="
+              cat /tmp/bench-regression.txt | /tmp/benchcmp baseline --save
+            fi
+          else
+            echo "No benchmark results found (Ollama may be unavailable)"
           fi
-          echo "Benchmark regression analysis complete."
 
       - name: Upload regression artifact
         if: always()

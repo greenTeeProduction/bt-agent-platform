@@ -5,7 +5,7 @@ GO := /usr/local/go/bin/go
 GOFMT := /usr/local/go/bin/gofmt
 
 # Build all binaries
-BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli
+BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli benchcmp
 BIN_DIR := bin
 
 all: build
@@ -41,6 +41,18 @@ clean:
 # Run benchmark suite (fast, no LLM needed)
 bench:
 	$(GO) test -bench=. -benchtime=1x -count=1 ./internal/benchmark/... 2>&1
+
+# Save benchmark baseline for regression detection
+benchcmp-baseline:
+	$(GO) test -bench=. -benchtime=1x -count=3 ./internal/benchmark/... 2>&1 | $(BIN_DIR)/benchcmp baseline --save
+
+# Check benchmarks against stored baseline (exit 1 on critical regression)
+benchcmp-check:
+	$(GO) test -bench=. -benchtime=1x -count=3 ./internal/benchmark/... 2>&1 | $(BIN_DIR)/benchcmp check
+
+# Reset benchmark baseline
+benchcmp-reset:
+	$(BIN_DIR)/benchcmp reset
 
 # Nightly benchmark suite — runs all evaluation benchmarks (SWE-bench, BFCL, τ-bench, ToolBench)
 # Requires Ollama running and ~10GB disk for benchmark datasets.
@@ -121,6 +133,9 @@ help:
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
 	@echo "  bench             Run fast benchmarks (no LLM)"
+	@echo "  benchcmp-baseline Save benchmark baseline for regression detection"
+	@echo "  benchcmp-check    Check benchmarks against stored baseline"
+	@echo "  benchcmp-reset    Reset benchmark baseline"
 	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
