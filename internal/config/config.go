@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -823,3 +824,147 @@ func envBool(key string, defaultVal bool) bool {
 func Duration(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
+
+// ─── Runtime Checks ──────────────────────────────────────────────────────────
+
+// RuntimeIssue represents a runtime configuration consistency issue.
+type RuntimeIssue struct {
+	Severity  string // "error" or "warning"
+	Component string // config field or subsystem
+	Message   string // human-readable description
+}
+
+// RuntimeReport contains the results of a runtime consistency check.
+type RuntimeReport struct {
+	Ok     bool           `json:"ok"`
+	Issues []RuntimeIssue `json:"issues,omitempty"`
+}
+
+// CheckRuntime performs runtime consistency checks that go beyond static
+// value validation. It verifies that configured filesystem paths exist,
+// that the Ollama host is reachable (if using the ollama provider), and
+// that persistence directories are usable. Unlike Validate() which checks
+// value constraints, CheckRuntime() verifies that the configured external
+// resources are actually available at startup.
+//
+// Issues are categorized as "error" (critical, platform may not function)
+// or "warning" (non-critical, worth logging). A platform can use this to
+// decide whether to start in degraded mode or abort entirely.
+func (c *Config) CheckRuntime() RuntimeReport {
+	var issues []RuntimeIssue
+
+	// ── TLS files ──────────────────────────────────────────────────────
+	if c.TLSCert != "" {
+		if _, err := os.Stat(c.TLSCert); os.IsNotExist(err) {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "error",
+				Component: "TLSCert",
+				Message:   fmt.Sprintf("TLS certificate file not found: %s", c.TLSCert),
+			})
+		}
+	}
+	if c.TLSKey != "" {
+		if _, err := os.Stat(c.TLSKey); os.IsNotExist(err) {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "error",
+				Component: "TLSKey",
+				Message:   fmt.Sprintf("TLS key file not found: %s", c.TLSKey),
+			})
+		}
+	}
+
+	// ── Persistence directories (directories are created on demand,
+	//     but we check parent dir existence for explicit paths) ─────────
+	issues = c.checkDirAccess(issues, "ReflectionsDir", c.ReflectionsDir)
+	issues = c.checkDirAccess(issues, "AgentDefsDir", c.AgentDefsDir)
+	issues = c.checkDirAccess(issues, "HistoryDir", c.HistoryDir)
+	issues = c.checkDirAccess(issues, "LogDir", c.LogDir)
+
+	// ── Config file ───────────────────────────────────────────────────
+	if c.ConfigFile != "" {
+		if _, err := os.Stat(c.ConfigFile); os.IsNotExist(err) {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "warning",
+				Component: "ConfigFile",
+				Message:   fmt.Sprintf("Config file specified but not found, using defaults: %s", c.ConfigFile),
+			})
+		}
+	}
+
+	// ── Ollama reachability ───────────────────────────────────────────
+	if c.LLMProvider == "ollama" && c.OllamaHost != "" {
+		if !c.ollamaReachable() {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "warning",
+				Component: "OllamaHost",
+				Message:   fmt.Sprintf("Ollama host unreachable, agent execution will be degraded: %s", c.OllamaHost),
+			})
+		}
+	}
+
+	if len(issues) == 0 {
+		return RuntimeReport{Ok: true}
+	}
+	return RuntimeReport{Ok: false, Issues: issues}
+}
+
+// checkDirAccess validates that a configured directory path either exists
+// as a directory or can be created. Empty paths are skipped (not configured).
+func (c *Config) checkDirAccess(issues []RuntimeIssue, component, dir string) []RuntimeIssue {
+	if dir == "" {
+		return issues
+	}
+	info, err := os.Stat(dir)
+	if err == nil {
+		if !info.IsDir() {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "error",
+				Component: component,
+				Message:   fmt.Sprintf("path exists but is not a directory: %s", dir),
+			})
+		}
+		return issues
+	}
+	if os.IsNotExist(err) {
+		// Check if the parent directory exists (so we could create it).
+		parent := filepath.Dir(dir)
+		if _, perr := os.Stat(parent); os.IsNotExist(perr) {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "warning",
+				Component: component,
+				Message:   fmt.Sprintf("directory does not exist and parent is missing: %s", dir),
+			})
+		}
+		return issues
+	}
+	// Other error (permission, etc.)
+	issues = append(issues, RuntimeIssue{
+		Severity:  "error",
+		Component: component,
+		Message:   fmt.Sprintf("cannot access directory %s: %v", dir, err),
+	})
+	return issues
+}
+
+// ollamaReachable performs a lightweight HTTP check against the Ollama API
+// root endpoint. Uses a 5-second timeout to avoid blocking startup.
+// When ollamaChecker is set (e.g., in tests), it delegates to that function
+// instead of making a real network call.
+func (c *Config) ollamaReachable() bool {
+	if ollamaChecker != nil {
+		return ollamaChecker(c.OllamaHost)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := strings.TrimRight(c.OllamaHost, "/") + "/api/tags"
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+// ollamaChecker is a package-level function that can be overridden in tests
+// to avoid real network calls. Tests set it to a mock; production code leaves
+// it nil, which causes ollamaReachable to use a real HTTP client.
+var ollamaChecker func(host string) bool

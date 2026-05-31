@@ -1131,3 +1131,296 @@ func TestValidate_TLS_KeyOnly(t *testing.T) {
 		t.Error("expected validation error when TLS key set but cert missing")
 	}
 }
+
+// ─── CheckRuntime Tests ────────────────────────────────────────────────────
+
+func TestCheckRuntime_AllOk(t *testing.T) {
+	// Use a real directory that exists for persistence paths.
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.ReflectionsDir = tmp
+	c.AgentDefsDir = tmp
+	c.HistoryDir = tmp
+	c.LogDir = tmp
+	// No TLS, no config file, no Ollama reachability — these are skipped.
+	// Set deepseek provider to skip ollama check.
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true, got Ok=false with %d issues: %+v", len(report.Issues), report.Issues)
+	}
+}
+
+func TestCheckRuntime_TLSCertNotFound(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.TLSCert = filepath.Join(tmp, "nonexistent.pem")
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when TLS cert file doesn't exist")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "TLSCert" && iss.Severity == "error" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected TLSCert error, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_TLSKeyNotFound(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.TLSKey = filepath.Join(tmp, "nonexistent.pem")
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when TLS key file doesn't exist")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "TLSKey" && iss.Severity == "error" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected TLSKey error, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_TLSFilesExist(t *testing.T) {
+	tmp := t.TempDir()
+	certPath := filepath.Join(tmp, "cert.pem")
+	keyPath := filepath.Join(tmp, "key.pem")
+	os.WriteFile(certPath, []byte("fake-cert"), 0644)
+	os.WriteFile(keyPath, []byte("fake-key"), 0644)
+
+	c := newDefaultConfig()
+	c.TLSCert = certPath
+	c.TLSKey = keyPath
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true when TLS files exist, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_DirExists(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.ReflectionsDir = tmp
+	c.AgentDefsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true for valid directories, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_DirIsFile(t *testing.T) {
+	tmp := t.TempDir()
+	filePath := filepath.Join(tmp, "notadir.txt")
+	os.WriteFile(filePath, []byte("data"), 0644)
+
+	c := newDefaultConfig()
+	c.ReflectionsDir = filePath
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when dir path is a file")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "ReflectionsDir" && iss.Severity == "error" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected ReflectionsDir error, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_DirParentMissing(t *testing.T) {
+	c := newDefaultConfig()
+	c.ReflectionsDir = "/nonexistent/parent/subdir"
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when parent directory doesn't exist")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "ReflectionsDir" && iss.Severity == "warning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected ReflectionsDir warning for missing parent, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_ConfigFileNotFound(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.ConfigFile = filepath.Join(tmp, "nonexistent.json")
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when config file doesn't exist")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "ConfigFile" && iss.Severity == "warning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected ConfigFile warning, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_OllamaUnreachable(t *testing.T) {
+	tmp := t.TempDir()
+	// Override ollamaChecker to simulate unreachable host.
+	oldChecker := ollamaChecker
+	ollamaChecker = func(host string) bool { return false }
+	defer func() { ollamaChecker = oldChecker }()
+
+	c := newDefaultConfig()
+	c.LLMProvider = "ollama"
+	c.OllamaHost = "http://localhost:11434"
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when Ollama is unreachable")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "OllamaHost" && iss.Severity == "warning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected OllamaHost warning, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_OllamaReachable(t *testing.T) {
+	tmp := t.TempDir()
+	oldChecker := ollamaChecker
+	ollamaChecker = func(host string) bool { return true }
+	defer func() { ollamaChecker = oldChecker }()
+
+	c := newDefaultConfig()
+	c.LLMProvider = "ollama"
+	c.OllamaHost = "http://localhost:11434"
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true when Ollama is reachable, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_DeepSeekNoOllamaCheck(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true for deepseek provider (no Ollama check), got: %+v", report.Issues)
+	}
+	// Verify no OllamaHost issues.
+	for _, iss := range report.Issues {
+		if iss.Component == "OllamaHost" {
+			t.Error("expected no OllamaHost check for deepseek provider")
+		}
+	}
+}
+
+func TestCheckRuntime_AllEmptyPaths(t *testing.T) {
+	c := newDefaultConfig()
+	// All persistence dirs empty, no TLS, no config file.
+	c.ReflectionsDir = ""
+	c.AgentDefsDir = ""
+	c.HistoryDir = ""
+	c.LogDir = ""
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true for all-empty paths, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_MultipleIssues(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.TLSCert = filepath.Join(tmp, "missing.pem")
+	c.TLSKey = filepath.Join(tmp, "also-missing.pem")
+	c.ReflectionsDir = filepath.Join(tmp, "notadir.txt")
+	os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
+	c.AgentDefsDir = "/nonexistent/parent/subdir"
+	c.ConfigFile = filepath.Join(tmp, "nosuch.json")
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false with multiple issues")
+	}
+	if len(report.Issues) < 4 {
+		t.Errorf("expected at least 4 issues, got %d: %+v", len(report.Issues), report.Issues)
+	}
+}
+
+func TestCheckRuntime_CreatedDir_Valid(t *testing.T) {
+	// A newly-created temp dir should be valid.
+	tmp := t.TempDir()
+	subdir := filepath.Join(tmp, "subdir")
+	os.Mkdir(subdir, 0755)
+
+	c := newDefaultConfig()
+	c.ReflectionsDir = subdir
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true for newly created directory, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_TLSBothFilesOk(t *testing.T) {
+	tmp := t.TempDir()
+	certPath := filepath.Join(tmp, "cert.pem")
+	keyPath := filepath.Join(tmp, "key.pem")
+	os.WriteFile(certPath, []byte("cert"), 0644)
+	os.WriteFile(keyPath, []byte("key"), 0644)
+
+	c := newDefaultConfig()
+	c.TLSCert = certPath
+	c.TLSKey = keyPath
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true with both TLS files present, got: %+v", report.Issues)
+	}
+}
