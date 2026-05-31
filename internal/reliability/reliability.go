@@ -743,13 +743,15 @@ func (le *LocalExecutor) String() string {
 }
 
 // AgentRouter distributes agent tasks across multiple executors with
-// health-aware round-robin routing and graceful degradation.
-// When all remote executors are unhealthy, falls back to local execution.
+// health-aware round-robin routing, failover retry, and graceful degradation.
+// When an executor's Execute() call fails, the router tries the next healthy
+// executor. When all remote executors are exhausted, falls back to local execution.
 type AgentRouter struct {
-	mu        sync.RWMutex
-	executors []AgentExecutor
-	next      int
-	local     AgentExecutor // fallback
+	mu          sync.RWMutex
+	executors   []AgentExecutor
+	next        int
+	local       AgentExecutor // fallback
+	MaxFailover int           // max executors to try per Execute() call (0 = try all)
 }
 
 // NewAgentRouter creates a router with the given executors.
@@ -781,26 +783,55 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 	r.local = e
 }
 
-// Execute routes a task to a healthy executor using round-robin.
-// Falls back to local executor if all remote executors are unhealthy.
+// Execute routes a task to a healthy executor using round-robin with failover.
+// If an executor's Execute() call fails, the router tries the next healthy executor.
+// Falls back to local executor if all remote executors are exhausted.
+// MaxFailover caps how many executors to try (0 = try all).
 func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	r.mu.Lock()
 	executors := make([]AgentExecutor, len(r.executors))
 	copy(executors, r.executors)
 	start := r.next
 	r.next = (r.next + 1) % max(1, len(executors))
+	maxFailover := r.MaxFailover
 	r.mu.Unlock()
 
-	// Round-robin through executors, trying each once
-	for i := 0; i < len(executors); i++ {
-		idx := (start + i) % len(executors)
-		e := executors[idx]
-		if err := e.Health(); err == nil {
-			return e.Execute(agent, task)
-		}
+	if maxFailover <= 0 {
+		maxFailover = len(executors)
 	}
 
-	// All remote executors unhealthy — fall back to local
+	// Round-robin through executors with failover on Execute() failure.
+	// Each executor's Health() must pass before we try Execute().
+	var lastErr error
+	tried := 0
+	for i := 0; i < len(executors) && tried < maxFailover; i++ {
+		idx := (start + i) % len(executors)
+		e := executors[idx]
+		if err := e.Health(); err != nil {
+			continue // skip unhealthy executors
+		}
+		tried++
+		result, err := e.Execute(agent, task)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+	}
+
+	// If we have a specific error, include it; otherwise fall back to local
+	if lastErr != nil {
+		// Try local as last resort
+		if r.local != nil {
+			result, localErr := r.local.Execute(agent, task)
+			if localErr == nil {
+				return result, nil
+			}
+			lastErr = fmt.Errorf("all executors failed (last remote: %w; local: %v)", lastErr, localErr)
+		}
+		return nil, lastErr
+	}
+
+	// No remote executor was healthy — fall back to local
 	if r.local != nil {
 		return r.local.Execute(agent, task)
 	}

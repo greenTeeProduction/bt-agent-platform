@@ -742,3 +742,177 @@ func TestAgentExecutor_AgentResultFields(t *testing.T) {
 		t.Error("quality_score field not preserved")
 	}
 }
+
+// ─── AgentRouter Failover Tests ─────────────────────────────────────────────
+
+func TestAgentRouter_FailoverOnExecuteError(t *testing.T) {
+	// Executor passes Health() but Execute() fails → router tries next executor
+	failing := NewLocalExecutor("failing", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("transient error")
+	})
+	working := NewLocalExecutor("working", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "from working"}, nil
+	})
+
+	router := NewAgentRouter(failing, working)
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected failover to working executor, got error: %v", err)
+	}
+	if result.Output != "from working" {
+		t.Errorf("expected output from working executor, got %q", result.Output)
+	}
+}
+
+func TestAgentRouter_AllExecutorsFail(t *testing.T) {
+	// All executors pass Health() but Execute() fails → error returned
+	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("error from e1")
+	})
+	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("error from e2")
+	})
+
+	router := NewAgentRouter(e1, e2)
+	_, err := router.Execute("agent", "task")
+	if err == nil {
+		t.Fatal("expected error when all executors fail")
+	}
+}
+
+func TestAgentRouter_FailoverThenLocalFallback(t *testing.T) {
+	// All remote executors fail Execute(), local fallback succeeds
+	remote1 := NewLocalExecutor("remote-1", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("remote-1 failed")
+	})
+	remote2 := NewLocalExecutor("remote-2", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("remote-2 failed")
+	})
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "local fallback"}, nil
+	})
+
+	router := NewAgentRouter(remote1, remote2)
+	router.SetLocal(local)
+
+	result, err := router.Execute("agent", "critical-task")
+	if err != nil {
+		t.Fatalf("expected local fallback after remote failures, got error: %v", err)
+	}
+	if result.Output != "local fallback" {
+		t.Errorf("expected 'local fallback', got %q", result.Output)
+	}
+}
+
+func TestAgentRouter_FailoverThenLocalFailsToo(t *testing.T) {
+	// All remote + local fail → combined error
+	remote := NewLocalExecutor("remote", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("remote down")
+	})
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local down")
+	})
+
+	router := NewAgentRouter(remote)
+	router.SetLocal(local)
+
+	_, err := router.Execute("agent", "task")
+	if err == nil {
+		t.Fatal("expected error when all executors including local fail")
+	}
+}
+
+func TestAgentRouter_FailoverNonFailoverExecutorSkipped(t *testing.T) {
+	// Unhealthy executor is skipped even during failover
+	unhealthy := NewLocalExecutor("unhealthy", nil).
+		WithHealthCheck(func() error { return errors.New("unhealthy") })
+	healthy := NewLocalExecutor("healthy", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "ok"}, nil
+	})
+
+	router := NewAgentRouter(unhealthy, healthy)
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected skip unhealthy and use healthy, got error: %v", err)
+	}
+	if result.Output != "ok" {
+		t.Errorf("expected 'ok', got %q", result.Output)
+	}
+}
+
+func TestAgentRouter_MaxFailoverLimit(t *testing.T) {
+	// MaxFailover=1 → only try first healthy executor, even if it fails
+	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("e1 failed")
+	})
+	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "e2 would work but not tried"}, nil
+	})
+
+	router := NewAgentRouter(e1, e2)
+	router.MaxFailover = 1
+
+	_, err := router.Execute("agent", "task")
+	if err == nil {
+		t.Fatal("expected error because MaxFailover=1 prevents trying e2")
+	}
+}
+
+func TestAgentRouter_MaxFailoverRespected(t *testing.T) {
+	// MaxFailover=2 with 3 remote executors → only tries first 2 healthy ones,
+	// then falls back to local (which is separate, not counted in failover cap)
+	callCount := 0
+	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+		callCount++
+		return nil, errors.New("e1 failed")
+	})
+	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+		callCount++
+		return nil, errors.New("e2 failed")
+	})
+	e3 := NewLocalExecutor("e3", func(agent, task string) (*AgentResult, error) {
+		callCount++
+		return &AgentResult{Success: true}, nil
+	})
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "local"}, nil
+	})
+
+	router := NewAgentRouter(e1, e2, e3)
+	router.SetLocal(local)
+	router.MaxFailover = 2
+
+	// e1 and e2 are tried (both fail), e3 is NOT tried (MaxFailover=2),
+	// then fallback to local which succeeds.
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected local fallback to succeed, got error: %v", err)
+	}
+	if result.Output != "local" {
+		t.Errorf("expected 'local' fallback output, got %q", result.Output)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 remote executors tried (e1,e2), got %d", callCount)
+	}
+}
+
+func TestAgentRouter_FailoverMixedHealthyAndErrors(t *testing.T) {
+	// Mixed: unhealthy, error-after-Execute, and working executor
+	unhealthy := NewLocalExecutor("unhealthy", nil).
+		WithHealthCheck(func() error { return errors.New("down") })
+	flaky := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("flaky crashed")
+	})
+	working := NewLocalExecutor("working", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "finally"}, nil
+	})
+
+	router := NewAgentRouter(unhealthy, flaky, working)
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected failover through unhealthy→flaky→working, got: %v", err)
+	}
+	if result.Output != "finally" {
+		t.Errorf("expected 'finally', got %q", result.Output)
+	}
+}
