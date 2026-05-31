@@ -141,19 +141,20 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "SetupDevTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
-				toolStub{name: "go_build", desc: "Run go build and report errors"},
-				toolStub{name: "go_test", desc: "Run go test with coverage"},
-				toolStub{name: "go_vet", desc: "Run go vet for static analysis"},
-				toolStub{name: "web_search", desc: "Search for Go documentation and examples"},
+				newGoBuildTool(),
+				newGoTestTool(),
+				newGoVetTool(),
+				newWebSearchTool(),
 			}
 			return 1
 		}
 	case "SetupUniversalTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
-				toolStub{name: "web_search", desc: "Search the web for information, facts, and sources"},
-				toolStub{name: "code_exec", desc: "Execute code and return output"},
-				toolStub{name: "file_ops", desc: "Read and write files"},
+				newShellExecTool(),
+				newFileReadTool(),
+				newFileWriteTool(),
+				newWebSearchTool(),
 				toolStub{name: "calculator", desc: "Perform mathematical calculations and data analysis"},
 			}
 			return 1
@@ -161,8 +162,8 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "SetupResearchTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
-				toolStub{name: "web_search", desc: "Search the web for information, facts, and sources"},
-				toolStub{name: "knowledge_graph", desc: "Query the knowledge graph for structured information"},
+				newWebSearchTool(),
+				newGraphifyTool(),
 				toolStub{name: "calculator", desc: "Perform mathematical calculations and data analysis"},
 			}
 			return 1
@@ -170,9 +171,21 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "SetupStartupTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
-				toolStub{name: "web_search", desc: "Search for market data, competitors, industry trends"},
+				newWebSearchTool(),
 				toolStub{name: "calculator", desc: "Financial calculations: runway, burn rate, valuation"},
 				toolStub{name: "metrics_db", desc: "Query company metrics: users, MRR, churn, CAC, LTV"},
+			}
+			return 1
+		}
+	case "SetupDefaultTools":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			bb.ChainTools = []any{
+				newShellExecTool(),
+				newFileReadTool(),
+				toolStub{name: "http_get", desc: "Make an HTTP GET request and return response body"},
+				toolStub{name: "process_check", desc: "Check if a process is running by name"},
+				toolStub{name: "disk_usage", desc: "Check disk usage on a mount point"},
+				toolStub{name: "memory_usage", desc: "Check memory usage statistics"},
 			}
 			return 1
 		}
