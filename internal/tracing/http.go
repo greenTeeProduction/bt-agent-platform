@@ -34,16 +34,38 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 // Uses the global tracer — a noop by default if SetGlobalTracer was never called.
 // Span attributes recorded: http.method, http.url, http.status_code, http.duration_ms.
 // For requests taking >5 seconds, a "slow_request" event is added.
+//
+// W3C Trace Context propagation:
+// If the incoming request carries a valid traceparent header (W3C Trace Context format),
+// the span is created as a child of the remote parent — inheriting the trace_id and
+// referencing the parent span. This enables distributed tracing across service boundaries.
+// The tracestate header is also captured if present.
 func TracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		ctx := r.Context()
+
+		// W3C Trace Context: extract parent from incoming traceparent header
+		traceParentHeader := r.Header.Get("traceparent")
+		if tp := ExtractTraceParentFromRequest(traceParentHeader); tp != nil {
+			ctx = ContextWithTraceParent(ctx, tp)
+		}
 
 		spanName := "http:" + r.Method + " " + r.URL.Path
-		ctx, span := StartSpan(r.Context(), spanName)
+		ctx, span := StartSpan(ctx, spanName)
 		defer span.End()
 
 		span.SetAttribute("http.method", r.Method)
 		span.SetAttribute("http.url", r.URL.String())
+
+		// Capture W3C trace context if present
+		if traceParentHeader != "" {
+			span.SetAttribute("w3c.traceparent", traceParentHeader)
+		}
+		tracestate := r.Header.Get("tracestate")
+		if tracestate != "" {
+			span.SetAttribute("w3c.tracestate", tracestate)
+		}
 
 		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(rw, r.WithContext(ctx))
