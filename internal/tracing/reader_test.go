@@ -484,3 +484,383 @@ func BenchmarkTraceReader_ReadRecent(b *testing.B) {
 		r.ReadRecent(50)
 	}
 }
+
+// ─── Trace Aggregation tests ──────────────────────────────────────────────────
+
+func TestBuildAggregatedTrace_SingleSpan(t *testing.T) {
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	spans := []TraceEntry{
+		{
+			TraceID:   "trace-1",
+			SpanID:    "span-1",
+			Timestamp: baseTime,
+			Duration:  100 * time.Millisecond,
+			Operation: "RunTask:review code",
+		},
+	}
+
+	agg := buildAggregatedTrace("trace-1", spans)
+	if agg == nil {
+		t.Fatal("expected non-nil AggregatedTrace")
+	}
+	if agg.SpanCount != 1 {
+		t.Errorf("expected SpanCount=1, got %d", agg.SpanCount)
+	}
+	if agg.RootSpan == nil {
+		t.Fatal("expected non-nil RootSpan")
+	}
+	if agg.RootSpan.Span.SpanID != "span-1" {
+		t.Errorf("expected root span-1, got %s", agg.RootSpan.Span.SpanID)
+	}
+	if len(agg.RootSpan.Children) != 0 {
+		t.Errorf("expected 0 children, got %d", len(agg.RootSpan.Children))
+	}
+	if agg.TotalDuration != 100*time.Millisecond {
+		t.Errorf("expected TotalDuration=100ms, got %v", agg.TotalDuration)
+	}
+	if !agg.StartTime.Equal(baseTime) {
+		t.Errorf("expected StartTime=%v, got %v", baseTime, agg.StartTime)
+	}
+}
+
+func TestBuildAggregatedTrace_ParentChild(t *testing.T) {
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	spans := []TraceEntry{
+		{
+			TraceID:   "trace-2",
+			SpanID:    "root",
+			Timestamp: baseTime,
+			Duration:  500 * time.Millisecond,
+			Operation: "http:GET /api/tasks",
+		},
+		{
+			TraceID:      "trace-2",
+			SpanID:       "child-1",
+			ParentSpanID: "root",
+			Timestamp:    baseTime.Add(10 * time.Millisecond),
+			Duration:     200 * time.Millisecond,
+			Operation:    "RunTask:review code",
+		},
+		{
+			TraceID:      "trace-2",
+			SpanID:       "child-2",
+			ParentSpanID: "root",
+			Timestamp:    baseTime.Add(50 * time.Millisecond),
+			Duration:     100 * time.Millisecond,
+			Operation:    "mcp:bt_get_tree",
+		},
+	}
+
+	agg := buildAggregatedTrace("trace-2", spans)
+	if agg == nil {
+		t.Fatal("expected non-nil AggregatedTrace")
+	}
+	if agg.SpanCount != 3 {
+		t.Errorf("expected SpanCount=3, got %d", agg.SpanCount)
+	}
+	if agg.RootSpan == nil {
+		t.Fatal("expected non-nil RootSpan")
+	}
+	if agg.RootSpan.Span.SpanID != "root" {
+		t.Errorf("expected root span 'root', got %s", agg.RootSpan.Span.SpanID)
+	}
+	if len(agg.RootSpan.Children) != 2 {
+		t.Fatalf("expected 2 children, got %d", len(agg.RootSpan.Children))
+	}
+
+	// Verify children
+	childIDs := make(map[string]bool)
+	for _, c := range agg.RootSpan.Children {
+		childIDs[c.Span.SpanID] = true
+	}
+	if !childIDs["child-1"] || !childIDs["child-2"] {
+		t.Errorf("expected children child-1 and child-2, got %v", childIDs)
+	}
+
+	// Total duration should span from start of root to end of last child
+	if agg.TotalDuration < 500*time.Millisecond {
+		t.Errorf("expected TotalDuration >= 500ms, got %v", agg.TotalDuration)
+	}
+}
+
+func TestBuildAggregatedTrace_OrphanSpans(t *testing.T) {
+	// Spans with parents that don't exist in the set — earliest span becomes root
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	spans := []TraceEntry{
+		{
+			TraceID:      "trace-3",
+			SpanID:       "orphan-1",
+			ParentSpanID: "missing-parent",
+			Timestamp:    baseTime.Add(50 * time.Millisecond),
+			Duration:     100 * time.Millisecond,
+			Operation:    "mcp:bt_run_task",
+		},
+		{
+			TraceID:      "trace-3",
+			SpanID:       "orphan-2",
+			ParentSpanID: "also-missing",
+			Timestamp:    baseTime,
+			Duration:     200 * time.Millisecond,
+			Operation:    "mcp:bt_get_tree",
+		},
+	}
+
+	agg := buildAggregatedTrace("trace-3", spans)
+	if agg == nil {
+		t.Fatal("expected non-nil AggregatedTrace")
+	}
+	if agg.RootSpan == nil {
+		t.Fatal("expected non-nil RootSpan")
+	}
+	// Earliest span should be root
+	if agg.RootSpan.Span.SpanID != "orphan-2" {
+		t.Errorf("expected earliest span orphan-2 as root, got %s", agg.RootSpan.Span.SpanID)
+	}
+	if agg.SpanCount != 2 {
+		t.Errorf("expected SpanCount=2, got %d", agg.SpanCount)
+	}
+}
+
+func TestBuildAggregatedTrace_EmptySpans(t *testing.T) {
+	agg := buildAggregatedTrace("empty", nil)
+	if agg != nil {
+		t.Error("expected nil for empty spans")
+	}
+}
+
+func TestBuildAggregatedTrace_Operations(t *testing.T) {
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	spans := []TraceEntry{
+		{TraceID: "trace-4", SpanID: "s1", Timestamp: baseTime, Duration: 1 * time.Millisecond, Operation: "http:GET /"},
+		{TraceID: "trace-4", SpanID: "s2", Timestamp: baseTime, Duration: 1 * time.Millisecond, Operation: "RunTask:task"},
+		{TraceID: "trace-4", SpanID: "s3", Timestamp: baseTime, Duration: 1 * time.Millisecond, Operation: "RunTask:task"}, // duplicate op
+	}
+
+	agg := buildAggregatedTrace("trace-4", spans)
+	if agg == nil {
+		t.Fatal("expected non-nil AggregatedTrace")
+	}
+	// Should deduplicate operations
+	if len(agg.Operations) != 2 {
+		t.Errorf("expected 2 unique operations, got %d: %v", len(agg.Operations), agg.Operations)
+	}
+}
+
+func TestAggregatedTrace_JSONRoundtrip(t *testing.T) {
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	agg := &AggregatedTrace{
+		TraceID:         "trace-json",
+		SpanCount:       2,
+		TotalDuration:   500 * time.Millisecond,
+		TotalDurationMS: 500,
+		StartTime:       baseTime,
+		EndTime:         baseTime.Add(500 * time.Millisecond),
+		Operations:      []string{"http:GET /", "RunTask:test"},
+		RootSpan: &TraceSpanNode{
+			Span: TraceEntry{
+				TraceID:   "trace-json",
+				SpanID:    "root",
+				Timestamp: baseTime,
+				Duration:  500 * time.Millisecond,
+				Operation: "http:GET /",
+			},
+			Children: []*TraceSpanNode{
+				{
+					Span: TraceEntry{
+						TraceID:      "trace-json",
+						SpanID:       "child",
+						ParentSpanID: "root",
+						Timestamp:    baseTime.Add(10 * time.Millisecond),
+						Duration:     200 * time.Millisecond,
+						Operation:    "RunTask:test",
+					},
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(agg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var back AggregatedTrace
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.TraceID != "trace-json" {
+		t.Errorf("TraceID mismatch: %s", back.TraceID)
+	}
+	if back.SpanCount != 2 {
+		t.Errorf("SpanCount mismatch: %d", back.SpanCount)
+	}
+	if back.RootSpan == nil {
+		t.Fatal("RootSpan is nil after roundtrip")
+	}
+	if back.RootSpan.Span.SpanID != "root" {
+		t.Errorf("root SpanID mismatch: %s", back.RootSpan.Span.SpanID)
+	}
+	if len(back.RootSpan.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(back.RootSpan.Children))
+	}
+	if back.RootSpan.Children[0].Span.SpanID != "child" {
+		t.Errorf("child SpanID mismatch: %s", back.RootSpan.Children[0].Span.SpanID)
+	}
+}
+
+func TestTraceReader_GetTrace(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "traces.log")
+
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	lines := []string{
+		"TRACE " + baseTime.Format(time.RFC3339Nano) + " trace-a span-root op=http:GET / duration=500ms",
+		"TRACE " + baseTime.Add(10*time.Millisecond).Format(time.RFC3339Nano) + " trace-a span-child parent=span-root op=RunTask:test duration=200ms",
+		"TRACE " + baseTime.Format(time.RFC3339Nano) + " trace-b span-1 op=mcp:bt_get_tree duration=50ms",
+	}
+	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+
+	r := NewTraceReader(logPath)
+
+	// Fetch trace-a (2 spans, parent-child)
+	trace, err := r.GetTrace("trace-a")
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	if trace == nil {
+		t.Fatal("expected non-nil trace for trace-a")
+	}
+	if trace.SpanCount != 2 {
+		t.Errorf("expected SpanCount=2, got %d", trace.SpanCount)
+	}
+	if trace.RootSpan.Span.SpanID != "span-root" {
+		t.Errorf("expected root span-root, got %s", trace.RootSpan.Span.SpanID)
+	}
+
+	// Fetch trace-b (1 span)
+	trace, err = r.GetTrace("trace-b")
+	if err != nil {
+		t.Fatalf("GetTrace trace-b: %v", err)
+	}
+	if trace.SpanCount != 1 {
+		t.Errorf("expected SpanCount=1, got %d", trace.SpanCount)
+	}
+}
+
+func TestTraceReader_GetTrace_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "traces.log")
+
+	os.WriteFile(logPath, []byte("TRACE 2026-06-01T10:00:00Z trace-1 span-1 op=test duration=1ms\n"), 0644)
+
+	r := NewTraceReader(logPath)
+	trace, err := r.GetTrace("nonexistent")
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	if trace != nil {
+		t.Error("expected nil for nonexistent trace")
+	}
+}
+
+func TestTraceReader_GetTrace_NoFile(t *testing.T) {
+	r := NewTraceReader("/nonexistent/traces.log")
+	trace, err := r.GetTrace("any-trace")
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	if trace != nil {
+		t.Error("expected nil for nonexistent file")
+	}
+}
+
+func TestTraceReader_ListTraceIDs(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "traces.log")
+
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	lines := []string{
+		"TRACE " + baseTime.Format(time.RFC3339Nano) + " trace-1 span-1 op=test duration=1ms",
+		"TRACE " + baseTime.Add(1*time.Second).Format(time.RFC3339Nano) + " trace-1 span-2 op=test duration=1ms",
+		"TRACE " + baseTime.Add(2*time.Second).Format(time.RFC3339Nano) + " trace-2 span-3 op=other duration=1ms",
+		"TRACE " + baseTime.Add(3*time.Second).Format(time.RFC3339Nano) + " trace-3 span-4 op=third duration=1ms",
+	}
+	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+
+	r := NewTraceReader(logPath)
+	traces, err := r.ListTraceIDs(10)
+	if err != nil {
+		t.Fatalf("ListTraceIDs: %v", err)
+	}
+
+	if len(traces) != 3 {
+		t.Fatalf("expected 3 traces, got %d", len(traces))
+	}
+
+	// Newest first (trace-3 should be first)
+	if traces[0].TraceID != "trace-3" {
+		t.Errorf("expected trace-3 first, got %s", traces[0].TraceID)
+	}
+
+	// trace-1 should have SpanCount=2
+	if traces[2].TraceID != "trace-1" {
+		t.Errorf("expected trace-1 last, got %s", traces[2].TraceID)
+	}
+	if traces[2].SpanCount != 2 {
+		t.Errorf("expected trace-1 SpanCount=2, got %d", traces[2].SpanCount)
+	}
+}
+
+func TestTraceReader_ListTraceIDs_Limit(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "traces.log")
+
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	var lines []string
+	for i := 0; i < 10; i++ {
+		lines = append(lines, "TRACE "+
+			baseTime.Add(time.Duration(i)*time.Second).Format(time.RFC3339Nano)+
+			" trace-"+formatInt(i+1)+
+			" span-"+formatInt(i+1)+
+			" op=test duration=1ms")
+	}
+	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+
+	r := NewTraceReader(logPath)
+	traces, err := r.ListTraceIDs(3)
+	if err != nil {
+		t.Fatalf("ListTraceIDs: %v", err)
+	}
+	if len(traces) != 3 {
+		t.Fatalf("expected 3 traces (limit), got %d", len(traces))
+	}
+}
+
+func TestTraceReader_ListTraceIDs_NoFile(t *testing.T) {
+	r := NewTraceReader("/nonexistent/traces.log")
+	traces, err := r.ListTraceIDs(5)
+	if err != nil {
+		t.Fatalf("ListTraceIDs: %v", err)
+	}
+	if len(traces) != 0 {
+		t.Errorf("expected 0 traces, got %d", len(traces))
+	}
+}
+
+func TestTraceReader_ListTraceIDs_DefaultLimit(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "traces.log")
+
+	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	os.WriteFile(logPath, []byte("TRACE "+baseTime.Format(time.RFC3339Nano)+" trace-1 span-1 op=test duration=1ms\n"), 0644)
+
+	r := NewTraceReader(logPath)
+	// limit=0 should use default (20)
+	traces, err := r.ListTraceIDs(0)
+	if err != nil {
+		t.Fatalf("ListTraceIDs with limit=0: %v", err)
+	}
+	if len(traces) != 1 {
+		t.Errorf("expected 1 trace, got %d", len(traces))
+	}
+}

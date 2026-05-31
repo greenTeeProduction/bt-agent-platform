@@ -804,8 +804,12 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
-// handleTraces returns recent trace entries from the shared traces log as JSON.
-// Supports query params: ?limit=50 (default 50, max 500), ?since=5m (relative duration).
+// handleTraces returns recent trace entries or aggregated traces from the shared traces log as JSON.
+// Supports query params:
+//   ?limit=50        — max entries (default 50, max 500) for flat list mode
+//   ?since=5m        — relative duration filter for flat list mode
+//   ?trace_id=xxx    — fetch a specific trace (returns AggregatedTrace with span tree)
+//   ?list=true       — list aggregated traces (returns []AggregatedTrace, newest first)
 // Public endpoint (no auth) — monitoring tool compatible.
 func handleTraces(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -818,6 +822,50 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ─── Aggregated trace by ID ────────────────────────────────────────────
+	if traceID := r.URL.Query().Get("trace_id"); traceID != "" {
+		trace, err := traceReader.GetTrace(traceID)
+		if err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if trace == nil {
+			http.Error(w, `{"error":"trace not found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(trace)
+		return
+	}
+
+	// ─── Aggregated trace listing ──────────────────────────────────────────
+	if r.URL.Query().Get("list") == "true" {
+		limit := 20
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := fmt.Sscanf(l, "%d", &limit); err != nil || n != 1 || limit < 1 || limit > 100 {
+				http.Error(w, `{"error":"limit must be 1-100"}`, http.StatusBadRequest)
+				return
+			}
+		}
+		traces, err := traceReader.ListTraceIDs(limit)
+		if err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if traces == nil {
+			traces = []*tracing.AggregatedTrace{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"count":  len(traces),
+			"traces": traces,
+		})
+		return
+	}
+
+	// ─── Flat span list (existing behavior) ────────────────────────────────
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := fmt.Sscanf(l, "%d", &limit); err != nil || n != 1 || limit < 1 || limit > 500 {

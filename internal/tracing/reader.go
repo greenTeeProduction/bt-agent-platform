@@ -344,6 +344,186 @@ func (r *TraceReader) SizeBytes() (int64, error) {
 	return info.Size(), nil
 }
 
+// ─── Trace Aggregation ────────────────────────────────────────────────────────
+
+// AggregatedTrace represents a complete distributed trace assembled from individual spans.
+type AggregatedTrace struct {
+	TraceID      string          `json:"trace_id"`
+	RootSpan     *TraceSpanNode  `json:"root_span,omitempty"`
+	SpanCount    int             `json:"span_count"`
+	TotalDuration time.Duration  `json:"total_duration"`
+	TotalDurationMS int64        `json:"total_duration_ms"`
+	StartTime    time.Time       `json:"start_time"`
+	EndTime      time.Time       `json:"end_time"`
+	Operations   []string        `json:"operations"`
+}
+
+// TraceSpanNode represents a span in the trace tree, with its children.
+type TraceSpanNode struct {
+	Span      TraceEntry       `json:"span"`
+	Children  []*TraceSpanNode `json:"children,omitempty"`
+}
+
+// GetTrace reads all spans for a specific trace ID and builds the aggregated trace tree.
+// Returns nil if no spans are found for the given trace ID.
+func (r *TraceReader) GetTrace(traceID string) (*AggregatedTrace, error) {
+	allSpans, err := r.readAllSpans()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter spans by trace ID
+	var spans []TraceEntry
+	for _, s := range allSpans {
+		if s.TraceID == traceID {
+			spans = append(spans, s)
+		}
+	}
+	if len(spans) == 0 {
+		return nil, nil
+	}
+
+	return buildAggregatedTrace(traceID, spans), nil
+}
+
+// ListTraceIDs returns a list of unique trace IDs with summary info, newest first.
+// limit caps the number of traces returned (max 100).
+func (r *TraceReader) ListTraceIDs(limit int) ([]*AggregatedTrace, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	allSpans, err := r.readAllSpans()
+	if err != nil {
+		return nil, err
+	}
+
+	// Group spans by trace ID
+	byTrace := make(map[string][]TraceEntry)
+	for _, s := range allSpans {
+		byTrace[s.TraceID] = append(byTrace[s.TraceID], s)
+	}
+
+	// Build aggregated traces
+	var traces []*AggregatedTrace
+	for traceID, spans := range byTrace {
+		traces = append(traces, buildAggregatedTrace(traceID, spans))
+	}
+
+	// Sort by start time descending (newest first)
+	for i := 0; i < len(traces); i++ {
+		for j := i + 1; j < len(traces); j++ {
+			if traces[j].StartTime.After(traces[i].StartTime) {
+				traces[i], traces[j] = traces[j], traces[i]
+			}
+		}
+	}
+
+	if len(traces) > limit {
+		traces = traces[:limit]
+	}
+
+	return traces, nil
+}
+
+// readAllSpans reads and parses all trace lines from the log file.
+func (r *TraceReader) readAllSpans() ([]TraceEntry, error) {
+	f, err := os.Open(r.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("open trace log: %w", err)
+	}
+	defer f.Close()
+
+	var spans []TraceEntry
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		entry := ParseTraceLine(scanner.Text())
+		if entry != nil {
+			spans = append(spans, *entry)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan trace log: %w", err)
+	}
+	return spans, nil
+}
+
+// buildAggregatedTrace constructs an AggregatedTrace from a set of spans with the same trace ID.
+func buildAggregatedTrace(traceID string, spans []TraceEntry) *AggregatedTrace {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	// Build span map by span ID
+	spanMap := make(map[string]*TraceSpanNode)
+	for i := range spans {
+		spanMap[spans[i].SpanID] = &TraceSpanNode{Span: spans[i]}
+	}
+
+	// Build parent-child relationships
+	var root *TraceSpanNode
+	for _, node := range spanMap {
+		if node.Span.ParentSpanID != "" {
+			if parent, ok := spanMap[node.Span.ParentSpanID]; ok {
+				parent.Children = append(parent.Children, node)
+			}
+		}
+		// Root is the span with no parent, or the first span if no parent relationship exists
+		if node.Span.ParentSpanID == "" {
+			if root == nil {
+				root = node
+			}
+		}
+	}
+
+	// If no root found (all spans have parents but parent spans weren't captured),
+	// use the earliest span as root
+	if root == nil && len(spanMap) > 0 {
+		for _, node := range spanMap {
+			if root == nil || node.Span.Timestamp.Before(root.Span.Timestamp) {
+				root = node
+			}
+		}
+		// Detach it from its parent for clean tree display
+		root.Span.ParentSpanID = ""
+	}
+
+	// Compute time bounds and collect operations
+	var startTime, endTime time.Time
+	ops := make(map[string]bool)
+	for _, s := range spans {
+		if startTime.IsZero() || s.Timestamp.Before(startTime) {
+			startTime = s.Timestamp
+		}
+		spanEnd := s.Timestamp.Add(s.Duration)
+		if endTime.IsZero() || spanEnd.After(endTime) {
+			endTime = spanEnd
+		}
+		ops[s.Operation] = true
+	}
+
+	totalDuration := endTime.Sub(startTime)
+	var opList []string
+	for op := range ops {
+		opList = append(opList, op)
+	}
+
+	return &AggregatedTrace{
+		TraceID:         traceID,
+		RootSpan:        root,
+		SpanCount:       len(spans),
+		TotalDuration:   totalDuration,
+		TotalDurationMS: totalDuration.Milliseconds(),
+		StartTime:       startTime,
+		EndTime:         endTime,
+		Operations:      opList,
+	}
+}
+
 // ─── ParseDuration helper ─────────────────────────────────────────────────────
 
 // ParseTraceDuration parses a duration string like "151µs", "2.341s", "1m30s".
