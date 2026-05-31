@@ -85,6 +85,8 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	// Restore persisted jobs
 	if cfg.JobStore != nil {
 		s.loadState()
+		// Dedup: remove duplicate active jobs for the same agent (keeps most recent)
+		s.dedupJobsLocked()
 	}
 	return s
 }
@@ -257,6 +259,33 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 	delete(s.jobs, jobID)
 	s.saveStateLocked()
 	return nil
+}
+
+// dedupJobsLocked removes duplicate active jobs for the same agent,
+// keeping only the most recent one (highest run_count). Must be called
+// with s.mu held. Used at startup to clean up accumulated duplicates
+// from prior bt-agent restarts.
+func (s *Scheduler) dedupJobsLocked() {
+	seen := make(map[string]*ScheduledJob) // agentName -> best job
+	for _, job := range s.jobs {
+		if !job.Active {
+			continue
+		}
+		existing, ok := seen[job.AgentName]
+		if !ok || job.RunCount > existing.RunCount {
+			seen[job.AgentName] = job
+		}
+	}
+	// Delete all active jobs that aren't the best one for their agent
+	for id, job := range s.jobs {
+		if !job.Active {
+			continue
+		}
+		best := seen[job.AgentName]
+		if best != nil && id != best.ID {
+			delete(s.jobs, id)
+		}
+	}
 }
 
 func (s *Scheduler) tick(runner AgentRunner) {
