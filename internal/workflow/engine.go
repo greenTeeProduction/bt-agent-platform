@@ -272,9 +272,9 @@ func (w *Workflow) ExecuteSprint(sprintNum int, orch interface {
 	if approved > 0 {
 		w.Company.CurrentSprint = sprintNum
 		w.Company.SprintGoal = fmt.Sprintf("Execute %d approved tasks", approved)
-		for _, t := range tasks {
-			if t.Status == StatusApproved {
-				t.Status = StatusInProgress
+		for i := range w.Tasks {
+			if w.Tasks[i].SprintTarget == sprintNum && w.Tasks[i].Status == StatusApproved {
+				w.Tasks[i].Status = StatusInProgress
 			}
 		}
 	}
