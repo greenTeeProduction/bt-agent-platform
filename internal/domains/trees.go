@@ -1,3 +1,7 @@
+// Package domains provides domain-specific behavior trees for code review,
+// DevOps/CI, security, data pipelines, refactoring, incident response,
+// alert routing, and general knowledge tasks. Each tree encodes expert
+// decision logic for its domain with keyword-based condition routing.
 package domains
 
 import "github.com/nico/go-bt-evolve/internal/evolution"
