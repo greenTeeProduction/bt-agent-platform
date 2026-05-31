@@ -194,13 +194,10 @@ func TestOpenAPIGenerator_RequestBody(t *testing.T) {
 
 	gen.AddRoute(NewRoute("/api/agents", POST).
 		Summary("Create agent").
+		RequestBody(reqSchema).
 		JSONResponse(201, "Created", ObjectSchema(map[string]*Schema{
 			"id": StringSchema("Agent ID"),
 		})).Build())
-	// Set request body after building
-	routes := gen.routes
-	routes[len(routes)-1].RequestBody = reqSchema
-	gen.routes = routes
 
 	spec := gen.Generate()
 	agentPath := spec.Paths["/api/agents"]["post"].(map[string]interface{})
@@ -785,4 +782,119 @@ func mapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func TestDashboardRoutes_AllHaveOperationIDs(t *testing.T) {
+	routes := DashboardRoutes()
+	for i, r := range routes {
+		if r.OperationID == "" {
+			t.Errorf("route %d (%s %s) has empty operationId", i, r.Method, r.Path)
+		}
+	}
+}
+
+func TestOpenAPIGenerator_OperationID(t *testing.T) {
+	gen := NewOpenAPIGenerator("Test API", "0.1.0", "")
+	gen.AddRoute(NewRoute("/api/health", GET).
+		Summary("Health check").
+		OperationID("getHealth").
+		Tags("System").
+		JSONResponse(200, "OK", ObjectSchema(map[string]*Schema{
+			"status": StringSchema("Status"),
+		})).Build())
+
+	spec := gen.Generate()
+	healthPath := spec.Paths["/api/health"]["get"].(map[string]interface{})
+	if opID, ok := healthPath["operationId"]; !ok {
+		t.Error("expected operationId on /api/health GET")
+	} else if opID != "getHealth" {
+		t.Errorf("expected operationId 'getHealth', got %v", opID)
+	}
+}
+
+func TestOpenAPIGenerator_NoOperationIDWhenEmpty(t *testing.T) {
+	gen := NewOpenAPIGenerator("Test API", "0.1.0", "")
+	gen.AddRoute(NewRoute("/api/test", GET).
+		Summary("Test").
+		Tags("System").Build())
+
+	spec := gen.Generate()
+	testPath := spec.Paths["/api/test"]["get"].(map[string]interface{})
+	if _, ok := testPath["operationId"]; ok {
+		t.Error("expected no operationId when not set")
+	}
+}
+
+func TestRouteBuilder_OperationID(t *testing.T) {
+	route := NewRoute("/api/test", GET).
+		Summary("Test").
+		OperationID("getTest").
+		Tags("System").Build()
+
+	if route.OperationID != "getTest" {
+		t.Errorf("expected operationId 'getTest', got %q", route.OperationID)
+	}
+}
+
+func TestRouteBuilder_RequestBody(t *testing.T) {
+	bodySchema := ObjectSchema(map[string]*Schema{
+		"name": StringSchema("Name"),
+	}, "name")
+
+	route := NewRoute("/api/create", POST).
+		Summary("Create").
+		Tags("System").
+		RequestBody(bodySchema).Build()
+
+	if route.RequestBody == nil {
+		t.Fatal("expected non-nil request body")
+	}
+	if route.RequestBody.Type != "object" {
+		t.Errorf("expected object type, got %q", route.RequestBody.Type)
+	}
+	required := route.RequestBody.Required
+	if len(required) != 1 || required[0] != "name" {
+		t.Errorf("expected required ['name'], got %v", required)
+	}
+}
+
+func TestRouteBuilder_RequestBody_Nil(t *testing.T) {
+	route := NewRoute("/api/test", GET).
+		Summary("Test").
+		Tags("System").Build()
+
+	if route.RequestBody != nil {
+		t.Error("expected nil request body when not set")
+	}
+}
+
+func TestDashboardRoutes_AgentsExecuteHasRequestBody(t *testing.T) {
+	routes := DashboardRoutes()
+	for i := range routes {
+		if routes[i].Path == "/api/agents/execute" && routes[i].Method == POST {
+			if routes[i].RequestBody == nil {
+				t.Error("expected request body on /api/agents/execute")
+			}
+			if routes[i].RequestBody.Type != "object" {
+				t.Errorf("expected object request body, got type %q", routes[i].RequestBody.Type)
+			}
+			return
+		}
+	}
+	t.Error("expected /api/agents/execute route with POST method")
+}
+
+func TestDashboardRoutes_OperationIDUniqueness(t *testing.T) {
+	routes := DashboardRoutes()
+	seen := make(map[string]bool)
+	for i, r := range routes {
+		if r.OperationID == "" {
+			continue // not required, just a best practice
+		}
+		key := string(r.Method) + ":" + r.OperationID
+		if seen[key] {
+			t.Errorf("route %d: duplicate operationId %q for method %s", i, r.OperationID, r.Method)
+		}
+		seen[key] = true
+	}
 }

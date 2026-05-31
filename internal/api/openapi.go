@@ -47,16 +47,17 @@ type RouteResponse struct {
 
 // Route describes a single API endpoint for OpenAPI generation.
 type Route struct {
-	Path        string        `json:"path"`
-	Method      HTTPMethod    `json:"method"`
-	Summary     string        `json:"summary"`
-	Description string        `json:"description,omitempty"`
-	Tags        []string      `json:"tags,omitempty"`
-	Parameters  []RouteParam  `json:"parameters,omitempty"`
-	RequestBody *Schema       `json:"request_body,omitempty"`
+	Path        string          `json:"path"`
+	Method      HTTPMethod      `json:"method"`
+	Summary     string          `json:"summary"`
+	Description string          `json:"description,omitempty"`
+	Tags        []string        `json:"tags,omitempty"`
+	Parameters  []RouteParam    `json:"parameters,omitempty"`
+	RequestBody *Schema         `json:"request_body,omitempty"`
 	Responses   []RouteResponse `json:"responses"`
-	Deprecated  bool          `json:"deprecated,omitempty"`
-	Auth        bool          `json:"auth"` // requires API key
+	Deprecated  bool            `json:"deprecated,omitempty"`
+	OperationID string          `json:"operation_id,omitempty"` // unique ID for code generators
+	Auth        bool            `json:"auth"`                   // requires API key
 }
 
 // ─── OpenAPI Spec Generator ─────────────────────────────────────────────────
@@ -157,6 +158,9 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 		}
 		if route.Deprecated {
 			methodObj["deprecated"] = true
+		}
+		if route.OperationID != "" {
+			methodObj["operationId"] = route.OperationID
 		}
 
 		// Parameters
@@ -479,6 +483,18 @@ func (rb *RouteBuilder) Deprecated() *RouteBuilder {
 	return rb
 }
 
+// OperationID sets a unique operationId for code generation tools.
+func (rb *RouteBuilder) OperationID(id string) *RouteBuilder {
+	rb.route.OperationID = id
+	return rb
+}
+
+// RequestBody sets the JSON request body schema for POST/PUT endpoints.
+func (rb *RouteBuilder) RequestBody(schema *Schema) *RouteBuilder {
+	rb.route.RequestBody = schema
+	return rb
+}
+
 // Build returns the compiled Route.
 func (rb *RouteBuilder) Build() Route {
 	return rb.route
@@ -491,6 +507,7 @@ func DashboardRoutes() []Route {
 		NewRoute("/api/health", GET).
 			Summary("Health check").
 			Tags("System").
+			OperationID("getHealth").
 			JSONResponse(200, "Dashboard health status", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("Health status (ok/degraded)"),
 				"version": StringSchema("Dashboard version"),
@@ -500,12 +517,14 @@ func DashboardRoutes() []Route {
 			Summary("Prometheus metrics").
 			Description("Returns platform metrics in Prometheus text format.").
 			Tags("System").
+			OperationID("getMetrics").
 			JSONResponse(200, "Prometheus metrics text", StringSchema("Prometheus-formatted metrics")).Build(),
 
 		NewRoute("/api/alerts", GET).
 			Summary("Active alerts").
 			Description("Returns evaluated alert rules from platform metrics.").
 			Tags("System").
+			OperationID("getAlerts").
 			JSONResponse(200, "Alert report", ObjectSchema(map[string]*Schema{
 				"evaluated_at": StringSchema("ISO 8601 timestamp of evaluation"),
 				"total_rules":  IntSchema("Total number of alert rules"),
@@ -526,24 +545,28 @@ func DashboardRoutes() []Route {
 			Summary("Alert rules file").
 			Description("Returns the raw Prometheus alert rules YAML file for direct scraping by Prometheus or other monitoring tools.").
 			Tags("System").
+			OperationID("getAlertRules").
 			ContentResponse(200, "text/yaml", "Prometheus alert rules YAML").Build(),
 
 		NewRoute("/api/openapi.json", GET).
 			Summary("OpenAPI specification").
 			Description("Returns the OpenAPI 3.0 specification for all dashboard endpoints.").
 			Tags("System").
+			OperationID("getOpenAPISpec").
 			JSONResponse(200, "OpenAPI 3.0 JSON specification", StringSchema("OpenAPI JSON document")).Build(),
 
 		NewRoute("/api/swagger", GET).
 			Summary("Swagger UI").
 			Description("Interactive API documentation using Swagger UI. Loads the OpenAPI spec from /api/openapi.json and renders it as a browsable API reference.").
 			Tags("System").
+			OperationID("getSwaggerUI").
 			ContentResponse(200, "text/html", "Swagger UI HTML page").Build(),
 
 		NewRoute("/api/scalability", GET).
 			Summary("Scalability status").
 			Description("Returns a snapshot of scalability components: worker pool utilization, concurrency limiter stats, queue depth, and agent router health. Public monitoring endpoint.").
 			Tags("System").
+			OperationID("getScalabilityStatus").
 			JSONResponse(200, "Scalability component snapshot", ObjectSchema(map[string]*Schema{
 				"timestamp": StringSchema("ISO 8601 snapshot timestamp"),
 				"worker_pool": ObjectSchema(map[string]*Schema{
@@ -575,6 +598,7 @@ func DashboardRoutes() []Route {
 			Summary("Runtime configuration").
 			Description("Returns the effective runtime configuration with secret fields (API keys, TLS paths) redacted. Public monitoring endpoint — no auth required.").
 			Tags("System").
+			OperationID("getConfig").
 			JSONResponse(200, "Sanitized runtime configuration", ObjectSchema(map[string]*Schema{
 				"dashboard_port":      IntSchema("Dashboard HTTP port"),
 				"llm_provider":        StringSchema("LLM provider (ollama/deepseek)"),
@@ -601,6 +625,7 @@ func DashboardRoutes() []Route {
 			Summary("Platform summary").
 			Description("Returns an overview of the BT platform: tree counts, categories, MCP tools, and model name.").
 			Tags("Platform").
+			OperationID("getSummary").
 			JSONResponse(200, "Platform summary", ObjectSchema(map[string]*Schema{
 				"total_trees": IntSchema("Total number of behavior trees"),
 				"categories": ObjectSchema(map[string]*Schema{
@@ -620,6 +645,7 @@ func DashboardRoutes() []Route {
 			Summary("List behavior trees").
 			Description("Returns all registered behavior trees with their IDs, names, categories, and node counts.").
 			Tags("Trees").
+			OperationID("getTrees").
 			JSONResponse(200, "Array of tree objects", ArraySchema(ObjectSchema(map[string]*Schema{
 				"id":         StringSchema("Tree identifier"),
 				"name":       StringSchema("Display name"),
@@ -631,6 +657,7 @@ func DashboardRoutes() []Route {
 			Summary("Get tree structure").
 			Description("Returns the JSON structure of a specific behavior tree.").
 			Tags("Trees").
+			OperationID("getTreeStructure").
 			QueryParam("id", "Tree identifier (e.g., 'merged', 'godev')", true, StringSchema("Tree ID")).
 			JSONResponse(200, "Tree structure JSON", ObjectSchema(map[string]*Schema{
 				"id":         StringSchema("Tree identifier"),
@@ -646,6 +673,7 @@ func DashboardRoutes() []Route {
 			Summary("List thinktank fellows").
 			Description("Returns the five analytical fellows with their roles and perspectives.").
 			Tags("Thinktank").
+			OperationID("getThinktankFellows").
 			JSONResponse(200, "Array of fellow objects", ArraySchema(ObjectSchema(map[string]*Schema{
 				"name":        StringSchema("Fellow name"),
 				"role":        StringSchema("Role (bull/bear/technical/macro/contrarian)"),
@@ -657,6 +685,7 @@ func DashboardRoutes() []Route {
 			Summary("Run thinktank analysis").
 			Description("Runs a think tank analysis on the given topic using the 5-fellow Hegelian dialectic pipeline.").
 			Tags("Thinktank").
+			OperationID("postThinktankAnalyze").
 			QueryParam("topic", "Analysis topic (e.g., 'AI safety frameworks')", true, StringSchema("Topic")).
 			JSONResponse(200, "Analysis results", ObjectSchema(map[string]*Schema{
 				"topic":    StringSchema("Analysis topic"),
@@ -674,6 +703,7 @@ func DashboardRoutes() []Route {
 			Summary("Get default company state").
 			Description("Returns the default HermesAI startup company state with metrics like MRR, users, runway.").
 			Tags("Company").
+			OperationID("getDefaultCompany").
 			JSONResponse(200, "Company state", ObjectSchema(map[string]*Schema{
 				"name":     StringSchema("Company name"),
 				"mrr":      NumberSchema("Monthly recurring revenue"),
@@ -689,6 +719,7 @@ func DashboardRoutes() []Route {
 			Summary("List tasks").
 			Description("Returns the full task pipeline with statuses and assignments.").
 			Tags("Tasks").
+			OperationID("getTasks").
 			JSONResponse(200, "Array of task objects", ArraySchema(ObjectSchema(map[string]*Schema{
 				"id":       StringSchema("Task identifier"),
 				"title":    StringSchema("Task title"),
@@ -703,6 +734,7 @@ func DashboardRoutes() []Route {
 			Summary("Approve a task").
 			Description("Approves a task by ID, marking it ready for sprint execution.").
 			Tags("Tasks").
+			OperationID("postTasksApprove").
 			QueryParam("id", "Task identifier", true, StringSchema("Task ID")).
 			JSONResponse(200, "Approval confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'approved' on success"),
@@ -714,6 +746,7 @@ func DashboardRoutes() []Route {
 			Summary("Reject a task").
 			Description("Rejects a task by ID.").
 			Tags("Tasks").
+			OperationID("postTasksReject").
 			QueryParam("id", "Task identifier", true, StringSchema("Task ID")).
 			JSONResponse(200, "Rejection confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'rejected' on success"),
@@ -726,6 +759,7 @@ func DashboardRoutes() []Route {
 			Summary("Execute sprint").
 			Description("Executes all approved tasks in a sprint. Runs asynchronously with a job ID for status polling.").
 			Tags("Sprint").
+			OperationID("postSprintExecute").
 			QueryParam("fast", "Fast mode (skip Ollama calls)", false, BoolSchema("Fast mode flag")).
 			JSONResponse(200, "Sprint started", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("'sprint_started' or 'no_approved_tasks'"),
@@ -740,6 +774,7 @@ func DashboardRoutes() []Route {
 			Summary("Get sprint status").
 			Description("Returns the current sprint execution status.").
 			Tags("Sprint").
+			OperationID("getSprintStatus").
 			JSONResponse(200, "Sprint status", ObjectSchema(map[string]*Schema{
 				"running":    BoolSchema("Whether a sprint is currently executing"),
 				"job_id":     StringSchema("Active sprint job ID"),
@@ -752,6 +787,7 @@ func DashboardRoutes() []Route {
 			Summary("Dashboard chat").
 			Description("Sends a message to a tab-specific AI agent and returns the reply.").
 			Tags("Chat").
+			OperationID("postChat").
 			QueryParam("msg", "User message", true, StringSchema("Message text")).
 			QueryParam("tab", "Chat tab (overview/thinktank/company/tasks/trees/mindmap/evolution)", false, StringSchema("Tab identifier")).
 			JSONResponse(200, "Chat response", ObjectSchema(map[string]*Schema{
@@ -765,6 +801,12 @@ func DashboardRoutes() []Route {
 			Summary("Execute agent remotely").
 			Description("Executes an agent task on this dashboard node using the behavior tree framework. Accepts JSON body {agent (required), task, tree?}. Used by RemoteExecutor for horizontal scaling — the AgentRouter distributes tasks across multiple dashboard nodes via this endpoint. Returns reliability.AgentResult with output, duration, success/error, and quality_score.").
 			Tags("Scalability").
+			OperationID("postAgentsExecute").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"agent": StringSchema("Agent name (required)"),
+				"task":  StringSchema("Task text to execute"),
+				"tree":  StringSchema("Optional tree ID override"),
+			}, "agent")).
 			JSONResponse(200, "Agent execution result", ObjectSchema(map[string]*Schema{
 				"agent":         StringSchema("Agent name"),
 				"task":          StringSchema("Task executed"),
@@ -782,6 +824,7 @@ func DashboardRoutes() []Route {
 			Summary("List dead letter queue entries").
 			Description("Returns all failed tasks in the dead letter queue with their IDs, agents, errors, and timestamps.").
 			Tags("Reliability").
+			OperationID("getDLQ").
 			JSONResponse(200, "DLQ entries list", ObjectSchema(map[string]*Schema{
 				"count": IntSchema("Number of dead letter entries"),
 				"entries": ArraySchema(ObjectSchema(map[string]*Schema{
@@ -799,6 +842,7 @@ func DashboardRoutes() []Route {
 			Summary("Replay a dead letter entry").
 			Description("Removes a specific entry from the DLQ and returns it for re-execution.").
 			Tags("Reliability").
+			OperationID("postDLQReplay").
 			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
 			JSONResponse(200, "Replayed entry", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("'replayed' on success"),
@@ -819,6 +863,7 @@ func DashboardRoutes() []Route {
 			Summary("Purge dead letter queue").
 			Description("Removes all entries from the dead letter queue. IRREVERSIBLE.").
 			Tags("Reliability").
+			OperationID("deleteDLQPurge").
 			JSONResponse(200, "Purge confirmation", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("'purged' on success"),
 				"cleared": IntSchema("Number of entries cleared"),
