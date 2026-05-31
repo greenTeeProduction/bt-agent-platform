@@ -95,8 +95,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git log since last tag
+
       - uses: actions/setup-go@v5
         with: { go-version: '1.23' }
+
+      - name: Generate release notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          bash scripts/release-notes.sh --next "$VERSION" > /tmp/release-notes.md
+          echo "Release notes generated: $(wc -l < /tmp/release-notes.md) lines"
 
       - name: Build release binaries
         run: |
@@ -115,4 +124,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: bin/*
-          generate_release_notes: true
+          body_path: /tmp/release-notes.md

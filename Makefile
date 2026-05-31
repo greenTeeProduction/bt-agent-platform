@@ -146,6 +146,14 @@ changelog-prepend:
 	mv CHANGELOG.md.tmp CHANGELOG.md; \
 	echo "Prepended $(VERSION) section to CHANGELOG.md"
 
+# Generate release notes from conventional commits (markdown)
+release-notes:
+	@./scripts/release-notes.sh --next $(VERSION)
+
+# Generate release notes in JSON format for API consumers
+release-notes-json:
+	@./scripts/release-notes.sh --next $(VERSION) --format json
+
 help:
 	@echo "BT Platform Makefile"
 	@echo ""
@@ -159,6 +167,8 @@ help:
 	@echo "  ci                Run complete CI pipeline locally (vet + fmt + test + build)"
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
+	@echo "  release-notes     Generate release notes from conventional commits"
+	@echo "  release-notes-json Generate release notes as JSON"
 	@echo "  bench             Run fast benchmarks (no LLM)"
 	@echo "  benchcmp-baseline Save benchmark baseline for regression detection"
 	@echo "  benchcmp-check    Check benchmarks against stored baseline"
