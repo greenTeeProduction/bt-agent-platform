@@ -572,6 +572,66 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// ─── Content-Type Validation ────────────────────────────────────────────────
+
+// ContentTypeMiddleware validates that incoming requests have an allowed Content-Type
+// header for the specified HTTP methods. This prevents content-type confusion attacks
+// where an attacker sends unexpected payload formats to JSON-only endpoints.
+//
+// allowedTypes is a map of MIME types (e.g., "application/json") that are permitted.
+// methods is a set of HTTP methods to enforce the check on (e.g., POST, PUT, PATCH).
+// If methods is nil, defaults to POST, PUT, PATCH, DELETE.
+func ContentTypeMiddleware(allowedTypes map[string]bool, methods map[string]bool) func(http.Handler) http.Handler {
+	if len(allowedTypes) == 0 {
+		allowedTypes = map[string]bool{"application/json": true}
+	}
+	if len(methods) == 0 {
+		methods = map[string]bool{
+			http.MethodPost:   true,
+			http.MethodPut:    true,
+			http.MethodPatch:  true,
+			http.MethodDelete: true,
+		}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if methods[r.Method] {
+				ct := r.Header.Get("Content-Type")
+				// Strip parameters (e.g., "application/json; charset=utf-8" → "application/json")
+				if idx := strings.Index(ct, ";"); idx != -1 {
+					ct = strings.TrimSpace(ct[:idx])
+				}
+				if ct == "" || !allowedTypes[ct] {
+					AuditSecurityEvent(r.Context(), "invalid_content_type",
+						"method", r.Method,
+						"path", r.URL.Path,
+						"content_type", r.Header.Get("Content-Type"),
+						"remote_addr", r.RemoteAddr,
+					)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnsupportedMediaType)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error":   "unsupported_media_type",
+						"message": "Request Content-Type is not supported for this endpoint.",
+					})
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// JSONContentTypeMiddleware is a convenience wrapper that enforces application/json
+// Content-Type on POST, PUT, PATCH, and DELETE requests. GET/HEAD/OPTIONS pass through
+// without Content-Type checks.
+//
+// This is the most common case for REST API endpoints and should be placed after
+// CSRF middleware in the stack.
+func JSONContentTypeMiddleware(next http.Handler) http.Handler {
+	return ContentTypeMiddleware(nil, nil)(next)
+}
+
 // ─── CSRF Protection ────────────────────────────────────────────────────────
 
 // csrfCookieName is the name of the cookie storing the CSRF token.

@@ -873,3 +873,214 @@ func TestGenerateCSRFToken_Length(t *testing.T) {
 		}
 	}
 }
+
+// ─── Content-Type Validation Tests ──────────────────────────────────────────
+
+func TestContentTypeMiddleware_AllowsJSON(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{"key":"value"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for JSON content type, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_RejectsPlainText(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader("plain text"))
+	req.Header.Set("Content-Type", "text/plain")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 Unsupported Media Type, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_RejectsEmptyContentType(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{"key":"value"}`))
+	// No Content-Type header set
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for missing Content-Type, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_AllowsGETWithoutContentType(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	// No Content-Type header on GET — should pass through
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for GET without Content-Type, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_AllowsJSONWithCharset(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{"key":"value"}`))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for JSON with charset, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_CustomAllowedTypes(t *testing.T) {
+	allowedTypes := map[string]bool{
+		"application/json": true,
+		"application/xml":  true,
+	}
+	handler := ContentTypeMiddleware(allowedTypes, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// JSON should pass
+	reqJSON := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{"key":"value"}`))
+	reqJSON.Header.Set("Content-Type", "application/json")
+	recJSON := httptest.NewRecorder()
+	handler.ServeHTTP(recJSON, reqJSON)
+	if recJSON.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for JSON, got %d", recJSON.Code)
+	}
+
+	// XML should pass
+	reqXML := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader("<root/>"))
+	reqXML.Header.Set("Content-Type", "application/xml")
+	recXML := httptest.NewRecorder()
+	handler.ServeHTTP(recXML, reqXML)
+	if recXML.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for XML, got %d", recXML.Code)
+	}
+
+	// Form data should be rejected
+	reqForm := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader("key=value"))
+	reqForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recForm := httptest.NewRecorder()
+	handler.ServeHTTP(recForm, reqForm)
+	if recForm.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for form data, got %d", recForm.Code)
+	}
+}
+
+func TestContentTypeMiddleware_CustomMethods(t *testing.T) {
+	allowedTypes := map[string]bool{"application/json": true}
+	methods := map[string]bool{http.MethodPost: true, http.MethodPut: true}
+	handler := ContentTypeMiddleware(allowedTypes, methods)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// POST should enforce
+	postReq := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader("plain"))
+	postReq.Header.Set("Content-Type", "text/plain")
+	postRec := httptest.NewRecorder()
+	handler.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for POST text/plain, got %d", postRec.Code)
+	}
+
+	// PATCH should NOT enforce (not in custom methods)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/test", strings.NewReader("plain"))
+	patchReq.Header.Set("Content-Type", "text/plain")
+	patchRec := httptest.NewRecorder()
+	handler.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for PATCH (not enforced), got %d", patchRec.Code)
+	}
+}
+
+func TestJSONContentTypeMiddleware_Convenience(t *testing.T) {
+	handler := JSONContentTypeMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// JSON passes
+	goodReq := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader(`{}`))
+	goodReq.Header.Set("Content-Type", "application/json")
+	goodRec := httptest.NewRecorder()
+	handler.ServeHTTP(goodRec, goodReq)
+	if goodRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for JSON, got %d", goodRec.Code)
+	}
+
+	// GET passes without Content-Type
+	getReq := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for GET, got %d", getRec.Code)
+	}
+
+	// Form data rejected
+	badReq := httptest.NewRequest(http.MethodPost, "/api/test", strings.NewReader("x=1"))
+	badReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	badRec := httptest.NewRecorder()
+	handler.ServeHTTP(badRec, badReq)
+	if badRec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for form data via JSONContentTypeMiddleware, got %d", badRec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_OptionsPassesThrough(t *testing.T) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for OPTIONS, got %d", rec.Code)
+	}
+}
+
+func TestContentTypeMiddleware_EmptyAllowedTypesDefaultsToJSON(t *testing.T) {
+	// Empty allowedTypes + empty methods → defaults to JSON enforcement on POST/PUT/PATCH/DELETE
+	handler := ContentTypeMiddleware(map[string]bool{}, map[string]bool{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// JSON passes
+	jsonReq := httptest.NewRequest(http.MethodPut, "/api/test", strings.NewReader(`{}`))
+	jsonReq.Header.Set("Content-Type", "application/json")
+	jsonRec := httptest.NewRecorder()
+	handler.ServeHTTP(jsonRec, jsonReq)
+	if jsonRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for JSON on PUT, got %d", jsonRec.Code)
+	}
+
+	// Form data rejected on DELETE
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/test", strings.NewReader("x=1"))
+	delReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	delRec := httptest.NewRecorder()
+	handler.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("expected 415 for form data on DELETE, got %d", delRec.Code)
+	}
+}
