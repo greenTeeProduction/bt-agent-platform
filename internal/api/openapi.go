@@ -868,5 +868,47 @@ func DashboardRoutes() []Route {
 				"status":  StringSchema("'purged' on success"),
 				"cleared": IntSchema("Number of entries cleared"),
 			}, "status", "cleared")).WithAuth().Build(),
+
+		// Session Management
+		NewRoute("/api/login", POST).
+			Summary("Login / create session").
+			Description("Authenticate with BT_API_KEY password and receive a session cookie. Public endpoint — no prior auth required. Body: {\"password\": \"<api_key>\"}. Sets HttpOnly session cookie on success.").
+			Tags("Session").
+			OperationID("postLogin").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"password": StringSchema("API key / password for authentication"),
+			}, "password")).
+			JSONResponse(200, "Session created", ObjectSchema(map[string]*Schema{
+				"status":  StringSchema("'authenticated' on success"),
+				"message": StringSchema("Confirmation message"),
+			}, "status")).
+			ErrorResponse(401, "Invalid password").
+			ErrorResponse(503, "Login not configured (BT_API_KEY not set)").
+			ErrorResponse(405, "Method not allowed — POST only").Build(),
+
+		NewRoute("/api/logout", POST).
+			Summary("Logout / destroy session").
+			Description("Destroys the current session and clears the session cookie. Requires valid session cookie or API key header.").
+			Tags("Session").
+			OperationID("postLogout").
+			JSONResponse(200, "Session destroyed", ObjectSchema(map[string]*Schema{
+				"status":  StringSchema("'logged_out' on success"),
+				"message": StringSchema("Confirmation message"),
+			}, "status")).
+			ErrorResponse(405, "Method not allowed — POST only").Build(),
+
+		NewRoute("/api/session", GET).
+			Summary("Get session info").
+			Description("Returns information about the current authenticated session (cookie-based or API key). Requires valid session cookie or API key header.").
+			Tags("Session").
+			OperationID("getSession").
+			JSONResponse(200, "Session info", ObjectSchema(map[string]*Schema{
+				"status":      StringSchema("'authenticated' or 'unauthenticated'"),
+				"auth_method": StringSchema("'session' or 'api_key'"),
+				"created_at":  StringSchema("ISO 8601 session creation timestamp (session only)"),
+				"expires_at":  StringSchema("ISO 8601 session expiry timestamp (session only)"),
+				"remaining":   StringSchema("Time until session expiry (session only)"),
+			}, "status")).
+			ErrorResponse(401, "Not authenticated").Build(),
 	}
 }

@@ -46,6 +46,9 @@ var dashConfig *config.Config
 // traceReader reads and parses the shared traces log for the /api/traces endpoint.
 var traceReader *tracing.TraceReader
 
+// sessionStore manages authenticated user sessions (login/logout, cookie-based auth).
+var sessionStore *security.SessionStore
+
 // Sprint tracking
 var sprintState = struct {
 	sync.Mutex
@@ -108,6 +111,17 @@ func main() {
 	// API key from env — if set, all /api/* endpoints require X-API-Key header
 	apiKey := os.Getenv("BT_API_KEY")
 
+	// Session store — cookie-based session management with TTL-based expiry.
+	// Sessions are backed by the same API key for password-based login.
+	// CookieSecure matches TLS config (auto-detected below).
+	sessionStore = security.NewSessionStore(security.SessionStoreConfig{
+		DefaultTTL:  24 * time.Hour,
+		CookieName:  "bt_session",
+		CookiePath:  "/api",
+		MaxSessions: 100,
+	})
+	slog.Info("Session store initialized", "ttl", "24h", "cookie", "bt_session")
+
 	// Load runtime configuration
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
@@ -133,25 +147,35 @@ func main() {
 	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/scalability", handleScalability)
 	mux.HandleFunc("/api/traces", handleTraces)
-	mux.HandleFunc("/api/summary", authMiddleware(apiKey, handleSummary))
-	mux.HandleFunc("/api/trees", authMiddleware(apiKey, handleTrees))
-	mux.HandleFunc("/api/thinktank/fellows", authMiddleware(apiKey, handleFellows))
-	mux.HandleFunc("/api/thinktank/analyze", authMiddleware(apiKey, handleAnalyze))
-	mux.HandleFunc("/api/company/default", authMiddleware(apiKey, handleDefaultCompany))
-	mux.HandleFunc("/api/agents", authMiddleware(apiKey, handleAgentsList))
-	mux.HandleFunc("/api/agents/run", authMiddleware(apiKey, handleAgentRun))
-	mux.HandleFunc("/api/agents/execute", authMiddleware(apiKey, handleAgentExecute))
-	mux.HandleFunc("/api/tasks", authMiddleware(apiKey, handleTasks))
-	mux.HandleFunc("/api/tasks/approve", authMiddleware(apiKey, handleTaskApprove))
-	mux.HandleFunc("/api/tasks/create", authMiddleware(apiKey, handleTaskCreate))
-	mux.HandleFunc("/api/tasks/reject", authMiddleware(apiKey, handleTaskReject))
-	mux.HandleFunc("/api/sprint/execute", authMiddleware(apiKey, handleSprintExecute))
-	mux.HandleFunc("/api/sprint/status", authMiddleware(apiKey, handleSprintStatus))
-	mux.HandleFunc("/api/tree/structure", authMiddleware(apiKey, handleTreeStructure))
-	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat))
-	mux.HandleFunc("/api/dlq", authMiddleware(apiKey, handleDLQ))
-	mux.HandleFunc("/api/dlq/replay", authMiddleware(apiKey, handleDLQReplay))
-	mux.HandleFunc("/api/dlq/purge", authMiddleware(apiKey, handleDLQPurge))
+	mux.HandleFunc("/api/login", handleLogin)
+	mux.HandleFunc("/api/logout", handleLogout)
+	mux.HandleFunc("/api/session", handleSession)
+	// Session-aware auth: checks session cookie first, falls back to API key header.
+	// This preserves backward compatibility with existing X-API-Key header workflows
+	// while adding cookie-based browser sessions via /api/login.
+	sessionAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return sessionStore.SessionMiddleware(apiKey, nil)(next)
+	}
+
+	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
+	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
+	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
+	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
+	mux.HandleFunc("/api/company/default", sessionAuth(handleDefaultCompany))
+	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
+	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
+	mux.HandleFunc("/api/agents/execute", sessionAuth(handleAgentExecute))
+	mux.HandleFunc("/api/tasks", sessionAuth(handleTasks))
+	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
+	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
+	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
+	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
+	mux.HandleFunc("/api/sprint/status", sessionAuth(handleSprintStatus))
+	mux.HandleFunc("/api/tree/structure", sessionAuth(handleTreeStructure))
+	mux.HandleFunc("/api/chat", sessionAuth(handleChat))
+	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
+	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
+	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
 
 	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
 	tlsCert := os.Getenv("BT_TLS_CERT")
@@ -162,6 +186,14 @@ func main() {
 	secCfg := security.DefaultSecurityHeaders()
 	if tlsEnabled {
 		secCfg.EnableHSTS = true
+		// Update session store cookie security for HTTPS
+		sessionStore = security.NewSessionStore(security.SessionStoreConfig{
+			DefaultTTL:   24 * time.Hour,
+			CookieName:   "bt_session",
+			CookiePath:   "/api",
+			CookieSecure: true,
+			MaxSessions:  100,
+		})
 	}
 
 	// Middleware stack: security headers → request ID → tracing → cors → csrf → sanitize → rate limit → metrics
@@ -568,6 +600,142 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ─── Session Management Handlers ──────────────────────────────────────────────
+
+// handleLogin authenticates a user via password and creates a session.
+// POST /api/login — body: {"password": "<api_key>"}
+// The password must match BT_API_KEY env var. On success, sets a session cookie.
+// Public endpoint (no auth required — this is how you get a session).
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		return
+	}
+
+	apiKey := os.Getenv("BT_API_KEY")
+	if apiKey == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "login not configured — BT_API_KEY not set"})
+		return
+	}
+
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if body.Password != apiKey {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
+		security.AuditSecurityEvent(r.Context(), "login_failed",
+			"reason", "invalid_password",
+		)
+		return
+	}
+
+	token, err := sessionStore.CreateSession("")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to create session: " + err.Error()})
+		return
+	}
+
+	sessionStore.SetSessionCookie(w, token)
+	security.AuditSecurityEvent(r.Context(), "login_success",
+		"session_count", sessionStore.Count(),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "authenticated",
+		"message": "Session created. Include the session cookie in subsequent requests.",
+	})
+}
+
+// handleLogout destroys the current session and clears the session cookie.
+// POST /api/logout — requires valid session cookie or API key header.
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		return
+	}
+
+	// Extract and destroy session from cookie
+	if cookie, err := r.Cookie("bt_session"); err == nil {
+		sessionStore.DestroySession(cookie.Value)
+	}
+	sessionStore.ClearSessionCookie(w)
+
+	security.AuditSecurityEvent(r.Context(), "logout",
+		"session_count", sessionStore.Count(),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "logged_out",
+		"message": "Session destroyed and cookie cleared.",
+	})
+}
+
+// handleSession returns information about the current session.
+// GET /api/session — requires valid session cookie or API key header.
+func handleSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use GET"})
+		return
+	}
+
+	// Check for session cookie
+	if cookie, err := r.Cookie("bt_session"); err == nil {
+		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":       "authenticated",
+				"auth_method":  "session",
+				"created_at":   info.CreatedAt,
+				"expires_at":   info.ExpiresAt,
+				"last_used":    info.LastUsed,
+				"remaining":    info.Remaining.String(),
+			})
+			return
+		}
+	}
+
+	// Check for API key header
+	apiKey := os.Getenv("BT_API_KEY")
+	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":      "authenticated",
+			"auth_method": "api_key",
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "unauthenticated",
+		"message": "No valid session cookie or API key found.",
+	})
+}
+
 // handleAlerts evaluates prometheus alert rules against current metrics and
 // returns which alerts are firing. Public endpoint (no auth) so monitoring
 // tools can scrape it.
@@ -683,6 +851,7 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	gen.AddTag("Agents", "Agent management and execution")
 	gen.AddTag("Scalability", "Horizontal scaling, worker pool, queues")
 	gen.AddTag("Reliability", "Dead letter queue, circuit breaker")
+	gen.AddTag("Session", "Login, logout, session management")
 
 	for _, route := range api.DashboardRoutes() {
 		gen.AddRoute(route)

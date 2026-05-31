@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -100,7 +101,7 @@ func TestRecover_ReturnsErrorWithContext(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	// Should contain the context string
-	if !contains(err.Error(), "my-context") {
+	if !strings.Contains(err.Error(), "my-context") {
 		t.Errorf("error should contain context: %v", err)
 	}
 }
@@ -166,11 +167,3 @@ func TestWorkerPool_MultiplePanics(t *testing.T) {
 	}
 }
 
-func contains(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}

@@ -19,6 +19,9 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -854,6 +857,213 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		return func(ctx *btcore.BTContext[Blackboard]) int { bb.Result += "\n\nStop-loss: $175.80 (ATR-based, 5% below entry)."; return 1 }
 	case "AssessRiskReward":
 		return func(ctx *btcore.BTContext[Blackboard]) int { bb.Result += "\n\nR:R = 2.1:1. Kelly = 15% allocation. Acceptable."; bb.Outcome = "success"; return 1 }
+
+	// ─── Arc42 Documentation Actions ───────────────────────────────
+	case "SetupDocTools":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			bb.ChainTools = []any{newFileReadTool(), newShellExecTool(), newWebSearchTool()}
+			return 1
+		}
+	case "ReadGraphReport":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			data, err := os.ReadFile("/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md")
+			if err == nil {
+				bb.CachedResult = string(data)
+			}
+			return 1
+		}
+	case "ReadGitHistory":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("git", "-C", "/home/nico/go-bt-evolve", "log", "--oneline", "-30").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["git_history"] = string(out)
+			return 1
+		}
+	case "ReadADRs":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			files, _ := filepath.Glob("/home/nico/go-bt-evolve/docs/adr/ADR-*.md")
+			var adrs strings.Builder
+			for _, f := range files {
+				data, err := os.ReadFile(f)
+				if err == nil {
+					adrs.Write(data)
+					adrs.WriteString("\n---\n")
+				}
+			}
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["adrs"] = adrs.String()
+			return 1
+		}
+	case "ReadGoMod":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			data, _ := os.ReadFile("/home/nico/go-bt-evolve/go.mod")
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["go_mod"] = string(data)
+			lines := strings.SplitN(string(data), "\n", 3)
+			if len(lines) > 0 {
+				bb.ChainState["go_version"] = strings.TrimSpace(lines[0])
+			}
+			return 1
+		}
+	case "ReadConfigFiles":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			data, _ := os.ReadFile("/home/nico/.hermes/config.yaml")
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["config"] = string(data)
+			return 1
+		}
+	case "DetectHardware":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			cpu, _ := exec.Command("sh", "-c", "grep 'model name' /proc/cpuinfo | head -1").Output()
+			mem, _ := exec.Command("sh", "-c", "grep MemTotal /proc/meminfo").Output()
+			disk, _ := exec.Command("sh", "-c", "df -h / /mnt/ssd 2>/dev/null | tail -2").Output()
+			uname, _ := exec.Command("uname", "-a").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["hardware"] = fmt.Sprintf("CPU: %sMEM: %sDisk: %sKernel: %s", cpu, mem, disk, uname)
+			return 1
+		}
+	case "DetectProcesses":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "ps aux | grep '[b]t-' | awk '{print $11, $2}'").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["processes"] = string(out)
+			return 1
+		}
+	case "ListPackages":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "find /home/nico/go-bt-evolve/internal -maxdepth 1 -type d | sort | sed 's|.*/||'").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["packages"] = string(out)
+			return 1
+		}
+	case "ListBinaries":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "find /home/nico/go-bt-evolve/cmd -name 'main.go' | sed 's|/main.go||' | sed 's|.*/||' | sort").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["binaries"] = string(out)
+			return 1
+		}
+	case "ReadEngineCode":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			data, _ := os.ReadFile("/home/nico/go-bt-evolve/internal/engine/tree.go")
+			bb.CachedResult = string(data[:min(len(data), 3000)])
+			return 1
+		}
+	case "ListExternalAPIs":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "grep -rn 'http.Get\\|http.Post\\|http.NewRequest\\|net.Dial' /home/nico/go-bt-evolve/internal/ 2>/dev/null | head -20").Output()
+			bb.CachedResult = string(out)
+			return 1
+		}
+	case "ListMCPTools":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "grep -rn 'RegisterTool\\|tools/call\\|bt_agent_\\|bt_evaluator_\\|bt_langagent_' /home/nico/go-bt-evolve/cmd/bt-agent/tools.go 2>/dev/null | wc -l").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["mcp_tools"] = strings.TrimSpace(string(out))
+			return 1
+		}
+	case "ReadSection1":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			data, _ := os.ReadFile("/mnt/ssd/clawd/wiki/bt-research/docs/arc42/01-introduction-goals.md")
+			bb.CachedResult = string(data)
+			return 1
+		}
+	case "ReadTestCoverage":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "cd /home/nico/go-bt-evolve && go test -coverprofile=/tmp/arc42-cover.out ./... 2>&1 | grep 'coverage:' | head -10").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["coverage"] = string(out)
+			return 1
+		}
+	case "ReadErrorLogs":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "grep -i 'error\\|panic\\|fail' /home/nico/.hermes/logs/errors.log 2>/dev/null | tail -10").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["errors"] = string(out)
+			return 1
+		}
+	case "FallbackSection1":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			bb.Result = "# 1. Introduction and Goals\n\n## 1.1 Requirements Overview\n\ngo-bt-evolve is a behavior-tree-driven AI agent platform.\n\n## 1.2 Quality Goals\n\n| Goal | Scenario |\n|------|----------|\n| Correctness | Trees route tasks to correct domain paths |\n| Evolvability | 6 evolution algorithms continuously improve trees |\n| Reliability | Panic recovery, circuit breakers, retry with DLQ |\n\n## 1.3 Stakeholders\n\n| Role | Expectations |\n|------|-------------|\n| Nico | Platform architect and developer |\n| Hermes Agent | Automated operator via cron jobs |\n| Dashboard Users | Visual introspection of agents, trees, tasks |"
+			bb.Outcome = "success"
+			return 1
+		}
+	case "ValidateSection":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			if len(bb.Result) < 100 {
+				bb.Result = "ERROR: section content too short"
+				bb.Outcome = "failure"
+				return 0
+			}
+			return 1
+		}
+	case "SaveSection":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			sectionName := bb.ChainState["section_file"].(string)
+			os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
+			path := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42/" + sectionName
+			os.WriteFile(path, []byte(bb.Result), 0644)
+			return 1
+		}
+	case "MarkSectionDone":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			sectionKey := bb.ChainState["section_key"].(string)
+			bb.ChainState[sectionKey] = true
+			return 1
+		}
+	case "ScanCodeComments":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "grep -rn '// Package ' /home/nico/go-bt-evolve/internal/ 2>/dev/null | head -30").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["comments"] = string(out)
+			return 1
+		}
+	case "ScanTypes":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			out, _ := exec.Command("sh", "-c", "grep -rn 'type.*struct {' /home/nico/go-bt-evolve/internal/engine/ /home/nico/go-bt-evolve/internal/evolution/ 2>/dev/null | head -20").Output()
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["types"] = string(out)
+			return 1
+		}
+	case "CollectAllSections":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			files, _ := filepath.Glob("/mnt/ssd/clawd/wiki/bt-research/docs/arc42/0*.md")
+			var all strings.Builder
+			for _, f := range files {
+				data, err := os.ReadFile(f)
+				if err == nil {
+					all.Write(data)
+					all.WriteString("\n\n")
+				}
+			}
+			bb.CachedResult = all.String()
+			return 1
+		}
+	case "GenerateTOC":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			var toc strings.Builder
+			toc.WriteString("# Table of Contents\n\n")
+			for i := 1; i <= 12; i++ {
+				toc.WriteString(fmt.Sprintf("%d. [Section %d](#section-%d)\n", i, i, i))
+			}
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["toc"] = toc.String()
+			return 1
+		}
+	case "SaveDocument":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
+			path := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42/go-bt-evolve-arc42.md"
+			os.WriteFile(path, []byte(bb.Result), 0644)
+			return 1
+		}
+	case "MarkDocAssembled":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			if bb.ChainState == nil { bb.ChainState = make(map[string]any) }
+			bb.ChainState["doc_assembled"] = true
+			return 1
+		}
 	default:
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			return 1
@@ -1394,6 +1604,42 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool { return containsAny(b.Task, "build", "compile", "install", "make", "go build") }
 	case "IsImplementRequest":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "implement", "plan", "fix", "create", "pending") }
+
+	// ─── Arc42 Documentation Conditions ────────────────────────────
+	case "GraphIsFresh":
+		return func(b *Blackboard) bool {
+			_, err := os.Stat("/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md")
+			return err == nil
+		}
+	case "Section1Done":
+		return func(b *Blackboard) bool {
+			if bb.ChainState == nil { return false }
+			v, _ := bb.ChainState["section1_done"].(bool)
+			return v
+		}
+	case "Section4Done":
+		return func(b *Blackboard) bool {
+			if bb.ChainState == nil { return false }
+			v, _ := bb.ChainState["section4_done"].(bool)
+			return v
+		}
+	case "Section5Done":
+		return func(b *Blackboard) bool {
+			if bb.ChainState == nil { return false }
+			v, _ := bb.ChainState["section5_done"].(bool)
+			return v
+		}
+	case "AllSectionsDone":
+		return func(b *Blackboard) bool {
+			if bb.ChainState == nil { return false }
+			for i := 1; i <= 12; i++ {
+				key := fmt.Sprintf("section%d_done", i)
+				if v, _ := bb.ChainState[key].(bool); !v {
+					return false
+				}
+			}
+			return true
+		}
 	default:
 		return func(b *Blackboard) bool {
 			return true

@@ -1,9 +1,11 @@
 package domains
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
+	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
 // singleTaskSuite builds a minimal Suite with one task.
@@ -98,6 +100,20 @@ func tasksForTree() map[string]string {
 		"goap_planning":      "plan the steps to deploy a new service",
 		"goap_research":      "research best practices for Go microservices",
 		"goap_devops":        "diagnose why the CI pipeline is failing",
+		// Arc42 documentation trees
+		"arc42:section1":  "generate arc42 introduction and goals",
+		"arc42:section2":  "generate arc42 constraints section",
+		"arc42:section3":  "generate arc42 context and scope",
+		"arc42:section4":  "generate arc42 solution strategy",
+		"arc42:section5":  "generate arc42 building block view",
+		"arc42:section6":  "generate arc42 runtime view",
+		"arc42:section7":  "generate arc42 deployment view",
+		"arc42:section8":  "generate arc42 crosscutting concepts",
+		"arc42:section9":  "generate arc42 architecture decisions",
+		"arc42:section10": "generate arc42 quality requirements",
+		"arc42:section11": "generate arc42 risks and technical debt",
+		"arc42:section12": "generate arc42 glossary",
+		"arc42:assemble":  "assemble final arc42 document",
 	}
 }
 
@@ -106,8 +122,8 @@ func TestAllDomainTrees(t *testing.T) {
 	tasks := tasksForTree()
 	mock := benchmark.DefaultMock()
 
-	if len(all) != 14 {
-		t.Errorf("expected 14 domain trees, got %d", len(all))
+	if len(all) != 27 {
+		t.Errorf("expected 27 domain trees, got %d", len(all))
 	}
 
 	for name, tree := range all {
@@ -116,6 +132,21 @@ func TestAllDomainTrees(t *testing.T) {
 			t.Errorf("no smoke task defined for tree %q", name)
 			continue
 		}
+		// Arc42 trees require graphify + LLM + shell access. Smoke-test
+		// structural validity only: verify BuildTree doesn't panic.
+		if strings.HasPrefix(name, "arc42:") {
+			bb := &engine.Blackboard{
+				Task: task,
+				LLM:  mock,
+			}
+			cmd := engine.BuildTree(tree, bb)
+			if cmd == nil {
+				t.Errorf("arc42 tree %q: BuildTree returned nil", name)
+			}
+			t.Logf("  %s: structure OK (skip runtime — needs graphify + LLM)", name)
+			continue
+		}
+
 		suite := singleTaskSuite(name+"_smoke", task, true)
 		metrics := benchmark.RunSuite(tree, suite, mock)
 

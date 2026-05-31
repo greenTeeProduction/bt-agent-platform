@@ -672,6 +672,9 @@ func parseChainConfig(node *evolution.SerializableNode) ChainConfig {
 // --- Helpers ---
 
 // expandTemplate replaces {{.Field}} placeholders with blackboard values.
+// Supports: .Task, .Plan, .Result, .Outcome, .Complexity, .CachedResult,
+// .KgResults, .DurationMs, .QualityScore, .CurrentPath, .FailureCount.
+// Also supports .ChainState.<key> for arbitrary chain state lookups.
 func expandTemplate(tmpl string, bb *Blackboard) string {
 	if tmpl == "" {
 		return bb.Task
@@ -682,7 +685,39 @@ func expandTemplate(tmpl string, bb *Blackboard) string {
 	result = replaceAll(result, "{{.Result}}", bb.Result)
 	result = replaceAll(result, "{{.Outcome}}", bb.Outcome)
 	result = replaceAll(result, "{{.Complexity}}", bb.Complexity)
+	result = replaceAll(result, "{{.CachedResult}}", bb.CachedResult)
+	result = replaceAll(result, "{{.KgResults}}", bb.KgResults)
+	result = replaceAll(result, "{{.DurationMs}}", fmt.Sprintf("%d", bb.DurationMs))
+	result = replaceAll(result, "{{.QualityScore}}", fmt.Sprintf("%.2f", bb.QualityScore))
+	result = replaceAll(result, "{{.CurrentPath}}", bb.CurrentPath)
+	result = replaceAll(result, "{{.FailureCount}}", fmt.Sprintf("%d", bb.FailureCount))
+	// Expand {{.ChainState.<key>}} patterns
+	result = expandChainStateTemplates(result, bb)
 	return result
+}
+
+// expandChainStateTemplates replaces {{.ChainState.<key>}} with bb.ChainState[key].
+func expandChainStateTemplates(s string, bb *Blackboard) string {
+	if bb.ChainState == nil {
+		return s
+	}
+	for {
+		idx := strings.Index(s, "{{.ChainState.")
+		if idx < 0 {
+			break
+		}
+		end := strings.Index(s[idx:], "}}")
+		if end < 0 {
+			break
+		}
+		key := s[idx+len("{{.ChainState.") : idx+end]
+		val := ""
+		if v, ok := bb.ChainState[key]; ok {
+			val = fmt.Sprintf("%v", v)
+		}
+		s = s[:idx] + val + s[idx+end+2:]
+	}
+	return s
 }
 
 func replaceAll(s, old, new string) string {

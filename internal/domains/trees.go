@@ -522,7 +522,7 @@ func GoapDevopsTree() *evolution.SerializableNode {
 
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
-	return map[string]*evolution.SerializableNode{
+	trees := map[string]*evolution.SerializableNode{
 		"code_review":        CodeReviewTree(),
 		"devops_ci":          DevOpsCITree(),
 		"agent_monitor":      AgentMonitorTree(),
@@ -538,6 +538,11 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"goap_research":      GoapResearchTree(),
 		"goap_devops":        GoapDevopsTree(),
 	}
+	// Merge arc42 trees with qualified names (arc42:section1, etc.)
+	for k, v := range Arc42Trees() {
+		trees[k] = v
+	}
+	return trees
 }
 
 // Descriptions maps tree names to descriptions.

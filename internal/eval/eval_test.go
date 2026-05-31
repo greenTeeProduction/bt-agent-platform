@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -37,10 +38,10 @@ func TestPlatformEval_JSON(t *testing.T) {
 		t.Error("JSON output too short")
 	}
 	// Verify key fields present in JSON
-	if !contains(jsonStr, "total_suites") {
+	if !strings.Contains(jsonStr, "total_suites") {
 		t.Error("JSON missing total_suites")
 	}
-	if !contains(jsonStr, "scorecard") {
+	if !strings.Contains(jsonStr, "scorecard") {
 		t.Error("JSON missing scorecard")
 	}
 }
@@ -78,11 +79,3 @@ func TestPlatformEval_Scorecard(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

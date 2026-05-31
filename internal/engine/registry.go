@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -406,7 +407,7 @@ func hasClearTaskCond(b *Blackboard) bool {
 	if len(task) < 3 {
 		return false
 	}
-	lower := toLower(task)
+	lower := strings.ToLower(task)
 	hasAlpha := false
 	for _, c := range lower {
 		if c >= 'a' && c <= 'z' {
@@ -451,14 +452,4 @@ func trim(s string) string {
 	return s[start:end]
 }
 
-func toLower(s string) string {
-	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 32
-		}
-		b[i] = c
-	}
-	return string(b)
-}
+
