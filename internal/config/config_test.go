@@ -795,3 +795,63 @@ func TestLoadDotEnv_SpacesAroundEquals(t *testing.T) {
 		t.Errorf("expected BT_OLLAMA_MODEL=trimmed-model, got %q", kv["BT_OLLAMA_MODEL"])
 	}
 }
+
+func TestConfig_Sanitized_RedactsSecrets(t *testing.T) {
+	c := &Config{
+		DashboardPort: 9800,
+		APIKey:        "secret-api-key-12345",
+		DeepSeekKey:   "sk-deepseek-secret",
+		TLSCert:       "/path/to/cert.pem",
+		TLSKey:        "/path/to/key.pem",
+		OllamaModel:   "qwen3.6:35b-a3b",
+		LLMTimeout:    300,
+	}
+	s := c.Sanitized()
+
+	if s.APIKey != "[REDACTED]" {
+		t.Errorf("expected APIKey to be redacted, got %q", s.APIKey)
+	}
+	if s.DeepSeekKey != "[REDACTED]" {
+		t.Errorf("expected DeepSeekKey to be redacted, got %q", s.DeepSeekKey)
+	}
+	if s.TLSCert != "[REDACTED]" {
+		t.Errorf("expected TLSCert to be redacted, got %q", s.TLSCert)
+	}
+	if s.TLSKey != "[REDACTED]" {
+		t.Errorf("expected TLSKey to be redacted, got %q", s.TLSKey)
+	}
+
+	// Non-secret fields should be preserved
+	if s.DashboardPort != 9800 {
+		t.Errorf("expected DashboardPort=9800, got %d", s.DashboardPort)
+	}
+	if s.OllamaModel != "qwen3.6:35b-a3b" {
+		t.Errorf("expected OllamaModel=qwen3.6:35b-a3b, got %q", s.OllamaModel)
+	}
+	if s.LLMTimeout != 300 {
+		t.Errorf("expected LLMTimeout=300, got %d", s.LLMTimeout)
+	}
+
+	// Original should be unchanged
+	if c.APIKey != "secret-api-key-12345" {
+		t.Error("original config was mutated")
+	}
+}
+
+func TestConfig_Sanitized_EmptySecrets(t *testing.T) {
+	c := &Config{
+		DashboardPort: 9800,
+		OllamaModel:   "qwen3.6:35b-a3b",
+	}
+	s := c.Sanitized()
+
+	if s.APIKey != "" {
+		t.Errorf("expected empty APIKey to stay empty, got %q", s.APIKey)
+	}
+	if s.DeepSeekKey != "" {
+		t.Errorf("expected empty DeepSeekKey to stay empty, got %q", s.DeepSeekKey)
+	}
+	if s.TLSCert != "" {
+		t.Errorf("expected empty TLSCert to stay empty, got %q", s.TLSCert)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/api"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -38,6 +39,9 @@ var sharedLLM llm.LLM
 // dlq is the dead letter queue for failed agent tasks.
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
 var dlq *reliability.DeadLetterQueue
+
+// dashConfig holds the runtime configuration loaded at startup.
+var dashConfig *config.Config
 
 // traceReader reads and parses the shared traces log for the /api/traces endpoint.
 var traceReader *tracing.TraceReader
@@ -104,6 +108,16 @@ func main() {
 	// API key from env — if set, all /api/* endpoints require X-API-Key header
 	apiKey := os.Getenv("BT_API_KEY")
 
+	// Load runtime configuration
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		slog.Warn("Failed to load config, using defaults", "error", cfgErr)
+		dashConfig = &config.Config{}
+	} else {
+		dashConfig = cfg
+		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
+	}
+
 	// Rate limiter: 100 req/sec per client, burst 20
 	rateLimiter := security.NewRateLimiter(100, 20)
 
@@ -114,6 +128,7 @@ func main() {
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
+	mux.HandleFunc("/api/config", handleConfig)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/scalability", handleScalability)
@@ -838,6 +853,21 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		"count":   len(entries),
 		"entries": entries,
 	})
+}
+
+// handleConfig returns the current runtime configuration with secrets redacted.
+// Public endpoint (no auth) — provides visibility into effective configuration.
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	sanitized := dashConfig.Sanitized()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(sanitized)
 }
 
 

@@ -571,6 +571,31 @@ func DashboardRoutes() []Route {
 				}, "total", "healthy", "unhealthy"),
 			}, "timestamp")).Build(),
 
+		NewRoute("/api/config", GET).
+			Summary("Runtime configuration").
+			Description("Returns the effective runtime configuration with secret fields (API keys, TLS paths) redacted. Public monitoring endpoint — no auth required.").
+			Tags("System").
+			JSONResponse(200, "Sanitized runtime configuration", ObjectSchema(map[string]*Schema{
+				"dashboard_port":      IntSchema("Dashboard HTTP port"),
+				"llm_provider":        StringSchema("LLM provider (ollama/deepseek)"),
+				"ollama_host":         StringSchema("Ollama server URL"),
+				"ollama_model":        StringSchema("Ollama model name"),
+				"deepseek_host":       StringSchema("DeepSeek API URL"),
+				"deepseek_model":      StringSchema("DeepSeek model name"),
+				"llm_timeout":         IntSchema("LLM call timeout in seconds"),
+				"rate_limit_rps":      NumberSchema("Rate limit requests per second"),
+				"rate_limit_burst":    IntSchema("Rate limit burst capacity"),
+				"gardener_enabled":    BoolSchema("Gardener evolution daemon enabled"),
+				"scheduler_enabled":   BoolSchema("Agent scheduler enabled"),
+				"auto_evolve_enabled":  BoolSchema("Auto-evolution enabled"),
+				"kanban_enabled":      BoolSchema("Kanban board integration enabled"),
+				"thinktank_enabled":   BoolSchema("Thinktank analysis enabled"),
+				"startup_sim_enabled": BoolSchema("Startup simulation enabled"),
+				"gardener_cycle_interval": IntSchema("Gardener cycle interval in seconds"),
+				"gardener_mutations_per":  IntSchema("Mutations applied per cycle"),
+				"max_body_size":       IntSchema("Max request body size in bytes"),
+			}, "dashboard_port", "llm_provider", "ollama_model")).Build(),
+
 		// Platform overview
 		NewRoute("/api/summary", GET).
 			Summary("Platform summary").

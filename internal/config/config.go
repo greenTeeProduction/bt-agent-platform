@@ -780,6 +780,25 @@ func (c *Config) SaveFile(path string) error {
 	return nil
 }
 
+// Sanitized returns a copy of the config with secret fields redacted.
+// Safe to expose via public API endpoints or logs.
+func (c *Config) Sanitized() Config {
+	s := *c
+	if s.APIKey != "" {
+		s.APIKey = "[REDACTED]"
+	}
+	if s.DeepSeekKey != "" {
+		s.DeepSeekKey = "[REDACTED]"
+	}
+	if s.TLSCert != "" {
+		s.TLSCert = "[REDACTED]"
+	}
+	if s.TLSKey != "" {
+		s.TLSKey = "[REDACTED]"
+	}
+	return s
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 func envBool(key string, defaultVal bool) bool {
