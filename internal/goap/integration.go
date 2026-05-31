@@ -360,6 +360,12 @@ func StandardActions() []Action {
 			Preconditions: WorldState{"has_result": true},
 			Effects:       WorldState{"task_status": "completed", "has_verification": true},
 		},
+		{
+			Name:          "delegate_to_a2a",
+			Cost:          3.0,
+			Preconditions: WorldState{"has_a2a_target": true, "has_resources": true},
+			Effects:       WorldState{"has_result": true, "task_status": "completed", "external_result": true},
+		},
 	}
 }
 

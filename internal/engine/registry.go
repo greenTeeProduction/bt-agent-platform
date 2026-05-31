@@ -204,6 +204,7 @@ func init() {
 func init() {
 	registerGoapNodes()
 	registerAlertRouterNodes()
+	registerA2ANodes()
 }
 
 // registerAlertRouterNodes registers conditions and actions for the alert_router tree.

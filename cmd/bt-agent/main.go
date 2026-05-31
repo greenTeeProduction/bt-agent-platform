@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -392,6 +393,37 @@ func main() {
 	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
 	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-agent", f))
+	}
+
+	// ── A2A Server ──────────────────────────────────────────────────────────
+	a2aPort := 8686
+	if p := os.Getenv("BT_A2A_PORT"); p != "" {
+		fmt.Sscanf(p, "%d", &a2aPort)
+	}
+	a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
+	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
+		a2aBaseURL = u
+	}
+
+	a2aSrv, a2aErr := a2a_mod.NewServer(agentReg, llmClient, a2aPort, a2aBaseURL)
+	if a2aErr != nil {
+		btlog.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
+	} else {
+		// Inject tree resolver and pre-resolve trees for all agents
+		a2a_mod.SetTreeResolver(resolveTree)
+		a2a_mod.InitEngineDelegate()
+		a2aSrv.Executor.TreeMap = make(map[string]*evolution.SerializableNode)
+		for _, inst := range agentReg.List() {
+			if t := resolveTree(inst.Definition.Tree); t != nil {
+				a2aSrv.Executor.TreeMap[inst.Definition.Name] = t
+			}
+		}
+		go func() {
+			if err := a2aSrv.Start(); err != nil {
+				btlog.Error("a2a server failed", "error", err)
+			}
+		}()
+		btlog.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
 	}
 
 	if err := server.Run(); err != nil {

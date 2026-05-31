@@ -3,6 +3,7 @@ module github.com/nico/go-bt-evolve
 go 1.26.3
 
 require (
+	github.com/a2aproject/a2a-go/v2 v2.3.1
 	github.com/rvitorper/go-bt v0.1.0
 	github.com/tmc/langchaingo v0.1.14
 )
@@ -10,6 +11,8 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 )
 
 require (
@@ -39,6 +42,6 @@ require (
 	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1
 )
