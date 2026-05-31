@@ -301,8 +301,9 @@ type Config struct {
 	Interval       time.Duration // how often to wake up
 	MaxMutations   int           // max mutations per cycle per tree
 	UseRealLLM     bool          // use real Ollama for benchmark validation (slow but accurate)
-	Gate           *evolution.QualityGate // quality gate for regression detection
-	SnapshotDir    string                 // directory for pre-mutation snapshots
+	Gate           *evolution.QualityGate      // quality gate for regression detection
+	CrisisDetector *evolution.CrisisDetector   // crisis detection & diversity injection
+	SnapshotDir    string                      // directory for pre-mutation snapshots
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -354,6 +355,31 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	rejections := 0
 	rollbacks := 0
 
+	// Crisis detection: proactively check for diversity collapse or stagnation
+	// before mutations are applied (Stage 3.5 of the evolution cycle).
+	// Complements the reactive QualityGate below.
+	emergencyMutations := g.cfg.MaxMutations
+	crisisIntervened := false
+	if g.cfg.CrisisDetector != nil {
+		state := evolution.CrisisState{
+			TreeName:            entry.Name,
+			CurrentFitness:      baseFitness.Composite,
+			BehavioralDiversity: g.cfg.CrisisDetector.LastDiversity(),
+		}
+		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
+			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
+			_ = action // emergency mode flag; used for logging
+			// Force more aggressive mutation: allow up to 2x normal mutations
+			emergencyMutations = g.cfg.MaxMutations * 2
+			if emergencyMutations < 1 {
+				emergencyMutations = 1
+			}
+			crisisIntervened = true
+			fmt.Printf("[gardener] CRISIS: %s — %s (stagnation=%d epochs), boosting mutations %d→%d\n",
+				entry.Name, reason, action.StagnationEpochs, g.cfg.MaxMutations, emergencyMutations)
+		}
+	}
+
 	// Only cap at extreme bloat (20x original) — trees should be allowed to grow
 	baseNodes := baseNodeCount(entry.Name)
 	if nodesBefore > baseNodes*20 {
@@ -385,7 +411,7 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	}
 
 	applied := 0
-	for i := 0; i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
+	for i := 0; i < len(candidates) && applied < emergencyMutations; i++ {
 		// Idempotency guards
 		if candidates[i].Op.Operation == "add_before" && hasNodeNamed(tree, "CheckConfidence") { continue }
 		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) { continue }
@@ -445,6 +471,12 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		tmp := treeJSONPath + ".tmp"
 		os.WriteFile(tmp, data, 0644)
 		os.Rename(tmp, treeJSONPath)
+	}
+
+	// If crisis intervention was triggered and mutations were accepted,
+	// reset the stagnation counter so the next cycle is a clean slate.
+	if crisisIntervened && applied > 0 && g.cfg.CrisisDetector != nil {
+		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
 	}
 
 	newFitness := evaluator.EvaluateTree(tree, records)
