@@ -104,6 +104,21 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Dedup: if an active job for this agent already exists, update its schedule
+	// instead of creating a duplicate. This prevents duplicate jobs from accumulating
+	// across bt-agent restarts (where Restore loads persisted jobs, then auto-schedule
+	// creates new ones for the same agents).
+	for _, existing := range s.jobs {
+		if existing.AgentName == agentName && existing.Active {
+			existing.Schedule = schedule
+			existing.NextRun = nextRun
+			existing.Timeout = timeout
+			existing.MaxRetries = maxRetries
+			s.saveStateLocked()
+			return existing, nil
+		}
+	}
+
 	job := &ScheduledJob{
 		ID:         fmt.Sprintf("job_%s_%d", agentName, time.Now().Unix()),
 		AgentName:  agentName,
