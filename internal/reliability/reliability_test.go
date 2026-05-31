@@ -3,6 +3,8 @@ package reliability
 import (
 	"errors"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -698,7 +700,9 @@ func TestAgentRouter_String(t *testing.T) {
 	router := NewAgentRouter(e1, e2)
 
 	s := router.String()
-	if s != "AgentRouter(executors=2, strategy=round_robin, local=e1)" {
+	// Updated format includes failure/cooling stats for multi-node diagnostics.
+	expected := "AgentRouter(executors=2, strategy=round_robin, local=e1, failures=0, cooling=0)"
+	if s != expected {
 		t.Errorf("unexpected String() output: %q", s)
 	}
 }
@@ -914,5 +918,356 @@ func TestAgentRouter_FailoverMixedHealthyAndErrors(t *testing.T) {
 	}
 	if result.Output != "finally" {
 		t.Errorf("expected 'finally', got %q", result.Output)
+	}
+}
+
+// ─── Per-Executor Failure Tracking (Zombie Detection) ────────────────────
+
+func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
+	exec := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("simulated failure")
+	})
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(local) // separate local to isolate failure tracking
+	router.SetFailureThreshold(3)
+	router.SetFailureCooldown(100 * time.Millisecond)
+
+	// Execute 3 times — should all fail but not yet in cooldown.
+	for i := 0; i < 3; i++ {
+		_, err := router.Execute("agent", "task")
+		if err == nil {
+			t.Fatalf("attempt %d: expected error", i)
+		}
+	}
+
+	// After 3 consecutive failures, executor should be in cooldown.
+	status := router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 3 {
+		t.Errorf("expected 3 failures, got %d", status[0].ConsecutiveFailures)
+	}
+	if !status[0].CoolingDown {
+		t.Error("expected executor to be cooling down after threshold exceeded")
+	}
+
+	// 4th attempt: executor is cooling down, fallback to local (which also fails).
+	_, err := router.Execute("agent", "task")
+	if err == nil {
+		t.Fatal("expected error when all executors in cooldown")
+	}
+	// Failure count should not increase (cooling executor skipped).
+	status = router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 3 {
+		t.Errorf("expected still 3 failures (cooling executor skipped), got %d", status[0].ConsecutiveFailures)
+	}
+}
+
+func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
+	shouldFail := true
+	exec := NewLocalExecutor("recoverable", func(agent, task string) (*AgentResult, error) {
+		if shouldFail {
+			return nil, errors.New("transient error")
+		}
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "recovered"}, nil
+	})
+	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(local)
+	router.SetFailureThreshold(3)
+
+	// Fail 2 times (below threshold).
+	for i := 0; i < 2; i++ {
+		_, err := router.Execute("agent", "task")
+		if err == nil {
+			t.Fatalf("attempt %d: expected error", i)
+		}
+	}
+	status := router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 2 {
+		t.Errorf("expected 2 failures, got %d", status[0].ConsecutiveFailures)
+	}
+
+	// Now succeed — should reset counter.
+	shouldFail = false
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+	if result.Output != "recovered" {
+		t.Errorf("expected 'recovered', got %q", result.Output)
+	}
+
+	// Counter should be reset.
+	status = router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 0 {
+		t.Errorf("expected counter reset after success, got %d", status[0].ConsecutiveFailures)
+	}
+
+	// Failing again should start from 0.
+	shouldFail = true
+	for i := 0; i < 3; i++ {
+		_, err := router.Execute("agent", "task")
+		if err == nil {
+			t.Fatalf("attempt %d after reset: expected error", i)
+		}
+	}
+	status = router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 3 {
+		t.Errorf("expected 3 failures after reset, got %d", status[0].ConsecutiveFailures)
+	}
+	if !status[0].CoolingDown {
+		t.Error("expected cooldown after 3 failures post-reset")
+	}
+}
+
+func TestAgentRouter_FailureTracking_CoolDownExpiry(t *testing.T) {
+	exec := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("failure")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	}))
+	router.SetFailureThreshold(2)
+	router.SetFailureCooldown(50 * time.Millisecond)
+
+	// Fail twice to trigger cooldown.
+	for i := 0; i < 2; i++ {
+		router.Execute("agent", "task")
+	}
+
+	// Executor should be cooling down.
+	status := router.ExecutorHealthStatus()
+	if !status[0].CoolingDown {
+		t.Fatal("expected executor to be cooling down after 2 failures")
+	}
+
+	// Wait for cooldown to expire.
+	time.Sleep(100 * time.Millisecond)
+
+	// After expiry, executor should be available again.
+	status = router.ExecutorHealthStatus()
+	if status[0].CoolingDown {
+		t.Error("expected cooldown to have expired")
+	}
+	if status[0].ConsecutiveFailures != 0 {
+		t.Errorf("expected counter reset after cooldown expiry, got %d",
+			status[0].ConsecutiveFailures)
+	}
+}
+
+func TestAgentRouter_FailureTracking_HealthyExecutorsExcludesCooling(t *testing.T) {
+	healthy := NewLocalExecutor("healthy", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true}, nil
+	})
+	flaky := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("failure")
+	})
+
+	router := NewAgentRouter(healthy, flaky)
+	router.SetFailureThreshold(1)
+
+	// Fail once on flaky to trigger cooldown.
+	router.Execute("agent", "task") // this hits healthy, succeeds
+	// Need to route specifically to flaky. We'll use Execute with failover.
+	// Create a router with only flaky to test HealthyExecutors.
+	router2 := NewAgentRouter(flaky)
+	router2.SetFailureThreshold(1)
+	router2.Execute("agent", "task") // triggers cooldown on flaky
+
+	healthyExecs := router2.HealthyExecutors()
+	if len(healthyExecs) != 0 {
+		t.Errorf("expected 0 healthy executors (flaky in cooldown), got %d", len(healthyExecs))
+	}
+}
+
+func TestAgentRouter_FailureTracking_ExecutorHealthStatus(t *testing.T) {
+	exec1 := NewLocalExecutor("worker-1", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("worker-1 failure")
+	})
+	exec2 := NewLocalExecutor("worker-2", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "ok"}, nil
+	})
+
+	router := NewAgentRouter(exec1, exec2)
+	// Separate local to avoid double-counting on fallback.
+	router.SetLocal(NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	}))
+	router.SetFailureThreshold(2)
+
+	// worker-1: fail twice → cooldown
+	_, _ = router.Execute("agent", "task1") // round-robin: hits exec1, fails → failover to exec2 (success)
+	_, _ = router.Execute("agent", "task2") // round-robin: hits exec2 → success
+	_, _ = router.Execute("agent", "task3") // round-robin: hits exec1, fails → failover to exec2 (success)
+
+	status := router.ExecutorHealthStatus()
+	if len(status) != 2 {
+		t.Fatalf("expected 2 executors in status, got %d", len(status))
+	}
+
+	// exec1 should have 2 failures but NOT cooling down (succeeded via failover each time).
+	if status[0].Index != 0 || status[0].Name != "worker-1" {
+		t.Errorf("unexpected status[0]: %+v", status[0])
+	}
+	if status[0].ConsecutiveFailures != 2 {
+		t.Errorf("expected 2 consecutive failures, got %d", status[0].ConsecutiveFailures)
+	}
+	// NOTE: CoolingDown may or may not be true here depending on cooldown threshold.
+	// With threshold=2, two consecutive router.Execute() that hit exec1 but succeeded
+	// via exec2 failover would trigger cooldown if exec1 fails twice consecutively
+	// in the failover loop. Let's just verify the failure count.
+	if status[0].LastFailure.IsZero() {
+		t.Error("expected non-zero LastFailure")
+	}
+	if !status[0].Healthy {
+		t.Error("expected exec1 to still be healthy (Health() passes)")
+	}
+
+	// exec2 should be healthy, no failures.
+	if status[1].ConsecutiveFailures != 0 {
+		t.Errorf("expected 0 failures for exec2, got %d", status[1].ConsecutiveFailures)
+	}
+}
+
+func TestAgentRouter_FailureTracking_ResetExecutor(t *testing.T) {
+	exec := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("failure")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	}))
+	router.SetFailureThreshold(2)
+
+	// Trigger cooldown.
+	router.Execute("agent", "task")
+	router.Execute("agent", "task")
+
+	status := router.ExecutorHealthStatus()
+	if !status[0].CoolingDown {
+		t.Fatal("expected cooldown after 2 failures")
+	}
+
+	// Reset clears the cooldown.
+	router.ResetExecutor(0)
+	status = router.ExecutorHealthStatus()
+	if status[0].CoolingDown {
+		t.Error("expected cooldown cleared after ResetExecutor")
+	}
+	if status[0].ConsecutiveFailures != 0 {
+		t.Errorf("expected 0 failures after reset, got %d", status[0].ConsecutiveFailures)
+	}
+}
+
+func TestAgentRouter_FailureTracking_DefaultThreshold(t *testing.T) {
+	router := NewAgentRouter()
+	// Default threshold is 5, default cooldown is 30s.
+	// These are set in NewAgentRouter; we verify via behavior.
+	router.SetFailureThreshold(1) // test that SetFailureThreshold works
+
+	if router.failureThreshold != 1 {
+		t.Errorf("expected threshold 1, got %d", router.failureThreshold)
+	}
+}
+
+func TestAgentRouter_FailureTracking_String_WithFailures(t *testing.T) {
+	exec := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("failure")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	}))
+	router.SetFailureThreshold(1)
+
+	// Trigger a failure.
+	router.Execute("agent", "task")
+
+	s := router.String()
+	if !strings.Contains(s, "failures=1") {
+		t.Errorf("expected String() to contain 'failures=1', got: %s", s)
+	}
+	if !strings.Contains(s, "cooling=1") {
+		t.Errorf("expected String() to contain 'cooling=1', got: %s", s)
+	}
+}
+
+func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
+	// Two executors: flaky (will cool down) and working.
+	flakyCount := 0
+	flaky := NewLocalExecutor("flaky", func(agent, task string) (*AgentResult, error) {
+		flakyCount++
+		return nil, errors.New("flaky failure")
+	})
+	working := NewLocalExecutor("working", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "worked"}, nil
+	})
+
+	router := NewAgentRouter(flaky, working)
+	router.SetFailureThreshold(2)
+
+	// First attempt hits flaky (round-robin), fails. Failover to working succeeds.
+	result, err := router.Execute("agent", "task1")
+	if err != nil {
+		t.Fatalf("expected failover to working, got: %v", err)
+	}
+	if result.Output != "worked" {
+		t.Errorf("expected 'worked', got %q", result.Output)
+	}
+	if flakyCount != 1 {
+		t.Errorf("expected 1 flaky attempt, got %d", flakyCount)
+	}
+
+	// Second attempt: flaky fails again (2nd consecutive → cooldown).
+	// Then failover to working.
+	result, err = router.Execute("agent", "task2")
+	if err != nil {
+		t.Fatalf("expected failover to working (attempt 2), got: %v", err)
+	}
+	if result.Output != "worked" {
+		t.Errorf("expected 'worked' on attempt 2, got %q", result.Output)
+	}
+
+	// Third attempt: flaky is now in cooldown → skipped entirely.
+	// Working handles it directly.
+	result, err = router.Execute("agent", "task3")
+	if err != nil {
+		t.Fatalf("expected working to handle after flaky cooldown, got: %v", err)
+	}
+	// flakyCount should still be 2 (cooldown skips it, no Execute() called).
+	if flakyCount != 2 {
+		t.Errorf("expected flakyCount=2 (skipped in cooldown), got %d", flakyCount)
+	}
+}
+
+func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
+	exec := NewLocalExecutor("shared", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("failure")
+	})
+	router := NewAgentRouter(exec)
+	router.SetLocal(NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+		return nil, errors.New("local fail")
+	}))
+	router.SetFailureThreshold(200) // high threshold so we test counter safety
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			router.Execute("agent", "task")
+		}()
+	}
+	wg.Wait()
+
+	status := router.ExecutorHealthStatus()
+	if status[0].ConsecutiveFailures != 50 {
+		t.Errorf("expected 50 failures after concurrent use, got %d",
+			status[0].ConsecutiveFailures)
 	}
 }

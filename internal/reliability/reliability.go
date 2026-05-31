@@ -743,26 +743,60 @@ func (le *LocalExecutor) String() string {
 	return le.name
 }
 
+// executorFailureState tracks per-executor failure history for zombie detection.
+// An executor that passes health checks but consistently fails Execute() calls
+// enters a cooldown period where it's skipped during routing. This prevents
+// wasted attempts on degraded peers in multi-node deployments.
+type executorFailureState struct {
+	consecutiveFailures int
+	lastFailure         time.Time
+	coolingDown         bool
+	coolDownUntil       time.Time
+}
+
+// ExecutorHealthDetail provides per-executor health and failure statistics
+// for monitoring and diagnostics in multi-node deployments.
+type ExecutorHealthDetail struct {
+	Index               int       `json:"index"`
+	Name                string    `json:"name"`
+	Healthy             bool      `json:"healthy"`
+	CoolingDown         bool      `json:"cooling_down"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	LastFailure         time.Time `json:"last_failure,omitempty"`
+	CoolDownUntil       time.Time `json:"cool_down_until,omitempty"`
+}
+
 // AgentRouter distributes agent tasks across multiple executors with
 // health-aware routing, failover retry, and graceful degradation.
 // Supports two routing strategies: round-robin (default) and least-connections.
 // When an executor's Execute() call fails, the router tries the next healthy
 // executor. When all remote executors are exhausted, falls back to local execution.
+//
+// Per-executor failure tracking detects "zombie" peers that pass health checks
+// but consistently fail on actual task execution. Executors that exceed the
+// failure threshold enter a cooldown period where they're skipped during routing.
 type AgentRouter struct {
-	mu           sync.RWMutex
-	executors    []AgentExecutor
-	next         int
-	local        AgentExecutor  // fallback
-	MaxFailover  int            // max executors to try per Execute() call (0 = try all)
-	strategy     RoutingStrategy
-	activeCounts []int64        // per-executor in-flight count (atomic, least-connections)
+	mu               sync.RWMutex
+	executors        []AgentExecutor
+	next             int
+	local            AgentExecutor // fallback
+	MaxFailover      int           // max executors to try per Execute() call (0 = try all)
+	strategy         RoutingStrategy
+	activeCounts     []int64                 // per-executor in-flight count (atomic, least-connections)
+	executorFailures map[int]*executorFailureState // per-executor failure tracking
+	failureThreshold int                     // consecutive failures before cooldown (default 5)
+	failureCooldown  time.Duration           // cooldown duration after threshold exceeded (default 30s)
 }
 
 // NewAgentRouter creates a router with the given executors.
 // The first executor is used as the local fallback if none is explicitly set.
+// Default failure threshold is 5 consecutive failures; default cooldown is 30s.
 func NewAgentRouter(executors ...AgentExecutor) *AgentRouter {
 	r := &AgentRouter{
-		executors: executors,
+		executors:        executors,
+		failureThreshold: 5,
+		failureCooldown:  30 * time.Second,
+		executorFailures: make(map[int]*executorFailureState),
 	}
 	if len(executors) > 0 {
 		r.local = executors[0]
@@ -770,7 +804,8 @@ func NewAgentRouter(executors ...AgentExecutor) *AgentRouter {
 	return r
 }
 
-// Add adds an executor to the router.
+// Add adds an executor to the router. New executors start with zero failures
+// and are immediately eligible for routing.
 func (r *AgentRouter) Add(e AgentExecutor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -794,6 +829,11 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 // If an executor's Execute() call fails, the router tries the next healthy executor.
 // Falls back to local executor if all remote executors are exhausted.
 // MaxFailover caps how many executors to try (0 = try all).
+//
+// Per-executor failure tracking: consecutive Execute() failures on an executor
+// increment a counter. When it exceeds failureThreshold, the executor enters
+// a cooldown period and is skipped for failureCooldown duration. A successful
+// Execute() resets the counter and clears any cooldown.
 func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	// Snapshot router state under lock, then release before Health() calls.
 	r.mu.Lock()
@@ -850,19 +890,30 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 
 	// Failover loop: try executors starting from `start`.
 	// Each executor's Health() must pass before we try Execute().
+	// Cooling-down executors are skipped regardless of Health().
 	var lastErr error
 	tried := 0
 	for i := 0; i < len(executors) && tried < maxFailover; i++ {
 		idx := (start + i) % len(executors)
 		e := executors[idx]
+
+		// Skip executors in cooldown (zombie detection).
+		if r.isCoolingDown(idx) {
+			continue
+		}
+
 		if err := e.Health(); err != nil {
 			continue // skip unhealthy executors
 		}
 		tried++
 		result, err := e.Execute(agent, task)
 		if err == nil {
+			// Success resets failure counter and clears cooldown.
+			r.recordSuccess(idx)
 			return result, nil
 		}
+		// Record failure for zombie detection.
+		r.recordFailure(idx)
 		lastErr = err
 	}
 
@@ -902,12 +953,23 @@ func (r *AgentRouter) Health() error {
 	return fmt.Errorf("no executors configured")
 }
 
-// String returns a summary of the router configuration.
+// String returns a summary of the router configuration, including failure and
+// cooldown statistics for multi-node diagnostics.
 func (r *AgentRouter) String() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return fmt.Sprintf("AgentRouter(executors=%d, strategy=%s, local=%s)",
-		len(r.executors), r.strategy, r.local.String())
+	cooling := 0
+	failed := 0
+	for _, fs := range r.executorFailures {
+		if fs.coolingDown {
+			cooling++
+		}
+		if fs.consecutiveFailures > 0 {
+			failed++
+		}
+	}
+	return fmt.Sprintf("AgentRouter(executors=%d, strategy=%s, local=%s, failures=%d, cooling=%d)",
+		len(r.executors), r.strategy, r.local.String(), failed, cooling)
 }
 
 // Executors returns the current list of executors.
@@ -919,17 +981,136 @@ func (r *AgentRouter) Executors() []AgentExecutor {
 	return result
 }
 
-// HealthyExecutors returns only executors that pass their health check.
+// HealthyExecutors returns only executors that pass their health check
+// AND are not in a cooldown period (zombie detection).
+// Automatically clears expired cooldowns. Uses write lock for safe mutation.
 func (r *AgentRouter) HealthyExecutors() []AgentExecutor {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var healthy []AgentExecutor
-	for _, e := range r.executors {
+	for i, e := range r.executors {
+		if r.isCoolingDownLocked(i) {
+			continue
+		}
 		if e.Health() == nil {
 			healthy = append(healthy, e)
 		}
 	}
 	return healthy
+}
+
+// isCoolingDown checks whether executor `idx` is in a cooldown period.
+// If the cooldown has expired, the executor is automatically cleared.
+// Must NOT hold r.mu (acquires RLock internally).
+func (r *AgentRouter) isCoolingDown(idx int) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isCoolingDownLocked(idx)
+}
+
+// isCoolingDownLocked is the internal version that assumes r.mu is held.
+func (r *AgentRouter) isCoolingDownLocked(idx int) bool {
+	fs, ok := r.executorFailures[idx]
+	if !ok || !fs.coolingDown {
+		return false
+	}
+	if time.Now().After(fs.coolDownUntil) {
+		// Cooldown expired — clear it.
+		fs.coolingDown = false
+		fs.consecutiveFailures = 0
+		return false
+	}
+	return true
+}
+
+// recordSuccess resets the failure counter and clears any cooldown for executor `idx`.
+func (r *AgentRouter) recordSuccess(idx int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fs, ok := r.executorFailures[idx]
+	if !ok {
+		return
+	}
+	fs.consecutiveFailures = 0
+	fs.coolingDown = false
+}
+
+// recordFailure increments the failure counter for executor `idx`.
+// If consecutive failures exceed the threshold, the executor enters cooldown.
+func (r *AgentRouter) recordFailure(idx int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fs, ok := r.executorFailures[idx]
+	if !ok {
+		fs = &executorFailureState{}
+		r.executorFailures[idx] = fs
+	}
+	fs.consecutiveFailures++
+	fs.lastFailure = time.Now()
+	if fs.consecutiveFailures >= r.failureThreshold {
+		fs.coolingDown = true
+		fs.coolDownUntil = time.Now().Add(r.failureCooldown)
+	}
+}
+
+// ExecutorHealthStatus returns detailed health and failure statistics for
+// all executors. This is the primary diagnostic API for multi-node deployments.
+// Automatically clears expired cooldowns. Uses write lock for safe mutation.
+func (r *AgentRouter) ExecutorHealthStatus() []ExecutorHealthDetail {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	result := make([]ExecutorHealthDetail, len(r.executors))
+	for i, e := range r.executors {
+		healthy := e.Health() == nil
+		fs, ok := r.executorFailures[i]
+		detail := ExecutorHealthDetail{
+			Index:   i,
+			Name:    e.String(),
+			Healthy: healthy,
+		}
+		if ok {
+			// Auto-expire cooldowns that have passed.
+			if fs.coolingDown && now.After(fs.coolDownUntil) {
+				fs.coolingDown = false
+				fs.consecutiveFailures = 0
+			}
+			detail.ConsecutiveFailures = fs.consecutiveFailures
+			if !fs.lastFailure.IsZero() {
+				detail.LastFailure = fs.lastFailure
+			}
+			if fs.coolingDown {
+				detail.CoolingDown = true
+				detail.CoolDownUntil = fs.coolDownUntil
+			}
+		}
+		result[i] = detail
+	}
+	return result
+}
+
+// ResetExecutor clears the failure counter and cooldown for a specific executor.
+// Use this to manually re-enable an executor after underlying issues are resolved.
+func (r *AgentRouter) ResetExecutor(idx int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.executorFailures, idx)
+}
+
+// SetFailureThreshold sets the number of consecutive Execute() failures before
+// an executor enters cooldown. Default is 5.
+func (r *AgentRouter) SetFailureThreshold(n int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failureThreshold = n
+}
+
+// SetFailureCooldown sets the duration an executor stays in cooldown after
+// exceeding the failure threshold. Default is 30s.
+func (r *AgentRouter) SetFailureCooldown(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failureCooldown = d
 }
 
 // ─── Concurrency Limiter ─────────────────────────────────────────────────────
