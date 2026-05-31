@@ -95,6 +95,9 @@ func tasksForTree() map[string]string {
 		"game_ai":            "game: patrol the area",
 		"trading_signal":     "calculate trading signals for AAPL",
 		"alert_router":       "critical disk alert: sda1 at 95%",
+		"goap_planning":      "plan the steps to deploy a new service",
+		"goap_research":      "research best practices for Go microservices",
+		"goap_devops":        "diagnose why the CI pipeline is failing",
 	}
 }
 
@@ -103,8 +106,8 @@ func TestAllDomainTrees(t *testing.T) {
 	tasks := tasksForTree()
 	mock := benchmark.DefaultMock()
 
-	if len(all) != 11 {
-		t.Errorf("expected 11 domain trees, got %d", len(all))
+	if len(all) != 14 {
+		t.Errorf("expected 14 domain trees, got %d", len(all))
 	}
 
 	for name, tree := range all {

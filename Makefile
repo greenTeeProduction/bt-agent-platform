@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly help
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -53,6 +53,32 @@ benchcmp-check:
 # Reset benchmark baseline
 benchcmp-reset:
 	$(BIN_DIR)/benchcmp reset
+
+# Complete local CI pipeline — runs vet, fmt-check, tests, and builds all binaries.
+# Use before pushing to avoid CI failures.
+ci:
+	@echo "=== CI Pipeline (local) ==="
+	@echo ""
+	@echo "1/4  go vet..."
+	@$(GO) vet ./...
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "2/4  gofmt check..."
+	@test -z "$$($(GOFMT) -l .)" || (echo "     ✗ Files need formatting:" && $(GOFMT) -l . && exit 1)
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "3/4  tests (short + race)..."
+	@$(GO) test -short -count=1 -race -timeout 120s ./...
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "4/4  build all binaries..."
+	@mkdir -p $(BIN_DIR)
+	@for bin in $(BINARIES); do \
+		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
+	done
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "=== CI Pipeline PASSED ==="
 
 # Nightly benchmark suite — runs all evaluation benchmarks (SWE-bench, BFCL, τ-bench, ToolBench)
 # Requires Ollama running and ~10GB disk for benchmark datasets.
@@ -130,6 +156,7 @@ help:
 	@echo "  lint / vet        Run go vet"
 	@echo "  fmt               Format all source files"
 	@echo "  fmt-check         Check formatting (CI)"
+	@echo "  ci                Run complete CI pipeline locally (vet + fmt + test + build)"
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
 	@echo "  bench             Run fast benchmarks (no LLM)"

@@ -52,8 +52,8 @@
     "hash": "25e53ee9d450c445501944ac578d3a03"
   },
   "/home/nico/go-bt-evolve/internal/benchmark/benchmark.go": {
-    "mtime": 1780236404.5669272,
-    "hash": "10d0157dff456983cbf6656b0d60b4ad"
+    "mtime": 1780240402.5796506,
+    "hash": "3367be9cb3a95a2c7f978ccdd36a6c2e"
   },
   "/home/nico/go-bt-evolve/internal/benchmark/external.go": {
     "mtime": 1780055007.6151059,
@@ -160,8 +160,8 @@
     "hash": "4f8fb05f065e4a64d54f93db80a143a7"
   },
   "/home/nico/go-bt-evolve/internal/config/config.go": {
-    "mtime": 1780127993.4378245,
-    "hash": "6420135f9387cabffdb8f82a8d731534"
+    "mtime": 1780240402.5796506,
+    "hash": "a5275d715105b3872fb9924a6c82f862"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
     "mtime": 1780128079.3222642,
@@ -268,8 +268,8 @@
     "hash": "2af233cffb8a4d792acb150ccf17c37f"
   },
   "/home/nico/go-bt-evolve/internal/domains/domains_test.go": {
-    "mtime": 1780105335.7930188,
-    "hash": "182732d58beb7e70ca274ef1c5b7fa7d"
+    "mtime": 1780243857.8631682,
+    "hash": "1cb8129305674181b693e2c798a04407"
   },
   "/home/nico/go-bt-evolve/internal/research/tesla_research_test.go": {
     "mtime": 1780055007.623106,
@@ -496,16 +496,16 @@
     "hash": "b68b2628ebe0cf835fe54cffe30526cc"
   },
   "/home/nico/go-bt-evolve/internal/tracing/tracing.go": {
-    "mtime": 1780055007.635106,
-    "hash": "5031cbfb6b3f0a4ff5a4e5cb633ca367"
+    "mtime": 1780242852.5529773,
+    "hash": "b903fede2b7253f194ac3db22adde8ac"
   },
   "/home/nico/go-bt-evolve/internal/tracing/reader_test.go": {
     "mtime": 1780173902.0697696,
     "hash": "e11f6368f917d4401b65242e9b656bcd"
   },
   "/home/nico/go-bt-evolve/internal/tracing/tracing_test.go": {
-    "mtime": 1780055007.635106,
-    "hash": "69f18bc37fc6cddec0100d4292fd3c3e"
+    "mtime": 1780242976.0736334,
+    "hash": "10e5c9288efc4e878d2f1e2e6e1739e1"
   },
   "/home/nico/go-bt-evolve/internal/tracing/reader.go": {
     "mtime": 1780173929.2540026,
