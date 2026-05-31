@@ -274,8 +274,16 @@ func main() {
 	agentLocalMem := agentHome + "/.go-bt-evolve/memory"
 	dlq := reliability.NewDeadLetterQueue(agentHome + "/.go-bt-evolve/dead_letter_queue.json")
 
-	// Persistent agent scheduler
-	globalSched := agent.NewScheduler(agent.SchedulerConfig{Registry: agentReg, History: agentHist})
+	// Create jobs directory for scheduler persistence
+	jobStoreDir := agentHome + "/.go-bt-evolve/jobs"
+	os.MkdirAll(jobStoreDir, 0755)
+
+	// Persistent agent scheduler (with FileJobStore for durability across restarts)
+	globalSched := agent.NewScheduler(agent.SchedulerConfig{
+		Registry: agentReg,
+		History:  agentHist,
+		JobStore: agent.NewFileJobStore(jobStoreDir + "/scheduler-jobs.json"),
+	})
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
 		task := "scheduled run: " + ctx.AgentName
 		if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil && inst.Definition.Description != "" {
