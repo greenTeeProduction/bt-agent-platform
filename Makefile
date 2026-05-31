@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -95,6 +95,19 @@ bench-nightly:
 	$(GO) test -run TestTool -count=1 -timeout 1800s ./internal/benchmark/... || echo "ToolBench failed (check logs)"
 	@echo "=== Nightly Benchmarks Complete ==="
 
+# Setup GitHub Actions self-hosted runner for Jetson ARM64
+# Requires a runner registration token from GitHub Settings → Actions → Runners.
+# Usage: make setup-runner TOKEN=AAAA...
+setup-runner:
+	@if [ -z "$(TOKEN)" ]; then \
+		echo "Usage: make setup-runner TOKEN=<github-runner-token>"; \
+		echo ""; \
+		echo "Get a token at: https://github.com/nico/go-bt-evolve/settings/actions/runners/new"; \
+		echo "  → New self-hosted runner → Linux → ARM64"; \
+		exit 1; \
+	fi
+	@./scripts/setup-gh-runner.sh --token "$(TOKEN)"
+
 # Generate CHANGELOG.md from conventional commits since last tag
 changelog:
 	@if [ -f CHANGELOG.md ]; then \
@@ -174,5 +187,6 @@ help:
 	@echo "  benchcmp-check    Check benchmarks against stored baseline"
 	@echo "  benchcmp-reset    Reset benchmark baseline"
 	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
+	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
