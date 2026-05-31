@@ -398,6 +398,29 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		})
 	}
 
+	// Publish event to AgentBus (→ Hermes webhook bridge)
+	if GlobalAgentBus != nil {
+		tree := ""
+		if inst != nil {
+			tree = inst.Definition.Tree
+		}
+		eventType := "task_complete"
+		if outcome == "panic" || outcome == "error" {
+			eventType = "error_detected"
+		}
+		GlobalAgentBus.Publish(AgentEvent{
+			Type:    eventType,
+			Source:  job.AgentName,
+			Message: fmt.Sprintf("%s: %s (%s)", job.AgentName, outcome, duration.Truncate(time.Second)),
+			Data: map[string]interface{}{
+				"tree":     tree,
+				"task":     runCtx.Task,
+				"outcome":  outcome,
+				"duration": duration.Truncate(time.Second).String(),
+			},
+		})
+	}
+
 	// Feed back into knowledge graph
 	if inst.Definition.Tree != "" {
 		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{

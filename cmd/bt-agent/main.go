@@ -408,7 +408,18 @@ func main() {
 	a2aSrv, a2aErr := a2a_mod.NewServer(agentReg, llmClient, a2aPort, a2aBaseURL)
 	if a2aErr != nil {
 		btlog.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
-	} else {
+	}
+
+	// ── Agent Event Bus ─────────────────────────────────────────────────────
+	agent.InitAgentBus(200)
+	btlog.Info("agent event bus initialized", "max_history", 200)
+
+	// ── Hermes Webhook Bridge (AgentBus → Hermes events) ─────────────────────
+	whPublisher := agent.NewWebhookPublisher("http://localhost:8644", agent.DefaultWebhookSecrets())
+	whPublisher.Attach(agent.GlobalAgentBus)
+	btlog.Info("hermes webhook bridge attached")
+
+	if a2aErr == nil {
 		// Inject tree resolver and pre-resolve trees for all agents
 		a2a_mod.SetTreeResolver(resolveTree)
 		a2a_mod.InitEngineDelegate()
