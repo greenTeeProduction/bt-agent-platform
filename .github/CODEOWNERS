@@ -1,0 +1,76 @@
+# CODEOWNERS — Behavior Tree Evolution Platform
+# These owners are automatically requested for review on PRs.
+# Last updated: 2026-05-31
+
+# Global owner (fallback for everything not explicitly assigned)
+*                       @nico
+
+# Core behavior tree engine
+/internal/engine/       @nico
+/internal/evolution/    @nico
+
+# MCP server infrastructure
+/internal/mcp/          @nico
+cmd/bt-agent/           @nico
+cmd/bt-evaluator/       @nico
+cmd/bt-langagent/       @nico
+cmd/bt-gardener/        @nico
+
+# LLM integration
+/internal/llm/          @nico
+
+# Agent platform (scheduler, registry, history, catalog)
+/internal/agent/        @nico
+/internal/workflow/     @nico
+
+# Knowledge graph & factory
+/internal/knowledge/    @nico
+/internal/factory/      @nico
+
+# Domain trees (finance, research, domains, thinktank, startup)
+/internal/finance/      @nico
+/internal/research/     @nico
+/internal/domains/      @nico
+/internal/thinktank/    @nico
+/internal/startup/      @nico
+
+# Reliability & scalability
+/internal/reliability/  @nico
+
+# Security
+/internal/security/     @nico
+
+# Observability
+/internal/metrics/      @nico
+/internal/monitoring/   @nico
+/internal/tracing/      @nico
+/internal/log/          @nico
+
+# API & configuration
+/internal/api/           @nico
+/internal/config/        @nico
+
+# Validation & benchmarking
+/internal/validate/      @nico
+/internal/benchmark/     @nico
+/internal/evaluator/     @nico
+/internal/reflection/    @nico
+/internal/langagent/     @nico
+/internal/goap/          @nico
+
+# Dashboard
+/cmd/bt-dashboard/      @nico
+
+# CI/CD workflows
+/.github/               @nico
+
+# Documentation
+/docs/                  @nico
+/references/            @nico
+*.md                    @nico
+
+# Build & release
+/Makefile               @nico
+/go.mod                 @nico
+/go.sum                 @nico
+/.golangci.yml          @nico
