@@ -719,8 +719,8 @@ func (c *Config) Validate() error {
 	if c.RateLimitBurst < 0 {
 		errs = append(errs, ValidationError{"RateLimitBurst", "must be >= 0"})
 	}
-	if c.GardenerCycleInterval < 10 {
-		errs = append(errs, ValidationError{"GardenerCycleInterval", "must be >= 10 seconds"})
+	if c.GardenerCycleInterval < 10 || c.GardenerCycleInterval > 86400 {
+		errs = append(errs, ValidationError{"GardenerCycleInterval", "must be between 10 and 86400 seconds"})
 	}
 	if c.GardenerMutationsPer < 0 || c.GardenerMutationsPer > 10 {
 		errs = append(errs, ValidationError{"GardenerMutationsPer", "must be between 0 and 10"})
@@ -728,8 +728,8 @@ func (c *Config) Validate() error {
 	if c.GardenerMaxNodes < 1 || c.GardenerMaxNodes > 100 {
 		errs = append(errs, ValidationError{"GardenerMaxNodes", "must be between 1 and 100"})
 	}
-	if c.SchedulerCheckInterval < 10 {
-		errs = append(errs, ValidationError{"SchedulerCheckInterval", "must be >= 10 seconds"})
+	if c.SchedulerCheckInterval < 10 || c.SchedulerCheckInterval > 3600 {
+		errs = append(errs, ValidationError{"SchedulerCheckInterval", "must be between 10 and 3600 seconds"})
 	}
 	if c.MaxBodySize < 1024 || c.MaxBodySize > 100*1024*1024 {
 		errs = append(errs, ValidationError{"MaxBodySize", "must be between 1024 and 104857600 (100MB)"})
@@ -739,6 +739,12 @@ func (c *Config) Validate() error {
 	}
 	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" {
 		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama' or 'deepseek'"})
+	}
+	if c.LLMProvider == "ollama" && c.OllamaHost == "" {
+		errs = append(errs, ValidationError{"OllamaHost", "must not be empty when LLMProvider is ollama"})
+	}
+	if c.LLMProvider == "deepseek" && c.DeepSeekKey == "" {
+		errs = append(errs, ValidationError{"DeepSeekKey", "must not be empty when LLMProvider is deepseek"})
 	}
 	// TLS: if cert is set, key must also be set, and vice versa
 	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {

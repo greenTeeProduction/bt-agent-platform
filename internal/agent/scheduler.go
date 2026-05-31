@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -448,12 +450,144 @@ func parseSchedule(sched string) (time.Time, error) {
 			return time.Time{}, fmt.Errorf("invalid duration in %q: %w", sched, err)
 		}
 		return now.Add(d), nil
-	case len(sched) > 2 && sched[2] == ' ':
-		// Simple cron: "0 9 * * *" → next occurrence
-		// For now, just return now+1h as a reasonable default
-		return now.Add(1 * time.Hour), nil
+	case strings.Count(sched, " ") >= 4:
+		// 5-field cron: "0 9 * * *", "15,37 * * * *", "8-59/15 * * * *"
+		next, err := nextCronTime(sched, now)
+		if err != nil {
+			// Fall back to 1h if we can't parse — better than crashing
+			log.Printf("Scheduler: cron parse error for %q: %v — falling back to +1h", sched, err)
+			return now.Add(1 * time.Hour), nil
+		}
+		return next, nil
 	}
 	return now.Add(1 * time.Hour), nil
+}
+
+// matches calls a cron field matcher, handling nil gracefully.
+func matches(fn func(int) bool, v int) bool {
+	if fn == nil {
+		return true
+	}
+	return fn(v)
+}
+
+// nextCronTime computes the next fire time for a 5-field cron expression.
+// Fields: minute hour day-of-month month day-of-week
+// Supports: *, N, N,M, */N, N-M, N-M/N
+func nextCronTime(expr string, from time.Time) (time.Time, error) {
+	fields := strings.Fields(expr)
+	if len(fields) != 5 {
+		return time.Time{}, fmt.Errorf("expected 5 cron fields, got %d in %q", len(fields), expr)
+	}
+
+	// Parse each field
+	minute, err := parseCronField(fields[0], 0, 59)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("minute field %q: %w", fields[0], err)
+	}
+	hour, err := parseCronField(fields[1], 0, 23)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("hour field %q: %w", fields[1], err)
+	}
+	dom, err := parseCronField(fields[2], 1, 31)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("day-of-month field %q: %w", fields[2], err)
+	}
+	month, err := parseCronField(fields[3], 1, 12)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("month field %q: %w", fields[3], err)
+	}
+	dow, err := parseCronField(fields[4], 0, 7) // 0 and 7 both mean Sunday
+	if err != nil {
+		return time.Time{}, fmt.Errorf("day-of-week field %q: %w", fields[4], err)
+	}
+
+	// Search forward from the current minute, up to 2 years ahead
+	candidate := time.Date(from.Year(), from.Month(), from.Day(), from.Hour(), from.Minute(), 0, 0, from.Location())
+	// Start from next minute so we don't re-trigger the current one
+	candidate = candidate.Add(1 * time.Minute)
+	deadline := from.AddDate(2, 0, 0)
+
+	for candidate.Before(deadline) {
+		if matches(minute, candidate.Minute()) &&
+			matches(hour, candidate.Hour()) &&
+			matches(dom, candidate.Day()) &&
+			matches(month, int(candidate.Month())) &&
+			matches(dow, int(candidate.Weekday())) {
+			return candidate, nil
+		}
+		candidate = candidate.Add(1 * time.Minute)
+	}
+	return time.Time{}, fmt.Errorf("no matching time found for cron %q within 2 years", expr)
+}
+
+// parseCronField parses a single cron field into a matching function.
+// Handles: * (all), N (specific), N,M (list), */N (step), N-M (range), N-M/N (ranged step)
+func parseCronField(field string, min, max int) (func(int) bool, error) {
+	if field == "*" {
+		return func(v int) bool { return v >= min && v <= max }, nil
+	}
+
+	// Check for step pattern: */N, N-M/N
+	if strings.Contains(field, "/") {
+		parts := strings.SplitN(field, "/", 2)
+		step, err := strconv.Atoi(parts[1])
+		if err != nil || step < 1 {
+			return nil, fmt.Errorf("invalid step in %q: %w", field, err)
+		}
+		if parts[0] == "*" {
+			// */N: every Nth value
+			return func(v int) bool { return v%step == 0 }, nil
+		}
+		// N-M/N: every Nth within range
+		rangeParts := strings.SplitN(parts[0], "-", 2)
+		start, err := strconv.Atoi(rangeParts[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid range start in %q: %w", field, err)
+		}
+		end, err := strconv.Atoi(rangeParts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid range end in %q: %w", field, err)
+		}
+		return func(v int) bool {
+			return v >= start && v <= end && (v-start)%step == 0
+		}, nil
+	}
+
+	// Check for range: N-M
+	if strings.Contains(field, "-") {
+		parts := strings.SplitN(field, "-", 2)
+		start, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid range start in %q: %w", field, err)
+		}
+		end, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid range end in %q: %w", field, err)
+		}
+		return func(v int) bool { return v >= start && v <= end }, nil
+	}
+
+	// Check for list: N,M,O
+	if strings.Contains(field, ",") {
+		parts := strings.Split(field, ",")
+		values := make(map[int]bool)
+		for _, p := range parts {
+			v, err := strconv.Atoi(strings.TrimSpace(p))
+			if err != nil {
+				return nil, fmt.Errorf("invalid list value %q in %q: %w", p, field, err)
+			}
+			values[v] = true
+		}
+		return func(v int) bool { return values[v] }, nil
+	}
+
+	// Single value
+	v, err := strconv.Atoi(field)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cron field %q: %w", field, err)
+	}
+	return func(v2 int) bool { return v2 == v }, nil
 }
 
 func parseTimeout(timeout string) time.Duration {

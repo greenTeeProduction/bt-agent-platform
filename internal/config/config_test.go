@@ -855,3 +855,279 @@ func TestConfig_Sanitized_EmptySecrets(t *testing.T) {
 		t.Errorf("expected empty TLSCert to stay empty, got %q", s.TLSCert)
 	}
 }
+
+// ─── Validation Edge Case Tests ─────────────────────────────────────────────
+
+func TestValidate_OllamaProvider_NoHost(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "ollama"
+	c.OllamaHost = "" // empty host should fail
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when OllamaHost is empty with ollama provider")
+	}
+}
+
+func TestValidate_DeepSeekProvider_NoKey(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "" // empty key should fail
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when DeepSeekKey is empty with deepseek provider")
+	}
+}
+
+func TestValidate_DeepSeekProvider_WithKey(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-valid-deepseek-key"
+	c.DeepSeekHost = "https://api.deepseek.com/v1"
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected valid deepseek config, got: %v", err)
+	}
+}
+
+func TestValidate_GardenerCycleInterval_Max(t *testing.T) {
+	c := newDefaultConfig()
+	c.GardenerCycleInterval = 86400 // exactly at max (1 day)
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected GardenerCycleInterval=86400 to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_GardenerCycleInterval_TooHigh(t *testing.T) {
+	c := newDefaultConfig()
+	c.GardenerCycleInterval = 86401 // just above max
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when GardenerCycleInterval > 86400")
+	}
+}
+
+func TestValidate_SchedulerCheckInterval_Min(t *testing.T) {
+	c := newDefaultConfig()
+	c.SchedulerCheckInterval = 10 // exactly at min
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected SchedulerCheckInterval=10 to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_SchedulerCheckInterval_Max(t *testing.T) {
+	c := newDefaultConfig()
+	c.SchedulerCheckInterval = 3600 // exactly at max
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected SchedulerCheckInterval=3600 to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_SchedulerCheckInterval_TooHigh(t *testing.T) {
+	c := newDefaultConfig()
+	c.SchedulerCheckInterval = 3601 // just above max
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when SchedulerCheckInterval > 3600")
+	}
+}
+
+func TestValidate_AllEdgeCases(t *testing.T) {
+	c := newDefaultConfig()
+	c.DashboardPort = 0         // invalid
+	c.LLMTimeout = 0            // invalid
+	c.GardenerMaxNodes = 0      // invalid
+	c.MaxBodySize = 0           // invalid
+	c.GardenerCycleInterval = 5 // invalid (< 10)
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = ""          // invalid (no key for deepseek)
+	c.RateLimitBurst = -1       // invalid (negative)
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected multiple validation errors")
+	}
+	verrs, ok := err.(ValidationErrors)
+	if !ok {
+		t.Fatalf("expected ValidationErrors, got %T", err)
+	}
+	// We expect at least 6 errors
+	if len(verrs) < 6 {
+		t.Errorf("expected at least 6 validation errors, got %d", len(verrs))
+	}
+}
+
+func TestValidate_LLMProvider_Invalid(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "openai" // not ollama or deepseek
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error for invalid LLMProvider")
+	}
+}
+
+func TestValidate_RateLimitRPS_Negative(t *testing.T) {
+	c := newDefaultConfig()
+	c.RateLimitRPS = -1.5
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error for negative RateLimitRPS")
+	}
+}
+
+func TestValidate_GardenerMutationsPer_TooHigh(t *testing.T) {
+	c := newDefaultConfig()
+	c.GardenerMutationsPer = 11
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when GardenerMutationsPer > 10")
+	}
+}
+
+func TestValidate_GardenerMutationsPer_Negative(t *testing.T) {
+	c := newDefaultConfig()
+	c.GardenerMutationsPer = -1
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when GardenerMutationsPer < 0")
+	}
+}
+
+func TestValidate_MaxBodySize_TooSmall(t *testing.T) {
+	c := newDefaultConfig()
+	c.MaxBodySize = 512 // below min of 1024
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when MaxBodySize < 1024")
+	}
+}
+
+func TestValidate_MaxBodySize_TooLarge(t *testing.T) {
+	c := newDefaultConfig()
+	c.MaxBodySize = 200 * 1024 * 1024 // above max of 100MB
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when MaxBodySize > 100MB")
+	}
+}
+
+func TestValidate_BoundaryValues_AllValid(t *testing.T) {
+	c := newDefaultConfig()
+	c.DashboardPort = 1          // min
+	c.LLMTimeout = 1             // min
+	c.RateLimitRPS = 0           // min
+	c.RateLimitBurst = 0         // min
+	c.GardenerCycleInterval = 10 // min
+	c.GardenerMutationsPer = 0   // min
+	c.GardenerMaxNodes = 1       // min
+	c.SchedulerCheckInterval = 10 // min
+	c.MaxBodySize = 1024         // min
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected boundary minimums to be valid, got: %v", err)
+	}
+
+	c2 := newDefaultConfig()
+	c2.DashboardPort = 65535              // max
+	c2.LLMTimeout = 3600                  // max
+	c2.GardenerCycleInterval = 86400      // max
+	c2.GardenerMutationsPer = 10          // max
+	c2.GardenerMaxNodes = 100             // max
+	c2.SchedulerCheckInterval = 3600      // max
+	c2.MaxBodySize = 100 * 1024 * 1024    // max
+
+	err = c2.Validate()
+	if err != nil {
+		t.Errorf("expected boundary maximums to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_LLMTimeout_Max(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMTimeout = 3600 // exactly at max
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected LLMTimeout=3600 to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_LLMTimeout_TooHigh(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMTimeout = 3601 // just above max
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when LLMTimeout > 3600")
+	}
+}
+
+func TestValidate_DashboardPort_Max(t *testing.T) {
+	c := newDefaultConfig()
+	c.DashboardPort = 65535 // exactly at max
+
+	err := c.Validate()
+	if err != nil {
+		t.Errorf("expected DashboardPort=65535 to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_DashboardPort_TooHigh(t *testing.T) {
+	c := newDefaultConfig()
+	c.DashboardPort = 65536 // just above max
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when DashboardPort > 65535")
+	}
+}
+
+func TestValidate_OllamaProvider_ModelEmpty(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "ollama"
+	c.OllamaModel = ""
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when OllamaModel is empty with ollama provider")
+	}
+}
+
+func TestValidate_TLS_CertOnly(t *testing.T) {
+	c := newDefaultConfig()
+	c.TLSCert = "/path/to/cert.pem"
+	c.TLSKey = ""
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when TLS cert set but key missing")
+	}
+}
+
+func TestValidate_TLS_KeyOnly(t *testing.T) {
+	c := newDefaultConfig()
+	c.TLSCert = ""
+	c.TLSKey = "/path/to/key.pem"
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when TLS key set but cert missing")
+	}
+}
