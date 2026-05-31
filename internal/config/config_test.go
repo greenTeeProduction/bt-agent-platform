@@ -1357,6 +1357,89 @@ func TestCheckRuntime_DeepSeekNoOllamaCheck(t *testing.T) {
 	}
 }
 
+func TestCheckRuntime_DeepSeekUnreachable(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+	c.DeepSeekHost = "https://api.deepseek.com/v1"
+	c.ReflectionsDir = tmp
+
+	oldChecker := deepseekChecker
+	deepseekChecker = func(host string) bool { return false }
+	defer func() { deepseekChecker = oldChecker }()
+
+	report := c.CheckRuntime()
+	if report.Ok {
+		t.Error("expected Ok=false when DeepSeek is unreachable")
+	}
+	found := false
+	for _, iss := range report.Issues {
+		if iss.Component == "DeepSeekHost" {
+			found = true
+			if iss.Severity != "warning" {
+				t.Errorf("expected severity=warning, got %q", iss.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected DeepSeekHost warning in issues")
+	}
+}
+
+func TestCheckRuntime_DeepSeekReachable(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+	c.DeepSeekHost = "https://api.deepseek.com/v1"
+	c.ReflectionsDir = tmp
+
+	oldChecker := deepseekChecker
+	deepseekChecker = func(host string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true when DeepSeek is reachable, got: %+v", report.Issues)
+	}
+}
+
+func TestCheckRuntime_OllamaNoDeepSeekCheck(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.LLMProvider = "ollama"
+	c.OllamaHost = "" // empty host skips check
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	// Verify no DeepSeekHost issues since provider is ollama.
+	for _, iss := range report.Issues {
+		if iss.Component == "DeepSeekHost" {
+			t.Error("expected no DeepSeekHost check for ollama provider")
+		}
+	}
+}
+
+func TestCheckRuntime_DeepSeekEmptyHost(t *testing.T) {
+	tmp := t.TempDir()
+	c := newDefaultConfig()
+	c.LLMProvider = "deepseek"
+	c.DeepSeekKey = "sk-test"
+	c.DeepSeekHost = "" // empty host skips check
+	c.ReflectionsDir = tmp
+
+	report := c.CheckRuntime()
+	if !report.Ok {
+		t.Errorf("expected Ok=true for empty DeepSeekHost, got: %+v", report.Issues)
+	}
+	for _, iss := range report.Issues {
+		if iss.Component == "DeepSeekHost" {
+			t.Error("expected no DeepSeekHost check when host is empty")
+		}
+	}
+}
+
 func TestCheckRuntime_AllEmptyPaths(t *testing.T) {
 	c := newDefaultConfig()
 	// All persistence dirs empty, no TLS, no config file.

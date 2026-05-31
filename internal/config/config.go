@@ -902,6 +902,17 @@ func (c *Config) CheckRuntime() RuntimeReport {
 		}
 	}
 
+	// ── DeepSeek reachability ─────────────────────────────────────────
+	if c.LLMProvider == "deepseek" && c.DeepSeekHost != "" {
+		if !c.deepseekReachable() {
+			issues = append(issues, RuntimeIssue{
+				Severity:  "warning",
+				Component: "DeepSeekHost",
+				Message:   fmt.Sprintf("DeepSeek host unreachable, agent execution will be degraded: %s", c.DeepSeekHost),
+			})
+		}
+	}
+
 	if len(issues) == 0 {
 		return RuntimeReport{Ok: true}
 	}
@@ -968,3 +979,36 @@ func (c *Config) ollamaReachable() bool {
 // to avoid real network calls. Tests set it to a mock; production code leaves
 // it nil, which causes ollamaReachable to use a real HTTP client.
 var ollamaChecker func(host string) bool
+
+// deepseekReachable performs a lightweight HTTP check against the DeepSeek API
+// /models endpoint. Uses a 5-second timeout to avoid blocking startup.
+// When deepseekChecker is set (e.g., in tests), it delegates to that function
+// instead of making a real network call.
+func (c *Config) deepseekReachable() bool {
+	if deepseekChecker != nil {
+		return deepseekChecker(c.DeepSeekHost)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := strings.TrimRight(c.DeepSeekHost, "/") + "/models"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false
+	}
+	if c.DeepSeekKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.DeepSeekKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// Any response (200 OK, 401 unauthorized, 403 rate limited)
+	// means the host is reachable. Only connection failures are
+	// considered "unreachable."
+	return true
+}
+
+// deepseekChecker is a package-level function that can be overridden in tests
+// to avoid real network calls. Tests set it to a mock; production code leaves
+// it nil, which causes deepseekReachable to use a real HTTP client.
+var deepseekChecker func(host string) bool
