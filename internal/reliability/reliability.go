@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -743,15 +744,18 @@ func (le *LocalExecutor) String() string {
 }
 
 // AgentRouter distributes agent tasks across multiple executors with
-// health-aware round-robin routing, failover retry, and graceful degradation.
+// health-aware routing, failover retry, and graceful degradation.
+// Supports two routing strategies: round-robin (default) and least-connections.
 // When an executor's Execute() call fails, the router tries the next healthy
 // executor. When all remote executors are exhausted, falls back to local execution.
 type AgentRouter struct {
-	mu          sync.RWMutex
-	executors   []AgentExecutor
-	next        int
-	local       AgentExecutor // fallback
-	MaxFailover int           // max executors to try per Execute() call (0 = try all)
+	mu           sync.RWMutex
+	executors    []AgentExecutor
+	next         int
+	local        AgentExecutor  // fallback
+	MaxFailover  int            // max executors to try per Execute() call (0 = try all)
+	strategy     RoutingStrategy
+	activeCounts []int64        // per-executor in-flight count (atomic, least-connections)
 }
 
 // NewAgentRouter creates a router with the given executors.
@@ -774,6 +778,7 @@ func (r *AgentRouter) Add(e AgentExecutor) {
 	if r.local == nil {
 		r.local = e
 	}
+	r.ensureActiveCounts()
 }
 
 // SetLocal sets the fallback executor used when all others are unhealthy.
@@ -783,24 +788,67 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 	r.local = e
 }
 
-// Execute routes a task to a healthy executor using round-robin with failover.
+// Execute routes a task to a healthy executor using the configured strategy.
+// Round-robin (default): distributes evenly across executors.
+// Least-connections: picks the executor with fewest in-flight requests.
 // If an executor's Execute() call fails, the router tries the next healthy executor.
 // Falls back to local executor if all remote executors are exhausted.
 // MaxFailover caps how many executors to try (0 = try all).
 func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
+	// Snapshot router state under lock, then release before Health() calls.
 	r.mu.Lock()
 	executors := make([]AgentExecutor, len(r.executors))
 	copy(executors, r.executors)
-	start := r.next
-	r.next = (r.next + 1) % max(1, len(executors))
+	strategy := r.strategy
 	maxFailover := r.MaxFailover
-	r.mu.Unlock()
+
+	var start int
+	var activeIdx int = -1 // executor index for active-count tracking (least-connections)
+
+	if strategy == RoutingLeastConnections {
+		// Snapshot active counts before releasing lock.
+		activeSnapshot := make([]int64, len(r.activeCounts))
+		for i := range r.activeCounts {
+			activeSnapshot[i] = atomic.LoadInt64(&r.activeCounts[i])
+		}
+		r.mu.Unlock()
+
+		// Health() may make network calls — do NOT hold lock.
+		start = r.pickLeastConnections(executors, activeSnapshot)
+		if start < 0 {
+			if r.local != nil {
+				return r.local.Execute(agent, task)
+			}
+			return nil, fmt.Errorf("no healthy executor available for agent %q", agent)
+		}
+
+		// Re-acquire lock to increment active count.
+		r.mu.Lock()
+		if start < len(r.activeCounts) {
+			atomic.AddInt64(&r.activeCounts[start], 1)
+		}
+		activeIdx = start
+		r.next = (start + 1) % max(1, len(executors))
+		r.mu.Unlock()
+
+		defer func() {
+			r.mu.Lock()
+			if activeIdx >= 0 && activeIdx < len(r.activeCounts) {
+				atomic.AddInt64(&r.activeCounts[activeIdx], -1)
+			}
+			r.mu.Unlock()
+		}()
+	} else {
+		start = r.next
+		r.next = (r.next + 1) % max(1, len(executors))
+		r.mu.Unlock()
+	}
 
 	if maxFailover <= 0 {
 		maxFailover = len(executors)
 	}
 
-	// Round-robin through executors with failover on Execute() failure.
+	// Failover loop: try executors starting from `start`.
 	// Each executor's Health() must pass before we try Execute().
 	var lastErr error
 	tried := 0
@@ -858,7 +906,8 @@ func (r *AgentRouter) Health() error {
 func (r *AgentRouter) String() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return fmt.Sprintf("AgentRouter(executors=%d, local=%s)", len(r.executors), r.local.String())
+	return fmt.Sprintf("AgentRouter(executors=%d, strategy=%s, local=%s)",
+		len(r.executors), r.strategy, r.local.String())
 }
 
 // Executors returns the current list of executors.

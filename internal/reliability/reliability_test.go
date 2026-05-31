@@ -698,7 +698,7 @@ func TestAgentRouter_String(t *testing.T) {
 	router := NewAgentRouter(e1, e2)
 
 	s := router.String()
-	if s != "AgentRouter(executors=2, local=e1)" {
+	if s != "AgentRouter(executors=2, strategy=round_robin, local=e1)" {
 		t.Errorf("unexpected String() output: %q", s)
 	}
 }
