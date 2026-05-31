@@ -45,6 +45,8 @@ import (
 var (
 	incremental = flag.Bool("incremental", false, "Only regenerate sections whose sources changed")
 	sections    = flag.String("section", "", "Comma-separated section numbers to regenerate (1-12)")
+	fastMode    = flag.Bool("fast", false, "Skip LLM generation — use template-only output (faster)")
+	llmProvider = flag.String("llm", "ollama", "LLM provider: ollama or deepseek")
 )
 
 // docgenState tracks the last document generation for incremental mode.
@@ -161,15 +163,27 @@ func main() {
 	// Record graph hash after update
 	state.GraphHash = fileHash("graphify-out/GRAPH_REPORT.md")
 
-	// Initialize Ollama client for LLM-generated content
-	fmt.Println("\n[2/3] Connecting to Ollama...")
-	llmCfg := llm.DefaultConfig()
-	llmClient, err := llm.NewClient(llmCfg)
-	if err != nil {
-		fmt.Printf("Warning: Ollama unavailable (%v) — output will be template-only\n", err)
-		llmClient = nil
+	// Initialize LLM client (skip in fast mode)
+	var llmClient llm.LLM
+	if !*fastMode {
+		fmt.Println("\n[2/3] Connecting to LLM...")
+		switch *llmProvider {
+		case "deepseek":
+			dsCfg := llm.DefaultDeepSeekConfig()
+			llmClient = llm.NewDeepSeekClient(dsCfg)
+			fmt.Printf("  Using DeepSeek %s\n", dsCfg.Model)
+		default:
+			llmCfg := llm.DefaultConfig()
+			var err error
+			llmClient, err = llm.NewClient(llmCfg)
+			if err != nil {
+				fmt.Printf("Warning: Ollama unavailable (%v)\n", err)
+			} else {
+				fmt.Printf("  Using %s @ %s\n", llmCfg.Model, llmCfg.ServerURL)
+			}
+		}
 	} else {
-		fmt.Printf("  Using %s @ %s\n", llmCfg.Model, llmCfg.ServerURL)
+		fmt.Println("\n[2/3] Fast mode — skipping LLM connection (template-only output)")
 	}
 
 	// Load arc42 trees and build section mapping

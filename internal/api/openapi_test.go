@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -896,5 +898,246 @@ func TestDashboardRoutes_OperationIDUniqueness(t *testing.T) {
 			t.Errorf("route %d: duplicate operationId %q for method %s", i, r.OperationID, r.Method)
 		}
 		seen[key] = true
+	}
+}
+
+// ─── Deprecation Tests ──────────────────────────────────────────────────────
+
+func TestRouteBuilder_Sunset(t *testing.T) {
+	route := NewRoute("/api/old-feature", GET).
+		Summary("Old feature").
+		Tags("System").
+		Sunset("2027-01-01").
+		JSONResponse(200, "OK", StringSchema("response")).
+		Build()
+
+	if !route.Deprecated {
+		t.Error("expected Deprecated=true when Sunset is set")
+	}
+	if route.SunsetDate != "2027-01-01" {
+		t.Errorf("expected SunsetDate '2027-01-01', got %q", route.SunsetDate)
+	}
+	if len(route.DeprecationHeaders) != 2 {
+		t.Fatalf("expected 2 deprecation headers, got %d", len(route.DeprecationHeaders))
+	}
+	if route.DeprecationHeaders[0].Name != "Deprecation" {
+		t.Errorf("expected Deprecation header, got %q", route.DeprecationHeaders[0].Name)
+	}
+	if route.DeprecationHeaders[0].Value != "true" {
+		t.Errorf("expected Deprecation header value 'true', got %q", route.DeprecationHeaders[0].Value)
+	}
+	if route.DeprecationHeaders[1].Name != "Sunset" {
+		t.Errorf("expected Sunset header, got %q", route.DeprecationHeaders[1].Name)
+	}
+	if route.DeprecationHeaders[1].Value != "2027-01-01" {
+		t.Errorf("expected Sunset header value '2027-01-01', got %q", route.DeprecationHeaders[1].Value)
+	}
+}
+
+func TestRouteBuilder_Deprecated_WithoutSunset(t *testing.T) {
+	route := NewRoute("/api/old-feature", GET).
+		Summary("Old feature").
+		Tags("System").
+		Deprecated().
+		JSONResponse(200, "OK", StringSchema("response")).
+		Build()
+
+	if !route.Deprecated {
+		t.Error("expected Deprecated=true")
+	}
+	if route.SunsetDate != "" {
+		t.Errorf("expected empty SunsetDate, got %q", route.SunsetDate)
+	}
+	if len(route.DeprecationHeaders) != 0 {
+		t.Errorf("expected 0 deprecation headers when Sunset not set, got %d", len(route.DeprecationHeaders))
+	}
+}
+
+func TestOpenAPIGenerator_DeprecatedRouteHeaders(t *testing.T) {
+	gen := NewOpenAPIGenerator("Test API", "1.0.0", "")
+	gen.AddRoute(NewRoute("/api/old-endpoint", GET).
+		Summary("Old endpoint").
+		Tags("System").
+		Sunset("2027-06-01").
+		JSONResponse(200, "OK", StringSchema("response")).
+		Build())
+
+	spec := gen.Generate()
+
+	// Check path exists
+	oldPath, ok := spec.Paths["/api/old-endpoint"]
+	if !ok {
+		t.Fatal("expected /api/old-endpoint path")
+	}
+	oldGet, ok := oldPath["get"]
+	if !ok {
+		t.Fatal("expected GET method on /api/old-endpoint")
+	}
+	oldMap := oldGet.(map[string]interface{})
+
+	// Check deprecated flag
+	if deprecated, ok := oldMap["deprecated"]; !ok || deprecated != true {
+		t.Errorf("expected deprecated=true, got %v", oldMap["deprecated"])
+	}
+
+	// Check response headers
+	responses, ok := oldMap["responses"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected responses map")
+	}
+	resp200, ok := responses["200"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected 200 response")
+	}
+	headers, ok := resp200["headers"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected headers in 200 response for deprecated route")
+	}
+
+	// Check Deprecation header
+	depHeader, ok := headers["Deprecation"].(map[string]interface{})
+	if !ok {
+		t.Error("expected Deprecation header in response")
+	} else {
+		if desc, ok := depHeader["description"]; !ok || desc != "Endpoint is deprecated" {
+			t.Errorf("expected description 'Endpoint is deprecated', got %v", depHeader["description"])
+		}
+	}
+
+	// Check Sunset header
+	sunsetHeader, ok := headers["Sunset"].(map[string]interface{})
+	if !ok {
+		t.Error("expected Sunset header in response")
+	} else {
+		if example, ok := sunsetHeader["example"]; !ok || example != "2027-06-01" {
+			t.Errorf("expected example '2027-06-01', got %v", sunsetHeader["example"])
+		}
+	}
+}
+
+func TestOpenAPIGenerator_DeprecatedWithoutSunset_NoHeaders(t *testing.T) {
+	gen := NewOpenAPIGenerator("Test API", "1.0.0", "")
+	gen.AddRoute(NewRoute("/api/old-endpoint", GET).
+		Summary("Old endpoint").
+		Tags("System").
+		Deprecated().
+		JSONResponse(200, "OK", StringSchema("response")).
+		Build())
+
+	spec := gen.Generate()
+
+	oldPath := spec.Paths["/api/old-endpoint"]
+	oldMap := oldPath["get"].(map[string]interface{})
+
+	// Deprecated=true but no sunset → no headers in response
+	responses := oldMap["responses"].(map[string]interface{})
+	resp200 := responses["200"].(map[string]interface{})
+	if _, hasHeaders := resp200["headers"]; hasHeaders {
+		t.Error("expected no response headers when Sunset not set (only Deprecated flag)")
+	}
+}
+
+func TestOpenAPIGenerator_NonDeprecatedRoute_NoHeaders(t *testing.T) {
+	gen := NewOpenAPIGenerator("Test API", "1.0.0", "")
+	gen.AddRoute(NewRoute("/api/active-endpoint", GET).
+		Summary("Active endpoint").
+		Tags("System").
+		JSONResponse(200, "OK", StringSchema("response")).
+		Build())
+
+	spec := gen.Generate()
+
+	activePath := spec.Paths["/api/active-endpoint"]
+	activeMap := activePath["get"].(map[string]interface{})
+
+	// Not deprecated → no headers
+	responses := activeMap["responses"].(map[string]interface{})
+	resp200 := responses["200"].(map[string]interface{})
+	if _, hasHeaders := resp200["headers"]; hasHeaders {
+		t.Error("expected no response headers for non-deprecated route")
+	}
+}
+
+func TestDeprecatedHandler_WithSunset(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":true}`))
+	}
+	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "2027-01-01")
+
+	// Use httptest
+	req, _ := http.NewRequest("GET", "/api/old", nil)
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Deprecation") != "true" {
+		t.Errorf("expected Deprecation header 'true', got %q", rec.Header().Get("Deprecation"))
+	}
+	if rec.Header().Get("Sunset") != "2027-01-01" {
+		t.Errorf("expected Sunset header '2027-01-01', got %q", rec.Header().Get("Sunset"))
+	}
+	if rec.Body.String() != `{"ok":true}` {
+		t.Errorf("expected body '{\"ok\":true}', got %q", rec.Body.String())
+	}
+}
+
+func TestDeprecatedHandler_WithoutSunset(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`ok`))
+	}
+	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "")
+
+	req, _ := http.NewRequest("GET", "/api/old", nil)
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+
+	if rec.Header().Get("Deprecation") != "true" {
+		t.Errorf("expected Deprecation header 'true', got %q", rec.Header().Get("Deprecation"))
+	}
+	if rec.Header().Get("Sunset") != "" {
+		t.Errorf("expected no Sunset header when empty, got %q", rec.Header().Get("Sunset"))
+	}
+}
+
+func TestDeprecatedHandlerFunc_WithSunset(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`ok`))
+	}
+	wrapped := DeprecatedHandlerFunc(handler, "2026-12-31")
+
+	req, _ := http.NewRequest("GET", "/api/old", nil)
+	rec := httptest.NewRecorder()
+	wrapped(rec, req)
+
+	if rec.Header().Get("Deprecation") != "true" {
+		t.Errorf("expected Deprecation header, got %q", rec.Header().Get("Deprecation"))
+	}
+	if rec.Header().Get("Sunset") != "2026-12-31" {
+		t.Errorf("expected Sunset header '2026-12-31', got %q", rec.Header().Get("Sunset"))
+	}
+}
+
+func TestDashboardRoutes_AllRoutesBuildWithoutPanic(t *testing.T) {
+	routes := DashboardRoutes()
+	if len(routes) == 0 {
+		t.Fatal("expected non-empty dashboard routes")
+	}
+
+	gen := NewOpenAPIGenerator("Test", "1.0.0", "")
+	for _, r := range routes {
+		gen.AddRoute(r)
+	}
+	spec := gen.Generate()
+
+	// Verify all routes generated paths
+	for _, r := range routes {
+		if _, ok := spec.Paths[r.Path]; !ok {
+			t.Errorf("route path %q not found in generated spec", r.Path)
+		}
 	}
 }

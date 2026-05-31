@@ -304,12 +304,12 @@
     "hash": "969f2c7abd8ca31297228ca23c3468ee"
   },
   "/home/nico/go-bt-evolve/internal/api/openapi.go": {
-    "mtime": 1780255759.423028,
-    "hash": "27c172a3054d938d77408a24ffbb63f0"
+    "mtime": 1780257401.7847285,
+    "hash": "127f6e091ebdc11732f2cd0e851bdb62"
   },
   "/home/nico/go-bt-evolve/internal/api/openapi_test.go": {
-    "mtime": 1780250294.2414863,
-    "hash": "835a208be811b889a388428dbe20f38c"
+    "mtime": 1780257505.3627076,
+    "hash": "38d8761d777a9fa3c1298441d7ad6fc5"
   },
   "/home/nico/go-bt-evolve/internal/mcp/server.go": {
     "mtime": 1780204551.0614414,
@@ -412,8 +412,8 @@
     "hash": "8fd86af2b3b9ba1b266b76bc93069d37"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains.go": {
-    "mtime": 1780255052.7086158,
-    "hash": "f7d1ac08fc77b2abbca6e70bd6fcb880"
+    "mtime": 1780256619.55413,
+    "hash": "3028986116f66c849603e3d6b0ef854f"
   },
   "/home/nico/go-bt-evolve/internal/engine/validate.go": {
     "mtime": 1780086568.5129857,
@@ -828,8 +828,8 @@
     "hash": "78fec65146438907e1c97e18c0ec318d"
   },
   "/home/nico/go-bt-evolve/cmd/bt-docgen/main.go": {
-    "mtime": 1780254542.2858481,
-    "hash": "b652a4d15ab4e6fc8613c05306a48a91"
+    "mtime": 1780256619.5221286,
+    "hash": "c733245a6865e2722f5abaa59ed3dc1d"
   },
   "/home/nico/go-bt-evolve/cmd/hermes_review/main.go": {
     "mtime": 1779723445.198211,

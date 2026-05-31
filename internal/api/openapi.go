@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
 	"sort"
 )
 
@@ -45,19 +46,28 @@ type RouteResponse struct {
 	ContentType string  `json:"content_type,omitempty"`
 }
 
+// DeprecationHeader represents a deprecation-related response header.
+type DeprecationHeader struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Value       string `json:"value,omitempty"`
+}
+
 // Route describes a single API endpoint for OpenAPI generation.
 type Route struct {
-	Path        string          `json:"path"`
-	Method      HTTPMethod      `json:"method"`
-	Summary     string          `json:"summary"`
-	Description string          `json:"description,omitempty"`
-	Tags        []string        `json:"tags,omitempty"`
-	Parameters  []RouteParam    `json:"parameters,omitempty"`
-	RequestBody *Schema         `json:"request_body,omitempty"`
-	Responses   []RouteResponse `json:"responses"`
-	Deprecated  bool            `json:"deprecated,omitempty"`
-	OperationID string          `json:"operation_id,omitempty"` // unique ID for code generators
-	Auth        bool            `json:"auth"`                   // requires API key
+	Path                string              `json:"path"`
+	Method              HTTPMethod          `json:"method"`
+	Summary             string              `json:"summary"`
+	Description         string              `json:"description,omitempty"`
+	Tags                []string            `json:"tags,omitempty"`
+	Parameters          []RouteParam        `json:"parameters,omitempty"`
+	RequestBody         *Schema             `json:"request_body,omitempty"`
+	Responses           []RouteResponse     `json:"responses"`
+	Deprecated          bool                `json:"deprecated,omitempty"`
+	SunsetDate          string              `json:"sunset_date,omitempty"`          // ISO 8601 date when endpoint will be removed
+	DeprecationHeaders  []DeprecationHeader `json:"deprecation_headers,omitempty"`  // HTTP headers emitted on deprecated responses
+	OperationID         string              `json:"operation_id,omitempty"`          // unique ID for code generators
+	Auth                bool                `json:"auth"`                            // requires API key
 }
 
 // ─── OpenAPI Spec Generator ─────────────────────────────────────────────────
@@ -206,6 +216,21 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 						"schema": schemaToMap(resp.Schema),
 					},
 				}
+			}
+			// Deprecation headers — added to all response status codes for deprecated endpoints
+			if len(route.DeprecationHeaders) > 0 {
+				headers := make(map[string]interface{})
+				for _, h := range route.DeprecationHeaders {
+					headerObj := map[string]interface{}{
+						"description": h.Description,
+						"schema":      map[string]interface{}{"type": "string"},
+					}
+					if h.Value != "" {
+						headerObj["example"] = h.Value
+					}
+					headers[h.Name] = headerObj
+				}
+				respObj["headers"] = headers
 			}
 			responses[statusKey] = respObj
 		}
@@ -483,6 +508,21 @@ func (rb *RouteBuilder) Deprecated() *RouteBuilder {
 	return rb
 }
 
+// Sunset sets the deprecation sunset date and adds Deprecation/Sunset response headers.
+// The sunsetDate should be an ISO 8601 date string (e.g., "2026-12-31").
+// Automatically marks the route as Deprecated and adds:
+//   - Deprecation: true header
+//   - Sunset: <date> header (per RFC 8594)
+func (rb *RouteBuilder) Sunset(sunsetDate string) *RouteBuilder {
+	rb.route.Deprecated = true
+	rb.route.SunsetDate = sunsetDate
+	rb.route.DeprecationHeaders = []DeprecationHeader{
+		{Name: "Deprecation", Description: "Endpoint is deprecated", Value: "true"},
+		{Name: "Sunset", Description: "Date after which the endpoint may be removed (RFC 8594)", Value: sunsetDate},
+	}
+	return rb
+}
+
 // OperationID sets a unique operationId for code generation tools.
 func (rb *RouteBuilder) OperationID(id string) *RouteBuilder {
 	rb.route.OperationID = id
@@ -498,6 +538,38 @@ func (rb *RouteBuilder) RequestBody(schema *Schema) *RouteBuilder {
 // Build returns the compiled Route.
 func (rb *RouteBuilder) Build() Route {
 	return rb.route
+}
+
+// ─── Deprecation Middleware ─────────────────────────────────────────────────
+
+// DeprecatedHandler wraps an http.Handler to add deprecation-related response headers.
+// When sunsetDate is non-empty, both "Deprecation: true" and "Sunset: <date>" headers
+// are added. When sunsetDate is empty, only "Deprecation: true" is added.
+// Pass sunsetDate as an ISO 8601 date string (e.g., "2026-12-31").
+//
+// Usage:
+//
+//	mux.Handle("/api/old-endpoint", api.DeprecatedHandler(handler, "2027-01-01"))
+func DeprecatedHandler(next http.Handler, sunsetDate string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Deprecation", "true")
+		if sunsetDate != "" {
+			w.Header().Set("Sunset", sunsetDate)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// DeprecatedHandlerFunc wraps an http.HandlerFunc to add deprecation headers.
+// Convenience wrapper around DeprecatedHandler.
+func DeprecatedHandlerFunc(next http.HandlerFunc, sunsetDate string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Deprecation", "true")
+		if sunsetDate != "" {
+			w.Header().Set("Sunset", sunsetDate)
+		}
+		next(w, r)
+	}
 }
 
 // DashboardRoutes returns the standard set of dashboard API routes.

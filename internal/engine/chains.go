@@ -96,9 +96,12 @@ func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[
 func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
 	prompt := expandTemplate(cfg.Prompt, bb)
 	if bb.LLM == nil {
-		bb.Outcome = "chain_failed"
-		bb.Result = "no LLM available"
-		return -1
+		// Template-only mode: return the expanded prompt with data filled in.
+		// Data-gathering actions (ReadGraphReport, ReadGitHistory, etc.) populate
+		// bb.CachedResult and bb.ChainState before the chain runs.
+		bb.Outcome = "template_only"
+		bb.Result = generateTemplateOutput(prompt, bb)
+		return 1
 	}
 	result, err := bb.LLM.Generate(prompt)
 	if err != nil {
@@ -110,6 +113,54 @@ func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
 	bb.Result = result
 	bb.Results = append(bb.Results, result)
 	return 1
+}
+
+// generateTemplateOutput produces a structured markdown section from the
+// expanded chain prompt when no LLM is available. It extracts the section
+// purpose from the prompt and formats the available data.
+func generateTemplateOutput(prompt string, bb *Blackboard) string {
+	var sb strings.Builder
+
+	// Extract section title from prompt (first line up to newline or period)
+	title := "Arc42 Section"
+	if idx := strings.Index(prompt, "arc42 Section"); idx >= 0 {
+		end := strings.Index(prompt[idx:], "\n")
+		if end < 0 {
+			end = strings.Index(prompt[idx:], " —")
+		}
+		if end > 0 {
+			title = strings.TrimSpace(prompt[idx : idx+end])
+		}
+	}
+	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+
+	// Add available data from chain state
+	if bb.CachedResult != "" && bb.CachedResult != prompt {
+		// Truncate very long cached results
+		truncated := bb.CachedResult
+		if len(truncated) > 500 {
+			truncated = truncated[:500] + "\n... (truncated)"
+		}
+		sb.WriteString("## Source Data\n\n```\n")
+		sb.WriteString(truncated)
+		sb.WriteString("\n```\n\n")
+	}
+
+	if bb.ChainState != nil {
+		sb.WriteString("## Context\n\n")
+		for k, v := range bb.ChainState {
+			valStr := fmt.Sprintf("%v", v)
+			if len(valStr) > 300 {
+				valStr = valStr[:300] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("- **%s**: %s\n", k, valStr))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## Generated Content\n\n")
+	sb.WriteString("*Auto-generated from codebase introspection. Run with `--llm=deepseek` for LLM-generated prose.*\n")
+	return sb.String()
 }
 
 func execRAGQuery(cfg ChainConfig, bb *Blackboard) int {
