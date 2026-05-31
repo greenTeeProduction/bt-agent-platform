@@ -287,3 +287,222 @@ func TestScheduler_NormalJobAfterPanic(t *testing.T) {
 		t.Errorf("good-agent: expected 'success', got %q", goodRuns[0].Outcome)
 	}
 }
+
+func TestScheduler_CrashRecovery_InFlightReset(t *testing.T) {
+	// Simulate a crash: schedule a job, mark it in-flight, then
+	// "restart" the scheduler and verify the in-flight flag is cleared
+	// and the job is scheduled to run immediately.
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "crash-agent", Tree: "domain:default", Version: "1.0.0", Description: "crash recovery test"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	jobStorePath := filepath.Join(dir, "jobs.json")
+	store := NewFileJobStore(jobStorePath)
+
+	// Scheduler 1: schedule a job, then manually mark it in-flight without running
+	sched1 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	job, err := sched1.Schedule("crash-agent", "every 1h", "30m", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually mark in-flight and persist (simulating a crash mid-execution)
+	sched1.mu.Lock()
+	job.InFlight = true
+	sched1.mu.Unlock()
+	sched1.saveState()
+
+	// Verify the persisted state has InFlight=true
+	loadedJobs, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, j := range loadedJobs {
+		if j.ID == job.ID && j.InFlight {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pre-condition failed: job not persisted with InFlight=true")
+	}
+
+	// Scheduler 2: "restart" — should detect the crashed job and reset it
+	sched2 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	jobs := sched2.ListJobs()
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 restored job, got %d", len(jobs))
+	}
+
+	restored := jobs[0]
+	if restored.InFlight {
+		t.Error("restored job still has InFlight=true — should have been cleared")
+	}
+	if !restored.NextRun.IsZero() {
+		t.Errorf("restored job NextRun should be zero (run immediately), got %v", restored.NextRun)
+	}
+	if restored.RunCount != job.RunCount {
+		t.Errorf("run_count should be preserved: was %d, got %d", job.RunCount, restored.RunCount)
+	}
+	if !restored.Active {
+		t.Error("restored job should still be Active")
+	}
+}
+
+func TestScheduler_CrashRecovery_CleanJobsUnaffected(t *testing.T) {
+	// Verify that jobs without InFlight are not modified during recovery.
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "clean-agent", Tree: "domain:default", Version: "1.0.0", Description: "clean job test"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	jobStorePath := filepath.Join(dir, "jobs.json")
+	store := NewFileJobStore(jobStorePath)
+
+	sched1 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	job, _ := sched1.Schedule("clean-agent", "every 1h", "30m", 5)
+	originalNextRun := job.NextRun
+	originalRunCount := job.RunCount
+
+	// Save clean state (InFlight=false by default)
+	sched1.saveState()
+
+	// Restart — clean jobs should be unaffected
+	sched2 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	jobs := sched2.ListJobs()
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 restored job, got %d", len(jobs))
+	}
+
+	restored := jobs[0]
+	if restored.InFlight {
+		t.Error("clean job should not be in-flight")
+	}
+	if restored.RunCount != originalRunCount {
+		t.Errorf("run_count changed: was %d, got %d", originalRunCount, restored.RunCount)
+	}
+	// NextRun should be preserved for clean jobs
+	if !restored.NextRun.Equal(originalNextRun) {
+		t.Errorf("NextRun changed: was %v, got %v", originalNextRun, restored.NextRun)
+	}
+}
+
+func TestScheduler_CrashRecovery_MultipleCrashedJobs(t *testing.T) {
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "crash-a", Tree: "domain:default", Version: "1.0.0", Description: "crash a"})
+	reg.Create(Definition{Name: "crash-b", Tree: "domain:default", Version: "1.0.0", Description: "crash b"})
+	reg.Create(Definition{Name: "clean-c", Tree: "domain:default", Version: "1.0.0", Description: "clean c"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	jobStorePath := filepath.Join(dir, "jobs.json")
+	store := NewFileJobStore(jobStorePath)
+
+	sched1 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	jobA, _ := sched1.Schedule("crash-a", "every 1h", "30m", 3)
+	jobB, _ := sched1.Schedule("crash-b", "every 1h", "30m", 3)
+	jobC, _ := sched1.Schedule("clean-c", "every 2h", "30m", 3)
+
+	// Mark A and B as crashed, C is clean
+	sched1.mu.Lock()
+	jobA.InFlight = true
+	jobB.InFlight = true
+	sched1.mu.Unlock()
+	sched1.saveState()
+
+	// Restart
+	sched2 := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: store,
+	})
+
+	jobs := sched2.ListJobs()
+	if len(jobs) != 3 {
+		t.Fatalf("expected 3 restored jobs, got %d", len(jobs))
+	}
+
+	for _, j := range jobs {
+		switch j.AgentName {
+		case "crash-a", "crash-b":
+			if j.InFlight {
+				t.Errorf("%s: InFlight should be cleared", j.AgentName)
+			}
+			if !j.NextRun.IsZero() {
+				t.Errorf("%s: NextRun should be zero for immediate retry, got %v", j.AgentName, j.NextRun)
+			}
+		case "clean-c":
+			if j.InFlight {
+				t.Error("clean-c: should not be in-flight")
+			}
+			if j.NextRun.IsZero() {
+				t.Error("clean-c: NextRun should be preserved, got zero")
+			}
+			if j.ID != jobC.ID {
+				t.Errorf("clean-c: wrong ID: %s", j.ID)
+			}
+		}
+	}
+}
+
+func TestScheduler_CrashRecovery_NoJobStore(t *testing.T) {
+	// Without a JobStore, crash recovery is a no-op.
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	reg.Create(Definition{Name: "no-store-agent", Tree: "domain:default", Version: "1.0.0"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		// No JobStore — in-memory only
+	})
+
+	_, err := sched.Schedule("no-store-agent", "every 1h", "30m", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jobs := sched.ListJobs()
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	if jobs[0].InFlight {
+		t.Error("in-memory jobs should not be in-flight")
+	}
+}

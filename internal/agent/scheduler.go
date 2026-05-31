@@ -35,6 +35,7 @@ type ScheduledJob struct {
 	RetryDelay string    `json:"retry_delay"` // "5m" between retries
 	Timeout    string    `json:"timeout"`     // "2h" max run duration
 	Active     bool      `json:"active"`
+	InFlight   bool      `json:"in_flight"`   // true when currently executing (crash recovery)
 	Checkpoint *Checkpoint `json:"checkpoint,omitempty"` // for long-running agents
 }
 
@@ -329,6 +330,14 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		Checkpoint: job.Checkpoint,
 	}
 
+	// Mark in-flight and persist IMMEDIATELY for crash recovery.
+	// If bt-agent crashes after this point, loadState() will detect
+	// the in-flight job on restart and handle it gracefully.
+	s.mu.Lock()
+	job.InFlight = true
+	s.mu.Unlock()
+	s.saveState()
+
 	start := time.Now()
 
 	// Recover from panics in the runner so one bad agent doesn't
@@ -347,8 +356,10 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}()
 	duration := time.Since(start)
 
+	// Clear in-flight flag now that execution has completed (or panicked).
 	// Update job state
 	s.mu.Lock()
+	job.InFlight = false
 	job.LastRun = time.Now()
 	job.RunCount++
 
@@ -492,6 +503,8 @@ func (s *Scheduler) saveStateLocked() {
 // loadState restores jobs from the configured JobStore.
 // Called during NewScheduler. Errors are logged and ignored —
 // an empty job map is a safe fallback.
+// Detects jobs that were in-flight when bt-agent crashed and
+// marks them as "crashed" so they can be retried on startup.
 func (s *Scheduler) loadState() {
 	if s.jobStore == nil {
 		return
@@ -503,8 +516,23 @@ func (s *Scheduler) loadState() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	crashedCount := 0
 	for i := range jobs {
 		j := jobs[i] // copy
+		if j.InFlight {
+			// This job was running when bt-agent crashed.
+			// Clear in-flight flag, reset NextRun to "now" so it
+			// retries immediately on the next tick.
+			log.Printf("Scheduler: recovered crashed job %q (agent=%s, run_count=%d)",
+				j.ID, j.AgentName, j.RunCount)
+			j.InFlight = false
+			j.NextRun = time.Time{} // run immediately on next tick
+			crashedCount++
+		}
 		s.jobs[j.ID] = &j
+	}
+	if crashedCount > 0 {
+		log.Printf("Scheduler: recovered %d in-flight job(s) from crash", crashedCount)
 	}
 }
