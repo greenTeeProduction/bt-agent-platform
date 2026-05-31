@@ -782,31 +782,6 @@ func (c *Config) SaveFile(path string) error {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-func envStr(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
-}
-
-func envInt(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return defaultVal
-}
-
-func envFloat(key string, defaultVal float64) float64 {
-	if v := os.Getenv(key); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f
-		}
-	}
-	return defaultVal
-}
-
 func envBool(key string, defaultVal bool) bool {
 	if v := os.Getenv(key); v != "" {
 		switch strings.ToLower(v) {

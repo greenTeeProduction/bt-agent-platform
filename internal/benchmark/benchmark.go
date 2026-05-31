@@ -430,15 +430,6 @@ func AnnotateMetrics(m *RunMetrics) {
 
 func containsStr(s, substr string) bool { return strings.Contains(s, substr) }
 
-func indexOfStr(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
 func minF(a, b float64) float64 {
 	if a < b { return a }
 	return b
