@@ -1,6 +1,7 @@
 package security
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -325,7 +326,7 @@ func TestKeyRing_Empty(t *testing.T) {
 func TestKeyHash_Deterministic(t *testing.T) {
 	h1 := KeyHash("sk-test-key")
 	h2 := KeyHash("sk-test-key")
-	h3 := KeyHash("sk-different-key")
+	h3 := KeyHash("***")
 
 	if h1 != h2 {
 		t.Errorf("expected same hash for same key, got %q != %q", h1, h2)
@@ -336,4 +337,257 @@ func TestKeyHash_Deterministic(t *testing.T) {
 	if len(h1) != 64 { // SHA-256 hex = 64 chars
 		t.Errorf("expected 64-char hex hash, got %d chars", len(h1))
 	}
+}
+
+func TestExpiringKeys_EmptyRing(t *testing.T) {
+	kr := NewKeyRing()
+	hashes := kr.ExpiringKeys(1 * time.Hour)
+	if len(hashes) != 0 {
+		t.Errorf("expected 0 expiring keys on empty ring, got %d", len(hashes))
+	}
+}
+
+func TestExpiringKeys_OnlyPermanent(t *testing.T) {
+	kr := NewKeyRing()
+	kr.GenerateKey("perm-1", 0)
+	kr.GenerateKey("perm-2", 0)
+
+	hashes := kr.ExpiringKeys(1 * time.Hour)
+	if len(hashes) != 0 {
+		t.Errorf("expected 0 expiring keys for permanent keys, got %d", len(hashes))
+	}
+}
+
+func TestExpiringKeys_WithinWindow(t *testing.T) {
+	kr := NewKeyRing()
+	kr.GenerateKey("expiring-soon", 100*time.Millisecond)
+
+	hashes := kr.ExpiringKeys(1 * time.Hour)
+	if len(hashes) != 1 {
+		t.Errorf("expected 1 expiring key, got %d", len(hashes))
+	}
+}
+
+func TestExpiringKeys_OutsideWindow(t *testing.T) {
+	kr := NewKeyRing()
+	kr.GenerateKey("expiring-later", 2*time.Hour)
+
+	hashes := kr.ExpiringKeys(1 * time.Hour)
+	if len(hashes) != 0 {
+		t.Errorf("expected 0 expiring keys outside window, got %d", len(hashes))
+	}
+}
+
+func TestExpireKey_NotFound(t *testing.T) {
+	kr := NewKeyRing()
+	err := kr.ExpireKey("nonexistent-hash", 1*time.Hour)
+	if err == nil {
+		t.Error("expected error expiring non-existent key")
+	}
+}
+
+func TestExpireKey_Success(t *testing.T) {
+	kr := NewKeyRing()
+	key, _ := kr.GenerateKey("expire-me", 0)
+	hash := KeyHash(key)
+
+	// Key should validate before expiry
+	if !kr.Validate(key) {
+		t.Fatal("expected key to validate before expire")
+	}
+
+	// Set expiry 50ms from now
+	err := kr.ExpireKey(hash, 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("ExpireKey failed: %v", err)
+	}
+
+	// Should still validate during grace period
+	if !kr.Validate(key) {
+		t.Error("expected key to validate during grace period")
+	}
+
+	// Wait for expiry
+	time.Sleep(100 * time.Millisecond)
+
+	if kr.Validate(key) {
+		t.Error("expected key to fail after expiry")
+	}
+}
+
+func TestKeyRotationScheduler_RotateNow(t *testing.T) {
+	kr := NewKeyRing()
+
+	// Create a key that expires very soon
+	oldKey, err := kr.GenerateKey("auto-rotate-label", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+
+	initialCount := kr.Count()
+	if initialCount != 1 {
+		t.Fatalf("expected 1 key, got %d", initialCount)
+	}
+
+	// Wait for it to be past its original expiry
+	time.Sleep(60 * time.Millisecond)
+
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "auto-rotated", nil)
+	rotated := krs.RotateNow()
+	if rotated != 1 {
+		t.Errorf("expected 1 key rotated, got %d", rotated)
+	}
+
+	// Old key should STILL validate — rotation grants a 1s grace period
+	if !kr.Validate(oldKey) {
+		t.Error("expected old key to validate during rotation grace period")
+	}
+
+	// We should have 2 keys (old with grace period + new)
+	if kr.Count() != 2 {
+		t.Errorf("expected 2 keys after rotation (old with grace + new), got %d", kr.Count())
+	}
+
+	// After grace period, old key should fail
+	time.Sleep(1100 * time.Millisecond)
+	if kr.Validate(oldKey) {
+		t.Error("expected old key to be expired after grace period")
+	}
+}
+
+func TestKeyRotationScheduler_NoExpiringKeys(t *testing.T) {
+	kr := NewKeyRing()
+	kr.GenerateKey("perm-key", 0) // never expires
+
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "rotated", nil)
+	rotated := krs.RotateNow()
+	if rotated != 0 {
+		t.Errorf("expected 0 rotations when no keys expiring, got %d", rotated)
+	}
+	if kr.Count() != 1 {
+		t.Errorf("expected 1 key unchanged, got %d", kr.Count())
+	}
+}
+
+func TestKeyRotationScheduler_StartStop(t *testing.T) {
+	kr := NewKeyRing()
+
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "auto", nil)
+	krs.Start()
+	krs.Stop() // should not hang or panic
+
+	if kr.Count() != 0 {
+		t.Errorf("expected 0 keys, got %d", kr.Count())
+	}
+}
+
+func TestKeyRotationScheduler_Callback(t *testing.T) {
+	kr := NewKeyRing()
+
+	oldKey, err := kr.GenerateKey("callback-key", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+
+	var (
+		cbHash    string
+		cbNewKey  string
+		cbInvoked bool
+	)
+
+	onRotate := func(hash, newKey string) {
+		cbHash = hash
+		cbNewKey = newKey
+		cbInvoked = true
+	}
+
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "callback-rotated", onRotate)
+	rotated := krs.RotateNow()
+	if rotated != 1 {
+		t.Fatalf("expected 1 rotation, got %d", rotated)
+	}
+
+	if !cbInvoked {
+		t.Error("expected rotation callback to be invoked")
+	}
+	if cbHash == "" {
+		t.Error("expected non-empty callback hash")
+	}
+	if cbNewKey == "" {
+		t.Error("expected non-empty callback new key")
+	}
+	if oldKey == cbNewKey {
+		t.Error("expected new key to differ from old key")
+	}
+}
+
+func TestKeyRotationScheduler_BackgroundLoop(t *testing.T) {
+	kr := NewKeyRing()
+
+	// Create key that expires in 150ms
+	_, err := kr.GenerateKey("bg-key", 150*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+
+	var rotations int
+	var mu sync.Mutex
+	onRotate := func(hash, newKey string) {
+		mu.Lock()
+		rotations++
+		mu.Unlock()
+	}
+
+	// Check every 50ms, rotate keys expiring within 200ms
+	krs := NewKeyRotationScheduler(kr, 50*time.Millisecond, 200*time.Millisecond, "bg-rotated", onRotate)
+	krs.Start()
+
+	// Wait for the background loop to detect and rotate
+	time.Sleep(200 * time.Millisecond)
+
+	krs.Stop()
+
+	mu.Lock()
+	r := rotations
+	mu.Unlock()
+
+	if r < 1 {
+		t.Errorf("expected at least 1 background rotation, got %d", r)
+	}
+}
+
+func TestKeyRotationScheduler_EmptyRingRotateNow(t *testing.T) {
+	kr := NewKeyRing()
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "empty", nil)
+	rotated := krs.RotateNow()
+	if rotated != 0 {
+		t.Errorf("expected 0 rotations on empty ring, got %d", rotated)
+	}
+}
+
+func TestKeyRotationScheduler_MultipleExpiring(t *testing.T) {
+	kr := NewKeyRing()
+
+	// Create 3 keys that expire soon
+	for i := 0; i < 3; i++ {
+		kr.GenerateKey("multi-key", 50*time.Millisecond)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "multi-rotated", nil)
+	rotated := krs.RotateNow()
+	if rotated != 3 {
+		t.Errorf("expected 3 rotations, got %d", rotated)
+	}
+}
+
+func TestKeyRotationScheduler_StartStopSafe(t *testing.T) {
+	kr := NewKeyRing()
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "safe", nil)
+	krs.Start()
+	krs.Stop() // should not hang or panic
+	// Second Stop is NOT safe (closes already-closed channel — use once)
 }

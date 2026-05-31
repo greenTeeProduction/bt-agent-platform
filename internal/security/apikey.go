@@ -236,6 +236,116 @@ func KeyHash(keyStr string) string {
 	return sha256Hex(keyStr)
 }
 
+// ExpireKey sets the expiry time for a key identified by its hash.
+// gracePeriod is how long from now the key remains valid.
+// Returns an error if the hash is not found.
+func (kr *KeyRing) ExpireKey(hash string, gracePeriod time.Duration) error {
+	kr.mu.Lock()
+	defer kr.mu.Unlock()
+
+	entry, ok := kr.keys[hash]
+	if !ok {
+		return fmt.Errorf("key hash %q not found", hash)
+	}
+	entry.ExpiresAt = time.Now().Add(gracePeriod)
+	return nil
+}
+
+// ExpiringKeys returns the hashes of keys that will expire within the given window.
+// Keys that never expire (ExpiresAt zero) are not included.
+func (kr *KeyRing) ExpiringKeys(window time.Duration) []string {
+	kr.mu.RLock()
+	defer kr.mu.RUnlock()
+
+	threshold := time.Now().Add(window)
+	var hashes []string
+	for hash, entry := range kr.keys {
+		if !entry.ExpiresAt.IsZero() && entry.ExpiresAt.Before(threshold) {
+			hashes = append(hashes, hash)
+		}
+	}
+	return hashes
+}
+
+// KeyRotationScheduler periodically checks a KeyRing for keys approaching expiry
+// and auto-rotates them, creating new keys before old ones expire.
+type KeyRotationScheduler struct {
+	keyRing      *KeyRing
+	interval     time.Duration
+	rotateWindow time.Duration
+	label        string
+	onRotate     func(hash, newKey string)
+	stopCh       chan struct{}
+	done         chan struct{}
+}
+
+// NewKeyRotationScheduler creates a new rotation scheduler.
+// interval is how often the scheduler checks for expiring keys.
+// rotateWindow is the threshold: keys expiring within this window are rotated.
+// label is used as the label for auto-rotated replacement keys.
+// onRotate is an optional callback invoked after each rotation with the old hash and new key.
+func NewKeyRotationScheduler(kr *KeyRing, interval, rotateWindow time.Duration, label string, onRotate func(hash, newKey string)) *KeyRotationScheduler {
+	return &KeyRotationScheduler{
+		keyRing:      kr,
+		interval:     interval,
+		rotateWindow: rotateWindow,
+		label:        label,
+		onRotate:     onRotate,
+		stopCh:       make(chan struct{}),
+		done:         make(chan struct{}),
+	}
+}
+
+// Start begins the rotation loop in a background goroutine.
+func (krs *KeyRotationScheduler) Start() {
+	go krs.loop()
+}
+
+// Stop gracefully shuts down the rotation scheduler.
+func (krs *KeyRotationScheduler) Stop() {
+	close(krs.stopCh)
+	<-krs.done
+}
+
+// RotateNow performs an immediate rotation pass — rotates all keys
+// that expire within the configured rotateWindow. Returns the number of keys rotated.
+func (krs *KeyRotationScheduler) RotateNow() int {
+	return krs.rotate()
+}
+
+func (krs *KeyRotationScheduler) loop() {
+	defer close(krs.done)
+
+	ticker := time.NewTicker(krs.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			krs.rotate()
+		case <-krs.stopCh:
+			return
+		}
+	}
+}
+
+func (krs *KeyRotationScheduler) rotate() int {
+	hashes := krs.keyRing.ExpiringKeys(krs.rotateWindow)
+	rotated := 0
+	for _, oldHash := range hashes {
+		newKey, err := krs.keyRing.GenerateKey(krs.label, 0)
+		if err != nil {
+			continue
+		}
+		_ = krs.keyRing.ExpireKey(oldHash, krs.rotateWindow)
+		if krs.onRotate != nil {
+			krs.onRotate(oldHash, newKey)
+		}
+		rotated++
+	}
+	return rotated
+}
+
 func sha256Hex(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
