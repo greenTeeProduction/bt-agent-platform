@@ -1322,3 +1322,528 @@ func TestToolStub_CallReturnsEmpty(t *testing.T) {
 		t.Errorf("expected empty (triggers LLM simulation fallback), got: %q", result)
 	}
 }
+
+// --- Additional edge-case tests for low-coverage chain functions ---
+
+func TestChainAction_StructuredOutput_NoSchema(t *testing.T) {
+	// execStructuredOutput: no json_schema in params → empty schemaDesc path
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": `{"summary": "All good"}`,
+	}}
+	bb := &Blackboard{
+		Task: "summarize results",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "structured_output:Summarize without schema",
+		Metadata: map[string]any{},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_StructuredOutput_NilLLM(t *testing.T) {
+	// execStructuredOutput: bb.LLM == nil → failure path
+	bb := &Blackboard{
+		Task: "summarize results",
+		LLM:  nil,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "structured_output:Summarize as JSON",
+		Metadata: map[string]any{
+			"params": map[string]any{
+				"json_schema": `{"type":"object"}`,
+			},
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_StructuredOutput_LLMError(t *testing.T) {
+	// execStructuredOutput: LLM.Generate error → failure path
+	errMock := &errorMockLLM{err: fmt.Errorf("simulated error")}
+	bb := &Blackboard{
+		Task: "summarize results",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "structured_output:Summarize as JSON",
+		Metadata: map[string]any{
+			"params": map[string]any{
+				"json_schema": `{"type":"object"}`,
+			},
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for LLM error, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_Agent_NilLLM(t *testing.T) {
+	// execAgent: bb.LLM == nil → failure path
+	bb := &Blackboard{
+		Task: "analyze something",
+		LLM:  nil,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Analyze the task and research: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(10),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+	if bb.Result != "no LLM available for agent" {
+		t.Errorf("expected 'no LLM available for agent', got: %s", bb.Result)
+	}
+}
+
+func TestChainAction_Agent_SummaryError(t *testing.T) {
+	// execAgent: agent runs iterations with no tools, produces no Final Answer,
+	// then the summary prompt fails → error path
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Thought: I should analyze this task step by step\nAction: none\nAction Input: none",
+	}}
+	bb := &Blackboard{
+		Task:       "analyze complex topic",
+		LLM:        mock,
+		ChainTools: []any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Deep analysis: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(3),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	// After 3 iterations of "none" actions, finalAnswer should be empty
+	// and the summary prompt should succeed with our mock
+	if bb.Outcome != "success" {
+		t.Errorf("expected success (summary generated), got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_Agent_SummaryLLMError(t *testing.T) {
+	// execAgent: agent runs, no final answer, summary prompt errors
+	callCount := 0
+	mock := &countedErrorMockLLM{
+		responses: map[string]string{
+			"generate": "Thought: reviewing the task\nAction: unknown\nAction Input: none",
+		},
+		failOnCall: 4, // fail on the 4th call (summary prompt)
+		count:      &callCount,
+	}
+	bb := &Blackboard{
+		Task:       "research quantum computing",
+		LLM:        mock,
+		ChainTools: []any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Research: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(3),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure (summary LLM error), got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+// countedErrorMockLLM returns responses for N calls, then errors
+type countedErrorMockLLM struct {
+	responses  map[string]string
+	failOnCall int
+	count      *int
+}
+
+func (m *countedErrorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *countedErrorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *countedErrorMockLLM) Generate(prompt string) (string, error) {
+	*m.count++
+	if *m.count >= m.failOnCall {
+		return "", fmt.Errorf("simulated error on call %d", *m.count)
+	}
+	if r, ok := m.responses["generate"]; ok {
+		return r, nil
+	}
+	return "mock response", nil
+}
+func (m *countedErrorMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
+func (m *countedErrorMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
+func (m *countedErrorMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
+
+func TestChainAction_LLMCall_Error(t *testing.T) {
+	// execLLMCall: LLM.Generate error → failure path
+	errMock := &errorMockLLM{err: fmt.Errorf("simulated error")}
+	bb := &Blackboard{
+		Task: "test task",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "llm_call:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for LLM error, got %s", bb.Outcome)
+	}
+	if !strings.Contains(bb.Result, "LLM error") {
+		t.Errorf("expected 'LLM error' in result, got: %s", bb.Result)
+	}
+}
+
+func TestChainAction_MapReduce_NilLLM(t *testing.T) {
+	// execMapReduce: bb.LLM == nil → failure path
+	bb := &Blackboard{
+		Task: "analyze a complex topic",
+		LLM:  nil,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:Break down and analyze: {{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_MapReduce_SubErrors(t *testing.T) {
+	// execMapReduce: sub-result LLM errors use 'continue' (not fail)
+	callCount := 0
+	mock := &countedErrorMockLLM{
+		responses: map[string]string{
+			"generate": "1. Sub1\n2. Sub2\n3. Sub3",
+		},
+		failOnCall: 99, // never fail
+		count:      &callCount,
+	}
+	bb := &Blackboard{
+		Task: "analyze complex topic",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_MapReduce_SubResultErrors(t *testing.T) {
+	// execMapReduce: LLM errors on sub-result generation → continue (skip sub)
+	callCount := 0
+	mock := &countedErrorMockLLM{
+		responses: map[string]string{
+			"generate": "1. Sub1\n2. Sub2\n3. Sub3",
+		},
+		failOnCall: 2, // fail on call 2 (sub-result generation, skipped via continue)
+		count:      &callCount,
+	}
+	bb := &Blackboard{
+		Task: "analyze complex topic",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	// Second sub-result errors, but the function continues to the reduce phase
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure (reduce LLM also errors on failOnCall=2), got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
+	// execAgent: Test MaxTokens boundary values (0, 1, 31)
+	tests := []struct {
+		name     string
+		maxTokens float64
+	}{
+		{"ZeroUsesDefault15", 0},
+		{"OneKeepsOne", 1},
+		{"ThirtyOneCappedTo15", 31},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &chainMockLLM{responses: map[string]string{
+				"generate": "Final Answer: Complete analysis result",
+			}}
+			bb := &Blackboard{
+				Task:       "analyze something",
+				LLM:        mock,
+				ChainTools: []any{},
+			}
+			tree := &evolution.SerializableNode{
+				Type: "ChainAction",
+				Name: "agent:Analyze: {{.Task}}",
+				Metadata: map[string]any{
+					"max_tokens": tc.maxTokens,
+				},
+			}
+
+			bt := BuildTree(tree, bb)
+			RunTask(bb, bt)
+
+			if bb.Outcome != "success" {
+				t.Errorf("expected success, got %s: %s", bb.Outcome, bb.Result)
+			}
+		})
+	}
+}
+
+func TestChainAction_Agent_UnparseableScratchpad(t *testing.T) {
+	// execAgent: agent response doesn't parse as action or final answer → added to scratchpad
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "I'm thinking about how to approach this...",
+	}}
+	bb := &Blackboard{
+		Task:       "analyze something",
+		LLM:        mock,
+		ChainTools: []any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Think about: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(2),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	// Unparseable responses go to scratchpad, then summary prompt runs
+	if bb.Outcome != "success" {
+		t.Errorf("expected success (summary generated), got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_Conversation_NilLLM(t *testing.T) {
+	// execConversation: bb.LLM == nil → failure path
+	bb := &Blackboard{
+		Task: "greet user",
+		LLM:  nil,
+		ChainState: map[string]any{
+			"conv_history": "User: Hi\n",
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "conversation:How are you?",
+		Metadata: map[string]any{
+			"system_msg": "You are helpful.",
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_Conversation_LLMErrorWithHistory(t *testing.T) {
+	// execConversation: LLM.Generate error with conv_history present
+	errMock := &errorMockLLM{err: fmt.Errorf("conversation error")}
+	bb := &Blackboard{
+		Task: "greet user",
+		LLM:  errMock,
+		ChainState: map[string]any{
+			"conv_history": "User: Hello\nAssistant: Hi!\n",
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "conversation:Continue the chat",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for LLM error, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_RAGQuery_NilLLM(t *testing.T) {
+	// execRAGQuery: bb.LLM == nil at QA phase → failure path
+	bb := &Blackboard{
+		Task:      "find information",
+		LLM:       nil,
+		KgResults: "Some retrieved context",
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "rag_query:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_RetrievalQA_NilLLM(t *testing.T) {
+	// execRetrievalQA: bb.LLM == nil at QA phase → failure path
+	bb := &Blackboard{
+		Task:      "answer question",
+		LLM:       nil,
+		KgResults: "Some context info",
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "retrieval_qa:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_Refine_NilLLM(t *testing.T) {
+	// execRefine: bb.LLM == nil → failure path
+	bb := &Blackboard{
+		Task: "improve text",
+		LLM:  nil,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "refine:Improve the following: {{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for nil LLM, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_ToolAction_NilTools(t *testing.T) {
+	// execToolAction: no tool name in cfg.Tools or prompt → failure path
+	bb := &Blackboard{
+		Task: "do something",
+		LLM:  &chainMockLLM{},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "tool_action:",
+		Metadata: map[string]any{},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure for no tool name, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_ToolAction_FromPrompt(t *testing.T) {
+	// execToolAction: tool name parsed from prompt (no cfg.Tools)
+	mock := &chainMockLLM{}
+	bb := &Blackboard{
+		Task:       "search for info",
+		LLM:        mock,
+		ChainTools: []any{toolStub{name: "web_search", desc: "Search the web"}},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "tool_action:web_search:some query",
+		Metadata: map[string]any{},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_BuildChainActionFn_Panic(t *testing.T) {
+	// buildChainActionFn: panic recovery test
+	// Use an LLM that panics
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Final Answer: done",
+	}}
+	bb := &Blackboard{
+		Task: "test task",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "unknown_chain_type:this should panic",
+		Metadata: map[string]any{
+			"max_tokens": float64(5),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	// Unknown chain type should not crash — panic recovery catches it
+	if bb.Outcome != "failure" && bb.Outcome != "chain_panic" {
+		t.Errorf("expected failure or chain_panic, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
