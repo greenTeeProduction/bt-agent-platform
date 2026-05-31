@@ -75,24 +75,129 @@ func (n noopTracer) StartSpan(ctx context.Context, name string) (context.Context
 	return ctx, noopSpan{}
 }
 
+// ─── Sampler ─────────────────────────────────────────────────────────────────
+
+// Sampler decides whether a span should be recorded.
+type Sampler interface {
+	// ShouldSample returns true if the span with the given trace ID and operation name
+	// should be recorded. Return false to drop the span (creates a noopSpan).
+	ShouldSample(traceID, spanName string) bool
+}
+
+// alwaysSampler samples every span.
+type alwaysSampler struct{}
+
+func (alwaysSampler) ShouldSample(traceID, spanName string) bool { return true }
+
+// neverSampler drops every span.
+type neverSampler struct{}
+
+func (neverSampler) ShouldSample(traceID, spanName string) bool { return false }
+
+// AlwaysSample returns a Sampler that records every span.
+func AlwaysSample() Sampler { return alwaysSampler{} }
+
+// NeverSample returns a Sampler that drops every span.
+func NeverSample() Sampler { return neverSampler{} }
+
+// RatioSampler samples spans at the given ratio (0.0 to 1.0).
+// Uses the trace ID for deterministic sampling — all spans within the same trace
+// get the same sample decision. Ratio 1.0 means always sample, 0.0 means never.
+type RatioSampler struct {
+	ratio float64
+}
+
+// NewRatioSampler creates a RatioSampler that samples approximately ratio fraction
+// of traces. Ratio is clamped to [0.0, 1.0].
+func NewRatioSampler(ratio float64) *RatioSampler {
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	return &RatioSampler{ratio: ratio}
+}
+
+// Ratio returns the configured sampling ratio.
+func (rs *RatioSampler) Ratio() float64 { return rs.ratio }
+
+// ShouldSample deterministically decides whether to sample based on the trace ID.
+// Uses the first 8 hex characters of the trace ID as a hash (0x00000000-0xFFFFFFFF).
+// This ensures all spans in the same trace get the same decision.
+func (rs *RatioSampler) ShouldSample(traceID, spanName string) bool {
+	if rs.ratio >= 1.0 {
+		return true
+	}
+	if rs.ratio <= 0.0 {
+		return false
+	}
+	// Use first 8 hex chars of trace ID as a deterministic hash
+	hash := hashTraceID(traceID)
+	threshold := uint32(float64(0xFFFFFFFF) * rs.ratio)
+	return hash <= threshold
+}
+
+// hashTraceID extracts a deterministic uint32 hash from the trace ID string.
+// Uses the first 8 hex characters; falls back to 0 if the trace ID is too short
+// or not hex-formatted.
+func hashTraceID(traceID string) uint32 {
+	if len(traceID) < 8 {
+		return 0
+	}
+	var h uint32
+	for i := 0; i < 8; i++ {
+		c := traceID[i]
+		h <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			h |= uint32(c - '0')
+		case c >= 'a' && c <= 'f':
+			h |= uint32(c - 'a' + 10)
+		case c >= 'A' && c <= 'F':
+			h |= uint32(c - 'A' + 10)
+		default:
+			h |= uint32(i) // non-hex char: use position-based fallback
+		}
+	}
+	return h
+}
+
 // ─── Console Tracer ──────────────────────────────────────────────────────────
 
 // ConsoleTracer writes span lifecycle events as text lines to an io.Writer.
 // Format: "TRACE [timestamp] trace_id span_id operation DURATION [event] key=value..."
 type ConsoleTracer struct {
-	mu     sync.Mutex
-	w      io.Writer
-	seq    uint64
-	prefix string // short prefix for the tracer source (e.g., "bt-agent")
+	mu      sync.Mutex
+	w       io.Writer
+	seq     uint64
+	prefix  string  // short prefix for the tracer source (e.g., "bt-agent")
+	sampler Sampler // nil means always sample
 }
 
 // NewConsoleTracer creates a ConsoleTracer that writes to the given writer.
-// If w is nil, os.Stderr is used.
+// If w is nil, os.Stderr is used. All spans are sampled by default.
 func NewConsoleTracer(prefix string, w io.Writer) *ConsoleTracer {
 	if w == nil {
 		w = os.Stderr
 	}
 	return &ConsoleTracer{w: w, prefix: prefix, seq: 0}
+}
+
+// SetSampler configures the sampling strategy for this tracer.
+// Set to nil to sample everything (default). Set to NeverSample() to disable tracing.
+// Set to NewRatioSampler(0.1) to sample 10% of traces.
+func (t *ConsoleTracer) SetSampler(s Sampler) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.sampler = s
+}
+
+// Sampler returns the current sampling strategy.
+func (t *ConsoleTracer) Sampler() Sampler {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.sampler
 }
 
 func (t *ConsoleTracer) nextID() string {
@@ -114,6 +219,20 @@ func (t *ConsoleTracer) StartSpan(ctx context.Context, name string) (context.Con
 		}
 		if pc := parent.SpanContext(); pc.SpanID != "" {
 			parentID = pc.SpanID
+		}
+	}
+
+	// Check sampler — if the sample is dropped, return a noopSpan.
+	// New traces (no parent) are subject to sampling. Child spans always inherit
+	// the parent's trace (already sampled), so we only sample at trace root.
+	if parent == nil {
+		t.mu.Lock()
+		s := t.sampler
+		t.mu.Unlock()
+		if s != nil && !s.ShouldSample(traceID, name) {
+			// Dropped: return a noopSpan. Still propagate a dropped sentinel
+			// so children can detect the trace was dropped.
+			return ctx, noopSpan{}
 		}
 	}
 

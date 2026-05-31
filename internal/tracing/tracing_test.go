@@ -324,3 +324,266 @@ func TestHelperAttributes(t *testing.T) {
 		t.Errorf("DurationAttr: got %s=%s", da.Key, da.Value)
 	}
 }
+
+// ─── Sampler Tests ──────────────────────────────────────────────────────────
+
+func TestAlwaysSample(t *testing.T) {
+	s := AlwaysSample()
+	if !s.ShouldSample("abc12345-trace", "anyOp") {
+		t.Error("AlwaysSample should always return true")
+	}
+}
+
+func TestNeverSample(t *testing.T) {
+	s := NeverSample()
+	if s.ShouldSample("abc12345-trace", "anyOp") {
+		t.Error("NeverSample should always return false")
+	}
+}
+
+func TestRatioSampler_FullRatio(t *testing.T) {
+	rs := NewRatioSampler(1.0)
+	if !rs.ShouldSample("any-trace", "anyOp") {
+		t.Error("ratio 1.0 should always sample")
+	}
+	if rs.Ratio() != 1.0 {
+		t.Errorf("Ratio() = %f, want 1.0", rs.Ratio())
+	}
+}
+
+func TestRatioSampler_ZeroRatio(t *testing.T) {
+	rs := NewRatioSampler(0.0)
+	if rs.ShouldSample("any-trace", "anyOp") {
+		t.Error("ratio 0.0 should never sample")
+	}
+	if rs.Ratio() != 0.0 {
+		t.Errorf("Ratio() = %f, want 0.0", rs.Ratio())
+	}
+}
+
+func TestRatioSampler_Clamping(t *testing.T) {
+	rs := NewRatioSampler(5.0) // should clamp to 1.0
+	if rs.Ratio() != 1.0 {
+		t.Errorf("ratio 5.0 should clamp to 1.0, got %f", rs.Ratio())
+	}
+
+	rs2 := NewRatioSampler(-0.5) // should clamp to 0.0
+	if rs2.Ratio() != 0.0 {
+		t.Errorf("ratio -0.5 should clamp to 0.0, got %f", rs2.Ratio())
+	}
+}
+
+func TestRatioSampler_Determinism(t *testing.T) {
+	// Same trace ID always produces same decision
+	rs := NewRatioSampler(0.5)
+	traceID := "abcdef01-trace"
+	first := rs.ShouldSample(traceID, "op1")
+	for i := 0; i < 100; i++ {
+		if rs.ShouldSample(traceID, "op2") != first {
+			t.Error("Same trace ID must produce consistent sample decision")
+		}
+	}
+}
+
+func TestRatioSampler_Distribution(t *testing.T) {
+	// With 50% sampling, verify approximate distribution.
+	// Spread trace IDs across the full uint32 range.
+	rs := NewRatioSampler(0.5)
+	sampled := 0
+	n := 100000
+	step := uint32(0xFFFFFFFF) / uint32(n)
+	for i := 0; i < n; i++ {
+		traceID := fmt.Sprintf("%08x-suffix", uint32(i)*step)
+		if rs.ShouldSample(traceID, "op") {
+			sampled++
+		}
+	}
+	ratio := float64(sampled) / float64(n)
+	if ratio < 0.49 || ratio > 0.51 {
+		t.Errorf("expected ~50%% sampled, got %.1f%% (%d/%d)", ratio*100, sampled, n)
+	}
+}
+
+func TestRatioSampler_EdgeTraceIDs(t *testing.T) {
+	rs := NewRatioSampler(0.01) // 1% sampling
+
+	// Trace ID starting with 00000000 should NOT be sampled (hash=0, threshold is 1%)
+	if !rs.ShouldSample("00000000-abcd", "op") {
+		// Actually 0 <= threshold so it IS sampled. Let me fix.
+	}
+	// 00000000 has hash=0, which is <= threshold for any ratio > 0
+	if !rs.ShouldSample("00000000-abcd", "op") {
+		t.Error("trace with hash 0 should be sampled at ratio 0.01")
+	}
+
+	// ffffffff has hash=0xFFFFFFFF, at 0.01 ratio should NOT be sampled
+	if rs.ShouldSample("ffffffff-abcd", "op") {
+		t.Error("trace with hash 0xFFFFFFFF should not be sampled at ratio 0.01")
+	}
+}
+
+func TestRatioSampler_ShortTraceID(t *testing.T) {
+	rs := NewRatioSampler(0.5)
+	// Short trace ID (< 8 chars) defaults to hash 0
+	if !rs.ShouldSample("ab", "op") {
+		t.Error("short trace ID should default to hash 0 (sampled)")
+	}
+}
+
+func TestRatioSampler_NonHexTraceID(t *testing.T) {
+	rs := NewRatioSampler(0.5)
+	// Non-hex characters use position-based fallback
+	// Just verify it doesn't panic
+	result := rs.ShouldSample("gggggggg-trace", "op")
+	_ = result // deterministic but hash depends on position values
+}
+
+func TestConsoleTracer_WithNeverSampler(t *testing.T) {
+	tracer, output := TestTracer("sampled")
+	tracer.SetSampler(NeverSample())
+	ctx := context.Background()
+
+	_, span := tracer.StartSpan(ctx, "DroppedOp")
+	span.SetAttribute("key", "value")
+	span.End()
+
+	out := output()
+	if out != "" {
+		t.Errorf("expected no output with NeverSample, got: %s", out)
+	}
+}
+
+func TestConsoleTracer_WithAlwaysSampler(t *testing.T) {
+	tracer, output := TestTracer("sampled")
+	tracer.SetSampler(AlwaysSample())
+	ctx := context.Background()
+
+	_, span := tracer.StartSpan(ctx, "KeptOp")
+	span.End()
+
+	out := output()
+	if !strings.Contains(out, "op=KeptOp") {
+		t.Errorf("expected op=KeptOp with AlwaysSample, got: %s", out)
+	}
+}
+
+func TestConsoleTracer_SamplerNilDefault(t *testing.T) {
+	tracer, output := TestTracer("sampled")
+
+	// nil sampler (default) should sample everything
+	if tracer.Sampler() != nil {
+		t.Error("default sampler should be nil")
+	}
+
+	ctx := context.Background()
+	_, span := tracer.StartSpan(ctx, "DefaultSampled")
+	span.End()
+
+	out := output()
+	if !strings.Contains(out, "op=DefaultSampled") {
+		t.Errorf("expected output with nil sampler (default=always), got: %s", out)
+	}
+}
+
+func TestConsoleTracer_SetSamplerRoundtrip(t *testing.T) {
+	tracer, _ := TestTracer("sampled")
+
+	rs := NewRatioSampler(0.1)
+	tracer.SetSampler(rs)
+	if tracer.Sampler() != rs {
+		t.Error("SetSampler + Sampler roundtrip failed")
+	}
+
+	tracer.SetSampler(nil)
+	if tracer.Sampler() != nil {
+		t.Error("SetSampler(nil) should clear sampler")
+	}
+}
+
+func TestConsoleTracer_ChildSpansNotSampled(t *testing.T) {
+	// Children should always be recorded if parent was sampled (sampling at root only)
+	tracer, output := TestTracer("sampled")
+	tracer.SetSampler(NeverSample())
+	ctx := context.Background()
+
+	// Start a new trace — this is a root span, should be dropped
+	ctx, parent := tracer.StartSpan(ctx, "Parent")
+	// parent is a noopSpan — verify it doesn't record
+	if parent.IsRecording() {
+		t.Error("parent should not be recording when dropped by sampler")
+	}
+
+	// Child attempt — context has noopSpan, so it's treated as new root
+	_, child := tracer.StartSpan(ctx, "Child")
+	if child.IsRecording() {
+		t.Error("child should not be recording (sampled as new root)")
+	}
+	child.End()
+	parent.End()
+
+	out := output()
+	if out != "" {
+		t.Errorf("expected no output with NeverSample, got: %s", out)
+	}
+}
+
+func TestConsoleTracer_SamplerConcurrent(t *testing.T) {
+	tracer, _ := TestTracer("concurrent-sampler")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tracer.SetSampler(NewRatioSampler(0.5))
+			_ = tracer.Sampler()
+		}()
+	}
+	wg.Wait()
+	// No panic = pass
+}
+
+func TestHashTraceID_Basic(t *testing.T) {
+	// "00000000" → all zeroes
+	if h := hashTraceID("00000000-trace"); h != 0 {
+		t.Errorf("hashTraceID(00000000) = %d, want 0", h)
+	}
+	// "ffffffff" → all ones (0xFFFFFFFF)
+	if h := hashTraceID("ffffffff-trace"); h != 0xFFFFFFFF {
+		t.Errorf("hashTraceID(ffffffff) = %d, want %d", h, 0xFFFFFFFF)
+	}
+	// "0000000f" → 0x0000000f = 15
+	if h := hashTraceID("0000000f-trace"); h != 15 {
+		t.Errorf("hashTraceID(0000000f) = %d, want 15", h)
+	}
+}
+
+func TestHashTraceID_MixedCase(t *testing.T) {
+	// "aBcDeF01" — mixed case should work
+	h1 := hashTraceID("abcdef01-trace")
+	h2 := hashTraceID("ABCDEF01-trace")
+	if h1 != h2 {
+		t.Errorf("hash should be case-insensitive: %d vs %d", h1, h2)
+	}
+	if h1 == 0 {
+		t.Error("expected non-zero hash for abcdef01")
+	}
+}
+
+func TestHashTraceID_ShortInput(t *testing.T) {
+	if h := hashTraceID("ab"); h != 0 {
+		t.Errorf("short trace ID should return 0, got %d", h)
+	}
+	if h := hashTraceID(""); h != 0 {
+		t.Errorf("empty trace ID should return 0, got %d", h)
+	}
+}
+
+func TestHashTraceID_NonHexFallback(t *testing.T) {
+	// Non-hex chars use position-based fallback — should be deterministic
+	h1 := hashTraceID("gggggggg-trace")
+	h2 := hashTraceID("gggggggg-trace")
+	if h1 != h2 {
+		t.Errorf("non-hex hash should be deterministic: %d vs %d", h1, h2)
+	}
+}
