@@ -387,8 +387,8 @@ Identify weaknesses and provide an improved version.`, task, current)
 func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	task := expandTemplate(cfg.Prompt, bb)
 	maxIter := cfg.MaxTokens
-	if maxIter <= 0 || maxIter > 50 {
-		maxIter = 10 // default max iterations
+	if maxIter <= 0 || maxIter > 30 {
+		maxIter = 15
 	}
 
 	if bb.LLM == nil {
@@ -412,8 +412,6 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	for i := 0; i < maxIter; i++ {
 		prompt := fmt.Sprintf(`%s
 
-%s
-
 TASK: %s
 
 You have access to these tools:
@@ -424,12 +422,12 @@ Thought: <your reasoning about what to do next>
 Action: <tool_name>
 Action Input: <parameters for the tool>
 ...or if you have the final answer...
-Final Answer: <your complete answer to the task>
+Final Answer: <your complete answer — INCLUDE ALL tool output data verbatim, do not summarize or omit results>
 
 Previous steps:
 %s
 
-What is your next step?`, systemMsg, cfg.SystemMsg, task, toolList, scratchpad)
+What is your next step?`, systemMsg, task, toolList, scratchpad)
 
 		response, err := bb.LLM.Generate(prompt)
 		if err != nil {
@@ -461,7 +459,7 @@ What is your next step?`, systemMsg, cfg.SystemMsg, task, toolList, scratchpad)
 
 	if finalAnswer == "" {
 		// No final answer produced — generate one from scratchpad
-		summaryPrompt := fmt.Sprintf(`Based on the following investigation, provide a final answer.
+		summaryPrompt := fmt.Sprintf(`Based on the following investigation, provide a final answer. Include ALL data from the investigation log verbatim — do not summarize or omit any results.
 
 TASK: %s
 
@@ -561,18 +559,26 @@ func parseAgentAction(response string) (action string, input string) {
 }
 
 // parseFinalAnswer extracts Final Answer from agent response.
+// Captures everything after the "Final Answer:" marker, including multi-line content.
 func parseFinalAnswer(response string) string {
-	lines := strings.Split(response, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Final Answer:") {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, "Final Answer:"))
-		}
+	trimmed := strings.TrimSpace(response)
+
+	// Fast path: entire response starts with "Final Answer:"
+	if strings.HasPrefix(trimmed, "Final Answer:") {
+		return strings.TrimSpace(strings.TrimPrefix(trimmed, "Final Answer:"))
 	}
 
-	// Also check if the entire response starts with "Final Answer:"
-	if strings.HasPrefix(strings.TrimSpace(response), "Final Answer:") {
-		return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(response), "Final Answer:"))
+	// Scan for "Final Answer:" on a line, then capture everything after it
+	lines := strings.Split(response, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Final Answer:") {
+			firstLine := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "Final Answer:"))
+			rest := strings.TrimSpace(strings.Join(lines[i+1:], "\n"))
+			if rest != "" {
+				return firstLine + "\n" + rest
+			}
+			return firstLine
+		}
 	}
 
 	return ""

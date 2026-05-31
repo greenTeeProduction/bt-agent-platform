@@ -34,8 +34,8 @@ func chainAgent(name, systemPrompt string, tools []string) evolution.Serializabl
 		Type: "ChainAction",
 		Name: "agent:" + systemPrompt,
 		Metadata: map[string]any{
-			"tools":          ti,
-			"max_iterations": float64(10),
+			"tools":      ti,
+			"max_tokens": float64(15),
 		},
 	}
 }
