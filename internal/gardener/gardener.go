@@ -1,3 +1,20 @@
+// Package gardener implements the 24/7 tree evolution daemon that continuously
+// improves all registered behavior trees through benchmark-validated mutations.
+//
+// It runs 5-minute evolution cycles across 25 trees, using Stockfish-style move
+// ordering to rank mutation candidates. Each candidate is validated against
+// domain-specific benchmark suites before application. The gardener tracks
+// per-tree metrics (cycles, mutations applied, composite fitness) and persists
+// cycle results to a shared log.
+//
+// Key types:
+//   - Gardener — orchestrates evolution cycles with configurable interval
+//   - Registry — manages the set of active trees being evolved
+//   - MetricsTracker — per-tree cycle counts, mutation history, fitness scores
+//   - Config — cycle interval, mutation cap, benchmark validation, real-LLM flag
+//
+// Evolution guarantees: idempotency guards (no duplicate nodes), retry cap (15),
+// node cap (20x original), neutral mutation acceptance (score >= 0 passes).
 package gardener
 
 import (

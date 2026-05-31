@@ -1,3 +1,22 @@
+// Package evolution implements tree definitions, mutation operators, and optimization
+// algorithms for the behavior tree platform.
+//
+// It provides 46 behavior trees across 7 categories (core, domain, finance, research,
+// startup, thinktank, kanban) and 7 algorithm engines:
+//
+//   - Expert Knowledge Base — 6 proven design patterns, 5 anti-patterns, 10 heuristics
+//   - Genetic Algorithm — tournament selection, crossover, elitism, memetic refinement
+//   - Q-Learning — epsilon-greedy mutation selection with state encoding
+//   - Ensemble Methods — voting, weighted, stacking, boosting
+//   - Decision Tree Optimizer — C4.5/CART metrics for Selector reordering
+//   - SelectorOptimizer — IG/Gini/Killer heuristic for dynamic child ordering
+//   - Memetic Local Search — hill climbing, simulated annealing, tabu search
+//
+// Key functions:
+//   - DefaultTree() — the base 17-node behavior tree with agent-based execution
+//   - MergedTree() — 51-node universal router combining all domain trees
+//   - GoDeveloperTree() — Go-specific tree with build/test/review paths
+//   - randomMutation() — applies one of 6 mutation types to any tree
 package evolution
 
 import (

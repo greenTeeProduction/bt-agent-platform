@@ -1,3 +1,19 @@
+// Package knowledge manages the behavior tree knowledge graph — a semantic index
+// of all 38+ trees with capabilities, keywords, and cross-tree relationships.
+//
+// It powers tree discovery (find the best tree for a task), auto-creation (build
+// new trees when no match exists), and the tree factory (crossover breeding from
+// two parent trees). The knowledge graph supports 7 categories (core, domain,
+// finance, research, startup, thinktank, evolution) with weighted capability edges
+// between related trees.
+//
+// Key types:
+//   - KnowledgeGraph — the in-memory graph with Query, Discover, Summary, AutoCreate
+//   - TreeMeta — metadata for each tree: name, category, capabilities, keywords
+//   - Relationship — typed edges between trees (derived_from, similar_to, composed_of)
+//
+// MCP tools exposed: bt_kg_discover, bt_kg_query, bt_kg_auto_create, bt_kg_summary,
+// bt_kg_list, bt_kg_explain, bt_kg_analytics, bt_factory_create.
 package knowledge
 
 import (

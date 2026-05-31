@@ -1,3 +1,17 @@
+// Package mcp implements a JSON-RPC 2.0 server over stdio for the Model Context Protocol.
+//
+// It provides tool registration, concurrent request handling (3-call semaphore
+// with mutex-protected stdout), rate limiting, API key authentication, structured
+// audit logging, and message size limits. The server is used by all three BT MCP
+// binaries (bt-agent, bt-evaluator, bt-langagent).
+//
+// Key types:
+//   - Server — the MCP server with RegisterTool, SetRateLimit, SetSecurity, SetAudit
+//   - ToolResult — structured response with ContentItem array
+//   - ContentItem — text/image/resource content for tool responses
+//
+// Concurrency model: tools/call requests are dispatched to goroutines (up to 3
+// concurrent), while initialize, tools/list, and notifications run inline.
 package mcp
 
 import (

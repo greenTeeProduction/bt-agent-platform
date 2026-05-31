@@ -1,23 +1,18 @@
-// Package security provides API key management with rotation, expiry, and keyring support.
+// Package security provides production security primitives for the BT platform.
 //
-// The KeyRing manages multiple API keys, each with optional expiry times and labels.
-// Keys are generated with crypto/rand and stored as SHA-256 hashes for comparison.
-// Rotation adds a new key while optionally keeping the old key active for a grace period.
+// It implements a layered security stack with:
 //
-// Usage:
+//   - API key management (KeyRing with SHA-256 hashing, generation, validation,
+//     rotation with grace periods, TTL-based expiry, revocation)
+//   - Rate limiting (token bucket per client, configurable rate/burst)
+//   - Input sanitization (null byte removal, ANSI escape stripping, size limits)
+//   - IP filtering (allowlist/blocklist with CIDR support)
+//   - CSRF protection (double-submit cookie pattern, crypto/rand tokens)
+//   - Security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+//   - Structured audit logging (per-context event deduplication)
+//   - Request ID middleware (crypto/rand correlation IDs for distributed tracing)
 //
-//	kr := security.NewKeyRing()
-//	key, _ := kr.GenerateKey("dashboard-readonly", 24*time.Hour)
-//	fmt.Println("New key:", key) // sk-abc123... — only shown once
-//
-//	// Validate an incoming request
-//	if !kr.Validate(incomingKey) {
-//	    http.Error(w, "unauthorized", 401)
-//	    return
-//	}
-//
-//	// Rotate: generate new key, old key expires in 1h
-//	newKey, _ := kr.RotateKey(key, "dashboard-readonly", 1*time.Hour)
+// All components are concurrency-safe and configurable via the Config type.
 package security
 
 import (

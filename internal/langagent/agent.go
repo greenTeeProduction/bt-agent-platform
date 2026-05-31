@@ -1,3 +1,16 @@
+// Package langagent implements a ReAct (Reasoning + Acting) agent that wraps
+// behavior tree tools behind a langchaingo agent executor.
+//
+// It exposes 7 BT tools (RunTask, GetTree, GetReflections, Evolve, Reset,
+// CreateAgent, UseTree) as langchaingo tools, enabling conversational agent
+// loops that interact with the behavior tree platform. The agent uses a custom
+// ReAct prompt template with pre-rendered tool names and descriptions.
+//
+// Key types:
+//   - Agent — wraps langchaingo agent executor with BT tools
+//   - Config — model, tools, prompt template configuration
+//
+// MCP tools exposed: la_run, la_fitness, la_evolve.
 package langagent
 
 import (

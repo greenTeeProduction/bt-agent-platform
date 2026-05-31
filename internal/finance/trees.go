@@ -1,3 +1,21 @@
+// Package finance converts all 10 Anthropic financial agent workflows into behavior
+// trees, encoding domain-specific decision logic from the financial-services repository.
+//
+// Trees (10 total, 20-39 nodes each):
+//
+//	pitch_agent — comps, precedents, LBO, DCF → branded pitch deck
+//	earnings_reviewer — earnings call analysis → model update → note draft
+//	market_researcher — industry overview, competitive landscape, investment ideas
+//	model_builder — 3-statement, DCF, LBO models live in Excel
+//	meeting_prep — client briefing pack generation
+//	valuation_reviewer — GP package review → valuation → LP reporting
+//	gl_reconciler — break identification → root cause → sign-off
+//	month_end_closer — accruals, roll-forwards, variance analysis
+//	statement_auditor — LP statement audit with verification checks
+//	kyc_screener — document parsing, sanctions screening, risk scoring
+//
+// The package provides 48 finance-specific engine nodes (19 conditions, 29 actions)
+// covering DCF modeling, LBO verification, KYC rules, GL reconciliation, and more.
 package finance
 
 import "github.com/nico/go-bt-evolve/internal/evolution"

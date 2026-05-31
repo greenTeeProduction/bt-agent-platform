@@ -1,3 +1,19 @@
+// Package engine provides the behavior tree runtime for the BT platform.
+//
+// It implements tree building, execution, action/condition registration, and
+// the Blackboard context that carries task state through tree execution.
+// The package also defines 10 chain types (llm_call, agent, refine, map_reduce,
+// rag_query, structured_output, retrieval_qa, conversation, tool_call, tool_action)
+// that integrate langchaingo workflows directly into behavior tree nodes.
+//
+// Key types:
+//   - Blackboard — shared state (Task, Plan, Result, Outcome, ChainTools, ChainMemory)
+//   - SerializableNode — JSON-serializable tree node used across all domain trees
+//
+// Key functions:
+//   - RunTask(bb, tree) — executes a tree to completion with 1000-tick safety limit
+//   - BuildTree(tree, bb) — converts a SerializableNode into a runnable go-bt tree
+//   - actionForName / conditionForName — registry of 175+ engine nodes
 package engine
 
 import (

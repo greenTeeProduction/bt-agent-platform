@@ -1,3 +1,18 @@
+// Package llm provides the LLM interface and Ollama client for the BT platform.
+//
+// The LLM interface abstracts language model access behind Generate, AnalyzeComplexity,
+// GeneratePlan, and Reflect methods, enabling testable tree execution with mock LLMs.
+// The concrete Client wraps langchaingo's Ollama integration with configurable model,
+// host, and timeout settings. The package also includes graceful degradation support
+// via the HealthMonitor that probes LLM availability and enables fail-fast behavior
+// in MCP servers when Ollama is unreachable.
+//
+// Key types:
+//   - LLM — interface for all LLM operations (Generate, AnalyzeComplexity, GeneratePlan, Reflect)
+//   - Client — Ollama-backed implementation via langchaingo
+//   - Config — model, host, timeout configuration with env var overrides
+//
+// Default model: qwen3.6:35b-a3b (24 GB, Q4_K_M) at http://localhost:11434.
 package llm
 
 import (

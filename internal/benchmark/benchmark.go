@@ -1,3 +1,19 @@
+// Package benchmark provides A/B testing, statistical mutation quality testing,
+// and external benchmark integration for behavior trees.
+//
+// It includes:
+//
+//   - Domain suites (GoDev, CodeReview, DevOps, Finance, AgentMonitor) for
+//     per-domain task validation with real Ollama by default
+//   - External benchmarks: BFCL V1/V3 (tool routing), SWE-bench Lite/Verified
+//     (bug resolution), τ-bench (conversational tool use), ToolBench (API selection),
+//     BTPG (tree quality metrics)
+//   - ScoreMutation — statistical comparison of baseline vs mutated tree output
+//     with Fisher's exact test and bootstrap confidence intervals
+//   - DefaultLLM() — returns real Ollama (qwen3.6:35b) with mock fallback
+//
+// All domain suite tasks use DefaultLLM() for production-grade validation.
+// Use testing.Short() guards for Ollama-dependent tests on slow hardware.
 package benchmark
 
 import (
