@@ -140,6 +140,7 @@ func main() {
 	mux.HandleFunc("/api/company/default", authMiddleware(apiKey, handleDefaultCompany))
 	mux.HandleFunc("/api/agents", authMiddleware(apiKey, handleAgentsList))
 	mux.HandleFunc("/api/agents/run", authMiddleware(apiKey, handleAgentRun))
+	mux.HandleFunc("/api/agents/execute", authMiddleware(apiKey, handleAgentExecute))
 	mux.HandleFunc("/api/tasks", authMiddleware(apiKey, handleTasks))
 	mux.HandleFunc("/api/tasks/approve", authMiddleware(apiKey, handleTaskApprove))
 	mux.HandleFunc("/api/tasks/create", authMiddleware(apiKey, handleTaskCreate))
@@ -679,6 +680,8 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	gen.AddTag("Tasks", "Task pipeline management")
 	gen.AddTag("Sprint", "Sprint execution")
 	gen.AddTag("Chat", "Dashboard AI chat")
+	gen.AddTag("Agents", "Agent management and execution")
+	gen.AddTag("Scalability", "Horizontal scaling, worker pool, queues")
 	gen.AddTag("Reliability", "Dead letter queue, circuit breaker")
 
 	for _, route := range api.DashboardRoutes() {
@@ -899,6 +902,65 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── Agent Handlers ──────────────────────────────────────────────────────
+
+// handleAgentExecute handles POST /api/agents/execute — the server-side
+// counterpart to RemoteExecutor for horizontal scaling. Accepts JSON body
+// {agent, task, tree?} and returns a reliability.AgentResult.
+func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Agent string `json:"agent"`
+		Task  string `json:"task"`
+		Tree  string `json:"tree"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if req.Agent == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: agent"})
+		return
+	}
+	if req.Task == "" {
+		req.Task = "Execute your scheduled workflow"
+	}
+
+	treeID := req.Tree
+	if treeID == "" {
+		treeID = "godev"
+	}
+
+	start := time.Now()
+	executor := dashboard.NewAgentExecutor()
+	output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
+	elapsed := time.Since(start)
+
+	result := reliability.AgentResult{
+		Agent:    req.Agent,
+		Task:     req.Task,
+		Output:   output,
+		Duration: elapsed,
+		Success:  outcome == "success" || outcome == "completed",
+	}
+	if outcome == "failed" || outcome == "timeout" {
+		result.Success = false
+	}
+	if err != nil {
+		result.Error = err.Error()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
 
 // handleAgentsList returns all registered BT agents with their live status.
 func handleAgentsList(w http.ResponseWriter, r *http.Request) {

@@ -760,6 +760,23 @@ func DashboardRoutes() []Route {
 			}, "reply")).
 			ErrorResponse(503, "Ollama unavailable").WithAuth().Build(),
 
+		// Remote Agent Execution — enables horizontal scaling via RemoteExecutor
+		NewRoute("/api/agents/execute", POST).
+			Summary("Execute agent remotely").
+			Description("Executes an agent task on this dashboard node using the behavior tree framework. Accepts JSON body {agent (required), task, tree?}. Used by RemoteExecutor for horizontal scaling — the AgentRouter distributes tasks across multiple dashboard nodes via this endpoint. Returns reliability.AgentResult with output, duration, success/error, and quality_score.").
+			Tags("Scalability").
+			JSONResponse(200, "Agent execution result", ObjectSchema(map[string]*Schema{
+				"agent":         StringSchema("Agent name"),
+				"task":          StringSchema("Task executed"),
+				"output":        StringSchema("Agent output text"),
+				"duration":      IntSchema("Execution duration in nanoseconds"),
+				"success":       BoolSchema("Whether execution succeeded"),
+				"error":         StringSchema("Error message if failed"),
+				"quality_score": NumberSchema("Output quality score 0.0-1.0"),
+			}, "agent", "task", "output", "duration", "success")).
+			ErrorResponse(400, "Invalid request body").
+			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
+
 		// Dead Letter Queue
 		NewRoute("/api/dlq", GET).
 			Summary("List dead letter queue entries").
