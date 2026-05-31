@@ -285,9 +285,12 @@ func main() {
 		JobStore: agent.NewFileJobStore(jobStoreDir + "/scheduler-jobs.json"),
 	})
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
-		task := "scheduled run: " + ctx.AgentName
-		if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil && inst.Definition.Description != "" {
-			task = inst.Definition.Description + " (" + task + ")"
+		// ctx.Task is set by the scheduler from the agent's description.
+		// Don't prepend "scheduled run" — that causes self-referential loops
+		// when the agent investigates itself instead of its actual purpose.
+		task := ctx.Task
+		if task == "" {
+			task = ctx.AgentName
 		}
 
 		// Inject agent memory context into the task

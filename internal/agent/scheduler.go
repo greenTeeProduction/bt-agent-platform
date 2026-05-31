@@ -270,8 +270,17 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	timeoutDur := parseTimeout(job.Timeout)
 	_ = timeoutDur
 
+	// Build a meaningful task from the agent's description.
+	// Avoid "scheduled run" — use the actual purpose so the agent
+	// doesn't get caught in a self-referential loop.
+	task := inst.Definition.Description
+	if task == "" {
+		task = job.AgentName
+	}
+
 	runCtx := RunContext{
 		AgentName:  job.AgentName,
+		Task:       task,
 		JobID:      job.ID,
 		Checkpoint: job.Checkpoint,
 	}
@@ -321,7 +330,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		}
 		s.history.Record(RunRecord{
 			AgentName: job.AgentName,
-			Task:      "scheduled run",
+			Task:      runCtx.Task,
 			Outcome:   outcome,
 			Output:    output,
 			Error:     errStr,
@@ -336,7 +345,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	if inst.Definition.Tree != "" {
 		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{
 			TreeID:   inst.Definition.Tree,
-			Task:     "scheduled run",
+			Task:     runCtx.Task,
 			Outcome:  outcome,
 			Duration: duration,
 		})
@@ -345,7 +354,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
 			RunID:     runID,
 			TreeID:    inst.Definition.Tree,
-			Task:      "scheduled run",
+			Task:      runCtx.Task,
 			Outcome:   outcome,
 			StartedAt: start,
 			EndedAt:   time.Now(),
