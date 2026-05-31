@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
+	"github.com/nico/go-bt-evolve/internal/goap"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
@@ -460,5 +461,725 @@ func TestKnowledgeQueryAction_EmptyTask(t *testing.T) {
 	// Should still set KgResults with empty task in string
 	if bb.KgResults == "" {
 		t.Error("KgResults should be set even with empty task")
+	}
+}
+
+// ============================================================================
+// Alert Router condition tests (registerAlertRouterNodes — 33.3% → target 100%)
+// ============================================================================
+
+func TestCondition_IsCritical(t *testing.T) {
+	fn := GetCondition("IsCritical")
+	if fn == nil {
+		t.Fatal("IsCritical condition not registered")
+	}
+	if !fn(&Blackboard{Task: "critical disk error on sda1"}) {
+		t.Error("should match 'critical'")
+	}
+	if !fn(&Blackboard{Task: "EMERGENCY: system down"}) {
+		t.Error("should match 'emergency'")
+	}
+	if !fn(&Blackboard{Task: "urgent security patch needed"}) {
+		t.Error("should match 'urgent'")
+	}
+	if !fn(&Blackboard{Task: "severe memory leak detected"}) {
+		t.Error("should match 'severe'")
+	}
+	if fn(&Blackboard{Task: "normal system check"}) {
+		t.Error("should NOT match normal task")
+	}
+	if fn(&Blackboard{Task: ""}) {
+		t.Error("should NOT match empty task")
+	}
+}
+
+func TestCondition_IsSecurity(t *testing.T) {
+	fn := GetCondition("IsSecurity")
+	if fn == nil {
+		t.Fatal("IsSecurity condition not registered")
+	}
+	if !fn(&Blackboard{Task: "security breach detected"}) {
+		t.Error("should match 'security'")
+	}
+	if !fn(&Blackboard{Task: "brute force SSH attack"}) {
+		t.Error("should match 'brute' and 'ssh'")
+	}
+	if !fn(&Blackboard{Task: "intrusion attempt blocked"}) {
+		t.Error("should match 'intrusion'")
+	}
+	if !fn(&Blackboard{Task: "unauthorized access detected"}) {
+		t.Error("should match 'unauthorized'")
+	}
+	if fn(&Blackboard{Task: "normal system update"}) {
+		t.Error("should NOT match normal task")
+	}
+}
+
+func TestCondition_IsTrading(t *testing.T) {
+	fn := GetCondition("IsTrading")
+	if fn == nil {
+		t.Fatal("IsTrading condition not registered")
+	}
+	if !fn(&Blackboard{Task: "btc trading signal detected"}) {
+		t.Error("should match 'btc' and 'trading'")
+	}
+	if !fn(&Blackboard{Task: "market price alert"}) {
+		t.Error("should match 'price' and 'market'")
+	}
+	if !fn(&Blackboard{Task: "high volume signal"}) {
+		t.Error("should match 'volume' and 'signal'")
+	}
+	if fn(&Blackboard{Task: "system health check"}) {
+		t.Error("should NOT match health task")
+	}
+}
+
+func TestCondition_IsDiskAlert(t *testing.T) {
+	fn := GetCondition("IsDiskAlert")
+	if fn == nil {
+		t.Fatal("IsDiskAlert condition not registered")
+	}
+	if !fn(&Blackboard{Task: "disk sda 95% full"}) {
+		t.Error("should match 'disk' and 'sda'")
+	}
+	if !fn(&Blackboard{Task: "nvme storage capacity warning"}) {
+		t.Error("should match 'storage' and 'nvme'")
+	}
+	if !fn(&Blackboard{Task: "filesystem space low"}) {
+		t.Error("should match 'filesystem' and 'space'")
+	}
+	if fn(&Blackboard{Task: "cpu utilization high"}) {
+		t.Error("should NOT match CPU task")
+	}
+}
+
+func TestCondition_IsHealthAlert(t *testing.T) {
+	fn := GetCondition("IsHealthAlert")
+	if fn == nil {
+		t.Fatal("IsHealthAlert condition not registered")
+	}
+	if !fn(&Blackboard{Task: "health check failed"}) {
+		t.Error("should match 'health'")
+	}
+	if !fn(&Blackboard{Task: "monitor service down"}) {
+		t.Error("should match 'monitor' and 'down'")
+	}
+	if !fn(&Blackboard{Task: "critical failure in pipeline"}) {
+		t.Error("should match 'failure' (and 'critical')")
+	}
+	if !fn(&Blackboard{Task: "crash detected in agent"}) {
+		t.Error("should match 'crash'")
+	}
+	if !fn(&Blackboard{Task: "endpoint unreachable"}) {
+		t.Error("should match 'unreachable'")
+	}
+	if fn(&Blackboard{Task: "system operating normally"}) {
+		t.Error("should NOT match normal task")
+	}
+}
+
+// ============================================================================
+// Alert Router action tests
+// ============================================================================
+
+func TestAction_RouteToAllChannels(t *testing.T) {
+	fn := GetAction("RouteToAllChannels")
+	if fn == nil {
+		t.Fatal("RouteToAllChannels action not registered")
+	}
+	bb := &Blackboard{Task: "critical disk alert"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Result == "" {
+		t.Error("Result should be set")
+	}
+	if !stringContains(bb.Result, "CRITICAL") {
+		t.Error("result should contain CRITICAL")
+	}
+	if !stringContains(bb.Result, "ALL channels") {
+		t.Error("result should mention ALL channels")
+	}
+}
+
+func TestAction_RouteToSecurityChannel(t *testing.T) {
+	fn := GetAction("RouteToSecurityChannel")
+	if fn == nil {
+		t.Fatal("RouteToSecurityChannel action not registered")
+	}
+	bb := &Blackboard{Task: "SSH brute force attack"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if !stringContains(bb.Result, "Security Alert") {
+		t.Error("result should contain Security Alert")
+	}
+	if !stringContains(bb.Result, "Security team") {
+		t.Error("result should mention Security team")
+	}
+	if !stringContains(bb.Result, "Delivered") {
+		t.Error("result should mention Delivered")
+	}
+}
+
+func TestAction_RouteToTradingChannel(t *testing.T) {
+	fn := GetAction("RouteToTradingChannel")
+	if fn == nil {
+		t.Fatal("RouteToTradingChannel action not registered")
+	}
+	bb := &Blackboard{Task: "BTC price spike detected"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if !stringContains(bb.Result, "Trading Signal") {
+		t.Error("result should contain Trading Signal")
+	}
+	if !stringContains(bb.Result, "Trading channels") {
+		t.Error("result should mention Trading channels")
+	}
+}
+
+func TestAction_RouteToDevOpsChannel(t *testing.T) {
+	fn := GetAction("RouteToDevOpsChannel")
+	if fn == nil {
+		t.Fatal("RouteToDevOpsChannel action not registered")
+	}
+	bb := &Blackboard{Task: "disk sda1 at 95%"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if !stringContains(bb.Result, "Alert Routed") {
+		t.Error("result should contain Alert Routed")
+	}
+	if !stringContains(bb.Result, "DevOps/Admin") {
+		t.Error("result should mention DevOps/Admin")
+	}
+}
+
+func TestAction_RouteToDefaultChannel(t *testing.T) {
+	fn := GetAction("RouteToDefaultChannel")
+	if fn == nil {
+		t.Fatal("RouteToDefaultChannel action not registered")
+	}
+	bb := &Blackboard{Task: "general system notification"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if !stringContains(bb.Result, "Default channel") {
+		t.Error("result should mention Default channel")
+	}
+}
+
+// ============================================================================
+// GOAP condition tests (registerGoapNodes — 37.5% → target higher)
+// ============================================================================
+
+func TestCondition_HasGoapGoal_NoChainState(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{Task: "build and deploy a microservice"}
+	// No ChainState = no goals
+	if fn(bb) {
+		t.Error("should return false when ChainState is nil")
+	}
+}
+
+func TestCondition_HasGoapGoal_NoGoals(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task:       "build a pipeline",
+		ChainState: map[string]interface{}{},
+	}
+	if fn(bb) {
+		t.Error("should return false when no goap_goals in ChainState")
+	}
+}
+
+func TestCondition_HasGoapGoal_EmptyTask(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "",
+		ChainState: map[string]interface{}{
+			"goap_goals": []*goap.Goal{goap.NewGoal("test", 1.0, goap.WorldState{})},
+		},
+	}
+	if fn(bb) {
+		t.Error("should return false when task is empty")
+	}
+}
+
+func TestCondition_HasGoapGoal_PureQuestion(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "what is a monad",
+		ChainState: map[string]interface{}{
+			"goap_goals": []*goap.Goal{goap.NewGoal("test", 1.0, goap.WorldState{})},
+		},
+	}
+	if fn(bb) {
+		t.Error("should reject pure knowledge questions (no action verb)")
+	}
+}
+
+func TestCondition_HasGoapGoal_MultiStepTask(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "first build the API, then deploy it to production",
+		ChainState: map[string]interface{}{
+			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
+		},
+	}
+	if !fn(bb) {
+		t.Error("should accept multi-step task with action verb")
+	}
+	// Should have created goap_current_goal
+	if _, ok := bb.ChainState["goap_current_goal"]; !ok {
+		t.Error("should have set goap_current_goal")
+	}
+}
+
+func TestCondition_HasGoapGoal_WithActionVerb(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "build a real-time chat application",
+		ChainState: map[string]interface{}{
+			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
+		},
+	}
+	if !fn(bb) {
+		t.Error("should accept task with action verb 'build'")
+	}
+}
+
+func TestCondition_HasGoapGoal_ConfigureTask(t *testing.T) {
+	fn := GetCondition("HasGoapGoal")
+	if fn == nil {
+		t.Fatal("HasGoapGoal condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "configure the Kubernetes cluster",
+		ChainState: map[string]interface{}{
+			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
+		},
+	}
+	if !fn(bb) {
+		t.Error("should accept task with action verb 'configure'")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_NoChainState(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{Task: "test"}
+	if fn(bb) {
+		t.Error("should return false when ChainState is nil")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_NoIndex(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{
+		Task:       "test",
+		ChainState: map[string]interface{}{},
+	}
+	if fn(bb) {
+		t.Error("should return false when goap_step_index is missing")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_NoSteps(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 0,
+		},
+	}
+	if fn(bb) {
+		t.Error("should return false when goap_steps is missing")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_HasRemaining(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 0,
+			"goap_steps":      []string{"step1", "step2", "step3"},
+		},
+	}
+	if !fn(bb) {
+		t.Error("should return true when index < len(steps)")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_AllDone(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 3,
+			"goap_steps":      []string{"step1", "step2", "step3"},
+		},
+	}
+	if fn(bb) {
+		t.Error("should return false when index >= len(steps)")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_WrongType(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	// goap_steps is wrong type (int instead of []string)
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 0,
+			"goap_steps":      42,
+		},
+	}
+	if fn(bb) {
+		t.Error("should return false when goap_steps is wrong type")
+	}
+}
+
+func TestCondition_HasMoreGoapSteps_WrongIndexType(t *testing.T) {
+	fn := GetCondition("HasMoreGoapSteps")
+	if fn == nil {
+		t.Fatal("HasMoreGoapSteps condition not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": "not_an_int",
+			"goap_steps":      []string{"step1"},
+		},
+	}
+	if fn(bb) {
+		t.Error("should return false when goap_step_index is wrong type")
+	}
+}
+
+// ============================================================================
+// GOAP action tests
+// ============================================================================
+
+func TestAction_SetupGoapTools(t *testing.T) {
+	fn := GetAction("SetupGoapTools")
+	if fn == nil {
+		t.Fatal("SetupGoapTools action not registered")
+	}
+	bb := &Blackboard{Task: "build a deployment pipeline"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.ChainState == nil {
+		t.Fatal("ChainState should be initialized")
+	}
+	if _, ok := bb.ChainState["goap_actions"]; !ok {
+		t.Error("goap_actions should be set")
+	}
+	if _, ok := bb.ChainState["goap_goals"]; !ok {
+		t.Error("goap_goals should be set")
+	}
+	if _, ok := bb.ChainState["goap_config"]; !ok {
+		t.Error("goap_config should be set")
+	}
+}
+
+func TestAction_SetupGoapTools_Idempotent(t *testing.T) {
+	fn := GetAction("SetupGoapTools")
+	if fn == nil {
+		t.Fatal("SetupGoapTools action not registered")
+	}
+	bb := &Blackboard{
+		Task: "build a pipeline",
+		ChainState: map[string]interface{}{
+			"goap_actions": "already_seeded",
+		},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	// Should NOT overwrite existing
+	if bb.ChainState["goap_actions"] != "already_seeded" {
+		t.Error("should preserve existing goap_actions (idempotent)")
+	}
+}
+
+func TestAction_GoapFallback(t *testing.T) {
+	fn := GetAction("GoapFallback")
+	if fn == nil {
+		t.Fatal("GoapFallback action not registered")
+	}
+	bb := &Blackboard{Task: "complex planning task"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Outcome != "partial" {
+		t.Errorf("expected outcome 'partial', got %q", bb.Outcome)
+	}
+	if !stringContains(bb.Result, "falling back") {
+		t.Error("result should mention falling back")
+	}
+}
+
+func TestAction_ReflectGoapOutcome_Success(t *testing.T) {
+	fn := GetAction("ReflectGoapOutcome")
+	if fn == nil {
+		t.Fatal("ReflectGoapOutcome action not registered")
+	}
+	bb := &Blackboard{
+		Task:    "build a pipeline",
+		Outcome: "success",
+		ChainState: map[string]interface{}{
+			"goap_plan_found": true,
+		},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Outcome != "success" {
+		t.Errorf("expected outcome 'success', got %q", bb.Outcome)
+	}
+}
+
+func TestAction_ReflectGoapOutcome_NoPlan(t *testing.T) {
+	fn := GetAction("ReflectGoapOutcome")
+	if fn == nil {
+		t.Fatal("ReflectGoapOutcome action not registered")
+	}
+	bb := &Blackboard{
+		Task:       "simple task",
+		Outcome:    "failure",
+		ChainState: map[string]interface{}{},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	// Should preserve original outcome when no plan found
+	if bb.Outcome != "failure" {
+		t.Errorf("expected outcome 'failure', got %q", bb.Outcome)
+	}
+}
+
+func TestAction_ReflectGoapOutcome_NilChainState(t *testing.T) {
+	fn := GetAction("ReflectGoapOutcome")
+	if fn == nil {
+		t.Fatal("ReflectGoapOutcome action not registered")
+	}
+	bb := &Blackboard{
+		Task:    "task",
+		Outcome: "running",
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	// Should not panic with nil ChainState
+	if bb.Outcome != "running" {
+		t.Errorf("expected outcome 'running', got %q", bb.Outcome)
+	}
+}
+
+// ============================================================================
+// Action: ExecuteGoapStep edge cases
+// ============================================================================
+
+func TestAction_ExecuteGoapStep_NoChainState(t *testing.T) {
+	fn := GetAction("ExecuteGoapStep")
+	if fn == nil {
+		t.Fatal("ExecuteGoapStep action not registered")
+	}
+	bb := &Blackboard{Task: "test"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for nil ChainState, got %d", result)
+	}
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure outcome, got %q", bb.Outcome)
+	}
+}
+
+func TestAction_ExecuteGoapStep_NoIndex(t *testing.T) {
+	fn := GetAction("ExecuteGoapStep")
+	if fn == nil {
+		t.Fatal("ExecuteGoapStep action not registered")
+	}
+	bb := &Blackboard{
+		Task:       "test",
+		ChainState: map[string]interface{}{},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for missing index, got %d", result)
+	}
+}
+
+func TestAction_ExecuteGoapStep_NoSteps(t *testing.T) {
+	fn := GetAction("ExecuteGoapStep")
+	if fn == nil {
+		t.Fatal("ExecuteGoapStep action not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 0,
+		},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for missing steps, got %d", result)
+	}
+}
+
+func TestAction_ExecuteGoapStep_PastEnd(t *testing.T) {
+	fn := GetAction("ExecuteGoapStep")
+	if fn == nil {
+		t.Fatal("ExecuteGoapStep action not registered")
+	}
+	bb := &Blackboard{
+		Task: "test",
+		ChainState: map[string]interface{}{
+			"goap_step_index": 5,
+			"goap_steps":      []string{"step1", "step2"},
+		},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != 1 {
+		t.Errorf("expected 1 for past-end, got %d", result)
+	}
+	if bb.Outcome != "success" {
+		t.Errorf("expected success outcome, got %q", bb.Outcome)
+	}
+	if !stringContains(bb.Result, "all GOAP steps completed") {
+		t.Error("result should indicate completion")
+	}
+}
+
+func TestAction_PlanGoapActions_NoActions(t *testing.T) {
+	fn := GetAction("PlanGoapActions")
+	if fn == nil {
+		t.Fatal("PlanGoapActions action not registered")
+	}
+	bb := &Blackboard{
+		Task:       "do something",
+		ChainState: map[string]interface{}{},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for no actions, got %d", result)
+	}
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure outcome, got %q", bb.Outcome)
+	}
+}
+
+func TestAction_PlanGoapActions_EmptyActions(t *testing.T) {
+	fn := GetAction("PlanGoapActions")
+	if fn == nil {
+		t.Fatal("PlanGoapActions action not registered")
+	}
+	bb := &Blackboard{
+		Task: "do something",
+		ChainState: map[string]interface{}{
+			"goap_actions": []goap.Action{},
+		},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := fn(ctx)
+	if result != -1 {
+		t.Errorf("expected -1 for empty actions, got %d", result)
+	}
+	if !stringContains(bb.Result, "no valid actions") {
+		t.Error("result should mention no valid actions")
+	}
+}
+
+// ============================================================================
+// containsAnyLower tests (line coverage for registerAlertRouterNodes helper)
+// ============================================================================
+
+func TestContainsAnyLower_Positive(t *testing.T) {
+	if !containsAnyLower("critical disk error", "critical", "emergency") {
+		t.Error("should match 'critical'")
+	}
+	if !containsAnyLower("EMERGENCY ALERT", "critical", "emergency") {
+		t.Error("should match case-insensitive")
+	}
+	if !containsAnyLower("System Health OK", "health") {
+		t.Error("should match 'health'")
+	}
+}
+
+func TestContainsAnyLower_Negative(t *testing.T) {
+	if containsAnyLower("normal system check", "critical", "emergency") {
+		t.Error("should NOT match normal text")
+	}
+	if containsAnyLower("", "error") {
+		t.Error("should NOT match empty string")
+	}
+	if containsAnyLower("short", "longer_word") {
+		t.Error("should NOT match when keyword longer than string")
 	}
 }
