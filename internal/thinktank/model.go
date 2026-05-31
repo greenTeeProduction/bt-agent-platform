@@ -1,3 +1,7 @@
+// Package thinktank implements a collaborative analytical think tank
+// where five fellows (bull, bear, technical, macro, contrarian) research
+// independently, debate dialectically (Hegelian thesis/antithesis/synthesis),
+// and peer-review findings before producing a final executive report.
 package thinktank
 
 import "time"

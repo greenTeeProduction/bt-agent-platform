@@ -1,3 +1,7 @@
+// Package research provides behavior trees for deep and quick research
+// with agent-powered iterative analysis. Trees orchestrate web search,
+// source evaluation, cross-referencing, and structured report generation
+// in a multi-phase pipeline.
 package research
 
 import "github.com/nico/go-bt-evolve/internal/evolution"

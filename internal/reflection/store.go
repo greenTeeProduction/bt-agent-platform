@@ -1,3 +1,7 @@
+// Package reflection provides persistent storage for behavior tree
+// execution records. Each Record captures the task, outcome, plan,
+// timestamp, and structured reflection (what went well, what to improve).
+// Records are stored as JSON files for post-hoc analysis and evolution.
 package reflection
 
 import (

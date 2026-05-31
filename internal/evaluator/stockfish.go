@@ -1,3 +1,9 @@
+// Package evaluator provides a Stockfish-adapted behavior tree evaluator
+// with multi-dimensional fitness scoring (success rate, stability,
+// coverage, speed, complexity). It uses transposition tables, killer
+// move heuristics, history heuristics, alpha-beta pruning, iterative
+// deepening, and late move reductions — all adapted from chess engines
+// for behavior tree optimization.
 package evaluator
 
 import (

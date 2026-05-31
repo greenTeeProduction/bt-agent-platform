@@ -1,3 +1,8 @@
+// Package startup simulates a software startup company where each
+// department (CEO, CTO, PM, Engineer, Marketing, Sales) is a behavior
+// tree. The orchestrator runs sprint/quarter/year cycles with the trees
+// acting as company roles, making decisions that affect company metrics
+// like MRR, ARR, runway, and team size.
 package startup
 
 import "time"

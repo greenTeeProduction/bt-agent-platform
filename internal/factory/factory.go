@@ -1,3 +1,8 @@
+// Package factory implements a skill-to-behavior-tree compiler that
+// converts SKILL.md specifications into executable behavior trees.
+// The pipeline: Analyzer extracts pre_checks, strategy_paths, and
+// fallback patterns → Generator produces SerializableNodes →
+// AgentFactory persists the tree for runtime execution.
 package factory
 
 import (
