@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"time"
 	"context"
 	"strings"
@@ -599,5 +600,337 @@ func TestChainAction_ToolAction_NoTool(t *testing.T) {
 	}
 }
 
-// Compile-time check: chainMockLLM implements llm.LLM
+// --- parseFinalAnswer edge cases (uncovered branches: mid-response, multi-line rest) ---
+
+func TestParseFinalAnswer_MidResponse(t *testing.T) {
+	// "Final Answer:" appears in the middle of the response, content on same line only
+	result := parseFinalAnswer("Thought: I need to think\nAction: search\nFinal Answer: The answer is Paris")
+	if result != "The answer is Paris" {
+		t.Errorf("expected 'The answer is Paris', got %q", result)
+	}
+}
+
+func TestParseFinalAnswer_MidResponseWithRest(t *testing.T) {
+	// "Final Answer:" appears mid-response with content on SAME line + rest on subsequent lines
+	result := parseFinalAnswer("Some thought\nFinal Answer: Here is the result:\n- Point 1\n- Point 2\n- Point 3")
+	if !strings.Contains(result, "Here is the result:") {
+		t.Errorf("expected result to contain header, got %q", result)
+	}
+	if !strings.Contains(result, "- Point 1") {
+		t.Errorf("expected result to contain point 1, got %q", result)
+	}
+	if !strings.Contains(result, "- Point 3") {
+		t.Errorf("expected result to contain point 3, got %q", result)
+	}
+	// Should contain exactly 4 lines (header + 3 points)
+	lines := strings.Split(result, "\n")
+	if len(lines) != 4 {
+		t.Errorf("expected 4 lines, got %d: %q", len(lines), result)
+	}
+}
+
+func TestParseFinalAnswer_MultipleMarkers(t *testing.T) {
+	// Multiple "Final Answer:" markers — first one wins, captures all subsequent content
+	// When found mid-response, the function includes ALL rest lines (including any later markers)
+	result := parseFinalAnswer("Thought: need to answer\nFinal Answer: First answer.\nSome more text\nFinal Answer: Second answer.")
+	if !strings.Contains(result, "First answer.") {
+		t.Errorf("expected result to start with 'First answer.', got %q", result)
+	}
+	if !strings.Contains(result, "Some more text") {
+		t.Errorf("expected result to include rest content, got %q", result)
+	}
+	if !strings.Contains(result, "Final Answer: Second answer.") {
+		t.Errorf("expected result to include second marker as part of captured content, got %q", result)
+	}
+}
+
+func TestParseFinalAnswer_OnlyMarkerNoContent(t *testing.T) {
+	// "Final Answer:" marker with no content after it
+	result := parseFinalAnswer("Final Answer:")
+	if result != "" {
+		t.Errorf("expected empty for marker-only, got %q", result)
+	}
+}
+
+func TestParseFinalAnswer_WithIndentedMarker(t *testing.T) {
+	// "Final Answer:" marker indented with whitespace
+	result := parseFinalAnswer("  Final Answer: The indented answer")
+	if result != "The indented answer" {
+		t.Errorf("expected 'The indented answer', got %q", result)
+	}
+}
+
+// --- execToolCall edge cases ---
+
+// errorMockLLM returns an error on Generate
+type errorMockLLM struct {
+	err error
+}
+
+func (m *errorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
+func (m *errorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *errorMockLLM) Generate(prompt string) (string, error) { return "", m.err }
+func (m *errorMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
+func (m *errorMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
+func (m *errorMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
+
+func TestChainAction_ToolCall_ChainToolsOnly(t *testing.T) {
+	// cfg.Tools is empty/nil, but bb.ChainTools has tools
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Using web_search tool",
+	}}
+	bb := &Blackboard{
+		Task: "search for something",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "web_search", description: "search the web", result: "result"},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "tool_call:{{.Task}}",
+		Metadata: map[string]any{}, // no "tools" key — falls back to bb.ChainTools
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_ToolCall_NoToolsAtAll(t *testing.T) {
+	// Neither cfg.Tools nor bb.ChainTools have tools
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "No tools needed, direct answer: 42",
+	}}
+	bb := &Blackboard{
+		Task: "simple question",
+		LLM:  mock,
+		// ChainTools is nil
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "tool_call:{{.Task}}",
+		Metadata: map[string]any{}, // no tools
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success even without tools, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_ToolCall_LLMError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("connection refused")}
+	bb := &Blackboard{
+		Task: "test",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "tool_call:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure, got %s", bb.Outcome)
+	}
+}
+
+// --- execRAGQuery edge cases ---
+
+func TestChainAction_RAGQuery_NoKGResults(t *testing.T) {
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Answer from cached context.",
+	}}
+	bb := &Blackboard{
+		Task:         "test question",
+		KgResults:    "",                       // empty
+		CachedResult: "Cached: the answer is 42", // fallback
+		LLM:          mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "rag_query:test question",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success with cached result fallback, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+func TestChainAction_RAGQuery_NoContextAtAll(t *testing.T) {
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "I don't have enough information.",
+	}}
+	bb := &Blackboard{
+		Task:         "test question",
+		KgResults:    "", // empty
+		CachedResult: "", // empty too
+		LLM:          mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "rag_query:test question",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected chain_success (even with empty context), got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_RAGQuery_LLMError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("ollama unavailable")}
+	bb := &Blackboard{
+		Task:      "test",
+		KgResults: "some data",
+		LLM:       errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "rag_query:test",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure, got %s", bb.Outcome)
+	}
+	if !strings.Contains(bb.Result, "RAG error") {
+		t.Errorf("expected RAG error message, got: %s", bb.Result)
+	}
+}
+
+// --- execConversation edge cases ---
+
+// noopMemory doesn't implement fmt.Stringer
+type noopMemory struct{}
+
+func TestChainAction_Conversation_NoMemory(t *testing.T) {
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Hello! How can I help?",
+	}}
+	bb := &Blackboard{
+		Task:        "greet",
+		LLM:         mock,
+		ChainMemory: &noopMemory{}, // does NOT implement fmt.Stringer
+		ChainState:  map[string]any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "conversation:Hello",
+		Metadata: map[string]any{
+			"system_msg": "You are a helpful assistant.",
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Errorf("expected success without memory, got %s", bb.Outcome)
+	}
+}
+
+func TestChainAction_Conversation_LLMError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("model not found")}
+	bb := &Blackboard{
+		Task:       "test",
+		LLM:        errMock,
+		ChainState: map[string]any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "conversation:test",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure, got %s", bb.Outcome)
+	}
+}
+
+// --- execMapReduce edge cases ---
+
+func TestChainAction_MapReduce_DecomposeError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("decompose failed")}
+	bb := &Blackboard{
+		Task: "analyze something",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure on decompose error, got %s", bb.Outcome)
+	}
+}
+
+// --- execRefine edge cases ---
+
+func TestChainAction_Refine_InitialError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("initial generation failed")}
+	bb := &Blackboard{
+		Task: "improve this",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "refine:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure on initial error, got %s", bb.Outcome)
+	}
+}
+
+// --- execAgent edge cases ---
+
+func TestChainAction_Agent_LLMError(t *testing.T) {
+	errMock := &errorMockLLM{err: fmt.Errorf("agent crashed")}
+	bb := &Blackboard{
+		Task: "do something complex",
+		LLM:  errMock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:{{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(3),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "failure" {
+		t.Errorf("expected failure, got %s: %s", bb.Outcome, bb.Result)
+	}
+}
+
+// Compile-time checks
 var _ llm.LLM = (*chainMockLLM)(nil)
+var _ llm.LLM = (*errorMockLLM)(nil)
