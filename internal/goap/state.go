@@ -128,6 +128,11 @@ func (ws WorldState) String() string {
 	return sb.String()
 }
 
+// IsSatisfied checks if this goal is satisfied by the given world state.
+func (g *Goal) IsSatisfied(state WorldState) bool {
+	return state.Satisfies(g.Conditions)
+}
+
 // NewGoal creates a new goal with the given name, priority, and conditions.
 func NewGoal(name string, priority float64, conditions WorldState) *Goal {
 	return &Goal{Name: name, Priority: priority, Conditions: conditions}
