@@ -17,6 +17,7 @@
 package knowledge
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -249,10 +250,10 @@ func (kg *KnowledgeGraph) Summary() string {
 		if !first {
 			s += ", "
 		}
-		s += cat + "(" + itoa(count) + ")"
+		s += cat + "(" + strconv.Itoa(count) + ")"
 		first = false
 	}
-	s += " | " + itoa(len(kg.Trees)) + " trees, " + itoa(len(kg.Edges)) + " edges"
+	s += " | " + strconv.Itoa(len(kg.Trees)) + " trees, " + strconv.Itoa(len(kg.Edges)) + " edges"
 	return s
 }
 
@@ -276,14 +277,4 @@ func (kg *KnowledgeGraph) DiscoverRelated(treeID string) []string {
 	return results
 }
 
-func itoa(n int) string {
-	if n == 0 { return "0" }
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
-}
+

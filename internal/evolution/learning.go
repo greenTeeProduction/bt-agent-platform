@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"math/rand"
 	"sort"
+	"strconv"
 )
 
 // ─── Genetic Algorithm Engine ───
@@ -223,7 +224,7 @@ func (qt *QTable) GetState(tree *SerializableNode, category string) string {
 	bucket := "low"
 	if nodes > 20 { bucket = "med" }
 	if nodes > 35 { bucket = "high" }
-	return category + ":" + bucket + ":" + itoa(depth)
+	return category + ":" + bucket + ":" + strconv.Itoa(depth)
 }
 
 // SelectAction returns best action via epsilon-greedy.
@@ -316,7 +317,7 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 }
 
 func hashTree(t *SerializableNode) string {
-	h := sha256.Sum256([]byte(t.Name + t.Type + itoa(len(t.Children))))
+	h := sha256.Sum256([]byte(t.Name + t.Type + strconv.Itoa(len(t.Children))))
 	return hex.EncodeToString(h[:])[:16]
 }
 
@@ -357,16 +358,6 @@ func maxTreeDepth(node *SerializableNode, current int) int {
 		if d > maxD { maxD = d }
 	}
 	return maxD
-}
-
-func itoa(n int) string {
-	if n == 0 { return "0" }
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
 }
 
 func max(a, b int) int {

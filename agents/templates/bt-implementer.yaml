@@ -1,0 +1,18 @@
+name: bt-implementer
+description: Pick up pending implementation plans from the vault, implement them task-by-task using the Go BT framework development workflow, run tests, and commit
+version: "1.0.0"
+tree: domain:goap_devops
+schedule: "30 */6 * * *"
+inputs:
+  - name: plan_path
+    type: text
+    required: false
+    description: "Specific plan to implement (default: oldest pending)"
+outputs:
+  - name: implementation_report
+    type: markdown
+quality:
+  required_sections: ["Plan", "Status", "Tests"]
+metadata:
+  category: dev
+  tags: "implementation,devops,plans"

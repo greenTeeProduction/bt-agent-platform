@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -562,7 +563,7 @@ func TestItoa(t *testing.T) {
 		{12345, "12345"},
 	}
 	for _, tt := range tests {
-		got := itoa(tt.n)
+		got := strconv.Itoa(tt.n)
 		if got != tt.want {
 			t.Errorf("itoa(%d) = %q, want %q", tt.n, got, tt.want)
 		}

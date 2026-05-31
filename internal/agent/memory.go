@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // MemoryEntry is a single key-value record in agent memory.
@@ -332,12 +334,7 @@ func priorityWeight(p string) int {
 	}
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n-3] + "..."
-}
+func truncate(s string, n int) string { return util.Truncate(s, n) }
 
 func summarizeOutput(output string, maxLen int) string {
 	// Get first paragraph or first maxLen chars

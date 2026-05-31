@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -233,7 +234,7 @@ func SecurityHeadersMiddleware(cfg SecurityHeadersConfig) func(http.Handler) htt
 
 			// HSTS (opt-in — only for HTTPS)
 			if cfg.EnableHSTS {
-				policy := "max-age=" + itoa(cfg.HSTSMaxAge)
+				policy := "max-age=" + strconv.Itoa(cfg.HSTSMaxAge)
 				if cfg.HSTSIncludeSub {
 					policy += "; includeSubDomains"
 				}
@@ -668,14 +669,3 @@ func CSRFMiddleware(tokenFn func() string) func(http.Handler) http.Handler {
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
-}

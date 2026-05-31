@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // SkillSpec is the extracted essence of a skill, used to generate a behavior tree.
@@ -139,9 +140,4 @@ func extractJSON(s string) string {
 	return s[start:]
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
-}
+func truncate(s string, n int) string { return util.Truncate(s, n) }

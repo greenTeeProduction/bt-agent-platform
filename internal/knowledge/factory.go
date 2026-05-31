@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // TreeTemplate captures the structural pattern of an existing tree for reuse.
@@ -391,14 +392,7 @@ func determineCategory(task string) string {
 	}
 }
 
-func containsAnyStr(s string, substrs ...string) bool {
-	for _, sub := range substrs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
-}
+func containsAnyStr(s string, substrs ...string) bool { return util.ContainsAnyStr(s, substrs...) }
 
 // ─── Public API ───
 

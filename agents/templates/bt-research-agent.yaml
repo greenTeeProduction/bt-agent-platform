@@ -1,0 +1,20 @@
+name: bt-research-agent
+description: Research behavior tree evolution methods. Search web, query NotebookLM, save to vault, create implementation plans. GOAP composite workflow.
+version: "1.0.0"
+tree: domain:goap_research
+schedule: "0 8 * * *"
+inputs:
+  - name: topic
+    type: text
+    required: false
+    default: "behavior tree evolution and multi-agent architectures"
+outputs:
+  - name: research_note
+    type: markdown
+  - name: plan
+    type: markdown
+quality:
+  required_sections: ["Findings", "Sources", "Recommendations"]
+metadata:
+  category: research
+  tags: "research,evolution,notebooklm"

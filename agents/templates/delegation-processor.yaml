@@ -1,0 +1,13 @@
+name: delegation-processor
+description: Process pending BT↔Hermes delegation requests — poll queue, route to correct agent, return results
+version: "1.0.0"
+tree: domain:data_pipeline
+schedule: "8-59/15 * * * *"
+outputs:
+  - name: delegation_report
+    type: text
+quality:
+  required_sections: ["Status", "Processed"]
+metadata:
+  category: ops
+  tags: "delegation,routing,queue"

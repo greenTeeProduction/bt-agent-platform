@@ -85,13 +85,5 @@ func TestTelegramClarifyTree(t *testing.T) {
 		t.Errorf("outcome = %s/%s, want Selector/OutcomeSelector", outcomeNode.Type, outcomeNode.Name)
 	}
 
-	t.Logf("TelegramClarifyTree: %d nodes, structure validated OK", countNodes(tree))
-}
-
-func countNodes(tree *SerializableNode) int {
-	n := 1
-	for i := range tree.Children {
-		n += countNodes(&tree.Children[i])
-	}
-	return n
+	t.Logf("TelegramClarifyTree: %d nodes, structure validated OK", CountNodes(tree))
 }

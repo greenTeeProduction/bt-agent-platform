@@ -284,7 +284,7 @@ func TestIntegration_AllKanbanTrees(t *testing.T) {
 
 func TestIntegration_MutationOperators(t *testing.T) {
 	tree := evolution.DefaultTree()
-	originalNodes := countNodes(tree)
+	originalNodes := evolution.CountNodes(tree)
 
 	t.Run("apply_mutations", func(t *testing.T) {
 		newCondition := evolution.SerializableNode{Type: "Condition", Name: "CheckConfidence"}
@@ -293,7 +293,7 @@ func TestIntegration_MutationOperators(t *testing.T) {
 			{Operation: "wrap_retry", Target: "ReflectOnOutcome"},
 		}
 		evolution.ApplyMutations(tree, ops)
-		newNodes := countNodes(tree)
+		newNodes := evolution.CountNodes(tree)
 		if newNodes <= originalNodes {
 			t.Errorf("expected more nodes after mutations, got %d (was %d)", newNodes, originalNodes)
 		}
@@ -305,17 +305,9 @@ func TestIntegration_MutationOperators(t *testing.T) {
 			{Operation: "prune_node", Target: "CachePath"},
 		}
 		evolution.ApplyMutations(tree2, ops)
-		prunedNodes := countNodes(tree2)
+		prunedNodes := evolution.CountNodes(tree2)
 		if prunedNodes >= originalNodes {
 			t.Errorf("expected fewer nodes after prune, got %d (was %d)", prunedNodes, originalNodes)
 		}
 	})
-}
-
-func countNodes(node *evolution.SerializableNode) int {
-	n := 1
-	for i := range node.Children {
-		n += countNodes(&node.Children[i])
-	}
-	return n
 }

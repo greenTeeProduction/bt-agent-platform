@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func makeDeepTree(depth int) *SerializableNode {
 	root := &SerializableNode{Type: "Selector", Name: "deep_root"}
 	current := root
 	for d := 1; d < depth; d++ {
-		child := &SerializableNode{Type: "Sequence", Name: "deep_" + itoa(d)}
+		child := &SerializableNode{Type: "Sequence", Name: "deep_" + strconv.Itoa(d)}
 		child.Children = append(child.Children, SerializableNode{Type: "Action", Name: "leaf"})
 		current.Children = append(current.Children, *child)
 		if len(current.Children) > 0 {
@@ -121,7 +122,7 @@ func TestMAPElitesGrid_Elites(t *testing.T) {
 	grid := NewMAPElitesGrid(3) // only keep top 3
 
 	for i := 0; i < 5; i++ {
-		tree := makeTestTree("t"+itoa(i), i+1, 2)
+		tree := makeTestTree("t"+strconv.Itoa(i), i+1, 2)
 		ind := &Individual{Tree: tree, Fitness: float64((i+1)*20), Genome: hashTree(tree)}
 		desc := Descriptor(tree, "test")
 		grid.Insert(desc, ind)

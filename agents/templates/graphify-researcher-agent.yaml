@@ -1,0 +1,20 @@
+name: graphify-researcher-agent
+description: Analyze BT framework with graphify. Update graph, query structural insights, cross-reference KG, find optimizations, create implementation plans. GOAP composite workflow.
+version: "1.0.0"
+tree: domain:goap_research
+schedule: "0 7 * * *"
+inputs:
+  - name: target
+    type: text
+    required: false
+    default: "/home/nico/go-bt-evolve"
+outputs:
+  - name: analysis_report
+    type: markdown
+  - name: plan
+    type: markdown
+quality:
+  required_sections: ["Graph Freshness", "Findings", "Optimizations", "Plans"]
+metadata:
+  category: research
+  tags: "graphify,analysis,optimization"

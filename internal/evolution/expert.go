@@ -1,5 +1,7 @@
 package evolution
 
+import "strings"
+
 // ExpertKnowledge encodes proven behavior tree design patterns discovered
 // through benchmark validation across 38 trees and 1000+ evolution cycles.
 //
@@ -322,14 +324,7 @@ func (ek *ExpertKnowledge) evaluateCondition(tree *SerializableNode, condition s
 	}
 }
 
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
+func containsStr(s, substr string) bool { return strings.Contains(s, substr) }
 
 func hasNodeType(node *SerializableNode, nodeType string) bool {
 	if node.Type == nodeType {

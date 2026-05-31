@@ -4,37 +4,28 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// AgentInfo holds displayed agent data.
+// AgentInfo holds the dashboard-facing agent summary.
 type AgentInfo struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Tree        string  `json:"tree"`
-	Schedule    string  `json:"schedule"`
+	Status      string  `json:"status"`       // running, scheduled, created, error
+	Schedule    string  `json:"schedule"`      // cron expression or "on_demand"
+	SuccessRate float64 `json:"success_rate"`  // 0.0-1.0
 	TotalRuns   int     `json:"total_runs"`
-	SuccessRate float64 `json:"success_rate"`
 	AvgQuality  float64 `json:"avg_quality"`
-	LastRun     string  `json:"last_run"`
-	LastOutcome string  `json:"last_outcome"`
+	LastRun     string  `json:"last_run"`      // ISO 8601
+	LastOutcome string  `json:"last_outcome"`  // success, failure, timeout
 }
 
-// AgentRunRecord is a single run from the JSONL history.
-type AgentRunRecord struct {
-	RunID     string  `json:"id"`
-	AgentName string  `json:"agent_name"`
-	Task      string  `json:"task"`
-	Outcome   string  `json:"outcome"`
-	Duration  string  `json:"duration"`
-	Quality   float64 `json:"quality"`
-	StartedAt string  `json:"started_at"`
-}
-
-// AgentYAMLConfig is the structure of an agent YAML file.
+// AgentYAMLConfig mirrors the agent YAML template format.
 type AgentYAMLConfig struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
@@ -42,25 +33,50 @@ type AgentYAMLConfig struct {
 	Schedule    string `yaml:"schedule"`
 }
 
-// ListAgents reads agent configs and history to build agent info.
+// SchedulerJobs is the scheduler state file.
+type SchedulerJobs struct {
+	Jobs []ScheduledJob `json:"jobs"`
+}
+
+// ScheduledJob mirrors the bt-agent scheduler job entry.
+type ScheduledJob struct {
+	AgentName   string  `json:"agent_name"`
+	Status      string  `json:"status"`
+	SuccessRate float64 `json:"success_rate"`
+	TotalRuns   int     `json:"total_runs"`
+	AvgQuality  float64 `json:"avg_quality"`
+	LastRun     string  `json:"last_run"`
+	LastOutcome string  `json:"last_outcome"`
+}
+
+// AgentHistoryEntry mirrors a single run record.
+type AgentHistoryEntry struct {
+	Outcome  string  `json:"outcome"`
+	Quality  float64 `json:"quality"`
+	StartedAt string `json:"started_at"`
+}
+
+// ListAgents reads agent definitions from YAML templates and combines with scheduler state.
 func ListAgents() []AgentInfo {
 	home := os.Getenv("HOME")
-	agentsDir := filepath.Join(home, ".go-bt-evolve", "agents")
-	historyDir := filepath.Join(home, ".go-bt-evolve", "history")
+	templatesDir := filepath.Join(home, "go-bt-evolve", "agents", "templates")
+	schedulerPath := filepath.Join(home, ".go-bt-evolve", "jobs", "scheduler-jobs.json")
 
-	var agents []AgentInfo
+	// Load scheduler state for live stats
+	sched := loadScheduler(schedulerPath)
 
-	entries, err := os.ReadDir(agentsDir)
+	// Read agent YAML definitions
+	entries, err := os.ReadDir(templatesDir)
 	if err != nil {
-		return agents
+		return nil
 	}
 
+	var agents []AgentInfo
 	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".yaml") {
+		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
 			continue
 		}
-		path := filepath.Join(agentsDir, entry.Name())
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(filepath.Join(templatesDir, entry.Name()))
 		if err != nil {
 			continue
 		}
@@ -68,53 +84,90 @@ func ListAgents() []AgentInfo {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			continue
 		}
-
-		name := strings.TrimSuffix(entry.Name(), ".yaml")
-		if cfg.Name != "" {
-			name = cfg.Name
+		if cfg.Name == "" {
+			cfg.Name = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		}
 
-		agent := AgentInfo{
-			Name:        name,
+		info := AgentInfo{
+			Name:        cfg.Name,
 			Description: cfg.Description,
 			Tree:        cfg.Tree,
+			Status:      "created",
 			Schedule:    cfg.Schedule,
 		}
 
-		// Parse history JSONL
-		histPath := filepath.Join(historyDir, strings.TrimSuffix(entry.Name(), ".yaml")+".jsonl")
-		if histData, err := os.ReadFile(histPath); err == nil {
-			lines := strings.Split(strings.TrimSpace(string(histData)), "\n")
-			var totalQuality float64
-			successes := 0
-			for _, line := range lines {
-				var rec AgentRunRecord
-				if err := json.Unmarshal([]byte(line), &rec); err != nil {
-					continue
+		// Merge scheduler state
+		for _, job := range sched {
+			if job.AgentName == cfg.Name {
+				info.SuccessRate = job.SuccessRate
+				info.TotalRuns = job.TotalRuns
+				info.AvgQuality = job.AvgQuality
+				info.LastRun = job.LastRun
+				info.LastOutcome = job.LastOutcome
+				info.Status = job.Status
+				if info.Status == "" {
+					info.Status = "scheduled"
 				}
-				agent.TotalRuns++
-				totalQuality += rec.Quality
-				if rec.Outcome == "success" {
-					successes++
-				}
-				// Last record wins
-				agent.LastRun = rec.StartedAt
-				agent.LastOutcome = rec.Outcome
-			}
-			if agent.TotalRuns > 0 {
-				agent.SuccessRate = float64(successes) / float64(agent.TotalRuns)
-				agent.AvgQuality = totalQuality / float64(agent.TotalRuns)
 			}
 		}
 
-		// Format last run time
-		if agent.LastRun != "" {
-			if t, err := time.Parse(time.RFC3339Nano, agent.LastRun); err == nil {
-				agent.LastRun = t.Format("2006-01-02 15:04")
-			}
-		}
-
-		agents = append(agents, agent)
+		agents = append(agents, info)
 	}
+
+	// Sort alphabetically
+	sort.Slice(agents, func(i, j int) bool {
+		return agents[i].Name < agents[j].Name
+	})
+
 	return agents
+}
+
+func loadScheduler(path string) []ScheduledJob {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var store SchedulerJobs
+	if err := json.Unmarshal(data, &store); err != nil {
+		return nil
+	}
+	return store.Jobs
+}
+
+// GetAgentHistory returns the last N run records for an agent.
+func GetAgentHistory(agentName string, limit int) []AgentHistoryEntry {
+	home := os.Getenv("HOME")
+	historyDir := filepath.Join(home, ".go-bt-evolve", "history")
+	pattern := filepath.Join(historyDir, agentName+"*.json")
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+
+	var all []AgentHistoryEntry
+	for _, match := range matches {
+		data, err := os.ReadFile(match)
+		if err != nil {
+			continue
+		}
+		var entries []AgentHistoryEntry
+		if err := json.Unmarshal(data, &entries); err != nil {
+			continue
+		}
+		all = append(all, entries...)
+	}
+
+	// Sort by most recent first
+	sort.Slice(all, func(i, j int) bool {
+		// Parse ISO timestamps for sorting
+		ti, _ := time.Parse(time.RFC3339, all[i].StartedAt)
+		tj, _ := time.Parse(time.RFC3339, all[j].StartedAt)
+		return ti.After(tj)
+	})
+
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all
 }

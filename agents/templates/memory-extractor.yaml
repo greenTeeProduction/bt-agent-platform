@@ -1,0 +1,13 @@
+name: memory-extractor
+description: Extract durable facts from recent sessions and propose memory entries. Replaces memory_extractor.py script.
+version: "1.0.0"
+tree: domain:data_pipeline
+schedule: "0 9 * * *"
+outputs:
+  - name: extraction_report
+    type: text
+quality:
+  required_sections: ["Status", "Memories Found"]
+metadata:
+  category: maintenance
+  tags: "memories,extraction,sessions"

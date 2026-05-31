@@ -172,7 +172,10 @@ func collectSystem() SystemMetrics {
 	// Process count (bt-* only)
 	out, err := exec.Command("sh", "-c", "ps aux | grep -c '[b]t-'").Output()
 	if err == nil {
-		s.Processes, _ = strconv.Atoi(strings.TrimSpace(string(out)))
+		s.Processes, err = strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		s.Processes = 0
+	}
 	}
 
 	// Uptime

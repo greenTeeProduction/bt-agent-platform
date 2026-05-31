@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -143,7 +144,9 @@ func (t *EvolveTool) Call(ctx context.Context, input string) (string, error) {
 	applied := evolution.ApplyMutations(tree, ops)
 	after := evolution.CountNodes(tree)
 	if applied > 0 {
-		_ = t.treeStore.Save(tree)
+		if err := t.treeStore.Save(tree); err != nil {
+		fmt.Fprintf(os.Stderr, "langagent: failed to save tree in Evolve tool: %v\n", err)
+	}
 	}
 	out := map[string]interface{}{
 		"evolved":      applied > 0,

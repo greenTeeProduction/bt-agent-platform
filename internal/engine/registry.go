@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"os"
 	"sync"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -336,7 +337,9 @@ func reflectOnOutcomeAction(ctx *btcore.BTContext[Blackboard]) int {
 				Outcome:       reflection.Outcome(bb.Outcome),
 				DurationMs:    bb.DurationMs,
 			}
-			_ = bb.Reflections.Save(record)
+			if err := bb.Reflections.Save(record); err != nil {
+				fmt.Fprintf(os.Stderr, "engine: failed to save reflection record for %q: %v\n", bb.Task, err)
+			}
 		}
 	}
 	return 1

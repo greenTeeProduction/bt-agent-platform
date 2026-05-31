@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -105,7 +106,7 @@ func TestParetoFront_Best(t *testing.T) {
 
 	// Add non-dominated individuals (different trade-offs)
 	for i := 0; i < 5; i++ {
-		tree := makeTestTree("t"+itoa(i), 2, 3)
+		tree := makeTestTree("t"+strconv.Itoa(i), 2, 3)
 		ind := &Individual{Tree: tree, Fitness: 50, Genome: hashTree(tree)}
 		fv := NewMultiFitness()
 		// Trade-off: higher success rate = lower path coverage
@@ -137,7 +138,7 @@ func TestParetoFront_DiversityScore(t *testing.T) {
 
 	// Add two diverse individuals
 	for i := 0; i < 2; i++ {
-		tree := makeTestTree("t"+itoa(i), 2, 3)
+		tree := makeTestTree("t"+strconv.Itoa(i), 2, 3)
 		ind := &Individual{Tree: tree, Fitness: 50, Genome: hashTree(tree)}
 		fv := NewMultiFitness()
 		fv.Set(DimSuccessRate, float64(20+i*60))
@@ -178,10 +179,10 @@ func TestStructuralMultiFitness(t *testing.T) {
 func makeOptimalParetoTree() *SerializableNode {
 	root := &SerializableNode{Type: "Selector", Name: "pareto_opt"}
 	for i := 0; i < 5; i++ {
-		root.Children = append(root.Children, SerializableNode{Type: "Condition", Name: "cond_" + itoa(i)})
+		root.Children = append(root.Children, SerializableNode{Type: "Condition", Name: "cond_" + strconv.Itoa(i)})
 	}
 	for i := 0; i < 8; i++ {
-		root.Children = append(root.Children, SerializableNode{Type: "Action", Name: "act_" + itoa(i)})
+		root.Children = append(root.Children, SerializableNode{Type: "Action", Name: "act_" + strconv.Itoa(i)})
 	}
 	// Add depth
 	seq := &SerializableNode{Type: "Sequence", Name: "deep"}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Workflow connects thinktank analysis to company execution.
@@ -359,7 +360,4 @@ func sortTasks(tasks []Task) {
 	})
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n { return s }
-	return s[:n-3] + "..."
-}
+func truncate(s string, n int) string { return util.Truncate(s, n) }

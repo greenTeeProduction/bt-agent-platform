@@ -16,6 +16,7 @@ package langagent
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -116,7 +117,9 @@ func (ea *EvolvedAgent) Run(ctx context.Context, task string) (string, error) {
 				{Operation: "increase_retries", Target: "RetrySelfCorrect"},
 			}
 			if evolution.ApplyMutations(tree, ops) > 0 {
-				_ = ea.BB.TreeStore.Save(tree)
+				if err := ea.BB.TreeStore.Save(tree); err != nil {
+					fmt.Fprintf(os.Stderr, "langagent: failed to save evolved tree: %v\n", err)
+				}
 			}
 		}
 	}
