@@ -272,8 +272,12 @@ func TestChainAction_NoLLM(t *testing.T) {
 	bt := BuildTree(tree, bb)
 	RunTask(bb, bt)
 
-	if bb.Outcome != "failure" {
-		t.Errorf("expected chain_failed, got %s", bb.Outcome)
+	// Template-only mode returns success with generated template output
+	if bb.Outcome != "success" {
+		t.Errorf("expected success in template-only mode, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if bb.Result == "" {
+		t.Error("expected non-empty result from template generation")
 	}
 }
 
@@ -934,3 +938,387 @@ func TestChainAction_Agent_LLMError(t *testing.T) {
 // Compile-time checks
 var _ llm.LLM = (*chainMockLLM)(nil)
 var _ llm.LLM = (*errorMockLLM)(nil)
+
+// --- Pure function tests: expandTemplate, expandChainStateTemplates ---
+
+func TestExpandTemplate_AllFields(t *testing.T) {
+	bb := &Blackboard{
+		Task:      "test task",
+		Plan:      "a plan",
+		Result:    "a result",
+		Outcome:   "success",
+		Complexity: "medium",
+		CachedResult: "cached data",
+		KgResults: "kg data",
+		DurationMs: 1234,
+		QualityScore: 0.85,
+		CurrentPath: "SomePath",
+		FailureCount: 3,
+	}
+	result := expandTemplate("Task={{.Task}} Plan={{.Plan}} Result={{.Result}} Outcome={{.Outcome}} Cpx={{.Complexity}} Cache={{.CachedResult}} KG={{.KgResults}} Dur={{.DurationMs}} Q={{.QualityScore}} Path={{.CurrentPath}} FC={{.FailureCount}}", bb)
+	if !strings.Contains(result, "Task=test task") {
+		t.Errorf("expected task substitution, got: %s", result)
+	}
+	if !strings.Contains(result, "Dur=1234") {
+		t.Errorf("expected DurationMs, got: %s", result)
+	}
+	if !strings.Contains(result, "Q=0.85") {
+		t.Errorf("expected QualityScore, got: %s", result)
+	}
+	if !strings.Contains(result, "FC=3") {
+		t.Errorf("expected FailureCount, got: %s", result)
+	}
+	if !strings.Contains(result, "Path=SomePath") {
+		t.Errorf("expected CurrentPath, got: %s", result)
+	}
+}
+
+func TestExpandTemplate_EmptyTemplate(t *testing.T) {
+	bb := &Blackboard{Task: "default task"}
+	result := expandTemplate("", bb)
+	if result != "default task" {
+		t.Errorf("empty template should return Task, got: %s", result)
+	}
+}
+
+func TestExpandTemplate_NoPlaceholders(t *testing.T) {
+	bb := &Blackboard{Task: "irrelevant"}
+	result := expandTemplate("Hello world", bb)
+	if result != "Hello world" {
+		t.Errorf("expected literal, got: %s", result)
+	}
+}
+
+func TestExpandChainStateTemplates_Basic(t *testing.T) {
+	bb := &Blackboard{
+		ChainState: map[string]any{
+			"user":   "Alice",
+			"age":    30,
+			"active": true,
+		},
+	}
+	result := expandChainStateTemplates("User: {{.ChainState.user}}, Age: {{.ChainState.age}}, Active: {{.ChainState.active}}", bb)
+	if !strings.Contains(result, "User: Alice") {
+		t.Errorf("expected User: Alice, got: %s", result)
+	}
+	if !strings.Contains(result, "Age: 30") {
+		t.Errorf("expected Age: 30, got: %s", result)
+	}
+}
+
+func TestExpandChainStateTemplates_NilChainState(t *testing.T) {
+	bb := &Blackboard{ChainState: nil}
+	result := expandChainStateTemplates("{{.ChainState.foo}}", bb)
+	if result != "{{.ChainState.foo}}" {
+		t.Errorf("nil chain state should leave placeholder unchanged, got: %s", result)
+	}
+}
+
+func TestExpandChainStateTemplates_MissingKey(t *testing.T) {
+	bb := &Blackboard{ChainState: map[string]any{"exists": "value"}}
+	result := expandChainStateTemplates("{{.ChainState.missing}}", bb)
+	if result != "" {
+		t.Errorf("missing key should become empty, got: %s", result)
+	}
+}
+
+func TestExpandChainStateTemplates_MultipleSubstitutions(t *testing.T) {
+	bb := &Blackboard{
+		ChainState: map[string]any{"a": "1", "b": "2", "c": "3"},
+	}
+	result := expandChainStateTemplates("a={{.ChainState.a}} b={{.ChainState.b}} c={{.ChainState.c}}", bb)
+	if result != "a=1 b=2 c=3" {
+		t.Errorf("expected a=1 b=2 c=3, got: %s", result)
+	}
+}
+
+// --- Pure function tests: generateTemplateOutput ---
+
+func TestGenerateTemplateOutput_Basic(t *testing.T) {
+	bb := &Blackboard{
+		CachedResult: "some data here",
+		ChainState:   map[string]any{"key": "val"},
+	}
+	result := generateTemplateOutput("arc42 Section 3 — Architecture Overview\nMore text", bb)
+	if !strings.Contains(result, "# arc42 Section 3") {
+		t.Errorf("expected section title, got: %s", result)
+	}
+	if !strings.Contains(result, "some data here") {
+		t.Errorf("expected cached result, got: %s", result)
+	}
+	if !strings.Contains(result, "key") {
+		t.Errorf("expected chain state key, got: %s", result)
+	}
+}
+
+func TestGenerateTemplateOutput_NoArc42Section(t *testing.T) {
+	bb := &Blackboard{
+		CachedResult: "simple data",
+	}
+	result := generateTemplateOutput("Do something with {{.Task}}", bb)
+	if !strings.Contains(result, "# Arc42 Section") {
+		t.Errorf("expected default title, got: %s", result)
+	}
+}
+
+func TestGenerateTemplateOutput_TruncatedCache(t *testing.T) {
+	long := strings.Repeat("x", 600)
+	bb := &Blackboard{CachedResult: long}
+	result := generateTemplateOutput("prompt", bb)
+	if !strings.Contains(result, "... (truncated)") {
+		t.Errorf("expected truncation, got: %s", result)
+	}
+}
+
+func TestGenerateTemplateOutput_NilChainState(t *testing.T) {
+	bb := &Blackboard{CachedResult: "data"}
+	result := generateTemplateOutput("prompt", bb)
+	if !strings.Contains(result, "data") {
+		t.Errorf("expected data in output, got: %s", result)
+	}
+}
+
+// --- Pure function tests: replaceAll ---
+
+func TestReplaceAll_Basic(t *testing.T) {
+	result := replaceAll("hello WORLD world WORLD", "WORLD", "Earth")
+	if result != "hello Earth world Earth" {
+		t.Errorf("got: %s", result)
+	}
+}
+
+func TestReplaceAll_NoMatch(t *testing.T) {
+	result := replaceAll("hello world", "MARS", "Earth")
+	if result != "hello world" {
+		t.Errorf("got: %s", result)
+	}
+}
+
+func TestReplaceAll_Empty(t *testing.T) {
+	result := replaceAll("", "x", "y")
+	if result != "" {
+		t.Errorf("got: %s", result)
+	}
+}
+
+// --- Pure function tests: splitLines ---
+
+func TestSplitLines_Basic(t *testing.T) {
+	lines := splitLines("1. First task\n2. Second task\n3. Third task")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %v", len(lines), lines)
+	}
+	if lines[0] != "First task" {
+		t.Errorf("got: %s", lines[0])
+	}
+}
+
+func TestSplitLines_EmptyInput(t *testing.T) {
+	lines := splitLines("")
+	if len(lines) != 0 {
+		t.Errorf("expected 0 lines for empty input, got %d", len(lines))
+	}
+}
+
+func TestSplitLines_SkipEmptyLines(t *testing.T) {
+	lines := splitLines("1. Task A\n\n2. Task B\n\n\n3. Task C")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines (skipping empty), got %d", len(lines))
+	}
+}
+
+func TestSplitLines_DashPrefix(t *testing.T) {
+	lines := splitLines("- Task A\n- Task B\n- Task C")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+	if lines[0] != "Task A" {
+		t.Errorf("expected 'Task A', got %q", lines[0])
+	}
+}
+
+func TestSplitLines_MixedFormats(t *testing.T) {
+	lines := splitLines("1. First\n- Second\n3. Third")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d: %v", len(lines), lines)
+	}
+	if lines[1] != "Second" {
+		t.Errorf("expected 'Second', got %q", lines[1])
+	}
+}
+
+// --- Pure function tests: tools_real.go helpers ---
+
+func TestStripHTML_Basic(t *testing.T) {
+	result := stripHTML("<b>Hello</b> <i>World</i>")
+	if result != "Hello World" {
+		t.Errorf("expected 'Hello World', got: %q", result)
+	}
+}
+
+func TestStripHTML_NoTags(t *testing.T) {
+	result := stripHTML("plain text no tags")
+	if result != "plain text no tags" {
+		t.Errorf("expected unchanged, got: %q", result)
+	}
+}
+
+func TestStripHTML_NestedTags(t *testing.T) {
+	result := stripHTML("<div><span>content</span></div>")
+	if result != "content" {
+		t.Errorf("expected 'content', got: %q", result)
+	}
+}
+
+func TestStripHTML_EmptyString(t *testing.T) {
+	result := stripHTML("")
+	if result != "" {
+		t.Errorf("expected empty, got: %q", result)
+	}
+}
+
+func TestStripHTML_Attributes(t *testing.T) {
+	result := stripHTML(`<a href="http://example.com" class="link">click here</a>`)
+	if result != "click here" {
+		t.Errorf("expected 'click here', got: %q", result)
+	}
+}
+
+func TestExtractDuckDuckGoResults_ValidHTML(t *testing.T) {
+	html := `<div class="result">
+		<a class="result__a" href="https://example.com">Example Title</a>
+		<span class="result__snippet">This is a snippet about examples.</span>
+		<span class="result__url">example.com</span>
+	</div>`
+	result := extractDuckDuckGoResults(html)
+	// The function may use fallback link extraction if snippet regex doesn't match
+	if result == "" {
+		t.Error("expected non-empty result from HTML extraction")
+	}
+	t.Logf("extract result: %s", result)
+}
+
+func TestExtractDuckDuckGoResults_NoResults(t *testing.T) {
+	result := extractDuckDuckGoResults("<html><body>no results here</body></html>")
+	if result != "" {
+		t.Errorf("expected empty for no results, got: %s", result)
+	}
+}
+
+func TestExtractDuckDuckGoResults_FallbackToLinks(t *testing.T) {
+	html := `<div class="web-result">
+		<a class="result__a" href="https://fallback.com">Fallback Title</a>
+	</div>`
+	result := extractDuckDuckGoResults(html)
+	if !strings.Contains(result, "Fallback Title") {
+		t.Errorf("expected fallback link, got: %s", result)
+	}
+}
+
+func TestExtractDuckDuckGoResults_EmptyHTML(t *testing.T) {
+	result := extractDuckDuckGoResults("")
+	if result != "" {
+		t.Errorf("expected empty, got: %s", result)
+	}
+}
+
+// --- Real tool struct tests ---
+
+func TestRealTool_NameAndDescription(t *testing.T) {
+	rt := &realTool{name: "test_tool", desc: "does testing"}
+	if rt.Name() != "test_tool" {
+		t.Errorf("expected test_tool, got %s", rt.Name())
+	}
+	if rt.Description() != "does testing" {
+		t.Errorf("expected description, got %s", rt.Description())
+	}
+}
+
+func TestRealTool_Call(t *testing.T) {
+	rt := &realTool{name: "echo", desc: "echoes input", fn: func(input string) string { return "echo: " + input }}
+	result := rt.Call("hello")
+	if result != "echo: hello" {
+		t.Errorf("expected 'echo: hello', got %q", result)
+	}
+}
+
+// --- Tool factory functions (struct validation only) ---
+
+func TestNewShellExecTool_Structure(t *testing.T) {
+	rt := newShellExecTool()
+	if rt.Name() != "shell_exec" {
+		t.Errorf("expected shell_exec, got %s", rt.Name())
+	}
+	if rt.Description() == "" {
+		t.Error("expected non-empty description")
+	}
+}
+
+func TestNewFileReadTool_Structure(t *testing.T) {
+	rt := newFileReadTool()
+	if rt.Name() != "file_read" {
+		t.Errorf("expected file_read, got %s", rt.Name())
+	}
+}
+
+func TestNewFileWriteTool_Structure(t *testing.T) {
+	rt := newFileWriteTool()
+	if rt.Name() != "file_write" {
+		t.Errorf("expected file_write, got %s", rt.Name())
+	}
+}
+
+func TestNewWebSearchTool_Structure(t *testing.T) {
+	rt := newWebSearchTool()
+	if rt.Name() != "web_search" {
+		t.Errorf("expected web_search, got %s", rt.Name())
+	}
+}
+
+func TestNewGoBuildTool_Structure(t *testing.T) {
+	rt := newGoBuildTool()
+	if rt.Name() != "go_build" {
+		t.Errorf("expected go_build, got %s", rt.Name())
+	}
+}
+
+func TestNewGoTestTool_Structure(t *testing.T) {
+	rt := newGoTestTool()
+	if rt.Name() != "go_test" {
+		t.Errorf("expected go_test, got %s", rt.Name())
+	}
+}
+
+func TestNewGoVetTool_Structure(t *testing.T) {
+	rt := newGoVetTool()
+	if rt.Name() != "go_vet" {
+		t.Errorf("expected go_vet, got %s", rt.Name())
+	}
+}
+
+func TestNewGraphifyTool_Structure(t *testing.T) {
+	rt := newGraphifyTool()
+	if rt.Name() != "graphify" {
+		t.Errorf("expected graphify, got %s", rt.Name())
+	}
+}
+
+// --- toolStub tests ---
+
+func TestToolStub_NameDescription(t *testing.T) {
+	ts := toolStub{name: "stub_tool", desc: "a stub"}
+	if ts.Name() != "stub_tool" {
+		t.Errorf("expected stub_tool, got %s", ts.Name())
+	}
+	if ts.Description() != "a stub" {
+		t.Errorf("expected description, got %s", ts.Description())
+	}
+}
+
+func TestToolStub_CallReturnsEmpty(t *testing.T) {
+	ts := toolStub{name: "stub", desc: "desc"}
+	result := ts.Call("anything")
+	if result != "" {
+		t.Errorf("expected empty (triggers LLM simulation fallback), got: %q", result)
+	}
+}
