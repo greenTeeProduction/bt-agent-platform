@@ -173,7 +173,7 @@ func DefaultTree() *SerializableNode {
 					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded and output is valid"},
 					{
 						Type: "ChainAction",
-						Name: "llm_call:Self-correct the previous task. Fix errors and produce a correct answer.",
+						Name: "llm_call:Self-correct the previous task. Task: {{.Task}}. Fix errors and produce a correct answer.",
 						Metadata: map[string]any{"max_tokens": float64(2048)},
 					},
 					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},

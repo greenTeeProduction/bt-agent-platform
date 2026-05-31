@@ -897,12 +897,13 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 				"kubernetes", "k8s", "terraform", "ansible", "jenkins",
 				"github actions", "gitlab ci", "circleci", "infrastructure", "devops")
 		}
-	case "IsDataTask":
-		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
-				"etl", "pipeline", "data ", "transform", "extract",
-				"load", "schema", "dataset", "csv", "parquet", "sql")
-		}
+		case "IsDataTask":
+			return func(b *Blackboard) bool {
+				return containsAny(strings.ToLower(b.Task),
+					"etl", "pipeline", "data ", "transform", "extract",
+					"load", "schema", "dataset", "csv", "parquet", "sql",
+					"delegation", "queue", "index", "session", "memory")
+			}
 	case "IsAnalysisTask":
 		return func(b *Blackboard) bool {
 			return containsAny(strings.ToLower(b.Task),
@@ -1365,6 +1366,21 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return func(b *Blackboard) bool { return containsAny(b.Task, "signal", "buy", "sell", "entry") }
 	case "IsRiskCheck":
 		return func(b *Blackboard) bool { return containsAny(b.Task, "risk", "stop", "position", "exposure") }
+	// --- GOAP Planning conditions ---
+	case "IsAssessRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "assess", "check", "review", "scan", "audit", "track", "measure", "maturity") }
+	case "IsSyncRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "sync", "pollinate", "cross", "align", "mismatch") }
+	// --- GOAP Research conditions ---
+	case "IsResearchRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "research", "analyze", "find ", "query", "search", "discover", "evolution") }
+	case "IsGraphifyRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "graphify", "graph", "structural", "codebase", "coupling") }
+	// --- GOAP Devops conditions ---
+	case "IsBuildRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "build", "compile", "install", "make", "go build") }
+	case "IsImplementRequest":
+		return func(b *Blackboard) bool { return containsAny(b.Task, "implement", "plan", "fix", "create", "pending") }
 	default:
 		return func(b *Blackboard) bool {
 			return true

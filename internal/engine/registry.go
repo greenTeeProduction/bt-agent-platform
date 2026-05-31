@@ -166,7 +166,12 @@ func init() {
 	RegisterAction("SelfCorrect", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.LLM != nil {
-			prompt := fmt.Sprintf("The previous task produced errors. Task: %s\n\nCorrect and return a better answer:", bb.Task)
+			// Include the previous failed output so the LLM knows what to fix
+			prevResult := bb.Result
+			if prevResult == "" && len(bb.Results) > 0 {
+				prevResult = bb.Results[len(bb.Results)-1]
+			}
+			prompt := fmt.Sprintf("The previous task produced errors. Task: %s\n\nPrevious output: %s\n\nCorrect the errors and produce a better answer:", bb.Task, prevResult)
 			result, err := bb.LLM.Generate(prompt)
 			if err == nil {
 				bb.Result = result
@@ -205,6 +210,7 @@ func init() {
 	registerGoapNodes()
 	registerAlertRouterNodes()
 	registerA2ANodes()
+	registerScriptNodes()
 }
 
 // registerAlertRouterNodes registers conditions and actions for the alert_router tree.
