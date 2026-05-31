@@ -3,6 +3,7 @@ package knowledge
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -40,7 +41,15 @@ func NewFactory(kg *KnowledgeGraph) *Factory {
 
 // extractTemplates learns structural patterns from all registered trees.
 func (f *Factory) extractTemplates() {
-	for id, meta := range f.Graph.Trees {
+	// Collect and sort IDs for deterministic template selection.
+	ids := make([]string, 0, len(f.Graph.Trees))
+	for id := range f.Graph.Trees {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		meta := f.Graph.Trees[id]
 		// For now we store metadata only — trees are resolved at breed time
 		tmpl := &TreeTemplate{
 			SourceID: id,

@@ -122,64 +122,6 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		return fn
 	}
 	switch name {
-	case "AnalyzeTask":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Complexity = bb.LLM.AnalyzeComplexity(bb.Task)
-			return 1
-		}
-	case "ExecutePlan":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Plan = bb.LLM.GeneratePlan(bb.Task, bb.Complexity)
-			bb.Result = fmt.Sprintf("Executed plan for: %s (complexity: %s)", bb.Task, bb.Complexity)
-			bb.Outcome = string(reflection.Success) // mark success for downstream conditions
-			return 1
-		}
-	case "ReflectOnOutcome":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			wentWell, toImprove := bb.LLM.Reflect(bb.Task, bb.Outcome, bb.Plan)
-
-			// Validate output quality — mark as failure if output is garbage
-			if !validateOutputQuality(bb) {
-				bb.Outcome = string(reflection.Failure)
-				bb.Result = fmt.Sprintf("OUTPUT QUALITY FAILED (score=%.1f): %s", bb.QualityScore, bb.Result)
-				toImprove = "Output quality below threshold — retry with more detail"
-			}
-
-			record := &reflection.Record{
-				Task:          bb.Task,
-				Plan:          bb.Plan,
-				WhatWentWell:  []string{wentWell},
-				WhatToImprove: []string{toImprove},
-				Outcome:       reflection.Outcome(bb.Outcome),
-				DurationMs:    bb.DurationMs,
-			}
-			if bb.Reflections != nil {
-				_ = bb.Reflections.Save(record)
-			}
-			return 1
-		}
-	case "SelfCorrect":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			// Retry with a corrected plan
-			bb.Plan = fmt.Sprintf("CORRECTED: %s (previous: %s)", bb.Task, bb.Plan)
-			return 1
-		}
-	case "EscalateToDeepSeek":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("[ESCALATED] Task '%s' sent to DeepSeek", bb.Task)
-			return 1
-		}
-	// --- Tool setup actions (populate bb.ChainTools) ---
-	case "SetupDefaultTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			if bb.ChainTools == nil {
-				bb.ChainTools = []any{
-					toolStub{name: "web_search", desc: "Search the web for information"},
-					toolStub{name: "calculator", desc: "Perform mathematical calculations"},
-				}
-			}
-			return 1
-		}
 	case "SetupDevTools":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
@@ -261,31 +203,6 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 					return 1
 				}
 			}
-			return -1
-		}
-	case "UpdateBehaviorTree":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			if bb.FailureCount >= 3 && bb.TreeStore != nil {
-				tree, err := bb.TreeStore.Load()
-				if err != nil || tree == nil {
-					return 1
-				}
-				ops := []evolution.MutationOp{
-					{Operation: "wrap_retry", Target: "AnalyzeTask"},
-				}
-				applied := evolution.ApplyMutations(tree, ops)
-				if applied > 0 {
-					_ = bb.TreeStore.Save(tree)
-				}
-			}
-			return 1
-		}
-	case "ValidateOutput":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			if validateOutputQuality(bb) {
-				return 1
-			}
-			bb.Outcome = string(reflection.Failure)
 			return -1
 		}
 	// --- Go developer actions ---
@@ -922,128 +839,13 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		return fn
 	}
 	switch name {
-	case "ValidateInput":
-		return func(b *Blackboard) bool {
-			return len(b.Task) > 0
-		}
-	case "CheckPrerequisites":
-		return func(b *Blackboard) bool {
-			return true // always ready
-		}
 	case "IsHighPriority":
 		return func(b *Blackboard) bool {
 			return containsAny(b.Task, "critical", "urgent", "asap")
 		}
-	case "CheckKnowledgeGap":
-		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "what is", "explain", "how does", "define", "kubernetes", "docker", "rust", "algorithm")
-		}
-	case "CheckCache":
-		return func(b *Blackboard) bool {
-			return b.CachedResult != ""
-		}
-	case "WasSuccessful":
-		return func(b *Blackboard) bool {
-			// Accept both tree outcomes (success) and chain outcomes (chain_success)
-			return b.Outcome == string(reflection.Success) || b.Outcome == "chain_success"
-		}
 	case "ValidateOutput":
 		return func(b *Blackboard) bool {
 			return validateOutputQuality(b)
-		}
-	// --- Go developer conditions ---
-	case "HasClearTask":
-		return func(b *Blackboard) bool {
-			task := strings.TrimSpace(b.Task)
-			if len(task) < 1 {
-				return false
-			}
-			lower := strings.ToLower(task)
-			// Reject injection/script patterns (common attack vectors)
-			dangerPatterns := []string{"<script", "drop table", "select * from",
-				"union select", "1=1", "exec(", "eval(", "onerror", "onload",
-				"javascript:", "vbscript:", "document.cookie", "../etc/passwd",
-				"cmd.exe", "powershell", "wget http", "curl http",
-				"undefined has no properties", "has no properties"}
-			for _, p := range dangerPatterns {
-				if strings.Contains(lower, p) {
-					return false
-				}
-			}
-			// Reject all-digit inputs (not tasks)
-			allDigit := true
-			for _, c := range task {
-				if c < '0' || c > '9' {
-					allDigit = false
-					break
-				}
-			}
-			if allDigit && len(task) > 1 {
-				return false
-			}
-			// Reject standalone programming keywords (no context → not a task)
-			standaloneRejects := []string{"nil", "null", "undefined", "nan", "none",
-				"true", "false", "void", "inf"}
-			for _, kw := range standaloneRejects {
-				if lower == kw {
-					return false
-				}
-			}
-			// Accept if it has meaningful content (not just punctuation/whitespace)
-			hasMeaningful := false
-			for _, c := range task {
-				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-					(c >= '0' && c <= '9') || c == '$' || c == '€' || c == '£' ||
-					c == '%' || c == '#' || c == '@' || c == '&' || c == '/' {
-					hasMeaningful = true
-					break
-				}
-			}
-			if !hasMeaningful {
-				return false
-			}
-			// Short but meaningful inputs: accept alphanumeric/currency (e.g., "$0", "FAQ", "API3")
-			// Reject single-character or pure-alpha 2-char inputs as noise
-			if len(task) == 1 && (task[0] >= '0' && task[0] <= '9') {
-				return true // single digit is valid
-			}
-			if len(task) >= 2 && len(task) <= 5 {
-				return true
-			}
-			// Accept if it has an action verb OR is a clear question/statement
-			verbs := []string{"build", "fix", "add", "create", "implement", "write", "debug",
-				"test", "deploy", "review", "refactor", "analyze", "optimize", "update",
-				"remove", "migrate", "upgrade", "configure", "setup", "run", "design",
-				"explain", "show", "find", "generate", "make", "check", "search", "list",
-				"audit", "summarize", "investigate", "research", "evaluate", "validate",
-				"alert", "card", "crash", "model", "scan", "report", "project", "source",
-				"note", "assemble", "compare", "forecast", "move", "story", "simulate",
-				"manage", "identify", "assess", "prepare", "collect", "monitor", "track",
-				"train", "profile", "compute", "calculate", "measure", "reconcile",
-				"transcribe", "ingest", "synthesize", "predict", "verify", "transform",
-				"pipeline", "extract", "load", "import", "export", "publish", "query",
-				"notebook", "compile", "format", "lint", "vet", "diagram", "document",
-				"convert", "inspect", "trace", "diagnose", "classify", "aggregate",
-				"tell", "become", "give", "help", "start", "stop", "get", "set",
-				"read", "open", "close", "begin", "finish", "plan", "organize"}
-			for _, v := range verbs {
-				if strings.Contains(lower, v) {
-					return true
-				}
-			}
-			questionPatterns := []string{"what ", "how ", "why ", "best practice", "example",
-				"difference", "compare", "tutorial", "guide", "document", "summary",
-				"overview", "architecture", "pattern", "convention", "idiom", "benchmark"}
-			for _, p := range questionPatterns {
-				if strings.Contains(lower, p) {
-					return true
-				}
-			}
-			// Fallback: accept well-formed natural language (multi-word, reasonable length)
-			if len(task) > 20 && strings.Count(lower, " ") >= 2 {
-				return true
-			}
-			return false
 		}
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
