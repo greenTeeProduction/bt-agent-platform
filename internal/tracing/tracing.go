@@ -386,9 +386,14 @@ func GetGlobalTracer() Tracer {
 }
 
 // StartSpan creates a span using the global tracer. Returns the new context
-// containing the span, and the span itself.
+// containing the span, and the span itself. If no global tracer is set
+// (nil), falls back to a noopSpan gracefully.
 func StartSpan(ctx context.Context, name string) (context.Context, Span) {
-	return GetGlobalTracer().StartSpan(ctx, name)
+	t := GetGlobalTracer()
+	if t == nil {
+		return ctx, noopSpan{}
+	}
+	return t.StartSpan(ctx, name)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

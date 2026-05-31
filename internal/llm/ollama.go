@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 	"github.com/tmc/langchaingo/llms/ollama"
 )
 
@@ -79,14 +80,28 @@ func NewClient(cfg Config) (*Client, error) {
 }
 
 // generateCtx calls the LLM with a caller-provided context and timeout.
+// Wraps the call in a tracing span so LLM execution time is visible
+// alongside the existing engine and MCP tracing.
 func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt string) (string, error) {
+	traceCtx, span := tracing.StartSpan(ctx, "llm:generate")
+	defer span.End()
+
+	span.SetAttribute("llm.model", c.cfg.Model)
+	span.SetAttribute("llm.prompt_len", fmt.Sprintf("%d", len(prompt)))
+	span.SetAttribute("llm.timeout", timeout.String())
+
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result, err := c.llm.Call(callCtx, prompt)
 	if err != nil {
+		span.RecordError(err)
 		return "", fmt.Errorf("llm call: %w", err)
 	}
-	return strings.TrimSpace(result), nil
+	trimmed := strings.TrimSpace(result)
+	span.SetAttribute("llm.response_len", fmt.Sprintf("%d", len(trimmed)))
+
+	_ = traceCtx // may be used for cancellation propagation in the future
+	return trimmed, nil
 }
 
 // generate is the legacy helper using context.Background() and the default timeout.
