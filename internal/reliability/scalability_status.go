@@ -10,8 +10,9 @@ import (
 )
 
 // ScalabilityStatus aggregates stats from all scalability components
-// — worker pool, concurrency limiter, queue, agent router, and connection
-// pool — into a single JSON-serializable snapshot for dashboard monitoring.
+// — worker pool, concurrency limiter, queue, agent router, connection
+// pool, and heartbeat — into a single JSON-serializable snapshot for
+// dashboard monitoring of distributed multi-node deployments.
 type ScalabilityStatus struct {
 	// Timestamp is when this snapshot was taken.
 	Timestamp time.Time `json:"timestamp"`
@@ -25,11 +26,14 @@ type ScalabilityStatus struct {
 	// Queue stats (nil if no queue configured).
 	Queue *QueueStats `json:"queue,omitempty"`
 
-	// Router stats: number of executors, healthy, unhealthy.
+	// Router stats: number of executors, healthy, unhealthy, and failures.
 	Router *RouterStats `json:"router,omitempty"`
 
 	// ConnPool stats (nil if no connection pool configured).
 	ConnPool *ConnPoolStats `json:"conn_pool,omitempty"`
+
+	// Heartbeat stats (nil if no heartbeat tracker configured).
+	Heartbeat *HeartbeatStats `json:"heartbeat,omitempty"`
 }
 
 // WorkerPoolStats captures worker pool capacity and utilization.
@@ -56,11 +60,12 @@ type QueueStats struct {
 	MaxLen  int `json:"max_len,omitempty"` // -1 = unbounded
 }
 
-// RouterStats captures agent executor distribution.
+// RouterStats captures agent executor distribution and failure tracking.
 type RouterStats struct {
 	Total     int `json:"total"`
 	Healthy   int `json:"healthy"`
 	Unhealthy int `json:"unhealthy"`
+	Failures  int `json:"failures,omitempty"` // executors with consecutive failures > 0
 }
 
 // NewScalabilityStatus creates a status snapshot from the given components.
@@ -72,6 +77,8 @@ func NewScalabilityStatus(
 	maxLen int,
 	routerTotal, routerHealthy int,
 	cp *ConnPool,
+	routerFailures int,
+	hb *HeartbeatStats,
 ) *ScalabilityStatus {
 	s := &ScalabilityStatus{Timestamp: time.Now()}
 
@@ -104,17 +111,22 @@ func NewScalabilityStatus(
 		}
 	}
 
-	if routerTotal > 0 {
+	if routerTotal > 0 || routerFailures > 0 {
 		s.Router = &RouterStats{
 			Total:     routerTotal,
 			Healthy:   routerHealthy,
 			Unhealthy: routerTotal - routerHealthy,
+			Failures:  routerFailures,
 		}
 	}
 
 	if cp != nil {
 		cs := cp.Stats()
 		s.ConnPool = &cs
+	}
+
+	if hb != nil {
+		s.Heartbeat = hb
 	}
 
 	return s
@@ -127,7 +139,8 @@ func (wp *WorkerPool) Workers() int {
 	return wp.workers
 }
 
-// HTTPHandler returns an http.HandlerFunc that writes a JSON snapshot.
+// HTTPHandler returns an http.HandlerFunc that writes a JSON snapshot
+// of all scalability components including heartbeat and failure tracking.
 func HTTPHandler(
 	wp *WorkerPool,
 	cl *ConcurrencyLimiter,
@@ -136,6 +149,8 @@ func HTTPHandler(
 	routerTotal func() int,
 	routerHealthy func() int,
 	cp *ConnPool,
+	routerFailures func() int,
+	heartbeatStats func() *HeartbeatStats,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -143,7 +158,8 @@ func HTTPHandler(
 			return
 		}
 
-		var pending, maxLen, rTotal, rHealthy int
+		var pending, maxLen, rTotal, rHealthy, rFailures int
+		var hb *HeartbeatStats
 		if queuePending != nil {
 			pending = queuePending()
 		}
@@ -156,8 +172,14 @@ func HTTPHandler(
 		if routerHealthy != nil {
 			rHealthy = routerHealthy()
 		}
+		if routerFailures != nil {
+			rFailures = routerFailures()
+		}
+		if heartbeatStats != nil {
+			hb = heartbeatStats()
+		}
 
-		status := NewScalabilityStatus(wp, cl, pending, maxLen, rTotal, rHealthy, cp)
+		status := NewScalabilityStatus(wp, cl, pending, maxLen, rTotal, rHealthy, cp, rFailures, hb)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(status)
 	}

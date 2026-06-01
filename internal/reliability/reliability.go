@@ -845,6 +845,7 @@ type AgentRouter struct {
 	executorFailures map[int]*executorFailureState // per-executor failure tracking
 	failureThreshold int                           // consecutive failures before cooldown (default 5)
 	failureCooldown  time.Duration                 // cooldown duration after threshold exceeded (default 30s)
+	heartbeat        *AgentRouterHeartbeat         // async health tracking (optional, nil = synchronous only)
 }
 
 // NewAgentRouter creates a router with the given executors.
@@ -961,7 +962,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 			continue
 		}
 
-		if err := e.Health(); err != nil {
+		if err := r.executeHealthCheck(idx, e); err != nil {
 			continue // skip unhealthy executors
 		}
 		tried++
@@ -969,6 +970,8 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		if err == nil {
 			// Success resets failure counter and clears cooldown.
 			r.recordSuccess(idx)
+			// Refresh heartbeat timestamp after successful execution.
+			r.pingHeartbeatAfterSuccess(idx)
 			return result, nil
 		}
 		// Record failure for zombie detection.

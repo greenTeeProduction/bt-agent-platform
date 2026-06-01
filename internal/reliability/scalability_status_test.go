@@ -8,7 +8,7 @@ import (
 )
 
 func TestScalabilityStatus_Empty(t *testing.T) {
-	s := NewScalabilityStatus(nil, nil, 0, 0, 0, 0, nil)
+	s := NewScalabilityStatus(nil, nil, 0, 0, 0, 0, nil, 0, nil)
 	if s.Timestamp.IsZero() {
 		t.Error("expected non-zero timestamp")
 	}
@@ -24,12 +24,15 @@ func TestScalabilityStatus_Empty(t *testing.T) {
 	if s.Router != nil {
 		t.Error("expected nil Router when routerTotal=0")
 	}
+	if s.Heartbeat != nil {
+		t.Error("expected nil Heartbeat when none provided")
+	}
 }
 
 func TestScalabilityStatus_WithWorkerPool(t *testing.T) {
 	wp := NewWorkerPool(2)
 
-	s := NewScalabilityStatus(wp, nil, 0, 0, 0, 0, nil)
+	s := NewScalabilityStatus(wp, nil, 0, 0, 0, 0, nil, 0, nil)
 	if s.WorkerPool == nil {
 		t.Fatal("expected WorkerPool stats")
 	}
@@ -52,7 +55,7 @@ func TestScalabilityStatus_WithWorkerPool(t *testing.T) {
 func TestScalabilityStatus_WithConcurrencyLimiter(t *testing.T) {
 	cl := NewConcurrencyLimiter(5)
 
-	s := NewScalabilityStatus(nil, cl, 0, 0, 0, 0, nil)
+	s := NewScalabilityStatus(nil, cl, 0, 0, 0, 0, nil, 0, nil)
 	if s.ConcurrencyLimiter == nil {
 		t.Fatal("expected ConcurrencyLimiter stats")
 	}
@@ -69,7 +72,7 @@ func TestScalabilityStatus_WithConcurrencyLimiter(t *testing.T) {
 
 func TestScalabilityStatus_WithQueue(t *testing.T) {
 	// pending > 0 should populate Queue stats
-	s := NewScalabilityStatus(nil, nil, 42, 1000, 0, 0, nil)
+	s := NewScalabilityStatus(nil, nil, 42, 1000, 0, 0, nil, 0, nil)
 	if s.Queue == nil {
 		t.Fatal("expected Queue stats when pending=42")
 	}
@@ -82,7 +85,7 @@ func TestScalabilityStatus_WithQueue(t *testing.T) {
 }
 
 func TestScalabilityStatus_WithRouter(t *testing.T) {
-	s := NewScalabilityStatus(nil, nil, 0, 0, 3, 2, nil)
+	s := NewScalabilityStatus(nil, nil, 0, 0, 3, 2, nil, 0, nil)
 	if s.Router == nil {
 		t.Fatal("expected Router stats when routerTotal=3")
 	}
@@ -95,6 +98,9 @@ func TestScalabilityStatus_WithRouter(t *testing.T) {
 	if s.Router.Unhealthy != 1 {
 		t.Errorf("expected Unhealthy=1, got %d", s.Router.Unhealthy)
 	}
+	if s.Router.Failures != 0 {
+		t.Errorf("expected Failures=0, got %d", s.Router.Failures)
+	}
 }
 func TestScalabilityStatus_AllComponents(t *testing.T) {
 	wp := NewWorkerPool(4)
@@ -102,11 +108,15 @@ func TestScalabilityStatus_AllComponents(t *testing.T) {
 	cl := NewConcurrencyLimiter(10)
 	cp := NewConnPool(ConnPoolConfig{})
 
-	s := NewScalabilityStatus(wp, cl, 7, 500, 4, 3, cp)
+	s := NewScalabilityStatus(wp, cl, 7, 500, 4, 3, cp, 0, nil)
 
 	if s.WorkerPool == nil || s.ConcurrencyLimiter == nil ||
 		s.Queue == nil || s.Router == nil || s.ConnPool == nil {
 		t.Error("expected all five components populated")
+	}
+
+	if s.Heartbeat != nil {
+		t.Error("expected nil Heartbeat when none provided")
 	}
 
 	if s.WorkerPool.Workers != 4 {
@@ -135,7 +145,7 @@ func TestScalabilityStatus_JSONRoundTrip(t *testing.T) {
 	cl := NewConcurrencyLimiter(8)
 	cp := NewConnPool(ConnPoolConfig{})
 
-	s := NewScalabilityStatus(wp, cl, 5, 200, 2, 2, cp)
+	s := NewScalabilityStatus(wp, cl, 5, 200, 2, 2, cp, 0, nil)
 	data, err := json.Marshal(s)
 	if err != nil {
 		t.Fatalf("JSON marshal failed: %v", err)
@@ -170,7 +180,7 @@ func TestScalabilityStatus_HTTPHandler(t *testing.T) {
 	wp := NewWorkerPool(2)
 	defer wp.Shutdown()
 
-	handler := HTTPHandler(wp, nil, nil, nil, nil, nil, nil)
+	handler := HTTPHandler(wp, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/scalability", nil)
 	rec := httptest.NewRecorder()
@@ -191,7 +201,7 @@ func TestScalabilityStatus_HTTPHandler(t *testing.T) {
 }
 
 func TestScalabilityStatus_HTTPHandler_MethodNotAllowed(t *testing.T) {
-	handler := HTTPHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := HTTPHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/scalability", nil)
 	rec := httptest.NewRecorder()
@@ -213,7 +223,7 @@ func TestWorkerPool_Workers(t *testing.T) {
 
 func TestScalabilityStatus_QueueMaxLenZero(t *testing.T) {
 	// maxLen=0 with pending>0 should still populate queue
-	s := NewScalabilityStatus(nil, nil, 3, 0, 0, 0, nil)
+	s := NewScalabilityStatus(nil, nil, 3, 0, 0, 0, nil, 0, nil)
 	if s.Queue == nil {
 		t.Error("expected Queue when pending=3 even with maxLen=0")
 	}

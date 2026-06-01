@@ -86,13 +86,17 @@ func (r *AgentRouter) ensureActiveCounts() {
 // fewest in-flight requests. Returns -1 if no executor is healthy.
 // Caller must NOT hold r.mu since Health() may perform network calls.
 // activeCountsSnapshot provides a snapshot of active connection counts.
+// Uses heartbeat-aware health checking when available.
 func (r *AgentRouter) pickLeastConnections(executors []AgentExecutor, activeCountsSnapshot []int64) int {
 	bestIdx := -1
 	var bestCount int64 = 1<<63 - 1 // max int64
 
 	for i, e := range executors {
-		if e.Health() != nil {
-			continue // skip unhealthy
+		// Heartbeat-aware health check first.
+		if r.isAliveByHeartbeat(i) {
+			// Heartbeat says alive — proceed.
+		} else if e.Health() != nil {
+			continue // skip unhealthy executors
 		}
 		count := int64(0)
 		if i < len(activeCountsSnapshot) {

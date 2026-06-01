@@ -110,7 +110,7 @@ func newScalabilityProbeServer(t *testing.T, nodeName string, healthy, scalabili
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(NewScalabilityStatus(nil, nil, 3, 100, 2, 2, nil))
+		_ = json.NewEncoder(w).Encode(NewScalabilityStatus(nil, nil, 3, 100, 2, 2, nil, 0, nil))
 	})
 	mux.HandleFunc("/api/agents/execute", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
