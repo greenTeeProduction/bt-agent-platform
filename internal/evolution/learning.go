@@ -96,9 +96,12 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 	p.Evaluate(fitnessFn)
 	p.PrevBestFitness = p.BestFitness
 	eliteCount := max(2, len(p.Individuals)/10)
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
+		guidance := supervisor.Guide(BuildPopulationState(p))
+		mutationRate := guidance.RecommendedRate
 
 		// Sort by fitness descending
 		sort.Slice(p.Individuals, func(i, j int) bool {
@@ -119,8 +122,8 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 		for i := eliteCount; i < len(p.Individuals); i++ {
 			parents := p.Select()
 			child := Crossover(parents[0], parents[1])
-			// Mutate with 30% probability
-			if rand.Float64() < 0.3 {
+			// Mutate with phase-aware probability recommended by the supervisor.
+			if rand.Float64() < mutationRate {
 				ops := randomMutation(child)
 				ApplyMutations(child, ops)
 				p.TotalMutations++
@@ -317,6 +320,10 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 		for k, v := range t.Metadata {
 			c.Metadata[k] = v
 		}
+	}
+	if t.Edges != nil {
+		c.Edges = make([]TypedEdge, len(t.Edges))
+		copy(c.Edges, t.Edges)
 	}
 	for _, ch := range t.Children {
 		c.Children = append(c.Children, *cloneTree(&ch))

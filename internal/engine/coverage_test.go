@@ -33,6 +33,16 @@ func TestValidateOutput_ErrorPattern(t *testing.T) {
 	}
 }
 
+func TestValidateOutput_QualityFailurePrefix(t *testing.T) {
+	bb := &Blackboard{Result: "OUTPUT QUALITY FAILED (score=0.1): ## Fabricated Report\n\nThis output is long and structured, but it must remain a quality failure."}
+	if validateOutputQuality(bb) {
+		t.Fatalf("quality-failure wrapper should fail, score=%.2f", bb.QualityScore)
+	}
+	if bb.QualityScore > 0.1 {
+		t.Fatalf("quality-failure wrapper should keep low quality score, got %.2f", bb.QualityScore)
+	}
+}
+
 func TestValidateOutput_Structured(t *testing.T) {
 	bb := &Blackboard{Result: "# Report\n\n## Findings\n- Finding 1\n- Finding 2\n\n## Code\n```\nexample\n```\n\nDetailed analysis with substantial content for quality validation."}
 	if !validateOutputQuality(bb) {

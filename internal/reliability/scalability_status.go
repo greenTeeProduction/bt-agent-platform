@@ -1,5 +1,6 @@
 // Package reliability provides scalability status aggregation for
-// monitoring worker pools, queues, concurrency limiters, and agent routers.
+// monitoring worker pools, queues, concurrency limiters, agent routers,
+// and connection pools.
 package reliability
 
 import (
@@ -9,8 +10,8 @@ import (
 )
 
 // ScalabilityStatus aggregates stats from all scalability components
-// — worker pool, concurrency limiter, queue, and agent router — into
-// a single JSON-serializable snapshot for dashboard monitoring.
+// — worker pool, concurrency limiter, queue, agent router, and connection
+// pool — into a single JSON-serializable snapshot for dashboard monitoring.
 type ScalabilityStatus struct {
 	// Timestamp is when this snapshot was taken.
 	Timestamp time.Time `json:"timestamp"`
@@ -26,6 +27,9 @@ type ScalabilityStatus struct {
 
 	// Router stats: number of executors, healthy, unhealthy.
 	Router *RouterStats `json:"router,omitempty"`
+
+	// ConnPool stats (nil if no connection pool configured).
+	ConnPool *ConnPoolStats `json:"conn_pool,omitempty"`
 }
 
 // WorkerPoolStats captures worker pool capacity and utilization.
@@ -67,6 +71,7 @@ func NewScalabilityStatus(
 	pending int,
 	maxLen int,
 	routerTotal, routerHealthy int,
+	cp *ConnPool,
 ) *ScalabilityStatus {
 	s := &ScalabilityStatus{Timestamp: time.Now()}
 
@@ -107,6 +112,11 @@ func NewScalabilityStatus(
 		}
 	}
 
+	if cp != nil {
+		cs := cp.Stats()
+		s.ConnPool = &cs
+	}
+
 	return s
 }
 
@@ -125,6 +135,7 @@ func HTTPHandler(
 	queueMaxLen func() int,
 	routerTotal func() int,
 	routerHealthy func() int,
+	cp *ConnPool,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -146,7 +157,7 @@ func HTTPHandler(
 			rHealthy = routerHealthy()
 		}
 
-		status := NewScalabilityStatus(wp, cl, pending, maxLen, rTotal, rHealthy)
+		status := NewScalabilityStatus(wp, cl, pending, maxLen, rTotal, rHealthy, cp)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(status)
 	}

@@ -208,6 +208,10 @@ func registerArc42Nodes() {
 
 	RegisterAction("ReadTestCoverage", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		if strings.HasSuffix(os.Args[0], ".test") {
+			setChainState(bb, "coverage", "coverage skipped: running inside go test to avoid recursive test execution")
+			return 1
+		}
 		out, _ := exec.Command("bash", "-c",
 			`go test ./... -coverprofile=/tmp/arc42_cover.out -count=1 -timeout 60s 2>&1 | tail -10`).Output()
 		setChainState(bb, "coverage", string(out))

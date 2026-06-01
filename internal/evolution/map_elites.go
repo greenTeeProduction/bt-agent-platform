@@ -194,6 +194,24 @@ func (g *MAPElitesGrid) BestIndividual() *Individual {
 	return best
 }
 
+// SpecialistDistribution returns occupied MAP-Elites cells grouped by domain.
+// The resulting map feeds the LLM supervisor's structured population state.
+func (g *MAPElitesGrid) SpecialistDistribution() map[string]int {
+	domains := make(map[string]int)
+	if g == nil {
+		return domains
+	}
+	for key := range g.Cells {
+		var domain string
+		var nb, db int
+		if _, err := fmt.Sscanf(key, "n%d|d%d|%s", &nb, &db, &domain); err != nil || domain == "" {
+			domain = "unknown"
+		}
+		domains[domain]++
+	}
+	return domains
+}
+
 // MAPElitesPopulation wraps a Population with a MAP-Elites grid for diversity-preserving evolution.
 type MAPElitesPopulation struct {
 	*Population
@@ -247,9 +265,12 @@ func (mp *MAPElitesPopulation) SelectElites() []*SerializableNode {
 func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*SerializableNode) float64) *SerializableNode {
 	mp.Evaluate(fitnessFn)
 	eliteCount := max(2, len(mp.Individuals)/10)
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		mp.Generation++
+		guidance := supervisor.Guide(BuildPopulationStateWithGrid(mp.Population, mp.Grid, mp.Domain))
+		mutationRate := guidance.RecommendedRate
 
 		// Get diverse elite parents from MAP-Elites grid
 		mapElites := mp.Grid.Elites()
@@ -279,7 +300,7 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 		for i := eliteCount; i < len(mp.Individuals); i++ {
 			parents := mp.SelectElites()
 			child := Crossover(parents[0], parents[1])
-			if rand.Float64() < 0.3 {
+			if rand.Float64() < mutationRate {
 				ops := randomMutation(child)
 				ApplyMutations(child, ops)
 			}

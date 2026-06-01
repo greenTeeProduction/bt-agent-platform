@@ -14,6 +14,9 @@ import "sync"
 // This is the PROACTIVE counterpart to QualityGate (which is REACTIVE —
 // rollback after regression). Crisis detection catches diversity collapse
 // before regression happens.
+//
+// Plan #4 extensions: population-level crisis detection, regression spiral
+// tracking, quality crash detection, and emergency action recommendations.
 type CrisisDetector struct {
 	DiversityThreshold float64 // δ_d, default 0.2
 	StagnationLimit    int     // δ_s, default 5
@@ -24,6 +27,10 @@ type CrisisDetector struct {
 	stagnation    map[string]int     // treeName → consecutive epochs w/o improvement
 	lastBestFit   map[string]float64 // treeName → last best composite fitness
 	lastDiversity float64            // most recent diversity score
+
+	// Plan #4: population-level state
+	regressionStreak int // consecutive generations with high regression rate
+	qualityCrash     int // consecutive generations with low working ratio
 }
 
 // NewCrisisDetector creates a crisis detector with sensible defaults.
@@ -134,4 +141,65 @@ func (c *CrisisDetector) LastDiversity() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.lastDiversity
+}
+
+// ——— Plan #4 extensions ———
+
+// DetectPopulation checks for population-level crisis conditions.
+// This is separate from per-tree Detect; it evaluates the entire population
+// for regression spirals, quality crashes, and overall diversity collapse.
+func (c *CrisisDetector) DetectPopulation(state *PopulationState) (crisis bool, reasons []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Diversity collapse
+	if state.DiversityMetrics.BehavioralDiversity < c.DiversityThreshold &&
+		state.DiversityMetrics.BehavioralDiversity > 0 {
+		reasons = append(reasons, "diversity_collapse")
+	}
+
+	// Regression spiral: >50% regression rate for 3+ consecutive generations
+	if state.EvolutionParameters.RegressionRate > 0.5 {
+		c.regressionStreak++
+	} else {
+		c.regressionStreak = 0
+	}
+	if c.regressionStreak >= 3 {
+		reasons = append(reasons, "regression_spiral")
+	}
+
+	// Quality crash: <30% working ratio
+	if state.QualityMetrics.WorkingRatio < 0.3 {
+		c.qualityCrash++
+	} else {
+		c.qualityCrash = 0
+	}
+	if c.qualityCrash >= 2 {
+		reasons = append(reasons, "quality_crash")
+	}
+
+	return len(reasons) > 0, reasons
+}
+
+// EmergencyActions returns a list of recommended crisis actions.
+func (c *CrisisDetector) EmergencyActions() []string {
+	return []string{
+		"inject_diversity_candidates",
+		"resurrect_specialists",
+		"elevate_mutation_rate",
+		"freeze_elites",
+	}
+}
+
+// GetEmergencyMutationRate returns the mutation rate to use during crisis.
+func (c *CrisisDetector) GetEmergencyMutationRate() float64 {
+	return c.EmergencyRate
+}
+
+// ResetPopulation resets population-level counters.
+func (c *CrisisDetector) ResetPopulation() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.regressionStreak = 0
+	c.qualityCrash = 0
 }

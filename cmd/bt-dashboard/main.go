@@ -982,6 +982,7 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 		0,   // queue max len
 		0,   // router total
 		0,   // router healthy
+		nil, // connection pool (managed by RemoteExecutor)
 	)
 
 	w.Header().Set("Content-Type", "application/json")

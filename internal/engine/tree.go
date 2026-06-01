@@ -82,6 +82,16 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 	return buildNode(serTree, bb, "")
 }
 
+// BuildAndValidate constructs a tree and validates it before execution.
+// Returns an error if validation fails; on success the tree is still built.
+func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
+	info := ValidateTreeFull(serTree)
+	if !info.Valid() {
+		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
+	}
+	return buildNode(serTree, bb, ""), nil
+}
+
 // buildNode recursively builds a go-bt Command from a SerializableNode.
 // parentName tracks the parent node's name for path-tracking in StrategyRouters.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
@@ -126,6 +136,15 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildChainAction(cfg, bb)
 	case "Condition":
 		return btleaf.NewCondition(bb.conditionForName(node.Name))
+	case "UtilitySelector":
+		return BuildUtilitySelector(node, bb)
+	case "PlannerNode":
+		// PlannerNode extends UtilitySelector with GOAP goal management
+		return BuildPlannerNode(node, bb)
+	case "AbortOnEvent":
+		return BuildEventDrivenAbort(node, bb)
+	case "ReactiveParallel":
+		return BuildReactiveParallel(node, bb)
 	default:
 		// Unknown node type → pass-through action (always succeeds)
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
@@ -2004,7 +2023,7 @@ func validateOutputQuality(b *Blackboard) bool {
 
 	// 2. Error pattern check
 	errorPatterns := []string{
-		"i cannot", "i can't", "unable to", "error:", "failed to",
+		"output quality failed", "i cannot", "i can't", "unable to", "error:", "failed to",
 		"i don't know", "i'm not sure", "not implemented",
 	}
 	for _, p := range errorPatterns {

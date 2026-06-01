@@ -28,13 +28,17 @@ type Config struct {
 	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	LLMProvider   string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek
-	OllamaHost    string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
-	OllamaModel   string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
-	DeepSeekHost  string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
-	DeepSeekModel string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
-	DeepSeekKey   string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
-	LLMTimeout    int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"` // seconds
+	LLMProvider    string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek, acp
+	OllamaHost     string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
+	OllamaModel    string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
+	DeepSeekHost   string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
+	DeepSeekModel  string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
+	DeepSeekKey    string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
+	ACPCommand     string `json:"acp_command" env:"BT_ACP_COMMAND" default:"hermes"`
+	ACPArgs        string `json:"acp_args" env:"BT_ACP_ARGS" default:"acp --accept-hooks"`
+	ACPCwd         string `json:"acp_cwd,omitempty" env:"BT_ACP_CWD" default:""`
+	FallbackModels string `json:"fallback_models,omitempty" env:"BT_FALLBACK_MODELS" default:""` // CSV: model or provider:model/provider/model
+	LLMTimeout     int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"`                // seconds
 
 	// Rate Limiting
 	RateLimitRPS   float64 `json:"rate_limit_rps" env:"BT_RATE_LIMIT_RPS" default:"100"`
@@ -227,6 +231,8 @@ func newDefaultConfig() *Config {
 		OllamaModel:            "qwen3.6:35b-a3b",
 		DeepSeekHost:           "https://api.deepseek.com/v1",
 		DeepSeekModel:          "deepseek-v4-flash",
+		ACPCommand:             "hermes",
+		ACPArgs:                "acp --accept-hooks",
 		LLMTimeout:             300,
 		RateLimitRPS:           100,
 		RateLimitBurst:         20,
@@ -298,6 +304,18 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 	if file.DeepSeekKey != "" {
 		c.DeepSeekKey = file.DeepSeekKey
+	}
+	if file.ACPCommand != "" {
+		c.ACPCommand = file.ACPCommand
+	}
+	if file.ACPArgs != "" {
+		c.ACPArgs = file.ACPArgs
+	}
+	if file.ACPCwd != "" {
+		c.ACPCwd = file.ACPCwd
+	}
+	if file.FallbackModels != "" {
+		c.FallbackModels = file.FallbackModels
 	}
 	if file.LLMTimeout != 0 {
 		c.LLMTimeout = file.LLMTimeout
@@ -413,6 +431,18 @@ func applyEnvOverrides(c *Config) {
 	} else if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
 		// Fallback: read from Hermes's env
 		c.DeepSeekKey = v
+	}
+	if v := os.Getenv("BT_ACP_COMMAND"); v != "" {
+		c.ACPCommand = v
+	}
+	if v := os.Getenv("BT_ACP_ARGS"); v != "" {
+		c.ACPArgs = v
+	}
+	if v := os.Getenv("BT_ACP_CWD"); v != "" {
+		c.ACPCwd = v
+	}
+	if v := os.Getenv("BT_FALLBACK_MODELS"); v != "" {
+		c.FallbackModels = v
 	}
 	if v := os.Getenv("BT_LLM_TIMEOUT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -662,6 +692,10 @@ func applyDotEnvToConfig(c *Config, kv map[string]string) {
 	applyDotEnvStr("BT_DEEPSEEK_KEY", "BT_DEEPSEEK_KEY", func(v string) { c.DeepSeekKey = v })
 	// Also check the standard DEEPSEEK_API_KEY for .env files (Hermes convention)
 	applyDotEnvStr("DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", func(v string) { c.DeepSeekKey = v })
+	applyDotEnvStr("BT_ACP_COMMAND", "BT_ACP_COMMAND", func(v string) { c.ACPCommand = v })
+	applyDotEnvStr("BT_ACP_ARGS", "BT_ACP_ARGS", func(v string) { c.ACPArgs = v })
+	applyDotEnvStr("BT_ACP_CWD", "BT_ACP_CWD", func(v string) { c.ACPCwd = v })
+	applyDotEnvStr("BT_FALLBACK_MODELS", "BT_FALLBACK_MODELS", func(v string) { c.FallbackModels = v })
 	applyDotEnvInt("BT_LLM_TIMEOUT", "BT_LLM_TIMEOUT", func(v int) { c.LLMTimeout = v })
 
 	// Rate Limiting
@@ -738,14 +772,17 @@ func (c *Config) Validate() error {
 	if c.OllamaModel == "" && c.LLMProvider == "ollama" {
 		errs = append(errs, ValidationError{"OllamaModel", "must not be empty when LLMProvider is ollama"})
 	}
-	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" {
-		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama' or 'deepseek'"})
+	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" && c.LLMProvider != "acp" {
+		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama', 'deepseek', or 'acp'"})
 	}
 	if c.LLMProvider == "ollama" && c.OllamaHost == "" {
 		errs = append(errs, ValidationError{"OllamaHost", "must not be empty when LLMProvider is ollama"})
 	}
 	if c.LLMProvider == "deepseek" && c.DeepSeekKey == "" {
 		errs = append(errs, ValidationError{"DeepSeekKey", "must not be empty when LLMProvider is deepseek"})
+	}
+	if c.LLMProvider == "acp" && c.ACPCommand == "" {
+		errs = append(errs, ValidationError{"ACPCommand", "must not be empty when LLMProvider is acp"})
 	}
 	// TLS: if cert is set, key must also be set, and vice versa
 	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
@@ -869,6 +906,9 @@ func (c *Config) Diff(other *Config) []string {
 	}
 	if c.LLMTimeout != other.LLMTimeout {
 		diffs = append(diffs, fmt.Sprintf("LLMTimeout: %ds → %ds", c.LLMTimeout, other.LLMTimeout))
+	}
+	if c.FallbackModels != other.FallbackModels {
+		diffs = append(diffs, fmt.Sprintf("FallbackModels: %q → %q", c.FallbackModels, other.FallbackModels))
 	}
 
 	// Rate Limiting

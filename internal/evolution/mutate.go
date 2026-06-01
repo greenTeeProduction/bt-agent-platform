@@ -37,6 +37,7 @@ type SerializableNode struct {
 	MaxRetries  int                `json:"max_retries,omitempty"`
 	TimeoutMs   int64              `json:"timeout_ms,omitempty"`
 	Metadata    map[string]any     `json:"metadata,omitempty"` // chain config, tags, etc.
+	Edges       []TypedEdge        `json:"edges,omitempty"`    // typed edge relationships
 }
 
 // TreeStore persists a serializable behavior tree to disk.
@@ -61,6 +62,34 @@ func (ts *TreeStore) Path() string { return ts.path }
 
 // Dir returns the store directory.
 func (ts *TreeStore) Dir() string { return ts.dir }
+
+// MetaPath returns the path to the evolution metadata file.
+func (ts *TreeStore) MetaPath() string { return filepath.Join(ts.dir, "metadata.json") }
+
+// SaveMeta writes evolution metadata to disk alongside the tree.
+func (ts *TreeStore) SaveMeta(meta *EvolutionMetadata) error {
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	return os.WriteFile(ts.MetaPath(), data, 0644)
+}
+
+// LoadMeta reads evolution metadata from disk. Returns nil if no metadata exists.
+func (ts *TreeStore) LoadMeta() (*EvolutionMetadata, error) {
+	data, err := os.ReadFile(ts.MetaPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read metadata: %w", err)
+	}
+	var meta EvolutionMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	}
+	return &meta, nil
+}
 
 // SaveTo writes the tree to a specific path atomically.
 func (ts *TreeStore) SaveTo(tree *SerializableNode, path string) error {
@@ -229,55 +258,52 @@ type MutationOp struct {
 }
 
 // ApplyMutations applies a list of MutationOps to a tree in-place.
+// Validates the tree after each mutation; skips mutations that would produce an invalid tree.
 func ApplyMutations(tree *SerializableNode, ops []MutationOp) int {
 	applied := 0
 	for _, op := range ops {
-		switch op.Operation {
-		case "add_before":
-			if op.Node != nil {
-				if applyAddBefore(tree, op.Target, *op.Node) {
-					applied++
-				}
-			}
-		case "add_after":
-			if op.Node != nil {
-				if applyAddAfter(tree, op.Target, *op.Node) {
-					applied++
-				}
-			}
-		case "wrap_retry":
-			if applyWrapRetry(tree, op.Target) {
-				applied++
-			}
-		case "add_fallback":
-			if op.Node != nil {
-				if applyAddFallback(tree, op.Target, *op.Node) {
-					applied++
-				}
-			}
-		case "increase_retries":
-			if applyIncreaseRetries(tree, op.Target) {
-				applied++
-			}
-		case "prune_node":
-			if applyPruneNode(tree, op.Target) {
-				applied++
-			}
-		case "replace_node":
-			if applyReplaceNode(tree, op.Target) {
-				applied++
-			}
-		case "replace_children":
-			if applyReplaceChildren(tree, op.Target) {
-				applied++
-			}
-		case "reorder_children":
-			if applyReorderChildren(tree, op.Target) {
-				applied++
-			}
+		// Clone the tree so we can rollback if mutation produces invalid state
+		clone := cloneTree(tree)
+		applyOp(tree, op)
+		errors := tree.Validate()
+		if len(errors) > 0 {
+			// Rollback: restore from clone
+			*tree = *clone
+			continue
 		}
+		applied++
 	}
 	return applied
+}
+
+func applyOp(tree *SerializableNode, op MutationOp) bool {
+	switch op.Operation {
+	case "add_before":
+		if op.Node != nil {
+			return applyAddBefore(tree, op.Target, *op.Node)
+		}
+	case "add_after":
+		if op.Node != nil {
+			return applyAddAfter(tree, op.Target, *op.Node)
+		}
+	case "wrap_retry":
+		return applyWrapRetry(tree, op.Target)
+	case "add_fallback":
+		if op.Node != nil {
+			return applyAddFallback(tree, op.Target, *op.Node)
+		}
+	case "increase_retries":
+		return applyIncreaseRetries(tree, op.Target)
+	case "prune_node":
+		return applyPruneNode(tree, op.Target)
+	case "replace_node":
+		return applyReplaceNode(tree, op.Target)
+	case "replace_children":
+		return applyReplaceChildren(tree, op.Target)
+	case "reorder_children":
+		return applyReorderChildren(tree, op.Target)
+	}
+	return false
 }
 
 // CountNodes returns the total number of nodes in the tree (including the root).

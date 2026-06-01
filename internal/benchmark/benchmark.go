@@ -246,7 +246,10 @@ func RunABTest(tree *evolution.SerializableNode, suite Suite, mock llm.LLM, ops 
 	)
 	delta.Significant = delta.PValue < 0.05
 
-	improved := delta.SuccessRate > 0 || (delta.SuccessRate == 0 && delta.AvgDurationMs < 0)
+	// Only quality improvements should mark a mutation as improved. Runtime speed
+	// alone is not enough because destructive mutations can appear faster by
+	// pruning work while preserving mock outputs.
+	improved := delta.SuccessRate > 0 || (delta.SuccessRate == 0 && delta.PathCoverage > 0)
 
 	return &ABTest{
 		Before:   before,

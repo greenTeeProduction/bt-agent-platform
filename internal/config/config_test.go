@@ -30,6 +30,23 @@ func TestLoad_Defaults(t *testing.T) {
 	if c.OllamaModel != "qwen3.6:35b-a3b" {
 		t.Errorf("expected OllamaModel=qwen3.6:35b-a3b, got %s", c.OllamaModel)
 	}
+	if c.FallbackModels != "" {
+		t.Errorf("expected no fallback models by default, got %q", c.FallbackModels)
+	}
+}
+
+func TestLoad_FallbackModelsEnvOverride(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_FALLBACK_MODELS", "deepseek:deepseek-v4-pro,ollama:qwen3.6:35b-a3b")
+	defer os.Unsetenv("BT_FALLBACK_MODELS")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.FallbackModels != "deepseek:deepseek-v4-pro,ollama:qwen3.6:35b-a3b" {
+		t.Fatalf("expected fallback models from env, got %q", c.FallbackModels)
+	}
 }
 
 func TestLoad_EnvOverrides(t *testing.T) {
@@ -967,9 +984,32 @@ func TestValidate_AllEdgeCases(t *testing.T) {
 	}
 }
 
+func TestValidate_ACPProvider_DefaultHermesCommand(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "acp"
+	c.ACPCommand = "hermes"
+	c.ACPArgs = "acp --accept-hooks"
+	c.ACPCwd = "/tmp"
+
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected ACP provider config to validate, got: %v", err)
+	}
+}
+
+func TestValidate_ACPProvider_NoCommand(t *testing.T) {
+	c := newDefaultConfig()
+	c.LLMProvider = "acp"
+	c.ACPCommand = ""
+
+	err := c.Validate()
+	if err == nil {
+		t.Error("expected validation error when ACPCommand is empty with acp provider")
+	}
+}
+
 func TestValidate_LLMProvider_Invalid(t *testing.T) {
 	c := newDefaultConfig()
-	c.LLMProvider = "openai" // not ollama or deepseek
+	c.LLMProvider = "openai" // not ollama, deepseek, or acp
 
 	err := c.Validate()
 	if err == nil {
