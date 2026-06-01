@@ -196,7 +196,7 @@ func main() {
 		})
 	}
 
-	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics
+	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression
 	var handler http.Handler = mux
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.RequestIDMiddleware(handler)                       // correlation IDs for audit trail
@@ -207,6 +207,7 @@ func main() {
 	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
 	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
+	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
 	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
