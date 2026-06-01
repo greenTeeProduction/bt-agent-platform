@@ -46,6 +46,7 @@ type CircuitBreaker struct {
 	cooldown        time.Duration // time to stay open
 	lastFailureTime time.Time
 	lastStateChange time.Time
+	categoryCounts  map[ErrorCategory]int // per-category failure counts
 }
 
 // NewCircuitBreaker creates a circuit breaker.
@@ -106,16 +107,44 @@ func (cb *CircuitBreaker) RecordSuccess() {
 
 // RecordFailure records a failed execution.
 func (cb *CircuitBreaker) RecordFailure() {
+	cb.recordFailure(ErrCatUnknown)
+}
+
+// RecordFailureWithCategory records a failed execution with its error category.
+func (cb *CircuitBreaker) RecordFailureWithCategory(err error) {
+	cb.recordFailure(ClassifyError(err))
+}
+
+func (cb *CircuitBreaker) recordFailure(cat ErrorCategory) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	cb.failureCount++
 	cb.lastFailureTime = time.Now()
+	if cb.categoryCounts == nil {
+		cb.categoryCounts = make(map[ErrorCategory]int)
+	}
+	cb.categoryCounts[cat]++
 
 	if cb.state == CircuitHalfOpen || (cb.state == CircuitClosed && cb.failureCount >= cb.threshold) {
 		cb.state = CircuitOpen
 		cb.lastStateChange = time.Now()
 	}
+}
+
+// CategoryFailureCounts returns per-category failure counts for diagnostics.
+// Returns nil if no categorized failures have been recorded.
+func (cb *CircuitBreaker) CategoryFailureCounts() map[ErrorCategory]int {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	if len(cb.categoryCounts) == 0 {
+		return nil
+	}
+	result := make(map[ErrorCategory]int, len(cb.categoryCounts))
+	for k, v := range cb.categoryCounts {
+		result[k] = v
+	}
+	return result
 }
 
 // ─── Exponential Backoff ────────────────────────────────────────────────────
@@ -164,6 +193,7 @@ type DeadLetterEntry struct {
 	Attempts  int       `json:"attempts"`
 	FailedAt  time.Time `json:"failed_at"`
 	Circuit   string    `json:"circuit,omitempty"`
+	Category  string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
 }
 
 // DeadLetterQueue stores failed tasks for manual inspection and replay.
@@ -187,8 +217,27 @@ func (dlq *DeadLetterQueue) Push(entry DeadLetterEntry) {
 	dlq.mu.Lock()
 	defer dlq.mu.Unlock()
 	entry.FailedAt = time.Now()
+	// Auto-classify error if category not already set.
+	if entry.Category == "" && entry.Error != "" {
+		entry.Category = ClassifyError(fmt.Errorf("%s", entry.Error)).String()
+	}
 	dlq.entries = append(dlq.entries, entry)
 	dlq.save()
+}
+
+// CategoryCounts returns the count of dead letter entries per error category.
+func (dlq *DeadLetterQueue) CategoryCounts() map[string]int {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	counts := make(map[string]int)
+	for _, e := range dlq.entries {
+		cat := e.Category
+		if cat == "" {
+			cat = "unknown"
+		}
+		counts[cat]++
+	}
+	return counts
 }
 
 // List returns all dead letter entries.
