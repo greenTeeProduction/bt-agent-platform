@@ -100,4 +100,7 @@ See `internal/config/config.go` for full list.
 
 - Dashboard: http://localhost:9800
 - Architecture Decision Records: `docs/adr/`
+- Hands-on tutorial: `docs/TUTORIAL.md`
+- Troubleshooting guide: `docs/TROUBLESHOOTING.md`
+- Video walkthrough script and operator demo checklist: `docs/VIDEO_WALKTHROUGH.md`
 - License: MIT
