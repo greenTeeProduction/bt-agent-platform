@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -1181,5 +1182,370 @@ func TestErrorContext_Concurrent(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		<-done
+	}
+}
+
+// ─── Jitter Tests ─────────────────────────────────────────────────────────────
+
+func TestFullJitter_Zero(t *testing.T) {
+	if got := FullJitter(0); got != 0 {
+		t.Errorf("FullJitter(0) = %v, want 0", got)
+	}
+	if got := FullJitter(-time.Second); got != 0 {
+		t.Errorf("FullJitter(-1s) = %v, want 0", got)
+	}
+}
+
+func TestFullJitter_Range(t *testing.T) {
+	base := 100 * time.Millisecond
+	for i := 0; i < 100; i++ {
+		got := FullJitter(base)
+		if got < 0 || got >= base {
+			t.Errorf("FullJitter(%v) = %v, out of range [0, %v)", base, got, base)
+		}
+	}
+}
+
+func TestEqualJitter_Zero(t *testing.T) {
+	if got := EqualJitter(0); got != 0 {
+		t.Errorf("EqualJitter(0) = %v, want 0", got)
+	}
+	if got := EqualJitter(-time.Second); got != 0 {
+		t.Errorf("EqualJitter(-1s) = %v, want 0", got)
+	}
+}
+
+func TestEqualJitter_Range(t *testing.T) {
+	base := 100 * time.Millisecond
+	half := base / 2
+	for i := 0; i < 100; i++ {
+		got := EqualJitter(base)
+		if got < half {
+			t.Errorf("EqualJitter(%v) = %v, below half %v", base, got, half)
+		}
+		if got > base {
+			t.Errorf("EqualJitter(%v) = %v, above base %v", base, got, base)
+		}
+	}
+}
+
+func TestJitterStrategy_String(t *testing.T) {
+	tests := []struct {
+		s    JitterStrategy
+		want string
+	}{
+		{NoJitter, "no_jitter"},
+		{FullJitterStrategy, "full_jitter"},
+		{EqualJitterStrategy, "equal_jitter"},
+		{DecorrelatedJitterStrategy, "decorrelated_jitter"},
+		{JitterStrategy(99), "no_jitter"},
+	}
+	for _, tt := range tests {
+		if got := tt.s.String(); got != tt.want {
+			t.Errorf("JitterStrategy(%d).String() = %q, want %q", tt.s, got, tt.want)
+		}
+	}
+}
+
+func TestApplyJitter_NoJitter(t *testing.T) {
+	delay := 100 * time.Millisecond
+	got := ApplyJitter(delay, NoJitter, 0)
+	if got != delay {
+		t.Errorf("ApplyJitter(NoJitter) = %v, want %v", got, delay)
+	}
+}
+
+func TestApplyJitter_FullJitter(t *testing.T) {
+	delay := 100 * time.Millisecond
+	for i := 0; i < 50; i++ {
+		got := ApplyJitter(delay, FullJitterStrategy, 0)
+		if got < 0 || got >= delay {
+			t.Errorf("ApplyJitter(FullJitter, %v) = %v, out of range [0, %v)", delay, got, delay)
+		}
+	}
+}
+
+func TestApplyJitter_EqualJitter(t *testing.T) {
+	delay := 100 * time.Millisecond
+	half := delay / 2
+	for i := 0; i < 50; i++ {
+		got := ApplyJitter(delay, EqualJitterStrategy, 0)
+		if got < half || got > delay {
+			t.Errorf("ApplyJitter(EqualJitter, %v) = %v, out of range [%v, %v]", delay, got, half, delay)
+		}
+	}
+}
+
+func TestApplyJitter_Decorrelated(t *testing.T) {
+	delay := 100 * time.Millisecond
+	got := ApplyJitter(delay, DecorrelatedJitterStrategy, 50*time.Millisecond)
+	if got <= 0 {
+		t.Errorf("ApplyJitter(Decorrelated) = %v, want > 0", got)
+	}
+	got2 := ApplyJitter(delay, DecorrelatedJitterStrategy, 0)
+	if got2 <= 0 {
+		t.Errorf("ApplyJitter(Decorrelated, zero prev) = %v, want > 0", got2)
+	}
+}
+
+func TestDecorrelatedJitter_ZeroMaxDelay(t *testing.T) {
+	if got := DecorrelatedJitter(time.Second, time.Second, 0); got != 0 {
+		t.Errorf("DecorrelatedJitter with maxDelay=0 = %v, want 0", got)
+	}
+}
+
+func TestApplyJitter_AllStrategiesDeterministicRange(t *testing.T) {
+	strategies := []JitterStrategy{NoJitter, FullJitterStrategy, EqualJitterStrategy, DecorrelatedJitterStrategy}
+	for _, s := range strategies {
+		for i := 0; i < 20; i++ {
+			got := ApplyJitter(time.Second, s, 500*time.Millisecond)
+			if got < 0 {
+				t.Errorf("ApplyJitter(%s) = %v, negative", s, got)
+			}
+		}
+	}
+}
+
+// ─── RetryPolicy Validate & Sanitize Tests ────────────────────────────────────
+
+func TestRetryPolicy_Validate_ZeroRetries(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: 0}
+	if err := p.Validate(); err == nil {
+		t.Error("Validate() expected error for MaxRetries=0")
+	}
+}
+
+func TestRetryPolicy_Validate_NegativeRetries(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: -1}
+	if err := p.Validate(); err == nil {
+		t.Error("Validate() expected error for MaxRetries=-1")
+	}
+}
+
+func TestRetryPolicy_Validate_BaseExceedsMaxDelay(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: 3, Base: 60 * time.Second, MaxDelay: 30 * time.Second}
+	if err := p.Validate(); err == nil {
+		t.Error("Validate() expected error when Base > MaxDelay")
+	}
+}
+
+func TestRetryPolicy_Validate_NegativeDurations(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: 3, Base: -time.Second}
+	if err := p.Validate(); err == nil {
+		t.Error("Validate() expected error for negative Base")
+	}
+	p2 := &RetryPolicy{MaxRetries: 3, Base: time.Second, MaxDelay: -time.Second}
+	if err := p2.Validate(); err == nil {
+		t.Error("Validate() expected error for negative MaxDelay")
+	}
+	p3 := &RetryPolicy{MaxRetries: 3, Base: time.Second, LLMBase: -time.Second}
+	if err := p3.Validate(); err == nil {
+		t.Error("Validate() expected error for negative LLMBase")
+	}
+}
+
+func TestRetryPolicy_Validate_Valid(t *testing.T) {
+	p := DefaultRetryPolicy()
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestRetryPolicy_Sanitize_Defaults(t *testing.T) {
+	p := &RetryPolicy{}
+	p.Sanitize()
+	if p.MaxRetries != 3 {
+		t.Errorf("Sanitize MaxRetries = %d, want 3", p.MaxRetries)
+	}
+	if p.Base != time.Second {
+		t.Errorf("Sanitize Base = %v, want 1s", p.Base)
+	}
+	if p.MaxDelay != 30*time.Second {
+		t.Errorf("Sanitize MaxDelay = %v, want 30s", p.MaxDelay)
+	}
+	if p.LLMBase != 2*time.Second {
+		t.Errorf("Sanitize LLMBase = %v, want 2s", p.LLMBase)
+	}
+}
+
+func TestRetryPolicy_Sanitize_Partial(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: 5}
+	p.Sanitize()
+	if p.MaxRetries != 5 {
+		t.Errorf("Sanitize should preserve MaxRetries=5, got %d", p.MaxRetries)
+	}
+	if p.Base != time.Second {
+		t.Errorf("Sanitize Base = %v, want 1s", p.Base)
+	}
+}
+
+func TestRetryPolicy_Sanitize_LLMBase(t *testing.T) {
+	p := &RetryPolicy{MaxRetries: 3, Base: 5 * time.Second}
+	p.Sanitize()
+	if p.LLMBase != 10*time.Second {
+		t.Errorf("Sanitize LLMBase = %v, want 10s (2×Base)", p.LLMBase)
+	}
+}
+
+// ─── RetryPolicy ExecuteContext Tests ──────────────────────────────────────────
+
+func TestRetryPolicy_ExecuteContext_Success(t *testing.T) {
+	p := DefaultRetryPolicy()
+	attempts := 0
+	err := p.ExecuteContext(context.Background(), func() error {
+		attempts++
+		return nil
+	})
+	if err != nil {
+		t.Errorf("ExecuteContext unexpected error: %v", err)
+	}
+	if attempts != 1 {
+		t.Errorf("Expected 1 attempt, got %d", attempts)
+	}
+}
+
+func TestRetryPolicy_ExecuteContext_Exhaustion(t *testing.T) {
+	p := DefaultRetryPolicy()
+	p.Jitter = NoJitter   // deterministic delays
+	p.RetryUnknown = true // unknown errors should retry
+	errCount := 0
+	err := p.ExecuteContext(context.Background(), func() error {
+		errCount++
+		return fmt.Errorf("transient error")
+	})
+	if err == nil {
+		t.Fatal("ExecuteContext expected error")
+	}
+	if errCount != p.MaxRetries {
+		t.Errorf("Expected %d attempts, got %d", p.MaxRetries, errCount)
+	}
+}
+
+func TestRetryPolicy_ExecuteContext_RetryRefused(t *testing.T) {
+	p := DefaultRetryPolicy()
+	err := p.ExecuteContext(context.Background(), func() error {
+		return NewCategorizedError(ErrCatValidation, fmt.Errorf("bad input"))
+	})
+	if err == nil {
+		t.Fatal("ExecuteContext expected error")
+	}
+	if !strings.Contains(err.Error(), "retry refused") {
+		t.Errorf("Expected 'retry refused', got: %v", err)
+	}
+}
+
+func TestRetryPolicy_ExecuteContext_Cancellation(t *testing.T) {
+	p := &RetryPolicy{
+		MaxRetries:   10,
+		Base:         time.Hour, // very long — would hang
+		MaxDelay:     time.Hour,
+		Jitter:       NoJitter,
+		RetryUnknown: true,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := p.ExecuteContext(ctx, func() error {
+		return fmt.Errorf("will be cancelled")
+	})
+	if err == nil {
+		t.Fatal("ExecuteContext expected cancellation error")
+	}
+	if !strings.Contains(err.Error(), "retry cancelled") {
+		t.Errorf("Expected 'retry cancelled', got: %v", err)
+	}
+}
+
+func TestRetryPolicy_ExecuteContext_Timeout(t *testing.T) {
+	p := &RetryPolicy{
+		MaxRetries:   10,
+		Base:         time.Hour,
+		MaxDelay:     time.Hour,
+		Jitter:       NoJitter,
+		RetryUnknown: true,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+
+	// Give the context a moment to be cancelled before we start.
+	time.Sleep(2 * time.Millisecond)
+
+	err := p.ExecuteContext(ctx, func() error {
+		return fmt.Errorf("will timeout")
+	})
+	if err == nil {
+		t.Fatal("ExecuteContext expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "retry cancelled") && !strings.Contains(err.Error(), "context") {
+		t.Errorf("Expected retry cancelled or context error, got: %v", err)
+	}
+}
+
+func TestRetryPolicy_ExecuteContext_EventuallySucceeds(t *testing.T) {
+	p := &RetryPolicy{
+		MaxRetries:   5,
+		Base:         time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		LLMBase:      2 * time.Millisecond,
+		Jitter:       NoJitter,
+		RetryUnknown: true,
+	}
+	attempts := 0
+	err := p.ExecuteContext(context.Background(), func() error {
+		attempts++
+		if attempts < 3 {
+			return fmt.Errorf("transient error")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Errorf("ExecuteContext unexpected error: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryPolicy_CallbackContext(t *testing.T) {
+	var called bool
+	p := &RetryPolicy{
+		MaxRetries:   2,
+		Base:         time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Jitter:       NoJitter,
+		RetryUnknown: true,
+		OnRetry: func(attempt int, cat ErrorCategory, delay time.Duration) {
+			called = true
+		},
+	}
+	_ = p.ExecuteContext(context.Background(), func() error {
+		return fmt.Errorf("fail")
+	})
+	if !called {
+		t.Error("OnRetry callback not called")
+	}
+}
+
+func TestRetryPolicy_DeprecatedInheritsContext(t *testing.T) {
+	// Execute() (deprecated) should still work via ExecuteContext.
+	p := DefaultRetryPolicy()
+	p.Base = time.Millisecond
+	p.MaxDelay = 5 * time.Millisecond
+	p.Jitter = NoJitter
+	p.RetryUnknown = true
+
+	attempts := 0
+	err := p.Execute(func() error {
+		attempts++
+		if attempts < 2 {
+			return fmt.Errorf("transient")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Errorf("Execute() unexpected error: %v", err)
+	}
+	if attempts != 2 {
+		t.Errorf("Expected 2 attempts, got %d", attempts)
 	}
 }

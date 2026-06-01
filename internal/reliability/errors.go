@@ -6,8 +6,10 @@
 package reliability
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -305,6 +307,98 @@ func contextDeadlineExceeded() error {
 	return os.ErrDeadlineExceeded
 }
 
+// ─── Jitter Strategies ─────────────────────────────────────────────────────────
+
+// JitterStrategy selects the jitter algorithm for backoff delays.
+type JitterStrategy int
+
+const (
+	// NoJitter applies no randomization — pure exponential backoff.
+	NoJitter JitterStrategy = iota
+	// FullJitterStrategy randomizes in [0, baseDelay) — AWS recommended.
+	FullJitterStrategy
+	// EqualJitterStrategy randomizes in [baseDelay/2, baseDelay] — Google recommended.
+	EqualJitterStrategy
+	// DecorrelatedJitterStrategy uses previous-sleep-based smoothing.
+	DecorrelatedJitterStrategy
+)
+
+// String returns the human-readable strategy name.
+func (s JitterStrategy) String() string {
+	switch s {
+	case FullJitterStrategy:
+		return "full_jitter"
+	case EqualJitterStrategy:
+		return "equal_jitter"
+	case DecorrelatedJitterStrategy:
+		return "decorrelated_jitter"
+	default:
+		return "no_jitter"
+	}
+}
+
+// FullJitter returns a random duration in [0, baseDelay).
+// AWS recommended pattern: sleep = random_between(0, min(cap, base * 2^attempt))
+// Prevents thundering herd when many clients retry simultaneously.
+func FullJitter(baseDelay time.Duration) time.Duration {
+	if baseDelay <= 0 {
+		return 0
+	}
+	return time.Duration(rand.Int63n(int64(baseDelay)))
+}
+
+// EqualJitter returns a random duration in [baseDelay/2, baseDelay].
+// Half of the backoff time is deterministic, half is random.
+// Recommended for latency-sensitive systems: ensures minimum delay while
+// still providing desynchronization.
+func EqualJitter(baseDelay time.Duration) time.Duration {
+	if baseDelay <= 0 {
+		return 0
+	}
+	half := baseDelay / 2
+	// +1 to include exact half in the random range.
+	return half + time.Duration(rand.Int63n(int64(half+1)))
+}
+
+// DecorrelatedJitter returns a duration based on the previous sleep value.
+// sleep = min(cap, random_between(base, sleep * 3))
+// Produces smoother retry distribution than FullJitter under contention.
+func DecorrelatedJitter(previousSleep time.Duration, base time.Duration, maxDelay time.Duration) time.Duration {
+	if maxDelay <= 0 {
+		return 0
+	}
+	if previousSleep <= 0 {
+		previousSleep = base
+	}
+	next := previousSleep * 3
+	if next > maxDelay {
+		next = maxDelay
+	}
+	minVal := base
+	if minVal <= 0 {
+		minVal = time.Millisecond
+	}
+	if next <= minVal {
+		return minVal
+	}
+	return minVal + time.Duration(rand.Int63n(int64(next-minVal)))
+}
+
+// ApplyJitter applies the selected jitter strategy to a backoff delay.
+// For NoJitter, returns the delay unchanged.
+func ApplyJitter(delay time.Duration, strategy JitterStrategy, previousSleep time.Duration) time.Duration {
+	switch strategy {
+	case FullJitterStrategy:
+		return FullJitter(delay)
+	case EqualJitterStrategy:
+		return EqualJitter(delay)
+	case DecorrelatedJitterStrategy:
+		return DecorrelatedJitter(previousSleep, delay/2, delay*2)
+	default:
+		return delay
+	}
+}
+
 // ─── Retry Policy ────────────────────────────────────────────────────────────
 
 // RetryPolicy defines category-aware retry behavior. Different error
@@ -328,6 +422,13 @@ type RetryPolicy struct {
 	// When false (default), unknown errors fail immediately to be safe.
 	RetryUnknown bool
 
+	// Jitter controls how backoff delays are randomized to prevent
+	// thundering herd. Default: NoJitter (no randomization).
+	Jitter JitterStrategy
+
+	// PreviousSleep tracks the last sleep duration for decorrelated jitter.
+	previousSleep time.Duration
+
 	// OnRetry is an optional callback invoked before each retry attempt.
 	// Receives: attempt number (1-indexed), error category, next delay.
 	OnRetry func(attempt int, category ErrorCategory, delay time.Duration)
@@ -339,6 +440,7 @@ type RetryPolicy struct {
 //	LLM: 3 retries, 2s→4s→8s backoff
 //	Validation/Auth/ResourceExhausted: fail immediately
 //	Unknown: fail immediately (conservative)
+//	Jitter: FullJitter (prevents thundering herd)
 func DefaultRetryPolicy() *RetryPolicy {
 	return &RetryPolicy{
 		MaxRetries:   3,
@@ -346,6 +448,46 @@ func DefaultRetryPolicy() *RetryPolicy {
 		MaxDelay:     30 * time.Second,
 		LLMBase:      2 * time.Second,
 		RetryUnknown: false,
+		Jitter:       FullJitterStrategy,
+	}
+}
+
+// Validate checks the RetryPolicy for configuration errors and sanitizes
+// zero values to sensible defaults. Returns an error if the policy
+// cannot produce valid behavior (e.g., MaxRetries < 1).
+func (p *RetryPolicy) Validate() error {
+	if p.MaxRetries < 1 {
+		return fmt.Errorf("retry policy: MaxRetries must be >= 1, got %d", p.MaxRetries)
+	}
+	if p.Base < 0 {
+		return fmt.Errorf("retry policy: Base must be >= 0, got %v", p.Base)
+	}
+	if p.MaxDelay < 0 {
+		return fmt.Errorf("retry policy: MaxDelay must be >= 0, got %v", p.MaxDelay)
+	}
+	if p.Base > 0 && p.MaxDelay > 0 && p.Base > p.MaxDelay {
+		return fmt.Errorf("retry policy: Base (%v) must not exceed MaxDelay (%v)", p.Base, p.MaxDelay)
+	}
+	if p.LLMBase < 0 {
+		return fmt.Errorf("retry policy: LLMBase must be >= 0, got %v", p.LLMBase)
+	}
+	return nil
+}
+
+// Sanitize fills in zero/default values that could cause unintended
+// behavior (zero delays, unbounded waits, etc.).
+func (p *RetryPolicy) Sanitize() {
+	if p.MaxRetries <= 0 {
+		p.MaxRetries = 3
+	}
+	if p.Base <= 0 {
+		p.Base = 1 * time.Second
+	}
+	if p.MaxDelay <= 0 {
+		p.MaxDelay = 30 * time.Second
+	}
+	if p.LLMBase <= 0 {
+		p.LLMBase = 2 * p.Base
 	}
 }
 
@@ -359,7 +501,20 @@ func DefaultRetryPolicy() *RetryPolicy {
 // Network and Timeout errors use exponential backoff. LLM errors use
 // a longer base delay (LLMBase). Unknown errors are treated according
 // to RetryUnknown.
+//
+// Deprecated: Use ExecuteContext for context cancellation support.
 func (p *RetryPolicy) Execute(fn func() error) error {
+	return p.ExecuteContext(context.Background(), fn)
+}
+
+// ExecuteContext runs fn with category-aware retry and context support.
+// If the context is cancelled or exceeds its deadline during a retry sleep,
+// the function returns immediately with context.Canceled/context.DeadlineExceeded.
+//
+// Non-retryable categories (Validation, Auth, ResourceExhausted) return
+// immediately with a wrapped error. Network/Timeout errors use exponential
+// backoff with jitter (if configured). LLM errors use LLMBase delay.
+func (p *RetryPolicy) ExecuteContext(ctx context.Context, fn func() error) error {
 	var lastErr error
 	var lastCat ErrorCategory
 
@@ -394,14 +549,37 @@ func (p *RetryPolicy) Execute(fn func() error) error {
 			p.OnRetry(attempt, lastCat, delay)
 		}
 
-		time.Sleep(delay)
+		// Use context-aware sleep so cancellation is prompt.
+		if err := sleepWithContext(ctx, delay); err != nil {
+			return fmt.Errorf("retry cancelled after %d attempts (context): %w", attempt, err)
+		}
+
+		// Track previous sleep for decorrelated jitter.
+		p.previousSleep = delay
 	}
 
 	return fmt.Errorf("retry exhausted after %d attempts (last: %s): %w",
 		p.MaxRetries, lastCat, lastErr)
 }
 
-// delayForCategory returns the backoff delay for a given attempt and category.
+// sleepWithContext sleeps for the given duration or until the context
+// is cancelled, whichever comes first.
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// delayForCategory returns the backoff delay for a given attempt and category,
+// applying jitter if configured.
 func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory) time.Duration {
 	base := p.Base
 	if base <= 0 {
@@ -418,7 +596,8 @@ func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory) time.Dura
 	if maxDelay <= 0 {
 		maxDelay = 30 * time.Second
 	}
-	return Backoff(attempt, base, maxDelay)
+	rawDelay := Backoff(attempt, base, maxDelay)
+	return ApplyJitter(rawDelay, p.Jitter, p.previousSleep)
 }
 
 // ExecuteWithPolicy is a convenience wrapper that creates a DefaultRetryPolicy
