@@ -5,6 +5,8 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 )
 
@@ -266,15 +268,45 @@ func validateAgainstSchema(v interface{}, s *Schema, path string) error {
 		}
 
 	case "string":
-		if _, ok := v.(string); !ok {
+		str, ok := v.(string)
+		if !ok {
 			return fmt.Errorf("%s: expected string, got %T", path, v)
+		}
+		if s.MinLength != nil && len(str) < *s.MinLength {
+			return fmt.Errorf("%s: string length %d < minLength %d", path, len(str), *s.MinLength)
+		}
+		if s.MaxLength != nil && len(str) > *s.MaxLength {
+			return fmt.Errorf("%s: string length %d > maxLength %d", path, len(str), *s.MaxLength)
+		}
+		if len(s.Enum) > 0 && !stringIn(str, s.Enum) {
+			return fmt.Errorf("%s: value %q not in enum %v", path, str, s.Enum)
+		}
+		if s.Pattern != "" {
+			matched, err := regexp.MatchString(s.Pattern, str)
+			if err != nil {
+				return fmt.Errorf("%s: invalid pattern %q: %w", path, s.Pattern, err)
+			}
+			if !matched {
+				return fmt.Errorf("%s: value %q does not match pattern %q", path, str, s.Pattern)
+			}
 		}
 
 	case "number", "integer":
-		switch v.(type) {
-		case float64, int, int64, json.Number:
-		default:
+		num, ok := numberValue(v)
+		if !ok {
 			return fmt.Errorf("%s: expected number, got %T", path, v)
+		}
+		if s.Type == "integer" && math.Trunc(num) != num {
+			return fmt.Errorf("%s: expected integer, got %v", path, num)
+		}
+		if s.Minimum != nil && num < *s.Minimum {
+			return fmt.Errorf("%s: value %v < minimum %v", path, num, *s.Minimum)
+		}
+		if s.Maximum != nil && num > *s.Maximum {
+			return fmt.Errorf("%s: value %v > maximum %v", path, num, *s.Maximum)
+		}
+		if len(s.Enum) > 0 && !numberIn(num, s.Enum) {
+			return fmt.Errorf("%s: value %v not in enum %v", path, num, s.Enum)
 		}
 
 	case "boolean":
@@ -284,6 +316,41 @@ func validateAgainstSchema(v interface{}, s *Schema, path string) error {
 	}
 
 	return nil
+}
+
+func stringIn(value string, allowed []string) bool {
+	for _, item := range allowed {
+		if value == item {
+			return true
+		}
+	}
+	return false
+}
+
+func numberValue(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func numberIn(value float64, allowed []string) bool {
+	for _, item := range allowed {
+		n, err := json.Number(item).Float64()
+		if err == nil && n == value {
+			return true
+		}
+	}
+	return false
 }
 
 // ─── Marshal / Unmarshal ────────────────────────────────────────────────────

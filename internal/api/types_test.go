@@ -102,6 +102,26 @@ func TestValidateOutput(t *testing.T) {
 			&Schema{Type: "object", Properties: map[string]*Schema{
 				"name": {Type: "string"},
 			}, Required: []string{"name"}}, true},
+		{"schema string min length valid", `{"name":"alice"}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: intPtr(3)}}}, false},
+		{"schema string min length rejected", `{"name":"al"}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: intPtr(3)}}}, true},
+		{"schema string max length rejected", `{"name":"abcdef"}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MaxLength: intPtr(5)}}}, true},
+		{"schema string enum rejected", `{"status":"unknown"}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"status": {Type: "string", Enum: []string{"ok", "failed"}}}}, true},
+		{"schema string pattern rejected", `{"id":"bad id"}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"id": {Type: "string", Pattern: `^[a-z]+-[0-9]+$`}}}, true},
+		{"schema number bounds valid", `{"score":0.75}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(1)}}}, false},
+		{"schema number minimum rejected", `{"score":-0.1}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0)}}}, true},
+		{"schema number maximum rejected", `{"score":1.1}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Maximum: floatPtr(1)}}}, true},
+		{"schema integer rejects decimal", `{"count":1.5}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"count": {Type: "integer"}}}, true},
+		{"schema numeric enum rejected", `{"priority":4}`, ContentTypeJSON,
+			&Schema{Type: "object", Properties: map[string]*Schema{"priority": {Type: "integer", Enum: []string{"1", "2", "3"}}}}, true},
 		{"no type constraint", "anything", "", nil, false},
 	}
 
@@ -138,4 +158,5 @@ func TestSchemaValidation(t *testing.T) {
 	}
 }
 
-func intPtr(i int) *int { return &i }
+func intPtr(i int) *int           { return &i }
+func floatPtr(f float64) *float64 { return &f }
