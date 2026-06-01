@@ -35,6 +35,21 @@ fmt:
 fmt-check:
 	@test -z "$$($(GOFMT) -l .)" || (echo "Files need formatting:" && $(GOFMT) -l . && exit 1)
 
+# Verify go.mod and go.sum are in sync with source code
+mod-tidy:
+	@$(GO) mod tidy
+	@if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then \
+		echo "✗ go.mod or go.sum is out of sync. Run 'go mod tidy' and commit changes."; \
+		git checkout go.mod go.sum 2>/dev/null; \
+		exit 1; \
+	fi
+	@echo "✓ go.mod and go.sum are in sync"
+
+# Run Go vulnerability scanner (govulncheck)
+vulncheck:
+	@$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
+	@govulncheck ./... || echo "⚠ Potential vulnerabilities found — review above output"
+
 clean:
 	rm -rf $(BIN_DIR)/*
 
@@ -54,24 +69,33 @@ benchcmp-check:
 benchcmp-reset:
 	$(BIN_DIR)/benchcmp reset
 
-# Complete local CI pipeline — runs vet, fmt-check, tests, and builds all binaries.
+# Complete local CI pipeline — runs vet, fmt-check, go-mod-tidy, tests, and builds all binaries.
 # Use before pushing to avoid CI failures.
 ci:
 	@echo "=== CI Pipeline (local) ==="
 	@echo ""
-	@echo "1/4  go vet..."
+	@echo "1/5  go vet..."
 	@$(GO) vet ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "2/4  gofmt check..."
+	@echo "2/5  gofmt check..."
 	@test -z "$$($(GOFMT) -l .)" || (echo "     ✗ Files need formatting:" && $(GOFMT) -l . && exit 1)
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "3/4  tests (short + race)..."
+	@echo "3/5  go mod tidy check..."
+	@$(GO) mod tidy
+	@if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then \
+		echo "     ✗ go.mod or go.sum is out of sync. Run 'go mod tidy' and commit changes."; \
+		git checkout go.mod go.sum 2>/dev/null; \
+		exit 1; \
+	fi
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "4/5  tests (short + race)..."
 	@$(GO) test -short -count=1 -race -timeout 120s ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "4/4  build all binaries..."
+	@echo "5/5  build all binaries..."
 	@mkdir -p $(BIN_DIR)
 	@for bin in $(BINARIES); do \
 		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
@@ -177,7 +201,9 @@ help:
 	@echo "  lint / vet        Run go vet"
 	@echo "  fmt               Format all source files"
 	@echo "  fmt-check         Check formatting (CI)"
-	@echo "  ci                Run complete CI pipeline locally (vet + fmt + test + build)"
+	@echo "  mod-tidy          Run go mod tidy and verify no diff"
+	@echo "  vulncheck         Run govulncheck vulnerability scan"
+	@echo "  ci                Run complete CI pipeline locally (vet + fmt + tidy + test + build)"
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
 	@echo "  release-notes     Generate release notes from conventional commits"
