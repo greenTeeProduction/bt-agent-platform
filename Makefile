@@ -1,11 +1,11 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe
 
 # Go binary path
 GO := /usr/local/go/bin/go
 GOFMT := /usr/local/go/bin/gofmt
 
 # Build all binaries
-BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli benchcmp
+BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe benchcmp
 BIN_DIR := bin
 
 all: build
@@ -129,6 +129,13 @@ pre-commit-install:
 	@echo "  Hook runs: gofmt → go vet → go test -short"
 	@echo "  To skip: git commit --no-verify"
 
+# Run the lightweight dashboard security penetration/smoke probe.
+# Override target with TARGET=http://host:9800 and API key with BT_API_KEY.
+security-probe:
+	@mkdir -p $(BIN_DIR)
+	@$(GO) build -o $(BIN_DIR)/bt-security-probe ./cmd/bt-security-probe/
+	@$(BIN_DIR)/bt-security-probe --target "$${TARGET:-http://localhost:9800}"
+
 # Setup GitHub Actions self-hosted runner for Jetson ARM64
 # Requires a runner registration token from GitHub Settings → Actions → Runners.
 # Usage: make setup-runner TOKEN=AAAA...
@@ -225,5 +232,6 @@ help:
 	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
 	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
 	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + test)"
+	@echo "  security-probe    Run dashboard security probe (TARGET=http://host:9800)"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
