@@ -79,10 +79,37 @@ func TestOAuth2IntrospectionValidator_ServerError(t *testing.T) {
 		ClientSecret:     "test-secret",
 	})
 
-	// Server returns 500 with no JSON body — json.Decode fails
 	_, err := v(context.Background(), "any-token")
 	if err == nil {
 		t.Fatal("expected error for server error")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 500") {
+		t.Fatalf("expected status-code error, got %v", err)
+	}
+}
+
+func TestOAuth2IntrospectionValidator_RejectsActiveTokenOnNon2xx(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"active": true,
+			"sub":    "should-not-be-trusted",
+		})
+	}))
+	defer ts.Close()
+
+	v := OAuth2IntrospectionValidator(OAuth2IntrospectionConfig{
+		IntrospectionURL: ts.URL,
+		ClientID:         "test-client",
+		ClientSecret:     "test-secret",
+	})
+
+	_, err := v(context.Background(), "forged-token")
+	if err == nil {
+		t.Fatal("expected non-2xx introspection response to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 401") {
+		t.Fatalf("expected status-code error, got %v", err)
 	}
 }
 

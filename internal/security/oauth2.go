@@ -228,6 +228,10 @@ func OAuth2IntrospectionValidator(cfg OAuth2IntrospectionConfig) TokenValidator 
 		}
 		defer resp.Body.Close()
 
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return "", fmt.Errorf("oauth2 introspection: unexpected status %d", resp.StatusCode)
+		}
+
 		// Parse introspection response (RFC 7662)
 		var introspect struct {
 			Active   bool   `json:"active"`
