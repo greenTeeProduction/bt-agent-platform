@@ -39,11 +39,11 @@ import (
 
 // TreeEntry is a named tree in the registry with its evolution state.
 type TreeEntry struct {
-	Name        string                     `json:"name"`
-	Description string                     `json:"description"`
+	Name        string                      `json:"name"`
+	Description string                      `json:"description"`
 	Tree        *evolution.SerializableNode `json:"-"`
-	FilePath    string                     `json:"file_path"`
-	Active      bool                       `json:"active"`
+	FilePath    string                      `json:"file_path"`
+	Active      bool                        `json:"active"`
 }
 
 // Registry manages all known behavior trees.
@@ -169,19 +169,19 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 
 // CycleMetrics records the outcome of one evolution cycle for a single tree.
 type CycleMetrics struct {
-	TreeName     string  `json:"tree_name"`
-	Cycle        int     `json:"cycle"`
-	Timestamp    int64   `json:"timestamp"`
-	BaseFitness  float64 `json:"base_fitness"`
-	NewFitness   float64 `json:"new_fitness"`
-	Delta        float64 `json:"delta"`
-	Mutations    int     `json:"mutations_applied"`
-	NodesBefore  int     `json:"nodes_before"`
-	NodesAfter   int     `json:"nodes_after"`
-	Improved     bool    `json:"improved"`
-	DurationMs   int64   `json:"duration_ms"`
-	Rejections   int     `json:"rejections,omitempty"`   // quality gate rejections this cycle
-	Rollbacks    int     `json:"rollbacks,omitempty"`     // quality gate rollbacks this cycle
+	TreeName    string  `json:"tree_name"`
+	Cycle       int     `json:"cycle"`
+	Timestamp   int64   `json:"timestamp"`
+	BaseFitness float64 `json:"base_fitness"`
+	NewFitness  float64 `json:"new_fitness"`
+	Delta       float64 `json:"delta"`
+	Mutations   int     `json:"mutations_applied"`
+	NodesBefore int     `json:"nodes_before"`
+	NodesAfter  int     `json:"nodes_after"`
+	Improved    bool    `json:"improved"`
+	DurationMs  int64   `json:"duration_ms"`
+	Rejections  int     `json:"rejections,omitempty"` // quality gate rejections this cycle
+	Rollbacks   int     `json:"rollbacks,omitempty"`  // quality gate rollbacks this cycle
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -298,12 +298,12 @@ type Config struct {
 	MetricsTracker *MetricsTracker
 	RefStore       *reflection.Store
 	TT             *evaluator.TranspositionTable
-	Interval       time.Duration // how often to wake up
-	MaxMutations   int           // max mutations per cycle per tree
-	UseRealLLM     bool          // use real Ollama for benchmark validation (slow but accurate)
-	Gate           *evolution.QualityGate      // quality gate for regression detection
-	CrisisDetector *evolution.CrisisDetector   // crisis detection & diversity injection
-	SnapshotDir    string                      // directory for pre-mutation snapshots
+	Interval       time.Duration             // how often to wake up
+	MaxMutations   int                       // max mutations per cycle per tree
+	UseRealLLM     bool                      // use real Ollama for benchmark validation (slow but accurate)
+	Gate           *evolution.QualityGate    // quality gate for regression detection
+	CrisisDetector *evolution.CrisisDetector // crisis detection & diversity injection
+	SnapshotDir    string                    // directory for pre-mutation snapshots
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -413,12 +413,22 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	applied := 0
 	for i := 0; i < len(candidates) && applied < emergencyMutations; i++ {
 		// Idempotency guards
-		if candidates[i].Op.Operation == "add_before" && hasNodeNamed(tree, "CheckConfidence") { continue }
-		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) { continue }
-		if candidates[i].Op.Operation == "increase_retries" && getRetryCount(tree, candidates[i].Op.Target) >= 15 { continue }
-		if candidates[i].Op.Operation == "add_fallback" && hasChildNamed(tree, candidates[i].Op.Target, "DefaultFallback") { continue }
+		if candidates[i].Op.Operation == "add_before" && hasNodeNamed(tree, "CheckConfidence") {
+			continue
+		}
+		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) {
+			continue
+		}
+		if candidates[i].Op.Operation == "increase_retries" && getRetryCount(tree, candidates[i].Op.Target) >= 15 {
+			continue
+		}
+		if candidates[i].Op.Operation == "add_fallback" && hasChildNamed(tree, candidates[i].Op.Target, "DefaultFallback") {
+			continue
+		}
 
-		if candidates[i].Score < 0.2 { break }
+		if candidates[i].Score < 0.2 {
+			break
+		}
 
 		// Only apply if benchmark says it helps (quick 2-task validation for speed)
 		score := benchmark.QuickValidate(tree, suite, llm, []evolution.MutationOp{candidates[i].Op})
@@ -485,34 +495,46 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
-		Delta: newFitness.Composite - baseFitness.Composite,
+		Delta:     newFitness.Composite - baseFitness.Composite,
 		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
-		Improved: applied > 0,
+		Improved:   applied > 0,
 		Rejections: rejections, Rollbacks: rollbacks,
 	}
 }
 
 func baseNodeCount(name string) int {
 	switch {
-	case strings.HasPrefix(name, "domain_"): return 30
-	case strings.HasPrefix(name, "finance_"): 
-		if strings.Contains(name, "pitch") { return 39 }
+	case strings.HasPrefix(name, "domain_"):
+		return 30
+	case strings.HasPrefix(name, "finance_"):
+		if strings.Contains(name, "pitch") {
+			return 39
+		}
 		return 27
 	case strings.HasPrefix(name, "research_"):
-		if strings.Contains(name, "deep") { return 54 }
+		if strings.Contains(name, "deep") {
+			return 54
+		}
 		return 18
-	case name == "godev": return 30
-	case name == "default": return 22
-	default: return 25
+	case name == "godev":
+		return 30
+	case name == "default":
+		return 22
+	default:
+		return 25
 	}
 }
 
 func getRetryCount(tree *evolution.SerializableNode, name string) int {
 	var find func(n *evolution.SerializableNode) int
 	find = func(n *evolution.SerializableNode) int {
-		if n.Name == name && n.Type == "Retry" { return n.MaxRetries }
+		if n.Name == name && n.Type == "Retry" {
+			return n.MaxRetries
+		}
 		for i := range n.Children {
-			if r := find(&n.Children[i]); r > 0 { return r }
+			if r := find(&n.Children[i]); r > 0 {
+				return r
+			}
 		}
 		return 0
 	}
@@ -520,9 +542,13 @@ func getRetryCount(tree *evolution.SerializableNode, name string) int {
 }
 
 func hasNodeNamed(tree *evolution.SerializableNode, name string) bool {
-	if tree.Name == name { return true }
+	if tree.Name == name {
+		return true
+	}
 	for i := range tree.Children {
-		if hasNodeNamed(&tree.Children[i], name) { return true }
+		if hasNodeNamed(&tree.Children[i], name) {
+			return true
+		}
 	}
 	return false
 }
@@ -531,11 +557,15 @@ func hasNodeNamed(tree *evolution.SerializableNode, name string) bool {
 func hasChildNamed(tree *evolution.SerializableNode, parentName, childName string) bool {
 	if tree.Name == parentName {
 		for i := range tree.Children {
-			if tree.Children[i].Name == childName { return true }
+			if tree.Children[i].Name == childName {
+				return true
+			}
 		}
 	}
 	for i := range tree.Children {
-		if hasChildNamed(&tree.Children[i], parentName, childName) { return true }
+		if hasChildNamed(&tree.Children[i], parentName, childName) {
+			return true
+		}
 	}
 	return false
 }
@@ -547,7 +577,9 @@ func isNodeWrapped(tree *evolution.SerializableNode, name string) bool {
 		}
 	}
 	for i := range tree.Children {
-		if isNodeWrapped(&tree.Children[i], name) { return true }
+		if isNodeWrapped(&tree.Children[i], name) {
+			return true
+		}
 	}
 	return false
 }

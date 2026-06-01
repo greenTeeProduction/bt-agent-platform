@@ -25,9 +25,9 @@ type EvolveV2Config struct {
 	ParetoEnabled bool
 
 	// Island model (domain separation)
-	IslandEnabled       bool
-	MigrationInterval   int     // generations between cross-domain migration
-	MigrationRate       float64 // fraction migrated
+	IslandEnabled     bool
+	MigrationInterval int     // generations between cross-domain migration
+	MigrationRate     float64 // fraction migrated
 
 	// Model ensemble (Ollama + DeepSeek)
 	EnsembleEnabled bool
@@ -151,10 +151,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			CurrentFitness: baseFitness.Composite,
 			Domain:         domain,
 			EvaluatorBreakdown: map[string]float64{
-				"composite":      baseFitness.Composite,
-				"success_rate":   baseFitness.SuccessRate,
-				"path_coverage":  baseFitness.PathCoverage,
-				"stability":      baseFitness.Stability,
+				"composite":     baseFitness.Composite,
+				"success_rate":  baseFitness.SuccessRate,
+				"path_coverage": baseFitness.PathCoverage,
+				"stability":     baseFitness.Stability,
 			},
 			ResearchHints: llm.DefaultResearchHints(),
 		}
@@ -267,7 +267,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
-		Delta: newFitness.Composite - baseFitness.Composite,
+		Delta:     newFitness.Composite - baseFitness.Composite,
 		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
 		Improved: improved,
 	}

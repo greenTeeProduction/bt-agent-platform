@@ -382,32 +382,32 @@ func TestNewDeepSeekClient_FullConfig(t *testing.T) {
 
 func TestNewDeepSeekClient_DefaultsApplied(t *testing.T) {
 	tests := []struct {
-		name     string
-		cfg      DeepSeekConfig
-		wantURL  string
+		name      string
+		cfg       DeepSeekConfig
+		wantURL   string
 		wantModel string
-		wantTO   time.Duration
+		wantTO    time.Duration
 	}{
 		{
-			name:     "all empty",
-			cfg:      DeepSeekConfig{APIKey: "key"},
-			wantURL:  "https://api.deepseek.com/v1",
+			name:      "all empty",
+			cfg:       DeepSeekConfig{APIKey: "key"},
+			wantURL:   "https://api.deepseek.com/v1",
 			wantModel: "deepseek-v4-pro",
-			wantTO:   120 * time.Second,
+			wantTO:    120 * time.Second,
 		},
 		{
-			name:     "zero timeout",
-			cfg:      DeepSeekConfig{APIKey: "key", Timeout: 0},
-			wantURL:  "https://api.deepseek.com/v1",
+			name:      "zero timeout",
+			cfg:       DeepSeekConfig{APIKey: "key", Timeout: 0},
+			wantURL:   "https://api.deepseek.com/v1",
 			wantModel: "deepseek-v4-pro",
-			wantTO:   120 * time.Second,
+			wantTO:    120 * time.Second,
 		},
 		{
-			name:     "empty BaseURL only",
-			cfg:      DeepSeekConfig{APIKey: "key", Model: "m1", Timeout: 10 * time.Second},
-			wantURL:  "https://api.deepseek.com/v1",
+			name:      "empty BaseURL only",
+			cfg:       DeepSeekConfig{APIKey: "key", Model: "m1", Timeout: 10 * time.Second},
+			wantURL:   "https://api.deepseek.com/v1",
 			wantModel: "m1",
-			wantTO:   10 * time.Second,
+			wantTO:    10 * time.Second,
 		},
 	}
 

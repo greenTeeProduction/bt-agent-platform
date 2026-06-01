@@ -8,37 +8,37 @@ import (
 
 func TestWorldStateSatisfies(t *testing.T) {
 	ws := WorldState{"hungry": true, "hasFood": false, "energy": 50}
-	
+
 	t.Run("empty goal always satisfied", func(t *testing.T) {
 		if !ws.Satisfies(WorldState{}) {
 			t.Error("empty goal should always be satisfied")
 		}
 	})
-	
+
 	t.Run("single matching condition", func(t *testing.T) {
 		if !ws.Satisfies(WorldState{"hungry": true}) {
 			t.Error("should satisfy single matching condition")
 		}
 	})
-	
+
 	t.Run("single non-matching condition", func(t *testing.T) {
 		if ws.Satisfies(WorldState{"hungry": false}) {
 			t.Error("should NOT satisfy non-matching condition")
 		}
 	})
-	
+
 	t.Run("missing key", func(t *testing.T) {
 		if ws.Satisfies(WorldState{"nonexistent": true}) {
 			t.Error("should NOT satisfy when key is missing")
 		}
 	})
-	
+
 	t.Run("multiple matching conditions", func(t *testing.T) {
 		if !ws.Satisfies(WorldState{"hungry": true, "hasFood": false}) {
 			t.Error("should satisfy multiple matching conditions")
 		}
 	})
-	
+
 	t.Run("partial match fails", func(t *testing.T) {
 		if ws.Satisfies(WorldState{"hungry": true, "hasFood": true}) {
 			t.Error("should fail when one condition doesn't match")
@@ -57,7 +57,7 @@ func TestWorldStateApply(t *testing.T) {
 			t.Error("original should be unchanged")
 		}
 	})
-	
+
 	t.Run("apply multiple effects", func(t *testing.T) {
 		ws := WorldState{"x": 1}
 		newState := ws.Apply(WorldState{"x": 2, "y": 3})
@@ -158,7 +158,7 @@ func TestPlannerMultiStep(t *testing.T) {
 	if len(plan.Steps) != 3 {
 		t.Fatalf("expected 3 steps, got %d", len(plan.Steps))
 	}
-	
+
 	names := []string{plan.Steps[0].Name, plan.Steps[1].Name, plan.Steps[2].Name}
 	expected := []string{"walk_to_kitchen", "cook_food", "eat"}
 	for i, n := range names {
@@ -396,19 +396,27 @@ func TestAgentCallbacks(t *testing.T) {
 	}
 	agent := NewAgent(planner, registry)
 	agent.Callbacks = AgentCallbacks{
-		OnPlanFound: func(p *Plan) { planFound = true },
-		OnStepStart: func(i int, a *Action) { stepStarted = true },
+		OnPlanFound:    func(p *Plan) { planFound = true },
+		OnStepStart:    func(i int, a *Action) { stepStarted = true },
 		OnStepComplete: func(i int, a *Action, err error) { stepComplete = true },
-		OnComplete: func(r *AgentRun) { completed = true },
+		OnComplete:     func(r *AgentRun) { completed = true },
 	}
 	agent.SetState("hungry", true)
 	agent.SetGoals(NewGoal("not hungry", 1.0, WorldState{"hungry": false}))
 
 	agent.Run()
-	if !planFound { t.Error("OnPlanFound should fire") }
-	if !stepStarted { t.Error("OnStepStart should fire") }
-	if !stepComplete { t.Error("OnStepComplete should fire") }
-	if !completed { t.Error("OnComplete should fire") }
+	if !planFound {
+		t.Error("OnPlanFound should fire")
+	}
+	if !stepStarted {
+		t.Error("OnStepStart should fire")
+	}
+	if !stepComplete {
+		t.Error("OnStepComplete should fire")
+	}
+	if !completed {
+		t.Error("OnComplete should fire")
+	}
 }
 
 // --- Integration Tests ---

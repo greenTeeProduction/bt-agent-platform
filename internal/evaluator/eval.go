@@ -36,7 +36,9 @@ func NewEvaluator(cfg EvaluatorConfig) *Evaluator {
 	} else {
 		var err error
 		e.ollama, err = llm.NewClient(llm.DefaultConfig())
-		if err != nil { e.ollama = nil }
+		if err != nil {
+			e.ollama = nil
+		}
 	}
 	return e
 }

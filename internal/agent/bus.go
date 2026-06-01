@@ -9,11 +9,11 @@ import (
 
 // AgentEvent represents an event published on the AgentBus.
 type AgentEvent struct {
-	Type      string    // "service_down", "health_alert", "task_complete", "error_detected"
-	Source    string    // agent name that published
-	Target    string    // optional target agent (empty = broadcast)
-	Message   string    // human-readable message
-	Data      any       // optional structured data
+	Type      string // "service_down", "health_alert", "task_complete", "error_detected"
+	Source    string // agent name that published
+	Target    string // optional target agent (empty = broadcast)
+	Message   string // human-readable message
+	Data      any    // optional structured data
 	Timestamp time.Time
 }
 
@@ -21,9 +21,9 @@ type AgentEvent struct {
 // Agents can subscribe to specific event types or receive all events.
 type AgentBus struct {
 	mu          sync.RWMutex
-	subscribers map[string][]chan AgentEvent   // event type → subscriber channels
-	allSubs     []chan AgentEvent              // subscribers receiving all events
-	history     []AgentEvent                   // recent events (ring buffer)
+	subscribers map[string][]chan AgentEvent // event type → subscriber channels
+	allSubs     []chan AgentEvent            // subscribers receiving all events
+	history     []AgentEvent                 // recent events (ring buffer)
 	maxHistory  int
 	closed      bool
 }

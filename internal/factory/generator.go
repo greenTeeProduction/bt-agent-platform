@@ -85,8 +85,8 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 
 	if spec.SelfCorrect != nil {
 		outcomeKids = append(outcomeKids, evolution.SerializableNode{
-			Type:     "Retry",
-			Name:     "RetrySelfCorrect",
+			Type: "Retry",
+			Name: "RetrySelfCorrect",
 			Children: []evolution.SerializableNode{{
 				Type:        "Action",
 				Name:        spec.SelfCorrect.Name,

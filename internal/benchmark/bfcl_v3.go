@@ -20,32 +20,32 @@ type BFCLV3Turn struct {
 // BFCLV3Entry represents a multi-turn BFCL V3 benchmark entry.
 // Each entry has multiple conversation turns and expected tool calls per turn.
 type BFCLV3Entry struct {
-	ID            string           `json:"id"`
-	Category      string           `json:"category"`
-	Turns         []BFCLV3Turn     `json:"turns"`          // conversation turns
-	InitialConfig map[string]any   `json:"initial_config"` // initial system state
-	ExpectedTools []string         `json:"expected_tools"` // expected tool per turn
+	ID            string         `json:"id"`
+	Category      string         `json:"category"`
+	Turns         []BFCLV3Turn   `json:"turns"`          // conversation turns
+	InitialConfig map[string]any `json:"initial_config"` // initial system state
+	ExpectedTools []string       `json:"expected_tools"` // expected tool per turn
 }
 
 // BFCLV3Metrics aggregates BFCL V3 multi-turn evaluation results.
 type BFCLV3Metrics struct {
-	TotalEntries         int              `json:"total_entries"`
-	CorrectTurns         int              `json:"correct_turns"`
-	TotalTurns           int              `json:"total_turns"`
-	TurnAccuracy         float64          `json:"turn_accuracy"`
-	MultiStepSuccessRate float64          `json:"multi_step_success_rate"`
-	FullyCorrect         int              `json:"fully_correct"`
-	Results              []BFCLV3Result   `json:"results,omitempty"`
+	TotalEntries         int            `json:"total_entries"`
+	CorrectTurns         int            `json:"correct_turns"`
+	TotalTurns           int            `json:"total_turns"`
+	TurnAccuracy         float64        `json:"turn_accuracy"`
+	MultiStepSuccessRate float64        `json:"multi_step_success_rate"`
+	FullyCorrect         int            `json:"fully_correct"`
+	Results              []BFCLV3Result `json:"results,omitempty"`
 }
 
 // BFCLV3Result holds the outcome for a single multi-turn entry.
 type BFCLV3Result struct {
-	EntryID        string   `json:"entry_id"`
-	Category       string   `json:"category"`
-	NumTurns       int      `json:"num_turns"`
-	CorrectInTurns int      `json:"correct_in_turns"`
-	AllCorrect     bool     `json:"all_correct"`
-	TurnSuccess    []bool   `json:"turn_success,omitempty"`
+	EntryID        string `json:"entry_id"`
+	Category       string `json:"category"`
+	NumTurns       int    `json:"num_turns"`
+	CorrectInTurns int    `json:"correct_in_turns"`
+	AllCorrect     bool   `json:"all_correct"`
+	TurnSuccess    []bool `json:"turn_success,omitempty"`
 }
 
 // LoadBFCLV3MultiTurn reads a BFCL V3 multi-turn JSON file.

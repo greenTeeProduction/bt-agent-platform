@@ -13,12 +13,12 @@ import (
 // When the current file exceeds MaxSize, it is rotated: .log → .log.1, .log.1 → .log.2, etc.
 // MaxBackups old files are kept; older files are deleted.
 type RotatingWriter struct {
-	mu        sync.Mutex
-	file      *os.File
-	filePath  string
-	size      int64
-	MaxSize   int64 // Max file size in bytes before rotation (default 10MB)
-	MaxBackups int  // Max number of old log files to keep (default 5)
+	mu         sync.Mutex
+	file       *os.File
+	filePath   string
+	size       int64
+	MaxSize    int64 // Max file size in bytes before rotation (default 10MB)
+	MaxBackups int   // Max number of old log files to keep (default 5)
 }
 
 // NewRotatingWriter creates a new rotating writer that writes to filePath.

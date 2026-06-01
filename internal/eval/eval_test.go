@@ -78,4 +78,3 @@ func TestPlatformEval_Scorecard(t *testing.T) {
 		}
 	}
 }
-

@@ -40,15 +40,15 @@ type AgentRun struct {
 
 // Agent executes GOAP plans with monitoring and replanning.
 type Agent struct {
-	mu             sync.RWMutex
-	Planner        *Planner
-	Registry       ActionRegistry
+	mu         sync.RWMutex
+	Planner    *Planner
+	Registry   ActionRegistry
 	WorldState WorldState
 	Goals      []*Goal
 	CurrentRun *AgentRun
 	State      AgentState
 	History    []*AgentRun
-	MaxReplans int           // maximum replanning attempts (default 3)
+	MaxReplans int // maximum replanning attempts (default 3)
 	Callbacks  AgentCallbacks
 }
 
@@ -277,7 +277,7 @@ func (a *Agent) executePlan(plan *Plan, startTime time.Time) *AgentRun {
 	retryPlan:
 		// Reset loop for new plan
 	}
-	
+
 	// Should not reach here
 	run.Status = AgentFailed
 	run.Error = "max replans reached"

@@ -623,9 +623,9 @@ func TestBlockConfig_FilterMutations(t *testing.T) {
 	}
 
 	mutations := []MutationOp{
-		{Operation: "replace_condition", Target: "HasClearTask"},  // should be filtered (PreGate is frozen)
-		{Operation: "replace_action", Target: "ExecutePlan"},       // should pass (ExecutionPath is mutable)
-		{Operation: "add_after", Target: "UnknownTarget"},           // unknown target = mutable by default
+		{Operation: "replace_condition", Target: "HasClearTask"}, // should be filtered (PreGate is frozen)
+		{Operation: "replace_action", Target: "ExecutePlan"},     // should pass (ExecutionPath is mutable)
+		{Operation: "add_after", Target: "UnknownTarget"},        // unknown target = mutable by default
 	}
 
 	filtered := bc.FilterMutations(mutations, tree)
@@ -681,7 +681,7 @@ func TestFindBlockForNode(t *testing.T) {
 		{"ExecutePlan", "ExecutionPath"},
 		{"DeepAction", "Inner"},
 		{"UnnamedChild", "StrategyRouter"},
-		{"Root", ""},   // root has no parent block
+		{"Root", ""}, // root has no parent block
 		{"Nonexistent", ""},
 	}
 

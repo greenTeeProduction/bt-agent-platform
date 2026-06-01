@@ -7,8 +7,12 @@ import (
 func TestDTAnalyzer_Entropy(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Record 10 tasks: 6 hit PathA, 4 hit PathB
-	for i := 0; i < 6; i++ { d.RecordHit("StrategyRouter", "PathA", "IsCodeReview", true) }
-	for i := 0; i < 4; i++ { d.RecordHit("StrategyRouter", "PathB", "IsBuildTask", true) }
+	for i := 0; i < 6; i++ {
+		d.RecordHit("StrategyRouter", "PathA", "IsCodeReview", true)
+	}
+	for i := 0; i < 4; i++ {
+		d.RecordHit("StrategyRouter", "PathB", "IsBuildTask", true)
+	}
 
 	entropy := d.Entropy("StrategyRouter")
 	// Expected: -(0.6*log2(0.6) + 0.4*log2(0.4)) ≈ 0.971
@@ -19,8 +23,12 @@ func TestDTAnalyzer_Entropy(t *testing.T) {
 
 func TestDTAnalyzer_Gini(t *testing.T) {
 	d := NewDTAnalyzer()
-	for i := 0; i < 10; i++ { d.RecordHit("SR", "PathA", "Check", true) }
-	for i := 0; i < 0; i++ { d.RecordHit("SR", "PathB", "Other", true) }
+	for i := 0; i < 10; i++ {
+		d.RecordHit("SR", "PathA", "Check", true)
+	}
+	for i := 0; i < 0; i++ {
+		d.RecordHit("SR", "PathB", "Other", true)
+	}
 
 	// Pure split: Gini = 1 - (1.0^2 + 0.0^2) = 0
 	gini := d.GiniImpurity("SR")
@@ -30,8 +38,12 @@ func TestDTAnalyzer_Gini(t *testing.T) {
 
 	// 50/50 split
 	d2 := NewDTAnalyzer()
-	for i := 0; i < 5; i++ { d2.RecordHit("SR2", "A", "x", true) }
-	for i := 0; i < 5; i++ { d2.RecordHit("SR2", "B", "y", true) }
+	for i := 0; i < 5; i++ {
+		d2.RecordHit("SR2", "A", "x", true)
+	}
+	for i := 0; i < 5; i++ {
+		d2.RecordHit("SR2", "B", "y", true)
+	}
 	gini2 := d2.GiniImpurity("SR2")
 	// Gini = 1 - (0.5^2 + 0.5^2) = 0.5
 	if gini2 < 0.45 || gini2 > 0.55 {
@@ -42,8 +54,12 @@ func TestDTAnalyzer_Gini(t *testing.T) {
 func TestDTAnalyzer_BestSplit(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Condition "IsCodeReview" perfectly splits: always hits PathA
-	for i := 0; i < 8; i++ { d.RecordHit("SR", "PathA", "IsCodeReview", true) }
-	for i := 0; i < 2; i++ { d.RecordHit("SR", "PathB", "IsBuildTask", true) }
+	for i := 0; i < 8; i++ {
+		d.RecordHit("SR", "PathA", "IsCodeReview", true)
+	}
+	for i := 0; i < 2; i++ {
+		d.RecordHit("SR", "PathB", "IsBuildTask", true)
+	}
 
 	best := d.BestSplitCondition("SR")
 	if best != "IsCodeReview" {
@@ -54,8 +70,12 @@ func TestDTAnalyzer_BestSplit(t *testing.T) {
 func TestBTOptimizer_ReorderSelectors(t *testing.T) {
 	o := NewBTOptimizer()
 	// Record usage: PathB hit more often than PathA
-	for i := 0; i < 8; i++ { o.Analyzer.RecordHit("StrategyRouter", "BuildPath", "IsBuildTask", true) }
-	for i := 0; i < 2; i++ { o.Analyzer.RecordHit("StrategyRouter", "ReviewPath", "IsCodeReview", true) }
+	for i := 0; i < 8; i++ {
+		o.Analyzer.RecordHit("StrategyRouter", "BuildPath", "IsBuildTask", true)
+	}
+	for i := 0; i < 2; i++ {
+		o.Analyzer.RecordHit("StrategyRouter", "ReviewPath", "IsCodeReview", true)
+	}
 
 	tree := &SerializableNode{
 		Type: "Selector", Name: "StrategyRouter",
@@ -106,10 +126,16 @@ func TestConditionOverlap(t *testing.T) {
 func TestDTAnalyzer_InformationGain(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Simulate: CodeReview paths succeed 90%, Build path succeeds 50%
-	for i := 0; i < 9; i++ { d.RecordHit("SR", "Review", "IsCodeReview", true) }
+	for i := 0; i < 9; i++ {
+		d.RecordHit("SR", "Review", "IsCodeReview", true)
+	}
 	d.RecordHit("SR", "Review", "IsCodeReview", false)
-	for i := 0; i < 5; i++ { d.RecordHit("SR", "Build", "IsBuildTask", true) }
-	for i := 0; i < 5; i++ { d.RecordHit("SR", "Build", "IsBuildTask", false) }
+	for i := 0; i < 5; i++ {
+		d.RecordHit("SR", "Build", "IsBuildTask", true)
+	}
+	for i := 0; i < 5; i++ {
+		d.RecordHit("SR", "Build", "IsBuildTask", false)
+	}
 
 	gain := d.InformationGain("SR", "IsCodeReview")
 	t.Logf("Information gain for IsCodeReview: %.4f", gain)

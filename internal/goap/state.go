@@ -25,27 +25,27 @@ type WorldState map[string]interface{}
 // Goal represents a desired world state. Only the specified keys must match;
 // other keys in the world state are ignored during goal satisfaction checks.
 type Goal struct {
-	Name       string            `json:"name"`
-	Priority   float64           `json:"priority"`   // 0-1, higher = more important
-	Conditions WorldState        `json:"conditions"`  // must all be satisfied
-	Deadline   int               `json:"deadline"`    // optional step deadline (0 = none)
+	Name       string     `json:"name"`
+	Priority   float64    `json:"priority"`   // 0-1, higher = more important
+	Conditions WorldState `json:"conditions"` // must all be satisfied
+	Deadline   int        `json:"deadline"`   // optional step deadline (0 = none)
 }
 
 // Action is an operator that transforms the world state.
 // It has preconditions (must be true to execute) and effects (what changes).
 type Action struct {
-	Name          string            `json:"name"`
-	Cost          float64           `json:"cost"`          // execution cost (1.0 default)
-	Preconditions WorldState        `json:"preconditions"`  // must all match
-	Effects       WorldState        `json:"effects"`        // state changes after execution
+	Name          string                 `json:"name"`
+	Cost          float64                `json:"cost"`               // execution cost (1.0 default)
+	Preconditions WorldState             `json:"preconditions"`      // must all match
+	Effects       WorldState             `json:"effects"`            // state changes after execution
 	Metadata      map[string]interface{} `json:"metadata,omitempty"` // arbitrary data
 }
 
 // Plan is an ordered sequence of actions to achieve a goal.
 type Plan struct {
-	Goal   *Goal    `json:"goal"`
-	Steps  []Action `json:"steps"`
-	Cost   float64  `json:"cost"`
+	Goal  *Goal    `json:"goal"`
+	Steps []Action `json:"steps"`
+	Cost  float64  `json:"cost"`
 }
 
 // String returns a human-readable plan representation.

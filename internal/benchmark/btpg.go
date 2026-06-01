@@ -11,21 +11,21 @@ import (
 // BTPGMetrics holds behavior tree quality metrics adapted from the
 // Behavior Tree Planning Gym (BTPG) paper for service robot evaluation.
 type BTPGMetrics struct {
-	NodeCount        int     `json:"node_count"`         // total nodes in tree
-	Depth            int     `json:"depth"`               // max depth
-	BranchingFactor  float64 `json:"branching_factor"`    // avg children per composite node
-	SuccessRate      float64 `json:"success_rate"`        // task completion rate
+	NodeCount          int     `json:"node_count"`          // total nodes in tree
+	Depth              int     `json:"depth"`               // max depth
+	BranchingFactor    float64 `json:"branching_factor"`    // avg children per composite node
+	SuccessRate        float64 `json:"success_rate"`        // task completion rate
 	PlanningEfficiency float64 `json:"planning_efficiency"` // success / node_count (higher is better)
-	RobustnessScore  float64 `json:"robustness_score"`    // handles edge cases (0.0 - 1.0)
+	RobustnessScore    float64 `json:"robustness_score"`    // handles edge cases (0.0 - 1.0)
 }
 
 // BTPGTaskResult holds per-task evaluation results.
 type BTPGTaskResult struct {
-	Task        string `json:"task"`
-	Success     bool   `json:"success"`
-	NodesVisited int   `json:"nodes_visited"`
-	Path        string `json:"path"`
-	Output      string `json:"output"`
+	Task         string `json:"task"`
+	Success      bool   `json:"success"`
+	NodesVisited int    `json:"nodes_visited"`
+	Path         string `json:"path"`
+	Output       string `json:"output"`
 }
 
 // BTPGResult aggregates BTPG evaluation results.

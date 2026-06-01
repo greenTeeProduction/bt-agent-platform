@@ -134,14 +134,14 @@ func TestPctChange(t *testing.T) {
 		old, new float64
 		want     float64
 	}{
-		{100, 110, 10.0},   // 10% slower
-		{100, 125, 25.0},   // 25% slower
-		{100, 90, -10.0},   // 10% faster
-		{100, 100, 0.0},    // no change
-		{0, 100, 100.0},    // new benchmark
-		{0, 0, 0.0},        // both zero
-		{50, 100, 100.0},   // 2x slower
-		{200, 100, -50.0},  // 2x faster
+		{100, 110, 10.0},  // 10% slower
+		{100, 125, 25.0},  // 25% slower
+		{100, 90, -10.0},  // 10% faster
+		{100, 100, 0.0},   // no change
+		{0, 100, 100.0},   // new benchmark
+		{0, 0, 0.0},       // both zero
+		{50, 100, 100.0},  // 2x slower
+		{200, 100, -50.0}, // 2x faster
 	}
 	for _, tt := range tests {
 		got := pctChange(tt.old, tt.new)

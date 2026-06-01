@@ -28,9 +28,9 @@ import (
 type MemoryEntry struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`
-	Category  string    `json:"category"`  // "fact", "pattern", "pitfall", "preference", "state"
-	Priority  string    `json:"priority"`  // "high", "medium", "low"
-	Source    string    `json:"source"`    // "agent", "reflection", "manual", "extracted"
+	Category  string    `json:"category"` // "fact", "pattern", "pitfall", "preference", "state"
+	Priority  string    `json:"priority"` // "high", "medium", "low"
+	Source    string    `json:"source"`   // "agent", "reflection", "manual", "extracted"
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	HitCount  int       `json:"hit_count"` // how many times this entry was read
@@ -39,10 +39,10 @@ type MemoryEntry struct {
 // MemoryStore is a per-agent persistent key-value store.
 // Thread-safe, persisted to JSON on every write.
 type MemoryStore struct {
-	mu       sync.RWMutex
-	dir      string
-	maxSize  int
-	entries  map[string]*MemoryEntry // key → entry
+	mu      sync.RWMutex
+	dir     string
+	maxSize int
+	entries map[string]*MemoryEntry // key → entry
 }
 
 // NewMemoryStore creates or opens a memory store for an agent.

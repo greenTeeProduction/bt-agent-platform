@@ -45,10 +45,10 @@ func TestBTPG_QualityMetrics_CodeReviewTree(t *testing.T) {
 
 func TestBTPG_QualityMetrics_AllDomainTrees(t *testing.T) {
 	trees := map[string]*evolution.SerializableNode{
-		"GoDev":           evolution.GoDeveloperTree(),
-		"CodeReview":      domains.CodeReviewTree(),
-		"DevOpsCI":        domains.DevOpsCITree(),
-		"AgentMonitor":    domains.AgentMonitorTree(),
+		"GoDev":             evolution.GoDeveloperTree(),
+		"CodeReview":        domains.CodeReviewTree(),
+		"DevOpsCI":          domains.DevOpsCITree(),
+		"AgentMonitor":      domains.AgentMonitorTree(),
 		"CrashInvestigator": domains.CrashInvestigatorTree(),
 	}
 
@@ -65,7 +65,9 @@ func TestBTPG_QualityMetrics_AllDomainTrees(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution(t *testing.T) {
-	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping LLM-dependent BTPG test in short mode")
+	}
 	tasks := BuiltinBTPGTasks()
 	if len(tasks) != 8 {
 		t.Errorf("expected 8 BTPG tasks, got %d", len(tasks))
@@ -112,7 +114,9 @@ func TestBTPG_TaskExecution(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution_FiveTasks(t *testing.T) {
-	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping LLM-dependent BTPG test in short mode")
+	}
 	// Test with subset of 5 tasks as specified
 	tasks := BuiltinBTPGTasks()[:5]
 	tree := evolution.GoDeveloperTree()
@@ -143,11 +147,13 @@ func TestBTPG_EmptyTasks(t *testing.T) {
 }
 
 func TestBTPG_EdgeCaseRobustness(t *testing.T) {
-	if testing.Short() { t.Skip("skipping LLM-dependent BTPG test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping LLM-dependent BTPG test in short mode")
+	}
 	// Tasks that are edge cases should test robustness
 	edgeTasks := []string{
-		"bring coffee",          // very short
-		"??",                    // ambiguous
+		"bring coffee", // very short
+		"??",           // ambiguous
 		"clean the entire house and do the laundry and wash dishes and mop floors!!", // very long
 	}
 

@@ -9,8 +9,10 @@ import (
 
 func main() {
 	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil { fmt.Println("Ollama unavailable"); return }
-
+	if err != nil {
+		fmt.Println("Ollama unavailable")
+		return
+	}
 
 	fmt.Println("\nPhase 1: Genetic Algorithm")
 	pop := evolution.NewPopulation(10, evolution.DefaultTree())
@@ -29,9 +31,16 @@ func main() {
 	cmd := engine.BuildTree(tree, bb)
 	engine.RunTask(bb, cmd)
 	fmt.Printf("Stockfish: %s\n", bb.Outcome)
-	if bb.Result != "" { fmt.Println(bb.Result[:min(200, len(bb.Result))]) }
+	if bb.Result != "" {
+		fmt.Println(bb.Result[:min(200, len(bb.Result))])
+	}
 
 	fmt.Println("\nEvolution complete.")
 }
 
-func min(a, b int) int { if a<b {return a}; return b }
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

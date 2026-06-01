@@ -24,7 +24,7 @@ import (
 
 // Session represents an authenticated user session.
 type Session struct {
-	ID        string    `json:"id"`         // SHA-256 hash of the raw session token
+	ID        string    `json:"id"` // SHA-256 hash of the raw session token
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	LastUsed  time.Time `json:"last_used"`
@@ -34,24 +34,24 @@ type Session struct {
 // SessionInfo is the public-facing representation of a session.
 // Raw tokens and hashes are never exposed.
 type SessionInfo struct {
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	LastUsed  time.Time `json:"last_used"`
+	CreatedAt time.Time     `json:"created_at"`
+	ExpiresAt time.Time     `json:"expires_at"`
+	LastUsed  time.Time     `json:"last_used"`
 	Remaining time.Duration `json:"remaining"`
 }
 
 // SessionStore manages authenticated sessions. Safe for concurrent use.
 type SessionStore struct {
-	mu           sync.RWMutex
-	sessions     map[string]*Session // hash -> session
-	maxSessions  int
-	defaultTTL   time.Duration
-	cookieName   string
-	cookieSecure bool
-	cookiePath   string
+	mu            sync.RWMutex
+	sessions      map[string]*Session // hash -> session
+	maxSessions   int
+	defaultTTL    time.Duration
+	cookieName    string
+	cookieSecure  bool
+	cookiePath    string
 	cleanupTicker *time.Ticker
-	stopCh       chan struct{}
-	done         chan struct{}
+	stopCh        chan struct{}
+	done          chan struct{}
 }
 
 // SessionStoreConfig configures a SessionStore.
@@ -89,14 +89,14 @@ func NewSessionStore(cfg SessionStoreConfig) *SessionStore {
 	}
 
 	ss := &SessionStore{
-		sessions:      make(map[string]*Session),
-		maxSessions:   cfg.MaxSessions,
-		defaultTTL:    cfg.DefaultTTL,
-		cookieName:    cfg.CookieName,
-		cookieSecure:  cfg.CookieSecure,
-		cookiePath:    cfg.CookiePath,
-		stopCh:        make(chan struct{}),
-		done:          make(chan struct{}),
+		sessions:     make(map[string]*Session),
+		maxSessions:  cfg.MaxSessions,
+		defaultTTL:   cfg.DefaultTTL,
+		cookieName:   cfg.CookieName,
+		cookieSecure: cfg.CookieSecure,
+		cookiePath:   cfg.CookiePath,
+		stopCh:       make(chan struct{}),
+		done:         make(chan struct{}),
 	}
 	ss.cleanupTicker = time.NewTicker(cfg.CleanupInterval)
 	go ss.cleanupLoop()
@@ -118,7 +118,7 @@ func (ss *SessionStore) CreateSession(userID string) (string, error) {
 	if _, err := rand.Read(raw); err != nil {
 		return "", fmt.Errorf("session token generation failed: %w", err)
 	}
-	token := hex.EncodeToString(raw)                         // 64-char hex
+	token := hex.EncodeToString(raw) // 64-char hex
 	hash := sha256Hex(token)
 
 	now := time.Now()

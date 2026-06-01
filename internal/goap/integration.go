@@ -55,13 +55,13 @@ func (b *BlackboardBridge) SyncFromBB() {
 
 	// Map known keys
 	keyMap := map[string]string{
-		"goap_state":     "goap_state",
-		"goal_priority":  "goal_priority",
-		"task_type":      "task_type",
-		"task_status":    "task_status",
-		"has_resources":  "has_resources",
-		"has_plan":       "has_plan",
-		"has_result":     "has_result",
+		"goap_state":    "goap_state",
+		"goal_priority": "goal_priority",
+		"task_type":     "task_type",
+		"task_status":   "task_status",
+		"has_resources": "has_resources",
+		"has_plan":      "has_plan",
+		"has_result":    "has_result",
 	}
 
 	for bbKey, wsKey := range keyMap {
@@ -125,20 +125,20 @@ const (
 
 // SerializableNode mirrors engine.SerializableNode to avoid import cycles.
 type SerializableNode struct {
-	Type     BTNodeType         `json:"type"`
-	Name     string             `json:"name"`
-	Children []SerializableNode `json:"children,omitempty"`
+	Type     BTNodeType             `json:"type"`
+	Name     string                 `json:"name"`
+	Children []SerializableNode     `json:"children,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // GOAPTreeDefinition is a complete behavior tree that integrates GOAP planning.
 type GOAPTreeDefinition struct {
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Goals       []*Goal            `json:"goals"`
-	Actions     []Action           `json:"actions"`
-	LLMPrompts  map[string]string  `json:"llm_prompts,omitempty"` // action -> prompt template
-	Config      GOAPTreeConfig     `json:"config"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Goals       []*Goal           `json:"goals"`
+	Actions     []Action          `json:"actions"`
+	LLMPrompts  map[string]string `json:"llm_prompts,omitempty"` // action -> prompt template
+	Config      GOAPTreeConfig    `json:"config"`
 }
 
 // GOAPTreeConfig configures the GOAP-BT integration.
@@ -180,9 +180,9 @@ func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
 				Type: "Condition",
 				Name: "HasGoapGoal",
 				Metadata: map[string]interface{}{
-					"goap_goals": def.Goals,
-					"goap_actions": def.Actions,
-					"goap_config": def.Config,
+					"goap_goals":       def.Goals,
+					"goap_actions":     def.Actions,
+					"goap_config":      def.Config,
 					"goap_llm_prompts": def.LLMPrompts,
 				},
 			},
@@ -191,7 +191,7 @@ func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
 				Name: "PlanGoapActions",
 				Metadata: map[string]interface{}{
 					"goap_actions": def.Actions,
-					"goap_config": def.Config,
+					"goap_config":  def.Config,
 				},
 			},
 			{

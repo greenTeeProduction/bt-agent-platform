@@ -25,12 +25,12 @@ import (
 
 // TreeMeta describes a behavior tree in the knowledge graph.
 type TreeMeta struct {
-	ID          string   `json:"id"`          // unique identifier (e.g., "finance:pitch_agent")
-	Name        string   `json:"name"`        // human-readable name
-	Category    string   `json:"category"`    // finance, domain, research, startup, thinktank, evolution, core
-	Description string   `json:"description"` // what it does
-	NodeCount   int      `json:"node_count"`  // total nodes
-	Fitness     float64  `json:"fitness"`     // current fitness score (0-100)
+	ID          string  `json:"id"`          // unique identifier (e.g., "finance:pitch_agent")
+	Name        string  `json:"name"`        // human-readable name
+	Category    string  `json:"category"`    // finance, domain, research, startup, thinktank, evolution, core
+	Description string  `json:"description"` // what it does
+	NodeCount   int     `json:"node_count"`  // total nodes
+	Fitness     float64 `json:"fitness"`     // current fitness score (0-100)
 
 	// Capabilities — what tasks this tree handles
 	Capabilities []Capability `json:"capabilities"`
@@ -80,9 +80,9 @@ type KnowledgeGraph struct {
 
 // Edge is a directed relationship between two trees.
 type Edge struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Type   string `json:"type"`
+	From   string  `json:"from"`
+	To     string  `json:"to"`
+	Type   string  `json:"type"`
 	Weight float64 `json:"weight"` // 0-1 relationship strength
 }
 
@@ -276,5 +276,3 @@ func (kg *KnowledgeGraph) DiscoverRelated(treeID string) []string {
 	}
 	return results
 }
-
-

@@ -12,10 +12,10 @@ func makeRecords(outcomes ...reflection.Outcome) []reflection.Record {
 	var records []reflection.Record
 	for i, o := range outcomes {
 		records = append(records, reflection.Record{
-			TaskID:    "task",
-			Task:      "task",
-			Plan:      "plan",
-			Outcome:   o,
+			TaskID:     "task",
+			Task:       "task",
+			Plan:       "plan",
+			Outcome:    o,
 			DurationMs: int64(10000 + i*5000),
 		})
 	}

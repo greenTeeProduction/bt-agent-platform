@@ -13,9 +13,9 @@ type Task struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	Priority    string `json:"priority"`  // critical, high, medium, low
-	Status      string `json:"status"`    // pending, approved, rejected, in_progress, completed, failed
-	Assignee    string `json:"assignee"`  // agent name or role
+	Priority    string `json:"priority"` // critical, high, medium, low
+	Status      string `json:"status"`   // pending, approved, rejected, in_progress, completed, failed
+	Assignee    string `json:"assignee"` // agent name or role
 	Sprint      int    `json:"sprint"`
 	StoryPoints int    `json:"sp"`
 	Source      string `json:"source"`    // thinktank, manual

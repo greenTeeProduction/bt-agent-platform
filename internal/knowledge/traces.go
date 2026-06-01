@@ -7,13 +7,13 @@ import (
 
 // DecisionTrace captures the full execution path through a behavior tree.
 type DecisionTrace struct {
-	RunID     string       `json:"run_id"`
-	TreeID    string       `json:"tree_id"`
-	Task      string       `json:"task"`
-	Steps     []TraceStep  `json:"steps"`
-	Outcome   string       `json:"outcome"`
-	StartedAt time.Time    `json:"started_at"`
-	EndedAt   time.Time    `json:"ended_at"`
+	RunID     string      `json:"run_id"`
+	TreeID    string      `json:"tree_id"`
+	Task      string      `json:"task"`
+	Steps     []TraceStep `json:"steps"`
+	Outcome   string      `json:"outcome"`
+	StartedAt time.Time   `json:"started_at"`
+	EndedAt   time.Time   `json:"ended_at"`
 }
 
 // TraceStep is a single node execution in the tree.

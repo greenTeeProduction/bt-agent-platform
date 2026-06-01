@@ -1,15 +1,20 @@
 package research
 
 import (
-	"testing"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"testing"
 )
 
 func TestTeslaDeepResearch(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil { t.Skipf("Ollama: %v", err); return }
+	if err != nil {
+		t.Skipf("Ollama: %v", err)
+		return
+	}
 
 	tree := DeepResearchTree()
 	bb := &engine.Blackboard{
@@ -22,9 +27,14 @@ func TestTeslaDeepResearch(t *testing.T) {
 }
 
 func TestTeslaQuickResearch(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil { t.Skipf("Ollama: %v", err); return }
+	if err != nil {
+		t.Skipf("Ollama: %v", err)
+		return
+	}
 
 	tree := QuickResearchTree()
 	bb := &engine.Blackboard{

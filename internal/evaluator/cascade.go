@@ -11,10 +11,10 @@ import (
 type CascadeLevel int
 
 const (
-	LevelSkip    CascadeLevel = iota // don't evaluate (rejected by previous tier)
-	LevelQuick                       // structural checks only, no LLM, ~1s
-	LevelBench                       // subset of benchmark tasks, ~30s
-	LevelFull                        // complete benchmark suite, ~5min
+	LevelSkip  CascadeLevel = iota // don't evaluate (rejected by previous tier)
+	LevelQuick                     // structural checks only, no LLM, ~1s
+	LevelBench                     // subset of benchmark tasks, ~30s
+	LevelFull                      // complete benchmark suite, ~5min
 )
 
 func (l CascadeLevel) String() string {
@@ -34,21 +34,21 @@ func (l CascadeLevel) String() string {
 
 // CascadeResult holds per-tier evaluation results for one tree.
 type CascadeResult struct {
-	Tree       *evolution.SerializableNode
-	QuickScore float64 // 0-100, structural fitness
-	BenchScore float64 // 0-100, benchmark subset fitness
-	FullScore  float64 // 0-100, full benchmark fitness
-	Level      CascadeLevel
-	Rejected   bool   // true if filtered out at a tier
+	Tree         *evolution.SerializableNode
+	QuickScore   float64 // 0-100, structural fitness
+	BenchScore   float64 // 0-100, benchmark subset fitness
+	FullScore    float64 // 0-100, full benchmark fitness
+	Level        CascadeLevel
+	Rejected     bool // true if filtered out at a tier
 	RejectReason string
 }
 
 // CascadeConfig configures the evaluation cascade.
 type CascadeConfig struct {
-	QuickThreshold float64 // min QuickScore to advance to Bench (default: 30)
-	BenchThreshold float64 // min BenchScore to advance to Full (default: 50)
-	MaxBenchCandidates int // max candidates that reach Bench tier (default: 10)
-	MaxFullCandidates  int // max candidates that reach Full tier (default: 3)
+	QuickThreshold     float64 // min QuickScore to advance to Bench (default: 30)
+	BenchThreshold     float64 // min BenchScore to advance to Full (default: 50)
+	MaxBenchCandidates int     // max candidates that reach Bench tier (default: 10)
+	MaxFullCandidates  int     // max candidates that reach Full tier (default: 3)
 }
 
 // DefaultCascadeConfig returns sensible defaults for Jetson.
@@ -283,7 +283,7 @@ func maxTreeDepthEval(node *evolution.SerializableNode, current int) int {
 
 // CascadeStats tracks aggregate cascade performance across a run.
 type CascadeStats struct {
-	Total      int
+	Total       int
 	PassedQuick int
 	PassedBench int
 	PassedFull  int

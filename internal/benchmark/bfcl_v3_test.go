@@ -11,7 +11,9 @@ import (
 )
 
 func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	// Use 2 base entries from BuiltinBFCLV3
 	all := BuiltinBFCLV3()
 	var baseEntries []BFCLV3Entry
@@ -49,7 +51,9 @@ func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
 }
 
 func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	// Use 2 composite entries
 	all := BuiltinBFCLV3()
 	var compEntries []BFCLV3Entry
@@ -118,7 +122,9 @@ func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
 }
 
 func TestBFCLV3_LongContext(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	// Use long_context entries to verify tree handles long conversations
 	all := BuiltinBFCLV3()
 	var longCtxEntries []BFCLV3Entry
@@ -156,7 +162,9 @@ func TestBFCLV3_LongContext(t *testing.T) {
 }
 
 func TestSWEVerified_Evaluation(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	// Use a sample of 5 entries from BuiltinSWEVerifiedSample
 	all := BuiltinSWEVerifiedSample()
 	entries := all[:minInt(5, len(all))]

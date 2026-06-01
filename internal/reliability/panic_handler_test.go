@@ -166,4 +166,3 @@ func TestWorkerPool_MultiplePanics(t *testing.T) {
 		t.Errorf("expected normal task to run once, got %d (worker likely died)", count)
 	}
 }
-

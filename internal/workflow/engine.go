@@ -13,30 +13,30 @@ import (
 // Workflow connects thinktank analysis to company execution.
 // Thinktank produces recommendations → Workflow creates tasks → Company executes sprints.
 type Workflow struct {
-	ID          string              `json:"id"`
-	Name        string              `json:"name"`
-	ThinkTank   *thinktank.ThinkTank `json:"thinktank"`
-	Company     *startup.CompanyState `json:"company"`
-	Tasks       []Task              `json:"tasks"`
-	CreatedAt   time.Time           `json:"created_at"`
-	UpdatedAt   time.Time           `json:"updated_at"`
-	Status      string              `json:"status"` // created, analyzing, executing, completed, archived
+	ID        string                `json:"id"`
+	Name      string                `json:"name"`
+	ThinkTank *thinktank.ThinkTank  `json:"thinktank"`
+	Company   *startup.CompanyState `json:"company"`
+	Tasks     []Task                `json:"tasks"`
+	CreatedAt time.Time             `json:"created_at"`
+	UpdatedAt time.Time             `json:"updated_at"`
+	Status    string                `json:"status"` // created, analyzing, executing, completed, archived
 }
 
 // Task is a unit of work derived from thinktank recommendations.
 type Task struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description"`
-	Source         string    `json:"source"`          // which thinktank recommendation spawned this
-	Priority       Priority  `json:"priority"`
-	Status         TaskStatus `json:"status"`
-	Approval       Approval  `json:"approval"`
-	AssigneeRole   string    `json:"assignee_role"`   // ceo, cto, pm, engineer, marketing, sales
-	SprintTarget   int       `json:"sprint_target"`   // which sprint to execute in
-	EstimatedEffort int     `json:"estimated_effort"` // story points
-	CreatedAt      time.Time `json:"created_at"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	ID              string     `json:"id"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	Source          string     `json:"source"` // which thinktank recommendation spawned this
+	Priority        Priority   `json:"priority"`
+	Status          TaskStatus `json:"status"`
+	Approval        Approval   `json:"approval"`
+	AssigneeRole    string     `json:"assignee_role"`    // ceo, cto, pm, engineer, marketing, sales
+	SprintTarget    int        `json:"sprint_target"`    // which sprint to execute in
+	EstimatedEffort int        `json:"estimated_effort"` // story points
+	CreatedAt       time.Time  `json:"created_at"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
 }
 
 // Priority levels for task ordering.
@@ -52,11 +52,16 @@ const (
 
 func (p Priority) String() string {
 	switch p {
-	case PriorityCritical: return "critical"
-	case PriorityHigh: return "high"
-	case PriorityMedium: return "medium"
-	case PriorityLow: return "low"
-	default: return "backlog"
+	case PriorityCritical:
+		return "critical"
+	case PriorityHigh:
+		return "high"
+	case PriorityMedium:
+		return "medium"
+	case PriorityLow:
+		return "low"
+	default:
+		return "backlog"
 	}
 }
 
@@ -74,22 +79,28 @@ const (
 
 func (s TaskStatus) String() string {
 	switch s {
-	case StatusPending: return "pending"
-	case StatusApproved: return "approved"
-	case StatusRejected: return "rejected"
-	case StatusInProgress: return "in_progress"
-	case StatusCompleted: return "completed"
-	default: return "blocked"
+	case StatusPending:
+		return "pending"
+	case StatusApproved:
+		return "approved"
+	case StatusRejected:
+		return "rejected"
+	case StatusInProgress:
+		return "in_progress"
+	case StatusCompleted:
+		return "completed"
+	default:
+		return "blocked"
 	}
 }
 
 // Approval tracks the review state of a task.
 type Approval struct {
-	ApprovedBy  string     `json:"approved_by"`
-	ApprovedAt  *time.Time `json:"approved_at,omitempty"`
-	RejectedAt  *time.Time `json:"rejected_at,omitempty"`
-	Reason      string     `json:"reason,omitempty"`
-	IsApproved  bool       `json:"is_approved"`
+	ApprovedBy string     `json:"approved_by"`
+	ApprovedAt *time.Time `json:"approved_at,omitempty"`
+	RejectedAt *time.Time `json:"rejected_at,omitempty"`
+	Reason     string     `json:"reason,omitempty"`
+	IsApproved bool       `json:"is_approved"`
 }
 
 // ─── Conversion: ThinkTank → Tasks ───
@@ -104,63 +115,63 @@ func (w *Workflow) RecommendationsToTasks() {
 
 	// Main recommendation becomes a critical CEO task
 	w.Tasks = append(w.Tasks, Task{
-		ID:             "rec-001",
-		Title:          "Implement: " + truncate(s.Recommendation, 80),
-		Description:    s.Recommendation,
-		Source:         "thinktank:synthesis:recommendation",
-		Priority:       PriorityCritical,
-		Status:         StatusPending,
-		AssigneeRole:   "ceo",
-		SprintTarget:   1,
+		ID:              "rec-001",
+		Title:           "Implement: " + truncate(s.Recommendation, 80),
+		Description:     s.Recommendation,
+		Source:          "thinktank:synthesis:recommendation",
+		Priority:        PriorityCritical,
+		Status:          StatusPending,
+		AssigneeRole:    "ceo",
+		SprintTarget:    1,
 		EstimatedEffort: 13,
-		CreatedAt:      time.Now(),
+		CreatedAt:       time.Now(),
 	})
 
 	// Points of agreement → PM tasks
 	for i, point := range s.PointsOfAgreement {
 		w.Tasks = append(w.Tasks, Task{
-			ID:             fmt.Sprintf("agree-%03d", i+1),
-			Title:          "Align on: " + truncate(point, 70),
-			Description:    point,
-			Source:         "thinktank:synthesis:agreement",
-			Priority:       PriorityHigh,
-			Status:         StatusPending,
-			AssigneeRole:   "pm",
-			SprintTarget:   1,
+			ID:              fmt.Sprintf("agree-%03d", i+1),
+			Title:           "Align on: " + truncate(point, 70),
+			Description:     point,
+			Source:          "thinktank:synthesis:agreement",
+			Priority:        PriorityHigh,
+			Status:          StatusPending,
+			AssigneeRole:    "pm",
+			SprintTarget:    1,
 			EstimatedEffort: 5,
-			CreatedAt:      time.Now(),
+			CreatedAt:       time.Now(),
 		})
 	}
 
 	// Points of disagreement → CTO investigation tasks
 	for i, point := range s.PointsOfDisagreement {
 		w.Tasks = append(w.Tasks, Task{
-			ID:             fmt.Sprintf("disagree-%03d", i+1),
-			Title:          "Investigate: " + truncate(point, 70),
-			Description:    point,
-			Source:         "thinktank:synthesis:disagreement",
-			Priority:       PriorityMedium,
-			Status:         StatusPending,
-			AssigneeRole:   "cto",
-			SprintTarget:   2,
+			ID:              fmt.Sprintf("disagree-%03d", i+1),
+			Title:           "Investigate: " + truncate(point, 70),
+			Description:     point,
+			Source:          "thinktank:synthesis:disagreement",
+			Priority:        PriorityMedium,
+			Status:          StatusPending,
+			AssigneeRole:    "cto",
+			SprintTarget:    2,
 			EstimatedEffort: 8,
-			CreatedAt:      time.Now(),
+			CreatedAt:       time.Now(),
 		})
 	}
 
 	// Dissenting notes → engineer spike tasks
 	for i, note := range s.DissentingNotes {
 		w.Tasks = append(w.Tasks, Task{
-			ID:             fmt.Sprintf("dissent-%03d", i+1),
-			Title:          "Spike: " + truncate(note, 70),
-			Description:    note,
-			Source:         "thinktank:synthesis:dissenting",
-			Priority:       PriorityLow,
-			Status:         StatusPending,
-			AssigneeRole:   "engineer",
-			SprintTarget:   3,
+			ID:              fmt.Sprintf("dissent-%03d", i+1),
+			Title:           "Spike: " + truncate(note, 70),
+			Description:     note,
+			Source:          "thinktank:synthesis:dissenting",
+			Priority:        PriorityLow,
+			Status:          StatusPending,
+			AssigneeRole:    "engineer",
+			SprintTarget:    3,
 			EstimatedEffort: 3,
-			CreatedAt:      time.Now(),
+			CreatedAt:       time.Now(),
 		})
 	}
 }

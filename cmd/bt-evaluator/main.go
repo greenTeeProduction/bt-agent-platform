@@ -42,13 +42,13 @@ func main() {
 			fitness := evaluator.EvaluateTree(tree, records)
 
 			result := map[string]interface{}{
-				"success_rate":   fmt.Sprintf("%.1f%%", fitness.SuccessRate*100),
+				"success_rate":    fmt.Sprintf("%.1f%%", fitness.SuccessRate*100),
 				"avg_duration_ms": fitness.AvgDurationMs,
-				"node_count":     fitness.NodeCount,
-				"stability":      fmt.Sprintf("%.2f", fitness.Stability),
-				"path_coverage":  fmt.Sprintf("%.2f", fitness.PathCoverage),
-				"composite":      fmt.Sprintf("%.1f", fitness.Composite),
-				"total_tasks":    len(records),
+				"node_count":      fitness.NodeCount,
+				"stability":       fmt.Sprintf("%.2f", fitness.Stability),
+				"path_coverage":   fmt.Sprintf("%.2f", fitness.PathCoverage),
+				"composite":       fmt.Sprintf("%.1f", fitness.Composite),
+				"total_tasks":     len(records),
 			}
 			data, _ := json.Marshal(result)
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
@@ -115,12 +115,12 @@ func main() {
 			}
 
 			out := map[string]interface{}{
-				"depth":           result.Depth,
-				"base_composite":  fmt.Sprintf("%.1f", result.BaseFitness.Composite),
+				"depth":            result.Depth,
+				"base_composite":   fmt.Sprintf("%.1f", result.BaseFitness.Composite),
 				"candidates_total": len(result.Candidates),
-				"pruned":          result.PrunedCount,
-				"tt_probes":       result.TTProbes,
-				"tt_hits":         result.TTProbeHits,
+				"pruned":           result.PrunedCount,
+				"tt_probes":        result.TTProbes,
+				"tt_hits":          result.TTProbeHits,
 			}
 			if result.BestMutation != nil {
 				out["best_op"] = result.BestMutation.Op.Operation
@@ -141,7 +141,7 @@ func main() {
 		nil,
 		func(args json.RawMessage) *mcp.ToolResult {
 			stats := map[string]interface{}{
-				"entries": tt.Stats(),
+				"entries":  tt.Stats(),
 				"max_size": 1000,
 				"path":     filepath.Join(refDir, "transposition.json"),
 			}
@@ -166,7 +166,7 @@ func main() {
 
 	btlog.Info("bt-evaluator: 5 tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
-	server.SetRateLimit(5, 10) // 5 req/s, burst 10 (evaluator is fast, no Ollama)
+	server.SetRateLimit(5, 10)        // 5 req/s, burst 10 (evaluator is fast, no Ollama)
 	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
 
 	// ── Tracing: initialize global tracer ──

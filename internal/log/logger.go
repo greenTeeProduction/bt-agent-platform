@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	mu     sync.Mutex
-	logger *slog.Logger
+	mu        sync.Mutex
+	logger    *slog.Logger
 	rotWriter io.WriteCloser // rotating writer, closed on shutdown
 )
 

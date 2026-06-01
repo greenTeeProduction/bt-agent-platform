@@ -17,15 +17,15 @@ import (
 
 // PlatformEvalResult is the comprehensive result of evaluating all suites.
 type PlatformEvalResult struct {
-	Timestamp    string                 `json:"timestamp"`
-	TotalSuites  int                    `json:"total_suites"`
-	TotalTasks   int                    `json:"total_tasks"`
-	Passed       int                    `json:"passed"`
-	Failed       int                    `json:"failed"`
-	SuccessRate  float64                `json:"success_rate"`
-	AvgDurationMs float64               `json:"avg_duration_ms"`
-	BySuite      []SuiteEvalResult      `json:"by_suite"`
-	Scorecard    PlatformScorecard      `json:"scorecard"`
+	Timestamp     string            `json:"timestamp"`
+	TotalSuites   int               `json:"total_suites"`
+	TotalTasks    int               `json:"total_tasks"`
+	Passed        int               `json:"passed"`
+	Failed        int               `json:"failed"`
+	SuccessRate   float64           `json:"success_rate"`
+	AvgDurationMs float64           `json:"avg_duration_ms"`
+	BySuite       []SuiteEvalResult `json:"by_suite"`
+	Scorecard     PlatformScorecard `json:"scorecard"`
 }
 
 // SuiteEvalResult is the result for a single suite.
@@ -46,18 +46,22 @@ type PlatformScorecard struct {
 
 // UseCaseScore scores a single use case on automation readiness.
 type UseCaseScore struct {
-	Name           string  `json:"name"`
-	SuitePass      float64 `json:"suite_pass_rate"` // routing success rate
-	AutomationFit  float64 `json:"automation_fit"`  // 0-100: how well it fits automation
-	Frequency      string  `json:"frequency"`        // how often it runs
-	Status         string  `json:"status"`           // optimized | ready | partial | gap
+	Name          string  `json:"name"`
+	SuitePass     float64 `json:"suite_pass_rate"` // routing success rate
+	AutomationFit float64 `json:"automation_fit"`  // 0-100: how well it fits automation
+	Frequency     string  `json:"frequency"`       // how often it runs
+	Status        string  `json:"status"`          // optimized | ready | partial | gap
 }
 
 // EvalMockLLM is a mock that returns sufficiently long output to pass quality gates.
 type EvalMockLLM struct{}
 
-func (m *EvalMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *EvalMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *EvalMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *EvalMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *EvalMockLLM) Generate(prompt string) (string, error) {
 	return "EVAL_OUTPUT: This is a comprehensive response that addresses all aspects of the task in detail. " +
@@ -67,8 +71,8 @@ func (m *EvalMockLLM) Generate(prompt string) (string, error) {
 		"for production-grade evaluation results with complete documentation and traceable decision logic. " +
 		"This ensures the response exceeds the minimum length requirement for the quality validation gate.", nil
 }
-func (m *EvalMockLLM) AnalyzeComplexity(task string) string    { return "medium" }
-func (m *EvalMockLLM) GeneratePlan(task, complexity string) string { return "plan: " + task }
+func (m *EvalMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
+func (m *EvalMockLLM) GeneratePlan(task, complexity string) string         { return "plan: " + task }
 func (m *EvalMockLLM) Reflect(task, outcome, plan string) (string, string) { return "good", "none" }
 
 // treeForSuite maps suite names to their optimal behavior trees.

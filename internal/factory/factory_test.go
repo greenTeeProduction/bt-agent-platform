@@ -1,12 +1,12 @@
 package factory
 
 import (
-	"time"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -16,14 +16,18 @@ type mockLLM struct {
 	treeSpecJSON string
 }
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	return m.treeSpecJSON, nil
 }
-func (m *mockLLM) AnalyzeComplexity(task string) string { return "low" }
-func (m *mockLLM) GeneratePlan(task, complexity string) string { return "mock plan" }
+func (m *mockLLM) AnalyzeComplexity(task string) string                { return "low" }
+func (m *mockLLM) GeneratePlan(task, complexity string) string         { return "mock plan" }
 func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "better" }
 
 func validTreeSpecJSON() string {
@@ -164,8 +168,8 @@ func TestGenerator_BuildsCorrectTree(t *testing.T) {
 func TestGenerator_NoSelfCorrect_NoFallback(t *testing.T) {
 	gen := NewGenerator()
 	spec := &TreeSpec{
-		RootType: "Selector",
-		RootName: "SimpleAgent",
+		RootType:  "Selector",
+		RootName:  "SimpleAgent",
 		PreChecks: nil,
 		StrategyPath: []TreeNode{
 			{Type: "Action", Name: "DoThing", Description: "Just do it"},

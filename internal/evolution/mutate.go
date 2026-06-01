@@ -192,8 +192,8 @@ func GoDeveloperTree() *SerializableNode {
 			},
 			// Always reflect
 			{
-				Type: "Action",
-				Name: "ReflectOnOutcome",
+				Type:        "Action",
+				Name:        "ReflectOnOutcome",
 				Description: "Generate reflection: what went well, what to improve",
 			},
 			// Outcome handling with agent-based self-correction
@@ -213,8 +213,8 @@ func GoDeveloperTree() *SerializableNode {
 				},
 			},
 			{
-				Type: "Action",
-				Name: "UpdateBehaviorTree",
+				Type:        "Action",
+				Name:        "UpdateBehaviorTree",
 				Description: "Adapt tree on 3+ consecutive failures",
 			},
 		},
@@ -223,8 +223,8 @@ func GoDeveloperTree() *SerializableNode {
 
 // MutationOp describes a tree mutation to apply.
 type MutationOp struct {
-	Operation string `json:"operation"` // add_before, add_after, wrap_retry, add_fallback, increase_retries, prune_node
-	Target    string `json:"target"`    // name of the target node
+	Operation string            `json:"operation"` // add_before, add_after, wrap_retry, add_fallback, increase_retries, prune_node
+	Target    string            `json:"target"`    // name of the target node
 	Node      *SerializableNode `json:"node,omitempty"`
 }
 
@@ -401,8 +401,8 @@ func applyReplaceNode(tree *SerializableNode, target string) bool {
 			old := tree.Children[i]
 			// Replace with a new node that has the same type but simplified name
 			replacement := SerializableNode{
-				Type: old.Type + "Action", // Action/Condition → ActionAction/ConditionAction
-				Name: "Replaced_" + old.Name,
+				Type:     old.Type + "Action", // Action/Condition → ActionAction/ConditionAction
+				Name:     "Replaced_" + old.Name,
 				Metadata: map[string]any{"original": old.Name, "evolved": true},
 			}
 			// Preserve children if any
@@ -426,8 +426,8 @@ func applyReplaceChildren(tree *SerializableNode, target string) bool {
 		if tree.Children[i].Name == target && len(tree.Children[i].Children) > 0 {
 			// Replace all children with a single action
 			tree.Children[i].Children = []SerializableNode{{
-				Type: "Action",
-				Name: "Restructured_" + target,
+				Type:     "Action",
+				Name:     "Restructured_" + target,
 				Metadata: map[string]any{"evolved": true, "restructured": true},
 			}}
 			return true

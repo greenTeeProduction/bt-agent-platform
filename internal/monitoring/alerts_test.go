@@ -14,13 +14,13 @@ func TestEvaluateAlerts_AllClear(t *testing.T) {
 		TotalErrors:       0,
 		Agents: []AgentMetric{
 			{
-				Name:           "system-monitor",
-				SuccessCount:   48,
-				ErrorCount:     2,
-				TotalCount:     50,
-				AvgDurationMs:  "1500",
-				SuccessRate:    "96.0%",
-				LastRun:        time.Now().UTC().Format(time.RFC3339),
+				Name:          "system-monitor",
+				SuccessCount:  48,
+				ErrorCount:    2,
+				TotalCount:    50,
+				AvgDurationMs: "1500",
+				SuccessRate:   "96.0%",
+				LastRun:       time.Now().UTC().Format(time.RFC3339),
 			},
 		},
 	}
@@ -82,9 +82,9 @@ func TestEvaluateAlerts_AgentNoActivity(t *testing.T) {
 	metrics := MetricsJSON{
 		Agents: []AgentMetric{
 			{
-				Name:      "daily-researcher",
+				Name:       "daily-researcher",
 				TotalCount: 10,
-				LastRun:   lastRun,
+				LastRun:    lastRun,
 			},
 		},
 	}
@@ -110,9 +110,9 @@ func TestEvaluateAlerts_AgentRecentActivity(t *testing.T) {
 	metrics := MetricsJSON{
 		Agents: []AgentMetric{
 			{
-				Name:      "daily-researcher",
+				Name:       "daily-researcher",
 				TotalCount: 10,
-				LastRun:   lastRun,
+				LastRun:    lastRun,
 			},
 		},
 	}
@@ -290,27 +290,27 @@ func TestEvaluateAlerts_NoFalsePositives(t *testing.T) {
 	// Normal, healthy platform
 	metrics := MetricsJSON{
 		HTTPRequestsTotal: 500,
-		HTTPErrorsTotal:   10,  // 2%
+		HTTPErrorsTotal:   10, // 2%
 		TotalRequests:     200,
-		TotalErrors:       3,   // below spike threshold of 5
+		TotalErrors:       3, // below spike threshold of 5
 		Agents: []AgentMetric{
 			{
-				Name:           "system-monitor",
-				SuccessCount:   95,
-				ErrorCount:     5,
-				TotalCount:     100, // 5% error rate — below 10% warning
-				AvgDurationMs:  "2500",
-				SuccessRate:    "95.0%",
-				LastRun:        time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
+				Name:          "system-monitor",
+				SuccessCount:  95,
+				ErrorCount:    5,
+				TotalCount:    100, // 5% error rate — below 10% warning
+				AvgDurationMs: "2500",
+				SuccessRate:   "95.0%",
+				LastRun:       time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
 			},
 			{
-				Name:           "code-reviewer",
-				SuccessCount:   8,
-				ErrorCount:     2,
-				TotalCount:     10, // 20% — above 10% warning, below 50% critical
-				AvgDurationMs:  "120000", // 2 min — below 5 min
-				SuccessRate:    "80.0%",
-				LastRun:        time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339),
+				Name:          "code-reviewer",
+				SuccessCount:  8,
+				ErrorCount:    2,
+				TotalCount:    10,       // 20% — above 10% warning, below 50% critical
+				AvgDurationMs: "120000", // 2 min — below 5 min
+				SuccessRate:   "80.0%",
+				LastRun:       time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339),
 			},
 		},
 	}

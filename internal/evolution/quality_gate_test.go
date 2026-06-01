@@ -8,58 +8,58 @@ import (
 
 func TestQualityGateValidate(t *testing.T) {
 	tests := []struct {
-		name         string
+		name          string
 		preComposite  float64
 		postComposite float64
-		expected     GateResult
+		expected      GateResult
 	}{
 		{
-			name:         "accept improvement",
+			name:          "accept improvement",
 			preComposite:  50,
 			postComposite: 55,
-			expected:     GateAccepted,
+			expected:      GateAccepted,
 		},
 		{
-			name:         "accept small regression within threshold",
+			name:          "accept small regression within threshold",
 			preComposite:  50,
 			postComposite: 49,
-			expected:     GateAccepted,
+			expected:      GateAccepted,
 		},
 		{
-			name:         "accept exact threshold boundary",
+			name:          "accept exact threshold boundary",
 			preComposite:  50,
 			postComposite: 40,
-			expected:     GateAccepted, // exactly 20% — not strictly below
+			expected:      GateAccepted, // exactly 20% — not strictly below
 		},
 		{
-			name:         "reject below composite floor",
+			name:          "reject below composite floor",
 			preComposite:  40,
 			postComposite: 0.2,
-			expected:     GateRejected,
+			expected:      GateRejected,
 		},
 		{
-			name:         "rollback large regression",
+			name:          "rollback large regression",
 			preComposite:  50,
 			postComposite: 20,
-			expected:     GateRollback,
+			expected:      GateRollback,
 		},
 		{
-			name:         "accept when pre is zero (new tree)",
+			name:          "accept when pre is zero (new tree)",
 			preComposite:  0,
 			postComposite: 30,
-			expected:     GateAccepted,
+			expected:      GateAccepted,
 		},
 		{
-			name:         "reject when pre is very low and post is below floor",
+			name:          "reject when pre is very low and post is below floor",
 			preComposite:  0.1,
 			postComposite: 0.09,
-			expected:     GateRejected, // postComposite < MinComposite (0.3)
+			expected:      GateRejected, // postComposite < MinComposite (0.3)
 		},
 		{
-			name:         "rollback on 25% regression",
+			name:          "rollback on 25% regression",
 			preComposite:  100,
 			postComposite: 74,
-			expected:     GateRollback, // 26% drop > 20% threshold
+			expected:      GateRollback, // 26% drop > 20% threshold
 		},
 	}
 

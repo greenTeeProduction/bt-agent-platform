@@ -19,13 +19,13 @@ type Individual struct {
 
 // Population is a generation of individuals.
 type Population struct {
-	Individuals     []Individual      `json:"individuals"`
-	Generation      int               `json:"generation"`
-	BestFitness     float64           `json:"best_fitness"`
-	PrevBestFitness float64           `json:"prev_best_fitness"`
-	BestTree        *SerializableNode `json:"-"`
-	TotalMutations  int               `json:"total_mutations"`
-	Regressions     int               `json:"regressions"`
+	Individuals         []Individual      `json:"individuals"`
+	Generation          int               `json:"generation"`
+	BestFitness         float64           `json:"best_fitness"`
+	PrevBestFitness     float64           `json:"prev_best_fitness"`
+	BestTree            *SerializableNode `json:"-"`
+	TotalMutations      int               `json:"total_mutations"`
+	Regressions         int               `json:"regressions"`
 	NicheDiversityScore float64           `json:"niche_diversity"`
 }
 
@@ -222,8 +222,12 @@ func (qt *QTable) GetState(tree *SerializableNode, category string) string {
 	nodes := CountNodes(tree)
 	depth := maxTreeDepth(tree, 0)
 	bucket := "low"
-	if nodes > 20 { bucket = "med" }
-	if nodes > 35 { bucket = "high" }
+	if nodes > 20 {
+		bucket = "med"
+	}
+	if nodes > 35 {
+		bucket = "high"
+	}
 	return category + ":" + bucket + ":" + strconv.Itoa(depth)
 }
 
@@ -301,14 +305,18 @@ func (rl *ReinforcementLearner) Suggest(tree *SerializableNode, category string)
 // ─── Helpers ───
 
 func cloneTree(t *SerializableNode) *SerializableNode {
-	if t == nil { return nil }
+	if t == nil {
+		return nil
+	}
 	c := &SerializableNode{
 		Type: t.Type, Name: t.Name, MaxRetries: t.MaxRetries,
 		TimeoutMs: t.TimeoutMs,
 	}
 	if t.Metadata != nil {
 		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata { c.Metadata[k] = v }
+		for k, v := range t.Metadata {
+			c.Metadata[k] = v
+		}
 	}
 	for _, ch := range t.Children {
 		c.Children = append(c.Children, *cloneTree(&ch))
@@ -330,13 +338,17 @@ func randomMutation(tree *SerializableNode) []MutationOp {
 	op := allOps[rand.Intn(len(allOps))]
 	// Find a random target node
 	target := randomNodeName(tree, tree.Name)
-	if target == "" { target = tree.Name }
+	if target == "" {
+		target = tree.Name
+	}
 	return []MutationOp{{Operation: op, Target: target}}
 }
 
 func randomNodeName(node *SerializableNode, fallback string) string {
 	names := collectNodeNames(node)
-	if len(names) == 0 { return fallback }
+	if len(names) == 0 {
+		return fallback
+	}
 	return names[rand.Intn(len(names))]
 }
 
@@ -355,12 +367,16 @@ func maxTreeDepth(node *SerializableNode, current int) int {
 	maxD := current
 	for i := range node.Children {
 		d := maxTreeDepth(&node.Children[i], current+1)
-		if d > maxD { maxD = d }
+		if d > maxD {
+			maxD = d
+		}
 	}
 	return maxD
 }
 
 func max(a, b int) int {
-	if a > b { return a }
+	if a > b {
+		return a
+	}
 	return b
 }

@@ -27,7 +27,7 @@ type TraceEntry struct {
 
 // TraceEvent represents a timestamped event within a trace span.
 type TraceEvent struct {
-	Name string            `json:"name"`
+	Name  string            `json:"name"`
 	Attrs map[string]string `json:"attrs,omitempty"`
 }
 
@@ -68,12 +68,12 @@ func ParseTraceLine(line string) *TraceEntry {
 	}
 
 	entry := &TraceEntry{
-		Timestamp:  ts,
-		TraceID:    matches[2],
-		SpanID:     matches[3],
+		Timestamp:    ts,
+		TraceID:      matches[2],
+		SpanID:       matches[3],
 		ParentSpanID: matches[4],
-		Operation:  matches[5],
-		Attributes: make(map[string]string),
+		Operation:    matches[5],
+		Attributes:   make(map[string]string),
 	}
 
 	// Parse duration
@@ -348,20 +348,20 @@ func (r *TraceReader) SizeBytes() (int64, error) {
 
 // AggregatedTrace represents a complete distributed trace assembled from individual spans.
 type AggregatedTrace struct {
-	TraceID      string          `json:"trace_id"`
-	RootSpan     *TraceSpanNode  `json:"root_span,omitempty"`
-	SpanCount    int             `json:"span_count"`
-	TotalDuration time.Duration  `json:"total_duration"`
-	TotalDurationMS int64        `json:"total_duration_ms"`
-	StartTime    time.Time       `json:"start_time"`
-	EndTime      time.Time       `json:"end_time"`
-	Operations   []string        `json:"operations"`
+	TraceID         string         `json:"trace_id"`
+	RootSpan        *TraceSpanNode `json:"root_span,omitempty"`
+	SpanCount       int            `json:"span_count"`
+	TotalDuration   time.Duration  `json:"total_duration"`
+	TotalDurationMS int64          `json:"total_duration_ms"`
+	StartTime       time.Time      `json:"start_time"`
+	EndTime         time.Time      `json:"end_time"`
+	Operations      []string       `json:"operations"`
 }
 
 // TraceSpanNode represents a span in the trace tree, with its children.
 type TraceSpanNode struct {
-	Span      TraceEntry       `json:"span"`
-	Children  []*TraceSpanNode `json:"children,omitempty"`
+	Span     TraceEntry       `json:"span"`
+	Children []*TraceSpanNode `json:"children,omitempty"`
 }
 
 // GetTrace reads all spans for a specific trace ID and builds the aggregated trace tree.

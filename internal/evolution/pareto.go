@@ -103,7 +103,7 @@ func (mf MultiFitness) String() string {
 // ParetoFront maintains the set of non-dominated individuals.
 type ParetoFront struct {
 	Individuals []*MultiIndividual `json:"individuals"`
-	Dimensions  []FitnessDimension  `json:"dimensions"`
+	Dimensions  []FitnessDimension `json:"dimensions"`
 }
 
 // MultiIndividual extends Individual with multi-objective fitness.
@@ -216,7 +216,7 @@ func (pf *ParetoFront) DiversityScore() float64 {
 // ParetoPopulation wraps a Population with a Pareto front for multi-objective evolution.
 type ParetoPopulation struct {
 	*Population
-	Front  *ParetoFront
+	Front     *ParetoFront
 	FitnessFn func(*SerializableNode) MultiFitness
 }
 
@@ -312,8 +312,8 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 
 // ParetoStats reports multi-objective metrics.
 type ParetoStats struct {
-	FrontSize      int                `json:"front_size"`
-	DiversityScore float64            `json:"diversity_score"`
+	FrontSize      int                          `json:"front_size"`
+	DiversityScore float64                      `json:"diversity_score"`
 	BestPerDim     map[FitnessDimension]float64 `json:"best_per_dim"`
 }
 

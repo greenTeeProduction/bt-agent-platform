@@ -8,11 +8,12 @@ package evolution
 // http_get) instead of llm_call: — enabling actual tool execution via ReAct agent loops.
 //
 // Structure:
-//   PreGate (6 universal validators + tool setup)
-//   StrategyRouter (21 ranked paths from all domains, all agent: chains)
-//   QualityGate (output validation)
-//   OutcomeSelector (success/retry/escalate)
-//   SelfImprove (adapt on failure patterns)
+//
+//	PreGate (6 universal validators + tool setup)
+//	StrategyRouter (21 ranked paths from all domains, all agent: chains)
+//	QualityGate (output validation)
+//	OutcomeSelector (success/retry/escalate)
+//	SelfImprove (adapt on failure patterns)
 func MergedTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",
@@ -216,22 +217,22 @@ func MergedTree() *SerializableNode {
 
 			// ─── Quality Gate ───────────────────────────────────────────
 			{
-				Type: "Action",
-				Name: "ValidateOutput",
+				Type:        "Action",
+				Name:        "ValidateOutput",
 				Description: "Check output quality: min length, structure, error patterns",
 			},
 
 			// ─── Outcome ──────────────────────────────────────────────
 			{
-				Type: "Action",
-				Name: "MarkSuccessful",
+				Type:        "Action",
+				Name:        "MarkSuccessful",
 				Description: "Mark task as successful — quality gates already validated output",
 			},
 
 			// ─── Self-Improvement ───────────────────────────────────────
 			{
-				Type: "Action",
-				Name: "UpdateBehaviorTree",
+				Type:        "Action",
+				Name:        "UpdateBehaviorTree",
 				Description: "Adapt tree on 3+ consecutive failures; save reflections",
 			},
 		},

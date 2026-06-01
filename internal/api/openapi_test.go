@@ -374,7 +374,7 @@ func TestSchemaToMap_Object(t *testing.T) {
 	minLen := 3
 	maxLen := 50
 	s := &Schema{
-		Type:        "object",
+		Type: "object",
 		Properties: map[string]*Schema{
 			"name": {Type: "string", Description: "Full name", MinLength: &minLen, MaxLength: &maxLen},
 			"age":  {Type: "integer"},
@@ -481,9 +481,9 @@ func TestHTTPStatusText(t *testing.T) {
 		{500, "500"},
 		{201, "201"},
 		{301, "301"},
-		{99, "default"},   // below HTTP range
-		{600, "default"},  // above HTTP range
-		{0, "default"},    // zero
+		{99, "default"},  // below HTTP range
+		{600, "default"}, // above HTTP range
+		{0, "default"},   // zero
 	}
 
 	for _, tc := range tests {

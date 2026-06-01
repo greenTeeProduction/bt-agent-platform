@@ -39,12 +39,12 @@ func (s HealthStatus) String() string {
 
 // HealthState tracks the current LLM health with concurrency safety.
 type HealthState struct {
-	mu            sync.RWMutex
-	status        HealthStatus
-	lastCheck     time.Time
-	lastError     error
-	latencyMs     int64
-	consecutiveOK int
+	mu              sync.RWMutex
+	status          HealthStatus
+	lastCheck       time.Time
+	lastError       error
+	latencyMs       int64
+	consecutiveOK   int
 	consecutiveFail int
 }
 

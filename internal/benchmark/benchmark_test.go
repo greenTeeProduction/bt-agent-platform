@@ -237,7 +237,9 @@ func TestMockLLM_ReturnsPredictable(t *testing.T) {
 }
 
 func mathAbs(x float64) float64 {
-	if x < 0 { return -x }
+	if x < 0 {
+		return -x
+	}
 	return x
 }
 

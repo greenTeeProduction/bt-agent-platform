@@ -25,7 +25,7 @@ func NewRunTaskTool(bb *engine.Blackboard, runFn func(string) string) *RunTaskTo
 	return &RunTaskTool{bb: bb, run: runFn}
 }
 
-func (t *RunTaskTool) Name() string        { return "bt_run_task" }
+func (t *RunTaskTool) Name() string { return "bt_run_task" }
 func (t *RunTaskTool) Description() string {
 	return "Execute a task through the behavior tree. Input: a task description. Returns: JSON with result, outcome, complexity, duration_ms, and plan."
 }
@@ -52,7 +52,7 @@ func NewReflectTool(bb *engine.Blackboard) *ReflectTool {
 	return &ReflectTool{bb: bb}
 }
 
-func (t *ReflectTool) Name() string        { return "bt_reflect" }
+func (t *ReflectTool) Name() string { return "bt_reflect" }
 func (t *ReflectTool) Description() string {
 	return "Generate a reflection on the last executed task. Returns: what went well and what to improve."
 }
@@ -62,10 +62,10 @@ func (t *ReflectTool) Call(ctx context.Context, input string) (string, error) {
 	}
 	ww, ti := t.bb.LLM.Reflect(t.bb.Task, t.bb.Outcome, t.bb.Plan)
 	out := map[string]interface{}{
-		"went_well":    ww,
-		"to_improve":   ti,
-		"task":         t.bb.Task,
-		"outcome":      t.bb.Outcome,
+		"went_well":  ww,
+		"to_improve": ti,
+		"task":       t.bb.Task,
+		"outcome":    t.bb.Outcome,
 	}
 	data, _ := json.Marshal(out)
 	return string(data), nil
@@ -82,7 +82,7 @@ func NewFitnessTool(refStore *reflection.Store, treeStore *evolution.TreeStore) 
 	return &FitnessTool{refStore: refStore, treeStore: treeStore}
 }
 
-func (t *FitnessTool) Name() string        { return "bt_get_fitness" }
+func (t *FitnessTool) Name() string { return "bt_get_fitness" }
 func (t *FitnessTool) Description() string {
 	return "Get behavior tree fitness stats: total tasks, successes, failures, success rate, node count."
 }
@@ -121,7 +121,7 @@ func NewEvolveTool(refStore *reflection.Store, treeStore *evolution.TreeStore) *
 	return &EvolveTool{refStore: refStore, treeStore: treeStore}
 }
 
-func (t *EvolveTool) Name() string        { return "bt_evolve" }
+func (t *EvolveTool) Name() string { return "bt_evolve" }
 func (t *EvolveTool) Description() string {
 	return "Evolve the behavior tree by applying mutations when failure count >= 3. Returns: whether evolution was applied and node count change."
 }
@@ -145,8 +145,8 @@ func (t *EvolveTool) Call(ctx context.Context, input string) (string, error) {
 	after := evolution.CountNodes(tree)
 	if applied > 0 {
 		if err := t.treeStore.Save(tree); err != nil {
-		fmt.Fprintf(os.Stderr, "langagent: failed to save tree in Evolve tool: %v\n", err)
-	}
+			fmt.Fprintf(os.Stderr, "langagent: failed to save tree in Evolve tool: %v\n", err)
+		}
 	}
 	out := map[string]interface{}{
 		"evolved":      applied > 0,
@@ -168,7 +168,7 @@ func NewGetTreeTool(treeStore *evolution.TreeStore) *GetTreeTool {
 	return &GetTreeTool{treeStore: treeStore}
 }
 
-func (t *GetTreeTool) Name() string        { return "bt_get_tree" }
+func (t *GetTreeTool) Name() string { return "bt_get_tree" }
 func (t *GetTreeTool) Description() string {
 	return "Get the current behavior tree structure. Returns: full serialized tree JSON."
 }
@@ -191,7 +191,7 @@ func NewCreateAgentTool(f *factory.AgentFactory) *CreateAgentTool {
 	return &CreateAgentTool{factory: f}
 }
 
-func (t *CreateAgentTool) Name() string        { return "bt_create_agent" }
+func (t *CreateAgentTool) Name() string { return "bt_create_agent" }
 func (t *CreateAgentTool) Description() string {
 	return "Create a new behavior tree agent from a skill file. Input: path to SKILL.md file. Returns: agent name, node count, strategy count."
 }
@@ -223,7 +223,7 @@ func NewGetReflectionsTool(refStore *reflection.Store) *GetReflectionsTool {
 	return &GetReflectionsTool{refStore: refStore}
 }
 
-func (t *GetReflectionsTool) Name() string        { return "bt_get_reflections" }
+func (t *GetReflectionsTool) Name() string { return "bt_get_reflections" }
 func (t *GetReflectionsTool) Description() string {
 	return "Get recent reflection records: what went well, what to improve from past tasks."
 }
@@ -235,10 +235,10 @@ func (t *GetReflectionsTool) Call(ctx context.Context, input string) (string, er
 		records = records[n-5:]
 	}
 	type summary struct {
-		Task       string `json:"task"`
-		Outcome    string `json:"outcome"`
-		WentWell   string `json:"went_well"`
-		ToImprove  string `json:"to_improve"`
+		Task      string `json:"task"`
+		Outcome   string `json:"outcome"`
+		WentWell  string `json:"went_well"`
+		ToImprove string `json:"to_improve"`
 	}
 	var items []summary
 	for _, r := range records {
@@ -258,8 +258,8 @@ func (t *GetReflectionsTool) Call(ctx context.Context, input string) (string, er
 		})
 	}
 	out := map[string]interface{}{
-		"total":         n,
-		"recent":        items,
+		"total":  n,
+		"recent": items,
 	}
 	data, _ := json.Marshal(out)
 	return string(data), nil

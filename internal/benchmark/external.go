@@ -14,18 +14,18 @@ import (
 // BFCLEntry mirrors a Berkeley Function Calling Leaderboard test case.
 // Each entry tests whether the tree routes to the correct tool given a query and available tools.
 type BFCLEntry struct {
-	ID            string   `json:"id"`
-	Query         string   `json:"query"`          // user's request
-	Functions      []BFCLFunction `json:"functions"` // available tools
-	ExpectedTool  string   `json:"expected_tool"`  // which tool should be called
-	ExpectedArgs  map[string]interface{} `json:"expected_args"` // expected arguments
-	Category      string   `json:"category"`       // simple, multiple, parallel, relevance
+	ID           string                 `json:"id"`
+	Query        string                 `json:"query"`         // user's request
+	Functions    []BFCLFunction         `json:"functions"`     // available tools
+	ExpectedTool string                 `json:"expected_tool"` // which tool should be called
+	ExpectedArgs map[string]interface{} `json:"expected_args"` // expected arguments
+	Category     string                 `json:"category"`      // simple, multiple, parallel, relevance
 }
 
 // BFCLFunction represents a tool definition in BFCL format.
 type BFCLFunction struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
 	Parameters  map[string]interface{} `json:"parameters"`
 }
 
@@ -172,22 +172,22 @@ func BuiltinBFCLMultiple() *BFCLSuite {
 type GAIAEntry struct {
 	ID       string `json:"id"`
 	Question string `json:"question"`
-	Level    int    `json:"level"`    // 1, 2, or 3
-	Answer   string `json:"answer"`   // ground truth
+	Level    int    `json:"level"`  // 1, 2, or 3
+	Answer   string `json:"answer"` // ground truth
 }
 
 // GAIAMetrics holds GAIA evaluation results.
 type GAIAMetrics struct {
-	TotalQuestions int     `json:"total_questions"`
-	CorrectAnswers int     `json:"correct_answers"`
-	Accuracy       float64 `json:"accuracy"`
+	TotalQuestions int                      `json:"total_questions"`
+	CorrectAnswers int                      `json:"correct_answers"`
+	Accuracy       float64                  `json:"accuracy"`
 	ByLevel        map[int]GAIALevelMetrics `json:"by_level"`
 }
 
 // GAIALevelMetrics holds per-level GAIA results.
 type GAIALevelMetrics struct {
-	Total   int     `json:"total"`
-	Correct int     `json:"correct"`
+	Total    int     `json:"total"`
+	Correct  int     `json:"correct"`
 	Accuracy float64 `json:"accuracy"`
 }
 
@@ -243,12 +243,12 @@ func EvaluateGAIA(tree *evolution.SerializableNode, entries []GAIAEntry, mock ll
 
 // SWEEntry mirrors a SWE-bench task.
 type SWEEntry struct {
-	ID          string `json:"id"`
-	Repo        string `json:"repo"`
-	IssueTitle  string `json:"issue_title"`
-	IssueBody   string `json:"issue_body"`
-	BaseCommit  string `json:"base_commit"`
-	TestPatch   string `json:"test_patch"` // tests that must pass
+	ID         string `json:"id"`
+	Repo       string `json:"repo"`
+	IssueTitle string `json:"issue_title"`
+	IssueBody  string `json:"issue_body"`
+	BaseCommit string `json:"base_commit"`
+	TestPatch  string `json:"test_patch"` // tests that must pass
 }
 
 // SWEMetrics holds SWE-bench evaluation results.
@@ -290,6 +290,8 @@ func BuiltinSWELite() []SWEEntry {
 }
 
 func max1(n int) int {
-	if n < 1 { return 1 }
+	if n < 1 {
+		return 1
+	}
 	return n
 }

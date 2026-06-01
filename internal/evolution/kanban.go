@@ -166,8 +166,8 @@ func KanbanWorkflowTree() *SerializableNode {
 						Children: []SerializableNode{
 							{Type: "Condition", Name: "IsCreateTask", Description: "Task mentions create, new card, add"},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Create a new task card following DoR standards: actionable title, description, acceptance criteria (- [ ] items), priority (critical/high/medium/low), AQAL quadrant (q-i/q-it/q-we/q-its/q-all). Place in BACKLOG column.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Create a new task card following DoR standards: actionable title, description, acceptance criteria (- [ ] items), priority (critical/high/medium/low), AQAL quadrant (q-i/q-it/q-we/q-its/q-all). Place in BACKLOG column.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 						},
@@ -178,8 +178,8 @@ func KanbanWorkflowTree() *SerializableNode {
 						Children: []SerializableNode{
 							{Type: "Condition", Name: "IsRefinement", Description: "Task mentions refine, expand, detail"},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Refine a TODO card: expand description, add implementation notes, ensure AC are testable, add architecture constraints. Move TODO→PLANNING→REFINED. Verify DoR gate passes.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Refine a TODO card: expand description, add implementation notes, ensure AC are testable, add architecture constraints. Move TODO→PLANNING→REFINED. Verify DoR gate passes.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 						},
@@ -190,8 +190,8 @@ func KanbanWorkflowTree() *SerializableNode {
 						Children: []SerializableNode{
 							{Type: "Condition", Name: "IsQA", Description: "Task mentions qa, test, validate, verify"},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Run QA on a card: check all AC are [x], verify implementation, check for regressions, generate PASS/FAIL report. PASS → move QA→REVIEW. FAIL → move back to IN PROGRESS with issues.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Run QA on a card: check all AC are [x], verify implementation, check for regressions, generate PASS/FAIL report. PASS → move QA→REVIEW. FAIL → move back to IN PROGRESS with issues.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 						},
@@ -201,8 +201,8 @@ func KanbanWorkflowTree() *SerializableNode {
 						Type: "Sequence", Name: "ScanPath",
 						Children: []SerializableNode{
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Scan the full Kanban board: count cards per column, detect stale items, identify bottlenecks, check for cards ready for next phase. Produce a board health report with recommendations.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Scan the full Kanban board: count cards per column, detect stale items, identify bottlenecks, check for cards ready for next phase. Produce a board health report with recommendations.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 						},
@@ -211,8 +211,8 @@ func KanbanWorkflowTree() *SerializableNode {
 			},
 			// DoD gate
 			{
-				Type: "ChainAction",
-				Name: "llm_call:Verify Definition of Done: all checkboxes [x], QA report PASS, description reflects implementation. Flag any DoD violations.",
+				Type:     "ChainAction",
+				Name:     "llm_call:Verify Definition of Done: all checkboxes [x], QA report PASS, description reflects implementation. Flag any DoD violations.",
 				Metadata: map[string]any{"max_tokens": float64(5)},
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
@@ -244,8 +244,8 @@ func KanbanAutoPilotTree() *SerializableNode {
 			},
 			// Quality: verify proper transitions
 			{
-				Type: "ChainAction",
-				Name: "llm_call:Audit card transitions: verify no card skipped a column, no unauthorized transitions (BACKLOG→TODO, REFINED→APPROVED, REVIEW→DONE require human approval), all cards have proper gates met.",
+				Type:     "ChainAction",
+				Name:     "llm_call:Audit card transitions: verify no card skipped a column, no unauthorized transitions (BACKLOG→TODO, REFINED→APPROVED, REVIEW→DONE require human approval), all cards have proper gates met.",
 				Metadata: map[string]any{"max_tokens": float64(6)},
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},

@@ -30,31 +30,31 @@ type Alert struct {
 
 // MetricsJSON mirrors the /api/metrics JSON response from the dashboard.
 type MetricsJSON struct {
-	HTTPRequestsTotal uint64         `json:"http_requests_total"`
-	HTTPErrorsTotal   uint64         `json:"http_errors_total"`
-	TotalRequests     uint64         `json:"total_requests"`
-	TotalErrors       uint64         `json:"total_errors"`
-	Agents            []AgentMetric  `json:"agents"`
+	HTTPRequestsTotal uint64        `json:"http_requests_total"`
+	HTTPErrorsTotal   uint64        `json:"http_errors_total"`
+	TotalRequests     uint64        `json:"total_requests"`
+	TotalErrors       uint64        `json:"total_errors"`
+	Agents            []AgentMetric `json:"agents"`
 }
 
 // AgentMetric mirrors per-agent metrics from /api/metrics.
 type AgentMetric struct {
-	Name           string `json:"name"`
-	SuccessCount   uint64 `json:"success_count"`
-	ErrorCount     uint64 `json:"error_count"`
-	TotalCount     uint64 `json:"total_count"`
-	AvgDurationMs  string `json:"avg_duration_ms"`
-	SuccessRate    string `json:"success_rate"`
-	LastRun        string `json:"last_run"` // RFC3339
+	Name          string `json:"name"`
+	SuccessCount  uint64 `json:"success_count"`
+	ErrorCount    uint64 `json:"error_count"`
+	TotalCount    uint64 `json:"total_count"`
+	AvgDurationMs string `json:"avg_duration_ms"`
+	SuccessRate   string `json:"success_rate"`
+	LastRun       string `json:"last_run"` // RFC3339
 }
 
 // AlertReport is the result of evaluating all alert rules.
 type AlertReport struct {
-	EvaluatedAt  string  `json:"evaluated_at"`
-	TotalRules   int     `json:"total_rules"`
-	FiringCount  int     `json:"firing_count"`
-	Alerts       []Alert `json:"alerts"`
-	AllClear     bool    `json:"all_clear"`
+	EvaluatedAt string  `json:"evaluated_at"`
+	TotalRules  int     `json:"total_rules"`
+	FiringCount int     `json:"firing_count"`
+	Alerts      []Alert `json:"alerts"`
+	AllClear    bool    `json:"all_clear"`
 }
 
 // ─── Thresholds ─────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ const (
 	globalErrorSpikeThreshold = 10 // raw count threshold in evaluation window
 
 	// No request / no activity thresholds.
-	noRequestDuration     = 10 * time.Minute
+	noRequestDuration        = 10 * time.Minute
 	lowActivitySuppressHours = 1 * time.Hour
 )
 
@@ -228,12 +228,12 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 	// Dashboard has received no requests (info severity during idle periods)
 	if metrics.HTTPRequestsTotal == 0 {
 		alerts = append(alerts, Alert{
-			Name:      "BTDashboardNoRequests",
-			Severity:  SeverityInfo,
-			Component: "dashboard",
-			Summary:   "Dashboard has received no requests",
+			Name:        "BTDashboardNoRequests",
+			Severity:    SeverityInfo,
+			Component:   "dashboard",
+			Summary:     "Dashboard has received no requests",
 			Description: "Dashboard has received no HTTP requests. This may be normal during low-usage periods.",
-			Firing: true,
+			Firing:      true,
 		})
 	}
 
@@ -246,12 +246,12 @@ func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
 	// No platform activity: no requests AND no agents have recent activity
 	if metrics.TotalRequests == 0 && len(metrics.Agents) == 0 {
 		alerts = append(alerts, Alert{
-			Name:      "BTGlobalNoActivity",
-			Severity:  SeverityWarning,
-			Component: "platform",
-			Summary:   "No platform activity detected",
+			Name:        "BTGlobalNoActivity",
+			Severity:    SeverityWarning,
+			Component:   "platform",
+			Summary:     "No platform activity detected",
 			Description: "The platform has received no task requests and has no registered agents. Check if the Hermes gateway and MCP servers are running.",
-			Firing:    true,
+			Firing:      true,
 		})
 	}
 
@@ -274,12 +274,12 @@ func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
 	// Low activity suppression hint: platform is idle, non-critical alerts are noise
 	if metrics.TotalRequests == 0 && metrics.HTTPRequestsTotal == 0 {
 		alerts = append(alerts, Alert{
-			Name:      "BTAlertSuppressionHint",
-			Severity:  SeverityInfo,
-			Component: "platform",
-			Summary:   "Low platform activity — consider suppressing alerts",
+			Name:        "BTAlertSuppressionHint",
+			Severity:    SeverityInfo,
+			Component:   "platform",
+			Summary:     "Low platform activity — consider suppressing alerts",
 			Description: "Platform request rate is near zero. Non-critical alert noise may be unnecessary during idle periods.",
-			Firing: true,
+			Firing:      true,
 		})
 	}
 

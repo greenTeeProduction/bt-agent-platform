@@ -8,19 +8,22 @@ import (
 
 func main() {
 	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil { fmt.Println("Ollama unavailable"); return }
+	if err != nil {
+		fmt.Println("Ollama unavailable")
+		return
+	}
 
-	tt := thinktank.NewThinkTank("Hermes Review Council", 
+	tt := thinktank.NewThinkTank("Hermes Review Council",
 		"Review the current Hermes Agent setup and recommend improvements. Analyze: architecture, 24 MCP tools, 38 behavior trees, 10 chain types, knowledge graph, gardener evolution, Stockfish algorithms, thinktank/startup simulations, qwen3.6 model performance on Jetson ARM64. Identify strengths, weaknesses, risks, and top 5 actionable improvements.")
 
 	orch := thinktank.NewOrchestrator(tt, client)
-	
+
 	fmt.Println("═══════════════════════════════════════════")
 	fmt.Println("  HERMES AGENT — THINK TANK REVIEW")
 	fmt.Println("  5 Fellows: Bull, Bear, Technical, Macro, Contrarian")
 	fmt.Println("═══════════════════════════════════════════")
 	fmt.Println()
-	
+
 	// Phase 1: Research
 	fmt.Println("Phase 1: Independent Fellow Research...")
 	orch.RunResearchRound()
@@ -29,13 +32,13 @@ func main() {
 			f.FellowName, f.Role, len(f.KeyInsights), f.ConfidenceScore*100)
 	}
 	fmt.Println()
-	
+
 	// Phase 2: Debate
 	fmt.Println("Phase 2: Structured Dialectic Debate...")
 	orch.RunDebate()
 	fmt.Printf("  %d debate turns across %d rounds\n", len(tt.DebateTranscript), tt.DelphiRounds)
 	fmt.Println()
-	
+
 	// Phase 3: Synthesis
 	fmt.Println("Phase 3: Hegelian Synthesis...")
 	orch.RunSynthesis()
@@ -47,17 +50,19 @@ func main() {
 		fmt.Printf("  Disagreement points: %d\n", len(tt.Synthesis.PointsOfDisagreement))
 	}
 	fmt.Println()
-	
+
 	// Phase 4: Peer Review
 	fmt.Println("Phase 4: Peer Review...")
 	orch.RunPeerReview()
 	critical := 0
 	for _, r := range tt.PeerReview {
-		if r.Severity == "critical" { critical++ }
+		if r.Severity == "critical" {
+			critical++
+		}
 	}
 	fmt.Printf("  %d review comments (%d critical)\n", len(tt.PeerReview), critical)
 	fmt.Println()
-	
+
 	// Phase 5: Report
 	fmt.Println("Phase 5: Final Report...")
 	orch.RunReportGeneration()

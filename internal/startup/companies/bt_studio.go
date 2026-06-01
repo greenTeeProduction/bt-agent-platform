@@ -1,8 +1,8 @@
 package companies
 
 import (
-	"time"
 	"github.com/nico/go-bt-evolve/internal/startup"
+	"time"
 )
 
 // BTStudioCompany creates a startup building a Flutter-based behavior tree visual editor.
@@ -44,8 +44,8 @@ func BTStudioCompany() *startup.CompanyState {
 		Opportunities: []string{"growing BT adoption in AI agents", "no good visual BT editor exists", "Ollama ecosystem growth"},
 
 		Metrics: map[string]interface{}{
-			"waitlist_signups":    340,
-			"github_stars":        120,
+			"waitlist_signups":     340,
+			"github_stars":         120,
 			"flutter_widget_count": 45,
 			"tree_render_fps":      58.0,
 		},

@@ -15,11 +15,11 @@ type RunRecord struct {
 	ID        string    `json:"id"`
 	AgentName string    `json:"agent_name"`
 	Task      string    `json:"task"`
-	Outcome   string    `json:"outcome"`   // success, failure, partial, timeout, panic
+	Outcome   string    `json:"outcome"` // success, failure, partial, timeout, panic
 	Output    string    `json:"output"`
 	Error     string    `json:"error,omitempty"`
-	Duration  string    `json:"duration"`  // "2m34s"
-	Quality   float64   `json:"quality"`   // 0.0-1.0 output quality
+	Duration  string    `json:"duration"` // "2m34s"
+	Quality   float64   `json:"quality"`  // 0.0-1.0 output quality
 	StartedAt time.Time `json:"started_at"`
 	EndedAt   time.Time `json:"ended_at"`
 }
@@ -120,14 +120,14 @@ func (h *History) Stats(agentName string) RunStats {
 	}
 
 	return RunStats{
-		AgentName:     agentName,
-		TotalRuns:     len(runs),
-		SuccessRate:   float64(successes) / float64(len(runs)),
-		TotalPanics:   panics,
-		AvgDuration:   totalDuration / time.Duration(len(runs)),
-		AvgQuality:    totalQuality / float64(len(runs)),
-		LastRun:       runs[len(runs)-1].EndedAt,
-		LastOutcome:   runs[len(runs)-1].Outcome,
+		AgentName:   agentName,
+		TotalRuns:   len(runs),
+		SuccessRate: float64(successes) / float64(len(runs)),
+		TotalPanics: panics,
+		AvgDuration: totalDuration / time.Duration(len(runs)),
+		AvgQuality:  totalQuality / float64(len(runs)),
+		LastRun:     runs[len(runs)-1].EndedAt,
+		LastOutcome: runs[len(runs)-1].Outcome,
 	}
 }
 

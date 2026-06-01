@@ -149,8 +149,8 @@ const (
 
 // SelectorOptimizer reorders Selector children based on execution history.
 type SelectorOptimizer struct {
-	Stats     map[string]*SelectorStats // selector name → stats
-	Strategy  SelectorOrderingStrategy
+	Stats      map[string]*SelectorStats // selector name → stats
+	Strategy   SelectorOrderingStrategy
 	MinSamples int // minimum samples before reordering (default: 10)
 }
 

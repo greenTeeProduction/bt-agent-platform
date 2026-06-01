@@ -3,9 +3,9 @@ package engine
 import (
 	"testing"
 
-	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/goap"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ─── Engine Tests ────────────────────────────────────────────────────────────

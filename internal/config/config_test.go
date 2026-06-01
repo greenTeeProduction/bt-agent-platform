@@ -319,8 +319,8 @@ func TestValidate_Valid(t *testing.T) {
 
 func TestValidate_Invalid(t *testing.T) {
 	c, _ := Load()
-	c.DashboardPort = 0   // invalid
-	c.LLMTimeout = 0      // invalid
+	c.DashboardPort = 0    // invalid
+	c.LLMTimeout = 0       // invalid
 	c.GardenerMaxNodes = 0 // invalid
 
 	err := c.Validate()
@@ -950,8 +950,8 @@ func TestValidate_AllEdgeCases(t *testing.T) {
 	c.MaxBodySize = 0           // invalid
 	c.GardenerCycleInterval = 5 // invalid (< 10)
 	c.LLMProvider = "deepseek"
-	c.DeepSeekKey = ""          // invalid (no key for deepseek)
-	c.RateLimitBurst = -1       // invalid (negative)
+	c.DeepSeekKey = ""    // invalid (no key for deepseek)
+	c.RateLimitBurst = -1 // invalid (negative)
 
 	err := c.Validate()
 	if err == nil {
@@ -1029,15 +1029,15 @@ func TestValidate_MaxBodySize_TooLarge(t *testing.T) {
 
 func TestValidate_BoundaryValues_AllValid(t *testing.T) {
 	c := newDefaultConfig()
-	c.DashboardPort = 1          // min
-	c.LLMTimeout = 1             // min
-	c.RateLimitRPS = 0           // min
-	c.RateLimitBurst = 0         // min
-	c.GardenerCycleInterval = 10 // min
-	c.GardenerMutationsPer = 0   // min
-	c.GardenerMaxNodes = 1       // min
+	c.DashboardPort = 1           // min
+	c.LLMTimeout = 1              // min
+	c.RateLimitRPS = 0            // min
+	c.RateLimitBurst = 0          // min
+	c.GardenerCycleInterval = 10  // min
+	c.GardenerMutationsPer = 0    // min
+	c.GardenerMaxNodes = 1        // min
 	c.SchedulerCheckInterval = 10 // min
-	c.MaxBodySize = 1024         // min
+	c.MaxBodySize = 1024          // min
 
 	err := c.Validate()
 	if err != nil {
@@ -1045,13 +1045,13 @@ func TestValidate_BoundaryValues_AllValid(t *testing.T) {
 	}
 
 	c2 := newDefaultConfig()
-	c2.DashboardPort = 65535              // max
-	c2.LLMTimeout = 3600                  // max
-	c2.GardenerCycleInterval = 86400      // max
-	c2.GardenerMutationsPer = 10          // max
-	c2.GardenerMaxNodes = 100             // max
-	c2.SchedulerCheckInterval = 3600      // max
-	c2.MaxBodySize = 100 * 1024 * 1024    // max
+	c2.DashboardPort = 65535           // max
+	c2.LLMTimeout = 3600               // max
+	c2.GardenerCycleInterval = 86400   // max
+	c2.GardenerMutationsPer = 10       // max
+	c2.GardenerMaxNodes = 100          // max
+	c2.SchedulerCheckInterval = 3600   // max
+	c2.MaxBodySize = 100 * 1024 * 1024 // max
 
 	err = c2.Validate()
 	if err != nil {
@@ -1505,5 +1505,431 @@ func TestCheckRuntime_TLSBothFilesOk(t *testing.T) {
 	report := c.CheckRuntime()
 	if !report.Ok {
 		t.Errorf("expected Ok=true with both TLS files present, got: %+v", report.Issues)
+	}
+}
+
+// ─── Diff tests ──────────────────────────────────────────────────────────────
+
+func TestDiff_Identical(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	diffs := a.Diff(b)
+	if len(diffs) != 0 {
+		t.Errorf("expected no diffs for identical configs, got: %v", diffs)
+	}
+}
+
+func TestDiff_NilOther(t *testing.T) {
+	a := newDefaultConfig()
+	diffs := a.Diff(nil)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for nil other, got %d", len(diffs))
+	}
+	if diffs[0] != "other config is nil" {
+		t.Errorf("unexpected nil diff message: %q", diffs[0])
+	}
+}
+
+func TestDiff_SingleFieldChanged(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.DashboardPort = 9090
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff, got %d: %v", len(diffs), diffs)
+	}
+	expected := "DashboardPort: 9800 → 9090"
+	if diffs[0] != expected {
+		t.Errorf("expected %q, got %q", expected, diffs[0])
+	}
+}
+
+func TestDiff_MultipleFieldsChanged(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.DashboardPort = 8080
+	b.LLMTimeout = 120
+	b.GardenerEnabled = false
+	b.OllamaModel = "custom-model"
+
+	diffs := a.Diff(b)
+	if len(diffs) != 4 {
+		t.Fatalf("expected 4 diffs, got %d: %v", len(diffs), diffs)
+	}
+
+	// Verify each expected diff is present (order doesn't matter)
+	expectedSet := map[string]bool{
+		"DashboardPort: 9800 → 8080":                  false,
+		"LLMTimeout: 300s → 120s":                     false,
+		"GardenerEnabled: true → false":               false,
+		"OllamaModel: qwen3.6:35b-a3b → custom-model": false,
+	}
+	for _, d := range diffs {
+		if _, ok := expectedSet[d]; ok {
+			expectedSet[d] = true
+		} else {
+			t.Errorf("unexpected diff: %q", d)
+		}
+	}
+	for k, found := range expectedSet {
+		if !found {
+			t.Errorf("missing expected diff: %q", k)
+		}
+	}
+}
+
+func TestDiff_SecretFields(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+
+	// APIKey: originally empty, now set
+	b.APIKey = "secret-key-123"
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for APIKey set, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "APIKey: set" {
+		t.Errorf("expected 'APIKey: set', got %q", diffs[0])
+	}
+
+	// APIKey: changed (both non-empty but different)
+	a2 := newDefaultConfig()
+	a2.APIKey = "old-key"
+	diffs = a2.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for APIKey changed, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "APIKey: changed" {
+		t.Errorf("expected 'APIKey: changed', got %q", diffs[0])
+	}
+
+	// APIKey: removed
+	diffs = b.Diff(a)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for APIKey removed, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "APIKey: removed" {
+		t.Errorf("expected 'APIKey: removed', got %q", diffs[0])
+	}
+}
+
+func TestDiff_DeepSeekKeyHandling(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+
+	b.DeepSeekKey = "sk-abc123"
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff, got %d", len(diffs))
+	}
+	if diffs[0] != "DeepSeekKey: set" {
+		t.Errorf("expected 'DeepSeekKey: set', got %q", diffs[0])
+	}
+
+	// Changed
+	a2 := newDefaultConfig()
+	a2.DeepSeekKey = "sk-old"
+	diffs = a2.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for changed, got %d", len(diffs))
+	}
+	if diffs[0] != "DeepSeekKey: changed" {
+		t.Errorf("expected 'DeepSeekKey: changed', got %q", diffs[0])
+	}
+
+	// Removed
+	diffs = b.Diff(a)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff for removed, got %d", len(diffs))
+	}
+	if diffs[0] != "DeepSeekKey: removed" {
+		t.Errorf("expected 'DeepSeekKey: removed', got %q", diffs[0])
+	}
+}
+
+func TestDiff_TLSFields(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+
+	b.TLSCert = "/etc/ssl/cert.pem"
+	b.TLSKey = "/etc/ssl/key.pem"
+
+	diffs := a.Diff(b)
+	if len(diffs) != 2 {
+		t.Fatalf("expected 2 diffs, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "TLSCert: set" {
+		t.Errorf("expected 'TLSCert: set', got %q", diffs[0])
+	}
+	if diffs[1] != "TLSKey: set" {
+		t.Errorf("expected 'TLSKey: set', got %q", diffs[1])
+	}
+
+	// TLS removed
+	diffs = b.Diff(a)
+	if len(diffs) != 2 {
+		t.Fatalf("expected 2 diffs for removal, got %d", len(diffs))
+	}
+	if diffs[0] != "TLSCert: removed" {
+		t.Errorf("expected 'TLSCert: removed', got %q", diffs[0])
+	}
+}
+
+func TestDiff_AllFeatureFlags(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+
+	// Flip all feature flags
+	b.GardenerEnabled = false
+	b.SchedulerEnabled = false
+	b.AutoEvolveEnabled = true
+	b.KanbanEnabled = false
+	b.ThinktankEnabled = false
+	b.StartupSimEnabled = false
+
+	diffs := a.Diff(b)
+	if len(diffs) != 6 {
+		t.Fatalf("expected 6 diffs, got %d: %v", len(diffs), diffs)
+	}
+	expectedFlags := map[string]bool{
+		"GardenerEnabled: true → false":   false,
+		"SchedulerEnabled: true → false":  false,
+		"AutoEvolveEnabled: false → true": false,
+		"KanbanEnabled: true → false":     false,
+		"ThinktankEnabled: true → false":  false,
+		"StartupSimEnabled: true → false": false,
+	}
+	for _, d := range diffs {
+		if _, ok := expectedFlags[d]; ok {
+			expectedFlags[d] = true
+		} else {
+			t.Errorf("unexpected diff: %q", d)
+		}
+	}
+	for k, found := range expectedFlags {
+		if !found {
+			t.Errorf("missing expected diff: %q", k)
+		}
+	}
+}
+
+func TestDiff_RateLimitFields(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.RateLimitRPS = 50.0
+	b.RateLimitBurst = 10
+
+	diffs := a.Diff(b)
+	if len(diffs) != 2 {
+		t.Fatalf("expected 2 diffs, got %d", len(diffs))
+	}
+	if diffs[0] != "RateLimitRPS: 100.0 → 50.0" {
+		t.Errorf("expected RateLimitRPS diff, got %q", diffs[0])
+	}
+	if diffs[1] != "RateLimitBurst: 20 → 10" {
+		t.Errorf("expected RateLimitBurst diff, got %q", diffs[1])
+	}
+}
+
+func TestDiff_PersistenceDirs(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.ReflectionsDir = "/data/reflections"
+	b.HistoryDir = "/data/history"
+
+	diffs := a.Diff(b)
+	if len(diffs) != 2 {
+		t.Fatalf("expected 2 diffs, got %d", len(diffs))
+	}
+	if diffs[0] != `ReflectionsDir: "" → "/data/reflections"` {
+		t.Errorf("unexpected ReflectionsDir diff: %q", diffs[0])
+	}
+	if diffs[1] != `HistoryDir: "" → "/data/history"` {
+		t.Errorf("unexpected HistoryDir diff: %q", diffs[1])
+	}
+}
+
+func TestDiff_GardenerFields(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.GardenerCycleInterval = 600
+	b.GardenerMutationsPer = 5
+	b.GardenerMaxNodes = 50
+
+	diffs := a.Diff(b)
+	if len(diffs) != 3 {
+		t.Fatalf("expected 3 diffs, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "GardenerCycleInterval: 300s → 600s" {
+		t.Errorf("unexpected diff: %q", diffs[0])
+	}
+	if diffs[1] != "GardenerMutationsPer: 2 → 5" {
+		t.Errorf("unexpected diff: %q", diffs[1])
+	}
+	if diffs[2] != "GardenerMaxNodes: 20 → 50" {
+		t.Errorf("unexpected diff: %q", diffs[2])
+	}
+}
+
+func TestDiff_LLMProviderSwitch(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.LLMProvider = "deepseek"
+	b.DeepSeekKey = "sk-test"
+	b.OllamaHost = "" // deepseek provider doesn't use Ollama
+
+	diffs := a.Diff(b)
+	if len(diffs) != 3 {
+		// LLMProvider changed + OllamaHost emptied + DeepSeekKey set
+		t.Fatalf("expected 3 diffs, got %d: %v", len(diffs), diffs)
+	}
+	if diffs[0] != "LLMProvider: ollama → deepseek" {
+		t.Errorf("expected LLMProvider diff, got %q", diffs[0])
+	}
+	// OllamaHost changed (emptied for deepseek)
+	foundHost := false
+	for _, d := range diffs {
+		if d == "OllamaHost: http://localhost:11434 → " {
+			foundHost = true
+		}
+	}
+	if !foundHost {
+		t.Errorf("expected OllamaHost diff not found in: %v", diffs)
+	}
+	foundKey := false
+	for _, d := range diffs {
+		if d == "DeepSeekKey: set" {
+			foundKey = true
+		}
+	}
+	if !foundKey {
+		t.Errorf("expected DeepSeekKey: set not found in: %v", diffs)
+	}
+}
+
+func TestDiff_AllFieldsChangedAtOnce(t *testing.T) {
+	a := newDefaultConfig()
+	b := &Config{
+		DashboardPort:          9090,
+		APIKey:                 "new-key",
+		TLSCert:                "/new/cert.pem",
+		TLSKey:                 "/new/key.pem",
+		LLMProvider:            "deepseek",
+		OllamaHost:             "",
+		OllamaModel:            "",
+		DeepSeekHost:           "https://custom.deepseek.com/v1",
+		DeepSeekModel:          "deepseek-v4-pro",
+		DeepSeekKey:            "sk-new",
+		LLMTimeout:             600,
+		RateLimitRPS:           200,
+		RateLimitBurst:         50,
+		GardenerEnabled:        false,
+		SchedulerEnabled:       false,
+		AutoEvolveEnabled:      true,
+		KanbanEnabled:          false,
+		ThinktankEnabled:       false,
+		StartupSimEnabled:      false,
+		ReflectionsDir:         "/data/r",
+		AgentDefsDir:           "/data/a",
+		HistoryDir:             "/data/h",
+		LogDir:                 "/data/l",
+		GardenerCycleInterval:  600,
+		GardenerMutationsPer:   5,
+		GardenerMaxNodes:       50,
+		SchedulerCheckInterval: 120,
+		MaxBodySize:            2097152,
+	}
+
+	diffs := a.Diff(b)
+	// 30 config fields total (all changed from defaults)
+	// DashboardPort, APIKey, TLSCert, TLSKey, LLMProvider, OllamaHost,
+	// OllamaModel, DeepSeekHost, DeepSeekModel, DeepSeekKey, LLMTimeout,
+	// RateLimitRPS, RateLimitBurst, GardenerEnabled, SchedulerEnabled,
+	// AutoEvolveEnabled, KanbanEnabled, ThinktankEnabled, StartupSimEnabled,
+	// ReflectionsDir, AgentDefsDir, HistoryDir, LogDir,
+	// GardenerCycleInterval, GardenerMutationsPer, GardenerMaxNodes,
+	// SchedulerCheckInterval, MaxBodySize = 28 fields
+	if len(diffs) < 28 {
+		t.Errorf("expected at least 28 diffs, got %d", len(diffs))
+	}
+
+	// Reverse: b → a should also report all changes
+	reverseDiffs := b.Diff(a)
+	if len(reverseDiffs) < 28 {
+		t.Errorf("expected at least 28 reverse diffs, got %d", len(reverseDiffs))
+	}
+}
+
+func TestDiff_EmptyDirsNotDiffed(t *testing.T) {
+	// Two configs with the same empty dir strings should not produce diffs
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+
+	// Both have empty string for all persistence dirs
+	diffs := a.Diff(b)
+	for _, d := range diffs {
+		if d == `ReflectionsDir: "" → ""` {
+			t.Error("should not diff identical empty strings")
+		}
+	}
+}
+
+func TestDiff_SchedulerCheckInterval(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.SchedulerCheckInterval = 30
+
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff, got %d", len(diffs))
+	}
+	if diffs[0] != "SchedulerCheckInterval: 60s → 30s" {
+		t.Errorf("unexpected diff: %q", diffs[0])
+	}
+}
+
+func TestDiff_MaxBodySize(t *testing.T) {
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.MaxBodySize = 5242880
+
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected 1 diff, got %d", len(diffs))
+	}
+	if diffs[0] != "MaxBodySize: 1048576 → 5242880" {
+		t.Errorf("unexpected diff: %q", diffs[0])
+	}
+}
+
+func TestDiff_UnchangedFieldsNotIncluded(t *testing.T) {
+	// Only change one field, verify all other fields are not reported
+	a := newDefaultConfig()
+	b := newDefaultConfig()
+	b.OllamaModel = "new-model"
+
+	diffs := a.Diff(b)
+	if len(diffs) != 1 {
+		t.Fatalf("expected exactly 1 diff, got %d: %v", len(diffs), diffs)
+	}
+
+	// Check that DashboardPort (unchanged) is not in diffs
+	for _, d := range diffs {
+		if d == "DashboardPort: 9800 → 9800" {
+			t.Error("unchanged DashboardPort should not be in diffs")
+		}
+	}
+}
+
+func TestDiff_ConfigFileFieldIgnored(t *testing.T) {
+	// ConfigFile is tagged json:"-" and should not be diffed
+	a := newDefaultConfig()
+	a.ConfigFile = "/etc/bt/config.json"
+	b := newDefaultConfig()
+	b.ConfigFile = "/etc/bt/other.json"
+
+	diffs := a.Diff(b)
+	if len(diffs) != 0 {
+		t.Errorf("ConfigFile should not be diffed (json:\"-\"), got: %v", diffs)
 	}
 }

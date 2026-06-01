@@ -10,12 +10,12 @@ import (
 // IslandModel manages domain-separated subpopulations with periodic migration.
 // Prevents premature convergence by maintaining genetic diversity across domains.
 type IslandModel struct {
-	mu       sync.RWMutex
-	Islands  map[string]*Population           `json:"islands"`
-	Domain   string                            `json:"-"`
-	MigrationInterval int                      `json:"migration_interval"` // generations between migration
-	MigrationRate     float64                  `json:"migration_rate"`     // fraction of population to migrate (0-1)
-	Generation        int                      `json:"generation"`
+	mu                sync.RWMutex
+	Islands           map[string]*Population `json:"islands"`
+	Domain            string                 `json:"-"`
+	MigrationInterval int                    `json:"migration_interval"` // generations between migration
+	MigrationRate     float64                `json:"migration_rate"`     // fraction of population to migrate (0-1)
+	Generation        int                    `json:"generation"`
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -96,9 +96,9 @@ func (im *IslandModel) Migrate() int {
 		for i := 0; i < migrateCount && i < len(srcSorted) && i < len(tgtSorted); i++ {
 			// Copy the source elite to target's worst slot
 			tgtSorted[i] = Individual{
-				Tree:   cloneTree(srcSorted[i].Tree),
+				Tree:    cloneTree(srcSorted[i].Tree),
 				Fitness: srcSorted[i].Fitness,
-				Genome: hashTree(srcSorted[i].Tree),
+				Genome:  hashTree(srcSorted[i].Tree),
 			}
 			migrated++
 		}
@@ -191,10 +191,10 @@ func (im *IslandModel) DiversityAcrossIslands() float64 {
 
 // IslandStats reports per-domain and cross-island metrics.
 type IslandStats struct {
-	Domains       int                `json:"domains"`
-	TotalPop      int                `json:"total_population"`
-	BestPerDomain map[string]float64 `json:"best_per_domain"`
-	CrossDiversity float64           `json:"cross_diversity"`
+	Domains        int                `json:"domains"`
+	TotalPop       int                `json:"total_population"`
+	BestPerDomain  map[string]float64 `json:"best_per_domain"`
+	CrossDiversity float64            `json:"cross_diversity"`
 }
 
 // Stats returns aggregate statistics for the island model.

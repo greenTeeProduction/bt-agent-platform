@@ -13,25 +13,25 @@ import (
 type StepKind string
 
 const (
-	StepAgent     StepKind = "agent"      // Run an agent
-	StepCondition StepKind = "condition"  // Evaluate a condition
-	StepParallel  StepKind = "parallel"   // Run multiple agents in parallel
-	StepLoop      StepKind = "loop"       // Loop until condition met
-	StepApproval  StepKind = "approval"   // Wait for human approval
+	StepAgent       StepKind = "agent"       // Run an agent
+	StepCondition   StepKind = "condition"   // Evaluate a condition
+	StepParallel    StepKind = "parallel"    // Run multiple agents in parallel
+	StepLoop        StepKind = "loop"        // Loop until condition met
+	StepApproval    StepKind = "approval"    // Wait for human approval
 	StepSubworkflow StepKind = "subworkflow" // Run a sub-workflow
 )
 
 // Step is a single step in a workflow.
 type Step struct {
-	ID          string   `yaml:"id" json:"id"`
-	Kind        StepKind `yaml:"kind" json:"kind"`
-	Agent       string   `yaml:"agent,omitempty" json:"agent,omitempty"`           // agent name for agent step
-	Input       string   `yaml:"input,omitempty" json:"input,omitempty"`           // task input (supports {{.prev.output}})
-	Condition   string   `yaml:"condition,omitempty" json:"condition,omitempty"`   // Go template: "{{.prev.output.status}} == 'degraded'"
-	MaxIterations int    `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // for loop steps
-	Steps       []Step  `yaml:"steps,omitempty" json:"steps,omitempty"`            // for parallel/subworkflow steps
-	Timeout     string  `yaml:"timeout,omitempty" json:"timeout,omitempty"`        // "30s", "5m"
-	OnFailure   string  `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`  // "skip", "abort", "retry"
+	ID            string   `yaml:"id" json:"id"`
+	Kind          StepKind `yaml:"kind" json:"kind"`
+	Agent         string   `yaml:"agent,omitempty" json:"agent,omitempty"`                   // agent name for agent step
+	Input         string   `yaml:"input,omitempty" json:"input,omitempty"`                   // task input (supports {{.prev.output}})
+	Condition     string   `yaml:"condition,omitempty" json:"condition,omitempty"`           // Go template: "{{.prev.output.status}} == 'degraded'"
+	MaxIterations int      `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // for loop steps
+	Steps         []Step   `yaml:"steps,omitempty" json:"steps,omitempty"`                   // for parallel/subworkflow steps
+	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`               // "30s", "5m"
+	OnFailure     string   `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`         // "skip", "abort", "retry"
 }
 
 // Workflow is a named sequence of steps.
@@ -44,20 +44,20 @@ type Pipeline struct {
 
 // StepResult captures the output of a single workflow step.
 type StepResult struct {
-	StepID   string    `json:"step_id"`
-	Agent    string    `json:"agent"`
-	Outcome  string    `json:"outcome"`  // success, failure, skipped
-	Output   string    `json:"output"`
+	StepID   string        `json:"step_id"`
+	Agent    string        `json:"agent"`
+	Outcome  string        `json:"outcome"` // success, failure, skipped
+	Output   string        `json:"output"`
 	Duration time.Duration `json:"duration"`
-	Error    string    `json:"error,omitempty"`
+	Error    string        `json:"error,omitempty"`
 }
 
 // WorkflowResult is the complete result of a workflow execution.
 type PipelineResult struct {
-	Workflow   string       `json:"workflow"`
-	Steps      []StepResult `json:"steps"`
-	Outcome    string       `json:"outcome"` // success, failure, partial
-	Duration   time.Duration `json:"duration"`
+	Workflow string        `json:"workflow"`
+	Steps    []StepResult  `json:"steps"`
+	Outcome  string        `json:"outcome"` // success, failure, partial
+	Duration time.Duration `json:"duration"`
 }
 
 // Runner executes a workflow by delegating steps to the BT MCP agent.
@@ -107,22 +107,22 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 				result.Duration = time.Since(start)
 				return result, nil
 			case "retry":
-					// retry once — replace failed result with retry result
-					sr2, err2 := r.executeStep(ctx, step, state)
-					if err2 != nil {
-						sr2.Error = err2.Error()
-						sr2.Outcome = "failure"
-					}
-					// Replace the failed step in results array
-					result.Steps[len(result.Steps)-1] = sr2
-					state.prev[step.ID] = sr2
-					state.input = sr2.Output
-					if sr2.Outcome == "failure" {
-						result.Outcome = "failure"
-						result.Duration = time.Since(start)
-						return result, nil
-					}
+				// retry once — replace failed result with retry result
+				sr2, err2 := r.executeStep(ctx, step, state)
+				if err2 != nil {
+					sr2.Error = err2.Error()
+					sr2.Outcome = "failure"
 				}
+				// Replace the failed step in results array
+				result.Steps[len(result.Steps)-1] = sr2
+				state.prev[step.ID] = sr2
+				state.input = sr2.Output
+				if sr2.Outcome == "failure" {
+					result.Outcome = "failure"
+					result.Duration = time.Since(start)
+					return result, nil
+				}
+			}
 		}
 	}
 

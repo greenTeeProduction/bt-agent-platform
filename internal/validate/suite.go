@@ -13,11 +13,11 @@ import (
 type TestKind string
 
 const (
-	TestSmoke     TestKind = "smoke"     // Does the agent run without crashing?
-	TestRouting   TestKind = "routing"   // Do all strategy paths get exercised?
-	TestOutput    TestKind = "output"    // Does output meet quality gates?
+	TestSmoke      TestKind = "smoke"      // Does the agent run without crashing?
+	TestRouting    TestKind = "routing"    // Do all strategy paths get exercised?
+	TestOutput     TestKind = "output"     // Does output meet quality gates?
 	TestRegression TestKind = "regression" // Does new version score better than old?
-	TestEdge       TestKind = "edge"     // Edge cases: empty input, long input, special chars
+	TestEdge       TestKind = "edge"       // Edge cases: empty input, long input, special chars
 )
 
 // TestCase is a single validation test.
@@ -38,35 +38,35 @@ type Suite struct {
 
 // Result is the outcome of running a single test case.
 type TestResult struct {
-	TestCase TestCase `json:"test_case"`
-	Passed   bool     `json:"passed"`
-	Output   string   `json:"output"`
-	Error    string   `json:"error,omitempty"`
+	TestCase TestCase      `json:"test_case"`
+	Passed   bool          `json:"passed"`
+	Output   string        `json:"output"`
+	Error    string        `json:"error,omitempty"`
 	Duration time.Duration `json:"duration"`
 }
 
 // SuiteResult is the aggregate result of running a full suite.
 type SuiteResult struct {
-	AgentName  string       `json:"agent_name"`
-	Version    string       `json:"version"`
-	Results    []TestResult `json:"results"`
-	Passed     int          `json:"passed"`
-	Failed     int          `json:"failed"`
-	Skipped    int          `json:"skipped"`
-	Duration   time.Duration `json:"duration"`
-	Score      float64      `json:"score"` // overall quality score 0-100
+	AgentName string        `json:"agent_name"`
+	Version   string        `json:"version"`
+	Results   []TestResult  `json:"results"`
+	Passed    int           `json:"passed"`
+	Failed    int           `json:"failed"`
+	Skipped   int           `json:"skipped"`
+	Duration  time.Duration `json:"duration"`
+	Score     float64       `json:"score"` // overall quality score 0-100
 }
 
 // AgentScore is a composite quality score for an agent.
 type AgentScore struct {
-	AgentName    string  `json:"agent_name"`
-	Version      string  `json:"version"`
-	SuccessRate  float64 `json:"success_rate"`  // 0-1
+	AgentName     string  `json:"agent_name"`
+	Version       string  `json:"version"`
+	SuccessRate   float64 `json:"success_rate"`   // 0-1
 	OutputQuality float64 `json:"output_quality"` // 0-1
-	RoutingScore float64 `json:"routing_score"`  // 0-1
-	Speed        float64 `json:"speed"`          // normalized 0-1
-	Robustness   float64 `json:"robustness"`     // 0-1 (edge case handling)
-	Composite    float64 `json:"composite"`      // weighted: 0.4*sr + 0.3*oq + 0.2*speed + 0.1*robustness
+	RoutingScore  float64 `json:"routing_score"`  // 0-1
+	Speed         float64 `json:"speed"`          // normalized 0-1
+	Robustness    float64 `json:"robustness"`     // 0-1 (edge case handling)
+	Composite     float64 `json:"composite"`      // weighted: 0.4*sr + 0.3*oq + 0.2*speed + 0.1*robustness
 }
 
 // Runner executes validation tests against an agent.
@@ -268,7 +268,6 @@ func containsErrorPattern(output string) bool {
 	}
 	return false
 }
-
 
 const longInput = `This is a very long input designed to test the agent's ability to handle large amounts of text. ` +
 	`It contains multiple sentences and paragraphs to simulate real-world usage where users might paste ` +

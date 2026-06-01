@@ -55,31 +55,31 @@ type DeprecationHeader struct {
 
 // Route describes a single API endpoint for OpenAPI generation.
 type Route struct {
-	Path                string              `json:"path"`
-	Method              HTTPMethod          `json:"method"`
-	Summary             string              `json:"summary"`
-	Description         string              `json:"description,omitempty"`
-	Tags                []string            `json:"tags,omitempty"`
-	Parameters          []RouteParam        `json:"parameters,omitempty"`
-	RequestBody         *Schema             `json:"request_body,omitempty"`
-	Responses           []RouteResponse     `json:"responses"`
-	Deprecated          bool                `json:"deprecated,omitempty"`
-	SunsetDate          string              `json:"sunset_date,omitempty"`          // ISO 8601 date when endpoint will be removed
-	DeprecationHeaders  []DeprecationHeader `json:"deprecation_headers,omitempty"`  // HTTP headers emitted on deprecated responses
-	OperationID         string              `json:"operation_id,omitempty"`          // unique ID for code generators
-	Auth                bool                `json:"auth"`                            // requires API key
+	Path               string              `json:"path"`
+	Method             HTTPMethod          `json:"method"`
+	Summary            string              `json:"summary"`
+	Description        string              `json:"description,omitempty"`
+	Tags               []string            `json:"tags,omitempty"`
+	Parameters         []RouteParam        `json:"parameters,omitempty"`
+	RequestBody        *Schema             `json:"request_body,omitempty"`
+	Responses          []RouteResponse     `json:"responses"`
+	Deprecated         bool                `json:"deprecated,omitempty"`
+	SunsetDate         string              `json:"sunset_date,omitempty"`         // ISO 8601 date when endpoint will be removed
+	DeprecationHeaders []DeprecationHeader `json:"deprecation_headers,omitempty"` // HTTP headers emitted on deprecated responses
+	OperationID        string              `json:"operation_id,omitempty"`        // unique ID for code generators
+	Auth               bool                `json:"auth"`                          // requires API key
 }
 
 // ─── OpenAPI Spec Generator ─────────────────────────────────────────────────
 
 // OpenAPISpec represents the top-level OpenAPI 3.0 document.
 type OpenAPISpec struct {
-	OpenAPI    string                `json:"openapi"`
-	Info       OpenAPIInfo           `json:"info"`
-	Servers    []OpenAPIServer       `json:"servers,omitempty"`
+	OpenAPI    string                            `json:"openapi"`
+	Info       OpenAPIInfo                       `json:"info"`
+	Servers    []OpenAPIServer                   `json:"servers,omitempty"`
 	Paths      map[string]map[string]interface{} `json:"paths"`
-	Components OpenAPIComponents     `json:"components,omitempty"`
-	Tags       []OpenAPITag          `json:"tags,omitempty"`
+	Components OpenAPIComponents                 `json:"components,omitempty"`
+	Tags       []OpenAPITag                      `json:"tags,omitempty"`
 }
 
 // OpenAPIInfo contains API metadata.
@@ -672,24 +672,24 @@ func DashboardRoutes() []Route {
 			Tags("System").
 			OperationID("getConfig").
 			JSONResponse(200, "Sanitized runtime configuration", ObjectSchema(map[string]*Schema{
-				"dashboard_port":      IntSchema("Dashboard HTTP port"),
-				"llm_provider":        StringSchema("LLM provider (ollama/deepseek)"),
-				"ollama_host":         StringSchema("Ollama server URL"),
-				"ollama_model":        StringSchema("Ollama model name"),
-				"deepseek_host":       StringSchema("DeepSeek API URL"),
-				"deepseek_model":      StringSchema("DeepSeek model name"),
-				"llm_timeout":         IntSchema("LLM call timeout in seconds"),
-				"rate_limit_rps":      NumberSchema("Rate limit requests per second"),
-				"rate_limit_burst":    IntSchema("Rate limit burst capacity"),
-				"gardener_enabled":    BoolSchema("Gardener evolution daemon enabled"),
-				"scheduler_enabled":   BoolSchema("Agent scheduler enabled"),
-				"auto_evolve_enabled":  BoolSchema("Auto-evolution enabled"),
-				"kanban_enabled":      BoolSchema("Kanban board integration enabled"),
-				"thinktank_enabled":   BoolSchema("Thinktank analysis enabled"),
-				"startup_sim_enabled": BoolSchema("Startup simulation enabled"),
+				"dashboard_port":          IntSchema("Dashboard HTTP port"),
+				"llm_provider":            StringSchema("LLM provider (ollama/deepseek)"),
+				"ollama_host":             StringSchema("Ollama server URL"),
+				"ollama_model":            StringSchema("Ollama model name"),
+				"deepseek_host":           StringSchema("DeepSeek API URL"),
+				"deepseek_model":          StringSchema("DeepSeek model name"),
+				"llm_timeout":             IntSchema("LLM call timeout in seconds"),
+				"rate_limit_rps":          NumberSchema("Rate limit requests per second"),
+				"rate_limit_burst":        IntSchema("Rate limit burst capacity"),
+				"gardener_enabled":        BoolSchema("Gardener evolution daemon enabled"),
+				"scheduler_enabled":       BoolSchema("Agent scheduler enabled"),
+				"auto_evolve_enabled":     BoolSchema("Auto-evolution enabled"),
+				"kanban_enabled":          BoolSchema("Kanban board integration enabled"),
+				"thinktank_enabled":       BoolSchema("Thinktank analysis enabled"),
+				"startup_sim_enabled":     BoolSchema("Startup simulation enabled"),
 				"gardener_cycle_interval": IntSchema("Gardener cycle interval in seconds"),
 				"gardener_mutations_per":  IntSchema("Mutations applied per cycle"),
-				"max_body_size":       IntSchema("Max request body size in bytes"),
+				"max_body_size":           IntSchema("Max request body size in bytes"),
 			}, "dashboard_port", "llm_provider", "ollama_model")).Build(),
 
 		// Platform overview
@@ -701,13 +701,13 @@ func DashboardRoutes() []Route {
 			JSONResponse(200, "Platform summary", ObjectSchema(map[string]*Schema{
 				"total_trees": IntSchema("Total number of behavior trees"),
 				"categories": ObjectSchema(map[string]*Schema{
-					"core":        IntSchema(""),
-					"finance":     IntSchema(""),
-					"research":    IntSchema(""),
-					"domain":      IntSchema(""),
-					"startup":     IntSchema(""),
-					"thinktank":   IntSchema(""),
-					"evolution":   IntSchema(""),
+					"core":      IntSchema(""),
+					"finance":   IntSchema(""),
+					"research":  IntSchema(""),
+					"domain":    IntSchema(""),
+					"startup":   IntSchema(""),
+					"thinktank": IntSchema(""),
+					"evolution": IntSchema(""),
 				}, "categories"),
 				"mcp_tools": IntSchema("Total MCP tools"),
 				"model":     StringSchema("LLM model name"),
@@ -760,7 +760,7 @@ func DashboardRoutes() []Route {
 			OperationID("postThinktankAnalyze").
 			QueryParam("topic", "Analysis topic (e.g., 'AI safety frameworks')", true, StringSchema("Topic")).
 			JSONResponse(200, "Analysis results", ObjectSchema(map[string]*Schema{
-				"topic":    StringSchema("Analysis topic"),
+				"topic": StringSchema("Analysis topic"),
 				"findings": ArraySchema(ObjectSchema(map[string]*Schema{
 					"fellow":     StringSchema("Fellow name"),
 					"role":       StringSchema("Analytical role"),
@@ -777,13 +777,13 @@ func DashboardRoutes() []Route {
 			Tags("Company").
 			OperationID("getDefaultCompany").
 			JSONResponse(200, "Company state", ObjectSchema(map[string]*Schema{
-				"name":     StringSchema("Company name"),
-				"mrr":      NumberSchema("Monthly recurring revenue"),
-				"arr":      NumberSchema("Annual recurring revenue"),
-				"users":    IntSchema("Active users"),
+				"name":      StringSchema("Company name"),
+				"mrr":       NumberSchema("Monthly recurring revenue"),
+				"arr":       NumberSchema("Annual recurring revenue"),
+				"users":     IntSchema("Active users"),
 				"team_size": IntSchema("Team size"),
-				"runway":   IntSchema("Months of runway"),
-				"cash":     NumberSchema("Cash on hand"),
+				"runway":    IntSchema("Months of runway"),
+				"cash":      NumberSchema("Cash on hand"),
 			}, "name", "mrr", "users")).WithAuth().Build(),
 
 		// Tasks
@@ -917,7 +917,7 @@ func DashboardRoutes() []Route {
 			OperationID("postDLQReplay").
 			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
 			JSONResponse(200, "Replayed entry", ObjectSchema(map[string]*Schema{
-				"status":  StringSchema("'replayed' on success"),
+				"status": StringSchema("'replayed' on success"),
 				"entry": ObjectSchema(map[string]*Schema{
 					"id":        StringSchema("Entry identifier"),
 					"task":      StringSchema("Original task text"),

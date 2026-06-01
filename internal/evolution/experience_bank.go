@@ -33,19 +33,19 @@ import (
 //
 // Thread-safe via sync.RWMutex. Persists to disk on every Add.
 type ExperienceBank struct {
-	mu          sync.RWMutex        `json:"-"`
-	Entries     []ExperienceEntry   `json:"entries"`
-	PersistPath string              `json:"-"` // path to experience.json
+	mu          sync.RWMutex      `json:"-"`
+	Entries     []ExperienceEntry `json:"entries"`
+	PersistPath string            `json:"-"` // path to experience.json
 }
 
 // ExperienceEntry records one successful mutation with EvoRepair-style
 // 5-dimension (ABCDE) analysis. Each entry captures not just WHAT worked
 // but WHY, HOW, and in WHAT context — enabling intelligent retrieval.
 type ExperienceEntry struct {
-	ID         string    `json:"id"`
-	TreeType   string    `json:"tree_type"`   // GoDev, Merged, Default, etc.
-	MutationOp string    `json:"mutation_op"` // add_before, wrap_retry, etc.
-	TargetNode string    `json:"target_node"` // name of the mutated node
+	ID         string `json:"id"`
+	TreeType   string `json:"tree_type"`   // GoDev, Merged, Default, etc.
+	MutationOp string `json:"mutation_op"` // add_before, wrap_retry, etc.
+	TargetNode string `json:"target_node"` // name of the mutated node
 
 	// EvoRepair 5 dimensions — ABCD+E
 	Context    string `json:"context"`    // A: why this mutation? (problem context)

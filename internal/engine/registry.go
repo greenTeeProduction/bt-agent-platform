@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ActionFunc is the signature for behavior tree action implementations.
@@ -336,11 +336,20 @@ func containsAnyLower(s string, keywords ...string) bool {
 			for j := 0; j < len(kw); j++ {
 				c := s[i+j]
 				kc := kw[j]
-				if c >= 'A' && c <= 'Z' { c += 32 }
-				if kc >= 'A' && kc <= 'Z' { kc += 32 }
-				if c != kc { match = false; break }
+				if c >= 'A' && c <= 'Z' {
+					c += 32
+				}
+				if kc >= 'A' && kc <= 'Z' {
+					kc += 32
+				}
+				if c != kc {
+					match = false
+					break
+				}
 			}
-			if match { return true }
+			if match {
+				return true
+			}
 		}
 	}
 	return false
@@ -517,5 +526,3 @@ func trim(s string) string {
 	}
 	return s[start:end]
 }
-
-

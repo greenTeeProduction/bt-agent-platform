@@ -973,17 +973,17 @@ func TestNewMetricsTracker_InvalidDir(t *testing.T) {
 
 func TestCycleMetricsStruct(t *testing.T) {
 	m := CycleMetrics{
-		TreeName:     "test",
-		Cycle:        5,
-		Timestamp:    1234567890,
-		BaseFitness:  1.0,
-		NewFitness:   1.5,
-		Delta:        0.5,
-		Mutations:    3,
-		NodesBefore:  10,
-		NodesAfter:   12,
-		Improved:     true,
-		DurationMs:   150,
+		TreeName:    "test",
+		Cycle:       5,
+		Timestamp:   1234567890,
+		BaseFitness: 1.0,
+		NewFitness:  1.5,
+		Delta:       0.5,
+		Mutations:   3,
+		NodesBefore: 10,
+		NodesAfter:  12,
+		Improved:    true,
+		DurationMs:  150,
 	}
 	if m.TreeName != "test" {
 		t.Error("TreeName mismatch")
@@ -1047,4 +1047,5 @@ type testTreeStats struct {
 	Improvements int     `json:"improvements"`
 	TotalDelta   float64 `json:"total_delta"`
 }
+
 // ============================================================================

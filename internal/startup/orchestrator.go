@@ -165,14 +165,14 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 	endUsers := state.Users
 
 	result := &QuarterResult{
-		Quarter:    quarterNum,
-		Revenue:    state.MRR * 3, // quarterly revenue
-		Growth:     ((endMRR - startMRR) / startMRR) * 100,
-		UsersAdded: endUsers - startUsers,
-		Churn:      state.ChurnRate,
-		CashBurned: startCash - state.CashInBank,
-		Highlights: []string{},
-		Lowlights:  []string{},
+		Quarter:     quarterNum,
+		Revenue:     state.MRR * 3, // quarterly revenue
+		Growth:      ((endMRR - startMRR) / startMRR) * 100,
+		UsersAdded:  endUsers - startUsers,
+		Churn:       state.ChurnRate,
+		CashBurned:  startCash - state.CashInBank,
+		Highlights:  []string{},
+		Lowlights:   []string{},
 		OKRProgress: map[string]float64{},
 	}
 

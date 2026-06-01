@@ -54,8 +54,8 @@ type QueueStats struct {
 
 // RouterStats captures agent executor distribution.
 type RouterStats struct {
-	Total    int `json:"total"`
-	Healthy  int `json:"healthy"`
+	Total     int `json:"total"`
+	Healthy   int `json:"healthy"`
 	Unhealthy int `json:"unhealthy"`
 }
 

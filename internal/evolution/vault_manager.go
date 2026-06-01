@@ -4,13 +4,13 @@ package evolution
 // It automates the full vault workflow: session start → ingestion → synthesis → session end.
 //
 // Strategy paths:
-//   1. SessionStart — load AGENTS.md, today's memory, SCHEMA.md
-//   2. IngestRaw — process new source material into raw/
-//   3. SynthesizeWiki — extract knowledge from raw to wiki/
-//   4. CrossLink — ensure ≥2 links per wiki page
-//   5. UpdateIndex — refresh _index.md
-//   6. SessionEnd — write daily summary, update log.md
-//   7. WeeklySweep — extract durable knowledge from past week
+//  1. SessionStart — load AGENTS.md, today's memory, SCHEMA.md
+//  2. IngestRaw — process new source material into raw/
+//  3. SynthesizeWiki — extract knowledge from raw to wiki/
+//  4. CrossLink — ensure ≥2 links per wiki page
+//  5. UpdateIndex — refresh _index.md
+//  6. SessionEnd — write daily summary, update log.md
+//  7. WeeklySweep — extract durable knowledge from past week
 func VaultManagerTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",
@@ -148,8 +148,8 @@ func VaultManagerTree() *SerializableNode {
 				Type: "Sequence", Name: "QualityGate",
 				Children: []SerializableNode{
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Verify vault integrity: 1) Check no duplicate pages were created. 2) Verify all wiki pages have YAML frontmatter with required fields. 3) Check no raw/ files were modified. 4) Confirm _index.md reflects current state. Report any issues found.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Verify vault integrity: 1) Check no duplicate pages were created. 2) Verify all wiki pages have YAML frontmatter with required fields. 3) Check no raw/ files were modified. 4) Confirm _index.md reflects current state. Report any issues found.",
 						Metadata: map[string]any{"max_tokens": float64(6)},
 					},
 				},
@@ -174,8 +174,8 @@ func VaultManagerTree() *SerializableNode {
 				Children: []SerializableNode{
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Vault operation issue detected. Self-correct: check file permissions, verify vault path, retry with corrected approach.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Vault operation issue detected. Self-correct: check file permissions, verify vault path, retry with corrected approach.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},

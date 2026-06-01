@@ -276,7 +276,7 @@ func TestSetA2ATarget_WithWorldState(t *testing.T) {
 	ws := map[string]interface{}{}
 	bb := &Blackboard{
 		ChainState: map[string]any{
-			"a2a_target_url":  "http://agent:8080",
+			"a2a_target_url":   "http://agent:8080",
 			"goap_world_state": ws,
 		},
 	}

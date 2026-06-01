@@ -4,11 +4,11 @@ package evolution
 // to monitor, evaluate, and improve its own performance.
 //
 // Strategy paths:
-//   1. Self-Monitor: periodic check of performance
-//   2. Skill Evolution: update skills based on failure patterns
-//   3. Strategy Optimization: improve workflows
-//   4. Model/Tool Tuning: optimize model and tool selection
-//   5. Knowledge Synthesis: consolidate learnings
+//  1. Self-Monitor: periodic check of performance
+//  2. Skill Evolution: update skills based on failure patterns
+//  3. Strategy Optimization: improve workflows
+//  4. Model/Tool Tuning: optimize model and tool selection
+//  5. Knowledge Synthesis: consolidate learnings
 func HermesSelfEvolutionTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",
@@ -43,8 +43,8 @@ func HermesSelfEvolutionTree() *SerializableNode {
 								},
 							},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Based on the failure patterns identified, prioritize the top 3 improvements that would have the biggest impact. Consider: frequency of occurrence, severity of failure, ease of fix. Output: ranked list with justification.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Based on the failure patterns identified, prioritize the top 3 improvements that would have the biggest impact. Consider: frequency of occurrence, severity of failure, ease of fix. Output: ranked list with justification.",
 								Metadata: map[string]any{"max_tokens": float64(5)},
 							},
 						},
@@ -64,8 +64,8 @@ func HermesSelfEvolutionTree() *SerializableNode {
 								},
 							},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Validate the proposed skill changes against the failure patterns they're meant to fix. For each proposed change, explain: what specific failure it prevents, how it changes Hermes behavior, and how to verify the fix works.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Validate the proposed skill changes against the failure patterns they're meant to fix. For each proposed change, explain: what specific failure it prevents, how it changes Hermes behavior, and how to verify the fix works.",
 								Metadata: map[string]any{"max_tokens": float64(5)},
 							},
 						},
@@ -77,13 +77,13 @@ func HermesSelfEvolutionTree() *SerializableNode {
 						Children: []SerializableNode{
 							{Type: "Condition", Name: "HasWorkflowInefficiencies", Description: "Detected redundant steps or suboptimal patterns"},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Analyze Hermes Agent's recent workflows. Look for: redundant tool calls, unnecessarily verbose responses, suboptimal model choices for task types, missed opportunities to delegate or parallelize. Propose concrete workflow optimizations.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Analyze Hermes Agent's recent workflows. Look for: redundant tool calls, unnecessarily verbose responses, suboptimal model choices for task types, missed opportunities to delegate or parallelize. Propose concrete workflow optimizations.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:For each optimization proposed, estimate the time/cost savings and the risk of regression. Prioritize low-risk, high-impact changes. Output an implementation plan ordered by ROI.",
+								Type:     "ChainAction",
+								Name:     "llm_call:For each optimization proposed, estimate the time/cost savings and the risk of regression. Prioritize low-risk, high-impact changes. Output an implementation plan ordered by ROI.",
 								Metadata: map[string]any{"max_tokens": float64(5)},
 							},
 						},
@@ -95,8 +95,8 @@ func HermesSelfEvolutionTree() *SerializableNode {
 						Children: []SerializableNode{
 							{Type: "Condition", Name: "HasModelToolIssues", Description: "Model selection or tool configuration issues detected"},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Evaluate Hermes Agent's model and tool usage. Which models perform best for which task types? Are tools being used correctly? Are there configuration issues (timeouts, rate limits, missing tools)? Recommend specific changes.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Evaluate Hermes Agent's model and tool usage. Which models perform best for which task types? Are tools being used correctly? Are there configuration issues (timeouts, rate limits, missing tools)? Recommend specific changes.",
 								Metadata: map[string]any{"max_tokens": float64(8)},
 							},
 						},
@@ -107,13 +107,13 @@ func HermesSelfEvolutionTree() *SerializableNode {
 						Name: "KnowledgeSynthesisPath",
 						Children: []SerializableNode{
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Synthesize all recent learnings about Hermes Agent's performance. What patterns emerge across different tasks? What capabilities have improved? What new weaknesses have appeared? Produce a comprehensive self-assessment with actionable recommendations.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Synthesize all recent learnings about Hermes Agent's performance. What patterns emerge across different tasks? What capabilities have improved? What new weaknesses have appeared? Produce a comprehensive self-assessment with actionable recommendations.",
 								Metadata: map[string]any{"max_tokens": float64(10)},
 							},
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Based on the self-assessment, update Hermes Agent's persistent memory with durable facts: what models work best for what, preferred workflows, common pitfalls to avoid, successful patterns to repeat. Save only facts that will remain useful across future sessions.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Based on the self-assessment, update Hermes Agent's persistent memory with durable facts: what models work best for what, preferred workflows, common pitfalls to avoid, successful patterns to repeat. Save only facts that will remain useful across future sessions.",
 								Metadata: map[string]any{"max_tokens": float64(5)},
 							},
 						},
@@ -122,8 +122,8 @@ func HermesSelfEvolutionTree() *SerializableNode {
 			},
 			// Reflection and quality gate
 			{
-				Type: "Action",
-				Name: "ReflectOnOutcome",
+				Type:        "Action",
+				Name:        "ReflectOnOutcome",
 				Description: "What went well? What to improve in the evolution process?",
 			},
 			{
@@ -141,8 +141,8 @@ func HermesSelfEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{Type: "Condition", Name: "WasSuccessful", Description: "Evolution cycle completed successfully"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Self-correct the evolution process. What went wrong in the self-analysis? Fix any errors in reasoning and produce a corrected assessment.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Self-correct the evolution process. What went wrong in the self-analysis? Fix any errors in reasoning and produce a corrected assessment.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},

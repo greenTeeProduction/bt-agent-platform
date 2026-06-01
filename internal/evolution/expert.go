@@ -11,31 +11,31 @@ import "strings"
 //   - Expected fitness improvement
 //   - Confidence based on historical success rate
 type ExpertKnowledge struct {
-	Patterns      []DesignPattern      `json:"patterns"`
-	AntiPatterns  []AntiPattern        `json:"anti_patterns"`
-	Heuristics    []HeuristicRule      `json:"heuristics"`
-	TreeArchetypes []TreeArchetype     `json:"archetypes"`
+	Patterns       []DesignPattern `json:"patterns"`
+	AntiPatterns   []AntiPattern   `json:"anti_patterns"`
+	Heuristics     []HeuristicRule `json:"heuristics"`
+	TreeArchetypes []TreeArchetype `json:"archetypes"`
 }
 
 // DesignPattern is a proven tree structure that improves fitness.
 type DesignPattern struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Condition   string  `json:"condition"`    // when to apply
-	Mutation    string  `json:"mutation"`     // what to do
-	Target      string  `json:"target"`       // which node type
+	Name         string  `json:"name"`
+	Description  string  `json:"description"`
+	Condition    string  `json:"condition"`     // when to apply
+	Mutation     string  `json:"mutation"`      // what to do
+	Target       string  `json:"target"`        // which node type
 	ExpectedGain float64 `json:"expected_gain"` // avg fitness improvement
-	Confidence  float64 `json:"confidence"`    // 0-1 success rate
-	Evidence    string  `json:"evidence"`      // benchmark results
+	Confidence   float64 `json:"confidence"`    // 0-1 success rate
+	Evidence     string  `json:"evidence"`      // benchmark results
 }
 
 // AntiPattern is a known-bad tree structure to avoid.
 type AntiPattern struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Detection   string `json:"detection"`  // how to spot it
-	Fix         string `json:"fix"`         // how to correct it
-	Severity    string `json:"severity"`    // critical, major, minor
+	Detection   string `json:"detection"` // how to spot it
+	Fix         string `json:"fix"`       // how to correct it
+	Severity    string `json:"severity"`  // critical, major, minor
 }
 
 // HeuristicRule guides the evolution search.
@@ -54,17 +54,17 @@ type TreeArchetype struct {
 	MaxNodes    int      `json:"max_nodes"`
 	TargetDepth int      `json:"target_depth"`
 	TargetBF    float64  `json:"target_branching_factor"`
-	MustHave    []string `json:"must_have"`  // required node types
+	MustHave    []string `json:"must_have"` // required node types
 	ShouldHave  []string `json:"should_have"`
-	Example     string   `json:"example"`     // reference tree ID
+	Example     string   `json:"example"` // reference tree ID
 }
 
 // NewExpertKnowledge builds the knowledge base from empirical data.
 func NewExpertKnowledge() *ExpertKnowledge {
 	return &ExpertKnowledge{
-		Patterns: provenPatterns(),
-		AntiPatterns: knownAntiPatterns(),
-		Heuristics: coreHeuristics(),
+		Patterns:       provenPatterns(),
+		AntiPatterns:   knownAntiPatterns(),
+		Heuristics:     coreHeuristics(),
 		TreeArchetypes: referenceArchetypes(),
 	}
 }
@@ -73,64 +73,64 @@ func NewExpertKnowledge() *ExpertKnowledge {
 func provenPatterns() []DesignPattern {
 	return []DesignPattern{
 		{
-			Name: "Agent Execution Path",
-			Description: "Replace individual AnalyzeTask+ExecutePlan actions with a single agent ChainAction node. Reduces node count by 40% while maintaining or improving success rate.",
-			Condition: "Tree has sequential AnalyzeTask → ExecutePlan in ExecutionPath",
-			Mutation: "replace_children",
-			Target: "ExecutionPath",
+			Name:         "Agent Execution Path",
+			Description:  "Replace individual AnalyzeTask+ExecutePlan actions with a single agent ChainAction node. Reduces node count by 40% while maintaining or improving success rate.",
+			Condition:    "Tree has sequential AnalyzeTask → ExecutePlan in ExecutionPath",
+			Mutation:     "replace_children",
+			Target:       "ExecutionPath",
 			ExpectedGain: 3.5,
-			Confidence: 0.95,
-			Evidence: "DefaultTree: 22→17 nodes, GoDev: 30→27 nodes, Research: 54→20 nodes. No success rate regression. BTPG efficiency score improved 15%.",
+			Confidence:   0.95,
+			Evidence:     "DefaultTree: 22→17 nodes, GoDev: 30→27 nodes, Research: 54→20 nodes. No success rate regression. BTPG efficiency score improved 15%.",
 		},
 		{
-			Name: "Agent Self-Correction",
-			Description: "Replace Retry decorator with agent-based self-correction. Agent analyzes failure, fixes issues, and produces corrected output in one pass vs blind retry.",
-			Condition: "Tree has Retry node wrapping SelfCorrect action",
-			Mutation: "replace_node",
-			Target: "RetrySelfCorrect",
+			Name:         "Agent Self-Correction",
+			Description:  "Replace Retry decorator with agent-based self-correction. Agent analyzes failure, fixes issues, and produces corrected output in one pass vs blind retry.",
+			Condition:    "Tree has Retry node wrapping SelfCorrect action",
+			Mutation:     "replace_node",
+			Target:       "RetrySelfCorrect",
 			ExpectedGain: 2.0,
-			Confidence: 0.90,
-			Evidence: "All 5 core trees converted. Self-correction quality improved as measured by reflection scores.",
+			Confidence:   0.90,
+			Evidence:     "All 5 core trees converted. Self-correction quality improved as measured by reflection scores.",
 		},
 		{
-			Name: "Tool-Aware PreGate",
-			Description: "Add tool setup action in PreGate so all downstream nodes have access to ChainTools. Without this, agent nodes fall back to LLM simulation for every tool call.",
-			Condition: "Tree has ChainAction or agent nodes but no SetupTools action in PreGate",
-			Mutation: "add_after",
-			Target: "PreGate last condition",
+			Name:         "Tool-Aware PreGate",
+			Description:  "Add tool setup action in PreGate so all downstream nodes have access to ChainTools. Without this, agent nodes fall back to LLM simulation for every tool call.",
+			Condition:    "Tree has ChainAction or agent nodes but no SetupTools action in PreGate",
+			Mutation:     "add_after",
+			Target:       "PreGate last condition",
 			ExpectedGain: 1.8,
-			Confidence: 0.85,
-			Evidence: "ThinkTank trees need SetupResearchTools. Startup trees need SetupStartupTools. Without tools, agents use LLM simulation (lower quality).",
+			Confidence:   0.85,
+			Evidence:     "ThinkTank trees need SetupResearchTools. Startup trees need SetupStartupTools. Without tools, agents use LLM simulation (lower quality).",
 		},
 		{
-			Name: "Balanced Selector Ordering",
-			Description: "Order Selector children from most-specific to most-general. Generic paths (ExecutionPath) must be LAST. Otherwise specialized paths become unreachable dead code.",
-			Condition: "Selector has ExecutionPath or fallback path before specialized paths",
-			Mutation: "reorder_children",
-			Target: "StrategyRouter",
+			Name:         "Balanced Selector Ordering",
+			Description:  "Order Selector children from most-specific to most-general. Generic paths (ExecutionPath) must be LAST. Otherwise specialized paths become unreachable dead code.",
+			Condition:    "Selector has ExecutionPath or fallback path before specialized paths",
+			Mutation:     "reorder_children",
+			Target:       "StrategyRouter",
 			ExpectedGain: 5.0,
-			Confidence: 0.98,
-			Evidence: "GoDev: CodeReview→Build→Test→Knowledge→Execution. Finance: Comps→DCF→LBO→Deck. Specific-first ordering critical for correct routing.",
+			Confidence:   0.98,
+			Evidence:     "GoDev: CodeReview→Build→Test→Knowledge→Execution. Finance: Comps→DCF→LBO→Deck. Specific-first ordering critical for correct routing.",
 		},
 		{
-			Name: "Quality Gate Before Reflection",
-			Description: "Add quality gate Sequence before reflection. Check source count, coverage completeness, citation format. Catches issues before they reach the report.",
-			Condition: "Tree produces reports or analysis without quality checks",
-			Mutation: "add_before",
-			Target: "ReflectOnOutcome",
+			Name:         "Quality Gate Before Reflection",
+			Description:  "Add quality gate Sequence before reflection. Check source count, coverage completeness, citation format. Catches issues before they reach the report.",
+			Condition:    "Tree produces reports or analysis without quality checks",
+			Mutation:     "add_before",
+			Target:       "ReflectOnOutcome",
 			ExpectedGain: 2.5,
-			Confidence: 0.88,
-			Evidence: "Research trees: CheckSourceCount+CheckCoverage+CheckCitation→FlagGaps before Reflect. Improved report quality scores.",
+			Confidence:   0.88,
+			Evidence:     "Research trees: CheckSourceCount+CheckCoverage+CheckCitation→FlagGaps before Reflect. Improved report quality scores.",
 		},
 		{
-			Name: "Refine Chain for Output Quality",
-			Description: "Add a refine ChainAction after the main agent node to iteratively improve output quality through self-critique and revision.",
-			Condition: "Tree has single agent node producing final output",
-			Mutation: "add_after",
-			Target: "Last agent node",
+			Name:         "Refine Chain for Output Quality",
+			Description:  "Add a refine ChainAction after the main agent node to iteratively improve output quality through self-critique and revision.",
+			Condition:    "Tree has single agent node producing final output",
+			Mutation:     "add_after",
+			Target:       "Last agent node",
 			ExpectedGain: 1.5,
-			Confidence: 0.82,
-			Evidence: "QuickResearch: agent+refine produces better answers than agent alone. Refine catches factual errors and improves structure.",
+			Confidence:   0.82,
+			Evidence:     "QuickResearch: agent+refine produces better answers than agent alone. Refine catches factual errors and improves structure.",
 		},
 	}
 }
@@ -139,39 +139,39 @@ func provenPatterns() []DesignPattern {
 func knownAntiPatterns() []AntiPattern {
 	return []AntiPattern{
 		{
-			Name: "Dead Strategy Path",
+			Name:        "Dead Strategy Path",
 			Description: "A Selector path that can never be reached because an earlier path always succeeds. Common when ExecutionPath is first in Selector.",
-			Detection: "Selector child has AlwaysSucceed condition before specialized paths OR ExecutionPath listed first",
-			Fix: "Move specialized paths before generic ones. Use specific keyword conditions.",
-			Severity: "critical",
+			Detection:   "Selector child has AlwaysSucceed condition before specialized paths OR ExecutionPath listed first",
+			Fix:         "Move specialized paths before generic ones. Use specific keyword conditions.",
+			Severity:    "critical",
 		},
 		{
-			Name: "Missing Outcome Setter",
+			Name:        "Missing Outcome Setter",
 			Description: "Strategy path actions don't set bb.Outcome='success'. OutcomeSelector always routes to SelfCorrect even on success.",
-			Detection: "Terminal action in each strategy path doesn't set Outcome",
-			Fix: "Add bb.Outcome='success' in the last action of every strategy path",
-			Severity: "critical",
+			Detection:   "Terminal action in each strategy path doesn't set Outcome",
+			Fix:         "Add bb.Outcome='success' in the last action of every strategy path",
+			Severity:    "critical",
 		},
 		{
-			Name: "Unbounded Retry Loop",
+			Name:        "Unbounded Retry Loop",
 			Description: "Retry node with high max_retries in a Sequence that always reaches it. Causes infinite ticks without terminal state.",
-			Detection: "Retry node with max_retries > 10 in root Sequence (not behind Selector condition)",
-			Fix: "Move Retry behind a Selector with WasSuccessful condition, or use agent self-correction instead",
-			Severity: "critical",
+			Detection:   "Retry node with max_retries > 10 in root Sequence (not behind Selector condition)",
+			Fix:         "Move Retry behind a Selector with WasSuccessful condition, or use agent self-correction instead",
+			Severity:    "critical",
 		},
 		{
-			Name: "Keyword Collision",
+			Name:        "Keyword Collision",
 			Description: "Two Selector paths use overlapping keywords, causing misrouting. Example: 'check' matches IsCodeReview before NeedsTesting.",
-			Detection: "Selectors with conditions that share single-word triggers",
-			Fix: "Use multi-word phrases. Remove ambiguous single words. Test each condition against tasks meant for OTHER paths.",
-			Severity: "major",
+			Detection:   "Selectors with conditions that share single-word triggers",
+			Fix:         "Use multi-word phrases. Remove ambiguous single words. Test each condition against tasks meant for OTHER paths.",
+			Severity:    "major",
 		},
 		{
-			Name: "Template-Only Execution",
+			Name:        "Template-Only Execution",
 			Description: "Tree produces template output without real data because it has no tool access. Finance and research trees affected.",
-			Detection: "ChainAction nodes without tool setup action in PreGate",
-			Fix: "Add SetupTools action in PreGate. Ensure tools are available on bb.ChainTools.",
-			Severity: "major",
+			Detection:   "ChainAction nodes without tool setup action in PreGate",
+			Fix:         "Add SetupTools action in PreGate. Ensure tools are available on bb.ChainTools.",
+			Severity:    "major",
 		},
 	}
 }
@@ -198,44 +198,44 @@ func referenceArchetypes() []TreeArchetype {
 		{
 			Name: "Agent Pipeline", Category: "research",
 			MinNodes: 10, MaxNodes: 25, TargetDepth: 3, TargetBF: 2.5,
-			MustHave: []string{"PreGate", "ChainAction:agent", "ChainAction:refine", "OutcomeSelector"},
+			MustHave:   []string{"PreGate", "ChainAction:agent", "ChainAction:refine", "OutcomeSelector"},
 			ShouldHave: []string{"ChainAction:rag_query", "QualityGate"},
-			Example: "research:deep_research",
+			Example:    "research:deep_research",
 		},
 		{
 			Name: "Multi-Path Router", Category: "domain",
 			MinNodes: 20, MaxNodes: 40, TargetDepth: 3, TargetBF: 4.0,
-			MustHave: []string{"PreGate", "StrategyRouter:Selector", "OutcomeSelector"},
+			MustHave:   []string{"PreGate", "StrategyRouter:Selector", "OutcomeSelector"},
 			ShouldHave: []string{"ReflectOnOutcome", "SetupTools"},
-			Example: "domain:code_review",
+			Example:    "domain:code_review",
 		},
 		{
 			Name: "Financial Analyzer", Category: "finance",
 			MinNodes: 18, MaxNodes: 45, TargetDepth: 3, TargetBF: 3.5,
-			MustHave: []string{"PreGate", "StrategyRouter", "ChainAction:agent"},
+			MustHave:   []string{"PreGate", "StrategyRouter", "ChainAction:agent"},
 			ShouldHave: []string{"SetupFinanceTools", "ChainAction:structured_output"},
-			Example: "finance:pitch_agent",
+			Example:    "finance:pitch_agent",
 		},
 		{
 			Name: "Role Agent", Category: "startup",
 			MinNodes: 8, MaxNodes: 15, TargetDepth: 2, TargetBF: 2.0,
-			MustHave: []string{"PreGate", "ChainAction:agent"},
+			MustHave:   []string{"PreGate", "ChainAction:agent"},
 			ShouldHave: []string{"ReflectOnOutcome", "OutcomeSelector"},
-			Example: "startup:ceo",
+			Example:    "startup:ceo",
 		},
 		{
 			Name: "Dialectic Pipeline", Category: "thinktank",
 			MinNodes: 8, MaxNodes: 20, TargetDepth: 2, TargetBF: 2.0,
-			MustHave: []string{"ChainAction:agent", "ChainAction:agent", "ChainAction:agent"},
+			MustHave:   []string{"ChainAction:agent", "ChainAction:agent", "ChainAction:agent"},
 			ShouldHave: []string{"ChainAction:structured_output"},
-			Example: "thinktank:synthesis",
+			Example:    "thinktank:synthesis",
 		},
 		{
 			Name: "Evolution Engine", Category: "evolution",
 			MinNodes: 20, MaxNodes: 40, TargetDepth: 4, TargetBF: 3.0,
-			MustHave: []string{"InitTranspositionTable", "ChainAction:agent", "OutcomeSelector"},
+			MustHave:   []string{"InitTranspositionTable", "ChainAction:agent", "OutcomeSelector"},
 			ShouldHave: []string{"ChainAction:agent:iterative_deepening", "ChainAction:agent:alpha_beta"},
-			Example: "stockfish_evolve",
+			Example:    "stockfish_evolve",
 		},
 	}
 }
@@ -350,7 +350,6 @@ func hasNodeMatching(node *SerializableNode, pattern string) bool {
 	}
 	return false
 }
-
 
 func maxDepth(node *SerializableNode, currentDepth int) int {
 	if node == nil {

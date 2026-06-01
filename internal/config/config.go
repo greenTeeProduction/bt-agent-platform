@@ -28,10 +28,10 @@ type Config struct {
 	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	LLMProvider  string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek
-	OllamaHost   string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
-	OllamaModel  string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
-	DeepSeekHost string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
+	LLMProvider   string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek
+	OllamaHost    string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
+	OllamaModel   string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
+	DeepSeekHost  string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
 	DeepSeekModel string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
 	DeepSeekKey   string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
 	LLMTimeout    int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"` // seconds
@@ -46,7 +46,7 @@ type Config struct {
 	AutoEvolveEnabled bool `json:"auto_evolve_enabled" env:"BT_FEATURE_AUTO_EVOLVE" default:"false"`
 	KanbanEnabled     bool `json:"kanban_enabled" env:"BT_FEATURE_KANBAN" default:"true"`
 	ThinktankEnabled  bool `json:"thinktank_enabled" env:"BT_FEATURE_THINKTANK" default:"true"`
-	StartupSimEnabled  bool `json:"startup_sim_enabled" env:"BT_FEATURE_STARTUP_SIM" default:"true"`
+	StartupSimEnabled bool `json:"startup_sim_enabled" env:"BT_FEATURE_STARTUP_SIM" default:"true"`
 
 	// Persistence
 	ReflectionsDir string `json:"reflections_dir,omitempty" env:"BT_REFLECTIONS_DIR" default:""`
@@ -75,14 +75,14 @@ type Config struct {
 // PathConfig provides resolved file paths for all BT platform components.
 // Use cfg.ResolvePaths() to populate from env vars or defaults.
 type PathConfig struct {
-	HomeDir     string `json:"home_dir"`     // ~/.bt-agent/ or BT_HOME
-	ConfigFile  string `json:"config_file"`  // config.yaml
-	DBFile      string `json:"db_file"`      // agents.db
-	DLQFile     string `json:"dlq_file"`     // dead_letter_queue.json
-	TemplateDir string `json:"template_dir"` // agents/templates/
+	HomeDir        string `json:"home_dir"`     // ~/.bt-agent/ or BT_HOME
+	ConfigFile     string `json:"config_file"`  // config.yaml
+	DBFile         string `json:"db_file"`      // agents.db
+	DLQFile        string `json:"dlq_file"`     // dead_letter_queue.json
+	TemplateDir    string `json:"template_dir"` // agents/templates/
 	ReflectionsDir string `json:"reflections_dir"`
-	HistoryDir  string `json:"history_dir"`
-	LogDir      string `json:"log_dir"`
+	HistoryDir     string `json:"history_dir"`
+	LogDir         string `json:"log_dir"`
 }
 
 // ResolvePaths populates cfg.Paths from env vars (BT_HOME, BT_CONFIG_FILE, etc.)
@@ -137,10 +137,10 @@ func (e ValidationErrors) Error() string {
 }
 
 // Load reads configuration from multiple sources with a defined priority:
-//   1. Hardcoded defaults (newDefaultConfig)
-//   2. JSON config file (BT_CONFIG_FILE env var or explicit path)
-//   3. .env files (BT_DOTENV_FILE env var, then ./.env if it exists)
-//   4. Environment variable overrides (highest priority)
+//  1. Hardcoded defaults (newDefaultConfig)
+//  2. JSON config file (BT_CONFIG_FILE env var or explicit path)
+//  3. .env files (BT_DOTENV_FILE env var, then ./.env if it exists)
+//  4. Environment variable overrides (highest priority)
 //
 // .env files are KEY=value format files commonly used for local development
 // and CI/CD. They're applied before environment variables, so env vars
@@ -771,7 +771,7 @@ func (c *Config) FeatureFlags() map[string]bool {
 		"auto_evolve": c.AutoEvolveEnabled,
 		"kanban":      c.KanbanEnabled,
 		"thinktank":   c.ThinktankEnabled,
-		"startup_sim":  c.StartupSimEnabled,
+		"startup_sim": c.StartupSimEnabled,
 	}
 }
 
@@ -785,6 +785,156 @@ func (c *Config) SaveFile(path string) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+// Diff compares two configs field-by-field and returns a list of
+// human-readable change descriptions. It's designed for ConfigWatcher
+// callbacks — when a hot-reload occurs, Diff() tells operators exactly
+// which fields changed without needing to read config files manually.
+//
+// Only fields with different values are included. Secret fields
+// (APIKey, DeepSeekKey, TLSCert, TLSKey) are reported as "changed"
+// without revealing values. Feature flags report true→false or false→true.
+//
+// Usage from a ConfigWatcher callback:
+//
+//	watcher.OnChange(func(newCfg *Config) {
+//	    diffs := oldCfg.Diff(newCfg)
+//	    for _, d := range diffs {
+//	        log.Printf("config changed: %s", d)
+//	    }
+//	})
+func (c *Config) Diff(other *Config) []string {
+	if other == nil {
+		return []string{"other config is nil"}
+	}
+	var diffs []string
+
+	// Server
+	if c.DashboardPort != other.DashboardPort {
+		diffs = append(diffs, fmt.Sprintf("DashboardPort: %d → %d", c.DashboardPort, other.DashboardPort))
+	}
+	if c.APIKey != other.APIKey {
+		if c.APIKey == "" {
+			diffs = append(diffs, "APIKey: set")
+		} else if other.APIKey == "" {
+			diffs = append(diffs, "APIKey: removed")
+		} else {
+			diffs = append(diffs, "APIKey: changed")
+		}
+	}
+	if c.TLSCert != other.TLSCert {
+		if c.TLSCert == "" {
+			diffs = append(diffs, "TLSCert: set")
+		} else if other.TLSCert == "" {
+			diffs = append(diffs, "TLSCert: removed")
+		} else {
+			diffs = append(diffs, "TLSCert: changed")
+		}
+	}
+	if c.TLSKey != other.TLSKey {
+		if c.TLSKey == "" {
+			diffs = append(diffs, "TLSKey: set")
+		} else if other.TLSKey == "" {
+			diffs = append(diffs, "TLSKey: removed")
+		} else {
+			diffs = append(diffs, "TLSKey: changed")
+		}
+	}
+
+	// LLM
+	if c.LLMProvider != other.LLMProvider {
+		diffs = append(diffs, fmt.Sprintf("LLMProvider: %s → %s", c.LLMProvider, other.LLMProvider))
+	}
+	if c.OllamaHost != other.OllamaHost {
+		diffs = append(diffs, fmt.Sprintf("OllamaHost: %s → %s", c.OllamaHost, other.OllamaHost))
+	}
+	if c.OllamaModel != other.OllamaModel {
+		diffs = append(diffs, fmt.Sprintf("OllamaModel: %s → %s", c.OllamaModel, other.OllamaModel))
+	}
+	if c.DeepSeekHost != other.DeepSeekHost {
+		diffs = append(diffs, fmt.Sprintf("DeepSeekHost: %s → %s", c.DeepSeekHost, other.DeepSeekHost))
+	}
+	if c.DeepSeekModel != other.DeepSeekModel {
+		diffs = append(diffs, fmt.Sprintf("DeepSeekModel: %s → %s", c.DeepSeekModel, other.DeepSeekModel))
+	}
+	if c.DeepSeekKey != other.DeepSeekKey {
+		if c.DeepSeekKey == "" {
+			diffs = append(diffs, "DeepSeekKey: set")
+		} else if other.DeepSeekKey == "" {
+			diffs = append(diffs, "DeepSeekKey: removed")
+		} else {
+			diffs = append(diffs, "DeepSeekKey: changed")
+		}
+	}
+	if c.LLMTimeout != other.LLMTimeout {
+		diffs = append(diffs, fmt.Sprintf("LLMTimeout: %ds → %ds", c.LLMTimeout, other.LLMTimeout))
+	}
+
+	// Rate Limiting
+	if c.RateLimitRPS != other.RateLimitRPS {
+		diffs = append(diffs, fmt.Sprintf("RateLimitRPS: %.1f → %.1f", c.RateLimitRPS, other.RateLimitRPS))
+	}
+	if c.RateLimitBurst != other.RateLimitBurst {
+		diffs = append(diffs, fmt.Sprintf("RateLimitBurst: %d → %d", c.RateLimitBurst, other.RateLimitBurst))
+	}
+
+	// Feature Flags
+	if c.GardenerEnabled != other.GardenerEnabled {
+		diffs = append(diffs, fmt.Sprintf("GardenerEnabled: %v → %v", c.GardenerEnabled, other.GardenerEnabled))
+	}
+	if c.SchedulerEnabled != other.SchedulerEnabled {
+		diffs = append(diffs, fmt.Sprintf("SchedulerEnabled: %v → %v", c.SchedulerEnabled, other.SchedulerEnabled))
+	}
+	if c.AutoEvolveEnabled != other.AutoEvolveEnabled {
+		diffs = append(diffs, fmt.Sprintf("AutoEvolveEnabled: %v → %v", c.AutoEvolveEnabled, other.AutoEvolveEnabled))
+	}
+	if c.KanbanEnabled != other.KanbanEnabled {
+		diffs = append(diffs, fmt.Sprintf("KanbanEnabled: %v → %v", c.KanbanEnabled, other.KanbanEnabled))
+	}
+	if c.ThinktankEnabled != other.ThinktankEnabled {
+		diffs = append(diffs, fmt.Sprintf("ThinktankEnabled: %v → %v", c.ThinktankEnabled, other.ThinktankEnabled))
+	}
+	if c.StartupSimEnabled != other.StartupSimEnabled {
+		diffs = append(diffs, fmt.Sprintf("StartupSimEnabled: %v → %v", c.StartupSimEnabled, other.StartupSimEnabled))
+	}
+
+	// Persistence
+	if c.ReflectionsDir != other.ReflectionsDir {
+		diffs = append(diffs, fmt.Sprintf("ReflectionsDir: %q → %q", c.ReflectionsDir, other.ReflectionsDir))
+	}
+	if c.AgentDefsDir != other.AgentDefsDir {
+		diffs = append(diffs, fmt.Sprintf("AgentDefsDir: %q → %q", c.AgentDefsDir, other.AgentDefsDir))
+	}
+	if c.HistoryDir != other.HistoryDir {
+		diffs = append(diffs, fmt.Sprintf("HistoryDir: %q → %q", c.HistoryDir, other.HistoryDir))
+	}
+	if c.LogDir != other.LogDir {
+		diffs = append(diffs, fmt.Sprintf("LogDir: %q → %q", c.LogDir, other.LogDir))
+	}
+
+	// Gardener
+	if c.GardenerCycleInterval != other.GardenerCycleInterval {
+		diffs = append(diffs, fmt.Sprintf("GardenerCycleInterval: %ds → %ds", c.GardenerCycleInterval, other.GardenerCycleInterval))
+	}
+	if c.GardenerMutationsPer != other.GardenerMutationsPer {
+		diffs = append(diffs, fmt.Sprintf("GardenerMutationsPer: %d → %d", c.GardenerMutationsPer, other.GardenerMutationsPer))
+	}
+	if c.GardenerMaxNodes != other.GardenerMaxNodes {
+		diffs = append(diffs, fmt.Sprintf("GardenerMaxNodes: %d → %d", c.GardenerMaxNodes, other.GardenerMaxNodes))
+	}
+
+	// Scheduler
+	if c.SchedulerCheckInterval != other.SchedulerCheckInterval {
+		diffs = append(diffs, fmt.Sprintf("SchedulerCheckInterval: %ds → %ds", c.SchedulerCheckInterval, other.SchedulerCheckInterval))
+	}
+
+	// Validation
+	if c.MaxBodySize != other.MaxBodySize {
+		diffs = append(diffs, fmt.Sprintf("MaxBodySize: %d → %d", c.MaxBodySize, other.MaxBodySize))
+	}
+
+	return diffs
 }
 
 // Sanitized returns a copy of the config with secret fields redacted.

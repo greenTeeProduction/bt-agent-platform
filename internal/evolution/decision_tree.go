@@ -12,18 +12,18 @@ import (
 
 // PathStats tracks execution statistics for a Selector path.
 type PathStats struct {
-	PathName     string  `json:"path_name"`
-	Condition    string  `json:"condition"`
-	HitCount     int     `json:"hit_count"`     // how often this path was taken
-	SuccessCount int     `json:"success_count"` // how often it succeeded
-	TotalTasks   int     `json:"total_tasks"`   // total tasks seen by this selector
+	PathName     string `json:"path_name"`
+	Condition    string `json:"condition"`
+	HitCount     int    `json:"hit_count"`     // how often this path was taken
+	SuccessCount int    `json:"success_count"` // how often it succeeded
+	TotalTasks   int    `json:"total_tasks"`   // total tasks seen by this selector
 }
 
 // DTSelectorStats holds decision-tree statistics for a Selector node.
 type DTSelectorStats struct {
-	NodeName    string      `json:"node_name"`
-	Paths       []PathStats  `json:"paths"`
-	TotalTasks  int          `json:"total_tasks"`
+	NodeName   string      `json:"node_name"`
+	Paths      []PathStats `json:"paths"`
+	TotalTasks int         `json:"total_tasks"`
 }
 
 // DTAnalyzer computes decision-tree metrics for behavior trees.
@@ -47,7 +47,9 @@ func (d *DTAnalyzer) RecordHit(selectorName, pathName, condition string, success
 	for i := range ss.Paths {
 		if ss.Paths[i].PathName == pathName {
 			ss.Paths[i].HitCount++
-			if success { ss.Paths[i].SuccessCount++ }
+			if success {
+				ss.Paths[i].SuccessCount++
+			}
 			ss.Paths[i].TotalTasks = ss.TotalTasks
 			return
 		}
@@ -56,14 +58,18 @@ func (d *DTAnalyzer) RecordHit(selectorName, pathName, condition string, success
 		PathName: pathName, Condition: condition,
 		HitCount: 1, TotalTasks: ss.TotalTasks,
 	})
-	if success { ss.Paths[len(ss.Paths)-1].SuccessCount = 1 }
+	if success {
+		ss.Paths[len(ss.Paths)-1].SuccessCount = 1
+	}
 }
 
 // Entropy computes Shannon entropy for a set of path probabilities.
 // H(S) = -sum(p_i * log2(p_i))
 func (d *DTAnalyzer) Entropy(selectorName string) float64 {
 	ss, ok := d.Stats[selectorName]
-	if !ok || ss == nil || ss.TotalTasks == 0 { return 0 }
+	if !ok || ss == nil || ss.TotalTasks == 0 {
+		return 0
+	}
 
 	entropy := 0.0
 	for _, p := range ss.Paths {
@@ -84,7 +90,9 @@ func (d *DTAnalyzer) InformationGain(selectorName, condition string) float64 {
 	withCond := 0
 	withoutCond := 0
 	ss := d.Stats[selectorName]
-	if ss == nil { return 0 }
+	if ss == nil {
+		return 0
+	}
 
 	for _, p := range ss.Paths {
 		if strings.Contains(strings.ToLower(p.Condition), strings.ToLower(condition)) {
@@ -95,7 +103,9 @@ func (d *DTAnalyzer) InformationGain(selectorName, condition string) float64 {
 	}
 
 	total := withCond + withoutCond
-	if total == 0 { return 0 }
+	if total == 0 {
+		return 0
+	}
 
 	// Weighted child entropy
 	childEntropy := 0.0
@@ -115,16 +125,22 @@ func pathEntropy(paths []PathStats, condition string, match bool) float64 {
 	total := 0
 	for _, p := range paths {
 		matches := strings.Contains(strings.ToLower(p.Condition), strings.ToLower(condition))
-		if matches == match { total += p.HitCount }
+		if matches == match {
+			total += p.HitCount
+		}
 	}
-	if total == 0 { return 0 }
+	if total == 0 {
+		return 0
+	}
 
 	entropy := 0.0
 	for _, p := range paths {
 		matches := strings.Contains(strings.ToLower(p.Condition), strings.ToLower(condition))
 		if matches == match {
 			prob := float64(p.HitCount) / float64(total)
-			if prob > 0 { entropy -= prob * math.Log2(prob) }
+			if prob > 0 {
+				entropy -= prob * math.Log2(prob)
+			}
 		}
 	}
 	return entropy
@@ -134,7 +150,9 @@ func pathEntropy(paths []PathStats, condition string, match bool) float64 {
 // Lower is better (more pure splits).
 func (d *DTAnalyzer) GiniImpurity(selectorName string) float64 {
 	ss, ok := d.Stats[selectorName]
-	if !ok || ss == nil || ss.TotalTasks == 0 { return 1.0 }
+	if !ok || ss == nil || ss.TotalTasks == 0 {
+		return 1.0
+	}
 
 	sumSq := 0.0
 	for _, p := range ss.Paths {
@@ -147,12 +165,16 @@ func (d *DTAnalyzer) GiniImpurity(selectorName string) float64 {
 // BestSplitCondition finds the condition with highest information gain.
 func (d *DTAnalyzer) BestSplitCondition(selectorName string) string {
 	ss, ok := d.Stats[selectorName]
-	if !ok || ss == nil || len(ss.Paths) < 2 { return "" }
+	if !ok || ss == nil || len(ss.Paths) < 2 {
+		return ""
+	}
 
 	best := ""
 	bestGain := -1.0
 	for _, p := range ss.Paths {
-		if p.Condition == "" { continue }
+		if p.Condition == "" {
+			continue
+		}
 		gain := d.InformationGain(selectorName, p.Condition)
 		if gain > bestGain {
 			bestGain = gain
@@ -177,9 +199,10 @@ func NewBTOptimizer() *BTOptimizer {
 
 // OptimizeSelectors reorders Selector children based on decision tree metrics.
 // Rules:
-//   1. Conditions with highest information gain go first
-//   2. Most frequently hit paths go before rarely used paths
-//   3. Default/fallback path stays last
+//  1. Conditions with highest information gain go first
+//  2. Most frequently hit paths go before rarely used paths
+//  3. Default/fallback path stays last
+//
 // Returns the number of changes made.
 func (o *BTOptimizer) OptimizeSelectors(tree *SerializableNode) int {
 	changes := 0
@@ -217,7 +240,9 @@ func (o *BTOptimizer) optimizeNode(node *SerializableNode, changes *int) {
 			if children[i].isDefault != children[j].isDefault {
 				return !children[i].isDefault // non-default first
 			}
-			if children[i].isDefault { return false }
+			if children[i].isDefault {
+				return false
+			}
 			gi := gains[children[i].condition]
 			gj := gains[children[j].condition]
 			return gi > gj
@@ -227,7 +252,9 @@ func (o *BTOptimizer) optimizeNode(node *SerializableNode, changes *int) {
 		newOrder := make([]SerializableNode, len(node.Children))
 		for newPos, c := range children {
 			newOrder[newPos] = node.Children[c.idx]
-			if c.idx != newPos { *changes++ }
+			if c.idx != newPos {
+				*changes++
+			}
 		}
 		copy(node.Children, newOrder)
 	}
@@ -241,7 +268,9 @@ func (o *BTOptimizer) optimizeNode(node *SerializableNode, changes *int) {
 // PruneDeadPaths removes Selector paths that never execute.
 // Returns the number of paths removed.
 func (o *BTOptimizer) PruneDeadPaths(tree *SerializableNode, minHitRatio float64) int {
-	if minHitRatio == 0 { minHitRatio = 0.01 } // 1% minimum
+	if minHitRatio == 0 {
+		minHitRatio = 0.01
+	} // 1% minimum
 	removed := 0
 	o.pruneNode(tree, minHitRatio, &removed)
 	return removed
@@ -298,7 +327,9 @@ func (o *BTOptimizer) mergeNode(node *SerializableNode, merged *int) {
 
 // pathHitRatio returns the fraction of tasks that hit this path.
 func (o *BTOptimizer) pathHitRatio(ss *DTSelectorStats, pathName string) float64 {
-	if ss == nil || ss.TotalTasks == 0 { return 0 }
+	if ss == nil || ss.TotalTasks == 0 {
+		return 0
+	}
 	for _, p := range ss.Paths {
 		if p.PathName == pathName {
 			return float64(p.HitCount) / float64(ss.TotalTasks)
@@ -312,7 +343,9 @@ func (o *BTOptimizer) pathHitRatio(ss *DTSelectorStats, pathName string) float64
 func extractCondition(child *SerializableNode) string {
 	// A Selector path's condition is usually the first Condition child
 	for _, c := range child.Children {
-		if c.Type == "Condition" { return c.Name }
+		if c.Type == "Condition" {
+			return c.Name
+		}
 	}
 	return child.Name
 }
@@ -329,11 +362,15 @@ func isDefaultPath(child *SerializableNode) bool {
 func conditionOverlap(a, b string) float64 {
 	aWords := wordSet(a)
 	bWords := wordSet(b)
-	if len(aWords) == 0 || len(bWords) == 0 { return 0 }
+	if len(aWords) == 0 || len(bWords) == 0 {
+		return 0
+	}
 
 	intersect := 0
 	for w := range aWords {
-		if bWords[w] { intersect++ }
+		if bWords[w] {
+			intersect++
+		}
 	}
 	return float64(intersect) / float64(max(len(aWords), len(bWords)))
 }
@@ -372,15 +409,15 @@ func splitCamelCase(s string) []string {
 // ─── DTImprovementReport ───
 
 type DTImprovementReport struct {
-	TreeName          string  `json:"tree_name"`
-	NodeCount         int     `json:"node_count"`
-	Entropy           float64 `json:"entropy"`
-	Gini              float64 `json:"gini_impurity"`
-	BestSplit         string  `json:"best_split_condition"`
-	ReorderChanges    int     `json:"reorder_changes"`
-	DeadPathsRemoved  int     `json:"dead_paths_removed"`
-	OverlappingPaths  int     `json:"overlapping_paths"`
-	OverallScore      float64 `json:"overall_score"` // 0-10
+	TreeName         string  `json:"tree_name"`
+	NodeCount        int     `json:"node_count"`
+	Entropy          float64 `json:"entropy"`
+	Gini             float64 `json:"gini_impurity"`
+	BestSplit        string  `json:"best_split_condition"`
+	ReorderChanges   int     `json:"reorder_changes"`
+	DeadPathsRemoved int     `json:"dead_paths_removed"`
+	OverlappingPaths int     `json:"overlapping_paths"`
+	OverallScore     float64 `json:"overall_score"` // 0-10
 }
 
 // AnalyzeTree runs full decision tree analysis on a behavior tree.
@@ -405,8 +442,12 @@ func (o *BTOptimizer) AnalyzeTree(tree *SerializableNode, name string) *DTImprov
 
 	// Score: lower entropy + well-ordered = better
 	report.OverallScore = (1.0 - report.Entropy/3.0) * 10.0
-	if report.OverallScore < 0 { report.OverallScore = 0 }
-	if report.OverallScore > 10 { report.OverallScore = 10 }
+	if report.OverallScore < 0 {
+		report.OverallScore = 0
+	}
+	if report.OverallScore > 10 {
+		report.OverallScore = 10
+	}
 
 	return report
 }
@@ -420,13 +461,17 @@ func findMainSelector(tree *SerializableNode) string {
 			return n
 		}
 	}
-	if len(names) > 0 { return names[0] }
+	if len(names) > 0 {
+		return names[0]
+	}
 	return ""
 }
 
 func collectSelectors(node *SerializableNode) []string {
 	var names []string
-	if node.Type == "Selector" { names = append(names, node.Name) }
+	if node.Type == "Selector" {
+		names = append(names, node.Name)
+	}
 	for i := range node.Children {
 		names = append(names, collectSelectors(&node.Children[i])...)
 	}

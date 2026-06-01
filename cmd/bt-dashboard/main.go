@@ -18,15 +18,15 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/research"
-	"github.com/nico/go-bt-evolve/internal/startup"
-	"github.com/nico/go-bt-evolve/internal/thinktank"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/metrics"
 	"github.com/nico/go-bt-evolve/internal/monitoring"
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/security"
+	"github.com/nico/go-bt-evolve/internal/startup"
+	"github.com/nico/go-bt-evolve/internal/thinktank"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
@@ -73,10 +73,11 @@ func init() {
 	companyState = startup.NewDefaultCompany()
 }
 
-
 func main() {
 	port := os.Getenv("BT_DASHBOARD_PORT")
-	if port == "" { port = "9800" }
+	if port == "" {
+		port = "9800"
+	}
 
 	// Structured logging
 	slog.Info("BT Dashboard starting", "port", port)
@@ -199,12 +200,12 @@ func main() {
 	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression
 	var handler http.Handler = mux
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
-	handler = security.RequestIDMiddleware(handler)                       // correlation IDs for audit trail
-	handler = tracing.TracingMiddleware(handler)                          // distributed tracing spans per request
+	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
+	handler = tracing.TracingMiddleware(handler)    // distributed tracing spans per request
 	handler = security.CrossOriginMiddleware("*", "GET, POST, PUT, DELETE, OPTIONS")(handler)
-	handler = security.CSRFMiddleware(nil)(handler)                       // CSRF protection for state-changing requests
-	handler = security.JSONContentTypeMiddleware(handler)                  // enforce application/json Content-Type on mutating requests
-	handler = security.SanitizeMiddleware(1 << 20)(handler)         // 1MB body limit + input cleaning
+	handler = security.CSRFMiddleware(nil)(handler)                   // CSRF protection for state-changing requests
+	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
+	handler = security.SanitizeMiddleware(1 << 20)(handler)           // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
 	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
 	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
@@ -271,7 +272,10 @@ func handleFellows(w http.ResponseWriter, r *http.Request) {
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Query().Get("topic")
 	c := sharedLLM
-	if c == nil { json.NewEncoder(w).Encode(map[string]string{"error": "Ollama unavailable"}); return }
+	if c == nil {
+		json.NewEncoder(w).Encode(map[string]string{"error": "Ollama unavailable"})
+		return
+	}
 	tt := thinktank.NewThinkTank("Council", topic)
 	orch := thinktank.NewOrchestrator(tt, c)
 	orch.RunResearchRound()
@@ -288,7 +292,9 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		if f.ConfidenceScore >= 0.6 && len(f.KeyInsights) > 0 {
 			for _, insight := range f.KeyInsights[:min(2, len(f.KeyInsights))] {
 				priority := "medium"
-				if f.ConfidenceScore >= 0.8 { priority = "high" }
+				if f.ConfidenceScore >= 0.8 {
+					priority = "high"
+				}
 				task := dashboard.Task{
 					ID:          fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), len(f.KeyInsights)),
 					Title:       f.FellowName + ": " + insight,
@@ -314,7 +320,9 @@ func handleDefaultCompany(w http.ResponseWriter, r *http.Request) {
 func handleChat(w http.ResponseWriter, r *http.Request) {
 	msg := r.URL.Query().Get("msg")
 	tab := r.URL.Query().Get("tab")
-	if msg == "" { msg = "Hello" }
+	if msg == "" {
+		msg = "Hello"
+	}
 
 	agents := map[string]string{
 		"overview":  "BT Studio admin agent. 38 trees, 26 MCP tools, 7 categories. Help the user navigate and manage.",
@@ -326,7 +334,9 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 		"evolution": "Evolution optimizer. Stockfish+genetic+Q-learning. Help tune evolution parameters.",
 	}
 	sys := agents[tab]
-	if sys == "" { sys = "BT Studio assistant. Help the user administer the behavior tree framework." }
+	if sys == "" {
+		sys = "BT Studio assistant. Help the user administer the behavior tree framework."
+	}
 
 	if sharedLLM == nil {
 		json.NewEncoder(w).Encode(map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
@@ -462,11 +472,13 @@ func handleSprintStatus(w http.ResponseWriter, r *http.Request) {
 	tasks := taskStore.List()
 	completed := 0
 	for _, t := range tasks {
-		if t.Status == "completed" { completed++ }
+		if t.Status == "completed" {
+			completed++
+		}
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
-		"elapsed": time.Since(sprintState.StartedAt).Seconds(),
+		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
 		"tasks_completed": completed, "tasks_total": len(tasks),
 		"current_task": sprintState.CurrentTask,
 	})
@@ -531,9 +543,9 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 
 	// ── ThinkTank trees (3 static + FellowResearch/Debate parameterized) ──
 	thinktankTrees := map[string]*evolution.SerializableNode{
-		"synthesis":      thinktank.SynthesisTree(),
-		"peer_review":    thinktank.PeerReviewTree(),
-		"report":         thinktank.ReportGenerationTree(),
+		"synthesis":   thinktank.SynthesisTree(),
+		"peer_review": thinktank.PeerReviewTree(),
+		"report":      thinktank.ReportGenerationTree(),
 	}
 	if tree, ok := thinktankTrees[treeID]; ok {
 		json.NewEncoder(w).Encode(tree)
@@ -542,8 +554,8 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 
 	// ── Evolution / core trees (2) ──
 	evolutionTrees := map[string]*evolution.SerializableNode{
-		"godev":    evolution.GoDeveloperTree(),
-		"default":  evolution.DefaultTree(),
+		"godev":   evolution.GoDeveloperTree(),
+		"default": evolution.DefaultTree(),
 	}
 	if tree, ok := evolutionTrees[treeID]; ok {
 		json.NewEncoder(w).Encode(tree)
@@ -560,7 +572,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
 				"node_count": t.NodeCount,
-				"children": []map[string]interface{}{},
+				"children":   []map[string]interface{}{},
 			})
 			return
 		}
@@ -708,12 +720,12 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"status":       "authenticated",
-				"auth_method":  "session",
-				"created_at":   info.CreatedAt,
-				"expires_at":   info.ExpiresAt,
-				"last_used":    info.LastUsed,
-				"remaining":    info.Remaining.String(),
+				"status":      "authenticated",
+				"auth_method": "session",
+				"created_at":  info.CreatedAt,
+				"expires_at":  info.ExpiresAt,
+				"last_used":   info.LastUsed,
+				"remaining":   info.Remaining.String(),
 			})
 			return
 		}
@@ -977,10 +989,12 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 
 // handleTraces returns recent trace entries or aggregated traces from the shared traces log as JSON.
 // Supports query params:
-//   ?limit=50        — max entries (default 50, max 500) for flat list mode
-//   ?since=5m        — relative duration filter for flat list mode
-//   ?trace_id=xxx    — fetch a specific trace (returns AggregatedTrace with span tree)
-//   ?list=true       — list aggregated traces (returns []AggregatedTrace, newest first)
+//
+//	?limit=50        — max entries (default 50, max 500) for flat list mode
+//	?since=5m        — relative duration filter for flat list mode
+//	?trace_id=xxx    — fetch a specific trace (returns AggregatedTrace with span tree)
+//	?list=true       — list aggregated traces (returns []AggregatedTrace, newest first)
+//
 // Public endpoint (no auth) — monitoring tool compatible.
 func handleTraces(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1092,7 +1106,6 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sanitized)
 }
 
-
 // handleTaskCreate creates a new task via query params (GET — avoids CSRF on API endpoints).
 func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
@@ -1109,8 +1122,12 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 		Assignee:    r.URL.Query().Get("assignee"),
 		Source:      "manual",
 	}
-	if task.Priority == "" { task.Priority = "medium" }
-	if task.Assignee == "" { task.Assignee = "bt-implementer" }
+	if task.Priority == "" {
+		task.Priority = "medium"
+	}
+	if task.Assignee == "" {
+		task.Assignee = "bt-implementer"
+	}
 	task.TreeID = dashboard.PickTreeForTask(task)
 	if err := taskStore.Create(task); err != nil {
 		w.WriteHeader(500)

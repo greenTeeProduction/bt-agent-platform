@@ -36,7 +36,7 @@ const (
 	ChainRetrievalQA      ChainKind = "retrieval_qa"
 	ChainMapReduce        ChainKind = "map_reduce"
 	ChainRefine           ChainKind = "refine"
-	ChainAgent            ChainKind = "agent"      // ReAct agent loop with tool use
+	ChainAgent            ChainKind = "agent"       // ReAct agent loop with tool use
 	ChainToolAction       ChainKind = "tool_action" // direct tool invocation without agent loop
 )
 

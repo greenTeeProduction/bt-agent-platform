@@ -29,8 +29,10 @@ type GardenerStatusTool struct {
 	metrics  *gardener.MetricsTracker
 }
 
-func (t *GardenerStatusTool) Name() string        { return "gardener_status" }
-func (t *GardenerStatusTool) Description() string { return "Get current status: tree count, metrics summary, improvement rate." }
+func (t *GardenerStatusTool) Name() string { return "gardener_status" }
+func (t *GardenerStatusTool) Description() string {
+	return "Get current status: tree count, metrics summary, improvement rate."
+}
 func (t *GardenerStatusTool) Call(ctx context.Context, input string) (string, error) {
 	summary := t.metrics.Summary()
 	summary["tree_count"] = t.registry.Count()
@@ -42,8 +44,10 @@ type GardenerRunCycleTool struct {
 	gardener *gardener.Gardener
 }
 
-func (t *GardenerRunCycleTool) Name() string        { return "gardener_run_cycle" }
-func (t *GardenerRunCycleTool) Description() string { return "Run one evolution cycle over ALL behavior trees. Returns per-tree fitness deltas." }
+func (t *GardenerRunCycleTool) Name() string { return "gardener_run_cycle" }
+func (t *GardenerRunCycleTool) Description() string {
+	return "Run one evolution cycle over ALL behavior trees. Returns per-tree fitness deltas."
+}
 func (t *GardenerRunCycleTool) Call(ctx context.Context, input string) (string, error) {
 	results, err := t.gardener.RunCycle()
 	if err != nil {
@@ -68,8 +72,10 @@ type GardenerRecommendTool struct {
 	refStore *reflection.Store
 }
 
-func (t *GardenerRecommendTool) Name() string        { return "gardener_recommend" }
-func (t *GardenerRecommendTool) Description() string { return "Analyze all trees and their fitness scores. Recommend which need urgent attention." }
+func (t *GardenerRecommendTool) Name() string { return "gardener_recommend" }
+func (t *GardenerRecommendTool) Description() string {
+	return "Analyze all trees and their fitness scores. Recommend which need urgent attention."
+}
 func (t *GardenerRecommendTool) Call(ctx context.Context, input string) (string, error) {
 	entries := t.registry.List()
 	records, _ := t.refStore.LoadAll()

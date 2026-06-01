@@ -36,7 +36,7 @@ type APIKeyInfo struct {
 
 // apiKey is the internal representation including the hash.
 type apiKey struct {
-	Hash      string    `json:"hash"`       // SHA-256 hex of the raw key
+	Hash      string    `json:"hash"` // SHA-256 hex of the raw key
 	Label     string    `json:"label"`
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at,omitempty"`

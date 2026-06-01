@@ -6,7 +6,7 @@ import "time"
 type RunRecord struct {
 	TreeID   string
 	Task     string
-	Outcome  string        // "success", "failure", "chain_failed", "chain_panic"
+	Outcome  string // "success", "failure", "chain_failed", "chain_panic"
 	Duration time.Duration
 	Tools    []string // tools used during execution
 	Quality  float64  // 0-100 quality score if applicable

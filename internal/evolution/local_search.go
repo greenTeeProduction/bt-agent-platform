@@ -30,19 +30,19 @@ import (
 type LocalSearchStrategy int
 
 const (
-	HillClimbSearch      LocalSearchStrategy = iota
+	HillClimbSearch LocalSearchStrategy = iota
 	SimulatedAnnealingSearch
 	TabuSearch
 )
 
 // LocalSearcher performs local refinement of a behavior tree individual.
 type LocalSearcher struct {
-	Strategy        LocalSearchStrategy
-	MaxIterations   int     // max local search steps
-	Temperature     float64 // for simulated annealing
-	CoolingRate     float64 // temperature decay factor (0 < rate < 1)
-	TabuTenure      int     // iterations a move stays in tabu list
-	MutationProb    float64 // probability of mutating each step
+	Strategy      LocalSearchStrategy
+	MaxIterations int     // max local search steps
+	Temperature   float64 // for simulated annealing
+	CoolingRate   float64 // temperature decay factor (0 < rate < 1)
+	TabuTenure    int     // iterations a move stays in tabu list
+	MutationProb  float64 // probability of mutating each step
 }
 
 // NewLocalSearcher creates a searcher with sensible defaults.

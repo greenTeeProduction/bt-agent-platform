@@ -14,7 +14,7 @@ import (
 type SkillSpec struct {
 	Name        string   `json:"name"`
 	Purpose     string   `json:"purpose"`
-	Checks      []string `json:"checks"`      // conditions / decision points
+	Checks      []string `json:"checks"`       // conditions / decision points
 	Actions     []string `json:"actions"`      // things the agent should do
 	Pitfalls    []string `json:"pitfalls"`     // things to avoid (guard conditions)
 	Fallbacks   []string `json:"fallbacks"`    // what to do on failure

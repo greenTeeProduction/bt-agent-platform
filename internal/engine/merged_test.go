@@ -1,24 +1,28 @@
 package engine
 
 import (
-	"time"
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 type mergedMockLLM struct{}
 
-func (m *mergedMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *mergedMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *mergedMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mergedMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *mergedMockLLM) Generate(prompt string) (string, error) {
 	return "MOCK_OUTPUT: This is a comprehensive response to the task including details and examples.", nil
 }
-func (m *mergedMockLLM) AnalyzeComplexity(task string) string    { return "medium" }
-func (m *mergedMockLLM) GeneratePlan(task, complexity string) string { return "plan: " + task }
+func (m *mergedMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
+func (m *mergedMockLLM) GeneratePlan(task, complexity string) string         { return "plan: " + task }
 func (m *mergedMockLLM) Reflect(task, outcome, plan string) (string, string) { return "good", "none" }
 
 func TestMergedTree_Routing(t *testing.T) {

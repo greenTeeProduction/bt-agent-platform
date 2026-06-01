@@ -75,10 +75,10 @@ func TestSelectorOptimizer_KillerHeuristic(t *testing.T) {
 	so.MinSamples = 1
 
 	// A succeeds first, then B succeeds later
-	so.Record("Router", NodeExecutionRecord{NodeName: "Alpha", Outcome: "success"})   // tick 0
-	so.Record("Router", NodeExecutionRecord{NodeName: "Beta", Outcome: "failure"})     // tick 1
-	so.Record("Router", NodeExecutionRecord{NodeName: "Alpha", Outcome: "failure"})    // tick 2
-	so.Record("Router", NodeExecutionRecord{NodeName: "Beta", Outcome: "success"})     // tick 3 ← last success
+	so.Record("Router", NodeExecutionRecord{NodeName: "Alpha", Outcome: "success"}) // tick 0
+	so.Record("Router", NodeExecutionRecord{NodeName: "Beta", Outcome: "failure"})  // tick 1
+	so.Record("Router", NodeExecutionRecord{NodeName: "Alpha", Outcome: "failure"}) // tick 2
+	so.Record("Router", NodeExecutionRecord{NodeName: "Beta", Outcome: "success"})  // tick 3 ← last success
 
 	order := so.OrderChildren("Router")
 	if len(order) != 2 {
@@ -136,8 +136,8 @@ func TestLocalSearch_HillClimb(t *testing.T) {
 		Type: "Selector",
 		Name: "Root",
 		Metadata: map[string]any{
-			"threshold":   0.5,
-			"timeout_ms":  1000.0,
+			"threshold":  0.5,
+			"timeout_ms": 1000.0,
 		},
 		Children: []SerializableNode{
 			{Type: "Action", Name: "Child1"},

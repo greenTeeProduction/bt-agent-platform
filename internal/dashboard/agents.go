@@ -17,12 +17,12 @@ type AgentInfo struct {
 	Description string  `json:"description"`
 	Tree        string  `json:"tree"`
 	Status      string  `json:"status"`       // running, scheduled, created, error
-	Schedule    string  `json:"schedule"`      // cron expression or "on_demand"
-	SuccessRate float64 `json:"success_rate"`  // 0.0-1.0
+	Schedule    string  `json:"schedule"`     // cron expression or "on_demand"
+	SuccessRate float64 `json:"success_rate"` // 0.0-1.0
 	TotalRuns   int     `json:"total_runs"`
 	AvgQuality  float64 `json:"avg_quality"`
-	LastRun     string  `json:"last_run"`      // ISO 8601
-	LastOutcome string  `json:"last_outcome"`  // success, failure, timeout
+	LastRun     string  `json:"last_run"`     // ISO 8601
+	LastOutcome string  `json:"last_outcome"` // success, failure, timeout
 }
 
 // AgentYAMLConfig mirrors the agent YAML template format.
@@ -51,9 +51,9 @@ type ScheduledJob struct {
 
 // AgentHistoryEntry mirrors a single run record.
 type AgentHistoryEntry struct {
-	Outcome  string  `json:"outcome"`
-	Quality  float64 `json:"quality"`
-	StartedAt string `json:"started_at"`
+	Outcome   string  `json:"outcome"`
+	Quality   float64 `json:"quality"`
+	StartedAt string  `json:"started_at"`
 }
 
 // ListAgents reads agent definitions from YAML templates and combines with scheduler state.

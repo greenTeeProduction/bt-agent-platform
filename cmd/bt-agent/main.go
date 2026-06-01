@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nico/go-bt-evolve/internal/agent"
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"

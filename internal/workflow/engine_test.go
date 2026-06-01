@@ -104,9 +104,9 @@ func TestRecommendationsToTasks_FullSynthesis(t *testing.T) {
 	tt := &thinktank.ThinkTank{
 		Synthesis: &thinktank.Synthesis{
 			Recommendation:       "Build a real-time collaboration feature with WebSocket support and operational transforms",
-			PointsOfAgreement:     []string{"Market demand is strong", "Technical feasibility confirmed"},
-			PointsOfDisagreement:  []string{"WebSocket vs SSE", "Priority relative to mobile app"},
-			DissentingNotes:       []string{"Engineering bandwidth is tight this quarter"},
+			PointsOfAgreement:    []string{"Market demand is strong", "Technical feasibility confirmed"},
+			PointsOfDisagreement: []string{"WebSocket vs SSE", "Priority relative to mobile app"},
+			DissentingNotes:      []string{"Engineering bandwidth is tight this quarter"},
 		},
 	}
 	wf := NewWorkflow("test", tt, nil)
@@ -508,11 +508,11 @@ type mockTTOrch struct {
 	phases []string
 }
 
-func (m *mockTTOrch) RunResearchRound() error     { m.phases = append(m.phases, "research"); return nil }
-func (m *mockTTOrch) RunDebate() error             { m.phases = append(m.phases, "debate"); return nil }
-func (m *mockTTOrch) RunSynthesis() error          { m.phases = append(m.phases, "synthesis"); return nil }
-func (m *mockTTOrch) RunPeerReview() error         { m.phases = append(m.phases, "peer_review"); return nil }
-func (m *mockTTOrch) RunReportGeneration() error   { m.phases = append(m.phases, "report"); return nil }
+func (m *mockTTOrch) RunResearchRound() error    { m.phases = append(m.phases, "research"); return nil }
+func (m *mockTTOrch) RunDebate() error           { m.phases = append(m.phases, "debate"); return nil }
+func (m *mockTTOrch) RunSynthesis() error        { m.phases = append(m.phases, "synthesis"); return nil }
+func (m *mockTTOrch) RunPeerReview() error       { m.phases = append(m.phases, "peer_review"); return nil }
+func (m *mockTTOrch) RunReportGeneration() error { m.phases = append(m.phases, "report"); return nil }
 
 func TestRunFullPipeline(t *testing.T) {
 	tt := &thinktank.ThinkTank{
@@ -710,10 +710,10 @@ func TestRecommendationsToTasks_LongTextTruncation(t *testing.T) {
 	long := strings.Repeat("x", 200)
 	tt := &thinktank.ThinkTank{
 		Synthesis: &thinktank.Synthesis{
-			Recommendation:      long,
-			PointsOfAgreement:   []string{long},
+			Recommendation:       long,
+			PointsOfAgreement:    []string{long},
 			PointsOfDisagreement: []string{long},
-			DissentingNotes:     []string{long},
+			DissentingNotes:      []string{long},
 		},
 	}
 	wf := NewWorkflow("test", tt, nil)
@@ -831,7 +831,7 @@ func TestWorkflow_NoTasks(t *testing.T) {
 func TestRecommendationsToTasks_Idempotent(t *testing.T) {
 	tt := &thinktank.ThinkTank{
 		Synthesis: &thinktank.Synthesis{
-			Recommendation: "test",
+			Recommendation:    "test",
 			PointsOfAgreement: []string{"agree"},
 		},
 	}

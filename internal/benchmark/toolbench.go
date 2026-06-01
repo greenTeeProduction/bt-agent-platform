@@ -36,12 +36,12 @@ type ToolBenchAPI struct {
 // ToolBenchEntry mirrors a ToolBench test case: a user task with required APIs,
 // available distractors, and a sequence of steps.
 type ToolBenchEntry struct {
-	ID              string         `json:"id"`
-	Category        string         `json:"category"`
-	TaskDescription string         `json:"task_description"`
-	RequiredAPIs    []string       `json:"required_apis"`
+	ID              string          `json:"id"`
+	Category        string          `json:"category"`
+	TaskDescription string          `json:"task_description"`
+	RequiredAPIs    []string        `json:"required_apis"`
 	Steps           []ToolBenchStep `json:"steps"`
-	AvailableAPIs   []ToolBenchAPI `json:"available_apis"`
+	AvailableAPIs   []ToolBenchAPI  `json:"available_apis"`
 }
 
 // ToolBenchMetrics holds aggregate ToolBench evaluation results.

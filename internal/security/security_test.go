@@ -216,9 +216,9 @@ func TestSecurityHeadersMiddleware_HSTS(t *testing.T) {
 
 func TestSecurityHeadersMiddleware_CustomConfig(t *testing.T) {
 	cfg := SecurityHeadersConfig{
-		FrameOptions:     "SAMEORIGIN",
-		ReferrerPolicy:   "no-referrer",
-		CSP:              "default-src 'none'",
+		FrameOptions:   "SAMEORIGIN",
+		ReferrerPolicy: "no-referrer",
+		CSP:            "default-src 'none'",
 	}
 	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

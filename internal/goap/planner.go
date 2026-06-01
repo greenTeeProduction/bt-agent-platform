@@ -7,18 +7,20 @@ import (
 
 // plannerNode is an A* search node.
 type plannerNode struct {
-	state    WorldState
-	actions  []Action // path of actions taken to reach this state
-	cost     float64  // g(n) — accumulated cost
-	heuristic float64 // h(n) — estimated cost to goal
+	state     WorldState
+	actions   []Action // path of actions taken to reach this state
+	cost      float64  // g(n) — accumulated cost
+	heuristic float64  // h(n) — estimated cost to goal
 }
 
 // plannerNodeHeap implements container/heap.Interface for A* priority queue.
 type plannerNodeHeap []*plannerNode
 
-func (h plannerNodeHeap) Len() int           { return len(h) }
-func (h plannerNodeHeap) Less(i, j int) bool  { return h[i].cost+h[i].heuristic < h[j].cost+h[j].heuristic }
-func (h plannerNodeHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h plannerNodeHeap) Len() int { return len(h) }
+func (h plannerNodeHeap) Less(i, j int) bool {
+	return h[i].cost+h[i].heuristic < h[j].cost+h[j].heuristic
+}
+func (h plannerNodeHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
 func (h *plannerNodeHeap) Push(x interface{}) {
 	*h = append(*h, x.(*plannerNode))
@@ -34,10 +36,10 @@ func (h *plannerNodeHeap) Pop() interface{} {
 
 // Planner performs A* search to find optimal action sequences.
 type Planner struct {
-	Actions          []Action     `json:"actions"`          // available actions
-	MaxDepth         int          `json:"max_depth"`        // search depth limit
-	MaxNodes         int          `json:"max_nodes"`        // expanded nodes limit
-	stats            PlannerStats `json:"-"`
+	Actions  []Action     `json:"actions"`   // available actions
+	MaxDepth int          `json:"max_depth"` // search depth limit
+	MaxNodes int          `json:"max_nodes"` // expanded nodes limit
+	stats    PlannerStats `json:"-"`
 }
 
 // PlannerStats tracks planner performance.
@@ -84,9 +86,9 @@ func (p *Planner) Plan(current WorldState, goal *Goal) *Plan {
 	heap.Init(pq)
 
 	startNode := &plannerNode{
-		state:    current.Clone(),
-		actions:  nil,
-		cost:     0,
+		state:     current.Clone(),
+		actions:   nil,
+		cost:      0,
 		heuristic: p.heuristic(current, goal),
 	}
 	heap.Push(pq, startNode)

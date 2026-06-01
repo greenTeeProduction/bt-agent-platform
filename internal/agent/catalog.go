@@ -11,21 +11,21 @@ import (
 
 // CatalogEntry is a lightweight listing for the agent marketplace.
 type CatalogEntry struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Version     string   `json:"version"`
-	Tree        string   `json:"tree"`
-	Category    string   `json:"category"`
-	Tags        []string `json:"tags"`
-	Installed   bool     `json:"installed"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Version     string    `json:"version"`
+	Tree        string    `json:"tree"`
+	Category    string    `json:"category"`
+	Tags        []string  `json:"tags"`
+	Installed   bool      `json:"installed"`
 	InstalledAt time.Time `json:"installed_at,omitempty"`
-	Score       float64  `json:"score,omitempty"`
+	Score       float64   `json:"score,omitempty"`
 }
 
 // Catalog manages the agent marketplace — browsing, searching, installing, sharing.
 type Catalog struct {
-	reg      *Registry
-	tmplDir  string
+	reg     *Registry
+	tmplDir string
 }
 
 // NewCatalog creates a catalog backed by the registry and template directory.

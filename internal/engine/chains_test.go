@@ -1,11 +1,11 @@
 package engine
 
 import (
-	"fmt"
-	"time"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
@@ -16,8 +16,12 @@ type chainMockLLM struct {
 	responses map[string]string
 }
 
-func (m *chainMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *chainMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *chainMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *chainMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *chainMockLLM) Generate(prompt string) (string, error) {
 	if r, ok := m.responses["generate"]; ok {
@@ -29,7 +33,9 @@ func (m *chainMockLLM) Generate(prompt string) (string, error) {
 	return "mock response for: " + prompt, nil
 }
 func (m *chainMockLLM) AnalyzeComplexity(task string) string { return "medium" }
-func (m *chainMockLLM) GeneratePlan(task, complexity string) string { return "1. Step one\n2. Step two" }
+func (m *chainMockLLM) GeneratePlan(task, complexity string) string {
+	return "1. Step one\n2. Step two"
+}
 func (m *chainMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "better" }
 
 // DemoChainTree builds a tree that uses ChainAction nodes for a conversational RAG pipeline.
@@ -435,8 +441,12 @@ type agentTestMockLLM struct {
 	callCount *int
 }
 
-func (m *agentTestMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *agentTestMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *agentTestMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *agentTestMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *agentTestMockLLM) Generate(prompt string) (string, error) {
 	idx := *m.callCount
@@ -565,13 +575,13 @@ func TestChainAction_ToolAction_Pipeline(t *testing.T) {
 		Name: "ToolPipeline",
 		Children: []evolution.SerializableNode{
 			{
-				Type: "ChainAction",
-				Name: "tool_action:web_search:{{.Task}}",
+				Type:     "ChainAction",
+				Name:     "tool_action:web_search:{{.Task}}",
 				Metadata: map[string]any{"tools": []any{"web_search"}},
 			},
 			{
-				Type: "ChainAction",
-				Name: "tool_action:calculator:add 50 to {{.CachedResult}}",
+				Type:     "ChainAction",
+				Name:     "tool_action:calculator:add 50 to {{.CachedResult}}",
 				Metadata: map[string]any{"tools": []any{"calculator"}},
 			},
 		},
@@ -671,9 +681,13 @@ type errorMockLLM struct {
 	err error
 }
 
-func (m *errorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *errorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
-func (m *errorMockLLM) Generate(prompt string) (string, error) { return "", m.err }
+func (m *errorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *errorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *errorMockLLM) Generate(prompt string) (string, error)              { return "", m.err }
 func (m *errorMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
 func (m *errorMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
 func (m *errorMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
@@ -755,7 +769,7 @@ func TestChainAction_RAGQuery_NoKGResults(t *testing.T) {
 	}}
 	bb := &Blackboard{
 		Task:         "test question",
-		KgResults:    "",                       // empty
+		KgResults:    "",                         // empty
 		CachedResult: "Cached: the answer is 42", // fallback
 		LLM:          mock,
 	}
@@ -943,16 +957,16 @@ var _ llm.LLM = (*errorMockLLM)(nil)
 
 func TestExpandTemplate_AllFields(t *testing.T) {
 	bb := &Blackboard{
-		Task:      "test task",
-		Plan:      "a plan",
-		Result:    "a result",
-		Outcome:   "success",
-		Complexity: "medium",
+		Task:         "test task",
+		Plan:         "a plan",
+		Result:       "a result",
+		Outcome:      "success",
+		Complexity:   "medium",
 		CachedResult: "cached data",
-		KgResults: "kg data",
-		DurationMs: 1234,
+		KgResults:    "kg data",
+		DurationMs:   1234,
 		QualityScore: 0.85,
-		CurrentPath: "SomePath",
+		CurrentPath:  "SomePath",
 		FailureCount: 3,
 	}
 	result := expandTemplate("Task={{.Task}} Plan={{.Plan}} Result={{.Result}} Outcome={{.Outcome}} Cpx={{.Complexity}} Cache={{.CachedResult}} KG={{.KgResults}} Dur={{.DurationMs}} Q={{.QualityScore}} Path={{.CurrentPath}} FC={{.FailureCount}}", bb)
@@ -1609,7 +1623,7 @@ func TestChainAction_MapReduce_SubResultErrors(t *testing.T) {
 func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
 	// execAgent: Test MaxTokens boundary values (0, 1, 31)
 	tests := []struct {
-		name     string
+		name      string
 		maxTokens float64
 	}{
 		{"ZeroUsesDefault15", 0},

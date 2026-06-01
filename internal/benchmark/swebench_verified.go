@@ -28,10 +28,10 @@ type SWEVerifiedResult struct {
 
 // SWEVerifiedMetrics aggregates evaluation results across SWE-bench Verified entries.
 type SWEVerifiedMetrics struct {
-	TotalEntries int                  `json:"total_entries"`
-	Resolved     int                  `json:"resolved"`
-	ResolveRate  float64              `json:"resolve_rate"`
-	Results      []SWEVerifiedResult  `json:"results"`
+	TotalEntries int                 `json:"total_entries"`
+	Resolved     int                 `json:"resolved"`
+	ResolveRate  float64             `json:"resolve_rate"`
+	Results      []SWEVerifiedResult `json:"results"`
 }
 
 // LoadSWEVerified reads a SWE-bench Verified JSON file and returns entries.

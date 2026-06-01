@@ -15,15 +15,15 @@ func DefaultTree() *SerializableNode {
 		Type: "Sequence",
 		Name: "MainSequence",
 		Children: []SerializableNode{
-		{
-			Type: "Sequence",
-			Name: "PreGate",
-			Children: []SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Check input is non-empty"},
-				{Type: "Condition", Name: "CheckPrerequisites", Description: "Verify capability"},
-				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate bb.ChainTools with standard tools"},
+			{
+				Type: "Sequence",
+				Name: "PreGate",
+				Children: []SerializableNode{
+					{Type: "Condition", Name: "ValidateInput", Description: "Check input is non-empty"},
+					{Type: "Condition", Name: "CheckPrerequisites", Description: "Verify capability"},
+					{Type: "Action", Name: "SetupDefaultTools", Description: "Populate bb.ChainTools with standard tools"},
+				},
 			},
-		},
 			{
 				Type: "Selector",
 				Name: "StrategyRouter",
@@ -50,8 +50,8 @@ func DefaultTree() *SerializableNode {
 						Name: "ExecutionPath",
 						Children: []SerializableNode{
 							{
-								Type: "ChainAction",
-								Name: "llm_call:Complete this task: {{.Task}}. Use available tools. Think step by step and provide a thorough answer.",
+								Type:     "ChainAction",
+								Name:     "llm_call:Complete this task: {{.Task}}. Use available tools. Think step by step and provide a thorough answer.",
 								Metadata: map[string]any{"max_tokens": float64(2048)},
 							},
 						},
@@ -59,8 +59,8 @@ func DefaultTree() *SerializableNode {
 				},
 			},
 			{
-				Type: "Action",
-				Name: "ReflectOnOutcome",
+				Type:        "Action",
+				Name:        "ReflectOnOutcome",
 				Description: "Generate reflection and validate output quality",
 			},
 			{
@@ -69,16 +69,16 @@ func DefaultTree() *SerializableNode {
 				Children: []SerializableNode{
 					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded and output is valid"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Self-correct the previous task. Task: {{.Task}}. Fix errors and produce a correct answer.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Self-correct the previous task. Task: {{.Task}}. Fix errors and produce a correct answer.",
 						Metadata: map[string]any{"max_tokens": float64(2048)},
 					},
 					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},
 				},
 			},
 			{
-				Type: "Action",
-				Name: "UpdateBehaviorTree",
+				Type:        "Action",
+				Name:        "UpdateBehaviorTree",
 				Description: "Adapt tree on 3+ consecutive failures",
 			},
 		},

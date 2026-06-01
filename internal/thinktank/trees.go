@@ -26,13 +26,13 @@ func FellowResearchTree(fellow Fellow, topic string) *evolution.SerializableNode
 				Name: "PreGate",
 				Children: []evolution.SerializableNode{
 					{
-						Type: "Condition",
-						Name: "ValidateCompanyState",
+						Type:        "Condition",
+						Name:        "ValidateCompanyState",
 						Description: "Ensure thinktank is on the blackboard",
 					},
 					{
-						Type: "Action",
-						Name: "SetupResearchTools",
+						Type:        "Action",
+						Name:        "SetupResearchTools",
 						Description: "Populate bb.ChainTools with web_search, knowledge_graph, calculator",
 					},
 				},
@@ -45,7 +45,7 @@ func FellowResearchTree(fellow Fellow, topic string) *evolution.SerializableNode
 				Metadata: map[string]any{
 					"system_msg": sysMsg,
 					"max_tokens": float64(4096),
-					"tools": []any{"web_search", "knowledge_graph", "calculator"},
+					"tools":      []any{"web_search", "knowledge_graph", "calculator"},
 				},
 			},
 			// BiasCheck: identify own biases and blind spots
@@ -64,7 +64,7 @@ func FellowResearchTree(fellow Fellow, topic string) *evolution.SerializableNode
 				Metadata: map[string]any{
 					"system_msg": sysMsg,
 					"max_tokens": float64(3072),
-					"tools": []any{"web_search"},
+					"tools":      []any{"web_search"},
 				},
 			},
 			// ProduceFinding: output a structured ResearchFinding
@@ -93,13 +93,13 @@ func DebateTree(fellows []Fellow, topic string) *evolution.SerializableNode {
 		Name: "PreGate",
 		Children: []evolution.SerializableNode{
 			{
-				Type: "Condition",
-				Name: "ValidateCompanyState",
+				Type:        "Condition",
+				Name:        "ValidateCompanyState",
 				Description: "Ensure thinktank is on the blackboard",
 			},
 			{
-				Type: "Action",
-				Name: "SetupResearchTools",
+				Type:        "Action",
+				Name:        "SetupResearchTools",
 				Description: "Populate bb.ChainTools for debate research",
 			},
 		},
@@ -272,10 +272,10 @@ func PeerReviewTree() *evolution.SerializableNode {
 	// The peer review runs for each fellow perspective
 	// We use a sequence of review chains — one per analytical role
 	reviewRoles := []struct {
-		Name    string
-		Role    string
-		System  string
-		Focus   string
+		Name   string
+		Role   string
+		System string
+		Focus  string
 	}{
 		{
 			Name:   "Fact Check (Bull lens)",

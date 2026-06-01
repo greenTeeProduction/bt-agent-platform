@@ -10,7 +10,9 @@ import (
 )
 
 func TestTauBench_Airline(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
+	}
 	entries := BuiltinTauBenchAirline()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 airline entries, got %d", len(entries))
@@ -61,7 +63,9 @@ func TestTauBench_Airline(t *testing.T) {
 }
 
 func TestTauBench_Retail(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
+	}
 	entries := BuiltinTauBenchRetail()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 retail entries, got %d", len(entries))
@@ -105,7 +109,9 @@ func TestTauBench_Retail(t *testing.T) {
 }
 
 func TestTauBench_MultiDomain(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent τ-bench test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
+	}
 	allEntries := DefaultTauBenchEntries()
 	if len(allEntries) != 10 {
 		t.Fatalf("expected 10 total entries (5 airline + 5 retail), got %d", len(allEntries))
@@ -299,7 +305,9 @@ func TestTauBench_TaskLoading(t *testing.T) {
 }
 
 func TestTauBench_EmptyEntries(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	// Evaluate with empty entries should not panic
 	tree := evolution.GoDeveloperTree()
 	mock := DefaultLLM()

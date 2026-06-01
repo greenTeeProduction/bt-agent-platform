@@ -3,8 +3,8 @@ package engine
 import (
 	"strings"
 
-	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/goap"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // registerGoapNodes registers all GOAP-related conditions and actions.

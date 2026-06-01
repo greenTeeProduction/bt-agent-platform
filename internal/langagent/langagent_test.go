@@ -1,10 +1,10 @@
 package langagent
 
 import (
-	"time"
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -18,8 +18,12 @@ import (
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	return "mock response", nil
@@ -73,10 +77,10 @@ func newConfig(t *testing.T) Config {
 	t.Helper()
 	refStore, treeStore := newTestStores(t)
 	return Config{
-		LLMClient: &mockLLM{},
-		LangLLM:   &mockModel{},
-		RefStore:  refStore,
-		TreeStore: treeStore,
+		LLMClient:    &mockLLM{},
+		LangLLM:      &mockModel{},
+		RefStore:     refStore,
+		TreeStore:    treeStore,
 		AgentFactory: nil, // no factory
 		RunTaskFn: func(task string) string {
 			return "task completed"

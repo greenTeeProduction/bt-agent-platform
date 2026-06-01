@@ -27,9 +27,9 @@ type ComparisonResult struct {
 	Name       string  `json:"name"`
 	Baseline   float64 `json:"baseline_ns_per_op"`
 	Current    float64 `json:"current_ns_per_op"`
-	DeltaPct   float64 `json:"delta_pct"`     // positive = slower (regression)
+	DeltaPct   float64 `json:"delta_pct"` // positive = slower (regression)
 	Regression bool    `json:"regression"`
-	Severity   string  `json:"severity"`       // "ok", "warning", or "critical"
+	Severity   string  `json:"severity"` // "ok", "warning", or "critical"
 }
 
 // BaselineStore persists and loads benchmark baselines.

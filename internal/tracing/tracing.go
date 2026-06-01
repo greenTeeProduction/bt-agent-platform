@@ -62,11 +62,11 @@ type Tracer interface {
 
 type noopSpan struct{}
 
-func (n noopSpan) End()                               {}
+func (n noopSpan) End()                                {}
 func (n noopSpan) AddEvent(name string, attrs ...Attr) {}
 func (n noopSpan) SetAttribute(key, value string)      {}
 func (n noopSpan) RecordError(err error)               {}
-func (n noopSpan) SpanContext() SpanContext             { return SpanContext{} }
+func (n noopSpan) SpanContext() SpanContext            { return SpanContext{} }
 func (n noopSpan) IsRecording() bool                   { return false }
 
 type noopTracer struct{}

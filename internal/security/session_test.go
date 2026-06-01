@@ -142,8 +142,8 @@ func TestSessionStore_CleanupExpired(t *testing.T) {
 
 func TestSessionStore_MaxSessions(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{
-		MaxSessions:      3,
-		DefaultTTL:       1 * time.Hour,
+		MaxSessions:     3,
+		DefaultTTL:      1 * time.Hour,
 		CleanupInterval: 10 * time.Minute,
 	})
 	defer ss.Stop()
@@ -226,9 +226,9 @@ func TestSessionStore_RefreshInvalidToken(t *testing.T) {
 
 func TestSessionStore_CookieRoundtrip(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{
-		DefaultTTL:  1 * time.Hour,
-		CookieName:  "bt_session",
-		CookiePath:  "/",
+		DefaultTTL: 1 * time.Hour,
+		CookieName: "bt_session",
+		CookiePath: "/",
 	})
 	defer ss.Stop()
 
@@ -435,8 +435,8 @@ func TestSessionStore_BackgroundCleanup(t *testing.T) {
 
 func TestSessionMiddleware_ValidCookie(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{
-		DefaultTTL:  1 * time.Hour,
-		CookieName:  "bt_session",
+		DefaultTTL: 1 * time.Hour,
+		CookieName: "bt_session",
 	})
 	defer ss.Stop()
 
@@ -563,8 +563,8 @@ func TestSessionMiddleware_NoAPIKeyWhenEmpty(t *testing.T) {
 
 func TestSessionMiddleware_ExpiredCookie(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{
-		DefaultTTL:  10 * time.Millisecond,
-		CookieName:  "bt_session",
+		DefaultTTL: 10 * time.Millisecond,
+		CookieName: "bt_session",
 	})
 	defer ss.Stop()
 

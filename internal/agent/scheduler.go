@@ -27,25 +27,25 @@ type Scheduler struct {
 
 // ScheduledJob represents a scheduled agent run.
 type ScheduledJob struct {
-	ID         string    `json:"id"`
-	AgentName  string    `json:"agent_name"`
-	Schedule   string    `json:"schedule"`    // "every 1h", "0 9 * * *", "on_demand"
-	NextRun    time.Time `json:"next_run"`
-	LastRun    time.Time `json:"last_run"`
-	RunCount   int       `json:"run_count"`
-	MaxRetries int       `json:"max_retries"` // 0 = unlimited
-	RetryDelay string    `json:"retry_delay"` // "5m" between retries
-	Timeout    string    `json:"timeout"`     // "2h" max run duration
-	Active     bool      `json:"active"`
-	InFlight   bool      `json:"in_flight"`   // true when currently executing (crash recovery)
+	ID         string      `json:"id"`
+	AgentName  string      `json:"agent_name"`
+	Schedule   string      `json:"schedule"` // "every 1h", "0 9 * * *", "on_demand"
+	NextRun    time.Time   `json:"next_run"`
+	LastRun    time.Time   `json:"last_run"`
+	RunCount   int         `json:"run_count"`
+	MaxRetries int         `json:"max_retries"` // 0 = unlimited
+	RetryDelay string      `json:"retry_delay"` // "5m" between retries
+	Timeout    string      `json:"timeout"`     // "2h" max run duration
+	Active     bool        `json:"active"`
+	InFlight   bool        `json:"in_flight"`            // true when currently executing (crash recovery)
 	Checkpoint *Checkpoint `json:"checkpoint,omitempty"` // for long-running agents
 }
 
 // Checkpoint saves agent state for resumable long-running execution.
 type Checkpoint struct {
-	Step      int       `json:"step"`       // current step number
-	Progress  string    `json:"progress"`   // human-readable progress
-	Data      string    `json:"data"`       // serialized state
+	Step      int       `json:"step"`     // current step number
+	Progress  string    `json:"progress"` // human-readable progress
+	Data      string    `json:"data"`     // serialized state
 	UpdatedAt time.Time `json:"updated_at"`
 }
 

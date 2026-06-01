@@ -11,7 +11,8 @@ package evolution
 //   - Alpha-Beta Pruning: skip mutations that can't beat current best
 //
 // This tree runs the FULL Stockfish pipeline:
-//   Evaluate → OrderMutations(Killer+History) → Deepen → Prune → Apply → Validate → TT Store → Repeat
+//
+//	Evaluate → OrderMutations(Killer+History) → Deepen → Prune → Apply → Validate → TT Store → Repeat
 func StockfishEvolutionTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",
@@ -195,8 +196,8 @@ func StockfishEvolutionTree() *SerializableNode {
 				Children: []SerializableNode{
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Evolution attempt failed. Analyze why: was the search depth insufficient? Were all mutations pruned? Was the benchmark suite too narrow? Recommend parameter adjustments for the next cycle.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Evolution attempt failed. Analyze why: was the search depth insufficient? Were all mutations pruned? Was the benchmark suite too narrow? Recommend parameter adjustments for the next cycle.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},
@@ -207,11 +208,11 @@ func StockfishEvolutionTree() *SerializableNode {
 
 // StockfishEvolutionLoop runs continuous tree evolution using Stockfish algorithms.
 // It's an infinite loop that:
-//   1. Evaluates all registered trees
-//   2. Runs StockfishEvolutionTree on the lowest-fitness tree
-//   3. Updates heuristics and transposition table
-//   4. Sleeps for the configured interval
-//   5. Repeats forever
+//  1. Evaluates all registered trees
+//  2. Runs StockfishEvolutionTree on the lowest-fitness tree
+//  3. Updates heuristics and transposition table
+//  4. Sleeps for the configured interval
+//  5. Repeats forever
 //
 // This is the infinite improvement loop — it never stops, only gets better.
 func StockfishEvolutionLoop() *SerializableNode {
@@ -227,8 +228,8 @@ func StockfishEvolutionLoop() *SerializableNode {
 					{Type: "Action", Name: "SetupDefaultTools"},
 					{Type: "Action", Name: "InitTranspositionTable"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:Initialize the Stockfish evolution loop. Load all registered behavior trees, initialize the transposition table, killer move table, and history heuristic table. Set the evolution interval and max mutations per cycle.",
+						Type:     "ChainAction",
+						Name:     "llm_call:Initialize the Stockfish evolution loop. Load all registered behavior trees, initialize the transposition table, killer move table, and history heuristic table. Set the evolution interval and max mutations per cycle.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},
@@ -236,8 +237,8 @@ func StockfishEvolutionLoop() *SerializableNode {
 
 			// Infinite loop body — uses Retry decorator with high max retries
 			{
-				Type: "Retry",
-				Name: "InfiniteEvolveLoop",
+				Type:       "Retry",
+				Name:       "InfiniteEvolveLoop",
 				MaxRetries: 999999, // effectively infinite
 				Children: []SerializableNode{
 					{
@@ -273,8 +274,8 @@ func StockfishEvolutionLoop() *SerializableNode {
 										Children: []SerializableNode{
 											{Type: "Condition", Name: "HasFitnessImproved"},
 											{
-												Type: "ChainAction",
-												Name: "llm_call:Save the improved tree to disk. Update the killer move table (this mutation type gets a bonus). Update the history heuristic table. Log the improvement with the fitness delta.",
+												Type:     "ChainAction",
+												Name:     "llm_call:Save the improved tree to disk. Update the killer move table (this mutation type gets a bonus). Update the history heuristic table. Log the improvement with the fitness delta.",
 												Metadata: map[string]any{"max_tokens": float64(4)},
 											},
 										},
@@ -284,8 +285,8 @@ func StockfishEvolutionLoop() *SerializableNode {
 										Name: "SkipNoImprovement",
 										Children: []SerializableNode{
 											{
-												Type: "ChainAction",
-												Name: "llm_call:No improvement found. Decrease history score for these mutation types on this tree. If this tree has had no improvements for 10+ cycles, consider increasing search depth or trying a different mutation strategy.",
+												Type:     "ChainAction",
+												Name:     "llm_call:No improvement found. Decrease history score for these mutation types on this tree. If this tree has had no improvements for 10+ cycles, consider increasing search depth or trying a different mutation strategy.",
 												Metadata: map[string]any{"max_tokens": float64(4)},
 											},
 										},

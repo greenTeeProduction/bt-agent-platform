@@ -650,15 +650,15 @@ func TestNewFactory(t *testing.T) {
 func TestExtractTemplates(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	kg.Register(&TreeMeta{
-		ID:       "test:a", Name: "A", Category: "finance",
+		ID: "test:a", Name: "A", Category: "finance",
 		NodeCount: 10, Fitness: 80, Keywords: []string{"money"},
 	})
 	kg.Register(&TreeMeta{
-		ID:       "test:b", Name: "B", Category: "research",
+		ID: "test:b", Name: "B", Category: "research",
 		NodeCount: 15, Fitness: 90, Keywords: []string{"study"},
 	})
 	kg.Register(&TreeMeta{
-		ID:       "test:c", Name: "C", Category: "finance",
+		ID: "test:c", Name: "C", Category: "finance",
 		NodeCount: 20, Fitness: 70, Keywords: []string{"invest"},
 	})
 
@@ -742,8 +742,8 @@ func TestExtractKeywords(t *testing.T) {
 	}{
 		{"build a DCF model for valuation analysis", 4},
 		{"review go code for bugs and issues", 3},
-		{"a b c d", 0},   // all <= 3 chars
-		{"", 0},           // empty
+		{"a b c d", 0}, // all <= 3 chars
+		{"", 0},        // empty
 		{"hello, world! this is a test.", 3},
 	}
 

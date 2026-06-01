@@ -7,11 +7,11 @@ package evolution
 // Requires: nlm login --manual -f cookies.json (headless auth)
 //
 // Strategy paths:
-//   1. IngestVault — push Obsidian vault notes to NotebookLM as sources
-//   2. QueryNotebook — ask AI questions grounded in notebook sources
-//   3. CreateArtifact — generate studio content (podcast, briefing, FAQ)
-//   4. ResearchDeep — web/Drive research with source import
-//   5. SyncBack — export NotebookLM insights back to Obsidian vault
+//  1. IngestVault — push Obsidian vault notes to NotebookLM as sources
+//  2. QueryNotebook — ask AI questions grounded in notebook sources
+//  3. CreateArtifact — generate studio content (podcast, briefing, FAQ)
+//  4. ResearchDeep — web/Drive research with source import
+//  5. SyncBack — export NotebookLM insights back to Obsidian vault
 func NotebookLMTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",
@@ -129,8 +129,8 @@ func NotebookLMTree() *SerializableNode {
 
 			// Quality gate
 			{
-				Type: "ChainAction",
-				Name: "llm_call:Verify NotebookLM operation: check that sources were added correctly, queries returned grounded answers, artifacts were downloaded, and vault notes were properly linked. Report any issues.",
+				Type:     "ChainAction",
+				Name:     "llm_call:Verify NotebookLM operation: check that sources were added correctly, queries returned grounded answers, artifacts were downloaded, and vault notes were properly linked. Report any issues.",
 				Metadata: map[string]any{"max_tokens": float64(5)},
 			},
 
@@ -142,8 +142,8 @@ func NotebookLMTree() *SerializableNode {
 				Children: []SerializableNode{
 					{Type: "Condition", Name: "WasSuccessful"},
 					{
-						Type: "ChainAction",
-						Name: "llm_call:NotebookLM operation failed. Check: is auth valid? Is the notebook accessible? Are the MCP tools connected? Diagnose and retry.",
+						Type:     "ChainAction",
+						Name:     "llm_call:NotebookLM operation failed. Check: is auth valid? Is the notebook accessible? Are the MCP tools connected? Diagnose and retry.",
 						Metadata: map[string]any{"max_tokens": float64(5)},
 					},
 				},

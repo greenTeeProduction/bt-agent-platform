@@ -21,10 +21,10 @@ import (
 
 // RateLimiter implements a token bucket rate limiter per client (by IP or API key).
 type RateLimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*tokenBucket
-	rate     float64 // tokens per second
-	burst    int     // max burst size
+	mu              sync.Mutex
+	buckets         map[string]*tokenBucket
+	rate            float64 // tokens per second
+	burst           int     // max burst size
 	cleanupInterval time.Duration
 }
 
@@ -36,9 +36,9 @@ type tokenBucket struct {
 // NewRateLimiter creates a rate limiter. rate=tokens/sec, burst=max burst.
 func NewRateLimiter(rate float64, burst int) *RateLimiter {
 	rl := &RateLimiter{
-		buckets:  make(map[string]*tokenBucket),
-		rate:     rate,
-		burst:    burst,
+		buckets:         make(map[string]*tokenBucket),
+		rate:            rate,
+		burst:           burst,
 		cleanupInterval: 10 * time.Minute,
 	}
 	go rl.cleanup()
@@ -194,13 +194,13 @@ func SanitizeInput(input string) string {
 // Zero values disable the respective header (except HSTS which is opt-in).
 type SecurityHeadersConfig struct {
 	// HSTS is opt-in — only set when serving over HTTPS/Tailscale.
-	EnableHSTS         bool
-	HSTSMaxAge         int    // seconds, default 31536000 (1 year)
-	HSTSIncludeSub     bool   // includeSubDomains
-	FrameOptions       string // default "DENY"
-	CSP                string // Content-Security-Policy value
-	ReferrerPolicy     string // default "strict-origin-when-cross-origin"
-	PermissionsPolicy  string // Permissions-Policy header value
+	EnableHSTS        bool
+	HSTSMaxAge        int    // seconds, default 31536000 (1 year)
+	HSTSIncludeSub    bool   // includeSubDomains
+	FrameOptions      string // default "DENY"
+	CSP               string // Content-Security-Policy value
+	ReferrerPolicy    string // default "strict-origin-when-cross-origin"
+	PermissionsPolicy string // Permissions-Policy header value
 }
 
 // DefaultSecurityHeaders returns a production-ready default configuration.
@@ -336,10 +336,10 @@ const (
 
 // IPFilter provides IP/CIDR-based access control for HTTP handlers.
 type IPFilter struct {
-	mu     sync.RWMutex
-	nets   []*net.IPNet
-	ips    map[string]bool
-	mode   IPFilterMode
+	mu   sync.RWMutex
+	nets []*net.IPNet
+	ips  map[string]bool
+	mode IPFilterMode
 }
 
 // NewIPFilter creates an IP filter. IPs can be individual addresses ("192.168.1.1")
@@ -846,4 +846,3 @@ func StaticTokenValidator(tokens map[string]string) TokenValidator {
 		return "", fmt.Errorf("invalid or expired token")
 	}
 }
-

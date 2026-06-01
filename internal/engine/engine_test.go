@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/goap"
 	"github.com/nico/go-bt-evolve/internal/reflection"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // mockLLM is a test double that returns predefined responses.
@@ -22,9 +22,11 @@ type mockLLM struct {
 	toImprove  string
 }
 
-func (m *mockLLM) AnalyzeComplexity(task string) string { return m.complexity }
+func (m *mockLLM) AnalyzeComplexity(task string) string        { return m.complexity }
 func (m *mockLLM) GeneratePlan(task, complexity string) string { return m.plan }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) { return m.wentWell, m.toImprove }
+func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+	return m.wentWell, m.toImprove
+}
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	// Return 40+ chars to pass validateOutputQuality (30-char minimum).
 	return "Mock response with sufficient length for quality validation checks", nil

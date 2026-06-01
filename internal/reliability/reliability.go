@@ -26,10 +26,14 @@ const (
 
 func (s CircuitState) String() string {
 	switch s {
-	case CircuitClosed: return "closed"
-	case CircuitOpen: return "open"
-	case CircuitHalfOpen: return "half_open"
-	default: return "unknown"
+	case CircuitClosed:
+		return "closed"
+	case CircuitOpen:
+		return "open"
+	case CircuitHalfOpen:
+		return "half_open"
+	default:
+		return "unknown"
 	}
 }
 
@@ -186,14 +190,14 @@ func RetryWithBackoff(maxRetries int, base, maxDelay time.Duration, fn func() er
 
 // DeadLetterEntry represents a failed task stored for inspection.
 type DeadLetterEntry struct {
-	ID        string    `json:"id"`
-	Task      string    `json:"task"`
-	Agent     string    `json:"agent"`
-	Error     string    `json:"error"`
-	Attempts  int       `json:"attempts"`
-	FailedAt  time.Time `json:"failed_at"`
-	Circuit   string    `json:"circuit,omitempty"`
-	Category  string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
+	ID       string    `json:"id"`
+	Task     string    `json:"task"`
+	Agent    string    `json:"agent"`
+	Error    string    `json:"error"`
+	Attempts int       `json:"attempts"`
+	FailedAt time.Time `json:"failed_at"`
+	Circuit  string    `json:"circuit,omitempty"`
+	Category string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
 }
 
 // DeadLetterQueue stores failed tasks for manual inspection and replay.
@@ -300,13 +304,13 @@ func (dlq *DeadLetterQueue) load() {
 
 // WorkerPool manages a fixed pool of goroutines for task execution.
 type WorkerPool struct {
-	workers  int
-	tasks    chan func()
-	wg       sync.WaitGroup
-	quit     chan struct{}
-	mu       sync.Mutex
-	active   int
-	total    uint64
+	workers   int
+	tasks     chan func()
+	wg        sync.WaitGroup
+	quit      chan struct{}
+	mu        sync.Mutex
+	active    int
+	total     uint64
 	completed uint64
 }
 
@@ -456,22 +460,22 @@ func (tq *TaskQueue) load() {
 
 // SchedulerState persists scheduler job state across restarts.
 type SchedulerState struct {
-	mu        sync.Mutex
-	jobs      map[string]JobState
-	path      string
+	mu   sync.Mutex
+	jobs map[string]JobState
+	path string
 }
 
 // JobState represents a persisted job's runtime state.
 type JobState struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Schedule    string    `json:"schedule"`
-	LastRun     time.Time `json:"last_run"`
-	NextRun     time.Time `json:"next_run"`
-	RunCount    int       `json:"run_count"`
-	ErrorCount  int       `json:"error_count"`
-	Enabled     bool      `json:"enabled"`
-	LastError   string    `json:"last_error,omitempty"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Schedule   string    `json:"schedule"`
+	LastRun    time.Time `json:"last_run"`
+	NextRun    time.Time `json:"next_run"`
+	RunCount   int       `json:"run_count"`
+	ErrorCount int       `json:"error_count"`
+	Enabled    bool      `json:"enabled"`
+	LastError  string    `json:"last_error,omitempty"`
 }
 
 // NewSchedulerState creates scheduler persistence.
@@ -542,39 +546,45 @@ func (ss *SchedulerState) load() {
 type Priority int
 
 const (
-	PriorityCritical  Priority = 0 // must execute immediately
-	PriorityHigh      Priority = 1 // important, execute before normal tasks
-	PriorityMedium    Priority = 2 // normal priority
-	PriorityLow       Priority = 3 // best-effort
+	PriorityCritical   Priority = 0 // must execute immediately
+	PriorityHigh       Priority = 1 // important, execute before normal tasks
+	PriorityMedium     Priority = 2 // normal priority
+	PriorityLow        Priority = 3 // best-effort
 	PriorityBackground Priority = 4 // only when idle
 )
 
 func (p Priority) String() string {
 	switch p {
-	case PriorityCritical: return "critical"
-	case PriorityHigh: return "high"
-	case PriorityMedium: return "medium"
-	case PriorityLow: return "low"
-	case PriorityBackground: return "background"
-	default: return "unknown"
+	case PriorityCritical:
+		return "critical"
+	case PriorityHigh:
+		return "high"
+	case PriorityMedium:
+		return "medium"
+	case PriorityLow:
+		return "low"
+	case PriorityBackground:
+		return "background"
+	default:
+		return "unknown"
 	}
 }
 
 // PriorityTask is a task with priority and metadata for the priority queue.
 type PriorityTask struct {
-	ID       string   `json:"id"`
-	Task     string   `json:"task"`
-	Agent    string   `json:"agent"`
-	Priority Priority `json:"priority"`
+	ID       string    `json:"id"`
+	Task     string    `json:"task"`
+	Agent    string    `json:"agent"`
+	Priority Priority  `json:"priority"`
 	QueuedAt time.Time `json:"queued_at"`
 }
 
 // PriorityQueue is a priority-ordered task queue backed by a min-heap.
 // Lower priority values execute first (Critical=0 before Background=4).
 type PriorityQueue struct {
-	mu    sync.Mutex
-	heap  []PriorityTask
-	path  string
+	mu     sync.Mutex
+	heap   []PriorityTask
+	path   string
 	nextID int
 }
 
@@ -831,10 +841,10 @@ type AgentRouter struct {
 	local            AgentExecutor // fallback
 	MaxFailover      int           // max executors to try per Execute() call (0 = try all)
 	strategy         RoutingStrategy
-	activeCounts     []int64                 // per-executor in-flight count (atomic, least-connections)
+	activeCounts     []int64                       // per-executor in-flight count (atomic, least-connections)
 	executorFailures map[int]*executorFailureState // per-executor failure tracking
-	failureThreshold int                     // consecutive failures before cooldown (default 5)
-	failureCooldown  time.Duration           // cooldown duration after threshold exceeded (default 30s)
+	failureThreshold int                           // consecutive failures before cooldown (default 5)
+	failureCooldown  time.Duration                 // cooldown duration after threshold exceeded (default 30s)
 }
 
 // NewAgentRouter creates a router with the given executors.

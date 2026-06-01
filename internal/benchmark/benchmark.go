@@ -32,14 +32,14 @@ import (
 
 // TaskCase is a single benchmark task with expected routing.
 type TaskCase struct {
-	Task           string   `json:"task"`
-	ExpectedPath   string   `json:"expected_path"`   // which strategy path should handle this
-	PossiblePaths  []string `json:"possible_paths,omitempty"` // multiple acceptable paths for ambiguous tasks
-	MinResultLen   int      `json:"min_result_len"`  // minimum output length expected
-	ShouldSucceed  bool     `json:"should_succeed"`   // expected outcome
-	ShouldReject   bool     `json:"should_reject"`    // PreGate should reject this
-	MinQualityScore float64 `json:"min_quality_score,omitempty"` // minimum quality score expected
-	Difficulty     string   `json:"difficulty,omitempty"` // easy | medium | hard | adversarial
+	Task            string   `json:"task"`
+	ExpectedPath    string   `json:"expected_path"`               // which strategy path should handle this
+	PossiblePaths   []string `json:"possible_paths,omitempty"`    // multiple acceptable paths for ambiguous tasks
+	MinResultLen    int      `json:"min_result_len"`              // minimum output length expected
+	ShouldSucceed   bool     `json:"should_succeed"`              // expected outcome
+	ShouldReject    bool     `json:"should_reject"`               // PreGate should reject this
+	MinQualityScore float64  `json:"min_quality_score,omitempty"` // minimum quality score expected
+	Difficulty      string   `json:"difficulty,omitempty"`        // easy | medium | hard | adversarial
 }
 
 // Suite is a collection of benchmark tasks for a specific domain.
@@ -51,12 +51,12 @@ type Suite struct {
 
 // Result is the outcome of running a single task through a tree.
 type Result struct {
-	Task       string  `json:"task"`
-	Outcome    string  `json:"outcome"`
-	DurationMs int64   `json:"duration_ms"`
-	ResultLen  int     `json:"result_len"`
-	Path       string  `json:"path"`        // which strategy path was taken
-	Success    bool    `json:"success"`
+	Task       string `json:"task"`
+	Outcome    string `json:"outcome"`
+	DurationMs int64  `json:"duration_ms"`
+	ResultLen  int    `json:"result_len"`
+	Path       string `json:"path"` // which strategy path was taken
+	Success    bool   `json:"success"`
 }
 
 // RunMetrics aggregates results from running a full suite.
@@ -67,9 +67,9 @@ type RunMetrics struct {
 	SuccessRate   float64  `json:"success_rate"`
 	AvgDurationMs float64  `json:"avg_duration_ms"`
 	AvgResultLen  float64  `json:"avg_result_len"`
-	PathCoverage  float64  `json:"path_coverage"` // unique paths / total tasks
-	LowerCI       float64  `json:"lower_ci"`       // 95% bootstrap CI lower bound
-	UpperCI       float64  `json:"upper_ci"`       // 95% bootstrap CI upper bound
+	PathCoverage  float64  `json:"path_coverage"`     // unique paths / total tasks
+	LowerCI       float64  `json:"lower_ci"`          // 95% bootstrap CI lower bound
+	UpperCI       float64  `json:"upper_ci"`          // 95% bootstrap CI upper bound
 	Warning       string   `json:"warning,omitempty"` // small-sample or other warnings
 	Results       []Result `json:"results"`
 }
@@ -84,8 +84,8 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		start := time.Now()
 
 		bb := &engine.Blackboard{
-			Task:    tc.Task,
-			LLM:     mock,
+			Task: tc.Task,
+			LLM:  mock,
 		}
 
 		bt := engine.BuildTree(tree, bb)
@@ -149,14 +149,14 @@ func RunSuiteWithLLM(tree *evolution.SerializableNode, suite Suite) *RunMetrics 
 
 // LLMDivergenceReport compares mock-based and real-LLM benchmark results.
 type LLMDivergenceReport struct {
-	SuiteName        string   `json:"suite_name"`
-	MockSuccessRate  float64  `json:"mock_success_rate"`
-	RealSuccessRate  float64  `json:"real_success_rate"`
-	Divergence       float64  `json:"divergence"`        // absolute difference
-	TasksDiverged    []string `json:"tasks_diverged"`    // tasks where mock≠real outcome
-	MockAvgDuration  float64  `json:"mock_avg_duration_ms"`
-	RealAvgDuration  float64  `json:"real_avg_duration_ms"`
-	SpeedRatio       float64  `json:"speed_ratio"`       // real/mock duration ratio
+	SuiteName       string   `json:"suite_name"`
+	MockSuccessRate float64  `json:"mock_success_rate"`
+	RealSuccessRate float64  `json:"real_success_rate"`
+	Divergence      float64  `json:"divergence"`     // absolute difference
+	TasksDiverged   []string `json:"tasks_diverged"` // tasks where mock≠real outcome
+	MockAvgDuration float64  `json:"mock_avg_duration_ms"`
+	RealAvgDuration float64  `json:"real_avg_duration_ms"`
+	SpeedRatio      float64  `json:"speed_ratio"` // real/mock duration ratio
 }
 
 // CompareMockVsLLM runs a suite twice — once with mock, once with real LLM —
@@ -197,10 +197,10 @@ func absDiff(a, b float64) float64 {
 }
 
 type ABTest struct {
-	Before    *RunMetrics `json:"before"`
-	After     *RunMetrics `json:"after"`
-	Delta     ABDelta     `json:"delta"`
-	Improved  bool        `json:"improved"`
+	Before   *RunMetrics `json:"before"`
+	After    *RunMetrics `json:"after"`
+	Delta    ABDelta     `json:"delta"`
+	Improved bool        `json:"improved"`
 }
 
 // ABDelta is the difference between before and after.
@@ -209,8 +209,8 @@ type ABDelta struct {
 	AvgDurationMs float64 `json:"avg_duration_delta"`
 	AvgResultLen  float64 `json:"avg_result_len_delta"`
 	PathCoverage  float64 `json:"path_coverage_delta"`
-	EffectSize    float64 `json:"effect_size"`    // Cohen's d on success rate
-	Significant   bool    `json:"significant"`    // p < 0.05
+	EffectSize    float64 `json:"effect_size"` // Cohen's d on success rate
+	Significant   bool    `json:"significant"` // p < 0.05
 	PValue        float64 `json:"p_value"`
 }
 
@@ -288,8 +288,8 @@ func QuickValidate(tree *evolution.SerializableNode, suite Suite, llm llm.LLM, o
 	lite := Suite{
 		Name: suite.Name + "_quick",
 		Tasks: []TaskCase{
-			suite.Tasks[0],                      // happy-path routing
-			suite.Tasks[len(suite.Tasks)-1],     // edge-case task
+			suite.Tasks[0],                  // happy-path routing
+			suite.Tasks[len(suite.Tasks)-1], // edge-case task
 		},
 	}
 	return ScoreMutation(tree, lite, llm, ops)
@@ -334,9 +334,13 @@ func fishersExact(s1, f1, s2, f2 int) float64 {
 	// Sum probabilities of tables at least as extreme as observed
 	// Range of possible 'a' values given fixed margins
 	minA := 0
-	if c := n1 + s2 - N; c > minA { minA = c }
+	if c := n1 + s2 - N; c > minA {
+		minA = c
+	}
 	maxA := n1
-	if s1+s2 < maxA { maxA = s1 + s2 }
+	if s1+s2 < maxA {
+		maxA = s1 + s2
+	}
 
 	pObs := hypergeometricProb(a, b, c, d)
 	pValue := 0.0
@@ -364,13 +368,17 @@ func hypergeometricProb(a, b, c, d int) float64 {
 
 // lnChoose computes ln(n choose k) using the log-gamma function.
 func lnChoose(n, k int) float64 {
-	if k < 0 || k > n { return 0 }
+	if k < 0 || k > n {
+		return 0
+	}
 	return lnFactorial(n) - lnFactorial(k) - lnFactorial(n-k)
 }
 
 // lnFactorial computes ln(n!) using math.Lgamma.
 func lnFactorial(n int) float64 {
-	if n <= 1 { return 0 }
+	if n <= 1 {
+		return 0
+	}
 	result, _ := math.Lgamma(float64(n + 1))
 	return result
 }
@@ -396,8 +404,12 @@ func BootstrapCI(successes, total int) (lower, upper float64) {
 		expected := rate * float64(total)
 		stddev := math.Sqrt(float64(total) * rate * (1 - rate))
 		bootRate := (expected + stddev*math.Erfinv(2*(float64(i)/float64(iterations))-1)) / float64(total)
-		if bootRate < 0 { bootRate = 0 }
-		if bootRate > 1 { bootRate = 1 }
+		if bootRate < 0 {
+			bootRate = 0
+		}
+		if bootRate > 1 {
+			bootRate = 1
+		}
 		samples[i] = bootRate
 	}
 
@@ -431,7 +443,9 @@ func AnnotateMetrics(m *RunMetrics) {
 func containsStr(s, substr string) bool { return strings.Contains(s, substr) }
 
 func minF(a, b float64) float64 {
-	if a < b { return a }
+	if a < b {
+		return a
+	}
 	return b
 }
 
@@ -464,12 +478,18 @@ type MockLLM struct {
 	ToImprove  string
 }
 
-func (m *MockLLM) AnalyzeComplexity(task string) string { return m.Complexity }
+func (m *MockLLM) AnalyzeComplexity(task string) string        { return m.Complexity }
 func (m *MockLLM) GeneratePlan(task, complexity string) string { return m.Plan }
-func (m *MockLLM) Reflect(task, outcome, plan string) (string, string) { return m.WentWell, m.ToImprove }
+func (m *MockLLM) Reflect(task, outcome, plan string) (string, string) {
+	return m.WentWell, m.ToImprove
+}
 func (m *MockLLM) Generate(prompt string) (string, error) { return m.Plan, nil }
-func (m *MockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *MockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *MockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *MockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 // DefaultMock returns a standard mock for benchmarks.
 func DefaultMock() *MockLLM {

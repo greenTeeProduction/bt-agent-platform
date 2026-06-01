@@ -9,82 +9,82 @@ import "time"
 
 // CompanyState holds the simulated startup's state — the shared blackboard for all role trees.
 type CompanyState struct {
-	Name        string    `json:"name"`
-	Founded     time.Time `json:"founded"`
-	Mission     string    `json:"mission"`
-	Industry    string    `json:"industry"`
+	Name     string    `json:"name"`
+	Founded  time.Time `json:"founded"`
+	Mission  string    `json:"mission"`
+	Industry string    `json:"industry"`
 
 	// Product
-	ProductName    string   `json:"product_name"`
-	ProductStage   string   `json:"product_stage"` // idea, mvp, beta, launched, scaling
-	Features       []string `json:"features"`
-	TechStack      []string `json:"tech_stack"`
-	TechnicalDebt  float64  `json:"technical_debt"` // 0-100
+	ProductName   string   `json:"product_name"`
+	ProductStage  string   `json:"product_stage"` // idea, mvp, beta, launched, scaling
+	Features      []string `json:"features"`
+	TechStack     []string `json:"tech_stack"`
+	TechnicalDebt float64  `json:"technical_debt"` // 0-100
 
 	// Metrics
-	Users          int     `json:"users"`
-	MRR            float64 `json:"mrr"`
-	ARR            float64 `json:"arr"`
-	ChurnRate      float64 `json:"churn_rate"`
-	CAC            float64 `json:"cac"`
-	LTV            float64 `json:"ltv"`
-	NPS            float64 `json:"nps"`
+	Users     int     `json:"users"`
+	MRR       float64 `json:"mrr"`
+	ARR       float64 `json:"arr"`
+	ChurnRate float64 `json:"churn_rate"`
+	CAC       float64 `json:"cac"`
+	LTV       float64 `json:"ltv"`
+	NPS       float64 `json:"nps"`
 
 	// Financials
-	Runway         int     `json:"runway_months"`
-	BurnRate       float64 `json:"burn_rate_monthly"`
-	CashInBank     float64 `json:"cash_in_bank"`
-	FundingRaised  float64 `json:"funding_raised"`
-	FundingRound   string   `json:"funding_round"` // pre-seed, seed, series-a, series-b
-	Valuation      float64 `json:"valuation"`
+	Runway        int     `json:"runway_months"`
+	BurnRate      float64 `json:"burn_rate_monthly"`
+	CashInBank    float64 `json:"cash_in_bank"`
+	FundingRaised float64 `json:"funding_raised"`
+	FundingRound  string  `json:"funding_round"` // pre-seed, seed, series-a, series-b
+	Valuation     float64 `json:"valuation"`
 
 	// Team
-	TeamSize       int     `json:"team_size"`
-	Engineers      int     `json:"engineers"`
-	SalesPeople    int     `json:"sales_people"`
-	MarketingStaff int     `json:"marketing_staff"`
+	TeamSize       int `json:"team_size"`
+	Engineers      int `json:"engineers"`
+	SalesPeople    int `json:"sales_people"`
+	MarketingStaff int `json:"marketing_staff"`
 
 	// Strategy
-	CurrentSprint  int                    `json:"current_sprint"`
-	SprintGoal     string                 `json:"sprint_goal"`
-	QuarterGoals   []string               `json:"quarter_goals"`
-	Risks          []string               `json:"risks"`
-	Opportunities  []string               `json:"opportunities"`
-	Decisions      []Decision             `json:"decisions"`
-	Metrics        map[string]interface{} `json:"custom_metrics"`
+	CurrentSprint int                    `json:"current_sprint"`
+	SprintGoal    string                 `json:"sprint_goal"`
+	QuarterGoals  []string               `json:"quarter_goals"`
+	Risks         []string               `json:"risks"`
+	Opportunities []string               `json:"opportunities"`
+	Decisions     []Decision             `json:"decisions"`
+	Metrics       map[string]interface{} `json:"custom_metrics"`
 }
 
 // Decision records a strategic choice made by the CEO or leadership.
 type Decision struct {
-	Topic       string    `json:"topic"`
-	Choice      string    `json:"choice"`
-	Rationale   string    `json:"rationale"`
+	Topic        string    `json:"topic"`
+	Choice       string    `json:"choice"`
+	Rationale    string    `json:"rationale"`
 	Alternatives []string  `json:"alternatives"`
-	Timestamp   time.Time `json:"timestamp"`
+	Timestamp    time.Time `json:"timestamp"`
 }
 
 // SprintResult captures the outcome of one development sprint.
 type SprintResult struct {
-	SprintNum    int      `json:"sprint_num"`
-	Goal         string   `json:"goal"`
-	Completed    []string `json:"completed"`
-	Deferred     []string `json:"deferred"`
-	BugsFixed    int      `json:"bugs_fixed"`
-	Velocity     float64  `json:"velocity"`
-	TechDebtDelta float64 `json:"tech_debt_delta"`
+	SprintNum     int      `json:"sprint_num"`
+	Goal          string   `json:"goal"`
+	Completed     []string `json:"completed"`
+	Deferred      []string `json:"deferred"`
+	BugsFixed     int      `json:"bugs_fixed"`
+	Velocity      float64  `json:"velocity"`
+	TechDebtDelta float64  `json:"tech_debt_delta"`
 }
 
 // QuarterResult captures quarterly business review.
 type QuarterResult struct {
-	Quarter      int     `json:"quarter"`
-	Revenue      float64 `json:"revenue"`
-	Growth       float64 `json:"growth_pct"`
-	UsersAdded   int     `json:"users_added"`
-	Churn        float64 `json:"churn"`
-	CashBurned   float64 `json:"cash_burned"`
-	Highlights   []string `json:"highlights"`
-	Lowlights    []string `json:"lowlights"`
-	OKRProgress  map[string]float64 `json:"okr_progress"`
+	Quarter     int                `json:"quarter"`
+	Revenue     float64            `json:"revenue"`
+	Growth      float64            `json:"growth_pct"`
+	UsersAdded  int                `json:"users_added"`
+	Churn       float64            `json:"churn"`
+	CashBurned  float64            `json:"cash_burned"`
+	Highlights  []string           `json:"highlights"`
+	Lowlights   []string           `json:"lowlights"`
+	OKRProgress map[string]float64 `json:"okr_progress"`
 }
 
 // NewDefaultCompany creates a seed-stage SaaS startup as default simulation.
@@ -126,10 +126,10 @@ func NewDefaultCompany() *CompanyState {
 		Opportunities: []string{"enterprise procurement pipeline", "OpenAI plugin marketplace"},
 
 		Metrics: map[string]interface{}{
-			"daily_active_users":  340,
-			"activation_rate":     0.45,
-			"nps_score":           42,
-			"support_tickets":     18,
+			"daily_active_users": 340,
+			"activation_rate":    0.45,
+			"nps_score":          42,
+			"support_tickets":    18,
 		},
 	}
 }

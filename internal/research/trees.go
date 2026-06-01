@@ -100,7 +100,7 @@ func QuickResearchTree() *evolution.SerializableNode {
 				Type: "ChainAction",
 				Name: "llm_call:Research {{.Task}} and provide a concise structured answer with sources.",
 				Metadata: map[string]any{
-					"max_tokens":  float64(1024),
+					"max_tokens": float64(1024),
 					"system_msg": "You are a quick research agent. Search for information, synthesize findings, and provide a structured answer with citations. Be concise.",
 					"tools":      []any{"web_search"},
 				},

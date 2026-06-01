@@ -169,8 +169,8 @@ func TestParseTraceLine_Invalid(t *testing.T) {
 
 func TestParseTraceEvent(t *testing.T) {
 	tests := []struct {
-		body     string
-		wantName string
+		body      string
+		wantName  string
 		wantAttrs map[string]string
 	}{
 		{"slow_request threshold=5s actual=5.1s", "slow_request", map[string]string{"threshold": "5s", "actual": "5.1s"}},

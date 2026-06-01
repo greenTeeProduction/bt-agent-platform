@@ -274,7 +274,9 @@ func TestSetSecurity_DefaultOff(t *testing.T) {
 		func(args json.RawMessage) *ToolResult {
 			// Security is off by default — args arrive unmodified
 			// Return the text field value directly
-			var p struct{ Text string `json:"text"` }
+			var p struct {
+				Text string `json:"text"`
+			}
 			json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
@@ -304,7 +306,9 @@ func TestSetSecurity_SanitizeArgs(t *testing.T) {
 		},
 		nil,
 		func(args json.RawMessage) *ToolResult {
-			var p struct{ Text string `json:"text"` }
+			var p struct {
+				Text string `json:"text"`
+			}
 			json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
@@ -393,7 +397,9 @@ func TestSetSecurity_SanitizeANSI(t *testing.T) {
 		},
 		nil,
 		func(args json.RawMessage) *ToolResult {
-			var p struct{ Text string `json:"text"` }
+			var p struct {
+				Text string `json:"text"`
+			}
 			json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
@@ -428,7 +434,7 @@ func TestSetSecurity_NestedArgs(t *testing.T) {
 			// Return a specific value to verify sanitization passed the correct data
 			var p struct {
 				Outer struct {
-					Inner string   `json:"inner"`
+					Inner string `json:"inner"`
 				} `json:"outer"`
 				Arr []string `json:"arr"`
 			}

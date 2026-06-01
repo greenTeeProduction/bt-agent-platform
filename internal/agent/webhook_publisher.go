@@ -43,11 +43,11 @@ func DefaultWebhookSecrets() WebhookSecrets {
 
 // eventRoute maps AgentBus event types to webhook subscription names.
 var eventRoute = map[string]string{
-	"service_down":     "bt-agent-alert",
-	"health_alert":     "bt-agent-alert",
-	"error_detected":   "bt-agent-alert",
-	"task_complete":    "bt-task-complete",
-	"evolution_step":   "bt-evolution-event",
+	"service_down":   "bt-agent-alert",
+	"health_alert":   "bt-agent-alert",
+	"error_detected": "bt-agent-alert",
+	"task_complete":  "bt-task-complete",
+	"evolution_step": "bt-evolution-event",
 }
 
 // WebhookPublisher bridges AgentBus events to Hermes webhooks.

@@ -1,15 +1,19 @@
 package thinktank
 
 import (
-	"time"
 	"context"
 	"testing"
+	"time"
 )
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	// Return structured mock response for synthesis/parsing
@@ -17,13 +21,17 @@ func (m *mockLLM) Generate(prompt string) (string, error) {
 		return "THESIS: Main argument thesis text\nANTITHESIS: Counter argument antithesis text\nSYNTHESIS: Resolved synthesis position\nRECOMMENDATION: Recommended action\nDISSENTING: Minority view", nil
 	}
 	l := len(prompt)
-	if l > 50 { l = 50 }
+	if l > 50 {
+		l = 50
+	}
 	return "Mock analysis: " + prompt[:l] + "...", nil
 }
 func (m *mockLLM) AnalyzeComplexity(task string) string { return "medium" }
 func (m *mockLLM) GeneratePlan(task, complexity string) string {
 	l := len(task)
-	if l > 30 { l = 30 }
+	if l > 30 {
+		l = 30
+	}
 	return "Execute: " + task[:l]
 }
 func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
@@ -84,22 +92,30 @@ func TestDebateTurn(t *testing.T) {
 
 func TestSynthesis(t *testing.T) {
 	s := Synthesis{Thesis: "A", Antithesis: "B", Synthesis: "C", Recommendation: "D"}
-	if s.Thesis == "" { t.Error("thesis") }
+	if s.Thesis == "" {
+		t.Error("thesis")
+	}
 }
 
 func TestReviewComment(t *testing.T) {
 	rc := ReviewComment{Reviewer: "R", Issue: "factual_error", Severity: "high", Comment: "c"}
-	if rc.Issue != "factual_error" { t.Error("issue") }
+	if rc.Issue != "factual_error" {
+		t.Error("issue")
+	}
 }
 
 func TestReport(t *testing.T) {
 	r := Report{Title: "T", ExecutiveSummary: "S", Recommendation: "R"}
-	if r.Title == "" { t.Error("title") }
+	if r.Title == "" {
+		t.Error("title")
+	}
 }
 
 func TestScenario(t *testing.T) {
 	s := Scenario{Name: "N", Probability: 0.5, Impact: "high"}
-	if s.Probability < 0 { t.Error("prob") }
+	if s.Probability < 0 {
+		t.Error("prob")
+	}
 }
 
 func TestOrchestrator_ResearchRound(t *testing.T) {
@@ -174,9 +190,15 @@ func TestOrchestrator_FullAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tt.ResearchFindings) != 5 { t.Error("research") }
-	if tt.Synthesis == nil { t.Error("synthesis") }
-	if tt.FinalReport == nil { t.Error("report") }
+	if len(tt.ResearchFindings) != 5 {
+		t.Error("research")
+	}
+	if tt.Synthesis == nil {
+		t.Error("synthesis")
+	}
+	if tt.FinalReport == nil {
+		t.Error("report")
+	}
 }
 
 func TestOrchestrator_EmptyTopic(t *testing.T) {

@@ -75,10 +75,10 @@ type AgentDefinition struct {
 	OutputType   ContentType `json:"output_type" yaml:"output_type"`
 
 	// Execution
-	Tree      string            `json:"tree" yaml:"tree"`           // tree ID
-	Schedule  string            `json:"schedule,omitempty" yaml:"schedule,omitempty"`
-	Timeout   string            `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Tree     string            `json:"tree" yaml:"tree"` // tree ID
+	Schedule string            `json:"schedule,omitempty" yaml:"schedule,omitempty"`
+	Timeout  string            `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 // Validate validates an agent definition against the schema.

@@ -30,9 +30,9 @@ func (d FeatureDimension) String() string {
 
 // BehavioralDescriptor maps a tree to a feature vector for MAP-Elites binning.
 type BehavioralDescriptor struct {
-	NodeCount  int
-	MaxDepth   int
-	Domain     string // "" for unlabeled
+	NodeCount int
+	MaxDepth  int
+	Domain    string // "" for unlabeled
 }
 
 // Descriptor computes the behavioral descriptor for a tree.
@@ -70,10 +70,10 @@ func Bucket(value, bucketSize int) int {
 // MAPElitesGrid stores the best individual per behavioral niche.
 // Niche key format: "node_<bucket>|depth_<bucket>|domain_<name>"
 type MAPElitesGrid struct {
-	Cells      map[string]*Individual  `json:"cells"`
-	Dimensions []FeatureDimension      `json:"dimensions"`
-	EliteSize  int                     `json:"elite_size"` // max elites to return
-	NodeBucket int                     `json:"node_bucket"` // bucket size for node count (default: 10)
+	Cells       map[string]*Individual `json:"cells"`
+	Dimensions  []FeatureDimension     `json:"dimensions"`
+	EliteSize   int                    `json:"elite_size"`   // max elites to return
+	NodeBucket  int                    `json:"node_bucket"`  // bucket size for node count (default: 10)
 	DepthBucket int                    `json:"depth_bucket"` // bucket size for depth (default: 2)
 }
 
@@ -295,12 +295,12 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 
 // MAPElitesStats reports diversity and coverage metrics for the grid.
 type MAPElitesStats struct {
-	TotalCells      int     `json:"total_cells"`
-	OccupiedCells   int     `json:"occupied_cells"`
-	DiversityScore  float64 `json:"diversity_score"`
-	BestFitness     float64 `json:"best_fitness"`
-	MeanFitness     float64 `json:"mean_fitness"`
-	Domains         int     `json:"domains"`
+	TotalCells     int     `json:"total_cells"`
+	OccupiedCells  int     `json:"occupied_cells"`
+	DiversityScore float64 `json:"diversity_score"`
+	BestFitness    float64 `json:"best_fitness"`
+	MeanFitness    float64 `json:"mean_fitness"`
+	Domains        int     `json:"domains"`
 }
 
 // Stats returns aggregate statistics for the MAP-Elites grid.

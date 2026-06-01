@@ -38,10 +38,10 @@ func itoaTest(n int) string {
 
 func TestStructuralQuickEval(t *testing.T) {
 	tests := []struct {
-		name       string
-		tree       *evolution.SerializableNode
-		wantMin    float64
-		wantMax    float64
+		name    string
+		tree    *evolution.SerializableNode
+		wantMin float64
+		wantMax float64
 	}{
 		{"nil tree", nil, 0, 0},
 		{"optimal tree", buildOptimalTree(), 60, 100},
@@ -287,9 +287,9 @@ func TestCountConditionsActions(t *testing.T) {
 
 func TestMaxTreeDepthEval(t *testing.T) {
 	tests := []struct {
-		name  string
-		tree  *evolution.SerializableNode
-		want  int
+		name string
+		tree *evolution.SerializableNode
+		want int
 	}{
 		{"nil", nil, 0},
 		{"single node", &evolution.SerializableNode{Type: "Selector"}, 0},

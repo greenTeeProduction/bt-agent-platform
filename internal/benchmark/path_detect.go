@@ -4,8 +4,8 @@ import "github.com/nico/go-bt-evolve/internal/engine"
 
 // detectPath returns the strategy path that was actually executed by the tree.
 // Priority: 1) bb.CurrentPath (set by tree traversal during execution)
-//           2) First entry in bb.VisitedPaths
-//           3) Keyword-based fallback on bb.Task (backward compatibility)
+//  2. First entry in bb.VisitedPaths
+//  3. Keyword-based fallback on bb.Task (backward compatibility)
 func detectPath(result string, bb *engine.Blackboard) string {
 	// PRIMARY: tree-internal path tracking — reflects what the tree actually did
 	if bb.CurrentPath != "" {

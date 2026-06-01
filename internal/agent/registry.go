@@ -19,7 +19,7 @@ type Definition struct {
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description" json:"description"`
 	Version     string            `yaml:"version" json:"version"`
-	Tree        string            `yaml:"tree" json:"tree"`               // tree ID: "domain:code_review", "finance:pitch_agent", etc.
+	Tree        string            `yaml:"tree" json:"tree"`                             // tree ID: "domain:code_review", "finance:pitch_agent", etc.
 	Schedule    string            `yaml:"schedule,omitempty" json:"schedule,omitempty"` // cron expression or "on_demand"
 	Inputs      []InputSpec       `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 	Outputs     []OutputSpec      `yaml:"outputs,omitempty" json:"outputs,omitempty"`
@@ -47,10 +47,10 @@ type OutputSpec struct {
 
 // QualitySpec defines quality gate requirements for agent output.
 type QualitySpec struct {
-	MinLength         int      `yaml:"min_length" json:"min_length"`
-	RequiredSections  []string `yaml:"required_sections,omitempty" json:"required_sections,omitempty"`
-	RequiredKeywords  []string `yaml:"required_keywords,omitempty" json:"required_keywords,omitempty"`
-	BlockedPatterns   []string `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`
+	MinLength        int      `yaml:"min_length" json:"min_length"`
+	RequiredSections []string `yaml:"required_sections,omitempty" json:"required_sections,omitempty"`
+	RequiredKeywords []string `yaml:"required_keywords,omitempty" json:"required_keywords,omitempty"`
+	BlockedPatterns  []string `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`
 }
 
 // State represents the current state of a deployed agent.
@@ -66,13 +66,13 @@ const (
 
 // Instance is a running instance of an agent definition.
 type Instance struct {
-	ID          string    `json:"id"`
+	ID          string     `json:"id"`
 	Definition  Definition `json:"definition"`
-	State       State     `json:"state"`
-	RunCount    int       `json:"run_count"`
-	SuccessRate float64   `json:"success_rate"`
-	LastRun     time.Time `json:"last_run"`
-	LastError   string    `json:"last_error,omitempty"`
+	State       State      `json:"state"`
+	RunCount    int        `json:"run_count"`
+	SuccessRate float64    `json:"success_rate"`
+	LastRun     time.Time  `json:"last_run"`
+	LastError   string     `json:"last_error,omitempty"`
 }
 
 // Registry manages agent definitions and instances.

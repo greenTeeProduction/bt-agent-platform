@@ -2,16 +2,18 @@ package finance
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"testing"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func TestTeslaFullAnalysis(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
 		t.Skipf("Ollama unavailable: %v", err)
@@ -64,12 +66,16 @@ func TestTeslaFullAnalysis(t *testing.T) {
 }
 
 func trunc(s string, n int) string {
-	if len(s) <= n { return s }
+	if len(s) <= n {
+		return s
+	}
 	return s[:n] + "..."
 }
 
 func TestTeslaPitchAgent(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
 		t.Skipf("Ollama unavailable: %v", err)
@@ -86,26 +92,37 @@ func TestTeslaPitchAgent(t *testing.T) {
 }
 
 func TestTeslaEarnings(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	runTeslaTree(t, "earnings_reviewer", EarningsReviewerTree())
 }
 func TestTeslaMarket(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	runTeslaTree(t, "market_researcher", MarketResearcherTree())
 }
 func TestTeslaModel(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	runTeslaTree(t, "model_builder", ModelBuilderTree())
 }
 func TestTeslaValuation(t *testing.T) {
-	if testing.Short() { t.Skip("skipping Ollama-dependent test in short mode") }
+	if testing.Short() {
+		t.Skip("skipping Ollama-dependent test in short mode")
+	}
 	runTeslaTree(t, "valuation_reviewer", ValuationReviewerTree())
 }
 
 func runTeslaTree(t *testing.T, name string, tree *evolution.SerializableNode) {
 	t.Helper()
 	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil { t.Skipf("Ollama unavailable: %v", err); return }
+	if err != nil {
+		t.Skipf("Ollama unavailable: %v", err)
+		return
+	}
 	bb := &engine.Blackboard{
 		Task: "Analyze Tesla (TSLA): current stock price, market cap, last 4 quarters earnings (revenue, EPS, margins), EV deliveries growth, energy storage, FSD/AI progress, competitive position vs BYD/Ford/GM/Rivian, balance sheet (cash, debt, FCF), valuation (P/E, EV/EBITDA vs auto), risks (China, regulatory, competition, Musk concentration), bull/bear cases with price targets, investment recommendation.",
 		LLM:  client,

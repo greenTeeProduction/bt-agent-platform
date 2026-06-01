@@ -57,9 +57,9 @@ func NewDeepSeekClient(cfg DeepSeekConfig) *DeepSeekClient {
 }
 
 type deepseekRequest struct {
-	Model    string          `json:"model"`
-	Messages []deepseekMsg   `json:"messages"`
-	Stream   bool            `json:"stream"`
+	Model    string        `json:"model"`
+	Messages []deepseekMsg `json:"messages"`
+	Stream   bool          `json:"stream"`
 }
 
 type deepseekMsg struct {

@@ -12,14 +12,14 @@ import (
 
 // TreeTemplate captures the structural pattern of an existing tree for reuse.
 type TreeTemplate struct {
-	SourceID      string                              `json:"source_id"`
-	Category      string                              `json:"category"`
-	PreGate       *evolution.SerializableNode          `json:"pre_gate"`
-	StrategyRouter *evolution.SerializableNode         `json:"strategy_router"`
-	AgentNodes    []*evolution.SerializableNode        `json:"agent_nodes"`
-	ReflectNode   *evolution.SerializableNode          `json:"reflect_node"`
-	OutcomeHandler *evolution.SerializableNode         `json:"outcome_handler"`
-	Metadata      map[string]any                       `json:"metadata"`
+	SourceID       string                        `json:"source_id"`
+	Category       string                        `json:"category"`
+	PreGate        *evolution.SerializableNode   `json:"pre_gate"`
+	StrategyRouter *evolution.SerializableNode   `json:"strategy_router"`
+	AgentNodes     []*evolution.SerializableNode `json:"agent_nodes"`
+	ReflectNode    *evolution.SerializableNode   `json:"reflect_node"`
+	OutcomeHandler *evolution.SerializableNode   `json:"outcome_handler"`
+	Metadata       map[string]any                `json:"metadata"`
 }
 
 // Factory breeds new behavior trees from existing templates.
@@ -105,8 +105,8 @@ func (f *Factory) crossoverBreed(category string, parentIDs []string, task strin
 
 	// Build the hybrid tree
 	tree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: f.generateTreeName(category, task),
+		Type:     "Sequence",
+		Name:     f.generateTreeName(category, task),
 		Children: []evolution.SerializableNode{},
 	}
 
@@ -148,8 +148,8 @@ func (f *Factory) breedFromArchetype(category string) *evolution.SerializableNod
 // buildFromArchetype constructs a tree that satisfies the archetype requirements.
 func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.SerializableNode {
 	tree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: arch.Category + "_generated",
+		Type:     "Sequence",
+		Name:     arch.Category + "_generated",
 		Children: []evolution.SerializableNode{},
 	}
 
@@ -177,7 +177,9 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 			agentCount++
 		}
 	}
-	if agentCount == 0 { agentCount = 2 }
+	if agentCount == 0 {
+		agentCount = 2
+	}
 
 	for i := 0; i < agentCount; i++ {
 		path := evolution.SerializableNode{
@@ -185,8 +187,8 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 			Name: fmt.Sprintf("AgentPath_%d", i+1),
 			Children: []evolution.SerializableNode{
 				{
-					Type: "ChainAction",
-					Name: fmt.Sprintf("llm_call:Process step %d of the task", i+1),
+					Type:     "ChainAction",
+					Name:     fmt.Sprintf("llm_call:Process step %d of the task", i+1),
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				},
 			},
@@ -218,8 +220,8 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 			{
 				Type: "Sequence", Name: "ExecutionPath",
 				Children: []evolution.SerializableNode{{
-					Type: "ChainAction",
-					Name: "llm_call:Complete this task: {{.Task}}",
+					Type:     "ChainAction",
+					Name:     "llm_call:Complete this task: {{.Task}}",
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				}},
 			},
@@ -247,7 +249,9 @@ func (f *Factory) selectParents(category, task string) []string {
 	}
 	// Pick 2-3 random parents
 	n := 2 + rand.Intn(2)
-	if n > len(candidates) { n = len(candidates) }
+	if n > len(candidates) {
+		n = len(candidates)
+	}
 	rand.Shuffle(len(candidates), func(i, j int) {
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	})
@@ -271,16 +275,16 @@ func (f *Factory) cloneStrategyRouter(tmpl *TreeTemplate) *evolution.Serializabl
 			{
 				Type: "Sequence", Name: "PrimaryPath",
 				Children: []evolution.SerializableNode{{
-					Type: "ChainAction",
-					Name: fmt.Sprintf("llm_call:Execute the primary workflow for %s", tmpl.Category),
+					Type:     "ChainAction",
+					Name:     fmt.Sprintf("llm_call:Execute the primary workflow for %s", tmpl.Category),
 					Metadata: map[string]any{"max_tokens": float64(10)},
 				}},
 			},
 			{
 				Type: "Sequence", Name: "FallbackPath",
 				Children: []evolution.SerializableNode{{
-					Type: "ChainAction",
-					Name: "llm_call:Handle the task using fallback approach",
+					Type:     "ChainAction",
+					Name:     "llm_call:Handle the task using fallback approach",
 					Metadata: map[string]any{"max_tokens": float64(8)},
 				}},
 			},
@@ -290,11 +294,16 @@ func (f *Factory) cloneStrategyRouter(tmpl *TreeTemplate) *evolution.Serializabl
 
 func (f *Factory) pickToolSetup(category string) string {
 	switch category {
-	case "research": return "SetupResearchTools"
-	case "startup": return "SetupStartupTools"
-	case "domain": return "SetupDevTools"
-	case "evolution": return "SetupDefaultTools"
-	default: return "SetupDefaultTools"
+	case "research":
+		return "SetupResearchTools"
+	case "startup":
+		return "SetupStartupTools"
+	case "domain":
+		return "SetupDevTools"
+	case "evolution":
+		return "SetupDefaultTools"
+	default:
+		return "SetupDefaultTools"
 	}
 }
 
@@ -312,8 +321,8 @@ func (f *Factory) defaultAgentPath(task string) evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type: "Sequence", Name: "ExecutionPath",
 		Children: []evolution.SerializableNode{{
-			Type: "ChainAction",
-			Name: fmt.Sprintf("llm_call:%s", truncateTask(task, 80)),
+			Type:     "ChainAction",
+			Name:     fmt.Sprintf("llm_call:%s", truncateTask(task, 80)),
 			Metadata: map[string]any{"max_tokens": float64(10)},
 		}},
 	}
@@ -325,8 +334,8 @@ func (f *Factory) defaultOutcomeSelector() evolution.SerializableNode {
 		Children: []evolution.SerializableNode{
 			{Type: "Condition", Name: "WasSuccessful"},
 			{
-				Type: "ChainAction",
-				Name: "llm_call:Self-correct the previous step and fix any issues.",
+				Type:     "ChainAction",
+				Name:     "llm_call:Self-correct the previous step and fix any issues.",
 				Metadata: map[string]any{"max_tokens": float64(5)},
 			},
 		},
@@ -342,7 +351,9 @@ func (f *Factory) generateTreeName(category, task string) string {
 		if len(w) > 3 && w != "this" && w != "that" && w != "with" && w != "from" && w != "what" && w != "when" && w != "where" {
 			key += "_" + w
 			count++
-			if count >= 3 { break }
+			if count >= 3 {
+				break
+			}
 		}
 	}
 	if key == "" {
@@ -352,7 +363,9 @@ func (f *Factory) generateTreeName(category, task string) string {
 }
 
 func truncateTask(task string, n int) string {
-	if len(task) <= n { return task }
+	if len(task) <= n {
+		return task
+	}
 	return task[:n-3] + "..."
 }
 
@@ -427,7 +440,7 @@ func (f *Factory) CreateFromParents(parentA, parentB string, task string) (*evol
 	}
 	tree := f.Breed(task, category, []string{parentA, parentB})
 	treeID := f.generateTreeName(category, task)
-	
+
 	meta := &TreeMeta{
 		ID:          treeID,
 		Name:        tree.Name,
@@ -444,7 +457,7 @@ func (f *Factory) CreateFromParents(parentA, parentB string, task string) (*evol
 		},
 	}
 	f.Graph.Register(meta)
-	
+
 	return tree, treeID
 }
 
@@ -456,7 +469,9 @@ func extractKeywords(task string) []string {
 		if len(w) > 3 {
 			keywords = append(keywords, w)
 		}
-		if len(keywords) >= 8 { break }
+		if len(keywords) >= 8 {
+			break
+		}
 	}
 	return keywords
 }

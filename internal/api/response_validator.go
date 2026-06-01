@@ -222,8 +222,8 @@ func fieldPath(parent, field string) string {
 // and status code for post-processing.
 type responseCapture struct {
 	http.ResponseWriter
-	statusCode int
-	body       bytes.Buffer
+	statusCode  int
+	body        bytes.Buffer
 	wroteHeader bool
 }
 

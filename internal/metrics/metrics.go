@@ -18,8 +18,8 @@ type Counter struct {
 	value uint64
 }
 
-func (c *Counter) Inc()         { atomic.AddUint64(&c.value, 1) }
-func (c *Counter) Add(n uint64) { atomic.AddUint64(&c.value, n) }
+func (c *Counter) Inc()          { atomic.AddUint64(&c.value, 1) }
+func (c *Counter) Add(n uint64)  { atomic.AddUint64(&c.value, n) }
 func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
 
 // Gauge is a value that can go up and down.
@@ -70,12 +70,12 @@ type AgentMetrics struct {
 }
 
 type AgentStats struct {
-	Name         string    `json:"name"`
-	SuccessCount uint64    `json:"success_count"`
-	ErrorCount   uint64    `json:"error_count"`
-	TotalCount   uint64    `json:"total_count"`
-	TotalDurationMs uint64 `json:"total_duration_ms"`
-	LastRun      time.Time `json:"last_run"`
+	Name            string    `json:"name"`
+	SuccessCount    uint64    `json:"success_count"`
+	ErrorCount      uint64    `json:"error_count"`
+	TotalCount      uint64    `json:"total_count"`
+	TotalDurationMs uint64    `json:"total_duration_ms"`
+	LastRun         time.Time `json:"last_run"`
 }
 
 var globalMetrics = &AgentMetrics{agents: make(map[string]*AgentStats)}
@@ -121,7 +121,7 @@ func GetAgentMetrics() []AgentStats {
 // LabeledCounter is a counter with label dimensions (Prometheus-compatible).
 // Each unique label combination gets its own counter value.
 type LabeledCounter struct {
-	mu     sync.RWMutex
+	mu      sync.RWMutex
 	buckets map[string]*Counter
 }
 
@@ -194,7 +194,7 @@ func (lc *LabeledCounter) Snapshot() map[string]uint64 {
 
 // LabeledGauge is a gauge with label dimensions (Prometheus-compatible).
 type LabeledGauge struct {
-	mu     sync.RWMutex
+	mu      sync.RWMutex
 	buckets map[string]*Gauge
 }
 
@@ -285,12 +285,12 @@ func indexOf(s string, c byte) int {
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
-	httpRequestsTotal     Counter
-	httpRequestDuration   Histogram
-	httpErrorsTotal       Counter
-	httpRequestsByMethod  = NewLabeledCounter()
-	httpRequestsByStatus  = NewLabeledCounter()
-	httpRequestsByPath    = NewLabeledCounter()
+	httpRequestsTotal    Counter
+	httpRequestDuration  Histogram
+	httpErrorsTotal      Counter
+	httpRequestsByMethod = NewLabeledCounter()
+	httpRequestsByStatus = NewLabeledCounter()
+	httpRequestsByPath   = NewLabeledCounter()
 )
 
 func init() {
@@ -507,25 +507,25 @@ func MetricsJSON() map[string]interface{} {
 			avgDuration = float64(s.TotalDurationMs) / float64(s.TotalCount)
 		}
 		agentStats = append(agentStats, map[string]interface{}{
-			"name":             s.Name,
-			"success_count":    s.SuccessCount,
-			"error_count":      s.ErrorCount,
-			"total_count":      s.TotalCount,
-			"success_rate":     fmt.Sprintf("%.1f%%", successRate),
-			"avg_duration_ms":  fmt.Sprintf("%.0f", avgDuration),
-			"last_run":         s.LastRun.Format(time.RFC3339),
+			"name":            s.Name,
+			"success_count":   s.SuccessCount,
+			"error_count":     s.ErrorCount,
+			"total_count":     s.TotalCount,
+			"success_rate":    fmt.Sprintf("%.1f%%", successRate),
+			"avg_duration_ms": fmt.Sprintf("%.0f", avgDuration),
+			"last_run":        s.LastRun.Format(time.RFC3339),
 		})
 	}
 
 	return map[string]interface{}{
-		"http_requests_total":      httpRequestsTotal.Value(),
-		"http_errors_total":        httpErrorsTotal.Value(),
-		"total_requests":           globalMetrics.TotalRequests.Value(),
-		"total_errors":             globalMetrics.TotalErrors.Value(),
-		"agents":                   agentStats,
-		"http_requests_by_method":  labeledSnapshotToMap(httpRequestsByMethod.Snapshot()),
-		"http_requests_by_status":  labeledSnapshotToMap(httpRequestsByStatus.Snapshot()),
-		"http_requests_by_path":    labeledSnapshotToMap(httpRequestsByPath.Snapshot()),
+		"http_requests_total":     httpRequestsTotal.Value(),
+		"http_errors_total":       httpErrorsTotal.Value(),
+		"total_requests":          globalMetrics.TotalRequests.Value(),
+		"total_errors":            globalMetrics.TotalErrors.Value(),
+		"agents":                  agentStats,
+		"http_requests_by_method": labeledSnapshotToMap(httpRequestsByMethod.Snapshot()),
+		"http_requests_by_status": labeledSnapshotToMap(httpRequestsByStatus.Snapshot()),
+		"http_requests_by_path":   labeledSnapshotToMap(httpRequestsByPath.Snapshot()),
 	}
 }
 

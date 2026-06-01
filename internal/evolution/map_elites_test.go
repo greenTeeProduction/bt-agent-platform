@@ -75,8 +75,8 @@ func TestBucket(t *testing.T) {
 
 func TestMAPElitesGrid_InsertAndRetrieve(t *testing.T) {
 	grid := NewMAPElitesGrid(5)
-	tree1 := makeTestTree("small", 1, 2)   // 3 nodes, depth 1
-	tree2 := makeDeepTree(5)               // 5 nodes, depth 4
+	tree1 := makeTestTree("small", 1, 2) // 3 nodes, depth 1
+	tree2 := makeDeepTree(5)             // 5 nodes, depth 4
 
 	ind1 := &Individual{Tree: tree1, Fitness: 50, Genome: hashTree(tree1)}
 	ind2 := &Individual{Tree: tree2, Fitness: 80, Genome: hashTree(tree2)}
@@ -123,7 +123,7 @@ func TestMAPElitesGrid_Elites(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		tree := makeTestTree("t"+strconv.Itoa(i), i+1, 2)
-		ind := &Individual{Tree: tree, Fitness: float64((i+1)*20), Genome: hashTree(tree)}
+		ind := &Individual{Tree: tree, Fitness: float64((i + 1) * 20), Genome: hashTree(tree)}
 		desc := Descriptor(tree, "test")
 		grid.Insert(desc, ind)
 	}

@@ -44,15 +44,15 @@ func TestAgentDefinition_Validate_MissingFields(t *testing.T) {
 
 func TestAgentDefinition_JSON_MarshalRoundtrip(t *testing.T) {
 	def := &AgentDefinition{
-		APIVersion: "v1",
-		Name:       "code-reviewer",
+		APIVersion:  "v1",
+		Name:        "code-reviewer",
 		Description: "Reviews code for bugs and style issues",
-		Version:    "1.2.3",
-		InputType:  ContentTypeCode,
-		OutputType: ContentTypeMarkdown,
-		Tree:       "domain:code_review",
-		Schedule:   "every 1h",
-		Timeout:    "5m",
+		Version:     "1.2.3",
+		InputType:   ContentTypeCode,
+		OutputType:  ContentTypeMarkdown,
+		Tree:        "domain:code_review",
+		Schedule:    "every 1h",
+		Timeout:     "5m",
 		InputSchema: &Schema{
 			Type: "object",
 			Properties: map[string]*Schema{
@@ -82,11 +82,11 @@ func TestAgentDefinition_JSON_MarshalRoundtrip(t *testing.T) {
 
 func TestValidateOutput(t *testing.T) {
 	tests := []struct {
-		name     string
-		output   string
-		ct       ContentType
-		schema   *Schema
-		wantErr  bool
+		name    string
+		output  string
+		ct      ContentType
+		schema  *Schema
+		wantErr bool
 	}{
 		{"valid JSON", `{"key": "value"}`, ContentTypeJSON, nil, false},
 		{"invalid JSON", `not json`, ContentTypeJSON, nil, true},

@@ -120,12 +120,12 @@ type DocPlanner struct {
 
 // SectionMapping maps arc42 section numbers to their metadata.
 type SectionMapping struct {
-	Number       int
-	ActionName   string
-	TreeID       string
-	Filename     string
-	DependsOn    []int  // section numbers this depends on
-	SectionKey   string // world state key
+	Number     int
+	ActionName string
+	TreeID     string
+	Filename   string
+	DependsOn  []int  // section numbers this depends on
+	SectionKey string // world state key
 }
 
 // SectionMappings defines all 12 arc42 sections with their dependencies.

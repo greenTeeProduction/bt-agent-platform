@@ -14,10 +14,10 @@ import (
 
 // Metrics holds a snapshot of live dashboard data.
 type Metrics struct {
-	Timestamp int64                    `json:"timestamp"`
-	System    SystemMetrics            `json:"system"`
-	Trees     TreeMetrics              `json:"trees"`
-	Gardener  *GardenerMetrics         `json:"gardener,omitempty"`
+	Timestamp int64            `json:"timestamp"`
+	System    SystemMetrics    `json:"system"`
+	Trees     TreeMetrics      `json:"trees"`
+	Gardener  *GardenerMetrics `json:"gardener,omitempty"`
 }
 
 // SystemMetrics holds system health data.
@@ -31,12 +31,12 @@ type SystemMetrics struct {
 
 // DiskInfo holds disk usage for a mount point.
 type DiskInfo struct {
-	MountPoint string `json:"mount"`
-	TotalGB    int    `json:"total_gb"`
-	UsedGB     int    `json:"used_gb"`
-	PercentUse int    `json:"percent_use"`
-	AvailableGB int   `json:"available_gb"`
-	OK         bool   `json:"ok"`
+	MountPoint  string `json:"mount"`
+	TotalGB     int    `json:"total_gb"`
+	UsedGB      int    `json:"used_gb"`
+	PercentUse  int    `json:"percent_use"`
+	AvailableGB int    `json:"available_gb"`
+	OK          bool   `json:"ok"`
 }
 
 // MemInfo holds memory usage.
@@ -63,9 +63,9 @@ type GardenerMetrics struct {
 }
 
 var (
-	mu        sync.RWMutex
-	lastSnap  *Metrics
-	snapTime  time.Time
+	mu       sync.RWMutex
+	lastSnap *Metrics
+	snapTime time.Time
 )
 
 // Collect gathers live system and platform metrics.
@@ -153,10 +153,12 @@ func collectSystem() SystemMetrics {
 			}
 			return 0
 		}
-		total := parseMem("MemTotal") / 1024  // MB → GB
+		total := parseMem("MemTotal") / 1024 // MB → GB
 		avail := parseMem("MemAvailable") / 1024
 		used := total - avail
-		if used < 0 { used = 0 }
+		if used < 0 {
+			used = 0
+		}
 		pct := 0
 		if total > 0 {
 			pct = (used * 100) / total
@@ -173,9 +175,9 @@ func collectSystem() SystemMetrics {
 	out, err := exec.Command("sh", "-c", "ps aux | grep -c '[b]t-'").Output()
 	if err == nil {
 		s.Processes, err = strconv.Atoi(strings.TrimSpace(string(out)))
-	if err != nil {
-		s.Processes = 0
-	}
+		if err != nil {
+			s.Processes = 0
+		}
 	}
 
 	// Uptime
@@ -200,9 +202,9 @@ func loadGardenerMetrics() *GardenerMetrics {
 		return nil
 	}
 	var raw struct {
-		Cycles       int     `json:"total_cycles"`
-		Trees        int     `json:"active_trees"`
-		BestFitness  float64 `json:"best_fitness"`
+		Cycles      int     `json:"total_cycles"`
+		Trees       int     `json:"active_trees"`
+		BestFitness float64 `json:"best_fitness"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil

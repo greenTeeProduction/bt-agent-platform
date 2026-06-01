@@ -25,7 +25,7 @@ import (
 // FitnessScore evaluates a behavior tree on multiple dimensions, like Stockfish
 // evaluates a chess position on material + positional factors.
 type FitnessScore struct {
-	SuccessRate   float64 `json:"success_rate"`   // 0.0–1.0, most important (like material)
+	SuccessRate   float64 `json:"success_rate"`    // 0.0–1.0, most important (like material)
 	AvgDurationMs int64   `json:"avg_duration_ms"` // lower is better (like tempo)
 	NodeCount     int     `json:"node_count"`      // lower is better (like mobility)
 	Stability     float64 `json:"stability"`       // 1/variance of success rate (like king safety)
@@ -127,10 +127,10 @@ type TranspositionEntry struct {
 // TranspositionTable is a persistent cache mapping (tree, task) → evaluation.
 // Like Stockfish's TT, it avoids re-evaluating already-seen positions.
 type TranspositionTable struct {
-	mu       sync.RWMutex
-	entries  map[string]TranspositionEntry // key = tree_hash:task_sig
-	path     string
-	maxSize  int
+	mu      sync.RWMutex
+	entries map[string]TranspositionEntry // key = tree_hash:task_sig
+	path    string
+	maxSize int
 }
 
 // NewTranspositionTable creates or loads a TT from disk.
@@ -232,17 +232,17 @@ func hashTask(task string) string {
 
 // MutationCandidate is a proposed mutation with an ordering score.
 type MutationCandidate struct {
-	Op      evolution.MutationOp `json:"op"`
-	Score   float64              `json:"score"`   // higher = try first
-	Reason  string               `json:"reason"`
+	Op     evolution.MutationOp `json:"op"`
+	Score  float64              `json:"score"` // higher = try first
+	Reason string               `json:"reason"`
 }
 
 // OrderMutations ranks mutation candidates using Stockfish-like heuristics.
 // Priority: 1) wrap_retry on frequently-failing nodes (killer move)
-//           2) increase_retries on existing retries (history heuristic)
-//           3) add_condition to catch failures early
-//           4) prune dead/unreachable nodes
-//           5) add_fallback for selectors with few children
+//  2. increase_retries on existing retries (history heuristic)
+//  3. add_condition to catch failures early
+//  4. prune dead/unreachable nodes
+//  5. add_fallback for selectors with few children
 func OrderMutations(tree *evolution.SerializableNode, records []reflection.Record, fitness FitnessScore) []MutationCandidate {
 	var candidates []MutationCandidate
 
@@ -268,7 +268,7 @@ func OrderMutations(tree *evolution.SerializableNode, records []reflection.Recor
 	// Add pre-condition if failures are frequent (early cutoff)
 	if fitness.SuccessRate < 0.7 {
 		candidates = append(candidates, MutationCandidate{
-			Op:     evolution.MutationOp{Operation: "add_before", Target: "PreGate", Node: &evolution.SerializableNode{
+			Op: evolution.MutationOp{Operation: "add_before", Target: "PreGate", Node: &evolution.SerializableNode{
 				Type: "Condition", Name: "CheckConfidence", Description: "Skip if confidence too low",
 			}},
 			Score:  0.6,
@@ -289,7 +289,7 @@ func OrderMutations(tree *evolution.SerializableNode, records []reflection.Recor
 	selCount := countSelectors(tree)
 	if selCount > 0 && float64(selCount)/float64(fitness.NodeCount) < 0.15 {
 		candidates = append(candidates, MutationCandidate{
-			Op:     evolution.MutationOp{Operation: "add_fallback", Target: "OutcomeSelector", Node: &evolution.SerializableNode{
+			Op: evolution.MutationOp{Operation: "add_fallback", Target: "OutcomeSelector", Node: &evolution.SerializableNode{
 				Type: "Action", Name: "DefaultFallback", Description: "Generic fallback action",
 			}},
 			Score:  0.4,
@@ -327,14 +327,14 @@ func findFailureNodes(records []reflection.Record) []string {
 
 // DeepeningResult holds the result of iterative deepening mutation search.
 type DeepeningResult struct {
-	Depth         int                `json:"depth"`          // how deep we searched
-	BaseFitness   FitnessScore       `json:"base_fitness"`
-	BestMutation  *MutationCandidate `json:"best_mutation"`
-	BestFitness   *FitnessScore      `json:"best_fitness"`
-	Candidates    []MutationCandidate `json:"candidates_ordered"`
-	PrunedCount   int                `json:"pruned"`
-	TTProbes      int                `json:"tt_probes"`
-	TTProbeHits   int                `json:"tt_probes_hit"`
+	Depth        int                 `json:"depth"` // how deep we searched
+	BaseFitness  FitnessScore        `json:"base_fitness"`
+	BestMutation *MutationCandidate  `json:"best_mutation"`
+	BestFitness  *FitnessScore       `json:"best_fitness"`
+	Candidates   []MutationCandidate `json:"candidates_ordered"`
+	PrunedCount  int                 `json:"pruned"`
+	TTProbes     int                 `json:"tt_probes"`
+	TTProbeHits  int                 `json:"tt_probes_hit"`
 }
 
 // IterativeDeepening progressively tests deeper mutations.

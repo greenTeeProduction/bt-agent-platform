@@ -79,7 +79,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			if degraded := checkLLMHealth(deps.llmHealth, "bt_run_task"); degraded != nil {
 				return degraded
 			}
-			var params struct{ Task string `json:"task"` }
+			var params struct {
+				Task string `json:"task"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				btlog.Error("bt_run_task: invalid arguments", "error", err)
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf("Error: %v", err)}}}
@@ -185,7 +187,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"skill_path": {Type: "string", Description: "Path to SKILL.md"}},
 		[]string{"skill_path"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ SkillPath string `json:"skill_path"` }
+			var params struct {
+				SkillPath string `json:"skill_path"`
+			}
 			json.Unmarshal(args, &params)
 			agent, err := deps.agentFactory.CreateFromSkillDir(params.SkillPath)
 			if err != nil {
@@ -214,7 +218,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"agent": {Type: "string", Description: "Agent name: pitch_agent, earnings_reviewer, market_researcher, model_builder, meeting_prep, valuation_reviewer, gl_reconciler, month_end_closer, statement_auditor, kyc_screener"}},
 		[]string{"agent"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Agent string `json:"agent"` }
+			var params struct {
+				Agent string `json:"agent"`
+			}
 			json.Unmarshal(args, &params)
 			allTrees := finance.AllFinanceTrees()
 			tree, ok := allTrees[params.Agent]
@@ -253,7 +259,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"variant": {Type: "string", Description: "deep_research or quick_research"}},
 		[]string{"variant"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Variant string `json:"variant"` }
+			var params struct {
+				Variant string `json:"variant"`
+			}
 			json.Unmarshal(args, &params)
 			if params.Variant == "" {
 				params.Variant = "deep_research"
@@ -274,7 +282,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"tree": {Type: "string", Description: "Tree name"}},
 		[]string{"tree"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Tree string `json:"tree"` }
+			var params struct {
+				Tree string `json:"tree"`
+			}
 			json.Unmarshal(args, &params)
 			allTrees := domains.AllDomainTrees()
 			tree, ok := allTrees[params.Tree]
@@ -416,7 +426,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"task": {Type: "string", Description: "Task description to match against known trees"}},
 		[]string{"task"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Task string `json:"task"` }
+			var params struct {
+				Task string `json:"task"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -430,7 +442,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"capability": {Type: "string", Description: "Capability to search for (e.g., code_review, pitch, research)"}},
 		[]string{"capability"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Capability string `json:"capability"` }
+			var params struct {
+				Capability string `json:"capability"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -450,7 +464,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"task": {Type: "string", Description: "Task to discover or create a tree for"}},
 		[]string{"task"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Task string `json:"task"` }
+			var params struct {
+				Task string `json:"task"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -487,7 +503,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"category": {Type: "string", Description: "Category to list (finance, domain, research, startup, thinktank, evolution, core)"}},
 		[]string{"category"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Category string `json:"category"` }
+			var params struct {
+				Category string `json:"category"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -514,7 +532,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"tree": {Type: "string", Description: "Tree ID to explain (e.g., 'research:deep_research')"}},
 		[]string{"tree"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Tree string `json:"tree"` }
+			var params struct {
+				Tree string `json:"tree"`
+			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -592,7 +612,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"tree": {Type: "string", Description: "Tree ID to analyze"}},
 		[]string{"tree"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Tree string `json:"tree"` }
+			var params struct {
+				Tree string `json:"tree"`
+			}
 			json.Unmarshal(args, &params)
 			t := resolveTree(params.Tree)
 			if t == nil {
@@ -651,7 +673,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"topic": {Type: "string", Description: "Topic for thinktank analysis"}},
 		[]string{"topic"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Topic string `json:"topic"` }
+			var params struct {
+				Topic string `json:"topic"`
+			}
 			json.Unmarshal(args, &params)
 			data, _ := json.Marshal(map[string]interface{}{"topic": params.Topic, "status": "pipeline ready — use bt_thinktank_analyze + bt_startup_simulate"})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
@@ -831,7 +855,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{"agent": {Type: "string", Description: "Agent name"}},
 		[]string{"agent"},
 		func(args json.RawMessage) *mcp.ToolResult {
-			var params struct{ Agent string `json:"agent"` }
+			var params struct {
+				Agent string `json:"agent"`
+			}
 			json.Unmarshal(args, &params)
 			if err := deps.agentReg.Delete(params.Agent); err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
@@ -932,10 +958,10 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			entries := agentMem.Query(params.Category, params.Priority, params.Limit)
 			contextBlock := agentMem.ContextBlock()
 			data, _ := json.Marshal(map[string]interface{}{
-				"agent":    params.Agent,
-				"entries":  entries,
-				"context":  contextBlock,
-				"count":    len(entries),
+				"agent":   params.Agent,
+				"entries": entries,
+				"context": contextBlock,
+				"count":   len(entries),
 			})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})

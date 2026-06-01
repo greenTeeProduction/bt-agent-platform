@@ -20,10 +20,10 @@ type CrisisDetector struct {
 	EmergencyRate      float64 // μ_emergency, default 0.50
 
 	// Per-tree state
-	mu             sync.Mutex
-	stagnation     map[string]int     // treeName → consecutive epochs w/o improvement
-	lastBestFit    map[string]float64 // treeName → last best composite fitness
-	lastDiversity  float64            // most recent diversity score
+	mu            sync.Mutex
+	stagnation    map[string]int     // treeName → consecutive epochs w/o improvement
+	lastBestFit   map[string]float64 // treeName → last best composite fitness
+	lastDiversity float64            // most recent diversity score
 }
 
 // NewCrisisDetector creates a crisis detector with sensible defaults.
@@ -39,12 +39,12 @@ func NewCrisisDetector() *CrisisDetector {
 
 // CrisisState describes the current health of a tree's evolution cycle.
 type CrisisState struct {
-	TreeName              string
-	CurrentFitness        float64
-	LastBestFitness       float64
-	StagnationEpochs      int
-	BehavioralDiversity   float64
-	DiversityThreshold    float64
+	TreeName            string
+	CurrentFitness      float64
+	LastBestFitness     float64
+	StagnationEpochs    int
+	BehavioralDiversity float64
+	DiversityThreshold  float64
 }
 
 // Detect checks whether a crisis is occurring for a given tree.

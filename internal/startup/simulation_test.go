@@ -1,10 +1,10 @@
 package startup
 
 import (
-	"time"
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/llm"
 )
@@ -17,8 +17,12 @@ func testLLM() llm.LLM {
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) { return m.Generate(prompt) }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) { return m.Generate(prompt) }
+func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	return fmt.Sprintf("Mock response for: %.50s...", prompt), nil

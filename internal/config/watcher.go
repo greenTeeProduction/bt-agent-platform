@@ -35,17 +35,17 @@ type ChangeCallback func(*Config)
 //	watcher.Start()
 //	defer watcher.Stop()
 type ConfigWatcher struct {
-	mu            sync.Mutex
-	path          string
-	dotenvPath    string        // optional .env file to watch for hot-reload
-	interval      time.Duration
-	cbs           []ChangeCallback
-	stopCh        chan struct{}
-	running       bool
-	lastMod       time.Time
-	lastSize      int64         // file size for detecting changes within same timestamp second
-	lastDotEnvMod time.Time     // last .env file modification time
-	lastDotEnvSize int64        // last .env file size
+	mu             sync.Mutex
+	path           string
+	dotenvPath     string // optional .env file to watch for hot-reload
+	interval       time.Duration
+	cbs            []ChangeCallback
+	stopCh         chan struct{}
+	running        bool
+	lastMod        time.Time
+	lastSize       int64     // file size for detecting changes within same timestamp second
+	lastDotEnvMod  time.Time // last .env file modification time
+	lastDotEnvSize int64     // last .env file size
 }
 
 // NewConfigWatcher creates a watcher for the given config file.

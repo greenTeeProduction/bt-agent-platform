@@ -142,7 +142,7 @@ func TestValidateResponse_ValidObject(t *testing.T) {
 	route := &Route{
 		Responses: []RouteResponse{
 			{
-				StatusCode: 200,
+				StatusCode:  200,
 				Description: "ok",
 				Schema: ObjectSchema(map[string]*Schema{
 					"name": StringSchema("name"),
@@ -162,7 +162,7 @@ func TestValidateResponse_MissingRequiredField(t *testing.T) {
 	route := &Route{
 		Responses: []RouteResponse{
 			{
-				StatusCode: 200,
+				StatusCode:  200,
 				Description: "ok",
 				Schema: ObjectSchema(map[string]*Schema{
 					"name": StringSchema("name"),

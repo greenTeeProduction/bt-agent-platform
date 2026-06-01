@@ -46,21 +46,21 @@ type ConnPoolConfig struct {
 type ConnPool struct {
 	transport *http.Transport
 
-	mu         sync.Mutex
-	created    int64
+	mu          sync.Mutex
+	created     int64
 	maxObserved int
 }
 
 // ConnPoolStats provides a point-in-time snapshot of connection pool state.
 type ConnPoolStats struct {
-	Idle          int   `json:"idle"`           // idle connections in pool
-	InUse         int   `json:"in_use"`         // active connections
-	MaxIdle       int   `json:"max_idle"`       // max idle across all hosts
-	MaxIdlePerHost int  `json:"max_idle_per_host"` // max idle per host
-	MaxPerHost    int   `json:"max_per_host"`    // max total per host
-	MaxObserved   int   `json:"max_observed"`   // peak connections seen
-	Created       int64 `json:"created"`        // total connections created (cumulative)
-	IsShared      bool  `json:"is_shared"`      // true if pool is shared across executors
+	Idle           int   `json:"idle"`              // idle connections in pool
+	InUse          int   `json:"in_use"`            // active connections
+	MaxIdle        int   `json:"max_idle"`          // max idle across all hosts
+	MaxIdlePerHost int   `json:"max_idle_per_host"` // max idle per host
+	MaxPerHost     int   `json:"max_per_host"`      // max total per host
+	MaxObserved    int   `json:"max_observed"`      // peak connections seen
+	Created        int64 `json:"created"`           // total connections created (cumulative)
+	IsShared       bool  `json:"is_shared"`         // true if pool is shared across executors
 }
 
 // NewConnPool creates a connection pool with the given configuration.
@@ -94,15 +94,15 @@ func NewConnPool(cfg ConnPoolConfig) *ConnPool {
 	// Wrap dialer to track connection creation (works for plain HTTP and TLS)
 	baseDial := dialer.DialContext
 	cp.transport = &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           cp.trackDial(baseDial),
-		MaxIdleConns:          cfg.MaxIdleConns,
-		MaxIdleConnsPerHost:   cfg.MaxIdleConnsPerHost,
-		MaxConnsPerHost:       cfg.MaxConnsPerHost,
-		IdleConnTimeout:       cfg.IdleConnTimeout,
-		TLSHandshakeTimeout:   cfg.TLSHandshakeTimeout,
-		DisableKeepAlives:     cfg.DisableKeepAlives,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         cp.trackDial(baseDial),
+		MaxIdleConns:        cfg.MaxIdleConns,
+		MaxIdleConnsPerHost: cfg.MaxIdleConnsPerHost,
+		MaxConnsPerHost:     cfg.MaxConnsPerHost,
+		IdleConnTimeout:     cfg.IdleConnTimeout,
+		TLSHandshakeTimeout: cfg.TLSHandshakeTimeout,
+		DisableKeepAlives:   cfg.DisableKeepAlives,
+		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 
 	return cp

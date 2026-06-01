@@ -10,7 +10,7 @@ import (
 type ModelRole int
 
 const (
-	RoleExplorer ModelRole = iota // high throughput, local, generates many candidates
+	RoleExplorer  ModelRole = iota // high throughput, local, generates many candidates
 	RoleRefiner                    // high quality, cloud, refines top candidates
 	RoleEvaluator                  // evaluates and scores outputs
 )
@@ -30,9 +30,9 @@ func (r ModelRole) String() string {
 
 // EnsembleConfig configures a multi-model ensemble.
 type EnsembleConfig struct {
-	Explorer  LLM            // local Ollama — breadth
-	Refiner   LLM            // cloud DeepSeek — depth
-	Evaluator LLM            // either — scoring
+	Explorer  LLM // local Ollama — breadth
+	Refiner   LLM // cloud DeepSeek — depth
+	Evaluator LLM // either — scoring
 }
 
 // ModelEnsemble orchestrates multiple LLM backends for the evolution pipeline.
@@ -45,10 +45,10 @@ type ModelEnsemble struct {
 
 // EnsembleStats tracks per-role usage and performance.
 type EnsembleStats struct {
-	ExplorerCalls  int           `json:"explorer_calls"`
-	RefinerCalls   int           `json:"refiner_calls"`
-	EvaluatorCalls int           `json:"evaluator_calls"`
-	TotalTokens    int           `json:"total_tokens"`
+	ExplorerCalls  int                   `json:"explorer_calls"`
+	RefinerCalls   int                   `json:"refiner_calls"`
+	EvaluatorCalls int                   `json:"evaluator_calls"`
+	TotalTokens    int                   `json:"total_tokens"`
 	AvgLatencyMs   map[ModelRole]float64 `json:"avg_latency_ms"`
 }
 
@@ -207,13 +207,13 @@ func (me *ModelEnsemble) callCount(role ModelRole) float64 {
 
 // EvolutionContext holds rich context for LLM mutation prompts.
 type EvolutionContext struct {
-	CurrentTree     string              `json:"current_tree"`      // serialized tree
-	CurrentFitness  float64             `json:"current_fitness"`   // scalar composite
-	PriorSolutions  []PriorSolution     `json:"prior_solutions"`   // top-N from history
-	EvaluatorBreakdown map[string]float64 `json:"eval_breakdown"`  // per-metric scores
-	ResearchHints   []string            `json:"research_hints"`    // paper citations
-	Domain          string              `json:"domain"`            // godev, research, etc.
-	MutationHistory []string            `json:"mutation_history"`  // recent mutation descriptions
+	CurrentTree        string             `json:"current_tree"`     // serialized tree
+	CurrentFitness     float64            `json:"current_fitness"`  // scalar composite
+	PriorSolutions     []PriorSolution    `json:"prior_solutions"`  // top-N from history
+	EvaluatorBreakdown map[string]float64 `json:"eval_breakdown"`   // per-metric scores
+	ResearchHints      []string           `json:"research_hints"`   // paper citations
+	Domain             string             `json:"domain"`           // godev, research, etc.
+	MutationHistory    []string           `json:"mutation_history"` // recent mutation descriptions
 }
 
 // PriorSolution represents a previously successful tree.
