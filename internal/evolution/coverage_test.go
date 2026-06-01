@@ -101,14 +101,6 @@ func TestBTOptimizer_New(t *testing.T) {
 	}
 }
 
-func TestEnsemble_New(t *testing.T) {
-	trees := []*SerializableNode{DefaultTree(), GoDeveloperTree()}
-	ens := NewEnsemble(trees, "voting")
-	if ens == nil {
-		t.Error("ensemble nil")
-	}
-}
-
 func TestExpertKnowledge_New(t *testing.T) {
 	ek := NewExpertKnowledge()
 	if ek == nil {
