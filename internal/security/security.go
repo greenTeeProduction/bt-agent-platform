@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -726,6 +727,123 @@ func CSRFMiddleware(tokenFn func() string) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// ─── Bearer Token Authentication ────────────────────────────────────────────
+
+// bearerPrincipalKey is a context key for the authenticated principal from bearer auth.
+type bearerPrincipalKey struct{}
+
+// TokenValidator validates a bearer token and returns the authenticated principal/subject.
+// Returns an empty string and a non-nil error if the token is invalid, expired, or revoked.
+// This interface supports pluggable backends: static tokens, JWT, OAuth2/OIDC introspection.
+type TokenValidator func(ctx context.Context, token string) (subject string, err error)
+
+// BearerAuthMiddleware validates Bearer tokens from the Authorization header.
+// It extracts the token, calls the provided TokenValidator, and injects the
+// authenticated principal into the request context on success.
+//
+// Requests without an Authorization header pass through unauthenticated —
+// use with an auth-required wrapper if enforcement is needed. Invalid tokens
+// receive a 401 Unauthorized response with a structured JSON error body,
+// a WWW-Authenticate challenge header, and an audit security event.
+//
+// The authenticated principal is accessible via BearerPrincipal(ctx).
+func BearerAuthMiddleware(validator TokenValidator) func(http.Handler) http.Handler {
+	if validator == nil {
+		validator = func(_ context.Context, _ string) (string, error) {
+			return "", nil // no-op validator — all tokens accepted
+		}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				// No auth header — pass through unauthenticated
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Must start with "Bearer "
+			if len(authHeader) < 7 || !strings.EqualFold(authHeader[:7], "Bearer ") {
+				AuditSecurityEvent(r.Context(), "bearer_auth_malformed",
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "invalid_request",
+					"message": "Authorization header must use Bearer scheme.",
+				})
+				return
+			}
+
+			token := strings.TrimSpace(authHeader[7:])
+			if token == "" {
+				AuditSecurityEvent(r.Context(), "bearer_auth_malformed",
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "invalid_request",
+					"message": "Authorization header must use Bearer scheme with a non-empty token.",
+				})
+				return
+			}
+			subject, err := validator(r.Context(), token)
+			if err != nil {
+				AuditSecurityEvent(r.Context(), "bearer_auth_failed",
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+					"error", err.Error(),
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("WWW-Authenticate", `Bearer realm="bt-platform", error="invalid_token", error_description="`+err.Error()+`"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":             "invalid_token",
+					"error_description": err.Error(),
+				})
+				return
+			}
+
+			// Inject authenticated principal into context
+			ctx := context.WithValue(r.Context(), bearerPrincipalKey{}, subject)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// BearerPrincipal returns the authenticated principal from a bearer token,
+// or an empty string if no bearer authentication was performed.
+func BearerPrincipal(ctx context.Context) string {
+	if p, ok := ctx.Value(bearerPrincipalKey{}).(string); ok {
+		return p
+	}
+	return ""
+}
+
+// StaticTokenValidator returns a TokenValidator that checks against a fixed set
+// of valid tokens mapped to subjects. This is suitable for development, testing,
+// or deployments with a small number of pre-provisioned API tokens.
+//
+// The resulting validator is constant-time safe only for the map lookup step;
+// token values themselves are compared with standard string equality.
+// For production, use a JWT validator or OAuth2 token introspection endpoint.
+func StaticTokenValidator(tokens map[string]string) TokenValidator {
+	valid := make(map[string]string, len(tokens))
+	for token, subject := range tokens {
+		valid[token] = subject
+	}
+	return func(_ context.Context, token string) (string, error) {
+		if subject, ok := valid[token]; ok {
+			return subject, nil
+		}
+		return "", fmt.Errorf("invalid or expired token")
 	}
 }
 

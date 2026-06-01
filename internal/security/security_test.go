@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1082,5 +1083,295 @@ func TestContentTypeMiddleware_EmptyAllowedTypesDefaultsToJSON(t *testing.T) {
 	handler.ServeHTTP(delRec, delReq)
 	if delRec.Code != http.StatusUnsupportedMediaType {
 		t.Errorf("expected 415 for form data on DELETE, got %d", delRec.Code)
+	}
+}
+
+// ─── Bearer Token Authentication Tests ──────────────────────────────────────
+
+func TestBearerAuthMiddleware_NoHeaderPassesThrough(t *testing.T) {
+	validator := func(_ context.Context, token string) (string, error) {
+		return "", fmt.Errorf("should not be called")
+	}
+	mw := BearerAuthMiddleware(validator)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for no auth header, got %d", rec.Code)
+	}
+}
+
+func TestBearerAuthMiddleware_ValidToken(t *testing.T) {
+	validator := StaticTokenValidator(map[string]string{
+		"test-token-abc123": "user-42",
+	})
+	mw := BearerAuthMiddleware(validator)
+	var capturedPrincipal string
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPrincipal = BearerPrincipal(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer test-token-abc123")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+	if capturedPrincipal != "user-42" {
+		t.Errorf("expected principal 'user-42', got %q", capturedPrincipal)
+	}
+}
+
+func TestBearerAuthMiddleware_InvalidToken(t *testing.T) {
+	validator := StaticTokenValidator(map[string]string{
+		"valid-token": "user-1",
+	})
+	mw := BearerAuthMiddleware(validator)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called for invalid token")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+	wwwAuth := rec.Header().Get("WWW-Authenticate")
+	if wwwAuth == "" {
+		t.Error("expected WWW-Authenticate header")
+	}
+}
+
+func TestBearerAuthMiddleware_MalformedHeader(t *testing.T) {
+	validator := func(_ context.Context, _ string) (string, error) {
+		return "user", nil
+	}
+	mw := BearerAuthMiddleware(validator)
+
+	tests := []struct {
+		name       string
+		value      string
+		wantStatus int
+	}{
+		{"basic auth", "Basic dXNlcjpwYXNz", http.StatusBadRequest},
+		{"empty bearer", "Bearer ", http.StatusBadRequest},
+		{"no scheme", "test-token", http.StatusBadRequest},
+		{"short string", "B", http.StatusBadRequest},
+		{"mixed case Bearer", "bearer token123", http.StatusOK}, // case-insensitive per RFC
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.wantStatus != http.StatusOK {
+					t.Error("handler should not be called for malformed header")
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+			if tt.value != "" {
+				req.Header.Set("Authorization", tt.value)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("expected status %d for %q, got %d", tt.wantStatus, tt.name, rec.Code)
+			}
+		})
+	}
+}
+
+func TestBearerAuthMiddleware_TrimmedToken(t *testing.T) {
+	validator := StaticTokenValidator(map[string]string{
+		"my-token": "user-99",
+	})
+	mw := BearerAuthMiddleware(validator)
+	var capturedPrincipal string
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPrincipal = BearerPrincipal(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Token with leading/trailing whitespace — should be trimmed
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer   my-token   ")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+	if capturedPrincipal != "user-99" {
+		t.Errorf("expected principal 'user-99', got %q", capturedPrincipal)
+	}
+}
+
+func TestBearerAuthMiddleware_NilValidatorDefault(t *testing.T) {
+	// nil validator: all tokens accepted
+	mw := BearerAuthMiddleware(nil)
+	var principal string
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal = BearerPrincipal(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer anything")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for nil validator, got %d", rec.Code)
+	}
+	// nil validator returns "" subject
+	if principal != "" {
+		t.Errorf("expected empty principal for nil validator, got %q", principal)
+	}
+}
+
+func TestBearerAuthMiddleware_CaseInsensitiveBearer(t *testing.T) {
+	validator := StaticTokenValidator(map[string]string{
+		"tok": "u1",
+	})
+	mw := BearerAuthMiddleware(validator)
+	var principal string
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal = BearerPrincipal(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for _, prefix := range []string{"Bearer ", "bearer ", "BEARER "} {
+		t.Run(prefix, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+			req.Header.Set("Authorization", prefix+"tok")
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected 200 OK for %q, got %d", prefix, rec.Code)
+			}
+			if principal != "u1" {
+				t.Errorf("expected principal 'u1' for %q, got %q", prefix, principal)
+			}
+		})
+	}
+}
+
+func TestBearerPrincipal_NoAuth(t *testing.T) {
+	// Without going through BearerAuthMiddleware, BearerPrincipal returns ""
+	ctx := context.Background()
+	if p := BearerPrincipal(ctx); p != "" {
+		t.Errorf("expected empty principal for no-auth context, got %q", p)
+	}
+}
+
+func TestBearerPrincipal_WithInvalidType(t *testing.T) {
+	// If someone stores something else under the bearer key, returns ""
+	ctx := context.WithValue(context.Background(), bearerPrincipalKey{}, 42)
+	if p := BearerPrincipal(ctx); p != "" {
+		t.Errorf("expected empty principal for non-string value, got %q", p)
+	}
+}
+
+func TestStaticTokenValidator_Basic(t *testing.T) {
+	v := StaticTokenValidator(map[string]string{
+		"tok-a": "alice",
+		"tok-b": "bob",
+	})
+
+	tests := []struct {
+		token   string
+		subject string
+		err     bool
+	}{
+		{"tok-a", "alice", false},
+		{"tok-b", "bob", false},
+		{"tok-c", "", true},
+		{"", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.token, func(t *testing.T) {
+			subject, err := v(context.Background(), tt.token)
+			if tt.err && err == nil {
+				t.Error("expected error")
+			}
+			if !tt.err && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if subject != tt.subject {
+				t.Errorf("expected subject %q, got %q", tt.subject, subject)
+			}
+		})
+	}
+}
+
+func TestStaticTokenValidator_EmptyMap(t *testing.T) {
+	v := StaticTokenValidator(map[string]string{})
+	_, err := v(context.Background(), "anything")
+	if err == nil {
+		t.Error("expected error for empty token map")
+	}
+}
+
+func TestBearerAuthMiddleware_ErrorResponseFormat(t *testing.T) {
+	validator := func(_ context.Context, _ string) (string, error) {
+		return "", fmt.Errorf("token expired at 2026-01-01")
+	}
+	mw := BearerAuthMiddleware(validator)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/data", nil)
+	req.Header.Set("Authorization", "Bearer old-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rec.Code)
+	}
+
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		t.Errorf("expected JSON content-type, got %q", ct)
+	}
+
+	wwwAuth := rec.Header().Get("WWW-Authenticate")
+	if !strings.Contains(wwwAuth, "invalid_token") {
+		t.Errorf("WWW-Authenticate missing error type: %q", wwwAuth)
+	}
+	if !strings.Contains(wwwAuth, "token expired") {
+		t.Errorf("WWW-Authenticate missing error description: %q", wwwAuth)
+	}
+}
+
+func TestBearerAuthMiddleware_EmptyToken(t *testing.T) {
+	validator := StaticTokenValidator(map[string]string{"x": "y"})
+	mw := BearerAuthMiddleware(validator)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called for empty token")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer ")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Empty token rejected as malformed (400) per RFC 6750
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for empty token, got %d", rec.Code)
 	}
 }
