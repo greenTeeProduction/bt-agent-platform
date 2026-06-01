@@ -44,6 +44,17 @@ type validationReport struct {
 	Results        []treeResult `json:"results"`
 }
 
+type evidenceVerificationReport struct {
+	ReportPath     string    `json:"report_path"`
+	VerifiedAt     time.Time `json:"verified_at"`
+	ExpectedTrees  int       `json:"expected_trees"`
+	ValidatedTrees int       `json:"validated_trees"`
+	LLMProvider    string    `json:"llm_provider"`
+	Checks         int       `json:"checks"`
+	Valid          bool      `json:"valid"`
+	Errors         []string  `json:"errors,omitempty"`
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -58,6 +69,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	jsonOnly := fs.Bool("json", false, "emit only JSON output")
 	includeResults := fs.Bool("include-results", false, "include per-task results in JSON report")
 	outputPath := fs.String("output", "", "optional path to write JSON report")
+	verifyReport := fs.String("verify-report", "", "validate an existing JSON evidence report and exit without invoking Ollama")
+	expectTrees := fs.Int("expect-trees", 0, "minimum validated tree count required when verifying a report; 0 accepts the report count")
+	maxAgeHours := fs.Float64("max-age-hours", 168, "maximum report age in hours when verifying; 0 disables age check")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -65,9 +79,41 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "max-trees must be >= 0")
 		return 2
 	}
+	if *expectTrees < 0 {
+		fmt.Fprintln(stderr, "expect-trees must be >= 0")
+		return 2
+	}
+	if *maxAgeHours < 0 {
+		fmt.Fprintln(stderr, "max-age-hours must be >= 0")
+		return 2
+	}
 	if *minSuccess < 0 || *minSuccess > 1 {
 		fmt.Fprintln(stderr, "min-success must be between 0 and 1")
 		return 2
+	}
+	if *verifyReport != "" {
+		report, err := verifyEvidenceReport(*verifyReport, *expectTrees, time.Duration(*maxAgeHours*float64(time.Hour)), time.Now())
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to verify report: %v\n", err)
+			return 2
+		}
+		if !*jsonOnly {
+			status := "FAIL"
+			if report.Valid {
+				status = "PASS"
+			}
+			fmt.Fprintf(stdout, "BT tree integration evidence: %s (%d checks, report=%s)\n", status, report.Checks, report.ReportPath)
+			for _, errMsg := range report.Errors {
+				fmt.Fprintf(stdout, "- %s\n", errMsg)
+			}
+		}
+		if code := encodeJSON(stdout, stderr, report); code != 0 {
+			return code
+		}
+		if !report.Valid {
+			return 1
+		}
+		return 0
 	}
 
 	reg := gardener.NewRegistry(*storageDir)
@@ -192,6 +238,54 @@ func writeJSONFile(path string, report validationReport) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+
+func verifyEvidenceReport(path string, expectedTrees int, maxAge time.Duration, now time.Time) (evidenceVerificationReport, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return evidenceVerificationReport{}, err
+	}
+	var report validationReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return evidenceVerificationReport{}, err
+	}
+	verification := evidenceVerificationReport{
+		ReportPath:     path,
+		VerifiedAt:     now,
+		ExpectedTrees:  expectedTrees,
+		ValidatedTrees: report.ValidatedTrees,
+		LLMProvider:    report.LLMProvider,
+		Valid:          true,
+	}
+	check := func(ok bool, msg string) {
+		verification.Checks++
+		if !ok {
+			verification.Valid = false
+			verification.Errors = append(verification.Errors, msg)
+		}
+	}
+
+	if expectedTrees == 0 {
+		expectedTrees = report.TotalTrees
+		verification.ExpectedTrees = expectedTrees
+	}
+	check(report.Passed, "report did not pass")
+	check(report.LLMProvider == "ollama", "report was not produced by real Ollama")
+	check(report.TotalTrees > 0, "report has no registered trees")
+	check(report.ValidatedTrees >= expectedTrees, fmt.Sprintf("validated %d trees, expected at least %d", report.ValidatedTrees, expectedTrees))
+	check(report.PassedTrees == report.ValidatedTrees, fmt.Sprintf("passed %d of %d validated trees", report.PassedTrees, report.ValidatedTrees))
+	check(report.FailedTrees == 0, fmt.Sprintf("report has %d failed trees", report.FailedTrees))
+	check(len(report.Results) == report.ValidatedTrees, fmt.Sprintf("report has %d result rows for %d validated trees", len(report.Results), report.ValidatedTrees))
+	check(!report.StartedAt.IsZero() && !report.FinishedAt.IsZero() && !report.FinishedAt.Before(report.StartedAt), "report timestamps are missing or invalid")
+	if maxAge > 0 {
+		check(!report.FinishedAt.IsZero() && now.Sub(report.FinishedAt) <= maxAge, fmt.Sprintf("report is older than %s", maxAge))
+	}
+	for _, result := range report.Results {
+		check(result.Passed, fmt.Sprintf("tree %s failed evidence gate", result.Name))
+		check(result.SuccessRate >= report.MinSuccessRate, fmt.Sprintf("tree %s success %.2f below min %.2f", result.Name, result.SuccessRate, report.MinSuccessRate))
+		check(result.Tasks > 0, fmt.Sprintf("tree %s has no benchmark tasks", result.Name))
+	}
+	return verification, nil
 }
 
 func defaultStorageDir() string {
