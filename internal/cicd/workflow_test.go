@@ -19,7 +19,7 @@ func TestValidateWorkflowsRepositoryPasses(t *testing.T) {
 		}
 		t.Fatalf("expected repository workflows to pass, got %d failed", report.Failed)
 	}
-	if report.Passed < 20 {
+	if report.Passed < 22 {
 		t.Fatalf("expected comprehensive check coverage, got %d checks", report.Passed)
 	}
 }
@@ -79,10 +79,10 @@ jobs:
   lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
   security: {steps: [{run: 'echo no scanners'}]}
   test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
-  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener'}]}
+  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]}
   release:
     needs: [lint, security, test, build]
-    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./...'}]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
 `)
 	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
 	report, err := ValidateWorkflows(root)
@@ -135,10 +135,10 @@ jobs:
   lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
   security: {steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]}
   test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
-  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener'}]}
+  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]}
   release:
     needs: [lint, security, test, build]
-    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./...'}]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
 `
 }
 
