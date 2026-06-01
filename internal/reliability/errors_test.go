@@ -545,3 +545,378 @@ func TestClassifyError_SubstringMatch(t *testing.T) {
 		t.Logf("authorization error classified as: %s", cat)
 	}
 }
+
+// ─── RetryPolicy Tests ───────────────────────────────────────────────────────
+
+func TestRetryPolicy_Success(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestRetryPolicy_Exhausted(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return errors.New("connection refused")
+	})
+	if err == nil {
+		t.Fatal("expected error after exhaustion")
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls, got %d", calls)
+	}
+	if !strings.Contains(err.Error(), "retry exhausted") {
+		t.Errorf("error should mention exhaustion: %v", err)
+	}
+}
+
+func TestRetryPolicy_EventualSuccess(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		if calls < 3 {
+			return errors.New("connection refused")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls (2 failures + 1 success), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_ValidationFailsFast(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return errors.New("validation failed: missing required field")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("validation errors should fail fast (1 call), got %d", calls)
+	}
+	if !strings.Contains(err.Error(), "retry refused") {
+		t.Errorf("error should mention retry refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention category: %v", err)
+	}
+}
+
+func TestRetryPolicy_AuthFailsFast(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return errors.New("unauthorized: invalid api key")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("auth errors should fail fast (1 call), got %d", calls)
+	}
+	if !strings.Contains(err.Error(), "retry refused") {
+		t.Errorf("error should mention retry refused: %v", err)
+	}
+}
+
+func TestRetryPolicy_ResourceExhaustionFailsFast(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return errors.New("no space left on device")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("resource errors should fail fast (1 call), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_NetworkRetries(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	policy.Execute(func() error {
+		calls++
+		return &net.OpError{Op: "dial", Err: errors.New("connection refused")}
+	})
+	if calls != 3 {
+		t.Errorf("expected 3 calls for network error, got %d", calls)
+	}
+}
+
+func TestRetryPolicy_TimeoutRetries(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+
+	calls := 0
+	policy.Execute(func() error {
+		calls++
+		return os.ErrDeadlineExceeded
+	})
+	if calls != 3 {
+		t.Errorf("expected 3 calls for timeout error, got %d", calls)
+	}
+}
+
+func TestRetryPolicy_LLMRetries(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	policy.Execute(func() error {
+		calls++
+		return errors.New("ollama: model not found")
+	})
+	if calls != 3 {
+		t.Errorf("expected 3 calls for LLM error, got %d", calls)
+	}
+}
+
+func TestRetryPolicy_UnknownFailsFast_Default(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return errors.New("some completely unknown error")
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("unknown errors should fail fast by default (1 call), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_UnknownRetries_WhenEnabled(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+	policy.RetryUnknown = true
+
+	calls := 0
+	policy.Execute(func() error {
+		calls++
+		return errors.New("some completely unknown error")
+	})
+	if calls != 3 {
+		t.Errorf("unknown errors should retry when RetryUnknown=true (3 calls), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_OnRetryCallback(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+
+	var retryAttempts []int
+	var retryCategories []ErrorCategory
+
+	policy.OnRetry = func(attempt int, cat ErrorCategory, delay time.Duration) {
+		retryAttempts = append(retryAttempts, attempt)
+		retryCategories = append(retryCategories, cat)
+	}
+
+	policy.Execute(func() error {
+		return errors.New("connection timed out")
+	})
+
+	if len(retryAttempts) != 2 {
+		t.Errorf("expected OnRetry called 2 times (attempts 1→2, 2→3), got %d", len(retryAttempts))
+	}
+	for _, cat := range retryCategories {
+		if cat != ErrCatTimeout {
+			t.Errorf("expected timeout category, got %s", cat)
+		}
+	}
+}
+
+func TestRetryPolicy_DelayForCategory_Defaults(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 3}
+	delay := policy.delayForCategory(1, ErrCatNetwork)
+	if delay != 1*time.Second {
+		t.Errorf("default base should be 1s, got %v", delay)
+	}
+}
+
+func TestRetryPolicy_DelayForCategory_LLMDefault(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 3, Base: 500 * time.Millisecond}
+	delay := policy.delayForCategory(1, ErrCatLLM)
+	if delay != 1*time.Second {
+		t.Errorf("LLM default should use 2× Base for attempt 1 (2×500ms=1s), got %v", delay)
+	}
+}
+
+func TestRetryPolicy_DelayForCategory_LLMBaseSet(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 3, Base: 100 * time.Millisecond, LLMBase: 500 * time.Millisecond}
+	delay := policy.delayForCategory(1, ErrCatLLM)
+	if delay != 500*time.Millisecond {
+		t.Errorf("explicit LLMBase should be 500ms, got %v", delay)
+	}
+}
+
+func TestRetryPolicy_DelayForCategory_ExponentialGrowth(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 5, Base: 100 * time.Millisecond, MaxDelay: 10 * time.Second}
+
+	d1 := policy.delayForCategory(1, ErrCatNetwork)
+	d2 := policy.delayForCategory(2, ErrCatNetwork)
+	d3 := policy.delayForCategory(3, ErrCatNetwork)
+
+	if d1 != 100*time.Millisecond {
+		t.Errorf("attempt 1: expected 100ms, got %v", d1)
+	}
+	if d2 != 200*time.Millisecond {
+		t.Errorf("attempt 2: expected 200ms, got %v", d2)
+	}
+	if d3 != 400*time.Millisecond {
+		t.Errorf("attempt 3: expected 400ms, got %v", d3)
+	}
+}
+
+func TestRetryPolicy_MaxDelayCap(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 10, Base: 5 * time.Second, MaxDelay: 30 * time.Second}
+
+	delay := policy.delayForCategory(5, ErrCatNetwork)
+	if delay != 30*time.Second {
+		t.Errorf("delay should be capped at 30s, got %v", delay)
+	}
+}
+
+func TestRetryPolicy_CategorizedError_Retryable(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 3
+	policy.Base = time.Millisecond
+	policy.LLMBase = time.Millisecond
+
+	calls := 0
+	policy.Execute(func() error {
+		calls++
+		return NewCategorizedError(ErrCatNetwork, errors.New("dial tcp: connection refused"))
+	})
+	if calls != 3 {
+		t.Errorf("CategorizedError(network) should retry (3 calls), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_CategorizedError_NotRetryable(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	policy.MaxRetries = 5
+
+	calls := 0
+	err := policy.Execute(func() error {
+		calls++
+		return NewCategorizedError(ErrCatValidation, errors.New("schema check failed"))
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("CategorizedError(validation) should fail fast (1 call), got %d", calls)
+	}
+}
+
+func TestRetryPolicy_NilError(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	err := policy.Execute(func() error { return nil })
+	if err != nil {
+		t.Fatalf("nil error should succeed: %v", err)
+	}
+}
+
+func TestRetryPolicy_ExecuteWithPolicy(t *testing.T) {
+	calls := 0
+	err := ExecuteWithPolicy(func() error {
+		calls++
+		if calls < 2 {
+			return errors.New("connection refused")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 calls, got %d", calls)
+	}
+}
+
+func TestRetryPolicy_DefaultRetryPolicy_Values(t *testing.T) {
+	p := DefaultRetryPolicy()
+	if p.MaxRetries != 3 {
+		t.Errorf("expected MaxRetries=3, got %d", p.MaxRetries)
+	}
+	if p.Base != 1*time.Second {
+		t.Errorf("expected Base=1s, got %v", p.Base)
+	}
+	if p.MaxDelay != 30*time.Second {
+		t.Errorf("expected MaxDelay=30s, got %v", p.MaxDelay)
+	}
+	if p.LLMBase != 2*time.Second {
+		t.Errorf("expected LLMBase=2s, got %v", p.LLMBase)
+	}
+	if p.RetryUnknown {
+		t.Error("expected RetryUnknown=false by default")
+	}
+}
+
+func TestRetryPolicy_RetryRefusedWrapsError(t *testing.T) {
+	policy := DefaultRetryPolicy()
+	origErr := errors.New("validation failed: bad request")
+	err := policy.Execute(func() error { return origErr })
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, origErr) {
+		t.Errorf("retry refused error should wrap original via %%w: got %v", err)
+	}
+	var catErr *CategorizedError
+	if errors.As(err, &catErr) {
+		t.Logf("inner error is CategorizedError: %v", catErr)
+	}
+}

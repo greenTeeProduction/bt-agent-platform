@@ -7,11 +7,13 @@ package reliability
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ErrorCategory classifies errors into actionable groups for
@@ -301,4 +303,126 @@ func isLLMError(lower string) bool {
 func contextDeadlineExceeded() error {
 	// We use os.ErrDeadlineExceeded as a proxy — it has the same semantics.
 	return os.ErrDeadlineExceeded
+}
+
+// ─── Retry Policy ────────────────────────────────────────────────────────────
+
+// RetryPolicy defines category-aware retry behavior. Different error
+// categories get different treatment: network errors retry with backoff,
+// validation errors fail immediately, LLM errors retry with longer base delay.
+type RetryPolicy struct {
+	// MaxRetries is the maximum number of retry attempts (default: 3).
+	MaxRetries int
+
+	// Base is the initial backoff delay (default: 1s).
+	Base time.Duration
+
+	// MaxDelay caps the exponential backoff (default: 30s).
+	MaxDelay time.Duration
+
+	// LLMBase is the initial delay for LLM errors (default: 2× Base).
+	// LLM inference failures often resolve after a short wait.
+	LLMBase time.Duration
+
+	// RetryUnknown controls whether unknown-category errors are retried.
+	// When false (default), unknown errors fail immediately to be safe.
+	RetryUnknown bool
+
+	// OnRetry is an optional callback invoked before each retry attempt.
+	// Receives: attempt number (1-indexed), error category, next delay.
+	OnRetry func(attempt int, category ErrorCategory, delay time.Duration)
+}
+
+// DefaultRetryPolicy returns a sensible production policy:
+//
+//	Network/Timeout: 3 retries, 1s→2s→4s backoff
+//	LLM: 3 retries, 2s→4s→8s backoff
+//	Validation/Auth/ResourceExhausted: fail immediately
+//	Unknown: fail immediately (conservative)
+func DefaultRetryPolicy() *RetryPolicy {
+	return &RetryPolicy{
+		MaxRetries:   3,
+		Base:         1 * time.Second,
+		MaxDelay:     30 * time.Second,
+		LLMBase:      2 * time.Second,
+		RetryUnknown: false,
+	}
+}
+
+// Execute runs fn with category-aware retry. It classifies the error
+// from each attempt and decides whether to retry based on the category.
+//
+// Non-retryable categories (Validation, Auth, ResourceExhausted) return
+// immediately with a wrapped error indicating the category and that
+// retry was refused.
+//
+// Network and Timeout errors use exponential backoff. LLM errors use
+// a longer base delay (LLMBase). Unknown errors are treated according
+// to RetryUnknown.
+func (p *RetryPolicy) Execute(fn func() error) error {
+	var lastErr error
+	var lastCat ErrorCategory
+
+	for attempt := 1; attempt <= p.MaxRetries; attempt++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+		lastCat = ClassifyError(err)
+
+		// Check if this category is retryable.
+		if !lastCat.IsRetryable() {
+			// Also check unknown — treated specially per RetryUnknown.
+			if lastCat == ErrCatUnknown && p.RetryUnknown {
+				// Fall through to retry logic.
+			} else {
+				return fmt.Errorf("retry refused for %s error: %w", lastCat, err)
+			}
+		}
+
+		// Don't sleep on the last attempt.
+		if attempt >= p.MaxRetries {
+			break
+		}
+
+		// Compute backoff delay based on category.
+		delay := p.delayForCategory(attempt, lastCat)
+
+		if p.OnRetry != nil {
+			p.OnRetry(attempt, lastCat, delay)
+		}
+
+		time.Sleep(delay)
+	}
+
+	return fmt.Errorf("retry exhausted after %d attempts (last: %s): %w",
+		p.MaxRetries, lastCat, lastErr)
+}
+
+// delayForCategory returns the backoff delay for a given attempt and category.
+func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory) time.Duration {
+	base := p.Base
+	if base <= 0 {
+		base = 1 * time.Second
+	}
+	if cat == ErrCatLLM {
+		if p.LLMBase > 0 {
+			base = p.LLMBase
+		} else {
+			base = 2 * base
+		}
+	}
+	maxDelay := p.MaxDelay
+	if maxDelay <= 0 {
+		maxDelay = 30 * time.Second
+	}
+	return Backoff(attempt, base, maxDelay)
+}
+
+// ExecuteWithPolicy is a convenience wrapper that creates a DefaultRetryPolicy
+// and calls Execute. Equivalent to DefaultRetryPolicy().Execute(fn).
+func ExecuteWithPolicy(fn func() error) error {
+	return DefaultRetryPolicy().Execute(fn)
 }

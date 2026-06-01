@@ -321,7 +321,9 @@ func main() {
 			return "failure", "", fmt.Errorf("no tree found for agent %s", ctx.AgentName)
 		}
 
-		err = reliability.RetryWithBackoff(3, 1*time.Second, 30*time.Second, func() error {
+		policy := reliability.DefaultRetryPolicy()
+		policy.RetryUnknown = true // retry unknown errors to match legacy behavior
+		err = policy.Execute(func() error {
 			bb := &engine.Blackboard{Task: task, LLM: llmClient}
 			bt := engine.BuildTree(tree, bb)
 			_ = engine.RunTask(bb, bt)
