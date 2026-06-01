@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -185,6 +186,71 @@ func init() {
 	})
 	RegisterAction("MarkSuccessful", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.Outcome = string(reflection.Success)
+		return 1
+	})
+	RegisterAction("HealthCheckAgent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		var report strings.Builder
+		report.WriteString("## System Health Report\n\n")
+		// Disk usage
+		dfOut, err := exec.Command("df", "-h", "/", "/mnt/ssd").CombinedOutput()
+		if err == nil {
+			report.WriteString("### Disk\n```\n")
+			report.Write(dfOut)
+			report.WriteString("```\n\n")
+		}
+		// Memory
+		freeOut, err := exec.Command("free", "-m").CombinedOutput()
+		if err == nil {
+			report.WriteString("### Memory\n```\n")
+			report.Write(freeOut)
+			report.WriteString("```\n\n")
+		}
+		// BT processes
+		psOut, err := exec.Command("bash", "-c", "ps aux | grep '[b]t-' | awk '{print $11, $2, $3, $4}'").CombinedOutput()
+		if err == nil {
+			report.WriteString("### BT Processes\n```\n")
+			report.Write(psOut)
+			report.WriteString("```\n\n")
+		}
+		// Load
+		uptimeOut, err := exec.Command("uptime").CombinedOutput()
+		if err == nil {
+			report.WriteString("### Load\n```\n")
+			report.Write(uptimeOut)
+			report.WriteString("```\n")
+		}
+		bb.Result = report.String()
+		bb.Outcome = "success"
+		return 1
+	})
+	RegisterAction("MetricsCollectionAgent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		var report strings.Builder
+		report.WriteString("## Metrics Collection\n\n")
+		// Disk numeric
+		dfOut, err := exec.Command("df", "-BM", "/", "/mnt/ssd").CombinedOutput()
+		if err == nil {
+			report.WriteString("### Disk (MB)\n```\n")
+			report.Write(dfOut)
+			report.WriteString("```\n\n")
+		}
+		// Memory numeric
+		freeOut, err := exec.Command("free", "-m").CombinedOutput()
+		if err == nil {
+			report.WriteString("### Memory (MB)\n```\n")
+			report.Write(freeOut)
+			report.WriteString("```\n\n")
+		}
+		// Process count
+		countOut, err := exec.Command("bash", "-c", "ps aux | grep '[b]t-' | wc -l").CombinedOutput()
+		if err == nil {
+			report.WriteString("### BT Process Count: ")
+			report.Write(countOut)
+			report.WriteString("\n")
+		}
+		bb.Result = report.String()
+		bb.Outcome = "success"
 		return 1
 	})
 	RegisterAction("AnalyzeTask", func(ctx *btcore.BTContext[Blackboard]) int {

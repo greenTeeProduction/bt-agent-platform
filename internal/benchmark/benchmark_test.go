@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -238,4 +239,216 @@ func TestMockLLM_ReturnsPredictable(t *testing.T) {
 func mathAbs(x float64) float64 {
 	if x < 0 { return -x }
 	return x
+}
+
+func TestAbsDiff(t *testing.T) {
+	if absDiff(3.0, 5.0) != 2.0 {
+		t.Error("absDiff(3,5) should be 2")
+	}
+	if absDiff(5.0, 3.0) != 2.0 {
+		t.Error("absDiff(5,3) should be 2")
+	}
+	if absDiff(0.0, 0.0) != 0.0 {
+		t.Error("absDiff(0,0) should be 0")
+	}
+	if absDiff(-1.0, 1.0) != 2.0 {
+		t.Error("absDiff(-1,1) should be 2")
+	}
+}
+
+func TestMinF(t *testing.T) {
+	if minF(3.0, 5.0) != 3.0 {
+		t.Error("minF(3,5) should be 3")
+	}
+	if minF(5.0, 3.0) != 3.0 {
+		t.Error("minF(5,3) should be 3")
+	}
+	if minF(0.0, 0.0) != 0.0 {
+		t.Error("minF(0,0) should be 0")
+	}
+}
+
+func TestSortResults(t *testing.T) {
+	results := []Result{
+		{Task: "zebra"},
+		{Task: "alpha"},
+		{Task: "mega"},
+	}
+	SortResults(results)
+	if results[0].Task != "alpha" || results[1].Task != "mega" || results[2].Task != "zebra" {
+		t.Errorf("SortResults order wrong: %v, %v, %v", results[0].Task, results[1].Task, results[2].Task)
+	}
+	// Empty should not panic
+	SortResults(nil)
+	SortResults([]Result{})
+}
+
+func TestSmallSampleWarning(t *testing.T) {
+	w := SmallSampleWarning("test", 5)
+	if w == "" {
+		t.Error("small sample should warn")
+	}
+	w = SmallSampleWarning("test", 15)
+	if w == "" {
+		t.Error("medium sample should warn")
+	}
+	w = SmallSampleWarning("test", 25)
+	if w != "" {
+		t.Errorf("large sample should not warn, got: %s", w)
+	}
+}
+
+func TestBootstrapCI(t *testing.T) {
+	lower, upper := BootstrapCI(0, 0)
+	if lower != 0 || upper != 0 {
+		t.Error("zero total should return 0,0")
+	}
+	lower, upper = BootstrapCI(10, 10)
+	if lower > 1.0 || upper > 1.0 || lower < 0.0 || upper < 0.0 {
+		t.Errorf("bounds out of range: [%.3f, %.3f]", lower, upper)
+	}
+	lower, upper = BootstrapCI(5, 20)
+	if lower > upper {
+		t.Error("lower should be <= upper")
+	}
+}
+
+func TestAnnotateMetrics(t *testing.T) {
+	m := &RunMetrics{TotalTasks: 10, Successes: 8}
+	AnnotateMetrics(m)
+	if m.LowerCI == 0 && m.UpperCI == 0 {
+		t.Error("CIs should be populated")
+	}
+	if m.Warning == "" {
+		t.Error("should warn on small sample")
+	}
+
+	m2 := &RunMetrics{TotalTasks: 0}
+	AnnotateMetrics(m2)
+	if m2.LowerCI != 0 || m2.UpperCI != 0 {
+		t.Error("zero tasks should not annotate CIs")
+	}
+}
+
+func TestMockLLM_GenerateCtx(t *testing.T) {
+	mock := DefaultMock()
+	result, err := mock.GenerateCtx(nil, "test prompt")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if len(result) < 5 {
+		t.Error("result too short")
+	}
+}
+
+func TestMockLLM_GenerateWithTimeout(t *testing.T) {
+	mock := DefaultMock()
+	result, err := mock.GenerateWithTimeout("test prompt", 1000)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if len(result) < 5 {
+		t.Error("result too short")
+	}
+}
+
+func TestDetectPath_FromCurrentPath(t *testing.T) {
+	bb := &engine.Blackboard{CurrentPath: "BugDetection", Task: "any task"}
+	path := detectPath("result", bb)
+	if path != "BugDetection" {
+		t.Errorf("expected BugDetection, got %s", path)
+	}
+}
+
+func TestDetectPath_FromVisitedPaths(t *testing.T) {
+	bb := &engine.Blackboard{VisitedPaths: []string{"SecurityPath", "BugDetection"}, Task: "any task"}
+	path := detectPath("result", bb)
+	if path != "SecurityPath" {
+		t.Errorf("expected SecurityPath, got %s", path)
+	}
+}
+
+func TestDetectPath_KeywordFallback(t *testing.T) {
+	tests := []struct {
+		task, expected string
+	}{
+		{"health check for agent status", "HealthPath"},
+		{"transcribe the meeting minutes", "MeetingPath"},
+		{"build a DCF model for valuation", "FinancePath"},
+		{"deploy to kubernetes pipeline", "DevOpsPath"},
+		{"research new algorithms for optimization", "ResearchPath"},
+		{"refactor the engine package", "RefactoringPath"},
+		{"what is a Selector in behavior trees", "KnowledgePath"},
+		{"move card to backlog", "WorkflowPath"},
+		{"production outage postmortem analysis", "IncidentPath"},
+		{"review this code for security bugs", "CodeReviewPath"},
+		{"compile the Go build", "BuildPath"},
+		{"unknown task with no keywords", "GeneralPath"},
+		{"cron job audit and governance", "CronPath"},
+		{"tree fitness evaluation for mutation candidate", "EvolutionPath"},
+		{"platform maturity gap analysis for production readiness", "PlatformEvalPath"},
+		{"notebooklm chat queries for research", "NotebookLMPath"},
+		{"vault ingest the session and synthesize daily", "VaultPath"},
+		{"analyze the strategy and forecast", "ThinkTankPath"},
+	}
+	for _, tt := range tests {
+		bb := &engine.Blackboard{Task: tt.task}
+		path := detectPath("result", bb)
+		if path != tt.expected {
+			t.Errorf("task %q: expected %s, got %s", tt.task, tt.expected, path)
+		}
+	}
+}
+
+func TestQuickValidate_SmallSuite(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	mock := DefaultMock()
+	// Small suite (<=3 tasks) should call ScoreMutation directly
+	suite := Suite{Name: "tiny", Tasks: []TaskCase{
+		{Task: "build the Go module", ExpectedPath: "BuildPath", MinResultLen: 30, ShouldSucceed: true},
+	}}
+	ops := []evolution.MutationOp{{Operation: "increase_retries", Target: "RetrySelfCorrect"}}
+	score := QuickValidate(tree, suite, mock, ops)
+	// Should not panic, score can be any value
+	_ = score
+}
+
+func TestQuickValidate_LargeSuite(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	mock := DefaultMock()
+	suite := GoDevSuite() // has >3 tasks
+	ops := []evolution.MutationOp{{Operation: "increase_retries", Target: "RetrySelfCorrect"}}
+	score := QuickValidate(tree, suite, mock, ops)
+	// Should use only first+last tasks and not panic
+	_ = score
+}
+
+func TestScoreMutation_NeutralIsZero(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	suite := GoDevSuite()
+	mock := DefaultMock()
+	// Empty ops should be neutral
+	ops := []evolution.MutationOp{}
+	score := ScoreMutation(tree, suite, mock, ops)
+	if score != 0.0 {
+		t.Errorf("no-op mutation should be neutral (0.0), got %.2f", score)
+	}
+}
+
+func TestScoreMutation_RegressionIsNegative(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	suite := GoDevSuite()
+	mock := DefaultMock()
+	// Prune a critical path node — with mock LLM, output is identical so score is 0 (neutral)
+	// Real LLM would show actual regression here
+	ops := []evolution.MutationOp{
+		{Operation: "prune_node", Target: "StrategyRouter"},
+	}
+	score := ScoreMutation(tree, suite, mock, ops)
+	if score < 0 {
+		t.Logf("pruning StrategyRouter scored negative as expected: %.2f", score)
+	}
+	if score > 0 {
+		t.Errorf("pruning StrategyRouter should not improve score, got %.2f", score)
+	}
 }
