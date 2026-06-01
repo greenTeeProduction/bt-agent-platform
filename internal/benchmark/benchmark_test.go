@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"os"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
@@ -519,5 +520,137 @@ func TestFisherExact_PerfectSeparation(t *testing.T) {
 	p = fishersExact(0, 10, 10, 0)
 	if p > 0.001 {
 		t.Errorf("perfect separation should be extremely significant, p=%.6f", p)
+	}
+}
+
+func TestBuiltinSWELite_CoverageAndUniqueness(t *testing.T) {
+	entries := BuiltinSWELite()
+	if len(entries) != 5 {
+		t.Fatalf("expected 5 builtin SWE-lite entries, got %d", len(entries))
+	}
+
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if entry.ID == "" || entry.Repo == "" || entry.IssueTitle == "" || entry.IssueBody == "" {
+			t.Fatalf("entry has missing required fields: %+v", entry)
+		}
+		if seen[entry.ID] {
+			t.Fatalf("duplicate SWE-lite entry ID %q", entry.ID)
+		}
+		seen[entry.ID] = true
+	}
+}
+
+func TestMax1(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{name: "negative", in: -3, want: 1},
+		{name: "zero", in: 0, want: 1},
+		{name: "one", in: 1, want: 1},
+		{name: "larger", in: 7, want: 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := max1(tc.in); got != tc.want {
+				t.Fatalf("max1(%d) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuiltinSWEVerifiedSample_CoverageAndUniqueness(t *testing.T) {
+	entries := BuiltinSWEVerifiedSample()
+	if len(entries) != 10 {
+		t.Fatalf("expected 10 SWE-bench Verified sample entries, got %d", len(entries))
+	}
+
+	seen := map[string]bool{}
+	repos := map[string]bool{}
+	for _, entry := range entries {
+		if entry.InstanceID == "" || entry.Repo == "" || entry.ProblemStatement == "" {
+			t.Fatalf("entry has missing required fields: %+v", entry)
+		}
+		if seen[entry.InstanceID] {
+			t.Fatalf("duplicate SWE Verified instance ID %q", entry.InstanceID)
+		}
+		seen[entry.InstanceID] = true
+		repos[entry.Repo] = true
+	}
+	for _, repo := range []string{"astropy/astropy", "django/django", "sympy/sympy", "scikit-learn/scikit-learn"} {
+		if !repos[repo] {
+			t.Fatalf("expected representative repo %q in sample", repo)
+		}
+	}
+}
+
+func TestLoadSWEVerifiedAndEvaluate(t *testing.T) {
+	path := t.TempDir() + "/swe_verified.json"
+	jsonData := `[{"instance_id":"case-1","repo":"go-bt-evolve","problem_statement":"Fix a deterministic bug with enough detail to exercise evaluation."}]`
+	if err := os.WriteFile(path, []byte(jsonData), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	entries, err := LoadSWEVerified(path)
+	if err != nil {
+		t.Fatalf("LoadSWEVerified returned error: %v", err)
+	}
+	if len(entries) != 1 || entries[0].InstanceID != "case-1" {
+		t.Fatalf("unexpected entries: %+v", entries)
+	}
+
+	tree := &evolution.SerializableNode{Type: "Action", Name: "MarkSuccessful"}
+	metrics := EvaluateSWEVerified(tree, entries, DefaultMock())
+	if metrics.TotalEntries != 1 || len(metrics.Results) != 1 {
+		t.Fatalf("unexpected metrics shape: %+v", metrics)
+	}
+	if metrics.Resolved != 0 || metrics.ResolveRate != 0 {
+		t.Fatalf("MarkSuccessful without output should not be considered resolved: %+v", metrics)
+	}
+	if metrics.Results[0].Outcome != "success" {
+		t.Fatalf("expected successful BT outcome, got %+v", metrics.Results[0])
+	}
+}
+
+func TestLoadSWEVerified_Errors(t *testing.T) {
+	if _, err := LoadSWEVerified(t.TempDir() + "/missing.json"); err == nil {
+		t.Fatal("expected missing file error")
+	}
+
+	badPath := t.TempDir() + "/bad.json"
+	if err := os.WriteFile(badPath, []byte(`{"not":"an array"}`), 0o600); err != nil {
+		t.Fatalf("write bad fixture: %v", err)
+	}
+	if _, err := LoadSWEVerified(badPath); err == nil {
+		t.Fatal("expected JSON unmarshal error")
+	}
+}
+
+func TestTauBenchBuiltinRetailAndDefaultEntries(t *testing.T) {
+	retail := BuiltinTauBenchRetail()
+	if len(retail) != 5 {
+		t.Fatalf("expected 5 retail τ-bench entries, got %d", len(retail))
+	}
+	for _, entry := range retail {
+		if entry.Domain != "retail" {
+			t.Fatalf("retail entry has wrong domain: %+v", entry)
+		}
+		if entry.ID == "" || entry.Scenario == "" || len(entry.ExpectedActions) == 0 || len(entry.Tools) == 0 {
+			t.Fatalf("retail entry missing required benchmark fields: %+v", entry)
+		}
+	}
+
+	all := DefaultTauBenchEntries()
+	if len(all) != len(BuiltinTauBenchAirline())+len(retail) {
+		t.Fatalf("default τ-bench entries length mismatch: got %d", len(all))
+	}
+	seenDomains := map[string]bool{}
+	for _, entry := range all {
+		seenDomains[entry.Domain] = true
+	}
+	if !seenDomains["airline"] || !seenDomains["retail"] {
+		t.Fatalf("default τ-bench entries should include airline and retail domains, got %+v", seenDomains)
 	}
 }

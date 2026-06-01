@@ -169,6 +169,20 @@ func (r *Registry) UpdateState(name string, state State, lastError string) error
 	return r.saveDef(def)
 }
 
+// UpdateSchedule updates and persists an agent schedule.
+func (r *Registry) UpdateSchedule(name, schedule string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	inst, ok := r.instances[name]
+	if !ok {
+		return fmt.Errorf("agent %q not found", name)
+	}
+	inst.Definition.Schedule = schedule
+	inst.Definition.UpdatedAt = time.Now()
+	return r.saveDef(inst.Definition)
+}
+
 // Delete removes an agent from the registry.
 func (r *Registry) Delete(name string) error {
 	r.mu.Lock()
