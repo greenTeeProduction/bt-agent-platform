@@ -599,3 +599,65 @@ func TestMaxMessageSize_AllowsNormalSized(t *testing.T) {
 		t.Errorf("unexpected error on tools/call: %v", msgs[1].Error)
 	}
 }
+func TestTraceparent_Passthrough(t *testing.T) {
+	s, buf := testServer()
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// Send a tools/call with a valid W3C traceparent in params
+	req := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{},"traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}}`)
+	s.handleMessage(req)
+
+	msgs := readMessages(t, buf)
+	if msgs[0].Error != nil {
+		t.Fatalf("expected success with valid traceparent, got error: %+v", msgs[0].Error)
+	}
+	result := msgs[0].Result.(map[string]interface{})
+	content := result["content"].([]interface{})
+	item := content[0].(map[string]interface{})
+	if item["text"] != "pong" {
+		t.Errorf("expected 'pong', got %q", item["text"])
+	}
+}
+
+func TestTraceparent_InvalidDegradesGracefully(t *testing.T) {
+	s, buf := testServer()
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// Send with an invalid traceparent (too short) — should still succeed, just start a new trace
+	req := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{},"traceparent":"garbage"}}`)
+	s.handleMessage(req)
+
+	msgs := readMessages(t, buf)
+	if msgs[0].Error != nil {
+		t.Fatalf("expected success even with invalid traceparent, got error: %+v", msgs[0].Error)
+	}
+}
+
+func TestTraceparent_WithoutTraceparent(t *testing.T) {
+	s, buf := testServer()
+
+	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
+	})
+
+	// Send without any traceparent — default behavior, starts new trace
+	req := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`)
+	s.handleMessage(req)
+
+	msgs := readMessages(t, buf)
+	if msgs[0].Error != nil {
+		t.Fatalf("expected success without traceparent, got error: %+v", msgs[0].Error)
+	}
+	result := msgs[0].Result.(map[string]interface{})
+	content := result["content"].([]interface{})
+	item := content[0].(map[string]interface{})
+	if item["text"] != "pong" {
+		t.Errorf("expected 'pong', got %q", item["text"])
+	}
+}

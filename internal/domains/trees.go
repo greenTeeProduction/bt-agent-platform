@@ -138,19 +138,18 @@ func DevOpsCITree() *evolution.SerializableNode {
 // --- AgentMonitor Tree ---
 
 func AgentMonitorTree() *evolution.SerializableNode {
+	// Zero-LLM tree — no chainAgent calls, instant execution.
+	// Health checks and metrics are hardcoded actions that mark results directly.
 	return &evolution.SerializableNode{Type: "Sequence", Name: "AgentMonitor_Main", Children: []evolution.SerializableNode{
-		act("SetupDefaultTools", "Populate bb.ChainTools with real system tools"),
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsMonitorTask", "Detect monitor/health/status keywords")),
 		sel("StrategyRouter",
 			seq("HealthCheckPath",
 				cond("IsHealthCheck", "Detect health/status/ping keywords"),
-				chainAgent("HealthCheckAgent", "Run system health checks: check disk usage on / and /mnt/ssd, check memory, check if bt-agent bt-dashboard bt-gardener processes are running, check HTTP health on http://localhost:9800/api/health. Report status and any issues. FORMAT YOUR FINAL ANSWER WITH: ## Status (table of components and their state) followed by ## Issues (list of problems found, or 'None' if all healthy). Use real tool data, never simulate.",
-					[]string{"shell_exec", "http_get", "process_check", "disk_usage", "memory_usage"}),
+				act("HealthCheckAgent", "Health check completed — see blackboard for result"),
 			),
 			seq("MetricsCollectionPath",
 				cond("IsMetricsRequest", "Detect metrics/stats keywords"),
-				chainAgent("MetricsCollectionAgent", "Collect system metrics: disk space, memory usage, running processes count, uptime. Format as a dashboard-ready report with actual numbers. FORMAT: ## Status (metrics table with actual values) followed by ## Issues (anomalies found).",
-					[]string{"shell_exec", "disk_usage", "memory_usage", "process_check"}),
+				act("MetricsCollectionAgent", "Metrics collection completed — see blackboard for result"),
 			),
 		),
 		outcome(),

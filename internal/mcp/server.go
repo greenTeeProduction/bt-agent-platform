@@ -298,8 +298,9 @@ func (s *Server) handleMessage(data []byte) {
 
 	case "tools/call":
 		var params struct {
-			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
+			Name        string          `json:"name"`
+			Arguments   json.RawMessage `json:"arguments"`
+			Traceparent string          `json:"traceparent,omitempty"`
 		}
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			s.writeError(msg.ID, -32602, "Invalid params: "+err.Error())
@@ -362,14 +363,27 @@ func (s *Server) handleMessage(data []byte) {
 			return
 		}
 
+		// ── Tracing: build context with optional W3C traceparent for distributed tracing ──
+		// The Hermes gateway can inject a traceparent into tools/call params so MCP
+		// server spans become children of the gateway's trace root. Without a traceparent,
+		// the span starts a new trace (context.Background).
+		traceCtx := context.Background()
+		if params.Traceparent != "" {
+			if tp, err := tracing.ParseTraceParent(params.Traceparent); err == nil {
+				traceCtx = tracing.ContextWithTraceParent(traceCtx, tp)
+			}
+		}
+
 		// Execute the tool, recording timing for audit.
 		start := time.Now()
-		// ── Tracing: wrap tool execution in a span ──
-		_, span := tracing.StartSpan(context.Background(), "mcp:"+params.Name)
+		_, span := tracing.StartSpan(traceCtx, "mcp:"+params.Name)
 		result := handler(params.Arguments)
 		elapsed := time.Since(start)
 		span.SetAttribute("tool", params.Name)
 		span.SetAttribute("duration_ms", fmt.Sprintf("%d", elapsed.Milliseconds()))
+		if params.Traceparent != "" {
+			span.SetAttribute("traceparent", "injected")
+		}
 		span.End()
 
 		// ── Security: audit tool execution ──
