@@ -185,3 +185,73 @@ func TestBTPG_BuiltinTasks_Content(t *testing.T) {
 		}
 	}
 }
+
+func TestIsEdgeCaseTask(t *testing.T) {
+	// Short tasks (< 15 chars) are edge cases
+	if !isEdgeCaseTask("short") {
+		t.Error("very short task should be edge case")
+	}
+	if !isEdgeCaseTask("hi") {
+		t.Error("2-char task should be edge case")
+	}
+	// Exactly 14 chars = edge case; 15 chars = not
+	if !isEdgeCaseTask("12345678901234") {
+		t.Error("14-char task should be edge case")
+	}
+	if isEdgeCaseTask("123456789012345") {
+		t.Error("15-char task should NOT be edge case")
+	}
+	// Tasks with "??" are edge cases
+	if !isEdgeCaseTask("what is this??") {
+		t.Error("task with ?? should be edge case")
+	}
+	if !isEdgeCaseTask("??") {
+		t.Error("bare ?? should be edge case")
+	}
+	// Tasks with "!!!!" are edge cases
+	if !isEdgeCaseTask("help!!!!") {
+		t.Error("task with !!!! should be edge case")
+	}
+	if !isEdgeCaseTask("!!!!") {
+		t.Error("bare !!!! should be edge case")
+	}
+	// Normal tasks are NOT edge cases
+	if isEdgeCaseTask("build a production-ready behavior tree") {
+		t.Error("normal-length task should not be edge case")
+	}
+	if isEdgeCaseTask("deploy to kubernetes cluster") {
+		t.Error("normal task should not be edge case")
+	}
+	// Empty string is edge case (short)
+	if !isEdgeCaseTask("") {
+		t.Error("empty string should be edge case")
+	}
+}
+
+func TestBTPGTreeSummary_Normal(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	summary := BTPGTreeSummary(tree)
+	if len(summary) == 0 {
+		t.Error("summary should not be empty")
+	}
+	if !containsStr(summary, "nodes=") {
+		t.Error("summary should contain nodes=")
+	}
+	if !containsStr(summary, "depth=") {
+		t.Error("summary should contain depth=")
+	}
+	if !containsStr(summary, "branchFactor=") {
+		t.Error("summary should contain branchFactor=")
+	}
+}
+
+func TestBTPGTreeSummary_NilTree(t *testing.T) {
+	summary := BTPGTreeSummary(nil)
+	if len(summary) == 0 {
+		t.Error("nil tree summary should not be empty")
+	}
+	// Should show nodes=0
+	if !containsStr(summary, "nodes=0") {
+		t.Errorf("nil tree summary should show nodes=0, got: %s", summary)
+	}
+}

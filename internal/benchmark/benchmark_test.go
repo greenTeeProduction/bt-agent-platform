@@ -452,3 +452,70 @@ func TestScoreMutation_RegressionIsNegative(t *testing.T) {
 		t.Errorf("pruning StrategyRouter should not improve score, got %.2f", score)
 	}
 }
+
+func TestCohensD_SmallSamples(t *testing.T) {
+	// n1 < 2 should return 0
+	d := cohensD(1, 1, 5, 10)
+	if d != 0 {
+		t.Errorf("n1<2 should return 0, got %.3f", d)
+	}
+	// n2 < 2 should return 0
+	d = cohensD(5, 10, 1, 1)
+	if d != 0 {
+		t.Errorf("n2<2 should return 0, got %.3f", d)
+	}
+	// Both small
+	d = cohensD(0, 0, 0, 1)
+	if d != 0 {
+		t.Errorf("both small should return 0, got %.3f", d)
+	}
+}
+
+func TestCohensD_ExtremeProportions(t *testing.T) {
+	// pPool == 0 (all zeros)
+	d := cohensD(0, 10, 0, 10)
+	if d != 0 {
+		t.Errorf("pPool=0 should return 0, got %.3f", d)
+	}
+	// pPool == 1 (all successes)
+	d = cohensD(10, 10, 10, 10)
+	if d != 0 {
+		t.Errorf("pPool=1 should return 0, got %.3f", d)
+	}
+	// One group all zeros, other mixed — pPool in (0,1) but near boundary
+	d = cohensD(0, 10, 5, 10)
+	if d == 0 {
+		t.Log("near-boundary may produce small effect size")
+	}
+}
+
+func TestFisherExact_ZeroCounts(t *testing.T) {
+	// N == 0
+	p := fishersExact(0, 0, 0, 0)
+	if p != 1.0 {
+		t.Errorf("N=0 should return 1.0, got %.4f", p)
+	}
+	// n1 == 0
+	p = fishersExact(0, 0, 5, 5)
+	if p != 1.0 {
+		t.Errorf("n1=0 should return 1.0, got %.4f", p)
+	}
+	// n2 == 0
+	p = fishersExact(5, 5, 0, 0)
+	if p != 1.0 {
+		t.Errorf("n2=0 should return 1.0, got %.4f", p)
+	}
+}
+
+func TestFisherExact_PerfectSeparation(t *testing.T) {
+	// 100% success vs 0% success should be highly significant
+	p := fishersExact(10, 0, 0, 10)
+	if p > 0.001 {
+		t.Errorf("perfect separation should be extremely significant, p=%.6f", p)
+	}
+	// 0% vs 100%
+	p = fishersExact(0, 10, 10, 0)
+	if p > 0.001 {
+		t.Errorf("perfect separation should be extremely significant, p=%.6f", p)
+	}
+}
