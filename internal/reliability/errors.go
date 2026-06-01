@@ -426,3 +426,138 @@ func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory) time.Dura
 func ExecuteWithPolicy(fn func() error) error {
 	return DefaultRetryPolicy().Execute(fn)
 }
+
+// ─── Error Context ───────────────────────────────────────────────────────────
+
+// ErrorContext enriches errors with structured metadata for cross-node
+// diagnostics. When errors propagate across distributed AgentRouter nodes,
+// ErrorContext preserves the originating agent, task, operation, and timing
+// so the receiving node can diagnose failures without access to the source
+// machine's logs.
+type ErrorContext struct {
+	// Err is the underlying error being wrapped.
+	Err error
+
+	// Agent is the name of the agent that produced this error.
+	Agent string
+
+	// Task is the task text being executed when the error occurred.
+	Task string
+
+	// Operation is the specific operation (e.g., "Execute", "Health", "Retry").
+	Operation string
+
+	// Node is the originating node identifier (hostname or instance ID).
+	Node string
+
+	// Timestamp records when the error occurred.
+	Timestamp time.Time
+
+	// Attempt is the retry attempt number (0 = initial attempt).
+	Attempt int
+
+	// Category is the classified error category. Zero value means unclassified
+	// (ClassifyError will be called on the underlying error when needed).
+	Category ErrorCategory
+}
+
+// NewErrorContext creates an ErrorContext wrapping the given error with
+// the specified metadata. Returns nil if err is nil.
+func NewErrorContext(err error, agent, task, operation string) *ErrorContext {
+	if err == nil {
+		return nil
+	}
+	return &ErrorContext{
+		Err:       err,
+		Agent:     agent,
+		Task:      task,
+		Operation: operation,
+		Timestamp: time.Now(),
+		Category:  ClassifyError(err),
+	}
+}
+
+// Error implements the error interface with a structured multi-line format
+// suitable for log aggregation and cross-node diagnostics.
+func (ec *ErrorContext) Error() string {
+	var b strings.Builder
+	b.WriteString("ErrorContext")
+	if ec.Agent != "" {
+		b.WriteString("[agent=")
+		b.WriteString(ec.Agent)
+		b.WriteString("]")
+	}
+	if ec.Operation != "" {
+		b.WriteString("[op=")
+		b.WriteString(ec.Operation)
+		b.WriteString("]")
+	}
+	if ec.Node != "" {
+		b.WriteString("[node=")
+		b.WriteString(ec.Node)
+		b.WriteString("]")
+	}
+	b.WriteString(": ")
+	if ec.Err != nil {
+		b.WriteString(ec.Err.Error())
+	}
+	return b.String()
+}
+
+// Unwrap returns the underlying error for errors.Is/errors.As chain traversal.
+func (ec *ErrorContext) Unwrap() error {
+	return ec.Err
+}
+
+// WithNode sets the originating node identifier. Useful when errors cross
+// AgentRouter boundaries and the receiving node tags them with the source.
+func (ec *ErrorContext) WithNode(node string) *ErrorContext {
+	ec.Node = node
+	return ec
+}
+
+// WithAttempt sets the retry attempt number.
+func (ec *ErrorContext) WithAttempt(attempt int) *ErrorContext {
+	ec.Attempt = attempt
+	return ec
+}
+
+// WithCategory overrides the classified category.
+func (ec *ErrorContext) WithCategory(cat ErrorCategory) *ErrorContext {
+	ec.Category = cat
+	return ec
+}
+
+// GetErrorContext extracts an ErrorContext from an error chain.
+// Returns nil if no ErrorContext is found.
+func GetErrorContext(err error) *ErrorContext {
+	var ec *ErrorContext
+	if errors.As(err, &ec) {
+		return ec
+	}
+	return nil
+}
+
+// Summary returns a compact single-line summary suitable for metrics labels
+// and alert annotations. Format: "agent/op: category: message".
+func (ec *ErrorContext) Summary() string {
+	cat := ec.Category
+	if cat == ErrCatUnknown && ec.Err != nil {
+		cat = ClassifyError(ec.Err)
+	}
+	msg := ""
+	if ec.Err != nil {
+		msg = ec.Err.Error()
+		// Truncate long messages for summary use.
+		if len(msg) > 120 {
+			msg = msg[:117] + "..."
+		}
+	}
+	if ec.Agent != "" && ec.Operation != "" {
+		return fmt.Sprintf("%s/%s: %s: %s", ec.Agent, ec.Operation, cat, msg)
+	}
+	if ec.Operation != "" {
+		return fmt.Sprintf("%s: %s: %s", ec.Operation, cat, msg)
+	}
+	return fmt.Sprintf("%s: %s", cat, msg)
+}

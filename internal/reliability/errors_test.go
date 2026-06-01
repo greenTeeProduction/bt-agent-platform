@@ -465,8 +465,8 @@ func TestIntegration_CircuitBreakerAndDLQ(t *testing.T) {
 
 	// Simulate a sequence of failures
 	failures := []struct {
-		err      string
-		wantCat  ErrorCategory
+		err     string
+		wantCat ErrorCategory
 	}{
 		{"connection refused", ErrCatNetwork},
 		{"i/o timeout", ErrCatTimeout},
@@ -918,5 +918,268 @@ func TestRetryPolicy_RetryRefusedWrapsError(t *testing.T) {
 	var catErr *CategorizedError
 	if errors.As(err, &catErr) {
 		t.Logf("inner error is CategorizedError: %v", catErr)
+	}
+}
+
+// ─── ErrorContext Tests ──────────────────────────────────────────────────────
+
+func TestNewErrorContext_Basic(t *testing.T) {
+	orig := errors.New("connection refused")
+	ec := NewErrorContext(orig, "bt-agent", "review code", "Execute")
+	if ec == nil {
+		t.Fatal("expected non-nil ErrorContext")
+	}
+	if ec.Err != orig {
+		t.Errorf("Err = %v, want %v", ec.Err, orig)
+	}
+	if ec.Agent != "bt-agent" {
+		t.Errorf("Agent = %q, want bt-agent", ec.Agent)
+	}
+	if ec.Task != "review code" {
+		t.Errorf("Task = %q, want review code", ec.Task)
+	}
+	if ec.Operation != "Execute" {
+		t.Errorf("Operation = %q, want Execute", ec.Operation)
+	}
+	if ec.Attempt != 0 {
+		t.Errorf("Attempt = %d, want 0", ec.Attempt)
+	}
+	if ec.Category != ErrCatNetwork {
+		t.Errorf("Category = %s, want network", ec.Category)
+	}
+	if ec.Timestamp.IsZero() {
+		t.Error("Timestamp should not be zero")
+	}
+}
+
+func TestNewErrorContext_Nil(t *testing.T) {
+	ec := NewErrorContext(nil, "agent", "task", "op")
+	if ec != nil {
+		t.Errorf("expected nil for nil error, got %v", ec)
+	}
+}
+
+func TestErrorContext_Error(t *testing.T) {
+	ec := NewErrorContext(errors.New("timeout"), "bt-evaluator", "evaluate tree", "Evaluate")
+	msg := ec.Error()
+	if !strings.Contains(msg, "bt-evaluator") {
+		t.Errorf("Error() should contain agent name: %s", msg)
+	}
+	if !strings.Contains(msg, "Evaluate") {
+		t.Errorf("Error() should contain operation: %s", msg)
+	}
+	if !strings.Contains(msg, "timeout") {
+		t.Errorf("Error() should contain underlying error: %s", msg)
+	}
+}
+
+func TestErrorContext_Error_Minimal(t *testing.T) {
+	ec := &ErrorContext{Err: errors.New("oops")}
+	msg := ec.Error()
+	if !strings.Contains(msg, "oops") {
+		t.Errorf("Error() should contain underlying: %s", msg)
+	}
+}
+
+func TestErrorContext_Unwrap(t *testing.T) {
+	orig := errors.New("original")
+	ec := NewErrorContext(orig, "agent", "task", "op")
+	if !errors.Is(ec, orig) {
+		t.Error("errors.Is should find original through Unwrap")
+	}
+}
+
+func TestErrorContext_Unwrap_Nil(t *testing.T) {
+	ec := &ErrorContext{}
+	if ec.Unwrap() != nil {
+		t.Error("Unwrap on nil Err should return nil")
+	}
+}
+
+func TestErrorContext_WithNode(t *testing.T) {
+	ec := NewErrorContext(errors.New("err"), "a", "t", "op")
+	result := ec.WithNode("jetson-01")
+	if result != ec {
+		t.Error("WithNode should return self for chaining")
+	}
+	if ec.Node != "jetson-01" {
+		t.Errorf("Node = %q, want jetson-01", ec.Node)
+	}
+}
+
+func TestErrorContext_WithAttempt(t *testing.T) {
+	ec := NewErrorContext(errors.New("err"), "a", "t", "op")
+	result := ec.WithAttempt(3)
+	if result != ec {
+		t.Error("WithAttempt should return self")
+	}
+	if ec.Attempt != 3 {
+		t.Errorf("Attempt = %d, want 3", ec.Attempt)
+	}
+}
+
+func TestErrorContext_WithCategory(t *testing.T) {
+	ec := NewErrorContext(errors.New("err"), "a", "t", "op")
+	result := ec.WithCategory(ErrCatAuth)
+	if result != ec {
+		t.Error("WithCategory should return self")
+	}
+	if ec.Category != ErrCatAuth {
+		t.Errorf("Category = %s, want auth", ec.Category)
+	}
+}
+
+func TestGetErrorContext_Found(t *testing.T) {
+	orig := errors.New("base")
+	ec := NewErrorContext(orig, "agent", "task", "op")
+	result := GetErrorContext(ec)
+	if result == nil {
+		t.Fatal("GetErrorContext should find ErrorContext in chain")
+	}
+	if result.Agent != "agent" {
+		t.Errorf("Agent = %q, want agent", result.Agent)
+	}
+}
+
+func TestGetErrorContext_Wrapped(t *testing.T) {
+	orig := errors.New("base")
+	ec := NewErrorContext(orig, "agent", "task", "op")
+	wrapped := fmt.Errorf("outer: %w", ec)
+	result := GetErrorContext(wrapped)
+	if result == nil {
+		t.Fatal("GetErrorContext should find through fmt.Errorf wrapping")
+	}
+}
+
+func TestGetErrorContext_NotFound(t *testing.T) {
+	result := GetErrorContext(errors.New("plain error"))
+	if result != nil {
+		t.Errorf("expected nil for error without ErrorContext, got %v", result)
+	}
+}
+
+func TestGetErrorContext_Nil(t *testing.T) {
+	result := GetErrorContext(nil)
+	if result != nil {
+		t.Errorf("expected nil for nil error, got %v", result)
+	}
+}
+
+func TestErrorContext_Summary_Full(t *testing.T) {
+	ec := NewErrorContext(errors.New("connection timeout"), "code-reviewer", "review code", "Execute")
+	ec.WithNode("jetson-01")
+	summary := ec.Summary()
+	if !strings.Contains(summary, "code-reviewer/Execute") {
+		t.Errorf("Summary should contain agent/op: %s", summary)
+	}
+	// "connection timeout" is classified as timeout (contains "timeout").
+	if !strings.Contains(summary, "timeout") {
+		t.Errorf("Summary should contain category: %s", summary)
+	}
+}
+
+func TestErrorContext_Summary_NoAgent(t *testing.T) {
+	ec := &ErrorContext{Err: errors.New("oops"), Operation: "Health", Category: ErrCatLLM}
+	summary := ec.Summary()
+	if !strings.Contains(summary, "Health: llm:") {
+		t.Errorf("Summary = %q, want 'Health: llm: oops'", summary)
+	}
+}
+
+func TestErrorContext_Summary_NoOperation(t *testing.T) {
+	ec := NewErrorContext(errors.New("invalid input"), "validator", "validate schema", "")
+	summary := ec.Summary()
+	if !strings.Contains(summary, "validation") {
+		t.Errorf("Summary should contain category: %s", summary)
+	}
+}
+
+func TestErrorContext_Summary_TruncatesLong(t *testing.T) {
+	longMsg := strings.Repeat("x", 200)
+	ec := NewErrorContext(errors.New(longMsg), "a", "t", "op")
+	summary := ec.Summary()
+	if len(summary) > 200 {
+		t.Errorf("Summary should truncate long messages, got %d chars", len(summary))
+	}
+}
+
+func TestErrorContext_Summary_NilErr(t *testing.T) {
+	ec := &ErrorContext{Agent: "a", Operation: "op", Category: ErrCatTimeout}
+	summary := ec.Summary()
+	if !strings.Contains(summary, "timeout") {
+		t.Errorf("Summary = %q, should contain category", summary)
+	}
+}
+
+func TestErrorContext_Integration_RetryPolicy(t *testing.T) {
+	// Verify ErrorContext wraps errors properly through RetryPolicy.Execute
+	orig := errors.New("i/o timeout")
+	ec := NewErrorContext(orig, "bt-agent", "run tests", "RunAgent")
+	ec.WithAttempt(2)
+
+	// ErrorContext should be found through wrapping.
+	policy := DefaultRetryPolicy()
+	err := policy.Execute(func() error {
+		return ec
+	})
+	if err == nil {
+		t.Fatal("expected error after retry exhaustion")
+	}
+
+	found := GetErrorContext(err)
+	if found == nil {
+		t.Fatal("ErrorContext should be preserved through RetryPolicy wrapping")
+	}
+	if found.Agent != "bt-agent" {
+		t.Errorf("Agent = %q, want bt-agent", found.Agent)
+	}
+	if found.Attempt != 2 {
+		t.Errorf("Attempt = %d, want 2", found.Attempt)
+	}
+}
+
+func TestErrorContext_Summary_UnclassifiedCategory(t *testing.T) {
+	// When Category is Unknown but Err has a classifiable message,
+	// Summary should classify it.
+	ec := &ErrorContext{Err: errors.New("connection refused"), Agent: "a", Operation: "op"}
+	summary := ec.Summary()
+	if !strings.Contains(summary, "network") {
+		t.Errorf("Summary should classify unset category: %s", summary)
+	}
+}
+
+func TestErrorContext_Chained(t *testing.T) {
+	base := errors.New("disk full")
+	ce := NewCategorizedError(ErrCatResourceExhausted, base)
+	ec := NewErrorContext(ce, "gardener", "evolve trees", "Mutate")
+
+	// Both categorizations should be accessible.
+	cat := GetCategory(ec)
+	if cat != ErrCatResourceExhausted {
+		t.Errorf("GetCategory through ErrorContext: got %s, want resource_exhausted", cat)
+	}
+
+	ectx := GetErrorContext(ec)
+	if ectx == nil {
+		t.Fatal("GetErrorContext should return self")
+	}
+	if ectx.Agent != "gardener" {
+		t.Errorf("Agent = %q, want gardener", ectx.Agent)
+	}
+}
+
+func TestErrorContext_Concurrent(t *testing.T) {
+	// Verify ErrorContext is safe for concurrent use patterns.
+	ec := NewErrorContext(errors.New("error"), "agent", "task", "op")
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			_ = ec.Error()
+			_ = ec.Summary()
+			done <- true
+		}(i)
+	}
+	for i := 0; i < 10; i++ {
+		<-done
 	}
 }
