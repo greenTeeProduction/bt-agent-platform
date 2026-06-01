@@ -116,12 +116,181 @@ func GetAgentMetrics() []AgentStats {
 	return result
 }
 
+// ─── Labeled Metrics ─────────────────────────────────────────────────────────
+
+// LabeledCounter is a counter with label dimensions (Prometheus-compatible).
+// Each unique label combination gets its own counter value.
+type LabeledCounter struct {
+	mu     sync.RWMutex
+	buckets map[string]*Counter
+}
+
+// NewLabeledCounter creates a new labeled counter.
+func NewLabeledCounter() *LabeledCounter {
+	return &LabeledCounter{buckets: make(map[string]*Counter)}
+}
+
+// labelKey builds a deterministic key from label pairs. Labels are sorted for consistency.
+func labelKey(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	// Build a canonical key: sort by key name for deterministic ordering.
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+	var b []byte
+	for i, k := range keys {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, k...)
+		b = append(b, '=')
+		b = append(b, labels[k]...)
+	}
+	return string(b)
+}
+
+// Inc increments the counter for the given label combination by 1.
+func (lc *LabeledCounter) Inc(labels map[string]string) {
+	lc.Add(1, labels)
+}
+
+// Add increments the counter for the given label combination by n.
+func (lc *LabeledCounter) Add(n uint64, labels map[string]string) {
+	key := labelKey(labels)
+	lc.mu.RLock()
+	c, ok := lc.buckets[key]
+	lc.mu.RUnlock()
+	if ok {
+		c.Add(n)
+		return
+	}
+	lc.mu.Lock()
+	defer lc.mu.Unlock()
+	// Double-check after acquiring write lock
+	if c, ok = lc.buckets[key]; ok {
+		c.Add(n)
+		return
+	}
+	c = &Counter{}
+	c.Add(n)
+	lc.buckets[key] = c
+}
+
+// Snapshot returns a copy of all label combinations and their values.
+// The returned map is keyed by the canonical label string.
+func (lc *LabeledCounter) Snapshot() map[string]uint64 {
+	lc.mu.RLock()
+	defer lc.mu.RUnlock()
+	result := make(map[string]uint64, len(lc.buckets))
+	for k, c := range lc.buckets {
+		result[k] = c.Value()
+	}
+	return result
+}
+
+// LabeledGauge is a gauge with label dimensions (Prometheus-compatible).
+type LabeledGauge struct {
+	mu     sync.RWMutex
+	buckets map[string]*Gauge
+}
+
+// NewLabeledGauge creates a new labeled gauge.
+func NewLabeledGauge() *LabeledGauge {
+	return &LabeledGauge{buckets: make(map[string]*Gauge)}
+}
+
+// Set sets the gauge value for the given label combination.
+func (lg *LabeledGauge) Set(v int64, labels map[string]string) {
+	key := labelKey(labels)
+	lg.mu.RLock()
+	g, ok := lg.buckets[key]
+	lg.mu.RUnlock()
+	if ok {
+		g.Set(v)
+		return
+	}
+	lg.mu.Lock()
+	defer lg.mu.Unlock()
+	if g, ok = lg.buckets[key]; ok {
+		g.Set(v)
+		return
+	}
+	g = &Gauge{}
+	g.Set(v)
+	lg.buckets[key] = g
+}
+
+// Snapshot returns a copy of all label combinations and their values.
+func (lg *LabeledGauge) Snapshot() map[string]int64 {
+	lg.mu.RLock()
+	defer lg.mu.RUnlock()
+	result := make(map[string]int64, len(lg.buckets))
+	for k, g := range lg.buckets {
+		result[k] = g.Value()
+	}
+	return result
+}
+
+// sortStrings sorts a slice of strings in place (simple insertion sort for small N).
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && s[j] < s[j-1]; j-- {
+			s[j], s[j-1] = s[j-1], s[j]
+		}
+	}
+}
+
+// parseLabelKey reverses labelKey back to a map.
+func parseLabelKey(key string) map[string]string {
+	if key == "" {
+		return map[string]string{}
+	}
+	result := make(map[string]string)
+	pairs := splitOn(key, ',')
+	for _, pair := range pairs {
+		eq := indexOf(pair, '=')
+		if eq > 0 && eq < len(pair)-1 {
+			result[pair[:eq]] = pair[eq+1:]
+		}
+	}
+	return result
+}
+
+func splitOn(s string, sep byte) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == sep {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
+}
+
+func indexOf(s string, c byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
+}
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
-	httpRequestsTotal   Counter
-	httpRequestDuration Histogram
-	httpErrorsTotal     Counter
+	httpRequestsTotal     Counter
+	httpRequestDuration   Histogram
+	httpErrorsTotal       Counter
+	httpRequestsByMethod  = NewLabeledCounter()
+	httpRequestsByStatus  = NewLabeledCounter()
+	httpRequestsByPath    = NewLabeledCounter()
 )
 
 func init() {
@@ -144,7 +313,29 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		if wrapped.statusCode >= 400 {
 			httpErrorsTotal.Inc()
 		}
+
+		// Labeled metrics for dimensional analysis
+		statusBucket := bucketForStatus(wrapped.statusCode)
+		httpRequestsByMethod.Inc(map[string]string{"method": r.Method})
+		httpRequestsByStatus.Inc(map[string]string{"status": statusBucket})
+		httpRequestsByPath.Inc(map[string]string{"path": r.URL.Path})
 	})
+}
+
+// bucketForStatus maps HTTP status codes to Prometheus-compatible buckets.
+func bucketForStatus(code int) string {
+	switch {
+	case code < 200:
+		return "1xx"
+	case code < 300:
+		return "2xx"
+	case code < 400:
+		return "3xx"
+	case code < 500:
+		return "4xx"
+	default:
+		return "5xx"
+	}
 }
 
 type responseWriter struct {
@@ -243,6 +434,59 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 	fmt.Fprintf(w, "# HELP bt_total_errors Total task errors.\n")
 	fmt.Fprintf(w, "# TYPE bt_total_errors counter\n")
 	fmt.Fprintf(w, "bt_total_errors %d\n\n", globalMetrics.TotalErrors.Value())
+
+	// Labeled HTTP metrics — by method
+	fmt.Fprintf(w, "# HELP bt_http_requests_by_method HTTP requests broken down by HTTP method.\n")
+	fmt.Fprintf(w, "# TYPE bt_http_requests_by_method counter\n")
+	for key, val := range httpRequestsByMethod.Snapshot() {
+		labels := parseLabelKey(key)
+		labelStr := labelString(labels)
+		fmt.Fprintf(w, "bt_http_requests_by_method{%s} %d\n", labelStr, val)
+	}
+	fmt.Fprintln(w)
+
+	// Labeled HTTP metrics — by status
+	fmt.Fprintf(w, "# HELP bt_http_requests_by_status HTTP requests broken down by status bucket.\n")
+	fmt.Fprintf(w, "# TYPE bt_http_requests_by_status counter\n")
+	for key, val := range httpRequestsByStatus.Snapshot() {
+		labels := parseLabelKey(key)
+		labelStr := labelString(labels)
+		fmt.Fprintf(w, "bt_http_requests_by_status{%s} %d\n", labelStr, val)
+	}
+	fmt.Fprintln(w)
+
+	// Labeled HTTP metrics — by path
+	fmt.Fprintf(w, "# HELP bt_http_requests_by_path HTTP requests broken down by URL path.\n")
+	fmt.Fprintf(w, "# TYPE bt_http_requests_by_path counter\n")
+	for key, val := range httpRequestsByPath.Snapshot() {
+		labels := parseLabelKey(key)
+		labelStr := labelString(labels)
+		fmt.Fprintf(w, "bt_http_requests_by_path{%s} %d\n", labelStr, val)
+	}
+	fmt.Fprintln(w)
+}
+
+// labelString formats a label map into Prometheus label string format: key="value",key2="value2"
+func labelString(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+	var b []byte
+	for i, k := range keys {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, k...)
+		b = append(b, '=', '"')
+		b = append(b, labels[k]...)
+		b = append(b, '"')
+	}
+	return string(b)
 }
 
 // ─── JSON Export ────────────────────────────────────────────────────────────
@@ -274,12 +518,31 @@ func MetricsJSON() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"http_requests_total": httpRequestsTotal.Value(),
-		"http_errors_total":   httpErrorsTotal.Value(),
-		"total_requests":      globalMetrics.TotalRequests.Value(),
-		"total_errors":        globalMetrics.TotalErrors.Value(),
-		"agents":              agentStats,
+		"http_requests_total":      httpRequestsTotal.Value(),
+		"http_errors_total":        httpErrorsTotal.Value(),
+		"total_requests":           globalMetrics.TotalRequests.Value(),
+		"total_errors":             globalMetrics.TotalErrors.Value(),
+		"agents":                   agentStats,
+		"http_requests_by_method":  labeledSnapshotToMap(httpRequestsByMethod.Snapshot()),
+		"http_requests_by_status":  labeledSnapshotToMap(httpRequestsByStatus.Snapshot()),
+		"http_requests_by_path":    labeledSnapshotToMap(httpRequestsByPath.Snapshot()),
 	}
+}
+
+// labeledSnapshotToMap converts a labeled counter snapshot to a JSON-friendly format
+// with parsed label keys.
+func labeledSnapshotToMap(snapshot map[string]uint64) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(snapshot))
+	for key, val := range snapshot {
+		labels := parseLabelKey(key)
+		entry := make(map[string]interface{})
+		for k, v := range labels {
+			entry[k] = v
+		}
+		entry["count"] = val
+		result = append(result, entry)
+	}
+	return result
 }
 
 // ─── Health Check ───────────────────────────────────────────────────────────
