@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -119,6 +119,16 @@ bench-nightly:
 	$(GO) test -run TestTool -count=1 -timeout 1800s ./internal/benchmark/... || echo "ToolBench failed (check logs)"
 	@echo "=== Nightly Benchmarks Complete ==="
 
+# Install git pre-commit hook — runs gofmt + go vet + go test -short before each commit.
+# Catches issues at commit time, reducing CI pipeline failures.
+pre-commit-install:
+	@echo "→ Installing pre-commit hook..."
+	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "✓ Pre-commit hook installed (scripts/git-hooks/pre-commit → .git/hooks/pre-commit)"
+	@echo "  Hook runs: gofmt → go vet → go test -short"
+	@echo "  To skip: git commit --no-verify"
+
 # Setup GitHub Actions self-hosted runner for Jetson ARM64
 # Requires a runner registration token from GitHub Settings → Actions → Runners.
 # Usage: make setup-runner TOKEN=AAAA...
@@ -214,5 +224,6 @@ help:
 	@echo "  benchcmp-reset    Reset benchmark baseline"
 	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
 	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
+	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + test)"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
