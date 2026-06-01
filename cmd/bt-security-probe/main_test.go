@@ -5,22 +5,60 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
 func TestRunPassesAgainstHardenedDashboard(t *testing.T) {
+	var mu sync.Mutex
+	reqCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Cache-Control", "no-store")
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-			w.WriteHeader(http.StatusNoContent)
+		// Health endpoint with full hardening headers
+		if r.URL.Path == "/api/health" {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Permissions-Policy", "camera=()")
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "" {
-			http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
+		// Tasks approve — CSRF and Content-Type enforcement
+		if r.URL.Path == "/api/tasks/approve" {
+			if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "" {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				return
+			}
+			if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" && r.Header.Get("X-CSRF-Token") == "" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// Summary — used for rate limiting probe
+		if r.URL.Path == "/api/summary" {
+			mu.Lock()
+			reqCount++
+			count := reqCount
+			mu.Unlock()
+			if count > 5 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// DLQ — protected endpoint
+		if r.URL.Path == "/api/dlq" {
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
