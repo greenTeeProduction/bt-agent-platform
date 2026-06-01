@@ -2,6 +2,7 @@ package reliability
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ type RemoteExecutor struct {
 	name    string
 	baseURL string
 	apiKey  string
+	timeout time.Duration
 	client  *http.Client
 }
 
@@ -41,6 +43,7 @@ func NewRemoteExecutor(cfg RemoteExecutorConfig) *RemoteExecutor {
 		name:    cfg.Name,
 		baseURL: cfg.BaseURL,
 		apiKey:  cfg.APIKey,
+		timeout: timeout,
 	}
 	if cfg.Pool != nil {
 		re.client = cfg.Pool.HTTPClient()
@@ -62,7 +65,9 @@ func (re *RemoteExecutor) Execute(agent, task string) (*AgentResult, error) {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, re.baseURL+"/api/agents/execute", bytes.NewReader(data))
+	ctx, cancel := context.WithTimeout(context.Background(), re.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, re.baseURL+"/api/agents/execute", bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -96,7 +101,9 @@ func (re *RemoteExecutor) Execute(agent, task string) (*AgentResult, error) {
 // Health checks if the remote dashboard is reachable.
 // GET {baseURL}/api/health
 func (re *RemoteExecutor) Health() error {
-	req, err := http.NewRequest(http.MethodGet, re.baseURL+"/api/health", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), re.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, re.baseURL+"/api/health", nil)
 	if err != nil {
 		return fmt.Errorf("create health request: %w", err)
 	}

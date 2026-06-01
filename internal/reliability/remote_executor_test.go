@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -250,6 +251,107 @@ func TestRemoteExecutor_WithoutAPIKey(t *testing.T) {
 
 	if receivedKey != "" {
 		t.Errorf("expected no API key header, got %q", receivedKey)
+	}
+}
+
+func TestRemoteExecutor_WithPoolTimeoutsExecuteAndHealth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		if r.URL.Path == "/api/agents/execute" {
+			json.NewEncoder(w).Encode(&AgentResult{Success: true})
+		}
+	}))
+	defer server.Close()
+
+	pool := NewSharedConnPool(ConnPoolConfig{})
+	exec := NewRemoteExecutor(RemoteExecutorConfig{
+		Name:    "pooled-slow-node",
+		BaseURL: server.URL,
+		Timeout: 20 * time.Millisecond,
+		Pool:    pool,
+	})
+
+	start := time.Now()
+	_, err := exec.Execute("agent", "task")
+	if err == nil {
+		t.Fatal("expected Execute to respect RemoteExecutor timeout even with pooled HTTP client")
+	}
+	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
+		t.Fatalf("Execute timeout was not enforced promptly; elapsed=%s err=%v", elapsed, err)
+	}
+
+	start = time.Now()
+	err = exec.Health()
+	if err == nil {
+		t.Fatal("expected Health to respect RemoteExecutor timeout even with pooled HTTP client")
+	}
+	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
+		t.Fatalf("Health timeout was not enforced promptly; elapsed=%s err=%v", elapsed, err)
+	}
+}
+
+func TestAgentRouter_RemoteExecutorMultiNodeDistribution(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]int{"node-a": 0, "node-b": 0, "node-c": 0}
+
+	makeNode := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/health":
+				w.WriteHeader(http.StatusOK)
+			case "/api/agents/execute":
+				mu.Lock()
+				calls[name]++
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(&AgentResult{
+					Agent:   "distributed-agent",
+					Task:    "validate multi-node routing",
+					Output:  name,
+					Success: true,
+				})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+	}
+
+	nodeA := makeNode("node-a")
+	defer nodeA.Close()
+	nodeB := makeNode("node-b")
+	defer nodeB.Close()
+	nodeC := makeNode("node-c")
+	defer nodeC.Close()
+
+	pool := NewSharedConnPool(ConnPoolConfig{})
+	router := NewAgentRouter(
+		NewRemoteExecutor(RemoteExecutorConfig{Name: "node-a", BaseURL: nodeA.URL, Timeout: time.Second, Pool: pool}),
+		NewRemoteExecutor(RemoteExecutorConfig{Name: "node-b", BaseURL: nodeB.URL, Timeout: time.Second, Pool: pool}),
+		NewRemoteExecutor(RemoteExecutorConfig{Name: "node-c", BaseURL: nodeC.URL, Timeout: time.Second, Pool: pool}),
+	)
+
+	seen := map[string]bool{}
+	for i := 0; i < 6; i++ {
+		result, err := router.Execute("distributed-agent", "validate multi-node routing")
+		if err != nil {
+			t.Fatalf("router.Execute #%d: %v", i, err)
+		}
+		if !result.Success {
+			t.Fatalf("router.Execute #%d returned unsuccessful result: %+v", i, result)
+		}
+		seen[result.Output] = true
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, name := range []string{"node-a", "node-b", "node-c"} {
+		if !seen[name] {
+			t.Fatalf("expected router to return a result from %s; seen=%v calls=%v", name, seen, calls)
+		}
+		if calls[name] != 2 {
+			t.Fatalf("expected round-robin to send exactly 2 tasks to %s; calls=%v", name, calls)
+		}
 	}
 }
 
