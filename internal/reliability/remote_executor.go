@@ -25,23 +25,29 @@ type RemoteExecutorConfig struct {
 	BaseURL string // e.g., "http://100.123.73.66:9800"
 	APIKey  string // optional, sent as X-API-Key header
 	Timeout time.Duration
+	Pool    *ConnPool // optional shared connection pool; if nil, a private pool is created
 }
 
 // NewRemoteExecutor creates a remote executor that delegates to a
 // bt-dashboard instance at the given base URL.
+// If cfg.Pool is set, the executor shares that connection pool (ideal when
+// multiple executors target the same host). Otherwise, a private pool is created.
 func NewRemoteExecutor(cfg RemoteExecutorConfig) *RemoteExecutor {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
-	return &RemoteExecutor{
+	re := &RemoteExecutor{
 		name:    cfg.Name,
 		baseURL: cfg.BaseURL,
 		apiKey:  cfg.APIKey,
-		client: &http.Client{
-			Timeout: timeout,
-		},
 	}
+	if cfg.Pool != nil {
+		re.client = cfg.Pool.HTTPClient()
+	} else {
+		re.client = &http.Client{Timeout: timeout}
+	}
+	return re
 }
 
 // Execute sends the agent task to the remote dashboard's execution endpoint.
