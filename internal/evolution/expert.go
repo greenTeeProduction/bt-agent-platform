@@ -340,7 +340,7 @@ func hasNodeType(node *SerializableNode, nodeType string) bool {
 
 func hasNodeMatching(node *SerializableNode, pattern string) bool {
 	// Pattern format: "Type:Name" or just "Name"
-	if stringsContains(node.Name, pattern) || stringsContains(node.Type+":"+node.Name, pattern) {
+	if strings.Contains(node.Name, pattern) || strings.Contains(node.Type+":"+node.Name, pattern) {
 		return true
 	}
 	for i := range node.Children {
@@ -351,14 +351,6 @@ func hasNodeMatching(node *SerializableNode, pattern string) bool {
 	return false
 }
 
-func stringsContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func maxDepth(node *SerializableNode, currentDepth int) int {
 	if node == nil {

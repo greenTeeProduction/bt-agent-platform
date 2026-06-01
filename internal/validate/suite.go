@@ -5,6 +5,7 @@ package validate
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -96,7 +97,7 @@ func (r *Runner) RunSuite(suite Suite) *SuiteResult {
 			if err != nil {
 				tr.Error = err.Error()
 				tr.Passed = false
-			} else if stringsContains(outcome, "failure") || stringsContains(outcome, "panic") {
+			} else if strings.Contains(outcome, "failure") || strings.Contains(outcome, "panic") {
 				tr.Passed = false
 				tr.Error = fmt.Sprintf("agent returned %s", outcome)
 			} else {
@@ -146,7 +147,7 @@ func (r *Runner) RunSuite(suite Suite) *SuiteResult {
 				tr.Error = err.Error()
 			}
 			// Edge cases: agent should handle gracefully (not panic), even if outcome is failure
-			tr.Passed = outcome != "" && !stringsContains(stringsToLower(output), "panic")
+			tr.Passed = outcome != "" && !strings.Contains(strings.ToLower(output), "panic")
 			sr.Results = append(sr.Results, tr)
 
 		case TestRegression:
@@ -259,35 +260,15 @@ func ScoreAgent(results []TestResult, successRate, avgDurationMs float64) AgentS
 
 func containsErrorPattern(output string) bool {
 	patterns := []string{"panic", "error:", "failed", "cannot", "unable"}
-	lower := stringsToLower(output)
+	lower := strings.ToLower(output)
 	for _, p := range patterns {
-		if stringsContains(lower, p) {
+		if strings.Contains(lower, p) {
 			return true
 		}
 	}
 	return false
 }
 
-func stringsToLower(s string) string {
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 32
-		}
-		result[i] = c
-	}
-	return string(result)
-}
-
-func stringsContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 const longInput = `This is a very long input designed to test the agent's ability to handle large amounts of text. ` +
 	`It contains multiple sentences and paragraphs to simulate real-world usage where users might paste ` +
