@@ -92,8 +92,10 @@ func main() {
 	// Distributed tracing — writes to shared traces log
 	traceLogPath := os.Getenv("HOME") + "/.go-bt-evolve/logs/traces.log"
 	if f, err := os.OpenFile(traceLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-dashboard", f))
-		slog.Info("Tracing enabled", "output", traceLogPath)
+		tracer := tracing.NewConsoleTracer("bt-dashboard", f)
+		otlpEnabled := tracing.ConfigureOTLPFromEnv(tracer)
+		tracing.SetGlobalTracer(tracer)
+		slog.Info("Tracing enabled", "output", traceLogPath, "otlp", otlpEnabled)
 	} else {
 		slog.Warn("Tracing log unavailable", "path", traceLogPath, "error", err)
 	}

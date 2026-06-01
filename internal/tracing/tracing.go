@@ -168,11 +168,13 @@ func hashTraceID(traceID string) uint32 {
 // ConsoleTracer writes span lifecycle events as text lines to an io.Writer.
 // Format: "TRACE [timestamp] trace_id span_id operation DURATION [event] key=value..."
 type ConsoleTracer struct {
-	mu      sync.Mutex
-	w       io.Writer
-	seq     uint64
-	prefix  string  // short prefix for the tracer source (e.g., "bt-agent")
-	sampler Sampler // nil means always sample
+	mu            sync.Mutex
+	w             io.Writer
+	seq           uint64
+	prefix        string       // short prefix for the tracer source (e.g., "bt-agent")
+	sampler       Sampler      // nil means always sample
+	exporter      SpanExporter // optional backend exporter (OTLP, custom collector, etc.)
+	exportTimeout time.Duration
 }
 
 // NewConsoleTracer creates a ConsoleTracer that writes to the given writer.
@@ -181,7 +183,7 @@ func NewConsoleTracer(prefix string, w io.Writer) *ConsoleTracer {
 	if w == nil {
 		w = os.Stderr
 	}
-	return &ConsoleTracer{w: w, prefix: prefix, seq: 0}
+	return &ConsoleTracer{w: w, prefix: prefix, seq: 0, exportTimeout: defaultExportTimeout}
 }
 
 // SetSampler configures the sampling strategy for this tracer.
@@ -198,6 +200,33 @@ func (t *ConsoleTracer) Sampler() Sampler {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.sampler
+}
+
+// SetExporter configures an optional backend exporter that receives each span
+// after it is written to the local trace log. Set nil to disable backend export.
+func (t *ConsoleTracer) SetExporter(exporter SpanExporter) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.exporter = exporter
+}
+
+// Exporter returns the currently configured backend exporter, if any.
+func (t *ConsoleTracer) Exporter() SpanExporter {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.exporter
+}
+
+// SetExportTimeout changes the per-span export timeout. Non-positive durations
+// reset to the default timeout.
+func (t *ConsoleTracer) SetExportTimeout(timeout time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if timeout <= 0 {
+		t.exportTimeout = defaultExportTimeout
+		return
+	}
+	t.exportTimeout = timeout
 }
 
 func (t *ConsoleTracer) nextID() string {
@@ -274,16 +303,20 @@ type spanEvent struct {
 
 func (s *consoleSpan) End() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.ended {
+		s.mu.Unlock()
 		return
 	}
 	s.ended = true
-	duration := time.Since(s.startTime)
+	endTime := time.Now()
+	duration := endTime.Sub(s.startTime)
+	exported := s.exportedSpanLocked(endTime, duration)
+	s.mu.Unlock()
 
 	// Build log line: TRACE ts trace_id span_id parent_id operation DURATION [events]
 	s.tracer.mu.Lock()
-	defer s.tracer.mu.Unlock()
+	exporter := s.tracer.exporter
+	exportTimeout := s.tracer.exportTimeout
 
 	fmt.Fprintf(s.tracer.w, "TRACE %s %s %s",
 		s.startTime.Format(time.RFC3339Nano),
@@ -315,6 +348,45 @@ func (s *consoleSpan) End() {
 	}
 
 	fmt.Fprintln(s.tracer.w)
+	s.tracer.mu.Unlock()
+
+	if exporter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
+		defer cancel()
+		_ = exporter.ExportSpan(ctx, exported)
+	}
+}
+
+func (s *consoleSpan) exportedSpanLocked(endTime time.Time, duration time.Duration) ExportedSpan {
+	attrs := make(map[string]string, len(s.attrs))
+	for k, v := range s.attrs {
+		attrs[k] = v
+	}
+	events := make([]ExportedEvent, 0, len(s.events))
+	for _, ev := range s.events {
+		evAttrs := make(map[string]string, len(ev.Attrs))
+		for _, attr := range ev.Attrs {
+			evAttrs[attr.Key] = attr.Value
+		}
+		events = append(events, ExportedEvent{Name: ev.Name, Time: ev.Time, Attributes: evAttrs})
+	}
+	errMsg := ""
+	if s.err != nil {
+		errMsg = s.err.Error()
+	}
+	return ExportedSpan{
+		ServiceName:  s.tracer.prefix,
+		TraceID:      s.spanCtx.TraceID,
+		SpanID:       s.spanCtx.SpanID,
+		ParentSpanID: s.parentSpanID,
+		Name:         s.name,
+		StartTime:    s.startTime,
+		EndTime:      endTime,
+		Duration:     duration,
+		Attributes:   attrs,
+		Events:       events,
+		Error:        errMsg,
+	}
 }
 
 func (s *consoleSpan) AddEvent(name string, attrs ...Attr) {

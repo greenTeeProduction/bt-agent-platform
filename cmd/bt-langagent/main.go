@@ -204,7 +204,9 @@ func main() {
 	// ── Tracing: initialize global tracer ──
 	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
 	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracing.SetGlobalTracer(tracing.NewConsoleTracer("bt-langagent", f))
+		tracer := tracing.NewConsoleTracer("bt-langagent", f)
+		tracing.ConfigureOTLPFromEnv(tracer)
+		tracing.SetGlobalTracer(tracer)
 	}
 
 	if err := server.Run(); err != nil {
