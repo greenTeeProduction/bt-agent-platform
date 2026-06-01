@@ -1,0 +1,160 @@
+package cicd
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestValidateWorkflowsRepositoryPasses(t *testing.T) {
+	report, err := ValidateWorkflows(repoRoot(t))
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if !report.AllPassed {
+		for _, check := range report.Checks {
+			if !check.Passed {
+				t.Logf("failed: %s — %s", check.Name, check.Details)
+			}
+		}
+		t.Fatalf("expected repository workflows to pass, got %d failed", report.Failed)
+	}
+	if report.Passed < 20 {
+		t.Fatalf("expected comprehensive check coverage, got %d checks", report.Passed)
+	}
+}
+
+func TestValidateWorkflowsMissingFiles(t *testing.T) {
+	report, err := ValidateWorkflows(t.TempDir())
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if report.AllPassed || report.Failed == 0 {
+		t.Fatalf("expected missing workflow failures, got %+v", report)
+	}
+}
+
+func TestValidateWorkflowsDetectsNightlyLabelDrift(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), `name: Nightly
+on: { schedule: [{cron: '0 3 * * *'}], workflow_dispatch: {} }
+jobs:
+  full-tests:
+    runs-on: [ubuntu-latest]
+    steps:
+      - run: curl localhost:11434
+      - run: go test -count=1 -timeout 90m ./...
+      - uses: actions/upload-artifact@v4
+  benchmark-compare:
+    needs: [full-tests]
+    steps:
+      - run: benchcmp check
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if report.AllPassed {
+		t.Fatalf("expected label drift to fail")
+	}
+	if !hasFailedCheck(report, "nightly runs on Jetson self-hosted labels") {
+		t.Fatalf("expected Jetson label check failure, got %+v", report.Checks)
+	}
+}
+
+func TestValidateWorkflowsDetectsMissingSecurityGate(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), `name: CI
+on: {push: {}, pull_request: {}}
+jobs:
+  lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
+  security: {steps: [{run: 'echo no scanners'}]}
+  test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
+  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener'}]}
+  release:
+    needs: [lint, security, test, build]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./...'}]
+`)
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if !hasFailedCheck(report, "ci security runs gosec") || !hasFailedCheck(report, "ci security runs govulncheck") {
+		t.Fatalf("expected scanner checks to fail, got %+v", report.Checks)
+	}
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(wd, "go.mod")); err == nil {
+			return wd
+		}
+		next := filepath.Dir(wd)
+		if next == wd {
+			t.Fatal("go.mod not found")
+		}
+		wd = next
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func hasFailedCheck(report WorkflowReport, name string) bool {
+	for _, check := range report.Checks {
+		if check.Name == name && !check.Passed {
+			return true
+		}
+	}
+	return false
+}
+
+func minimalCI() string {
+	return `name: CI
+on: {push: {}, pull_request: {}}
+jobs:
+  lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
+  security: {steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]}
+  test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
+  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener'}]}
+  release:
+    needs: [lint, security, test, build]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./...'}]
+`
+}
+
+func minimalNightly() string {
+	return `name: Nightly
+on: { schedule: [{cron: '0 3 * * *'}], workflow_dispatch: {} }
+jobs:
+  full-tests:
+    runs-on: [self-hosted, jetson, arm64]
+    steps:
+      - run: curl localhost:11434
+      - run: go test -count=1 -timeout 90m ./...
+      - uses: actions/upload-artifact@v4
+  benchmark-compare:
+    needs: [full-tests]
+    steps:
+      - run: benchcmp check
+`
+}

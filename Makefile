@@ -1,11 +1,11 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe ci-doctor
 
 # Go binary path
 GO := /usr/local/go/bin/go
 GOFMT := /usr/local/go/bin/gofmt
 
 # Build all binaries
-BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe benchcmp
+BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor benchcmp
 BIN_DIR := bin
 
 all: build
@@ -136,6 +136,12 @@ security-probe:
 	@$(GO) build -o $(BIN_DIR)/bt-security-probe ./cmd/bt-security-probe/
 	@$(BIN_DIR)/bt-security-probe --target "$${TARGET:-http://localhost:9800}"
 
+# Validate GitHub Actions workflow maturity gates locally.
+ci-doctor:
+	@mkdir -p $(BIN_DIR)
+	@$(GO) build -o $(BIN_DIR)/bt-ci-doctor ./cmd/bt-ci-doctor/
+	@$(BIN_DIR)/bt-ci-doctor --root "$${ROOT:-.}"
+
 # Setup GitHub Actions self-hosted runner for Jetson ARM64
 # Requires a runner registration token from GitHub Settings → Actions → Runners.
 # Usage: make setup-runner TOKEN=AAAA...
@@ -233,5 +239,6 @@ help:
 	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
 	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + test)"
 	@echo "  security-probe    Run dashboard security probe (TARGET=http://host:9800)"
+	@echo "  ci-doctor         Validate GitHub Actions workflow maturity gates"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
