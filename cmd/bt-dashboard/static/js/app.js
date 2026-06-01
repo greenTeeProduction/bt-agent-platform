@@ -43,6 +43,7 @@ function renderTab(tab) {
     case 'trees':     main.innerHTML = renderTrees(); break;
     case 'mindmap':   main.innerHTML = renderMindMap(); setTimeout(loadMindMap, 200); break;
     case 'evolution': main.innerHTML = renderEvolution(); break;
+    case 'traces':    main.innerHTML = renderTraces(); setTimeout(startTracesPolling, 200); break;
     case 'agents':    main.innerHTML = renderAgents(); setTimeout(loadAgents, 200); break;
   }
 }
@@ -79,7 +80,7 @@ document.getElementById('chat-toggle').addEventListener('click', toggleChat);
 init();
 
 // ─── Keyboard Shortcuts ───
-const TAB_KEYS = ['overview', 'thinktank', 'company', 'tasks', 'trees', 'mindmap', 'evolution', 'agents'];
+const TAB_KEYS = ['overview', 'thinktank', 'company', 'tasks', 'trees', 'mindmap', 'evolution', 'traces', 'agents'];
 document.addEventListener('keydown', e => {
   // Don't trigger when typing in inputs
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
