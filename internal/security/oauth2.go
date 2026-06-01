@@ -49,6 +49,115 @@ func DefaultOAuth2IntrospectionConfig(introspectionURL, clientID, clientSecret s
 	}
 }
 
+// OAuth2DiscoveryConfig configures OpenID Connect discovery for OAuth2 token introspection.
+//
+// IssuerURL points at the OAuth2/OIDC issuer base URL, for example
+// https://auth.example.com/realms/prod. The discovery request is made to
+// {IssuerURL}/.well-known/openid-configuration and must return an
+// introspection_endpoint field.
+type OAuth2DiscoveryConfig struct {
+	// IssuerURL is the OAuth2/OIDC issuer base URL.
+	IssuerURL string
+
+	// ClientID and ClientSecret are copied into the resulting introspection config.
+	ClientID     string
+	ClientSecret string
+
+	// CacheTTL controls the token introspection cache TTL. Default: 5 minutes.
+	CacheTTL time.Duration
+
+	// Timeout for the discovery HTTP request and subsequent introspection requests. Default: 5 seconds.
+	Timeout time.Duration
+
+	// HTTPClient is an optional pre-configured HTTP client. If nil, a timeout-bound client is created.
+	HTTPClient *http.Client
+}
+
+// DefaultOAuth2DiscoveryConfig returns an OIDC discovery config with safe defaults.
+func DefaultOAuth2DiscoveryConfig(issuerURL, clientID, clientSecret string) OAuth2DiscoveryConfig {
+	return OAuth2DiscoveryConfig{
+		IssuerURL:    issuerURL,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		CacheTTL:     5 * time.Minute,
+		Timeout:      5 * time.Second,
+	}
+}
+
+// DiscoverOAuth2IntrospectionConfig resolves an RFC 8414/OIDC discovery document
+// into an OAuth2IntrospectionConfig. This lets deployments configure only an
+// issuer URL instead of hardcoding provider-specific introspection endpoints.
+func DiscoverOAuth2IntrospectionConfig(ctx context.Context, cfg OAuth2DiscoveryConfig) (OAuth2IntrospectionConfig, error) {
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = 5 * time.Second
+	}
+	if cfg.CacheTTL <= 0 {
+		cfg.CacheTTL = 5 * time.Minute
+	}
+	issuer := strings.TrimRight(strings.TrimSpace(cfg.IssuerURL), "/")
+	if issuer == "" {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: issuer URL is required")
+	}
+	issuerURL, err := url.Parse(issuer)
+	if err != nil || issuerURL.Scheme == "" || issuerURL.Host == "" {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: invalid issuer URL %q", cfg.IssuerURL)
+	}
+
+	discoveryURL := issuer + "/.well-known/openid-configuration"
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: cfg.Timeout}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+	if err != nil {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: unexpected status %d", resp.StatusCode)
+	}
+
+	var doc struct {
+		Issuer                string `json:"issuer"`
+		IntrospectionEndpoint string `json:"introspection_endpoint"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: failed to parse response: %w", err)
+	}
+	if strings.TrimSpace(doc.IntrospectionEndpoint) == "" {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: introspection_endpoint missing")
+	}
+	endpointURL, err := url.Parse(doc.IntrospectionEndpoint)
+	if err != nil || endpointURL.Scheme == "" || endpointURL.Host == "" {
+		return OAuth2IntrospectionConfig{}, fmt.Errorf("oauth2 discovery: invalid introspection_endpoint %q", doc.IntrospectionEndpoint)
+	}
+
+	return OAuth2IntrospectionConfig{
+		IntrospectionURL: doc.IntrospectionEndpoint,
+		ClientID:         cfg.ClientID,
+		ClientSecret:     cfg.ClientSecret,
+		CacheTTL:         cfg.CacheTTL,
+		Timeout:          cfg.Timeout,
+		HTTPClient:       cfg.HTTPClient,
+	}, nil
+}
+
+// OAuth2DiscoveryValidator discovers the provider introspection endpoint and
+// returns a TokenValidator backed by OAuth2IntrospectionValidator.
+func OAuth2DiscoveryValidator(ctx context.Context, cfg OAuth2DiscoveryConfig) (TokenValidator, error) {
+	introspectionCfg, err := DiscoverOAuth2IntrospectionConfig(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return OAuth2IntrospectionValidator(introspectionCfg), nil
+}
+
 // introspectionResult is the cached result of a token introspection call.
 type introspectionResult struct {
 	Subject string

@@ -676,6 +676,9 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 }
 
 func TestRunCycle_NoActiveTrees(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping RunCycle benchmark validation path in short mode")
+	}
 	g, _, _, _ := setupGardener(t)
 
 	// Deactivate all trees

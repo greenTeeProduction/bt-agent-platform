@@ -540,3 +540,186 @@ func TestOAuth2IntrospectionValidator_DifferentTokensSeparateCache(t *testing.T)
 		t.Errorf("expected still 3 server calls (cached), got %d", callCount)
 	}
 }
+
+func TestDefaultOAuth2DiscoveryConfig(t *testing.T) {
+	cfg := DefaultOAuth2DiscoveryConfig("https://issuer.example.com", "client", "secret")
+	if cfg.IssuerURL != "https://issuer.example.com" {
+		t.Errorf("expected issuer URL to be set")
+	}
+	if cfg.ClientID != "client" || cfg.ClientSecret != "secret" {
+		t.Errorf("expected client credentials to be set")
+	}
+	if cfg.CacheTTL != 5*time.Minute {
+		t.Errorf("expected CacheTTL 5m, got %v", cfg.CacheTTL)
+	}
+	if cfg.Timeout != 5*time.Second {
+		t.Errorf("expected Timeout 5s, got %v", cfg.Timeout)
+	}
+}
+
+func TestDiscoverOAuth2IntrospectionConfig_Success(t *testing.T) {
+	var discoveryPath, acceptHeader string
+	var serverURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		discoveryPath = r.URL.Path
+		acceptHeader = r.Header.Get("Accept")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"issuer":                 "test-issuer",
+			"introspection_endpoint": serverURL + "/oauth2/introspect",
+		})
+	}))
+	serverURL = ts.URL
+	defer ts.Close()
+
+	cfg, err := DiscoverOAuth2IntrospectionConfig(context.Background(), OAuth2DiscoveryConfig{
+		IssuerURL:    ts.URL + "/",
+		ClientID:     "client-a",
+		ClientSecret: "secret-a",
+		CacheTTL:     time.Minute,
+		Timeout:      2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("unexpected discovery error: %v", err)
+	}
+	if discoveryPath != "/.well-known/openid-configuration" {
+		t.Errorf("expected OIDC discovery path, got %q", discoveryPath)
+	}
+	if acceptHeader != "application/json" {
+		t.Errorf("expected Accept application/json, got %q", acceptHeader)
+	}
+	if cfg.IntrospectionURL != ts.URL+"/oauth2/introspect" {
+		t.Errorf("unexpected introspection URL: %q", cfg.IntrospectionURL)
+	}
+	if cfg.ClientID != "client-a" || cfg.ClientSecret != "secret-a" {
+		t.Errorf("client credentials not propagated")
+	}
+	if cfg.CacheTTL != time.Minute || cfg.Timeout != 2*time.Second {
+		t.Errorf("cache TTL / timeout not propagated")
+	}
+}
+
+func TestDiscoverOAuth2IntrospectionConfig_Defaults(t *testing.T) {
+	var serverURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"introspection_endpoint": serverURL + "/introspect",
+		})
+	}))
+	serverURL = ts.URL
+	defer ts.Close()
+
+	cfg, err := DiscoverOAuth2IntrospectionConfig(context.Background(), OAuth2DiscoveryConfig{IssuerURL: ts.URL})
+	if err != nil {
+		t.Fatalf("unexpected discovery error: %v", err)
+	}
+	if cfg.CacheTTL != 5*time.Minute {
+		t.Errorf("expected default cache TTL, got %v", cfg.CacheTTL)
+	}
+	if cfg.Timeout != 5*time.Second {
+		t.Errorf("expected default timeout, got %v", cfg.Timeout)
+	}
+}
+
+func TestDiscoverOAuth2IntrospectionConfig_Errors(t *testing.T) {
+	tests := []struct {
+		name    string
+		server  func() *httptest.Server
+		issuer  string
+		wantErr string
+	}{
+		{name: "empty issuer", issuer: "", wantErr: "issuer URL is required"},
+		{name: "invalid issuer", issuer: "://bad", wantErr: "invalid issuer URL"},
+		{
+			name: "non-2xx",
+			server: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusBadGateway)
+				}))
+			},
+			wantErr: "unexpected status 502",
+		},
+		{
+			name: "invalid json",
+			server: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("not-json"))
+				}))
+			},
+			wantErr: "failed to parse response",
+		},
+		{
+			name: "missing endpoint",
+			server: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					json.NewEncoder(w).Encode(map[string]interface{}{"issuer": "issuer"})
+				}))
+			},
+			wantErr: "introspection_endpoint missing",
+		},
+		{
+			name: "invalid endpoint",
+			server: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					json.NewEncoder(w).Encode(map[string]interface{}{"introspection_endpoint": "://bad"})
+				}))
+			},
+			wantErr: "invalid introspection_endpoint",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issuer := tt.issuer
+			var ts *httptest.Server
+			if tt.server != nil {
+				ts = tt.server()
+				defer ts.Close()
+				issuer = ts.URL
+			}
+			_, err := DiscoverOAuth2IntrospectionConfig(context.Background(), OAuth2DiscoveryConfig{IssuerURL: issuer})
+			if err == nil {
+				t.Fatal("expected discovery error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestOAuth2DiscoveryValidator_ValidatesToken(t *testing.T) {
+	var serverURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"introspection_endpoint": serverURL + "/introspect",
+			})
+		case "/introspect":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"active": true,
+				"sub":    "discovered-user",
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	serverURL = ts.URL
+	defer ts.Close()
+
+	v, err := OAuth2DiscoveryValidator(context.Background(), OAuth2DiscoveryConfig{
+		IssuerURL:    ts.URL,
+		ClientID:     "client",
+		ClientSecret: "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected discovery error: %v", err)
+	}
+	subject, err := v(context.Background(), "valid-token")
+	if err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+	if subject != "discovered-user" {
+		t.Errorf("expected discovered-user, got %q", subject)
+	}
+}
