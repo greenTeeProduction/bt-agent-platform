@@ -1,40 +1,50 @@
 # Go BT Platform — API Reference
 
 > Auto-generated from Go source and maintained as the canonical API reference.
-> Last updated: 2026-05-29 · Version: 0.2.0 · Go module: `github.com/nico/go-bt-evolve`
+> Last updated: 2026-06-02 · Version: 0.2.0 · Go module: `github.com/nico/go-bt-evolve`
 
-## Packages at a Glance
+## Packages at a Glance (35 packages + 3 utility scripts)
 
 | Package | Lines | Coverage | Purpose |
 |---|---|---|---|
-| [`engine`](#package-engine) | 7,082 | 60% | Core BT runtime, Blackboard, BuildTree, RunTask, 10 chain types |
-| [`evolution`](#package-evolution) | 14,000+ | 54% | 46 trees, 7 algorithm engines, HasClearTask, mutation operators |
-| [`agent`](#package-agent) | 1,400+ | 75% | Agent definitions (YAML), registry, scheduler, history, catalog |
-| [`reliability`](#package-reliability) | 2,000+ | 95% | Circuit breaker, backoff, DLQ, worker pool, queues, executor |
-| [`mcp`](#package-mcp) | 500+ | 82% | JSON-RPC 2.0 stdio MCP server, concurrent dispatch |
-| [`security`](#package-security) | 580+ | 90% | Rate limiter, sanitization, IP filter, audit, request IDs |
-| [`config`](#package-config) | 540+ | 79% | Env-based config, JSON file support, hot-reload watcher |
-| [`metrics`](#package-metrics) | 200+ | 85% | Prometheus Counter/Gauge/Histogram, middleware |
-| [`tracing`](#package-tracing) | 250+ | 95% | OpenTelemetry-ready Tracer/Span, console exporter |
-| [`benchmark`](#package-benchmark) | 1,500+ | 55% | A/B test suite, ScoreMutation, BFCL/SWE-bench/τ-bench/ToolBench/BTPG |
-| [`api`](#package-api) | 800+ | 64% | OpenAPI 3.0 generator, JSON schema I/O, content types |
+| Package | Lines | Coverage | Purpose |
+|---|---|---|---|---|
+| [`engine`](#package-engine) | 7,082 | 90% | Core BT runtime, Blackboard, BuildTree, RunTask, 10 chain types |
+| [`evolution`](#package-evolution) | 14,000+ | 82% | 46 trees, 7 algorithm engines, HasClearTask, mutation operators |
+| [`agent`](#package-agent) | 1,400+ | 77% | Agent definitions (YAML), registry, scheduler, history, catalog |
+| [`reliability`](#package-reliability) | 2,000+ | 87% | Circuit breaker, backoff, DLQ, worker pool, queues, executor |
+| [`mcp`](#package-mcp) | 500+ | 88% | JSON-RPC 2.0 stdio MCP server, concurrent dispatch |
+| [`security`](#package-security) | 580+ | 92% | Rate limiter, sanitization, IP filter, audit, request IDs |
+| [`config`](#package-config) | 540+ | 94% | Env-based config, JSON file support, hot-reload watcher |
+| [`metrics`](#package-metrics) | 200+ | 92% | Prometheus Counter/Gauge/Histogram, middleware |
+| [`tracing`](#package-tracing) | 250+ | 90% | OpenTelemetry-ready Tracer/Span, console exporter |
+| [`benchmark`](#package-benchmark) | 1,500+ | 85% | A/B test suite, ScoreMutation, BFCL/SWE-bench/τ-bench/ToolBench/BTPG |
+| [`api`](#package-api) | 800+ | 94% | OpenAPI 3.0 generator, JSON schema I/O, content types |
+| [`benchreg`](#package-benchreg) | 200+ | 96% | Benchmark regression detection, baseline comparison |
+| [`cicd`](#package-cicd) | 350+ | 90% | CI/CD workflow validation, ci-doctor, runner status |
+| [`dashboard`](#package-internal-dashboard) | 500+ | — | Dashboard API handlers, agent management UI backend |
 | [`factory`](#package-factory) | 600+ | 84% | Skill→BT compiler (analyzer + generator) |
-| [`knowledge`](#package-knowledge) | 500+ | 97% | Tree knowledge graph, discovery, auto-creation, factory |
+| [`knowledge`](#package-knowledge) | 500+ | 89% | Tree knowledge graph, discovery, auto-creation, factory |
 | [`domains`](#package-domains) | 800+ | 100% | 10 domain trees (code review, DevOps, security, etc.) |
 | [`finance`](#package-finance) | 2,000+ | 100% | 10 Anthropic finance trees (pitch, DCF, LBO, KYC, etc.) |
 | [`thinktank`](#package-thinktank) | 1,200+ | 80% | 5-fellow dialectic analysis, 5-phase pipeline |
-|| [`startup`](#package-startup) | 1,000+ | 75% | Startup company simulation (sprint/quarter/year) |
-|| [`evaluator`](#package-evaluator) | 1,200+ | 73% | Stockfish-style tree evaluator, multi-dim fitness, TT, move ordering |
-|| [`gardener`](#package-gardener) | 900+ | 95% | 24/7 evolution daemon, 25 trees, 5-minute cycles, MetricsTracker |
-|| [`goap`](#package-goap) | 600+ | 89% | GOAP planner, DocPlanner, BlackboardBridge, world-state modeling |
-|| [`langagent`](#package-langagent) | 400+ | 95% | LangChain ReAct agent wrapping BT tools |
-|| [`llm`](#package-llm) | 300+ | 94% | LLM client interface, Ollama client, mock for testing |
-|| [`monitoring`](#package-monitoring) | 200+ | 90% | Prometheus alert rules, Alert evaluator, MetricsJSON parser |
-|| [`reflection`](#package-reflection) | 200+ | 75% | Reflection store, Record persistence, JSON file I/O |
-|| [`research`](#package-research) | 600+ | 100% | Deep and quick research trees, gap analysis |
-|| [`validate`](#package-validate) | 500+ | 78% | Agent validation suites, composite scoring, 5 test kinds |
-|| [`workflow`](#package-workflow) | 400+ | 93% | Multi-agent orchestration, sequential/parallel/conditional/loop |
-|| [`log`](#package-log) | 150+ | 85% | Structured logging with file rotation (10MB, 5 backups) |
+| [`startup`](#package-startup) | 1,000+ | 91% | Startup company simulation (sprint/quarter/year) |
+| [`evaluator`](#package-evaluator) | 1,200+ | 94% | Stockfish-style tree evaluator, multi-dim fitness, TT, move ordering |
+| [`gardener`](#package-gardener) | 900+ | 81% | 24/7 evolution daemon, 25 trees, 5-minute cycles, MetricsTracker |
+| [`goap`](#package-goap) | 600+ | 89% | GOAP planner, DocPlanner, BlackboardBridge, world-state modeling |
+| [`langagent`](#package-langagent) | 400+ | 93% | LangChain ReAct agent wrapping BT tools |
+| [`llm`](#package-llm) | 300+ | 56% | LLM client interface, Ollama client, mock for testing |
+| [`monitoring`](#package-monitoring) | 200+ | 96% | Prometheus alert rules, Alert evaluator, MetricsJSON parser |
+| [`reflection`](#package-reflection) | 200+ | 75% | Reflection store, Record persistence, JSON file I/O |
+| [`research`](#package-research) | 600+ | 100% | Deep and quick research trees, gap analysis |
+| [`tools`](#package-tools) | 350+ | 90% | Built-in tool implementations for BT agent chains |
+| [`a2a`](#package-a2a) | 600+ | 42% | Agent-to-Agent protocol, agent cards, inter-agent delegation |
+| [`eval`](#package-eval) | 300+ | 89% | Platform evaluation runner, use case suites, maturity scorecard |
+| [`validate`](#package-validate) | 500+ | 100% | Agent validation suites, composite scoring, 5 test kinds |
+| [`workflow`](#package-workflow) | 400+ | 93% | Multi-agent orchestration, sequential/parallel/conditional/loop |
+| [`log`](#package-log) | 150+ | 58% | Structured logging with file rotation (10MB, 5 backups) |
+| [`util`](#package-util) | 100+ | 100% | Shared utility functions, string conversions |
+| [`persistence`](#package-persistence) | 100+ | — | Generic persistence primitives for BT state |
 
 ---
 
@@ -1040,6 +1050,127 @@ func Init(path string) error
 
 ---
 
+## Package: persistence
+
+`github.com/nico/go-bt-evolve/internal/persistence`
+
+Generic persistence primitives for BT state storage. Provides file-backed persistent storage interfaces used by the reflection store, job store, and scheduler state.
+
+```go
+type Store struct { ... }
+func NewStore(basePath string) (*Store, error)
+func (s *Store) Save(name string, data []byte) error
+func (s *Store) Load(name string) ([]byte, error)
+func (s *Store) List(prefix string) ([]string, error)
+func (s *Store) Delete(name string) error
+```
+
+## Package: util
+
+`github.com/nico/go-bt-evolve/internal/util`
+
+Shared utility functions used across the bt-evolve codebase. Provides string conversion helpers and common patterns to eliminate duplicate implementations.
+
+```go
+func Itoa(i int) string
+func Atoi(s string) (int, error)
+func Contains(s, substr string) bool
+```
+
+## Package: tools
+
+`github.com/nico/go-bt-evolve/internal/tools`
+
+Built-in tool implementations for BT agent chains. Each tool implements `Name()`, `Description()`, and `Call(string)string` for use with `ChainTools` on the engine blackboard. Provides real implementations for web search, file I/O, command execution, and Go toolchain operations.
+
+```go
+type Tool struct { ... }
+func NewWebSearch() Tool
+func NewGoBuild() Tool
+func NewGoTest() Tool
+func NewGoVet() Tool
+func NewCalculator() Tool
+func NewFileRead() Tool
+func NewFileWrite() Tool
+func (t Tool) Name() string
+func (t Tool) Description() string
+func (t Tool) Call(input string) string
+```
+
+## Package: a2a
+
+`github.com/nico/go-bt-evolve/internal/a2a`
+
+Agent-to-Agent (A2A) protocol integration. Auto-generates A2A Agent Cards from BT agent definitions, provides an A2A server wrapping the agent registry, an A2A client for BT trees to delegate to external agents, and a task bridge mapping A2A task lifecycle to BT Blackboard outcomes.
+
+```go
+type AgentCard struct { Name, Description, URL string }
+func GenerateAgentCard(agent *agent.Definition) *AgentCard
+func NewServer(registry *agent.Registry, port int) *Server
+func (s *Server) Start() error
+func NewClient(baseURL string) *Client
+func (c *Client) SendTask(task string) (string, error)
+```
+
+## Package: eval
+
+`github.com/nico/go-bt-evolve/internal/eval`
+
+Platform evaluation runner that executes all 20 use case suites against the merged behavior tree and produces a maturity scorecard. Validates tree routing, output quality, and domain-specific task handling across all registered trees.
+
+```go
+type PlatformEvalResult struct { ... }
+func RunAllSuites(llm llm.LLM) (*PlatformEvalResult, error)
+func RunSuite(name string, llm llm.LLM) (*SuiteResult, error)
+func Scorecard(result *PlatformEvalResult) string
+```
+
+## Package: benchreg
+
+`github.com/nico/go-bt-evolve/internal/benchreg`
+
+Benchmark regression detection for Go benchmarks. Parses `go test -bench` output, stores baseline results, and compares new runs against stored baselines to detect significant performance regressions. Used by the CI/CD pipeline for automated performance monitoring.
+
+```go
+type BaselineStore struct { ... }
+func NewBaselineStore(path string) *BaselineStore
+func (s *BaselineStore) Load() ([]BenchmarkResult, error)
+func (s *BaselineStore) Save(results []BenchmarkResult) error
+type Comparator struct { ... }
+func NewComparator(store *BaselineStore, config RegressionConfig) *Comparator
+func (c *Comparator) Compare(current []BenchmarkResult) []ComparisonResult
+```
+
+## Package: cicd
+
+`github.com/nico/go-bt-evolve/internal/cicd`
+
+CI/CD workflow validation and maturity checks. Implements ci-doctor — 37 evidence-gated checks covering GitHub Actions workflows, linting, build, test, release configuration, runner presence, and security scanning. Produces WorkflowReport evidence artifacts for platform maturity validation.
+
+```go
+type WorkflowReport struct { ... }
+func ValidateWorkflows(rootDir string) *WorkflowReport
+type Check struct { Name, Details string; Passed bool }
+func ValidateChangelog(rootDir string) error
+func ValidateRunnerStatus() bool
+```
+
+## Package: internal/dashboard
+
+`github.com/nico/go-bt-evolve/internal/dashboard`
+
+Dashboard API handlers for the bt-dashboard web UI. Provides endpoints for agent management, task execution, tree visualization, scalability monitoring, and OTLP collector stats. Wraps the agent registry, scheduler, and evaluator for browser-accessible operations.
+
+```go
+type AgentInfo struct { Name, Status, Schedule string; SuccessRate float64 }
+type ScheduledJob struct { Name, Agent, Schedule, Status, LastRun string }
+func TaskApproveHandler(w http.ResponseWriter, r *http.Request)
+func TaskRejectHandler(w http.ResponseWriter, r *http.Request)
+func ScalabilityHandler(w http.ResponseWriter, r *http.Request)
+func OtlpStatsHandler(w http.ResponseWriter, r *http.Request)
+func AgentsHandler(w http.ResponseWriter, r *http.Request)
+```
+
 ## Binaries
 
 | Binary | Port | Purpose |
@@ -1049,7 +1180,12 @@ func Init(path string) error
 | `bt-langagent` | — (MCP stdio) | Langchain ReAct agent (3 tools) |
 | `bt-dashboard` | 9800 | Web dashboard (20+ API endpoints) |
 | `bt-gardener` | — (daemon) | 24/7 tree evolution, 5-min cycles |
+| `bt-otlp-collector` | 4318 | OTLP/HTTP trace collector, auto-started by dashboard |
+| `bt-security-probe` | — (CLI) | 23-check security posture assessment |
+| `bt-scalability-probe` | — (CLI) | Single-node scalability probe and multi-node probing |
 | `bt-agent-cli` | — (CLI) | Agent management CLI |
+| `bt-tree-integration` | — (CLI) | Tree registration and loading validation |
+| `bt-assistant` | — (CLI) | BT assistant CLI |
 | `evolve_all` | — (script) | Batch evolution runner |
 | `hermes_improve` | — (script) | Self-improvement runner |
 
