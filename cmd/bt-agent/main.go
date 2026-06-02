@@ -284,7 +284,10 @@ func main() {
 		Registry: agentReg,
 		History:  agentHist,
 		JobStore: agent.NewFileJobStore(jobStoreDir + "/scheduler-jobs.json"),
-		CBStore:  agent.NewAgentCircuitBreakerStore(agent.DefaultCircuitBreakerOptions()),
+		CBStore: agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+			Threshold: cfg.CBThreshold,
+			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
+		}),
 	})
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
 		// ctx.Task is set by the scheduler from the agent's description.
@@ -322,8 +325,25 @@ func main() {
 			return "failure", "", fmt.Errorf("no tree found for agent %s", ctx.AgentName)
 		}
 
-		policy := reliability.DefaultRetryPolicy()
-		policy.RetryUnknown = true // retry unknown errors to match legacy behavior
+		policy := reliability.RetryPolicy{
+			MaxRetries:   cfg.RetryMaxRetries,
+			Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
+			MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
+			LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
+			RetryUnknown: true, // retry unknown errors to match legacy behavior
+		}
+		switch cfg.RetryJitter {
+		case "no_jitter":
+			policy.Jitter = reliability.NoJitter
+		case "full_jitter":
+			policy.Jitter = reliability.FullJitterStrategy
+		case "equal_jitter":
+			policy.Jitter = reliability.EqualJitterStrategy
+		case "decorrelated_jitter":
+			policy.Jitter = reliability.DecorrelatedJitterStrategy
+		default:
+			policy.Jitter = reliability.FullJitterStrategy
+		}
 		err = policy.ExecuteContext(ctx.Context, func() error {
 			bb := &engine.Blackboard{Task: task, LLM: llmClient}
 			bt := engine.BuildTree(tree, bb)

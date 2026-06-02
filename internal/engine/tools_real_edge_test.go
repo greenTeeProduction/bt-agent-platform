@@ -276,6 +276,45 @@ func TestComputeSubtreeMetrics_MixedChildren(t *testing.T) {
 	}
 }
 
+func TestComputeSubtreeMetrics_UpdatesMaxValues(t *testing.T) {
+	// Children with non-zero retries, timeout, and parallel width to exercise
+	// all the comparison-branch true paths.
+	children := []evolution.SerializableNode{
+		{
+			Type:       "Parallel",
+			Name:       "ChildPar",
+			MaxRetries: 3,
+			TimeoutMs:  5000,
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "A"},
+				{Type: "Action", Name: "B"},
+			},
+		},
+		{
+			Type:       "Retry",
+			Name:       "ChildRet",
+			MaxRetries: 5,
+			TimeoutMs:  10000,
+		},
+	}
+	depth, count, par, retries, timeout := computeSubtreeMetrics(children)
+	if count != 4 {
+		t.Errorf("expected count 4 (ChildPar + A + B + ChildRet), got %d", count)
+	}
+	if par != 2 {
+		t.Errorf("expected parallel width 2 from ChildPar, got %d", par)
+	}
+	if retries != 5 {
+		t.Errorf("expected max retries 5 from ChildRet, got %d", retries)
+	}
+	if timeout != 10000 {
+		t.Errorf("expected max timeout 10000 from ChildRet, got %d", timeout)
+	}
+	if depth != 1 {
+		t.Errorf("expected depth 1, got %d", depth)
+	}
+}
+
 // ─── buildChainActionFn with ChainConfig edge cases ───
 
 func TestBuildChainActionFn_UnknownChainType(t *testing.T) {

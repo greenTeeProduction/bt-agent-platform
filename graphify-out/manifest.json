@@ -116,8 +116,8 @@
     "hash": "aca7dc4b6230e05aa7c34172b7cd11d4"
   },
   "/home/nico/go-bt-evolve/internal/startup/eng.go": {
-    "mtime": 1780055314.602559,
-    "hash": "19ac692936b2fea721aa2177b1e95f0c"
+    "mtime": 1780385967.3824441,
+    "hash": "9b1d2d545a82f0a63f9e1a67d20b3589"
   },
   "/home/nico/go-bt-evolve/internal/startup/company.go": {
     "mtime": 1780295456.882351,
@@ -134,6 +134,10 @@
   "/home/nico/go-bt-evolve/internal/startup/orchestrator.go": {
     "mtime": 1780295456.9583514,
     "hash": "3204177441eebae69d73d6e007f9b500"
+  },
+  "/home/nico/go-bt-evolve/internal/startup/startup_test.go": {
+    "mtime": 1780386100.6836212,
+    "hash": "d24b5318726c6f1fd542f47b23f9f981"
   },
   "/home/nico/go-bt-evolve/internal/startup/companies/bt_studio.go": {
     "mtime": 1780295456.8903508,
@@ -164,8 +168,8 @@
     "hash": "006cd72f3beb446d1b70868743729d27"
   },
   "/home/nico/go-bt-evolve/internal/config/config.go": {
-    "mtime": 1780378817.1845877,
-    "hash": "d05149f5615974cb9ceb172436ac0dd7"
+    "mtime": 1780389680.2313716,
+    "hash": "78aedb2f699546ecddf6ede36bafaac3"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
     "mtime": 1780128079.3222642,
@@ -444,16 +448,16 @@
     "hash": "e4d0a64961558e211971335a564da6a9"
   },
   "/home/nico/go-bt-evolve/internal/security/probe.go": {
-    "mtime": 1780365293.0178165,
-    "hash": "18a6a50d00d2842a6526afbaf4345fdf"
+    "mtime": 1780387032.104692,
+    "hash": "1d8e71662e671dec7a933e7008c2567f"
   },
   "/home/nico/go-bt-evolve/internal/engine/script_nodes.go": {
     "mtime": 1780212236.430722,
     "hash": "9e70e365d2480ed68bd61d1d9a8a9c39"
   },
   "/home/nico/go-bt-evolve/internal/engine/tree.go": {
-    "mtime": 1780383532.127927,
-    "hash": "44d5842706c7d3cddba423c3eaefd30c"
+    "mtime": 1780386075.8194017,
+    "hash": "ddfe30f37b0d1021630b6b1cf00a8cc7"
   },
   "/home/nico/go-bt-evolve/internal/engine/a2a_nodes_test.go": {
     "mtime": 1780295456.7783499,
@@ -536,8 +540,8 @@
     "hash": "f0c6d4369055efcc9918e0e03f3a2605"
   },
   "/home/nico/go-bt-evolve/internal/engine/tools_real_edge_test.go": {
-    "mtime": 1780367314.447278,
-    "hash": "64fe856ac65c9da6db8807a06d9c5b16"
+    "mtime": 1780388852.714266,
+    "hash": "eb85f2984aa17a1f344015d2009b6182"
   },
   "/home/nico/go-bt-evolve/internal/engine/validate.go": {
     "mtime": 1780086568.5129857,
@@ -567,6 +571,10 @@
     "mtime": 1780349835.890554,
     "hash": "e699bdc556dc64e94e5bc60cd5ba9851"
   },
+  "/home/nico/go-bt-evolve/internal/engine/validate_edge_test.go": {
+    "mtime": 1780388909.5990903,
+    "hash": "c9101bc77e333e7af68f7a80a60c65ae"
+  },
   "/home/nico/go-bt-evolve/internal/engine/script_nodes_test.go": {
     "mtime": 1780337503.0297942,
     "hash": "0a9707ed2412d19f4c6c2fb6f95830d6"
@@ -576,8 +584,8 @@
     "hash": "c05190db5efb93b7104f90da58b1d409"
   },
   "/home/nico/go-bt-evolve/internal/engine/builtin_names.go": {
-    "mtime": 1780383585.9005067,
-    "hash": "e531ba58e391b39f513111a1b765f970"
+    "mtime": 1780386067.4233277,
+    "hash": "d3be425230420c2d297bf9f24b93043c"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_driven_abort.go": {
     "mtime": 1780349835.890554,
@@ -1152,8 +1160,8 @@
     "hash": "a087530c3f4dff6c6d78f3d55ed30f1a"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/main.go": {
-    "mtime": 1780378779.1604364,
-    "hash": "5e5157fc2d472665f7af1d39b8295e8a"
+    "mtime": 1780387027.9687164,
+    "hash": "79a137ef4b4a7bffc5cb11ccbc102388"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
     "mtime": 1780356197.2263799,
@@ -1240,8 +1248,8 @@
     "hash": "907cf814607bdb716c7601402bedc86e"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/main.go": {
-    "mtime": 1780381430.1575541,
-    "hash": "57027f875d02ac44ce010aef050f9d2d"
+    "mtime": 1780389665.5552435,
+    "hash": "7130d7bbc2e14d4df06ed9ed76d12238"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/tools.go": {
     "mtime": 1780372519.6089852,
@@ -1264,8 +1272,8 @@
     "hash": "ab380048cef90102ac24f67096384716"
   },
   "/home/nico/go-bt-evolve/scripts/git-hooks/pre-commit": {
-    "mtime": 1780364487.2948592,
-    "hash": "592b19076cb082efc20d291a6352bfb6"
+    "mtime": 1780387693.3440547,
+    "hash": "8d2c5bdfaccbc0ec65f044de48d13584"
   },
   "/home/nico/go-bt-evolve/flutter/lib/dashboard.dart": {
     "mtime": 1779723806.1141267,

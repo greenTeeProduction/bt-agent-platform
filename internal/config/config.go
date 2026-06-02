@@ -70,6 +70,17 @@ type Config struct {
 	// Scheduler
 	SchedulerCheckInterval int `json:"scheduler_check_interval" env:"BT_SCHEDULER_INTERVAL" default:"60"` // seconds
 
+	// Error Handling
+	RetryMaxRetries  int    `json:"retry_max_retries" env:"BT_RETRY_MAX_RETRIES" default:"3"`
+	RetryBaseDelayMs int    `json:"retry_base_delay_ms" env:"BT_RETRY_BASE_DELAY_MS" default:"1000"`
+	RetryMaxDelayMs  int    `json:"retry_max_delay_ms" env:"BT_RETRY_MAX_DELAY_MS" default:"30000"`
+	RetryLLMBaseMs   int    `json:"retry_llm_base_ms" env:"BT_RETRY_LLM_BASE_MS" default:"2000"`
+	RetryJitter      string `json:"retry_jitter" env:"BT_RETRY_JITTER" default:"full_jitter"` // no_jitter, full_jitter, equal_jitter, decorrelated_jitter
+	RetryUnknown     bool   `json:"retry_unknown" env:"BT_RETRY_UNKNOWN" default:"false"`
+	CBThreshold      int    `json:"cb_threshold" env:"BT_CB_THRESHOLD" default:"3"`
+	CBCooldownSecs   int    `json:"cb_cooldown_secs" env:"BT_CB_COOLDOWN_SECS" default:"300"` // 5 minutes
+	DLQMaxEntries    int    `json:"dlq_max_entries" env:"BT_DLQ_MAX_ENTRIES" default:"1000"`
+
 	// Validation
 	MaxBodySize int64 `json:"max_body_size" env:"BT_MAX_BODY_SIZE" default:"1048576"` // 1 MB
 
@@ -251,6 +262,15 @@ func newDefaultConfig() *Config {
 		GardenerMaxNodes:             20,
 		SchedulerCheckInterval:       60,
 		MaxBodySize:                  1048576,
+		RetryMaxRetries:              3,
+		RetryBaseDelayMs:             1000,
+		RetryMaxDelayMs:              30000,
+		RetryLLMBaseMs:               2000,
+		RetryJitter:                  "full_jitter",
+		RetryUnknown:                 false,
+		CBThreshold:                  3,
+		CBCooldownSecs:               300,
+		DLQMaxEntries:                1000,
 	}
 }
 
@@ -531,6 +551,49 @@ func applyEnvOverrides(c *Config) {
 		}
 	}
 
+	// Error Handling
+	if v := os.Getenv("BT_RETRY_MAX_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.RetryMaxRetries = n
+		}
+	}
+	if v := os.Getenv("BT_RETRY_BASE_DELAY_MS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.RetryBaseDelayMs = n
+		}
+	}
+	if v := os.Getenv("BT_RETRY_MAX_DELAY_MS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.RetryMaxDelayMs = n
+		}
+	}
+	if v := os.Getenv("BT_RETRY_LLM_BASE_MS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.RetryLLMBaseMs = n
+		}
+	}
+	if v := os.Getenv("BT_RETRY_JITTER"); v != "" {
+		c.RetryJitter = v
+	}
+	if v := os.Getenv("BT_RETRY_UNKNOWN"); v != "" {
+		c.RetryUnknown = parseBool(v)
+	}
+	if v := os.Getenv("BT_CB_THRESHOLD"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.CBThreshold = n
+		}
+	}
+	if v := os.Getenv("BT_CB_COOLDOWN_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.CBCooldownSecs = n
+		}
+	}
+	if v := os.Getenv("BT_DLQ_MAX_ENTRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.DLQMaxEntries = n
+		}
+	}
+
 	// Validation
 	if v := os.Getenv("BT_MAX_BODY_SIZE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -739,6 +802,17 @@ func applyDotEnvToConfig(c *Config, kv map[string]string) {
 	// Scheduler
 	applyDotEnvInt("BT_SCHEDULER_INTERVAL", "BT_SCHEDULER_INTERVAL", func(v int) { c.SchedulerCheckInterval = v })
 
+	// Error Handling
+	applyDotEnvInt("BT_RETRY_MAX_RETRIES", "BT_RETRY_MAX_RETRIES", func(v int) { c.RetryMaxRetries = v })
+	applyDotEnvInt("BT_RETRY_BASE_DELAY_MS", "BT_RETRY_BASE_DELAY_MS", func(v int) { c.RetryBaseDelayMs = v })
+	applyDotEnvInt("BT_RETRY_MAX_DELAY_MS", "BT_RETRY_MAX_DELAY_MS", func(v int) { c.RetryMaxDelayMs = v })
+	applyDotEnvInt("BT_RETRY_LLM_BASE_MS", "BT_RETRY_LLM_BASE_MS", func(v int) { c.RetryLLMBaseMs = v })
+	applyDotEnvStr("BT_RETRY_JITTER", "BT_RETRY_JITTER", func(v string) { c.RetryJitter = v })
+	applyDotEnvBool("BT_RETRY_UNKNOWN", "BT_RETRY_UNKNOWN", func(v bool) { c.RetryUnknown = v })
+	applyDotEnvInt("BT_CB_THRESHOLD", "BT_CB_THRESHOLD", func(v int) { c.CBThreshold = v })
+	applyDotEnvInt("BT_CB_COOLDOWN_SECS", "BT_CB_COOLDOWN_SECS", func(v int) { c.CBCooldownSecs = v })
+	applyDotEnvInt("BT_DLQ_MAX_ENTRIES", "BT_DLQ_MAX_ENTRIES", func(v int) { c.DLQMaxEntries = v })
+
 	// Validation
 	applyDotEnvInt("BT_MAX_BODY_SIZE", "BT_MAX_BODY_SIZE", func(v int) { c.MaxBodySize = int64(v) })
 }
@@ -784,6 +858,33 @@ func (c *Config) Validate() error {
 	if c.MaxBodySize < 1024 || c.MaxBodySize > 100*1024*1024 {
 		errs = append(errs, ValidationError{"MaxBodySize", "must be between 1024 and 104857600 (100MB)"})
 	}
+
+	// Error Handling
+	if c.RetryMaxRetries < 1 || c.RetryMaxRetries > 10 {
+		errs = append(errs, ValidationError{"RetryMaxRetries", "must be between 1 and 10"})
+	}
+	if c.RetryBaseDelayMs < 100 || c.RetryBaseDelayMs > 60000 {
+		errs = append(errs, ValidationError{"RetryBaseDelayMs", "must be between 100 and 60000 ms"})
+	}
+	if c.RetryMaxDelayMs < 1000 || c.RetryMaxDelayMs > 600000 {
+		errs = append(errs, ValidationError{"RetryMaxDelayMs", "must be between 1000 and 600000 ms"})
+	}
+	if c.RetryLLMBaseMs < 100 || c.RetryLLMBaseMs > 120000 {
+		errs = append(errs, ValidationError{"RetryLLMBaseMs", "must be between 100 and 120000 ms"})
+	}
+	if c.RetryJitter != "no_jitter" && c.RetryJitter != "full_jitter" && c.RetryJitter != "equal_jitter" && c.RetryJitter != "decorrelated_jitter" {
+		errs = append(errs, ValidationError{"RetryJitter", "must be one of: no_jitter, full_jitter, equal_jitter, decorrelated_jitter"})
+	}
+	if c.CBThreshold < 1 || c.CBThreshold > 20 {
+		errs = append(errs, ValidationError{"CBThreshold", "must be between 1 and 20 failures"})
+	}
+	if c.CBCooldownSecs < 10 || c.CBCooldownSecs > 3600 {
+		errs = append(errs, ValidationError{"CBCooldownSecs", "must be between 10 and 3600 seconds"})
+	}
+	if c.DLQMaxEntries < 10 || c.DLQMaxEntries > 100000 {
+		errs = append(errs, ValidationError{"DLQMaxEntries", "must be between 10 and 100000"})
+	}
+
 	if c.OllamaModel == "" && c.LLMProvider == "ollama" {
 		errs = append(errs, ValidationError{"OllamaModel", "must not be empty when LLMProvider is ollama"})
 	}
@@ -993,6 +1094,35 @@ func (c *Config) Diff(other *Config) []string {
 		diffs = append(diffs, fmt.Sprintf("SchedulerCheckInterval: %ds → %ds", c.SchedulerCheckInterval, other.SchedulerCheckInterval))
 	}
 
+	// Error Handling
+	if c.RetryMaxRetries != other.RetryMaxRetries {
+		diffs = append(diffs, fmt.Sprintf("RetryMaxRetries: %d → %d", c.RetryMaxRetries, other.RetryMaxRetries))
+	}
+	if c.RetryBaseDelayMs != other.RetryBaseDelayMs {
+		diffs = append(diffs, fmt.Sprintf("RetryBaseDelayMs: %dms → %dms", c.RetryBaseDelayMs, other.RetryBaseDelayMs))
+	}
+	if c.RetryMaxDelayMs != other.RetryMaxDelayMs {
+		diffs = append(diffs, fmt.Sprintf("RetryMaxDelayMs: %dms → %dms", c.RetryMaxDelayMs, other.RetryMaxDelayMs))
+	}
+	if c.RetryLLMBaseMs != other.RetryLLMBaseMs {
+		diffs = append(diffs, fmt.Sprintf("RetryLLMBaseMs: %dms → %dms", c.RetryLLMBaseMs, other.RetryLLMBaseMs))
+	}
+	if c.RetryJitter != other.RetryJitter {
+		diffs = append(diffs, fmt.Sprintf("RetryJitter: %s → %s", c.RetryJitter, other.RetryJitter))
+	}
+	if c.RetryUnknown != other.RetryUnknown {
+		diffs = append(diffs, fmt.Sprintf("RetryUnknown: %v → %v", c.RetryUnknown, other.RetryUnknown))
+	}
+	if c.CBThreshold != other.CBThreshold {
+		diffs = append(diffs, fmt.Sprintf("CBThreshold: %d → %d", c.CBThreshold, other.CBThreshold))
+	}
+	if c.CBCooldownSecs != other.CBCooldownSecs {
+		diffs = append(diffs, fmt.Sprintf("CBCooldownSecs: %ds → %ds", c.CBCooldownSecs, other.CBCooldownSecs))
+	}
+	if c.DLQMaxEntries != other.DLQMaxEntries {
+		diffs = append(diffs, fmt.Sprintf("DLQMaxEntries: %d → %d", c.DLQMaxEntries, other.DLQMaxEntries))
+	}
+
 	// Validation
 	if c.MaxBodySize != other.MaxBodySize {
 		diffs = append(diffs, fmt.Sprintf("MaxBodySize: %d → %d", c.MaxBodySize, other.MaxBodySize))
@@ -1037,6 +1167,35 @@ func envBool(key string, defaultVal bool) bool {
 // Duration is a helper to get a time.Duration from seconds config.
 func Duration(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
+}
+
+// RetryBaseDuration returns the retry base delay as time.Duration.
+func (c *Config) RetryBaseDuration() time.Duration {
+	return time.Duration(c.RetryBaseDelayMs) * time.Millisecond
+}
+
+// RetryMaxDuration returns the retry max delay as time.Duration.
+func (c *Config) RetryMaxDuration() time.Duration {
+	return time.Duration(c.RetryMaxDelayMs) * time.Millisecond
+}
+
+// RetryLLMBaseDuration returns the retry LLM base delay as time.Duration.
+func (c *Config) RetryLLMBaseDuration() time.Duration {
+	return time.Duration(c.RetryLLMBaseMs) * time.Millisecond
+}
+
+// CBCooldownDuration returns the circuit breaker cooldown as time.Duration.
+func (c *Config) CBCooldownDuration() time.Duration {
+	return time.Duration(c.CBCooldownSecs) * time.Second
+}
+
+// DLQMaxEntriesLimit returns the dead letter queue max entry count.
+// Returns 0 (unlimited) if DLQMaxEntries is 0 or negative.
+func (c *Config) DLQMaxEntriesLimit() int {
+	if c.DLQMaxEntries <= 0 {
+		return 0
+	}
+	return c.DLQMaxEntries
 }
 
 // ─── Runtime Checks ──────────────────────────────────────────────────────────
