@@ -153,8 +153,13 @@ func main() {
 	}
 	slog.Info("Dashboard CORS origin", "origin", corsOrigin)
 
-	// Rate limiter: 100 req/sec per client, burst 20
-	rateLimiter := security.NewRateLimiter(100, 20)
+	// Rate limiter: 10 req/sec per client, burst 10.
+	// Production tuning: the Jetson ARM64 cannot serve 100 req/s from a single process,
+	// so 10/10 provides meaningful protection against burst abuse while allowing
+	// normal interactive dashboard usage. The security probe sends 25 rapid requests;
+	// with burst 10 and 10 req/s refill, the 20th+ request within the same second
+	// should reliably trigger a 429.
+	rateLimiter := security.NewRateLimiter(10, 10)
 
 	// Security audit buffer: capture security events in-memory for dashboard visibility
 	auditBuffer := security.NewAuditBuffer(200)
