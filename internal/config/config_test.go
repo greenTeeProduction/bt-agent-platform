@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoad_Defaults(t *testing.T) {
@@ -1971,5 +1972,133 @@ func TestDiff_ConfigFileFieldIgnored(t *testing.T) {
 	diffs := a.Diff(b)
 	if len(diffs) != 0 {
 		t.Errorf("ConfigFile should not be diffed (json:\"-\"), got: %v", diffs)
+	}
+}
+
+// ─── Duration Helper Tests ─────────────────────────────────────────────────
+
+func TestDuration(t *testing.T) {
+	if d := Duration(5); d != 5*time.Second {
+		t.Errorf("Duration(5) = %v, want 5s", d)
+	}
+	if d := Duration(0); d != 0 {
+		t.Errorf("Duration(0) = %v, want 0s", d)
+	}
+	if d := Duration(3600); d != time.Hour {
+		t.Errorf("Duration(3600) = %v, want 1h0m0s", d)
+	}
+}
+
+func TestConfig_RetryBaseDuration(t *testing.T) {
+	c := newDefaultConfig()
+	c.RetryBaseDelayMs = 1000
+	if d := c.RetryBaseDuration(); d != time.Second {
+		t.Errorf("RetryBaseDuration() = %v, want 1s", d)
+	}
+	c.RetryBaseDelayMs = 0
+	if d := c.RetryBaseDuration(); d != 0 {
+		t.Errorf("RetryBaseDuration() with 0ms = %v, want 0s", d)
+	}
+}
+
+func TestConfig_RetryMaxDuration(t *testing.T) {
+	c := newDefaultConfig()
+	c.RetryMaxDelayMs = 30000
+	if d := c.RetryMaxDuration(); d != 30*time.Second {
+		t.Errorf("RetryMaxDuration() = %v, want 30s", d)
+	}
+	c.RetryMaxDelayMs = 0
+	if d := c.RetryMaxDuration(); d != 0 {
+		t.Errorf("RetryMaxDuration() with 0ms = %v, want 0s", d)
+	}
+}
+
+func TestConfig_RetryLLMBaseDuration(t *testing.T) {
+	c := newDefaultConfig()
+	c.RetryLLMBaseMs = 5000
+	if d := c.RetryLLMBaseDuration(); d != 5*time.Second {
+		t.Errorf("RetryLLMBaseDuration() = %v, want 5s", d)
+	}
+}
+
+func TestConfig_CBCooldownDuration(t *testing.T) {
+	c := newDefaultConfig()
+	c.CBCooldownSecs = 60
+	if d := c.CBCooldownDuration(); d != time.Minute {
+		t.Errorf("CBCooldownDuration() = %v, want 1m0s", d)
+	}
+	c.CBCooldownSecs = 0
+	if d := c.CBCooldownDuration(); d != 0 {
+		t.Errorf("CBCooldownDuration() with 0s = %v, want 0s", d)
+	}
+}
+
+func TestConfig_DLQMaxEntriesLimit(t *testing.T) {
+	c := newDefaultConfig()
+	c.DLQMaxEntries = 100
+	if n := c.DLQMaxEntriesLimit(); n != 100 {
+		t.Errorf("DLQMaxEntriesLimit() = %d, want 100", n)
+	}
+	// Zero means unlimited
+	c.DLQMaxEntries = 0
+	if n := c.DLQMaxEntriesLimit(); n != 0 {
+		t.Errorf("DLQMaxEntriesLimit(0) = %d, want 0", n)
+	}
+	// Negative means unlimited
+	c.DLQMaxEntries = -1
+	if n := c.DLQMaxEntriesLimit(); n != 0 {
+		t.Errorf("DLQMaxEntriesLimit(-1) = %d, want 0", n)
+	}
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	// Set a specific home for deterministic test
+	t.Setenv("BT_HOME", "/tmp/test-bt-home")
+	c := newDefaultConfig()
+	c.ResolvePaths()
+
+	if c.Paths.HomeDir != "/tmp/test-bt-home" {
+		t.Errorf("HomeDir = %q, want /tmp/test-bt-home", c.Paths.HomeDir)
+	}
+	if c.Paths.ConfigFile != "/tmp/test-bt-home/config.yaml" {
+		t.Errorf("ConfigFile = %q, want /tmp/test-bt-home/config.yaml", c.Paths.ConfigFile)
+	}
+	if c.Paths.DBFile != "/tmp/test-bt-home/agents.db" {
+		t.Errorf("DBFile = %q, want /tmp/test-bt-home/agents.db", c.Paths.DBFile)
+	}
+	if c.Paths.ReflectionsDir != "/tmp/test-bt-home/reflections" {
+		t.Errorf("ReflectionsDir = %q, want /tmp/test-bt-home/reflections", c.Paths.ReflectionsDir)
+	}
+	if c.Paths.HistoryDir != "/tmp/test-bt-home/history" {
+		t.Errorf("HistoryDir = %q, want /tmp/test-bt-home/history", c.Paths.HistoryDir)
+	}
+	if c.Paths.LogDir != "/tmp/test-bt-home/logs" {
+		t.Errorf("LogDir = %q, want /tmp/test-bt-home/logs", c.Paths.LogDir)
+	}
+}
+
+func TestConfig_ResolvePaths_WithOverrides(t *testing.T) {
+	t.Setenv("BT_HOME", "/tmp/bt-home")
+	c := newDefaultConfig()
+	c.ReflectionsDir = "/custom/reflections"
+	c.HistoryDir = "/custom/history"
+	c.LogDir = "/custom/logs"
+	c.ConfigFile = "/custom/config.json"
+	c.ResolvePaths()
+
+	if c.Paths.HomeDir != "/tmp/bt-home" {
+		t.Errorf("HomeDir = %q, want /tmp/bt-home", c.Paths.HomeDir)
+	}
+	if c.Paths.ConfigFile != "/custom/config.json" {
+		t.Errorf("ConfigFile = %q, want /custom/config.json", c.Paths.ConfigFile)
+	}
+	if c.Paths.ReflectionsDir != "/custom/reflections" {
+		t.Errorf("ReflectionsDir = %q, want /custom/reflections", c.Paths.ReflectionsDir)
+	}
+	if c.Paths.HistoryDir != "/custom/history" {
+		t.Errorf("HistoryDir = %q, want /custom/history", c.Paths.HistoryDir)
+	}
+	if c.Paths.LogDir != "/custom/logs" {
+		t.Errorf("LogDir = %q, want /custom/logs", c.Paths.LogDir)
 	}
 }

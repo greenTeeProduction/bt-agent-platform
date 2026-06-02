@@ -180,8 +180,8 @@
     "hash": "417e7fd94473176e87b1be8c910af756"
   },
   "/home/nico/go-bt-evolve/internal/config/config_test.go": {
-    "mtime": 1780333165.6689248,
-    "hash": "493ac6bd4c8392a60679e94d83b38052"
+    "mtime": 1780410356.995423,
+    "hash": "f137c73302c43ace0069667b3b319b3c"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher.go": {
     "mtime": 1780295456.7383497,
@@ -192,8 +192,8 @@
     "hash": "c6ee820de4e4830c6d40b77d6780744e"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
-    "mtime": 1780128079.3222642,
-    "hash": "3698e3cb2509e20cf888bac8b287a2ba"
+    "mtime": 1780410805.158168,
+    "hash": "d5719bc0bb247e4a1bc82cc5ba1061ee"
   },
   "/home/nico/go-bt-evolve/internal/llm/provider.go": {
     "mtime": 1780333262.049399,
@@ -1348,8 +1348,8 @@
     "hash": "ab380048cef90102ac24f67096384716"
   },
   "/home/nico/go-bt-evolve/scripts/git-hooks/pre-commit": {
-    "mtime": 1780387693.3440547,
-    "hash": "8d2c5bdfaccbc0ec65f044de48d13584"
+    "mtime": 1780409550.529764,
+    "hash": "9dafc0133868e427ea4e08b4c553287c"
   },
   "/home/nico/go-bt-evolve/flutter/lib/dashboard.dart": {
     "mtime": 1779723806.1141267,
