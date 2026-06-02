@@ -23,6 +23,10 @@
     "mtime": 1780295456.8343503,
     "hash": "4b5ea5e83bf48e287da1e93a020cb9a2"
   },
+  "/home/nico/go-bt-evolve/internal/benchmark/integration_test.go": {
+    "mtime": 1780420594.8951216,
+    "hash": "5f566f2a5440e695ade949375ecc8581"
+  },
   "/home/nico/go-bt-evolve/internal/benchmark/bfcl_v3.go": {
     "mtime": 1780295456.9503515,
     "hash": "3fdbe818aad8ed6226875cfbe1e95f32"
@@ -732,8 +736,8 @@
     "hash": "9d09df76e3bd8b9ad2f3c28fe1bc4cca"
   },
   "/home/nico/go-bt-evolve/internal/evaluator/coverage_gaps_test.go": {
-    "mtime": 1780419253.8466325,
-    "hash": "c2b10d56d4240751c87b1541e8c2093e"
+    "mtime": 1780419408.4439225,
+    "hash": "ad78db54e3b004c584f5fc473a473a9e"
   },
   "/home/nico/go-bt-evolve/internal/evaluator/stockfish.go": {
     "mtime": 1780416883.4121325,
