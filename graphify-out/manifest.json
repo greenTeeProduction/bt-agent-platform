@@ -359,6 +359,10 @@
     "mtime": 1780383660.1612902,
     "hash": "5d7a55da589c652818bf1c8654ed6399"
   },
+  "/home/nico/go-bt-evolve/internal/api/coverage_gaps_test.go": {
+    "mtime": 1780416883.3561323,
+    "hash": "65200077e0d0eb0242a153c56f5853d9"
+  },
   "/home/nico/go-bt-evolve/internal/api/compress.go": {
     "mtime": 1780289941.2666678,
     "hash": "afe3f1e72c07965b7eacd6f5b5d2be59"
@@ -720,8 +724,8 @@
     "hash": "9d09df76e3bd8b9ad2f3c28fe1bc4cca"
   },
   "/home/nico/go-bt-evolve/internal/evaluator/stockfish.go": {
-    "mtime": 1780295456.7543497,
-    "hash": "c2a23a1af3ee2852878d1ffc4687936c"
+    "mtime": 1780416883.4121325,
+    "hash": "20ecdd67cfabd29e4844c61e35cf5bea"
   },
   "/home/nico/go-bt-evolve/internal/evaluator/evaluator_test.go": {
     "mtime": 1780295456.7943501,
@@ -992,8 +996,8 @@
     "hash": "3222ca62293e69a8fa69a4323f6b63c9"
   },
   "/home/nico/go-bt-evolve/internal/evolution/cmaes.go": {
-    "mtime": 1780402516.041088,
-    "hash": "4fd850d03c53863153a17061a4ff7c9e"
+    "mtime": 1780416510.9454374,
+    "hash": "aafa6658402557676c0895425e72baeb"
   },
   "/home/nico/go-bt-evolve/internal/evolution/notebooklm.go": {
     "mtime": 1780353640.239507,
@@ -1036,8 +1040,8 @@
     "hash": "7800ae35395c590cf063adfcca870f79"
   },
   "/home/nico/go-bt-evolve/internal/evolution/cmaes_test.go": {
-    "mtime": 1780402107.3435502,
-    "hash": "ee767a8bc1a559eb72e153cec896512e"
+    "mtime": 1780416521.9015167,
+    "hash": "eeb0b743e02b6ee82fb02e69226d0aad"
   },
   "/home/nico/go-bt-evolve/internal/evolution/expert.go": {
     "mtime": 1780295456.8143504,
@@ -1240,8 +1244,8 @@
     "hash": "435c25e4c36735d5cc676eaa0fa78fae"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
-    "mtime": 1780356197.2263799,
-    "hash": "f470125f5b25a48cb086e12511cffe16"
+    "mtime": 1780415675.7874968,
+    "hash": "c147448ed2f7fb6a682404b388e333c7"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/lib/api.js": {
     "mtime": 1780081021.5609252,
@@ -1262,6 +1266,10 @@
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/tabs/mindmap.js": {
     "mtime": 1780221749.1404698,
     "hash": "1bd4d371ea5732c800860c1ecc68a130"
+  },
+  "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/tabs/scalability.js": {
+    "mtime": 1780415660.703392,
+    "hash": "9b55d055506e01c087d5e7636853a6d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/tabs/overview.js": {
     "mtime": 1780082212.6563435,
@@ -1360,8 +1368,8 @@
     "hash": "16bc707ad6cc22dd56c3885ec0df7ce6"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
-    "mtime": 1780356190.9543025,
-    "hash": "6d3dc3b156e3582f1a0da3e9c20c8436"
+    "mtime": 1780415669.0754502,
+    "hash": "4c9a2bf786ded0c4c9eb248840dafec9"
   },
   "/home/nico/go-bt-evolve/docs/GETTING_STARTED.md": {
     "mtime": 1780300402.8912973,

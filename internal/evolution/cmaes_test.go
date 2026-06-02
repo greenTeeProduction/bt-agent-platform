@@ -3,6 +3,8 @@ package evolution
 import (
 	"math"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 func TestNewCMAESOptimizer(t *testing.T) {
@@ -224,7 +226,7 @@ func TestItoa(t *testing.T) {
 		{-5, "-5"},
 	}
 	for _, tt := range tests {
-		got := itoa(tt.input)
+		got := util.Itoa(tt.input)
 		if got != tt.want {
 			t.Errorf("itoa(%d) = %s, want %s", tt.input, got, tt.want)
 		}

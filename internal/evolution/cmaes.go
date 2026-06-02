@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── CMA-ES Parameter Tuner ────────────────────────────────────────────────
@@ -122,9 +124,9 @@ func collectParams(node *SerializableNode, path string, params *[]TunableParam) 
 	for i := range node.Children {
 		childPath := path
 		if childPath == "" {
-			childPath = "children." + itoa(i)
+			childPath = "children." + util.Itoa(i)
 		} else {
-			childPath = childPath + ".children." + itoa(i)
+			childPath = childPath + ".children." + util.Itoa(i)
 		}
 		collectParams(&node.Children[i], childPath, params)
 	}
@@ -534,25 +536,4 @@ func invertCholesky(C [][]float64) [][]float64 {
 		}
 	}
 	return result
-}
-
-// itoa converts an integer to string (avoiding strconv import for this package).
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	s := ""
-	neg := false
-	if i < 0 {
-		neg = true
-		i = -i
-	}
-	for i > 0 {
-		s = string(rune('0'+i%10)) + s
-		i /= 10
-	}
-	if neg {
-		s = "-" + s
-	}
-	return s
 }

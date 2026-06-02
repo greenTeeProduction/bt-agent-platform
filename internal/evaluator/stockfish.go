@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/reflection"
@@ -483,6 +482,3 @@ func minFloat64(a, b float64) float64 {
 	}
 	return b
 }
-
-// Ensure time is used (for future timing)
-var _ = time.Now
