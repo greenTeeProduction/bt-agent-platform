@@ -5,8 +5,28 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// BatchExporterStats exposes operational counters for a BatchExporter.
+// All fields are diagnostic metrics — they never block or return errors.
+type BatchExporterStats struct {
+	// TotalSpans is the total number of spans received (before batching).
+	TotalSpans int64 `json:"total_spans"`
+	// FlushedSpans is the total number of spans successfully exported.
+	FlushedSpans int64 `json:"flushed_spans"`
+	// DroppedSpans is the total number of spans dropped (post-close or nil-inner).
+	DroppedSpans int64 `json:"dropped_spans"`
+	// FlushCalls is the total number of flush operations attempted.
+	FlushCalls int64 `json:"flush_calls"`
+	// FlushErrors is the total number of flush operations that failed.
+	FlushErrors int64 `json:"flush_errors"`
+	// BufferedSpans is the current number of spans waiting to be flushed.
+	BufferedSpans int `json:"buffered_spans"`
+	// Closed is true if the exporter has been closed.
+	Closed bool `json:"closed"`
+}
 
 // BatchExporter wraps a SpanExporter and buffers spans, flushing them in
 // batches at a configurable interval. This reduces HTTP overhead when sending
@@ -36,6 +56,13 @@ type BatchExporter struct {
 	OnFlush func(count int)
 
 	wg sync.WaitGroup
+
+	// Counters for diagnostics and monitoring.
+	totalSpans   atomic.Int64
+	flushedSpans atomic.Int64
+	droppedSpans atomic.Int64
+	flushCalls   atomic.Int64
+	flushErrors  atomic.Int64
 }
 
 // NewBatchExporter creates a BatchExporter that forwards completed spans to
@@ -58,13 +85,16 @@ func NewBatchExporter(inner SpanExporter) *BatchExporter {
 // BatchSize, it is flushed synchronously.
 func (be *BatchExporter) ExportSpan(ctx context.Context, span ExportedSpan) error {
 	if be == nil || be.inner == nil {
+		be.recordDrop()
 		return nil
 	}
 	be.mu.Lock()
 	if be.closed {
 		be.mu.Unlock()
+		be.droppedSpans.Add(1)
 		return nil
 	}
+	be.totalSpans.Add(1)
 	be.batch = append(be.batch, span)
 	size := len(be.batch)
 	be.mu.Unlock()
@@ -73,6 +103,14 @@ func (be *BatchExporter) ExportSpan(ctx context.Context, span ExportedSpan) erro
 		be.flush()
 	}
 	return nil
+}
+
+// recordDrop atomically increments the dropped-spans counter. Thread-safe even
+// when be is nil (becomes a noop).
+func (be *BatchExporter) recordDrop() {
+	if be != nil {
+		be.droppedSpans.Add(1)
+	}
 }
 
 func (be *BatchExporter) startFlusher() {
@@ -114,6 +152,7 @@ func (be *BatchExporter) flushLoop() {
 
 // flush sends the current batch to the inner exporter. Thread-safe.
 func (be *BatchExporter) flush() {
+	be.flushCalls.Add(1)
 	be.mu.Lock()
 	if len(be.batch) == 0 || be.closed {
 		be.mu.Unlock()
@@ -137,9 +176,13 @@ func (be *BatchExporter) flush() {
 		}
 	}
 
-	if lastErr != nil && be.OnFlushError != nil {
-		be.OnFlushError(lastErr)
+	if lastErr != nil {
+		be.flushErrors.Add(1)
+		if be.OnFlushError != nil {
+			be.OnFlushError(lastErr)
+		}
 	}
+	be.flushedSpans.Add(int64(count))
 	if be.OnFlush != nil {
 		be.OnFlush(count)
 	}
@@ -191,9 +234,13 @@ func (be *BatchExporter) flushBatch(batch []ExportedSpan) {
 			count++
 		}
 	}
-	if lastErr != nil && be.OnFlushError != nil {
-		be.OnFlushError(lastErr)
+	if lastErr != nil {
+		be.flushErrors.Add(1)
+		if be.OnFlushError != nil {
+			be.OnFlushError(lastErr)
+		}
 	}
+	be.flushedSpans.Add(int64(count))
 	if be.OnFlush != nil {
 		be.OnFlush(count)
 	}
@@ -204,6 +251,28 @@ func (be *BatchExporter) Len() int {
 	be.mu.Lock()
 	defer be.mu.Unlock()
 	return len(be.batch)
+}
+
+// Stats returns a snapshot of diagnostic counters for this BatchExporter.
+// The returned struct is safe to read after the exporter is closed.
+// Nil-safe: returns zero-value stats if be is nil.
+func (be *BatchExporter) Stats() BatchExporterStats {
+	if be == nil {
+		return BatchExporterStats{}
+	}
+	be.mu.Lock()
+	buffered := len(be.batch)
+	closed := be.closed
+	be.mu.Unlock()
+	return BatchExporterStats{
+		TotalSpans:    be.totalSpans.Load(),
+		FlushedSpans:  be.flushedSpans.Load(),
+		DroppedSpans:  be.droppedSpans.Load(),
+		FlushCalls:    be.flushCalls.Load(),
+		FlushErrors:   be.flushErrors.Load(),
+		BufferedSpans: buffered,
+		Closed:        closed,
+	}
 }
 
 // DebugBatchExporter is a BatchExporter that also implements SpanExporter directly
