@@ -135,6 +135,13 @@ func main() {
 		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
 	}
 
+	// CORS origin: default to wildcard for dev, restrict in production via config
+	corsOrigin := dashConfig.CORSDashboardOrigin
+	if corsOrigin == "" {
+		corsOrigin = "*"
+	}
+	slog.Info("Dashboard CORS origin", "origin", corsOrigin)
+
 	// Rate limiter: 100 req/sec per client, burst 20
 	rateLimiter := security.NewRateLimiter(100, 20)
 
@@ -204,7 +211,7 @@ func main() {
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
 	handler = tracing.TracingMiddleware(handler)    // distributed tracing spans per request
-	handler = security.CrossOriginMiddleware("*", "GET, POST, PUT, DELETE, OPTIONS")(handler)
+	handler = security.CrossOriginMiddleware(corsOrigin, "GET, POST, PUT, DELETE, OPTIONS")(handler)
 	handler = security.CSRFMiddleware(nil)(handler)                   // CSRF protection for state-changing requests
 	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
 	handler = security.SanitizeMiddleware(1 << 20)(handler)           // 1MB body limit + input cleaning

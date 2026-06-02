@@ -40,6 +40,9 @@ type Config struct {
 	FallbackModels string `json:"fallback_models,omitempty" env:"BT_FALLBACK_MODELS" default:""` // CSV: model or provider:model/provider/model
 	LLMTimeout     int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"`                // seconds
 
+	// CORS
+	CORSDashboardOrigin string `json:"cors_dashboard_origin,omitempty" env:"BT_CORS_DASHBOARD_ORIGIN" default:"*"`
+
 	// Rate Limiting
 	RateLimitRPS   float64 `json:"rate_limit_rps" env:"BT_RATE_LIMIT_RPS" default:"100"`
 	RateLimitBurst int     `json:"rate_limit_burst" env:"BT_RATE_LIMIT_BURST" default:"20"`
@@ -698,6 +701,9 @@ func applyDotEnvToConfig(c *Config, kv map[string]string) {
 	applyDotEnvStr("BT_FALLBACK_MODELS", "BT_FALLBACK_MODELS", func(v string) { c.FallbackModels = v })
 	applyDotEnvInt("BT_LLM_TIMEOUT", "BT_LLM_TIMEOUT", func(v int) { c.LLMTimeout = v })
 
+	// CORS
+	applyDotEnvStr("BT_CORS_DASHBOARD_ORIGIN", "BT_CORS_DASHBOARD_ORIGIN", func(v string) { c.CORSDashboardOrigin = v })
+
 	// Rate Limiting
 	applyDotEnvFloat("BT_RATE_LIMIT_RPS", "BT_RATE_LIMIT_RPS", func(v float64) { c.RateLimitRPS = v })
 	applyDotEnvInt("BT_RATE_LIMIT_BURST", "BT_RATE_LIMIT_BURST", func(v int) { c.RateLimitBurst = v })
@@ -909,6 +915,11 @@ func (c *Config) Diff(other *Config) []string {
 	}
 	if c.FallbackModels != other.FallbackModels {
 		diffs = append(diffs, fmt.Sprintf("FallbackModels: %q → %q", c.FallbackModels, other.FallbackModels))
+	}
+
+	// CORS
+	if c.CORSDashboardOrigin != other.CORSDashboardOrigin {
+		diffs = append(diffs, fmt.Sprintf("CORSDashboardOrigin: %s → %s", c.CORSDashboardOrigin, other.CORSDashboardOrigin))
 	}
 
 	// Rate Limiting

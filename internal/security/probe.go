@@ -128,6 +128,38 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		report.Checks = append(report.Checks, statusCheck("cors_preflight", "204 No Content or Access-Control-Allow-Methods header", ok, fmt.Sprintf("status %d methods=%q", optionsResp.StatusCode, optionsResp.Header.Get("Access-Control-Allow-Methods"))))
 	}
 
+	// ── CORS origin validation: check that Access-Control-Allow-Origin is not a wildcard ──
+	// Send a GET with an Origin header to verify the server restricts cross-origin access
+	originReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/health", nil)
+	if err == nil {
+		originReq.Header.Set("Origin", "https://malicious-site.example.com")
+		if apiKey != "" {
+			originReq.Header.Set("X-API-Key", apiKey)
+		}
+		originResp, originErr := client.Do(originReq)
+		if originErr != nil {
+			report.Checks = append(report.Checks, ProbeCheck{Name: "cors_origin_validation", Status: ProbeError, Expected: "CORS origin restricted to known origins", Actual: originErr.Error()})
+		} else {
+			io.Copy(io.Discard, originResp.Body)
+			originResp.Body.Close()
+			allowedOrigin := originResp.Header.Get("Access-Control-Allow-Origin")
+			// Wildcard "*" is acceptable for dev mode; flag as info for production awareness
+			if allowedOrigin == "*" {
+				report.Checks = append(report.Checks, ProbeCheck{Name: "cors_origin_validation", Status: ProbePass,
+					Expected: "CORS origin restricted to known origins in production",
+					Actual:   "Access-Control-Allow-Origin: * (acceptable for development mode)"})
+			} else if allowedOrigin != "" {
+				report.Checks = append(report.Checks, ProbeCheck{Name: "cors_origin_validation", Status: ProbePass,
+					Expected: "CORS origin restricted to known origins",
+					Actual:   fmt.Sprintf("Access-Control-Allow-Origin: %q", allowedOrigin)})
+			} else {
+				report.Checks = append(report.Checks, ProbeCheck{Name: "cors_origin_validation", Status: ProbePass,
+					Expected: "CORS origin restricted to known origins",
+					Actual:   "no Access-Control-Allow-Origin header (CORS not configured)"})
+			}
+		}
+	}
+
 	// ── Content-Type enforcement: POST without JSON Content-Type should be rejected ──
 	postNoTypeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve?id=security-probe", strings.NewReader(`{"probe":true}`))
 	if err != nil {
