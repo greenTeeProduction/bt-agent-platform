@@ -615,6 +615,10 @@
     "mtime": 1780386067.4233277,
     "hash": "d3be425230420c2d297bf9f24b93043c"
   },
+  "/home/nico/go-bt-evolve/internal/engine/edge_case_coverage_test.go": {
+    "mtime": 1780401851.507003,
+    "hash": "f845ce0c5353cd35d20c11cc223590e0"
+  },
   "/home/nico/go-bt-evolve/internal/engine/event_driven_abort.go": {
     "mtime": 1780349835.890554,
     "hash": "e429beb653ed9e71ba930d4f43c44849"
@@ -868,8 +872,8 @@
     "hash": "b04248e84df766e9c30d46914da6892e"
   },
   "/home/nico/go-bt-evolve/internal/evolution/learning.go": {
-    "mtime": 1780381793.4841063,
-    "hash": "1bd90d65d846bfffe26c4f88c11a0c84"
+    "mtime": 1780401996.0472586,
+    "hash": "06a758110767e7d944b2eb699dd95893"
   },
   "/home/nico/go-bt-evolve/internal/evolution/default_tree.go": {
     "mtime": 1780295456.882351,
@@ -891,9 +895,17 @@
     "mtime": 1780315354.8438256,
     "hash": "fad707f177e4985171111fd77a671b8a"
   },
+  "/home/nico/go-bt-evolve/internal/evolution/multi_objective.go": {
+    "mtime": 1780402091.771505,
+    "hash": "d36ebb402fb1e3c2586934b7a77c5466"
+  },
   "/home/nico/go-bt-evolve/internal/evolution/meta_validator.go": {
     "mtime": 1780337016.0900462,
     "hash": "937be473e20132bd9930e7c3447e506e"
+  },
+  "/home/nico/go-bt-evolve/internal/evolution/multi_objective_test.go": {
+    "mtime": 1780402161.707717,
+    "hash": "9d49d9bf750993d30050d8bdfbe41ff0"
   },
   "/home/nico/go-bt-evolve/internal/evolution/node_types.go": {
     "mtime": 1780349835.890554,
@@ -955,6 +967,10 @@
     "mtime": 1780055007.643106,
     "hash": "3222ca62293e69a8fa69a4323f6b63c9"
   },
+  "/home/nico/go-bt-evolve/internal/evolution/cmaes.go": {
+    "mtime": 1780402118.2355824,
+    "hash": "fc5e065ba83251ebe8786a4d0f061d74"
+  },
   "/home/nico/go-bt-evolve/internal/evolution/notebooklm.go": {
     "mtime": 1780353640.239507,
     "hash": "2a2e771fb60d9f803f264e4e8ed0ffa0"
@@ -994,6 +1010,10 @@
   "/home/nico/go-bt-evolve/internal/evolution/map_elites_test.go": {
     "mtime": 1780295456.898351,
     "hash": "7800ae35395c590cf063adfcca870f79"
+  },
+  "/home/nico/go-bt-evolve/internal/evolution/cmaes_test.go": {
+    "mtime": 1780402107.3435502,
+    "hash": "ee767a8bc1a559eb72e153cec896512e"
   },
   "/home/nico/go-bt-evolve/internal/evolution/expert.go": {
     "mtime": 1780295456.8143504,

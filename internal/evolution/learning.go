@@ -295,6 +295,8 @@ type ReinforcementLearner struct {
 	Epsilon        float64 `json:"epsilon"`
 	LearningRate   float64 `json:"learning_rate"`
 	DiscountFactor float64 `json:"discount_factor"`
+	EpsilonDecay   float64 `json:"epsilon_decay"` // multiplicative decay per episode (0 < decay ≤ 1)
+	MinEpsilon     float64 `json:"min_epsilon"`   // floor for epsilon after decay
 }
 
 // NewReinforcementLearner creates a new RL agent.
@@ -304,7 +306,24 @@ func NewReinforcementLearner() *ReinforcementLearner {
 		Epsilon:        0.2,
 		LearningRate:   0.1,
 		DiscountFactor: 0.9,
+		EpsilonDecay:   0.995,
+		MinEpsilon:     0.01,
 	}
+}
+
+// DecayEpsilon reduces epsilon by the decay factor, clamped to MinEpsilon.
+func (rl *ReinforcementLearner) DecayEpsilon() {
+	rl.Epsilon *= rl.EpsilonDecay
+	if rl.Epsilon < rl.MinEpsilon {
+		rl.Epsilon = rl.MinEpsilon
+	}
+}
+
+// ConfigureEpsilonSchedule sets a custom decay schedule.
+func (rl *ReinforcementLearner) ConfigureEpsilonSchedule(initial, decay, minEpsilon float64) {
+	rl.Epsilon = initial
+	rl.EpsilonDecay = decay
+	rl.MinEpsilon = minEpsilon
 }
 
 // Learn updates the Q-table based on the outcome of a mutation.
