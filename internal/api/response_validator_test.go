@@ -826,3 +826,249 @@ func TestRouteIndex_NilReceiver(t *testing.T) {
 		t.Error("nil receiver Lookup should return nil")
 	}
 }
+
+// ─── Enforcement Mode Tests ─────────────────────────────────────────────────
+
+func TestResponseValidator_Enforcement_EnforcesOnViolation(t *testing.T) {
+	// Route with a schema that requires a field
+	routes := []Route{
+		{
+			Path: "/api/test", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode:  200,
+					ContentType: "application/json",
+					Schema: &Schema{
+						Type:       "object",
+						Required:   []string{"name"},
+						Properties: map[string]*Schema{"name": {Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	// Handler that returns JSON missing the required field
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"not_name": "value"}`))
+	})
+
+	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("enforcement mode: expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestResponseValidator_Enforcement_PassesOnValidResponse(t *testing.T) {
+	routes := []Route{
+		{
+			Path: "/api/valid", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode:  200,
+					ContentType: "application/json",
+					Schema: &Schema{
+						Type:       "object",
+						Required:   []string{"status"},
+						Properties: map[string]*Schema{"status": {Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`))
+	})
+
+	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/valid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("enforcement mode valid response: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestResponseValidator_Enforcement_ErrorBodyIsValidJSON(t *testing.T) {
+	routes := []Route{
+		{
+			Path: "/api/err", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode:  200,
+					ContentType: "application/json",
+					Schema: &Schema{
+						Type:       "object",
+						Required:   []string{"must_exist"},
+						Properties: map[string]*Schema{"must_exist": {Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"no_match": true}`))
+	})
+
+	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Error      string            `json:"error"`
+		Violations []SchemaViolation `json:"violations"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("expected valid JSON error body: %v", err)
+	}
+	if body.Error == "" {
+		t.Error("expected non-empty error message in enforcement response")
+	}
+	if len(body.Violations) == 0 {
+		t.Error("expected at least one violation in enforcement response")
+	}
+}
+
+func TestResponseValidator_Enforcement_DisabledByDefault(t *testing.T) {
+	// Without config.Enforce=true, violations should still be advisory
+	routes := []Route{
+		{
+			Path: "/api/advisory", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode:  200,
+					ContentType: "application/json",
+					Schema: &Schema{
+						Type:       "object",
+						Required:   []string{"required_field"},
+						Properties: map[string]*Schema{"required_field": {Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"wrong_field": "value"}`))
+	})
+
+	// Default config (Enforce=false)
+	validator := ResponseValidator(routes, nil)
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/advisory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("default (advisory) mode: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestResponseValidator_Enforcement_SkipPathBypassesEnforcement(t *testing.T) {
+	routes := []Route{
+		{
+			Path: "/api/skip-me", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode:  200,
+					ContentType: "application/json",
+					Schema: &Schema{
+						Type:       "object",
+						Required:   []string{"must_exist"},
+						Properties: map[string]*Schema{"must_exist": {Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"no_match": true}`))
+	})
+
+	validator := ResponseValidator(routes, &ResponseValidatorConfig{
+		Enforce:   true,
+		SkipPaths: map[string]bool{"/api/skip-me": true},
+	})
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/skip-me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("enforcement with skip path: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestResponseValidator_Enforcement_NonAPIPathPasses(t *testing.T) {
+	// Non-/api/ paths are not validated regardless of enforce mode
+	routes := []Route{
+		{
+			Path: "/static/test", Method: GET,
+			Responses: []RouteResponse{
+				{
+					StatusCode: 200,
+					Schema: &Schema{
+						Type:     "object",
+						Required: []string{"must_exist"},
+					},
+				},
+			},
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(`not json at all`))
+	})
+
+	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
+	ts := httptest.NewServer(validator(handler))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/static/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("non-API path in enforcement mode: expected 200, got %d", resp.StatusCode)
+	}
+}

@@ -220,29 +220,49 @@ func fieldPath(parent, field string) string {
 
 // responseCapture wraps http.ResponseWriter to capture the response body
 // and status code for post-processing.
+//
+// When enforce is true, the response is fully buffered and only flushed
+// after validation succeeds. If validation fails, the buffered response
+// is replaced with a 500 error body.
 type responseCapture struct {
 	http.ResponseWriter
 	statusCode  int
 	body        bytes.Buffer
 	wroteHeader bool
+
+	enforce  bool         // when true, buffer and defer writes
+	buffered bytes.Buffer // full buffered body when enforcing
 }
 
-// WriteHeader captures the status code and passes it through.
+// WriteHeader captures the status code. In enforce mode, headers are
+// deferred until Flush() is called. In advisory mode, headers pass through.
 func (rc *responseCapture) WriteHeader(code int) {
 	if !rc.wroteHeader {
 		rc.statusCode = code
 		rc.wroteHeader = true
 	}
-	rc.ResponseWriter.WriteHeader(code)
+	if !rc.enforce {
+		rc.ResponseWriter.WriteHeader(code)
+	}
 }
 
-// Write captures the body and passes it through.
+// Write captures the body. In enforce mode, the body is fully buffered
+// and not flushed until Flush() is called. In advisory mode, writes pass
+// through and JSON bodies are captured for advisory validation.
 func (rc *responseCapture) Write(b []byte) (int, error) {
 	if !rc.wroteHeader {
 		rc.statusCode = http.StatusOK
 		rc.wroteHeader = true
 	}
-	// Only capture if it's likely JSON (starts with { or [ or ")
+
+	if rc.enforce {
+		// Buffer everything for deferred validation
+		rc.buffered.Write(b)
+		rc.body.Write(b) // also capture for validateResponse
+		return len(b), nil
+	}
+
+	// Advisory mode: capture JSON bodies, pass through immediately
 	if rc.body.Len() == 0 && len(b) > 0 {
 		first := b[0]
 		if first == '{' || first == '[' {
@@ -260,6 +280,15 @@ func (rc *responseCapture) Status() int {
 	return rc.statusCode
 }
 
+// Flush writes the buffered response to the underlying ResponseWriter.
+// Must be called after validation succeeds in enforce mode.
+func (rc *responseCapture) Flush() {
+	if rc.enforce && rc.wroteHeader {
+		rc.ResponseWriter.WriteHeader(rc.statusCode)
+		rc.ResponseWriter.Write(rc.buffered.Bytes())
+	}
+}
+
 // ─── Response Validation Middleware ─────────────────────────────────────────
 
 // ResponseValidatorConfig configures the response validation middleware.
@@ -269,6 +298,15 @@ type ResponseValidatorConfig struct {
 
 	// SkipPaths is a set of paths to skip validation for.
 	SkipPaths map[string]bool
+
+	// Enforce enables hard enforcement of schema contracts. When true, any
+	// response that violates the documented schema returns HTTP 500 with a
+	// JSON error body instead of only logging a WARN. This is the production
+	// mode — it catches unexpected schema drift before clients consume it.
+	//
+	// When false (default), violations are advisory-only (WARN log), keeping
+	// the system tolerant of schema drift during development.
+	Enforce bool
 }
 
 // ResponseValidator creates HTTP middleware that validates API responses
@@ -323,7 +361,8 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 			}
 
 			// Capture the response
-			rc := &responseCapture{ResponseWriter: w}
+			enforce := config != nil && config.Enforce
+			rc := &responseCapture{ResponseWriter: w, enforce: enforce}
 			next.ServeHTTP(rc, r)
 
 			// Validate the captured body
@@ -339,7 +378,29 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 							"message", v.Message,
 						)
 					}
+
+					// In enforcement mode, reject the response with HTTP 500
+					// instead of delivering a schema-drifted payload to the client.
+					if enforce {
+						enforceResp := struct {
+							Error      string            `json:"error"`
+							Violations []SchemaViolation `json:"violations"`
+						}{
+							Error:      "API response violates documented schema contract",
+							Violations: violations,
+						}
+						errBody, _ := json.Marshal(enforceResp)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write(errBody)
+						return
+					}
 				}
+			}
+
+			// In enforce mode with no violations, flush the buffered response
+			if enforce {
+				rc.Flush()
 			}
 		})
 	}
