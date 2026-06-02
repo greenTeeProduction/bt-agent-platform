@@ -353,6 +353,9 @@ var builtinConditionNames = map[string]bool{
 	"Section5Done":              true,
 	"ValidateCompanyState":      true,
 	"ValidateOutput":            true,
+	"IsEngineeringTask":         true,
+	"IsMarketingTask":           true,
+	"IsSalesTask":               true,
 }
 
 func isKnownActionName(name string) bool {

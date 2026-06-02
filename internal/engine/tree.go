@@ -1625,6 +1625,27 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			_, ok := b.ChainState["company"]
 			return ok
 		}
+	case "IsEngineeringTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"engineering", "sprint", "feature", "build", "implement",
+				"code", "deploy", "architecture", "tech", "developer",
+				"sw. eng", "software eng")
+		}
+	case "IsMarketingTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"marketing", "content", "seo", "campaign", "growth",
+				"community", "brand", "social", "promotion",
+				"advertising", "lead gen", "audience")
+		}
+	case "IsSalesTask":
+		return func(b *Blackboard) bool {
+			return containsAny(strings.ToLower(b.Task),
+				"sales", "deal", "revenue", "pipeline", "lead",
+				"closing", "proposal", "demo", "pricing",
+				"customer", "prospect", "quota")
+		}
 	// --- Hermes self-evolution conditions ---
 	case "IsPeriodicCheck":
 		return func(b *Blackboard) bool {
