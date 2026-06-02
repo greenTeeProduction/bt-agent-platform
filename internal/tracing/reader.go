@@ -523,10 +523,3 @@ func buildAggregatedTrace(traceID string, spans []TraceEntry) *AggregatedTrace {
 		Operations:      opList,
 	}
 }
-
-// ─── ParseDuration helper ─────────────────────────────────────────────────────
-
-// ParseTraceDuration parses a duration string like "151µs", "2.341s", "1m30s".
-func ParseTraceDuration(s string) (time.Duration, error) {
-	return time.ParseDuration(s)
-}

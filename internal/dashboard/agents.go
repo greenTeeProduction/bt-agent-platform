@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -132,42 +131,4 @@ func loadScheduler(path string) []ScheduledJob {
 		return nil
 	}
 	return store.Jobs
-}
-
-// GetAgentHistory returns the last N run records for an agent.
-func GetAgentHistory(agentName string, limit int) []AgentHistoryEntry {
-	home := os.Getenv("HOME")
-	historyDir := filepath.Join(home, ".go-bt-evolve", "history")
-	pattern := filepath.Join(historyDir, agentName+"*.json")
-
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil
-	}
-
-	var all []AgentHistoryEntry
-	for _, match := range matches {
-		data, err := os.ReadFile(match)
-		if err != nil {
-			continue
-		}
-		var entries []AgentHistoryEntry
-		if err := json.Unmarshal(data, &entries); err != nil {
-			continue
-		}
-		all = append(all, entries...)
-	}
-
-	// Sort by most recent first
-	sort.Slice(all, func(i, j int) bool {
-		// Parse ISO timestamps for sorting
-		ti, _ := time.Parse(time.RFC3339, all[i].StartedAt)
-		tj, _ := time.Parse(time.RFC3339, all[j].StartedAt)
-		return ti.After(tj)
-	})
-
-	if limit > 0 && len(all) > limit {
-		all = all[:limit]
-	}
-	return all
 }

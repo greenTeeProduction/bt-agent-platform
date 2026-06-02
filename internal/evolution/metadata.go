@@ -37,19 +37,6 @@ type FitnessRecord struct {
 	EvalDate     time.Time     `json:"eval_date"`
 }
 
-// NewEvolutionMetadata creates a new EvolutionMetadata with defaults.
-func NewEvolutionMetadata(treeID string) *EvolutionMetadata {
-	return &EvolutionMetadata{
-		TreeID:    treeID,
-		Phase:     "exploration",
-		CreatedAt: time.Now(),
-		Version:   1,
-		Fitness: FitnessRecord{
-			EvalDate: time.Now(),
-		},
-	}
-}
-
 // AddMutation records a mutation in the lineage.
 func (m *EvolutionMetadata) AddMutation(op MutationLog) {
 	m.Mutations = append(m.Mutations, op)

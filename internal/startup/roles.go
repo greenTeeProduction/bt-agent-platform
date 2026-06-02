@@ -194,12 +194,3 @@ func Roles() map[string]*evolution.SerializableNode {
 		"pm":  PMTree(),
 	}
 }
-
-// RoleDescriptions returns human-readable descriptions for each role.
-func RoleDescriptions() map[string]string {
-	return map[string]string{
-		"ceo": "CEO: Strategic leadership — reviews company metrics, makes high-level decisions, sets quarterly OKRs, and communicates vision.",
-		"cto": "CTO: Technical leadership — reviews architecture, makes tech decisions, plans engineering roadmap, and assesses tech debt.",
-		"pm":  "Product Manager: Product leadership — reviews user feedback, prioritizes features, writes specs, and analyzes competition.",
-	}
-}

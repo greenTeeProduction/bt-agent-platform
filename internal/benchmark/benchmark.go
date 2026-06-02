@@ -147,48 +147,6 @@ func RunSuiteWithLLM(tree *evolution.SerializableNode, suite Suite) *RunMetrics 
 	return RunSuite(tree, suite, llmClient)
 }
 
-// LLMDivergenceReport compares mock-based and real-LLM benchmark results.
-type LLMDivergenceReport struct {
-	SuiteName       string   `json:"suite_name"`
-	MockSuccessRate float64  `json:"mock_success_rate"`
-	RealSuccessRate float64  `json:"real_success_rate"`
-	Divergence      float64  `json:"divergence"`     // absolute difference
-	TasksDiverged   []string `json:"tasks_diverged"` // tasks where mock≠real outcome
-	MockAvgDuration float64  `json:"mock_avg_duration_ms"`
-	RealAvgDuration float64  `json:"real_avg_duration_ms"`
-	SpeedRatio      float64  `json:"speed_ratio"` // real/mock duration ratio
-}
-
-// CompareMockVsLLM runs a suite twice — once with mock, once with real LLM —
-// and reports the divergence. Useful for detecting tasks where mock-based
-// evaluation is not representative of real agent behavior.
-func CompareMockVsLLM(tree *evolution.SerializableNode, suite Suite) *LLMDivergenceReport {
-	mockResult := RunSuite(tree, suite, DefaultMock())
-	realResult := RunSuiteWithLLM(tree, suite)
-
-	report := &LLMDivergenceReport{
-		SuiteName:       suite.Name,
-		MockSuccessRate: mockResult.SuccessRate,
-		RealSuccessRate: realResult.SuccessRate,
-		MockAvgDuration: mockResult.AvgDurationMs,
-		RealAvgDuration: realResult.AvgDurationMs,
-	}
-
-	report.Divergence = absDiff(mockResult.SuccessRate, realResult.SuccessRate)
-	if realResult.AvgDurationMs > 0 {
-		report.SpeedRatio = realResult.AvgDurationMs / mockResult.AvgDurationMs
-	}
-
-	// Find tasks where outcomes diverged
-	for i := range mockResult.Results {
-		if i < len(realResult.Results) && mockResult.Results[i].Success != realResult.Results[i].Success {
-			report.TasksDiverged = append(report.TasksDiverged, mockResult.Results[i].Task)
-		}
-	}
-
-	return report
-}
-
 func absDiff(a, b float64) float64 {
 	if a > b {
 		return a - b

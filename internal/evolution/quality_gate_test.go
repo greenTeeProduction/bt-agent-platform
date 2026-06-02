@@ -194,40 +194,6 @@ func TestSnapshotAndRestoreTree(t *testing.T) {
 	}
 }
 
-func TestCloneTree(t *testing.T) {
-	original := &SerializableNode{
-		Type: "Selector",
-		Name: "Original",
-		Children: []SerializableNode{
-			{Type: "Action", Name: "ChildA"},
-		},
-		Metadata: map[string]any{"max_tokens": float64(2048)},
-	}
-
-	clone := CloneTree(original)
-	if clone == nil {
-		t.Fatal("CloneTree returned nil")
-	}
-
-	// Verify deep copy (modifying clone doesn't affect original)
-	clone.Name = "Modified"
-	if original.Name != "Original" {
-		t.Errorf("original.Name = %s, want Original (deep copy failed)", original.Name)
-	}
-
-	clone.Children[0].Name = "ModifiedChild"
-	if original.Children[0].Name != "ChildA" {
-		t.Errorf("original.Children[0].Name = %s, want ChildA (deep copy failed)", original.Children[0].Name)
-	}
-}
-
-func TestCloneTreeNil(t *testing.T) {
-	clone := CloneTree(nil)
-	if clone != nil {
-		t.Error("CloneTree(nil) should return nil")
-	}
-}
-
 func TestSnapshotRestoreNonexistent(t *testing.T) {
 	_, err := RestoreTree("nonexistent", "/tmp/does_not_exist")
 	if err == nil {

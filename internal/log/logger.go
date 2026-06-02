@@ -54,16 +54,6 @@ func Init() {
 	}))
 }
 
-// Shutdown closes the rotating writer. Call before program exit.
-func Shutdown() {
-	mu.Lock()
-	defer mu.Unlock()
-	if rotWriter != nil {
-		rotWriter.Close()
-		rotWriter = nil
-	}
-}
-
 // L returns the global logger. Calls Init() if not initialized.
 func L() *slog.Logger {
 	mu.Lock()

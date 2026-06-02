@@ -138,19 +138,3 @@ func RestoreTree(treeName, snapshotDir string) (*SerializableNode, error) {
 
 	return &tree, nil
 }
-
-// CloneTree creates a deep copy of a SerializableNode via JSON round-trip.
-func CloneTree(tree *SerializableNode) *SerializableNode {
-	if tree == nil {
-		return nil
-	}
-	data, err := json.Marshal(tree)
-	if err != nil {
-		return nil
-	}
-	var clone SerializableNode
-	if err := json.Unmarshal(data, &clone); err != nil {
-		return nil
-	}
-	return &clone
-}

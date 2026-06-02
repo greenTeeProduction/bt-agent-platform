@@ -6,7 +6,6 @@ package benchreg
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -312,10 +311,4 @@ func ParseBenchOutput(output string) []BenchmarkResult {
 	}
 
 	return results
-}
-
-// roundTo returns n rounded to the specified number of decimal places.
-func roundTo(n float64, decimals int) float64 {
-	pow := math.Pow(10, float64(decimals))
-	return math.Round(n*pow) / pow
 }
