@@ -40,6 +40,10 @@ var sharedLLM llm.LLM
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
 var dlq *reliability.DeadLetterQueue
 
+// scalability components: WorkerPool and ConcurrencyLimiter for agent execution.
+var dashWorkerPool *reliability.WorkerPool
+var dashConcurrencyLimiter *reliability.ConcurrencyLimiter
+
 // dashConfig holds the runtime configuration loaded at startup.
 var dashConfig *config.Config
 
@@ -88,6 +92,13 @@ func main() {
 	dlqPath := os.Getenv("HOME") + "/.go-bt-evolve/dead_letter_queue.json"
 	dlq = reliability.NewDeadLetterQueue(dlqPath)
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
+
+	// Scalability components: worker pool and concurrency limiter for agent tasks
+	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
+	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions
+	slog.Info("Scalability components initialized",
+		"worker_pool_size", 4,
+		"concurrency_limit", 2)
 
 	// Distributed tracing — writes to shared traces log
 	traceLogPath := os.Getenv("HOME") + "/.go-bt-evolve/logs/traces.log"
@@ -1018,19 +1029,18 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a snapshot from currently wired scalability components.
-	// WorkerPool, ConcurrencyLimiter, Queue, and AgentRouter are nil here
-	// (maintained by bt-agent, not the dashboard). When wired, the snapshot
-	// auto-populates with real utilization data.
+	// WorkerPool and ConcurrencyLimiter are initialized at dashboard startup.
+	// Queue and AgentRouter are managed by bt-agent and remain nil here.
 	status := reliability.NewScalabilityStatus(
-		nil, // worker pool (managed by bt-agent)
-		nil, // concurrency limiter (managed by bt-agent)
-		0,   // queue pending
-		0,   // queue max len
-		0,   // router total
-		0,   // router healthy
-		nil, // connection pool (managed by RemoteExecutor)
-		0,   // router failures
-		nil, // heartbeat stats
+		dashWorkerPool,         // worker pool (4 workers, active/queued counts from running tasks)
+		dashConcurrencyLimiter, // concurrency limiter (2 max concurrent LLM executions)
+		0,                      // queue pending
+		0,                      // queue max len
+		0,                      // router total
+		0,                      // router healthy
+		nil,                    // connection pool (managed by RemoteExecutor)
+		0,                      // router failures
+		nil,                    // heartbeat stats
 	)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1193,6 +1203,8 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 // handleAgentExecute handles POST /api/agents/execute — the server-side
 // counterpart to RemoteExecutor for horizontal scaling. Accepts JSON body
 // {agent, task, tree?} and returns a reliability.AgentResult.
+// Execution is submitted through the dashboard WorkerPool with
+// ConcurrencyLimiter gating to prevent LLM resource exhaustion.
 func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -1226,27 +1238,69 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 		treeID = "godev"
 	}
 
-	start := time.Now()
-	executor := dashboard.NewAgentExecutor()
-	output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
-	elapsed := time.Since(start)
-
-	result := reliability.AgentResult{
-		Agent:    req.Agent,
-		Task:     req.Task,
-		Output:   output,
-		Duration: elapsed,
-		Success:  outcome == "success" || outcome == "completed",
+	// Acquire concurrency slot before submitting to worker pool.
+	// The limiter prevents more than 2 simultaneous LLM-bound agent
+	// executions, avoiding Ollama queue overflows on this Jetson.
+	if dashConcurrencyLimiter != nil {
+		dashConcurrencyLimiter.Acquire()
 	}
-	if outcome == "failed" || outcome == "timeout" {
-		result.Success = false
-	}
-	if err != nil {
-		result.Error = err.Error()
+	releaseLimiter := func() {
+		if dashConcurrencyLimiter != nil {
+			dashConcurrencyLimiter.Release()
+		}
 	}
 
+	result := make(chan reliability.AgentResult, 1)
+	if dashWorkerPool != nil {
+		dashWorkerPool.Submit(func() {
+			defer releaseLimiter()
+			start := time.Now()
+			executor := dashboard.NewAgentExecutor()
+			output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
+			elapsed := time.Since(start)
+
+			res := reliability.AgentResult{
+				Agent:    req.Agent,
+				Task:     req.Task,
+				Output:   output,
+				Duration: elapsed,
+				Success:  outcome == "success" || outcome == "completed",
+			}
+			if outcome == "failed" || outcome == "timeout" {
+				res.Success = false
+			}
+			if err != nil {
+				res.Error = err.Error()
+			}
+			result <- res
+		})
+	} else {
+		// Fallback: execute synchronously (no worker pool configured)
+		start := time.Now()
+		executor := dashboard.NewAgentExecutor()
+		output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
+		elapsed := time.Since(start)
+		releaseLimiter()
+
+		res := reliability.AgentResult{
+			Agent:    req.Agent,
+			Task:     req.Task,
+			Output:   output,
+			Duration: elapsed,
+			Success:  outcome == "success" || outcome == "completed",
+		}
+		if outcome == "failed" || outcome == "timeout" {
+			res.Success = false
+		}
+		if err != nil {
+			res.Error = err.Error()
+		}
+		result <- res
+	}
+
+	res := <-result
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(res)
 }
 
 // handleAgentsList returns all registered BT agents with their live status.
@@ -1276,15 +1330,44 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		treeID = "godev"
 	}
 
-	executor := dashboard.NewAgentExecutor()
-	output, outcome, err := executor.RunTask(agentName, task, treeID)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"agent": agentName, "outcome": outcome, "output": output, "error": err.Error(),
-		})
-		return
+	// Acquire concurrency slot to prevent LLM resource exhaustion.
+	if dashConcurrencyLimiter != nil {
+		dashConcurrencyLimiter.Acquire()
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"agent": agentName, "outcome": outcome, "output": output,
-	})
+
+	result := make(chan map[string]interface{}, 1)
+	if dashWorkerPool != nil {
+		dashWorkerPool.Submit(func() {
+			defer func() {
+				if dashConcurrencyLimiter != nil {
+					dashConcurrencyLimiter.Release()
+				}
+			}()
+			executor := dashboard.NewAgentExecutor()
+			output, outcome, err := executor.RunTask(agentName, task, treeID)
+			res := map[string]interface{}{
+				"agent": agentName, "outcome": outcome, "output": output,
+			}
+			if err != nil {
+				res["error"] = err.Error()
+			}
+			result <- res
+		})
+	} else {
+		executor := dashboard.NewAgentExecutor()
+		output, outcome, err := executor.RunTask(agentName, task, treeID)
+		if dashConcurrencyLimiter != nil {
+			dashConcurrencyLimiter.Release()
+		}
+		res := map[string]interface{}{
+			"agent": agentName, "outcome": outcome, "output": output,
+		}
+		if err != nil {
+			res["error"] = err.Error()
+		}
+		result <- res
+	}
+
+	res := <-result
+	json.NewEncoder(w).Encode(res)
 }

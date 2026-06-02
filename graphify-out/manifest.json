@@ -495,6 +495,10 @@
     "mtime": 1780317075.0676007,
     "hash": "5d73226da7c3089f7addd04b412c6a16"
   },
+  "/home/nico/go-bt-evolve/internal/engine/condition_fallback_test.go": {
+    "mtime": 1780376281.7734103,
+    "hash": "e6e45fa8a86ef27a9eee5d58753b0451"
+  },
   "/home/nico/go-bt-evolve/internal/engine/verifier.go": {
     "mtime": 1780349835.890554,
     "hash": "366a1e959d327a06c9833227af799cee"
@@ -1128,8 +1132,8 @@
     "hash": "a087530c3f4dff6c6d78f3d55ed30f1a"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/main.go": {
-    "mtime": 1780370675.3123405,
-    "hash": "1fe8dfc12b1936d9d501d18428ba141c"
+    "mtime": 1780377847.8023596,
+    "hash": "8300a9e1866ad5006ee1e03cccdc7ea8"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
     "mtime": 1780356197.2263799,
