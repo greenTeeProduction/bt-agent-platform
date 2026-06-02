@@ -324,7 +324,7 @@ func main() {
 
 		policy := reliability.DefaultRetryPolicy()
 		policy.RetryUnknown = true // retry unknown errors to match legacy behavior
-		err = policy.Execute(func() error {
+		err = policy.ExecuteContext(ctx.Context, func() error {
 			bb := &engine.Blackboard{Task: task, LLM: llmClient}
 			bt := engine.BuildTree(tree, bb)
 			_ = engine.RunTask(bb, bt)

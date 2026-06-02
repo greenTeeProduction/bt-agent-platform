@@ -57,6 +57,10 @@ type RunContext struct {
 	JobID      string
 	Checkpoint *Checkpoint
 	Cancel     context.CancelFunc
+	// Context carries the timeout/deadline context so runners can propagate
+	// cancellation to downstream operations (e.g., RetryPolicy.ExecuteContext).
+	// Never nil — always a real context (timeout or background).
+	Context context.Context
 }
 
 // AgentRunner is the function that actually executes an agent. Injected for testability.
@@ -155,6 +159,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	runCtx := RunContext{
 		AgentName: agentName,
 		Task:      task,
+		Context:   ctx,
 	}
 
 	start := time.Now()
@@ -335,7 +340,8 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	_ = inst
 
 	timeoutDur := parseTimeout(job.Timeout)
-	_ = timeoutDur
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	defer cancel()
 
 	// Build a meaningful task from the agent's description.
 	// Avoid "scheduled run" — use the actual purpose so the agent
@@ -350,6 +356,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		Task:       task,
 		JobID:      job.ID,
 		Checkpoint: job.Checkpoint,
+		Context:    ctx,
 	}
 
 	// Mark in-flight and persist IMMEDIATELY for crash recovery.
