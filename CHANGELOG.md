@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **(engine):** TypedEdge verifier hardening — recursive node/action/condition validation, side-effect approval gates, BuildTree fail-closed behavior, legacy builtin name registry, and edge-preserving clone support.
+- **(plans):** BT connector node implementation plan for TreeRef/TreeInclude/TreeCall reusable tree references (`2026-06-02-bt-connector-nodes.md`).
+
 - **(maturity):** observability — OpenTelemetry-ready tracing package with console exporter (b3b30b7)
 - **(maturity):** scalability — define Queue and PriorityTaskQueue interfaces for pluggable backends (8a5c5ae)
 - **(maturity):** Observability — Prometheus alert rules + alert evaluator (72bba17)

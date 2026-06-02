@@ -2,7 +2,7 @@ name: session-indexer
 description: Index recent sessions into the search database for fast retrieval. Replaces session_indexer.py script.
 version: "1.0.0"
 tree: domain:data_pipeline
-schedule: "every 360m"
+schedule: "on_demand"
 outputs:
   - name: index_report
     type: text
