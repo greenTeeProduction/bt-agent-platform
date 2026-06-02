@@ -211,7 +211,7 @@ func main() {
 		})
 	}
 
-	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression
+	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression → response validation
 	var handler http.Handler = mux
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
@@ -223,6 +223,15 @@ func main() {
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
 	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
 	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
+	handler = api.ResponseValidator(api.DashboardRoutes(), &api.ResponseValidatorConfig{
+		Logger: slog.Default(),
+		SkipPaths: map[string]bool{
+			"/api/health":  true, // constant response — no schema drift risk
+			"/api/metrics": true, // Prometheus text format, not JSON
+			"/api/swagger": true, // HTML page, not JSON
+		},
+		Enforce: false, // advisory by default; set true via config in production
+	})(handler)
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
 	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
