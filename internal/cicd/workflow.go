@@ -161,6 +161,7 @@ func (r *WorkflowReport) validateCI(wf workflow) {
 	r.add("ci runs on push and pull_request", workflowHasEvents(wf.On, "push", "pull_request"), "push + pull_request triggers required")
 	r.add("ci lint runs go vet", jobRuns(wf.Jobs["lint"], "go vet ./..."), "lint job must run go vet ./...")
 	r.add("ci lint verifies go mod tidy", jobRuns(wf.Jobs["lint"], "go mod tidy"), "lint job must run go mod tidy check")
+	r.add("ci lint runs golangci-lint", jobUsesOrRuns(wf.Jobs["lint"], "golangci-lint"), "lint job must run golangci-lint")
 	r.add("ci security runs gosec", jobUsesOrRuns(wf.Jobs["security"], "gosec"), "security job must run gosec")
 	r.add("ci security runs govulncheck", jobRuns(wf.Jobs["security"], "govulncheck"), "security job must run govulncheck")
 	r.add("ci tests run short race coverage", jobRunsAll(wf.Jobs["test"], "go test", "-short", "-race", "-coverprofile"), "test job must run short race coverage")
@@ -169,6 +170,13 @@ func (r *WorkflowReport) validateCI(wf workflow) {
 	r.add("release waits for gates", needsAll(wf.Jobs["release"].Needs, "lint", "security", "test", "build"), "release job must need lint/security/test/build")
 	r.add("release builds amd64 and arm64", jobRunsAll(wf.Jobs["release"], "GOARCH=amd64", "GOARCH=arm64"), "release job must build multi-arch artifacts")
 	r.add("release builds auxiliary multi-arch", jobRunsAll(wf.Jobs["release"], "bt-security-probe-linux-arm64", "bt-ci-doctor-linux-arm64", "bt-tree-integration-linux-arm64", "benchcmp-linux-arm64"), "release job must build multi-arch auxiliary binaries")
+
+	// Verify timeout-minutes set on all CI jobs to prevent runaway builds.
+	for _, name := range requiredJobs {
+		job, ok := wf.Jobs[name]
+		r.add("ci job "+name+" has timeout-minutes", ok && job.TimeoutMinute > 0,
+			timeoutDetail(ok, job.TimeoutMinute, name))
+	}
 }
 
 func (r *WorkflowReport) validateNightly(wf workflow) {
@@ -287,4 +295,14 @@ func boolDetail(ok bool, yes, no string) string {
 		return yes
 	}
 	return no
+}
+
+func timeoutDetail(ok bool, timeoutMin int, jobName string) string {
+	if !ok {
+		return "job " + jobName + " not found"
+	}
+	if timeoutMin > 0 {
+		return fmt.Sprintf("timeout-minutes=%d", timeoutMin)
+	}
+	return "timeout-minutes not set — job may run indefinitely"
 }

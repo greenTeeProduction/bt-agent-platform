@@ -19,7 +19,7 @@ func TestValidateWorkflowsRepositoryPasses(t *testing.T) {
 		}
 		t.Fatalf("expected repository workflows to pass, got %d failed", report.Failed)
 	}
-	if report.Passed < 25 {
+	if report.Passed < 30 {
 		t.Fatalf("expected comprehensive check coverage, got %d checks", report.Passed)
 	}
 }
@@ -89,11 +89,20 @@ func TestValidateWorkflowsDetectsMissingSecurityGate(t *testing.T) {
 	writeFile(t, filepath.Join(wfDir, "ci.yml"), `name: CI
 on: {push: {}, pull_request: {}}
 jobs:
-  lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
-  security: {steps: [{run: 'echo no scanners'}]}
-  test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
-  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]}
+  lint:
+    timeout-minutes: 10
+    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+  security:
+    timeout-minutes: 10
+    steps: [{run: 'echo no scanners'}]
+  test:
+    timeout-minutes: 15
+    steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]
+  build:
+    timeout-minutes: 10
+    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]
   release:
+    timeout-minutes: 20
     needs: [lint, security, test, build]
     steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
 `)
@@ -158,11 +167,20 @@ func minimalCI() string {
 	return `name: CI
 on: {push: {}, pull_request: {}}
 jobs:
-  lint: {steps: [{run: 'go vet ./...'}, {run: 'go mod tidy'}]}
-  security: {steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]}
-  test: {steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]}
-  build: {steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]}
+  lint:
+    timeout-minutes: 10
+    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+  security:
+    timeout-minutes: 10
+    steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]
+  test:
+    timeout-minutes: 15
+    steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]
+  build:
+    timeout-minutes: 10
+    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]
   release:
+    timeout-minutes: 20
     needs: [lint, security, test, build]
     steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
 `
