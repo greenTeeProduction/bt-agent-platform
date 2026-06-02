@@ -54,19 +54,35 @@ if [ -n "$STAGED_DOCS" ]; then
     echo "  ✓ docs in sync"
 fi
 
-# 4. CI Doctor — validate workflow maturity if workflow files changed
-STAGED_WORKFLOWS=$(git diff --cached --name-only --diff-filter=ACM | grep '^\.github/workflows/' || true)
-if [ -n "$STAGED_WORKFLOWS" ]; then
-    echo "→ ci-doctor workflow maturity check (.github/workflows/ changed)..."
-    REPO_ROOT=$(git rev-parse --show-toplevel)
-    if [ -f "$REPO_ROOT/bin/bt-ci-doctor" ]; then
-        if ! "$REPO_ROOT/bin/bt-ci-doctor" --root "$REPO_ROOT" 2>&1; then
-            echo "✗ CI/CD workflow maturity check failed. Fix before committing."
+# 4. CI Doctor — validate workflow maturity (always runs, blocks commit on failure)
+REPO_ROOT=$(git rev-parse --show-toplevel)
+echo "→ ci-doctor workflow maturity check..."
+if [ -f "$REPO_ROOT/bin/bt-ci-doctor" ]; then
+    CI_DOCTOR_OUTPUT=$("$REPO_ROOT/bin/bt-ci-doctor" --root "$REPO_ROOT" 2>&1)
+    CI_DOCTOR_EXIT=$?
+    if [ $CI_DOCTOR_EXIT -ne 0 ]; then
+        echo "✗ CI/CD workflow maturity check failed."
+        echo "$CI_DOCTOR_OUTPUT" | grep '^✗'
+        exit 1
+    fi
+    SUMMARY=$(echo "$CI_DOCTOR_OUTPUT" | head -1)
+    echo "  ✓ $SUMMARY"
+else
+    echo "  ⚠ bt-ci-doctor not built — run 'make ci-doctor' first"
+    echo "  → Attempting to build ci-doctor..."
+    if "$GO" build -o "$REPO_ROOT/bin/bt-ci-doctor" ./cmd/bt-ci-doctor/ 2>/dev/null; then
+        echo "  ✓ bt-ci-doctor built"
+        CI_DOCTOR_OUTPUT=$("$REPO_ROOT/bin/bt-ci-doctor" --root "$REPO_ROOT" 2>&1)
+        CI_DOCTOR_EXIT=$?
+        if [ $CI_DOCTOR_EXIT -ne 0 ]; then
+            echo "✗ CI/CD workflow maturity check failed."
+            echo "$CI_DOCTOR_OUTPUT" | grep '^✗'
             exit 1
         fi
-        echo "  ✓ ci-doctor validates all 36 workflow maturity gates"
+        SUMMARY=$(echo "$CI_DOCTOR_OUTPUT" | head -1)
+        echo "  ✓ $SUMMARY"
     else
-        echo "  ⚠ bt-ci-doctor not built — run 'make ci-doctor' first, or skip with --no-verify"
+        echo "  ⚠ Could not build ci-doctor — skip with --no-verify if needed"
     fi
 fi
 

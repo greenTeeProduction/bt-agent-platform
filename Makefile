@@ -95,20 +95,23 @@ ci:
 	@$(MAKE) ci-doctor
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "5/7  govulncheck..."
+	@echo "5/7  runner status (advisory)..."
+	-@$(MAKE) runner-status 2>&1 || echo "     ⚠ runner not installed (non-blocking)"
+	@echo ""
+	@echo "6/7  govulncheck..."
 	-@$(GO) install golang.org/x/vuln/cmd/govulncheck@latest 2>/dev/null
 	-@$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 || echo "     ⚠ warnings (non-blocking)"
 	@echo "     ✓ passed (non-blocking)"
 	@echo ""
-	@echo "6/7  scalability probe... (optional — requires dashboard on localhost:9800)"
+	@echo "7/7  scalability probe... (optional — requires dashboard on localhost:9800)"
 	-@$(MAKE) scalability-probe 2>&1 || echo "     ⚠ dashboard not reachable (non-blocking, requires running bt-dashboard on :9800)"
 	@echo "     ✓ done"
 	@echo ""
-	@echo "7/7  tests (short + race)..."
+	@echo "8/8  tests (short + race)..."
 	@$(GO) test -short -count=1 -race -timeout 120s ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "8/7  build all binaries..."
+	@echo "9/8  build all binaries..."
 	@mkdir -p $(BIN_DIR)
 	@for bin in $(BINARIES); do \
 		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
