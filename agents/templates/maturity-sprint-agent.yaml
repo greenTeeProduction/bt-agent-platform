@@ -2,7 +2,7 @@ name: maturity-sprint-agent
 description: Track BT platform maturity across 10 dimensions, identify weakest dimension, implement fix, verify improvement, report progress. GOAP composite workflow.
 version: "1.0.0"
 tree: domain:goap_planning
-schedule: "every 120m"
+schedule: on_demand
 inputs:
   - name: dimensions
     type: json

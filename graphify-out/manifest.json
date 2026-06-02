@@ -527,6 +527,14 @@
     "mtime": 1780393014.2367942,
     "hash": "78e5c48fba0c2e9b04fa983ec9367923"
   },
+  "/home/nico/go-bt-evolve/internal/engine/action_switch_coverage_test.go": {
+    "mtime": 1780407606.179438,
+    "hash": "43a65466a621dcf2e619c48c8ae05eef"
+  },
+  "/home/nico/go-bt-evolve/internal/engine/coverage_surge_test.go": {
+    "mtime": 1780406962.624374,
+    "hash": "a1fb3ff439ce58e01d71f2ad9e10aa91"
+  },
   "/home/nico/go-bt-evolve/internal/engine/arc42_nodes.go": {
     "mtime": 1780317075.0676007,
     "hash": "5d73226da7c3089f7addd04b412c6a16"
@@ -552,8 +560,8 @@
     "hash": "791e299e0f3a4aa6e009b95fc454ff5f"
   },
   "/home/nico/go-bt-evolve/internal/engine/tools_real_test.go": {
-    "mtime": 1780404144.0030386,
-    "hash": "336b18493a4d6b98bf91af4a51fae189"
+    "mtime": 1780407751.2889163,
+    "hash": "67c3fa458be66366947593a00de6e271"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains_test.go": {
     "mtime": 1780295456.910351,
@@ -1464,8 +1472,8 @@
     "hash": "f5d2af39097521a56201e53e65312280"
   },
   "/home/nico/go-bt-evolve/agents/templates/maturity-sprint-agent.yaml": {
-    "mtime": 1780212904.4349964,
-    "hash": "82efef31365c754507a8003bdba8fc12"
+    "mtime": 1780406208.299194,
+    "hash": "845862de1e823446c841e238a885887a"
   },
   "/home/nico/go-bt-evolve/agents/templates/skill-tree-syncer.yaml": {
     "mtime": 1780212904.4109962,
