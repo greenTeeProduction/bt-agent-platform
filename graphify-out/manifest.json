@@ -475,6 +475,10 @@
     "mtime": 1780349835.890554,
     "hash": "366a1e959d327a06c9833227af799cee"
   },
+  "/home/nico/go-bt-evolve/internal/engine/arc42_actions_test.go": {
+    "mtime": 1780359058.922057,
+    "hash": "5c8eaff0bd29fa925d5ba981be817e9c"
+  },
   "/home/nico/go-bt-evolve/internal/engine/utility_selector.go": {
     "mtime": 1780349835.894554,
     "hash": "ca6a31bdee7fe16f2e2a589f73c1c7a9"
@@ -944,8 +948,8 @@
     "hash": "682b49683e570db0e1a0fe98888cca55"
   },
   "/home/nico/go-bt-evolve/internal/reliability/scalability_probe_test.go": {
-    "mtime": 1780349731.7179968,
-    "hash": "f3ffaa9b04298caec2b7b32d5c4dc922"
+    "mtime": 1780358101.0301213,
+    "hash": "9e1b447fe6b2b4a8300e17171a55359f"
   },
   "/home/nico/go-bt-evolve/internal/reliability/remote_executor.go": {
     "mtime": 1780314793.9157455,
@@ -954,6 +958,10 @@
   "/home/nico/go-bt-evolve/internal/reliability/errors_test.go": {
     "mtime": 1780355434.476016,
     "hash": "72b8280101764b98b617fa13c217a463"
+  },
+  "/home/nico/go-bt-evolve/internal/reliability/heartbeat_router.go": {
+    "mtime": 1780358122.9061494,
+    "hash": "27364334894740debc7c40bad9f7db92"
   },
   "/home/nico/go-bt-evolve/internal/reliability/panic_handler_test.go": {
     "mtime": 1780295456.7103493,
@@ -964,8 +972,8 @@
     "hash": "c7478aee1a3f7c62727c4ccbfb5c3f35"
   },
   "/home/nico/go-bt-evolve/internal/reliability/reliability.go": {
-    "mtime": 1780295456.8783507,
-    "hash": "982929aee30f9db6591f4a19546fb5a0"
+    "mtime": 1780358047.0620742,
+    "hash": "4a261169a7fc883c593e0a88ee20ef17"
   },
   "/home/nico/go-bt-evolve/internal/reliability/heartbeat_test.go": {
     "mtime": 1780293330.582633,
@@ -1004,20 +1012,20 @@
     "hash": "509d481a952f8572fed56133db2e4333"
   },
   "/home/nico/go-bt-evolve/internal/reliability/weighted_router.go": {
-    "mtime": 1780260134.1117527,
-    "hash": "563b615dc22e34b018ae76c607d9b9e2"
+    "mtime": 1780358113.610137,
+    "hash": "327696225187412536ad5ba832c481fb"
   },
   "/home/nico/go-bt-evolve/internal/reliability/scalability_status.go": {
-    "mtime": 1780349684.6977158,
-    "hash": "9d3e0c1df86bff544834e2e0cdd829bb"
+    "mtime": 1780358067.5660884,
+    "hash": "1646615a9bf803b11a11b6645afb36ce"
   },
   "/home/nico/go-bt-evolve/internal/reliability/weighted_router_test.go": {
     "mtime": 1780260297.7378895,
     "hash": "7f2ced9e4c6cf64cb9349d43bc099513"
   },
   "/home/nico/go-bt-evolve/internal/reliability/scalability_status_test.go": {
-    "mtime": 1780349795.4463775,
-    "hash": "57b159e5534dddf0d23dd03054c6bc75"
+    "mtime": 1780358098.3061182,
+    "hash": "5fffd942d8fcc243e2098473d3d54795"
   },
   "/home/nico/go-bt-evolve/internal/benchreg/benchreg_test.go": {
     "mtime": 1780295456.882351,
@@ -1096,8 +1104,8 @@
     "hash": "a087530c3f4dff6c6d78f3d55ed30f1a"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/main.go": {
-    "mtime": 1780349738.762039,
-    "hash": "5f5b47b787e47fa24ce005f3437a8c99"
+    "mtime": 1780358106.534128,
+    "hash": "6126d84192e8c7db9ea01f96c6a2da29"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
     "mtime": 1780356197.2263799,
