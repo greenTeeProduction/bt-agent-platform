@@ -112,8 +112,11 @@ func (e *OTLPHTTPExporter) ExportSpan(ctx context.Context, span ExportedSpan) er
 	return nil
 }
 
-// ConfigureOTLPFromEnv attaches an OTLP exporter to t when BT_OTLP_ENDPOINT or
-// OTEL_EXPORTER_OTLP_ENDPOINT is set. It returns true when an exporter was wired.
+// ConfigureOTLPFromEnv attaches a batched OTLP exporter to t when
+// BT_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT is set.
+// Spans are batched (64 per batch or every 5s) before being sent to the
+// OTLP collector, reducing per-span HTTP overhead.
+// It returns true when an exporter was wired.
 func ConfigureOTLPFromEnv(t *ConsoleTracer) bool {
 	if t == nil {
 		return false
@@ -127,7 +130,9 @@ func ConfigureOTLPFromEnv(t *ConsoleTracer) bool {
 	if headers := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"); headers != "" {
 		exporter.Headers = parseOTLPHeaders(headers)
 	}
-	t.SetExporter(exporter)
+	// Wrap in BatchExporter so spans are buffered and flushed in batches
+	// instead of one HTTP request per span.
+	t.SetExporter(NewBatchExporter(exporter))
 	return true
 }
 

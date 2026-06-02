@@ -147,15 +147,26 @@ func TestConfigureOTLPFromEnv(t *testing.T) {
 	if !ConfigureOTLPFromEnv(tracer) {
 		t.Fatal("expected OTLP exporter from env")
 	}
-	exporter, ok := tracer.Exporter().(*OTLPHTTPExporter)
+	// ConfigureOTLPFromEnv wraps the OTLP exporter in a BatchExporter for
+	// production-grade span batching. Verify the inner exporter is correct.
+	batchExp, ok := tracer.Exporter().(*BatchExporter)
 	if !ok {
-		t.Fatalf("unexpected exporter type %T", tracer.Exporter())
+		t.Fatalf("expected BatchExporter, got %T", tracer.Exporter())
 	}
-	if exporter.Endpoint != "http://collector:4318/v1/traces" || exporter.ServiceName != "env-service" {
-		t.Fatalf("unexpected exporter config: %+v", exporter)
+	// Use the DebugBatchExporter identity (type alias) to access inner.
+	otlpExp := batchExp.inner
+	if otlpExp == nil {
+		t.Fatal("expected BatchExporter to wrap a non-nil inner exporter")
 	}
-	if exporter.Headers["Authorization"] != "Bearer token" || exporter.Headers["X-Test"] != "yes" {
-		t.Fatalf("unexpected headers: %+v", exporter.Headers)
+	otlpHTTP, ok := otlpExp.(*OTLPHTTPExporter)
+	if !ok {
+		t.Fatalf("expected BatchExporter to wrap OTLPHTTPExporter, got %T", otlpExp)
+	}
+	if otlpHTTP.Endpoint != "http://collector:4318/v1/traces" || otlpHTTP.ServiceName != "env-service" {
+		t.Fatalf("unexpected exporter config: %+v", otlpHTTP)
+	}
+	if otlpHTTP.Headers["Authorization"] != "Bearer token" || otlpHTTP.Headers["X-Test"] != "yes" {
+		t.Fatalf("unexpected headers: %+v", otlpHTTP.Headers)
 	}
 }
 
