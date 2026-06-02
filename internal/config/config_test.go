@@ -2672,6 +2672,246 @@ func TestLoad_DotEnvIntFloatBoolAlreadySetByEnvVar_Skip(t *testing.T) {
 	}
 }
 
+func TestLoad_DotEnvSetterClosures_AllTypesExercise(t *testing.T) {
+	// Exercises ALL setter closures in applyDotEnvToConfig for string, int,
+	// float, and bool fields simultaneously. No env vars are set for any of
+	// these fields, so the closures fire and propagate .env values to config.
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+
+	// Build a comprehensive .env file covering every field type
+	var lines []string
+
+	// String fields (applyDotEnvStr)
+	lines = append(lines, "BT_API_KEY=test-api-key")
+	lines = append(lines, "BT_TLS_CERT=/path/to/cert.pem")
+	lines = append(lines, "BT_TLS_KEY=/path/to/key.pem")
+	lines = append(lines, "BT_LLM_PROVIDER=deepseek")
+	lines = append(lines, "OLLAMA_HOST=http://ollama-test:11434")
+	lines = append(lines, "BT_OLLAMA_MODEL=test-model")
+	lines = append(lines, "BT_DEEPSEEK_HOST=https://api.test.com/v1")
+	lines = append(lines, "BT_DEEPSEEK_MODEL=test-deepseek-model")
+	lines = append(lines, "BT_DEEPSEEK_KEY=sk-test-deepseek-key")
+	lines = append(lines, "DEEPSEEK_API_KEY=sk-hermes-deepseek-key")
+	lines = append(lines, "BT_ACP_COMMAND=test-cmd")
+	lines = append(lines, "BT_ACP_ARGS=--test-flag")
+	lines = append(lines, "BT_ACP_CWD=/tmp/test-cwd")
+	lines = append(lines, "BT_FALLBACK_MODELS=deepseek:test,ollama:test2")
+	lines = append(lines, "BT_CORS_DASHBOARD_ORIGIN=https://test.example.com")
+	lines = append(lines, "BT_REFLECTIONS_DIR=/tmp/reflections")
+	lines = append(lines, "BT_AGENT_DEFS_DIR=/tmp/agents")
+	lines = append(lines, "BT_HISTORY_DIR=/tmp/history")
+	lines = append(lines, "BT_LOG_DIR=/tmp/logs")
+	lines = append(lines, "BT_RETRY_JITTER=decorrelated_jitter")
+
+	// Int fields (applyDotEnvInt)
+	lines = append(lines, "BT_DASHBOARD_PORT=7777")
+	lines = append(lines, "BT_LLM_TIMEOUT=123")
+	lines = append(lines, "BT_RATE_LIMIT_BURST=15")
+	lines = append(lines, "BT_GARDENER_CYCLE=600")
+	lines = append(lines, "BT_GARDENER_MUTATIONS=3")
+	lines = append(lines, "BT_GARDENER_MAX_NODES=50")
+	lines = append(lines, "BT_SCHEDULER_INTERVAL=120")
+	lines = append(lines, "BT_RETRY_MAX_RETRIES=5")
+	lines = append(lines, "BT_RETRY_BASE_DELAY_MS=2000")
+	lines = append(lines, "BT_RETRY_MAX_DELAY_MS=60000")
+	lines = append(lines, "BT_RETRY_LLM_BASE_MS=5000")
+	lines = append(lines, "BT_CB_THRESHOLD=10")
+	lines = append(lines, "BT_CB_COOLDOWN_SECS=600")
+	lines = append(lines, "BT_DLQ_MAX_ENTRIES=500")
+	lines = append(lines, "BT_MAX_BODY_SIZE=2097152")
+
+	// Float fields (applyDotEnvFloat)
+	lines = append(lines, "BT_RATE_LIMIT_RPS=55.5")
+
+	// Bool fields (applyDotEnvBool)
+	lines = append(lines, "BT_FEATURE_GARDENER=false")
+	lines = append(lines, "BT_FEATURE_SCHEDULER=false")
+	lines = append(lines, "BT_FEATURE_AUTO_EVOLVE=true")
+	lines = append(lines, "BT_FEATURE_KANBAN=false")
+	lines = append(lines, "BT_FEATURE_THINKTANK=false")
+	lines = append(lines, "BT_FEATURE_STARTUP_SIM=false")
+	lines = append(lines, "BT_API_ENFORCE_RESPONSE_VALIDATION=true")
+	lines = append(lines, "BT_RETRY_UNKNOWN=true")
+
+	content := ""
+	for _, l := range lines {
+		content += l + "\n"
+	}
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No env vars set for any of these fields
+	dotEnvKeys := []string{
+		"BT_DASHBOARD_PORT", "BT_API_KEY", "BT_TLS_CERT", "BT_TLS_KEY",
+		"BT_LLM_PROVIDER", "OLLAMA_HOST", "BT_OLLAMA_MODEL",
+		"BT_DEEPSEEK_HOST", "BT_DEEPSEEK_MODEL", "BT_DEEPSEEK_KEY",
+		"DEEPSEEK_API_KEY", "BT_ACP_COMMAND", "BT_ACP_ARGS", "BT_ACP_CWD",
+		"BT_FALLBACK_MODELS", "BT_CORS_DASHBOARD_ORIGIN",
+		"BT_RATE_LIMIT_RPS", "BT_RATE_LIMIT_BURST",
+		"BT_FEATURE_GARDENER", "BT_FEATURE_SCHEDULER", "BT_FEATURE_AUTO_EVOLVE",
+		"BT_FEATURE_KANBAN", "BT_FEATURE_THINKTANK", "BT_FEATURE_STARTUP_SIM",
+		"BT_API_ENFORCE_RESPONSE_VALIDATION",
+		"BT_REFLECTIONS_DIR", "BT_AGENT_DEFS_DIR", "BT_HISTORY_DIR", "BT_LOG_DIR",
+		"BT_GARDENER_CYCLE", "BT_GARDENER_MUTATIONS", "BT_GARDENER_MAX_NODES",
+		"BT_SCHEDULER_INTERVAL",
+		"BT_RETRY_MAX_RETRIES", "BT_RETRY_BASE_DELAY_MS", "BT_RETRY_MAX_DELAY_MS",
+		"BT_RETRY_LLM_BASE_MS", "BT_RETRY_JITTER", "BT_RETRY_UNKNOWN",
+		"BT_CB_THRESHOLD", "BT_CB_COOLDOWN_SECS", "BT_DLQ_MAX_ENTRIES",
+		"BT_MAX_BODY_SIZE", "BT_LLM_TIMEOUT",
+	}
+	for _, k := range dotEnvKeys {
+		os.Unsetenv(k)
+	}
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	defer os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_CONFIG_FILE")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Verify string fields
+	if c.APIKey != "test-api-key" {
+		t.Errorf("APIKey: expected test-api-key, got %q", c.APIKey)
+	}
+	if c.TLSCert != "/path/to/cert.pem" {
+		t.Errorf("TLSCert: expected /path/to/cert.pem, got %q", c.TLSCert)
+	}
+	if c.TLSKey != "/path/to/key.pem" {
+		t.Errorf("TLSKey: expected /path/to/key.pem, got %q", c.TLSKey)
+	}
+	if c.LLMProvider != "deepseek" {
+		t.Errorf("LLMProvider: expected deepseek, got %q", c.LLMProvider)
+	}
+	if c.OllamaHost != "http://ollama-test:11434" {
+		t.Errorf("OllamaHost: expected http://ollama-test:11434, got %q", c.OllamaHost)
+	}
+	if c.OllamaModel != "test-model" {
+		t.Errorf("OllamaModel: expected test-model, got %q", c.OllamaModel)
+	}
+	if c.DeepSeekHost != "https://api.test.com/v1" {
+		t.Errorf("DeepSeekHost: expected https://api.test.com/v1, got %q", c.DeepSeekHost)
+	}
+	if c.DeepSeekModel != "test-deepseek-model" {
+		t.Errorf("DeepSeekModel: expected test-deepseek-model, got %q", c.DeepSeekModel)
+	}
+	// DEEPSEEK_API_KEY should take precedence since it's listed second
+	if c.DeepSeekKey != "sk-hermes-deepseek-key" {
+		t.Errorf("DeepSeekKey: expected sk-hermes-deepseek-key (DEEPSEEK_API_KEY wins, listed second), got %q", c.DeepSeekKey)
+	}
+	if c.ACPCommand != "test-cmd" {
+		t.Errorf("ACPCommand: expected test-cmd, got %q", c.ACPCommand)
+	}
+	if c.ACPArgs != "--test-flag" {
+		t.Errorf("ACPArgs: expected --test-flag, got %q", c.ACPArgs)
+	}
+	if c.ACPCwd != "/tmp/test-cwd" {
+		t.Errorf("ACPCwd: expected /tmp/test-cwd, got %q", c.ACPCwd)
+	}
+	if c.FallbackModels != "deepseek:test,ollama:test2" {
+		t.Errorf("FallbackModels: expected deepseek:test,ollama:test2, got %q", c.FallbackModels)
+	}
+	if c.CORSDashboardOrigin != "https://test.example.com" {
+		t.Errorf("CORSDashboardOrigin: expected https://test.example.com, got %q", c.CORSDashboardOrigin)
+	}
+	if c.ReflectionsDir != "/tmp/reflections" {
+		t.Errorf("ReflectionsDir: expected /tmp/reflections, got %q", c.ReflectionsDir)
+	}
+	if c.AgentDefsDir != "/tmp/agents" {
+		t.Errorf("AgentDefsDir: expected /tmp/agents, got %q", c.AgentDefsDir)
+	}
+	if c.HistoryDir != "/tmp/history" {
+		t.Errorf("HistoryDir: expected /tmp/history, got %q", c.HistoryDir)
+	}
+	if c.LogDir != "/tmp/logs" {
+		t.Errorf("LogDir: expected /tmp/logs, got %q", c.LogDir)
+	}
+	if c.RetryJitter != "decorrelated_jitter" {
+		t.Errorf("RetryJitter: expected decorrelated_jitter, got %q", c.RetryJitter)
+	}
+
+	// Verify int fields
+	if c.DashboardPort != 7777 {
+		t.Errorf("DashboardPort: expected 7777, got %d", c.DashboardPort)
+	}
+	if c.LLMTimeout != 123 {
+		t.Errorf("LLMTimeout: expected 123, got %d", c.LLMTimeout)
+	}
+	if c.RateLimitBurst != 15 {
+		t.Errorf("RateLimitBurst: expected 15, got %d", c.RateLimitBurst)
+	}
+	if c.GardenerCycleInterval != 600 {
+		t.Errorf("GardenerCycleInterval: expected 600, got %d", c.GardenerCycleInterval)
+	}
+	if c.GardenerMutationsPer != 3 {
+		t.Errorf("GardenerMutationsPer: expected 3, got %d", c.GardenerMutationsPer)
+	}
+	if c.GardenerMaxNodes != 50 {
+		t.Errorf("GardenerMaxNodes: expected 50, got %d", c.GardenerMaxNodes)
+	}
+	if c.SchedulerCheckInterval != 120 {
+		t.Errorf("SchedulerCheckInterval: expected 120, got %d", c.SchedulerCheckInterval)
+	}
+	if c.RetryMaxRetries != 5 {
+		t.Errorf("RetryMaxRetries: expected 5, got %d", c.RetryMaxRetries)
+	}
+	if c.RetryBaseDelayMs != 2000 {
+		t.Errorf("RetryBaseDelayMs: expected 2000, got %d", c.RetryBaseDelayMs)
+	}
+	if c.RetryMaxDelayMs != 60000 {
+		t.Errorf("RetryMaxDelayMs: expected 60000, got %d", c.RetryMaxDelayMs)
+	}
+	if c.RetryLLMBaseMs != 5000 {
+		t.Errorf("RetryLLMBaseMs: expected 5000, got %d", c.RetryLLMBaseMs)
+	}
+	if c.CBThreshold != 10 {
+		t.Errorf("CBThreshold: expected 10, got %d", c.CBThreshold)
+	}
+	if c.CBCooldownSecs != 600 {
+		t.Errorf("CBCooldownSecs: expected 600, got %d", c.CBCooldownSecs)
+	}
+	if c.DLQMaxEntries != 500 {
+		t.Errorf("DLQMaxEntries: expected 500, got %d", c.DLQMaxEntries)
+	}
+	if c.MaxBodySize != 2097152 {
+		t.Errorf("MaxBodySize: expected 2097152, got %d", c.MaxBodySize)
+	}
+
+	// Verify float field
+	if c.RateLimitRPS != 55.5 {
+		t.Errorf("RateLimitRPS: expected 55.5, got %v", c.RateLimitRPS)
+	}
+
+	// Verify bool fields
+	if c.GardenerEnabled {
+		t.Error("GardenerEnabled: expected false")
+	}
+	if c.SchedulerEnabled {
+		t.Error("SchedulerEnabled: expected false")
+	}
+	if !c.AutoEvolveEnabled {
+		t.Error("AutoEvolveEnabled: expected true")
+	}
+	if c.KanbanEnabled {
+		t.Error("KanbanEnabled: expected false")
+	}
+	if c.ThinktankEnabled {
+		t.Error("ThinktankEnabled: expected false")
+	}
+	if c.StartupSimEnabled {
+		t.Error("StartupSimEnabled: expected false")
+	}
+	if !c.APIEnforceResponseValidation {
+		t.Error("APIEnforceResponseValidation: expected true")
+	}
+	if !c.RetryUnknown {
+		t.Error("RetryUnknown: expected true")
+	}
+}
+
 // ─── stripInlineComment Coverage Tests ─────────────────────────────────
 
 func TestStripInlineComment_SingleQuotedHash(t *testing.T) {
