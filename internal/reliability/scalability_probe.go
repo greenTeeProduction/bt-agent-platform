@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type NodeProbeStatus struct {
 	ScalabilityStatus *ScalabilityStatus `json:"scalability_status,omitempty"`
 	ExecuteOK         bool               `json:"execute_ok,omitempty"`
 	ExecuteResult     *AgentResult       `json:"execute_result,omitempty"`
+	LatencyMs         int64              `json:"latency_ms,omitempty"` // total probe duration for this node
 	Error             string             `json:"error,omitempty"`
 }
 
@@ -100,15 +102,28 @@ func ProbeMultiNodeDashboard(ctx context.Context, cfg MultiNodeProbeConfig) (Mul
 			report.Passed = false
 			continue
 		}
-		probeNode(ctx, cfg, &status)
-		if status.Healthy && status.ScalabilityOK && (!cfg.Execute || status.ExecuteOK) {
-			report.HealthyNodes++
-		}
-		if !(status.Healthy && status.ScalabilityOK && (!cfg.Execute || status.ExecuteOK)) {
-			report.Passed = false
-		}
 		report.Nodes = append(report.Nodes, status)
 	}
+
+	// Probe all nodes concurrently for production-grade latency behavior.
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(len(report.Nodes))
+	for i := range report.Nodes {
+		go func(s *NodeProbeStatus) {
+			defer wg.Done()
+			probeNode(ctx, cfg, s)
+			mu.Lock()
+			if s.Healthy && s.ScalabilityOK && (!cfg.Execute || s.ExecuteOK) {
+				report.HealthyNodes++
+			}
+			if !(s.Healthy && s.ScalabilityOK && (!cfg.Execute || s.ExecuteOK)) {
+				report.Passed = false
+			}
+			mu.Unlock()
+		}(&report.Nodes[i])
+	}
+	wg.Wait()
 	if report.HealthyNodes < cfg.RequiredHealthy {
 		report.Passed = false
 	}
@@ -116,14 +131,17 @@ func ProbeMultiNodeDashboard(ctx context.Context, cfg MultiNodeProbeConfig) (Mul
 }
 
 func probeNode(ctx context.Context, cfg MultiNodeProbeConfig, status *NodeProbeStatus) {
+	start := time.Now()
 	healthCode, err := getJSON(ctx, cfg.Client, status.URL+"/api/health", cfg.APIKey, nil)
 	status.HealthStatusCode = healthCode
 	if err != nil {
 		status.Error = appendErr(status.Error, "health: "+err.Error())
+		status.LatencyMs = time.Since(start).Milliseconds()
 		return
 	}
 	if healthCode < 200 || healthCode >= 300 {
 		status.Error = appendErr(status.Error, fmt.Sprintf("health: status %d", healthCode))
+		status.LatencyMs = time.Since(start).Milliseconds()
 		return
 	}
 	status.Healthy = true
@@ -132,10 +150,12 @@ func probeNode(ctx context.Context, cfg MultiNodeProbeConfig, status *NodeProbeS
 	scCode, err := getJSON(ctx, cfg.Client, status.URL+"/api/scalability", cfg.APIKey, &sc)
 	if err != nil {
 		status.Error = appendErr(status.Error, "scalability: "+err.Error())
+		status.LatencyMs = time.Since(start).Milliseconds()
 		return
 	}
 	if scCode < 200 || scCode >= 300 {
 		status.Error = appendErr(status.Error, fmt.Sprintf("scalability: status %d", scCode))
+		status.LatencyMs = time.Since(start).Milliseconds()
 		return
 	}
 	status.ScalabilityOK = true
@@ -145,6 +165,7 @@ func probeNode(ctx context.Context, cfg MultiNodeProbeConfig, status *NodeProbeS
 		result, err := executeProbeTask(ctx, cfg.Client, status.URL, cfg.APIKey, cfg.Agent, cfg.Task)
 		if err != nil {
 			status.Error = appendErr(status.Error, "execute: "+err.Error())
+			status.LatencyMs = time.Since(start).Milliseconds()
 			return
 		}
 		status.ExecuteOK = result.Success
@@ -153,6 +174,7 @@ func probeNode(ctx context.Context, cfg MultiNodeProbeConfig, status *NodeProbeS
 			status.Error = appendErr(status.Error, "execute result: "+result.Error)
 		}
 	}
+	status.LatencyMs = time.Since(start).Milliseconds()
 }
 
 func getJSON(ctx context.Context, client *http.Client, url, apiKey string, dst any) (int, error) {
@@ -221,6 +243,7 @@ type SingleNodeProbeReport struct {
 	ScalabilityStatus *ScalabilityStatus `json:"scalability_status,omitempty"`
 	ExecuteOK         bool               `json:"execute_ok,omitempty"`
 	ExecuteResult     *AgentResult       `json:"execute_result,omitempty"`
+	LatencyMs         int64              `json:"latency_ms,omitempty"`
 	Error             string             `json:"error,omitempty"`
 }
 
@@ -248,7 +271,7 @@ type SingleNodeProbeConfig struct {
 // exposes scalability telemetry, and optionally accepts remote agent execution.
 // Produces a structured JSON artifact for production validation evidence.
 func ProbeSingleNodeDashboard(ctx context.Context, cfg SingleNodeProbeConfig) SingleNodeProbeReport {
-	start := time.Now().UTC()
+	start := time.Now()
 	report := SingleNodeProbeReport{
 		CheckedAt: start,
 		BaseURL:   cfg.BaseURL,
@@ -311,6 +334,7 @@ func ProbeSingleNodeDashboard(ctx context.Context, cfg SingleNodeProbeConfig) Si
 	}
 
 	report.Passed = report.Healthy && report.ScalabilityOK && (!cfg.Execute || report.ExecuteOK)
+	report.LatencyMs = time.Since(start).Milliseconds()
 	return report
 }
 
