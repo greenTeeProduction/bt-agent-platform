@@ -24,14 +24,14 @@ import (
 // MCTSNode represents one state in the Monte Carlo search tree.
 // Each node corresponds to a tree variant produced by a specific mutation.
 type MCTSNode struct {
-	Tree      *SerializableNode `json:"tree"`
-	Q         float64           `json:"q"`          // cumulative reward (fitness)
-	N         int               `json:"n"`          // visit count
-	Children  []*MCTSNode       `json:"children"`   // child nodes
-	Parent    *MCTSNode         `json:"-"`          // back-pointer (not serialized)
-	MutationOp string           `json:"mutation_op"` // what mutation created this
-	UntriedOps []string         `json:"-"`          // mutation ops not yet tried from this node
-	IsLeaf     bool             `json:"is_leaf"`
+	Tree       *SerializableNode `json:"tree"`
+	Q          float64           `json:"q"`           // cumulative reward (fitness)
+	N          int               `json:"n"`           // visit count
+	Children   []*MCTSNode       `json:"children"`    // child nodes
+	Parent     *MCTSNode         `json:"-"`           // back-pointer (not serialized)
+	MutationOp string            `json:"mutation_op"` // what mutation created this
+	UntriedOps []string          `json:"-"`           // mutation ops not yet tried from this node
+	IsLeaf     bool              `json:"is_leaf"`
 }
 
 // Clone returns a deep copy of this MCTSNode (tree clone, new children slice).
@@ -100,11 +100,11 @@ type FitnessFunc func(*SerializableNode) float64
 // Instead of applying one random mutation, it searches K iterations using
 // SELECT → EXPAND → SIMULATE → BACKPROPAGATE, then returns the best variant found.
 type MCTSMutator struct {
-	Iterations       int         `json:"iterations"`         // K, default 10
+	Iterations       int         `json:"iterations"`           // K, default 10
 	ExplorationConst float64     `json:"exploration_constant"` // C, default 1.4
-	MaxDepth         int         `json:"max_depth"`          // search depth limit, default 3
-	FitnessEvaluator FitnessFunc `json:"-"`                  // evaluates tree fitness
-	Verbose          bool        `json:"verbose,omitempty"`  // enable logging
+	MaxDepth         int         `json:"max_depth"`            // search depth limit, default 3
+	FitnessEvaluator FitnessFunc `json:"-"`                    // evaluates tree fitness
+	Verbose          bool        `json:"verbose,omitempty"`    // enable logging
 
 	// Experience bank warm-start — optional reference to recent successful mutations
 	WarmStartHints []string `json:"warmstart_hints,omitempty"`
@@ -318,14 +318,14 @@ func (m *MCTSMutator) buildMutationOps(tree *SerializableNode) []string {
 
 // MCTSMetrics captures the result of an MCTS search for inspection/auditing.
 type MCTSMetrics struct {
-	Iterations        int     `json:"iterations"`
-	TotalNodes        int     `json:"total_nodes"`
-	RootFitness       float64 `json:"root_fitness"`
-	BestFitness       float64 `json:"best_fitness"`
-	Improvement       float64 `json:"improvement"`
-	ExplorationConst  float64 `json:"exploration_constant"`
-	SearchDepth       int     `json:"search_depth"`
-	NodesExpanded     int     `json:"nodes_expanded"`
+	Iterations       int     `json:"iterations"`
+	TotalNodes       int     `json:"total_nodes"`
+	RootFitness      float64 `json:"root_fitness"`
+	BestFitness      float64 `json:"best_fitness"`
+	Improvement      float64 `json:"improvement"`
+	ExplorationConst float64 `json:"exploration_constant"`
+	SearchDepth      int     `json:"search_depth"`
+	NodesExpanded    int     `json:"nodes_expanded"`
 }
 
 // Metrics returns a snapshot of the MCTS tree rooted at the given node.
@@ -409,5 +409,5 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// Ensure cloneTree, randomMutation, ApplyMutations, randomNodeName, 
+// Ensure cloneTree, randomMutation, ApplyMutations, randomNodeName,
 // and CountNodes are accessible (same package).

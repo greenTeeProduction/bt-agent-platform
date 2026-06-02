@@ -423,6 +423,10 @@
     "mtime": 1780295456.8303504,
     "hash": "f81ed815da0d69ea955d6603d608698a"
   },
+  "/home/nico/go-bt-evolve/internal/security/login_throttle.go": {
+    "mtime": 1780408637.7353344,
+    "hash": "83ac6aab3b017619fa99a3b5a16810ff"
+  },
   "/home/nico/go-bt-evolve/internal/security/audit_buffer.go": {
     "mtime": 1780370825.2532463,
     "hash": "3be707baa2deba9cb1acf9a26c348338"
@@ -430,6 +434,10 @@
   "/home/nico/go-bt-evolve/internal/security/audit_buffer_test.go": {
     "mtime": 1780370691.716436,
     "hash": "e6abfe151799d71f8c1211e90857ce78"
+  },
+  "/home/nico/go-bt-evolve/internal/security/login_throttle_test.go": {
+    "mtime": 1780408637.7433345,
+    "hash": "281a614784b6832e26b6d79665faefb3"
   },
   "/home/nico/go-bt-evolve/internal/security/session_test.go": {
     "mtime": 1780295456.79035,
@@ -532,8 +540,8 @@
     "hash": "43a65466a621dcf2e619c48c8ae05eef"
   },
   "/home/nico/go-bt-evolve/internal/engine/coverage_surge_test.go": {
-    "mtime": 1780406962.624374,
-    "hash": "a1fb3ff439ce58e01d71f2ad9e10aa91"
+    "mtime": 1780407811.9654787,
+    "hash": "c23db3082af72733bb5c7a1d7e24e712"
   },
   "/home/nico/go-bt-evolve/internal/engine/arc42_nodes.go": {
     "mtime": 1780317075.0676007,
@@ -884,8 +892,8 @@
     "hash": "059af4943ab7dff92d55ed1938851bab"
   },
   "/home/nico/go-bt-evolve/internal/evolution/mcts_mutate.go": {
-    "mtime": 1780380554.527657,
-    "hash": "b04248e84df766e9c30d46914da6892e"
+    "mtime": 1780408637.6913342,
+    "hash": "d58091e270b52c2f0f7179a9069b23d4"
   },
   "/home/nico/go-bt-evolve/internal/evolution/learning.go": {
     "mtime": 1780402516.041088,
@@ -1228,8 +1236,8 @@
     "hash": "a087530c3f4dff6c6d78f3d55ed30f1a"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/main.go": {
-    "mtime": 1780387027.9687164,
-    "hash": "79a137ef4b4a7bffc5cb11ccbc102388"
+    "mtime": 1780408602.9311266,
+    "hash": "435c25e4c36735d5cc676eaa0fa78fae"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
     "mtime": 1780356197.2263799,

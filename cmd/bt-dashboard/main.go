@@ -53,6 +53,9 @@ var traceReader *tracing.TraceReader
 // sessionStore manages authenticated user sessions (login/logout, cookie-based auth).
 var sessionStore *security.SessionStore
 
+// loginThrottle prevents brute-force password guessing with per-IP exponential backoff.
+var loginThrottle *security.LoginThrottle
+
 // Sprint tracking
 var sprintState = struct {
 	sync.Mutex
@@ -135,6 +138,13 @@ func main() {
 		MaxSessions: 100,
 	})
 	slog.Info("Session store initialized", "ttl", "24h", "cookie", "bt_session")
+
+	// Login throttle — per-IP exponential backoff for brute-force protection
+	loginThrottle = security.NewLoginThrottle(security.DefaultLoginThrottleConfig())
+	slog.Info("Login throttle initialized",
+		"lockout_threshold", 20,
+		"lockout_duration", "30m",
+	)
 
 	// Load runtime configuration
 	cfg, cfgErr := config.Load()
@@ -659,6 +669,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 // POST /api/login — body: {"password": "<api_key>"}
 // The password must match BT_API_KEY env var. On success, sets a session cookie.
 // Public endpoint (no auth required — this is how you get a session).
+//
+// Brute-force protection: after 20 failed attempts from the same IP, the IP
+// is locked out for 30 minutes. Cooldown periods apply before lockout with
+// exponential backoff (1s → 5s → 30s → 2m → 10m).
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
@@ -675,6 +689,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check brute-force throttle before processing
+	if loginThrottle.IsBlocked(r.RemoteAddr) {
+		remaining := loginThrottle.RemainingCooldown(r.RemoteAddr)
+		security.AuditSecurityEvent(r.Context(), "login_throttled",
+			"reason", "ip_blocked",
+			"remote_addr", r.RemoteAddr,
+			"remaining", remaining.String(),
+		)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":    "too many failed login attempts — IP temporarily blocked",
+			"retry_in": remaining.String(),
+		})
+		return
+	}
+
+	// Apply cooldown delay if the IP has recent failures
+	remaining := loginThrottle.RemainingCooldown(r.RemoteAddr)
+	if remaining > 0 {
+		time.Sleep(remaining)
+	}
+
 	var body struct {
 		Password string `json:"password"`
 	}
@@ -686,14 +724,20 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Password != apiKey {
+		loginThrottle.RecordFailure(r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
 		security.AuditSecurityEvent(r.Context(), "login_failed",
 			"reason", "invalid_password",
+			"remote_addr", r.RemoteAddr,
+			"failed_attempts", loginThrottle.State(r.RemoteAddr).FailedCount,
 		)
 		return
 	}
+
+	// Successful login — clear throttle state
+	loginThrottle.RecordSuccess(r.RemoteAddr)
 
 	token, err := sessionStore.CreateSession("")
 	if err != nil {
