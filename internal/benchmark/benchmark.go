@@ -552,9 +552,182 @@ func AgentMonitorSuite() Suite {
 	}
 }
 
+// SecuritySuite tests security audit tree routing.
+func SecuritySuite() Suite {
+	return Suite{
+		Name: "security_audit",
+		Tasks: []TaskCase{
+			{Task: "audit the codebase for security vulnerabilities", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "scan for XSS and SQL injection risks", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "review authentication and authorization patterns", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check for OWASP top 10 vulnerabilities", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// ResearchSuite tests research tree routing.
+func ResearchSuite() Suite {
+	return Suite{
+		Name: "research",
+		Tasks: []TaskCase{
+			{Task: "research the latest AI agent frameworks", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "investigate Go performance optimization techniques", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "analyze behavior tree evolution algorithms", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "explore OpenTelemetry distributed tracing options", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "summarize the latest trends in MCP server design", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// DataPipelineSuite tests data pipeline tree routing.
+func DataPipelineSuite() Suite {
+	return Suite{
+		Name: "data_pipeline",
+		Tasks: []TaskCase{
+			{Task: "build an ETL pipeline for log processing", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "set up data transformation for CSV to Parquet", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "configure streaming data ingestion from Kafka", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "monitor data quality and validation checks", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// GameAISuite tests game AI tree routing.
+func GameAISuite() Suite {
+	return Suite{
+		Name: "game_ai",
+		Tasks: []TaskCase{
+			{Task: "implement enemy behavior state machine", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "design NPC patrol and combat routines", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "build a decision tree for AI opponent strategy", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "optimize pathfinding with A-star algorithm", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// RefactoringSuite tests code refactoring tree routing.
+func RefactoringSuite() Suite {
+	return Suite{
+		Name: "refactoring",
+		Tasks: []TaskCase{
+			{Task: "refactor the legacy service layer to clean architecture", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "migrate from monolithic to microservices pattern", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "extract reusable components from duplicated code", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "modernize deprecated API endpoints to RESTful design", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// CrashInvestigatorSuite tests crash investigation tree routing.
+func CrashInvestigatorSuite() Suite {
+	return Suite{
+		Name: "crash_investigator",
+		Tasks: []TaskCase{
+			{Task: "investigate the production crash from the latest deployment", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "analyze the core dump for null pointer dereference", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "find the root cause of the memory leak in the agent scheduler", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "diagnose the race condition in the goroutine pool", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// MeetingNotesSuite tests meeting notes tree routing.
+func MeetingNotesSuite() Suite {
+	return Suite{
+		Name: "meeting_notes",
+		Tasks: []TaskCase{
+			{Task: "summarize the sprint planning meeting notes", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "extract action items from the architecture review", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the decision log from the quarterly review", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "create meeting minutes with key discussion points", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// AlertRouterSuite tests alert routing tree.
+func AlertRouterSuite() Suite {
+	return Suite{
+		Name: "alert_router",
+		Tasks: []TaskCase{
+			{Task: "route the critical production alert to the on-call engineer", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "escalate the P0 incident to the senior team", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "send warning notification for high memory usage", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "dispatch the database failure alert to DBA rotation", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// TradingSignalSuite tests trading signal tree routing.
+func TradingSignalSuite() Suite {
+	return Suite{
+		Name: "trading_signal",
+		Tasks: []TaskCase{
+			{Task: "analyze the trading signal for Bitcoin cross-arbitrage", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "evaluate the moving average crossover signal", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "assess the RSI divergence trading opportunity", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "backtest the mean reversion strategy on hourly data", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// Arc42Suite tests arc42 architecture documentation tree routing.
+func Arc42Suite() Suite {
+	return Suite{
+		Name: "arc42",
+		Tasks: []TaskCase{
+			{Task: "document the system architecture overview", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "describe the component decomposition and dependencies", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "create the runtime view for the MCP request flow", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the deployment topology and infrastructure", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "describe the cross-cutting security architecture", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the quality requirements and tradeoffs", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// DefaultSuite tests the default universal tree routing.
+func DefaultSuite() Suite {
+	return Suite{
+		Name: "default",
+		Tasks: []TaskCase{
+			{Task: "analyze the codebase for potential improvements", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check the system health and performance metrics", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "explain the difference between Sequence and Selector nodes", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "summarize the latest git commits in the repository", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// GOAPSuite tests GOAP (Goal-Oriented Action Planning) tree routing.
+func GOAPSuite() Suite {
+	return Suite{
+		Name: "goap",
+		Tasks: []TaskCase{
+			{Task: "plan a deployment pipeline with rollback steps", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "optimize the resource allocation for the microservices", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "schedule the research tasks with dependency resolution", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "plan the incident response escalation path", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
 // SuiteForTree returns the best benchmark suite for a given tree name.
 func SuiteForTree(treeName string) Suite {
 	switch {
+	case containsStr(treeName, "goap"):
+		return GOAPSuite()
 	case containsStr(treeName, "godev"):
 		return GoDevSuite()
 	case containsStr(treeName, "code_review"):
@@ -565,6 +738,28 @@ func SuiteForTree(treeName string) Suite {
 		return FinanceSuite()
 	case containsStr(treeName, "agent_monitor"):
 		return AgentMonitorSuite()
+	case containsStr(treeName, "security_audit"):
+		return SecuritySuite()
+	case containsStr(treeName, "research"):
+		return ResearchSuite()
+	case containsStr(treeName, "data_pipeline"):
+		return DataPipelineSuite()
+	case containsStr(treeName, "game_ai"):
+		return GameAISuite()
+	case containsStr(treeName, "refactoring"):
+		return RefactoringSuite()
+	case containsStr(treeName, "crash_investigator") || containsStr(treeName, "domain_crash"):
+		return CrashInvestigatorSuite()
+	case containsStr(treeName, "meeting_notes"):
+		return MeetingNotesSuite()
+	case containsStr(treeName, "alert_router"):
+		return AlertRouterSuite()
+	case containsStr(treeName, "trading_signal") || containsStr(treeName, "domain_trading"):
+		return TradingSignalSuite()
+	case containsStr(treeName, "arc42"):
+		return Arc42Suite()
+	case treeName == "default":
+		return DefaultSuite()
 	default:
 		return GoDevSuite()
 	}

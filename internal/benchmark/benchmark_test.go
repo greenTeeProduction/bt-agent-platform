@@ -181,6 +181,22 @@ func TestSuiteForTree_Matching(t *testing.T) {
 		{"finance_pitch_agent", "finance"},
 		{"finance_kyc_screener", "finance"},
 		{"domain_agent_monitor", "agent_monitor"},
+		{"domain_security_audit", "security_audit"},
+		{"research_deep_research", "research"},
+		{"research_quick_research", "research"},
+		{"domain_data_pipeline", "data_pipeline"},
+		{"domain_game_ai", "game_ai"},
+		{"domain_refactoring", "refactoring"},
+		{"domain_crash_investigator", "crash_investigator"},
+		{"domain_meeting_notes", "meeting_notes"},
+		{"domain_alert_router", "alert_router"},
+		{"domain_trading_signal", "trading_signal"},
+		{"domain_arc42:section1", "arc42"},
+		{"domain_arc42:assemble", "arc42"},
+		{"domain_goap_devops", "goap"},
+		{"domain_goap_planning", "goap"},
+		{"domain_goap_research", "goap"},
+		{"default", "default"},
 		{"unknown_tree", "godev"}, // default fallback
 	}
 	for _, tt := range tests {
