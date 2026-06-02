@@ -100,11 +100,15 @@ ci:
 	-@$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 || echo "     ⚠ warnings (non-blocking)"
 	@echo "     ✓ passed (non-blocking)"
 	@echo ""
-	@echo "6/7  tests (short + race)..."
+	@echo "6/7  scalability probe... (optional — requires dashboard on localhost:9800)"
+	-@$(MAKE) scalability-probe 2>&1 || echo "     ⚠ dashboard not reachable (non-blocking, requires running bt-dashboard on :9800)"
+	@echo "     ✓ done"
+	@echo ""
+	@echo "7/7  tests (short + race)..."
 	@$(GO) test -short -count=1 -race -timeout 120s ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "7/7  build all binaries..."
+	@echo "8/7  build all binaries..."
 	@mkdir -p $(BIN_DIR)
 	@for bin in $(BINARIES); do \
 		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
@@ -306,7 +310,7 @@ help:
 	@echo "  fmt-check         Check formatting (CI)"
 	@echo "  mod-tidy          Run go mod tidy and verify no diff"
 	@echo "  vulncheck         Run govulncheck vulnerability scan"
-	@echo "  ci                Run complete CI pipeline locally (vet + fmt + tidy + test + build)"
+	@echo "  ci                Run complete CI pipeline locally (vet + fmt + tidy + test + build + scalability probe)"
 	@echo "  changelog         Generate/update CHANGELOG.md from git commits"
 	@echo "  changelog-prepend Prepend a new version section (VERSION=v0.2.0)"
 	@echo "  release-notes     Generate release notes from conventional commits"
