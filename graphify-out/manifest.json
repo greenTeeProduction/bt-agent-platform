@@ -836,16 +836,16 @@
     "hash": "50d99b9178ebbae1c3e27e69fbb71a12"
   },
   "/home/nico/go-bt-evolve/internal/cicd/workflow_test.go": {
-    "mtime": 1780382335.119944,
-    "hash": "6e58e1f102318d2b48a4c4c8f5bf1041"
+    "mtime": 1780405754.9082565,
+    "hash": "60a4e69750b523d94ad1498ba3308c6e"
   },
   "/home/nico/go-bt-evolve/internal/cicd/doc.go": {
     "mtime": 1780321144.581056,
     "hash": "d6e15f8f3b3f38382ef07d6922147b96"
   },
   "/home/nico/go-bt-evolve/internal/cicd/workflow.go": {
-    "mtime": 1780382313.987794,
-    "hash": "734c2fb37e97dcc446eaa5985d29ba64"
+    "mtime": 1780405790.5920787,
+    "hash": "0844e009308759631999164a1dbae8db"
   },
   "/home/nico/go-bt-evolve/internal/evolution/vault_manager.go": {
     "mtime": 1780295456.9223511,
@@ -1292,8 +1292,8 @@
     "hash": "53fe203547f9bc4882d9e60f0e743398"
   },
   "/home/nico/go-bt-evolve/cmd/bt-ci-doctor/main.go": {
-    "mtime": 1780321238.1536071,
-    "hash": "f01b278005eb2f63b4d2cb9152bd272e"
+    "mtime": 1780405866.751765,
+    "hash": "f53699da2461a2c8f216c5193f5c6710"
   },
   "/home/nico/go-bt-evolve/cmd/hermes_improve/main.go": {
     "mtime": 1780295456.7943501,

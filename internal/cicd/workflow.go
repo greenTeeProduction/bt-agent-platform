@@ -20,6 +20,7 @@ type WorkflowReport struct {
 	Workflow         []string `json:"workflow_files"`
 	Summary          string   `json:"summary"`
 	DependabotExists bool     `json:"dependabot_exists"`
+	RunnerInstalled  bool     `json:"runner_installed"`
 }
 
 // Check records one CI/CD maturity assertion.
@@ -79,6 +80,15 @@ func ValidateWorkflows(root string) (WorkflowReport, error) {
 		report.add("dependabot config covers github-actions", hasGHA, boolDetail(hasGHA, "github-actions ecosystem configured", "github-actions ecosystem missing"))
 	}
 
+	// Check if a GitHub Actions self-hosted runner is installed on this machine.
+	// Advisory only — runner presence is environment-dependent, not a workflow structure issue.
+	runnerDir := filepath.Join(os.Getenv("HOME"), "actions-runner")
+	_, runnerErr := os.Stat(filepath.Join(runnerDir, ".runner"))
+	report.RunnerInstalled = runnerErr == nil
+	report.addAdvisory("self-hosted runner installed", report.RunnerInstalled,
+		boolDetail(report.RunnerInstalled, "runner configured at "+runnerDir,
+			"no runner at "+runnerDir+" -- run 'make setup-runner TOKEN=...'"))
+
 	report.AllPassed = report.Failed == 0
 	report.Summary = fmt.Sprintf("%d/%d CI/CD workflow checks passed", report.Passed, report.Passed+report.Failed)
 	return report, nil
@@ -113,6 +123,15 @@ func (r *WorkflowReport) add(name string, passed bool, details string) {
 		r.Passed++
 	} else {
 		r.Failed++
+	}
+}
+
+// addAdvisory records a check without affecting AllPassed status.
+// Used for environment-dependent checks (e.g., self-hosted runner presence).
+func (r *WorkflowReport) addAdvisory(name string, passed bool, details string) {
+	r.Checks = append(r.Checks, Check{Name: name, Passed: passed, Details: details})
+	if passed {
+		r.Passed++
 	}
 }
 

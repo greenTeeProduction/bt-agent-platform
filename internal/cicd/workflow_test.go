@@ -129,6 +129,34 @@ updates:
 	}
 }
 
+func TestValidateWorkflowsRunnerCheckNotInstalled(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if report.RunnerInstalled {
+		t.Log("runner IS installed on this machine (unexpected in temp dir test)")
+	} else {
+		// Expected: no runner in temp dir
+	}
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

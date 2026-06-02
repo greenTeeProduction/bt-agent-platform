@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -238,6 +238,11 @@ setup-runner:
 		exit 1; \
 	fi
 	@./scripts/setup-gh-runner.sh --token "$(TOKEN)"
+
+# Check if a GitHub Actions self-hosted runner is installed and operational.
+# Outputs JSON evidence for CI/CD maturity validation.
+runner-status:
+	@./scripts/check-runner-status.sh
 
 # Generate CHANGELOG.md from conventional commits since last tag
 changelog:
