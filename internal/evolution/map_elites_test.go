@@ -208,7 +208,7 @@ func StructuralQuickEval(tree *SerializableNode) float64 {
 		return 0
 	}
 	nodeCount := CountNodes(tree)
-	maxDepth := maxTreeDepthEvo(tree, 0)
+	maxDepth := MaxDepth(tree, 0)
 
 	score := 0.0
 	if nodeCount >= 15 && nodeCount <= 40 {

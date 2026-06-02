@@ -345,7 +345,7 @@ func StructuralMultiFitness(tree *SerializableNode) MultiFitness {
 	}
 
 	nodeCount := CountNodes(tree)
-	maxDepth := maxTreeDepthEvo(tree, 0)
+	maxDepth := MaxDepth(tree, 0)
 
 	// Success rate proxy: based on structure completeness
 	hasConditions := countConditions(tree)

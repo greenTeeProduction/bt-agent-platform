@@ -238,7 +238,7 @@ func NewQTable() *QTable {
 // GetState encodes a tree's state for Q-table lookup.
 func (qt *QTable) GetState(tree *SerializableNode, category string) string {
 	nodes := CountNodes(tree)
-	depth := maxTreeDepth(tree, 0)
+	depth := MaxDepth(tree, 0)
 	bucket := "low"
 	if nodes > 20 {
 		bucket = "med"
@@ -405,17 +405,6 @@ func collectNodeNames(node *SerializableNode) []string {
 		names = append(names, collectNodeNames(&node.Children[i])...)
 	}
 	return names
-}
-
-func maxTreeDepth(node *SerializableNode, current int) int {
-	maxD := current
-	for i := range node.Children {
-		d := maxTreeDepth(&node.Children[i], current+1)
-		if d > maxD {
-			maxD = d
-		}
-	}
-	return maxD
 }
 
 func max(a, b int) int {

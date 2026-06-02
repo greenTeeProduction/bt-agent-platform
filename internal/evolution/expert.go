@@ -285,7 +285,7 @@ func (ek *ExpertKnowledge) ValidateArchetype(tree *SerializableNode, category st
 		if nodeCount > arch.MaxNodes {
 			issues = append(issues, "too_many_nodes")
 		}
-		depth := maxDepth(tree, 0)
+		depth := MaxDepth(tree, 0)
 		if depth > arch.TargetDepth+1 {
 			issues = append(issues, "too_deep")
 		}
@@ -351,13 +351,13 @@ func hasNodeMatching(node *SerializableNode, pattern string) bool {
 	return false
 }
 
-func maxDepth(node *SerializableNode, currentDepth int) int {
+func MaxDepth(node *SerializableNode, currentDepth int) int {
 	if node == nil {
 		return currentDepth
 	}
 	maxChild := currentDepth
 	for i := range node.Children {
-		d := maxDepth(&node.Children[i], currentDepth+1)
+		d := MaxDepth(&node.Children[i], currentDepth+1)
 		if d > maxChild {
 			maxChild = d
 		}

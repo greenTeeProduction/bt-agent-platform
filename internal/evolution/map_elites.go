@@ -39,24 +39,9 @@ type BehavioralDescriptor struct {
 func Descriptor(tree *SerializableNode, domain string) BehavioralDescriptor {
 	return BehavioralDescriptor{
 		NodeCount: CountNodes(tree),
-		MaxDepth:  maxTreeDepthEvo(tree, 0),
+		MaxDepth:  MaxDepth(tree, 0),
 		Domain:    domain,
 	}
-}
-
-// maxTreeDepthEvo is a local depth calculator (avoid import cycle).
-func maxTreeDepthEvo(node *SerializableNode, current int) int {
-	if node == nil {
-		return current
-	}
-	maxD := current
-	for i := range node.Children {
-		d := maxTreeDepthEvo(&node.Children[i], current+1)
-		if d > maxD {
-			maxD = d
-		}
-	}
-	return maxD
 }
 
 // Bucket bins a continuous value into discrete buckets.

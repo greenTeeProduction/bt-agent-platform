@@ -29,6 +29,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 	"github.com/nico/go-bt-evolve/internal/tracing"
+	"github.com/nico/go-bt-evolve/internal/util"
 
 	btcomp "github.com/rvitorper/go-bt/composite"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -271,7 +272,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "ReviewGoCode":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan(bb.Task, "medium")
-			bb.Result = fmt.Sprintf("## Code Review\n\nTask: %s\n\nPlan: %s\n\nKey findings based on idiomatic Go review.", bb.Task, truncateStrForTree(bb.Plan, 300))
+			bb.Result = fmt.Sprintf("## Code Review\n\nTask: %s\n\nPlan: %s\n\nKey findings based on idiomatic Go review.", bb.Task, util.Truncate(bb.Plan, 300))
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
@@ -289,7 +290,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "FixBuildErrors":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("fix compilation errors in: "+bb.Task, "medium")
-			bb.Result = fmt.Sprintf("## Fixed Build Errors\n\n%s\n\nSuggested fix based on compilation output.", truncateStrForTree(bb.Plan, 300))
+			bb.Result = fmt.Sprintf("## Fixed Build Errors\n\n%s\n\nSuggested fix based on compilation output.", util.Truncate(bb.Plan, 300))
 			return 1
 		}
 	case "RunGoTests":
@@ -306,7 +307,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "ExplainGoConcept":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan(bb.Task, "low")
-			bb.Result = fmt.Sprintf("## Go Explanation\n\nTask: %s\n\n%s", bb.Task, truncateStrForTree(bb.Plan, 500))
+			bb.Result = fmt.Sprintf("## Go Explanation\n\nTask: %s\n\n%s", bb.Task, util.Truncate(bb.Plan, 500))
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
@@ -1410,7 +1411,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	switch name {
 	case "IsHighPriority":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "critical", "urgent", "asap")
+			return util.ContainsAnyStr(b.Task, "critical", "urgent", "asap")
 		}
 	case "ValidateOutput":
 		return func(b *Blackboard) bool {
@@ -1419,7 +1420,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)
-			return containsAny(lower, "go ", "golang", ".go", "goroutine", "channel", "interface", "struct", "defer", "package ",
+			return util.ContainsAnyStr(lower, "go ", "golang", ".go", "goroutine", "channel", "interface", "struct", "defer", "package ",
 				"gin-gonic", "gin ", "go-bt", "gorm", ".mod", "go sum", "go vet", "go build",
 				"http.handler", "gorilla", "middleware", "http.request", "http.response",
 				"json-rpc", "go module", "godoc", "go fmt", "golint", "staticcheck",
@@ -1428,62 +1429,62 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsCodeReview":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "review", "inspect", "lint", "vet", "staticcheck", "code review")
+			return util.ContainsAnyStr(b.Task, "review", "inspect", "lint", "vet", "staticcheck", "code review")
 		}
 	case "NeedsCompilation":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "build", "compile", "go build", "go run", "go install")
+			return util.ContainsAnyStr(b.Task, "build", "compile", "go build", "go run", "go install")
 		}
 	case "NeedsTesting":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "test", "coverage", "benchmark", "go test", "testing")
+			return util.ContainsAnyStr(b.Task, "test", "coverage", "benchmark", "go test", "testing")
 		}
 	case "IsGoQuestion":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "what is", "how to", "explain", "best practice", "pattern", "idiom", "convention")
+			return util.ContainsAnyStr(b.Task, "what is", "how to", "explain", "best practice", "pattern", "idiom", "convention")
 		}
 	// --- Merged universal conditions ---
 	case "IsDevOps":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"deploy", "build", "pipeline", "ci/cd", "ci ", "docker",
 				"kubernetes", "k8s", "terraform", "ansible", "jenkins",
 				"github actions", "gitlab ci", "circleci", "infrastructure", "devops")
 		}
 	case "IsDataTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"etl", "pipeline", "data ", "transform", "extract",
 				"load", "schema", "dataset", "csv", "parquet", "sql",
 				"delegation", "queue", "index", "session", "memory")
 		}
 	case "IsAnalysisTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"strategy", "analysis", "analyze", "foresight", "scenario",
 				"implications", "forecast", "roadmap", "synthesis", "think tank")
 		}
 	case "IsRefactoring":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"refactor", "restructure", "clean up", "improve",
 				"modernize", "migrate", "simplify")
 		}
 	case "IsQuestion":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"what ", "how ", "why ", "explain", "define",
 				"difference", "compare", "best practice", "example")
 		}
 	case "IsIncident":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"crash", "error", "timeout", "incident", "outage",
 				"down", "broken", "failure", "panic", "oom")
 		}
 	case "IsHealthCheck":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"health", "agent status", "disk usage", "memory", "cpu",
 				"metrics report", "dashboard", "system health", "check all",
 				"collect system", "verify the dashboard", "capacity planning",
@@ -1491,14 +1492,14 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsMeetingTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"transcribe", "meeting", "standup", "minutes", "summarize the",
 				"architecture review", "sprint planning", "board meeting",
 				"action items", "multi-speaker", "facilitation", "diarize")
 		}
 	case "IsPlatformEval":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"platform maturity", "lowest-scoring", "test suite and report",
 				"gap analysis", "comparative maturity", "maturity trends",
 				"comprehensive audit", "architecture review", "production readiness",
@@ -1506,14 +1507,14 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsCronTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"cron job", "cron audit", "cron capacity", "cron governance",
 				"list all cron", "find any cron", "verify all cron",
 				"diagnose the hermes", "cron A/B", "self-healing cron")
 		}
 	case "IsEvolutionTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"tree fitness", "evolution algorithm", "mutation candidate",
 				"evolution safety", "ensemble evolution", "meta-controller",
 				"multi-objective evolution", "fleet-wide evolution",
@@ -1521,7 +1522,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsNotebookLMTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"notebooklm", "chat quer", "briefing doc", "mind map",
 				"research notebook", "cross-notebook", "deep research",
 				"audio overview", "research pipeline", "full pipeline",
@@ -1529,7 +1530,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsVaultTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"ingest the session", "synthesize daily", "cross-link",
 				"vault", "update the index", "weekly sweep", "wiki page",
 				"map of content", "frontmatter", "knowledge gap")
@@ -1538,7 +1539,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsFinanceTask":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)
-			return containsAny(lower, "dcf", "lbo", "comps", "valuation", "ebitda", "revenue", "wacc",
+			return util.ContainsAnyStr(lower, "dcf", "lbo", "comps", "valuation", "ebitda", "revenue", "wacc",
 				"financial", "equity", "debt", "irr", "moic", "earnings", "quarterly", "10-k", "10-q",
 				"pitch", "model", "excel", "portfolio", "investor", "lp", "gp", "kyc", "aml",
 				"reconciliation", "reconcile", "ledger", "general ledger", "accrual", "month-end",
@@ -1546,75 +1547,75 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsCompsRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "comps", "comparable", "multiples", "trading comp", "peer")
+			return util.ContainsAnyStr(b.Task, "comps", "comparable", "multiples", "trading comp", "peer")
 		}
 	case "IsPrecedentsRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "precedent", "transaction", "m&a comp", "acquisition")
+			return util.ContainsAnyStr(b.Task, "precedent", "transaction", "m&a comp", "acquisition")
 		}
 	case "IsLBORequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "lbo", "leveraged buyout", "buyout", "private equity")
+			return util.ContainsAnyStr(b.Task, "lbo", "leveraged buyout", "buyout", "private equity")
 		}
 	case "IsDCFRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "dcf", "discounted cash flow", "intrinsic value", "wacc")
+			return util.ContainsAnyStr(b.Task, "dcf", "discounted cash flow", "intrinsic value", "wacc")
 		}
 	case "IsDeckRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "deck", "pitch", "presentation", "powerpoint", "slide")
+			return util.ContainsAnyStr(b.Task, "deck", "pitch", "presentation", "powerpoint", "slide")
 		}
 	case "IsEarningsRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "earnings", "quarterly", "10-q", "10-k", "8-k", "press release", "transcript")
+			return util.ContainsAnyStr(b.Task, "earnings", "quarterly", "10-q", "10-k", "8-k", "press release", "transcript")
 		}
 	case "NeedsModelUpdate":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "update model", "refresh", "revise", "roll forward")
+			return util.ContainsAnyStr(b.Task, "update model", "refresh", "revise", "roll forward")
 		}
 	case "IsNoteRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "note", "report", "write-up", "draft", "research")
+			return util.ContainsAnyStr(b.Task, "note", "report", "write-up", "draft", "research")
 		}
 	case "IsIndustryRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "industry", "sector", "market", "theme", "trend")
+			return util.ContainsAnyStr(b.Task, "industry", "sector", "market", "theme", "trend")
 		}
 	case "IsCompetitiveRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "competitive", "landscape", "peer", "market share")
+			return util.ContainsAnyStr(b.Task, "competitive", "landscape", "peer", "market share")
 		}
 	case "IsIdeaRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "idea", "opportunity", "screen", "shortlist")
+			return util.ContainsAnyStr(b.Task, "idea", "opportunity", "screen", "shortlist")
 		}
 	case "Is3StatementRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "3-statement", "three statement", "operating model", "income statement")
+			return util.ContainsAnyStr(b.Task, "3-statement", "three statement", "operating model", "income statement")
 		}
 	case "IsMeetingPrep":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "briefing", "meeting", "client", "prep", "talking points")
+			return util.ContainsAnyStr(b.Task, "briefing", "meeting", "client", "prep", "talking points")
 		}
 	case "IsValuationRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "valuation", "gp", "lp", "capital account", "nav")
+			return util.ContainsAnyStr(b.Task, "valuation", "gp", "lp", "capital account", "nav")
 		}
 	case "IsGLReconRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "gl", "general ledger", "reconcil", "break", "sub-ledger")
+			return util.ContainsAnyStr(b.Task, "gl", "general ledger", "reconcil", "break", "sub-ledger")
 		}
 	case "IsMonthEndRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "month-end", "close", "accrual", "roll-forward", "variance")
+			return util.ContainsAnyStr(b.Task, "month-end", "close", "accrual", "roll-forward", "variance")
 		}
 	case "IsAuditRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "audit", "statement", "verify", "lp", "capital account")
+			return util.ContainsAnyStr(b.Task, "audit", "statement", "verify", "lp", "capital account")
 		}
 	case "IsKYCRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "kyc", "aml", "onboarding", "screening", "sanctions", "pep")
+			return util.ContainsAnyStr(b.Task, "kyc", "aml", "onboarding", "screening", "sanctions", "pep")
 		}
 	// --- Company startup conditions ---
 	case "ValidateCompanyState":
@@ -1627,21 +1628,21 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsEngineeringTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"engineering", "sprint", "feature", "build", "implement",
 				"code", "deploy", "architecture", "tech", "developer",
 				"sw. eng", "software eng")
 		}
 	case "IsMarketingTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"marketing", "content", "seo", "campaign", "growth",
 				"community", "brand", "social", "promotion",
 				"advertising", "lead gen", "audience")
 		}
 	case "IsSalesTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task),
+			return util.ContainsAnyStr(strings.ToLower(b.Task),
 				"sales", "deal", "revenue", "pipeline", "lead",
 				"closing", "proposal", "demo", "pricing",
 				"customer", "prospect", "quota")
@@ -1654,15 +1655,15 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "HasSkillGaps":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "skill", "outdated", "missing", "improve skill", "update skill")
+			return util.ContainsAnyStr(b.Task, "skill", "outdated", "missing", "improve skill", "update skill")
 		}
 	case "HasWorkflowInefficiencies":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "workflow", "inefficient", "optimize", "redundant", "slow", "pattern")
+			return util.ContainsAnyStr(b.Task, "workflow", "inefficient", "optimize", "redundant", "slow", "pattern")
 		}
 	case "HasModelToolIssues":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "model", "tool", "config", "switch", "tune", "provider")
+			return util.ContainsAnyStr(b.Task, "model", "tool", "config", "switch", "tune", "provider")
 		}
 	// --- UI Review conditions ---
 	case "HasFeatureGaps":
@@ -1690,99 +1691,99 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "HasNewAlgorithm":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "implement", "new algorithm", "research", "create")
+			return util.ContainsAnyStr(b.Task, "implement", "new algorithm", "research", "create")
 		}
 	case "HasImprovement":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "improve", "enhance", "optimize", "tune")
+			return util.ContainsAnyStr(b.Task, "improve", "enhance", "optimize", "tune")
 		}
 	case "NeedsIntegration":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "integrate", "connect", "pipeline", "wire")
+			return util.ContainsAnyStr(b.Task, "integrate", "connect", "pipeline", "wire")
 		}
 	// --- Hermes+Obsidian conditions ---
 	case "NeedsSweep":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "sweep", "update notes", "refresh", "maintain")
+			return util.ContainsAnyStr(b.Task, "sweep", "update notes", "refresh", "maintain")
 		}
 	case "NeedsAudit":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "audit", "review", "check", "verify", "assess", "gap")
+			return util.ContainsAnyStr(b.Task, "audit", "review", "check", "verify", "assess", "gap")
 		}
 	case "NeedsPublish":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "publish", "export", "generate", "report", "slide", "briefing")
+			return util.ContainsAnyStr(b.Task, "publish", "export", "generate", "report", "slide", "briefing")
 		}
 	// --- NotebookLM conditions ---
 	case "IsIngestTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "ingest", "import", "add source", "push", "notebooklm")
+			return util.ContainsAnyStr(b.Task, "ingest", "import", "add source", "push", "notebooklm")
 		}
 	case "IsQueryTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "ask", "query", "question", "research", "analyze")
+			return util.ContainsAnyStr(b.Task, "ask", "query", "question", "research", "analyze")
 		}
 	case "IsStudioTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "podcast", "briefing", "FAQ", "audio", "timeline", "create", "studio")
+			return util.ContainsAnyStr(b.Task, "podcast", "briefing", "FAQ", "audio", "timeline", "create", "studio")
 		}
 	case "IsResearchTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "research", "web search", "discover", "find sources", "deep research")
+			return util.ContainsAnyStr(b.Task, "research", "web search", "discover", "find sources", "deep research")
 		}
 	// --- Kanban conditions ---
 	case "IsKanbanTask":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task), "card", "kanban", "board", "focalboard", "column", "backlog", "todo", "in progress", "sprint", "status", "move", "assign")
+			return util.ContainsAnyStr(strings.ToLower(b.Task), "card", "kanban", "board", "focalboard", "column", "backlog", "todo", "in progress", "sprint", "status", "move", "assign")
 		}
 	case "IsBoardCheck":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "scan", "check", "monitor", "stale", "board", "status", "bottleneck")
+			return util.ContainsAnyStr(b.Task, "scan", "check", "monitor", "stale", "board", "status", "bottleneck")
 		}
 	case "NeedsDispatch":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "dispatch", "assign", "next", "start", "pick up")
+			return util.ContainsAnyStr(b.Task, "dispatch", "assign", "next", "start", "pick up")
 		}
 	case "IsStandup":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "standup", "daily", "status", "report")
+			return util.ContainsAnyStr(b.Task, "standup", "daily", "status", "report")
 		}
 	case "IsCreateTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "create", "new card", "add card", "backlog")
+			return util.ContainsAnyStr(b.Task, "create", "new card", "add card", "backlog")
 		}
 	case "IsRefinement":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "refine", "expand", "detail", "planning")
+			return util.ContainsAnyStr(b.Task, "refine", "expand", "detail", "planning")
 		}
 	case "IsQA":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "qa", "test", "validate", "verify", "check")
+			return util.ContainsAnyStr(b.Task, "qa", "test", "validate", "verify", "check")
 		}
 	// --- Vault management conditions ---
 	case "IsSessionStart":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "session start", "boot", "wake", "startup", "begin", "morning")
+			return util.ContainsAnyStr(b.Task, "session start", "boot", "wake", "startup", "begin", "morning")
 		}
 	case "HasNewContent":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "ingest", "import", "new content", "source", "transcript", "article", "save", "raw")
+			return util.ContainsAnyStr(b.Task, "ingest", "import", "new content", "source", "transcript", "article", "save", "raw")
 		}
 	case "NeedsSynthesis":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "synthesize", "wiki", "extract", "create note", "knowledge", "concept")
+			return util.ContainsAnyStr(b.Task, "synthesize", "wiki", "extract", "create note", "knowledge", "concept")
 		}
 	case "NeedsCrossLinks":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "link", "cross-link", "audit", "connect", "orphan")
+			return util.ContainsAnyStr(b.Task, "link", "cross-link", "audit", "connect", "orphan")
 		}
 	case "NeedsIndexUpdate":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "index", "update", "refresh", "MOC")
+			return util.ContainsAnyStr(b.Task, "index", "update", "refresh", "MOC")
 		}
 	case "IsSessionEnd":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "session end", "wrap", "close", "daily summary", "end of day", "goodbye")
+			return util.ContainsAnyStr(b.Task, "session end", "wrap", "close", "daily summary", "end of day", "goodbye")
 		}
 	// --- Stockfish evolution conditions ---
 	case "HasCachedFitness":
@@ -1806,7 +1807,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsResearchQuery":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)
-			return containsAny(lower, "research", "investigate", "analyze", "what is", "how does",
+			return util.ContainsAnyStr(lower, "research", "investigate", "analyze", "what is", "how does",
 				"explain", "compare", "deep dive", "report on", "find out", "look into",
 				"literature", "study", "survey", "overview", "landscape",
 				"what are", "who", "when", "where", "why", "top ", "best ",
@@ -1819,23 +1820,23 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "IsAmbiguousQuery":
 		return func(b *Blackboard) bool {
-			return len(b.Task) < 15 || containsAny(b.Task, "it", "this", "that thing") || !containsAny(b.Task, "?", "who", "what", "when", "where", "why", "how")
+			return len(b.Task) < 15 || util.ContainsAnyStr(b.Task, "it", "this", "that thing") || !util.ContainsAnyStr(b.Task, "?", "who", "what", "when", "where", "why", "how")
 		}
 	case "IsSimpleQuery":
 		return func(b *Blackboard) bool {
-			return len(b.Task) < 60 && !containsAny(b.Task, "compare", "versus", "vs", "analysis", "deep", "comprehensive")
+			return len(b.Task) < 60 && !util.ContainsAnyStr(b.Task, "compare", "versus", "vs", "analysis", "deep", "comprehensive")
 		}
 	case "IsComparisonQuery":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "compare", "versus", "vs", "difference between", "contrast")
+			return util.ContainsAnyStr(b.Task, "compare", "versus", "vs", "difference between", "contrast")
 		}
 	case "IsDeepQuery":
 		return func(b *Blackboard) bool {
-			return len(b.Task) > 100 || containsAny(b.Task, "comprehensive", "deep dive", "in-depth", "thorough", "full report")
+			return len(b.Task) > 100 || util.ContainsAnyStr(b.Task, "comprehensive", "deep dive", "in-depth", "thorough", "full report")
 		}
 	case "DetectKnowledgeGaps":
 		return func(b *Blackboard) bool {
-			return bb.Result == "" || containsAny(bb.Result, "gap", "missing", "unknown", "unclear", "TODO")
+			return bb.Result == "" || util.ContainsAnyStr(bb.Result, "gap", "missing", "unknown", "unclear", "TODO")
 		}
 	case "CheckSourceCount":
 		return func(b *Blackboard) bool {
@@ -1847,134 +1848,134 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	case "CheckCitationFormat":
 		return func(b *Blackboard) bool {
-			return containsAny(bb.Result, "[", "source:", "http")
+			return util.ContainsAnyStr(bb.Result, "[", "source:", "http")
 		}
 	// --- Domain tree conditions ---
 	case "IsCodeTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "code", "function", "bug", "fix", "refactor") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "code", "function", "bug", "fix", "refactor") }
 	case "IsBugCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "bug", "fix", "error", "crash", "null", "race") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "bug", "fix", "error", "crash", "null", "race") }
 	case "IsSecurityCheck":
 		return func(b *Blackboard) bool {
-			return containsAny(strings.ToLower(b.Task), "security", "exploit", "vulnerability", "penetration", "auth", "audit", "xss", "sql injection", "csrf", "owasp", "injection")
+			return util.ContainsAnyStr(strings.ToLower(b.Task), "security", "exploit", "vulnerability", "penetration", "auth", "audit", "xss", "sql injection", "csrf", "owasp", "injection")
 		}
 	case "IsStyleCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "style", "lint", "format", "naming", "clean") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "style", "lint", "format", "naming", "clean") }
 	case "IsCIBuildTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "build", "deploy", "ci", "cd", "pipeline", "release")
+			return util.ContainsAnyStr(b.Task, "build", "deploy", "ci", "cd", "pipeline", "release")
 		}
 	case "NeedsBuild":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "build", "compile") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "build", "compile") }
 	case "NeedsTestRun":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "test", "run tests") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "test", "run tests") }
 	case "NeedsLinting":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "lint", "static") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "lint", "static") }
 	case "NeedsDeploy":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "deploy", "release", "ship") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "deploy", "release", "ship") }
 	case "IsMonitorTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "monitor", "health", "status", "agent", "watch") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "monitor", "health", "status", "agent", "watch") }
 	case "HasDeadAgents":
-		return func(b *Blackboard) bool { return containsAny(bb.Result, "dead", "offline", "unreachable") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "dead", "offline", "unreachable") }
 	case "PersistentFailures":
-		return func(b *Blackboard) bool { return containsAny(bb.Result, "failed", "3+", "persistent") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "failed", "3+", "persistent") }
 	case "IsMetricsRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "metrics", "stats", "report") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "metrics", "stats", "report") }
 	case "IsRefactorTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "refactor", "improve", "clean", "rewrite") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "refactor", "improve", "clean", "rewrite") }
 	case "IsSmellCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "smell", "cruft", "duplicate", "long") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "smell", "cruft", "duplicate", "long") }
 	case "IsPatternRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "pattern", "design", "architecture") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "pattern", "design", "architecture") }
 	case "NeedsVerification":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "verify", "test", "check") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "verify", "test", "check") }
 	case "IsSecurityTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "security", "audit", "threat", "vulnerability") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "security", "audit", "threat", "vulnerability") }
 	case "IsSASTRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "sast", "static analysis") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "sast", "static analysis") }
 	case "IsDepScanRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "dependency", "package", "cve", "library") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "dependency", "package", "cve", "library") }
 	case "IsSecretScan":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "secret", "credential", "key", "token", "password")
+			return util.ContainsAnyStr(b.Task, "secret", "credential", "key", "token", "password")
 		}
 	case "IsThreatModel":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "threat", "model", "attack", "stride") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "threat", "model", "attack", "stride") }
 	case "IsExtractRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "extract", "ingest", "load") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "extract", "ingest", "load") }
 	case "IsTransformRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "transform", "clean", "normalize") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "transform", "clean", "normalize") }
 	case "IsLoadRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "load", "write", "store") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "load", "write", "store") }
 	case "HasTranscript":
 		return func(b *Blackboard) bool { return len(bb.Task) > 200 }
 	case "IsActionExtraction":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "action", "todo", "next") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "action", "todo", "next") }
 	case "IsSummaryRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "summary", "notes", "minutes") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "summary", "notes", "minutes") }
 	case "IsFollowUp":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "follow", "reminder") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "follow", "reminder") }
 	case "IsCrashTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "crash", "error", "stack", "panic", "trace") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "crash", "error", "stack", "panic", "trace") }
 	case "HasStackTrace":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread") }
 	case "IsRootCauseRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "root cause", "why", "debug") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "root cause", "why", "debug") }
 	case "HasProposedFix":
-		return func(b *Blackboard) bool { return containsAny(bb.Result, "fix", "patch", "change") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "fix", "patch", "change") }
 	case "IsPreventionRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "prevent", "harden", "guard") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "prevent", "harden", "guard") }
 	case "IsGameTask":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "game", "npc", "ai", "behavior") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "game", "npc", "ai", "behavior") }
 	case "IsPatrolState":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "patrol", "idle", "wander") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "patrol", "idle", "wander") }
 	case "IsDetectState":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "detect", "spot", "see", "hear") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "detect", "spot", "see", "hear") }
 	case "IsChaseState":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "chase", "pursue", "follow") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "chase", "pursue", "follow") }
 	case "IsCombatState":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "attack", "fight", "combat", "shoot") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "attack", "fight", "combat", "shoot") }
 	case "IsRetreatState":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "retreat", "flee", "escape", "heal") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "retreat", "flee", "escape", "heal") }
 	case "IsTradingTask":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "trading", "signal", "market", "price", "stock", "alert", "critical", "incident", "notify", "route", "severity", "disk", "security", "health")
+			return util.ContainsAnyStr(b.Task, "trading", "signal", "market", "price", "stock", "alert", "critical", "incident", "notify", "route", "severity", "disk", "security", "health")
 		}
 	case "IsDataRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "data", "fetch", "pull", "price") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "data", "fetch", "pull", "price") }
 	case "IsTAPath":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "technical", "indicator", "pattern", "rsi", "macd", "sma")
+			return util.ContainsAnyStr(b.Task, "technical", "indicator", "pattern", "rsi", "macd", "sma")
 		}
 	case "IsSignalRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "signal", "buy", "sell", "entry") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "signal", "buy", "sell", "entry") }
 	case "IsRiskCheck":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "risk", "stop", "position", "exposure") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "risk", "stop", "position", "exposure") }
 	// --- GOAP Planning conditions ---
 	case "IsAssessRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "assess", "check", "review", "scan", "audit", "track", "measure", "maturity")
+			return util.ContainsAnyStr(b.Task, "assess", "check", "review", "scan", "audit", "track", "measure", "maturity")
 		}
 	case "IsSyncRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "sync", "pollinate", "cross", "align", "mismatch")
+			return util.ContainsAnyStr(b.Task, "sync", "pollinate", "cross", "align", "mismatch")
 		}
 	// --- GOAP Research conditions ---
 	case "IsResearchRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "research", "analyze", "find ", "query", "search", "discover", "evolution")
+			return util.ContainsAnyStr(b.Task, "research", "analyze", "find ", "query", "search", "discover", "evolution")
 		}
 	case "IsGraphifyRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "graphify", "graph", "structural", "codebase", "coupling")
+			return util.ContainsAnyStr(b.Task, "graphify", "graph", "structural", "codebase", "coupling")
 		}
 	// --- GOAP Devops conditions ---
 	case "IsBuildRequest":
 		return func(b *Blackboard) bool {
-			return containsAny(b.Task, "build", "compile", "install", "make", "go build")
+			return util.ContainsAnyStr(b.Task, "build", "compile", "install", "make", "go build")
 		}
 	case "IsImplementRequest":
-		return func(b *Blackboard) bool { return containsAny(b.Task, "implement", "plan", "fix", "create", "pending") }
+		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "implement", "plan", "fix", "create", "pending") }
 
 	// ─── Arc42 Documentation Conditions ────────────────────────────
 	case "GraphIsFresh":
@@ -2106,7 +2107,7 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	}
 	_, span := tracing.StartSpan(context.Background(), "RunTask:"+taskName)
 	defer span.End()
-	span.SetAttribute("task", truncateStrForTree(bb.Task, 80))
+	span.SetAttribute("task", util.Truncate(bb.Task, 80))
 
 	// Panic recovery at the tree level — if the entire BT crashes, capture it.
 	defer func() {
@@ -2148,22 +2149,4 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	validateOutputQuality(bb)
 
 	return bb.Result
-}
-
-func containsAny(s string, substrs ...string) bool {
-	for _, sub := range substrs {
-		for i := 0; i <= len(s)-len(sub); i++ {
-			if s[i:i+len(sub)] == sub {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func truncateStrForTree(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }

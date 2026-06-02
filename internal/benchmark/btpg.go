@@ -123,7 +123,7 @@ func BTPGQualityScore(tree *evolution.SerializableNode) BTPGMetrics {
 	}
 
 	nodeCount := evolution.CountNodes(tree)
-	depth := maxDepth(tree, 0)
+	depth := evolution.MaxDepth(tree, 0)
 	bf := avgBranchingFactor(tree)
 
 	return BTPGMetrics{
@@ -131,21 +131,6 @@ func BTPGQualityScore(tree *evolution.SerializableNode) BTPGMetrics {
 		Depth:           depth,
 		BranchingFactor: bf,
 	}
-}
-
-// maxDepth returns the maximum depth from this node downward. Root is at depth 0.
-func maxDepth(node *evolution.SerializableNode, currentDepth int) int {
-	if node == nil {
-		return currentDepth
-	}
-	maxChild := currentDepth
-	for i := range node.Children {
-		cd := maxDepth(&node.Children[i], currentDepth+1)
-		if cd > maxChild {
-			maxChild = cd
-		}
-	}
-	return maxChild
 }
 
 // avgBranchingFactor computes the average number of children per composite node.

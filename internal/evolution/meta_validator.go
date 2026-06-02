@@ -115,7 +115,7 @@ func (m *MetaValidator) ValidateMutation(baseline, candidate *SerializableNode, 
 	}
 
 	report.NodeCount = CountNodes(candidate)
-	report.Depth = maxTreeDepth(candidate, 0)
+	report.Depth = MaxDepth(candidate, 0)
 
 	m.checkRoot(candidate, &report)
 	m.checkNodeNames(candidate, &report)
@@ -258,7 +258,7 @@ func (m *MetaValidator) checkFitness(preComposite, postComposite float64, report
 
 func (m *MetaValidator) checkStructuralRegression(baseline, candidate *SerializableNode, report *MetaValidationReport) {
 	baseNodes := CountNodes(baseline)
-	baseDepth := maxTreeDepth(baseline, 0)
+	baseDepth := MaxDepth(baseline, 0)
 	if baseNodes > 0 && report.NodeCount > int(math.Ceil(float64(baseNodes)*2.5)) {
 		report.addWarning("structural_regression", "warning", "candidate grew more than 2.5x baseline nodes", 0.05)
 	}
