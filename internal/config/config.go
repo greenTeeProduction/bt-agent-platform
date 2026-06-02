@@ -48,12 +48,13 @@ type Config struct {
 	RateLimitBurst int     `json:"rate_limit_burst" env:"BT_RATE_LIMIT_BURST" default:"20"`
 
 	// Feature Flags
-	GardenerEnabled   bool `json:"gardener_enabled" env:"BT_FEATURE_GARDENER" default:"true"`
-	SchedulerEnabled  bool `json:"scheduler_enabled" env:"BT_FEATURE_SCHEDULER" default:"true"`
-	AutoEvolveEnabled bool `json:"auto_evolve_enabled" env:"BT_FEATURE_AUTO_EVOLVE" default:"false"`
-	KanbanEnabled     bool `json:"kanban_enabled" env:"BT_FEATURE_KANBAN" default:"true"`
-	ThinktankEnabled  bool `json:"thinktank_enabled" env:"BT_FEATURE_THINKTANK" default:"true"`
-	StartupSimEnabled bool `json:"startup_sim_enabled" env:"BT_FEATURE_STARTUP_SIM" default:"true"`
+	GardenerEnabled              bool `json:"gardener_enabled" env:"BT_FEATURE_GARDENER" default:"true"`
+	SchedulerEnabled             bool `json:"scheduler_enabled" env:"BT_FEATURE_SCHEDULER" default:"true"`
+	AutoEvolveEnabled            bool `json:"auto_evolve_enabled" env:"BT_FEATURE_AUTO_EVOLVE" default:"false"`
+	KanbanEnabled                bool `json:"kanban_enabled" env:"BT_FEATURE_KANBAN" default:"true"`
+	ThinktankEnabled             bool `json:"thinktank_enabled" env:"BT_FEATURE_THINKTANK" default:"true"`
+	StartupSimEnabled            bool `json:"startup_sim_enabled" env:"BT_FEATURE_STARTUP_SIM" default:"true"`
+	APIEnforceResponseValidation bool `json:"api_enforce_response_validation" env:"BT_API_ENFORCE_RESPONSE_VALIDATION" default:"false"`
 
 	// Persistence
 	ReflectionsDir string `json:"reflections_dir,omitempty" env:"BT_REFLECTIONS_DIR" default:""`
@@ -228,27 +229,28 @@ func LoadFileWithDotEnv(configPath, dotenvPath string) (*Config, error) {
 // newDefaultConfig returns a Config with all default values set.
 func newDefaultConfig() *Config {
 	return &Config{
-		DashboardPort:          9800,
-		LLMProvider:            "ollama",
-		OllamaHost:             "http://localhost:11434",
-		OllamaModel:            "qwen3.6:35b-a3b",
-		DeepSeekHost:           "https://api.deepseek.com/v1",
-		DeepSeekModel:          "deepseek-v4-flash",
-		ACPCommand:             "hermes",
-		ACPArgs:                "acp --accept-hooks",
-		LLMTimeout:             300,
-		RateLimitRPS:           100,
-		RateLimitBurst:         20,
-		GardenerEnabled:        true,
-		SchedulerEnabled:       true,
-		KanbanEnabled:          true,
-		ThinktankEnabled:       true,
-		StartupSimEnabled:      true,
-		GardenerCycleInterval:  300,
-		GardenerMutationsPer:   2,
-		GardenerMaxNodes:       20,
-		SchedulerCheckInterval: 60,
-		MaxBodySize:            1048576,
+		DashboardPort:                9800,
+		LLMProvider:                  "ollama",
+		OllamaHost:                   "http://localhost:11434",
+		OllamaModel:                  "qwen3.6:35b-a3b",
+		DeepSeekHost:                 "https://api.deepseek.com/v1",
+		DeepSeekModel:                "deepseek-v4-flash",
+		ACPCommand:                   "hermes",
+		ACPArgs:                      "acp --accept-hooks",
+		LLMTimeout:                   300,
+		RateLimitRPS:                 100,
+		RateLimitBurst:               20,
+		GardenerEnabled:              true,
+		SchedulerEnabled:             true,
+		KanbanEnabled:                true,
+		ThinktankEnabled:             true,
+		StartupSimEnabled:            true,
+		APIEnforceResponseValidation: false,
+		GardenerCycleInterval:        300,
+		GardenerMutationsPer:         2,
+		GardenerMaxNodes:             20,
+		SchedulerCheckInterval:       60,
+		MaxBodySize:                  1048576,
 	}
 }
 
@@ -347,6 +349,9 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 	if file.StartupSimEnabled || hasExplicitField(file, "startup_sim_enabled") {
 		c.StartupSimEnabled = file.StartupSimEnabled
+	}
+	if file.APIEnforceResponseValidation || hasExplicitField(file, "api_enforce_response_validation") {
+		c.APIEnforceResponseValidation = file.APIEnforceResponseValidation
 	}
 	if file.ReflectionsDir != "" {
 		c.ReflectionsDir = file.ReflectionsDir
@@ -483,6 +488,9 @@ func applyEnvOverrides(c *Config) {
 	}
 	if v := os.Getenv("BT_FEATURE_STARTUP_SIM"); v != "" {
 		c.StartupSimEnabled = parseBool(v)
+	}
+	if v := os.Getenv("BT_API_ENFORCE_RESPONSE_VALIDATION"); v != "" {
+		c.APIEnforceResponseValidation = parseBool(v)
 	}
 
 	// Persistence
@@ -715,6 +723,7 @@ func applyDotEnvToConfig(c *Config, kv map[string]string) {
 	applyDotEnvBool("BT_FEATURE_KANBAN", "BT_FEATURE_KANBAN", func(v bool) { c.KanbanEnabled = v })
 	applyDotEnvBool("BT_FEATURE_THINKTANK", "BT_FEATURE_THINKTANK", func(v bool) { c.ThinktankEnabled = v })
 	applyDotEnvBool("BT_FEATURE_STARTUP_SIM", "BT_FEATURE_STARTUP_SIM", func(v bool) { c.StartupSimEnabled = v })
+	applyDotEnvBool("BT_API_ENFORCE_RESPONSE_VALIDATION", "BT_API_ENFORCE_RESPONSE_VALIDATION", func(v bool) { c.APIEnforceResponseValidation = v })
 
 	// Persistence
 	applyDotEnvStr("BT_REFLECTIONS_DIR", "BT_REFLECTIONS_DIR", func(v string) { c.ReflectionsDir = v })
@@ -809,12 +818,13 @@ func (c *Config) TLSEnabled() bool {
 // FeatureFlags returns a map of all feature flags for dashboard display.
 func (c *Config) FeatureFlags() map[string]bool {
 	return map[string]bool{
-		"gardener":    c.GardenerEnabled,
-		"scheduler":   c.SchedulerEnabled,
-		"auto_evolve": c.AutoEvolveEnabled,
-		"kanban":      c.KanbanEnabled,
-		"thinktank":   c.ThinktankEnabled,
-		"startup_sim": c.StartupSimEnabled,
+		"gardener":                        c.GardenerEnabled,
+		"scheduler":                       c.SchedulerEnabled,
+		"auto_evolve":                     c.AutoEvolveEnabled,
+		"kanban":                          c.KanbanEnabled,
+		"thinktank":                       c.ThinktankEnabled,
+		"startup_sim":                     c.StartupSimEnabled,
+		"api_enforce_response_validation": c.APIEnforceResponseValidation,
 	}
 }
 
@@ -948,6 +958,9 @@ func (c *Config) Diff(other *Config) []string {
 	}
 	if c.StartupSimEnabled != other.StartupSimEnabled {
 		diffs = append(diffs, fmt.Sprintf("StartupSimEnabled: %v → %v", c.StartupSimEnabled, other.StartupSimEnabled))
+	}
+	if c.APIEnforceResponseValidation != other.APIEnforceResponseValidation {
+		diffs = append(diffs, fmt.Sprintf("APIEnforceResponseValidation: %v → %v", c.APIEnforceResponseValidation, other.APIEnforceResponseValidation))
 	}
 
 	// Persistence

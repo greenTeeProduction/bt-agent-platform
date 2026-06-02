@@ -241,7 +241,7 @@ func main() {
 			"/api/metrics": true, // Prometheus text format, not JSON
 			"/api/swagger": true, // HTML page, not JSON
 		},
-		Enforce: false, // advisory by default; set true via config in production
+		Enforce: dashConfig.APIEnforceResponseValidation, // controlled by BT_API_ENFORCE_RESPONSE_VALIDATION env var or config file
 	})(handler)
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
