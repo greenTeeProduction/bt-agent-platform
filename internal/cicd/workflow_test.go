@@ -100,11 +100,11 @@ jobs:
     steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]
   build:
     timeout-minutes: 10
-    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]
+    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration ./cmd/bt-scalability-probe'}]
   release:
     timeout-minutes: 20
     needs: [lint, security, test, build]
-    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64 && bt-scalability-probe-linux-arm64'}]
 `)
 	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
 	dependabotDir := filepath.Join(root, ".github")
@@ -178,11 +178,11 @@ jobs:
     steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]
   build:
     timeout-minutes: 10
-    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration'}]
+    steps: [{run: 'go build ./cmd/bt-agent ./cmd/bt-evaluator ./cmd/bt-langagent ./cmd/bt-dashboard ./cmd/bt-gardener ./cmd/benchcmp ./cmd/bt-security-probe ./cmd/bt-ci-doctor ./cmd/bt-tree-integration ./cmd/bt-scalability-probe'}]
   release:
     timeout-minutes: 20
     needs: [lint, security, test, build]
-    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
+    steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64 && bt-scalability-probe-linux-arm64'}]
 `
 }
 

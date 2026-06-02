@@ -166,10 +166,10 @@ func (r *WorkflowReport) validateCI(wf workflow) {
 	r.add("ci security runs govulncheck", jobRuns(wf.Jobs["security"], "govulncheck"), "security job must run govulncheck")
 	r.add("ci tests run short race coverage", jobRunsAll(wf.Jobs["test"], "go test", "-short", "-race", "-coverprofile"), "test job must run short race coverage")
 	r.add("ci build compiles core binaries", jobRunsAll(wf.Jobs["build"], "cmd/bt-agent", "cmd/bt-evaluator", "cmd/bt-langagent", "cmd/bt-dashboard", "cmd/bt-gardener"), "build job must compile all core binaries")
-	r.add("ci build compiles auxiliary binaries", jobRunsAll(wf.Jobs["build"], "cmd/benchcmp", "cmd/bt-security-probe", "cmd/bt-ci-doctor", "cmd/bt-tree-integration"), "build job must compile all auxiliary binaries")
+	r.add("ci build compiles auxiliary binaries", jobRunsAll(wf.Jobs["build"], "cmd/benchcmp", "cmd/bt-security-probe", "cmd/bt-ci-doctor", "cmd/bt-tree-integration", "cmd/bt-scalability-probe"), "build job must compile all auxiliary binaries")
 	r.add("release waits for gates", needsAll(wf.Jobs["release"].Needs, "lint", "security", "test", "build"), "release job must need lint/security/test/build")
 	r.add("release builds amd64 and arm64", jobRunsAll(wf.Jobs["release"], "GOARCH=amd64", "GOARCH=arm64"), "release job must build multi-arch artifacts")
-	r.add("release builds auxiliary multi-arch", jobRunsAll(wf.Jobs["release"], "bt-security-probe-linux-arm64", "bt-ci-doctor-linux-arm64", "bt-tree-integration-linux-arm64", "benchcmp-linux-arm64"), "release job must build multi-arch auxiliary binaries")
+	r.add("release builds auxiliary multi-arch", jobRunsAll(wf.Jobs["release"], "bt-security-probe-linux-arm64", "bt-ci-doctor-linux-arm64", "bt-tree-integration-linux-arm64", "benchcmp-linux-arm64", "bt-scalability-probe-linux-arm64"), "release job must build multi-arch auxiliary binaries")
 
 	// Verify timeout-minutes set on all CI jobs to prevent runaway builds.
 	for _, name := range requiredJobs {

@@ -109,6 +109,7 @@ jobs:
           go build -o bin/bt-ci-doctor ./cmd/bt-ci-doctor/
           go build -o bin/bt-tree-integration ./cmd/bt-tree-integration/
           go build -o bin/benchcmp ./cmd/benchcmp/
+          go build -o bin/bt-scalability-probe ./cmd/bt-scalability-probe/
 
   release:
     name: Release
@@ -152,6 +153,8 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -o bin/bt-agent-cli-linux-arm64 ./cmd/bt-agent-cli/
           GOOS=linux GOARCH=amd64 go build -o bin/benchcmp-linux-amd64 ./cmd/benchcmp/
           GOOS=linux GOARCH=arm64 go build -o bin/benchcmp-linux-arm64 ./cmd/benchcmp/
+          GOOS=linux GOARCH=amd64 go build -o bin/bt-scalability-probe-linux-amd64 ./cmd/bt-scalability-probe/
+          GOOS=linux GOARCH=arm64 go build -o bin/bt-scalability-probe-linux-arm64 ./cmd/bt-scalability-probe/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
