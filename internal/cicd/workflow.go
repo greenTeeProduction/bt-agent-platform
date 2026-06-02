@@ -43,6 +43,7 @@ func ValidateWorkflows(root string) (WorkflowReport, error) {
 
 	ci, ciErr := loadWorkflow(filepath.Join(abs, ".github", "workflows", "ci.yml"))
 	nightly, nightlyErr := loadWorkflow(filepath.Join(abs, ".github", "workflows", "nightly.yml"))
+	codeql, codeqlErr := loadWorkflow(filepath.Join(abs, ".github", "workflows", "codeql.yml"))
 	if ciErr == nil {
 		report.Workflow = append(report.Workflow, ".github/workflows/ci.yml")
 	}
@@ -53,11 +54,15 @@ func ValidateWorkflows(root string) (WorkflowReport, error) {
 
 	report.add("ci workflow exists and parses", ciErr == nil, errDetail(ciErr, "ci.yml parsed"))
 	report.add("nightly workflow exists and parses", nightlyErr == nil, errDetail(nightlyErr, "nightly.yml parsed"))
+	report.add("codeql workflow exists and parses", codeqlErr == nil, errDetail(codeqlErr, "codeql.yml parsed"))
 	if ciErr == nil {
 		report.validateCI(ci)
 	}
 	if nightlyErr == nil {
 		report.validateNightly(nightly)
+	}
+	if codeqlErr == nil {
+		report.validateCodeQL(codeql)
 	}
 
 	// Validate Dependabot config for automated dependency updates.
@@ -136,9 +141,10 @@ func (r *WorkflowReport) addAdvisory(name string, passed bool, details string) {
 }
 
 type workflow struct {
-	Name string                 `yaml:"name"`
-	On   any                    `yaml:"on"`
-	Jobs map[string]workflowJob `yaml:"jobs"`
+	Name        string                 `yaml:"name"`
+	On          any                    `yaml:"on"`
+	Permissions any                    `yaml:"permissions"`
+	Jobs        map[string]workflowJob `yaml:"jobs"`
 }
 
 type workflowJob struct {
@@ -147,13 +153,15 @@ type workflowJob struct {
 	Needs         any            `yaml:"needs"`
 	If            string         `yaml:"if"`
 	TimeoutMinute int            `yaml:"timeout-minutes"`
+	Permissions   any            `yaml:"permissions"`
 	Steps         []workflowStep `yaml:"steps"`
 }
 
 type workflowStep struct {
-	Name string `yaml:"name"`
-	Uses string `yaml:"uses"`
-	Run  string `yaml:"run"`
+	Name string      `yaml:"name"`
+	Uses string      `yaml:"uses"`
+	Run  string      `yaml:"run"`
+	With interface{} `yaml:"with"`
 }
 
 func loadWorkflow(path string) (workflow, error) {
@@ -211,6 +219,21 @@ func (r *WorkflowReport) validateNightly(wf workflow) {
 	r.add("nightly uploads artifacts", jobUsesOrRuns(wf.Jobs["full-tests"], "actions/upload-artifact"), "full-tests must upload evidence artifacts")
 	r.add("nightly benchmark comparison depends on full tests", needsAll(wf.Jobs["benchmark-compare"].Needs, "full-tests"), "benchmark comparison must depend on full-tests")
 	r.add("nightly detects benchmark regressions", jobRunsAll(wf.Jobs["benchmark-compare"], "benchcmp", "check"), "benchmark comparison must call benchcmp check")
+}
+
+// validateCodeQL validates a CodeQL workflow for SAST analysis coverage.
+func (r *WorkflowReport) validateCodeQL(wf workflow) {
+	requiredJobs := []string{"analyze"}
+	for _, job := range requiredJobs {
+		_, ok := wf.Jobs[job]
+		r.add("codeql job: "+job, ok, boolDetail(ok, "job present", "job missing"))
+	}
+	r.add("codeql runs on push and pull_request and schedule", workflowHasEvents(wf.On, "push", "pull_request", "schedule"), "codeql must run on push + PR + weekly schedule")
+	r.add("codeql uses github/codeql-action/init@v3", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/init@v3"), "codeql must use init@v3")
+	r.add("codeql uses github/codeql-action/analyze@v3", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/analyze@v3"), "codeql must use analyze@v3")
+	r.add("codeql has security-events write permission", r.hasPermission(wf, "security-events"), "codeql needs security-events: write permission")
+	r.add("codeql uses security-and-quality query suite", jobRuns(wf.Jobs["analyze"], "security-and-quality"), "codeql should use +security-and-quality queries")
+	r.add("codeql provides Go module caching", jobUsesOrRuns(wf.Jobs["analyze"], "actions/cache@v4"), "codeql job should use Go module cache")
 }
 
 func workflowHasEvents(on any, events ...string) bool {
@@ -293,6 +316,9 @@ func flatten(v any) string {
 		case []workflowStep:
 			for _, step := range t {
 				out = append(out, step.Name, step.Uses, step.Run)
+				if step.With != nil {
+					walk(step.With)
+				}
 			}
 		default:
 			out = append(out, fmt.Sprint(t))
@@ -324,4 +350,31 @@ func timeoutDetail(ok bool, timeoutMin int, jobName string) string {
 		return fmt.Sprintf("timeout-minutes=%d", timeoutMin)
 	}
 	return "timeout-minutes not set — job may run indefinitely"
+}
+
+// hasPermission checks if a workflow or its analyze job has a specific permission set.
+func (r *WorkflowReport) hasPermission(wf workflow, perm string) bool {
+	// Check workflow-level permissions first
+	if wf.Permissions != nil {
+		if permStr, ok := wf.Permissions.(string); ok {
+			if strings.Contains(strings.ToLower(permStr), "write-all") {
+				return true
+			}
+		}
+		body := flatten(wf.Permissions)
+		if strings.Contains(strings.ToLower(body), strings.ToLower(perm)) &&
+			strings.Contains(strings.ToLower(body), "write") {
+			return true
+		}
+	}
+	// Fall back to job-level permissions (CodeQL places permissions under jobs.analyze.permissions)
+	if job, ok := wf.Jobs["analyze"]; ok && job.Permissions != nil {
+		if permStr, ok := job.Permissions.(string); ok {
+			return strings.Contains(strings.ToLower(permStr), "write-all")
+		}
+		body := flatten(job.Permissions)
+		return strings.Contains(strings.ToLower(body), strings.ToLower(perm)) &&
+			strings.Contains(strings.ToLower(body), "write")
+	}
+	return false
 }

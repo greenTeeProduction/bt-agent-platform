@@ -214,6 +214,32 @@ jobs:
 `
 }
 
+func minimalCodeQL() string {
+	return `name: CodeQL Analysis
+on: {push: {}, pull_request: {}, schedule: [{cron: '0 6 * * 1'}]}
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+jobs:
+  analyze:
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.23'}
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ hashFiles('**/go.sum') }}
+      - uses: github/codeql-action/init@v3
+        with: {languages: go, queries: +security-and-quality}
+      - run: go build ./...
+      - uses: github/codeql-action/analyze@v3
+        with: {category: /language:go}
+`
+}
+
 func minimalNightly() string {
 	return `name: Nightly
 on: { schedule: [{cron: '0 3 * * *'}], workflow_dispatch: {} }
