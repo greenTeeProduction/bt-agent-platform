@@ -1,11 +1,11 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe ci-doctor tree-integration doc-drift-check
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check
 
 # Go binary path
 GO := /usr/local/go/bin/go
 GOFMT := /usr/local/go/bin/gofmt
 
 # Build all binaries
-BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp
+BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe
 BIN_DIR := bin
 
 all: build
@@ -142,6 +142,14 @@ ci-doctor:
 	@$(GO) build -o $(BIN_DIR)/bt-ci-doctor ./cmd/bt-ci-doctor/
 	@$(BIN_DIR)/bt-ci-doctor --root "$${ROOT:-.}"
 
+# Run the scalability probe against a live BT dashboard node.
+# Supports both single-node (default) and multi-node probes.
+# Override target with TARGET=http://host:9800 and API key with BT_API_KEY.
+scalability-probe:
+	@mkdir -p $(BIN_DIR)
+	@$(GO) build -o $(BIN_DIR)/bt-scalability-probe ./cmd/bt-scalability-probe/
+	@$(BIN_DIR)/bt-scalability-probe --target "$${TARGET:-http://localhost:9800}" --json
+
 # Run production-like real-Ollama integration validation across registered BT trees.
 # Use MAX_TREES=N for a smoke subset and OUTPUT=path for a JSON evidence artifact.
 tree-integration:
@@ -251,6 +259,7 @@ help:
 	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
 	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + test)"
 	@echo "  security-probe    Run dashboard security probe (TARGET=http://host:9800)"
+	@echo "  scalability-probe Run dashboard scalability probe (TARGET=http://host:9800)"
 	@echo "  ci-doctor         Validate GitHub Actions workflow maturity gates"
 	@echo "  tree-integration  Run real-Ollama BT tree integration validation"
 	@echo "  clean             Remove built binaries"

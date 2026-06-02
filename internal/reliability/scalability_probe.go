@@ -210,6 +210,110 @@ func executeProbeTask(ctx context.Context, client *http.Client, baseURL, apiKey,
 	return &result, nil
 }
 
+// SingleNodeProbeReport is a machine-readable scalability validation artifact for a single dashboard node.
+type SingleNodeProbeReport struct {
+	CheckedAt         time.Time          `json:"checked_at"`
+	Passed            bool               `json:"passed"`
+	BaseURL           string             `json:"base_url"`
+	HealthStatusCode  int                `json:"health_status_code,omitempty"`
+	Healthy           bool               `json:"healthy"`
+	ScalabilityOK     bool               `json:"scalability_ok"`
+	ScalabilityStatus *ScalabilityStatus `json:"scalability_status,omitempty"`
+	ExecuteOK         bool               `json:"execute_ok,omitempty"`
+	ExecuteResult     *AgentResult       `json:"execute_result,omitempty"`
+	Error             string             `json:"error,omitempty"`
+}
+
+// Summary returns a compact human-readable probe result for single-node reports.
+func (r SingleNodeProbeReport) Summary() string {
+	status := "FAIL"
+	if r.Passed {
+		status = "PASS"
+	}
+	return fmt.Sprintf("%s node=%s healthy=%t scalability=%t execute=%t",
+		status, r.BaseURL, r.Healthy, r.ScalabilityOK, r.ExecuteOK)
+}
+
+// SingleNodeProbeConfig configures a production-relevant scalability probe for a single dashboard node.
+type SingleNodeProbeConfig struct {
+	BaseURL string
+	APIKey  string
+	Execute bool
+	Agent   string
+	Task    string
+	Client  *http.Client
+}
+
+// ProbeSingleNodeDashboard validates that a single dashboard node is reachable,
+// exposes scalability telemetry, and optionally accepts remote agent execution.
+// Produces a structured JSON artifact for production validation evidence.
+func ProbeSingleNodeDashboard(ctx context.Context, cfg SingleNodeProbeConfig) SingleNodeProbeReport {
+	start := time.Now().UTC()
+	report := SingleNodeProbeReport{
+		CheckedAt: start,
+		BaseURL:   cfg.BaseURL,
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if cfg.Client == nil {
+		cfg.Client = &http.Client{Timeout: 10 * time.Second}
+	}
+	base := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if base == "" {
+		report.Error = "empty node URL"
+		return report
+	}
+
+	// 1. Health check
+	healthCode, err := getJSON(ctx, cfg.Client, base+"/api/health", cfg.APIKey, nil)
+	report.HealthStatusCode = healthCode
+	if err != nil {
+		report.Error = appendErr(report.Error, "health: "+err.Error())
+		return report
+	}
+	if healthCode < 200 || healthCode >= 300 {
+		report.Error = appendErr(report.Error, fmt.Sprintf("health: status %d", healthCode))
+		return report
+	}
+	report.Healthy = true
+
+	// 2. Scalability status
+	var sc ScalabilityStatus
+	scCode, err := getJSON(ctx, cfg.Client, base+"/api/scalability", cfg.APIKey, &sc)
+	if err != nil {
+		report.Error = appendErr(report.Error, "scalability: "+err.Error())
+		return report
+	}
+	if scCode < 200 || scCode >= 300 {
+		report.Error = appendErr(report.Error, fmt.Sprintf("scalability: status %d", scCode))
+		return report
+	}
+	report.ScalabilityOK = true
+	report.ScalabilityStatus = &sc
+
+	// 3. Optional execute
+	if cfg.Execute {
+		if strings.TrimSpace(cfg.Agent) == "" || strings.TrimSpace(cfg.Task) == "" {
+			report.Error = appendErr(report.Error, "execute probe requires non-empty agent and task")
+			return report
+		}
+		result, err := executeProbeTask(ctx, cfg.Client, base, cfg.APIKey, cfg.Agent, cfg.Task)
+		if err != nil {
+			report.Error = appendErr(report.Error, "execute: "+err.Error())
+			return report
+		}
+		report.ExecuteOK = result.Success
+		report.ExecuteResult = result
+		if !result.Success && result.Error != "" {
+			report.Error = appendErr(report.Error, "execute result: "+result.Error)
+		}
+	}
+
+	report.Passed = report.Healthy && report.ScalabilityOK && (!cfg.Execute || report.ExecuteOK)
+	return report
+}
+
 func appendErr(existing, next string) string {
 	if existing == "" {
 		return next

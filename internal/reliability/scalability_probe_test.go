@@ -95,6 +95,11 @@ func TestProbeMultiNodeDashboard_Validation(t *testing.T) {
 
 func newScalabilityProbeServer(t *testing.T, nodeName string, healthy, scalability bool) *httptest.Server {
 	t.Helper()
+	return newScalabilityProbeServerWithExecute(t, nodeName, healthy, scalability, true)
+}
+
+func newScalabilityProbeServerWithExecute(t *testing.T, nodeName string, healthy, scalability, executeOk bool) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		if !healthy {
@@ -113,6 +118,10 @@ func newScalabilityProbeServer(t *testing.T, nodeName string, healthy, scalabili
 		_ = json.NewEncoder(w).Encode(NewScalabilityStatus(nil, nil, 3, 100, 2, 2, nil, 0, nil))
 	})
 	mux.HandleFunc("/api/agents/execute", func(w http.ResponseWriter, r *http.Request) {
+		if !executeOk {
+			http.Error(w, `{"error":"agent not found"}`, http.StatusNotFound)
+			return
+		}
 		var req struct {
 			Agent string `json:"agent"`
 			Task  string `json:"task"`
@@ -132,4 +141,115 @@ func newScalabilityProbeServer(t *testing.T, nodeName string, healthy, scalabili
 		})
 	})
 	return httptest.NewServer(mux)
+}
+
+func TestProbeSingleNodeDashboard_Passes(t *testing.T) {
+	srv := newScalabilityProbeServer(t, "single-node", true, true)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Client:  srv.Client(),
+	})
+	if !report.Passed || !report.Healthy || !report.ScalabilityOK {
+		t.Fatalf("expected pass, got %+v", report)
+	}
+	if report.HealthStatusCode != 200 {
+		t.Fatalf("expected 200 health, got %d", report.HealthStatusCode)
+	}
+	if report.ScalabilityStatus == nil {
+		t.Fatal("expected scalability status snapshot")
+	}
+	if !strings.Contains(report.Summary(), "PASS") {
+		t.Fatalf("expected PASS summary, got %q", report.Summary())
+	}
+}
+
+func TestProbeSingleNodeDashboard_Unhealthy(t *testing.T) {
+	srv := newScalabilityProbeServer(t, "single-node", false, true)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Client:  srv.Client(),
+	})
+	if report.Passed || report.Healthy {
+		t.Fatalf("expected failure, got %+v", report)
+	}
+	if !strings.Contains(report.Summary(), "FAIL") {
+		t.Fatalf("expected FAIL summary, got %q", report.Summary())
+	}
+}
+
+func TestProbeSingleNodeDashboard_WithExecute(t *testing.T) {
+	srv := newScalabilityProbeServer(t, "single-node", true, true)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Execute: true,
+		Agent:   "smoke-test",
+		Task:    "verify execution",
+		Client:  srv.Client(),
+	})
+	if !report.Passed || !report.ExecuteOK {
+		t.Fatalf("expected execute pass, got %+v", report)
+	}
+	if report.ExecuteResult == nil || report.ExecuteResult.Agent != "smoke-test" {
+		t.Fatalf("expected smoke-test agent result, got %+v", report.ExecuteResult)
+	}
+}
+
+func TestProbeSingleNodeDashboard_EmptyURL(t *testing.T) {
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: "",
+	})
+	if report.Passed || report.Error == "" {
+		t.Fatalf("expected failure with error, got %+v", report)
+	}
+}
+
+func TestProbeSingleNodeDashboard_NilContext(t *testing.T) {
+	srv := newScalabilityProbeServer(t, "single-node", true, true)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(nil, SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Client:  srv.Client(),
+	})
+	if !report.Passed {
+		t.Fatalf("expected pass with nil context, got %+v", report)
+	}
+}
+
+func TestProbeSingleNodeDashboard_ExecuteFailNoAgent(t *testing.T) {
+	srv := newScalabilityProbeServer(t, "single-node", true, true)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Execute: true,
+		Agent:   "",
+		Task:    "some task",
+		Client:  srv.Client(),
+	})
+	if report.Passed {
+		t.Fatalf("expected fail on empty agent, got %+v", report)
+	}
+}
+
+func TestProbeSingleNodeDashboard_ExecuteServerError(t *testing.T) {
+	srv := newScalabilityProbeServerWithExecute(t, "single-node", true, true, false)
+	defer srv.Close()
+
+	report := ProbeSingleNodeDashboard(context.Background(), SingleNodeProbeConfig{
+		BaseURL: srv.URL,
+		Execute: true,
+		Agent:   "test-agent",
+		Task:    "test task",
+		Client:  srv.Client(),
+	})
+	if report.Passed || report.ExecuteOK {
+		t.Fatalf("expected execute failure on server error, got %+v", report)
+	}
 }
