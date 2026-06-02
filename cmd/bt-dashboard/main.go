@@ -145,6 +145,10 @@ func main() {
 	// Rate limiter: 100 req/sec per client, burst 20
 	rateLimiter := security.NewRateLimiter(100, 20)
 
+	// Security audit buffer: capture security events in-memory for dashboard visibility
+	auditBuffer := security.NewAuditBuffer(200)
+	security.SetGlobalAuditBuffer(auditBuffer)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveDashboard)
 	mux.HandleFunc("/static/", serveStatic)
@@ -152,6 +156,7 @@ func main() {
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
+	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
 	mux.HandleFunc("/api/config", handleConfig)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
@@ -967,6 +972,31 @@ func handleAlertRules(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(data)
+}
+
+func handleSecurityAudit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	buf := security.GlobalAuditBuffer()
+	if buf == nil {
+		json.NewEncoder(w).Encode(map[string]any{
+			"capacity":        0,
+			"total_events":    0,
+			"captured_events": 0,
+			"buffer_enabled":  false,
+			"event_counts":    map[string]int{},
+			"events":          []security.AuditEvent{},
+		})
+		return
+	}
+	events := buf.Recent(200)
+	json.NewEncoder(w).Encode(security.AuditBufferJSON{
+		Capacity:       buf.Capacity(),
+		TotalEvents:    buf.Count(),
+		CapturedEvents: len(events),
+		Events:         events,
+		EventCounts:    security.CountEvents().EventCounts,
+		BufferEnabled:  true,
+	})
 }
 
 // handleScalability returns a JSON snapshot of scalability components:

@@ -460,7 +460,8 @@ func IPFilterMiddleware(filter *IPFilter, extractIP func(*http.Request) string) 
 // auditKey is a context key for audit event cooldown tracking.
 type auditKey struct{}
 
-// AuditSecurityEvent logs a structured security event using slog.
+// AuditSecurityEvent logs a structured security event using slog and
+// captures it in the global audit buffer (if set).
 // Events are rate-limited: duplicate event types from the same context are
 // logged at most once to prevent log flooding during attacks.
 //
@@ -477,6 +478,9 @@ func AuditSecurityEvent(ctx context.Context, eventType string, attrs ...any) {
 	args := []any{"event", eventType, "timestamp", time.Now().UTC().Format(time.RFC3339)}
 	args = append(args, attrs...)
 	slog.Warn("SECURITY", args...)
+
+	// Also capture in-memory for dashboard/operator visibility
+	CaptureAuditEvent(eventType, attrs...)
 }
 
 // AuditContext returns a new context with audit dedup tracking.

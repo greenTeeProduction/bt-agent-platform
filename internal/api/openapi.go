@@ -620,6 +620,24 @@ func DashboardRoutes() []Route {
 			OperationID("getAlertRules").
 			ContentResponse(200, "text/yaml", "Prometheus alert rules YAML").Build(),
 
+		NewRoute("/api/security/audit", GET).
+			Summary("Security audit log").
+			Description("Returns recent security audit events from the in-memory buffer. Shows authentication failures, rate limit violations, and tool execution events across MCP servers and the dashboard. Public monitoring endpoint — no auth required.").
+			Tags("Security").
+			OperationID("getSecurityAudit").
+			JSONResponse(200, "Security audit events", ObjectSchema(map[string]*Schema{
+				"capacity":        IntSchema("Ring buffer capacity"),
+				"total_events":    IntSchema("Total events ever captured"),
+				"captured_events": IntSchema("Events currently in buffer"),
+				"buffer_enabled":  BoolSchema("Whether the audit buffer is active"),
+				"event_counts":    ObjectSchema(map[string]*Schema{}, "Count of each event type"),
+				"events": ArraySchema(ObjectSchema(map[string]*Schema{
+					"event":     StringSchema("Event type identifier (e.g., mcp_auth_failure, rate_limit_exceeded)"),
+					"timestamp": StringSchema("ISO 8601 event timestamp"),
+					"attrs":     ObjectSchema(map[string]*Schema{}, "Event-specific attributes"),
+				}, "List of recent audit events"), "events"),
+			}, "capacity", "total_events", "captured_events", "buffer_enabled", "event_counts", "events")).Build(),
+
 		NewRoute("/api/openapi.json", GET).
 			Summary("OpenAPI specification").
 			Description("Returns the OpenAPI 3.0 specification for all dashboard endpoints.").
