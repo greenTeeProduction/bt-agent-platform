@@ -287,6 +287,58 @@ func TestRunReactiveParallel_ParallelMonitor_OutOfBoundsIndex(t *testing.T) {
 
 // ─── ScoreChildren ───
 
+func TestScoreChildren_TieBreakByCost(t *testing.T) {
+	bb := &Blackboard{LLM: &mockLLM{}, ChainState: map[string]any{"task_priority": 0.5}}
+	node := &evolution.SerializableNode{
+		Type: "Selector", Name: "test",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "highCost", Metadata: map[string]any{"cost_estimate": 0.9, "confidence": 0.5}},
+			{Type: "Action", Name: "lowCost", Metadata: map[string]any{"cost_estimate": 0.1, "confidence": 0.5}},
+		},
+	}
+	scores := ScoreChildren(node, bb, DefaultScoringCriteria())
+	if len(scores) != 2 {
+		t.Fatalf("expected 2 scores, got %d", len(scores))
+	}
+	// With equal weighted scores, lower cost should win (sorted first)
+	if scores[0].CostEstimate != 0.1 {
+		t.Errorf("expected lowest cost first (0.1), got %f", scores[0].CostEstimate)
+	}
+	if scores[1].CostEstimate != 0.9 {
+		t.Errorf("expected highest cost last (0.9), got %f", scores[1].CostEstimate)
+	}
+}
+
+func TestScoreChildren_InvalidThenValidSorting(t *testing.T) {
+	bb := &Blackboard{
+		LLM:        &mockLLM{},
+		ChainState: map[string]any{"hasAccess": false},
+	}
+	node := &evolution.SerializableNode{
+		Type: "Selector", Name: "test",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Action", Name: "blocked",
+				Edges: []evolution.TypedEdge{
+					{Type: evolution.EdgeGuard, Condition: "hasAccess"},
+				},
+			},
+			{Type: "Action", Name: "validChild"},
+		},
+	}
+	scores := ScoreChildren(node, bb, DefaultScoringCriteria())
+	if len(scores) != 2 {
+		t.Fatalf("expected 2 scores, got %d", len(scores))
+	}
+	// Invalid should sort last, valid first
+	if !scores[0].Valid {
+		t.Error("expected first score to be valid")
+	}
+	if scores[1].Valid {
+		t.Error("expected second score to be invalid")
+	}
+}
+
 func TestScoreChildren_EmptyNode(t *testing.T) {
 	bb := &Blackboard{LLM: &mockLLM{}}
 	node := &evolution.SerializableNode{Type: "Selector", Name: "empty"}
@@ -491,6 +543,96 @@ func TestBuildUtilitySelector_WithMetadataCriteria(t *testing.T) {
 	}
 	if bb.Outcome != string(reflection.Success) {
 		t.Errorf("expected outcome=success, got %s", bb.Outcome)
+	}
+}
+
+func TestBuildUtilitySelector_FailFast_BestFails(t *testing.T) {
+	bb := &Blackboard{LLM: &mockLLM{}}
+	node := &evolution.SerializableNode{
+		Type: "UtilitySelector", Name: "failFast",
+		Metadata: map[string]any{"fail_fast": true},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "hasCachedFitness"},
+			{Type: "Action", Name: "MarkSuccessful"},
+		},
+	}
+	cmd := BuildUtilitySelector(node, bb)
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := cmd.Run(ctx)
+	// fail_fast=true should NOT try MarkSuccessful when hasCachedFitness fails
+	if result != -1 {
+		t.Errorf("expected -1 (fail-fast, no retry), got %d", result)
+	}
+}
+
+func TestBuildUtilitySelector_FailFastFalse_BestFailsThenNextSucceeds(t *testing.T) {
+	bb := &Blackboard{LLM: &mockLLM{}}
+	node := &evolution.SerializableNode{
+		Type: "UtilitySelector", Name: "tryNext",
+		Metadata: map[string]any{"fail_fast": false},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "hasCachedFitness"}, // fails, ChainState nil
+			{Type: "Action", Name: "MarkSuccessful"},   // succeeds
+		},
+	}
+	cmd := BuildUtilitySelector(node, bb)
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := cmd.Run(ctx)
+	// Should retry next best child (MarkSuccessful) and succeed
+	if result != 1 {
+		t.Errorf("expected 1 (retry next child succeeds), got %d", result)
+	}
+}
+
+func TestBuildUtilitySelector_FailFastFalse_AllChildrenFail(t *testing.T) {
+	bb := &Blackboard{LLM: &mockLLM{}}
+	node := &evolution.SerializableNode{
+		Type: "UtilitySelector", Name: "allFail",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "hasCachedFitness"}, // fails
+			{Type: "Action", Name: "hasCachedFitness"}, // also fails
+		},
+	}
+	cmd := BuildUtilitySelector(node, bb)
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := cmd.Run(ctx)
+	// All children fail → should return -1
+	if result != -1 {
+		t.Errorf("expected -1 (all children failed), got %d", result)
+	}
+}
+
+func TestBuildUtilitySelector_FailFastFalse_FirstSucceeds(t *testing.T) {
+	bb := &Blackboard{
+		LLM:        &mockLLM{},
+		ChainState: map[string]any{"cached_fitness": 0.85},
+	}
+	node := &evolution.SerializableNode{
+		Type: "UtilitySelector", Name: "firstWins",
+		// Default fail_fast=false
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "hasCachedFitness"}, // succeeds (cached_fitness exists)
+			{Type: "Action", Name: "MarkSuccessful"},   // also would succeed
+		},
+	}
+	cmd := BuildUtilitySelector(node, bb)
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	result := cmd.Run(ctx)
+	// First child (hasCachedFitness) should succeed → don't try second
+	if result != 1 {
+		t.Errorf("expected 1 (first child succeeds), got %d", result)
 	}
 }
 

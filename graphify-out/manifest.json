@@ -79,6 +79,14 @@
     "mtime": 1780295456.8263505,
     "hash": "9df0cd8498efcb53ca1d452102a7c281"
   },
+  "/home/nico/go-bt-evolve/internal/knowledge/analytics_test.go": {
+    "mtime": 1780397900.7942045,
+    "hash": "e72a942a49ec4504e6b36c893e9dcf45"
+  },
+  "/home/nico/go-bt-evolve/internal/knowledge/embeddings_test.go": {
+    "mtime": 1780397857.2695975,
+    "hash": "f521612c1d4fd841592ae9e8672a1353"
+  },
   "/home/nico/go-bt-evolve/internal/knowledge/factory.go": {
     "mtime": 1780295456.8063502,
     "hash": "455c9d4e6dd2e76a02f71e72c563e1fc"
@@ -90,6 +98,10 @@
   "/home/nico/go-bt-evolve/internal/knowledge/registry_test.go": {
     "mtime": 1780055007.6151059,
     "hash": "e8c97bf758dc4fe0f926385e212dfe09"
+  },
+  "/home/nico/go-bt-evolve/internal/knowledge/feedback_test.go": {
+    "mtime": 1780397792.5006695,
+    "hash": "7bad67179855142ab075e4497088da15"
   },
   "/home/nico/go-bt-evolve/internal/knowledge/graph.go": {
     "mtime": 1780295456.898351,
@@ -103,9 +115,17 @@
     "mtime": 1780295456.8263505,
     "hash": "4cca9aedc9a40e628b5b2969f59f3918"
   },
+  "/home/nico/go-bt-evolve/internal/knowledge/graph_discover_test.go": {
+    "mtime": 1780397838.8213363,
+    "hash": "5cd8ed7183930967b77e8423feddfc6f"
+  },
   "/home/nico/go-bt-evolve/internal/knowledge/registry.go": {
     "mtime": 1780055007.6151059,
     "hash": "dbc468841f783e5bc0a8490dc50c1344"
+  },
+  "/home/nico/go-bt-evolve/internal/knowledge/traces_test.go": {
+    "mtime": 1780397900.7942045,
+    "hash": "7063f1cfda4bef35b706f65911ea76b5"
   },
   "/home/nico/go-bt-evolve/internal/knowledge/embeddings.go": {
     "mtime": 1780075678.8214483,
@@ -468,8 +488,8 @@
     "hash": "566a8e917fc336e28cb21a9da39d90cb"
   },
   "/home/nico/go-bt-evolve/internal/engine/utility_test.go": {
-    "mtime": 1780352745.2493596,
-    "hash": "ffb58448e5582ab13960e331ef7f7b2f"
+    "mtime": 1780399484.4137695,
+    "hash": "01930ec490030d4dbda409e284aac309"
   },
   "/home/nico/go-bt-evolve/internal/engine/goap_nodes.go": {
     "mtime": 1780295456.7623498,
@@ -940,8 +960,8 @@
     "hash": "2a2e771fb60d9f803f264e4e8ed0ffa0"
   },
   "/home/nico/go-bt-evolve/internal/evolution/crisis_detector_test.go": {
-    "mtime": 1780250827.5288515,
-    "hash": "78673fd9ba90b5fff304d320e9fc1e47"
+    "mtime": 1780398660.0115016,
+    "hash": "87825bbe7fa6ea3b4af4aee73d971674"
   },
   "/home/nico/go-bt-evolve/internal/evolution/selector_optimizer.go": {
     "mtime": 1780295456.8663507,
