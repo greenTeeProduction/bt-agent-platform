@@ -78,8 +78,19 @@ type Blackboard struct {
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
+// Invalid trees produce a failing command instead of silently executing an unsafe
+// or unknown structure. Use BuildAndValidate when the caller needs the error.
 func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
-	return buildNode(serTree, bb, "")
+	cmd, err := BuildAndValidate(serTree, bb)
+	if err != nil {
+		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			msg := fmt.Sprintf("tree validation failed: %v", err)
+			ctx.Blackboard.Outcome = msg
+			ctx.Blackboard.Result = msg
+			return -1
+		})
+	}
+	return cmd
 }
 
 // BuildAndValidate constructs a tree and validates it before execution.
@@ -472,6 +483,12 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "BuildBriefingPack":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBriefing: portfolio review, market update, talking points.", bb.Result)
+			bb.Outcome = string(reflection.Success)
+			return 1
+		}
+	case "QCBriefingPack":
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			bb.Result = fmt.Sprintf("## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved.")
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}

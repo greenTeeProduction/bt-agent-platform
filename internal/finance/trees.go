@@ -322,7 +322,7 @@ func MeetingPrepTree() *evolution.SerializableNode {
 							{Type: "Condition", Name: "IsMeetingPrep", Description: "Detect briefing / meeting prep / client keywords"},
 							{Type: "Action", Name: "GatherClientContext", Description: "Pull CRM data, recent interactions, holdings"},
 							{Type: "Action", Name: "BuildBriefingPack", Description: "Assemble briefing: portfolio review, market update, talking points"},
-							{Type: "Action", Name: "QC BriefingPack", Description: "Verify data accuracy, formatting, completeness"},
+							{Type: "Action", Name: "QCBriefingPack", Description: "Verify data accuracy, formatting, completeness"},
 						},
 					},
 					{

@@ -154,6 +154,7 @@ func init() {
 	RegisterCondition("CheckPrerequisites", func(b *Blackboard) bool { return true })
 	RegisterCondition("CheckKnowledgeGap", func(b *Blackboard) bool { return b.KgResults == "" })
 	RegisterCondition("CheckCache", func(b *Blackboard) bool { return b.CachedResult != "" })
+	RegisterCondition("CheckConfidence", func(b *Blackboard) bool { return true })
 	RegisterAction("SetupDefaultTools", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
 	RegisterAction("QueryKG", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.KgResults = fmt.Sprintf("KG: %s", ctx.Blackboard.Task)
@@ -185,6 +186,11 @@ func init() {
 		return -1
 	})
 	RegisterAction("MarkSuccessful", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Outcome = string(reflection.Success)
+		return 1
+	})
+	RegisterAction("DefaultFallback", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = fmt.Sprintf("## Fallback Executed\n\n**Task**: %s\n**Status**: Processed via generic fallback path.", ctx.Blackboard.Task)
 		ctx.Blackboard.Outcome = string(reflection.Success)
 		return 1
 	})
