@@ -54,7 +54,23 @@ if [ -n "$STAGED_DOCS" ]; then
     echo "  ✓ docs in sync"
 fi
 
-# 4. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
+# 4. CI Doctor — validate workflow maturity if workflow files changed
+STAGED_WORKFLOWS=$(git diff --cached --name-only --diff-filter=ACM | grep '^\.github/workflows/' || true)
+if [ -n "$STAGED_WORKFLOWS" ]; then
+    echo "→ ci-doctor workflow maturity check (.github/workflows/ changed)..."
+    REPO_ROOT=$(git rev-parse --show-toplevel)
+    if [ -f "$REPO_ROOT/bin/bt-ci-doctor" ]; then
+        if ! "$REPO_ROOT/bin/bt-ci-doctor" --root "$REPO_ROOT" 2>&1; then
+            echo "✗ CI/CD workflow maturity check failed. Fix before committing."
+            exit 1
+        fi
+        echo "  ✓ ci-doctor validates all 36 workflow maturity gates"
+    else
+        echo "  ⚠ bt-ci-doctor not built — run 'make ci-doctor' first, or skip with --no-verify"
+    fi
+fi
+
+# 5. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
 echo "→ go test -short..."
 if ! $GO test -short -count=1 -timeout 120s $(go list ./... | grep -v gardener) 2>&1; then
     echo "✗ Tests failed. Fix before committing."

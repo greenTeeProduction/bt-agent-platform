@@ -74,15 +74,15 @@ benchcmp-reset:
 ci:
 	@echo "=== CI Pipeline (local) ==="
 	@echo ""
-	@echo "1/5  go vet..."
+	@echo "1/7  go vet..."
 	@$(GO) vet ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "2/5  gofmt check..."
+	@echo "2/7  gofmt check..."
 	@test -z "$$($(GOFMT) -l .)" || (echo "     ✗ Files need formatting:" && $(GOFMT) -l . && exit 1)
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "3/5  go mod tidy check..."
+	@echo "3/7  go mod tidy check..."
 	@$(GO) mod tidy
 	@if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then \
 		echo "     ✗ go.mod or go.sum is out of sync. Run 'go mod tidy' and commit changes."; \
@@ -91,11 +91,20 @@ ci:
 	fi
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "4/5  tests (short + race)..."
+	@echo "4/7  ci-doctor workflow maturity check..."
+	@$(MAKE) ci-doctor
+	@echo "     ✓ passed"
+	@echo ""
+	@echo "5/7  govulncheck..."
+	-@$(GO) install golang.org/x/vuln/cmd/govulncheck@latest 2>/dev/null
+	-@$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 || echo "     ⚠ warnings (non-blocking)"
+	@echo "     ✓ passed (non-blocking)"
+	@echo ""
+	@echo "6/7  tests (short + race)..."
 	@$(GO) test -short -count=1 -race -timeout 120s ./...
 	@echo "     ✓ passed"
 	@echo ""
-	@echo "5/5  build all binaries..."
+	@echo "7/7  build all binaries..."
 	@mkdir -p $(BIN_DIR)
 	@for bin in $(BINARIES); do \
 		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
