@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe ci-doctor tree-integration
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe ci-doctor tree-integration doc-drift-check
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -148,6 +148,11 @@ tree-integration:
 	@mkdir -p $(BIN_DIR)
 	@$(GO) build -o $(BIN_DIR)/bt-tree-integration ./cmd/bt-tree-integration/
 	@$(BIN_DIR)/bt-tree-integration --max-trees "$${MAX_TREES:-0}" --output "$${OUTPUT:-/tmp/bt-tree-integration-report.json}"
+
+# Validate documentation consistency against the actual codebase.
+doc-drift-check:
+	@echo "Running documentation drift validation..."
+	@./scripts/check-doc-drift.sh
 
 # Setup GitHub Actions self-hosted runner for Jetson ARM64
 # Requires a runner registration token from GitHub Settings → Actions → Runners.

@@ -23,7 +23,18 @@
 | [`domains`](#package-domains) | 800+ | 100% | 10 domain trees (code review, DevOps, security, etc.) |
 | [`finance`](#package-finance) | 2,000+ | 100% | 10 Anthropic finance trees (pitch, DCF, LBO, KYC, etc.) |
 | [`thinktank`](#package-thinktank) | 1,200+ | 80% | 5-fellow dialectic analysis, 5-phase pipeline |
-| [`startup`](#package-startup) | 1,000+ | 75% | Startup company simulation (sprint/quarter/year) |
+|| [`startup`](#package-startup) | 1,000+ | 75% | Startup company simulation (sprint/quarter/year) |
+|| [`evaluator`](#package-evaluator) | 1,200+ | 73% | Stockfish-style tree evaluator, multi-dim fitness, TT, move ordering |
+|| [`gardener`](#package-gardener) | 900+ | 95% | 24/7 evolution daemon, 25 trees, 5-minute cycles, MetricsTracker |
+|| [`goap`](#package-goap) | 600+ | 89% | GOAP planner, DocPlanner, BlackboardBridge, world-state modeling |
+|| [`langagent`](#package-langagent) | 400+ | 95% | LangChain ReAct agent wrapping BT tools |
+|| [`llm`](#package-llm) | 300+ | 94% | LLM client interface, Ollama client, mock for testing |
+|| [`monitoring`](#package-monitoring) | 200+ | 90% | Prometheus alert rules, Alert evaluator, MetricsJSON parser |
+|| [`reflection`](#package-reflection) | 200+ | 75% | Reflection store, Record persistence, JSON file I/O |
+|| [`research`](#package-research) | 600+ | 100% | Deep and quick research trees, gap analysis |
+|| [`validate`](#package-validate) | 500+ | 78% | Agent validation suites, composite scoring, 5 test kinds |
+|| [`workflow`](#package-workflow) | 400+ | 93% | Multi-agent orchestration, sequential/parallel/conditional/loop |
+|| [`log`](#package-log) | 150+ | 85% | Structured logging with file rotation (10MB, 5 backups) |
 
 ---
 
@@ -904,6 +915,127 @@ func NewOrchestrator(company *CompanyState, llm llm.LLM) *CompanyOrchestrator
 func (o *CompanyOrchestrator) RunSprint() (*SprintResult, error)
 func (o *CompanyOrchestrator) RunQuarter() (*QuarterResult, error)
 func (o *CompanyOrchestrator) RunYear() (*YearResult, error)
+```
+
+---
+
+## Package: evaluator
+
+`github.com/nico/go-bt-evolve/internal/evaluator`
+
+Stockfish-style behavior tree evaluator. Multi-dimensional fitness (success_rate, stability, coverage, speed, complexity), transposition table (SHA256 tree+task → cached outcome), killer move ordering, iterative deepening.
+
+```go
+type Evaluator struct { ... }
+func NewEvaluator(llm llm.LLM) *Evaluator
+func (e *Evaluator) Evaluate(tree *SerializableNode, task string) (float64, error)
+func (e *Evaluator) OrderMutations(tree *SerializableNode, mutations []Mutation) []Mutation
+func (e *Evaluator) Deepen(tree *SerializableNode, task string, depth int) (*SerializableNode, error)
+```
+
+## Package: gardener
+
+`github.com/nico/go-bt-evolve/internal/gardener`
+
+24/7 evolution daemon. Runs 25 trees on 5-minute cycles using Stockfish-style move ordering. Benchmark-validated mutations, MetricsTracker, idempotency guards, soft diversity preference.
+
+```go
+type Gardener struct { ... }
+type Config struct { UseRealLLM bool }
+type MetricsTracker struct { ... }
+func NewGardener(cfg Config) *Gardener
+func (g *Gardener) RunCycle() CycleResult
+func (m *MetricsTracker) Save() error
+func (m *MetricsTracker) CyclesForTree(name string) int
+```
+
+## Package: goap
+
+`github.com/nico/go-bt-evolve/internal/goap`
+
+GOAP (Goal-Oriented Action Planning) planner integrated with behavior trees. DocPlanner for world-state modeling, BlackboardBridge for BT state sync, StandardActions registry, plan validation.
+
+```go
+type Planner interface { Plan(world WorldState, goal Goal) (Plan, error) }
+type DocPlanner struct { ... }
+func NewDocPlanner(actions []Action) *DocPlanner
+func BuildGoalState(task string) WorldState
+type BlackboardBridge struct { ... }
+func (b *BlackboardBridge) SyncToBlackboard(bb *engine.Blackboard) error
+```
+
+## Package: langagent
+
+`github.com/nico/go-bt-evolve/internal/langagent`
+
+LangChain ReAct agent wrapping BT tools as agent tools. Provides managed tool execution via ReAct loop (Thought→Action→Observation→Final Answer). 3 MCP tools exposed via bt-langagent binary.
+
+```go
+type Agent struct { ... }
+func NewAgent(llm llm.LLM, tools []Tool) (*Agent, error)
+func (a *Agent) Run(input string) (string, error)
+```
+
+## Package: reflection
+
+`github.com/nico/go-bt-evolve/internal/reflection`
+
+Reflection store for task outcomes. Records are JSON-persisted with atomic write-tmp-rename. Used by the evolution loop to track success/failure patterns for tree adaptation.
+
+```go
+type Store struct { ... }
+type Record struct { Task, Outcome, Result, Plant string }
+func NewStore(path string) (*Store, error)
+func (s *Store) Save(record Record) error
+func (s *Store) List() ([]Record, error)
+```
+
+## Package: research
+
+`github.com/nico/go-bt-evolve/internal/research`
+
+Deep and quick research behavior trees. DeepResearchTree (20 nodes, agent-based iterative search loop, refine chain for synthesis). QuickResearchTree (12 nodes, agent-based research).
+
+## Package: validate
+
+`github.com/nico/go-bt-evolve/internal/validate`
+
+Agent validation suites with composite scoring. 5 test kinds: smoke, routing, output, regression, edge. Weighted scoring (SR×0.4 + OQ×0.3 + Speed×0.2 + Robustness×0.1).
+
+```go
+type TestSuite struct { ... }
+type TestKind int
+const ( SmokeTest TestKind = iota; RoutingTest; OutputTest; RegressionTest; EdgeTest )
+type SuiteResult struct { ... }
+func RunSuite(suite *TestSuite, tree *SerializableNode) (*SuiteResult, error)
+func CompositeScore(suite *SuiteResult) float64
+```
+
+## Package: workflow
+
+`github.com/nico/go-bt-evolve/internal/workflow`
+
+Multi-agent workflow orchestrator. Sequential, parallel, conditional, loop, and retry execution patterns. Converts thinktank analysis to prioritized company tasks with role assignment.
+
+```go
+type Workflow struct { ... }
+type Task struct { ID, Description, Priority, Assignee, Status string }
+func (w *Workflow) RecommendationsToTasks(report *thinktank.Report) []Task
+func (w *Workflow) ExecuteSprint() error
+```
+
+## Package: log
+
+`github.com/nico/go-bt-evolve/internal/log`
+
+Structured logging with file rotation. RotatingWriter implements io.WriteCloser with size-based rotation (10MB default, 5 backups). Pure stdlib — no external deps.
+
+```go
+type RotatingWriter struct { ... }
+func NewRotatingWriter(path string) (*RotatingWriter, error)
+func (w *RotatingWriter) Write(p []byte) (n int, err error)
+func (w *RotatingWriter) Close() error
+func Init(path string) error
 ```
 
 ---

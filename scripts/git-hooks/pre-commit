@@ -42,7 +42,19 @@ if ! $GO vet ./... 2>&1; then
 fi
 echo "  ✓ passed"
 
-# 3. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
+# 3a. Doc drift check if docs/ files are staged
+STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/' || true)
+if [ -n "$STAGED_DOCS" ]; then
+    echo "→ documentation drift check (docs/ changed)..."
+    SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+    if ! "$SCRIPT_DIR/scripts/check-doc-drift.sh" 2>&1; then
+        echo "✗ Documentation drift detected. Update docs to match codebase."
+        exit 1
+    fi
+    echo "  ✓ docs in sync"
+fi
+
+# 4. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
 echo "→ go test -short..."
 if ! $GO test -short -count=1 -timeout 120s $(go list ./... | grep -v gardener) 2>&1; then
     echo "✗ Tests failed. Fix before committing."
