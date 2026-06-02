@@ -2946,9 +2946,94 @@ func TestStripInlineComment_NoHash(t *testing.T) {
 }
 
 func TestStripInlineComment_AlternatingQuotes(t *testing.T) {
-	// Alternating quote types: single, double, single
 	result := stripInlineComment("'a'\"b\"'c'#comment")
 	if result != "'a'\"b\"'c'" {
 		t.Errorf("expected quoted string without comment, got %q", result)
+	}
+}
+
+// ─── applyDotEnvFiles Coverage Tests ──────────────────────────────────
+
+func TestApplyDotEnvFiles_CwdDotEnv(t *testing.T) {
+	// This test exercises the os.Stat(".env") branch in applyDotEnvFiles:
+	// line 620-622: if _, err := os.Stat(".env"); err == nil { ... }
+	// which is NOT covered by TestLoad_DotEnvFile (uses BT_DOTENV_FILE).
+
+	// Save and restore CWD
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create a temp dir with a .env file
+	dir := t.TempDir()
+	envContent := "BT_DASHBOARD_PORT=5555\nBT_OLLAMA_MODEL=cwd-dotenv\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(envContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Also clear BT_DOTENV_FILE so we exercise the cwd .env path, not the explicit path
+	os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_DASHBOARD_PORT")
+	os.Unsetenv("BT_OLLAMA_MODEL")
+
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() from dir with .env failed: %v", err)
+	}
+
+	if c.DashboardPort != 5555 {
+		t.Errorf("expected DashboardPort=5555 from cwd .env, got %d", c.DashboardPort)
+	}
+	if c.OllamaModel != "cwd-dotenv" {
+		t.Errorf("expected OllamaModel=cwd-dotenv from cwd .env, got %s", c.OllamaModel)
+	}
+}
+
+func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
+	// Both explicit BT_DOTENV_FILE and cwd .env exist:
+	// explicit file should be processed first, then cwd .env values
+	// are applied on top (cwd wins for same keys).
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	dir := t.TempDir()
+
+	// CWD .env sets DashboardPort=7777
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("BT_DASHBOARD_PORT=7777\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Explicit .env file sets DashboardPort=6666 (should be overridden by cwd)
+	explicitEnv := filepath.Join(dir, "explicit.env")
+	if err := os.WriteFile(explicitEnv, []byte("BT_DASHBOARD_PORT=6666\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Setenv("BT_DOTENV_FILE", explicitEnv)
+	defer os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_DASHBOARD_PORT")
+
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() with both .env files failed: %v", err)
+	}
+
+	// cwd .env applied AFTER explicit file, so it wins
+	if c.DashboardPort != 7777 {
+		t.Errorf("expected DashboardPort=7777 (cwd .env overrides explicit 6666), got %d", c.DashboardPort)
 	}
 }
