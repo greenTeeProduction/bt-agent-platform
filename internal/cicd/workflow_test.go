@@ -129,6 +129,165 @@ updates:
 	}
 }
 
+func TestValidateWorkflowsDetectsCIJobMissingTimeout(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// CI without timeout-minutes on any job
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), `name: CI
+on: {push: {}, pull_request: {}}
+jobs:
+  lint:
+    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+  security:
+    timeout-minutes: 10
+    steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]
+  test:
+    timeout-minutes: 15
+    steps: [{run: 'go test -short -race -coverprofile=coverage.out ./...'}]
+  build:
+    timeout-minutes: 10
+    steps: [{run: 'go build ./cmd/bt-agent'}]
+  release:
+    timeout-minutes: 20
+    needs: [lint, security, test, build]
+    steps: [{run: 'GOARCH=amd64 go build ./...'}]
+`)
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if !hasFailedCheck(report, "ci job lint has timeout-minutes") {
+		t.Fatalf("expected lint timeout-minutes check to fail, got %+v", report.Checks)
+	}
+}
+
+func TestValidateWorkflowsDetectsMissingCodeQL(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	// No codeql.yml — should fail codeql checks
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if !hasFailedCheck(report, "codeql workflow exists and parses") {
+		t.Fatalf("expected codeql existence check to fail, got %+v", report.Checks)
+	}
+}
+
+func TestValidateWorkflowsCodeQLNoPermissions(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	// CodeQL with NO permissions block — hasPermission should return false
+	writeFile(t, filepath.Join(wfDir, "codeql.yml"), `name: CodeQL Analysis
+on: {push: {}, pull_request: {}, schedule: [{cron: '0 6 * * 1'}]}
+jobs:
+  analyze:
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.23'}
+      - uses: github/codeql-action/init@v3
+        with: {languages: go, queries: +security-and-quality}
+      - run: go build ./...
+      - uses: github/codeql-action/analyze@v3
+        with: {category: /language:go}
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	if !hasFailedCheck(report, "codeql has security-events write permission") {
+		t.Fatalf("expected codeql permissions check to fail, got %+v", report.Checks)
+	}
+}
+
+func TestValidateWorkflowsCodeQLWriteAllPermission(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	// CodeQL with workflow-level permissions: write-all string — hits hasPermission line 359-362
+	// write-all matches "write" substring check, so hasPermission returns true
+	writeFile(t, filepath.Join(wfDir, "codeql.yml"), `name: CodeQL Analysis
+on: {push: {}, pull_request: {}, schedule: [{cron: '0 6 * * 1'}]}
+permissions: write-all
+jobs:
+  analyze:
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.23'}
+      - uses: github/codeql-action/init@v3
+        with: {languages: go, queries: +security-and-quality}
+      - run: go build ./...
+      - uses: github/codeql-action/analyze@v3
+        with: {category: /language:go}
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	// write-all at workflow level should pass the permissions check
+	if hasFailedCheck(report, "codeql has security-events write permission") {
+		t.Fatal("expected codeql permissions check to pass with write-all at workflow level")
+	}
+}
+
 func TestValidateWorkflowsRunnerCheckNotInstalled(t *testing.T) {
 	root := t.TempDir()
 	wfDir := filepath.Join(root, ".github", "workflows")
