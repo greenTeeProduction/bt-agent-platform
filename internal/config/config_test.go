@@ -2454,3 +2454,261 @@ func TestValidationErrors_Empty(t *testing.T) {
 		t.Errorf("empty ValidationErrors.Error() = %q, want empty string", got)
 	}
 }
+
+// ─── applyDotEnvToConfig Coverage Tests ─────────────────────────────────
+
+func TestLoad_DotEnvAlreadySetByEnvVar_Skip(t *testing.T) {
+	// When BOTH the .env file AND the env var specify a value,
+	// the env var has precedence and applyDotEnvToConfig should
+	// skip the .env value via the early return in each helper closure.
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+
+	// .env says 3333 for DashboardPort and "custom-model" for OllamaModel
+	content := "BT_DASHBOARD_PORT=3333\nBT_OLLAMA_MODEL=custom-model\n"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set env vars that MATCH the .env keys — these should win
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	os.Setenv("BT_DASHBOARD_PORT", "9999")
+	os.Setenv("BT_OLLAMA_MODEL", "env-wins-model")
+	defer func() {
+		os.Unsetenv("BT_DOTENV_FILE")
+		os.Unsetenv("BT_DASHBOARD_PORT")
+		os.Unsetenv("BT_OLLAMA_MODEL")
+	}()
+	os.Unsetenv("BT_CONFIG_FILE")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Env vars must override .env values
+	if c.DashboardPort != 9999 {
+		t.Errorf("expected DashboardPort=9999 (env var), got %d (from .env=%s)", c.DashboardPort, "3333")
+	}
+	if c.OllamaModel != "env-wins-model" {
+		t.Errorf("expected OllamaModel=env-wins-model (env var), got %s", c.OllamaModel)
+	}
+}
+
+func TestLoad_DotEnvInvalidInt_SilentlyIgnored(t *testing.T) {
+	// When .env contains a non-numeric value for an int field,
+	// applyDotEnvInt's strconv.Atoi returns an error and the
+	// value is silently ignored (field keeps its default).
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+
+	// BT_LLM_TIMEOUT should be an integer — providing "not-a-number"
+	content := "BT_LLM_TIMEOUT=not-a-number\n"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	defer os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Unsetenv("BT_LLM_TIMEOUT")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Should fall back to default (300) since the strconv.Atoi failed
+	if c.LLMTimeout != 300 {
+		t.Errorf("expected LLMTimeout=300 (default, invalid .env ignored), got %d", c.LLMTimeout)
+	}
+}
+
+func TestLoad_DotEnvInvalidFloat_SilentlyIgnored(t *testing.T) {
+	// Same as above but for Float fields (RateLimitRPS).
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+
+	content := "BT_RATE_LIMIT_RPS=not-a-float\n"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	defer os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Unsetenv("BT_RATE_LIMIT_RPS")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Default is 100.0
+	if c.RateLimitRPS != 100.0 {
+		t.Errorf("expected RateLimitRPS=100.0 (default, invalid .env ignored), got %v", c.RateLimitRPS)
+	}
+}
+
+func TestLoadFileWithDotEnv_LoadError(t *testing.T) {
+	// LoadFileWithDotEnv: when LoadDotEnv returns a non-not-exist error,
+	// it should log a warning but NOT fail.
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.json")
+	cfgContent := `{"dashboard_port": 4444}`
+	if err := os.WriteFile(cfgFile, []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a directory at the .env path so os.ReadFile fails
+	dotenvPath := filepath.Join(dir, ".env")
+	if err := os.Mkdir(dotenvPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Unsetenv("BT_CONFIG_FILE")
+
+	c, err := LoadFileWithDotEnv(cfgFile, dotenvPath)
+	if err != nil {
+		t.Fatalf("LoadFileWithDotEnv() should not fail on bad .env: %v", err)
+	}
+
+	if c.DashboardPort != 4444 {
+		t.Errorf("expected DashboardPort=4444 from config file, got %d", c.DashboardPort)
+	}
+}
+
+func TestLoadFileWithDotEnv_NotExistIgnored(t *testing.T) {
+	// LoadFileWithDotEnv: LoadDotEnv returns not-exist error →
+	// silently ignored (no warning, no failure).
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.json")
+	cfgContent := `{"dashboard_port": 5555}`
+	if err := os.WriteFile(cfgFile, []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-existent .env file
+	dotenvPath := filepath.Join(dir, ".env.nonexistent")
+
+	os.Unsetenv("BT_CONFIG_FILE")
+
+	c, err := LoadFileWithDotEnv(cfgFile, dotenvPath)
+	if err != nil {
+		t.Fatalf("LoadFileWithDotEnv() should not fail on missing .env: %v", err)
+	}
+
+	if c.DashboardPort != 5555 {
+		t.Errorf("expected DashboardPort=5555 from config file, got %d", c.DashboardPort)
+	}
+}
+
+func TestLoad_DotEnvFileLoadError_LogsWarning(t *testing.T) {
+	// applyDotEnvFiles: when LoadDotEnv returns an error (e.g., path is
+	// a directory, not a file), log a warning and continue without failing.
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	// Create a directory with the same path so os.ReadFile fails
+	if err := os.Mkdir(envFile, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	defer os.Unsetenv("BT_DOTENV_FILE")
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Unsetenv("BT_DASHBOARD_PORT")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() should not fail on bad .env file: %v", err)
+	}
+
+	// Config should still have defaults
+	if c.DashboardPort != 9800 {
+		t.Errorf("expected DashboardPort=9800 (default, bad .env ignored), got %d", c.DashboardPort)
+	}
+}
+
+func TestLoad_DotEnvIntFloatBoolAlreadySetByEnvVar_Skip(t *testing.T) {
+	// Tests that the early-return paths in applyDotEnvInt, applyDotEnvFloat,
+	// and applyDotEnvBool closures are exercised when the corresponding env
+	// var is already set.
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+
+	// .env provides values for int, float, and bool fields
+	content := "BT_LLM_TIMEOUT=500\nBT_RATE_LIMIT_RPS=50\nBT_FEATURE_GARDENER=true\n"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set env vars for the same fields — these should win (early return)
+	os.Setenv("BT_DOTENV_FILE", envFile)
+	os.Setenv("BT_LLM_TIMEOUT", "999")
+	os.Setenv("BT_RATE_LIMIT_RPS", "999.0")
+	os.Setenv("BT_FEATURE_GARDENER", "false")
+	defer func() {
+		os.Unsetenv("BT_DOTENV_FILE")
+		os.Unsetenv("BT_LLM_TIMEOUT")
+		os.Unsetenv("BT_RATE_LIMIT_RPS")
+		os.Unsetenv("BT_FEATURE_GARDENER")
+	}()
+	os.Unsetenv("BT_CONFIG_FILE")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// Env vars must override .env values
+	if c.LLMTimeout != 999 {
+		t.Errorf("expected LLMTimeout=999 (env var), got %d (from .env=%s)", c.LLMTimeout, "500")
+	}
+	if c.RateLimitRPS != 999.0 {
+		t.Errorf("expected RateLimitRPS=999.0 (env var), got %v", c.RateLimitRPS)
+	}
+	if c.GardenerEnabled {
+		t.Errorf("expected GardenerEnabled=false (env var override), got true")
+	}
+}
+
+// ─── stripInlineComment Coverage Tests ─────────────────────────────────
+
+func TestStripInlineComment_SingleQuotedHash(t *testing.T) {
+	// A hash inside single quotes should NOT trigger inline comment removal.
+	result := stripInlineComment("value with '#' hash")
+	if result != "value with '#' hash" {
+		t.Errorf("expected 'value with '#' hash' (hash inside single quotes), got %q", result)
+	}
+}
+
+func TestStripInlineComment_DoubleQuotedHash(t *testing.T) {
+	// A hash inside double quotes should NOT trigger inline comment removal.
+	result := stripInlineComment("value with \"#\" hash")
+	if result != "value with \"#\" hash" {
+		t.Errorf("expected 'value with \"#\" hash' (hash inside double quotes), got %q", result)
+	}
+}
+
+func TestStripInlineComment_UnquotedHash(t *testing.T) {
+	// An unquoted hash SHOULD trigger inline comment removal.
+	result := stripInlineComment("value # comment")
+	if result != "value" {
+		t.Errorf("expected 'value' (unquoted hash triggers comment), got %q", result)
+	}
+}
+
+func TestStripInlineComment_NoHash(t *testing.T) {
+	result := stripInlineComment("plain value")
+	if result != "plain value" {
+		t.Errorf("expected 'plain value', got %q", result)
+	}
+}
+
+func TestStripInlineComment_AlternatingQuotes(t *testing.T) {
+	// Alternating quote types: single, double, single
+	result := stripInlineComment("'a'\"b\"'c'#comment")
+	if result != "'a'\"b\"'c'" {
+		t.Errorf("expected quoted string without comment, got %q", result)
+	}
+}
