@@ -182,6 +182,7 @@ func main() {
 	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
+	mux.HandleFunc("/api/otlp-stats", handleOTLPStats)
 	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
 	mux.HandleFunc("/api/config", handleConfig)
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
@@ -852,6 +853,45 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(report)
+}
+
+// handleOTLPStats proxies the bt-otlp-collector stats endpoint. Returns OTLP
+// collector status — batches received, spans received, uptime — for dashboard
+// visualization. Returns a fallback JSON when the collector is unreachable.
+// Public endpoint (no auth).
+func handleOTLPStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	collectorURL := os.Getenv("BT_OTLP_ENDPOINT")
+	if collectorURL == "" {
+		collectorURL = "http://localhost:4318"
+	}
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(collectorURL + "/api/otlp-stats")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":           "unreachable",
+			"collector_url":    collectorURL,
+			"message":          "bt-otlp-collector is not running",
+			"spans_received":   0,
+			"batches_received": 0,
+			"uptime":           "0s",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	var stats map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":  "error",
+			"message": fmt.Sprintf("decode error: %v", err),
+		})
+		return
+	}
+	stats["status"] = "connected"
+	json.NewEncoder(w).Encode(stats)
 }
 
 // ─── Dead Letter Queue Handlers ────────────────────────────────────────────────
