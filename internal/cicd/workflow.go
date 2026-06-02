@@ -12,13 +12,14 @@ import (
 
 // WorkflowReport is the evidence artifact produced by ValidateWorkflows.
 type WorkflowReport struct {
-	Root      string   `json:"root"`
-	Checks    []Check  `json:"checks"`
-	Passed    int      `json:"passed"`
-	Failed    int      `json:"failed"`
-	AllPassed bool     `json:"all_passed"`
-	Workflow  []string `json:"workflow_files"`
-	Summary   string   `json:"summary"`
+	Root             string   `json:"root"`
+	Checks           []Check  `json:"checks"`
+	Passed           int      `json:"passed"`
+	Failed           int      `json:"failed"`
+	AllPassed        bool     `json:"all_passed"`
+	Workflow         []string `json:"workflow_files"`
+	Summary          string   `json:"summary"`
+	DependabotExists bool     `json:"dependabot_exists"`
 }
 
 // Check records one CI/CD maturity assertion.
@@ -58,9 +59,52 @@ func ValidateWorkflows(root string) (WorkflowReport, error) {
 		report.validateNightly(nightly)
 	}
 
+	// Validate Dependabot config for automated dependency updates.
+	dependabotPath := filepath.Join(abs, ".github", "dependabot.yml")
+	dependabotCfg, dependabotErr := loadDependabotConfig(dependabotPath)
+	report.DependabotExists = dependabotErr == nil
+	report.add("dependabot config exists and parses", dependabotErr == nil, errDetail(dependabotErr, "dependabot.yml parsed"))
+	if dependabotErr == nil {
+		hasGoMod := false
+		hasGHA := false
+		for _, u := range dependabotCfg.Updates {
+			if u.Ecosystem == "gomod" {
+				hasGoMod = true
+			}
+			if u.Ecosystem == "github-actions" {
+				hasGHA = true
+			}
+		}
+		report.add("dependabot config covers gomod", hasGoMod, boolDetail(hasGoMod, "gomod ecosystem configured", "gomod ecosystem missing"))
+		report.add("dependabot config covers github-actions", hasGHA, boolDetail(hasGHA, "github-actions ecosystem configured", "github-actions ecosystem missing"))
+	}
+
 	report.AllPassed = report.Failed == 0
 	report.Summary = fmt.Sprintf("%d/%d CI/CD workflow checks passed", report.Passed, report.Passed+report.Failed)
 	return report, nil
+}
+
+type dependabotConfig struct {
+	Version int `yaml:"version"`
+	Updates []struct {
+		Ecosystem string `yaml:"package-ecosystem"`
+		Directory string `yaml:"directory"`
+	} `yaml:"updates"`
+}
+
+func loadDependabotConfig(path string) (dependabotConfig, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return dependabotConfig{}, err
+	}
+	var cfg dependabotConfig
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		return dependabotConfig{}, err
+	}
+	if cfg.Version != 2 || len(cfg.Updates) == 0 {
+		return dependabotConfig{}, fmt.Errorf("dependabot config: invalid version or no updates")
+	}
+	return cfg, nil
 }
 
 func (r *WorkflowReport) add(name string, passed bool, details string) {

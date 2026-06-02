@@ -1,0 +1,50 @@
+# Dependabot auto-dependency management for the Go BT Platform.
+# Keeps Go modules, GitHub Actions, and Docker dependencies up-to-date.
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Go module dependency updates
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - gomod
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    ignore:
+      # Major version bumps for langchaingo — major breaking changes require manual review
+      - dependency-name: "github.com/tmc/langchaingo"
+        update-types: ["version-update:semver-major"]
+      # Bumping golangci-lint across major versions often changes default linter config
+      - dependency-name: "github.com/golangci/golangci-lint"
+        update-types: ["version-update:semver-major"]
+    groups:
+      gomod-deps:
+        patterns:
+          - "github.com/*"
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions workflow dependency updates
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(deps-actions)"

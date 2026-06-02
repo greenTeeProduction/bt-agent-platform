@@ -19,7 +19,7 @@ func TestValidateWorkflowsRepositoryPasses(t *testing.T) {
 		}
 		t.Fatalf("expected repository workflows to pass, got %d failed", report.Failed)
 	}
-	if report.Passed < 22 {
+	if report.Passed < 25 {
 		t.Fatalf("expected comprehensive check coverage, got %d checks", report.Passed)
 	}
 }
@@ -55,6 +55,19 @@ jobs:
     steps:
       - run: benchcmp check
 `)
+	dependabotDir := filepath.Join(root, ".github")
+	if err := os.MkdirAll(dependabotDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dependabotDir, "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
 	report, err := ValidateWorkflows(root)
 	if err != nil {
 		t.Fatalf("ValidateWorkflows: %v", err)
@@ -85,6 +98,19 @@ jobs:
     steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64'}]
 `)
 	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	dependabotDir := filepath.Join(root, ".github")
+	if err := os.MkdirAll(dependabotDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dependabotDir, "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
 	report, err := ValidateWorkflows(root)
 	if err != nil {
 		t.Fatalf("ValidateWorkflows: %v", err)

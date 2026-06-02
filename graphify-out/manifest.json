@@ -164,8 +164,8 @@
     "hash": "006cd72f3beb446d1b70868743729d27"
   },
   "/home/nico/go-bt-evolve/internal/config/config.go": {
-    "mtime": 1780333269.7494376,
-    "hash": "fc7ec410846cb6d785b86ba4c4193101"
+    "mtime": 1780365281.6737242,
+    "hash": "e541f214106a63e9ecdca08805b77e5c"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
     "mtime": 1780128079.3222642,
@@ -420,8 +420,8 @@
     "hash": "e4d0a64961558e211971335a564da6a9"
   },
   "/home/nico/go-bt-evolve/internal/security/probe.go": {
-    "mtime": 1780360764.6142561,
-    "hash": "e330667791df86129877e809599d7f53"
+    "mtime": 1780365293.0178165,
+    "hash": "18a6a50d00d2842a6526afbaf4345fdf"
   },
   "/home/nico/go-bt-evolve/internal/engine/script_nodes.go": {
     "mtime": 1780212236.430722,
@@ -1088,8 +1088,8 @@
     "hash": "a087530c3f4dff6c6d78f3d55ed30f1a"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/main.go": {
-    "mtime": 1780358106.534128,
-    "hash": "6126d84192e8c7db9ea01f96c6a2da29"
+    "mtime": 1780365258.185533,
+    "hash": "716c2ded8e767ac4131ffbe2db2525e7"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/js/app.js": {
     "mtime": 1780356197.2263799,
@@ -1200,8 +1200,8 @@
     "hash": "ab380048cef90102ac24f67096384716"
   },
   "/home/nico/go-bt-evolve/scripts/git-hooks/pre-commit": {
-    "mtime": 1780291140.5481725,
-    "hash": "2ad95381c83d51b54b5529d37f4a7ee1"
+    "mtime": 1780364487.2948592,
+    "hash": "592b19076cb082efc20d291a6352bfb6"
   },
   "/home/nico/go-bt-evolve/flutter/lib/dashboard.dart": {
     "mtime": 1779723806.1141267,
@@ -1228,8 +1228,8 @@
     "hash": "68288ae6a315caacf89f707a28c78039"
   },
   "/home/nico/go-bt-evolve/docs/API_REFERENCE.md": {
-    "mtime": 1780105377.677563,
-    "hash": "08808567c1be103a360e2cf478807d70"
+    "mtime": 1780364426.9502802,
+    "hash": "423338d429b970c7826570ee1709e371"
   },
   "/home/nico/go-bt-evolve/docs/VIDEO_WALKTHROUGH.md": {
     "mtime": 1780300394.4192603,
@@ -1312,8 +1312,8 @@
     "hash": "48ccadcecac96046fdf064184b729b3a"
   },
   "/home/nico/go-bt-evolve/agents/templates/bt-research-agent.yaml": {
-    "mtime": 1780212904.3549957,
-    "hash": "c892537f73e713fdae3529f0d18de7da"
+    "mtime": 1780363548.0390444,
+    "hash": "dcbbfb3626a009e779ee9d67e82b36f5"
   },
   "/home/nico/go-bt-evolve/agents/templates/bt-implementer.yaml": {
     "mtime": 1780212911.2950387,

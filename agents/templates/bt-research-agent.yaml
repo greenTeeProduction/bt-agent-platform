@@ -2,7 +2,7 @@ name: bt-research-agent
 description: Research behavior tree evolution methods. Search web, query NotebookLM, save to vault, create implementation plans. GOAP composite workflow.
 version: "1.0.0"
 tree: domain:goap_research
-schedule: "0 8 * * *"
+schedule: "30 8 * * *"
 inputs:
   - name: topic
     type: text
