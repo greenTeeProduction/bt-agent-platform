@@ -238,12 +238,58 @@ func TestActionForName_BulkCoverage(t *testing.T) {
 
 		// --- Arc42 documentation actions (not registered — fallback in tree.go) ---
 		"FallbackSection1",
+
+		// --- Knowledge graph actions ---
+		"ApplyKnowledge",
+		"QueryKG",
+		"UseCachedResult",
+
+		// --- Arc42 doc assembly actions ---
+		"CollectAllSections",
+		"GenerateTOC",
+		"MarkDocAssembled",
+		"MarkSectionDone",
+		"ReadSection1",
+		"SaveDocument",
+		"SaveSection",
+		"ScanCodeComments",
+		"ScanTypes",
+		"ValidateSection",
+
+		// --- Arc42 doc reading actions ---
+		"ReadADRs",
+		"ReadConfigFiles",
+		"ReadEngineCode",
+		"ReadErrorLogs",
+		"ReadGitHistory",
+		"ReadGoMod",
+		"ReadGraphReport",
+		"ReadTestCoverage",
+
+		// --- Arc42 system discovery actions ---
+		"DetectHardware",
+		"DetectProcesses",
+		"ListBinaries",
+		"ListExternalAPIs",
+		"ListMCPTools",
+		"ListPackages",
+
+		// --- Tool setup (unregistered) ---
+		"SetupDefaultTools",
+		"SetupDocTools",
 	}
 
 	bb := &Blackboard{
 		Task:   "review Go code for performance issues",
 		LLM:    &mockLLM{},
 		Result: "initial result for concatenation tests",
+		ChainState: map[string]any{
+			"section_file":       "09-test-scenarios.md",
+			"section_key":        "section9_done",
+			"doc_title":          "Go BT Evolve Arc42",
+			"arc42_section_file": "09-test-scenarios.md",
+			"arc42_section_data": "# Test Section Content\n\nThis is a test section with enough content to pass validation.\n\n## Overview\n\nMore content here to ensure we exceed the minimum length threshold.\n",
+		},
 	}
 
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}

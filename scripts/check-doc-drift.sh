@@ -225,6 +225,25 @@ else
     yellow "  VIDEO_WALKTHROUGH.md not found (skip)"
 fi
 
+# ----- 7. Walkthrough evidence artifact freshness -----
+echo
+echo "--- Walkthrough evidence artifact ---"
+
+WE_FILE="$ROOT/docs/walkthrough-evidence.md"
+if [ -f "$WE_FILE" ]; then
+    WE_AGE=$(( $(date +%s) - $(stat -c %Y "$WE_FILE") ))
+    WE_AGE_HOURS=$(( WE_AGE / 3600 ))
+    if [ "$WE_AGE_HOURS" -le 24 ]; then
+        green "  walkthrough-evidence.md is fresh (${WE_AGE_HOURS}h old)"
+    else
+        yellow "  walkthrough-evidence.md is ${WE_AGE_HOURS}h old — consider running 'make walkthrough' to refresh"
+        WARNINGS=$((WARNINGS + 1))
+    fi
+else
+    yellow "  walkthrough-evidence.md not found — run 'make walkthrough' to produce it"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
 # ----- Summary -----
 echo
 echo "=== Results ==="

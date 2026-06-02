@@ -492,8 +492,8 @@
     "hash": "fcd83e508868bfc65f101cfacd8e94a7"
   },
   "/home/nico/go-bt-evolve/internal/engine/action_coverage_test.go": {
-    "mtime": 1780394094.1173933,
-    "hash": "5a76b0fee25a83a213bf139080b221fa"
+    "mtime": 1780396945.4030175,
+    "hash": "0cf9c7f7d0b8d88e4060ab4ee692e883"
   },
   "/home/nico/go-bt-evolve/internal/engine/tools_real.go": {
     "mtime": 1780216517.490825,
@@ -1318,6 +1318,10 @@
   "/home/nico/go-bt-evolve/docs/runner-setup.md": {
     "mtime": 1780267343.7355986,
     "hash": "6a174d41926fafac0d7561c11fc0acbf"
+  },
+  "/home/nico/go-bt-evolve/docs/walkthrough-evidence.md": {
+    "mtime": 1780397192.7617571,
+    "hash": "1f1b073a49e9c9eb68ad10642e0fdf3a"
   },
   "/home/nico/go-bt-evolve/docs/adr/ADR-007-reliability-architecture.md": {
     "mtime": 1780260865.1467552,

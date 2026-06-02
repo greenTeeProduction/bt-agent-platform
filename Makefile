@@ -171,6 +171,57 @@ doc-drift-check:
 	@echo "Running documentation drift validation..."
 	@./scripts/check-doc-drift.sh
 
+# Produce a timestamped evidence artifact from the video walkthrough
+# This runs the key commands from docs/VIDEO_WALKTHROUGH.md and captures output.
+walkthrough:
+	@echo "=== BT Platform Walkthrough — $$(date -u +%Y-%m-%dT%H:%M:%SZ) ===" > /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Setup Verification" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "Go version:" >> /tmp/bt-walkthrough.md
+	@export PATH=$$PATH:/usr/local/go/bin && go version >> /tmp/bt-walkthrough.md 2>&1
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "Build check:" >> /tmp/bt-walkthrough.md
+	@export PATH=$$PATH:/usr/local/go/bin && cd $(PWD) && go build ./... 2>&1 >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Quick Tests" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@export PATH=$$PATH:/usr/local/go/bin && cd $(PWD) && go test -short -count=1 -timeout 60s ./... 2>&1 | grep -E '(ok |FAIL|---)' >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Binary Size Overview" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@ls -lh $(PWD)/bin/bt-* 2>/dev/null >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## MCP Tools Overview" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "bt-agent:" >> /tmp/bt-walkthrough.md
+	@echo "  32 MCP tools (tree execution, evolution, agents, knowledge graph, factory)" >> /tmp/bt-walkthrough.md
+	@echo "bt-langagent:" >> /tmp/bt-walkthrough.md
+	@echo "  3 MCP tools (ReAct agent wrapping 7 BT tools)" >> /tmp/bt-walkthrough.md
+	@echo "bt-evaluator:" >> /tmp/bt-walkthrough.md
+	@echo "  5 MCP tools (Stockfish-style tree evaluation)" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Package Coverage Summary" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@export PATH=$$PATH:/usr/local/go/bin && cd $(PWD) && go test -short -count=1 -cover -timeout 60s ./... 2>&1 | grep -E '^ok' | grep -oP 'coverage: [^%]+' | sort -t' ' -k3 -g >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Dashboard Health" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@curl -s --max-time 5 http://localhost:9800/api/health 2>/dev/null >> /tmp/bt-walkthrough.md || echo "Dashboard not running at localhost:9800" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@echo "" >> /tmp/bt-walkthrough.md
+	@echo "## Doc Drift Check" >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@./scripts/check-doc-drift.sh 2>&1 >> /tmp/bt-walkthrough.md
+	@echo '```' >> /tmp/bt-walkthrough.md
+	@cp /tmp/bt-walkthrough.md docs/walkthrough-evidence.md
+	@echo "Walkthrough evidence saved to docs/walkthrough-evidence.md"
+
 # Setup GitHub Actions self-hosted runner for Jetson ARM64
 # Requires a runner registration token from GitHub Settings → Actions → Runners.
 # Usage: make setup-runner TOKEN=AAAA...
@@ -271,5 +322,6 @@ help:
 	@echo "  scalability-probe Run dashboard scalability probe (TARGET=http://host:9800)"
 	@echo "  ci-doctor         Validate GitHub Actions workflow maturity gates"
 	@echo "  tree-integration  Run real-Ollama BT tree integration validation"
+	@echo "  walkthrough       Produce live platform walkthrough evidence artifact"
 	@echo "  clean             Remove built binaries"
 	@echo "  help              Show this help"
