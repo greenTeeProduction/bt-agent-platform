@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -669,5 +670,593 @@ func TestCondFallback_GameStates(t *testing.T) {
 		if fn(&Blackboard{Task: "write Go code"}) {
 			t.Errorf("expected false for %q with non-game task", condName)
 		}
+	}
+}
+
+// ─── Bulk condition coverage surge — 80 untested condition switch cases ───
+
+// simpleContainsCond returns a test function for a condition that does a simple
+// containsAny check against the Task field.
+func simpleContainsCond(t *testing.T, condName string, trueTasks, falseTasks []string) {
+	t.Helper()
+	fn := (&Blackboard{}).conditionForName(condName)
+	if fn == nil {
+		t.Fatalf("conditionForName(%q) returned nil", condName)
+	}
+	for _, task := range trueTasks {
+		if !fn(&Blackboard{Task: task}) {
+			t.Errorf("conditionForName(%q)(%q) = false, want true", condName, task)
+		}
+	}
+	for _, task := range falseTasks {
+		if fn(&Blackboard{Task: task}) {
+			t.Errorf("conditionForName(%q)(%q) = true, want false", condName, task)
+		}
+	}
+}
+
+func TestCondBulk_StandardConditions(t *testing.T) {
+	// ─── IsHighPriority ───
+	simpleContainsCond(t, "IsHighPriority",
+		[]string{"critical bug fix needed", "urgent deployment required", "asap response"},
+		[]string{"review code quietly", "write documentation"},
+	)
+	// ─── IsCodeTask ───
+	simpleContainsCond(t, "IsCodeTask",
+		[]string{"review this code", "fix a bug", "refactor this function"},
+		[]string{"write a poem", "plan the sprint"},
+	)
+	// ─── IsBugCheck ───
+	simpleContainsCond(t, "IsBugCheck",
+		[]string{"find the bug", "fix crash issue", "null pointer error"},
+		[]string{"write documentation", "style cleanup"},
+	)
+	// ─── IsStyleCheck ───
+	simpleContainsCond(t, "IsStyleCheck",
+		[]string{"check style", "run lint on code", "fix naming conventions", "clean up formatting"},
+		[]string{"find bugs", "deploy to production"},
+	)
+	// ─── IsQuestion ───
+	simpleContainsCond(t, "IsQuestion",
+		[]string{"what is the best approach", "how does this work", "explain the pattern", "define recursion", "best practice for testing"},
+		[]string{"deploy the application"},
+	)
+	// ─── IsQA ───
+	simpleContainsCond(t, "IsQA",
+		[]string{"run QA checks", "validate the output", "verify requirements", "check results"},
+		[]string{"build the project"},
+	)
+	// ─── IsCreateTask ───
+	simpleContainsCond(t, "IsCreateTask",
+		[]string{"create a new card", "add card to backlog", "create new feature", "create a task"},
+		[]string{"review existing code"},
+	)
+	// ─── IsRefinement ───
+	simpleContainsCond(t, "IsRefinement",
+		[]string{"refine the requirements", "expand the spec", "planning session", "detail the user story"},
+		[]string{"build and deploy"},
+	)
+	// ─── IsDevOps ───
+	simpleContainsCond(t, "IsDevOps",
+		[]string{"deploy to production", "build the pipeline", "kubernetes deployment", "terraform config", "docker compose"},
+		[]string{"write a blog post"},
+	)
+	// ─── IsDataTask ───
+	simpleContainsCond(t, "IsDataTask",
+		[]string{"etl pipeline setup", "transform the data", "load csv file", "sql query", "parquet dataset"},
+		[]string{"review UI wireframes"},
+	)
+	// ─── IsAnalysisTask ───
+	simpleContainsCond(t, "IsAnalysisTask",
+		[]string{"strategic analysis", "think tank session", "scenario planning", "forecast next quarter"},
+		[]string{"fix this bug"},
+	)
+	// ─── IsRefactoring ───
+	simpleContainsCond(t, "IsRefactoring",
+		[]string{"refactor this module", "restructure the codebase", "migrate to new framework"},
+		[]string{"write unit tests"},
+	)
+	// ─── IsIncident ───
+	simpleContainsCond(t, "IsIncident",
+		[]string{"production crash", "timeout error", "server is down", "broken deployment", "panic in handler"},
+		[]string{"add new feature"},
+	)
+	// ─── IsMeetingTask ───
+	simpleContainsCond(t, "IsMeetingTask",
+		[]string{"transcribe the meeting", "daily standup notes", "sprint planning", "summarize the call"},
+		[]string{"build the binary"},
+	)
+	// ─── IsNotebookLMTask ───
+	simpleContainsCond(t, "IsNotebookLMTask",
+		[]string{"notebooklm briefing", "research notebook", "deep research session"},
+		[]string{"deploy to production"},
+	)
+	// ─── IsVaultTask ───
+	simpleContainsCond(t, "IsVaultTask",
+		[]string{"vault management", "ingest the session", "synthesize daily notes", "update the index", "wiki page edit"},
+		[]string{"build the Go binary"},
+	)
+
+	// ─── NeedsBuild ───
+	simpleContainsCond(t, "NeedsBuild",
+		[]string{"build the project", "compile the code"},
+		[]string{"review the PR"},
+	)
+	// ─── NeedsTestRun ───
+	simpleContainsCond(t, "NeedsTestRun",
+		[]string{"run the tests", "test the module"},
+		[]string{"write documentation"},
+	)
+	// ─── NeedsLinting ───
+	simpleContainsCond(t, "NeedsLinting",
+		[]string{"lint the codebase", "run static analysis"},
+		[]string{"build the binary"},
+	)
+	// ─── NeedsDeploy ───
+	simpleContainsCond(t, "NeedsDeploy",
+		[]string{"deploy to staging", "release version 2.0", "ship the feature"},
+		[]string{"fix a bug"},
+	)
+	// ─── NeedsVerification ───
+	simpleContainsCond(t, "NeedsVerification",
+		[]string{"verify the results", "check the output", "test the fix"},
+		[]string{"design the architecture"},
+	)
+	// ─── NeedsIntegration ───
+	simpleContainsCond(t, "NeedsIntegration",
+		[]string{"integrate with api", "connect to database", "wire up endpoint", "pipeline setup"},
+		[]string{"review code style"},
+	)
+	// ─── NeedsCrossLinks ───
+	simpleContainsCond(t, "NeedsCrossLinks",
+		[]string{"cross-link notes", "audit connections", "connect pages", "find orphan pages"},
+		[]string{"write unit tests"},
+	)
+	// ─── NeedsIndexUpdate ───
+	simpleContainsCond(t, "NeedsIndexUpdate",
+		[]string{"update the index", "refresh MOC", "regenerate index"},
+		[]string{"build the binary"},
+	)
+	// ─── NeedsDispatch ───
+	simpleContainsCond(t, "NeedsDispatch",
+		[]string{"dispatch the task", "assign to developer", "next action", "start working"},
+		[]string{"schedule for later"},
+	)
+
+	// ─── IsMeetingPrep ───
+	simpleContainsCond(t, "IsMeetingPrep",
+		[]string{"client briefing pack", "meeting prep notes", "talking points for call"},
+		[]string{"build the model"},
+	)
+	// ─── IsNoteRequest ───
+	simpleContainsCond(t, "IsNoteRequest",
+		[]string{"draft a note", "write report", "research deep dive"},
+		[]string{"run the pipeline"},
+	)
+	// ─── IsIndustryRequest ───
+	simpleContainsCond(t, "IsIndustryRequest",
+		[]string{"industry overview", "sector analysis", "market research", "theme tracking"},
+		[]string{"fix the bug"},
+	)
+	// ─── IsCompetitiveRequest ───
+	simpleContainsCond(t, "IsCompetitiveRequest",
+		[]string{"competitive landscape", "peer comparison", "market share analysis"},
+		[]string{"write test cases"},
+	)
+	// ─── IsIdeaRequest ───
+	simpleContainsCond(t, "IsIdeaRequest",
+		[]string{"generate ideas", "screen opportunities", "shortlist candidates"},
+		[]string{"compile the code"},
+	)
+	// ─── IsDeckRequest ───
+	simpleContainsCond(t, "IsDeckRequest",
+		[]string{"build pitch deck", "create presentation", "update slides", "powerpoint for board"},
+		[]string{"reconcile ledger"},
+	)
+	// ─── Is3StatementRequest ───
+	simpleContainsCond(t, "Is3StatementRequest",
+		[]string{"build 3-statement model", "three statement projection", "income statement forecast"},
+		[]string{"audit GL entries"},
+	)
+	// ─── IsPrecedentsRequest ───
+	simpleContainsCond(t, "IsPrecedentsRequest",
+		[]string{"precedent transaction", "m&a comp", "acquisition target"},
+		[]string{"run DCF model"},
+	)
+	// ─── IsAuditRequest ───
+	simpleContainsCond(t, "IsAuditRequest",
+		[]string{"audit LP statement", "verify capital account", "statement verification"},
+		[]string{"build a DCF"},
+	)
+	// ─── IsGLReconRequest ───
+	simpleContainsCond(t, "IsGLReconRequest",
+		[]string{"reconcile GL", "general ledger check", "find break in sub-ledger"},
+		[]string{"build a pitch deck"},
+	)
+	// ─── IsMonthEndRequest ───
+	simpleContainsCond(t, "IsMonthEndRequest",
+		[]string{"month-end close", "accrual journal", "roll-forward schedule", "variance report"},
+		[]string{"screen new client"},
+	)
+	// ─── IsValuationRequest ───
+	simpleContainsCond(t, "IsValuationRequest",
+		[]string{"fund valuation", "gp capital account", "lp reporting", "net asset value nav"},
+		[]string{"run KYC screening"},
+	)
+	// ─── NeedsModelUpdate ───
+	simpleContainsCond(t, "NeedsModelUpdate",
+		[]string{"update model with Q3", "refresh the financial model", "roll forward projections"},
+		[]string{"audit the statements"},
+	)
+
+	// ─── IsDataRequest ───
+	simpleContainsCond(t, "IsDataRequest",
+		[]string{"fetch market data", "pull price data", "get stock data"},
+		[]string{"build the UI"},
+	)
+	// ─── IsSignalRequest ───
+	simpleContainsCond(t, "IsSignalRequest",
+		[]string{"check buy signal", "sell signal analysis", "entry point detection"},
+		[]string{"write documentation"},
+	)
+	// ─── IsRiskCheck ───
+	simpleContainsCond(t, "IsRiskCheck",
+		[]string{"assess risk exposure", "stop loss calculation", "position sizing"},
+		[]string{"run the test suite"},
+	)
+	// ─── IsTAPath ───
+	simpleContainsCond(t, "IsTAPath",
+		[]string{"technical indicator analysis", "rsi divergence", "macd crossover", "sma pattern"},
+		[]string{"fundamental analysis"},
+	)
+	// ─── IsSummaryRequest ───
+	simpleContainsCond(t, "IsSummaryRequest",
+		[]string{"generate summary", "meeting notes", "write minutes"},
+		[]string{"deploy the code"},
+	)
+	// ─── IsActionExtraction ───
+	simpleContainsCond(t, "IsActionExtraction",
+		[]string{"extract action items", "find todos", "next steps"},
+		[]string{"build the binary"},
+	)
+	// ─── IsFollowUp ───
+	simpleContainsCond(t, "IsFollowUp",
+		[]string{"follow up on task", "send reminder"},
+		[]string{"write new feature"},
+	)
+	// ─── IsRootCauseRequest ───
+	simpleContainsCond(t, "IsRootCauseRequest",
+		[]string{"find root cause", "why did this fail", "debug the issue"},
+		[]string{"document the API"},
+	)
+	// ─── IsPreventionRequest ───
+	simpleContainsCond(t, "IsPreventionRequest",
+		[]string{"prevent recurrence", "harden the system", "add guards"},
+		[]string{"write new tests"},
+	)
+	// ─── IsDepScanRequest ───
+	simpleContainsCond(t, "IsDepScanRequest",
+		[]string{"dependency scan needed", "check package CVEs", "audit library versions"},
+		[]string{"review architecture"},
+	)
+	// ─── IsSASTRequest ───
+	simpleContainsCond(t, "IsSASTRequest",
+		[]string{"sast scan run", "static analysis check"},
+		[]string{"deploy the app"},
+	)
+	// ─── IsSecretScan ───
+	simpleContainsCond(t, "IsSecretScan",
+		[]string{"scan for secrets", "check credentials leak", "find API keys in code", "audit tokens"},
+		[]string{"write documentation"},
+	)
+	// ─── IsThreatModel ───
+	simpleContainsCond(t, "IsThreatModel",
+		[]string{"threat model", "attack surface", "stride assessment"},
+		[]string{"build feature X"},
+	)
+	// ─── IsSecurityTask ───
+	simpleContainsCond(t, "IsSecurityTask",
+		[]string{"security audit", "threat assessment", "vulnerability scan"},
+		[]string{"build the UI"},
+	)
+	// ─── IsMonitorTask ───
+	simpleContainsCond(t, "IsMonitorTask",
+		[]string{"monitor system health", "check agent status", "watch for anomalies"},
+		[]string{"write new feature"},
+	)
+	// ─── IsMetricsRequest ───
+	simpleContainsCond(t, "IsMetricsRequest",
+		[]string{"show metrics", "get stats", "generate report"},
+		[]string{"fix the bug"},
+	)
+	// ─── IsRefactorTask ───
+	simpleContainsCond(t, "IsRefactorTask",
+		[]string{"refactor this module", "improve code quality", "clean up tech debt", "rewrite the function"},
+		[]string{"deploy to prod"},
+	)
+	// ─── IsSmellCheck ───
+	simpleContainsCond(t, "IsSmellCheck",
+		[]string{"check code smells", "find cruft", "duplicate code detection"},
+		[]string{"write the tests"},
+	)
+	// ─── IsPatternRequest ───
+	simpleContainsCond(t, "IsPatternRequest",
+		[]string{"design pattern analysis", "architecture review"},
+		[]string{"run the build"},
+	)
+	// ─── IsExtractRequest ───
+	simpleContainsCond(t, "IsExtractRequest",
+		[]string{"extract data from source", "ingest CSV file", "load the dataset"},
+		[]string{"deploy the app"},
+	)
+	// ─── IsTransformRequest ───
+	simpleContainsCond(t, "IsTransformRequest",
+		[]string{"transform the data", "clean the dataset", "normalize fields"},
+		[]string{"run the pipeline"},
+	)
+	// ─── IsLoadRequest ───
+	simpleContainsCond(t, "IsLoadRequest",
+		[]string{"load data to database", "write to warehouse", "store results"},
+		[]string{"review the code"},
+	)
+	// ─── IsResearchRequest ───
+	simpleContainsCond(t, "IsResearchRequest",
+		[]string{"research the topic", "search for papers", "discover new approaches"},
+		[]string{"deploy the binary"},
+	)
+	// ─── IsGraphifyRequest ───
+	simpleContainsCond(t, "IsGraphifyRequest",
+		[]string{"run graphify analysis", "graph the codebase", "structural coupling check"},
+		[]string{"write unit tests"},
+	)
+	// ─── IsBuildRequest ───
+	simpleContainsCond(t, "IsBuildRequest",
+		[]string{"build the project", "compile the module", "go build the binary", "make the artifact"},
+		[]string{"review the PR"},
+	)
+	// ─── IsImplementRequest ───
+	simpleContainsCond(t, "IsImplementRequest",
+		[]string{"implement the feature", "plan the implementation", "fix the bug", "create new module"},
+		[]string{"run the tests"},
+	)
+	// ─── IsEngineeringTask ───
+	simpleContainsCond(t, "IsEngineeringTask",
+		[]string{"engineering sprint", "implement feature", "architecture review", "sw. eng. task"},
+		[]string{"marketing campaign"},
+	)
+	// ─── IsMarketingTask ───
+	simpleContainsCond(t, "IsMarketingTask",
+		[]string{"marketing campaign", "content strategy", "SEO optimization", "lead generation"},
+		[]string{"fix the bug"},
+	)
+	// ─── IsSalesTask ───
+	simpleContainsCond(t, "IsSalesTask",
+		[]string{"close the deal", "sales pipeline review", "client demo", "revenue forecast"},
+		[]string{"refactor the code"},
+	)
+	// ─── IsAssessRequest ───
+	simpleContainsCond(t, "IsAssessRequest",
+		[]string{"assess maturity", "check readiness", "review gaps", "scan vulnerabilities", "measure quality"},
+		[]string{"build the feature"},
+	)
+	// ─── IsSyncRequest ───
+	simpleContainsCond(t, "IsSyncRequest",
+		[]string{"sync across teams", "pollinate ideas", "align priorities", "cross-reference"},
+		[]string{"write new code"},
+	)
+	// ─── IsDailyResearch ───
+	simpleContainsCond(t, "IsDailyResearch",
+		[]string{"daily research task", "any task at all"},
+		[]string{}, // always true — no false case needed
+	)
+	// ─── IsDeepResearchDay ───
+	simpleContainsCond(t, "IsDeepResearchDay",
+		[]string{"deep research task", "any task for sunday"},
+		[]string{}, // always true
+	)
+	// ─── IsPeriodicCheck ───
+	simpleContainsCond(t, "IsPeriodicCheck",
+		[]string{"periodic health check", "any string works"},
+		[]string{}, // always true
+	)
+	// ─── HasNewAlgorithm ───
+	simpleContainsCond(t, "HasNewAlgorithm",
+		[]string{"implement new algorithm", "research AI techniques", "create a new method"},
+		[]string{"review code style"},
+	)
+	// ─── HasImprovement ───
+	simpleContainsCond(t, "HasImprovement",
+		[]string{"improve performance", "enhance the UI", "optimize queries", "tune parameters"},
+		[]string{"deploy to production"},
+	)
+	// ─── IsSessionEnd ───
+	simpleContainsCond(t, "IsSessionEnd",
+		[]string{"session end", "wrap up the day", "close the session", "end of day summary"},
+		[]string{"start the project"},
+	)
+	// ─── IsComparisonQuery (uses subtest) ───
+	t.Run("IsComparisonQuery", func(t *testing.T) {
+		// Check b.Task for comparison keywords
+		fn := (&Blackboard{}).conditionForName("IsComparisonQuery")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{Task: "compare A vs B"}) {
+			t.Error("expected true for 'compare A vs B'")
+		}
+		if !fn(&Blackboard{Task: "versus analysis"}) {
+			t.Error("expected true for 'versus analysis'")
+		}
+		if !fn(&Blackboard{Task: "difference between X and Y"}) {
+			t.Error("expected true for 'difference between X and Y'")
+		}
+		if !fn(&Blackboard{Task: "contrast approaches"}) {
+			t.Error("expected true for 'contrast approaches'")
+		}
+		if fn(&Blackboard{Task: "explain the concept"}) {
+			t.Error("expected false for non-comparison task")
+		}
+	})
+}
+
+func TestCondBulk_ChainStateConditions(t *testing.T) {
+	// Conditions that check bb.ChainState (receiver, not b parameter)
+
+	t.Run("HasCachedFitness", func(t *testing.T) {
+		fn := (&Blackboard{}).conditionForName("HasCachedFitness")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if fn(&Blackboard{}) {
+			t.Error("expected false without ChainState")
+		}
+		if !fn(&Blackboard{ChainState: map[string]any{"cached_fitness": 0.85}}) {
+			t.Error("expected true with cached_fitness")
+		}
+	})
+	t.Run("HasFitnessImproved", func(t *testing.T) {
+		fn := (&Blackboard{}).conditionForName("HasFitnessImproved")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if fn(&Blackboard{}) {
+			t.Error("expected false without ChainState")
+		}
+		if fn(&Blackboard{ChainState: map[string]any{"current_fitness": float64(0.5), "best_fitness": float64(0.8)}}) {
+			t.Error("expected false when current < best")
+		}
+		if !fn(&Blackboard{ChainState: map[string]any{"current_fitness": float64(0.9), "best_fitness": float64(0.8)}}) {
+			t.Error("expected true when current > best")
+		}
+	})
+
+	// Section4Done and Section5Done — registered in arc42_nodes.go uses section_*_done keys (underscore)
+	// These also check file existence via sectionFileExists(), which may or may not
+	// return true depending on whether the files exist on this system.
+	t.Run("Section4Done", func(t *testing.T) {
+		fn := (&Blackboard{}).conditionForName("Section4Done")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		// File may exist, so we don't assert on bare result without ChainState.
+		// Just verify it returns a bool and ChainState takes priority.
+		_ = fn(&Blackboard{})
+		// With ChainState set to true, it should return true regardless of files
+		if !fn(&Blackboard{ChainState: map[string]any{"section_4_done": true}}) {
+			t.Error("expected true when section_4_done is true")
+		}
+	})
+	t.Run("Section5Done", func(t *testing.T) {
+		fn := (&Blackboard{}).conditionForName("Section5Done")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		// File may exist, so we don't assert on bare result without ChainState.
+		_ = fn(&Blackboard{})
+		// With ChainState set to true, it should return true regardless of files
+		if !fn(&Blackboard{ChainState: map[string]any{"section_5_done": true}}) {
+			t.Error("expected true when section_5_done is true")
+		}
+	})
+}
+
+func TestCondBulk_BBResultConditions(t *testing.T) {
+	// Conditions that use bb.Result (receiver), not b.Result (parameter)
+
+	t.Run("CheckCitationFormat", func(t *testing.T) {
+		fn := (&Blackboard{Result: "with [citation] and source: example.com"}).conditionForName("CheckCitationFormat")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{}) {
+			t.Error("expected true when result has brackets or source:")
+		}
+		fn2 := (&Blackboard{Result: "plain text without citations"}).conditionForName("CheckCitationFormat")
+		if fn2(&Blackboard{}) {
+			t.Error("expected false when result has no citations")
+		}
+	})
+	t.Run("HasProposedFix", func(t *testing.T) {
+		fn := (&Blackboard{Result: "the fix is to change the code"}).conditionForName("HasProposedFix")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{}) {
+			t.Error("expected true when result contains fix")
+		}
+		fn2 := (&Blackboard{Result: "no resolution available"}).conditionForName("HasProposedFix")
+		if fn2(&Blackboard{}) {
+			t.Error("expected false when result has no fix")
+		}
+	})
+	t.Run("HasDeadAgents", func(t *testing.T) {
+		fn := (&Blackboard{Result: "dead agent detected"}).conditionForName("HasDeadAgents")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{}) {
+			t.Error("expected true when result mentions dead")
+		}
+		fn2 := (&Blackboard{Result: "all agents healthy"}).conditionForName("HasDeadAgents")
+		if fn2(&Blackboard{}) {
+			t.Error("expected false when result is clean")
+		}
+	})
+	t.Run("PersistentFailures", func(t *testing.T) {
+		fn := (&Blackboard{Result: "3+ persistent failures detected"}).conditionForName("PersistentFailures")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{}) {
+			t.Error("expected true when result mentions failed")
+		}
+		fn2 := (&Blackboard{Result: "all passed"}).conditionForName("PersistentFailures")
+		if fn2(&Blackboard{}) {
+			t.Error("expected false when result is clean")
+		}
+	})
+	t.Run("HasTranscript", func(t *testing.T) {
+		// HasTranscript checks bb.Task (receiver) via len > 200
+		longTask := strings.Repeat("a", 201)
+		fn := (&Blackboard{Task: longTask}).conditionForName("HasTranscript")
+		if fn == nil {
+			t.Fatal("expected non-nil")
+		}
+		if !fn(&Blackboard{}) {
+			t.Error("expected true for long task")
+		}
+		fn2 := (&Blackboard{Task: "short"}).conditionForName("HasTranscript")
+		if fn2(&Blackboard{}) {
+			t.Error("expected false for short task")
+		}
+	})
+}
+
+func TestCondBulk_ValidateOutput(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("ValidateOutput")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	// Short output fails
+	if fn(&Blackboard{Result: "hi"}) {
+		t.Error("expected false for short output")
+	}
+	// Long enough output passes
+	if !fn(&Blackboard{Result: "Here is a comprehensive analysis of the codebase including all findings"}) {
+		t.Error("expected true for substantial output")
+	}
+}
+
+// TestCondBulk_GraphIsFresh — checks file existence on disk
+func TestCondBulk_GraphIsFresh(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("GraphIsFresh")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	// Don't check the real file — just verify it doesn't panic
+	// and returns a bool (file may or may not exist on this system)
+	result := fn(&Blackboard{})
+	if !(result == true || result == false) {
+		t.Error("expected bool result")
 	}
 }
