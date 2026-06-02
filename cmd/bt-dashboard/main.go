@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -86,6 +88,10 @@ func main() {
 		port = "9800"
 	}
 
+	// Resolve the directory containing this binary for companion process discovery
+	exe, _ := os.Executable()
+	exeDir := filepath.Dir(exe)
+
 	// Structured logging
 	slog.Info("BT Dashboard starting", "port", port)
 
@@ -117,6 +123,31 @@ func main() {
 	// Trace reader for /api/traces endpoint
 	traceReader = tracing.NewTraceReader(traceLogPath)
 	slog.Info("Trace reader initialized", "path", traceLogPath)
+
+	// Auto-start bt-otlp-collector as a companion process if OTEL endpoint is
+	// not already configured. This enables production-grade distributed tracing
+	// without manual setup: the collector logs all received OTLP spans to
+	// ~/.go-bt-evolve/logs/otlp/otlp-traces-*.log and exposes /api/otlp-stats.
+	otlpEndpoint := os.Getenv("BT_OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		collectorExe := filepath.Join(exeDir, "bt-otlp-collector")
+		if _, err := os.Stat(collectorExe); err == nil {
+			os.Setenv("BT_OTLP_ENDPOINT", "http://localhost:4318")
+			cmd := exec.Command(collectorExe)
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			if err := cmd.Start(); err != nil {
+				slog.Warn("Failed to start bt-otlp-collector companion", "error", err)
+			} else {
+				slog.Info("bt-otlp-collector companion started", "pid", cmd.Process.Pid, "endpoint", "http://localhost:4318")
+				// Give the collector a moment to bind
+				time.Sleep(500 * time.Millisecond)
+			}
+		} else {
+			slog.Info("bt-otlp-collector binary not found; tracing will use local console output only",
+				"expected_path", collectorExe)
+		}
+	}
 
 	var err error
 	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
