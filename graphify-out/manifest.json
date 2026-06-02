@@ -407,6 +407,10 @@
     "mtime": 1780295456.9263513,
     "hash": "fea453ee9ef1aab2cd215d63132ca8df"
   },
+  "/home/nico/go-bt-evolve/internal/reflection/coverage_gaps_test.go": {
+    "mtime": 1780422434.8554962,
+    "hash": "ac30a723d527d1869f3704a740d3f2d8"
+  },
   "/home/nico/go-bt-evolve/internal/reflection/reflection_test.go": {
     "mtime": 1780055007.627106,
     "hash": "8d04925499635eefac1f55a3b3f7c08e"
@@ -1154,6 +1158,10 @@
   "/home/nico/go-bt-evolve/internal/reliability/queue_test.go": {
     "mtime": 1780055007.6471062,
     "hash": "3706d23649277af114932d19b6f70c7b"
+  },
+  "/home/nico/go-bt-evolve/internal/reliability/multi_node_integration_test.go": {
+    "mtime": 1780422895.3196084,
+    "hash": "a614f17bf88caa7687e6f5ca243cea58"
   },
   "/home/nico/go-bt-evolve/internal/reliability/queue.go": {
     "mtime": 1780055007.6471062,
