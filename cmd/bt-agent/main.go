@@ -284,6 +284,7 @@ func main() {
 		Registry: agentReg,
 		History:  agentHist,
 		JobStore: agent.NewFileJobStore(jobStoreDir + "/scheduler-jobs.json"),
+		CBStore:  agent.NewAgentCircuitBreakerStore(agent.DefaultCircuitBreakerOptions()),
 	})
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
 		// ctx.Task is set by the scheduler from the agent's description.

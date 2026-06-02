@@ -1002,6 +1002,53 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			data, _ := json.Marshal(snap)
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
+
+	// ─── CIRCUIT BREAKER STATUS ──────────────────────────────────────────
+
+	server.RegisterTool("bt_circuit_status", "Circuit breaker status for all scheduled agents. Shows open/closed states, failure counts, and cooldowns.",
+		map[string]mcp.Property{
+			"agent": {Type: "string", Description: "Optional: specific agent name to query (default: all)"},
+		},
+		[]string{},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct {
+				Agent string `json:"agent"`
+			}
+			json.Unmarshal(args, &params)
+
+			if deps.globalSched == nil {
+				data, _ := json.Marshal(map[string]string{"error": "scheduler not initialized"})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			cbStore := deps.globalSched.GetCBStore()
+			if cbStore == nil {
+				data, _ := json.Marshal(map[string]string{"status": "disabled", "message": "circuit breakers not configured"})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			status := cbStore.Status()
+			if params.Agent != "" {
+				if s, ok := status[params.Agent]; ok {
+					data, _ := json.Marshal(map[string]interface{}{"agent": params.Agent, "status": s})
+					return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+				}
+				data, _ := json.Marshal(map[string]interface{}{
+					"agent": params.Agent,
+					"status": agent.CircuitSummary{
+						State:        agent.CircuitClosed,
+						FailureCount: 0,
+						SuccessCount: 0,
+						Threshold:    3,
+						Cooldown:     300000000000,
+					},
+				})
+				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			data, _ := json.Marshal(map[string]interface{}{"circuit_breakers": status, "agent_count": len(status)})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

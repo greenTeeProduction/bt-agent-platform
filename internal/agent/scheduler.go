@@ -22,7 +22,8 @@ type Scheduler struct {
 	stopCh       chan struct{}
 	running      bool
 	tickInterval time.Duration
-	jobStore     JobStore // optional: persists job state across restarts
+	jobStore     JobStore                  // optional: persists job state across restarts
+	cbStore      *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
 }
 
 // ScheduledJob represents a scheduled agent run.
@@ -67,8 +68,9 @@ type AgentRunner func(ctx RunContext) (outcome, output string, err error)
 type SchedulerConfig struct {
 	Registry     *Registry
 	History      *History
-	TickInterval time.Duration // how often to check for due jobs (default: 1m)
-	JobStore     JobStore      // optional: persists jobs across restarts (nil = in-memory only)
+	TickInterval time.Duration             // how often to check for due jobs (default: 1m)
+	JobStore     JobStore                  // optional: persists jobs across restarts (nil = in-memory only)
+	CBStore      *AgentCircuitBreakerStore // optional: per-agent circuit breakers (nil = disabled)
 }
 
 // NewScheduler creates a new agent scheduler.
@@ -84,6 +86,7 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		stopCh:       make(chan struct{}),
 		tickInterval: cfg.TickInterval,
 		jobStore:     cfg.JobStore,
+		cbStore:      cfg.CBStore,
 	}
 	// Restore persisted jobs
 	if cfg.JobStore != nil {
@@ -251,6 +254,12 @@ func (s *Scheduler) ListJobs() []ScheduledJob {
 	return result
 }
 
+// GetCBStore returns the circuit breaker store for operator inspection.
+// Returns nil if circuit breakers are not configured.
+func (s *Scheduler) GetCBStore() *AgentCircuitBreakerStore {
+	return s.cbStore
+}
+
 // RemoveJob removes a scheduled job.
 func (s *Scheduler) RemoveJob(jobID string) error {
 	s.mu.Lock()
@@ -303,6 +312,17 @@ func (s *Scheduler) tick(runner AgentRunner) {
 	s.mu.RUnlock()
 
 	for _, job := range due {
+		// Check circuit breaker before starting the job.
+		// If the circuit is open, skip the run entirely instead of
+		// wasting resources on a known-broken agent.
+		if s.cbStore != nil {
+			if !s.cbStore.Allowed(job.AgentName) {
+				cb := s.cbStore.Get(job.AgentName)
+				log.Printf("Scheduler: skipping agent %q — circuit breaker %s (%d failures, cooldown %v)",
+					job.AgentName, cb.State(), cb.FailureCount(), cb.cooldown)
+				continue
+			}
+		}
 		s.runJob(job, runner)
 	}
 }
@@ -440,6 +460,11 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			EndedAt:   time.Now(),
 		})
 	}
+
+	// Report outcome to circuit breaker store.
+	// A run is considered successful if outcome is "success" and no error occurred.
+	isSuccess := outcome == "success" && runErr == nil
+	reportAgentOutcome(s.cbStore, job.AgentName, isSuccess)
 }
 
 // estimateQuality is a fast quality heuristic for output text.
