@@ -2102,3 +2102,355 @@ func TestConfig_ResolvePaths_WithOverrides(t *testing.T) {
 		t.Errorf("LogDir = %q, want /custom/logs", c.Paths.LogDir)
 	}
 }
+
+// ─── applyEnvOverrides Coverage Tests ──────────────────────────────────────
+
+func TestEnvOverride_RateLimiting(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_RATE_LIMIT_RPS", "10.5")
+	os.Setenv("BT_RATE_LIMIT_BURST", "20")
+	defer func() {
+		os.Unsetenv("BT_RATE_LIMIT_RPS")
+		os.Unsetenv("BT_RATE_LIMIT_BURST")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.RateLimitRPS != 10.5 {
+		t.Errorf("RateLimitRPS = %f, want 10.5", c.RateLimitRPS)
+	}
+	if c.RateLimitBurst != 20 {
+		t.Errorf("RateLimitBurst = %d, want 20", c.RateLimitBurst)
+	}
+}
+
+func TestEnvOverride_GardenerParams(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_GARDENER_CYCLE", "300")
+	os.Setenv("BT_GARDENER_MUTATIONS", "5")
+	os.Setenv("BT_GARDENER_MAX_NODES", "50")
+	defer func() {
+		os.Unsetenv("BT_GARDENER_CYCLE")
+		os.Unsetenv("BT_GARDENER_MUTATIONS")
+		os.Unsetenv("BT_GARDENER_MAX_NODES")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.GardenerCycleInterval != 300 {
+		t.Errorf("GardenerCycleInterval = %d, want 300", c.GardenerCycleInterval)
+	}
+	if c.GardenerMutationsPer != 5 {
+		t.Errorf("GardenerMutationsPer = %d, want 5", c.GardenerMutationsPer)
+	}
+	if c.GardenerMaxNodes != 50 {
+		t.Errorf("GardenerMaxNodes = %d, want 50", c.GardenerMaxNodes)
+	}
+}
+
+func TestEnvOverride_Scheduler(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_SCHEDULER_INTERVAL", "120")
+	defer os.Unsetenv("BT_SCHEDULER_INTERVAL")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.SchedulerCheckInterval != 120 {
+		t.Errorf("SchedulerCheckInterval = %d, want 120", c.SchedulerCheckInterval)
+	}
+}
+
+func TestEnvOverride_ErrorHandling(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_RETRY_MAX_RETRIES", "3")
+	os.Setenv("BT_RETRY_BASE_DELAY_MS", "500")
+	os.Setenv("BT_RETRY_MAX_DELAY_MS", "5000")
+	os.Setenv("BT_RETRY_LLM_BASE_MS", "2000")
+	os.Setenv("BT_RETRY_JITTER", "full_jitter")
+	os.Setenv("BT_RETRY_UNKNOWN", "true")
+	os.Setenv("BT_CB_THRESHOLD", "5")
+	os.Setenv("BT_CB_COOLDOWN_SECS", "60")
+	os.Setenv("BT_DLQ_MAX_ENTRIES", "1000")
+	defer func() {
+		os.Unsetenv("BT_RETRY_MAX_RETRIES")
+		os.Unsetenv("BT_RETRY_BASE_DELAY_MS")
+		os.Unsetenv("BT_RETRY_MAX_DELAY_MS")
+		os.Unsetenv("BT_RETRY_LLM_BASE_MS")
+		os.Unsetenv("BT_RETRY_JITTER")
+		os.Unsetenv("BT_RETRY_UNKNOWN")
+		os.Unsetenv("BT_CB_THRESHOLD")
+		os.Unsetenv("BT_CB_COOLDOWN_SECS")
+		os.Unsetenv("BT_DLQ_MAX_ENTRIES")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.RetryMaxRetries != 3 {
+		t.Errorf("RetryMaxRetries = %d, want 3", c.RetryMaxRetries)
+	}
+	if c.RetryBaseDelayMs != 500 {
+		t.Errorf("RetryBaseDelayMs = %d, want 500", c.RetryBaseDelayMs)
+	}
+	if c.RetryMaxDelayMs != 5000 {
+		t.Errorf("RetryMaxDelayMs = %d, want 5000", c.RetryMaxDelayMs)
+	}
+	if c.RetryLLMBaseMs != 2000 {
+		t.Errorf("RetryLLMBaseMs = %d, want 2000", c.RetryLLMBaseMs)
+	}
+	if c.RetryJitter != "full_jitter" {
+		t.Errorf("RetryJitter = %q, want full_jitter", c.RetryJitter)
+	}
+	if !c.RetryUnknown {
+		t.Error("RetryUnknown = false, want true")
+	}
+	if c.CBThreshold != 5 {
+		t.Errorf("CBThreshold = %d, want 5", c.CBThreshold)
+	}
+	if c.CBCooldownSecs != 60 {
+		t.Errorf("CBCooldownSecs = %d, want 60", c.CBCooldownSecs)
+	}
+	if c.DLQMaxEntries != 1000 {
+		t.Errorf("DLQMaxEntries = %d, want 1000", c.DLQMaxEntries)
+	}
+}
+
+func TestEnvOverride_DeepSeek(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_DEEPSEEK_HOST", "https://api.deepseek.com")
+	os.Setenv("BT_DEEPSEEK_MODEL", "deepseek-v4-pro")
+	os.Setenv("BT_DEEPSEEK_KEY", "sk-test-key")
+	defer func() {
+		os.Unsetenv("BT_DEEPSEEK_HOST")
+		os.Unsetenv("BT_DEEPSEEK_MODEL")
+		os.Unsetenv("BT_DEEPSEEK_KEY")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.DeepSeekHost != "https://api.deepseek.com" {
+		t.Errorf("DeepSeekHost = %q, want https://api.deepseek.com", c.DeepSeekHost)
+	}
+	if c.DeepSeekModel != "deepseek-v4-pro" {
+		t.Errorf("DeepSeekModel = %q, want deepseek-v4-pro", c.DeepSeekModel)
+	}
+	if c.DeepSeekKey != "sk-test-key" {
+		t.Errorf("DeepSeekKey = %q, want sk-test-key", c.DeepSeekKey)
+	}
+}
+
+func TestEnvOverride_DeepSeekKeyFallback(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	// Only set DEEPSEEK_API_KEY (the fallback), NOT BT_DEEPSEEK_KEY
+	os.Unsetenv("BT_DEEPSEEK_KEY")
+	os.Setenv("DEEPSEEK_API_KEY", "sk-fallback-key")
+	defer os.Unsetenv("DEEPSEEK_API_KEY")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.DeepSeekKey != "sk-fallback-key" {
+		t.Errorf("DeepSeekKey = %q, want sk-fallback-key (from fallback)", c.DeepSeekKey)
+	}
+}
+
+func TestEnvOverride_ACP(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_ACP_COMMAND", "acp")
+	os.Setenv("BT_ACP_ARGS", "--verbose")
+	os.Setenv("BT_ACP_CWD", "/tmp/acp-workdir")
+	defer func() {
+		os.Unsetenv("BT_ACP_COMMAND")
+		os.Unsetenv("BT_ACP_ARGS")
+		os.Unsetenv("BT_ACP_CWD")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.ACPCommand != "acp" {
+		t.Errorf("ACPCommand = %q, want acp", c.ACPCommand)
+	}
+	if c.ACPArgs != "--verbose" {
+		t.Errorf("ACPArgs = %q, want --verbose", c.ACPArgs)
+	}
+	if c.ACPCwd != "/tmp/acp-workdir" {
+		t.Errorf("ACPCwd = %q, want /tmp/acp-workdir", c.ACPCwd)
+	}
+}
+
+func TestEnvOverride_LLMProvider(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_LLM_PROVIDER", "deepseek")
+	os.Setenv("BT_DEEPSEEK_KEY", "sk-test-key-for-validation")
+	defer func() {
+		os.Unsetenv("BT_LLM_PROVIDER")
+		os.Unsetenv("BT_DEEPSEEK_KEY")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.LLMProvider != "deepseek" {
+		t.Errorf("LLMProvider = %q, want deepseek", c.LLMProvider)
+	}
+	if c.DeepSeekKey != "sk-test-key-for-validation" {
+		t.Errorf("DeepSeekKey = %q, want sk-test-key-for-validation", c.DeepSeekKey)
+	}
+}
+
+func TestEnvOverride_PersistenceDirs(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_REFLECTIONS_DIR", "/custom/reflections")
+	os.Setenv("BT_AGENT_DEFS_DIR", "/custom/agents")
+	os.Setenv("BT_HISTORY_DIR", "/custom/history")
+	os.Setenv("BT_LOG_DIR", "/custom/logs")
+	defer func() {
+		os.Unsetenv("BT_REFLECTIONS_DIR")
+		os.Unsetenv("BT_AGENT_DEFS_DIR")
+		os.Unsetenv("BT_HISTORY_DIR")
+		os.Unsetenv("BT_LOG_DIR")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.ReflectionsDir != "/custom/reflections" {
+		t.Errorf("ReflectionsDir = %q, want /custom/reflections", c.ReflectionsDir)
+	}
+	if c.AgentDefsDir != "/custom/agents" {
+		t.Errorf("AgentDefsDir = %q, want /custom/agents", c.AgentDefsDir)
+	}
+	if c.HistoryDir != "/custom/history" {
+		t.Errorf("HistoryDir = %q, want /custom/history", c.HistoryDir)
+	}
+	if c.LogDir != "/custom/logs" {
+		t.Errorf("LogDir = %q, want /custom/logs", c.LogDir)
+	}
+}
+
+func TestEnvOverride_FeatureFlags(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_FEATURE_SCHEDULER", "true")
+	os.Setenv("BT_FEATURE_KANBAN", "true")
+	os.Setenv("BT_FEATURE_STARTUP_SIM", "false")
+	defer func() {
+		os.Unsetenv("BT_FEATURE_SCHEDULER")
+		os.Unsetenv("BT_FEATURE_KANBAN")
+		os.Unsetenv("BT_FEATURE_STARTUP_SIM")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if !c.SchedulerEnabled {
+		t.Error("SchedulerEnabled = false, want true")
+	}
+	if !c.KanbanEnabled {
+		t.Error("KanbanEnabled = false, want true")
+	}
+	if c.StartupSimEnabled {
+		t.Error("StartupSimEnabled = true, want false")
+	}
+}
+
+func TestEnvOverride_MaxBodySize(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_MAX_BODY_SIZE", "1048576")
+	defer os.Unsetenv("BT_MAX_BODY_SIZE")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.MaxBodySize != 1048576 {
+		t.Errorf("MaxBodySize = %d, want 1048576", c.MaxBodySize)
+	}
+}
+
+func TestEnvOverride_APIKey(t *testing.T) {
+	os.Unsetenv("BT_CONFIG_FILE")
+	os.Setenv("BT_API_KEY", "test-api-key-123")
+	defer os.Unsetenv("BT_API_KEY")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if c.APIKey != "test-api-key-123" {
+		t.Errorf("APIKey = %q, want test-api-key-123", c.APIKey)
+	}
+}
+
+func TestParseBool_AllValues(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"True", true},
+		{"TRUE", true},
+		{"yes", true},
+		{"Yes", true},
+		{"on", true},
+		{"ON", true},
+		{"0", false},
+		{"false", false},
+		{"False", false},
+		{"off", false},
+		{"random", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseBool(tt.input)
+			if got != tt.want {
+				t.Errorf("parseBool(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSaveFile_ErrorPath(t *testing.T) {
+	c := newDefaultConfig()
+	err := c.SaveFile("/nonexistent/deep/path/config.json")
+	if err == nil {
+		t.Error("expected error writing to nonexistent directory")
+	}
+}
+
+func TestValidationError_Error(t *testing.T) {
+	e := &ValidationError{Field: "DashboardPort", Message: "must be between 1 and 65535"}
+	got := e.Error()
+	want := "config validation: DashboardPort: must be between 1 and 65535"
+	if got != want {
+		t.Errorf("ValidationError.Error() = %q, want %q", got, want)
+	}
+}
+
+func TestValidationErrors_Error(t *testing.T) {
+	e := ValidationErrors{
+		{Field: "DashboardPort", Message: "must be between 1 and 65535"},
+		{Field: "LLMTimeout", Message: "must be between 1 and 3600 seconds"},
+	}
+	got := e.Error()
+	want := "config validation: DashboardPort: must be between 1 and 65535; config validation: LLMTimeout: must be between 1 and 3600 seconds"
+	if got != want {
+		t.Errorf("ValidationErrors.Error() = %q, want %q", got, want)
+	}
+}
+
+func TestValidationErrors_Empty(t *testing.T) {
+	e := ValidationErrors{}
+	got := e.Error()
+	if got != "" {
+		t.Errorf("empty ValidationErrors.Error() = %q, want empty string", got)
+	}
+}

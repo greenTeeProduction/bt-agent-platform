@@ -180,8 +180,8 @@
     "hash": "417e7fd94473176e87b1be8c910af756"
   },
   "/home/nico/go-bt-evolve/internal/config/config_test.go": {
-    "mtime": 1780410356.995423,
-    "hash": "f137c73302c43ace0069667b3b319b3c"
+    "mtime": 1780411233.4847085,
+    "hash": "4b4ace1a8e8b59a6316c60cdbbe150d5"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher.go": {
     "mtime": 1780295456.7383497,
@@ -192,8 +192,8 @@
     "hash": "c6ee820de4e4830c6d40b77d6780744e"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
-    "mtime": 1780410805.158168,
-    "hash": "d5719bc0bb247e4a1bc82cc5ba1061ee"
+    "mtime": 1780411272.1290107,
+    "hash": "b40a114d3bc9beaddf7612da9831432f"
   },
   "/home/nico/go-bt-evolve/internal/llm/provider.go": {
     "mtime": 1780333262.049399,

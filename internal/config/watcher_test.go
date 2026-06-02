@@ -565,3 +565,61 @@ func writeDotenvFile(t *testing.T, path, content string) {
 	}
 	time.Sleep(15 * time.Millisecond)
 }
+
+func TestConfigWatcher_LastMod(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lastmod.json")
+	writeConfigFile(t, path, map[string]any{"dashboard_port": 8080})
+
+	w := NewConfigWatcher(path, 50*time.Millisecond)
+	w.Start()
+	defer w.Stop()
+
+	// After start, the watcher should have read the file and recorded its mod time.
+	time.Sleep(100 * time.Millisecond)
+
+	mod := w.LastMod()
+	if mod.IsZero() {
+		t.Error("LastMod() returned zero time, want non-zero")
+	}
+
+	// Write an updated file — LastMod should advance after the next poll.
+	time.Sleep(50 * time.Millisecond) // ensure timestamp advances
+	writeConfigFile(t, path, map[string]any{"dashboard_port": 8080, "ollama_model": "new-model"})
+	time.Sleep(150 * time.Millisecond)
+
+	newMod := w.LastMod()
+	if newMod.IsZero() {
+		t.Error("LastMod() after file change returned zero time")
+	}
+	if !newMod.After(mod) && !newMod.Equal(mod) {
+		t.Errorf("LastMod() after change = %v, expected > %v", newMod, mod)
+	}
+}
+
+func TestConfigWatcher_LastMod_NotStarted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "neverstarted.json")
+	writeConfigFile(t, path, map[string]any{"dashboard_port": 8080})
+
+	w := NewConfigWatcher(path, 50*time.Millisecond)
+	// Do NOT call w.Start()
+
+	mod := w.LastMod()
+	if !mod.IsZero() {
+		t.Errorf("LastMod() on never-started watcher = %v, want zero time", mod)
+	}
+}
+
+func TestConfigWatcher_LastSize_NotStarted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "neverstartedsize.json")
+	writeConfigFile(t, path, map[string]any{"dashboard_port": 8080})
+
+	w := NewConfigWatcher(path, 50*time.Millisecond)
+
+	size := w.LastSize()
+	if size != 0 {
+		t.Errorf("LastSize() on never-started watcher = %d, want 0", size)
+	}
+}
