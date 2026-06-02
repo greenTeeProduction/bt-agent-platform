@@ -219,6 +219,73 @@ func TestNewGraphifyTool_ExplainAction(t *testing.T) {
 	tool.Call("explain BuildTree")
 }
 
+// ─── newWebSearchTool — execution tests ───
+
+func TestNewWebSearchTool_BasicQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network-dependent test in short mode")
+	}
+	tool := newWebSearchTool()
+	result := tool.Call("golang programming")
+	if result == "" {
+		t.Error("expected non-empty search result")
+	}
+	if strings.Contains(result, "error") && strings.Contains(result, "no results") {
+		t.Logf("search returned no results (network may be unavailable): %s", result)
+	}
+}
+
+func TestNewWebSearchTool_EmptyQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network-dependent test in short mode")
+	}
+	tool := newWebSearchTool()
+	result := tool.Call("")
+	// Even empty queries return some response from the tool
+	if result == "" {
+		t.Error("expected non-empty result")
+	}
+}
+
+func TestNewWebSearchTool_NoResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network-dependent test in short mode")
+	}
+	tool := newWebSearchTool()
+	result := tool.Call("xyzzzqwerty999notexist")
+	if result == "" {
+		t.Error("expected non-empty result even for no-results query")
+	}
+}
+
+func TestNewWebSearchTool_Truncation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network-dependent test in short mode")
+	}
+	tool := newWebSearchTool()
+	// Very long query to test the code path
+	longQuery := strings.Repeat("golang ", 500)
+	result := tool.Call(longQuery)
+	if result == "" {
+		t.Error("expected non-empty result")
+	}
+	t.Logf("web search result length: %d", len(result))
+}
+
+// ─── newGoTestTool — execution tests ───
+
+func TestNewGoTestTool_NonRecursivePackage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping go test execution in short mode")
+	}
+	// Use a tiny non-engine package to avoid recursive test execution
+	tool := newGoTestTool()
+	result := tool.Call("-run ^$ -count=1 ./internal/reflection/")
+	if result == "" {
+		t.Error("expected non-empty result")
+	}
+}
+
 // ─── extractDuckDuckGoResults — additional edge cases ───
 
 func TestExtractDuckDuckGoResults_WithTagsInSnippet(t *testing.T) {
