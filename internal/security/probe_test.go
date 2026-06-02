@@ -62,6 +62,18 @@ func TestProbeDashboard_PassesHardenedStack(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
+		// Simulate login that sets session cookie with proper security attributes
+		http.SetCookie(w, &http.Cookie{
+			Name:     "bt_session",
+			Value:    "test-session-token",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/",
+		})
+		w.WriteHeader(http.StatusOK)
+	})
 
 	handler := SecurityHeadersMiddleware(DefaultSecurityHeaders())(
 		CrossOriginMiddleware("*", "GET, POST, OPTIONS")(
@@ -91,20 +103,21 @@ func TestProbeDashboard_PassesHardenedStack(t *testing.T) {
 		"header_referrer-policy",
 		"header_permissions-policy",
 		"header_x-xss-protection",
+		"header_strict-transport-security",
 		"csrf_protection",
 		"rate_limiting",
 		"protected_endpoint_reachable",
+		"session_cookie_attributes",
+		"input_sanitization",
+		"request_timeout_handling",
 	}
 	for _, name := range requiredChecks {
 		if !seenChecks[name] {
-			// rate_limiting may fail in test (local server can process 8 reqs instantly)
-			// protected_endpoint_reachable may be unreachable if dlq not wired
-			// Skip non-critical probes — the pass flag handles it
-			_ = name
+			t.Errorf("missing required probe check: %s", name)
 		}
 	}
 
-	// The content-type probe name changed
+	// The content-type probe name
 	seenContentTypeProbe := false
 	for _, check := range report.Checks {
 		if check.Name == "mutating_without_content_type_rejected" {
