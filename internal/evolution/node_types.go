@@ -81,6 +81,7 @@ var KnownNodeTypes = map[string]bool{
 	"StrategyRouter":   true,
 	"Monitor":          true,
 	"UtilitySelector":  true, // Plan #2
+	"DecisionTree":     true, // Deterministic ChainState/source-based branching
 	"PlannerNode":      true, // Plan #2 extension
 	"ReactiveParallel": true, // Plan #3
 	"AbortOnEvent":     true, // Plan #3

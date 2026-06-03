@@ -150,6 +150,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return btleaf.NewCondition(bb.conditionForName(node.Name))
 	case "UtilitySelector":
 		return BuildUtilitySelector(node, bb)
+	case "DecisionTree":
+		return BuildDecisionTree(node, bb)
 	case "PlannerNode":
 		// PlannerNode extends UtilitySelector with GOAP goal management
 		return BuildPlannerNode(node, bb)
