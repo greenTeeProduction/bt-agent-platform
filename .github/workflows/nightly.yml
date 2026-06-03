@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: /tmp/coverage.out
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload benchmark artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-output
           path: /tmp/bench-output.txt
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload regression artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-regression
           path: /tmp/bench-regression.txt
