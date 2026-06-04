@@ -173,6 +173,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		cmd = BuildEventDrivenAbort(node, bb)
 	case "ReactiveParallel":
 		cmd = BuildReactiveParallel(node, bb)
+	case "HumanApprovalGate":
+		cmd = buildHumanApprovalGate(node, bb, parentName)
 	default:
 		cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
 	}

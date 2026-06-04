@@ -92,6 +92,18 @@ func builtinBlocks() []Block {
 			},
 		},
 		{
+			ID:          "core:human_gate",
+			Name:        "HumanGate",
+			Description: "Human-in-the-loop checkpoint before risky execution",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := HumanGateBlock("HumanGate", "Review the task and approve before the agent executes tools or makes external changes.")
+				return &n
+			}(),
+		},
+		{
 			ID:          "core:reflect_only",
 			Name:        "ReflectOnly",
 			Description: "Reflection with timeout guard",

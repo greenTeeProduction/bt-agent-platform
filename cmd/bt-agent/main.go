@@ -10,6 +10,7 @@ import (
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/blocks"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -236,6 +237,9 @@ func main() {
 		os.Exit(1)
 	}
 	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
+	if _, err := hitl.InitStore(filepath.Join(home, ".go-bt-evolve")); err != nil {
+		btlog.Warn("hitl store init failed", "error", err)
+	}
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
