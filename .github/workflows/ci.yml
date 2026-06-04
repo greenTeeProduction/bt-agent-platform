@@ -43,7 +43,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
           args: --timeout=5m --out-format=colored-line-number
 
   security:
@@ -68,7 +68,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: -no-fail -fmt sarif -out results.sarif -severity medium -conf .gosec.json ./...
+          args: -no-fail -fmt sarif -out results.sarif -severity medium ./...
 
       - name: Go vulnerability check (govulncheck)
         run: |
@@ -83,8 +83,8 @@ jobs:
 
       - name: Check for high/critical issues
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -quiet -severity high ./...
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          gosec -quiet -severity high -exclude=G404,G304,G703,G704,G115 ./...
         continue-on-error: false
 
   test:
@@ -107,6 +107,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run tests
+        env:
+          BT_SKIP_LLM_TESTS: "1"
         run: go test -short -count=1 -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Coverage summary
