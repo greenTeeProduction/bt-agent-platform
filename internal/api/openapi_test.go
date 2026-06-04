@@ -507,7 +507,7 @@ func TestDashboardRoutes_Completeness(t *testing.T) {
 		if r.Summary == "" {
 			t.Errorf("route %d (%s %s) has empty summary", i, r.Method, r.Path)
 		}
-		if r.Tags == nil || len(r.Tags) == 0 {
+		if len(r.Tags) == 0 {
 			t.Errorf("route %d (%s %s) has no tags", i, r.Method, r.Path)
 		}
 		if len(r.Responses) == 0 {
@@ -756,7 +756,7 @@ func TestDashboardRoutes_SwaggerRoute(t *testing.T) {
 	if swaggerRoute.Summary == "" {
 		t.Error("expected non-empty summary")
 	}
-	if swaggerRoute.Tags == nil || len(swaggerRoute.Tags) == 0 {
+	if len(swaggerRoute.Tags) == 0 {
 		t.Error("expected tags")
 	}
 	// Swagger UI is a public endpoint — no auth required

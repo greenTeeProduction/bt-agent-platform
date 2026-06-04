@@ -92,8 +92,8 @@ func (t *GardenerRecommendTool) Call(_ context.Context, _ string) (string, error
 			continue
 		}
 		f := evaluator.EvaluateTree(e.Tree, records)
-		action := "monitor"
-				switch {
+		var action string
+		switch {
 		case f.Composite < 40:
 			action = "URGENT: prune dead paths, add retries"
 		case f.Composite < 65:

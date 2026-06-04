@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -40,17 +39,6 @@ func TestScoreChild_NilChainState(t *testing.T) {
 	if score.WeightedScore == 0 {
 		t.Log("ScoreChild returned WeightedScore=0 for nil ChainState")
 	}
-}
-
-// ─── coverage gaps: registry.go execLLMCallAction err path ───
-
-// errMockLLM returns an error from Generate
-type errMockLLM struct {
-	mockLLM
-}
-
-func (e *errMockLLM) Generate(_ string) (string, error) {
-	return "", errors.New("simulated error")
 }
 
 // ─── coverage gaps: tree.go validateOutputQuality ───

@@ -384,9 +384,18 @@ func TestConnPool_Stats_AfterRequests(t *testing.T) {
 	defer server.Close()
 
 	client := pool.HTTPClient()
-	_, _ = client.Get(server.URL + "/s1")
-	_, _ = client.Get(server.URL + "/s2")
-	_, _ = client.Get(server.URL + "/s3")
+	resp1, _ := client.Get(server.URL + "/s1")
+	if resp1 != nil {
+		resp1.Body.Close()
+	}
+	resp2, _ := client.Get(server.URL + "/s2")
+	if resp2 != nil {
+		resp2.Body.Close()
+	}
+	resp3, _ := client.Get(server.URL + "/s3")
+	if resp3 != nil {
+		resp3.Body.Close()
+	}
 
 	stats := pool.Stats()
 	if stats.Created == 0 {

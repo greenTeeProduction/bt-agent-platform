@@ -215,10 +215,7 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 		}
 		router.Children = append(router.Children, path)
 	}
-	tree.Children = append(tree.Children, router)
-
-	// Outcome handling
-	tree.Children = append(tree.Children,
+	tree.Children = append(tree.Children, router,
 		evolution.SerializableNode{Type: "Action", Name: "ReflectOnOutcome"},
 		f.defaultOutcomeSelector(),
 	)

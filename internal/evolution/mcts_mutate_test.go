@@ -269,7 +269,7 @@ func TestMCTSMutator_ExpandNode(t *testing.T) {
 	if child.Parent != root {
 		t.Error("child.Parent not set")
 	}
-	if root.UntriedOps != nil && len(root.UntriedOps) != 0 {
+	if len(root.UntriedOps) != 0 {
 		t.Errorf("expected root.UntriedOps empty, got %v", root.UntriedOps)
 	}
 	// Should have its own untried ops

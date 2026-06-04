@@ -93,16 +93,16 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	_, _ = io.Copy(io.Discard, getResp.Body)
 	getResp.Body.Close()
 
-	report.Checks = append(report.Checks, statusCheck("health_reachable", "2xx/3xx/4xx HTTP response", getResp.StatusCode < 500, fmt.Sprintf("status %d", getResp.StatusCode)))
-	report.Checks = append(report.Checks, headerEquals(getResp.Header, "X-Content-Type-Options", "nosniff"))
-	report.Checks = append(report.Checks, headerPresent(getResp.Header, "Content-Security-Policy"))
-	report.Checks = append(report.Checks, headerPresent(getResp.Header, "X-Frame-Options"))
-	report.Checks = append(report.Checks, headerPresent(getResp.Header, "Cache-Control"))
-
-	// ── Additional hardening headers ──
-	report.Checks = append(report.Checks, headerPresent(getResp.Header, "Referrer-Policy"))
-	report.Checks = append(report.Checks, headerPresent(getResp.Header, "Permissions-Policy"))
-	report.Checks = append(report.Checks, headerEquals(getResp.Header, "X-XSS-Protection", "1; mode=block"))
+	report.Checks = append(report.Checks,
+		statusCheck("health_reachable", "2xx/3xx/4xx HTTP response", getResp.StatusCode < 500, fmt.Sprintf("status %d", getResp.StatusCode)),
+		headerEquals(getResp.Header, "X-Content-Type-Options", "nosniff"),
+		headerPresent(getResp.Header, "Content-Security-Policy"),
+		headerPresent(getResp.Header, "X-Frame-Options"),
+		headerPresent(getResp.Header, "Cache-Control"),
+		headerPresent(getResp.Header, "Referrer-Policy"),
+		headerPresent(getResp.Header, "Permissions-Policy"),
+		headerEquals(getResp.Header, "X-XSS-Protection", "1; mode=block"),
+	)
 
 	// ── HSTS header (Strict-Transport-Security) — expected when TLS/HTTPS is active ──
 	rst := getResp.Header.Get("Strict-Transport-Security")

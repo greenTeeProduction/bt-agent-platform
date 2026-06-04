@@ -440,8 +440,8 @@ type MockLLM struct {
 	ToImprove  string
 }
 
-func (m *MockLLM) AnalyzeComplexity(_ string) string        { return m.Complexity }
-func (m *MockLLM) GeneratePlan(_, _ string) string { return m.Plan }
+func (m *MockLLM) AnalyzeComplexity(_ string) string { return m.Complexity }
+func (m *MockLLM) GeneratePlan(_, _ string) string   { return m.Plan }
 func (m *MockLLM) Reflect(_, _, _ string) (string, string) {
 	return m.WentWell, m.ToImprove
 }

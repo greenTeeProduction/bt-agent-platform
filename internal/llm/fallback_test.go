@@ -32,9 +32,9 @@ func (s *stubLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, e
 	return s.Generate(prompt)
 }
 
-func (s *stubLLM) AnalyzeComplexity(_ string) string             { return "low" }
-func (s *stubLLM) GeneratePlan(_, complexity string) string      { return "plan" }
-func (s *stubLLM) Reflect(_, outcome, _ string) (string, string) { return "ok", "none" }
+func (s *stubLLM) AnalyzeComplexity(_ string) string       { return "low" }
+func (s *stubLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (s *stubLLM) Reflect(_, _, _ string) (string, string) { return "ok", "none" }
 
 func TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(t *testing.T) {
 	primary := &stubLLM{name: "primary", err: errors.New("primary down")}

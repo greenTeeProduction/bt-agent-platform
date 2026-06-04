@@ -219,9 +219,11 @@ func (ms *MemoryStore) PreviousRunContext(history *History, agentName string, n 
 	lines = append(lines, fmt.Sprintf("PREVIOUS RUNS — Last %d successful task outputs:", len(successes)))
 	for i, s := range successes {
 		summary := summarizeOutput(s.Output, 200)
-		lines = append(lines, fmt.Sprintf("\n  Run %d (%s, %s):", i+1, s.EndedAt.Format("15:04"), s.Duration))
-		lines = append(lines, fmt.Sprintf("    Task: %s", truncate(s.Task, 100)))
-		lines = append(lines, fmt.Sprintf("    Output: %s", summary))
+		lines = append(lines,
+			fmt.Sprintf("\n  Run %d (%s, %s):", i+1, s.EndedAt.Format("15:04"), s.Duration),
+			fmt.Sprintf("    Task: %s", truncate(s.Task, 100)),
+			fmt.Sprintf("    Output: %s", summary),
+		)
 	}
 
 	return strings.Join(lines, "\n")

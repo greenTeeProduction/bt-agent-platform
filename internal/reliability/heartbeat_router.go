@@ -18,9 +18,10 @@ type AgentRouterHeartbeat struct {
 // HeartbeatStats captures the heartbeat-based node aliveness snapshot
 // for dashboard monitoring and operator diagnostics.
 type HeartbeatStats struct {
-	Tracked int `json:"tracked"` // nodes registered in the heartbeat tracker
-	Alive   int `json:"alive"`   // nodes that have pinged within TTL
-	Expired int `json:"expired"` // nodes past TTL
+	Tracked          int `json:"tracked"`           // nodes registered in the heartbeat tracker
+	Alive            int `json:"alive"`             // nodes that have pinged within TTL
+	Expired          int `json:"expired"`           // nodes past TTL
+	HealthyExecutors int `json:"healthy_executors"` // executors passing heartbeat-aware health
 }
 
 // ConsecutiveFailures returns the total number of executors with
@@ -70,9 +71,10 @@ func (r *AgentRouter) HeartbeatStats() *HeartbeatStats {
 	}
 	total, alive, expired := r.heartbeat.hb.Stats()
 	return &HeartbeatStats{
-		Tracked: total,
-		Alive:   alive,
-		Expired: expired,
+		Tracked:          total,
+		Alive:            alive,
+		Expired:          expired,
+		HealthyExecutors: r.healthyExecutorCount(),
 	}
 }
 
@@ -170,13 +172,7 @@ func (r *AgentRouter) healthyExecutorCount() int {
 			continue
 		}
 		if r.heartbeat != nil && r.heartbeat.hb != nil {
-			// Heartbeat check — cheaper than Health()
-			nodeID := ""
-			if r.heartbeat.executorID != nil {
-				nodeID = r.heartbeat.executorID(i)
-			} else {
-				nodeID = e.String()
-			}
+			nodeID := r.executorIDForHeartbeat(i)
 			if nodeID != "" && r.heartbeat.hb.IsAlive(nodeID) {
 				count++
 				continue
@@ -214,12 +210,7 @@ func (r *AgentRouter) HealthyExecutors2() []AgentExecutor {
 			continue
 		}
 		if r.heartbeat != nil && r.heartbeat.hb != nil {
-			nodeID := ""
-			if r.heartbeat.executorID != nil {
-				nodeID = r.heartbeat.executorID(i)
-			} else {
-				nodeID = e.String()
-			}
+			nodeID := r.executorIDForHeartbeat(i)
 			if nodeID != "" && r.heartbeat.hb.IsAlive(nodeID) {
 				healthy = append(healthy, e)
 				continue
@@ -249,16 +240,6 @@ func (r *AgentRouter) executorIDForHeartbeat(idx int) string {
 	}
 	return ""
 }
-
-// Ensure activeCounts is not empty for the least-connections path.
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-var _ = maxInt // used by weighted_router.go
 
 // ─── Modified Execute — heartbeat-aware health check ───────────────────
 

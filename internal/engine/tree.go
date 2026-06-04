@@ -1474,9 +1474,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "critical", "urgent", "asap")
 		}
 	case "ValidateOutput":
-		return func(b *Blackboard) bool {
-			return validateOutputQuality(b)
-		}
+		return validateOutputQuality
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)

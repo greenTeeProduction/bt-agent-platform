@@ -311,8 +311,6 @@ updates:
 	}
 	if report.RunnerInstalled {
 		t.Log("runner IS installed on this machine (unexpected in temp dir test)")
-	} else {
-		// intentionally empty: no runner in temp dir
 	}
 }
 
@@ -372,6 +370,7 @@ jobs:
     steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64 && bt-scalability-probe-linux-arm64'}]
 `
 }
+
 func minimalNightly() string {
 	return `name: Nightly
 on: { schedule: [{cron: '0 3 * * *'}], workflow_dispatch: {} }

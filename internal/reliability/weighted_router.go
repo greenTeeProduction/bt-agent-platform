@@ -93,9 +93,7 @@ func (r *AgentRouter) pickLeastConnections(executors []AgentExecutor, activeCoun
 
 	for i, e := range executors {
 		// Heartbeat-aware health check first.
-		if r.isAliveByHeartbeat(i) {
-			// intentionally empty: heartbeat alive, proceed
-		} else if e.Health() != nil {
+		if !r.isAliveByHeartbeat(i) && e.Health() != nil {
 			continue // skip unhealthy executors
 		}
 		count := int64(0)

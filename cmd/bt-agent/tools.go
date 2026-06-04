@@ -58,7 +58,6 @@ type mcpDeps struct {
 	llmHealth    *llm.HealthMonitor
 	cfg          *config.Config
 	agentHome    string
-	tracerHome   string
 	// Agent platform
 	agentReg    *agent.Registry
 	agentHist   *agent.History
@@ -663,7 +662,16 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				}
 				tree, treeID = f.CreateTree(params.Task, category, nil)
 			}
-			data, _ := json.Marshal(map[string]interface{}{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": treeID[:strings.Index(treeID, ":")]})
+			cat := treeID
+			if idx := strings.Index(treeID, ":"); idx >= 0 {
+				cat = treeID[:idx]
+			}
+			data, _ := json.Marshal(map[string]interface{}{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat, "cat_dup": func() string {
+				if i := strings.Index(treeID, ":"); i >= 0 {
+					return treeID[:i]
+				}
+				return treeID
+			}()})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

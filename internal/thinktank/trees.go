@@ -167,31 +167,29 @@ func DebateTree(fellows []Fellow, topic string) *evolution.SerializableNode {
 			},
 		}
 	}
-	children = append(children, evolution.SerializableNode{
-		Type:     "Sequence",
-		Name:     "Rebuttal",
-		Children: rebuttalChildren,
-	})
-
-	// Synthesis Move: find common ground across all perspectives
-	children = append(children, evolution.SerializableNode{
-		Type: "ChainAction",
-		Name: fmt.Sprintf("llm_call:You are the debate moderator. After hearing opening statements, cross-examination, and rebuttals from %d fellows on '%s', identify areas of common ground. What do all (or most) perspectives agree on? Where are the irreducible disagreements? Map the landscape of consensus and conflict. List: POINTS OF AGREEMENT, POINTS OF DISAGREEMENT, UNRESOLVED TENSIONS.", len(fellows), topic),
-		Metadata: map[string]any{
-			"system_msg": "You are an expert debate moderator and dialectical synthesizer. You are skilled at finding common ground between opposing viewpoints while being honest about genuine disagreements. You do not take sides but map the argument landscape clearly.",
-			"max_tokens": float64(3072),
+	children = append(children,
+		evolution.SerializableNode{
+			Type:     "Sequence",
+			Name:     "Rebuttal",
+			Children: rebuttalChildren,
 		},
-	})
-
-	// CallVote: assess which arguments have strongest evidence
-	children = append(children, evolution.SerializableNode{
-		Type: "ChainAction",
-		Name: fmt.Sprintf("llm_call:You are the debate judge. Evaluate the debate on '%s' involving %d fellows. For each major argument presented, assess: (1) Quality of evidence, (2) Logical coherence, (3) Predictive power. Rank the arguments by strength. Identify which positions are most defensible and which are weakest. Output as: STRONGEST ARGUMENTS: ... WEAKEST ARGUMENTS: ... OVERALL ASSESSMENT: ...", topic, len(fellows)),
-		Metadata: map[string]any{
-			"system_msg": "You are an impartial debate judge with expertise in epistemology and argumentation. You evaluate arguments based on evidence quality, logical rigor, and explanatory power. You are fair but decisive.",
-			"max_tokens": float64(2048),
+		evolution.SerializableNode{
+			Type: "ChainAction",
+			Name: fmt.Sprintf("llm_call:You are the debate moderator. After hearing opening statements, cross-examination, and rebuttals from %d fellows on '%s', identify areas of common ground. What do all (or most) perspectives agree on? Where are the irreducible disagreements? Map the landscape of consensus and conflict. List: POINTS OF AGREEMENT, POINTS OF DISAGREEMENT, UNRESOLVED TENSIONS.", len(fellows), topic),
+			Metadata: map[string]any{
+				"system_msg": "You are an expert debate moderator and dialectical synthesizer. You are skilled at finding common ground between opposing viewpoints while being honest about genuine disagreements. You do not take sides but map the argument landscape clearly.",
+				"max_tokens": float64(3072),
+			},
 		},
-	})
+		evolution.SerializableNode{
+			Type: "ChainAction",
+			Name: fmt.Sprintf("llm_call:You are the debate judge. Evaluate the debate on '%s' involving %d fellows. For each major argument presented, assess: (1) Quality of evidence, (2) Logical coherence, (3) Predictive power. Rank the arguments by strength. Identify which positions are most defensible and which are weakest. Output as: STRONGEST ARGUMENTS: ... WEAKEST ARGUMENTS: ... OVERALL ASSESSMENT: ...", topic, len(fellows)),
+			Metadata: map[string]any{
+				"system_msg": "You are an impartial debate judge with expertise in epistemology and argumentation. You evaluate arguments based on evidence quality, logical rigor, and explanatory power. You are fair but decisive.",
+				"max_tokens": float64(2048),
+			},
+		},
+	)
 
 	return &evolution.SerializableNode{
 		Type:     "Sequence",

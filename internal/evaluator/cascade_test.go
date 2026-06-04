@@ -103,9 +103,7 @@ func buildDeepTree(depth, width int) *evolution.SerializableNode {
 
 func TestCascadeEvaluator_BasicFlow(t *testing.T) {
 	cfg := DefaultCascadeConfig()
-	quickFn := func(tree *evolution.SerializableNode) float64 {
-		return StructuralQuickEval(tree)
-	}
+	quickFn := StructuralQuickEval
 	benchFn := func(tree *evolution.SerializableNode) float64 {
 		// Mock: return score based on tree name
 		if tree.Name == "bad_tree" {
@@ -156,9 +154,7 @@ func TestCascadeEvaluator_BasicFlow(t *testing.T) {
 
 func TestCascadeEvaluator_QuickFilter(t *testing.T) {
 	cfg := DefaultCascadeConfig()
-	quickFn := func(tree *evolution.SerializableNode) float64 {
-		return StructuralQuickEval(tree)
-	}
+	quickFn := StructuralQuickEval
 	benchFn := func(_ *evolution.SerializableNode) float64 {
 		return 0 // should never be called for rejected
 	}

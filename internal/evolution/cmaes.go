@@ -471,9 +471,9 @@ func sampleStdNormal(n int) []float64 {
 
 // multiplyCholesky computes L * x where L is the lower Cholesky factor of C.
 // Returns sqrt(C) * x = L * x.
-func multiplyCholesky(C [][]float64, x []float64) []float64 {
+func multiplyCholesky(covMatrix [][]float64, x []float64) []float64 {
 	n := len(x)
-	L := cholesky(C)
+	L := cholesky(covMatrix)
 	result := make([]float64, n)
 	for i := 0; i < n; i++ {
 		for j := 0; j <= i; j++ {

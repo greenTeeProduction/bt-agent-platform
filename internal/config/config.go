@@ -1002,31 +1002,13 @@ func (c *Config) Diff(other *Config) []string {
 		diffs = append(diffs, fmt.Sprintf("DashboardPort: %d → %d", c.DashboardPort, other.DashboardPort))
 	}
 	if c.APIKey != other.APIKey {
-		if c.APIKey == "" {
-			diffs = append(diffs, "APIKey: set")
-		} else if other.APIKey == "" {
-			diffs = append(diffs, "APIKey: removed")
-		} else {
-			diffs = append(diffs, "APIKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("APIKey", c.APIKey, other.APIKey))
 	}
 	if c.TLSCert != other.TLSCert {
-		if c.TLSCert == "" {
-			diffs = append(diffs, "TLSCert: set")
-		} else if other.TLSCert == "" {
-			diffs = append(diffs, "TLSCert: removed")
-		} else {
-			diffs = append(diffs, "TLSCert: changed")
-		}
+		diffs = append(diffs, diffSecretField("TLSCert", c.TLSCert, other.TLSCert))
 	}
 	if c.TLSKey != other.TLSKey {
-		if c.TLSKey == "" {
-			diffs = append(diffs, "TLSKey: set")
-		} else if other.TLSKey == "" {
-			diffs = append(diffs, "TLSKey: removed")
-		} else {
-			diffs = append(diffs, "TLSKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("TLSKey", c.TLSKey, other.TLSKey))
 	}
 
 	// LLM
@@ -1046,13 +1028,7 @@ func (c *Config) Diff(other *Config) []string {
 		diffs = append(diffs, fmt.Sprintf("DeepSeekModel: %s → %s", c.DeepSeekModel, other.DeepSeekModel))
 	}
 	if c.DeepSeekKey != other.DeepSeekKey {
-		if c.DeepSeekKey == "" {
-			diffs = append(diffs, "DeepSeekKey: set")
-		} else if other.DeepSeekKey == "" {
-			diffs = append(diffs, "DeepSeekKey: removed")
-		} else {
-			diffs = append(diffs, "DeepSeekKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("DeepSeekKey", c.DeepSeekKey, other.DeepSeekKey))
 	}
 	if c.LLMTimeout != other.LLMTimeout {
 		diffs = append(diffs, fmt.Sprintf("LLMTimeout: %ds → %ds", c.LLMTimeout, other.LLMTimeout))
@@ -1429,4 +1405,15 @@ func ApplyHITLPolicy(c *Config) {
 		AutoApprove: c.HITL.AutoApprove,
 		TimeoutSecs: c.HITL.TimeoutSecs,
 	})
+}
+
+func diffSecretField(name, current, other string) string {
+	switch {
+	case current == "":
+		return name + ": set"
+	case other == "":
+		return name + ": removed"
+	default:
+		return name + ": changed"
+	}
 }

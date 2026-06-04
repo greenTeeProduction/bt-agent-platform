@@ -499,10 +499,8 @@ func TestDeepSeekClient_Generate_APIError(t *testing.T) {
 	_, err := client.Generate("hello")
 	if err == nil {
 		t.Error("expected error for API error response")
-	} else {
-		if !strings.Contains(err.Error(), "rate limit exceeded") {
-			t.Errorf("error should mention rate limit, got: %v", err)
-		}
+	} else if !strings.Contains(err.Error(), "rate limit exceeded") {
+		t.Errorf("error should mention rate limit, got: %v", err)
 	}
 }
 
@@ -525,10 +523,8 @@ func TestDeepSeekClient_Generate_EmptyChoices(t *testing.T) {
 	_, err := client.Generate("hello")
 	if err == nil {
 		t.Error("expected error for empty choices")
-	} else {
-		if !strings.Contains(err.Error(), "no choices") {
-			t.Errorf("error should mention no choices, got: %v", err)
-		}
+	} else if !strings.Contains(err.Error(), "no choices") {
+		t.Errorf("error should mention no choices, got: %v", err)
 	}
 }
 

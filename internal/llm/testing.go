@@ -81,12 +81,12 @@ func (m *MockLLM) AnalyzeComplexity(_ string) string {
 }
 
 // GeneratePlan returns the canned Plan.
-func (m *MockLLM) GeneratePlan(_, complexity string) string {
+func (m *MockLLM) GeneratePlan(_, _ string) string {
 	return m.defPlan()
 }
 
 // Reflect returns the canned WentWell and ToImprove.
-func (m *MockLLM) Reflect(_, outcome, _ string) (string, string) {
+func (m *MockLLM) Reflect(_, _, _ string) (string, string) {
 	wentWell := m.WentWell
 	if wentWell == "" {
 		wentWell = "ok"

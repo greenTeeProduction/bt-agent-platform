@@ -481,7 +481,7 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 			if rand.Intn(2) == 0 {
 				// Shift first to last
 				first := children[0]
-				tree.Children[i].Children = append(children[1:], first)
+				tree.Children[i].Children = append(tree.Children[i].Children[1:], first)
 			} else {
 				// Shift last to first
 				last := children[len(children)-1]

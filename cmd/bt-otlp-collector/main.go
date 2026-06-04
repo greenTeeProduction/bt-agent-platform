@@ -69,6 +69,7 @@ func main() {
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("bt-otlp-collector starting on %s, logging to %s", addr, logPath)
 	if err := http.ListenAndServe(addr, mux); err != nil {
+		_ = logFile.Close()
 		log.Fatalf("server error: %v", err)
 	}
 }

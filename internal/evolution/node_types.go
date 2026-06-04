@@ -150,7 +150,7 @@ func (e TypedEdge) GetChildIndex(childrenCount int) (int, bool) {
 // MarshalJSON handles the omitempty behavior for TypedEdge.
 func (e TypedEdge) MarshalJSON() ([]byte, error) {
 	// Define a local type to handle omitempty properly
-		aux := &struct {
+	aux := &struct {
 		Type       *EdgeType          `json:"type,omitempty"`
 		ChildIndex *int               `json:"child_index,omitempty"`
 		Label      *string            `json:"label,omitempty"`
@@ -160,7 +160,7 @@ func (e TypedEdge) MarshalJSON() ([]byte, error) {
 		Priority   *int               `json:"priority,omitempty"`
 		Weight     *float64           `json:"weight,omitempty"`
 	}{
-		Type:       (*EdgeType)(&e.Type),
+		Type:       &e.Type,
 		ChildIndex: &e.ChildIndex,
 		Label:      &e.Label,
 		Condition:  &e.Condition,

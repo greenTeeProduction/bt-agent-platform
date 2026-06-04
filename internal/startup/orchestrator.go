@@ -183,9 +183,9 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 
 	if result.Growth > 10 {
 		result.Highlights = append(result.Highlights,
-			fmt.Sprintf("Strong growth: %.1f%% MRR increase", result.Growth))
-		result.Highlights = append(result.Highlights,
-			fmt.Sprintf("Added %d users to reach %d total", result.UsersAdded, state.Users))
+			fmt.Sprintf("Strong growth: %.1f%% MRR increase", result.Growth),
+			fmt.Sprintf("Added %d users to reach %d total", result.UsersAdded, state.Users),
+		)
 	}
 	if result.CashBurned > state.BurnRate*4 {
 		result.Lowlights = append(result.Lowlights,

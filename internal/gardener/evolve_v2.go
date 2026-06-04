@@ -79,10 +79,6 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	domain := extractDomain(entry.Name)
 
 	// ── P3: Evolution Blocks — check if tree can be mutated ──
-	if cfg.BlocksEnabled {
-		// intentionally empty
-		// Trees can always be evolved as a whole; block filtering is per-mutation
-	}
 
 	// ── P0: Evaluation Cascade — structural Quick check first ──
 	cascadeStats := &evaluator.CascadeStats{Total: 1}
@@ -281,7 +277,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		return entries[i].Name < entries[j].Name
 	})
 
-	results := make([]CycleMetrics, 0, 8)
+	results := make([]CycleMetrics, 0, len(entries))
 
 	// ── P2: Island Model — evolve all domains, migrate periodically ──
 	var islandModel *evolution.IslandModel
@@ -306,11 +302,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	if islandModel != nil && len(entries) > 1 {
 		islandModel.Generation++
 		if islandModel.Generation%cfg.MigrationInterval == 0 {
-			migrated := islandModel.Migrate()
-			if migrated > 0 {
-				// intentionally empty
-				// Log migration (could be added to metrics)
-			}
+			_ = islandModel.Migrate()
 		}
 	}
 

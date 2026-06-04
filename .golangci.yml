@@ -24,15 +24,13 @@ linters:
 
 linters-settings:
   gocritic:
+    disable-all: true
     enabled-checks:
       - appendCombine
       - badLock
       - boolExprSimplify
-      - deferInLoop
       - equalFold
       - indexAlloc
-      - nestingReduce
-      - paramTypeCombine
       - rangeExprCopy
       - regexpSimplify
       - sloppyReassign

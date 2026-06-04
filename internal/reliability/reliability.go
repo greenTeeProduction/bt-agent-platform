@@ -98,6 +98,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	defer cb.mu.Unlock()
 
 	cb.failureCount = 0
+	cb.successCount++
 	switch cb.state {
 	case CircuitHalfOpen:
 		cb.state = CircuitClosed
@@ -928,7 +929,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 			atomic.AddInt64(&r.activeCounts[start], 1)
 		}
 		activeIdx = start
-		r.next = (start + 1) % maxInt(1, len(executors))
+		r.next = (start + 1) % max(1, len(executors))
 		r.mu.Unlock()
 
 		defer func() {
@@ -940,7 +941,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		}()
 	} else {
 		start = r.next
-		r.next = (r.next + 1) % maxInt(1, len(executors))
+		r.next = (r.next + 1) % max(1, len(executors))
 		r.mu.Unlock()
 	}
 
@@ -1256,4 +1257,11 @@ func (cl *ConcurrencyLimiter) Capacity() int {
 // Available returns the number of free concurrency slots.
 func (cl *ConcurrencyLimiter) Available() int {
 	return cap(cl.sem) - len(cl.sem)
+}
+
+// SuccessCount returns successful executions recorded on the breaker.
+func (cb *CircuitBreaker) SuccessCount() int {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.successCount
 }

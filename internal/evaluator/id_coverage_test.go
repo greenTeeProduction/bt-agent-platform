@@ -67,7 +67,7 @@ func TestIterativeDeepening_Depth1_Applies(t *testing.T) {
 	if result.Depth != 1 {
 		t.Errorf("expected depth=1, got %d", result.Depth)
 	}
-	if result.Candidates == nil || len(result.Candidates) == 0 {
+	if len(result.Candidates) == 0 {
 		t.Log("no candidates — all failures may have missing WhatToImprove")
 	}
 }

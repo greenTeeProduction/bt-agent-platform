@@ -232,7 +232,7 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 			Severity:    SeverityInfo,
 			Component:   "dashboard",
 			Summary:     "Dashboard has received no requests",
-			Description: "Dashboard has received no HTTP requests. This may be normal during low-usage periods.",
+			Description: fmt.Sprintf("Dashboard has received no HTTP requests for at least %s. This may be normal during low-usage periods.", noRequestDuration),
 			Firing:      true,
 		})
 	}
@@ -278,7 +278,7 @@ func evaluateGlobalAlerts(metrics MetricsJSON, _ time.Time) []Alert {
 			Severity:    SeverityInfo,
 			Component:   "platform",
 			Summary:     "Low platform activity — consider suppressing alerts",
-			Description: "Platform request rate is near zero. Non-critical alert noise may be unnecessary during idle periods.",
+			Description: fmt.Sprintf("Platform request rate is near zero for at least %s. Non-critical alert noise may be unnecessary during idle periods.", lowActivitySuppressDur),
 			Firing:      true,
 		})
 	}
