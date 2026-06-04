@@ -302,6 +302,8 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 		return applyReplaceChildren(tree, op.Target)
 	case "reorder_children":
 		return applyReorderChildren(tree, op.Target)
+	case "insert_block_before", "insert_block_after", "replace_with_block", "compose_blocks":
+		return tryApplyBlockMutations(tree, op)
 	}
 	return false
 }

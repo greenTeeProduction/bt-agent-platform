@@ -77,6 +77,8 @@ var KnownNodeTypes = map[string]bool{
 	"Condition": true,
 	// Chain nodes (langchaingo integration)
 	"ChainAction": true,
+	// Composition — resolved by blocks.Expand before BuildTree
+	"SubTreeRef": true,
 	// Specialized nodes
 	"StrategyRouter":   true,
 	"Monitor":          true,

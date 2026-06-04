@@ -1049,6 +1049,8 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			data, _ := json.Marshal(map[string]interface{}{"circuit_breakers": status, "agent_count": len(status)})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
+
+	registerBlockTools(server, deps)
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

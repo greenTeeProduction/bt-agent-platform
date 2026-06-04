@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reflection"
@@ -97,6 +98,13 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 // BuildAndValidate constructs a tree and validates it before execution.
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
+	if blocks.HasSubTreeRefs(serTree) {
+		expanded, err := blocks.Expand(blocks.DefaultRegistry, serTree)
+		if err != nil {
+			return nil, err
+		}
+		serTree = expanded
+	}
 	info := ValidateTreeFull(serTree)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
@@ -1854,15 +1862,21 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	// --- Domain tree conditions ---
 	case "IsCodeTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "code", "function", "bug", "fix", "refactor") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "code", "function", "bug", "fix", "refactor")
+		}
 	case "IsBugCheck":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "bug", "fix", "error", "crash", "null", "race") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "bug", "fix", "error", "crash", "null", "race")
+		}
 	case "IsSecurityCheck":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(strings.ToLower(b.Task), "security", "exploit", "vulnerability", "penetration", "auth", "audit", "xss", "sql injection", "csrf", "owasp", "injection")
 		}
 	case "IsStyleCheck":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "style", "lint", "format", "naming", "clean") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "style", "lint", "format", "naming", "clean")
+		}
 	case "IsCIBuildTask":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "build", "deploy", "ci", "cd", "pipeline", "release")
@@ -1876,7 +1890,9 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "NeedsDeploy":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "deploy", "release", "ship") }
 	case "IsMonitorTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "monitor", "health", "status", "agent", "watch") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "monitor", "health", "status", "agent", "watch")
+		}
 	case "HasDeadAgents":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "dead", "offline", "unreachable") }
 	case "PersistentFailures":
@@ -1884,7 +1900,9 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsMetricsRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "metrics", "stats", "report") }
 	case "IsRefactorTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "refactor", "improve", "clean", "rewrite") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "refactor", "improve", "clean", "rewrite")
+		}
 	case "IsSmellCheck":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "smell", "cruft", "duplicate", "long") }
 	case "IsPatternRequest":
@@ -1892,11 +1910,15 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "NeedsVerification":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "verify", "test", "check") }
 	case "IsSecurityTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "security", "audit", "threat", "vulnerability") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "security", "audit", "threat", "vulnerability")
+		}
 	case "IsSASTRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "sast", "static analysis") }
 	case "IsDepScanRequest":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "dependency", "package", "cve", "library") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "dependency", "package", "cve", "library")
+		}
 	case "IsSecretScan":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "secret", "credential", "key", "token", "password")
@@ -1918,9 +1940,13 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsFollowUp":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "follow", "reminder") }
 	case "IsCrashTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "crash", "error", "stack", "panic", "trace") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "crash", "error", "stack", "panic", "trace")
+		}
 	case "HasStackTrace":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread")
+		}
 	case "IsRootCauseRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "root cause", "why", "debug") }
 	case "HasProposedFix":
@@ -1977,7 +2003,9 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "build", "compile", "install", "make", "go build")
 		}
 	case "IsImplementRequest":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "implement", "plan", "fix", "create", "pending") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "implement", "plan", "fix", "create", "pending")
+		}
 
 	// ─── Arc42 Documentation Conditions ────────────────────────────
 	case "GraphIsFresh":

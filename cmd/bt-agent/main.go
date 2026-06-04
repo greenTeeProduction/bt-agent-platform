@@ -9,6 +9,7 @@ import (
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -185,6 +186,22 @@ func resolveTree(id string) *evolution.SerializableNode {
 			return thinktank.SynthesisTree()
 		}
 	}
+
+	// composed:<block_id,...> or composed:task
+	if len(id) > 9 && id[:9] == "composed:" {
+		rest := id[9:]
+		if rest == "task" {
+			t, err := blocks.ComposeTaskTree(blocks.DefaultRegistry, "ComposedTask", nil)
+			if err == nil {
+				return t
+			}
+		}
+		ids := strings.Split(rest, ",")
+		t, err := blocks.Compose(blocks.DefaultRegistry, blocks.ComposeSpec{Name: "Composed_Main", Blocks: ids}, false)
+		if err == nil {
+			return t
+		}
+	}
 	// default: try as direct tree name
 	return evolution.DefaultTree()
 }
@@ -218,6 +235,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
+	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
