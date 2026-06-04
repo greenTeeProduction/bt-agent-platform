@@ -2,9 +2,9 @@ package engine
 
 import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	btcomp "github.com/rvitorper/go-bt/composite"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
-	btcomp "github.com/rvitorper/go-bt/composite"
 )
 
 // buildCompositeChildren builds child commands with typed-edge guard and quality_gate semantics.

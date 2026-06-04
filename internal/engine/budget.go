@@ -35,9 +35,9 @@ func BuildBudget(node *evolution.SerializableNode, bb *Blackboard) btcore.Comman
 }
 
 type budgetCmd struct {
-	child      btcore.Command[Blackboard]
-	maxTicks   int
-	maxTokens  int
+	child     btcore.Command[Blackboard]
+	maxTicks  int
+	maxTokens int
 }
 
 func (b *budgetCmd) Run(ctx *btcore.BTContext[Blackboard]) int {

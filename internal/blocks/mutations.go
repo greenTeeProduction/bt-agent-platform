@@ -78,7 +78,7 @@ func RandomBlockMutation(reg *Registry, tree *evolution.SerializableNode) []evol
 	if len(ids) == 0 {
 		return nil
 	}
-	id := ids[rand.Intn(len(ids))]
+	id := ids[rand.Intn(len(ids))] //#nosec G404 -- non-crypto PRNG for evolution heuristics
 	target := randomNamedNode(tree, tree.Name)
 	ref := SubTreeRefNode(id)
 	return []evolution.MutationOp{{
@@ -89,7 +89,7 @@ func RandomBlockMutation(reg *Registry, tree *evolution.SerializableNode) []evol
 }
 
 func pickInsertOp() string {
-	if rand.Intn(2) == 0 {
+	if rand.Intn(2) == 0 { //#nosec G404 -- non-crypto PRNG for evolution heuristics
 		return "insert_block_before"
 	}
 	return "insert_block_after"
@@ -101,7 +101,7 @@ func randomNamedNode(node *evolution.SerializableNode, fallback string) string {
 	if len(names) == 0 {
 		return fallback
 	}
-	return names[rand.Intn(len(names))]
+	return names[rand.Intn(len(names))] //#nosec G404 -- non-crypto PRNG for evolution heuristics
 }
 
 func collectNames(node *evolution.SerializableNode, names *[]string) {

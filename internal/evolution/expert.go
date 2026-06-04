@@ -368,7 +368,6 @@ func MaxDepth(node *SerializableNode, currentDepth int) int {
 	return maxChild
 }
 
-
 // MatchBlockPattern returns true if the tree contains a SubTreeRef or metadata block_id for blockID.
 func MatchBlockPattern(tree *SerializableNode, blockID string) bool {
 	if tree == nil || blockID == "" {

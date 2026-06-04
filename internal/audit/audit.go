@@ -32,7 +32,7 @@ func Init(base string) {
 	defer mu.Unlock()
 	baseDir = base
 	if base != "" {
-		_ = os.MkdirAll(filepath.Join(base, "audit"), 0755)
+		_ = os.MkdirAll(filepath.Join(base, "audit"), 0750)
 		taskPath = filepath.Join(base, "audit", "task.jsonl")
 	}
 }
@@ -54,7 +54,7 @@ func Append(e Entry) error {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}

@@ -16,11 +16,11 @@ const (
 
 // Block is a named, reusable subtree registered for composition and evolution.
 type Block struct {
-	ID          string                      `json:"id"`
-	Name        string                      `json:"name"`
-	Description string                      `json:"description"`
-	Category    Category                    `json:"category"`
-	Tree        *evolution.SerializableNode `json:"tree"`
+	ID              string                      `json:"id"`
+	Name            string                      `json:"name"`
+	Description     string                      `json:"description"`
+	Category        Category                    `json:"category"`
+	Tree            *evolution.SerializableNode `json:"tree"`
 	Mutable         bool                        `json:"mutable"`
 	Version         int                         `json:"version"`
 	PromotedVersion int                         `json:"promoted_version,omitempty"`

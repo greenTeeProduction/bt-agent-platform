@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -230,8 +231,8 @@ func (t *ConsoleTracer) SetExportTimeout(timeout time.Duration) {
 }
 
 func (t *ConsoleTracer) nextID() string {
-	t.seq++
-	return fmt.Sprintf("%s-%06d", t.prefix, t.seq)
+	n := atomic.AddUint64(&t.seq, 1)
+	return fmt.Sprintf("%s-%06d", t.prefix, n)
 }
 
 func (t *ConsoleTracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {

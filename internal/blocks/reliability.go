@@ -48,11 +48,11 @@ var (
 		MaxRetries: 0,
 		Graceful:   true,
 	}
-	SpecDelegate = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
-	SpecA2AHandoff = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
-	SpecFanout = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
+	SpecDelegate     = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
+	SpecA2AHandoff   = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
+	SpecFanout       = ReliabilitySpec{TimeoutMs: 300_000, MaxRetries: 1, Graceful: true}
 	SpecToolsProfile = ReliabilitySpec{TimeoutMs: 15_000, MaxRetries: 0, Graceful: false}
-	SpecQualityGate = ReliabilitySpec{
+	SpecQualityGate  = ReliabilitySpec{
 		TimeoutMs:  30_000,
 		MaxRetries: 1,
 		Graceful:   true,

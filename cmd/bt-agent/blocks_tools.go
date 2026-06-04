@@ -8,9 +8,10 @@ import (
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/metrics"
 	"github.com/nico/go-bt-evolve/internal/mcp"
+	"github.com/nico/go-bt-evolve/internal/metrics"
 )
+
 // registerBlockTools registers MCP tools for reusable tree building blocks.
 func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 	server.RegisterTool("bt_blocks_list_profiles", "List tool-profile building blocks (core:tools_*)",
@@ -52,26 +53,26 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_blocks_compose", "Compose a task/action tree from building blocks on demand",
 		map[string]mcp.Property{
-			"name":      {Type: "string", Description: "Root sequence name"},
-			"block_ids": {Type: "string", Description: "Comma-separated block ids"},
+			"name":          {Type: "string", Description: "Root sequence name"},
+			"block_ids":     {Type: "string", Description: "Comma-separated block ids"},
 			"tools_profile": {Type: "string", Description: "Tool profile: default, dev, research, startup, universal"},
-			"preset": {Type: "string", Description: "Compose preset: default, agentic, hitl, full (overrides block_ids when set)"},
-			"task_tree": {Type: "boolean", Description: "If true, use default task layout: pre_gate + strategy + tool_execution + error_handling"},
-			"strategy":  {Type: "string", Description: "Optional tree id for middle StrategyRouter (domain:code_review, etc.)"},
-			"save":      {Type: "boolean", Description: "Save composed tree as active agent tree"},
-			"inline":    {Type: "boolean", Description: "Inline blocks instead of SubTreeRef"},
+			"preset":        {Type: "string", Description: "Compose preset: default, agentic, hitl, full (overrides block_ids when set)"},
+			"task_tree":     {Type: "boolean", Description: "If true, use default task layout: pre_gate + strategy + tool_execution + error_handling"},
+			"strategy":      {Type: "string", Description: "Optional tree id for middle StrategyRouter (domain:code_review, etc.)"},
+			"save":          {Type: "boolean", Description: "Save composed tree as active agent tree"},
+			"inline":        {Type: "boolean", Description: "Inline blocks instead of SubTreeRef"},
 		},
 		[]string{"block_ids"},
 		func(args json.RawMessage) *mcp.ToolResult {
 			var params struct {
-				Name     string `json:"name"`
-				BlockIDs string `json:"block_ids"`
+				Name         string `json:"name"`
+				BlockIDs     string `json:"block_ids"`
 				Preset       string `json:"preset"`
 				ToolsProfile string `json:"tools_profile"`
-				TaskTree bool   `json:"task_tree"`
-				Strategy string `json:"strategy"`
-				Save     bool   `json:"save"`
-				Inline   bool   `json:"inline"`
+				TaskTree     bool   `json:"task_tree"`
+				Strategy     string `json:"strategy"`
+				Save         bool   `json:"save"`
+				Inline       bool   `json:"inline"`
 			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return mcpErr(err)

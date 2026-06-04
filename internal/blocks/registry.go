@@ -127,7 +127,11 @@ func (r *Registry) loadFromDisk() error {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		name := filepath.Base(e.Name())
+		if name != e.Name() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			continue
 		}
@@ -144,7 +148,7 @@ func (r *Registry) loadFromDisk() error {
 
 func (r *Registry) saveBlock(b *Block) error {
 	dir := r.blocksDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 	safe := filepath.Base(b.ID)
@@ -157,7 +161,7 @@ func (r *Registry) saveBlock(b *Block) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -189,7 +193,6 @@ func cloneTree(t *evolution.SerializableNode) *evolution.SerializableNode {
 	}
 	return c
 }
-
 
 // IsEvolutionMutable reports whether block id may be mutated by the evolver.
 func (r *Registry) IsEvolutionMutable(id string) bool {

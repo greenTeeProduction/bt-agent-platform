@@ -8,15 +8,17 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/engine"
-	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
 type pipelineMockLLM struct{}
 
-func (pipelineMockLLM) AnalyzeComplexity(task string) string        { return "low" }
-func (pipelineMockLLM) GeneratePlan(task, complexity string) string { return "1. Analyze\n2. Execute\n3. Verify" }
+func (pipelineMockLLM) AnalyzeComplexity(task string) string { return "low" }
+func (pipelineMockLLM) GeneratePlan(task, complexity string) string {
+	return "1. Analyze\n2. Execute\n3. Verify"
+}
 func (pipelineMockLLM) Reflect(task, outcome, plan string) (string, string) {
 	return "ok", "none"
 }

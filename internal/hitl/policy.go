@@ -47,12 +47,11 @@ func GetPolicy() Policy {
 	return globalPolicy
 }
 
-
 // HITLConfig is loaded from internal/config.Config.
 type HITLConfig struct {
-	Enabled      bool
-	AutoApprove  bool
-	TimeoutSecs  int
+	Enabled     bool
+	AutoApprove bool
+	TimeoutSecs int
 }
 
 // ApplyConfig merges file config; env still wins via DefaultPolicy when called after.

@@ -79,7 +79,6 @@ func promptFromNode(node *evolution.SerializableNode) string {
 	return ""
 }
 
-
 func hitlPhase(node *evolution.SerializableNode) string {
 	if node != nil && node.Metadata != nil {
 		if p, ok := node.Metadata["phase"].(string); ok && p != "" {

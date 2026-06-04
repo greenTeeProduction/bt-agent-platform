@@ -2,8 +2,8 @@ package engine
 
 import (
 	"path/filepath"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
@@ -64,8 +64,8 @@ func TestHumanApprovalGate_ManualApprove(t *testing.T) {
 		Name: "Root",
 		Children: []evolution.SerializableNode{
 			{
-				Type: "HumanApprovalGate",
-				Name: "ApproveStep",
+				Type:     "HumanApprovalGate",
+				Name:     "ApproveStep",
 				Metadata: map[string]any{"prompt": "confirm risky action"},
 				Children: []evolution.SerializableNode{
 					{Type: "Action", Name: "MarkSuccessful"},
@@ -158,4 +158,3 @@ func TestHumanApprovalGate_PostPhase(t *testing.T) {
 		t.Fatalf("expected success after post approve, got %d", code)
 	}
 }
-

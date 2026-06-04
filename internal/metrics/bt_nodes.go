@@ -82,7 +82,6 @@ func BlockMetricsSnapshot() map[string]uint64 {
 	return blockOpsTotal.Snapshot()
 }
 
-
 // RecordBlockFitness sets bt_block_fitness_score for a block/agent pair (0-100).
 func RecordBlockFitness(blockID, agent string, score float64) {
 	if blockID == "" {

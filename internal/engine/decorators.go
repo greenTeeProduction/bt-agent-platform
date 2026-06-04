@@ -5,8 +5,8 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
-	btleaf "github.com/rvitorper/go-bt/leaf"
 	btdec "github.com/rvitorper/go-bt/decorators"
+	btleaf "github.com/rvitorper/go-bt/leaf"
 )
 
 // BuildTimeout wraps the child with a tick-based timeout (TimeoutMs on node).

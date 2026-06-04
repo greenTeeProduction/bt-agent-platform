@@ -58,7 +58,7 @@ var DefaultStore *Store
 // InitStore creates or loads the default store under dir/hitl/.
 func InitStore(baseDir string) (*Store, error) {
 	dir := filepath.Join(baseDir, "hitl")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, err
 	}
 	s := &Store{
@@ -102,7 +102,7 @@ func (s *Store) save() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
