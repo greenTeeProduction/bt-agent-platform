@@ -13,7 +13,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // AgentFactory orchestrates skill → behavior tree → runnable agent.
@@ -21,7 +20,7 @@ type AgentFactory struct {
 	analyzer  *Analyzer
 	generator *Generator
 	treeStore *evolution.TreeStore
-	refStore  *reflection.Store
+	refStore  *evolution.Store
 	llmClient llm.LLM
 }
 
@@ -31,7 +30,7 @@ func NewAgentFactory(llmClient llm.LLM, homeDir string) (*AgentFactory, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tree store: %w", err)
 	}
-	rs, err := reflection.NewStore(filepath.Join(homeDir, ".go-bt-reflections"))
+	rs, err := evolution.NewStore(filepath.Join(homeDir, ".go-bt-reflections"))
 	if err != nil {
 		return nil, fmt.Errorf("reflection store: %w", err)
 	}

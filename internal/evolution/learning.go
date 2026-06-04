@@ -378,6 +378,7 @@ func randomMutation(tree *SerializableNode) []MutationOp {
 	allOps := []string{
 		"add_before", "add_after", "add_fallback",
 		"replace_node", "replace_children", "reorder_children",
+		"increase_retries", "prune_node", "increase_iterations", "add_tool",
 	}
 	op := allOps[rand.Intn(len(allOps))]
 	// Find a random target node

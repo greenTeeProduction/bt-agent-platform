@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
@@ -14,95 +13,19 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
-	"github.com/nico/go-bt-evolve/internal/finance"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	btlog "github.com/nico/go-bt-evolve/internal/log"
-	"github.com/nico/go-bt-evolve/internal/mcp"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 	"github.com/nico/go-bt-evolve/internal/reliability"
-	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
 	"github.com/nico/go-bt-evolve/internal/tracing"
-
-	btcore "github.com/rvitorper/go-bt/core"
 )
-
-func init() {
-	// ── Telegram Clarify — quality gate conditions ──
-	engine.RegisterCondition("IsTelegram", func(b *engine.Blackboard) bool {
-		if platform, ok := b.ChainState["platform"]; ok {
-			if p, ok := platform.(string); ok && p == "telegram" {
-				return true
-			}
-		}
-		return false
-	})
-
-	engine.RegisterCondition("HasQuestion", func(b *engine.Blackboard) bool {
-		response := b.Result
-		if response == "" {
-			response = b.Task
-		}
-		markers := []string{"?", "should I", "should we",
-			"which ", "what ", "how ", "why ", "when ", "where ",
-			"do you want", "would you like", "choose ", "pick ", "select "}
-		lower := strings.ToLower(response)
-		for _, m := range markers {
-			if strings.Contains(lower, m) {
-				return true
-			}
-		}
-		return false
-	})
-
-	engine.RegisterCondition("IsClarifyUsed", func(b *engine.Blackboard) bool {
-		if used, ok := b.ChainState["clarify_used"]; ok {
-			if v, ok := used.(bool); ok && v {
-				return true
-			}
-		}
-		return strings.Contains(strings.ToLower(b.Result), "clarify") ||
-			strings.Contains(strings.ToLower(b.Result), "multiple choice")
-	})
-
-	// ── Telegram Clarify — quality gate actions ──
-	engine.RegisterAction("MarkClarifyOK", func(ctx *btcore.BTContext[engine.Blackboard]) int {
-		b := ctx.Blackboard
-		b.Outcome = "success"
-		b.ChainState["telegram_clarify_ok"] = true
-		return 1
-	})
-
-	engine.RegisterAction("ReportClarifyViolation", func(ctx *btcore.BTContext[engine.Blackboard]) int {
-		b := ctx.Blackboard
-		b.ChainState["telegram_clarify_violation"] = true
-		b.ChainState["telegram_clarify_fix"] = "Use clarify(question=..., choices=[...]) instead of plain text"
-		b.Outcome = "violation"
-		return 1
-	})
-
-	engine.RegisterAction("SuggestFix", func(ctx *btcore.BTContext[engine.Blackboard]) int {
-		b := ctx.Blackboard
-		if s, ok := b.ChainState["telegram_clarify_suggestion"]; ok {
-			if str, ok := s.(string); ok {
-				b.Result = str
-				b.Outcome = "success"
-				return 1
-			}
-		}
-		b.Result = "Use clarify(question=\"...\", choices=[\"Option A\", \"Option B\"])"
-		b.Outcome = "success"
-		return 1
-	})
-}
 
 // resolveTree maps a tree identifier string to the actual tree object.
 func resolveTree(id string) *evolution.SerializableNode {
 	// hermes self-evolution tree
 	if id == "hermes_evolve" {
-		return evolution.HermesSelfEvolutionTree()
+		return domains.HermesSelfEvolutionTree()
 	}
 	// stockfish evolution trees
 	if id == "stockfish_evolve" {
@@ -116,29 +39,35 @@ func resolveTree(id string) *evolution.SerializableNode {
 	}
 	// Kanban trees
 	if id == "kanban:task_creator" {
-		return evolution.KanbanTaskCreatorTree()
+		return domains.KanbanTaskCreatorTree()
 	}
 	if id == "kanban:refiner" {
-		return evolution.KanbanRefinerTree()
+		return domains.KanbanRefinerTree()
 	}
 	if id == "kanban:qa" {
-		return evolution.KanbanQATree()
+		return domains.KanbanQATree()
 	}
 	if id == "kanban:monitor" {
-		return evolution.KanbanBoardMonitorTree()
+		return domains.KanbanBoardMonitorTree()
 	}
 	if id == "kanban:workflow" {
-		return evolution.KanbanWorkflowTree()
+		return domains.KanbanWorkflowTree()
 	}
 	if id == "kanban:autopilot" {
-		return evolution.KanbanAutoPilotTree()
+		return domains.KanbanAutoPilotTree()
 	}
 	// NotebookLM tree
 	if id == "notebooklm" {
-		return evolution.NotebookLMTree()
+		return domains.NotebookLMTree()
+	}
+	if id == "notebooklm-consumer" {
+		return domains.NotebookLMConsumerTree()
+	}
+	if id == "notebooklm-bridge" {
+		return evolution.NotebookLMBridgeTree()
 	}
 	if id == "hermes_obsidian" {
-		return evolution.HermesObsidianOptimizerTree()
+		return domains.HermesObsidianOptimizerTree()
 	}
 	// godev
 	if id == "godev" {
@@ -147,13 +76,13 @@ func resolveTree(id string) *evolution.SerializableNode {
 	// finance:<name>
 	if len(id) > 8 && id[:8] == "finance:" {
 		name := id[8:]
-		trees := finance.AllFinanceTrees()
+		trees := evolution.AllFinanceTrees()
 		return trees[name]
 	}
 	// research:<name>
 	if len(id) > 9 && id[:9] == "research:" {
 		name := id[9:]
-		trees := research.ResearchTrees()
+		trees := evolution.ResearchTrees()
 		return trees[name]
 	}
 	// domain:<name>
@@ -190,13 +119,13 @@ func resolveTree(id string) *evolution.SerializableNode {
 }
 
 func main() {
-	btlog.Init()
-	btlog.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
+	engine.Init()
+	engine.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
 
 	// ── Configuration ─────────────────────────────────────────────────────
 	cfg, err := config.Load()
 	if err != nil {
-		btlog.Warn("config validation warning, using defaults", "error", err)
+		engine.Warn("config validation warning, using defaults", "error", err)
 		cfg, _ = config.Load()
 		if cfg == nil {
 			fmt.Fprintf(os.Stderr, "fatal: config load failed\n")
@@ -207,13 +136,13 @@ func main() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
-		btlog.Error("failed to get home directory", "error", err)
+		engine.Error("failed to get home directory", "error", err)
 		os.Exit(1)
 	}
 	agentHome, _ := os.UserHomeDir()
 
 	// ── Persistence ────────────────────────────────────────────────────────
-	refStore, err := reflection.NewStore(filepath.Join(home, ".go-bt-reflections"))
+	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
@@ -230,7 +159,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: llm provider: %v\n", err)
 		os.Exit(1)
 	}
-	btlog.Info("llm provider initialized", "provider", cfg.LLMProvider)
+	engine.Info("llm provider initialized", "provider", cfg.LLMProvider)
 
 	// Graceful Degradation: LLM health monitor
 	llmHealth := llm.NewHealthMonitor(cfg.OllamaHost, 30*time.Second)
@@ -345,7 +274,7 @@ func main() {
 			policy.Jitter = reliability.FullJitterStrategy
 		}
 		err = policy.ExecuteContext(ctx.Context, func() error {
-			bb := &engine.Blackboard{Task: task, LLM: llmClient}
+			bb := &engine.Blackboard{Task: task, LLM: llmClient, Reflections: refStore, TreeStore: treeStore}
 			bt := engine.BuildTree(tree, bb)
 			_ = engine.RunTask(bb, bt)
 			outcome = bb.Outcome
@@ -376,15 +305,15 @@ func main() {
 		sched := inst.Definition.Schedule
 		if sched != "" && sched != "on_demand" {
 			if _, err := globalSched.Schedule(inst.Definition.Name, sched, "2h", 3); err != nil {
-				btlog.Info("auto-schedule failed", "agent", inst.Definition.Name, "error", err)
+				engine.Info("auto-schedule failed", "agent", inst.Definition.Name, "error", err)
 			} else {
-				btlog.Info("auto-scheduled agent", "agent", inst.Definition.Name, "schedule", sched)
+				engine.Info("auto-scheduled agent", "agent", inst.Definition.Name, "schedule", sched)
 			}
 		}
 	}
 
 	// ── MCP Server ─────────────────────────────────────────────────────────
-	server := mcp.NewServer("go-bt-agent")
+	server := engine.NewServer("go-bt-agent")
 
 	// Create a shared memory store for MCP tools (stores per-agent memory)
 	sharedMem, _ := agent.NewMemoryStore(agentLocalMem, "_global", 200)
@@ -432,17 +361,17 @@ func main() {
 
 	a2aSrv, a2aErr := a2a_mod.NewServer(agentReg, llmClient, a2aPort, a2aBaseURL)
 	if a2aErr != nil {
-		btlog.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
+		engine.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
 	}
 
 	// ── Agent Event Bus ─────────────────────────────────────────────────────
 	agent.InitAgentBus(200)
-	btlog.Info("agent event bus initialized", "max_history", 200)
+	engine.Info("agent event bus initialized", "max_history", 200)
 
 	// ── Hermes Webhook Bridge (AgentBus → Hermes events) ─────────────────────
 	whPublisher := agent.NewWebhookPublisher("http://localhost:8644", agent.DefaultWebhookSecrets())
 	whPublisher.Attach(agent.GlobalAgentBus)
-	btlog.Info("hermes webhook bridge attached")
+	engine.Info("hermes webhook bridge attached")
 
 	if a2aErr == nil {
 		// Inject tree resolver and pre-resolve trees for all agents
@@ -456,10 +385,10 @@ func main() {
 		}
 		go func() {
 			if err := a2aSrv.Start(); err != nil {
-				btlog.Error("a2a server failed", "error", err)
+				engine.Error("a2a server failed", "error", err)
 			}
 		}()
-		btlog.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
+		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
 	}
 
 	if err := server.Run(); err != nil {

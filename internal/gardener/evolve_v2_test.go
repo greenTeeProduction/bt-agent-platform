@@ -7,7 +7,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // ============================================================================
@@ -239,7 +238,7 @@ func TestDefaultEvolveV2Config(t *testing.T) {
 
 func TestRunCycleV2_Basic(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -292,7 +291,7 @@ func TestRunCycleV2_Basic(t *testing.T) {
 
 func TestRunCycleV2_MultipleTrees(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -341,7 +340,7 @@ func TestRunCycleV2_MultipleTrees(t *testing.T) {
 
 func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -371,7 +370,7 @@ func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 
 func TestRunCycleV2_NilTree(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -410,7 +409,7 @@ func TestRunCycleV2_NilTree(t *testing.T) {
 
 func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -452,7 +451,7 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 
 func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -499,13 +498,69 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 	_ = g.evolveTreeV2(TreeEntry{Name: "godev", Tree: bloatedTree, Active: true}, v2cfg)
 }
 
+func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
+	dir := t.TempDir()
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
+	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
+	mt, _ := NewMetricsTracker(dir)
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "PreGate"},
+			{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+		},
+	}
+	for i, outcome := range []evolution.Outcome{evolution.Failure, evolution.Failure, evolution.Success} {
+		if err := refStore.Save(&evolution.Record{
+			TaskID:        "quality-gate-test-" + string(rune('a'+i)),
+			TreeName:      "quality_tree",
+			Task:          "research notebooklm production readiness",
+			Plan:          "plan",
+			Outcome:       outcome,
+			DurationMs:    1000,
+			WhatToImprove: []string{"ResearchAgent needs verified outputs"},
+		}); err != nil {
+			t.Fatalf("save reflection: %v", err)
+		}
+	}
+
+	customReg := &Registry{dir: dir}
+	customReg.mu.Lock()
+	customReg.entries = []TreeEntry{
+		{Name: "quality_tree", Description: "quality", Tree: tree, FilePath: dir + "/tree-quality.json", Active: true},
+	}
+	customReg.mu.Unlock()
+
+	cfg := Config{Registry: customReg, MetricsTracker: mt, RefStore: refStore, TT: tt, MaxMutations: 2, UseRealLLM: false}
+	g := NewGardener(cfg)
+	v2cfg := EvolveV2Config{
+		MAPElitesEnabled:   false,
+		ParetoEnabled:      false,
+		IslandEnabled:      false,
+		EnsembleEnabled:    false,
+		RichContextEnabled: false,
+		BlocksEnabled:      false,
+		MetaPromptEnabled:  false,
+		UseRealLLM:         false,
+	}
+
+	m := g.evolveTreeV2(TreeEntry{Name: "quality_tree", Tree: tree, FilePath: dir + "/tree-quality.json", Active: true}, v2cfg)
+	if m.NewFitness+0.0001 < m.BaseFitness {
+		t.Fatalf("no-regression gate failed: base %.4f new %.4f delta %.4f mutations %d rollbacks %d", m.BaseFitness, m.NewFitness, m.Delta, m.Mutations, m.Rollbacks)
+	}
+	if m.Delta < -0.0001 {
+		t.Fatalf("expected non-negative recorded delta, got %.4f", m.Delta)
+	}
+}
+
 // ============================================================================
 // RunCycleV2 with config variants
 // ============================================================================
 
 func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 

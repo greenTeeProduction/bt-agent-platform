@@ -6,8 +6,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // ─── PRODUCTION VALIDATION: Idempotency + Concurrent Stress ───
@@ -33,20 +31,20 @@ func allPlatformTrees() []namedTree {
 		{"godev", evolution.GoDeveloperTree(), "review this go code for bugs"},
 
 		// Research trees
-		{"deep_research", research.DeepResearchTree(), "research quantum computing advances"},
-		{"quick_research", research.QuickResearchTree(), "quick summary of Kubernetes"},
+		{"deep_research", evolution.DeepResearchTree(), "research quantum computing advances"},
+		{"quick_research", evolution.QuickResearchTree(), "quick summary of Kubernetes"},
 
 		// Finance trees (10) — tasks MUST match IsFinanceTask keywords
-		{"pitch_agent", finance.PitchAgentTree(), "prepare a dcf valuation pitch for the client"},
-		{"earnings_reviewer", finance.EarningsReviewerTree(), "review the earnings report quarterly 10-q filing"},
-		{"market_researcher", finance.MarketResearcherTree(), "research dcf valuation for competitive landscape"},
-		{"model_builder", finance.ModelBuilderTree(), "build a dcf financial model for the portfolio company"},
-		{"meeting_prep", finance.MeetingPrepTree(), "prepare financial client meeting briefing"},
-		{"valuation_reviewer", finance.ValuationReviewerTree(), "review the gp valuation package with dcf analysis"},
-		{"gl_reconciler", finance.GLReconcilerTree(), "reconcile the general ledger breaks"},
-		{"month_end_closer", finance.MonthEndCloserTree(), "close month-end with accruals for audit"},
-		{"statement_auditor", finance.StatementAuditorTree(), "audit the lp statement for accuracy"},
-		{"kyc_screener", finance.KYCScreenerTree(), "screen kyc documents for aml compliance"},
+		{"pitch_agent", evolution.PitchAgentTree(), "prepare a dcf valuation pitch for the client"},
+		{"earnings_reviewer", evolution.EarningsReviewerTree(), "review the earnings report quarterly 10-q filing"},
+		{"market_researcher", evolution.MarketResearcherTree(), "research dcf valuation for competitive landscape"},
+		{"model_builder", evolution.ModelBuilderTree(), "build a dcf financial model for the portfolio company"},
+		{"meeting_prep", evolution.MeetingPrepTree(), "prepare financial client meeting briefing"},
+		{"valuation_reviewer", evolution.ValuationReviewerTree(), "review the gp valuation package with dcf analysis"},
+		{"gl_reconciler", evolution.GLReconcilerTree(), "reconcile the general ledger breaks"},
+		{"month_end_closer", evolution.MonthEndCloserTree(), "close month-end with accruals for audit"},
+		{"statement_auditor", evolution.StatementAuditorTree(), "audit the lp statement for accuracy"},
+		{"kyc_screener", evolution.KYCScreenerTree(), "screen kyc documents for aml compliance"},
 
 		// Domain trees (10+)
 		{"code_review", domains.CodeReviewTree(), "review code for bugs and security issues"},
@@ -61,17 +59,17 @@ func allPlatformTrees() []namedTree {
 		{"trading_signal", domains.TradingSignalTree(), "generate trading signal from market data"},
 
 		// Evolution trees
-		{"hermes_evolve", evolution.HermesSelfEvolutionTree(), "periodic check to evaluate skill gaps and improvements"},
+		{"hermes_evolve", domains.HermesSelfEvolutionTree(), "periodic check to evaluate skill gaps and improvements"},
 		{"stockfish", evolution.StockfishEvolutionTree(), "evolve the behavior tree with stockfish"},
 		{"stockfish_loop", evolution.StockfishEvolutionLoop(), "run continuous evolution cycle"},
 
 		// Kanban trees
-		{"kanban_task_creator", evolution.KanbanTaskCreatorTree(), "create a new kanban task card"},
-		{"kanban_refiner", evolution.KanbanRefinerTree(), "refine the kanban backlog tasks"},
-		{"kanban_qa", evolution.KanbanQATree(), "validate kanban qa pass status"},
-		{"kanban_monitor", evolution.KanbanBoardMonitorTree(), "check kanban for stale cards"},
-		{"kanban_workflow", evolution.KanbanWorkflowTree(), "run the kanban workflow pipeline"},
-		{"kanban_autopilot", evolution.KanbanAutoPilotTree(), "auto-dispatch kanban tasks"},
+		{"kanban_task_creator", domains.KanbanTaskCreatorTree(), "create a new kanban task card"},
+		{"kanban_refiner", domains.KanbanRefinerTree(), "refine the kanban backlog tasks"},
+		{"kanban_qa", domains.KanbanQATree(), "validate kanban qa pass status"},
+		{"kanban_monitor", domains.KanbanBoardMonitorTree(), "check kanban for stale cards"},
+		{"kanban_workflow", domains.KanbanWorkflowTree(), "run the kanban workflow pipeline"},
+		{"kanban_autopilot", domains.KanbanAutoPilotTree(), "auto-dispatch kanban tasks"},
 	}
 }
 
@@ -106,12 +104,12 @@ func TestStress_Idempotency(t *testing.T) {
 			}
 
 			// First run
-			bb1 := &Blackboard{Task: nt.task, LLM: &mockLLM{}}
+			bb1 := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
 			bt1 := BuildTree(nt.tree, bb1)
 			_ = RunTask(bb1, bt1)
 
 			// Second run — identical input
-			bb2 := &Blackboard{Task: nt.task, LLM: &mockLLM{}}
+			bb2 := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
 			bt2 := BuildTree(nt.tree, bb2)
 			_ = RunTask(bb2, bt2)
 
@@ -172,7 +170,7 @@ func TestStress_ConcurrentExecution(t *testing.T) {
 			}()
 			sem <- struct{}{}
 
-			bb := &Blackboard{Task: nt.task, LLM: &mockLLM{}}
+			bb := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
 			bt := BuildTree(nt.tree, bb)
 			_ = RunTask(bb, bt)
 			if bb.Outcome == "" {
@@ -223,7 +221,7 @@ func TestStress_EdgeInputs(t *testing.T) {
 							t.Errorf("panic with task=%q: %v", task, r)
 						}
 					}()
-					bb := &Blackboard{Task: task, LLM: &mockLLM{}}
+					bb := &Blackboard{Task: task, LLM: &MockLLM{}}
 					bt := BuildTree(nt.tree, bb)
 					_ = RunTask(bb, bt)
 					// No panic is the success criterion
@@ -248,7 +246,7 @@ func TestStress_MaxTicksSafetyLimit(t *testing.T) {
 		},
 	}
 
-	bb := &Blackboard{Task: "hello", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "hello", LLM: &MockLLM{}}
 	bt := BuildTree(infiniteTree, bb)
 
 	// Must complete without infinite loop — RunTask's 1000-tick cap should fire

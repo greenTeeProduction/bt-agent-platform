@@ -281,7 +281,7 @@ func TestActionForName_BulkCoverage(t *testing.T) {
 
 	bb := &Blackboard{
 		Task:   "review Go code for performance issues",
-		LLM:    &mockLLM{},
+		LLM:    &MockLLM{},
 		Result: "initial result for concatenation tests",
 		ChainState: map[string]any{
 			"section_file":       "09-test-scenarios.md",

@@ -218,8 +218,8 @@ func TestArc42Action_SetupDocTools(t *testing.T) {
 	if status != 1 {
 		t.Errorf("expected 1, got %d", status)
 	}
-	if len(bb.ChainTools) != 4 {
-		t.Errorf("expected 4 tools, got %d", len(bb.ChainTools))
+	if len(bb.ChainTools) != 3 {
+		t.Errorf("expected 3 real tools, got %d", len(bb.ChainTools))
 	}
 }
 

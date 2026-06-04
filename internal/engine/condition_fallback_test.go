@@ -607,35 +607,33 @@ func TestCondFallback_AllSectionsDone(t *testing.T) {
 // ─── Research gap conditions (switch uses bb.Result receiver, not b parameter) ───
 
 func TestCondFallback_DetectKnowledgeGaps(t *testing.T) {
-	// switch version uses bb.Result (receiver), not b.Result (parameter)
-	// Create receiver with Result set appropriately
-	fn := (&Blackboard{Result: ""}).conditionForName("DetectKnowledgeGaps")
+	// Registry version uses parameter bb.Result (not captured receiver)
+	fn := (&Blackboard{}).conditionForName("DetectKnowledgeGaps")
 	if fn == nil {
 		t.Fatal("expected non-nil")
 	}
 	// empty Result → gap detected
-	if !fn(&Blackboard{Task: "any task"}) {
+	if !fn(&Blackboard{Task: "any task", Result: ""}) {
 		t.Error("expected true for empty result (gap)")
 	}
 
-	fn2 := (&Blackboard{Result: "comprehensive report with full analysis"}).conditionForName("DetectKnowledgeGaps")
 	// complete result → no gap
-	if fn2(&Blackboard{Task: "any task"}) {
+	if fn(&Blackboard{Task: "any task", Result: "comprehensive report with full analysis"}) {
 		t.Error("expected false for complete result (no gap)")
 	}
 
-	fn3 := (&Blackboard{Result: "gap missing data"}).conditionForName("DetectKnowledgeGaps")
-	if !fn3(&Blackboard{Task: "any task"}) {
+	// result mentioning gap/missing → gap detected
+	if !fn(&Blackboard{Task: "any task", Result: "gap missing data"}) {
 		t.Error("expected true when result mentions gap")
 	}
 }
 
 func TestCondFallback_CheckSourceCount(t *testing.T) {
-	fn := (&Blackboard{Result: "short"}).conditionForName("CheckSourceCount")
+	fn := (&Blackboard{}).conditionForName("CheckSourceCount")
 	if fn == nil {
 		t.Fatal("expected non-nil")
 	}
-	if fn(&Blackboard{Task: "any"}) {
+	if fn(&Blackboard{Task: "any", Result: "short"}) {
 		t.Error("expected false for short result")
 	}
 
@@ -643,8 +641,7 @@ func TestCondFallback_CheckSourceCount(t *testing.T) {
 	for i := range longResult {
 		longResult[i] = 'x'
 	}
-	fn2 := (&Blackboard{Result: string(longResult)}).conditionForName("CheckSourceCount")
-	if !fn2(&Blackboard{Task: "any"}) {
+	if !fn(&Blackboard{Task: "any", Result: string(longResult)}) {
 		t.Error("expected true for result > 100 chars")
 	}
 }
@@ -1161,72 +1158,66 @@ func TestCondBulk_ChainStateConditions(t *testing.T) {
 }
 
 func TestCondBulk_BBResultConditions(t *testing.T) {
-	// Conditions that use bb.Result (receiver), not b.Result (parameter)
+	// Registry version uses parameter bb.Result/Task (not captured receiver)
 
 	t.Run("CheckCitationFormat", func(t *testing.T) {
-		fn := (&Blackboard{Result: "with [citation] and source: example.com"}).conditionForName("CheckCitationFormat")
+		fn := (&Blackboard{}).conditionForName("CheckCitationFormat")
 		if fn == nil {
 			t.Fatal("expected non-nil")
 		}
-		if !fn(&Blackboard{}) {
+		if !fn(&Blackboard{Result: "with [citation] and source: example.com"}) {
 			t.Error("expected true when result has brackets or source:")
 		}
-		fn2 := (&Blackboard{Result: "plain text without citations"}).conditionForName("CheckCitationFormat")
-		if fn2(&Blackboard{}) {
+		if fn(&Blackboard{Result: "plain text without citations"}) {
 			t.Error("expected false when result has no citations")
 		}
 	})
 	t.Run("HasProposedFix", func(t *testing.T) {
-		fn := (&Blackboard{Result: "the fix is to change the code"}).conditionForName("HasProposedFix")
+		fn := (&Blackboard{}).conditionForName("HasProposedFix")
 		if fn == nil {
 			t.Fatal("expected non-nil")
 		}
-		if !fn(&Blackboard{}) {
+		if !fn(&Blackboard{Result: "the fix is to change the code"}) {
 			t.Error("expected true when result contains fix")
 		}
-		fn2 := (&Blackboard{Result: "no resolution available"}).conditionForName("HasProposedFix")
-		if fn2(&Blackboard{}) {
+		if fn(&Blackboard{Result: "no resolution available"}) {
 			t.Error("expected false when result has no fix")
 		}
 	})
 	t.Run("HasDeadAgents", func(t *testing.T) {
-		fn := (&Blackboard{Result: "dead agent detected"}).conditionForName("HasDeadAgents")
+		fn := (&Blackboard{}).conditionForName("HasDeadAgents")
 		if fn == nil {
 			t.Fatal("expected non-nil")
 		}
-		if !fn(&Blackboard{}) {
+		if !fn(&Blackboard{Result: "dead agent detected"}) {
 			t.Error("expected true when result mentions dead")
 		}
-		fn2 := (&Blackboard{Result: "all agents healthy"}).conditionForName("HasDeadAgents")
-		if fn2(&Blackboard{}) {
+		if fn(&Blackboard{Result: "all agents healthy"}) {
 			t.Error("expected false when result is clean")
 		}
 	})
 	t.Run("PersistentFailures", func(t *testing.T) {
-		fn := (&Blackboard{Result: "3+ persistent failures detected"}).conditionForName("PersistentFailures")
+		fn := (&Blackboard{}).conditionForName("PersistentFailures")
 		if fn == nil {
 			t.Fatal("expected non-nil")
 		}
-		if !fn(&Blackboard{}) {
+		if !fn(&Blackboard{Result: "3+ persistent failures detected"}) {
 			t.Error("expected true when result mentions failed")
 		}
-		fn2 := (&Blackboard{Result: "all passed"}).conditionForName("PersistentFailures")
-		if fn2(&Blackboard{}) {
+		if fn(&Blackboard{Result: "all passed"}) {
 			t.Error("expected false when result is clean")
 		}
 	})
 	t.Run("HasTranscript", func(t *testing.T) {
-		// HasTranscript checks bb.Task (receiver) via len > 200
-		longTask := strings.Repeat("a", 201)
-		fn := (&Blackboard{Task: longTask}).conditionForName("HasTranscript")
+		fn := (&Blackboard{}).conditionForName("HasTranscript")
 		if fn == nil {
 			t.Fatal("expected non-nil")
 		}
-		if !fn(&Blackboard{}) {
+		longTask := strings.Repeat("a", 201)
+		if !fn(&Blackboard{Task: longTask}) {
 			t.Error("expected true for long task")
 		}
-		fn2 := (&Blackboard{Task: "short"}).conditionForName("HasTranscript")
-		if fn2(&Blackboard{}) {
+		if fn(&Blackboard{Task: "short"}) {
 			t.Error("expected false for short task")
 		}
 	})

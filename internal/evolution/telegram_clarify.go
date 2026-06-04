@@ -15,8 +15,8 @@ package evolution
 //	  │     └── Path: SuggestClarifyFix     → fallback: report violation
 //	  └── Reflect + Outcome
 //
-// Conditions and actions are registered in cmd/bt-agent/main.go
-// (engine cannot be imported here due to circular dependency).
+// Conditions and actions are registered in internal/domains/telegram_init.go
+// (engine cannot be imported in this package due to circular dependency).
 func TelegramClarifyTree() *SerializableNode {
 	return &SerializableNode{
 		Type: "Sequence",

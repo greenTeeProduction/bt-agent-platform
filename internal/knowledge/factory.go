@@ -322,7 +322,7 @@ func (f *Factory) defaultAgentPath(task string) evolution.SerializableNode {
 		Type: "Sequence", Name: "ExecutionPath",
 		Children: []evolution.SerializableNode{{
 			Type:     "ChainAction",
-			Name:     fmt.Sprintf("llm_call:%s", truncateTask(task, 80)),
+			Name:     fmt.Sprintf("llm_call:%s", util.Truncate(task, 80)),
 			Metadata: map[string]any{"max_tokens": float64(10)},
 		}},
 	}
@@ -360,13 +360,6 @@ func (f *Factory) generateTreeName(category, task string) string {
 		key = "_" + category + "_agent"
 	}
 	return category + ":" + strings.TrimPrefix(key, "_")
-}
-
-func truncateTask(task string, n int) string {
-	if len(task) <= n {
-		return task
-	}
-	return task[:n-3] + "..."
 }
 
 // ─── Backward compatibility ───
@@ -420,7 +413,7 @@ func (f *Factory) CreateTree(task, category string, parentIDs []string) (*evolut
 		ID:          treeID,
 		Name:        tree.Name,
 		Category:    category,
-		Description: "Auto-generated tree for: " + truncateTask(task, 100),
+		Description: "Auto-generated tree for: " + util.Truncate(task, 100),
 		NodeCount:   evolution.CountNodes(tree),
 		Keywords:    extractKeywords(task),
 		Capabilities: []Capability{
@@ -445,7 +438,7 @@ func (f *Factory) CreateFromParents(parentA, parentB string, task string) (*evol
 		ID:          treeID,
 		Name:        tree.Name,
 		Category:    category,
-		Description: fmt.Sprintf("Bred from %s × %s for: %s", parentA, parentB, truncateTask(task, 80)),
+		Description: fmt.Sprintf("Bred from %s × %s for: %s", parentA, parentB, util.Truncate(task, 80)),
 		NodeCount:   evolution.CountNodes(tree),
 		Keywords:    extractKeywords(task),
 		Relations: []Relation{

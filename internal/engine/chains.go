@@ -459,6 +459,8 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 
 	scratchpad := ""
 	finalAnswer := ""
+	toolUsed := false
+	toolsRequired := hasRealTools(bb)
 
 	for i := 0; i < maxIter; i++ {
 		prompt := fmt.Sprintf(`%s
@@ -492,6 +494,10 @@ What is your next step?`, systemMsg, task, toolList, scratchpad)
 		if action == "" {
 			// Check for final answer
 			if fa := parseFinalAnswer(response); fa != "" {
+				if toolsRequired && !toolUsed {
+					scratchpad += fmt.Sprintf("Step %d: rejected unevidenced final answer because no real tool was used. Available tools: %s\n", i+1, availableToolNames(bb))
+					continue
+				}
 				finalAnswer = fa
 				break
 			}
@@ -503,9 +509,19 @@ What is your next step?`, systemMsg, task, toolList, scratchpad)
 		// Execute the tool
 		toolResult := executeAgentTool(action, actionInput, bb)
 		scratchpad += fmt.Sprintf("Step %d: Action: %s(%s) → %s\n", i+1, action, actionInput, toolResult)
+		if !isToolUnavailableResult(toolResult) {
+			toolUsed = true
+		}
 
 		// Store tool result for downstream use
 		bb.CachedResult = toolResult
+	}
+
+	if toolsRequired && !toolUsed {
+		bb.Outcome = "tool_evidence_missing"
+		bb.Result = fmt.Sprintf("## Blocked: No Tool Evidence\n\nAgent was given real tools but did not successfully use any, so no factual claims were produced.\n\nAvailable real tools: %s\n\nStatus: blocked honestly instead of fabricating output.", availableToolNames(bb))
+		bb.Results = append(bb.Results, bb.Result)
+		return 1
 	}
 
 	if finalAnswer == "" {
@@ -559,6 +575,10 @@ func execToolAction(cfg ChainConfig, bb *Blackboard) int {
 	result := executeAgentTool(toolName, input, bb)
 	bb.CachedResult = result
 	bb.Result = result
+	if isToolUnavailableResult(result) {
+		bb.Outcome = "tool_unavailable"
+		return -1
+	}
 	bb.Outcome = "chain_success"
 	return 1
 }
@@ -652,16 +672,32 @@ func executeAgentTool(name, input string, bb *Blackboard) string {
 		}
 	}
 
-	// Fallback: ask LLM to simulate the tool
-	if bb.LLM != nil {
-		simPrompt := fmt.Sprintf("Simulate the output of tool '%s' with input '%s'. Be concise.", name, input)
-		result, err := bb.LLM.Generate(simPrompt)
-		if err == nil {
-			return result
+	return fmt.Sprintf("TOOL_UNAVAILABLE: real tool '%s' not found. Available real tools: %s. Do not simulate or fabricate this tool output; pick an available tool or report blocked.", name, availableToolNames(bb))
+}
+
+func availableToolNames(bb *Blackboard) string {
+	type named interface{ Name() string }
+	if bb == nil || len(bb.ChainTools) == 0 {
+		return "(none)"
+	}
+	names := make([]string, 0, len(bb.ChainTools))
+	for _, t := range bb.ChainTools {
+		if n, ok := t.(named); ok {
+			names = append(names, n.Name())
 		}
 	}
+	if len(names) == 0 {
+		return "(none)"
+	}
+	return strings.Join(names, ", ")
+}
 
-	return fmt.Sprintf("tool '%s' not found", name)
+func hasRealTools(bb *Blackboard) bool {
+	return bb != nil && len(bb.ChainTools) > 0 && availableToolNames(bb) != "(none)"
+}
+
+func isToolUnavailableResult(result string) bool {
+	return strings.Contains(result, "TOOL_UNAVAILABLE") || strings.Contains(result, "STUB_ERROR") || strings.Contains(result, "found but has no Call method")
 }
 
 // parseChainConfig extracts ChainConfig from a SerializableNode's metadata.

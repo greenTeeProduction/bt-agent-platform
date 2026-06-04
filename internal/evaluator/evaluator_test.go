@@ -5,13 +5,12 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
-func makeRecords(outcomes ...reflection.Outcome) []reflection.Record {
-	var records []reflection.Record
+func makeRecords(outcomes ...evolution.Outcome) []evolution.Record {
+	var records []evolution.Record
 	for i, o := range outcomes {
-		records = append(records, reflection.Record{
+		records = append(records, evolution.Record{
 			TaskID:     "task",
 			Task:       "task",
 			Plan:       "plan",
@@ -24,7 +23,7 @@ func makeRecords(outcomes ...reflection.Outcome) []reflection.Record {
 
 func TestEvaluateTree_Perfect(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success, reflection.Success, reflection.Success, reflection.Success)
+	records := makeRecords(evolution.Success, evolution.Success, evolution.Success, evolution.Success)
 
 	fitness := EvaluateTree(tree, records)
 
@@ -41,7 +40,7 @@ func TestEvaluateTree_Perfect(t *testing.T) {
 
 func TestEvaluateTree_AllFailures(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure, reflection.Failure)
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Failure)
 
 	fitness := EvaluateTree(tree, records)
 
@@ -55,7 +54,7 @@ func TestEvaluateTree_AllFailures(t *testing.T) {
 
 func TestEvaluateTree_Mixed(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success, reflection.Failure, reflection.Success, reflection.Failure)
+	records := makeRecords(evolution.Success, evolution.Failure, evolution.Success, evolution.Failure)
 
 	fitness := EvaluateTree(tree, records)
 
@@ -79,6 +78,29 @@ func TestEvaluateTree_EmptyRecords(t *testing.T) {
 	}
 }
 
+func TestEvaluateTree_StructuralQualityRewardsUsefulContentMutations(t *testing.T) {
+	weak := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{{Type: "ChainAction", Name: "Agent", Metadata: map[string]any{"max_iterations": float64(3)}}},
+	}
+	strong := cloneTree(weak)
+	evolution.ApplyMutations(strong, []evolution.MutationOp{
+		{Operation: "improve_prompt", Target: "Agent", Metadata: map[string]any{"system_msg": "Verify every claim with real tool output. Never fabricate."}},
+		{Operation: "add_tool", Target: "Agent", Metadata: map[string]any{"recommended_tool": "file_read"}},
+		{Operation: "increase_iterations", Target: "Agent"},
+	})
+	records := makeRecords(evolution.Success)
+
+	weakFit := EvaluateTree(weak, records)
+	strongFit := EvaluateTree(strong, records)
+	if strongFit.StructuralQuality <= weakFit.StructuralQuality {
+		t.Fatalf("expected structural quality improvement: weak %.2f strong %.2f", weakFit.StructuralQuality, strongFit.StructuralQuality)
+	}
+	if strongFit.Composite <= weakFit.Composite {
+		t.Fatalf("expected useful content mutations to improve composite: weak %.2f strong %.2f", weakFit.Composite, strongFit.Composite)
+	}
+}
+
 func TestEvaluateTree_NodeCountPenalty(t *testing.T) {
 	// A tree with many nodes should score lower on composite
 	smallTree := &evolution.SerializableNode{
@@ -87,7 +109,7 @@ func TestEvaluateTree_NodeCountPenalty(t *testing.T) {
 			{Type: "Action", Name: "A"},
 		},
 	}
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 
 	smallFit := EvaluateTree(smallTree, records)
 	bigFit := EvaluateTree(evolution.GoDeveloperTree(), records)
@@ -99,7 +121,7 @@ func TestEvaluateTree_NodeCountPenalty(t *testing.T) {
 }
 
 func TestEvaluateTree_GoDevVsDefault(t *testing.T) {
-	records := makeRecords(reflection.Success, reflection.Success, reflection.Success)
+	records := makeRecords(evolution.Success, evolution.Success, evolution.Success)
 
 	defaultFit := EvaluateTree(evolution.DefaultTree(), records)
 	goDevFit := EvaluateTree(evolution.GoDeveloperTree(), records)
@@ -209,7 +231,7 @@ func TestTranspositionTable_Eviction(t *testing.T) {
 
 func TestOrderMutations_SortsByScore(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure, reflection.Success)
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Success)
 	fitness := EvaluateTree(tree, records)
 
 	candidates := OrderMutations(tree, records, fitness)
@@ -229,7 +251,7 @@ func TestOrderMutations_SortsByScore(t *testing.T) {
 
 func TestOrderMutations_HighSuccess_NoPreCheck(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success, reflection.Success, reflection.Success, reflection.Success)
+	records := makeRecords(evolution.Success, evolution.Success, evolution.Success, evolution.Success)
 	fitness := EvaluateTree(tree, records)
 
 	candidates := OrderMutations(tree, records, fitness)
@@ -244,7 +266,7 @@ func TestOrderMutations_HighSuccess_NoPreCheck(t *testing.T) {
 
 func TestOrderMutations_LowSuccess_RecommendsValidation(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure, reflection.Success)
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Success)
 	fitness := EvaluateTree(tree, records)
 
 	candidates := OrderMutations(tree, records, fitness)
@@ -260,6 +282,53 @@ func TestOrderMutations_LowSuccess_RecommendsValidation(t *testing.T) {
 	}
 }
 
+func TestOrderMutations_PrioritizesClearTaskGateForWeakTrees(t *testing.T) {
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "PreGate"},
+			{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+		},
+	}
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Success)
+	fitness := EvaluateTree(tree, records)
+
+	candidates := OrderMutations(tree, records, fitness)
+	if len(candidates) == 0 {
+		t.Fatal("expected candidates")
+	}
+	first := candidates[0]
+	if first.Op.Operation != "add_before" || first.Op.Target != "PreGate" || first.Op.Node == nil || first.Op.Node.Name != "HasClearTask" {
+		t.Fatalf("expected HasClearTask gate as top mutation, got op=%s target=%s node=%v reason=%q", first.Op.Operation, first.Op.Target, first.Op.Node, first.Reason)
+	}
+}
+
+func TestOrderMutations_PrioritizesPromptThenToolThenIterations(t *testing.T) {
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{{
+			Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{
+				"system_msg":     "Research the task.",
+				"tools":          []any{},
+				"max_iterations": float64(3),
+			},
+		}},
+	}
+	records := makeRecords(evolution.Success)
+	fitness := EvaluateTree(tree, records)
+
+	candidates := OrderMutations(tree, records, fitness)
+	if len(candidates) < 3 {
+		t.Fatalf("expected at least three content candidates, got %d", len(candidates))
+	}
+	want := []string{"improve_prompt", "add_tool", "increase_iterations"}
+	for i, op := range want {
+		if candidates[i].Op.Operation != op {
+			t.Fatalf("candidate[%d] op=%s, want %s; all=%v", i, candidates[i].Op.Operation, op, candidates)
+		}
+	}
+}
+
 // --- Iterative Deepening tests ---
 
 func TestIterativeDeepening_NoCrash(t *testing.T) {
@@ -267,7 +336,7 @@ func TestIterativeDeepening_NoCrash(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success, reflection.Failure, reflection.Success)
+	records := makeRecords(evolution.Success, evolution.Failure, evolution.Success)
 
 	result := IterativeDeepening(tree, records, tt, 1)
 
@@ -285,7 +354,7 @@ func TestIterativeDeepening_PrunesExplodingTrees(t *testing.T) {
 
 	// Tree with wrap_retry on many nodes — mutations would explode node count
 	tree := evolution.GoDeveloperTree()
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 
 	result := IterativeDeepening(tree, records, tt, 3)
 
@@ -303,7 +372,7 @@ func TestIterativeDeepening_TTHits(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 
 	// Pre-populate TT with evaluations of mutation combos
 	clone := cloneTree(tree)

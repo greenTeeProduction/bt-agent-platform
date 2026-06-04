@@ -35,7 +35,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nico/go-bt-evolve/internal/benchreg"
+	"github.com/nico/go-bt-evolve/internal/benchmark"
 )
 
 func main() {
@@ -99,14 +99,14 @@ func baselineCmd(args []string) {
 	save := fs.Bool("save", false, "save stdin as new baseline")
 	fs.Parse(args)
 
-	store := benchreg.NewBaselineStore(baselinePath())
+	store := benchmark.NewBaselineStore(baselinePath())
 	if *save {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
 			os.Exit(3)
 		}
-		results := benchreg.ParseBenchOutput(string(data))
+		results := benchmark.ParseBenchOutput(string(data))
 		if len(results) == 0 {
 			fmt.Fprintln(os.Stderr, "No benchmark results found in input.")
 			os.Exit(3)
@@ -123,7 +123,7 @@ func baselineCmd(args []string) {
 			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
 			os.Exit(3)
 		}
-		results := benchreg.ParseBenchOutput(string(data))
+		results := benchmark.ParseBenchOutput(string(data))
 		for _, r := range results {
 			fmt.Printf("%-50s %8.0f ns/op %8.0f B/op %5d allocs\n", r.Name, r.NsPerOp, r.BPerOp, r.Allocs)
 		}
@@ -138,13 +138,13 @@ func checkCmd(args []string) {
 	minNs := fs.Float64("min-ns", 100.0, "minimum ns/op to consider")
 	fs.Parse(args)
 
-	config := benchreg.RegressionConfig{
+	config := benchmark.RegressionConfig{
 		WarningThreshold:  *warning,
 		CriticalThreshold: *critical,
 		MinNsPerOp:        *minNs,
 	}
 
-	store := benchreg.NewBaselineStore(baselinePath())
+	store := benchmark.NewBaselineStore(baselinePath())
 	if err := store.Load(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading baseline: %v\n", err)
 		os.Exit(3)
@@ -160,26 +160,26 @@ func checkCmd(args []string) {
 		os.Exit(3)
 	}
 
-	current := benchreg.ParseBenchOutput(string(data))
+	current := benchmark.ParseBenchOutput(string(data))
 	if len(current) == 0 {
 		fmt.Fprintln(os.Stderr, "No benchmark results found in input.")
 		os.Exit(3)
 	}
 
-	comp := benchreg.NewComparator(store, config)
+	comp := benchmark.NewComparator(store, config)
 	results := comp.Compare(current)
-	report := benchreg.FormatReport(results)
+	report := benchmark.FormatReport(results)
 	fmt.Print(report)
 
-	if benchreg.HasRegressions(results) {
+	if benchmark.HasRegressions(results) {
 		os.Exit(2)
-	} else if benchreg.HasWarnings(results) {
+	} else if benchmark.HasWarnings(results) {
 		os.Exit(1)
 	}
 }
 
 func showCmd() {
-	store := benchreg.NewBaselineStore(baselinePath())
+	store := benchmark.NewBaselineStore(baselinePath())
 	if err := store.Load(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading baseline: %v\n", err)
 		os.Exit(3)

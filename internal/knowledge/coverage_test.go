@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // =============================================================================
@@ -728,9 +729,9 @@ func TestTruncateTask(t *testing.T) {
 		{"exactly ten", 10, "exactly..."},
 	}
 	for _, tt := range tests {
-		got := truncateTask(tt.task, tt.n)
+		got := util.Truncate(tt.task, tt.n)
 		if got != tt.want {
-			t.Errorf("truncateTask(%q, %d) = %q, want %q", tt.task, tt.n, got, tt.want)
+			t.Errorf("util.Truncate(%q, %d) = %q, want %q", tt.task, tt.n, got, tt.want)
 		}
 	}
 }

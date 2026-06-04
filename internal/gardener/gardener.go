@@ -31,10 +31,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"github.com/nico/go-bt-evolve/internal/reflection"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // TreeEntry is a named tree in the registry with its evolution state.
@@ -72,13 +69,13 @@ func (r *Registry) loadAll() {
 	r.addBuiltin("godev", "Go software developer BT", evolution.GoDeveloperTree())
 
 	// Finance trees
-	for name, tree := range finance.AllFinanceTrees() {
-		r.addBuiltin("finance_"+name, finance.AgentDescriptions[name], tree)
+	for name, tree := range evolution.AllFinanceTrees() {
+		r.addBuiltin("finance_"+name, evolution.AgentDescriptions[name], tree)
 	}
 
 	// Research trees
-	for name, tree := range research.ResearchTrees() {
-		r.addBuiltin("research_"+name, research.Descriptions[name], tree)
+	for name, tree := range evolution.ResearchTrees() {
+		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
 	}
 
 	// Domain trees
@@ -152,6 +149,21 @@ func (r *Registry) Count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.entries)
+}
+
+// DeactivateAll sets Active=false on all entries in the registry.
+// Returns the previous count of active entries.
+func (r *Registry) DeactivateAll() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	active := 0
+	for i := range r.entries {
+		if r.entries[i].Active {
+			active++
+			r.entries[i].Active = false
+		}
+	}
+	return active
 }
 
 // SaveTree persists a tree to its file path.
@@ -296,7 +308,7 @@ func (mt *MetricsTracker) Summary() map[string]interface{} {
 type Config struct {
 	Registry       *Registry
 	MetricsTracker *MetricsTracker
-	RefStore       *reflection.Store
+	RefStore       *evolution.Store
 	TT             *evaluator.TranspositionTable
 	Interval       time.Duration             // how often to wake up
 	MaxMutations   int                       // max mutations per cycle per tree
@@ -349,7 +361,8 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
 
-	records, _ := g.cfg.RefStore.LoadAll()
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := evolution.FilterByTreeName(allRecords, entry.Name)
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
 	rejections := 0
@@ -491,13 +504,14 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 
 	newFitness := evaluator.EvaluateTree(tree, records)
 	nodesAfter := evolution.CountNodes(tree)
+	improved := newFitness.Composite > baseFitness.Composite
 
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
 		Delta:     newFitness.Composite - baseFitness.Composite,
 		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
-		Improved:   applied > 0,
+		Improved:   improved,
 		Rejections: rejections, Rollbacks: rollbacks,
 	}
 }

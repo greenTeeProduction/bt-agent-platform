@@ -46,7 +46,7 @@ func TestScoreChild_NilChainState(t *testing.T) {
 
 // errMockLLM returns an error from Generate
 type errMockLLM struct {
-	mockLLM
+	MockLLM
 }
 
 func (e *errMockLLM) Generate(prompt string) (string, error) {

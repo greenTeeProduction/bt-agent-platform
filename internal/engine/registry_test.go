@@ -1,10 +1,11 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/goap"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -142,7 +143,7 @@ func TestGeneratePlanAction_WithMockLLM(t *testing.T) {
 	bb := &Blackboard{
 		Task:       "test task",
 		Complexity: "medium",
-		LLM:        &mockLLM{plan: "generated plan"},
+		LLM:        &MockLLM{PlanResp: "generated plan"},
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := generatePlanAction(ctx)
@@ -164,7 +165,7 @@ func TestExecLLMCallAction_NilLLM(t *testing.T) {
 }
 
 func TestExecLLMCallAction_WithMockLLM(t *testing.T) {
-	bb := &Blackboard{Task: "test task", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test task", LLM: &MockLLM{}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := execLLMCallAction(ctx)
 	if result != 1 {
@@ -185,7 +186,7 @@ func TestExecRefineAction_NilLLM(t *testing.T) {
 }
 
 func TestExecRefineAction_EmptyResult(t *testing.T) {
-	bb := &Blackboard{Result: "", LLM: &mockLLM{}}
+	bb := &Blackboard{Result: "", LLM: &MockLLM{}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := execRefineAction(ctx)
 	if result != -1 {
@@ -194,7 +195,7 @@ func TestExecRefineAction_EmptyResult(t *testing.T) {
 }
 
 func TestExecRefineAction_WithMockLLM(t *testing.T) {
-	bb := &Blackboard{Result: "original output", LLM: &mockLLM{}}
+	bb := &Blackboard{Result: "original output", LLM: &MockLLM{}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := execRefineAction(ctx)
 	if result != 1 {
@@ -339,8 +340,8 @@ func TestToolStub_Description(t *testing.T) {
 func TestToolStub_Call(t *testing.T) {
 	ts := toolStub{name: "web_search", desc: "search the web"}
 	result := ts.Call("test query")
-	if result != "" {
-		t.Errorf("Call() = %q, want empty string", result)
+	if !strings.Contains(result, "STUB_ERROR") {
+		t.Errorf("Call() = %q, want STUB_ERROR message", result)
 	}
 }
 
@@ -393,7 +394,7 @@ func TestEngine_Independence(t *testing.T) {
 
 func TestReflectOnOutcomeAction_NilLLM(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	bb := &Blackboard{
 		Task:        "test task",
 		Outcome:     "success",
@@ -412,8 +413,8 @@ func TestReflectOnOutcomeAction_NilLLM(t *testing.T) {
 
 func TestReflectOnOutcomeAction_WithMockLLM(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
-	mock := &mockLLM{wentWell: "good analysis", toImprove: "add more detail"}
+	refStore, _ := evolution.NewStore(tmpDir)
+	mock := &MockLLM{WentWellResp: "good analysis", ToImproveResp: "add more detail"}
 	bb := &Blackboard{
 		Task:        "test task",
 		Outcome:     "success",

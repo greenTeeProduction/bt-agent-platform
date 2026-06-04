@@ -7,7 +7,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
@@ -102,7 +101,7 @@ func TestGAIA_DeepResearch(t *testing.T) {
 		t.Skip("skipping Ollama-dependent test in short mode")
 	}
 	entries := BuiltinGAIADev()
-	tree := research.DeepResearchTree()
+	tree := evolution.DeepResearchTree()
 	mock := DefaultLLM()
 
 	metrics := EvaluateGAIA(tree, entries, mock)

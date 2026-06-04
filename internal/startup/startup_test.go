@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -282,7 +283,7 @@ func TestStartupTrees(t *testing.T) {
 
 func TestSummary(t *testing.T) {
 	company := NewDefaultCompany()
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 	summary := orch.Summary()
 	if summary == "" {
 		t.Fatal("Summary() returned empty string")
@@ -308,7 +309,7 @@ func TestSummary(t *testing.T) {
 
 func TestRunYear(t *testing.T) {
 	company := NewDefaultCompany()
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 
 	results := orch.RunYear()
 	if results == nil {
@@ -345,7 +346,7 @@ func TestRunYear(t *testing.T) {
 
 func TestRunSprint_ProducesValidResult(t *testing.T) {
 	company := NewDefaultCompany()
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 
 	result := orch.RunSprint()
 	if result == nil {
@@ -369,7 +370,7 @@ func TestRunSprint_CompanyMetricsUpdated(t *testing.T) {
 	initialUsers := company.Users
 	initialCash := company.CashInBank
 
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 	_ = orch.RunSprint()
 
 	// MRR should increase from sales
@@ -421,7 +422,7 @@ func TestNewDefaultCompany_Values(t *testing.T) {
 
 func TestSprintAndQuarterHistory(t *testing.T) {
 	company := NewDefaultCompany()
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 
 	// Run one quarter (12 sprints)
 	_ = orch.RunQuarter()
@@ -443,7 +444,7 @@ func TestSprintAndQuarterHistory(t *testing.T) {
 
 func TestRunQuarter_MetricsValid(t *testing.T) {
 	company := NewDefaultCompany()
-	orch := NewOrchestrator(company, testLLM())
+	orch := NewOrchestrator(company, engine.NewMockLLM())
 
 	qr := orch.RunQuarter()
 	if qr.Revenue <= 0 {

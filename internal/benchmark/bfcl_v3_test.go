@@ -6,8 +6,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
@@ -88,7 +86,7 @@ func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
 
 	// Second entry: finance domain
 	{
-		tree := finance.PitchAgentTree()
+		tree := evolution.PitchAgentTree()
 		llmClient := DefaultLLM()
 		metrics := EvaluateBFCLV3(tree, compEntries[1:], llmClient)
 		allResults = append(allResults, metrics.Results...)
@@ -138,7 +136,7 @@ func TestBFCLV3_LongContext(t *testing.T) {
 	}
 
 	// Run against DeepResearchTree (handles research-type long context)
-	tree := research.DeepResearchTree()
+	tree := evolution.DeepResearchTree()
 	llmClient := DefaultLLM()
 	metrics := EvaluateBFCLV3(tree, longCtxEntries, llmClient)
 

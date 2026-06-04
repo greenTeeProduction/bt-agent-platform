@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
@@ -12,7 +11,7 @@ import (
 // ─── BuildAndValidate ───
 
 func TestBuildAndValidate_ValidTree(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "Sequence", Name: "test",
 		Children: []evolution.SerializableNode{
@@ -29,7 +28,7 @@ func TestBuildAndValidate_ValidTree(t *testing.T) {
 }
 
 func TestBuildAndValidate_InvalidTree(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	// An unknown node type fails validation
 	node := &evolution.SerializableNode{Type: "UnknownType", Name: "bad"}
 	_, err := BuildAndValidate(node, bb)
@@ -255,7 +254,7 @@ func TestRunReactiveParallel_DefaultMode_Sequential(t *testing.T) {
 		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
-	result := runReactiveParallel(children, "unknown_mode", nil, nil, true, ctx)
+	result := runReactiveParallel(children, ParallelMode(99), nil, nil, true, ctx)
 	if result != 1 {
 		t.Errorf("expected 1 (fallback sequential), got %d", result)
 	}
@@ -267,7 +266,7 @@ func TestRunReactiveParallel_DefaultMode_Fails(t *testing.T) {
 		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
-	result := runReactiveParallel(children, "unknown_mode", nil, nil, true, ctx)
+	result := runReactiveParallel(children, ParallelMode(99), nil, nil, true, ctx)
 	if result != -1 {
 		t.Errorf("expected -1 (fallback sequential failure), got %d", result)
 	}
@@ -288,7 +287,7 @@ func TestRunReactiveParallel_ParallelMonitor_OutOfBoundsIndex(t *testing.T) {
 // ─── ScoreChildren ───
 
 func TestScoreChildren_TieBreakByCost(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}, ChainState: map[string]any{"task_priority": 0.5}}
+	bb := &Blackboard{LLM: &MockLLM{}, ChainState: map[string]any{"task_priority": 0.5}}
 	node := &evolution.SerializableNode{
 		Type: "Selector", Name: "test",
 		Children: []evolution.SerializableNode{
@@ -311,7 +310,7 @@ func TestScoreChildren_TieBreakByCost(t *testing.T) {
 
 func TestScoreChildren_InvalidThenValidSorting(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"hasAccess": false},
 	}
 	node := &evolution.SerializableNode{
@@ -340,7 +339,7 @@ func TestScoreChildren_InvalidThenValidSorting(t *testing.T) {
 }
 
 func TestScoreChildren_EmptyNode(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{Type: "Selector", Name: "empty"}
 	scores := ScoreChildren(node, bb, DefaultScoringCriteria())
 	if len(scores) != 0 {
@@ -349,7 +348,7 @@ func TestScoreChildren_EmptyNode(t *testing.T) {
 }
 
 func TestScoreChildren_SingleChild(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "Selector", Name: "test",
 		Children: []evolution.SerializableNode{
@@ -370,7 +369,7 @@ func TestScoreChildren_SingleChild(t *testing.T) {
 
 func TestScoreChildren_GuardConditionBlocks(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"hasAccess": false},
 	}
 	node := &evolution.SerializableNode{
@@ -395,7 +394,7 @@ func TestScoreChildren_GuardConditionBlocks(t *testing.T) {
 
 func TestScoreChildren_GuardConditionPasses(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"hasAccess": true},
 	}
 	node := &evolution.SerializableNode{
@@ -420,7 +419,7 @@ func TestScoreChildren_GuardConditionPasses(t *testing.T) {
 
 func TestScoreChildren_MultipleChildrenRanked(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"task_priority": 0.9},
 	}
 	node := &evolution.SerializableNode{
@@ -442,7 +441,7 @@ func TestScoreChildren_MultipleChildrenRanked(t *testing.T) {
 
 func TestScoreChildren_ChildWithGoalAlignment(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"goal_alignment": 0.85},
 	}
 	node := &evolution.SerializableNode{
@@ -461,7 +460,7 @@ func TestScoreChildren_ChildWithGoalAlignment(t *testing.T) {
 }
 
 func TestScoreChildren_ChildWithRiskScore(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "Selector", Name: "test",
 		Children: []evolution.SerializableNode{
@@ -478,7 +477,7 @@ func TestScoreChildren_ChildWithRiskScore(t *testing.T) {
 }
 
 func TestScoreChildren_EdgeWeightOverrides(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "Selector", Name: "test",
 		Children: []evolution.SerializableNode{
@@ -502,7 +501,7 @@ func TestScoreChildren_EdgeWeightOverrides(t *testing.T) {
 // ─── BuildUtilitySelector ───
 
 func TestBuildUtilitySelector_NoChildren(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{Type: "UtilitySelector", Name: "empty"}
 	cmd := BuildUtilitySelector(node, bb)
 	if cmd == nil {
@@ -517,7 +516,7 @@ func TestBuildUtilitySelector_NoChildren(t *testing.T) {
 
 func TestBuildUtilitySelector_WithMetadataCriteria(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"task_priority": 0.95},
 	}
 	node := &evolution.SerializableNode{
@@ -541,13 +540,13 @@ func TestBuildUtilitySelector_WithMetadataCriteria(t *testing.T) {
 	if result != 1 {
 		t.Errorf("expected 1 (MarkSuccessful succeeds), got %d", result)
 	}
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected outcome=success, got %s", bb.Outcome)
 	}
 }
 
 func TestBuildUtilitySelector_FailFast_BestFails(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "UtilitySelector", Name: "failFast",
 		Metadata: map[string]any{"fail_fast": true},
@@ -569,7 +568,7 @@ func TestBuildUtilitySelector_FailFast_BestFails(t *testing.T) {
 }
 
 func TestBuildUtilitySelector_FailFastFalse_BestFailsThenNextSucceeds(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "UtilitySelector", Name: "tryNext",
 		Metadata: map[string]any{"fail_fast": false},
@@ -591,7 +590,7 @@ func TestBuildUtilitySelector_FailFastFalse_BestFailsThenNextSucceeds(t *testing
 }
 
 func TestBuildUtilitySelector_FailFastFalse_AllChildrenFail(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "UtilitySelector", Name: "allFail",
 		Children: []evolution.SerializableNode{
@@ -613,7 +612,7 @@ func TestBuildUtilitySelector_FailFastFalse_AllChildrenFail(t *testing.T) {
 
 func TestBuildUtilitySelector_FailFastFalse_FirstSucceeds(t *testing.T) {
 	bb := &Blackboard{
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 		ChainState: map[string]any{"cached_fitness": 0.85},
 	}
 	node := &evolution.SerializableNode{
@@ -639,7 +638,7 @@ func TestBuildUtilitySelector_FailFastFalse_FirstSucceeds(t *testing.T) {
 // ─── BuildReactiveParallel ───
 
 func TestBuildReactiveParallel_AllModeSuccess(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{"mode": "all"},
@@ -660,7 +659,7 @@ func TestBuildReactiveParallel_AllModeSuccess(t *testing.T) {
 }
 
 func TestBuildReactiveParallel_AbortOnEventDelegates(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "AbortOnEvent", Name: "abort",
 		Metadata: map[string]any{
@@ -678,7 +677,7 @@ func TestBuildReactiveParallel_AbortOnEventDelegates(t *testing.T) {
 }
 
 func TestBuildReactiveParallel_AnyMode(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{"mode": "any"},
@@ -698,7 +697,7 @@ func TestBuildReactiveParallel_AnyMode(t *testing.T) {
 }
 
 func TestBuildReactiveParallel_MonitorMode(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{

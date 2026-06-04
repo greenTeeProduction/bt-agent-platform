@@ -1,0 +1,9 @@
+name: notebooklm-bridge
+description: Bridges NotebookLM to the BT platform — scans for new artifacts, downloads audio/reports, indexes to Obsidian vault, monitors notebook health
+tree: notebooklm-bridge
+schedule: "30 */4 * * *"
+quality:
+  required_sections: ["Auth Status", "Notebooks Scanned", "Artifacts Downloaded", "Vault Entries"]
+metadata:
+  category: integration
+  tags: "notebooklm,bridge,automation"

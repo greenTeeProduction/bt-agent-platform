@@ -5,9 +5,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/reflection"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // ─── Output Quality Validation ───
@@ -91,7 +88,7 @@ func TestTree_GoDevStructure(t *testing.T) {
 
 func TestTree_AllEvolution(t *testing.T) {
 	fns := map[string]func() *evolution.SerializableNode{
-		"hermes_evolve":  evolution.HermesSelfEvolutionTree,
+		"hermes_evolve":  domains.HermesSelfEvolutionTree,
 		"stockfish":      evolution.StockfishEvolutionTree,
 		"stockfish_loop": evolution.StockfishEvolutionLoop,
 	}
@@ -105,16 +102,16 @@ func TestTree_AllEvolution(t *testing.T) {
 
 func TestTree_AllFinance(t *testing.T) {
 	fns := map[string]func() *evolution.SerializableNode{
-		"pitch_agent":        finance.PitchAgentTree,
-		"earnings_reviewer":  finance.EarningsReviewerTree,
-		"market_researcher":  finance.MarketResearcherTree,
-		"model_builder":      finance.ModelBuilderTree,
-		"meeting_prep":       finance.MeetingPrepTree,
-		"valuation_reviewer": finance.ValuationReviewerTree,
-		"gl_reconciler":      finance.GLReconcilerTree,
-		"month_end_closer":   finance.MonthEndCloserTree,
-		"statement_auditor":  finance.StatementAuditorTree,
-		"kyc_screener":       finance.KYCScreenerTree,
+		"pitch_agent":        evolution.PitchAgentTree,
+		"earnings_reviewer":  evolution.EarningsReviewerTree,
+		"market_researcher":  evolution.MarketResearcherTree,
+		"model_builder":      evolution.ModelBuilderTree,
+		"meeting_prep":       evolution.MeetingPrepTree,
+		"valuation_reviewer": evolution.ValuationReviewerTree,
+		"gl_reconciler":      evolution.GLReconcilerTree,
+		"month_end_closer":   evolution.MonthEndCloserTree,
+		"statement_auditor":  evolution.StatementAuditorTree,
+		"kyc_screener":       evolution.KYCScreenerTree,
 	}
 	for name, fn := range fns {
 		tree := fn()
@@ -146,11 +143,11 @@ func TestTree_AllDomain(t *testing.T) {
 }
 
 func TestTree_Research(t *testing.T) {
-	deep := research.DeepResearchTree()
+	deep := evolution.DeepResearchTree()
 	if deep == nil || len(deep.Children) == 0 {
 		t.Error("DeepResearchTree invalid")
 	}
-	quick := research.QuickResearchTree()
+	quick := evolution.QuickResearchTree()
 	if quick == nil || len(quick.Children) == 0 {
 		t.Error("QuickResearchTree invalid")
 	}
@@ -159,7 +156,7 @@ func TestTree_Research(t *testing.T) {
 // ─── Routing Path Tests ───
 
 func TestRouting_CodeReview(t *testing.T) {
-	bb := &Blackboard{Task: "review this Go code for bugs", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "review this Go code for bugs", LLM: &MockLLM{}}
 	tree := BuildTree(evolution.GoDeveloperTree(), bb)
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
@@ -168,7 +165,7 @@ func TestRouting_CodeReview(t *testing.T) {
 }
 
 func TestRouting_GoKnowledge(t *testing.T) {
-	bb := &Blackboard{Task: "what is the best practice for Go error handling", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "what is the best practice for Go error handling", LLM: &MockLLM{}}
 	tree := BuildTree(evolution.GoDeveloperTree(), bb)
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
@@ -177,8 +174,8 @@ func TestRouting_GoKnowledge(t *testing.T) {
 }
 
 func TestRouting_Finance(t *testing.T) {
-	bb := &Blackboard{Task: "build a DCF model for valuation", LLM: &mockLLM{}}
-	tree := BuildTree(finance.PitchAgentTree(), bb)
+	bb := &Blackboard{Task: "build a DCF model for valuation", LLM: &MockLLM{}}
+	tree := BuildTree(evolution.PitchAgentTree(), bb)
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
 		t.Error("DCF task should produce outcome")
@@ -186,8 +183,8 @@ func TestRouting_Finance(t *testing.T) {
 }
 
 func TestRouting_Research(t *testing.T) {
-	bb := &Blackboard{Task: "research quantum computing advances", LLM: &mockLLM{}}
-	tree := BuildTree(research.DeepResearchTree(), bb)
+	bb := &Blackboard{Task: "research quantum computing advances", LLM: &MockLLM{}}
+	tree := BuildTree(evolution.DeepResearchTree(), bb)
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
 		t.Error("research task should produce outcome")
@@ -195,7 +192,7 @@ func TestRouting_Research(t *testing.T) {
 }
 
 func TestRouting_Monitoring(t *testing.T) {
-	bb := &Blackboard{Task: "check system health status", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "check system health status", LLM: &MockLLM{}}
 	tree := BuildTree(domains.AgentMonitorTree(), bb)
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
@@ -206,21 +203,21 @@ func TestRouting_Monitoring(t *testing.T) {
 // ─── Outcome Flow ───
 
 func TestOutcome_Success(t *testing.T) {
-	bb := &Blackboard{Task: "test task", Outcome: string(reflection.Success), LLM: &mockLLM{}, Result: "valid output with sufficient length to pass quality validation checks"}
+	bb := &Blackboard{Task: "test task", Outcome: string(evolution.Success), LLM: &MockLLM{}, Result: "valid output with sufficient length to pass quality validation checks"}
 	tree := evolution.DefaultTree()
 	bt := BuildTree(tree, bb)
 	_ = RunTask(bb, bt)
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success, got %s", bb.Outcome)
 	}
 }
 
 func TestOutcome_EmptyTaskFails(t *testing.T) {
-	bb := &Blackboard{Task: "", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "", LLM: &MockLLM{}}
 	tree := evolution.DefaultTree()
 	bt := BuildTree(tree, bb)
 	outcome := RunTask(bb, bt)
-	if outcome == string(reflection.Success) {
+	if outcome == string(evolution.Success) {
 		t.Error("empty task should not succeed")
 	}
 }
@@ -228,7 +225,7 @@ func TestOutcome_EmptyTaskFails(t *testing.T) {
 // ─── Builder Edge Cases ───
 
 func TestBuildTree_Minimal(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{Type: "Sequence", Name: "minimal"}
 	bt := BuildTree(node, bb)
 	if bt == nil {
@@ -237,7 +234,7 @@ func TestBuildTree_Minimal(t *testing.T) {
 }
 
 func TestBuildTree_UnknownType(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{Type: "UnknownType", Name: "unknown"}
 	bt := BuildTree(node, bb)
 	if bt == nil {
@@ -249,12 +246,12 @@ func TestBuildTree_UnknownType(t *testing.T) {
 
 func TestBlackboard_AllFields(t *testing.T) {
 	store, _ := evolution.NewTreeStore("/tmp/test-trees")
-	refStore, _ := reflection.NewStore("/tmp/test-reflections")
+	refStore, _ := evolution.NewStore("/tmp/test-reflections")
 	bb := &Blackboard{
 		Task: "task", Complexity: "medium", Plan: "plan", Result: "result",
 		Outcome: "success", KgResults: "kg", CachedResult: "cached",
 		FailureCount: 1, Reflections: refStore, TreeStore: store,
-		LLM: &mockLLM{}, ChainState: map[string]any{"k": "v"},
+		LLM: &MockLLM{}, ChainState: map[string]any{"k": "v"},
 		Results: []string{"r1", "r2"}, QualityScore: 0.85,
 	}
 	if bb.QualityScore != 0.85 {

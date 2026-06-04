@@ -174,28 +174,45 @@ func (e TypedEdge) MarshalJSON() ([]byte, error) {
 // Validate performs basic validation on a SerializableNode tree.
 // Returns nil if the tree is valid, or a list of validation errors.
 // This is a lightweight check suitable for callers that don't import the engine package;
-// it validates node types and edges but not depth, node count, or parallel width.
+// it validates node types, edges, and cycles but not depth, node count, or parallel width.
 func (n *SerializableNode) Validate() []string {
 	var errors []string
+	visited := make(map[string]bool)
+	n.validateRecursive(&errors, visited)
+	return errors
+}
+
+// validateRecursive is the internal recursive helper for Validate() with cycle detection.
+func (n *SerializableNode) validateRecursive(errors *[]string, visited map[string]bool) {
+	if n == nil {
+		return
+	}
+
+	// Cycle detection
+	if n.Name != "" {
+		if visited[n.Name] {
+			*errors = append(*errors, "node "+n.Name+": cycle detected — duplicate name in ancestry path")
+			return
+		}
+		visited[n.Name] = true
+		defer func() { visited[n.Name] = false }()
+	}
 
 	// Check node type
 	if !KnownNodeTypes[n.Type] {
-		errors = append(errors, "node "+n.Name+": unknown node type "+n.Type)
+		*errors = append(*errors, "node "+n.Name+": unknown node type "+n.Type)
 	}
 
 	// Check edges
 	for _, edge := range n.Edges {
 		edgeErrs := ValidateEdge(edge, len(n.Children))
 		for _, err := range edgeErrs {
-			errors = append(errors, "node "+n.Name+": "+err)
+			*errors = append(*errors, "node "+n.Name+": "+err)
 		}
 	}
 
 	// Recursively validate children
 	for i := range n.Children {
-		childErrs := n.Children[i].Validate()
-		errors = append(errors, childErrs...)
+		n.Children[i].validateRecursive(errors, visited)
 	}
-
-	return errors
 }

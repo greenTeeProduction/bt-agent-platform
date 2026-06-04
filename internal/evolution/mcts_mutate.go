@@ -14,6 +14,7 @@ package evolution
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -89,6 +90,10 @@ var AllMutationOps = []string{
 	"replace_node",
 	"replace_children",
 	"reorder_children",
+	"increase_retries",
+	"prune_node",
+	"increase_iterations",
+	"add_tool",
 }
 
 // ─── MCTSMutator ────────────────────────────────────────────────────────────
@@ -164,7 +169,7 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) *S
 		clone := cloneTree(parent)
 		ops := randomMutation(clone)
 		ApplyMutations(clone, ops)
-		return clone
+		return m.validateOrFallback(clone, parent)
 	}
 
 	// 1. CREATE root node
@@ -208,10 +213,21 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) *S
 		clone := cloneTree(parent)
 		ops := randomMutation(clone)
 		ApplyMutations(clone, ops)
-		return clone
+		return m.validateOrFallback(clone, parent)
 	}
 
-	return cloneTree(bestNode.Tree)
+	return m.validateOrFallback(cloneTree(bestNode.Tree), parent)
+}
+
+// validateOrFallback validates the tree after mutation. If validation fails,
+// it returns a clean clone of the parent instead — rejecting invalid mutations.
+func (m *MCTSMutator) validateOrFallback(mutated, parent *SerializableNode) *SerializableNode {
+	errors := mutated.Validate()
+	if len(errors) > 0 {
+		// Reject invalid mutation — return clean parent clone
+		return cloneTree(parent)
+	}
+	return mutated
 }
 
 // selectNode traverses from root using UCB1 until reaching an expandable leaf.
@@ -262,8 +278,8 @@ func (m *MCTSMutator) expandNode(node *MCTSNode) *MCTSNode {
 
 	// Apply mutation to a clone of the node's tree
 	childTree := cloneTree(node.Tree)
-	ops := []MutationOp{{Operation: op, Target: randomNodeName(childTree, childTree.Name)}}
-	applied := ApplyMutations(childTree, ops)
+	mutation := m.concreteMutationOp(op, childTree)
+	applied := ApplyMutations(childTree, []MutationOp{mutation})
 	if applied == 0 {
 		return nil // mutation didn't apply cleanly
 	}
@@ -282,6 +298,50 @@ func (m *MCTSMutator) expandNode(node *MCTSNode) *MCTSNode {
 	m.mu.Unlock()
 
 	return child
+}
+
+func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) MutationOp {
+	target := randomNodeName(tree, tree.Name)
+	unique := fmt.Sprintf("MCTS_%s_%d", op, rand.Intn(1_000_000))
+	switch op {
+	case "add_before", "add_after":
+		return MutationOp{Operation: op, Target: target, Node: &SerializableNode{
+			Type: "Condition", Name: unique, Description: "MCTS candidate guard",
+		}}
+	case "add_fallback":
+		if selector := firstNodeNameByType(tree, "Selector"); selector != "" {
+			target = selector
+		}
+		return MutationOp{Operation: op, Target: target, Node: &SerializableNode{
+			Type: "Action", Name: unique, Description: "MCTS candidate fallback",
+		}}
+	case "increase_iterations", "add_tool", "improve_prompt":
+		if chain := firstNodeNameByType(tree, "ChainAction"); chain != "" {
+			target = chain
+		}
+		if op == "add_tool" {
+			return MutationOp{Operation: op, Target: target, Metadata: map[string]any{"recommended_tool": "file_read"}}
+		}
+		if op == "improve_prompt" {
+			return MutationOp{Operation: op, Target: target, Metadata: map[string]any{"system_msg": "Verify every claim with real tool output. Never fabricate."}}
+		}
+	}
+	return MutationOp{Operation: op, Target: target}
+}
+
+func firstNodeNameByType(tree *SerializableNode, typ string) string {
+	if tree == nil {
+		return ""
+	}
+	if tree.Type == typ && tree.Name != "" {
+		return tree.Name
+	}
+	for i := range tree.Children {
+		if name := firstNodeNameByType(&tree.Children[i], typ); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // backpropagate propagates the fitness reward from the leaf up to the root.

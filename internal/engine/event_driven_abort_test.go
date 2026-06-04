@@ -11,7 +11,7 @@ import (
 
 func TestNewEventBus_SubsFiredInitialized(t *testing.T) {
 	eb := NewEventBus()
-	if eb.subs == nil {
+	if eb.subscribers == nil {
 		t.Error("subs map nil")
 	}
 	if eb.fired == nil {
@@ -60,7 +60,9 @@ func TestBuildEventDrivenAbort_SuccessChild(t *testing.T) {
 func TestBuildEventDrivenAbort_EventChannelAbort(t *testing.T) {
 	bb := &Blackboard{
 		ChainState: make(map[string]any),
+		EventBus:   NewEventBus(),
 	}
+	bb.ChainState["event_bus"] = bb.EventBus
 	childNode := evolution.SerializableNode{
 		Type: "RunningAction", // stays running until aborted
 	}
@@ -101,7 +103,9 @@ func TestBuildEventDrivenAbort_EventChannelAbort(t *testing.T) {
 func TestBuildEventDrivenAbort_PropagateEventData(t *testing.T) {
 	bb := &Blackboard{
 		ChainState: make(map[string]any),
+		EventBus:   NewEventBus(),
 	}
+	bb.ChainState["event_bus"] = bb.EventBus
 	childNode := evolution.SerializableNode{
 		Type: "RunningAction",
 	}
@@ -203,7 +207,9 @@ func TestBuildEventDrivenAbort_BlackboardKeyNotPresent(t *testing.T) {
 func TestBuildEventDrivenAbort_LegacyEventKey(t *testing.T) {
 	bb := &Blackboard{
 		ChainState: make(map[string]any),
+		EventBus:   NewEventBus(),
 	}
+	bb.ChainState["event_bus"] = bb.EventBus
 	childNode := evolution.SerializableNode{
 		Type: "RunningAction",
 	}
@@ -670,7 +676,9 @@ func TestBuildEventDrivenAbort_NoAbortNoMessage(t *testing.T) {
 func TestBuildEventDrivenAbort_RunningChildAndEventFired(t *testing.T) {
 	bb := &Blackboard{
 		ChainState: make(map[string]any),
+		EventBus:   NewEventBus(),
 	}
+	bb.ChainState["event_bus"] = bb.EventBus
 	childNode := evolution.SerializableNode{
 		Type: "RunningAction",
 	}

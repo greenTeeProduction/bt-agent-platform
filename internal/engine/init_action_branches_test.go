@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -21,7 +22,7 @@ func TestInitAction_ExecLLMCall(t *testing.T) {
 	}
 
 	// LLM set → returns 1 (success)
-	bb2 := &Blackboard{Task: "tell me a joke", LLM: &mockLLM{}}
+	bb2 := &Blackboard{Task: "tell me a joke", LLM: &MockLLM{}}
 	ctx2 := &btcore.BTContext[Blackboard]{Blackboard: bb2}
 	if got := fn(ctx2); got != 1 {
 		t.Errorf("ExecLLMCall with mock LLM: expected 1, got %d", got)
@@ -46,14 +47,14 @@ func TestInitAction_ExecRefine(t *testing.T) {
 	}
 
 	// LLM set but empty Result → still -1 (Result required)
-	bb2 := &Blackboard{Task: "improve this", Result: "", LLM: &mockLLM{}}
+	bb2 := &Blackboard{Task: "improve this", Result: "", LLM: &MockLLM{}}
 	ctx2 := &btcore.BTContext[Blackboard]{Blackboard: bb2}
 	if got := fn(ctx2); got != -1 {
 		t.Errorf("ExecRefine with empty Result: expected -1, got %d", got)
 	}
 
 	// Both set → returns 1
-	bb3 := &Blackboard{Task: "improve this", Result: "initial output that needs refinement", LLM: &mockLLM{}}
+	bb3 := &Blackboard{Task: "improve this", Result: "initial output that needs refinement", LLM: &MockLLM{}}
 	ctx3 := &btcore.BTContext[Blackboard]{Blackboard: bb3}
 	if got := fn(ctx3); got != 1 {
 		t.Errorf("ExecRefine with valid inputs: expected 1, got %d", got)
@@ -71,7 +72,7 @@ func TestInitAction_SelfCorrect_ResultsFallback(t *testing.T) {
 		Task:    "analyze this code",
 		Result:  "",
 		Results: []string{"first attempt", "second attempt"},
-		LLM:     &mockLLM{},
+		LLM:     &MockLLM{},
 	}
 	fn := GetAction("SelfCorrect")
 	if fn == nil {
@@ -168,8 +169,8 @@ func TestInitAction_AnalyzeTask(t *testing.T) {
 		t.Errorf("AnalyzeTask no LLM: expected empty Complexity, got %q", bb.Complexity)
 	}
 
-	// With LLM → Complexity gets set (mockLLM returns "" by default so we set it)
-	bb2 := &Blackboard{Task: "test task", LLM: &mockLLM{complexity: "medium"}}
+	// With LLM → Complexity gets set (MockLLM returns "" by default so we set it)
+	bb2 := &Blackboard{Task: "test task", LLM: &MockLLM{ComplexityResp: "medium"}}
 	ctx2 := &btcore.BTContext[Blackboard]{Blackboard: bb2}
 	if got := fn(ctx2); got != 1 {
 		t.Errorf("AnalyzeTask with LLM: expected 1, got %d", got)
@@ -195,18 +196,24 @@ func TestInitAction_ExecutePlan(t *testing.T) {
 	if bb.Result == "" {
 		t.Error("ExecutePlan should set Result")
 	}
+	if strings.Contains(bb.Result, "Executed plan for:") {
+		t.Fatalf("ExecutePlan should not return placeholder output, got %q", bb.Result)
+	}
 	if bb.Outcome != "success" {
 		t.Error("ExecutePlan should set Outcome to success")
 	}
 
-	// With LLM → Plan gets set (mockLLM returns "" by default so we set it)
-	bb2 := &Blackboard{Task: "test task", LLM: &mockLLM{plan: "execution plan"}, Complexity: "low"}
+	// With LLM → Plan gets set (MockLLM returns "" by default so we set it)
+	bb2 := &Blackboard{Task: "test task", LLM: &MockLLM{PlanResp: "execution plan"}, Complexity: "low"}
 	ctx2 := &btcore.BTContext[Blackboard]{Blackboard: bb2}
 	if got := fn(ctx2); got != 1 {
 		t.Errorf("ExecutePlan with LLM: expected 1, got %d", got)
 	}
 	if bb2.Plan == "" {
 		t.Error("ExecutePlan with LLM should set Plan")
+	}
+	if bb2.Result != bb2.Plan {
+		t.Fatalf("ExecutePlan with LLM should expose generated plan as result, got result=%q plan=%q", bb2.Result, bb2.Plan)
 	}
 }
 
@@ -218,14 +225,14 @@ func TestInitAction_reflectOnOutcome(t *testing.T) {
 	}
 
 	// Success outcome → WentWell gets set
-	bb := &Blackboard{Task: "test", Outcome: "success", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", Outcome: "success", LLM: &MockLLM{}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	if got := fn(ctx); got != 1 {
 		t.Errorf("ReflectOnOutcome success: expected 1, got %d", got)
 	}
 
 	// Failure outcome → ToImprove gets set
-	bb2 := &Blackboard{Task: "test", Outcome: "failure", LLM: &mockLLM{}}
+	bb2 := &Blackboard{Task: "test", Outcome: "failure", LLM: &MockLLM{}}
 	ctx2 := &btcore.BTContext[Blackboard]{Blackboard: bb2}
 	if got := fn(ctx2); got != 1 {
 		t.Errorf("ReflectOnOutcome failure: expected 1, got %d", got)
@@ -290,7 +297,7 @@ func TestInitAction_GeneratePlan(t *testing.T) {
 	if fn == nil {
 		t.Fatal("GeneratePlan not registered")
 	}
-	bb := &Blackboard{Task: "build a feature", LLM: &mockLLM{plan: "my plan"}}
+	bb := &Blackboard{Task: "build a feature", LLM: &MockLLM{PlanResp: "my plan"}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	if got := fn(ctx); got != 1 {
 		t.Errorf("GeneratePlan: expected 1, got %d", got)
@@ -306,7 +313,7 @@ func TestInitAction_AssignComplexity(t *testing.T) {
 	if fn == nil {
 		t.Fatal("AssignComplexity not registered")
 	}
-	bb := &Blackboard{Task: "test task", LLM: &mockLLM{complexity: "low"}}
+	bb := &Blackboard{Task: "test task", LLM: &MockLLM{ComplexityResp: "low"}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	if got := fn(ctx); got != 1 {
 		t.Errorf("AssignComplexity: expected 1, got %d", got)

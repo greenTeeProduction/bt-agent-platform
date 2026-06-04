@@ -24,6 +24,19 @@ func NewGenerator() *Generator {
 	return &Generator{}
 }
 
+func generatedFallbackChainAction() evolution.SerializableNode {
+	return evolution.SerializableNode{
+		Type:        "ChainAction",
+		Name:        "agent:{{.Task}}",
+		Description: "Execute generated-agent fallback path with real tool-capable ChainAction instead of AnalyzeTask/ExecutePlan stubs",
+		Metadata: map[string]any{
+			"system_msg": "You are a generated BT agent fallback executor. Analyze the task, use available tools when needed, and produce a concrete final result. Do not return placeholder text.",
+			"tools":      []any{"web_search", "file_ops", "code_exec"},
+			"max_tokens": float64(512),
+		},
+	}
+}
+
 // Generate produces a GeneratedAgent from a TreeSpec and shared blackboard.
 func (g *Generator) Generate(spec *TreeSpec, name string, bb *engine.Blackboard) (*GeneratedAgent, error) {
 	serTree := g.buildSerializable(spec, name)
@@ -182,14 +195,12 @@ func (g *Generator) buildStrategyPaths(spec *TreeSpec) []evolution.SerializableN
 		})
 	}
 
-	// Always add a fallback execution path (AnalyzeTask → ExecutePlan)
+	// Always add a real fallback execution path via ChainAction.
+	// Do not emit AnalyzeTask → ExecutePlan stubs: they only produce placeholder output.
 	paths = append(paths, evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "FallbackExecution",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "AnalyzeTask", Description: "LLM: analyze task complexity + intent"},
-			{Type: "Action", Name: "ExecutePlan", Description: "LLM: generate and execute plan"},
-		},
+		Type:     "Sequence",
+		Name:     "FallbackExecution",
+		Children: []evolution.SerializableNode{generatedFallbackChainAction()},
 	})
 
 	return paths

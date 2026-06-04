@@ -1,42 +1,10 @@
 package thinktank
 
 import (
-	"context"
 	"testing"
-	"time"
+
+	"github.com/nico/go-bt-evolve/internal/engine"
 )
-
-type mockLLM struct{}
-
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
-}
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return m.Generate(prompt)
-}
-
-func (m *mockLLM) Generate(prompt string) (string, error) {
-	// Return structured mock response for synthesis/parsing
-	if len(prompt) > 100 {
-		return "THESIS: Main argument thesis text\nANTITHESIS: Counter argument antithesis text\nSYNTHESIS: Resolved synthesis position\nRECOMMENDATION: Recommended action\nDISSENTING: Minority view", nil
-	}
-	l := len(prompt)
-	if l > 50 {
-		l = 50
-	}
-	return "Mock analysis: " + prompt[:l] + "...", nil
-}
-func (m *mockLLM) AnalyzeComplexity(task string) string { return "medium" }
-func (m *mockLLM) GeneratePlan(task, complexity string) string {
-	l := len(task)
-	if l > 30 {
-		l = 30
-	}
-	return "Execute: " + task[:l]
-}
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
-	return "completed", "nothing to improve"
-}
 
 func TestNewThinkTank(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
@@ -120,7 +88,7 @@ func TestScenario(t *testing.T) {
 
 func TestOrchestrator_ResearchRound(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	err := orch.RunResearchRound()
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +100,7 @@ func TestOrchestrator_ResearchRound(t *testing.T) {
 
 func TestOrchestrator_Debate(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	orch.RunResearchRound()
 	err := orch.RunDebate()
 	if err != nil {
@@ -145,7 +113,7 @@ func TestOrchestrator_Debate(t *testing.T) {
 
 func TestOrchestrator_Synthesis(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	orch.RunResearchRound()
 	err := orch.RunSynthesis()
 	if err != nil {
@@ -158,7 +126,7 @@ func TestOrchestrator_Synthesis(t *testing.T) {
 
 func TestOrchestrator_PeerReview(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	orch.RunResearchRound()
 	orch.RunSynthesis()
 	err := orch.RunPeerReview()
@@ -171,7 +139,7 @@ func TestOrchestrator_PeerReview(t *testing.T) {
 
 func TestOrchestrator_Report(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	orch.RunResearchRound()
 	orch.RunSynthesis()
 	err := orch.RunReportGeneration()
@@ -185,7 +153,7 @@ func TestOrchestrator_Report(t *testing.T) {
 
 func TestOrchestrator_FullAnalysis(t *testing.T) {
 	tt := NewThinkTank("Full", "Should we invest in AI?")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	err := orch.RunFullAnalysis("Should we invest in AI?")
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +171,7 @@ func TestOrchestrator_FullAnalysis(t *testing.T) {
 
 func TestOrchestrator_EmptyTopic(t *testing.T) {
 	tt := NewThinkTank("Test", "")
-	orch := NewOrchestrator(tt, &mockLLM{})
+	orch := NewOrchestrator(tt, engine.NewMockLLM())
 	err := orch.RunResearchRound()
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +185,7 @@ func TestFullAnalysis_MultipleTopics(t *testing.T) {
 	topics := []string{"Tesla acquisition strategy", "AI regulation impact", "Cloud migration 2026"}
 	for _, topic := range topics {
 		tt := NewThinkTank("Council", topic)
-		orch := NewOrchestrator(tt, &mockLLM{})
+		orch := NewOrchestrator(tt, engine.NewMockLLM())
 		err := orch.RunFullAnalysis(topic)
 		if err != nil {
 			t.Errorf("full analysis failed for %q: %v", topic, err)

@@ -7,14 +7,23 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
+
+// execWithTimeout runs a command with a 5-second timeout to prevent hangs.
+func execWithTimeout(name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
 
 func init() {
 	registerArc42Nodes()
@@ -36,7 +45,7 @@ func registerArc42Nodes() {
 
 	RegisterAction("ReadGitHistory", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, err := exec.Command("git", "log", "--oneline", "-30").Output()
+		out, err := execWithTimeout("git", "log", "--oneline", "-30")
 		if err != nil {
 			setChainState(bb, "git_history", fmt.Sprintf("git unavailable: %v", err))
 			return 1
@@ -104,11 +113,11 @@ func registerArc42Nodes() {
 				}
 			}
 		}
-		df, _ := exec.Command("df", "-h", "/").Output()
+		df, _ := execWithTimeout("df", "-h", "/")
 		if df != nil {
 			parts = append(parts, fmt.Sprintf("Disk: %s", strings.TrimSpace(string(df))))
 		}
-		uname, _ := exec.Command("uname", "-a").Output()
+		uname, _ := execWithTimeout("uname", "-a")
 		if uname != nil {
 			parts = append(parts, fmt.Sprintf("Kernel: %s", strings.TrimSpace(string(uname))))
 		}
@@ -118,7 +127,7 @@ func registerArc42Nodes() {
 
 	RegisterAction("DetectProcesses", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c", "ps aux | grep -E 'bt-|hermes' | grep -v grep").Output()
+		out, _ := execWithTimeout("bash", "-c", "ps aux | grep -E 'bt-|hermes' | grep -v grep")
 		setChainState(bb, "processes", string(out))
 		return 1
 	})
@@ -149,32 +158,28 @@ func registerArc42Nodes() {
 
 	RegisterAction("ListExternalAPIs", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c",
-			`grep -rn 'http\.NewRequest\|http\.Get\|http\.Post\|http\.Client\|net\.Dial\|jsonrpc' internal/ cmd/ --include='*.go' | head -30`).Output()
+		out, _ := execWithTimeout("bash", "-c", `grep -rn 'http\.NewRequest\|http\.Get\|http\.Post\|http\.Client\|net\.Dial\|jsonrpc' internal/ cmd/ --include='*.go' | head -30`)
 		setChainState(bb, "external_apis", string(out))
 		return 1
 	})
 
 	RegisterAction("ListMCPTools", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c",
-			`grep -rn 'RegisterTool\|AddTool\|tools.Register' internal/mcp/ internal/a2a/ --include='*.go' | wc -l`).Output()
+		out, _ := execWithTimeout("bash", "-c", `grep -rn 'RegisterTool\|AddTool\|tools.Register' internal/mcp/ internal/a2a/ --include='*.go' | wc -l`)
 		setChainState(bb, "mcp_tools", fmt.Sprintf("Registered MCP tools: %s", strings.TrimSpace(string(out))))
 		return 1
 	})
 
 	RegisterAction("ScanCodeComments", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c",
-			`grep -rn '^// Package ' internal/ --include='*.go' | head -40`).Output()
+		out, _ := execWithTimeout("bash", "-c", `grep -rn '^// Package ' internal/ --include='*.go' | head -40`)
 		setChainState(bb, "comments", string(out))
 		return 1
 	})
 
 	RegisterAction("ScanTypes", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c",
-			`grep -rn '^type [A-Z]' internal/ --include='*.go' | grep -v '_test.go' | head -50`).Output()
+		out, _ := execWithTimeout("bash", "-c", `grep -rn '^type [A-Z]' internal/ --include='*.go' | grep -v '_test.go' | head -50`)
 		setChainState(bb, "types", string(out))
 		return 1
 	})
@@ -212,16 +217,14 @@ func registerArc42Nodes() {
 			setChainState(bb, "coverage", "coverage skipped: running inside go test to avoid recursive test execution")
 			return 1
 		}
-		out, _ := exec.Command("bash", "-c",
-			`go test ./... -coverprofile=/tmp/arc42_cover.out -count=1 -timeout 60s 2>&1 | tail -10`).Output()
+		out, _ := execWithTimeout("bash", "-c", `go test ./... -coverprofile=/tmp/arc42_cover.out -count=1 -timeout 60s 2>&1 | tail -10`)
 		setChainState(bb, "coverage", string(out))
 		return 1
 	})
 
 	RegisterAction("ReadErrorLogs", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, _ := exec.Command("bash", "-c",
-			`tail -30 ~/.hermes/logs/errors.log 2>/dev/null || echo "no error log found"`).Output()
+		out, _ := execWithTimeout("bash", "-c", `tail -30 ~/.hermes/logs/errors.log 2>/dev/null || echo "no error log found"`)
 		setChainState(bb, "errors", string(out))
 		return 1
 	})
@@ -231,10 +234,9 @@ func registerArc42Nodes() {
 	RegisterAction("SetupDocTools", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		bb.ChainTools = []any{
-			toolStub{name: "read_file", desc: "Read a file from the filesystem"},
-			toolStub{name: "write_file", desc: "Write content to a file"},
-			toolStub{name: "shell_exec", desc: "Execute a shell command"},
-			toolStub{name: "grep_search", desc: "Search codebase with grep patterns"},
+			newFileReadTool(),
+			newFileWriteTool(),
+			newShellExecTool(),
 		}
 		return 1
 	})

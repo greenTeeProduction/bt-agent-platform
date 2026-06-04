@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -201,9 +202,8 @@ func TestWalkValidate_DepthLimitExceeded(t *testing.T) {
 	root := &evolution.SerializableNode{Type: "Sequence", Name: "Depth0"}
 	current := root
 	for i := 1; i <= 20; i++ {
-		child := &evolution.SerializableNode{Type: "Sequence", Name: "Depth"}
+		child := &evolution.SerializableNode{Type: "Sequence", Name: fmt.Sprintf("Depth%d", i)}
 		current.Children = append(current.Children, *child)
-		// Need to re-find the new child since we appended a copy
 		current = &current.Children[len(current.Children)-1]
 	}
 	info := ValidateTreeFull(root)

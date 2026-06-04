@@ -28,14 +28,29 @@ func ValidateTreeFull(tree *evolution.SerializableNode) *evolution.NodeValidatio
 	}
 	info.Type = tree.Type
 
-	walkValidate(tree, info, 1, false)
+	// Cycle detection: track visited node names on the current ancestry path.
+	// A logical cycle exists when EdgeReuses references a sibling/ancestor subtree
+	// that contains the referencing node, or when an action node's children
+	// contain a node with its own name (self-referential subtree).
+	walkValidate(tree, info, 1, false, make(map[string]bool))
 	return info
 }
 
-func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidationInfo, depth int, hasApprovalGate bool) {
+func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidationInfo, depth int, hasApprovalGate bool, visitedNames map[string]bool) {
 	if node == nil {
 		info.Errors = append(info.Errors, "nil node")
 		return
+	}
+
+	// Cycle check: if this node's name is already in the ancestry path, we have a cycle.
+	// Empty-name nodes are allowed (anonymous inner nodes).
+	if node.Name != "" {
+		if visitedNames[node.Name] {
+			info.Errors = append(info.Errors, fmt.Sprintf("node %q: cycle detected — node name appears twice in ancestry path at depth %d", node.Name, depth))
+			return
+		}
+		visitedNames[node.Name] = true
+		defer func() { visitedNames[node.Name] = false }()
 	}
 
 	info.NodeCount++
@@ -93,7 +108,7 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 	}
 
 	for i := range node.Children {
-		walkValidate(&node.Children[i], info, depth+1, hasApprovalGate)
+		walkValidate(&node.Children[i], info, depth+1, hasApprovalGate, visitedNames)
 	}
 
 	if info.MaxDepth > DefaultMaxDepth {

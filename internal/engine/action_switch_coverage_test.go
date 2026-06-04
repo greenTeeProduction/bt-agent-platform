@@ -160,7 +160,7 @@ func TestActionSwitch_CompileAndTest(t *testing.T) {
 }
 
 func TestActionSwitch_WriteGoCode(t *testing.T) {
-	bb := &Blackboard{Task: "write code", LLM: &mockLLM{plan: "implement feature"}}
+	bb := &Blackboard{Task: "write code", LLM: &MockLLM{PlanResp: "implement feature"}}
 	fn := bb.actionForName("WriteGoCode")
 	if fn == nil {
 		t.Fatal("actionForName returned nil for WriteGoCode")
@@ -292,7 +292,7 @@ func TestActionSwitch_LoadToWarehouse(t *testing.T) {
 }
 
 func TestActionSwitch_BuildDCFModel(t *testing.T) {
-	bb := &Blackboard{Task: "dcf analysis", LLM: &mockLLM{plan: "dcf plan"}}
+	bb := &Blackboard{Task: "dcf analysis", LLM: &MockLLM{PlanResp: "dcf plan"}}
 	fn := bb.actionForName("BuildDCFModel")
 	if fn == nil {
 		t.Fatal("actionForName returned nil for BuildDCFModel")
@@ -316,7 +316,7 @@ func TestActionSwitch_AssemblePitchDeck(t *testing.T) {
 }
 
 func TestActionSwitch_ReviewLLMResponse(t *testing.T) {
-	bb := &Blackboard{Task: "review response", LLM: &mockLLM{plan: "review plan"}}
+	bb := &Blackboard{Task: "review response", LLM: &MockLLM{PlanResp: "review plan"}}
 	fn := bb.actionForName("ReviewLLMResponse")
 	if fn == nil {
 		t.Fatal("actionForName returned nil for ReviewLLMResponse")

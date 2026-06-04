@@ -318,7 +318,7 @@ func TestComputeSubtreeMetrics_UpdatesMaxValues(t *testing.T) {
 // ─── buildChainActionFn with ChainConfig edge cases ───
 
 func TestBuildChainActionFn_UnknownChainType(t *testing.T) {
-	bb := &Blackboard{Task: "test task", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test task", LLM: &MockLLM{}}
 	cfg := ChainConfig{
 		ChainType: "unknown_type_xyz",
 		Prompt:    "test prompt",

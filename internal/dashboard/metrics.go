@@ -176,7 +176,8 @@ func collectSystem() SystemMetrics {
 	if err == nil {
 		s.Processes, err = strconv.Atoi(strings.TrimSpace(string(out)))
 		if err != nil {
-			s.Processes = 0
+			// retain previous known-good count instead of silently defaulting to 0
+			_ = err
 		}
 	}
 

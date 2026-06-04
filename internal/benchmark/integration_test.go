@@ -9,8 +9,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // TestFullTreeIntegration_RunsAllTreesWithRealLLM exercises ALL registered trees
@@ -41,12 +39,12 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 	)
 
 	// 2. Finance trees
-	for name, tree := range finance.AllFinanceTrees() {
+	for name, tree := range evolution.AllFinanceTrees() {
 		allTrees = append(allTrees, namedTree{"finance_" + name, tree})
 	}
 
 	// 3. Research trees
-	for name, tree := range research.ResearchTrees() {
+	for name, tree := range evolution.ResearchTrees() {
 		allTrees = append(allTrees, namedTree{"research_" + name, tree})
 	}
 
@@ -158,7 +156,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 // with valid structure (non-nil, named correctly).
 func TestDomainTree_Registration(t *testing.T) {
 	// Finance trees
-	financeTrees := finance.AllFinanceTrees()
+	financeTrees := evolution.AllFinanceTrees()
 	if len(financeTrees) < 10 {
 		t.Errorf("expected 10 finance trees, got %d", len(financeTrees))
 	}
@@ -173,7 +171,7 @@ func TestDomainTree_Registration(t *testing.T) {
 	}
 
 	// Research trees
-	researchTrees := research.ResearchTrees()
+	researchTrees := evolution.ResearchTrees()
 	if len(researchTrees) < 2 {
 		t.Errorf("expected at least 2 research trees, got %d", len(researchTrees))
 	}
@@ -223,10 +221,10 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 	var treeNames []string
 	treeNames = append(treeNames, "default", "godev")
 
-	for name := range finance.AllFinanceTrees() {
+	for name := range evolution.AllFinanceTrees() {
 		treeNames = append(treeNames, "finance_"+name)
 	}
-	for name := range research.ResearchTrees() {
+	for name := range evolution.ResearchTrees() {
 		treeNames = append(treeNames, "research_"+name)
 	}
 	for name := range domains.AllDomainTrees() {
@@ -262,10 +260,10 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 		namedTree{"default", evolution.DefaultTree()},
 		namedTree{"godev", evolution.GoDeveloperTree()},
 	)
-	for name, tree := range finance.AllFinanceTrees() {
+	for name, tree := range evolution.AllFinanceTrees() {
 		allTrees = append(allTrees, namedTree{"finance_" + name, tree})
 	}
-	for name, tree := range research.ResearchTrees() {
+	for name, tree := range evolution.ResearchTrees() {
 		allTrees = append(allTrees, namedTree{"research_" + name, tree})
 	}
 	for name, tree := range domains.AllDomainTrees() {
@@ -309,7 +307,7 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 func TestTreeLoadFromDisk_NodeCount(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	for name, tree := range finance.AllFinanceTrees() {
+	for name, tree := range evolution.AllFinanceTrees() {
 		if tree == nil {
 			continue
 		}

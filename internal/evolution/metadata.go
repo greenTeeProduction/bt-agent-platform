@@ -43,14 +43,16 @@ func (m *EvolutionMetadata) AddMutation(op MutationLog) {
 	m.Version++
 }
 
-// RecordFitness updates the fitness record.
+// RecordFitness updates the fitness record and records a regression when the
+// new score is lower than the previously recorded score.
 func (m *EvolutionMetadata) RecordFitness(score float64, validated bool) {
+	previous := m.Fitness.Score
+	if score < previous {
+		m.Fitness.Regressions++
+	}
 	m.Fitness.Score = score
 	m.Fitness.Validated = validated
 	m.Fitness.EvalDate = time.Now()
-	if score < m.Fitness.Score {
-		m.Fitness.Regressions++
-	}
 }
 
 // SetPhase updates the evolution phase.

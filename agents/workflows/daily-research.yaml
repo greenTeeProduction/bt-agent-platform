@@ -1,0 +1,21 @@
+name: daily-research
+description: Daily research pipeline — research a topic, generate NotebookLM artifacts, and store in vault
+version: "1.0.0"
+steps:
+  - id: research
+    kind: agent
+    agent: hermes-researcher
+    input: "Research the following topic thoroughly: {{.input}}"
+    on_failure: abort
+
+  - id: notebooklm
+    kind: agent
+    agent: notebooklm
+    input: "Create a research notebook and generate artifacts for: {{.prev.research.output}}"
+    on_failure: skip
+
+  - id: vault
+    kind: agent
+    agent: vault
+    input: "Store the following research output and notebook details: {{.prev.notebooklm.output}}"
+    on_failure: skip

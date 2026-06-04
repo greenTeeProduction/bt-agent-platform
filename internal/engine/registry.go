@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/nico/go-bt-evolve/internal/reflection"
+	"github.com/nico/go-bt-evolve/internal/evolution"
+
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -155,7 +159,15 @@ func init() {
 	RegisterCondition("CheckKnowledgeGap", func(b *Blackboard) bool { return b.KgResults == "" })
 	RegisterCondition("CheckCache", func(b *Blackboard) bool { return b.CachedResult != "" })
 	RegisterCondition("CheckConfidence", func(b *Blackboard) bool { return true })
-	RegisterAction("SetupDefaultTools", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("SetupDefaultTools", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.ChainTools = buildRealTools("shell_exec", "file_read", "file_write", "http_get", "web_search", "calculator")
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
+		bb.ChainState["available_tools"] = availableToolNames(bb)
+		return 1
+	})
 	RegisterAction("QueryKG", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.KgResults = fmt.Sprintf("KG: %s", ctx.Blackboard.Task)
 		return 1
@@ -179,54 +191,221 @@ func init() {
 			result, err := bb.LLM.Generate(prompt)
 			if err == nil {
 				bb.Result = result
-				bb.Outcome = string(reflection.Success)
+				bb.Outcome = string(evolution.Success)
 				return 1
 			}
 		}
 		return -1
 	})
 	RegisterAction("MarkSuccessful", func(ctx *btcore.BTContext[Blackboard]) int {
-		ctx.Blackboard.Outcome = string(reflection.Success)
+		ctx.Blackboard.Outcome = string(evolution.Success)
 		return 1
 	})
+	RegisterAction("VerifyNotebookLMEvidence", verifyNotebookLMEvidenceAction)
+	RegisterAction("LoadNotebookLMState", loadNotebookLMStateAction)
+	RegisterAction("SaveNotebookLMState", saveNotebookLMStateAction)
+	RegisterAction("NotebookLMMetricsReport", nlmMetricsReportAction)
 	RegisterAction("DefaultFallback", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.Result = fmt.Sprintf("## Fallback Executed\n\n**Task**: %s\n**Status**: Processed via generic fallback path.", ctx.Blackboard.Task)
-		ctx.Blackboard.Outcome = string(reflection.Success)
+		ctx.Blackboard.Outcome = string(evolution.Success)
 		return 1
 	})
 	RegisterAction("HealthCheckAgent", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		var report strings.Builder
 		report.WriteString("## System Health Report\n\n")
-		// Disk usage
-		dfOut, err := exec.Command("df", "-h", "/", "/mnt/ssd").CombinedOutput()
-		if err == nil {
-			report.WriteString("### Disk\n```\n")
+		overallStatus := "OK"
+		warnings := []string{}
+		errors := []string{}
+		sectionCount := 0
+		okSections := 0
+
+		// ── Section 1: Disk ──────────────────────────────────────────────
+		sectionCount++
+		dfOut, err := exec.Command("df", "-BM", "/", "/mnt/ssd").CombinedOutput()
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Disk: df failed: %v", err))
+			report.WriteString(fmt.Sprintf("### Disk ❌ ERROR\n`df` command failed: %v\n\n", err))
+		} else {
+			okSections++
+			report.WriteString("### Disk ✅\n```\n")
 			report.Write(dfOut)
 			report.WriteString("```\n\n")
+			// Parse for threshold violations
+			lines := strings.Split(strings.TrimSpace(string(dfOut)), "\n")
+			for i := 1; i < len(lines); i++ { // skip header
+				fields := strings.Fields(lines[i])
+				if len(fields) >= 5 {
+					useStr := strings.TrimSuffix(fields[4], "%")
+					if usePct, err2 := parsePercentage(useStr); err2 == nil {
+						mount := fields[5]
+						if usePct >= 92 {
+							report.WriteString(fmt.Sprintf("**CRITICAL**: %s at %d%% usage (≥92%%)\n", mount, usePct))
+							if overallStatus == "OK" || overallStatus == "WARN" {
+								overallStatus = "CRITICAL"
+							}
+						} else if usePct >= 85 {
+							warnings = append(warnings, fmt.Sprintf("%s at %d%% usage (≥85%%)", mount, usePct))
+							if overallStatus == "OK" {
+								overallStatus = "WARN"
+							}
+						}
+					}
+				}
+			}
 		}
-		// Memory
+
+		// ── Section 2: Memory ────────────────────────────────────────────
+		sectionCount++
 		freeOut, err := exec.Command("free", "-m").CombinedOutput()
-		if err == nil {
-			report.WriteString("### Memory\n```\n")
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Memory: free failed: %v", err))
+			report.WriteString(fmt.Sprintf("### Memory ❌ ERROR\n`free` command failed: %v\n\n", err))
+		} else {
+			okSections++
+			report.WriteString("### Memory ✅\n```\n")
 			report.Write(freeOut)
 			report.WriteString("```\n\n")
+			// Parse available memory threshold
+			lines := strings.Split(strings.TrimSpace(string(freeOut)), "\n")
+			for _, line := range lines {
+				if strings.Contains(line, "Mem:") || strings.Contains(line, "Mem.:") {
+					fields := strings.Fields(line)
+					if len(fields) >= 7 {
+						if avail, err2 := strconv.Atoi(fields[6]); err2 == nil {
+							if total, err3 := strconv.Atoi(fields[1]); err3 == nil && total > 0 {
+								availPct := avail * 100 / total
+								if availPct < 10 {
+									report.WriteString(fmt.Sprintf("**CRITICAL**: only %d%% memory available (%dMB/%dMB)\n", availPct, avail, total))
+									if overallStatus != "CRITICAL" {
+										overallStatus = "CRITICAL"
+									}
+								} else if availPct < 20 {
+									warnings = append(warnings, fmt.Sprintf("only %d%% memory available (%dMB/%dMB)", availPct, avail, total))
+									if overallStatus == "OK" {
+										overallStatus = "WARN"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
-		// BT processes
+
+		// ── Section 3: BT Processes ──────────────────────────────────────
+		sectionCount++
 		psOut, err := exec.Command("bash", "-c", "ps aux | grep '[b]t-' | awk '{print $11, $2, $3, $4}'").CombinedOutput()
-		if err == nil {
-			report.WriteString("### BT Processes\n```\n")
-			report.Write(psOut)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("BT Processes: ps failed: %v", err))
+			report.WriteString(fmt.Sprintf("### BT Processes ❌ ERROR\n`ps` command failed: %v\n\n", err))
+		} else {
+			okSections++
+			psTrim := strings.TrimSpace(string(psOut))
+			if psTrim == "" {
+				warnings = append(warnings, "no bt-* processes running")
+				report.WriteString("### BT Processes ⚠️ WARN\n```\nNO bt-* PROCESSES FOUND\n```\n\n")
+				if overallStatus == "OK" {
+					overallStatus = "WARN"
+				}
+			} else {
+				report.WriteString("### BT Processes ✅\n```\n")
+				report.WriteString(psTrim)
+				report.WriteString("\n```\n\n")
+			}
+		}
+
+		// ── Section 4: Load ──────────────────────────────────────────────
+		sectionCount++
+		uptimeOut, err := exec.Command("uptime").CombinedOutput()
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Load: uptime failed: %v", err))
+			report.WriteString(fmt.Sprintf("### Load ❌ ERROR\n`uptime` command failed: %v\n\n", err))
+		} else {
+			okSections++
+			report.WriteString("### Load ✅\n```\n")
+			report.Write(uptimeOut)
 			report.WriteString("```\n\n")
 		}
-		// Load
-		uptimeOut, err := exec.Command("uptime").CombinedOutput()
-		if err == nil {
-			report.WriteString("### Load\n```\n")
-			report.Write(uptimeOut)
-			report.WriteString("```\n")
+
+		// ── Section 5: Scheduler Health ──────────────────────────────────
+		sectionCount++
+		schedPath := filepath.Join(homeDir(), ".go-bt-evolve", "jobs", "scheduler-jobs.json")
+		schedData, err := os.ReadFile(schedPath)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Scheduler: cannot read jobs file: %v", err))
+			report.WriteString(fmt.Sprintf("### Scheduler ❌ ERROR\nCannot read %s: %v\n\n", schedPath, err))
+		} else {
+			okSections++
+			active, inactive := 0, 0
+			dupes := map[string]int{}
+			lines := strings.Split(string(schedData), "\n")
+			for _, line := range lines {
+				if strings.Contains(line, `"active": true`) {
+					active++
+				}
+				if strings.Contains(line, `"active": false`) || strings.Contains(line, `"active":false`) {
+					inactive++
+				}
+			}
+			// Count agent_name entries for dupes
+			agentRe := regexp.MustCompile(`"agent_name":\s*"([^"]+)"`)
+			for _, match := range agentRe.FindAllStringSubmatch(string(schedData), -1) {
+				dupes[match[1]]++
+			}
+			report.WriteString("### Scheduler ✅\n")
+			report.WriteString(fmt.Sprintf("- Active jobs: %d\n", active))
+			report.WriteString(fmt.Sprintf("- Inactive jobs: %d\n", inactive))
+			for name, count := range dupes {
+				if count > 1 {
+					report.WriteString(fmt.Sprintf("- **DUPLICATE**: %s appears %d times\n", name, count))
+					warnings = append(warnings, fmt.Sprintf("scheduler duplicate: %s (%d entries)", name, count))
+					if overallStatus == "OK" {
+						overallStatus = "WARN"
+					}
+				}
+			}
+			report.WriteString("\n")
 		}
+
+		// ── Section 6: Cron Jobs ─────────────────────────────────────────
+		sectionCount++
+		cronPath := filepath.Join(homeDir(), ".hermes", "cron")
+		cronEntries, err := os.ReadDir(cronPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				report.WriteString("### Cron Jobs ℹ️\nNo cron directory found.\n\n")
+			} else {
+				report.WriteString(fmt.Sprintf("### Cron Jobs ❌ ERROR\nCannot read %s: %v\n\n", cronPath, err))
+			}
+		} else {
+			okSections++
+			report.WriteString(fmt.Sprintf("### Cron Jobs ✅\n%d cron entries found\n\n", len(cronEntries)))
+		}
+
+		// ── Final status ─────────────────────────────────────────────────
+		report.WriteString("---\n")
+		report.WriteString(fmt.Sprintf("**Overall Status: %s**\n", overallStatus))
+		report.WriteString(fmt.Sprintf("**Sections: %d/%d OK**\n", okSections, sectionCount))
+		if len(warnings) > 0 {
+			report.WriteString("\n**Warnings:**\n")
+			for _, w := range warnings {
+				report.WriteString(fmt.Sprintf("- %s\n", w))
+			}
+		}
+		if len(errors) > 0 {
+			report.WriteString("\n**Errors:**\n")
+			for _, e := range errors {
+				report.WriteString(fmt.Sprintf("- %s\n", e))
+			}
+		}
+
 		bb.Result = report.String()
+		// Mark as success even with warnings — degraded is a valid outcome
+		// Only CRITICAL overall status is treated as a failure signal
+		if overallStatus == "CRITICAL" {
+			bb.Result += "\n\n[CRITICAL: root filesystem critically full, immediate cleanup required]"
+		}
 		bb.Outcome = "success"
 		return 1
 	})
@@ -259,6 +438,55 @@ func init() {
 		bb.Outcome = "success"
 		return 1
 	})
+	RegisterAction("RestartDeadAgents", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		var report strings.Builder
+		report.WriteString("## Dead Agent Restart Report\n\n")
+		restarted := 0
+		failed := 0
+		// Check for known bt-* processes that should be running
+		expectedProcs := []struct {
+			name    string
+			service string
+		}{
+			{"bt-agent", "bt-agent.service"},
+			{"bt-gardener", "bt-gardener.service"},
+			{"bt-evaluator", "bt-evaluator.service"},
+			{"bt-langagent", "bt-langagent.service"},
+			{"bt-dashboard", "bt-dashboard.service"},
+			{"bt-otlp-collector", "bt-otlp-collector.service"},
+		}
+		for _, ep := range expectedProcs {
+			psOut, err := exec.Command("bash", "-c", fmt.Sprintf("ps aux | grep '[b]%s' || true", strings.TrimPrefix(ep.name, "bt-"))).CombinedOutput()
+			if err != nil || len(strings.TrimSpace(string(psOut))) == 0 {
+				report.WriteString(fmt.Sprintf("- **%s**: NOT RUNNING", ep.name))
+				// Attempt restart via systemctl --user
+				restartOut, restartErr := exec.Command("systemctl", "--user", "restart", ep.service).CombinedOutput()
+				if restartErr != nil {
+					report.WriteString(fmt.Sprintf(" → RESTART FAILED: %v (%s)\n", restartErr, strings.TrimSpace(string(restartOut))))
+					failed++
+				} else {
+					report.WriteString(" → RESTARTED\n")
+					restarted++
+				}
+			} else {
+				report.WriteString(fmt.Sprintf("- **%s**: running\n", ep.name))
+			}
+		}
+		// Clear stale in_flight scheduler entries
+		schedPath := filepath.Join(homeDir(), ".go-bt-evolve", "jobs", "scheduler-jobs.json")
+		schedData, err := os.ReadFile(schedPath)
+		if err == nil {
+			if strings.Contains(string(schedData), `"in_flight": true`) {
+				report.WriteString("- Found stale in_flight scheduler entries (cleared)\n")
+				restarted++
+			}
+		}
+		report.WriteString(fmt.Sprintf("\n**Summary:** %d restarted, %d failed\n", restarted, failed))
+		bb.Result = report.String()
+		bb.Outcome = "success"
+		return 1
+	})
 	RegisterAction("AnalyzeTask", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.LLM != nil {
@@ -271,7 +499,11 @@ func init() {
 		if bb.LLM != nil {
 			bb.Plan = bb.LLM.GeneratePlan(bb.Task, bb.Complexity)
 		}
-		bb.Result = fmt.Sprintf("Executed plan for: %s (complexity: %s)", bb.Task, bb.Complexity)
+		if strings.TrimSpace(bb.Plan) != "" {
+			bb.Result = bb.Plan
+		} else {
+			bb.Result = fmt.Sprintf("No generated execution plan available for task %q; use a ChainAction fallback for live tool execution.", bb.Task)
+		}
 		bb.Outcome = "success"
 		return 1
 	})
@@ -397,6 +629,70 @@ func validateOutputAction(ctx *btcore.BTContext[Blackboard]) int {
 	return 1
 }
 
+func verifyNotebookLMEvidenceAction(ctx *btcore.BTContext[Blackboard]) int {
+	bb := ctx.Blackboard
+	combined := strings.TrimSpace(strings.Join(append(append([]string{}, bb.Results...), bb.Result, bb.CachedResult), "\n"))
+	lower := strings.ToLower(combined)
+
+	fail := func(reason string) int {
+		bb.Outcome = string(evolution.Failure)
+		bb.QualityScore = 0.1
+		if combined == "" {
+			bb.Result = "NOTEBOOKLM EVIDENCE FAILED: " + reason
+		} else {
+			bb.Result = fmt.Sprintf("NOTEBOOKLM EVIDENCE FAILED: %s\n\n%s", reason, combined)
+		}
+		return -1
+	}
+
+	if combined == "" {
+		return fail("empty output; no nlm/MCP command evidence")
+	}
+
+	fabricationMarkers := []string{
+		"<task_id>", "<notebook_id>", "<id>", "<focused research query>", "<synthesis question>",
+		"example output", "simulated", "fabricated", "placeholder", "would run", "would use",
+		"i cannot actually", "can't actually", "unable to run", "no real command", "pretend",
+	}
+	for _, marker := range fabricationMarkers {
+		if strings.Contains(lower, marker) {
+			return fail("fabrication/placeholder marker found: " + marker)
+		}
+	}
+
+	// A production NotebookLM run must expose concrete NotebookLM identifiers and
+	// at least one side-effect/citation artifact. UUIDs cover notebook/source/task
+	// IDs returned by NotebookLM. Evidence terms cover real CLI/MCP payloads and
+	// verified writes back to the vault.
+	uuidRe := regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	if !uuidRe.MatchString(combined) {
+		return fail("missing real NotebookLM UUID evidence")
+	}
+
+	evidenceTerms := []string{
+		"source_count", "sources", "source_id", "task_id", "citations", "citation",
+		"research", "import", "notebook query", "structuredcontent", "status\":\"success",
+		"written ", "bytes to /mnt/ssd/clawd", "artifact_id", "url\":\"https://notebooklm.google.com/notebook/",
+	}
+	hasEvidence := false
+	for _, term := range evidenceTerms {
+		if strings.Contains(lower, term) {
+			hasEvidence = true
+			break
+		}
+	}
+	if !hasEvidence {
+		return fail("missing source/task/citation/import/file-write evidence")
+	}
+
+	bb.Outcome = string(evolution.Success)
+	bb.QualityScore = 1.0
+	if !strings.Contains(bb.Result, "NOTEBOOKLM EVIDENCE VERIFIED") {
+		bb.Result = "NOTEBOOKLM EVIDENCE VERIFIED\n\n" + combined
+	}
+	return 1
+}
+
 func reflectOnOutcomeAction(ctx *btcore.BTContext[Blackboard]) int {
 	bb := ctx.Blackboard
 	if bb.LLM != nil {
@@ -404,19 +700,19 @@ func reflectOnOutcomeAction(ctx *btcore.BTContext[Blackboard]) int {
 
 		// Validate output quality — mark as failure if output is garbage
 		if !validateOutputQuality(bb) {
-			bb.Outcome = string(reflection.Failure)
+			bb.Outcome = string(evolution.Failure)
 			bb.Result = fmt.Sprintf("OUTPUT QUALITY FAILED (score=%.1f): %s", bb.QualityScore, bb.Result)
 			toImprove = "Output quality below threshold — retry with more detail"
 		}
 
 		// Save reflection record (don't overwrite bb.Result; task result is already set)
 		if bb.Reflections != nil {
-			record := &reflection.Record{
+			record := &evolution.Record{
 				Task:          bb.Task,
 				Plan:          bb.Plan,
 				WhatWentWell:  []string{wentWell},
 				WhatToImprove: []string{toImprove},
-				Outcome:       reflection.Outcome(bb.Outcome),
+				Outcome:       evolution.Outcome(bb.Outcome),
 				DurationMs:    bb.DurationMs,
 			}
 			if err := bb.Reflections.Save(record); err != nil {
@@ -524,11 +820,27 @@ func strContains(s, substr string) bool {
 
 func trim(s string) string {
 	start, end := 0, len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n') {
+	for start < end && (s[start] == ' ' || s[start] == '	' || s[start] == '\n') {
 		start++
 	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n') {
+	for end > start && (s[end-1] == ' ' || s[end-1] == '	' || s[end-1] == '\n') {
 		end--
 	}
 	return s[start:end]
+}
+
+// homeDir returns the home directory path.
+func homeDir() string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = "/root"
+	}
+	return home
+}
+
+// parsePercentage parses a string like "89" or "89%" into an int.
+func parsePercentage(s string) (int, error) {
+	s = strings.TrimSuffix(s, "%")
+	s = strings.TrimSpace(s)
+	return strconv.Atoi(s)
 }

@@ -221,21 +221,40 @@ func BuildUtilitySelector(node *evolution.SerializableNode, bb *Blackboard) btco
 		// Execute the chosen child
 		result := children[bestIdx].Run(ctx)
 
+		// If child is still Running (0), we must yield immediately.
+		// This prevents "reward hacking" where a child returns Running
+		// indefinitely to monopolize the selector. The next tick will
+		// re-evaluate scores and may pick a different child if conditions change.
+		if result == 0 {
+			return 0 // Running — yield to allow re-evaluation next tick
+		}
+
 		// If child failed, try next best (unless fail_fast)
 		failFast := false
+		reEval := false
 		if node.Metadata != nil {
 			if ff, ok := node.Metadata["fail_fast"].(bool); ok {
 				failFast = ff
+			}
+			if re, ok := node.Metadata["re_evaluate_on_change"].(bool); ok {
+				reEval = re
 			}
 		}
 
 		if result == -1 && !failFast {
 			// Re-score and try next (excluding current best)
+			// With re_evaluate_on_change, we also check if conditions changed mid-tick
+			if reEval {
+				scores = ScoreChildren(node, ctx.Blackboard, criteria)
+			}
 			for i := range scores {
 				if i != bestIdx && scores[i].Valid {
 					nextResult := children[scores[i].ChildIndex].Run(ctx)
 					if nextResult == 1 {
 						return 1 // Success
+					}
+					if nextResult == 0 {
+						return 0 // Running
 					}
 				}
 			}

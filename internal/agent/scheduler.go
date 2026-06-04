@@ -92,11 +92,13 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		jobStore:     cfg.JobStore,
 		cbStore:      cfg.CBStore,
 	}
-	// Restore persisted jobs
+	// Restore persisted jobs, then reconcile them against the registry YAML.
+	// The registry definition is the source of truth: stale jobs for deleted
+	// agents are removed, on_demand agents cannot keep active recurring jobs,
+	// duplicate jobs are collapsed, and missing YAML-scheduled jobs are created.
 	if cfg.JobStore != nil {
 		s.loadState()
-		// Dedup: remove duplicate active jobs for the same agent (keeps most recent)
-		s.dedupJobsLocked()
+		s.ReconcileWithRegistry()
 	}
 	return s
 }
@@ -113,26 +115,57 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		return nil, fmt.Errorf("invalid schedule %q: %w", schedule, err)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Dedup: if an active job for this agent already exists, update its schedule
-	// instead of creating a duplicate. This prevents duplicate jobs from accumulating
-	// across bt-agent restarts (where Restore loads persisted jobs, then auto-schedule
-	// creates new ones for the same agents).
-	for _, existing := range s.jobs {
-		if existing.AgentName == agentName && existing.Active {
-			existing.Schedule = schedule
-			existing.NextRun = nextRun
-			existing.Timeout = timeout
-			existing.MaxRetries = maxRetries
-			s.saveStateLocked()
-			return existing, nil
+	// Scheduling is an operator-visible state change. Persist it to the
+	// registry YAML too, otherwise restart reconciliation can resurrect or
+	// remove jobs based on stale metadata.
+	if s.reg != nil {
+		if err := s.reg.UpdateSchedule(agentName, schedule); err != nil {
+			return nil, fmt.Errorf("persist schedule for %q: %w", agentName, err)
 		}
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// on_demand means explicitly paused: remove all jobs for this agent.
+	if schedule == "" || schedule == "on_demand" {
+		for id, existing := range s.jobs {
+			if existing.AgentName == agentName {
+				delete(s.jobs, id)
+			}
+		}
+		s.saveStateLocked()
+		return &ScheduledJob{ID: fmt.Sprintf("job_%s_on_demand", agentName), AgentName: agentName, Schedule: "on_demand", Active: false}, nil
+	}
+
+	// Dedup: if any job for this agent already exists, update the best one and
+	// delete the rest instead of creating another duplicate.
+	var keep *ScheduledJob
+	for id, existing := range s.jobs {
+		if existing.AgentName != agentName {
+			continue
+		}
+		if keep == nil || betterScheduledJob(existing, keep) {
+			if keep != nil {
+				delete(s.jobs, keep.ID)
+			}
+			keep = existing
+		} else {
+			delete(s.jobs, id)
+		}
+	}
+	if keep != nil {
+		keep.Schedule = schedule
+		keep.NextRun = nextRun
+		keep.Timeout = timeout
+		keep.MaxRetries = maxRetries
+		keep.Active = true
+		s.saveStateLocked()
+		return keep, nil
+	}
+
 	job := &ScheduledJob{
-		ID:         fmt.Sprintf("job_%s_%d", agentName, time.Now().Unix()),
+		ID:         fmt.Sprintf("job_%s_%d", agentName, time.Now().UnixNano()),
 		AgentName:  agentName,
 		Schedule:   schedule,
 		NextRun:    nextRun,
@@ -279,30 +312,115 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 }
 
 // dedupJobsLocked removes duplicate active jobs for the same agent,
-// keeping only the most recent one (highest run_count). Must be called
-// with s.mu held. Used at startup to clean up accumulated duplicates
-// from prior bt-agent restarts.
+// keeping only the most recent/best one. Must be called with s.mu held.
 func (s *Scheduler) dedupJobsLocked() {
-	seen := make(map[string]*ScheduledJob) // agentName -> best job
-	for _, job := range s.jobs {
-		if !job.Active {
-			continue
-		}
-		existing, ok := seen[job.AgentName]
-		if !ok || job.RunCount > existing.RunCount {
-			seen[job.AgentName] = job
-		}
-	}
-	// Delete all active jobs that aren't the best one for their agent
+	kept := make(map[string]*ScheduledJob)
 	for id, job := range s.jobs {
 		if !job.Active {
 			continue
 		}
-		best := seen[job.AgentName]
-		if best != nil && id != best.ID {
+		if existing, ok := kept[job.AgentName]; !ok || betterScheduledJob(job, existing) {
+			if ok {
+				delete(s.jobs, existing.ID)
+			}
+			kept[job.AgentName] = job
+		} else {
 			delete(s.jobs, id)
 		}
 	}
+}
+
+func betterScheduledJob(candidate, current *ScheduledJob) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if candidate.Active != current.Active {
+		return candidate.Active
+	}
+	if candidate.RunCount != current.RunCount {
+		return candidate.RunCount > current.RunCount
+	}
+	if !candidate.LastRun.Equal(current.LastRun) {
+		return candidate.LastRun.After(current.LastRun)
+	}
+	return candidate.ID > current.ID
+}
+
+// ReconcileWithRegistry canonicalizes scheduler state using agent YAML as the
+// source of truth. It removes jobs for deleted agents, removes all jobs for
+// on_demand agents, collapses duplicates for scheduled agents, forces job
+// schedules to match YAML, and creates a missing active job for every YAML
+// recurring schedule.
+func (s *Scheduler) ReconcileWithRegistry() {
+	if s.reg == nil {
+		return
+	}
+
+	agents := s.reg.List()
+	defs := make(map[string]Definition, len(agents))
+	for _, inst := range agents {
+		defs[inst.Definition.Name] = inst.Definition
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	bestByAgent := make(map[string]*ScheduledJob)
+	for id, job := range s.jobs {
+		def, ok := defs[job.AgentName]
+		if !ok {
+			delete(s.jobs, id)
+			continue
+		}
+		sched := def.Schedule
+		if sched == "on_demand" {
+			delete(s.jobs, id)
+			continue
+		}
+		if sched != "" {
+			job.Schedule = sched
+		}
+		job.Active = true
+		if existing, ok := bestByAgent[job.AgentName]; !ok || betterScheduledJob(job, existing) {
+			if ok {
+				delete(s.jobs, existing.ID)
+			}
+			bestByAgent[job.AgentName] = job
+		} else {
+			delete(s.jobs, id)
+		}
+	}
+
+	for name, def := range defs {
+		sched := def.Schedule
+		if sched == "" || sched == "on_demand" {
+			continue
+		}
+		if _, ok := bestByAgent[name]; ok {
+			continue
+		}
+		next, err := parseSchedule(sched)
+		if err != nil {
+			log.Printf("Scheduler: skipping invalid YAML schedule for %q: %q (%v)", name, sched, err)
+			continue
+		}
+		job := &ScheduledJob{
+			ID:         fmt.Sprintf("job_%s_%d", name, time.Now().UnixNano()),
+			AgentName:  name,
+			Schedule:   sched,
+			NextRun:    next,
+			MaxRetries: 3,
+			Timeout:    "2h",
+			Active:     true,
+		}
+		s.jobs[job.ID] = job
+		bestByAgent[name] = job
+	}
+
+	s.saveStateLocked()
 }
 
 func (s *Scheduler) tick(runner AgentRunner) {
@@ -476,15 +594,56 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 
 // estimateQuality is a fast quality heuristic for output text.
 func estimateQuality(output string) float64 {
-	if len(output) < 30 {
+	trimmed := strings.TrimSpace(output)
+	lower := strings.ToLower(trimmed)
+	if len(trimmed) < 10 {
 		return 0.2
 	}
-	score := 0.5
-	if len(output) > 200 {
-		score += 0.2
+
+	score := 0.35
+	if len(trimmed) >= 30 {
+		score = 0.5
 	}
-	if len(output) > 500 {
-		score += 0.2
+	if len(trimmed) > 200 {
+		score += 0.15
+	}
+	if len(trimmed) > 500 {
+		score += 0.15
+	}
+	if strings.Contains(trimmed, "## ") || strings.Contains(trimmed, "**") || strings.Contains(trimmed, "- ") {
+		score += 0.1
+	}
+
+	// Deterministic production agents are often concise. Score them by evidence
+	// fields instead of raw length so future runs stop being marked low-quality
+	// when they emit compact but complete reports.
+	evidenceTerms := []string{
+		"status:", "severity:", "route:", "target:", "timestamp:", "threshold:",
+		"symbols:", "delta:", "citation", "source", "artifact", "processed:",
+		"errors:", "idempotency", "decision:", "rationale:", "auth:", "quota:",
+	}
+	evidence := 0
+	for _, term := range evidenceTerms {
+		if strings.Contains(lower, term) {
+			evidence++
+		}
+	}
+	if evidence >= 3 {
+		score += 0.25
+	}
+	if evidence >= 5 {
+		score += 0.15
+	}
+
+	badPatterns := []string{"not implemented", "i don't know", "i cannot", "i can't", "unable to", "failed to", "error:"}
+	for _, p := range badPatterns {
+		if strings.Contains(lower, p) {
+			score -= 0.4
+			break
+		}
+	}
+	if score < 0 {
+		return 0
 	}
 	if score > 1.0 {
 		score = 1.0

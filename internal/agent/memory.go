@@ -166,7 +166,7 @@ func (ms *MemoryStore) ContextBlock() string {
 	if len(facts) > 0 {
 		parts = append(parts, "AGENT MEMORY — High-Priority Facts:")
 		for _, f := range facts {
-			parts = append(parts, fmt.Sprintf("  • %s: %s", f.Key, truncate(f.Value, 120)))
+			parts = append(parts, fmt.Sprintf("  • %s: %s", f.Key, util.Truncate(f.Value, 120)))
 		}
 	}
 
@@ -175,7 +175,7 @@ func (ms *MemoryStore) ContextBlock() string {
 	if len(pitfalls) > 0 {
 		parts = append(parts, "\nAGENT MEMORY — Known Pitfalls:")
 		for _, p := range pitfalls {
-			parts = append(parts, fmt.Sprintf("  ⚠ %s: %s", strings.TrimPrefix(p.Key, "pitfall:"), truncate(p.Value, 120)))
+			parts = append(parts, fmt.Sprintf("  ⚠ %s: %s", strings.TrimPrefix(p.Key, "pitfall:"), util.Truncate(p.Value, 120)))
 		}
 	}
 
@@ -184,7 +184,7 @@ func (ms *MemoryStore) ContextBlock() string {
 	if len(patterns) > 0 {
 		parts = append(parts, "\nAGENT MEMORY — Patterns Learned:")
 		for _, p := range patterns {
-			parts = append(parts, fmt.Sprintf("  ✓ %s: %s", strings.TrimPrefix(p.Key, "pattern:"), truncate(p.Value, 120)))
+			parts = append(parts, fmt.Sprintf("  ✓ %s: %s", strings.TrimPrefix(p.Key, "pattern:"), util.Truncate(p.Value, 120)))
 		}
 	}
 
@@ -220,7 +220,7 @@ func (ms *MemoryStore) PreviousRunContext(history *History, agentName string, n 
 	for i, s := range successes {
 		summary := summarizeOutput(s.Output, 200)
 		lines = append(lines, fmt.Sprintf("\n  Run %d (%s, %s):", i+1, s.EndedAt.Format("15:04"), s.Duration))
-		lines = append(lines, fmt.Sprintf("    Task: %s", truncate(s.Task, 100)))
+		lines = append(lines, fmt.Sprintf("    Task: %s", util.Truncate(s.Task, 100)))
 		lines = append(lines, fmt.Sprintf("    Output: %s", summary))
 	}
 
@@ -334,13 +334,11 @@ func priorityWeight(p string) int {
 	}
 }
 
-func truncate(s string, n int) string { return util.Truncate(s, n) }
-
 func summarizeOutput(output string, maxLen int) string {
 	// Get first paragraph or first maxLen chars
 	cleaned := strings.TrimSpace(output)
 	if idx := strings.Index(cleaned, "\n\n"); idx > 0 && idx < maxLen {
 		return cleaned[:idx]
 	}
-	return truncate(cleaned, maxLen)
+	return util.Truncate(cleaned, maxLen)
 }

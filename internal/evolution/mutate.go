@@ -144,117 +144,52 @@ func (ts *TreeStore) Save(tree *SerializableNode) error {
 // GoDeveloperTree returns a behavior tree specialized for Go software development.
 // Adds code review, compilation, linting, testing, and Go-specific knowledge paths.
 func GoDeveloperTree() *SerializableNode {
-	return &SerializableNode{
-		Type: "Sequence",
-		Name: "GoDev_Main",
-		Children: []SerializableNode{
-			// PreGate: validate Go-specific input
-			{
-				Type: "Sequence",
-				Name: "PreGate",
-				Children: []SerializableNode{
-					{Type: "Condition", Name: "HasClearTask", Description: "Check task has sufficient context, a verb, and a clear goal — >10 chars and not ambiguous"},
-					{Type: "Condition", Name: "ValidateInput", Description: "Check input is non-empty"},
-					{Type: "Condition", Name: "IsGoRelated", Description: "Check if task involves Go code or concepts"},
-					{Type: "Action", Name: "SetupDevTools", Description: "Populate bb.ChainTools with go_build, go_test, go_vet, web_search"},
-				},
-			},
-			// StrategyRouter: Go-specific strategy selection
-			{
-				Type: "Selector",
-				Name: "StrategyRouter",
-				Children: []SerializableNode{
-					// Path 1: Code review
-					{
-						Type: "Sequence",
-						Name: "CodeReviewPath",
-						Children: []SerializableNode{
-							{Type: "Condition", Name: "IsCodeReview", Description: "Detect review/audit/check keywords"},
-							{Type: "Action", Name: "ReviewGoCode", Description: "LLM: review Go code for bugs, style, patterns"},
-							{Type: "Action", Name: "SuggestImprovements", Description: "LLM: suggest idiomatic Go improvements"},
-						},
-					},
-					// Path 2: Compilation / build
-					{
-						Type: "Sequence",
-						Name: "BuildPath",
-						Children: []SerializableNode{
-							{Type: "Condition", Name: "NeedsCompilation", Description: "Detect build/compile/run keywords"},
-							{Type: "Action", Name: "CompileGoCode", Description: "Run 'go build' and capture errors"},
-							{Type: "Action", Name: "FixBuildErrors", Description: "LLM: analyze and fix compilation errors"},
-						},
-					},
-					// Path 3: Testing
-					{
-						Type: "Sequence",
-						Name: "TestPath",
-						Children: []SerializableNode{
-							{Type: "Condition", Name: "NeedsTesting", Description: "Detect test/coverage/benchmark keywords"},
-							{Type: "Action", Name: "RunGoTests", Description: "Run 'go test' and capture results"},
-							{Type: "Action", Name: "AnalyzeTestResults", Description: "Analyze test output for failures"},
-						},
-					},
-					// Path 4: Go knowledge query
-					{
-						Type: "Sequence",
-						Name: "GoKnowledgePath",
-						Children: []SerializableNode{
-							{Type: "Condition", Name: "IsGoQuestion", Description: "Detect Go concept/pattern/best-practice questions"},
-							{Type: "Action", Name: "ExplainGoConcept", Description: "LLM: explain Go concept with examples"},
-						},
-					},
-					// Path 5: Agent-based generic execution (replaces AnalyzeTask+ExecutePlan)
-					{
-						Type: "Sequence",
-						Name: "ExecutionPath",
-						Children: []SerializableNode{
-							{
-								Type: "ChainAction",
-								Name: "llm_call:Complete this Go development task: {{.Task}}. Use available tools if needed. Provide a complete solution.",
-								Metadata: map[string]any{
-									"max_tokens": float64(400),
-								},
-							},
-						},
-					},
-				},
-			},
-			// Always reflect
-			{
-				Type:        "Action",
-				Name:        "ReflectOnOutcome",
-				Description: "Generate reflection: what went well, what to improve",
-			},
-			// Outcome handling with agent-based self-correction
-			{
-				Type: "Selector",
-				Name: "OutcomeSelector",
-				Children: []SerializableNode{
-					{Type: "Condition", Name: "WasSuccessful", Description: "Exit if task succeeded"},
-					{
-						Type: "ChainAction",
-						Name: "llm_call:Self-correct the previous task. Analyze what went wrong, fix the issues, and produce a corrected solution.",
-						Metadata: map[string]any{
-							"max_tokens": float64(400),
-						},
-					},
-					{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM for difficult tasks"},
-				},
-			},
-			{
-				Type:        "Action",
-				Name:        "UpdateBehaviorTree",
-				Description: "Adapt tree on 3+ consecutive failures",
-			},
-		},
-	}
+	return NewTree("GoDev_Main",
+		NewPreGate(
+			NewCondition("HasClearTask", "Check task has sufficient context, a verb, and a clear goal — >10 chars and not ambiguous"),
+			NewCondition("ValidateInput", "Check input is non-empty"),
+			NewCondition("IsGoRelated", "Check if task involves Go code or concepts"),
+			NewAction("SetupDevTools", "Populate bb.ChainTools with go_build, go_test, go_vet, web_search"),
+		),
+		NewStrategyRouter(
+			NewStrategy("CodeReviewPath",
+				NewCondition("IsCodeReview", "Detect review/audit/check keywords"),
+				NewAction("ReviewGoCode", "LLM: review Go code for bugs, style, patterns"),
+				NewAction("SuggestImprovements", "LLM: suggest idiomatic Go improvements"),
+			),
+			NewStrategy("BuildPath",
+				NewCondition("NeedsCompilation", "Detect build/compile/run keywords"),
+				NewAction("CompileGoCode", "Run 'go build' and capture errors"),
+				NewAction("FixBuildErrors", "LLM: analyze and fix compilation errors"),
+			),
+			NewStrategy("TestPath",
+				NewCondition("NeedsTesting", "Detect test/coverage/benchmark keywords"),
+				NewAction("RunGoTests", "Run 'go test' and capture results"),
+				NewAction("AnalyzeTestResults", "Analyze test output for failures"),
+			),
+			NewStrategy("GoKnowledgePath",
+				NewCondition("IsGoQuestion", "Detect Go concept/pattern/best-practice questions"),
+				NewAction("ExplainGoConcept", "LLM: explain Go concept with examples"),
+			),
+			NewStrategy("ExecutionPath",
+				NewChainAction(
+					"llm_call:Complete this Go development task: {{.Task}}. Use available tools if needed. Provide a complete solution.",
+					400,
+				),
+			),
+		),
+		NewAction("ReflectOnOutcome", "Generate reflection: what went well, what to improve"),
+		NewDefaultOutcomeSelector(400),
+		NewAdapt(),
+	)
 }
 
 // MutationOp describes a tree mutation to apply.
 type MutationOp struct {
-	Operation string            `json:"operation"` // add_before, add_after, wrap_retry, add_fallback, increase_retries, prune_node
+	Operation string            `json:"operation"` // add_before, add_after, wrap_retry, add_fallback, increase_retries, prune_node, increase_iterations, add_tool, improve_prompt
 	Target    string            `json:"target"`    // name of the target node
 	Node      *SerializableNode `json:"node,omitempty"`
+	Metadata  map[string]any    `json:"metadata,omitempty"` // extra data (tool name, prompt text, etc.)
 }
 
 // ApplyMutations applies a list of MutationOps to a tree in-place.
@@ -262,9 +197,12 @@ type MutationOp struct {
 func ApplyMutations(tree *SerializableNode, ops []MutationOp) int {
 	applied := 0
 	for _, op := range ops {
-		// Clone the tree so we can rollback if mutation produces invalid state
+		// Clone the tree so we can rollback if mutation is a no-op or invalid.
 		clone := cloneTree(tree)
-		applyOp(tree, op)
+		if !applyOp(tree, op) {
+			*tree = *clone
+			continue
+		}
 		errors := tree.Validate()
 		if len(errors) > 0 {
 			// Rollback: restore from clone
@@ -302,6 +240,12 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 		return applyReplaceChildren(tree, op.Target)
 	case "reorder_children":
 		return applyReorderChildren(tree, op.Target)
+	case "increase_iterations":
+		return applyIncreaseIterations(tree, op.Target)
+	case "add_tool":
+		return applyAddTool(tree, op.Target, op.Metadata)
+	case "improve_prompt":
+		return applyImprovePrompt(tree, op.Target, op.Metadata)
 	}
 	return false
 }
@@ -323,8 +267,12 @@ func CountNodes(n *SerializableNode) int {
 func applyAddBefore(tree *SerializableNode, target string, newNode SerializableNode) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target {
+			if hasChildNamed(tree, newNode.Name) {
+				return false
+			}
 			// Insert before
 			tree.Children = append(tree.Children[:i], append([]SerializableNode{newNode}, tree.Children[i:]...)...)
+			shiftEdgeIndices(tree, i, 1)
 			return true
 		}
 	}
@@ -339,9 +287,13 @@ func applyAddBefore(tree *SerializableNode, target string, newNode SerializableN
 func applyAddAfter(tree *SerializableNode, target string, newNode SerializableNode) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target {
+			if hasChildNamed(tree, newNode.Name) {
+				return false
+			}
 			// Insert after
 			insertAt := i + 1
 			tree.Children = append(tree.Children[:insertAt], append([]SerializableNode{newNode}, tree.Children[insertAt:]...)...)
+			shiftEdgeIndices(tree, insertAt, 1)
 			return true
 		}
 	}
@@ -356,6 +308,9 @@ func applyAddAfter(tree *SerializableNode, target string, newNode SerializableNo
 func applyWrapRetry(tree *SerializableNode, target string) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target {
+			if tree.Children[i].Type == "Retry" || tree.Type == "Retry" {
+				return false
+			}
 			wrapped := SerializableNode{
 				Type:       "Retry",
 				Name:       "Retry_" + target,
@@ -377,6 +332,9 @@ func applyWrapRetry(tree *SerializableNode, target string) bool {
 func applyAddFallback(tree *SerializableNode, target string, newNode SerializableNode) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target && tree.Children[i].Type == "Selector" {
+			if hasChildNamed(&tree.Children[i], newNode.Name) {
+				return false
+			}
 			tree.Children[i].Children = append(tree.Children[i].Children, newNode)
 			return true
 		}
@@ -392,7 +350,13 @@ func applyAddFallback(tree *SerializableNode, target string, newNode Serializabl
 func applyIncreaseRetries(tree *SerializableNode, target string) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target && tree.Children[i].Type == "Retry" {
+			if tree.Children[i].MaxRetries >= 5 {
+				return false
+			}
 			tree.Children[i].MaxRetries += 2
+			if tree.Children[i].MaxRetries > 5 {
+				tree.Children[i].MaxRetries = 5
+			}
 			return true
 		}
 	}
@@ -408,6 +372,7 @@ func applyPruneNode(tree *SerializableNode, target string) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target {
 			tree.Children = append(tree.Children[:i], tree.Children[i+1:]...)
+			shiftEdgeIndices(tree, i, -1)
 			return true
 		}
 	}
@@ -485,6 +450,8 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 				last := children[len(children)-1]
 				tree.Children[i].Children = append([]SerializableNode{last}, children[:len(children)-1]...)
 			}
+			// Remap Edge.ChildIndex on the parent since children were reordered.
+			remapEdgeIndices(&tree.Children[i])
 			return true
 		}
 	}
@@ -494,4 +461,211 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 		}
 	}
 	return false
+}
+
+// remapEdgeIndices adjusts Edge.ChildIndex values after a mutation changes the
+// children array. After insert/delete/reorder operations, the indices in typed
+// edges must be re-established by walking the children and matching by name.
+// This addresses the NotebookLM CRITICAL gap: mutation index remapping.
+func remapEdgeIndices(node *SerializableNode) {
+	if node == nil || len(node.Edges) == 0 {
+		return
+	}
+
+	var activeEdges []TypedEdge
+	for _, e := range node.Edges {
+		if e.ChildIndex >= 0 && e.ChildIndex < len(node.Children) {
+			activeEdges = append(activeEdges, e)
+		}
+	}
+	if len(activeEdges) == 0 {
+		return
+	}
+
+	// Build name→index map for current children
+	nameToIndex := make(map[string]int, len(node.Children))
+	for idx, child := range node.Children {
+		if child.Name != "" {
+			nameToIndex[child.Name] = idx
+		}
+	}
+
+	// For each edge with ChildIndex ≥ 0, we need to find the child by its
+	// original position. Since we don't store the edge's "target name"
+	// separately, we approximate: if the ChildIndex uniquely maps to a child
+	// name before the mutation, we can remap it after.
+	// Strategy: use the edge Label as an implied hint, or fall back to
+	// keeping the index bounded.
+	for j, e := range node.Edges {
+		if e.ChildIndex < 0 {
+			continue
+		}
+		// Clamp to valid range
+		if e.ChildIndex >= len(node.Children) {
+			node.Edges[j].ChildIndex = -1 // invalidate out-of-range edges
+		}
+		// If the edge has a label matching a child name, use that
+		if e.Label != "" {
+			if idx, ok := nameToIndex[e.Label]; ok {
+				node.Edges[j].ChildIndex = idx
+			}
+		}
+	}
+}
+
+// shiftEdgeIndices adjusts Edge.ChildIndex values after inserting or removing
+// a child at the given position. delta is +1 for inserts, -1 for removes.
+func shiftEdgeIndices(node *SerializableNode, at, delta int) {
+	for j, e := range node.Edges {
+		if e.ChildIndex >= at {
+			node.Edges[j].ChildIndex += delta
+			if node.Edges[j].ChildIndex < 0 || node.Edges[j].ChildIndex >= len(node.Children) {
+				node.Edges[j].ChildIndex = -1
+			}
+		}
+	}
+}
+
+// --- Prompt-level mutations (content, not just structure) ---
+
+// applyIncreaseIterations bumps max_iterations/max_tokens on ChainAgent nodes.
+func applyIncreaseIterations(tree *SerializableNode, targetName string) bool {
+	found := false
+	walkTree(tree, func(n *SerializableNode) {
+		if found {
+			return
+		}
+		if n.Name == targetName && n.Type == "ChainAction" {
+			if n.Metadata == nil {
+				n.Metadata = map[string]any{"max_iterations": float64(10)}
+				found = true
+				return
+			}
+			if maxIter, ok := n.Metadata["max_iterations"].(float64); ok {
+				if maxIter >= 20 {
+					return
+				}
+				n.Metadata["max_iterations"] = minFloat64Evolution(maxIter+5, 20)
+				found = true
+				return
+			}
+			if maxIter, ok := n.Metadata["max_iterations"].(int); ok {
+				if maxIter >= 20 {
+					return
+				}
+				n.Metadata["max_iterations"] = maxIter + 5
+				if n.Metadata["max_iterations"].(int) > 20 {
+					n.Metadata["max_iterations"] = 20
+				}
+				found = true
+				return
+			}
+			if maxTok, ok := n.Metadata["max_tokens"].(float64); ok && maxTok < 100 {
+				n.Metadata["max_tokens"] = float64(400)
+				found = true
+				return
+			}
+			n.Metadata["max_iterations"] = float64(10)
+			found = true
+		}
+	})
+	return found
+}
+
+// applyAddTool adds a recommended tool to a ChainAgent node's tools list.
+func applyAddTool(tree *SerializableNode, targetName string, meta map[string]any) bool {
+	found := false
+	walkTree(tree, func(n *SerializableNode) {
+		if found {
+			return
+		}
+		if n.Name == targetName && n.Type == "ChainAction" {
+			if n.Metadata == nil {
+				n.Metadata = map[string]any{}
+			}
+			newTool := "file_read"
+			if metaTool, ok := meta["recommended_tool"].(string); ok && metaTool != "" {
+				newTool = metaTool
+			}
+			switch tools := n.Metadata["tools"].(type) {
+			case []any:
+				for _, t := range tools {
+					if ts, ok := t.(string); ok && ts == newTool {
+						return
+					}
+				}
+				n.Metadata["tools"] = append(tools, newTool)
+			case []string:
+				for _, t := range tools {
+					if t == newTool {
+						return
+					}
+				}
+				n.Metadata["tools"] = append(tools, newTool)
+			default:
+				n.Metadata["tools"] = []any{newTool}
+			}
+			found = true
+		}
+	})
+	return found
+}
+
+// applyImprovePrompt uses metadata to update system_msg on a ChainAgent node.
+func applyImprovePrompt(tree *SerializableNode, targetName string, meta map[string]any) bool {
+	if meta == nil {
+		return false
+	}
+	newSysMsg, ok := meta["system_msg"].(string)
+	if !ok || newSysMsg == "" {
+		return false
+	}
+	found := false
+	walkTree(tree, func(n *SerializableNode) {
+		if found {
+			return
+		}
+		if n.Name == targetName && n.Type == "ChainAction" {
+			if n.Metadata == nil {
+				n.Metadata = map[string]any{}
+			}
+			oldSysMsg, _ := n.Metadata["system_msg"].(string)
+			if oldSysMsg == newSysMsg {
+				return
+			}
+			n.Metadata["system_msg"] = newSysMsg
+			found = true
+		}
+	})
+	return found
+}
+
+func minFloat64Evolution(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func hasChildNamed(node *SerializableNode, name string) bool {
+	if node == nil || name == "" {
+		return false
+	}
+	for i := range node.Children {
+		if node.Children[i].Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// walkTree traverses a tree in pre-order, calling fn on each node.
+func walkTree(node *SerializableNode, fn func(*SerializableNode)) {
+	if node == nil {
+		return
+	}
+	fn(node)
+	for i := range node.Children {
+		walkTree(&node.Children[i], fn)
+	}
 }

@@ -5,9 +5,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/reflection"
-	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // ─── FULL INTEGRATION: All Trees, Chains, Use Cases ───
@@ -28,20 +25,20 @@ func TestIntegration_AllTreesExecute(t *testing.T) {
 		{"godev_knowledge", evolution.GoDeveloperTree(), "what is the best practice for error handling"},
 
 		// Research trees
-		{"deep_research", research.DeepResearchTree(), "research quantum computing advances"},
-		{"quick_research", research.QuickResearchTree(), "quick summary of Kubernetes"},
+		{"deep_research", evolution.DeepResearchTree(), "research quantum computing advances"},
+		{"quick_research", evolution.QuickResearchTree(), "quick summary of Kubernetes"},
 
 		// Finance trees (10)
-		{"pitch_agent", finance.PitchAgentTree(), "build a DCF model for valuation"},
-		{"earnings_reviewer", finance.EarningsReviewerTree(), "analyze earnings call transcript"},
-		{"market_researcher", finance.MarketResearcherTree(), "research competitive landscape"},
-		{"model_builder", finance.ModelBuilderTree(), "build LBO model for acquisition"},
-		{"meeting_prep", finance.MeetingPrepTree(), "prepare client meeting briefing"},
-		{"valuation_reviewer", finance.ValuationReviewerTree(), "review GP valuation package"},
-		{"gl_reconciler", finance.GLReconcilerTree(), "reconcile general ledger breaks"},
-		{"month_end_closer", finance.MonthEndCloserTree(), "close month-end with accruals"},
-		{"statement_auditor", finance.StatementAuditorTree(), "audit LP statement for accuracy"},
-		{"kyc_screener", finance.KYCScreenerTree(), "screen KYC documents for sanctions"},
+		{"pitch_agent", evolution.PitchAgentTree(), "build a DCF model for valuation"},
+		{"earnings_reviewer", evolution.EarningsReviewerTree(), "analyze earnings call transcript"},
+		{"market_researcher", evolution.MarketResearcherTree(), "research competitive landscape"},
+		{"model_builder", evolution.ModelBuilderTree(), "build LBO model for acquisition"},
+		{"meeting_prep", evolution.MeetingPrepTree(), "prepare client meeting briefing"},
+		{"valuation_reviewer", evolution.ValuationReviewerTree(), "review GP valuation package"},
+		{"gl_reconciler", evolution.GLReconcilerTree(), "reconcile general ledger breaks"},
+		{"month_end_closer", evolution.MonthEndCloserTree(), "close month-end with accruals"},
+		{"statement_auditor", evolution.StatementAuditorTree(), "audit LP statement for accuracy"},
+		{"kyc_screener", evolution.KYCScreenerTree(), "screen KYC documents for sanctions"},
 
 		// Domain trees (10)
 		{"code_review", domains.CodeReviewTree(), "review code for bugs and security issues"},
@@ -56,14 +53,14 @@ func TestIntegration_AllTreesExecute(t *testing.T) {
 		{"trading_signal", domains.TradingSignalTree(), "generate trading signal from market data"},
 
 		// Evolution trees
-		{"hermes_evolve", evolution.HermesSelfEvolutionTree(), "periodic self-improvement check"},
+		{"hermes_evolve", domains.HermesSelfEvolutionTree(), "periodic self-improvement check"},
 		{"stockfish", evolution.StockfishEvolutionTree(), "evolve the behavior tree with stockfish"},
 		{"stockfish_loop", evolution.StockfishEvolutionLoop(), "run continuous evolution cycle"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bb := &Blackboard{Task: tt.task, LLM: &mockLLM{}}
+			bb := &Blackboard{Task: tt.task, LLM: &MockLLM{}}
 			bt := BuildTree(tt.tree, bb)
 			outcome := RunTask(bb, bt)
 
@@ -132,7 +129,7 @@ func TestIntegration_AllChainTypes(t *testing.T) {
 
 	for _, tt := range chainTests {
 		t.Run(tt.name, func(t *testing.T) {
-			bb := &Blackboard{Task: tt.task, LLM: &mockLLM{}, ChainState: map[string]any{}}
+			bb := &Blackboard{Task: tt.task, LLM: &MockLLM{}, ChainState: map[string]any{}}
 			bt := BuildTree(tt.tree, bb)
 			_ = RunTask(bb, bt)
 			// Chain types should execute without crashing; empty outcome is acceptable for some mock chains
@@ -144,7 +141,7 @@ func TestIntegration_QualityGatesFullFlow(t *testing.T) {
 	// Structured output passes quality gates
 	t.Run("structured_output_passes", func(t *testing.T) {
 		bb := &Blackboard{
-			Task: "test", LLM: &mockLLM{},
+			Task: "test", LLM: &MockLLM{},
 			Result: "# Report\n\n## Analysis\nDetailed analysis with substantial content for quality check.",
 		}
 		// Direct quality check
@@ -155,7 +152,7 @@ func TestIntegration_QualityGatesFullFlow(t *testing.T) {
 
 	// Short output fails quality
 	t.Run("short_output_fails", func(t *testing.T) {
-		bb := &Blackboard{Task: "test", LLM: &mockLLM{}, Result: "short"}
+		bb := &Blackboard{Task: "test", LLM: &MockLLM{}, Result: "short"}
 		if validateOutputQuality(bb) {
 			t.Error("short output should fail quality")
 		}
@@ -163,7 +160,7 @@ func TestIntegration_QualityGatesFullFlow(t *testing.T) {
 
 	// Error pattern fails
 	t.Run("error_pattern_fails", func(t *testing.T) {
-		bb := &Blackboard{Task: "test", LLM: &mockLLM{}, Result: "I cannot complete this task due to an error"}
+		bb := &Blackboard{Task: "test", LLM: &MockLLM{}, Result: "I cannot complete this task due to an error"}
 		if validateOutputQuality(bb) {
 			t.Error("error output should fail quality")
 		}
@@ -175,7 +172,7 @@ func TestIntegration_QualityGatesFullFlow(t *testing.T) {
 
 func TestIntegration_PanicRecovery(t *testing.T) {
 	// Unknown action nodes are handled gracefully (return failure, don't panic)
-	bb := &Blackboard{Task: "test", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", LLM: &MockLLM{}}
 	panicTree := &evolution.SerializableNode{
 		Type: "Sequence", Name: "panic_test",
 		Children: []evolution.SerializableNode{
@@ -193,10 +190,10 @@ func TestIntegration_PanicRecovery(t *testing.T) {
 func TestIntegration_EdgeCases(t *testing.T) {
 	// Empty task
 	t.Run("empty_task", func(t *testing.T) {
-		bb := &Blackboard{Task: "", LLM: &mockLLM{}}
+		bb := &Blackboard{Task: "", LLM: &MockLLM{}}
 		bt := BuildTree(evolution.DefaultTree(), bb)
 		outcome := RunTask(bb, bt)
-		if outcome == string(reflection.Success) {
+		if outcome == string(evolution.Success) {
 			t.Error("empty task should not succeed")
 		}
 	})
@@ -207,7 +204,7 @@ func TestIntegration_EdgeCases(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			longTask += "This is a very long task description to test input handling. "
 		}
-		bb := &Blackboard{Task: longTask, LLM: &mockLLM{}}
+		bb := &Blackboard{Task: longTask, LLM: &MockLLM{}}
 		bt := BuildTree(evolution.DefaultTree(), bb)
 		outcome := RunTask(bb, bt)
 		if outcome == "" {
@@ -217,7 +214,7 @@ func TestIntegration_EdgeCases(t *testing.T) {
 
 	// Special characters
 	t.Run("special_chars", func(t *testing.T) {
-		bb := &Blackboard{Task: "!@#$%^&*()_+{}|:\"<>?~`", LLM: &mockLLM{}}
+		bb := &Blackboard{Task: "!@#$%^&*()_+{}|:\"<>?~`", LLM: &MockLLM{}}
 		bt := BuildTree(evolution.DefaultTree(), bb)
 		outcome := RunTask(bb, bt)
 		if outcome == "" {
@@ -227,7 +224,7 @@ func TestIntegration_EdgeCases(t *testing.T) {
 
 	// Unicode
 	t.Run("unicode", func(t *testing.T) {
-		bb := &Blackboard{Task: "こんにちは世界 review this Go code for bugs", LLM: &mockLLM{}}
+		bb := &Blackboard{Task: "こんにちは世界 review this Go code for bugs", LLM: &MockLLM{}}
 		bt := BuildTree(evolution.GoDeveloperTree(), bb)
 		outcome := RunTask(bb, bt)
 		if outcome == "" {
@@ -237,11 +234,11 @@ func TestIntegration_EdgeCases(t *testing.T) {
 }
 
 func TestIntegration_ReflectionAndPersistence(t *testing.T) {
-	refStore, _ := reflection.NewStore("/tmp/test-reflections-int")
+	refStore, _ := evolution.NewStore("/tmp/test-reflections-int")
 	treeStore, _ := evolution.NewTreeStore("/tmp/test-trees-int")
 
 	bb := &Blackboard{
-		Task: "integration test task", LLM: &mockLLM{},
+		Task: "integration test task", LLM: &MockLLM{},
 		Reflections: refStore, TreeStore: treeStore,
 	}
 	tree := evolution.DefaultTree()
@@ -260,19 +257,19 @@ func TestIntegration_ReflectionAndPersistence(t *testing.T) {
 
 func TestIntegration_AllKanbanTrees(t *testing.T) {
 	trees := map[string]*evolution.SerializableNode{
-		"task_creator": evolution.KanbanTaskCreatorTree(),
-		"refiner":      evolution.KanbanRefinerTree(),
-		"qa":           evolution.KanbanQATree(),
-		"monitor":      evolution.KanbanBoardMonitorTree(),
-		"workflow":     evolution.KanbanWorkflowTree(),
-		"autopilot":    evolution.KanbanAutoPilotTree(),
+		"task_creator": domains.KanbanTaskCreatorTree(),
+		"refiner":      domains.KanbanRefinerTree(),
+		"qa":           domains.KanbanQATree(),
+		"monitor":      domains.KanbanBoardMonitorTree(),
+		"workflow":     domains.KanbanWorkflowTree(),
+		"autopilot":    domains.KanbanAutoPilotTree(),
 	}
 	for name, tree := range trees {
 		t.Run(name, func(t *testing.T) {
 			if tree == nil {
 				t.Fatal("tree is nil")
 			}
-			bb := &Blackboard{Task: "kanban " + name, LLM: &mockLLM{}}
+			bb := &Blackboard{Task: "kanban " + name, LLM: &MockLLM{}}
 			bt := BuildTree(tree, bb)
 			outcome := RunTask(bb, bt)
 			if outcome == "" {

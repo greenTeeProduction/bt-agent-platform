@@ -1,34 +1,16 @@
 package factory
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// mockLLM returns a pre-built TreeSpec JSON so we don't need Ollama in tests.
-type mockLLM struct {
-	treeSpecJSON string
-}
-
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
-}
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return m.Generate(prompt)
-}
-
-func (m *mockLLM) Generate(prompt string) (string, error) {
-	return m.treeSpecJSON, nil
-}
-func (m *mockLLM) AnalyzeComplexity(task string) string                { return "low" }
-func (m *mockLLM) GeneratePlan(task, complexity string) string         { return "mock plan" }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "better" }
+// Tests use engine.MockLLM with GenerateResp set to a TreeSpec JSON.
 
 func validTreeSpecJSON() string {
 	spec := TreeSpec{
@@ -52,7 +34,7 @@ func validTreeSpecJSON() string {
 }
 
 func TestAnalyzer_ParsesTreeSpec(t *testing.T) {
-	mock := &mockLLM{treeSpecJSON: validTreeSpecJSON()}
+	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	analyzer := NewAnalyzer(mock)
 
 	spec, err := analyzer.Analyze("fake skill content")
@@ -81,7 +63,7 @@ func TestAnalyzer_ParsesTreeSpec(t *testing.T) {
 }
 
 func TestAnalyzer_EmptyResponse_Error(t *testing.T) {
-	mock := &mockLLM{treeSpecJSON: "not json at all"}
+	mock := &engine.MockLLM{GenerateResp: "not json at all"}
 	analyzer := NewAnalyzer(mock)
 
 	_, err := analyzer.Analyze("content")
@@ -94,7 +76,7 @@ func TestAnalyzer_NoStrategyPath_Error(t *testing.T) {
 	spec := TreeSpec{RootType: "Sequence", RootName: "Bad", StrategyPath: nil}
 	data, _ := json.Marshal(spec)
 
-	mock := &mockLLM{treeSpecJSON: string(data)}
+	mock := &engine.MockLLM{GenerateResp: string(data)}
 	analyzer := NewAnalyzer(mock)
 
 	_, err := analyzer.Analyze("content")
@@ -165,6 +147,34 @@ func TestGenerator_BuildsCorrectTree(t *testing.T) {
 	}
 }
 
+func TestGenerator_FallbackExecutionUsesChainAction(t *testing.T) {
+	gen := NewGenerator()
+	spec := &TreeSpec{
+		RootType: "Sequence",
+		RootName: "TestAgent",
+		StrategyPath: []TreeNode{
+			{Type: "Action", Name: "AnswerQuery", Description: "Respond"},
+		},
+	}
+
+	serTree := gen.buildSerializable(spec, "test-agent")
+	router := serTree.Children[0]
+	fallback := router.Children[len(router.Children)-1]
+	if fallback.Name != "FallbackExecution" {
+		t.Fatalf("expected final strategy path to be FallbackExecution, got %q", fallback.Name)
+	}
+	if len(fallback.Children) != 1 {
+		t.Fatalf("FallbackExecution should be one real chain action, got %d children", len(fallback.Children))
+	}
+	child := fallback.Children[0]
+	if child.Type != "ChainAction" {
+		t.Fatalf("FallbackExecution should use ChainAction, got type=%s name=%s", child.Type, child.Name)
+	}
+	if child.Name == "AnalyzeTask" || child.Name == "ExecutePlan" {
+		t.Fatalf("FallbackExecution still uses stub action %q", child.Name)
+	}
+}
+
 func TestGenerator_NoSelfCorrect_NoFallback(t *testing.T) {
 	gen := NewGenerator()
 	spec := &TreeSpec{
@@ -199,7 +209,7 @@ func TestGenerator_NoSelfCorrect_NoFallback(t *testing.T) {
 func TestFactory_CreateFromContent(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	mock := &mockLLM{treeSpecJSON: validTreeSpecJSON()}
+	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	factory, err := NewAgentFactory(mock, tmpDir)
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +244,7 @@ func TestFactory_CreateFromFile(t *testing.T) {
 	skillPath := filepath.Join(tmpDir, "SKILL.md")
 	os.WriteFile(skillPath, []byte("# Test\nCheck input, then act."), 0644)
 
-	mock := &mockLLM{treeSpecJSON: validTreeSpecJSON()}
+	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	factory, _ := NewAgentFactory(mock, tmpDir)
 
 	agent, err := factory.CreateFromFile(skillPath)
@@ -252,7 +262,7 @@ func TestFactory_CreateFromSkillDir_MdPath(t *testing.T) {
 	skillPath := filepath.Join(tmpDir, "myskill.md")
 	os.WriteFile(skillPath, []byte("# My Skill"), 0644)
 
-	mock := &mockLLM{treeSpecJSON: validTreeSpecJSON()}
+	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	factory, _ := NewAgentFactory(mock, tmpDir)
 
 	agent, err := factory.CreateFromSkillDir(skillPath)

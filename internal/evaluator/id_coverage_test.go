@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // ─── IterativeDeepening: TT hit via makeKey alignment ───
@@ -14,7 +13,7 @@ func TestIterativeDeepening_TTHitViaMakeKey(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure)
+	records := makeRecords(evolution.Failure, evolution.Failure)
 
 	// Pre-populate TT using the same key that IterativeDeepening will probe
 	// The clone's hash is used as the task key
@@ -44,7 +43,7 @@ func TestIterativeDeepening_ScoreImprovement(t *testing.T) {
 
 	tree := evolution.DefaultTree()
 	// All failures = low base fitness, any improvement is easy
-	records := makeRecords(reflection.Failure, reflection.Failure, reflection.Failure)
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Failure)
 
 	result := IterativeDeepening(tree, records, tt, 2)
 
@@ -60,7 +59,7 @@ func TestIterativeDeepening_Depth1_Applies(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure)
+	records := makeRecords(evolution.Failure, evolution.Failure)
 
 	result := IterativeDeepening(tree, records, tt, 1)
 

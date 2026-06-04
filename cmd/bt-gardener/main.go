@@ -8,12 +8,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	btlog "github.com/nico/go-bt-evolve/internal/log"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
@@ -49,7 +48,8 @@ func (t *GardenerRunCycleTool) Description() string {
 	return "Run one evolution cycle over ALL behavior trees. Returns per-tree fitness deltas."
 }
 func (t *GardenerRunCycleTool) Call(ctx context.Context, input string) (string, error) {
-	results, err := t.gardener.RunCycle()
+	cfg := gardener.DefaultEvolveV2Config()
+	results, err := t.gardener.RunCycleV2(cfg)
 	if err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 	}
@@ -69,7 +69,7 @@ func (t *GardenerRunCycleTool) Call(ctx context.Context, input string) (string, 
 
 type GardenerRecommendTool struct {
 	registry *gardener.Registry
-	refStore *reflection.Store
+	refStore *evolution.Store
 }
 
 func (t *GardenerRecommendTool) Name() string { return "gardener_recommend" }
@@ -110,8 +110,8 @@ func (t *GardenerRecommendTool) Call(ctx context.Context, input string) (string,
 }
 
 func main() {
-	btlog.Init()
-	btlog.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
+	engine.Init()
+	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
 
 	home, _ := os.UserHomeDir()
 	refDir := filepath.Join(home, ".go-bt-reflections")
@@ -119,10 +119,14 @@ func main() {
 
 	os.MkdirAll(metricsDir, 0755)
 
-	refStore, _ := reflection.NewStore(refDir)
+	refStore, _ := evolution.NewStore(refDir)
 	registry := gardener.NewRegistry(refDir)
 	metricsTracker, _ := gardener.NewMetricsTracker(metricsDir)
 	tt, _ := evaluator.NewTranspositionTable(refDir, 2000)
+
+	// ── V2 Evolution Config (AlphaEvolve pipeline) ──
+	v2Cfg := gardener.DefaultEvolveV2Config()
+	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 
 	g := gardener.NewGardener(gardener.Config{
 		Registry:       registry,
@@ -131,7 +135,7 @@ func main() {
 		TT:             tt,
 		Interval:       5 * time.Minute,
 		MaxMutations:   2,
-		UseRealLLM:     false, // mock for speed — idempotency guards prevent bloat
+		UseRealLLM:     false, // mock LLM for benchmark validation (speed > accuracy on 41 trees)
 	})
 
 	// Ollama LLM for langchain agent — uses platform config
@@ -174,13 +178,13 @@ Question: {{.input}}`,
 	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
 
-	btlog.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", 2)
+	engine.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", 2)
 	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, 5min cycle, langchain analysis every 5th cycle\n", registry.Count())
 	fmt.Fprintf(os.Stderr, "Metrics dir: %s\n", metricsDir)
 
 	// Run initial cycle immediately
 	fmt.Fprintf(os.Stderr, "\n=== Initial Cycle @ %s ===\n", time.Now().Format("15:04:05"))
-	results, _ := g.RunCycle()
+	results, _ := g.RunCycleV2(v2Cfg)
 	for _, r := range results {
 		mark := "  "
 		if r.Improved {
@@ -200,9 +204,9 @@ Question: {{.input}}`,
 		cycleCount++
 		fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))
 
-		results, err := g.RunCycle()
+		results, err := g.RunCycleV2(v2Cfg)
 		if err != nil {
-			btlog.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)
+			engine.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			continue
 		}
@@ -215,7 +219,7 @@ Question: {{.input}}`,
 					r.TreeName, r.BaseFitness, r.NewFitness, r.Delta, r.Mutations)
 			}
 		}
-		btlog.Info("bt-gardener: cycle complete", "cycle", cycleCount, "improved", improved, "total", len(results))
+		engine.Info("bt-gardener: cycle complete", "cycle", cycleCount, "improved", improved, "total", len(results))
 		fmt.Fprintf(os.Stderr, "Improved: %d/%d\n", improved, len(results))
 
 		// Every 5 cycles, run langchain analysis

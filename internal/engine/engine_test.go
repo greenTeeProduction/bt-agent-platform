@@ -1,53 +1,29 @@
 package engine
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/goap"
-	"github.com/nico/go-bt-evolve/internal/reflection"
+	"github.com/nico/go-bt-evolve/internal/util"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
-// mockLLM is a test double that returns predefined responses.
-// Implements the full llm.LLM interface for use as engine.Blackboard.LLM.
-type mockLLM struct {
-	complexity string
-	plan       string
-	wentWell   string
-	toImprove  string
-}
-
-func (m *mockLLM) AnalyzeComplexity(task string) string        { return m.complexity }
-func (m *mockLLM) GeneratePlan(task, complexity string) string { return m.plan }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
-	return m.wentWell, m.toImprove
-}
-func (m *mockLLM) Generate(prompt string) (string, error) {
-	// Return 40+ chars to pass validateOutputQuality (30-char minimum).
-	return "Mock response with sufficient length for quality validation checks", nil
-}
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
-}
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return m.Generate(prompt)
-}
+// MockLLM is now the shared test double in internal/engine/mock_llm.go.
+// Use NewMockLLM() or &MockLLM{...} directly.
 
 func TestRunTask_Success(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{
-		complexity: "low",
-		plan:       "1. Do the thing\n2. Verify",
-		wentWell:   "completed successfully",
-		toImprove:  "add error handling",
+	mock := &MockLLM{
+		ComplexityResp: "low",
+		PlanResp:       "1. Do the thing\n2. Verify",
+		WentWellResp:   "completed successfully",
+		ToImproveResp:  "add error handling",
 	}
 
 	bb := &Blackboard{
@@ -65,7 +41,7 @@ func TestRunTask_Success(t *testing.T) {
 	if result == "" {
 		t.Error("expected non-empty result")
 	}
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success, got %s", bb.Outcome)
 	}
 	if bb.DurationMs < 0 {
@@ -90,10 +66,10 @@ func TestRunTask_Success(t *testing.T) {
 
 func TestRunTask_EmptyInput_Fails(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "plan", wentWell: "ok", toImprove: "n/a"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "plan", WentWellResp: "ok", ToImproveResp: "n/a"}
 
 	bb := &Blackboard{
 		Reflections: refStore,
@@ -108,7 +84,7 @@ func TestRunTask_EmptyInput_Fails(t *testing.T) {
 	result := RunTask(bb, bt)
 
 	// Should fail immediately at PreGate
-	if bb.Outcome != string(reflection.Failure) {
+	if bb.Outcome != string(evolution.Failure) {
 		t.Errorf("expected failure for empty input, got %s", bb.Outcome)
 	}
 	// Result should be empty since the tree never reached ExecutePlan
@@ -119,10 +95,10 @@ func TestRunTask_EmptyInput_Fails(t *testing.T) {
 
 func TestRunTask_KnowledgeGap_RoutesToKnowledgePath(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "plan", wentWell: "ok", toImprove: "n/a"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "plan", WentWellResp: "ok", ToImproveResp: "n/a"}
 
 	bb := &Blackboard{
 		Reflections: refStore,
@@ -148,10 +124,10 @@ func TestRunTask_KnowledgeGap_RoutesToKnowledgePath(t *testing.T) {
 
 func TestRunTask_CacheHit(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "plan", wentWell: "ok", toImprove: "n/a"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "plan", WentWellResp: "ok", ToImproveResp: "n/a"}
 
 	bb := &Blackboard{
 		Reflections:  refStore,
@@ -235,10 +211,10 @@ func containsAnyStr(s, substr string) bool {
 
 func TestGoDevTree_RoutesToCodeReview(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "medium", plan: "review plan", wentWell: "good review", toImprove: "more depth"}
+	mock := &MockLLM{ComplexityResp: "medium", PlanResp: "review plan", WentWellResp: "good review", ToImproveResp: "more depth"}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
 
@@ -248,7 +224,7 @@ func TestGoDevTree_RoutesToCodeReview(t *testing.T) {
 	bb.Task = "review this Go code for bugs and style issues"
 	result := RunTask(bb, bt)
 
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success for code review, got %s", bb.Outcome)
 	}
 	if result == "" {
@@ -256,16 +232,16 @@ func TestGoDevTree_RoutesToCodeReview(t *testing.T) {
 	}
 	// Should have gone through CodeReviewPath
 	if !containsAnyStr(result, "Code Review") && !containsAnyStr(result, "review") {
-		t.Logf("result may not contain 'Code Review' marker: %s", truncate(result, 100))
+		t.Logf("result may not contain 'Code Review' marker: %s", util.Truncate(result, 100))
 	}
 }
 
 func TestGoDevTree_RoutesToGoKnowledge(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "explain interfaces", wentWell: "clear", toImprove: "examples"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "explain interfaces", WentWellResp: "clear", ToImproveResp: "examples"}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
 
@@ -275,20 +251,20 @@ func TestGoDevTree_RoutesToGoKnowledge(t *testing.T) {
 	bb.Task = "explain how Go interfaces work"
 	result := RunTask(bb, bt)
 
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success for Go knowledge, got %s", bb.Outcome)
 	}
 	if !containsAnyStr(result, "Go Explanation") {
-		t.Errorf("expected 'Go Explanation' in result, got: %s", truncate(result, 100))
+		t.Errorf("expected 'Go Explanation' in result, got: %s", util.Truncate(result, 100))
 	}
 }
 
 func TestGoDevTree_RoutesToBuild(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "medium", plan: "build and fix", wentWell: "compiles", toImprove: "warnings"}
+	mock := &MockLLM{ComplexityResp: "medium", PlanResp: "build and fix", WentWellResp: "compiles", ToImproveResp: "warnings"}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
 
@@ -298,21 +274,21 @@ func TestGoDevTree_RoutesToBuild(t *testing.T) {
 	bb.Task = "compile and build the Go project"
 	result := RunTask(bb, bt)
 
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success for build task, got %s", bb.Outcome)
 	}
 	// Build path runs CompileGoCode then FixBuildErrors — check for either marker
 	if !containsAnyStr(result, "Compilation") && !containsAnyStr(result, "Fixed Build") {
-		t.Errorf("expected build-related marker in result, got: %s", truncate(result, 100))
+		t.Errorf("expected build-related marker in result, got: %s", util.Truncate(result, 100))
 	}
 }
 
 func TestGoDevTree_RoutesToTest(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "test plan", wentWell: "all pass", toImprove: "more coverage"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "test plan", WentWellResp: "all pass", ToImproveResp: "more coverage"}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
 
@@ -322,20 +298,20 @@ func TestGoDevTree_RoutesToTest(t *testing.T) {
 	bb.Task = "run Go tests and verify coverage for the package"
 	result := RunTask(bb, bt)
 
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected success for test task, got %s", bb.Outcome)
 	}
 	if !containsAnyStr(result, "Test Results") {
-		t.Errorf("expected 'Test Results' in result, got: %s", truncate(result, 100))
+		t.Errorf("expected 'Test Results' in result, got: %s", util.Truncate(result, 100))
 	}
 }
 
 func TestGoDevTree_NonGoTask_Rejected(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
-	mock := &mockLLM{complexity: "low", plan: "general plan", wentWell: "ok", toImprove: "n/a"}
+	mock := &MockLLM{ComplexityResp: "low", PlanResp: "general plan", WentWellResp: "ok", ToImproveResp: "n/a"}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
 
@@ -347,27 +323,24 @@ func TestGoDevTree_NonGoTask_Rejected(t *testing.T) {
 	result := RunTask(bb, bt)
 
 	// GoDev tree's IsGoRelated condition should fail for non-Go tasks
-	if bb.Outcome != string(reflection.Failure) {
+	if bb.Outcome != string(evolution.Failure) {
 		t.Errorf("expected failure for non-Go task (PreGate IsGoRelated), got %s", bb.Outcome)
 	}
 	if result != "" {
-		t.Errorf("expected empty result for rejected task, got: %s", truncate(result, 50))
+		t.Errorf("expected empty result for rejected task, got: %s", util.Truncate(result, 50))
 	}
 }
 
 func TestGoDevTree_RetryBehavior(t *testing.T) {
 	tmpDir := t.TempDir()
-	refStore, _ := reflection.NewStore(tmpDir)
+	refStore, _ := evolution.NewStore(tmpDir)
 	treeStore, _ := evolution.NewTreeStore(tmpDir)
 
 	// Mock that fails then succeeds — simulate retry
 	callCount := 0
 	mock := &retryMockLLM{
-		complexity: "low",
-		plan:       "corrected plan",
-		wentWell:   "recovered",
-		toImprove:  "prevent initial failure",
-		callCount:  &callCount,
+		MockLLM:   MockLLM{ComplexityResp: "low", PlanResp: "corrected plan", WentWellResp: "recovered", ToImproveResp: "prevent initial failure"},
+		callCount: &callCount,
 	}
 
 	bb := &Blackboard{Reflections: refStore, TreeStore: treeStore, LLM: mock}
@@ -387,40 +360,23 @@ func TestGoDevTree_RetryBehavior(t *testing.T) {
 		t.Error("expected non-empty result after retry")
 	}
 	// Verify the tree self-corrected (plan should contain "corrected")
-	if bb.Plan == mock.plan {
+	if bb.Plan == mock.PlanResp {
 		// The SelfCorrect action rewrites the plan with CORRECTED prefix
 		if !containsAnyStr(bb.Plan, "CORRECTED") && !containsAnyStr(bb.Plan, "corrected") {
-			t.Logf("plan may not show correction: %s", truncate(bb.Plan, 100))
+			t.Logf("plan may not show correction: %s", util.Truncate(bb.Plan, 100))
 		}
 	}
 }
 
-// retryMockLLM simulates a first failure then success.
-// Implements the full llm.LLM interface.
+// retryMockLLM wraps MockLLM with a call counter for testing retry behavior.
 type retryMockLLM struct {
-	complexity string
-	plan       string
-	wentWell   string
-	toImprove  string
-	callCount  *int
+	MockLLM
+	callCount *int
 }
 
-func (m *retryMockLLM) AnalyzeComplexity(task string) string { return m.complexity }
 func (m *retryMockLLM) GeneratePlan(task, complexity string) string {
 	*m.callCount++
-	return m.plan
-}
-func (m *retryMockLLM) Reflect(task, outcome, plan string) (string, string) {
-	return m.wentWell, m.toImprove
-}
-func (m *retryMockLLM) Generate(prompt string) (string, error) {
-	return "RetryMock response with sufficient length for quality validation checks", nil
-}
-func (m *retryMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
-}
-func (m *retryMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return m.Generate(prompt)
+	return m.MockLLM.GeneratePlan(task, complexity)
 }
 
 func TestCheckConfidence_ConditionExists(t *testing.T) {
@@ -486,13 +442,6 @@ func findChildByName(node *evolution.SerializableNode, name string) *evolution.S
 		}
 	}
 	return nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
 
 // ============================================================================
@@ -874,7 +823,7 @@ func TestAssignComplexityAction_NoLLM_DefaultsMedium(t *testing.T) {
 }
 
 func TestAssignComplexityAction_WithLLM(t *testing.T) {
-	mock := &mockLLM{complexity: "high"}
+	mock := &MockLLM{ComplexityResp: "high"}
 	bb := &Blackboard{Task: "complex task", LLM: mock}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := assignComplexityAction(ctx)
@@ -913,7 +862,7 @@ func TestValidateOutputAction_Valid(t *testing.T) {
 // ============================================================================
 
 func TestActionForName_SelfCorrect(t *testing.T) {
-	bb := &Blackboard{Task: "fix bug", Plan: "old plan", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "fix bug", Plan: "old plan", LLM: &MockLLM{}}
 	fn := bb.actionForName("SelfCorrect")
 	if fn == nil {
 		t.Fatal("expected non-nil function for SelfCorrect")
@@ -1016,7 +965,8 @@ func TestActionForName_InitTranspositionTable(t *testing.T) {
 	if fn == nil {
 		t.Fatal("expected non-nil function")
 	}
-	fn(nil)
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	fn(ctx)
 	if bb.ChainState == nil {
 		t.Fatal("expected ChainState to be initialized")
 	}
@@ -1029,7 +979,7 @@ func TestActionForName_InitTranspositionTable(t *testing.T) {
 }
 
 func TestActionForName_MarkSuccessful(t *testing.T) {
-	bb := &Blackboard{Task: "test", Outcome: string(reflection.Failure)}
+	bb := &Blackboard{Task: "test", Outcome: string(evolution.Failure)}
 	fn := bb.actionForName("MarkSuccessful")
 	if fn == nil {
 		t.Fatal("expected non-nil function for MarkSuccessful")
@@ -1039,7 +989,7 @@ func TestActionForName_MarkSuccessful(t *testing.T) {
 	if result != 1 {
 		t.Errorf("expected 1, got %d", result)
 	}
-	if bb.Outcome != string(reflection.Success) {
+	if bb.Outcome != string(evolution.Success) {
 		t.Errorf("expected outcome=success, got %s", bb.Outcome)
 	}
 }
@@ -1287,10 +1237,10 @@ func TestConditionForName_WasSuccessful(t *testing.T) {
 	if fn == nil {
 		t.Fatal("expected non-nil function for WasSuccessful")
 	}
-	if !fn(&Blackboard{Outcome: string(reflection.Success)}) {
+	if !fn(&Blackboard{Outcome: string(evolution.Success)}) {
 		t.Error("expected true for success outcome")
 	}
-	if fn(&Blackboard{Outcome: string(reflection.Failure)}) {
+	if fn(&Blackboard{Outcome: string(evolution.Failure)}) {
 		t.Error("expected false for failure outcome")
 	}
 	if !fn(&Blackboard{Outcome: "chain_success"}) {

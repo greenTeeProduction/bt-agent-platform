@@ -11,11 +11,8 @@ func TestNewEventBus(t *testing.T) {
 	if eb == nil {
 		t.Fatal("NewEventBus returned nil")
 	}
-	if eb.subs == nil {
-		t.Error("subs map not initialized")
-	}
-	if eb.fired == nil {
-		t.Error("fired map not initialized")
+	if eb.subscribers == nil {
+		t.Error("subscribers map not initialized")
 	}
 }
 

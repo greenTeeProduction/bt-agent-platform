@@ -300,3 +300,53 @@ func TestApplyMutations_Batch(t *testing.T) {
 		t.Errorf("expected node count increase after mutations: %d → %d", initial, after)
 	}
 }
+
+func TestApplyMutations_NoOpDoesNotCountAsApplied(t *testing.T) {
+	tree := DefaultTree()
+	initial := CountNodes(tree)
+
+	applied := ApplyMutations(tree, []MutationOp{{Operation: "wrap_retry", Target: "MissingNode"}})
+	if applied != 0 {
+		t.Fatalf("expected no-op mutation to apply 0 changes, got %d", applied)
+	}
+	if got := CountNodes(tree); got != initial {
+		t.Fatalf("no-op mutation changed tree size: got %d, want %d", got, initial)
+	}
+}
+
+func TestApplyMutations_DuplicateFallbackRejected(t *testing.T) {
+	tree := DefaultTree()
+	op := MutationOp{Operation: "add_fallback", Target: "OutcomeSelector", Node: &SerializableNode{
+		Type: "Action", Name: "DefaultFallback", Description: "fallback",
+	}}
+
+	if applied := ApplyMutations(tree, []MutationOp{op}); applied != 1 {
+		t.Fatalf("expected first fallback mutation to apply once, got %d", applied)
+	}
+	if applied := ApplyMutations(tree, []MutationOp{op}); applied != 0 {
+		t.Fatalf("expected duplicate fallback mutation to be rejected, got %d", applied)
+	}
+}
+
+func TestApplyMutations_PromptToolIterationMutationsAreBounded(t *testing.T) {
+	tree := &SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []SerializableNode{{
+			Type: "ChainAction", Name: "Agent", Metadata: map[string]any{
+				"max_iterations": float64(5),
+			},
+		}},
+	}
+
+	ops := []MutationOp{
+		{Operation: "add_tool", Target: "Agent", Metadata: map[string]any{"recommended_tool": "file_read"}},
+		{Operation: "improve_prompt", Target: "Agent", Metadata: map[string]any{"system_msg": "Verify every claim with real tool output. Never fabricate."}},
+		{Operation: "increase_iterations", Target: "Agent"},
+	}
+	if applied := ApplyMutations(tree, ops); applied != 3 {
+		t.Fatalf("expected three first-time content mutations, got %d", applied)
+	}
+	if applied := ApplyMutations(tree, ops); applied != 1 {
+		t.Fatalf("expected only bounded iteration bump to remain applicable on second pass, got %d", applied)
+	}
+}

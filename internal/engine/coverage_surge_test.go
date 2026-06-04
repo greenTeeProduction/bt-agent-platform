@@ -159,7 +159,7 @@ func TestBuildChainActionFn_ConversationWithMemory(t *testing.T) {
 		Task:        "test task",
 		ChainMemory: &mockStringer{data: "Previous conversation history"},
 		ChainState:  make(map[string]any),
-		LLM:         &mockLLM{},
+		LLM:         &MockLLM{},
 	}
 	cfg := ChainConfig{
 		ChainType: "conversation",
@@ -314,7 +314,7 @@ func TestExecToolCall_NilLLM(t *testing.T) {
 // ─── BuildChainAction (constructor wrapper) ───
 
 func TestBuildChainAction_ReturnsNonNil(t *testing.T) {
-	bb := &Blackboard{LLM: &mockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}}
 	cfg := ChainConfig{
 		ChainType: "llm_call",
 		Prompt:    "hello",
@@ -410,7 +410,7 @@ func TestExecStructuredOutput_NilLLM(t *testing.T) {
 func TestBuildChainActionFn_ToolCallWithTools(t *testing.T) {
 	bb := &Blackboard{
 		Task: "test",
-		LLM:  &mockLLM{},
+		LLM:  &MockLLM{},
 		ChainTools: []any{
 			&mockTool{name: "web_search", desc: "Search web"},
 		},
@@ -518,7 +518,7 @@ func TestExecConversation_NoChainState(t *testing.T) {
 			data: "prior conversation",
 		},
 		ChainState: make(map[string]any),
-		LLM:        &mockLLM{},
+		LLM:        &MockLLM{},
 	}
 	cfg := ChainConfig{
 		ChainType: "conversation",

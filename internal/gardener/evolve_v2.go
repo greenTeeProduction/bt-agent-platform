@@ -73,7 +73,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
 
-	records, _ := g.cfg.RefStore.LoadAll()
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := evolution.FilterByTreeName(allRecords, entry.Name)
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
 	domain := extractDomain(entry.Name)
@@ -163,7 +164,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			prompt := llm.BuildMutationPrompt(*evoCtx)
 			suggestion, err := ensemble.GenerateBreadth([]string{prompt})
 			if err == nil && len(suggestion) > 0 && len(suggestion[0]) > 20 {
-				evoCtx.MutationHistory = append(evoCtx.MutationHistory, suggestion[0][:100])
+				truncated := suggestion[0]
+				if len(truncated) > 100 {
+					truncated = truncated[:100]
+				}
+				evoCtx.MutationHistory = append(evoCtx.MutationHistory, truncated)
 			}
 		}
 	}
@@ -209,8 +214,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 	applied := 0
 	rejected := 0
+	rollbacks := 0
+	originalTree := cloneTreeForGardener(tree)
+	currentFitness := baseFitness
 	for i := 0; i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
-		if candidates[i].Score < 0.2 {
+		if candidates[i].Score < 0.45 {
 			break
 		}
 
@@ -222,13 +230,37 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			continue
 		}
 
+		// Pre-score on a clone before mutating the live tree. This rejects no-op
+		// mutations and candidates whose estimated post-mutation fitness regresses.
+		candidateTree := cloneTreeForGardener(tree)
+		if evolution.ApplyMutations(candidateTree, []evolution.MutationOp{candidates[i].Op}) == 0 {
+			rejected++
+			continue
+		}
+		candidateFitness := evaluator.EvaluateTree(candidateTree, records)
+		if candidateFitness.Composite < currentFitness.Composite-0.0001 {
+			rejected++
+			continue
+		}
+		if g.cfg.Gate != nil {
+			gateResult := g.cfg.Gate.Validate(currentFitness.Composite, candidateFitness.Composite)
+			if gateResult != evolution.GateAccepted {
+				rejected++
+				if gateResult == evolution.GateRollback {
+					rollbacks++
+				}
+				continue
+			}
+		}
+
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
+			currentFitness = candidateFitness
 
 			// P0: Update MAP-Elites grid with mutated tree
 			if mapGrid != nil {
 				desc := evolution.Descriptor(tree, domain)
-				ind := &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: 0, Genome: hashTreeForGardener(tree)}
+				ind := &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: candidateFitness.Composite, Genome: hashTreeForGardener(tree)}
 				mapGrid.Insert(desc, ind)
 			}
 
@@ -236,20 +268,28 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			if paretoFront != nil {
 				fv := evolution.StructuralMultiFitness(tree)
 				paretoFront.Add(&evolution.MultiIndividual{
-					Individual: &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: 0, Genome: hashTreeForGardener(tree)},
+					Individual: &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: candidateFitness.Composite, Genome: hashTreeForGardener(tree)},
 					FitnessVec: fv,
 				})
 			}
 		}
 	}
 
+	newFitness := evaluator.EvaluateTree(tree, records)
+	nodesAfter := evolution.CountNodes(tree)
+	if newFitness.Composite < baseFitness.Composite-0.0001 {
+		if originalTree != nil {
+			*tree = *originalTree
+		}
+		newFitness = baseFitness
+		nodesAfter = nodesBefore
+		applied = 0
+		rollbacks++
+	}
+	improved := newFitness.Composite > baseFitness.Composite
 	if applied > 0 {
 		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
-
-	newFitness := evaluator.EvaluateTree(tree, records)
-	nodesAfter := evolution.CountNodes(tree)
-	improved := newFitness.Composite > baseFitness.Composite
 
 	// ── P3: Meta-Prompt Evolution — record outcome ──
 	// (template success rate tracked per mutation type)
@@ -269,7 +309,9 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
 		Delta:     newFitness.Composite - baseFitness.Composite,
 		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
-		Improved: improved,
+		Improved:   improved,
+		Rejections: rejected,
+		Rollbacks:  rollbacks,
 	}
 }
 
@@ -290,6 +332,10 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 
 	for _, entry := range entries {
 		if !entry.Active {
+			continue
+		}
+		// Skip heavy-IO documentation trees that run external commands
+		if strings.Contains(entry.Name, "arc42") {
 			continue
 		}
 
@@ -323,19 +369,44 @@ func cloneTreeForGardener(t *evolution.SerializableNode) *evolution.Serializable
 		return nil
 	}
 	c := &evolution.SerializableNode{
-		Type: t.Type, Name: t.Name, MaxRetries: t.MaxRetries,
-		TimeoutMs: t.TimeoutMs,
+		Type:        t.Type,
+		Name:        t.Name,
+		Description: t.Description,
+		MaxRetries:  t.MaxRetries,
+		TimeoutMs:   t.TimeoutMs,
 	}
 	if t.Metadata != nil {
-		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata {
-			c.Metadata[k] = v
-		}
+		c.Metadata = cloneMetadataForGardener(t.Metadata)
+	}
+	if t.Edges != nil {
+		c.Edges = make([]evolution.TypedEdge, len(t.Edges))
+		copy(c.Edges, t.Edges)
 	}
 	for _, ch := range t.Children {
 		c.Children = append(c.Children, *cloneTreeForGardener(&ch))
 	}
 	return c
+}
+
+func cloneMetadataForGardener(src map[string]any) map[string]any {
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		switch vv := v.(type) {
+		case []any:
+			cp := make([]any, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case []string:
+			cp := make([]string, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case map[string]any:
+			out[k] = cloneMetadataForGardener(vv)
+		default:
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func hashTreeForGardener(t *evolution.SerializableNode) string {

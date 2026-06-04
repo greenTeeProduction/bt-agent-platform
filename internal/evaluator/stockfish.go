@@ -13,10 +13,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // --- Multi-dimensional Fitness (Stockfish: Evaluation Function) ---
@@ -24,21 +25,23 @@ import (
 // FitnessScore evaluates a behavior tree on multiple dimensions, like Stockfish
 // evaluates a chess position on material + positional factors.
 type FitnessScore struct {
-	SuccessRate   float64 `json:"success_rate"`    // 0.0–1.0, most important (like material)
-	AvgDurationMs int64   `json:"avg_duration_ms"` // lower is better (like tempo)
-	NodeCount     int     `json:"node_count"`      // lower is better (like mobility)
-	Stability     float64 `json:"stability"`       // 1/variance of success rate (like king safety)
-	PathCoverage  float64 `json:"path_coverage"`   // fraction of strategy paths used (like development)
-	Composite     float64 `json:"composite"`       // weighted sum, in centipawns-like scale
+	SuccessRate       float64 `json:"success_rate"`       // 0.0–1.0, most important (like material)
+	AvgDurationMs     int64   `json:"avg_duration_ms"`    // lower is better (like tempo)
+	NodeCount         int     `json:"node_count"`         // lower is better (like mobility)
+	Stability         float64 `json:"stability"`          // 1/variance of success rate (like king safety)
+	PathCoverage      float64 `json:"path_coverage"`      // fraction of strategy paths used (like development)
+	StructuralQuality float64 `json:"structural_quality"` // static safeguards/tooling quality, 0.0-1.0
+	Composite         float64 `json:"composite"`          // weighted sum, in centipawns-like scale
 }
 
 // EvaluateTree computes a multi-dimensional fitness score for a tree given its history.
-func EvaluateTree(tree *evolution.SerializableNode, records []reflection.Record) FitnessScore {
+func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) FitnessScore {
 	n := len(records)
 	if n == 0 {
 		return FitnessScore{
-			NodeCount: evolution.CountNodes(tree),
-			Composite: 0,
+			NodeCount:         evolution.CountNodes(tree),
+			StructuralQuality: estimateStructuralQuality(tree),
+			Composite:         0,
 		}
 	}
 
@@ -46,7 +49,7 @@ func EvaluateTree(tree *evolution.SerializableNode, records []reflection.Record)
 	successes := 0
 	var totalDuration int64
 	for _, r := range records {
-		if r.Outcome == reflection.Success {
+		if r.Outcome == evolution.Success {
 			successes++
 		}
 		totalDuration += r.DurationMs
@@ -59,7 +62,7 @@ func EvaluateTree(tree *evolution.SerializableNode, records []reflection.Record)
 	variance := 0.0
 	for _, r := range records {
 		v := 0.0
-		if r.Outcome == reflection.Success {
+		if r.Outcome == evolution.Success {
 			v = 1.0
 		}
 		diff := v - mean
@@ -72,27 +75,31 @@ func EvaluateTree(tree *evolution.SerializableNode, records []reflection.Record)
 	pathCoverage := estimatePathCoverage(records)
 
 	// Composite (weighted like Stockfish: material=success, positional=others)
-	// Scale: 0–100 "centipawns" where 100 = perfect
-	// Node count penalty reduced from 10 to 2 to avoid punishing structural improvements
+	// Scale: 0–100 "centipawns" where 100 = perfect.
+	// Static structural quality rewards mutations that add verifiable safeguards,
+	// retry bounds, tool access, and prompt discipline before new outcome data exists.
+	structuralQuality := estimateStructuralQuality(tree)
 	composite := successRate*50 +
 		stability*15 +
 		pathCoverage*15 +
 		(1.0-minFloat64(float64(avgDuration)/120000.0, 1.0))*10 +
+		structuralQuality*8 +
 		(1.0-minFloat64(float64(evolution.CountNodes(tree))/100.0, 1.0))*2
 
 	nodeCount := evolution.CountNodes(tree)
 
 	return FitnessScore{
-		SuccessRate:   successRate,
-		AvgDurationMs: avgDuration,
-		NodeCount:     nodeCount,
-		Stability:     stability,
-		PathCoverage:  pathCoverage,
-		Composite:     composite,
+		SuccessRate:       successRate,
+		AvgDurationMs:     avgDuration,
+		NodeCount:         nodeCount,
+		Stability:         stability,
+		PathCoverage:      pathCoverage,
+		StructuralQuality: structuralQuality,
+		Composite:         composite,
 	}
 }
 
-func estimatePathCoverage(records []reflection.Record) float64 {
+func estimatePathCoverage(records []evolution.Record) float64 {
 	// Simple heuristic: if plans vary, coverage is higher
 	if len(records) < 2 {
 		return 0.5
@@ -109,6 +116,104 @@ func estimatePathCoverage(records []reflection.Record) float64 {
 		uniquePlans[sig] = true
 	}
 	return float64(len(uniquePlans)) / float64(len(records))
+}
+
+func estimateStructuralQuality(tree *evolution.SerializableNode) float64 {
+	if tree == nil {
+		return 0
+	}
+	var total, validation, retry, prompt, tools, selector float64
+	walkNodes(tree, func(n *evolution.SerializableNode) {
+		total++
+		switch n.Type {
+		case "Condition":
+			if isValidationGate(n.Name) {
+				validation++
+			}
+		case "Retry":
+			if n.MaxRetries > 0 && n.MaxRetries <= 5 && len(n.Children) > 0 {
+				retry++
+			}
+		case "ChainAction":
+			if hasVerifiedPrompt(n) {
+				prompt++
+			}
+			if hasUsefulTooling(n) || hasAdequateIterations(n) {
+				tools++
+			}
+		case "Selector":
+			if len(n.Children) >= 2 || hasNode(n, "DefaultFallback") || hasNode(n, "OutcomeSelector") {
+				selector++
+			}
+		}
+	})
+	if total == 0 {
+		return 0
+	}
+	chainCount := len(findChainAgentNodes(tree))
+	selectorCount := countSelectors(tree)
+	score := 0.0
+	if validation > 0 {
+		score += 0.25
+	}
+	if retry > 0 {
+		score += 0.20
+	}
+	if chainCount == 0 || prompt > 0 {
+		score += 0.20
+	}
+	if chainCount == 0 || tools > 0 {
+		score += 0.20
+	}
+	if selectorCount == 0 || selector > 0 {
+		score += 0.15
+	}
+	return minFloat64(score, 1.0)
+}
+
+func isValidationGate(name string) bool {
+	switch name {
+	case "HasClearTask", "CheckConfidence", "ValidateInput", "CheckPrerequisites", "WasSuccessful":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasVerifiedPrompt(n *evolution.SerializableNode) bool {
+	if n == nil || n.Metadata == nil {
+		return false
+	}
+	sysMsg, _ := n.Metadata["system_msg"].(string)
+	lower := strings.ToLower(sysMsg)
+	return strings.Contains(lower, "verify") || strings.Contains(lower, "real data") || strings.Contains(lower, "never fabricate") || strings.Contains(lower, "tool output")
+}
+
+func hasUsefulTooling(n *evolution.SerializableNode) bool {
+	if n == nil || n.Metadata == nil {
+		return false
+	}
+	switch tools := n.Metadata["tools"].(type) {
+	case []any:
+		return len(tools) > 0
+	case []string:
+		return len(tools) > 0
+	default:
+		return false
+	}
+}
+
+func hasAdequateIterations(n *evolution.SerializableNode) bool {
+	if n == nil || n.Metadata == nil {
+		return false
+	}
+	if maxIter, ok := n.Metadata["max_iterations"].(float64); ok {
+		return maxIter >= 10
+	}
+	if maxIter, ok := n.Metadata["max_iterations"].(int); ok {
+		return maxIter >= 10
+	}
+	return false
 }
 
 // --- Transposition Table (Stockfish: TT) ---
@@ -242,68 +347,133 @@ type MutationCandidate struct {
 //  3. add_condition to catch failures early
 //  4. prune dead/unreachable nodes
 //  5. add_fallback for selectors with few children
-func OrderMutations(tree *evolution.SerializableNode, records []reflection.Record, fitness FitnessScore) []MutationCandidate {
+func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record, fitness FitnessScore) []MutationCandidate {
 	var candidates []MutationCandidate
+
+	failurePressure := 1.0 - fitness.SuccessRate
+	if failurePressure < 0 {
+		failurePressure = 0
+	}
+
+	// Highest-value mutation for stuck trees: reject unclear work before expensive execution.
+	if fitness.SuccessRate < 0.7 && hasNode(tree, "PreGate") && !hasNode(tree, "HasClearTask") {
+		candidates = append(candidates, MutationCandidate{
+			Op: evolution.MutationOp{Operation: "add_before", Target: "PreGate", Node: &evolution.SerializableNode{
+				Type: "Condition", Name: "HasClearTask", Description: "Reject empty, gibberish, or underspecified tasks before execution",
+			}},
+			Score:  0.92 + failurePressure*0.05,
+			Reason: fmt.Sprintf("success rate %.0f%% — add clear-task validation before routing", fitness.SuccessRate*100),
+		})
+	}
 
 	// Find nodes that appear in failure plans — wrap them with retry (killer move)
 	failureNodes := findFailureNodes(records)
 	for _, nodeName := range failureNodes {
+		if !hasNode(tree, nodeName) {
+			continue
+		}
 		candidates = append(candidates, MutationCandidate{
 			Op:     evolution.MutationOp{Operation: "wrap_retry", Target: nodeName},
-			Score:  0.9, // highest priority — killer move
+			Score:  0.84 + failurePressure*0.06,
 			Reason: fmt.Sprintf("node %q appears in failure plans", nodeName),
 		})
 	}
 
 	// Increase retries on existing Retry nodes (history heuristic)
-	if hasNode(tree, "RetrySelfCorrect") {
+	if hasNode(tree, "RetrySelfCorrect") && fitness.Stability < 0.9 {
 		candidates = append(candidates, MutationCandidate{
 			Op:     evolution.MutationOp{Operation: "increase_retries", Target: "RetrySelfCorrect"},
-			Score:  0.7,
-			Reason: "increasing retries on existing retry node",
+			Score:  0.72 + (1.0-fitness.Stability)*0.10,
+			Reason: "unstable outcomes — increase bounded retries on existing self-correction node",
 		})
 	}
 
-	// Add pre-condition if failures are frequent (early cutoff)
-	if fitness.SuccessRate < 0.7 {
-		candidates = append(candidates, MutationCandidate{
-			Op: evolution.MutationOp{Operation: "add_before", Target: "PreGate", Node: &evolution.SerializableNode{
-				Type: "Condition", Name: "CheckConfidence", Description: "Skip if confidence too low",
-			}},
-			Score:  0.6,
-			Reason: fmt.Sprintf("success rate %.0f%% — add early validation", fitness.SuccessRate*100),
-		})
-	}
-
-	// Prune if node count > 40 (complexity penalty)
+	// Prune if node count > 40 (complexity penalty), but only target an existing leaf.
 	if fitness.NodeCount > 40 {
-		candidates = append(candidates, MutationCandidate{
-			Op:     evolution.MutationOp{Operation: "prune_node", Target: "CachePath"},
-			Score:  0.5,
-			Reason: fmt.Sprintf("tree has %d nodes — consider pruning unused paths", fitness.NodeCount),
-		})
+		if target := findPruneTarget(tree); target != "" {
+			candidates = append(candidates, MutationCandidate{
+				Op:     evolution.MutationOp{Operation: "prune_node", Target: target},
+				Score:  0.58,
+				Reason: fmt.Sprintf("tree has %d nodes — prune low-value leaf %q", fitness.NodeCount, target),
+			})
+		}
 	}
 
-	// Add fallback to selectors with few children
-	selCount := countSelectors(tree)
-	if selCount > 0 && float64(selCount)/float64(fitness.NodeCount) < 0.15 {
+	// Add fallback to an actual selector that lacks a default path.
+	if target := findSelectorNeedingFallback(tree); target != "" && (fitness.PathCoverage < 0.7 || fitness.SuccessRate < 0.8) {
 		candidates = append(candidates, MutationCandidate{
-			Op: evolution.MutationOp{Operation: "add_fallback", Target: "OutcomeSelector", Node: &evolution.SerializableNode{
+			Op: evolution.MutationOp{Operation: "add_fallback", Target: target, Node: &evolution.SerializableNode{
 				Type: "Action", Name: "DefaultFallback", Description: "Generic fallback action",
 			}},
-			Score:  0.4,
-			Reason: "selectors have few children — add fallback",
+			Score:  0.54 + (0.7-fitness.PathCoverage)*0.10,
+			Reason: fmt.Sprintf("selector %q lacks a default fallback under low coverage", target),
 		})
 	}
+
+	// --- Prompt-level mutations (content evolution) ---
+
+	// Find ChainAgent nodes and suggest content improvements
+	chainNodes := findChainAgentNodes(tree)
+	for _, cn := range chainNodes {
+		// improve_prompt: best prompt-level fix when verification discipline is missing.
+		if !hasVerifiedPrompt(cn) {
+			if sysMsg, ok := cn.Metadata["system_msg"].(string); ok && sysMsg != "" {
+				improvedMsg := sysMsg + " Verify outputs against real tool results and cited source data. Never fabricate results; if a tool call fails, report the error honestly and stop."
+				candidates = append(candidates, MutationCandidate{
+					Op: evolution.MutationOp{
+						Operation: "improve_prompt",
+						Target:    cn.Name,
+						Metadata:  map[string]any{"system_msg": improvedMsg},
+					},
+					Score:  0.82 + failurePressure*0.08,
+					Reason: fmt.Sprintf("ChainAgent %q lacks verification/fabrication guardrails", cn.Name),
+				})
+			} else {
+				baselineMsg := "You are a thorough and honest agent. Use tools to gather real information. Verify every claim with actual tool output or cited source data. If a tool fails, report the error — never fabricate. Produce complete, well-structured results."
+				candidates = append(candidates, MutationCandidate{
+					Op: evolution.MutationOp{
+						Operation: "improve_prompt",
+						Target:    cn.Name,
+						Metadata:  map[string]any{"system_msg": baselineMsg},
+					},
+					Score:  0.86 + failurePressure*0.08,
+					Reason: fmt.Sprintf("ChainAgent %q has no system_msg — add verified-output baseline prompt", cn.Name),
+				})
+			}
+		}
+
+		// add_tool: give tool-using agent nodes file access when missing.
+		if !chainHasTool(cn, "file_read") {
+			candidates = append(candidates, MutationCandidate{
+				Op:     evolution.MutationOp{Operation: "add_tool", Target: cn.Name, Metadata: map[string]any{"recommended_tool": "file_read"}},
+				Score:  0.76 + failurePressure*0.06,
+				Reason: fmt.Sprintf("ChainAgent %q missing file_read tool — add concrete file access", cn.Name),
+			})
+		}
+
+		// increase_iterations: bump shallow agent loops only when below the useful floor.
+		if needsMoreIterations(cn) {
+			candidates = append(candidates, MutationCandidate{
+				Op:     evolution.MutationOp{Operation: "increase_iterations", Target: cn.Name},
+				Score:  0.70 + failurePressure*0.05,
+				Reason: fmt.Sprintf("ChainAgent %q has shallow iteration/token budget", cn.Name),
+			})
+		}
+	}
+
+	// Sort all candidates by descending score for deterministic ordering
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
 
 	return candidates
 }
 
 // findFailureNodes extracts node names that appear in failure records.
-func findFailureNodes(records []reflection.Record) []string {
+func findFailureNodes(records []evolution.Record) []string {
 	seen := make(map[string]bool)
 	for _, r := range records {
-		if r.Outcome != reflection.Failure {
+		if r.Outcome != evolution.Failure {
 			continue
 		}
 		for _, wi := range r.WhatToImprove {
@@ -343,7 +513,7 @@ type DeepeningResult struct {
 // Like Stockfish, each depth prunes unpromising branches.
 func IterativeDeepening(
 	tree *evolution.SerializableNode,
-	records []reflection.Record,
+	records []evolution.Record,
 	tt *TranspositionTable,
 	maxDepth int,
 ) DeepeningResult {
@@ -438,6 +608,9 @@ func generateCombos(candidates []MutationCandidate, depth int) [][]MutationCandi
 }
 
 func hasNode(tree *evolution.SerializableNode, name string) bool {
+	if tree == nil {
+		return false
+	}
 	if tree.Name == name {
 		return true
 	}
@@ -450,6 +623,9 @@ func hasNode(tree *evolution.SerializableNode, name string) bool {
 }
 
 func countSelectors(tree *evolution.SerializableNode) int {
+	if tree == nil {
+		return 0
+	}
 	count := 0
 	if tree.Type == "Selector" {
 		count++
@@ -458,6 +634,96 @@ func countSelectors(tree *evolution.SerializableNode) int {
 		count += countSelectors(&tree.Children[i])
 	}
 	return count
+}
+
+func findPruneTarget(tree *evolution.SerializableNode) string {
+	var target string
+	walkNodes(tree, func(n *evolution.SerializableNode) {
+		if target != "" || n == nil || len(n.Children) > 0 {
+			return
+		}
+		if n.Name == "" || isValidationGate(n.Name) || strings.Contains(n.Name, "Fallback") {
+			return
+		}
+		if strings.Contains(strings.ToLower(n.Name), "cache") || strings.Contains(strings.ToLower(n.Description), "cache") || n.Type == "Action" {
+			target = n.Name
+		}
+	})
+	return target
+}
+
+func findSelectorNeedingFallback(tree *evolution.SerializableNode) string {
+	var target string
+	walkNodes(tree, func(n *evolution.SerializableNode) {
+		if target != "" || n == nil || n.Type != "Selector" {
+			return
+		}
+		if hasNode(n, "DefaultFallback") || hasNode(n, "EscalateToDeepSeek") {
+			return
+		}
+		if len(n.Children) > 0 {
+			target = n.Name
+		}
+	})
+	return target
+}
+
+func chainHasTool(n *evolution.SerializableNode, tool string) bool {
+	if n == nil || n.Metadata == nil {
+		return false
+	}
+	switch tools := n.Metadata["tools"].(type) {
+	case []any:
+		for _, t := range tools {
+			if ts, ok := t.(string); ok && ts == tool {
+				return true
+			}
+		}
+	case []string:
+		for _, t := range tools {
+			if t == tool {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func needsMoreIterations(n *evolution.SerializableNode) bool {
+	if n == nil || n.Metadata == nil {
+		return true
+	}
+	if maxIter, ok := n.Metadata["max_iterations"].(float64); ok {
+		return maxIter < 10
+	}
+	if maxIter, ok := n.Metadata["max_iterations"].(int); ok {
+		return maxIter < 10
+	}
+	if maxTok, ok := n.Metadata["max_tokens"].(float64); ok {
+		return maxTok < 100
+	}
+	return true
+}
+
+// findChainAgentNodes returns all ChainAction nodes with agent chain type.
+func findChainAgentNodes(tree *evolution.SerializableNode) []*evolution.SerializableNode {
+	var result []*evolution.SerializableNode
+	walkNodes(tree, func(n *evolution.SerializableNode) {
+		if n.Type == "ChainAction" && n.Metadata != nil {
+			result = append(result, n)
+		}
+	})
+	return result
+}
+
+func walkNodes(node *evolution.SerializableNode, fn func(*evolution.SerializableNode)) {
+	if node == nil {
+		return
+	}
+	fn(node)
+	for i := range node.Children {
+		walkNodes(&node.Children[i], fn)
+	}
 }
 
 func treeMaxDepth(tree *evolution.SerializableNode, depth int) int {

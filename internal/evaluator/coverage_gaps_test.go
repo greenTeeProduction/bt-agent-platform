@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // ─── containsWord tests ───
@@ -241,7 +240,7 @@ func TestTranspositionTable_Save_BadPath(t *testing.T) {
 // ─── findFailureNodes tests ───
 
 func TestFindFailureNodes_NoFailures(t *testing.T) {
-	records := makeRecords(reflection.Success, reflection.Success)
+	records := makeRecords(evolution.Success, evolution.Success)
 	nodes := findFailureNodes(records)
 	if len(nodes) != 0 {
 		t.Errorf("expected 0 nodes with no failures, got %d", len(nodes))
@@ -249,16 +248,16 @@ func TestFindFailureNodes_NoFailures(t *testing.T) {
 }
 
 func TestFindFailureNodes_WithFailures(t *testing.T) {
-	records := []reflection.Record{
+	records := []evolution.Record{
 		{
-			Outcome: reflection.Failure,
+			Outcome: evolution.Failure,
 			WhatToImprove: []string{
 				"AnalyzeTask failed to parse input",
 				"ExecutePlan was too slow",
 			},
 		},
 		{
-			Outcome: reflection.Failure,
+			Outcome: evolution.Failure,
 			WhatToImprove: []string{
 				"SelfCorrect did not fix the issue",
 			},
@@ -285,9 +284,9 @@ func TestFindFailureNodes_WithFailures(t *testing.T) {
 }
 
 func TestFindFailureNodes_IgnoresNonFailure(t *testing.T) {
-	records := []reflection.Record{
-		{Outcome: reflection.Success, WhatToImprove: []string{"AnalyzeTask is great"}},
-		{Outcome: reflection.Partial, WhatToImprove: []string{"ExecutePlan needs work"}},
+	records := []evolution.Record{
+		{Outcome: evolution.Success, WhatToImprove: []string{"AnalyzeTask is great"}},
+		{Outcome: evolution.Partial, WhatToImprove: []string{"ExecutePlan needs work"}},
 	}
 	nodes := findFailureNodes(records)
 	if len(nodes) != 0 {
@@ -296,9 +295,9 @@ func TestFindFailureNodes_IgnoresNonFailure(t *testing.T) {
 }
 
 func TestFindFailureNodes_Deduplicates(t *testing.T) {
-	records := []reflection.Record{
+	records := []evolution.Record{
 		{
-			Outcome: reflection.Failure,
+			Outcome: evolution.Failure,
 			WhatToImprove: []string{
 				"AnalyzeTask failed",
 				"AnalyzeTask needs improvement",
@@ -318,7 +317,7 @@ func TestIterativeDeepening_MultipleDepths(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Failure, reflection.Failure, reflection.Success)
+	records := makeRecords(evolution.Failure, evolution.Failure, evolution.Success)
 
 	result := IterativeDeepening(tree, records, tt, 3)
 
@@ -342,13 +341,13 @@ func TestIterativeDeepening_PruningOnNodeExplosion(t *testing.T) {
 		},
 	}
 	// Create enough failure records to generate many mutation candidates
-	records := []reflection.Record{
+	records := []evolution.Record{
 		{
-			Outcome:       reflection.Failure,
+			Outcome:       evolution.Failure,
 			WhatToImprove: []string{"AnalyzeTask error", "ExecutePlan error", "SelfCorrect error"},
 		},
 		{
-			Outcome:       reflection.Failure,
+			Outcome:       evolution.Failure,
 			WhatToImprove: []string{"ReflectOnOutcome error"},
 		},
 	}
@@ -366,7 +365,7 @@ func TestIterativeDeepening_TTHitDuringSearch(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 100)
 
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 
 	// Pre-populate with the tree's own hash to trigger TT hit
 	treeHash := hashTree(tree)
@@ -520,7 +519,7 @@ func TestTreeMaxDepth_Nested(t *testing.T) {
 func TestOrderMutations_LargeNodeCount_RecommendsPrune(t *testing.T) {
 	tree := evolution.DefaultTree()
 	// Override node count by constructing a fitness with high node count
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 	fitness := EvaluateTree(tree, records)
 	// Force node count > 40
 	fitness.NodeCount = 50
@@ -549,7 +548,7 @@ func TestOrderMutations_FewSelectors_RecommendsFallback(t *testing.T) {
 			{Type: "Action", Name: "B"},
 		},
 	}
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 	fitness := EvaluateTree(smallTree, records)
 
 	candidates := OrderMutations(smallTree, records, fitness)
@@ -571,7 +570,7 @@ func TestOrderMutations_FewSelectors_RecommendsFallback(t *testing.T) {
 
 func TestEvaluateTree_SingleRecord(t *testing.T) {
 	tree := evolution.DefaultTree()
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 
 	fitness := EvaluateTree(tree, records)
 
@@ -586,8 +585,8 @@ func TestEvaluateTree_SingleRecord(t *testing.T) {
 func TestEvaluateTree_NegativeDuration(t *testing.T) {
 	tree := evolution.DefaultTree()
 	// Duration should not cause issues even if negative (unlikely but defensive)
-	records := []reflection.Record{
-		{TaskID: "t1", Task: "test", Plan: "plan", Outcome: reflection.Success, DurationMs: -100},
+	records := []evolution.Record{
+		{TaskID: "t1", Task: "test", Plan: "plan", Outcome: evolution.Success, DurationMs: -100},
 	}
 	fitness := EvaluateTree(tree, records)
 	if fitness.AvgDurationMs < 0 {
@@ -675,7 +674,7 @@ func TestCountSelectors_Nested(t *testing.T) {
 // ─── estimatePathCoverage edge cases ───
 
 func TestEstimatePathCoverage_FewerThanTwoRecords(t *testing.T) {
-	records := makeRecords(reflection.Success)
+	records := makeRecords(evolution.Success)
 	cov := estimatePathCoverage(records)
 	if cov != 0.5 {
 		t.Errorf("expected 0.5 for single record, got %.2f", cov)

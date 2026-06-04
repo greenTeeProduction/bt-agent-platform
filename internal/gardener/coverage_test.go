@@ -9,7 +9,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/reflection"
 )
 
 // ============================================================================
@@ -647,7 +646,7 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 	t.Helper()
 	dir := t.TempDir()
 
-	refStore, err := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -681,28 +680,23 @@ func TestRunCycle_NoActiveTrees(t *testing.T) {
 	}
 	g, _, _, _ := setupGardener(t)
 
-	// Deactivate all trees
-	entries := g.cfg.Registry.List()
-	for i := range entries {
-		entries[i].Active = false
-	}
-	// We can't easily set Active = false on the registry entries, but
-	// the RunCycle will skip inactive ones. Let's test with nil-tree entries.
-	// Actually, the simpler path: trees from registry have non-nil Tree,
-	// but they may not have benchmarks that produce results.
-	// Let's just run it and ensure it doesn't crash.
+	// Deactivate all trees using the proper registry API
+	g.cfg.Registry.DeactivateAll()
+
 	results, err := g.RunCycle()
 	if err != nil {
 		t.Errorf("RunCycle returned error: %v", err)
 	}
-	// Should produce results (or empty if evolution fails)
-	_ = results
+	// Should produce no results since all trees are inactive
+	if len(results) != 0 {
+		t.Errorf("expected 0 results with all trees deactivated, got %d", len(results))
+	}
 }
 
 func TestEvolveTree_NilTree(t *testing.T) {
 	// Create a gardener with a tree that has nil Tree in the entry.
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -745,7 +739,7 @@ func TestEvolveTree_BloatGuard(t *testing.T) {
 	// The bloat guard fires when nodesBefore > baseNodes * 20
 	// For "godev", baseNodes = 30, so we need > 600 nodes
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -802,7 +796,7 @@ func TestEvolveTree_WithRealTree(t *testing.T) {
 	// This exercises the full evolution path: fitness eval, mutation ordering,
 	// benchmark validation, etc.
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -860,7 +854,7 @@ func TestEvolveTree_WithRealTree(t *testing.T) {
 
 func TestEvolveTree_MultipleTrees(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
@@ -910,7 +904,7 @@ func TestEvolveTree_MultipleTrees(t *testing.T) {
 
 func TestRunCycle_MetricsSave(t *testing.T) {
 	dir := t.TempDir()
-	refStore, _ := reflection.NewStore(filepath.Join(dir, "reflections"))
+	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
 	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 

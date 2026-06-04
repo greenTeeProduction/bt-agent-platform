@@ -130,3 +130,36 @@ func floatFromMap(m map[string]interface{}, key string) float64 {
 	}
 	return 0.5
 }
+
+// intSliceFromInterface converts various input types to []int.
+// Handles: nil, []float64, []interface{} with float64 or int elements.
+func intSliceFromInterface(v interface{}) []int {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []float64:
+		out := make([]int, len(val))
+		for i, f := range val {
+			out[i] = int(f)
+		}
+		return out
+	case []interface{}:
+		if len(val) == 0 {
+			return []int{}
+		}
+		var out []int
+		for _, item := range val {
+			switch n := item.(type) {
+			case float64:
+				out = append(out, int(n))
+			case int:
+				out = append(out, n)
+				// skip non-numeric types (strings, bools, etc.)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}

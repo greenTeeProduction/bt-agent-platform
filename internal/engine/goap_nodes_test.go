@@ -8,15 +8,7 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
-// mockLLMWithError returns an error on Generate calls.
-type mockLLMWithError struct {
-	mockLLM
-	errMsg string
-}
-
-func (m *mockLLMWithError) Generate(prompt string) (string, error) {
-	return "", errors.New(m.errMsg)
-}
+// TestAction_ExecuteGoapStep_LLMFailure uses MockLLM with GenerateErr set.
 
 // ─── PlanGoapActions — edge cases ──────────────────────────────────────────
 
@@ -353,7 +345,7 @@ func TestAction_ExecuteGoapStep_WithLLM(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a pipeline",
-		LLM:  &mockLLM{},
+		LLM:  &MockLLM{},
 		ChainState: map[string]interface{}{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements", "execute_build"},
@@ -403,7 +395,7 @@ func TestAction_ExecuteGoapStep_WithNoPlan(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a pipeline",
-		LLM:  &mockLLM{},
+		LLM:  &MockLLM{},
 		ChainState: map[string]interface{}{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements"},
@@ -425,7 +417,7 @@ func TestAction_ExecuteGoapStep_LLMFailure(t *testing.T) {
 	if fn == nil {
 		t.Fatal("ExecuteGoapStep action not registered")
 	}
-	llm := &mockLLMWithError{errMsg: "LLM unavailable"}
+	llm := &MockLLM{GenerateErr: errors.New("LLM unavailable")}
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		LLM:  llm,

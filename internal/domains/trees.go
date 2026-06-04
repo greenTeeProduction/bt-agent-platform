@@ -36,8 +36,9 @@ func chainAgent(name, systemPrompt string, tools []string) evolution.Serializabl
 	}
 	return evolution.SerializableNode{
 		Type: "ChainAction",
-		Name: "agent:" + systemPrompt,
+		Name: "agent:{{.Task}}",
 		Metadata: map[string]any{
+			"system_msg": systemPrompt,
 			"tools":      ti,
 			"max_tokens": float64(15),
 		},
@@ -66,6 +67,7 @@ func outcome() evolution.SerializableNode {
 func CodeReviewTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "CodeReview_Main", Children: []evolution.SerializableNode{
 		act("SetupDefaultTools", "Populate bb.ChainTools with real system tools"),
+		act("DiscoverAvailableTools", "Record available real tools before review"),
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsCodeTask", "Has code-related keywords")),
 		sel("StrategyRouter",
 			seq("BugDetection",
@@ -138,22 +140,99 @@ func DevOpsCITree() *evolution.SerializableNode {
 // --- AgentMonitor Tree ---
 
 func AgentMonitorTree() *evolution.SerializableNode {
-	// Zero-LLM tree — no chainAgent calls, instant execution.
-	// Health checks and metrics are hardcoded actions that mark results directly.
-	return &evolution.SerializableNode{Type: "Sequence", Name: "AgentMonitor_Main", Children: []evolution.SerializableNode{
-		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsMonitorTask", "Detect monitor/health/status keywords")),
-		sel("StrategyRouter",
-			seq("HealthCheckPath",
-				cond("IsHealthCheck", "Detect health/status/ping keywords"),
-				act("HealthCheckAgent", "Health check completed — see blackboard for result"),
-			),
-			seq("MetricsCollectionPath",
-				cond("IsMetricsRequest", "Detect metrics/stats keywords"),
-				act("MetricsCollectionAgent", "Metrics collection completed — see blackboard for result"),
-			),
-		),
-		outcome(),
-	}}
+	// Short helpers for typed edges
+	guard := func(label, condition string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeGuard, Label: label, Condition: condition, ChildIndex: -1}
+	}
+	effect := func(label, effectDesc string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeEffect, Label: label, Effect: effectDesc, ChildIndex: -1}
+	}
+	qualityGate := func(label string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeQualityGate, Label: label, ChildIndex: -1}
+	}
+	recovery := func(label string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeRecovery, Label: label, ChildIndex: -1}
+	}
+	approval := func(label string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeApproval, Label: label, ChildIndex: -1}
+	}
+
+	healthCheckPath := evolution.SerializableNode{
+		Type: "Sequence", Name: "HealthCheckPath",
+		Description: "Health check: scheduler, cron, disk, memory, BT processes, load, duplicate detection",
+		Edges:       []evolution.TypedEdge{qualityGate("health-report-completeness")},
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "IsHealthCheck", Description: "Detect health/status/ping/cron/scheduler keywords",
+				Edges: []evolution.TypedEdge{guard("is-health-check", "task contains health/status/cron/scheduler keywords")},
+			},
+			{Type: "Action", Name: "HealthCheckAgent", Description: "Full health check with thresholds, scheduler, cron, duplicates",
+				Edges: []evolution.TypedEdge{
+					effect("health-check-report", "writes health.disk, health.memory, health.processes, health.load, health.scheduler, health.cron, health.overall_status"),
+				},
+			},
+		},
+	}
+
+	metricsPath := evolution.SerializableNode{
+		Type: "Sequence", Name: "MetricsCollectionPath",
+		Description: "Numeric metrics collection for capacity planning",
+		Edges:       []evolution.TypedEdge{qualityGate("metrics-report-completeness")},
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "IsMetricsRequest", Description: "Detect metrics/stats/report keywords",
+				Edges: []evolution.TypedEdge{guard("is-metrics-request", "task contains metrics/stats/report keywords")},
+			},
+			{Type: "Action", Name: "MetricsCollectionAgent", Description: "Read-only numeric metrics snapshot",
+				Edges: []evolution.TypedEdge{
+					effect("metrics-report", "writes metrics.disk_mb, metrics.memory_mb, metrics.process_count"),
+				},
+			},
+		},
+	}
+
+	restartPath := evolution.SerializableNode{
+		Type: "Sequence", Name: "RestartPath",
+		Description: "Restart dead BT agents with approval gating",
+		Edges: []evolution.TypedEdge{
+			recovery("restart-dead-agents"),
+			approval("restart-approval-required"),
+		},
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "IsRestartRequest", Description: "Detect restart/dead/revive keywords",
+				Edges: []evolution.TypedEdge{guard("is-restart-request", "task contains restart/dead/revive keywords")},
+			},
+			{Type: "HumanApprovalGate", Name: "ApproveRestart", Description: "Requires human approval before restarting agents",
+				Edges: []evolution.TypedEdge{approval("human-approval-restart")},
+			},
+			{Type: "Action", Name: "RestartDeadAgents", Description: "Restart dead bt-* processes via systemctl, clear stale in_flight",
+				Edges: []evolution.TypedEdge{
+					recovery("restart-action"),
+					effect("restart-report", "writes restart.restarted, restart.failed, restart.stale_in_flight"),
+				},
+			},
+		},
+	}
+
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "AgentMonitor_Main",
+		Description: "Zero-LLM health/monitoring/restart agent with typed edge validation",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Sequence", Name: "PreGate",
+				Description: "Input validation guard — task must be non-empty and monitor-related",
+				Edges:       []evolution.TypedEdge{guard("input-validation", "task must be non-empty and monitor-related")},
+				Children: []evolution.SerializableNode{
+					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task", Edges: []evolution.TypedEdge{guard("non-empty-task", "task string must not be empty")}},
+					{Type: "Condition", Name: "IsMonitorTask", Description: "Has monitor/health/status keywords", Edges: []evolution.TypedEdge{guard("is-monitor-task", "task contains monitor/health/status keywords")}},
+				},
+			},
+			{
+				Type: "Selector", Name: "StrategyRouter",
+				Description: "Route to health check, metrics collection, or restart path",
+				Children:    []evolution.SerializableNode{healthCheckPath, metricsPath, restartPath},
+			},
+			outcome(),
+		},
+	}
 }
 
 // --- Refactoring Tree ---
@@ -231,29 +310,33 @@ func SecurityAuditTree() *evolution.SerializableNode {
 
 func DataPipelineTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "DataPipeline_Main", Children: []evolution.SerializableNode{
+		act("SetupDataPipelineTools", "Register real file/shell/calculator tools"),
+		act("DiscoverAvailableTools", "Record available real tools before any tool use"),
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsDataTask", "Detect data/ETL/pipeline/delegation/queue/index/session/memory/extract/process keywords")),
 		sel("StrategyRouter",
 			seq("ExtractPath",
 				cond("IsExtractRequest", "Detect extract/ingest/load keywords"),
-				act("ValidateDataSource", "Check source connectivity and schema"),
-				act("ExtractData", "Pull data with error handling and retries"),
+				act("ValidateDataSource", "Check actual source file exists and capture observed metrics"),
+				act("ExtractData", "Report observed extraction metrics only"),
+				act("VerifyOutput", "Reject canned/fabricated counts"),
 			),
 			seq("TransformPath",
 				cond("IsTransformRequest", "Detect transform/clean/normalize keywords"),
-				act("ValidateTransform", "Check transformation logic, data types"),
-				act("ApplyTransform", "Execute transformation pipeline"),
-				act("VerifyOutput", "Row counts, null checks, distribution validation"),
+				act("ValidateDataSource", "Check actual source file exists before transform"),
+				act("ValidateTransform", "Check transformation prerequisites"),
+				act("ApplyTransform", "Dry-run transform unless explicit source/target exists"),
+				act("VerifyOutput", "Reject canned/fabricated counts"),
 			),
 			seq("LoadPath",
 				cond("IsLoadRequest", "Detect load/write/store keywords"),
-				act("ValidateTarget", "Check target schema compatibility"),
-				act("LoadData", "Write to target with transaction safety"),
-				act("VerifyLoad", "Confirm row counts, sample validation"),
+				act("ValidateDataSource", "Check actual source file exists before load"),
+				act("ValidateTarget", "Check target path is explicit"),
+				act("LoadData", "Dry-run load unless explicit write content exists"),
+				act("VerifyLoad", "Confirm no unverified writes are claimed"),
 			),
 			seq("ExecutionPath",
-				chainAgent("DataPipelineAgent",
-					"You are a data pipeline agent. {{.Task}} Process data, run ETL tasks, handle queue operations, index sessions, extract memories. Use file_read and file_write for reading/writing, shell_exec for running scripts, web_search for documentation.",
-					[]string{"file_read", "shell_exec", "web_search"}),
+				act("ValidateDataSource", "If no source is provided, report blocked honestly instead of fabricating"),
+				act("VerifyOutput", "Anti-fabrication evidence gate"),
 			),
 		),
 		act("ReflectOnOutcome", "Reflect on pipeline quality"),
@@ -436,13 +519,13 @@ func GoapPlanningTree() *evolution.SerializableNode {
 			seq("AssessPath",
 				cond("IsAssessRequest", "Detect assess/check/review/scan/audit keywords"),
 				chainAgent("PlanningAssessAgent",
-					"You are a planning assessment agent. Assess the current state: scan files, check configurations, review logs. Use web_search for external research, file_read to read local files, shell_exec to run diagnostic commands. Produce a structured assessment report with findings and recommendations.",
+					"You are a planning assessment agent. TASK: {{.Task}}. Assess the current state: scan files, check configurations, review logs. Use web_search for external research, file_read to read local files, shell_exec to run diagnostic commands. Produce a structured assessment report with findings and recommendations.",
 					[]string{"web_search", "file_read", "shell_exec"}),
 			),
 			seq("SyncPath",
 				cond("IsSyncRequest", "Detect sync/pollinate/cross/align keywords"),
 				chainAgent("PlanningSyncAgent",
-					"You are a synchronization agent. Compare two systems (skills vs trees, configs vs reality, vault vs platform). Use file_read to read files, web_search for reference, shell_exec to run diff/comparison commands. Report mismatches with specific file paths and suggested fixes.",
+					"You are a synchronization agent. TASK: {{.Task}}. Compare two systems (skills vs trees, configs vs reality, vault vs platform). Use file_read to read files, web_search for reference, shell_exec to run diff/comparison commands. Report mismatches with specific file paths and suggested fixes.",
 					[]string{"web_search", "file_read", "shell_exec"}),
 			),
 			seq("ExecutionPath",
@@ -467,14 +550,14 @@ func GoapResearchTree() *evolution.SerializableNode {
 			seq("ResearchPath",
 				cond("IsResearchRequest", "Detect research/analyze/find/query/search keywords"),
 				chainAgent("ResearchAgent",
-					"You are a research agent. Search the web for the latest information, query the knowledge graph for structured data, perform calculations if needed. Produce a well-structured research note with sources.",
+					"You are a research agent. TASK: {{.Task}}. Search the web for the latest information, query the knowledge graph for structured data, perform calculations if needed. Produce a well-structured research note with sources.",
 					[]string{"web_search", "knowledge_graph", "calculator"}),
 			),
 			seq("GraphifyPath",
 				cond("IsGraphifyRequest", "Detect graphify/graph/structural/codebase keywords"),
 				chainAgent("GraphifyAgent",
-					"You are a codebase analysis agent. Run graphify commands to analyze code structure: graphify update . to refresh, graphify query for insights, graphify path A B for relationships. Use file_read to read GRAPH_REPORT.md and source files. Produce a structural analysis with findings.",
-					[]string{"shell_exec", "file_read"}),
+					"You are a codebase analysis agent. TASK: {{.Task}}. Run graphify commands to analyze code structure: graphify update . to refresh, graphify query for insights, graphify path A B for relationships. Use file_read to read GRAPH_REPORT.md and source files. Produce a structural analysis with findings.",
+					[]string{"shell_exec", "file_read", "graphify"}),
 			),
 			seq("ExecutionPath",
 				chainAgent("ResearchAgent",
@@ -498,13 +581,13 @@ func GoapDevopsTree() *evolution.SerializableNode {
 			seq("BuildPath",
 				cond("IsBuildRequest", "Detect build/compile/install keywords"),
 				chainAgent("DevopsBuildAgent",
-					"You are a build and deployment agent. Use go_build to compile Go code, go_test to run tests, go_vet for static analysis, web_search for documentation. Report build results with any errors.",
+					"You are a build and deployment agent. TASK: {{.Task}}. Use go_build to compile Go code, go_test to run tests, go_vet for static analysis, web_search for documentation. Report build results with any errors.",
 					[]string{"go_build", "go_test", "go_vet", "web_search"}),
 			),
 			seq("ImplementPath",
 				cond("IsImplementRequest", "Detect implement/plan/fix/create keywords"),
 				chainAgent("DevopsImplementAgent",
-					"You are an implementation agent. Read implementation plans from the vault, use go_build to compile changes, go_test to verify, go_vet to check quality. Use file_read to read/write code and web_search for reference. Complete the implementation task.",
+					"You are an implementation agent. TASK: {{.Task}}. Read implementation plans from the vault, use go_build to compile changes, go_test to verify, go_vet to check quality. Use file_read to read/write code and web_search for reference. Complete the implementation task.",
 					[]string{"go_build", "go_test", "go_vet", "file_read", "web_search"}),
 			),
 			seq("ExecutionPath",
@@ -522,20 +605,23 @@ func GoapDevopsTree() *evolution.SerializableNode {
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
 	trees := map[string]*evolution.SerializableNode{
-		"code_review":        CodeReviewTree(),
-		"devops_ci":          DevOpsCITree(),
-		"agent_monitor":      AgentMonitorTree(),
-		"refactoring":        RefactoringTree(),
-		"security_audit":     SecurityAuditTree(),
-		"data_pipeline":      DataPipelineTree(),
-		"meeting_notes":      MeetingNotesTree(),
-		"crash_investigator": CrashInvestigatorTree(),
-		"game_ai":            GameAITree(),
-		"trading_signal":     TradingSignalTree(),
-		"alert_router":       AlertRouterTree(),
-		"goap_planning":      GoapPlanningTree(),
-		"goap_research":      GoapResearchTree(),
-		"goap_devops":        GoapDevopsTree(),
+		"code_review":         CodeReviewTree(),
+		"devops_ci":           DevOpsCITree(),
+		"agent_monitor":       AgentMonitorTree(),
+		"refactoring":         RefactoringTree(),
+		"security_audit":      SecurityAuditTree(),
+		"data_pipeline":       DataPipelineTree(),
+		"meeting_notes":       MeetingNotesTree(),
+		"crash_investigator":  CrashInvestigatorTree(),
+		"game_ai":             GameAITree(),
+		"trading_signal":      TradingSignalTree(),
+		"alert_router":        AlertRouterTree(),
+		"goap_planning":       GoapPlanningTree(),
+		"goap_research":       GoapResearchTree(),
+		"goap_devops":         GoapDevopsTree(),
+		"bt_manager":          BTManagerTree(),
+		"notebooklm":          NotebookLMTree(),
+		"notebooklm_consumer": NotebookLMConsumerTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -546,14 +632,17 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 
 // Descriptions maps tree names to descriptions.
 var Descriptions = map[string]string{
-	"code_review":        "Bug detection, security review, style checking for any language",
-	"devops_ci":          "Build → test → lint → deploy → verify → rollback pipeline",
-	"agent_monitor":      "Health-check MCP servers, restart dead agents, send alerts",
-	"refactoring":        "Detect code smells, suggest rewrites, verify behavior preserved",
-	"security_audit":     "SAST scan, dependency CVE check, secret detection, threat modeling",
-	"data_pipeline":      "ETL validation: extract → transform → load with integrity checks",
-	"meeting_notes":      "Transcribe → extract actions → assign → summarize → distribute",
-	"crash_investigator": "Parse stack trace → root cause → fix → verify → prevent recurrence",
-	"game_ai":            "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
-	"trading_signal":     "Market data → technical analysis → signal generation → risk management",
+	"code_review":         "Bug detection, security review, style checking for any language",
+	"devops_ci":           "Build → test → lint → deploy → verify → rollback pipeline",
+	"agent_monitor":       "Health-check MCP servers, restart dead agents, send alerts",
+	"refactoring":         "Detect code smells, suggest rewrites, verify behavior preserved",
+	"security_audit":      "SAST scan, dependency CVE check, secret detection, threat modeling",
+	"data_pipeline":       "ETL validation: extract → transform → load with integrity checks",
+	"meeting_notes":       "Transcribe → extract actions → assign → summarize → distribute",
+	"crash_investigator":  "Parse stack trace → root cause → fix → verify → prevent recurrence",
+	"game_ai":             "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
+	"trading_signal":      "Market data → technical analysis → signal generation → risk management",
+	"bt_manager":          "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
+	"notebooklm":          "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
+	"notebooklm_consumer": "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
 }

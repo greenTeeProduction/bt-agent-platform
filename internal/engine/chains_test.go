@@ -11,7 +11,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
-// mockLLM for chain tests
+// MockLLM for chain tests
 type chainMockLLM struct {
 	responses map[string]string
 }
@@ -608,9 +608,12 @@ func TestChainAction_ToolAction_NoTool(t *testing.T) {
 	bt := BuildTree(tree, bb)
 	RunTask(bb, bt)
 
-	// Should fail with tool not found message
-	if bb.Outcome != "success" {
-		t.Errorf("should fall through to LLM simulation, got: %s", bb.Outcome)
+	// Should fail closed with tool not found message; missing tools must never be LLM-simulated.
+	if bb.Outcome != "failure" {
+		t.Errorf("expected fail-closed failure, got: %s", bb.Outcome)
+	}
+	if !strings.Contains(bb.Result, "TOOL_UNAVAILABLE") {
+		t.Errorf("expected TOOL_UNAVAILABLE, got: %s", bb.Result)
 	}
 }
 
@@ -1329,11 +1332,11 @@ func TestToolStub_NameDescription(t *testing.T) {
 	}
 }
 
-func TestToolStub_CallReturnsEmpty(t *testing.T) {
+func TestToolStub_CallReturnsError(t *testing.T) {
 	ts := toolStub{name: "stub", desc: "desc"}
 	result := ts.Call("anything")
-	if result != "" {
-		t.Errorf("expected empty (triggers LLM simulation fallback), got: %q", result)
+	if !strings.Contains(result, "STUB_ERROR") {
+		t.Errorf("expected STUB_ERROR message, got: %q", result)
 	}
 }
 
@@ -1817,9 +1820,13 @@ func TestChainAction_ToolAction_FromPrompt(t *testing.T) {
 	// execToolAction: tool name parsed from prompt (no cfg.Tools)
 	mock := &chainMockLLM{}
 	bb := &Blackboard{
-		Task:       "search for info",
-		LLM:        mock,
-		ChainTools: []any{toolStub{name: "web_search", desc: "Search the web"}},
+		Task: "search for info",
+		LLM:  mock,
+		ChainTools: []any{&mockAgentTool{
+			name:        "web_search",
+			description: "Search the web",
+			result:      "real tool result",
+		}},
 	}
 	tree := &evolution.SerializableNode{
 		Type:     "ChainAction",

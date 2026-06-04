@@ -97,12 +97,12 @@ func (a *Analyzer) Analyze(skillContent string) (*TreeSpec, error) {
 	// Extract JSON from the response (may be wrapped in markdown)
 	jsonStr := extractJSON(result)
 	if jsonStr == "" {
-		return nil, fmt.Errorf("no JSON found in LLM response: %s", truncate(result, 200))
+		return nil, fmt.Errorf("no JSON found in LLM response: %s", util.Truncate(result, 200))
 	}
 
 	var spec TreeSpec
 	if err := json.Unmarshal([]byte(jsonStr), &spec); err != nil {
-		return nil, fmt.Errorf("parse tree spec: %w\nRaw JSON: %s", err, truncate(jsonStr, 500))
+		return nil, fmt.Errorf("parse tree spec: %w\nRaw JSON: %s", err, util.Truncate(jsonStr, 500))
 	}
 
 	// Validate
@@ -139,5 +139,3 @@ func extractJSON(s string) string {
 	}
 	return s[start:]
 }
-
-func truncate(s string, n int) string { return util.Truncate(s, n) }

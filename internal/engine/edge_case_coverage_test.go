@@ -100,7 +100,7 @@ func TestRegisterCondition_DuplicatePanics(t *testing.T) {
 // ─── buildNode — composite node types (lines 150-158) ─────────────────────
 
 func TestBuildNode_UtilitySelector(t *testing.T) {
-	bb := &Blackboard{Task: "test", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "UtilitySelector",
 		Name: "test_utility",
@@ -119,7 +119,7 @@ func TestBuildNode_UtilitySelector(t *testing.T) {
 }
 
 func TestBuildNode_PlannerNode(t *testing.T) {
-	bb := &Blackboard{Task: "test", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "PlannerNode",
 		Name: "test_planner",
@@ -136,7 +136,7 @@ func TestBuildNode_PlannerNode(t *testing.T) {
 }
 
 func TestBuildNode_AbortOnEvent(t *testing.T) {
-	bb := &Blackboard{Task: "test", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "AbortOnEvent",
 		Name: "test_abort",
@@ -153,7 +153,7 @@ func TestBuildNode_AbortOnEvent(t *testing.T) {
 }
 
 func TestBuildNode_ReactiveParallel(t *testing.T) {
-	bb := &Blackboard{Task: "test", LLM: &mockLLM{}}
+	bb := &Blackboard{Task: "test", LLM: &MockLLM{}}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel",
 		Name: "test_parallel",
@@ -201,7 +201,7 @@ func TestRunTask_PanicRecovery(t *testing.T) {
 	bb := &Blackboard{
 		Task:   "test task that panics",
 		Result: "",
-		LLM:    &mockLLM{},
+		LLM:    &MockLLM{},
 	}
 	node := &evolution.SerializableNode{
 		Type: "Sequence",
@@ -228,7 +228,7 @@ func TestRunTask_MultiTickRepeat(t *testing.T) {
 	bb := &Blackboard{
 		Task:   "multi-tick test",
 		Result: "",
-		LLM:    &mockLLM{},
+		LLM:    &MockLLM{},
 	}
 	// Build a minimal tree with a Retry + Action
 	tree := btdec.NewRepeat(

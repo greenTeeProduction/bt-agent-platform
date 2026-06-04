@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -204,11 +205,91 @@ func assertInvalidContains(t *testing.T, info *evolution.NodeValidationInfo, wan
 
 func buildDeepTree(depth int) *evolution.SerializableNode {
 	if depth <= 0 {
-		return &evolution.SerializableNode{Type: "Action", Name: "GeneratePlan"}
+		return &evolution.SerializableNode{Type: "Action", Name: fmt.Sprintf("LeafNode_%d", depth)}
 	}
 	return &evolution.SerializableNode{
 		Type:     "Sequence",
-		Name:     "DeepNode",
+		Name:     fmt.Sprintf("DeepNode_L%d", depth),
 		Children: []evolution.SerializableNode{*buildDeepTree(depth - 1)},
+	}
+}
+
+// --- Cycle detection tests (Plan #1: NotebookLM CRITICAL gap) ---
+
+func TestValidateTree_NoCycle(t *testing.T) {
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "HealthCheckAgent"},
+			{Type: "Action", Name: "GeneratePlan"},
+		},
+	}
+	info := ValidateTreeFull(tree)
+	if !info.Valid() {
+		t.Fatalf("tree with unique node names should be valid, got: %v", info.Errors)
+	}
+}
+
+func TestValidateTree_CycleDetected(t *testing.T) {
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "StepA"},
+			{Type: "Sequence", Name: "Root", // same name as ancestor → cycle
+				Children: []evolution.SerializableNode{
+					{Type: "Action", Name: "StepB"},
+				},
+			},
+		},
+	}
+	info := ValidateTreeFull(tree)
+	if info.Valid() {
+		t.Fatal("expected cycle detection error, but tree was considered valid")
+	}
+	found := false
+	for _, e := range info.Errors {
+		if strings.Contains(e, "cycle detected") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'cycle detected' error, got: %v", info.Errors)
+	}
+}
+
+func TestValidateTree_CycleDeep(t *testing.T) {
+	// Cycle at depth 4: Root → A → B → Root
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "DeepRoot",
+		Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "Level1",
+				Children: []evolution.SerializableNode{
+					{Type: "Sequence", Name: "Level2",
+						Children: []evolution.SerializableNode{
+							{Type: "Sequence", Name: "DeepRoot", // cycle back to root
+								Children: []evolution.SerializableNode{
+									{Type: "Action", Name: "StepX"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	info := ValidateTreeFull(tree)
+	if info.Valid() {
+		t.Fatal("expected cycle detection at depth 4, but tree was considered valid")
+	}
+	found := false
+	for _, e := range info.Errors {
+		if strings.Contains(e, "cycle detected") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'cycle detected' error, got: %v", info.Errors)
 	}
 }

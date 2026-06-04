@@ -179,14 +179,6 @@ func TestMergedTree_PathConditions(t *testing.T) {
 	}
 }
 
-func trunc(s string, n int) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
-}
-
 func trimNewlines(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
 }

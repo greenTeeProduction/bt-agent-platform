@@ -14,18 +14,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/api"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/finance"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"github.com/nico/go-bt-evolve/internal/metrics"
-	"github.com/nico/go-bt-evolve/internal/monitoring"
 	"github.com/nico/go-bt-evolve/internal/reliability"
-	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -210,7 +207,7 @@ func main() {
 	mux.HandleFunc("/", serveDashboard)
 	mux.HandleFunc("/static/", serveStatic)
 	mux.HandleFunc("/api/health", handleHealth)
-	mux.HandleFunc("/api/metrics", metrics.PrometheusHandler().ServeHTTP)
+	mux.HandleFunc("/api/metrics", dashboard.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
 	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
 	mux.HandleFunc("/api/otlp-stats", handleOTLPStats)
@@ -238,6 +235,8 @@ func main() {
 	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
 	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
 	mux.HandleFunc("/api/agents/execute", sessionAuth(handleAgentExecute))
+	mux.HandleFunc("/api/agents/create", sessionAuth(handleAgentCreate))
+	mux.HandleFunc("/api/agents/delete", sessionAuth(handleAgentDelete))
 	mux.HandleFunc("/api/tasks", sessionAuth(handleTasks))
 	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
 	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
@@ -249,6 +248,9 @@ func main() {
 	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
 	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
 	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
+	mux.HandleFunc("/api/pipelines", sessionAuth(handlePipelines))
+	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
+	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
 
 	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
 	tlsCert := os.Getenv("BT_TLS_CERT")
@@ -279,7 +281,7 @@ func main() {
 	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
 	handler = security.SanitizeMiddleware(1 << 20)(handler)           // 1MB body limit + input cleaning
 	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
-	handler = metrics.MetricsMiddleware(handler)                      // Prometheus metrics collection
+	handler = dashboard.MetricsMiddleware(handler)                    // Prometheus metrics collection
 	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
 	handler = api.ResponseValidator(api.DashboardRoutes(), &api.ResponseValidatorConfig{
 		Logger: slog.Default(),
@@ -582,16 +584,16 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 
 	// ── Finance trees (10) ──
 	financeTrees := map[string]*evolution.SerializableNode{
-		"pitch_agent":        finance.PitchAgentTree(),
-		"earnings_reviewer":  finance.EarningsReviewerTree(),
-		"market_researcher":  finance.MarketResearcherTree(),
-		"model_builder":      finance.ModelBuilderTree(),
-		"meeting_prep":       finance.MeetingPrepTree(),
-		"valuation_reviewer": finance.ValuationReviewerTree(),
-		"gl_reconciler":      finance.GLReconcilerTree(),
-		"month_end_closer":   finance.MonthEndCloserTree(),
-		"statement_auditor":  finance.StatementAuditorTree(),
-		"kyc_screener":       finance.KYCScreenerTree(),
+		"pitch_agent":        evolution.PitchAgentTree(),
+		"earnings_reviewer":  evolution.EarningsReviewerTree(),
+		"market_researcher":  evolution.MarketResearcherTree(),
+		"model_builder":      evolution.ModelBuilderTree(),
+		"meeting_prep":       evolution.MeetingPrepTree(),
+		"valuation_reviewer": evolution.ValuationReviewerTree(),
+		"gl_reconciler":      evolution.GLReconcilerTree(),
+		"month_end_closer":   evolution.MonthEndCloserTree(),
+		"statement_auditor":  evolution.StatementAuditorTree(),
+		"kyc_screener":       evolution.KYCScreenerTree(),
 	}
 	if tree, ok := financeTrees[treeID]; ok {
 		json.NewEncoder(w).Encode(tree)
@@ -614,8 +616,8 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 
 	// ── Research trees (2) ──
 	researchTrees := map[string]*evolution.SerializableNode{
-		"deep_research":  research.DeepResearchTree(),
-		"quick_research": research.QuickResearchTree(),
+		"deep_research":  evolution.DeepResearchTree(),
+		"quick_research": evolution.QuickResearchTree(),
 	}
 	if tree, ok := researchTrees[treeID]; ok {
 		json.NewEncoder(w).Encode(tree)
@@ -869,14 +871,14 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 // returns which alerts are firing. Public endpoint (no auth) so monitoring
 // tools can scrape it.
 func handleAlerts(w http.ResponseWriter, r *http.Request) {
-	metricsJSON := metrics.MetricsJSON()
+	metricsJSON := dashboard.MetricsJSON()
 	b, err := json.Marshal(metricsJSON)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	report, err := monitoring.EvaluateFromJSON(b)
+	report, err := agent.EvaluateFromJSON(b)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1093,7 +1095,7 @@ func handleSwagger(w http.ResponseWriter, r *http.Request) {
 
 // handleAlertRules serves the raw Prometheus alert rules YAML file so
 // Prometheus or other monitoring tools can scrape it directly.
-// Public endpoint (no auth) — same as /api/alerts, /api/health, /api/metrics.
+// Public endpoint (no auth) — same as /api/alerts, /api/health, /api/dashboard.
 func handleAlertRules(w http.ResponseWriter, r *http.Request) {
 	// Look relative to the binary's working directory (repo root)
 	rulesPath := "monitoring/prometheus-alerts.yml"
@@ -1423,11 +1425,11 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-// handleAgentsList returns all registered BT agents with their live status.
+// handleAgentsList returns all registered BT agents with their live status and circuit breaker info.
 func handleAgentsList(w http.ResponseWriter, r *http.Request) {
-	agents := dashboard.ListAgents()
+	agents := dashboard.ListAgentsWithCB()
 	if agents == nil {
-		agents = []dashboard.AgentInfo{}
+		agents = []dashboard.AgentWithStatus{}
 	}
 	json.NewEncoder(w).Encode(agents)
 }
@@ -1490,4 +1492,103 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 
 	res := <-result
 	json.NewEncoder(w).Encode(res)
+}
+
+// handleAgentCreate handles POST /api/agents/create — creates a new agent YAML template.
+func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Tree        string `json:"tree"`
+		Schedule    string `json:"schedule"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if req.Name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: name"})
+		return
+	}
+	if req.Tree == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: tree"})
+		return
+	}
+
+	cfg := dashboard.AgentYAMLConfig{
+		Name:        req.Name,
+		Description: req.Description,
+		Tree:        req.Tree,
+		Schedule:    req.Schedule,
+	}
+	if err := dashboard.CreateAgent(cfg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Return the created agent info
+	info := dashboard.AgentWithStatus{
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		Tree:        cfg.Tree,
+		Status:      "created",
+		Schedule:    cfg.Schedule,
+		CBStatus:    "unknown",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(info)
+}
+
+// handleAgentDelete handles POST /api/agents/delete — deletes an agent YAML template.
+func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if req.Name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: name"})
+		return
+	}
+
+	if err := dashboard.DeleteAgent(req.Name); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "name": req.Name})
 }
