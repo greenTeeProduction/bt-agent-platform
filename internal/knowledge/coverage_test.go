@@ -664,9 +664,9 @@ func TestExtractTemplates(t *testing.T) {
 
 	f := NewFactory(kg)
 
-	// Templates should exist (last one per category wins due to map overwrite)
-	if f.Templates["finance"].SourceID != "test:c" {
-		t.Errorf("expected finance template from test:c, got %s", f.Templates["finance"].SourceID)
+	// Category template should keep the highest-fitness representative.
+	if f.Templates["finance"].SourceID != "test:a" {
+		t.Errorf("expected finance template from highest-fitness test:a, got %s", f.Templates["finance"].SourceID)
 	}
 	if f.Templates["research"].SourceID != "test:b" {
 		t.Errorf("expected research template from test:b, got %s", f.Templates["research"].SourceID)

@@ -2,6 +2,7 @@ package factory
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -24,6 +25,68 @@ func NewGenerator() *Generator {
 	return &Generator{}
 }
 
+func generatedFallbackChainAction() evolution.SerializableNode {
+	return evolution.SerializableNode{
+		Type:        "ChainAction",
+		Name:        "agent:{{.Task}}",
+		Description: "Execute generated-agent fallback path with real tool-capable ChainAction instead of AnalyzeTask/ExecutePlan stubs",
+		Metadata: map[string]any{
+			"system_msg": "You are a generated BT agent fallback executor. Analyze the task, use available tools when needed, and produce a concrete final result. Do not return placeholder text.",
+			"tools":      []any{"web_search", "file_ops", "code_exec"},
+			"max_tokens": float64(1024),
+		},
+	}
+}
+
+func generatedStepChainAction(step TreeNode) evolution.SerializableNode {
+	desc := strings.TrimSpace(step.Description)
+	if desc == "" {
+		desc = step.Name
+	}
+	return evolution.SerializableNode{
+		Type:        "ChainAction",
+		Name:        fmt.Sprintf("agent:%s\n\nTask: {{.Task}}\nPrevious result: {{.Result}}", desc),
+		Description: desc,
+		Metadata: map[string]any{
+			"system_msg": "You are executing one generated behavior-tree step. Use available tools when needed and return concrete, verifiable output. Do not fabricate tool results.",
+			"tools":      []any{"web_search", "file_ops", "code_exec"},
+			"max_tokens": float64(1024),
+		},
+	}
+}
+
+func generatedSelfCorrectChainAction(step TreeNode) evolution.SerializableNode {
+	desc := strings.TrimSpace(step.Description)
+	if desc == "" {
+		desc = "Self-correct the previous output"
+	}
+	return evolution.SerializableNode{
+		Type:        "ChainAction",
+		Name:        fmt.Sprintf("llm_call:%s. Task: {{.Task}} Previous output: {{.Result}}", desc),
+		Description: desc,
+		Metadata: map[string]any{
+			"max_tokens": float64(1024),
+		},
+	}
+}
+
+func generatedFallbackChainActionFromStep(step TreeNode) evolution.SerializableNode {
+	desc := strings.TrimSpace(step.Description)
+	if desc == "" {
+		desc = "Handle the task using fallback execution"
+	}
+	return evolution.SerializableNode{
+		Type:        "ChainAction",
+		Name:        fmt.Sprintf("agent:%s\n\nTask: {{.Task}}\nPrevious output: {{.Result}}", desc),
+		Description: desc,
+		Metadata: map[string]any{
+			"system_msg": "You are the fallback path for a generated BT agent. Recover from prior failure and produce a concrete final result using available tools when needed.",
+			"tools":      []any{"web_search", "file_ops", "code_exec"},
+			"max_tokens": float64(1024),
+		},
+	}
+}
+
 // Generate produces a GeneratedAgent from a TreeSpec and shared blackboard.
 func (g *Generator) Generate(spec *TreeSpec, name string, bb *engine.Blackboard) (*GeneratedAgent, error) {
 	serTree := g.buildSerializable(spec, name)
@@ -42,28 +105,35 @@ func (g *Generator) Generate(spec *TreeSpec, name string, bb *engine.Blackboard)
 func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.SerializableNode {
 	var children []evolution.SerializableNode
 
-	// 1. PreGate: validate conditions before execution
+	// 1. PreGate: generated skills use known runtime nodes only. LLM-derived
+	// checks are advisory descriptions, not invented Condition handler names.
 	if len(spec.PreChecks) > 0 {
-		preNodes := make([]evolution.SerializableNode, len(spec.PreChecks))
-		for i, c := range spec.PreChecks {
-			preNodes[i] = evolution.SerializableNode{
-				Type:        "Condition",
-				Name:        c.Name,
-				Description: c.Description,
-			}
-		}
 		children = append(children, evolution.SerializableNode{
-			Type:     "Sequence",
-			Name:     "PreGate",
-			Children: preNodes,
+			Type: "Sequence",
+			Name: "PreGate",
+			Children: []evolution.SerializableNode{
+				{Type: "Condition", Name: "ValidateInput", Description: "Generated agents require a non-empty task"},
+				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate default tools for generated ChainAction nodes"},
+			},
 		})
 	}
 
-	// 2. StrategyRouter: a Selector that tries each strategy path
+	// 2. StrategyRouter: deterministic DecisionTree that routes on ChainState["route"].
+	// If no route is set, default to the first generated path.
 	strategyKids := g.buildStrategyPaths(spec)
+	defaultBranch := "fallback"
+	if len(strategyKids) > 0 {
+		if branch, ok := strategyKids[0].Metadata["branch"].(string); ok {
+			defaultBranch = branch
+		}
+	}
 	children = append(children, evolution.SerializableNode{
-		Type:     "Selector",
-		Name:     "StrategyRouter",
+		Type: "DecisionTree",
+		Name: "StrategyRouter",
+		Metadata: map[string]any{
+			"key":     "route",
+			"default": defaultBranch,
+		},
 		Children: strategyKids,
 	})
 
@@ -85,23 +155,15 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 
 	if spec.SelfCorrect != nil {
 		outcomeKids = append(outcomeKids, evolution.SerializableNode{
-			Type: "Retry",
-			Name: "RetrySelfCorrect",
-			Children: []evolution.SerializableNode{{
-				Type:        "Action",
-				Name:        spec.SelfCorrect.Name,
-				Description: spec.SelfCorrect.Description,
-			}},
+			Type:       "Retry",
+			Name:       "RetrySelfCorrect",
+			Children:   []evolution.SerializableNode{generatedSelfCorrectChainAction(*spec.SelfCorrect)},
 			MaxRetries: 3,
 		})
 	}
 
 	if spec.Fallback != nil {
-		outcomeKids = append(outcomeKids, evolution.SerializableNode{
-			Type:        "Action",
-			Name:        spec.Fallback.Name,
-			Description: spec.Fallback.Description,
-		})
+		outcomeKids = append(outcomeKids, generatedFallbackChainActionFromStep(*spec.Fallback))
 	} else {
 		// Default escalation
 		outcomeKids = append(outcomeKids, evolution.SerializableNode{
@@ -140,56 +202,49 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 	}
 }
 
-// buildStrategyPaths converts strategy_path into a Selector's children.
-// Pattern: condition → action pairs become Sequences. Standalone actions become Sequences of one.
+// buildStrategyPaths converts strategy_path into DecisionTree children.
+// Condition nodes define branch labels; Action nodes compile to executable ChainAction nodes.
 func (g *Generator) buildStrategyPaths(spec *TreeSpec) []evolution.SerializableNode {
 	var paths []evolution.SerializableNode
 
 	var currentKids []evolution.SerializableNode
+	var currentBranch string
 
 	for _, node := range spec.StrategyPath {
 		switch node.Type {
 		case "Condition":
-			// If we have pending actions, close the current Sequence and start a new one
 			if len(currentKids) > 0 {
 				paths = append(paths, evolution.SerializableNode{
 					Type:     "Sequence",
 					Name:     fmt.Sprintf("Path_%d", len(paths)+1),
 					Children: currentKids,
+					Metadata: map[string]any{"branch": currentBranch, "match": currentBranch},
 				})
 				currentKids = nil
 			}
-			currentKids = append(currentKids, evolution.SerializableNode{
-				Type:        "Condition",
-				Name:        node.Name,
-				Description: node.Description,
-			})
+			currentBranch = node.Name
 		case "Action":
-			currentKids = append(currentKids, evolution.SerializableNode{
-				Type:        "Action",
-				Name:        node.Name,
-				Description: node.Description,
-			})
+			if currentBranch == "" {
+				currentBranch = fmt.Sprintf("path_%d", len(paths)+1)
+			}
+			currentKids = append(currentKids, generatedStepChainAction(node))
 		}
 	}
 
-	// Close final sequence
 	if len(currentKids) > 0 {
 		paths = append(paths, evolution.SerializableNode{
 			Type:     "Sequence",
 			Name:     fmt.Sprintf("Path_%d", len(paths)+1),
 			Children: currentKids,
+			Metadata: map[string]any{"branch": currentBranch, "match": currentBranch},
 		})
 	}
 
-	// Always add a fallback execution path (AnalyzeTask → ExecutePlan)
 	paths = append(paths, evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "FallbackExecution",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "AnalyzeTask", Description: "LLM: analyze task complexity + intent"},
-			{Type: "Action", Name: "ExecutePlan", Description: "LLM: generate and execute plan"},
-		},
+		Type:     "Sequence",
+		Name:     "FallbackExecution",
+		Children: []evolution.SerializableNode{generatedFallbackChainAction()},
+		Metadata: map[string]any{"branch": "fallback", "default": true},
 	})
 
 	return paths

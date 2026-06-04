@@ -135,14 +135,14 @@ func TestGenerator_BuildsCorrectTree(t *testing.T) {
 
 	// PreGate
 	preGate := serTree.Children[0]
-	if preGate.Name != "PreGate" || len(preGate.Children) != 1 {
-		t.Errorf("PreGate: expected 1 child, got %d", len(preGate.Children))
+	if preGate.Name != "PreGate" || len(preGate.Children) != 2 {
+		t.Errorf("PreGate: expected 2 known runtime children, got %d", len(preGate.Children))
 	}
 
 	// StrategyRouter
 	router := serTree.Children[1]
-	if router.Type != "Selector" {
-		t.Errorf("StrategyRouter: expected Selector, got %s", router.Type)
+	if router.Type != "DecisionTree" {
+		t.Errorf("StrategyRouter: expected DecisionTree, got %s", router.Type)
 	}
 	// One skill path + fallback execution
 	if len(router.Children) < 2 {
