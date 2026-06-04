@@ -83,7 +83,7 @@ func NewBatchExporter(inner SpanExporter) *BatchExporter {
 
 // ExportSpan buffers a span for eventual batch export. If the batch reaches
 // BatchSize, it is flushed synchronously.
-func (be *BatchExporter) ExportSpan(ctx context.Context, span ExportedSpan) error {
+func (be *BatchExporter) ExportSpan(_ context.Context, span ExportedSpan) error {
 	if be == nil || be.inner == nil {
 		be.recordDrop()
 		return nil

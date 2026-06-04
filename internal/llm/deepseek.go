@@ -129,12 +129,12 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 }
 
 // GenerateCtx generates with caller-provided context for cancellation propagation.
-func (d *DeepSeekClient) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (d *DeepSeekClient) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return d.Generate(prompt)
 }
 
 // GenerateWithTimeout generates with a per-operation timeout (DeepSeek API has its own timeout).
-func (d *DeepSeekClient) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (d *DeepSeekClient) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return d.Generate(prompt)
 }
 

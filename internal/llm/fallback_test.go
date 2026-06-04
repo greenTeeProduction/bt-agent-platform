@@ -24,17 +24,17 @@ func (s *stubLLM) Generate(prompt string) (string, error) {
 	return s.name + ":" + prompt, nil
 }
 
-func (s *stubLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (s *stubLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return s.Generate(prompt)
 }
 
-func (s *stubLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (s *stubLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return s.Generate(prompt)
 }
 
-func (s *stubLLM) AnalyzeComplexity(task string) string                { return "low" }
-func (s *stubLLM) GeneratePlan(task, complexity string) string         { return "plan" }
-func (s *stubLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "none" }
+func (s *stubLLM) AnalyzeComplexity(_ string) string             { return "low" }
+func (s *stubLLM) GeneratePlan(_, complexity string) string      { return "plan" }
+func (s *stubLLM) Reflect(_, outcome, _ string) (string, string) { return "ok", "none" }
 
 func TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(t *testing.T) {
 	primary := &stubLLM{name: "primary", err: errors.New("primary down")}

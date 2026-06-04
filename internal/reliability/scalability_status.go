@@ -181,6 +181,6 @@ func HTTPHandler(
 
 		status := NewScalabilityStatus(wp, cl, pending, maxLen, rTotal, rHealthy, cp, rFailures, hb)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(status)
+		_ = json.NewEncoder(w).Encode(status)
 	}
 }

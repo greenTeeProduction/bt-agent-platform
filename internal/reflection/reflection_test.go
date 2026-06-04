@@ -89,7 +89,7 @@ func TestStore_MultipleRecords(t *testing.T) {
 		if i >= 3 {
 			outcome = Failure
 		}
-		store.Save(&Record{
+		_ = store.Save(&Record{
 			TaskID:  fmt.Sprintf("task-%d", i), // unique IDs to avoid overwrite
 			Task:    "task",
 			Outcome: outcome,
@@ -123,9 +123,9 @@ func TestStore_RecentFailures(t *testing.T) {
 		t.Error("expected empty recent failures")
 	}
 
-	store.Save(&Record{TaskID: "t1", Outcome: Failure, Task: "fail1"})
-	store.Save(&Record{TaskID: "t2", Outcome: Success, Task: "ok"})
-	store.Save(&Record{TaskID: "t3", Outcome: Failure, Task: "fail2"})
+	_ = store.Save(&Record{TaskID: "t1", Outcome: Failure, Task: "fail1"})
+	_ = store.Save(&Record{TaskID: "t2", Outcome: Success, Task: "ok"})
+	_ = store.Save(&Record{TaskID: "t3", Outcome: Failure, Task: "fail2"})
 
 	failures := store.RecentFailures(2)
 	if len(failures) != 2 {

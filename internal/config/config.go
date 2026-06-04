@@ -160,7 +160,7 @@ func (e *ValidationError) Error() string {
 type ValidationErrors []ValidationError
 
 func (e ValidationErrors) Error() string {
-	var msgs []string
+	msgs := make([]string, 0, 8)
 	for _, err := range e {
 		msgs = append(msgs, err.Error())
 	}

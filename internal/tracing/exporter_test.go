@@ -19,7 +19,7 @@ type captureExporter struct {
 	err   error
 }
 
-func (e *captureExporter) ExportSpan(ctx context.Context, span ExportedSpan) error {
+func (e *captureExporter) ExportSpan(_ context.Context, span ExportedSpan) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.spans = append(e.spans, span)
@@ -129,7 +129,7 @@ func TestOTLPHTTPExporter_PostsOTLPJSON(t *testing.T) {
 }
 
 func TestOTLPHTTPExporter_Non2xx(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()

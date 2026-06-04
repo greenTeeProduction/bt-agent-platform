@@ -264,7 +264,7 @@ func newGoVetTool() *realTool {
 	return &realTool{
 		name: "go_vet",
 		desc: "Run 'go vet ./...' for static analysis in the Go project directory.",
-		fn: func(input string) string {
+		fn: func(_ string) string {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, "go", "vet", "./...")

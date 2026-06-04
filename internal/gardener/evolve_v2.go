@@ -80,6 +80,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 	// ── P3: Evolution Blocks — check if tree can be mutated ──
 	if cfg.BlocksEnabled {
+		// intentionally empty
 		// Trees can always be evolved as a whole; block filtering is per-mutation
 	}
 
@@ -244,7 +245,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 
 	if applied > 0 {
-		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
 
 	newFitness := evaluator.EvaluateTree(tree, records)
@@ -280,7 +281,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		return entries[i].Name < entries[j].Name
 	})
 
-	var results []CycleMetrics
+	results := make([]CycleMetrics, 0, 8)
 
 	// ── P2: Island Model — evolve all domains, migrate periodically ──
 	var islandModel *evolution.IslandModel
@@ -307,12 +308,13 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		if islandModel.Generation%cfg.MigrationInterval == 0 {
 			migrated := islandModel.Migrate()
 			if migrated > 0 {
+				// intentionally empty
 				// Log migration (could be added to metrics)
 			}
 		}
 	}
 
-	g.cfg.MetricsTracker.Save()
+	_ = g.cfg.MetricsTracker.Save()
 	return results, nil
 }
 

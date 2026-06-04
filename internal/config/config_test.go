@@ -1251,8 +1251,8 @@ func TestCheckRuntime_TLSFilesExist(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	os.WriteFile(certPath, []byte("fake-cert"), 0644)
-	os.WriteFile(keyPath, []byte("fake-key"), 0644)
+	_ = os.WriteFile(certPath, []byte("fake-cert"), 0644)
+	_ = os.WriteFile(keyPath, []byte("fake-key"), 0644)
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath
@@ -1280,7 +1280,7 @@ func TestCheckRuntime_DirExists(t *testing.T) {
 func TestCheckRuntime_DirIsFile(t *testing.T) {
 	tmp := t.TempDir()
 	filePath := filepath.Join(tmp, "notadir.txt")
-	os.WriteFile(filePath, []byte("data"), 0644)
+	_ = os.WriteFile(filePath, []byte("data"), 0644)
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = filePath
@@ -1347,7 +1347,7 @@ func TestCheckRuntime_OllamaUnreachable(t *testing.T) {
 	tmp := t.TempDir()
 	// Override ollamaChecker to simulate unreachable host.
 	oldChecker := ollamaChecker
-	ollamaChecker = func(host string) bool { return false }
+	ollamaChecker = func(_ string) bool { return false }
 	defer func() { ollamaChecker = oldChecker }()
 
 	c := newDefaultConfig()
@@ -1374,7 +1374,7 @@ func TestCheckRuntime_OllamaUnreachable(t *testing.T) {
 func TestCheckRuntime_OllamaReachable(t *testing.T) {
 	tmp := t.TempDir()
 	oldChecker := ollamaChecker
-	ollamaChecker = func(host string) bool { return true }
+	ollamaChecker = func(_ string) bool { return true }
 	defer func() { ollamaChecker = oldChecker }()
 
 	c := newDefaultConfig()
@@ -1416,7 +1416,7 @@ func TestCheckRuntime_DeepSeekUnreachable(t *testing.T) {
 	c.ReflectionsDir = tmp
 
 	oldChecker := deepseekChecker
-	deepseekChecker = func(host string) bool { return false }
+	deepseekChecker = func(_ string) bool { return false }
 	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
@@ -1446,7 +1446,7 @@ func TestCheckRuntime_DeepSeekReachable(t *testing.T) {
 	c.ReflectionsDir = tmp
 
 	oldChecker := deepseekChecker
-	deepseekChecker = func(host string) bool { return true }
+	deepseekChecker = func(_ string) bool { return true }
 	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
@@ -1512,7 +1512,7 @@ func TestCheckRuntime_MultipleIssues(t *testing.T) {
 	c.TLSCert = filepath.Join(tmp, "missing.pem")
 	c.TLSKey = filepath.Join(tmp, "also-missing.pem")
 	c.ReflectionsDir = filepath.Join(tmp, "notadir.txt")
-	os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
+	_ = os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
 	c.AgentDefsDir = "/nonexistent/parent/subdir"
 	c.ConfigFile = filepath.Join(tmp, "nosuch.json")
 
@@ -1529,7 +1529,7 @@ func TestCheckRuntime_CreatedDir_Valid(t *testing.T) {
 	// A newly-created temp dir should be valid.
 	tmp := t.TempDir()
 	subdir := filepath.Join(tmp, "subdir")
-	os.Mkdir(subdir, 0755)
+	_ = os.Mkdir(subdir, 0755)
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = subdir
@@ -1544,8 +1544,8 @@ func TestCheckRuntime_TLSBothFilesOk(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	os.WriteFile(certPath, []byte("cert"), 0644)
-	os.WriteFile(keyPath, []byte("key"), 0644)
+	_ = os.WriteFile(certPath, []byte("cert"), 0644)
+	_ = os.WriteFile(keyPath, []byte("key"), 0644)
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath
@@ -2973,7 +2973,7 @@ func TestApplyDotEnvFiles_CwdDotEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create a temp dir with a .env file
 	dir := t.TempDir()
@@ -3013,7 +3013,7 @@ func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	dir := t.TempDir()
 

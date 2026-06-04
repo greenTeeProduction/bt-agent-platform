@@ -101,7 +101,7 @@ func newScalabilityProbeServer(t *testing.T, nodeName string, healthy, scalabili
 func newScalabilityProbeServerWithExecute(t *testing.T, nodeName string, healthy, scalability, executeOk bool) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		if !healthy {
 			http.Error(w, `{"status":"down"}`, http.StatusServiceUnavailable)
 			return
@@ -109,7 +109,7 @@ func newScalabilityProbeServerWithExecute(t *testing.T, nodeName string, healthy
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.HandleFunc("/api/scalability", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/scalability", func(w http.ResponseWriter, _ *http.Request) {
 		if !scalability {
 			http.Error(w, `{"error":"missing"}`, http.StatusNotFound)
 			return
@@ -213,7 +213,7 @@ func TestProbeSingleNodeDashboard_NilContext(t *testing.T) {
 	srv := newScalabilityProbeServer(t, "single-node", true, true)
 	defer srv.Close()
 
-	report := ProbeSingleNodeDashboard(nil, SingleNodeProbeConfig{
+	report := ProbeSingleNodeDashboard(context.TODO(), SingleNodeProbeConfig{
 		BaseURL: srv.URL,
 		Client:  srv.Client(),
 	})

@@ -147,7 +147,7 @@ func TestBatchExporter_ErrorInInnerIsReported(t *testing.T) {
 	be := NewBatchExporter(ce)
 	defer be.Close()
 
-	be.OnFlushError = func(err error) { errCount.Add(1) }
+	be.OnFlushError = func(_ error) { errCount.Add(1) }
 
 	be.BatchSize = 1
 	_ = be.ExportSpan(context.Background(), ExportedSpan{Name: "fail-span"})
@@ -209,7 +209,7 @@ func TestBatchExporter_ConcurrentExports(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
-		go func(n int) {
+		go func(_ int) {
 			defer wg.Done()
 			_ = be.ExportSpan(context.Background(), ExportedSpan{Name: "span"})
 		}(i)
@@ -263,7 +263,7 @@ func TestBatchExporter_FlushWithEmptyBatchIsNoop(t *testing.T) {
 	be := NewBatchExporter(ce)
 	defer be.Close()
 
-	be.OnFlush = func(count int) { called.Store(true) }
+	be.OnFlush = func(_ int) { called.Store(true) }
 
 	// Force the issue through internal flush path.
 	// With an empty batch, flush should return without calling inner or callbacks.

@@ -103,7 +103,7 @@ func RateLimitMiddleware(rl *RateLimiter, extractKey func(*http.Request) string)
 				w.Header().Set("Retry-After", "1")
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "rate_limit_exceeded",
 					"message": "Too many requests. Please slow down.",
 				})
@@ -127,7 +127,7 @@ func SanitizeMiddleware(maxBodySize int64) func(http.Handler) http.Handler {
 			if r.ContentLength > maxBodySize {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusRequestEntityTooLarge)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "payload_too_large",
 					"message": "Request body exceeds maximum size.",
 				})
@@ -480,7 +480,7 @@ func IPFilterMiddleware(filter *IPFilter, extractIP func(*http.Request) string) 
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "access_denied",
 					"message": "IP address not authorized.",
 				})
@@ -651,7 +651,7 @@ func ContentTypeMiddleware(allowedTypes map[string]bool, methods map[string]bool
 					)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnsupportedMediaType)
-					json.NewEncoder(w).Encode(map[string]string{
+					_ = json.NewEncoder(w).Encode(map[string]string{
 						"error":   "unsupported_media_type",
 						"message": "Request Content-Type is not supported for this endpoint.",
 					})
@@ -758,7 +758,7 @@ func CSRFMiddleware(tokenFn func() string) func(http.Handler) http.Handler {
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "csrf_validation_failed",
 					"message": "CSRF token mismatch. Ensure X-CSRF-Token header matches the _csrf_token cookie.",
 				})
@@ -813,7 +813,7 @@ func BearerAuthMiddleware(validator TokenValidator) func(http.Handler) http.Hand
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "invalid_request",
 					"message": "Authorization header must use Bearer scheme.",
 				})
@@ -828,7 +828,7 @@ func BearerAuthMiddleware(validator TokenValidator) func(http.Handler) http.Hand
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":   "invalid_request",
 					"message": "Authorization header must use Bearer scheme with a non-empty token.",
 				})
@@ -844,7 +844,7 @@ func BearerAuthMiddleware(validator TokenValidator) func(http.Handler) http.Hand
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("WWW-Authenticate", `Bearer realm="bt-platform", error="invalid_token", error_description="`+err.Error()+`"`)
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error":             "invalid_token",
 					"error_description": err.Error(),
 				})

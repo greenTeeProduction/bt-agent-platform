@@ -144,9 +144,9 @@ func TestCountCPUCores_TwelveCores(t *testing.T) {
 func TestSectionFileExists_ExistingFile(t *testing.T) {
 	dir := "/tmp/arc42-test"
 	filename := "test-section.md"
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	defer os.RemoveAll(dir)
-	os.WriteFile(filepath.Join(dir, filename), []byte("test"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, filename), []byte("test"), 0644)
 
 	// Override the base path for testing — we can't change the const,
 	// but we can test with a file that exists in the real arc42 path.

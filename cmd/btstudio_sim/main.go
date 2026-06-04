@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/startup/companies"

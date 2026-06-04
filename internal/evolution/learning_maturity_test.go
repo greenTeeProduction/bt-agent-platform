@@ -1,7 +1,6 @@
 package evolution
 
 import (
-	"math/rand"
 	"strings"
 	"testing"
 )
@@ -49,7 +48,6 @@ func TestQTableSelectUpdateBestAction(t *testing.T) {
 	}
 
 	allowed := map[string]bool{"add_before": true, "add_after": true, "add_fallback": true, "replace_node": true, "remove_node": true}
-	rand.Seed(1)
 	if got := qt.SelectAction("unknown", 1); !allowed[got] {
 		t.Fatalf("exploration returned unexpected mutation %q", got)
 	}

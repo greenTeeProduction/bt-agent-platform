@@ -319,14 +319,14 @@ func main() {
 	}
 }
 
-func serveDashboard(w http.ResponseWriter, r *http.Request) {
+func serveDashboard(w http.ResponseWriter, _ *http.Request) {
 	data, err := staticFS.ReadFile("static/index.html")
 	if err != nil {
 		http.Error(w, "dashboard not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 func serveStatic(w http.ResponseWriter, r *http.Request) {
@@ -338,41 +338,41 @@ func serveStatic(w http.ResponseWriter, r *http.Request) {
 	http.StripPrefix("/static/", http.FileServer(http.FS(sub))).ServeHTTP(w, r)
 }
 
-func handleSummary(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]interface{}{
+func handleSummary(w http.ResponseWriter, _ *http.Request) {
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"total_trees": 41, "categories": map[string]int{
 			"core": 2, "finance": 10, "research": 2, "domain": 13, "startup": 6, "thinktank": 5, "evolution": 3,
 		}, "mcp_tools": 26, "model": "qwen3.6:35b-a3b",
 	})
 }
-func handleTrees(w http.ResponseWriter, r *http.Request) {
-	var r2 []map[string]interface{}
+func handleTrees(w http.ResponseWriter, _ *http.Request) {
+	r2 := make([]map[string]interface{}, 0, 8)
 	for _, t := range kg.Trees {
 		r2 = append(r2, map[string]interface{}{"id": t.ID, "name": t.Name, "category": t.Category, "node_count": t.NodeCount})
 	}
-	json.NewEncoder(w).Encode(r2)
+	_ = json.NewEncoder(w).Encode(r2)
 }
-func handleFellows(w http.ResponseWriter, r *http.Request) {
+func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	f := thinktank.DefaultFellows()
-	var r2 []map[string]interface{}
+	r2 := make([]map[string]interface{}, 0, 8)
 	for _, x := range f {
 		r2 = append(r2, map[string]interface{}{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
 	}
-	json.NewEncoder(w).Encode(r2)
+	_ = json.NewEncoder(w).Encode(r2)
 }
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Query().Get("topic")
 	c := sharedLLM
 	if c == nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": "Ollama unavailable"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Ollama unavailable"})
 		return
 	}
 	tt := thinktank.NewThinkTank("Council", topic)
 	orch := thinktank.NewOrchestrator(tt, c)
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 
 	// Auto-generate tasks from findings
-	var ff []map[string]interface{}
+	ff := make([]map[string]interface{}, 0, 8)
 	for _, f := range tt.ResearchFindings {
 		ff = append(ff, map[string]interface{}{
 			"fellow": f.FellowName, "role": f.Role,
@@ -402,10 +402,10 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"topic": topic, "findings": ff})
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"topic": topic, "findings": ff})
 }
-func handleDefaultCompany(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(companyState)
+func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
+	_ = json.NewEncoder(w).Encode(companyState)
 }
 
 func handleChat(w http.ResponseWriter, r *http.Request) {
@@ -430,19 +430,19 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sharedLLM == nil {
-		json.NewEncoder(w).Encode(map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
+		_ = json.NewEncoder(w).Encode(map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
 		return
 	}
 
 	reply, err := sharedLLM.Generate(sys + "\n\nUser: " + msg)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"reply": "Error: " + err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"reply": "Error: " + err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"reply": reply, "tab": tab})
+	_ = json.NewEncoder(w).Encode(map[string]string{"reply": reply, "tab": tab})
 }
 
-func handleTasks(w http.ResponseWriter, r *http.Request) {
+func handleTasks(w http.ResponseWriter, _ *http.Request) {
 	tasks := taskStore.List()
 	// Convert to []map for frontend compatibility
 	out := make([]map[string]interface{}, len(tasks))
@@ -454,14 +454,14 @@ func handleTasks(w http.ResponseWriter, r *http.Request) {
 			"tree_id": t.TreeID, "output": t.Output, "outcome": t.Outcome,
 		}
 	}
-	json.NewEncoder(w).Encode(out)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	if err := taskStore.UpdateStatus(taskID, "approved"); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 	resp := map[string]string{"status": "approved", "id": taskID}
@@ -480,7 +480,7 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	if err := taskStore.UpdateStatus(taskID, "rejected"); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 	resp := map[string]string{"status": "rejected", "id": taskID}
@@ -494,10 +494,10 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
+func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	approved := taskStore.Approved()
 	if len(approved) == 0 {
-		json.NewEncoder(w).Encode(map[string]string{"status": "no_approved_tasks"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "no_approved_tasks"})
 		return
 	}
 
@@ -511,7 +511,7 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	sprintState.Progress = "dispatching"
 	sprintState.Unlock()
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "sprint_started", "job_id": jobID,
 		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
 		"count":   len(approved),
@@ -538,7 +538,7 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 			sprintState.Unlock()
 
 			// Mark as in_progress
-			taskStore.UpdateStatus(task.ID, "in_progress")
+			_ = taskStore.UpdateStatus(task.ID, "in_progress")
 
 			// Pick tree if not set
 			treeID := task.TreeID
@@ -558,14 +558,14 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 			output, outcome, err := executor.RunTask(agentName, taskDesc, treeID)
 
 			if err != nil && outcome == "timeout" {
-				taskStore.UpdateStatus(task.ID, "failed")
-				taskStore.SetOutput(task.ID, "timeout: "+err.Error(), "timeout")
+				_ = taskStore.UpdateStatus(task.ID, "failed")
+				_ = taskStore.SetOutput(task.ID, "timeout: "+err.Error(), "timeout")
 			} else if outcome == "failed" || err != nil {
-				taskStore.UpdateStatus(task.ID, "failed")
-				taskStore.SetOutput(task.ID, output, "failed")
+				_ = taskStore.UpdateStatus(task.ID, "failed")
+				_ = taskStore.SetOutput(task.ID, output, "failed")
 			} else {
-				taskStore.UpdateStatus(task.ID, "completed")
-				taskStore.SetOutput(task.ID, output, outcome)
+				_ = taskStore.UpdateStatus(task.ID, "completed")
+				_ = taskStore.SetOutput(task.ID, output, outcome)
 			}
 		}
 
@@ -575,7 +575,7 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-func handleSprintStatus(w http.ResponseWriter, r *http.Request) {
+func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
 	sprintState.Lock()
 	defer sprintState.Unlock()
 	tasks := taskStore.List()
@@ -585,7 +585,7 @@ func handleSprintStatus(w http.ResponseWriter, r *http.Request) {
 			completed++
 		}
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
 		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
 		"tasks_completed": completed, "tasks_total": len(tasks),
@@ -604,7 +604,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 	// ── Domain trees (14) ──
 	domainTrees := domains.AllDomainTrees()
 	if tree, ok := domainTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -622,7 +622,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"kyc_screener":       finance.KYCScreenerTree(),
 	}
 	if tree, ok := financeTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -636,7 +636,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"sales":     startup.SalesTree(),
 	}
 	if tree, ok := startupTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -646,7 +646,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"quick_research": research.QuickResearchTree(),
 	}
 	if tree, ok := researchTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -657,7 +657,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"report":      thinktank.ReportGenerationTree(),
 	}
 	if tree, ok := thinktankTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -667,7 +667,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"default": evolution.DefaultTree(),
 	}
 	if tree, ok := evolutionTrees[treeID]; ok {
-		json.NewEncoder(w).Encode(tree)
+		_ = json.NewEncoder(w).Encode(tree)
 		return
 	}
 
@@ -678,7 +678,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 			name = name[idx+1:]
 		}
 		if name == treeID {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
 				"node_count": t.NodeCount,
 				"children":   []map[string]interface{}{},
@@ -694,27 +694,9 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 
 // authMiddleware wraps a handler with optional API key authentication.
 // If apiKey is empty, all requests pass through (no auth required).
-// If apiKey is set, requests must include X-API-Key header matching the key.
-func authMiddleware(apiKey string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if apiKey == "" {
-			next(w, r)
-			return
-		}
-		provided := r.Header.Get("X-API-Key")
-		if provided != apiKey {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: missing or invalid X-API-Key header"})
-			return
-		}
-		next(w, r)
-	}
-}
-
-// handleHealth returns platform health status.
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]interface{}{
+// If apiKey is set, requests must include X-API-Key header matching the key.// handleHealth returns platform health status.
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":   "ok",
 		"version":  "1.0.0",
 		"uptime":   "operational",
@@ -737,7 +719,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
 		return
 	}
 
@@ -745,7 +727,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if apiKey == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"error": "login not configured — BT_API_KEY not set"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "login not configured — BT_API_KEY not set"})
 		return
 	}
 
@@ -760,7 +742,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
 		w.WriteHeader(http.StatusTooManyRequests)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error":    "too many failed login attempts — IP temporarily blocked",
 			"retry_in": remaining.String(),
 		})
@@ -779,7 +761,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
@@ -787,7 +769,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		loginThrottle.RecordFailure(r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
 		security.AuditSecurityEvent(r.Context(), "login_failed",
 			"reason", "invalid_password",
 			"remote_addr", r.RemoteAddr,
@@ -803,7 +785,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "failed to create session: " + err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create session: " + err.Error()})
 		return
 	}
 
@@ -814,7 +796,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "authenticated",
 		"message": "Session created. Include the session cookie in subsequent requests.",
 	})
@@ -826,7 +808,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
 		return
 	}
 
@@ -842,7 +824,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "logged_out",
 		"message": "Session destroyed and cookie cleared.",
 	})
@@ -854,7 +836,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use GET"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use GET"})
 		return
 	}
 
@@ -862,7 +844,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("bt_session"); err == nil {
 		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":      "authenticated",
 				"auth_method": "session",
 				"created_at":  info.CreatedAt,
@@ -878,7 +860,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	apiKey := os.Getenv("BT_API_KEY")
 	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":      "authenticated",
 			"auth_method": "api_key",
 		})
@@ -887,7 +869,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "unauthenticated",
 		"message": "No valid session cookie or API key found.",
 	})
@@ -896,7 +878,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 // handleAlerts evaluates prometheus alert rules against current metrics and
 // returns which alerts are firing. Public endpoint (no auth) so monitoring
 // tools can scrape it.
-func handleAlerts(w http.ResponseWriter, r *http.Request) {
+func handleAlerts(w http.ResponseWriter, _ *http.Request) {
 	metricsJSON := metrics.MetricsJSON()
 	b, err := json.Marshal(metricsJSON)
 	if err != nil {
@@ -911,14 +893,14 @@ func handleAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(report)
+	_ = json.NewEncoder(w).Encode(report)
 }
 
 // handleOTLPStats proxies the bt-otlp-collector stats endpoint. Returns OTLP
 // collector status — batches received, spans received, uptime — for dashboard
 // visualization. Returns a fallback JSON when the collector is unreachable.
 // Public endpoint (no auth).
-func handleOTLPStats(w http.ResponseWriter, r *http.Request) {
+func handleOTLPStats(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	collectorURL := os.Getenv("BT_OTLP_ENDPOINT")
@@ -929,7 +911,7 @@ func handleOTLPStats(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(collectorURL + "/api/otlp-stats")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":           "unreachable",
 			"collector_url":    collectorURL,
 			"message":          "bt-otlp-collector is not running",
@@ -943,14 +925,14 @@ func handleOTLPStats(w http.ResponseWriter, r *http.Request) {
 
 	var stats map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":  "error",
 			"message": fmt.Sprintf("decode error: %v", err),
 		})
 		return
 	}
 	stats["status"] = "connected"
-	json.NewEncoder(w).Encode(stats)
+	_ = json.NewEncoder(w).Encode(stats)
 }
 
 // ─── Dead Letter Queue Handlers ────────────────────────────────────────────────
@@ -968,7 +950,7 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 		"entries": entries,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleDLQReplay removes an entry from the DLQ and returns it for re-execution.
@@ -982,7 +964,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing id parameter"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing id parameter"})
 		return
 	}
 
@@ -990,7 +972,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "entry not found", "id": id})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "entry not found", "id": id})
 		return
 	}
 
@@ -1000,7 +982,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		"pending": dlq.Len(),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleDLQPurge removes all entries from the dead letter queue.
@@ -1018,12 +1000,12 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 		"pending": 0,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.
 // This endpoint is public (no auth) so API consumers can discover the schema.
-func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
+func handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
 	gen := api.NewOpenAPIGenerator(
 		"BT Platform API",
 		"1.0.0",
@@ -1061,7 +1043,7 @@ func handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // swaggerUIHTML is a self-contained Swagger UI page that loads the OpenAPI spec
@@ -1113,16 +1095,16 @@ const swaggerUIHTML = `<!DOCTYPE html>
 // handleSwagger serves a Swagger UI page that renders the OpenAPI spec
 // from /api/openapi.json. Public endpoint — no auth required (same as
 // /api/health, /api/metrics, /api/alerts, /api/openapi.json).
-func handleSwagger(w http.ResponseWriter, r *http.Request) {
+func handleSwagger(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write([]byte(swaggerUIHTML))
+	_, _ = w.Write([]byte(swaggerUIHTML))
 }
 
 // handleAlertRules serves the raw Prometheus alert rules YAML file so
 // Prometheus or other monitoring tools can scrape it directly.
 // Public endpoint (no auth) — same as /api/alerts, /api/health, /api/metrics.
-func handleAlertRules(w http.ResponseWriter, r *http.Request) {
+func handleAlertRules(w http.ResponseWriter, _ *http.Request) {
 	// Look relative to the binary's working directory (repo root)
 	rulesPath := "monitoring/prometheus-alerts.yml"
 
@@ -1139,14 +1121,14 @@ func handleAlertRules(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
-func handleSecurityAudit(w http.ResponseWriter, r *http.Request) {
+func handleSecurityAudit(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	buf := security.GlobalAuditBuffer()
 	if buf == nil {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"capacity":        0,
 			"total_events":    0,
 			"captured_events": 0,
@@ -1157,7 +1139,7 @@ func handleSecurityAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	events := buf.Recent(200)
-	json.NewEncoder(w).Encode(security.AuditBufferJSON{
+	_ = json.NewEncoder(w).Encode(security.AuditBufferJSON{
 		Capacity:       buf.Capacity(),
 		TotalEvents:    buf.Count(),
 		CapturedEvents: len(events),
@@ -1193,7 +1175,7 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(status)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // handleTraces returns recent trace entries or aggregated traces from the shared traces log as JSON.
@@ -1229,7 +1211,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		json.NewEncoder(w).Encode(trace)
+		_ = json.NewEncoder(w).Encode(trace)
 		return
 	}
 
@@ -1252,7 +1234,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"count":  len(traces),
 			"traces": traces,
 		})
@@ -1294,7 +1276,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"count":   len(entries),
 		"entries": entries,
 	})
@@ -1312,7 +1294,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(sanitized)
+	_ = json.NewEncoder(w).Encode(sanitized)
 }
 
 // handleTaskCreate creates a new task via query params (GET — avoids CSRF on API endpoints).
@@ -1320,7 +1302,7 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	if title == "" {
 		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing title parameter"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing title parameter"})
 		return
 	}
 	task := dashboard.Task{
@@ -1340,10 +1322,10 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	task.TreeID = dashboard.PickTreeForTask(task)
 	if err := taskStore.Create(task); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"status": "created", "id": task.ID})
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "created", "id": task.ID})
 }
 
 // ─── Agent Handlers ──────────────────────────────────────────────────────
@@ -1367,14 +1349,14 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
 	if req.Agent == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: agent"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: agent"})
 		return
 	}
 	if req.Task == "" {
@@ -1448,16 +1430,16 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 
 	res := <-result
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 // handleAgentsList returns all registered BT agents with their live status.
-func handleAgentsList(w http.ResponseWriter, r *http.Request) {
+func handleAgentsList(w http.ResponseWriter, _ *http.Request) {
 	agents := dashboard.ListAgents()
 	if agents == nil {
 		agents = []dashboard.AgentInfo{}
 	}
-	json.NewEncoder(w).Encode(agents)
+	_ = json.NewEncoder(w).Encode(agents)
 }
 
 // handleAgentRun runs an agent with a given task.
@@ -1466,7 +1448,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	task := r.URL.Query().Get("task")
 	if agentName == "" {
 		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing agent parameter"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing agent parameter"})
 		return
 	}
 	if task == "" {
@@ -1517,5 +1499,5 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := <-result
-	json.NewEncoder(w).Encode(res)
+	_ = json.NewEncoder(w).Encode(res)
 }

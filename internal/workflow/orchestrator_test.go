@@ -9,7 +9,7 @@ import (
 
 func TestWorkflow_Sequential(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, task string) (string, string, error) {
 			return "success", fmt.Sprintf("agent %q completed task: %s", agentName, task), nil
 		},
 	}
@@ -39,7 +39,7 @@ func TestWorkflow_Sequential(t *testing.T) {
 
 func TestWorkflow_Conditional(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			return "success", "degraded", nil
 		},
 	}
@@ -66,7 +66,7 @@ func TestWorkflow_Conditional(t *testing.T) {
 
 func TestWorkflow_Parallel(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, _ string) (string, string, error) {
 			time.Sleep(10 * time.Millisecond)
 			return "success", fmt.Sprintf("%s done", agentName), nil
 		},
@@ -98,7 +98,7 @@ func TestWorkflow_Parallel(t *testing.T) {
 
 func TestWorkflow_OnFailureAbort(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, _ string) (string, string, error) {
 			if agentName == "failing-agent" {
 				return "failure", "error output", fmt.Errorf("simulated failure")
 			}
@@ -130,7 +130,7 @@ func TestWorkflow_OnFailureAbort(t *testing.T) {
 func TestWorkflow_Loop(t *testing.T) {
 	iterations := 0
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			iterations++
 			return "success", fmt.Sprintf("iteration %d", iterations), nil
 		},
@@ -163,7 +163,7 @@ func TestWorkflow_Loop(t *testing.T) {
 func TestWorkflow_OnFailureRetry(t *testing.T) {
 	attempts := 0
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			attempts++
 			if attempts == 1 {
 				return "failure", "first attempt failed", fmt.Errorf("fail")

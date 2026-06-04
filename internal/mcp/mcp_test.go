@@ -24,7 +24,7 @@ func testServer() (*Server, *bytes.Buffer) {
 
 func readMessages(t *testing.T, buf *bytes.Buffer) []Message {
 	t.Helper()
-	var msgs []Message
+	msgs := make([]Message, 0, 8)
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
 			continue
@@ -74,7 +74,7 @@ func TestToolsList(t *testing.T) {
 			"input": {Type: "string", Description: "the input"},
 		},
 		[]string{"input"},
-		func(args json.RawMessage) *ToolResult {
+		func(_ json.RawMessage) *ToolResult {
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: "ok"}},
 			}
@@ -119,7 +119,7 @@ func TestToolsCall_Success(t *testing.T) {
 			var params struct {
 				Name string `json:"name"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: "Hello, " + params.Name + "!"}},
 			}
@@ -175,7 +175,7 @@ func TestToolsCall_BadParams(t *testing.T) {
 			"required_field": {Type: "string", Description: "needed"},
 		},
 		[]string{"required_field"},
-		func(args json.RawMessage) *ToolResult {
+		func(_ json.RawMessage) *ToolResult {
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: "ok"}},
 			}
@@ -246,7 +246,7 @@ func TestRegisterMultipleTools(t *testing.T) {
 		s.RegisterTool("tool_"+string(rune('a'+i)), "desc",
 			map[string]Property{},
 			nil,
-			func(args json.RawMessage) *ToolResult {
+			func(_ json.RawMessage) *ToolResult {
 				return &ToolResult{Content: []ContentItem{{Type: "text", Text: "ok"}}}
 			})
 	}
@@ -277,7 +277,7 @@ func TestSetSecurity_DefaultOff(t *testing.T) {
 			var p struct {
 				Text string `json:"text"`
 			}
-			json.Unmarshal(args, &p)
+			_ = json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
 			}
@@ -309,7 +309,7 @@ func TestSetSecurity_SanitizeArgs(t *testing.T) {
 			var p struct {
 				Text string `json:"text"`
 			}
-			json.Unmarshal(args, &p)
+			_ = json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
 			}
@@ -339,7 +339,7 @@ func TestSetSecurity_ApiKeyRejected(t *testing.T) {
 	s.RegisterTool("admin", "admin tool",
 		map[string]Property{},
 		nil,
-		func(args json.RawMessage) *ToolResult {
+		func(_ json.RawMessage) *ToolResult {
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: "admin ok"}},
 			}
@@ -365,7 +365,7 @@ func TestSetSecurity_ApiKeyAccepted(t *testing.T) {
 	s.RegisterTool("admin", "admin tool",
 		map[string]Property{},
 		nil,
-		func(args json.RawMessage) *ToolResult {
+		func(_ json.RawMessage) *ToolResult {
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: "admin ok"}},
 			}
@@ -400,7 +400,7 @@ func TestSetSecurity_SanitizeANSI(t *testing.T) {
 			var p struct {
 				Text string `json:"text"`
 			}
-			json.Unmarshal(args, &p)
+			_ = json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{Type: "text", Text: p.Text}},
 			}
@@ -438,7 +438,7 @@ func TestSetSecurity_NestedArgs(t *testing.T) {
 				} `json:"outer"`
 				Arr []string `json:"arr"`
 			}
-			json.Unmarshal(args, &p)
+			_ = json.Unmarshal(args, &p)
 			return &ToolResult{
 				Content: []ContentItem{{
 					Type: "text",
@@ -472,7 +472,7 @@ func TestRateLimiting(t *testing.T) {
 	s, buf := testServer()
 	s.SetRateLimit(2, 3) // 2 tokens/sec, burst 3
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -504,7 +504,7 @@ func TestRateLimitingDisabled(t *testing.T) {
 	s, buf := testServer()
 	// No rate limit set — default should allow all requests
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -536,7 +536,7 @@ func TestMaxMessageSize_RejectsOversized(t *testing.T) {
 		maxMessageSize: 128, // cap at 128 bytes
 	}
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -576,7 +576,7 @@ func TestMaxMessageSize_AllowsNormalSized(t *testing.T) {
 		maxMessageSize: 1 << 20, // 1 MB
 	}
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -608,7 +608,7 @@ func TestMaxMessageSize_AllowsNormalSized(t *testing.T) {
 func TestTraceparent_Passthrough(t *testing.T) {
 	s, buf := testServer()
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -631,7 +631,7 @@ func TestTraceparent_Passthrough(t *testing.T) {
 func TestTraceparent_InvalidDegradesGracefully(t *testing.T) {
 	s, buf := testServer()
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 
@@ -648,7 +648,7 @@ func TestTraceparent_InvalidDegradesGracefully(t *testing.T) {
 func TestTraceparent_WithoutTraceparent(t *testing.T) {
 	s, buf := testServer()
 
-	s.RegisterTool("ping", "pong", nil, nil, func(args json.RawMessage) *ToolResult {
+	s.RegisterTool("ping", "pong", nil, nil, func(_ json.RawMessage) *ToolResult {
 		return &ToolResult{Content: []ContentItem{{Type: "text", Text: "pong"}}}
 	})
 

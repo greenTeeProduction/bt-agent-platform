@@ -374,9 +374,6 @@ func hashTree(t *SerializableNode) string {
 }
 
 func randomMutation(tree *SerializableNode) []MutationOp {
-	if ops := tryBlockRandomMutation(tree); len(ops) > 0 && rand.Float64() < 0.25 { //#nosec G404 -- non-crypto PRNG for evolution heuristics
-		return ops
-	}
 	// Include all mutation types the expert system recommends
 	allOps := []string{
 		"add_before", "add_after", "add_fallback",
@@ -408,11 +405,4 @@ func collectNodeNames(node *SerializableNode) []string {
 		names = append(names, collectNodeNames(&node.Children[i])...)
 	}
 	return names
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -450,7 +450,7 @@ func TestResponseCapture_CapturesJSON(t *testing.T) {
 	rc := &responseCapture{ResponseWriter: w}
 
 	json := `{"status":"ok"}`
-	rc.Write([]byte(json))
+	_, _ = rc.Write([]byte(json))
 	if rc.body.String() != json {
 		t.Errorf("JSON body not captured: got %q, want %q", rc.body.String(), json)
 	}
@@ -464,8 +464,8 @@ func TestResponseCapture_OnlyFirstJSONChunk(t *testing.T) {
 	rc := &responseCapture{ResponseWriter: w}
 
 	// Write JSON first
-	rc.Write([]byte(`{"key":`))
-	rc.Write([]byte(`"value"}`))
+	_, _ = rc.Write([]byte(`{"key":`))
+	_, _ = rc.Write([]byte(`"value"}`))
 
 	if rc.body.String() != `{"key":` {
 		t.Errorf("only first chunk captured: got %q", rc.body.String())
@@ -522,10 +522,10 @@ func TestResponseValidator_Passes(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
@@ -547,8 +547,8 @@ func TestResponseValidator_NonAPIPath(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	routes := DashboardRoutes()
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hello"))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello"))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
@@ -576,9 +576,9 @@ func TestResponseValidator_SkipPath(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"value":"not-a-number"}`)) // would normally violate
+		_, _ = w.Write([]byte(`{"value":"not-a-number"}`)) // would normally violate
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{
@@ -600,8 +600,8 @@ func TestResponseValidator_UnknownRoute(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	routes := []Route{}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"key":"value"}`))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"key":"value"}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
@@ -626,9 +626,9 @@ func TestResponseValidator_NilConfig(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`"ok"`))
+		_, _ = w.Write([]byte(`"ok"`))
 	})
 
 	validator := ResponseValidator(routes, nil)
@@ -654,9 +654,9 @@ func TestResponseValidator_NonJSONResponse(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/yaml")
-		w.Write([]byte("groups:\n  - name: test"))
+		_, _ = w.Write([]byte("groups:\n  - name: test"))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
@@ -690,9 +690,9 @@ func TestResponseValidator_DriftLogging(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`)) // missing "message"
+		_, _ = w.Write([]byte(`{"status":"ok"}`)) // missing "message"
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
@@ -849,9 +849,9 @@ func TestResponseValidator_Enforcement_EnforcesOnViolation(t *testing.T) {
 	}
 
 	// Handler that returns JSON missing the required field
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"not_name": "value"}`))
+		_, _ = w.Write([]byte(`{"not_name": "value"}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
@@ -887,9 +887,9 @@ func TestResponseValidator_Enforcement_PassesOnValidResponse(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status": "ok"}`))
+		_, _ = w.Write([]byte(`{"status": "ok"}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
@@ -925,9 +925,9 @@ func TestResponseValidator_Enforcement_ErrorBodyIsValidJSON(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"no_match": true}`))
+		_, _ = w.Write([]byte(`{"no_match": true}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})
@@ -974,9 +974,9 @@ func TestResponseValidator_Enforcement_DisabledByDefault(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"wrong_field": "value"}`))
+		_, _ = w.Write([]byte(`{"wrong_field": "value"}`))
 	})
 
 	// Default config (Enforce=false)
@@ -1013,9 +1013,9 @@ func TestResponseValidator_Enforcement_SkipPathBypassesEnforcement(t *testing.T)
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"no_match": true}`))
+		_, _ = w.Write([]byte(`{"no_match": true}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{
@@ -1053,9 +1053,9 @@ func TestResponseValidator_Enforcement_NonAPIPathPasses(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(`not json at all`))
+		_, _ = w.Write([]byte(`not json at all`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Enforce: true})

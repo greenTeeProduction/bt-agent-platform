@@ -77,7 +77,7 @@ type RunMetrics struct {
 
 // RunSuite executes all tasks in a suite against a tree.
 func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunMetrics {
-	var results []Result
+	results := make([]Result, 0, 32)
 	successes := 0
 	paths := make(map[string]int)
 
@@ -440,17 +440,17 @@ type MockLLM struct {
 	ToImprove  string
 }
 
-func (m *MockLLM) AnalyzeComplexity(task string) string        { return m.Complexity }
-func (m *MockLLM) GeneratePlan(task, complexity string) string { return m.Plan }
-func (m *MockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *MockLLM) AnalyzeComplexity(_ string) string        { return m.Complexity }
+func (m *MockLLM) GeneratePlan(_, _ string) string { return m.Plan }
+func (m *MockLLM) Reflect(_, _, _ string) (string, string) {
 	return m.WentWell, m.ToImprove
 }
-func (m *MockLLM) Generate(prompt string) (string, error) { return m.Plan, nil }
-func (m *MockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
+func (m *MockLLM) Generate(_ string) (string, error) { return m.Plan, nil }
+func (m *MockLLM) GenerateCtx(_ context.Context, _ string) (string, error) {
+	return m.Plan, nil
 }
-func (m *MockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return m.Generate(prompt)
+func (m *MockLLM) GenerateWithTimeout(_ string, _ time.Duration) (string, error) {
+	return m.Plan, nil
 }
 
 // DefaultMock returns a standard mock for benchmarks.

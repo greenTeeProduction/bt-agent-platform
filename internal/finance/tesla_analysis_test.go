@@ -2,12 +2,13 @@ package finance
 
 import (
 	"fmt"
-	"github.com/nico/go-bt-evolve/internal/engine"
-	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/llm"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
 func TestTeslaFullAnalysis(t *testing.T) {

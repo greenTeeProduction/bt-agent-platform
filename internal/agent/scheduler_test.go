@@ -17,7 +17,7 @@ func TestHistory_RecordAndList(t *testing.T) {
 
 	// Record some runs
 	for i := 0; i < 5; i++ {
-		h.Record(RunRecord{
+		_ = h.Record(RunRecord{
 			AgentName: "test-agent",
 			Task:      fmt.Sprintf("task-%d", i),
 			Outcome:   "success",
@@ -52,7 +52,7 @@ func TestHistory_Persistence(t *testing.T) {
 	dir := t.TempDir()
 	h, _ := NewHistory(dir)
 
-	h.Record(RunRecord{
+	_ = h.Record(RunRecord{
 		AgentName: "persist-agent",
 		Outcome:   "success",
 		Duration:  "10s",
@@ -79,10 +79,10 @@ func TestHistory_Stats(t *testing.T) {
 	h, _ := NewHistory(dir)
 
 	// Mix of outcomes
-	h.Record(RunRecord{AgentName: "stats-agent", Outcome: "success", Duration: "5s", Quality: 0.9, EndedAt: time.Now()})
-	h.Record(RunRecord{AgentName: "stats-agent", Outcome: "failure", Duration: "2s", Quality: 0.3, EndedAt: time.Now()})
-	h.Record(RunRecord{AgentName: "stats-agent", Outcome: "success", Duration: "8s", Quality: 0.7, EndedAt: time.Now()})
-	h.Record(RunRecord{AgentName: "stats-agent", Outcome: "panic", Duration: "1s", Quality: 0.0, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "stats-agent", Outcome: "success", Duration: "5s", Quality: 0.9, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "stats-agent", Outcome: "failure", Duration: "2s", Quality: 0.3, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "stats-agent", Outcome: "success", Duration: "8s", Quality: 0.7, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "stats-agent", Outcome: "panic", Duration: "1s", Quality: 0.0, EndedAt: time.Now()})
 
 	stats := h.Stats("stats-agent")
 	if stats.TotalRuns != 4 {
@@ -100,7 +100,7 @@ func TestHistory_FileCreated(t *testing.T) {
 	dir := t.TempDir()
 	h, _ := NewHistory(dir)
 
-	h.Record(RunRecord{AgentName: "file-agent", Outcome: "success", Duration: "1s", Quality: 1.0})
+	_ = h.Record(RunRecord{AgentName: "file-agent", Outcome: "success", Duration: "1s", Quality: 1.0})
 
 	// Verify .jsonl file exists
 	path := filepath.Join(dir, "file-agent.jsonl")
@@ -116,7 +116,7 @@ func TestHistory_FileCreated(t *testing.T) {
 func TestScheduler_Schedule(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "sched-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "sched-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -140,7 +140,7 @@ func TestScheduler_Schedule(t *testing.T) {
 		t.Errorf("expected 1 job, got %d", len(jobs))
 	}
 
-	sched.RemoveJob(job.ID)
+	_ = sched.RemoveJob(job.ID)
 	if len(sched.ListJobs()) != 0 {
 		t.Error("job not removed")
 	}
@@ -149,7 +149,7 @@ func TestScheduler_Schedule(t *testing.T) {
 func TestScheduler_RunNow(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "runnow-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "runnow-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -181,7 +181,7 @@ func TestScheduler_RunNow(t *testing.T) {
 func TestScheduler_RunJobPanicRecovery(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "panic-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "panic-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -193,7 +193,7 @@ func TestScheduler_RunJobPanicRecovery(t *testing.T) {
 	})
 
 	// Runner that panics
-	panickingRunner := func(ctx RunContext) (string, string, error) {
+	panickingRunner := func(_ RunContext) (string, string, error) {
 		panic("agent-crash")
 	}
 
@@ -236,8 +236,8 @@ func TestScheduler_RunJobPanicRecovery(t *testing.T) {
 func TestScheduler_NormalJobAfterPanic(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "good-agent", Tree: "domain:default", Version: "1.0.0"})
-	reg.Create(Definition{Name: "bad-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "good-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "bad-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -294,7 +294,7 @@ func TestScheduler_CrashRecovery_InFlightReset(t *testing.T) {
 	// and the job is scheduled to run immediately.
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "crash-agent", Tree: "domain:default", Version: "1.0.0", Description: "crash recovery test"})
+	_, _ = reg.Create(Definition{Name: "crash-agent", Tree: "domain:default", Version: "1.0.0", Description: "crash recovery test"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -367,7 +367,7 @@ func TestScheduler_CrashRecovery_CleanJobsUnaffected(t *testing.T) {
 	// Verify that jobs without InFlight are not modified during recovery.
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "clean-agent", Tree: "domain:default", Version: "1.0.0", Description: "clean job test"})
+	_, _ = reg.Create(Definition{Name: "clean-agent", Tree: "domain:default", Version: "1.0.0", Description: "clean job test"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -416,9 +416,9 @@ func TestScheduler_CrashRecovery_CleanJobsUnaffected(t *testing.T) {
 func TestScheduler_CrashRecovery_MultipleCrashedJobs(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "crash-a", Tree: "domain:default", Version: "1.0.0", Description: "crash a"})
-	reg.Create(Definition{Name: "crash-b", Tree: "domain:default", Version: "1.0.0", Description: "crash b"})
-	reg.Create(Definition{Name: "clean-c", Tree: "domain:default", Version: "1.0.0", Description: "clean c"})
+	_, _ = reg.Create(Definition{Name: "crash-a", Tree: "domain:default", Version: "1.0.0", Description: "crash a"})
+	_, _ = reg.Create(Definition{Name: "crash-b", Tree: "domain:default", Version: "1.0.0", Description: "crash b"})
+	_, _ = reg.Create(Definition{Name: "clean-c", Tree: "domain:default", Version: "1.0.0", Description: "clean c"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
@@ -482,7 +482,7 @@ func TestScheduler_CrashRecovery_NoJobStore(t *testing.T) {
 	// Without a JobStore, crash recovery is a no-op.
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "no-store-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "no-store-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)

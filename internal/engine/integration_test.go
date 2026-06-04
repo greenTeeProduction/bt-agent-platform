@@ -62,7 +62,7 @@ func TestIntegration_AllTreesExecute(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			bb := &Blackboard{Task: tt.task, LLM: &mockLLM{}}
 			bt := BuildTree(tt.tree, bb)
 			outcome := RunTask(bb, bt)
@@ -131,7 +131,7 @@ func TestIntegration_AllChainTypes(t *testing.T) {
 	}
 
 	for _, tt := range chainTests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			bb := &Blackboard{Task: tt.task, LLM: &mockLLM{}, ChainState: map[string]any{}}
 			bt := BuildTree(tt.tree, bb)
 			_ = RunTask(bb, bt)

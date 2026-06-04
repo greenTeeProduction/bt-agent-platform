@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -351,7 +352,7 @@ func TestAnnotateMetrics(t *testing.T) {
 
 func TestMockLLM_GenerateCtx(t *testing.T) {
 	mock := DefaultMock()
-	result, err := mock.GenerateCtx(nil, "test prompt")
+	result, err := mock.GenerateCtx(context.TODO(), "test prompt")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -419,7 +420,7 @@ func TestDetectPath_KeywordFallback(t *testing.T) {
 	}
 }
 
-func TestQuickValidate_SmallSuite(t *testing.T) {
+func TestQuickValidate_SmallSuite(_ *testing.T) {
 	tree := evolution.GoDeveloperTree()
 	mock := DefaultMock()
 	// Small suite (<=3 tasks) should call ScoreMutation directly
@@ -432,7 +433,7 @@ func TestQuickValidate_SmallSuite(t *testing.T) {
 	_ = score
 }
 
-func TestQuickValidate_LargeSuite(t *testing.T) {
+func TestQuickValidate_LargeSuite(_ *testing.T) {
 	tree := evolution.GoDeveloperTree()
 	mock := DefaultMock()
 	suite := GoDevSuite() // has >3 tasks

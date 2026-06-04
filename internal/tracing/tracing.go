@@ -63,16 +63,16 @@ type Tracer interface {
 
 type noopSpan struct{}
 
-func (n noopSpan) End()                                {}
-func (n noopSpan) AddEvent(name string, attrs ...Attr) {}
-func (n noopSpan) SetAttribute(key, value string)      {}
-func (n noopSpan) RecordError(err error)               {}
-func (n noopSpan) SpanContext() SpanContext            { return SpanContext{} }
-func (n noopSpan) IsRecording() bool                   { return false }
+func (n noopSpan) End()                         {}
+func (n noopSpan) AddEvent(_ string, _ ...Attr) {}
+func (n noopSpan) SetAttribute(_, _ string)     {}
+func (n noopSpan) RecordError(_ error)          {}
+func (n noopSpan) SpanContext() SpanContext     { return SpanContext{} }
+func (n noopSpan) IsRecording() bool            { return false }
 
 type noopTracer struct{}
 
-func (n noopTracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {
+func (n noopTracer) StartSpan(ctx context.Context, _ string) (context.Context, Span) {
 	return ctx, noopSpan{}
 }
 
@@ -88,12 +88,12 @@ type Sampler interface {
 // alwaysSampler samples every span.
 type alwaysSampler struct{}
 
-func (alwaysSampler) ShouldSample(traceID, spanName string) bool { return true }
+func (alwaysSampler) ShouldSample(_, _ string) bool { return true }
 
 // neverSampler drops every span.
 type neverSampler struct{}
 
-func (neverSampler) ShouldSample(traceID, spanName string) bool { return false }
+func (neverSampler) ShouldSample(_, _ string) bool { return false }
 
 // AlwaysSample returns a Sampler that records every span.
 func AlwaysSample() Sampler { return alwaysSampler{} }
@@ -126,7 +126,7 @@ func (rs *RatioSampler) Ratio() float64 { return rs.ratio }
 // ShouldSample deterministically decides whether to sample based on the trace ID.
 // Uses the first 8 hex characters of the trace ID as a hash (0x00000000-0xFFFFFFFF).
 // This ensures all spans in the same trace get the same decision.
-func (rs *RatioSampler) ShouldSample(traceID, spanName string) bool {
+func (rs *RatioSampler) ShouldSample(traceID, _ string) bool {
 	if rs.ratio >= 1.0 {
 		return true
 	}

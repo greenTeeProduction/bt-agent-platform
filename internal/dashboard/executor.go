@@ -20,7 +20,7 @@ func NewAgentExecutor() *AgentExecutor {
 
 // RunTask executes a task through the specified BT agent tree using Hermes CLI.
 // Returns the agent's output and outcome (success/failure).
-func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, outcome string, err error) {
+func (e *AgentExecutor) RunTask(_, task, treeID string) (output string, outcome string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	defer cancel()
 

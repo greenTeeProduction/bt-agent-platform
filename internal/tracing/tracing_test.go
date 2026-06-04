@@ -166,7 +166,7 @@ func TestNoopTracer(t *testing.T) {
 func TestStartSpan_NilCtx(t *testing.T) {
 	// Test that StartSpan with nil context works (uses background)
 	tracer, _ := TestTracer("test")
-	ctx, span := tracer.StartSpan(nil, "NilCtxOp")
+	ctx, span := tracer.StartSpan(context.TODO(), "NilCtxOp")
 	if ctx == nil {
 		t.Fatal("expected non-nil context")
 	}

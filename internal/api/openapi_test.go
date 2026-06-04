@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -136,8 +137,8 @@ func TestOpenAPIGenerator_MultipleRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateJSON failed: %v", err)
 	}
-	aIdx := strings.Index(string(data), "\"/api/a\"")
-	bIdx := strings.Index(string(data), "\"/api/b\"")
+	aIdx := bytes.Index(data, []byte("\"/api/a\""))
+	bIdx := bytes.Index(data, []byte("\"/api/b\""))
 	if aIdx == -1 || bIdx == -1 {
 		t.Fatal("expected /api/a and /api/b in JSON output")
 	}
@@ -449,12 +450,12 @@ func TestSchemaToMap_Enum(t *testing.T) {
 }
 
 func TestSchemaToMap_NumberBounds(t *testing.T) {
-	min := 0.0
-	max := 100.0
+	minBound := 0.0
+	maxBound := 100.0
 	s := &Schema{
 		Type:    "number",
-		Minimum: &min,
-		Maximum: &max,
+		Minimum: &minBound,
+		Maximum: &maxBound,
 		Format:  "float",
 	}
 
@@ -1059,9 +1060,9 @@ func TestOpenAPIGenerator_NonDeprecatedRoute_NoHeaders(t *testing.T) {
 }
 
 func TestDeprecatedHandler_WithSunset(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}
 	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "2027-01-01")
 
@@ -1085,9 +1086,9 @@ func TestDeprecatedHandler_WithSunset(t *testing.T) {
 }
 
 func TestDeprecatedHandler_WithoutSunset(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`ok`))
+		_, _ = w.Write([]byte(`ok`))
 	}
 	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "")
 
@@ -1104,9 +1105,9 @@ func TestDeprecatedHandler_WithoutSunset(t *testing.T) {
 }
 
 func TestDeprecatedHandlerFunc_WithSunset(t *testing.T) {
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`ok`))
+		_, _ = w.Write([]byte(`ok`))
 	}
 	wrapped := DeprecatedHandlerFunc(handler, "2026-12-31")
 

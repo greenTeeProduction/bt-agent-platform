@@ -335,7 +335,7 @@ func main() {
 
 	// Create jobs directory for scheduler persistence
 	jobStoreDir := agentHome + "/.go-bt-evolve/jobs"
-	os.MkdirAll(jobStoreDir, 0755)
+	_ = os.MkdirAll(jobStoreDir, 0755)
 
 	// Persistent agent scheduler (with FileJobStore for durability across restarts)
 	globalSched := agent.NewScheduler(agent.SchedulerConfig{
@@ -481,7 +481,7 @@ func main() {
 	// ── A2A Server ──────────────────────────────────────────────────────────
 	a2aPort := 8686
 	if p := os.Getenv("BT_A2A_PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &a2aPort)
+		_, _ = fmt.Sscanf(p, "%d", &a2aPort)
 	}
 	a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
 	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {

@@ -53,7 +53,7 @@ func TestFileJobStore_SaveLoad(t *testing.T) {
 	input2 := []ScheduledJob{
 		{ID: "job-3", AgentName: "agent-c", Schedule: "every 30m", Active: false},
 	}
-	store.Save(input2)
+	_ = store.Save(input2)
 	loaded2, _ := store.Load()
 	if len(loaded2) != 1 {
 		t.Fatalf("expected 1 job after overwrite, got %d", len(loaded2))
@@ -81,7 +81,7 @@ func TestFileJobStore_EmptyPath(t *testing.T) {
 func TestScheduler_PersistenceOnSchedule(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "persist-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "persist-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	store := NewFileJobStore(filepath.Join(dir, "scheduler-jobs.json"))
 
@@ -127,13 +127,13 @@ func TestScheduler_PersistenceOnSchedule(t *testing.T) {
 func TestScheduler_RestoreJobsOnStartup(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "restore-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "restore-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	storePath := filepath.Join(dir, "scheduler-jobs.json")
 
 	// Pre-populate the store with a job
 	store1 := NewFileJobStore(storePath)
-	store1.Save([]ScheduledJob{
+	_ = store1.Save([]ScheduledJob{
 		{
 			ID:        "existing-job",
 			AgentName: "restore-agent",
@@ -165,7 +165,7 @@ func TestScheduler_RestoreJobsOnStartup(t *testing.T) {
 func TestScheduler_NoJobStore_NilSafe(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "nil-agent", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "nil-agent", Tree: "domain:default", Version: "1.0.0"})
 
 	// No JobStore — everything should work without panics
 	sched := NewScheduler(SchedulerConfig{
@@ -179,7 +179,7 @@ func TestScheduler_NoJobStore_NilSafe(t *testing.T) {
 	}
 
 	// Should not panic
-	sched.RemoveJob(job.ID)
+	_ = sched.RemoveJob(job.ID)
 	sched.saveState()
 	sched.saveStateLocked()
 	sched.loadState()
@@ -202,12 +202,12 @@ func TestFileJobStore_Concurrent(t *testing.T) {
 
 	done := make(chan struct{})
 	for i := 0; i < 10; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer func() { done <- struct{}{} }()
-			store.Save([]ScheduledJob{
+			_ = store.Save([]ScheduledJob{
 				{ID: "conc-job", AgentName: "conc-agent", Schedule: "every 1h", Active: true},
 			})
-			store.Load()
+			_, _ = store.Load()
 		}(i)
 	}
 

@@ -48,7 +48,7 @@ func TestRateLimiter_PerClientIsolation(t *testing.T) {
 
 func TestRateLimitMiddleware(t *testing.T) {
 	rl := NewRateLimiter(100, 100)
-	handler := RateLimitMiddleware(rl, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RateLimitMiddleware(rl, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -63,7 +63,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 func TestRateLimitMiddleware_Denied(t *testing.T) {
 	rl := NewRateLimiter(0, 0) // zero rate, zero burst — all requests denied after first
-	handler := RateLimitMiddleware(rl, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RateLimitMiddleware(rl, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -116,7 +116,7 @@ func TestSanitizeString(t *testing.T) {
 }
 
 func TestSanitizeMiddleware(t *testing.T) {
-	handler := SanitizeMiddleware(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SanitizeMiddleware(1024)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -132,7 +132,7 @@ func TestSanitizeMiddleware(t *testing.T) {
 }
 
 func TestSanitizeMiddleware_BodyTooLarge(t *testing.T) {
-	handler := SanitizeMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SanitizeMiddleware(10)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -148,7 +148,7 @@ func TestSanitizeMiddleware_BodyTooLarge(t *testing.T) {
 
 func TestSecurityHeadersMiddleware(t *testing.T) {
 	cfg := DefaultSecurityHeaders()
-	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -194,7 +194,7 @@ func TestSecurityHeadersMiddleware_HSTS(t *testing.T) {
 		HSTSMaxAge:     31536000,
 		HSTSIncludeSub: true,
 	}
-	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -220,7 +220,7 @@ func TestSecurityHeadersMiddleware_CustomConfig(t *testing.T) {
 		ReferrerPolicy: "no-referrer",
 		CSP:            "default-src 'none'",
 	}
-	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SecurityHeadersMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -243,7 +243,7 @@ func TestSecurityHeadersMiddleware_CustomConfig(t *testing.T) {
 }
 
 func TestCrossOriginMiddleware(t *testing.T) {
-	handler := CrossOriginMiddleware("*", "GET, POST")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CrossOriginMiddleware("*", "GET, POST")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -263,7 +263,7 @@ func TestCrossOriginMiddleware(t *testing.T) {
 }
 
 func TestCrossOriginMiddleware_Preflight(t *testing.T) {
-	handler := CrossOriginMiddleware("https://example.com", "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CrossOriginMiddleware("https://example.com", "")(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called for OPTIONS preflight")
 	}))
 
@@ -280,7 +280,7 @@ func TestCrossOriginMiddleware_Preflight(t *testing.T) {
 }
 
 func TestRequestTimeoutMiddleware(t *testing.T) {
-	handler := RequestTimeoutMiddleware(50 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RequestTimeoutMiddleware(50 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -294,7 +294,7 @@ func TestRequestTimeoutMiddleware(t *testing.T) {
 }
 
 func TestRequestTimeoutMiddleware_Timeout(t *testing.T) {
-	handler := RequestTimeoutMiddleware(10 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RequestTimeoutMiddleware(10 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond) // exceeds timeout
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -402,7 +402,7 @@ func TestIPFilter_InvalidIP(t *testing.T) {
 
 func TestIPFilterMiddleware_Allowed(t *testing.T) {
 	f := NewIPFilter(FilterAllowlist, "127.0.0.1")
-	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -418,7 +418,7 @@ func TestIPFilterMiddleware_Allowed(t *testing.T) {
 
 func TestIPFilterMiddleware_Denied(t *testing.T) {
 	f := NewIPFilter(FilterAllowlist, "10.0.0.1")
-	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := IPFilterMiddleware(f, nil)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called for denied IP")
 	}))
 
@@ -438,7 +438,7 @@ func TestIPFilterMiddleware_CustomExtractor(t *testing.T) {
 		return r.Header.Get("X-Real-IP")
 	}
 
-	handler := IPFilterMiddleware(f, extractor)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := IPFilterMiddleware(f, extractor)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -465,7 +465,7 @@ func TestIPFilterMiddleware_CustomExtractor(t *testing.T) {
 
 // ─── Audit Logging Tests ──────────────────────────────────────────────────
 
-func TestAuditSecurityEvent_Basic(t *testing.T) {
+func TestAuditSecurityEvent_Basic(_ *testing.T) {
 	// Just verify it doesn't panic — slog output goes to stderr
 	AuditSecurityEvent(context.Background(), "test_event",
 		"key1", "value1",
@@ -473,7 +473,7 @@ func TestAuditSecurityEvent_Basic(t *testing.T) {
 	)
 }
 
-func TestAuditSecurityEvent_Dedup(t *testing.T) {
+func TestAuditSecurityEvent_Dedup(_ *testing.T) {
 	// Create a context with audit tracking
 	ctx := AuditContext(context.Background())
 
@@ -504,7 +504,7 @@ func TestAuditMiddleware(t *testing.T) {
 }
 
 func TestAuditMiddleware_SlowResponse(t *testing.T) {
-	handler := AuditMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuditMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(10 * time.Millisecond) // fast enough to not trigger slow_response log
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -665,7 +665,7 @@ func TestGenerateCSRFToken(t *testing.T) {
 }
 
 func TestCSRFMiddleware_SafeMethodsPassThrough(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -681,7 +681,7 @@ func TestCSRFMiddleware_SafeMethodsPassThrough(t *testing.T) {
 }
 
 func TestCSRFMiddleware_SetsCookieOnFirstSafeRequest(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -718,7 +718,7 @@ func TestCSRFMiddleware_SetsCookieOnFirstSafeRequest(t *testing.T) {
 }
 
 func TestCSRFMiddleware_ReusesExistingCookie(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -749,7 +749,7 @@ func TestCSRFMiddleware_ReusesExistingCookie(t *testing.T) {
 }
 
 func TestCSRFMiddleware_ValidPOSTPasses(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -781,7 +781,7 @@ func TestCSRFMiddleware_ValidPOSTPasses(t *testing.T) {
 }
 
 func TestCSRFMiddleware_InvalidPOSTRejected(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called for invalid CSRF")
 	}))
 
@@ -816,7 +816,7 @@ func TestCSRFMiddleware_InvalidPOSTRejected(t *testing.T) {
 }
 
 func TestCSRFMiddleware_DELETEAndPUTAlsoProtected(t *testing.T) {
-	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(nil)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called without valid CSRF")
 	}))
 
@@ -835,7 +835,7 @@ func TestCSRFMiddleware_CustomTokenGenerator(t *testing.T) {
 	customToken := "custom-static-token"
 	genFn := func() string { return customToken }
 
-	handler := CSRFMiddleware(genFn)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CSRFMiddleware(genFn)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -878,7 +878,7 @@ func TestGenerateCSRFToken_Length(t *testing.T) {
 // ─── Content-Type Validation Tests ──────────────────────────────────────────
 
 func TestContentTypeMiddleware_AllowsJSON(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -893,7 +893,7 @@ func TestContentTypeMiddleware_AllowsJSON(t *testing.T) {
 }
 
 func TestContentTypeMiddleware_RejectsPlainText(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -908,7 +908,7 @@ func TestContentTypeMiddleware_RejectsPlainText(t *testing.T) {
 }
 
 func TestContentTypeMiddleware_RejectsEmptyContentType(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -923,7 +923,7 @@ func TestContentTypeMiddleware_RejectsEmptyContentType(t *testing.T) {
 }
 
 func TestContentTypeMiddleware_AllowsGETWithoutContentType(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -938,7 +938,7 @@ func TestContentTypeMiddleware_AllowsGETWithoutContentType(t *testing.T) {
 }
 
 func TestContentTypeMiddleware_AllowsJSONWithCharset(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -957,7 +957,7 @@ func TestContentTypeMiddleware_CustomAllowedTypes(t *testing.T) {
 		"application/json": true,
 		"application/xml":  true,
 	}
-	handler := ContentTypeMiddleware(allowedTypes, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(allowedTypes, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -992,7 +992,7 @@ func TestContentTypeMiddleware_CustomAllowedTypes(t *testing.T) {
 func TestContentTypeMiddleware_CustomMethods(t *testing.T) {
 	allowedTypes := map[string]bool{"application/json": true}
 	methods := map[string]bool{http.MethodPost: true, http.MethodPut: true}
-	handler := ContentTypeMiddleware(allowedTypes, methods)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(allowedTypes, methods)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -1016,7 +1016,7 @@ func TestContentTypeMiddleware_CustomMethods(t *testing.T) {
 }
 
 func TestJSONContentTypeMiddleware_Convenience(t *testing.T) {
-	handler := JSONContentTypeMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := JSONContentTypeMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -1048,7 +1048,7 @@ func TestJSONContentTypeMiddleware_Convenience(t *testing.T) {
 }
 
 func TestContentTypeMiddleware_OptionsPassesThrough(t *testing.T) {
-	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -1063,7 +1063,7 @@ func TestContentTypeMiddleware_OptionsPassesThrough(t *testing.T) {
 
 func TestContentTypeMiddleware_EmptyAllowedTypesDefaultsToJSON(t *testing.T) {
 	// Empty allowedTypes + empty methods → defaults to JSON enforcement on POST/PUT/PATCH/DELETE
-	handler := ContentTypeMiddleware(map[string]bool{}, map[string]bool{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := ContentTypeMiddleware(map[string]bool{}, map[string]bool{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -1089,11 +1089,11 @@ func TestContentTypeMiddleware_EmptyAllowedTypesDefaultsToJSON(t *testing.T) {
 // ─── Bearer Token Authentication Tests ──────────────────────────────────────
 
 func TestBearerAuthMiddleware_NoHeaderPassesThrough(t *testing.T) {
-	validator := func(_ context.Context, token string) (string, error) {
+	validator := func(_ context.Context, _ string) (string, error) {
 		return "", fmt.Errorf("should not be called")
 	}
 	mw := BearerAuthMiddleware(validator)
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -1135,7 +1135,7 @@ func TestBearerAuthMiddleware_InvalidToken(t *testing.T) {
 		"valid-token": "user-1",
 	})
 	mw := BearerAuthMiddleware(validator)
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mw(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called for invalid token")
 	}))
 
@@ -1173,7 +1173,7 @@ func TestBearerAuthMiddleware_MalformedHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if tt.wantStatus != http.StatusOK {
 					t.Error("handler should not be called for malformed header")
 				}
@@ -1331,7 +1331,7 @@ func TestBearerAuthMiddleware_ErrorResponseFormat(t *testing.T) {
 		return "", fmt.Errorf("token expired at 2026-01-01")
 	}
 	mw := BearerAuthMiddleware(validator)
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mw(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -1361,7 +1361,7 @@ func TestBearerAuthMiddleware_ErrorResponseFormat(t *testing.T) {
 func TestBearerAuthMiddleware_EmptyToken(t *testing.T) {
 	validator := StaticTokenValidator(map[string]string{"x": "y"})
 	mw := BearerAuthMiddleware(validator)
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mw(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called for empty token")
 	}))
 

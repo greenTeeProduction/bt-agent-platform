@@ -269,7 +269,7 @@ func registerArc42Nodes() {
 			return 0
 		}
 		dir := arc42OutputDir()
-		os.MkdirAll(dir, 0755)
+		_ = os.MkdirAll(dir, 0755)
 		path := filepath.Join(dir, filename)
 		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
 			bb.Outcome = fmt.Sprintf("save_failed: %v", err)
@@ -282,7 +282,7 @@ func registerArc42Nodes() {
 	RegisterAction("SaveDocument", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		dir := arc42OutputDir()
-		os.MkdirAll(dir, 0755)
+		_ = os.MkdirAll(dir, 0755)
 		path := filepath.Join(dir, "go-bt-evolve-arc42.md")
 		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
 			bb.Outcome = fmt.Sprintf("document_save_failed: %v", err)

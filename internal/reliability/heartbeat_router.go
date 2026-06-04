@@ -251,14 +251,14 @@ func (r *AgentRouter) executorIDForHeartbeat(idx int) string {
 }
 
 // Ensure activeCounts is not empty for the least-connections path.
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
 
-var _ = max // used by weighted_router.go
+var _ = maxInt // used by weighted_router.go
 
 // ─── Modified Execute — heartbeat-aware health check ───────────────────
 

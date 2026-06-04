@@ -120,13 +120,13 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func handleStats(w http.ResponseWriter, r *http.Request) {
+func handleStats(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	uptime := time.Since(startTime).Truncate(time.Second).String()
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"batches_received": receivedBatches.Load(),
 		"spans_received":   receivedSpans.Load(),
 		"uptime":           uptime,
@@ -135,7 +135,7 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }

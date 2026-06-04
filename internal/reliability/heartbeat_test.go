@@ -304,7 +304,7 @@ func TestNodeHeartbeat_ConcurrentAccess(t *testing.T) {
 	// Concurrent registration
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < numNodes; j++ {
 				nodeID := "node-" + string(rune('0'+j%10))
@@ -338,7 +338,7 @@ func TestNodeHeartbeat_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestNodeHeartbeat_ConcurrentDeregister(t *testing.T) {
+func TestNodeHeartbeat_ConcurrentDeregister(_ *testing.T) {
 	hb := NewNodeHeartbeat(5 * time.Second)
 	defer hb.Stop()
 

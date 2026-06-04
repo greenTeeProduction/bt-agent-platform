@@ -1,9 +1,10 @@
 package research
 
 import (
+	"testing"
+
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"testing"
 )
 
 func TestTeslaDeepResearch(t *testing.T) {

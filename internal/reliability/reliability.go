@@ -287,9 +287,9 @@ func (dlq *DeadLetterQueue) save() {
 	if dlq.path == "" {
 		return
 	}
-	os.MkdirAll(filepath.Dir(dlq.path), 0755)
+	_ = os.MkdirAll(filepath.Dir(dlq.path), 0755)
 	data, _ := json.Marshal(dlq.entries)
-	os.WriteFile(dlq.path, data, 0644)
+	_ = os.WriteFile(dlq.path, data, 0644)
 }
 
 func (dlq *DeadLetterQueue) load() {
@@ -297,7 +297,7 @@ func (dlq *DeadLetterQueue) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &dlq.entries)
+	_ = json.Unmarshal(data, &dlq.entries)
 }
 
 // ─── Worker Pool ────────────────────────────────────────────────────────────
@@ -443,9 +443,9 @@ func (tq *TaskQueue) save() {
 	if tq.path == "" {
 		return
 	}
-	os.MkdirAll(filepath.Dir(tq.path), 0755)
+	_ = os.MkdirAll(filepath.Dir(tq.path), 0755)
 	data, _ := json.Marshal(tq.items)
-	os.WriteFile(tq.path, data, 0644)
+	_ = os.WriteFile(tq.path, data, 0644)
 }
 
 func (tq *TaskQueue) load() {
@@ -453,7 +453,7 @@ func (tq *TaskQueue) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &tq.items)
+	_ = json.Unmarshal(data, &tq.items)
 }
 
 // ─── Scheduler Persistence ──────────────────────────────────────────────────
@@ -527,9 +527,9 @@ func (ss *SchedulerState) persist() {
 	if ss.path == "" {
 		return
 	}
-	os.MkdirAll(filepath.Dir(ss.path), 0755)
+	_ = os.MkdirAll(filepath.Dir(ss.path), 0755)
 	data, _ := json.Marshal(ss.jobs)
-	os.WriteFile(ss.path, data, 0644)
+	_ = os.WriteFile(ss.path, data, 0644)
 }
 
 func (ss *SchedulerState) load() {
@@ -537,7 +537,7 @@ func (ss *SchedulerState) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &ss.jobs)
+	_ = json.Unmarshal(data, &ss.jobs)
 }
 
 // ─── Priority ────────────────────────────────────────────────────────────────
@@ -597,7 +597,7 @@ func NewPriorityQueue(path string) *PriorityQueue {
 	// Seed nextID from loaded entries to avoid collisions
 	for _, t := range pq.heap {
 		var id int
-		fmt.Sscanf(t.ID, "pq-%d", &id)
+		_, _ = fmt.Sscanf(t.ID, "pq-%d", &id)
 		if id >= pq.nextID {
 			pq.nextID = id + 1
 		}
@@ -721,9 +721,9 @@ func (pq *PriorityQueue) save() {
 	if pq.path == "" {
 		return
 	}
-	os.MkdirAll(filepath.Dir(pq.path), 0755)
+	_ = os.MkdirAll(filepath.Dir(pq.path), 0755)
 	data, _ := json.Marshal(pq.heap)
-	os.WriteFile(pq.path, data, 0644)
+	_ = os.WriteFile(pq.path, data, 0644)
 }
 
 func (pq *PriorityQueue) load() {
@@ -731,7 +731,7 @@ func (pq *PriorityQueue) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &pq.heap)
+	_ = json.Unmarshal(data, &pq.heap)
 }
 
 // ─── Agent Executor ──────────────────────────────────────────────────────────
@@ -928,7 +928,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 			atomic.AddInt64(&r.activeCounts[start], 1)
 		}
 		activeIdx = start
-		r.next = (start + 1) % max(1, len(executors))
+		r.next = (start + 1) % maxInt(1, len(executors))
 		r.mu.Unlock()
 
 		defer func() {
@@ -940,7 +940,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		}()
 	} else {
 		start = r.next
-		r.next = (r.next + 1) % max(1, len(executors))
+		r.next = (r.next + 1) % maxInt(1, len(executors))
 		r.mu.Unlock()
 	}
 

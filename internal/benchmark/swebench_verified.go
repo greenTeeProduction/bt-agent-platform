@@ -51,7 +51,7 @@ func LoadSWEVerified(path string) ([]SWEVerifiedEntry, error) {
 // Each entry is formatted as "fix: <repo>\n\n<problem_statement>" and evaluated.
 // Resolution criteria: bb.Outcome == "success" && len(output) > 50.
 func EvaluateSWEVerified(tree *evolution.SerializableNode, entries []SWEVerifiedEntry, llmClient llm.LLM) *SWEVerifiedMetrics {
-	var results []SWEVerifiedResult
+	results := make([]SWEVerifiedResult, 0, 32)
 	resolved := 0
 
 	for _, entry := range entries {

@@ -152,7 +152,7 @@ func TestNewClient_TimeoutConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := mockOllamaServer(func(body map[string]any) string {
+			srv := mockOllamaServer(func(_ map[string]any) string {
 				return "ok"
 			})
 			defer srv.Close()
@@ -457,7 +457,7 @@ func TestDeepSeekClient_Generate_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -478,7 +478,7 @@ func TestDeepSeekClient_Generate_Success(t *testing.T) {
 }
 
 func TestDeepSeekClient_Generate_APIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"error": map[string]any{
 				"message": "rate limit exceeded",
@@ -486,7 +486,7 @@ func TestDeepSeekClient_Generate_APIError(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -507,12 +507,12 @@ func TestDeepSeekClient_Generate_APIError(t *testing.T) {
 }
 
 func TestDeepSeekClient_Generate_EmptyChoices(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"choices": []map[string]any{},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -533,9 +533,9 @@ func TestDeepSeekClient_Generate_EmptyChoices(t *testing.T) {
 }
 
 func TestDeepSeekClient_Generate_InvalidJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json at all {{{"))
+		_, _ = w.Write([]byte("not json at all {{{"))
 	}))
 	defer srv.Close()
 
@@ -602,7 +602,7 @@ func TestDeepSeekClient_AnalyzeComplexity(t *testing.T) {
 // =============================================================================
 
 func TestClient_AnalyzeComplexity_High(t *testing.T) {
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "high"
 	})
 	defer srv.Close()
@@ -617,7 +617,7 @@ func TestClient_AnalyzeComplexity_High(t *testing.T) {
 func TestClient_Reflect_FallbackSections(t *testing.T) {
 	// When LLM returns content without proper WENT_WELL/TO_IMPROVE markers,
 	// the fallback values should be used.
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "random response without markers"
 	})
 	defer srv.Close()
@@ -634,7 +634,7 @@ func TestClient_Reflect_FallbackSections(t *testing.T) {
 
 func TestClient_Reflect_OnlyWentWell(t *testing.T) {
 	// When LLM returns only WENT_WELL (no TO_IMPROVE), the second fallback should kick in.
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "WENT_WELL: everything went great"
 	})
 	defer srv.Close()

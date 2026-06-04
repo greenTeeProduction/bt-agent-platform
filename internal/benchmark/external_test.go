@@ -152,7 +152,7 @@ func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
 		name     string
 		accuracy float64
 	}
-	var scores []treeScore
+	scores := make([]treeScore, 0, 16)
 
 	allTrees := map[string]*evolution.SerializableNode{
 		"godev":              evolution.GoDeveloperTree(),

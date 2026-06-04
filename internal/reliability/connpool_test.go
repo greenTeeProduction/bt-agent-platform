@@ -102,7 +102,7 @@ func TestConnPool_HTTPClient(t *testing.T) {
 	}
 
 	// Verify the client uses our transport
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -125,7 +125,7 @@ func TestConnPool_SharedHTTPClient_Concurrency(t *testing.T) {
 		MaxIdleConnsPerHost: 10,
 	})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(10 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -169,10 +169,10 @@ func TestRemoteExecutor_WithConnPool(t *testing.T) {
 	})
 
 	var requestCount int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"agent":"test","task":"test","output":"ok","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"test","task":"test","output":"ok","success":true}`))
 	}))
 	defer server.Close()
 
@@ -206,9 +206,9 @@ func TestRemoteExecutor_SharedPoolAcrossExecutors(t *testing.T) {
 		MaxIdleConnsPerHost: 5,
 	})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"agent":"shared","task":"shared","output":"pooled","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"shared","task":"shared","output":"pooled","success":true}`))
 	}))
 	defer server.Close()
 
@@ -242,9 +242,9 @@ func TestRemoteExecutor_SharedPoolAcrossExecutors(t *testing.T) {
 }
 
 func TestRemoteExecutor_WithoutConnPool_UsesPrivateClient(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"agent":"p","task":"p","output":"private","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"p","task":"p","output":"private","success":true}`))
 	}))
 	defer server.Close()
 
@@ -293,7 +293,7 @@ func TestRemoteExecutor_PooledHealthCheck(t *testing.T) {
 func TestRemoteExecutor_PooledHealthDown(t *testing.T) {
 	pool := NewConnPool(ConnPoolConfig{})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
@@ -321,7 +321,7 @@ func TestConnPool_MaxConnsPerHost(t *testing.T) {
 		MaxIdleConnsPerHost: 1,
 	})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(50 * time.Millisecond) // hold connection open
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -378,15 +378,15 @@ func TestConnPool_Stats_Initial(t *testing.T) {
 func TestConnPool_Stats_AfterRequests(t *testing.T) {
 	pool := NewConnPool(ConnPoolConfig{})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
 	client := pool.HTTPClient()
-	client.Get(server.URL + "/s1")
-	client.Get(server.URL + "/s2")
-	client.Get(server.URL + "/s3")
+	_, _ = client.Get(server.URL + "/s1")
+	_, _ = client.Get(server.URL + "/s2")
+	_, _ = client.Get(server.URL + "/s3")
 
 	stats := pool.Stats()
 	if stats.Created == 0 {
@@ -399,10 +399,10 @@ func TestConnPool_Stats_AfterRequests(t *testing.T) {
 
 // ─── Close / CloseIdleConnections ───────────────────────────────────────────
 
-func TestConnPool_CloseIdleConnections(t *testing.T) {
+func TestConnPool_CloseIdleConnections(_ *testing.T) {
 	pool := NewConnPool(ConnPoolConfig{})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -417,7 +417,7 @@ func TestConnPool_CloseIdleConnections(t *testing.T) {
 	pool.CloseIdleConnections()
 }
 
-func TestConnPool_Close(t *testing.T) {
+func TestConnPool_Close(_ *testing.T) {
 	pool := NewConnPool(ConnPoolConfig{})
 	pool.Close() // should not panic
 }
@@ -470,7 +470,7 @@ func TestAgentRouter_WithSharedPool(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case "/api/agents/execute":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"agent":"pooled","task":"task","output":"router-pooled","success":true,"quality_score":0.95}`))
+			_, _ = w.Write([]byte(`{"agent":"pooled","task":"task","output":"router-pooled","success":true,"quality_score":0.95}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -514,7 +514,7 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 		case "/api/agents/execute":
 			time.Sleep(20 * time.Millisecond) // simulate work
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"agent":"lc","task":"lc","output":"ok","success":true,"quality_score":0.9}`))
+			_, _ = w.Write([]byte(`{"agent":"lc","task":"lc","output":"ok","success":true,"quality_score":0.9}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -553,9 +553,9 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 
 func TestRemoteExecutor_BackwardCompat_NilPool(t *testing.T) {
 	// Existing code that doesn't set Pool should continue to work
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"agent":"bc","task":"bc","output":"backward","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"bc","task":"bc","output":"backward","success":true}`))
 	}))
 	defer server.Close()
 

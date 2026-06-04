@@ -153,11 +153,11 @@ func init() {
 
 	// Domain-specific aliases (implementations in tree.go actionForName/conditionForName)
 	RegisterCondition("ValidateInput", func(b *Blackboard) bool { return b.Task != "" })
-	RegisterCondition("CheckPrerequisites", func(b *Blackboard) bool { return true })
+	RegisterCondition("CheckPrerequisites", func(_ *Blackboard) bool { return true })
 	RegisterCondition("CheckKnowledgeGap", func(b *Blackboard) bool { return b.KgResults == "" })
 	RegisterCondition("CheckCache", func(b *Blackboard) bool { return b.CachedResult != "" })
-	RegisterCondition("CheckConfidence", func(b *Blackboard) bool { return true })
-	RegisterAction("SetupDefaultTools", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterCondition("CheckConfidence", func(_ *Blackboard) bool { return true })
+	RegisterAction("SetupDefaultTools", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	RegisterAction("QueryKG", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.KgResults = fmt.Sprintf("KG: %s", ctx.Blackboard.Task)
 		return 1
@@ -167,8 +167,8 @@ func init() {
 		bb.Task = fmt.Sprintf("%s [KG: %s]", bb.Task, bb.KgResults)
 		return 1
 	})
-	RegisterAction("UseCachedResult", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
-	RegisterAction("EscalateToDeepSeek", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("UseCachedResult", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("EscalateToDeepSeek", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	RegisterAction("SelfCorrect", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.LLM != nil {
@@ -429,7 +429,7 @@ func reflectOnOutcomeAction(ctx *btcore.BTContext[Blackboard]) int {
 	return 1
 }
 
-func updateBehaviorTreeAction(ctx *btcore.BTContext[Blackboard]) int {
+func updateBehaviorTreeAction(_ *btcore.BTContext[Blackboard]) int {
 	return 1
 }
 

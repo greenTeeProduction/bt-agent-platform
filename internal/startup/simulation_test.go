@@ -17,21 +17,21 @@ func testLLM() llm.LLM {
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *mockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *mockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
 func (m *mockLLM) Generate(prompt string) (string, error) {
 	return fmt.Sprintf("Mock response for: %.50s...", prompt), nil
 }
-func (m *mockLLM) AnalyzeComplexity(task string) string { return "medium" }
-func (m *mockLLM) GeneratePlan(task, complexity string) string {
+func (m *mockLLM) AnalyzeComplexity(_ string) string { return "medium" }
+func (m *mockLLM) GeneratePlan(_, _ string) string {
 	return "Execute the plan step by step"
 }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *mockLLM) Reflect(_, _, _ string) (string, string) {
 	return "completed task", "nothing to improve"
 }
 

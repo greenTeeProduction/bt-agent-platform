@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -67,7 +68,7 @@ func TestIsKnownConditionName_Unknown(t *testing.T) {
 
 func TestRegisterAction_DuplicatePanics(t *testing.T) {
 	// Register an action, then register the same name again — must panic (lines 34-36)
-	RegisterAction("__test_dup_action__", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("__test_dup_action__", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -79,11 +80,11 @@ func TestRegisterAction_DuplicatePanics(t *testing.T) {
 		regMu.Unlock()
 	}()
 
-	RegisterAction("__test_dup_action__", func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("__test_dup_action__", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 }
 
 func TestRegisterCondition_DuplicatePanics(t *testing.T) {
-	RegisterCondition("__test_dup_cond__", func(b *Blackboard) bool { return true })
+	RegisterCondition("__test_dup_cond__", func(_ *Blackboard) bool { return true })
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -94,7 +95,7 @@ func TestRegisterCondition_DuplicatePanics(t *testing.T) {
 		regMu.Unlock()
 	}()
 
-	RegisterCondition("__test_dup_cond__", func(b *Blackboard) bool { return true })
+	RegisterCondition("__test_dup_cond__", func(_ *Blackboard) bool { return true })
 }
 
 // ─── buildNode — composite node types (lines 150-158) ─────────────────────
@@ -111,7 +112,7 @@ func TestBuildNode_UtilitySelector(t *testing.T) {
 		t.Fatal("BuildUtilitySelector returned nil command")
 	}
 	// Execute it once to verify it works
-	ctx := btcore.NewBTContext(nil, bb)
+	ctx := btcore.NewBTContext(context.TODO(), bb)
 	status := cmd.Run(ctx)
 	if status != 1 && status != -1 && status != 0 {
 		t.Errorf("unexpected status %d", status)
@@ -128,7 +129,7 @@ func TestBuildNode_PlannerNode(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("BuildPlannerNode returned nil command")
 	}
-	ctx := btcore.NewBTContext(nil, bb)
+	ctx := btcore.NewBTContext(context.TODO(), bb)
 	status := cmd.Run(ctx)
 	if status != 1 && status != -1 && status != 0 {
 		t.Errorf("unexpected status %d", status)
@@ -145,7 +146,7 @@ func TestBuildNode_AbortOnEvent(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("BuildEventDrivenAbort returned nil command")
 	}
-	ctx := btcore.NewBTContext(nil, bb)
+	ctx := btcore.NewBTContext(context.TODO(), bb)
 	status := cmd.Run(ctx)
 	if status != 1 && status != -1 && status != 0 {
 		t.Errorf("unexpected status %d", status)
@@ -162,7 +163,7 @@ func TestBuildNode_ReactiveParallel(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("BuildReactiveParallel returned nil command")
 	}
-	ctx := btcore.NewBTContext(nil, bb)
+	ctx := btcore.NewBTContext(context.TODO(), bb)
 	status := cmd.Run(ctx)
 	if status != 1 && status != -1 && status != 0 {
 		t.Errorf("unexpected status %d", status)

@@ -129,7 +129,7 @@ func (c *Comparator) Compare(current []BenchmarkResult) []ComparisonResult {
 		currentMap[r.Name] = r
 	}
 
-	var results []ComparisonResult
+	results := make([]ComparisonResult, 0, len(c.store.Baseline)+len(current))
 
 	// Check existing baselines
 	for name, baseline := range c.store.Baseline {
@@ -242,11 +242,12 @@ func FormatReport(results []ComparisonResult) string {
 		sb.WriteString("\n")
 	}
 
-	if criticals > 0 {
+	switch {
+	case criticals > 0:
 		sb.WriteString("⚠ ACTION REQUIRED: Critical regressions detected. Investigate before merging.\n")
-	} else if warnings > 0 {
+	case warnings > 0:
 		sb.WriteString("ℹ Review warnings. If acceptable, update baselines.\n")
-	} else {
+	default:
 		sb.WriteString("✅ All benchmarks within acceptable thresholds.\n")
 	}
 
@@ -255,14 +256,14 @@ func FormatReport(results []ComparisonResult) string {
 
 // pctChange computes the percent change from old to new.
 // Positive means new is slower (regression). Negative means improvement.
-func pctChange(old, new float64) float64 {
+func pctChange(old, newVal float64) float64 {
 	if old == 0 {
-		if new == 0 {
+		if newVal == 0 {
 			return 0
 		}
 		return 100.0 // new benchmark, treat as 100% change
 	}
-	return ((new - old) / old) * 100.0
+	return ((newVal - old) / old) * 100.0
 }
 
 // ParseBenchOutput parses `go test -bench` output lines into BenchmarkResults.
@@ -274,7 +275,7 @@ func ParseBenchOutput(output string) []BenchmarkResult {
 	// The \S+ in the first capture includes the -N GOMAXPROCS suffix; we strip it below.
 	re := regexp.MustCompile(`^(Benchmark\S+?)(?:-\d+)?\s+(\d+)\s+([\d.]+)\s+ns/op(?:\s+([\d.]+)\s+B/op)?(?:\s+(\d+)\s+allocs/op)?`)
 	lines := strings.Split(output, "\n")
-	var results []BenchmarkResult
+	results := make([]BenchmarkResult, 0, 32)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

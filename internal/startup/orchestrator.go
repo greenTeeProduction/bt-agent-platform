@@ -110,7 +110,7 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 
 		// Marketing spend reduces CAC efficiency slightly but grows top of funnel
 		cacImprovement := 0.95 + float64(state.MarketingStaff)*0.01 // 0.95-0.99 range
-		state.CAC = state.CAC * cacImprovement
+		state.CAC *= cacImprovement
 	}
 
 	// 3. Run SalesTree
@@ -127,7 +127,7 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 		state.ARR = state.MRR * 12
 
 		// Burn rate increases slightly as team produces more
-		state.BurnRate = state.BurnRate * 1.01
+		state.BurnRate *= 1.01
 		state.CashInBank -= state.BurnRate / 4.0 // weekly burn
 		state.Runway = int(state.CashInBank / state.BurnRate)
 		if state.Runway < 0 {
@@ -234,12 +234,12 @@ func (o *CompanyOrchestrator) Summary() string {
 
 // --- helpers ---
 
-func clamp(val, min, max float64) float64 {
-	if val < min {
-		return min
+func clamp(val, minVal, maxVal float64) float64 {
+	if val < minVal {
+		return minVal
 	}
-	if val > max {
-		return max
+	if val > maxVal {
+		return maxVal
 	}
 	return val
 }

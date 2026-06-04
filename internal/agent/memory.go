@@ -126,7 +126,7 @@ func (ms *MemoryStore) Query(category, priority string, limit int) []MemoryEntry
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	var results []MemoryEntry
+	results := make([]MemoryEntry, 0, 32)
 	for _, e := range ms.entries {
 		if category != "" && !strings.HasPrefix(e.Category, category) {
 			continue
@@ -215,7 +215,7 @@ func (ms *MemoryStore) PreviousRunContext(history *History, agentName string, n 
 		return ""
 	}
 
-	var lines []string
+	lines := make([]string, 0, 16)
 	lines = append(lines, fmt.Sprintf("PREVIOUS RUNS — Last %d successful task outputs:", len(successes)))
 	for i, s := range successes {
 		summary := summarizeOutput(s.Output, 200)
@@ -251,7 +251,7 @@ func (ms *MemoryStore) Delete(key string) bool {
 		return false
 	}
 	delete(ms.entries, key)
-	ms.save() // best-effort
+	_ = ms.save() // best-effort
 	return true
 }
 
@@ -300,7 +300,7 @@ func (ms *MemoryStore) evictLRU() {
 
 // queryLocked is like Query but without locking (caller must hold lock).
 func (ms *MemoryStore) queryLocked(category, priority string, limit int) []MemoryEntry {
-	var results []MemoryEntry
+	results := make([]MemoryEntry, 0, 32)
 	for _, e := range ms.entries {
 		if category != "" && e.Category != category {
 			continue

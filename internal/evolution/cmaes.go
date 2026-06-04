@@ -485,8 +485,8 @@ func multiplyCholesky(C [][]float64, x []float64) []float64 {
 
 // cholesky computes the lower triangular Cholesky decomposition of positive-definite C.
 // Returns L such that C = L * L^T.
-func cholesky(C [][]float64) [][]float64 {
-	n := len(C)
+func cholesky(cov [][]float64) [][]float64 {
+	n := len(cov)
 	L := make([][]float64, n)
 	for i := 0; i < n; i++ {
 		L[i] = make([]float64, n)
@@ -496,9 +496,9 @@ func cholesky(C [][]float64) [][]float64 {
 				s += L[i][k] * L[j][k]
 			}
 			if i == j {
-				L[i][j] = math.Sqrt(C[i][i] - s)
+				L[i][j] = math.Sqrt(cov[i][i] - s)
 			} else {
-				L[i][j] = (C[i][j] - s) / L[j][j]
+				L[i][j] = (cov[i][j] - s) / L[j][j]
 			}
 		}
 	}
@@ -507,9 +507,9 @@ func cholesky(C [][]float64) [][]float64 {
 
 // invertCholesky computes the inverse of the lower Cholesky factor L.
 // Used for C^(-1/2) = L^(-T) * L^(-1), but we compute L^(-1) directly.
-func invertCholesky(C [][]float64) [][]float64 {
-	n := len(C)
-	L := cholesky(C)
+func invertCholesky(cov [][]float64) [][]float64 {
+	n := len(cov)
+	L := cholesky(cov)
 
 	// Forward substitution to invert L
 	Linv := make([][]float64, n)
@@ -525,9 +525,9 @@ func invertCholesky(C [][]float64) [][]float64 {
 		}
 	}
 
-	// Compute L^(-T) * L^(-1) = (L*L^T)^(-1) = C^(-1)
-	// But we need C^(-1/2) = L^(-T), so just transpose L^(-1)
-	// Actually for C^(-1/2) * x we want L^(-T) * x, so return Linv^T
+	// Compute L^(-T) * L^(-1) = (L*L^T)^(-1) = cov^(-1)
+	// But we need cov^(-1/2) = L^(-T), so just transpose L^(-1)
+	// Actually for cov^(-1/2) * x we want L^(-T) * x, so return Linv^T
 	result := make([][]float64, n)
 	for i := 0; i < n; i++ {
 		result[i] = make([]float64, n)

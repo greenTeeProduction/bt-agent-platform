@@ -766,20 +766,14 @@ func TestMockLLM_SatisfiesInterface(t *testing.T) {
 func TestMockModel_SatisfiesInterface(t *testing.T) {
 	var m llms.Model = &mockModel{}
 
-	result, err := m.Call(context.Background(), "test")
-	if err != nil {
-		t.Fatalf("Call: %v", err)
-	}
-	if result != "Final Answer: test passed" {
-		t.Errorf("Call: %q", result)
-	}
-
-	resp, err := m.GenerateContent(context.Background(), []llms.MessageContent{}, nil...)
+	resp, err := m.GenerateContent(context.Background(), []llms.MessageContent{
+		{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextContent{Text: "test"}}},
+	})
 	if err != nil {
 		t.Fatalf("GenerateContent: %v", err)
 	}
-	if resp == nil {
-		t.Fatal("GenerateContent returned nil")
+	if len(resp.Choices) == 0 || resp.Choices[0].Content != "test" {
+		t.Errorf("GenerateContent: %+v", resp)
 	}
 }
 

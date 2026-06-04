@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
@@ -32,13 +33,13 @@ func main() {
 	engine.RunTask(bb, cmd)
 	fmt.Printf("Stockfish: %s\n", bb.Outcome)
 	if bb.Result != "" {
-		fmt.Println(bb.Result[:min(200, len(bb.Result))])
+		fmt.Println(bb.Result[:minInt(200, len(bb.Result))])
 	}
 
 	fmt.Println("\nEvolution complete.")
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

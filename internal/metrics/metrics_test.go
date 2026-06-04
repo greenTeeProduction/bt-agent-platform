@@ -231,9 +231,9 @@ func TestLabelString(t *testing.T) {
 // ─── MetricsMiddleware Tests ─────────────────────────────────────────────────
 
 func TestMetricsMiddleware_RecordsRequest(t *testing.T) {
-	handler := MetricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := MetricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/health", nil)
@@ -262,7 +262,7 @@ func TestMetricsMiddleware_RecordsRequest(t *testing.T) {
 }
 
 func TestMetricsMiddleware_RecordsErrors(t *testing.T) {
-	handler := MetricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := MetricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 

@@ -149,7 +149,7 @@ func labelKey(labels map[string]string) string {
 		keys = append(keys, k)
 	}
 	sortStrings(keys)
-	var b []byte
+	b := make([]byte, 0, 256)
 	for i, k := range keys {
 		if i > 0 {
 			b = append(b, ',')
@@ -368,7 +368,7 @@ func (rw *responseWriter) Flush() {
 
 // PrometheusHandler returns an http.Handler that serves metrics in Prometheus text format.
 func PrometheusHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		writePrometheusMetrics(w)
 	})
@@ -540,7 +540,7 @@ func labelString(labels map[string]string) string {
 		keys = append(keys, k)
 	}
 	sortStrings(keys)
-	var b []byte
+	b := make([]byte, 0, 256)
 	for i, k := range keys {
 		if i > 0 {
 			b = append(b, ',')

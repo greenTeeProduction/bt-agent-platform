@@ -81,8 +81,8 @@ const (
 	globalErrorSpikeThreshold = 10 // raw count threshold in evaluation window
 
 	// No request / no activity thresholds.
-	noRequestDuration        = 10 * time.Minute
-	lowActivitySuppressHours = 1 * time.Hour
+	noRequestDuration      = 10 * time.Minute
+	lowActivitySuppressDur = 1 * time.Hour
 )
 
 // ─── Alert Evaluation ───────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 	return alerts
 }
 
-func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
+func evaluateGlobalAlerts(metrics MetricsJSON, _ time.Time) []Alert {
 	var alerts []Alert
 
 	// No platform activity: no requests AND no agents have recent activity

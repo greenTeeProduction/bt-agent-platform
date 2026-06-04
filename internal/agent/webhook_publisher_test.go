@@ -31,7 +31,7 @@ func TestNewWebhookPublisher(t *testing.T) {
 	}
 }
 
-func TestWebhookPublisher_AttachClose(t *testing.T) {
+func TestWebhookPublisher_AttachClose(_ *testing.T) {
 	bus := InitAgentBus(100)
 	pub := NewWebhookPublisher("http://localhost:8644", DefaultWebhookSecrets())
 	pub.Attach(bus)
@@ -65,7 +65,7 @@ func TestComputeHMAC_DifferentKeys(t *testing.T) {
 	}
 }
 
-func TestWebhookPublisher_HandleUnknownEvent(t *testing.T) {
+func TestWebhookPublisher_HandleUnknownEvent(_ *testing.T) {
 	bus := InitAgentBus(100)
 	pub := NewWebhookPublisher("http://localhost:8644", DefaultWebhookSecrets())
 	pub.Attach(bus)
@@ -78,7 +78,7 @@ func TestWebhookPublisher_HandleUnknownEvent(t *testing.T) {
 	})
 }
 
-func TestWebhookPublisher_HandleEventNoSecret(t *testing.T) {
+func TestWebhookPublisher_HandleEventNoSecret(_ *testing.T) {
 	bus := InitAgentBus(100)
 	pub := NewWebhookPublisher("http://localhost:8644", WebhookSecrets{})
 	pub.Attach(bus)
@@ -91,7 +91,7 @@ func TestWebhookPublisher_HandleEventNoSecret(t *testing.T) {
 	})
 }
 
-func TestWebhookPublisher_HandleEventHTTPError(t *testing.T) {
+func TestWebhookPublisher_HandleEventHTTPError(_ *testing.T) {
 	// Server that refuses connections (wrong port, no listener)
 	bus := InitAgentBus(100)
 	pub := NewWebhookPublisher("http://localhost:18999", DefaultWebhookSecrets())
@@ -116,9 +116,9 @@ func TestWebhookPublisher_HandleEventHTTPError(t *testing.T) {
 	}
 }
 
-func TestWebhookPublisher_HandleEventHTTP4xx(t *testing.T) {
+func TestWebhookPublisher_HandleEventHTTP4xx(_ *testing.T) {
 	// Create a test server that returns 404
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer ts.Close()
@@ -163,8 +163,8 @@ func TestWebhookPublisher_HandleEventSuccess(t *testing.T) {
 	})
 }
 
-func TestWebhookPublisher_HandleServiceDown(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestWebhookPublisher_HandleServiceDown(_ *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -180,8 +180,8 @@ func TestWebhookPublisher_HandleServiceDown(t *testing.T) {
 	})
 }
 
-func TestWebhookPublisher_HandleHealthAlert(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestWebhookPublisher_HandleHealthAlert(_ *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -197,8 +197,8 @@ func TestWebhookPublisher_HandleHealthAlert(t *testing.T) {
 	})
 }
 
-func TestWebhookPublisher_HandleEvolutionStep(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestWebhookPublisher_HandleEvolutionStep(_ *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -216,7 +216,7 @@ func TestWebhookPublisher_HandleEvolutionStep(t *testing.T) {
 
 // ─── loop() edge cases ───
 
-func TestWebhookPublisher_LoopStopsOnChannelClose(t *testing.T) {
+func TestWebhookPublisher_LoopStopsOnChannelClose(_ *testing.T) {
 	// Create a publisher with a custom event source
 	bus := InitAgentBus(100)
 	pub := NewWebhookPublisher("http://localhost:8644", DefaultWebhookSecrets())

@@ -133,7 +133,7 @@ func addUniqueError(info *evolution.NodeValidationInfo, msg string) {
 // computeTreeMetrics is kept for existing tests and callers. It returns depth
 // as edge-depth (a leaf is 0), plus aggregate node count, max parallel width,
 // max retries, max timeout, and the first side-effect class on this subtree.
-func computeTreeMetrics(node *evolution.SerializableNode, info *evolution.NodeValidationInfo) (maxDepth, nodeCount, parallelWidth, maxRetries int, timeoutMs int64, sideEffectClass string) {
+func computeTreeMetrics(node *evolution.SerializableNode, _ *evolution.NodeValidationInfo) (maxDepth, nodeCount, parallelWidth, maxRetries int, timeoutMs int64, sideEffectClass string) {
 	if node == nil {
 		return 0, 0, 0, 0, 0, ""
 	}

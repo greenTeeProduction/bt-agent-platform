@@ -253,7 +253,7 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 
 // ─── Helpers ───
 
-func (f *Factory) selectParents(category, task string) []string {
+func (f *Factory) selectParents(category, _ string) []string {
 	// Prefer parents from same category
 	var candidates []string
 	for id, tmpl := range f.Templates {

@@ -270,7 +270,7 @@ func TestBlackboard_AllFields(t *testing.T) {
 func TestTree_SerializeRoundtrip(t *testing.T) {
 	original := evolution.DefaultTree()
 	store, _ := evolution.NewTreeStore("/tmp/test-trees")
-	store.Save(original)
+	_ = store.Save(original)
 	loaded, err := store.Load()
 	if err != nil || loaded == nil || loaded.Name != original.Name {
 		t.Error("serialize roundtrip failed")

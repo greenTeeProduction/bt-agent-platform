@@ -113,7 +113,7 @@ func TestCascadeEvaluator_BasicFlow(t *testing.T) {
 		}
 		return 70
 	}
-	fullFn := func(tree *evolution.SerializableNode) float64 {
+	fullFn := func(_ *evolution.SerializableNode) float64 {
 		return 85
 	}
 
@@ -159,10 +159,10 @@ func TestCascadeEvaluator_QuickFilter(t *testing.T) {
 	quickFn := func(tree *evolution.SerializableNode) float64 {
 		return StructuralQuickEval(tree)
 	}
-	benchFn := func(tree *evolution.SerializableNode) float64 {
+	benchFn := func(_ *evolution.SerializableNode) float64 {
 		return 0 // should never be called for rejected
 	}
-	fullFn := func(tree *evolution.SerializableNode) float64 {
+	fullFn := func(_ *evolution.SerializableNode) float64 {
 		return 0
 	}
 
@@ -194,13 +194,13 @@ func TestCascadeEvaluator_CapacityLimits(t *testing.T) {
 		MaxFullCandidates:  1,
 	}
 
-	quickFn := func(tree *evolution.SerializableNode) float64 {
+	quickFn := func(_ *evolution.SerializableNode) float64 {
 		return 50 // everyone passes Quick
 	}
-	benchFn := func(tree *evolution.SerializableNode) float64 {
+	benchFn := func(_ *evolution.SerializableNode) float64 {
 		return 60 // everyone passes Bench
 	}
-	fullFn := func(tree *evolution.SerializableNode) float64 {
+	fullFn := func(_ *evolution.SerializableNode) float64 {
 		return 90
 	}
 

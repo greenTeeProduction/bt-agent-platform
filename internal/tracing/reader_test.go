@@ -217,7 +217,7 @@ func TestTraceReader_ReadRecent(t *testing.T) {
 			" trace-1 span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 
@@ -247,7 +247,7 @@ func TestTraceReader_ReadRecent_MoreThanAvailable(t *testing.T) {
 	lines := []string{
 		"TRACE " + baseTime.Format(time.RFC3339Nano) + " trace-1 span-1 op=test duration=1ms",
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	entries, err := r.ReadRecent(50)
@@ -282,7 +282,7 @@ func TestTraceReader_ReadRecent_FiltersInvalidLines(t *testing.T) {
 		"another garbage",
 		"TRACE " + baseTime.Add(time.Second).Format(time.RFC3339Nano) + " trace-1 span-2 op=valid2 duration=2ms",
 	}, "\n") + "\n"
-	os.WriteFile(logPath, []byte(content), 0644)
+	_ = os.WriteFile(logPath, []byte(content), 0644)
 
 	r := NewTraceReader(logPath)
 	entries, err := r.ReadRecent(50)
@@ -307,7 +307,7 @@ func TestTraceReader_ReadSince(t *testing.T) {
 			" trace-1 span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 
@@ -339,7 +339,7 @@ func TestTraceReader_ReadSince_Limit(t *testing.T) {
 			" trace-1 span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	entries, err := r.ReadSince(baseTime, 3) // limit=3
@@ -364,7 +364,7 @@ func TestTraceReader_TotalLines(t *testing.T) {
 			" trace-1 span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	count, err := r.TotalLines()
@@ -392,7 +392,7 @@ func TestTraceReader_SizeBytes(t *testing.T) {
 	logPath := filepath.Join(dir, "traces.log")
 
 	content := "TRACE 2026-05-30T10:00:00.000000001Z trace-1 span-1 op=test duration=1ms\n"
-	os.WriteFile(logPath, []byte(content), 0644)
+	_ = os.WriteFile(logPath, []byte(content), 0644)
 
 	r := NewTraceReader(logPath)
 	size, err := r.SizeBytes()
@@ -476,12 +476,12 @@ func BenchmarkTraceReader_ReadRecent(b *testing.B) {
 			" trace-1 span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 	r := NewTraceReader(logPath)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r.ReadRecent(50)
+		_, _ = r.ReadRecent(50)
 	}
 }
 
@@ -718,7 +718,7 @@ func TestTraceReader_GetTrace(t *testing.T) {
 		"TRACE " + baseTime.Add(10*time.Millisecond).Format(time.RFC3339Nano) + " trace-a span-child parent=span-root op=RunTask:test duration=200ms",
 		"TRACE " + baseTime.Format(time.RFC3339Nano) + " trace-b span-1 op=mcp:bt_get_tree duration=50ms",
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 
@@ -751,7 +751,7 @@ func TestTraceReader_GetTrace_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "traces.log")
 
-	os.WriteFile(logPath, []byte("TRACE 2026-06-01T10:00:00Z trace-1 span-1 op=test duration=1ms\n"), 0644)
+	_ = os.WriteFile(logPath, []byte("TRACE 2026-06-01T10:00:00Z trace-1 span-1 op=test duration=1ms\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	trace, err := r.GetTrace("nonexistent")
@@ -785,7 +785,7 @@ func TestTraceReader_ListTraceIDs(t *testing.T) {
 		"TRACE " + baseTime.Add(2*time.Second).Format(time.RFC3339Nano) + " trace-2 span-3 op=other duration=1ms",
 		"TRACE " + baseTime.Add(3*time.Second).Format(time.RFC3339Nano) + " trace-3 span-4 op=third duration=1ms",
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	traces, err := r.ListTraceIDs(10)
@@ -824,7 +824,7 @@ func TestTraceReader_ListTraceIDs_Limit(t *testing.T) {
 			" span-"+formatInt(i+1)+
 			" op=test duration=1ms")
 	}
-	os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	_ = os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	traces, err := r.ListTraceIDs(3)
@@ -852,7 +852,7 @@ func TestTraceReader_ListTraceIDs_DefaultLimit(t *testing.T) {
 	logPath := filepath.Join(dir, "traces.log")
 
 	baseTime := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
-	os.WriteFile(logPath, []byte("TRACE "+baseTime.Format(time.RFC3339Nano)+" trace-1 span-1 op=test duration=1ms\n"), 0644)
+	_ = os.WriteFile(logPath, []byte("TRACE "+baseTime.Format(time.RFC3339Nano)+" trace-1 span-1 op=test duration=1ms\n"), 0644)
 
 	r := NewTraceReader(logPath)
 	// limit=0 should use default (20)

@@ -110,7 +110,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_get_tree", "Get the current behavior tree definition",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, err := deps.treeStore.Load()
 			if err != nil || tree == nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: `{"error": "no tree found"}`}}}
@@ -121,7 +121,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_get_reflections", "Get all reflection records",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			records, err := deps.refStore.LoadAll()
 			if err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
@@ -133,7 +133,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_evolve", "Run tree evolution (adapt on failures)",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, err := deps.treeStore.Load()
 			if err != nil || tree == nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: `{"error": "no tree to evolve"}`}}}
@@ -159,7 +159,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_reset", "Reset the behavior tree to the default",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree := evolution.DefaultTree()
 			if err := deps.treeStore.Save(tree); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"reset": false, "error": %q}`, err.Error())}}}
@@ -169,7 +169,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_get_fitness", "Get tree fitness stats",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, _ := deps.treeStore.Load()
 			records, _ := deps.refStore.LoadAll()
 			failures := deps.refStore.CountFailures()
@@ -190,7 +190,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				SkillPath string `json:"skill_path"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			agent, err := deps.agentFactory.CreateFromSkillDir(params.SkillPath)
 			if err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
@@ -204,9 +204,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_use_go_tree", "Switch to Go developer tree",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree := evolution.GoDeveloperTree()
-			deps.treeStore.Save(tree)
+			_ = deps.treeStore.Save(tree)
 			newBt := engine.BuildTree(tree, deps.bb)
 			*deps.bt = newBt
 			result := map[string]interface{}{"switched": true, "tree": "GoDeveloperTree", "node_count": evolution.CountNodes(tree), "strategies": 5}
@@ -221,7 +221,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Agent string `json:"agent"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			allTrees := finance.AllFinanceTrees()
 			tree, ok := allTrees[params.Agent]
 			if !ok {
@@ -231,7 +231,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				}
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown agent", "available": %q}`, names)}}}
 			}
-			deps.treeStore.Save(tree)
+			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]interface{}{"switched": true, "agent": params.Agent, "description": finance.AgentDescriptions[params.Agent], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -240,7 +240,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_list_finance_trees", "List available Anthropic finance agent trees",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			type agent struct {
 				Name        string `json:"name"`
 				Description string `json:"description"`
@@ -262,7 +262,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Variant string `json:"variant"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Variant == "" {
 				params.Variant = "deep_research"
 			}
@@ -271,7 +271,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			if !ok {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: `{"error": "unknown variant, use: deep_research, quick_research"}`}}}
 			}
-			deps.treeStore.Save(tree)
+			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]interface{}{"switched": true, "variant": params.Variant, "description": research.Descriptions[params.Variant], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -285,7 +285,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Tree string `json:"tree"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			allTrees := domains.AllDomainTrees()
 			tree, ok := allTrees[params.Tree]
 			if !ok {
@@ -295,7 +295,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				}
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown tree", "available": %q}`, names)}}}
 			}
-			deps.treeStore.Save(tree)
+			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]interface{}{"switched": true, "tree": params.Tree, "description": domains.Descriptions[params.Tree], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -315,7 +315,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Mode    string `json:"mode"`
 				Company string `json:"company"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			company := startup.NewDefaultCompany()
 			if params.Company != "" {
 				company.Name = params.Company
@@ -341,7 +341,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_startup_summary", "Get current state summary of the simulated startup company",
 		nil, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			company := startup.NewDefaultCompany()
 			summary := fmt.Sprintf("Company: %s | Stage: %s | Round: %s | Team: %d | MRR: $%.0f | Users: %d | Runway: %dmo | Cash: $%.0f",
 				company.Name, company.ProductStage, company.FundingRound,
@@ -363,13 +363,13 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Topic string `json:"topic"`
 				Name  string `json:"name"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Name == "" {
 				params.Name = "AI Strategy Council"
 			}
 			tt := thinktank.NewThinkTank(params.Name, params.Topic)
 			orch := &thinktank.ThinkTankOrchestrator{Tank: tt, LLM: deps.llmClient}
-			orch.RunFullAnalysis(params.Topic)
+			_ = orch.RunFullAnalysis(params.Topic)
 			var scenarios []map[string]interface{}
 			if tt.FinalReport != nil {
 				for _, s := range tt.FinalReport.Scenarios {
@@ -407,7 +407,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Tree string `json:"tree"`
 				Task string `json:"task"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			tree := resolveTree(params.Tree)
 			if tree == nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error":"unknown tree: %s"}`, params.Tree)}}}
@@ -488,7 +488,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_kg_summary", "Get knowledge graph summary: tree counts by category, total edges",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			summary := deps.kg.Summary()
 			categories := make(map[string]int)
 			for _, t := range deps.kg.Trees {
@@ -523,7 +523,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_kg_analytics", "Compute cross-tree analytics: centrality, tool contention, coverage gaps, bottlenecks, and suggested actions",
 		map[string]mcp.Property{}, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			a := deps.kg.ComputeAnalytics()
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: a.FormatAnalytics()}}}
 		})
@@ -557,7 +557,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Population  int    `json:"population"`
 				Generations int    `json:"generations"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Population <= 0 {
 				params.Population = 20
 			}
@@ -615,7 +615,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Tree string `json:"tree"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			t := resolveTree(params.Tree)
 			if t == nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
@@ -650,7 +650,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				ParentA string `json:"parent_a"`
 				ParentB string `json:"parent_b"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			f := knowledge.NewFactory(deps.kg)
 			var tree *evolution.SerializableNode
 			var treeID string
@@ -676,7 +676,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Topic string `json:"topic"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			data, _ := json.Marshal(map[string]interface{}{"topic": params.Topic, "status": "pipeline ready — use bt_thinktank_analyze + bt_startup_simulate"})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -692,7 +692,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				TaskID string `json:"task_id"`
 				Action string `json:"action"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			status := "approved"
 			if params.Action == "reject" {
 				status = "rejected"
@@ -720,7 +720,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Schedule     string `json:"schedule"`
 				FromTemplate string `json:"from_template"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Schedule == "" {
 				params.Schedule = "on_demand"
 			}
@@ -744,7 +744,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_agent_list", "List all installed agents with their status and stats",
 		nil, nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			var result []map[string]interface{}
 			for _, inst := range deps.agentReg.List() {
 				stats := deps.agentHist.Stats(inst.Definition.Name)
@@ -773,7 +773,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Agent string `json:"agent"`
 				Task  string `json:"task"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			bb := &engine.Blackboard{Task: params.Task, LLM: deps.llmClient}
 
 			// Resolve through agent registry first — agent names are not tree IDs.
@@ -795,7 +795,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			_ = engine.RunTask(bb, bt)
 			outcome := bb.Outcome
 			duration := time.Since(start)
-			deps.agentHist.Record(agent.RunRecord{
+			_ = deps.agentHist.Record(agent.RunRecord{
 				AgentName: params.Agent, Task: params.Task, Outcome: outcome,
 				Output: bb.Result, Duration: duration.String(), Quality: bb.QualityScore,
 				StartedAt: start, EndedAt: time.Now(),
@@ -815,7 +815,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Agent string `json:"agent"`
 				Limit int    `json:"limit"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Limit <= 0 {
 				params.Limit = 10
 			}
@@ -838,7 +838,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Schedule string `json:"schedule"`
 				Timeout  string `json:"timeout"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Timeout == "" {
 				params.Timeout = "2h"
 			}
@@ -858,7 +858,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Agent string `json:"agent"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if err := deps.agentReg.Delete(params.Agent); err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
@@ -888,7 +888,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Priority string `json:"priority"`
 				Source   string `json:"source"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Category == "" {
 				params.Category = "fact"
 			}
@@ -937,7 +937,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Priority string `json:"priority"`
 				Limit    int    `json:"limit"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.Limit <= 0 {
 				params.Limit = 10
 			}
@@ -977,7 +977,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 				Agent string `json:"agent"`
 				Key   string `json:"key"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 
 			agentMem, err := agent.NewMemoryStore(deps.agentHome+"/.go-bt-evolve/memory", params.Agent, 100)
 			if err != nil {
@@ -995,7 +995,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 	server.RegisterTool("bt_health", "Health check: reports LLM provider availability and server status",
 		map[string]mcp.Property{},
 		[]string{},
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			snap := deps.llmHealth.State().Snapshot()
 			snap["server"] = "bt-agent"
 			snap["llm_provider"] = deps.cfg.LLMProvider
@@ -1014,7 +1014,7 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Agent string `json:"agent"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 
 			if deps.globalSched == nil {
 				data, _ := json.Marshal(map[string]string{"error": "scheduler not initialized"})

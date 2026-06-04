@@ -90,7 +90,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		report.Checks = append(report.Checks, ProbeCheck{Name: "health_reachable", Status: ProbeError, Expected: "GET /api/health returns HTTP response", Actual: err.Error()})
 		return finishProbe(report, start), err
 	}
-	io.Copy(io.Discard, getResp.Body)
+	_, _ = io.Copy(io.Discard, getResp.Body)
 	getResp.Body.Close()
 
 	report.Checks = append(report.Checks, statusCheck("health_reachable", "2xx/3xx/4xx HTTP response", getResp.StatusCode < 500, fmt.Sprintf("status %d", getResp.StatusCode)))
@@ -122,7 +122,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	if err != nil {
 		report.Checks = append(report.Checks, ProbeCheck{Name: "cors_preflight", Status: ProbeError, Expected: "OPTIONS /api/health returns response", Actual: err.Error()})
 	} else {
-		io.Copy(io.Discard, optionsResp.Body)
+		_, _ = io.Copy(io.Discard, optionsResp.Body)
 		optionsResp.Body.Close()
 		ok := optionsResp.StatusCode == http.StatusNoContent || optionsResp.Header.Get("Access-Control-Allow-Methods") != ""
 		report.Checks = append(report.Checks, statusCheck("cors_preflight", "204 No Content or Access-Control-Allow-Methods header", ok, fmt.Sprintf("status %d methods=%q", optionsResp.StatusCode, optionsResp.Header.Get("Access-Control-Allow-Methods"))))
@@ -140,7 +140,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if originErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "cors_origin_validation", Status: ProbeError, Expected: "CORS origin restricted to known origins", Actual: originErr.Error()})
 		} else {
-			io.Copy(io.Discard, originResp.Body)
+			_, _ = io.Copy(io.Discard, originResp.Body)
 			originResp.Body.Close()
 			allowedOrigin := originResp.Header.Get("Access-Control-Allow-Origin")
 			// Wildcard "*" is acceptable for dev mode; flag as info for production awareness
@@ -172,7 +172,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	if err != nil {
 		report.Checks = append(report.Checks, ProbeCheck{Name: "mutating_without_content_type_rejected", Status: ProbeError, Expected: "POST without Content-Type is rejected", Actual: err.Error()})
 	} else {
-		io.Copy(io.Discard, postNoTypeResp.Body)
+		_, _ = io.Copy(io.Discard, postNoTypeResp.Body)
 		postNoTypeResp.Body.Close()
 		ok := postNoTypeResp.StatusCode >= 400 && postNoTypeResp.StatusCode < 500
 		report.Checks = append(report.Checks, statusCheck("mutating_without_content_type_rejected", "4xx rejection when Content-Type missing", ok, fmt.Sprintf("status %d", postNoTypeResp.StatusCode)))
@@ -191,7 +191,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if sanitizeErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "input_sanitization", Status: ProbeError, Expected: "server handles null bytes without crashing", Actual: sanitizeErr.Error()})
 		} else {
-			io.Copy(io.Discard, sanitizeResp.Body)
+			_, _ = io.Copy(io.Discard, sanitizeResp.Body)
 			sanitizeResp.Body.Close()
 			ok := sanitizeResp.StatusCode < 500
 			report.Checks = append(report.Checks, statusCheck("input_sanitization", "server handles null bytes without 5xx error", ok, fmt.Sprintf("status %d", sanitizeResp.StatusCode)))
@@ -216,7 +216,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 				Expected: "server either responds or times out gracefully",
 				Actual:   fmt.Sprintf("client timeout after 8s: %v", timeoutErr)})
 		} else {
-			io.Copy(io.Discard, timeoutResp.Body)
+			_, _ = io.Copy(io.Discard, timeoutResp.Body)
 			timeoutResp.Body.Close()
 			report.Checks = append(report.Checks, statusCheck("request_timeout_handling",
 				"server either responds or times out gracefully",
@@ -238,7 +238,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	if err != nil {
 		report.Checks = append(report.Checks, ProbeCheck{Name: "csrf_protection", Status: ProbeError, Expected: "POST without CSRF token is rejected", Actual: err.Error()})
 	} else {
-		io.Copy(io.Discard, csrfResp.Body)
+		_, _ = io.Copy(io.Discard, csrfResp.Body)
 		csrfResp.Body.Close()
 		// CSRF middleware returns 403 when token is missing/wrong
 		ok := csrfResp.StatusCode == http.StatusForbidden
@@ -252,7 +252,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if csrfCookieErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "csrf_cookie_attributes", Status: ProbeError, Expected: "CSRF cookie has Secure+SameSite attributes", Actual: csrfCookieErr.Error()})
 		} else {
-			io.Copy(io.Discard, csrfCookieResp.Body)
+			_, _ = io.Copy(io.Discard, csrfCookieResp.Body)
 			csrfCookieResp.Body.Close()
 			csrfCookieCheck := probeCSRFCookie(csrfCookieResp.Cookies(), "csrf_cookie_attributes")
 			report.Checks = append(report.Checks, csrfCookieCheck)
@@ -277,7 +277,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if rlResp.StatusCode == http.StatusTooManyRequests {
 			rateLimited = true
 		}
-		io.Copy(io.Discard, rlResp.Body)
+		_, _ = io.Copy(io.Discard, rlResp.Body)
 		rlResp.Body.Close()
 	}
 	report.Checks = append(report.Checks, statusCheck("rate_limiting", "429 response under burst load", rateLimited, fmt.Sprintf("rate_limited=%v from %d requests", rateLimited, maxAttempts)))
@@ -291,7 +291,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if authErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "api_key_auth_enforcement", Status: ProbeError, Expected: "protected endpoint rejects unauthenticated requests", Actual: authErr.Error()})
 		} else {
-			io.Copy(io.Discard, authResp.Body)
+			_, _ = io.Copy(io.Discard, authResp.Body)
 			authResp.Body.Close()
 			// /api/scalability is public (no auth), so we actually expect 200 here
 			// Check a truly protected endpoint instead: /api/dlq (auth-protected)
@@ -306,7 +306,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if dlqErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "protected_endpoint_auth", Status: ProbeError, Expected: "protected endpoint rejects or allows with auth", Actual: dlqErr.Error()})
 		} else {
-			io.Copy(io.Discard, dlqResp.Body)
+			_, _ = io.Copy(io.Discard, dlqResp.Body)
 			dlqResp.Body.Close()
 			if apiKey == "" {
 				// Without API key, we expect 401/403 if auth is active, or 200 if public
@@ -329,7 +329,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		if loginErr != nil {
 			report.Checks = append(report.Checks, ProbeCheck{Name: "session_cookie_attributes", Status: ProbeError, Expected: "login sets secure session cookie", Actual: loginErr.Error()})
 		} else {
-			io.Copy(io.Discard, loginResp.Body)
+			_, _ = io.Copy(io.Discard, loginResp.Body)
 			loginResp.Body.Close()
 			sessionCookieCheck := probeSessionCookies(loginResp.Cookies(), "session_cookie_attributes")
 			report.Checks = append(report.Checks, sessionCookieCheck)

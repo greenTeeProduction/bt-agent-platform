@@ -33,7 +33,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 		name string
 		tree *evolution.SerializableNode
 	}
-	var allTrees []namedTree
+	allTrees := make([]namedTree, 0, 16)
 
 	// 1. Default + GoDev
 	allTrees = append(allTrees,
@@ -72,7 +72,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 		panicked    bool
 		panicRecov  interface{}
 	}
-	var results []treeResult
+	results := make([]treeResult, 0, 16)
 
 	for _, nt := range allTrees {
 		if nt.tree == nil {
@@ -217,7 +217,7 @@ func TestDomainTree_Registration(t *testing.T) {
 // non-empty suite for every known tree name.
 func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 	// Collect all tree names
-	var treeNames []string
+	treeNames := make([]string, 0, 16)
 	treeNames = append(treeNames, "default", "godev")
 
 	for name := range finance.AllFinanceTrees() {
@@ -253,7 +253,7 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 		name string
 		tree *evolution.SerializableNode
 	}
-	var allTrees []namedTree
+	allTrees := make([]namedTree, 0, 16)
 
 	allTrees = append(allTrees,
 		namedTree{"default", evolution.DefaultTree()},

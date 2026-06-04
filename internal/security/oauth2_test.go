@@ -21,7 +21,7 @@ func TestOAuth2IntrospectionValidator_ActiveToken(t *testing.T) {
 		if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 			t.Errorf("expected application/x-www-form-urlencoded, got %s", r.Header.Get("Content-Type"))
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "user-123",
 		})
@@ -45,8 +45,8 @@ func TestOAuth2IntrospectionValidator_ActiveToken(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_InactiveToken(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": false,
 		})
 	}))
@@ -68,7 +68,7 @@ func TestOAuth2IntrospectionValidator_InactiveToken(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_ServerError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer ts.Close()
@@ -89,9 +89,9 @@ func TestOAuth2IntrospectionValidator_ServerError(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_RejectsActiveTokenOnNon2xx(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "should-not-be-trusted",
 		})
@@ -115,9 +115,9 @@ func TestOAuth2IntrospectionValidator_RejectsActiveTokenOnNon2xx(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_CacheHit(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "cached-user",
 		})
@@ -158,9 +158,9 @@ func TestOAuth2IntrospectionValidator_CacheHit(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_CacheExpiry(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "expiring-user",
 		})
@@ -195,9 +195,9 @@ func TestOAuth2IntrospectionValidator_CacheExpiry(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_InactiveNotCached(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": false,
 		})
 	}))
@@ -258,8 +258,8 @@ func TestOAuth2IntrospectionValidator_SubjectFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				json.NewEncoder(w).Encode(tt.response)
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(tt.response)
 			}))
 			defer ts.Close()
 
@@ -285,7 +285,7 @@ func TestOAuth2IntrospectionValidator_BasicAuth(t *testing.T) {
 	var capturedAuth string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "auth-test-user",
 		})
@@ -312,8 +312,8 @@ func TestOAuth2IntrospectionValidator_BasicAuth(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_CustomHTTPClient(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "custom-client-user",
 		})
@@ -339,9 +339,9 @@ func TestOAuth2IntrospectionValidator_CustomHTTPClient(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_ContextCancellation(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond) // slow response
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "slow-user",
 		})
@@ -379,8 +379,8 @@ func TestOAuth2IntrospectionValidator_DefaultConfig(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_NilHTTPClient(t *testing.T) {
 	// Should use default client when HTTPClient is nil
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "default-client-user",
 		})
@@ -404,8 +404,8 @@ func TestOAuth2IntrospectionValidator_NilHTTPClient(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_InvalidJSONResponse(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer ts.Close()
 
@@ -437,9 +437,9 @@ func TestOAuth2IntrospectionValidator_UnreachableServer(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_ZeroCacheTTLDefaults(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "zero-ttl-user",
 		})
@@ -462,8 +462,8 @@ func TestOAuth2IntrospectionValidator_ZeroCacheTTLDefaults(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_ZeroTimeoutDefaults(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "zero-timeout-user",
 		})
@@ -484,8 +484,8 @@ func TestOAuth2IntrospectionValidator_ZeroTimeoutDefaults(t *testing.T) {
 }
 
 func TestOAuth2IntrospectionValidator_ConcurrentAccess(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "concurrent-user",
 		})
@@ -516,10 +516,10 @@ func TestOAuth2IntrospectionValidator_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestTokenValidator_TypeCompatibility(t *testing.T) {
+func TestTokenValidator_TypeCompatibility(_ *testing.T) {
 	// Verify OAuth2IntrospectionValidator returns a TokenValidator
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{"active": true, "sub": "test"})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"active": true, "sub": "test"})
 	}))
 	defer ts.Close()
 
@@ -533,10 +533,10 @@ func TestTokenValidator_TypeCompatibility(t *testing.T) {
 
 func TestOAuth2IntrospectionValidator_DifferentTokensSeparateCache(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		// Parse the token from the body
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"active": true,
 			"sub":    "multi-token-user",
 		})
@@ -590,7 +590,7 @@ func TestDiscoverOAuth2IntrospectionConfig_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		discoveryPath = r.URL.Path
 		acceptHeader = r.Header.Get("Accept")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"issuer":                 "test-issuer",
 			"introspection_endpoint": serverURL + "/oauth2/introspect",
 		})
@@ -627,8 +627,8 @@ func TestDiscoverOAuth2IntrospectionConfig_Success(t *testing.T) {
 
 func TestDiscoverOAuth2IntrospectionConfig_Defaults(t *testing.T) {
 	var serverURL string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"introspection_endpoint": serverURL + "/introspect",
 		})
 	}))
@@ -659,7 +659,7 @@ func TestDiscoverOAuth2IntrospectionConfig_Errors(t *testing.T) {
 		{
 			name: "non-2xx",
 			server: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusBadGateway)
 				}))
 			},
@@ -668,8 +668,8 @@ func TestDiscoverOAuth2IntrospectionConfig_Errors(t *testing.T) {
 		{
 			name: "invalid json",
 			server: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Write([]byte("not-json"))
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("not-json"))
 				}))
 			},
 			wantErr: "failed to parse response",
@@ -677,8 +677,8 @@ func TestDiscoverOAuth2IntrospectionConfig_Errors(t *testing.T) {
 		{
 			name: "missing endpoint",
 			server: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					json.NewEncoder(w).Encode(map[string]interface{}{"issuer": "issuer"})
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{"issuer": "issuer"})
 				}))
 			},
 			wantErr: "introspection_endpoint missing",
@@ -686,8 +686,8 @@ func TestDiscoverOAuth2IntrospectionConfig_Errors(t *testing.T) {
 		{
 			name: "invalid endpoint",
 			server: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					json.NewEncoder(w).Encode(map[string]interface{}{"introspection_endpoint": "://bad"})
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{"introspection_endpoint": "://bad"})
 				}))
 			},
 			wantErr: "invalid introspection_endpoint",
@@ -719,11 +719,11 @@ func TestOAuth2DiscoveryValidator_ValidatesToken(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"introspection_endpoint": serverURL + "/introspect",
 			})
 		case "/introspect":
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"active": true,
 				"sub":    "discovered-user",
 			})
