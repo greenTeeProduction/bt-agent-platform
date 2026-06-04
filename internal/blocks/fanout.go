@@ -11,11 +11,19 @@ func ParallelFanoutBlock() evolution.SerializableNode {
 		Children: []evolution.SerializableNode{
 			{Type: "Condition", Name: "HasPlan", Description: "Plan available for fan-out"},
 			{
-				Type:        "ChainAction",
-				Name:        "map_reduce:Execute subtasks from the plan.\n\nTask: {{.Task}}\nPlan: {{.Plan}}",
-				Description: "Map-reduce over plan steps",
-				Metadata: map[string]any{
-					"max_tokens": float64(2048),
+				Type:        "Parallel",
+				Name:        "FanoutParallel",
+				Description: "Execute plan steps in parallel (all must succeed)",
+				Metadata:    map[string]any{"success_policy": "all"},
+				Children: []evolution.SerializableNode{
+					{
+						Type:        "ChainAction",
+						Name:        "map_reduce:Execute subtasks from the plan.\n\nTask: {{.Task}}\nPlan: {{.Plan}}",
+						Description: "Map-reduce over plan steps",
+						Metadata: map[string]any{
+							"max_tokens": float64(2048),
+						},
+					},
 				},
 			},
 			{Type: "Action", Name: "MergeResults", Description: "Combine bb.Results into bb.Result"},

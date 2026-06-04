@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reflection"
 	"github.com/nico/go-bt-evolve/internal/tracing"
@@ -78,7 +77,12 @@ type Blackboard struct {
 	CurrentPath  string         // currently executing strategy path (set by tree traversal)
 	VisitedPaths []string       // all strategy paths visited during execution
 
-	TraceContext context.Context `json:"-"` // optional parent trace span
+	// Budget tracking (Budget decorator / agent limits)
+	TokensUsed int
+	TickBudget int
+	TreeTicks  int
+
+	TraceContext context.Context `json:"-"`
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -129,20 +133,55 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 
 	switch node.Type {
 	case "Sequence":
+		if len(node.Edges) > 0 {
+			return buildSequenceWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSequence(children...)
 	case "Selector":
+		if len(node.Edges) > 0 {
+			return buildSelectorWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
+	case "Parallel":
+		return BuildParallel(node, bb)
+	case "Budget":
+		return BuildBudget(node, bb)
+	case "RateLimit":
+		return BuildRateLimit(node, bb)
+	case "Timeout":
+		return BuildTimeout(node, bb)
+	case "CircuitBreaker":
+		return BuildCircuitBreaker(node, bb)
+	case "Inverter":
+		return BuildInverter(node, bb)
+	case "Succeeder":
+		return BuildSucceeder(node, bb)
+	case "Repeater":
+		return BuildRepeater(node, bb)
+	case "Runner":
+		return BuildRunner(node, bb)
+	case "Monitor":
+		return BuildMonitor(node, bb)
+	case "QualityGate":
+		return BuildQualityGate(node, bb)
 	case "Retry":
+		if len(node.Children) == 0 {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		}
 		child := buildNode(&node.Children[0], bb, node.Name)
-		return btdec.NewRepeat(child, node.MaxRetries)
+		times := node.MaxRetries
+		if times <= 0 {
+			times = 1
+		}
+		return btdec.NewRepeat(child, times)
 	case "Action":
 		return btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":
@@ -164,10 +203,15 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildReactiveParallel(node, bb)
 	case "HumanApprovalGate":
 		return buildHumanApprovalGate(node, bb, parentName)
-	default:
-		// Unknown node type → pass-through action (always succeeds)
+	case "SubTreeRef":
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-			return 1
+			ctx.Blackboard.Outcome = "SubTreeRef not expanded — run BuildAndValidate with tree expander"
+			return -1
+		})
+	default:
+		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Outcome = fmt.Sprintf("unsupported node type %q", node.Type)
+			return -1
 		})
 	}
 }
@@ -827,26 +871,6 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "EscalateToOperator":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nEscalated for human intervention."
-			return 1
-		}
-	case "EscalateHITL":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			store := hitl.DefaultStore
-			if store == nil {
-				bb.Result += "\n\nHITL escalation requested (no store)."
-				return 1
-			}
-			reqID, _ := bb.ChainState[chainKeyHITLRequestID].(string)
-			if reqID == "" {
-				bb.Result += "\n\nHITL escalation requested (no active request)."
-				return 1
-			}
-			if _, err := store.Escalate(reqID, "policy", bb.Result); err != nil {
-				bb.Result += "\n\nHITL escalation failed: " + err.Error()
-				return -1
-			}
-			setHITLState(bb, reqID, hitl.StatusEscalated)
-			bb.Result += "\n\nHITL request escalated to operator."
 			return 1
 		}
 	case "CollectAgentMetrics":
