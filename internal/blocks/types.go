@@ -21,8 +21,9 @@ type Block struct {
 	Description string                      `json:"description"`
 	Category    Category                    `json:"category"`
 	Tree        *evolution.SerializableNode `json:"tree"`
-	Mutable     bool                        `json:"mutable"` // evolver may mutate when promoted
-	Version     int                         `json:"version"`
+	Mutable         bool                        `json:"mutable"`
+	Version         int                         `json:"version"`
+	PromotedVersion int                         `json:"promoted_version,omitempty"`
 }
 
 // ComposeSpec assembles a new tree from block IDs and optional middle section.

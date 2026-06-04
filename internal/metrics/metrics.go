@@ -431,6 +431,14 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 	}
 	fmt.Fprintf(w, "\n")
 
+	fmt.Fprintf(w, "# HELP bt_block_fitness_score Block fitness score (0-100) per block and agent.\n")
+	fmt.Fprintf(w, "# TYPE bt_block_fitness_score gauge\n")
+	for key, val := range blockFitnessGauge.Snapshot() {
+		labels := parseLabelKey(key)
+		fmt.Fprintf(w, "bt_block_fitness_score%s %d\n", formatPromLabels(labels), val)
+	}
+	fmt.Fprintf(w, "\n")
+
 	fmt.Fprintf(w, "# HELP bt_http_errors_total Total HTTP error responses (4xx, 5xx).\n")
 	fmt.Fprintf(w, "# TYPE bt_http_errors_total counter\n")
 	fmt.Fprintf(w, "bt_http_errors_total %d\n\n", httpErrorsTotal.Value())

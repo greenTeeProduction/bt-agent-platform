@@ -14,6 +14,7 @@ var (
 	blockOpsTotal     = NewLabeledCounter()
 	blockErrorsTotal  = NewLabeledCounter()
 	blockDurationHist = NewLabeledHistogram([]float64{1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000, 30000})
+	blockFitnessGauge = NewLabeledGauge()
 )
 
 // RecordNodeTick records one behavior-tree node tick.
@@ -79,6 +80,56 @@ func NodeMetricsSnapshot() map[string]uint64 {
 // BlockMetricsSnapshot returns block op counters for JSON/debug export.
 func BlockMetricsSnapshot() map[string]uint64 {
 	return blockOpsTotal.Snapshot()
+}
+
+
+// RecordBlockFitness sets bt_block_fitness_score for a block/agent pair (0-100).
+func RecordBlockFitness(blockID, agent string, score float64) {
+	if blockID == "" {
+		return
+	}
+	if agent == "" {
+		agent = "default"
+	}
+	blockFitnessGauge.Set(int64(score), map[string]string{
+		"block_id": sanitizeLabel(blockID),
+		"agent":    sanitizeLabel(agent),
+	})
+}
+
+// BlockFitnessSnapshot returns current fitness gauge values.
+func BlockFitnessSnapshot() map[string]int64 {
+	return blockFitnessGauge.Snapshot()
+}
+
+// BlockFitnessRanking returns block_ids sorted by fitness descending.
+func BlockFitnessRanking() []string {
+	snap := blockFitnessGauge.Snapshot()
+	type pair struct {
+		id    string
+		score int64
+	}
+	var pairs []pair
+	for key, val := range snap {
+		labels := parseLabelKey(key)
+		id := labels["block_id"]
+		if id == "" || id == "_" {
+			continue
+		}
+		pairs = append(pairs, pair{id: id, score: val})
+	}
+	for i := 0; i < len(pairs); i++ {
+		for j := i + 1; j < len(pairs); j++ {
+			if pairs[j].score > pairs[i].score {
+				pairs[i], pairs[j] = pairs[j], pairs[i]
+			}
+		}
+	}
+	out := make([]string, len(pairs))
+	for i, pr := range pairs {
+		out[i] = pr.id
+	}
+	return out
 }
 
 // ObserveBlockCompose records compose timing.

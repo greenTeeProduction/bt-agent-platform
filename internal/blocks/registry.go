@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -187,4 +188,72 @@ func cloneTree(t *evolution.SerializableNode) *evolution.SerializableNode {
 		c.Children = append(c.Children, *cloneTree(&ch))
 	}
 	return c
+}
+
+
+// IsEvolutionMutable reports whether block id may be mutated by the evolver.
+func (r *Registry) IsEvolutionMutable(id string) bool {
+	b := r.Get(id)
+	if b == nil {
+		return false
+	}
+	return b.Mutable && !strings.HasPrefix(b.ID, "core:")
+}
+
+// Freeze sets Mutable=false for a block (builtin or custom).
+func (r *Registry) Freeze(id string) error {
+	r.mu.Lock()
+	b, ok := r.blocks[id]
+	if !ok || b == nil {
+		r.mu.Unlock()
+		return fmt.Errorf("block %q not found", id)
+	}
+	b.Mutable = false
+	cp := *b
+	r.mu.Unlock()
+	return r.Register(cp)
+}
+
+// PromoteVersion copies a block to custom:<suffix>_vN with incremented version.
+func (r *Registry) PromoteVersion(srcID, destID string) (*Block, error) {
+	src := r.Get(srcID)
+	if src == nil {
+		return nil, fmt.Errorf("source block %q not found", srcID)
+	}
+	if destID == "" {
+		destID = "custom:" + strings.TrimPrefix(srcID, "core:") + "_v" + fmt.Sprint(src.Version+1)
+	}
+	promoted := Block{
+		ID:              destID,
+		Name:            src.Name + " (promoted)",
+		Description:     "Promoted from " + srcID,
+		Category:        CategoryCustom,
+		Tree:            cloneTree(src.Tree),
+		Mutable:         true,
+		Version:         src.Version + 1,
+		PromotedVersion: src.Version,
+	}
+	if err := r.Register(promoted); err != nil {
+		return nil, err
+	}
+	return &promoted, nil
+}
+
+// FilterEvolutionMutations drops ops that target frozen or core builtin blocks.
+func (r *Registry) FilterEvolutionMutations(ops []evolution.MutationOp) []evolution.MutationOp {
+	if len(ops) == 0 {
+		return ops
+	}
+	var out []evolution.MutationOp
+	for _, op := range ops {
+		bid := blockIDFromOp(op)
+		if bid != "" && !r.IsEvolutionMutable(bid) {
+			continue
+		}
+		if strings.HasPrefix(op.Target, "core:") {
+			continue
+		}
+		out = append(out, op)
+	}
+	return out
 }

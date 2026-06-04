@@ -8,6 +8,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/metrics"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 )
 // registerBlockTools registers MCP tools for reusable tree building blocks.
@@ -173,6 +174,7 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 				return mcpErr(err)
 			}
 			ops := blocks.RandomBlockMutation(blocks.DefaultRegistry, tree)
+			ops = blocks.DefaultRegistry.FilterEvolutionMutations(ops)
 			applied := evolution.ApplyMutations(tree, ops)
 			data, _ := json.Marshal(map[string]any{
 				"mutations_applied": applied,
@@ -181,6 +183,56 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 			})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
+	server.RegisterTool("bt_blocks_fitness", "Return per-block fitness scores from metrics",
+		map[string]mcp.Property{}, []string{},
+		func(_ json.RawMessage) *mcp.ToolResult {
+			snap := metrics.BlockFitnessSnapshot()
+			rank := blocks.FitnessRanking()
+			data, _ := json.Marshal(map[string]any{"fitness": snap, "ranking": rank})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_blocks_freeze", "Freeze a block (set mutable=false)",
+		map[string]mcp.Property{
+			"block_id": {Type: "string", Description: "Block id to freeze"},
+		},
+		[]string{"block_id"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct {
+				BlockID string `json:"block_id"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
+			if err := blocks.DefaultRegistry.Freeze(params.BlockID); err != nil {
+				return mcpErr(err)
+			}
+			data, _ := json.Marshal(map[string]string{"status": "frozen", "block_id": params.BlockID})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_blocks_promote", "Promote a block to a new custom version",
+		map[string]mcp.Property{
+			"source_id": {Type: "string", Description: "Source block id (e.g. core:pre_gate)"},
+			"dest_id":   {Type: "string", Description: "Optional destination id (custom:pre_gate_v2)"},
+		},
+		[]string{"source_id"},
+		func(args json.RawMessage) *mcp.ToolResult {
+			var params struct {
+				SourceID string `json:"source_id"`
+				DestID   string `json:"dest_id"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
+			b, err := blocks.DefaultRegistry.PromoteVersion(params.SourceID, params.DestID)
+			if err != nil {
+				return mcpErr(err)
+			}
+			data, _ := json.Marshal(b)
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
 }
 
 func mcpErr(err error) *mcp.ToolResult {

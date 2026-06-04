@@ -9,6 +9,7 @@ import (
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/audit"
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/config"
@@ -273,6 +274,7 @@ func main() {
 		btlog.Warn("hitl store init failed", "error", err)
 	}
 	config.ApplyHITLPolicy(cfg)
+	audit.Init(filepath.Join(home, ".go-bt-evolve"))
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -329,6 +331,7 @@ func main() {
 	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
 	agentLocalMem := agentHome + "/.go-bt-evolve/memory"
 	dlq := reliability.NewDeadLetterQueue(agentHome + "/.go-bt-evolve/dead_letter_queue.json")
+	engine.TaskDLQ = dlq
 
 	// Create jobs directory for scheduler persistence
 	jobStoreDir := agentHome + "/.go-bt-evolve/jobs"

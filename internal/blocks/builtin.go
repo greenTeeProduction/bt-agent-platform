@@ -268,6 +268,67 @@ func builtinBlocks() []Block {
 				return &n
 			}(),
 		},
+
+		{
+			ID:          "core:fitness_probe",
+			Name:        "FitnessProbe",
+			Description: "Record block fitness for evolution benchmarking",
+			Category:    CategoryCore,
+			Mutable:     true,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := FitnessProbeBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:evolve_on_failure",
+			Name:        "EvolveOnFailure",
+			Description: "Update behavior tree after persistent failures with quality gate",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := EvolveOnFailureBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:trace_checkpoint",
+			Name:        "TraceCheckpoint",
+			Description: "Emit OpenTelemetry checkpoint event",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := TraceCheckpointBlock("task_checkpoint")
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:audit_log",
+			Name:        "AuditLog",
+			Description: "Append structured audit log entry",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := AuditLogBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:dlq_escalate",
+			Name:        "DLQEscalate",
+			Description: "Push exhausted task to dead letter queue",
+			Category:    CategoryRecovery,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := DLQEscalateBlock()
+				return &n
+			}(),
+		},
 		{
 			ID:          "core:reflect_only",
 			Name:        "ReflectOnly",
