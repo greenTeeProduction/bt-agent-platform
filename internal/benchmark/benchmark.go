@@ -12,8 +12,8 @@
 //     with Fisher's exact test and bootstrap confidence intervals
 //   - DefaultLLM() — returns real Ollama (qwen3.6:35b) with mock fallback
 //
-// All domain suite tasks use DefaultLLM() for production-grade validation.
-// Use testing.Short() guards for Ollama-dependent tests on slow hardware.
+// All domain suite tasks use DefaultLLM() for production-grade validation (mock fallback).
+// Ollama-dependent tests call llm.SkipUnlessIntegration(t) and RealLLM(t); set BT_SKIP_LLM_TESTS=1 to skip them.
 package benchmark
 
 import (

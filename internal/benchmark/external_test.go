@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/llm"
+
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -11,9 +13,7 @@ import (
 )
 
 func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use GoDev tree — it has 5 strategy paths. Match BFCL entries to those paths.
 	suite := &BFCLSuite{
 		Name: "bfcl_godev",
@@ -26,8 +26,8 @@ func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
 		},
 	}
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
-	metrics := suite.Evaluate(tree, mock)
+	llmBackend := RealLLM(t)
+	metrics := suite.Evaluate(tree, llmBackend)
 
 	fmt.Printf("\nBFCL GoDev: %d/%d (%.0f%%)\n", metrics.CorrectRoutes, metrics.TotalEntries, metrics.Accuracy*100)
 	for _, r := range metrics.Results {
@@ -44,9 +44,7 @@ func TestBFCL_Simple_RoutingAccuracy(t *testing.T) {
 }
 
 func TestBFCL_Relevance_NoFalsePositives(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// GoDev tree correctly rejects non-Go tasks at PreGate.
 	// "tell me a joke" has no Go keywords → IsGoRelated fails → PreGate fails → failure.
 	// This is CORRECT behavior for a specialized tree.
@@ -58,8 +56,8 @@ func TestBFCL_Relevance_NoFalsePositives(t *testing.T) {
 		},
 	}
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
-	metrics := suite.Evaluate(tree, mock)
+	llmBackend := RealLLM(t)
+	metrics := suite.Evaluate(tree, llmBackend)
 
 	// Non-Go tasks should be rejected at PreGate — they won't succeed.
 	// But they also shouldn't route to domain-specific tools.
@@ -73,9 +71,7 @@ func TestBFCL_Relevance_NoFalsePositives(t *testing.T) {
 }
 
 func TestBFCL_Multiple_Routing(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use code_review tree which has multiple strategy paths
 	suite := &BFCLSuite{
 		Name: "bfcl_multiple_cr",
@@ -86,8 +82,8 @@ func TestBFCL_Multiple_Routing(t *testing.T) {
 		},
 	}
 	tree := domains.CodeReviewTree()
-	mock := DefaultLLM()
-	metrics := suite.Evaluate(tree, mock)
+	llmBackend := RealLLM(t)
+	metrics := suite.Evaluate(tree, llmBackend)
 
 	fmt.Printf("\nBFCL CodeReview Multiple: %d/%d (%.0f%%)\n",
 		metrics.CorrectRoutes, metrics.TotalEntries, metrics.Accuracy*100)
@@ -98,14 +94,12 @@ func TestBFCL_Multiple_Routing(t *testing.T) {
 }
 
 func TestGAIA_DeepResearch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	entries := BuiltinGAIADev()
 	tree := research.DeepResearchTree()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
-	metrics := EvaluateGAIA(tree, entries, mock)
+	metrics := EvaluateGAIA(tree, entries, llmBackend)
 
 	fmt.Printf("\nGAIA Deep Research: %d/%d correct (%.0f%% accuracy)\n",
 		metrics.CorrectAnswers, metrics.TotalQuestions, metrics.Accuracy*100)
@@ -116,21 +110,19 @@ func TestGAIA_DeepResearch(t *testing.T) {
 		}
 	}
 
-	// With mock LLM, answer matching is approximate. Verify at least the tree runs without error.
+	// With llmBackend LLM, answer matching is approximate. Verify at least the tree runs without error.
 	if metrics.TotalQuestions != len(entries) {
 		t.Errorf("expected %d questions processed, got %d", len(entries), metrics.TotalQuestions)
 	}
-	// Accuracy is expected to be low with mock LLM since answers are generic
-	t.Logf("Note: low accuracy expected with mock LLM — real LLM needed for substantive GAIA eval")
+	// Accuracy is expected to be low with llmBackend LLM since answers are generic
+	t.Logf("Note: low accuracy expected with llmBackend LLM — real LLM needed for substantive GAIA eval")
 }
 
 func TestBFCL_CodeReview_Routing(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Test BFCL routing on the code_review domain tree
 	tree := domains.CodeReviewTree()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
 	// Create a mini-suite targeting code review paths
 	suite := &BFCLSuite{
@@ -143,7 +135,7 @@ func TestBFCL_CodeReview_Routing(t *testing.T) {
 		},
 	}
 
-	metrics := suite.Evaluate(tree, mock)
+	metrics := suite.Evaluate(tree, llmBackend)
 
 	fmt.Printf("\nBFCL CodeReview: %d/%d correct (%.0f%% accuracy)\n",
 		metrics.CorrectRoutes, metrics.TotalEntries, metrics.Accuracy*100)
@@ -154,9 +146,7 @@ func TestBFCL_CodeReview_Routing(t *testing.T) {
 }
 
 func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Run BFCL Simple against all domain trees, measure which tree has best routing
 	type treeScore struct {
 		name     string
@@ -173,10 +163,10 @@ func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
 	}
 
 	suite := BuiltinBFCLSimple()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
 	for name, tree := range allTrees {
-		metrics := suite.Evaluate(tree, mock)
+		metrics := suite.Evaluate(tree, llmBackend)
 		scores = append(scores, treeScore{name, metrics.Accuracy})
 		fmt.Printf("  %-20s %.0f%% (%d/%d)\n", name, metrics.Accuracy*100,
 			metrics.CorrectRoutes, metrics.TotalEntries)
@@ -196,9 +186,7 @@ func TestBFCL_AllDomainTrees_Accuracy(t *testing.T) {
 }
 
 func TestSWELite_IssueAnalysis(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	entries := BuiltinSWELite()
 	if len(entries) < 3 {
 		t.Fatal("expected at least 3 SWE entries")
@@ -213,13 +201,13 @@ func TestSWELite_IssueAnalysis(t *testing.T) {
 
 	// Test that GoDev tree can process SWE task descriptions
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
 	resolved := 0
 	for _, e := range entries {
 		bb := &engine.Blackboard{
 			Task: fmt.Sprintf("fix: %s\n\n%s", e.IssueTitle, e.IssueBody),
-			LLM:  mock,
+			LLM:  llmBackend,
 		}
 		bt := engine.BuildTree(tree, bb)
 		output := engine.RunTask(bb, bt)

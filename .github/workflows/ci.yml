@@ -84,8 +84,7 @@ jobs:
       - name: Check for high/critical issues
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # G404/G703/G704/G115: evolution RNG and taint-analysis false positives tracked separately
-          gosec -quiet -severity high -exclude=G404,G703,G704,G115 ./...
+          gosec -quiet -severity high ./...
         continue-on-error: false
 
   test:
@@ -108,6 +107,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Run tests
+        env:
+          BT_SKIP_LLM_TESTS: "1"
         run: go test -short -count=1 -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Coverage summary

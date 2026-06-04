@@ -11,14 +11,8 @@ import (
 )
 
 func TestTeslaFullAnalysis(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama unavailable: %v", err)
-		return
-	}
+	llm.SkipUnlessIntegration(t)
+	client := llm.NewClientOrSkip(t)
 
 	outPath := filepath.Join(t.TempDir(), "tesla_analysis.txt")
 	outFile, err := os.Create(outPath)
@@ -73,9 +67,7 @@ func trunc(s string, n int) string {
 }
 
 func TestTeslaPitchAgent(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
 		t.Skipf("Ollama unavailable: %v", err)
@@ -92,37 +84,25 @@ func TestTeslaPitchAgent(t *testing.T) {
 }
 
 func TestTeslaEarnings(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	runTeslaTree(t, "earnings_reviewer", EarningsReviewerTree())
 }
 func TestTeslaMarket(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	runTeslaTree(t, "market_researcher", MarketResearcherTree())
 }
 func TestTeslaModel(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	runTeslaTree(t, "model_builder", ModelBuilderTree())
 }
 func TestTeslaValuation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	runTeslaTree(t, "valuation_reviewer", ValuationReviewerTree())
 }
 
 func runTeslaTree(t *testing.T, name string, tree *evolution.SerializableNode) {
 	t.Helper()
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama unavailable: %v", err)
-		return
-	}
+	client := llm.NewClientOrSkip(t)
 	bb := &engine.Blackboard{
 		Task: "Analyze Tesla (TSLA): current stock price, market cap, last 4 quarters earnings (revenue, EPS, margins), EV deliveries growth, energy storage, FSD/AI progress, competitive position vs BYD/Ford/GM/Rivian, balance sheet (cash, debt, FCF), valuation (P/E, EV/EBITDA vs auto), risks (China, regulatory, competition, Musk concentration), bull/bear cases with price targets, investment recommendation.",
 		LLM:  client,

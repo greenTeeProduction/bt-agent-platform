@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/llm"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
@@ -14,7 +16,7 @@ import (
 )
 
 // TestFullTreeIntegration_RunsAllTreesWithRealLLM exercises ALL registered trees
-// through the benchmark suite runner with real Ollama (DefaultLLM()).
+// through the benchmark suite runner with real Ollama (RealLLM()).
 //
 // This is the production validation artifact required to raise Testing from 85%
 // toward 95% under the strict scoring rubric: it validates every tree's routing,
@@ -23,9 +25,7 @@ import (
 // Guarded by testing.Short() — run with `go test -count=1 -timeout 1800s ./internal/benchmark/`
 // Expected runtime: 15-30 min on Jetson (46 trees × 2-8 tasks × 2-4 min per Ollama call).
 func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping full-tree real-Ollama integration test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 
 	// Enumerate all trees from domain packages (same sources as gardener.NewRegistry).
 	type namedTree struct {
@@ -59,11 +59,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 		t.Fatalf("expected at least 20 trees, got %d", len(allTrees))
 	}
 
-	// Use real LLM via DefaultLLM()
-	llm := DefaultLLM()
-	if llm == nil {
-		t.Fatal("DefaultLLM() returned nil — Ollama may be unavailable")
-	}
+	llmClient := RealLLM(t)
 
 	start := time.Now()
 	type treeResult struct {
@@ -101,7 +97,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 					tr.panicRecov = r
 				}
 			}()
-			metrics := RunSuite(nt.tree, suite, llm)
+			metrics := RunSuite(nt.tree, suite, llmClient)
 			if metrics != nil {
 				tr.successRate = metrics.SuccessRate
 				tr.totalTasks = metrics.TotalTasks
@@ -250,7 +246,7 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 }
 
 // TestFullTreeIntegration_SmokeCheck validates all trees build and run the
-// first task of their suite without panic using mock LLM. Fast — under 5s.
+// first task of their suite without panic using llmBackend LLM. Fast — under 5s.
 func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 	type namedTree struct {
 		name string

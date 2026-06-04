@@ -7,14 +7,8 @@ import (
 )
 
 func TestTeslaDeepResearch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama: %v", err)
-		return
-	}
+	llm.SkipUnlessIntegration(t)
+	client := llm.NewClientOrSkip(t)
 
 	tree := DeepResearchTree()
 	bb := &engine.Blackboard{
@@ -27,14 +21,8 @@ func TestTeslaDeepResearch(t *testing.T) {
 }
 
 func TestTeslaQuickResearch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama: %v", err)
-		return
-	}
+	llm.SkipUnlessIntegration(t)
+	client := llm.NewClientOrSkip(t)
 
 	tree := QuickResearchTree()
 	bb := &engine.Blackboard{
