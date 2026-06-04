@@ -17,11 +17,10 @@ func HandleHITLPending(w http.ResponseWriter, r *http.Request) {
 	}
 	store := hitl.DefaultStore
 	if store == nil {
-		json.NewEncoder(w).Encode([]any{})
+		encodeJSON(w, 0, []any{})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(store.ListPending())
+	encodeJSON(w, 0, store.ListPending())
 }
 
 // HandleHITL routes HITL REST endpoints under /api/hitl/.
@@ -46,8 +45,7 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 
 	store := hitl.DefaultStore
 	if store == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"error": "HITL store not initialized"})
+		encodeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "HITL store not initialized"})
 		return
 	}
 
@@ -57,8 +55,7 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(req)
+		encodeJSON(w, 0, req)
 		return
 	}
 
@@ -113,12 +110,20 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func writeHITLResult(w http.ResponseWriter, req *hitl.Request, err error) {
+func encodeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	if status != 0 {
+		w.WriteHeader(status)
+	}
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func writeHITLResult(w http.ResponseWriter, req *hitl.Request, err error) {
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		encodeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(req)
+	encodeJSON(w, 0, req)
 }

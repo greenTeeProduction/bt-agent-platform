@@ -37,7 +37,7 @@ func TestCircuitBreaker_OpensAfterFailures(t *testing.T) {
 }
 
 func TestTimeout_DecoratorBuilds(t *testing.T) {
-	child := btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	child := btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	node := &evolution.SerializableNode{
 		Type:      "Timeout",
 		Name:      "TestTimeout",

@@ -121,10 +121,16 @@ type humanApprovalGateCmd struct {
 
 func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 	bb := ctx.Blackboard
+	if sideEffectRequiresHITL(h.node) {
+		if bb.ChainState == nil {
+			bb.ChainState = make(map[string]any)
+		}
+		bb.ChainState["side_effect_class"] = "external"
+	}
 	store := hitlStore()
 	pol := hitl.GetPolicy()
 
-	if !pol.Enabled {
+	if !pol.Enabled && !sideEffectRequiresHITL(h.node) {
 		if h.child != nil {
 			return h.child.Run(ctx)
 		}
@@ -170,6 +176,9 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		}
 		req = hitl.NewRequest(h.node.Name, h.node.Type, bb.Task, bb.Plan, proposed, promptFromNode(h.node), meta)
 		req.Phase = phase
+		if autoApproveFromNode(h.node) {
+			req.Status = hitl.StatusSkipped
+		}
 		req = hitl.ApplyAutoApproveIfPolicy(req)
 		if store != nil {
 			_ = store.Create(req)
@@ -214,7 +223,7 @@ func buildHumanApprovalGate(node *evolution.SerializableNode, bb *Blackboard, pa
 	var child btcore.Command[Blackboard]
 	switch len(node.Children) {
 	case 0:
-		child = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+		child = btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	case 1:
 		child = buildNode(&node.Children[0], bb, node.Name)
 	default:

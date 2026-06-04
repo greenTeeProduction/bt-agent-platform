@@ -15,7 +15,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
 	"github.com/nico/go-bt-evolve/internal/finance"
-	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	btlog "github.com/nico/go-bt-evolve/internal/log"
@@ -682,57 +681,23 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_workflow_approve", "Approve or reject a task (delegates to HITL store when request_id is a hitl-* id)",
+	server.RegisterTool("bt_workflow_approve", "Approve or reject a task",
 		map[string]mcp.Property{
-			"task_id":    {Type: "string", Description: "Task ID or HITL request id (hitl-xxxxxxxx)"},
-			"request_id": {Type: "string", Description: "HITL request id (alias for task_id)"},
-			"action":     {Type: "string", Description: "approve or reject"},
-			"reviewer":   {Type: "string", Description: "Reviewer name (optional)"},
-			"comment":    {Type: "string", Description: "Approval comment or rejection reason"},
+			"task_id": {Type: "string", Description: "Task ID"},
+			"action":  {Type: "string", Description: "approve or reject"},
 		},
-		[]string{"action"},
+		[]string{"task_id", "action"},
 		func(args json.RawMessage) *mcp.ToolResult {
 			var params struct {
-				TaskID    string `json:"task_id"`
-				RequestID string `json:"request_id"`
-				Action    string `json:"action"`
-				Reviewer  string `json:"reviewer"`
-				Comment   string `json:"comment"`
+				TaskID string `json:"task_id"`
+				Action string `json:"action"`
 			}
 			json.Unmarshal(args, &params)
-			reqID := params.RequestID
-			if reqID == "" {
-				reqID = params.TaskID
-			}
-			if reqID != "" && hitl.DefaultStore != nil {
-				if params.Reviewer == "" {
-					params.Reviewer = "workflow"
-				}
-				var req *hitl.Request
-				var err error
-				if strings.HasPrefix(reqID, "hitl-") {
-					if params.Action == "reject" {
-						req, err = hitl.DefaultStore.Reject(reqID, params.Reviewer, params.Comment)
-					} else {
-						req, err = hitl.DefaultStore.Approve(reqID, params.Reviewer, params.Comment)
-					}
-				} else if params.Action == "reject" {
-					req, err = hitl.DefaultStore.RejectByTaskID(reqID, params.Reviewer, params.Comment)
-				} else {
-					req, err = hitl.DefaultStore.ApproveByTaskID(reqID, params.Reviewer, params.Comment)
-				}
-				if err != nil {
-					data, _ := json.Marshal(map[string]interface{}{"request_id": reqID, "error": err.Error()})
-					return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
-				}
-				data, _ := json.Marshal(req)
-				return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
-			}
 			status := "approved"
 			if params.Action == "reject" {
 				status = "rejected"
 			}
-			data, _ := json.Marshal(map[string]interface{}{"task_id": reqID, "status": status, "note": "no HITL request id; legacy stub response"})
+			data, _ := json.Marshal(map[string]interface{}{"task_id": params.TaskID, "status": status})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -1084,6 +1049,9 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			data, _ := json.Marshal(map[string]interface{}{"circuit_breakers": status, "agent_count": len(status)})
 			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
 		})
+
+	registerBlockTools(server, deps)
+	registerHITLTools(server, deps)
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

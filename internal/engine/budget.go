@@ -9,7 +9,7 @@ import (
 // BuildBudget wraps a child and enforces max_ticks / max_tokens from metadata.
 func BuildBudget(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	maxTicks := 0
 	maxTokens := 0

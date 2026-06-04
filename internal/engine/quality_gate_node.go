@@ -9,7 +9,7 @@ import (
 // BuildQualityGate runs the primary child, validates output quality, then runs recovery on failure.
 func BuildQualityGate(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	primary := buildNode(&node.Children[0], bb, node.Name)
 	var recovery btcore.Command[Blackboard]

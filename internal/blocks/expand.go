@@ -16,7 +16,7 @@ func Expand(reg *Registry, tree *evolution.SerializableNode) (*evolution.Seriali
 		return nil, fmt.Errorf("expand: nil tree")
 	}
 	var expanded *evolution.SerializableNode
-	err := traceBlockOp(context.Background(), "expand", "", func(ctx context.Context) error {
+	err := traceBlockOp(context.Background(), "expand", "", func(_ context.Context) error {
 		expanded = expandNode(reg, tree, make(map[string]int))
 		if errs := expanded.Validate(); len(errs) > 0 {
 			return fmt.Errorf("invalid expanded tree: %v", errs)

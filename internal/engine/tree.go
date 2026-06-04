@@ -179,7 +179,7 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildQualityGate(node, bb)
 	case "Retry":
 		if len(node.Children) == 0 {
-			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+			return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 		}
 		child := buildNode(&node.Children[0], bb, node.Name)
 		times := node.MaxRetries
@@ -424,7 +424,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "BuildDCFModel":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("build DCF model for: "+bb.Task, "high")
-			bb.Result = fmt.Sprintf("## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected.")
+			bb.Result = "## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected."
 			return 1
 		}
 	case "BuildSensitivityTables":
@@ -440,7 +440,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "AssemblePitchDeck":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary.")
+			bb.Result = "## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
@@ -467,7 +467,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "UpdateFinancialModel":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Model Updated\n\nDCF/comps model refreshed with latest quarter data.")
+			bb.Result = "## Model Updated\n\nDCF/comps model refreshed with latest quarter data."
 			return 1
 		}
 	case "RollForwardProjections":
@@ -483,7 +483,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "DraftEarningsNote":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL.")
+			bb.Result = "## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
@@ -505,7 +505,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "MapCompetitors":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Competitive Landscape\n\nMarket share, positioning, key differentiators.")
+			bb.Result = "## Competitive Landscape\n\nMarket share, positioning, key differentiators."
 			return 1
 		}
 	case "BuildPeerComparison":
@@ -516,7 +516,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "ScreenForIdeas":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation.")
+			bb.Result = "## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation."
 			return 1
 		}
 	case "RankAndPrioritize":
@@ -527,7 +527,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "Build3StatementModel":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified.")
+			bb.Result = "## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified."
 			return 1
 		}
 	case "VerifyModelBalance":
@@ -538,7 +538,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "GatherClientContext":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences.")
+			bb.Result = "## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences."
 			return 1
 		}
 	case "BuildBriefingPack":
@@ -549,13 +549,13 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "QCBriefingPack":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved.")
+			bb.Result = "## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "IngestGPPackage":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## GP Package\n\nCapital account statements, cap tables ingested.")
+			bb.Result = "## GP Package\n\nCapital account statements, cap tables ingested."
 			return 1
 		}
 	case "RunValuationTemplate":
@@ -634,7 +634,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	case "ParseOnboardingDocs":
 		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners.")
+			bb.Result = "## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners."
 			return 1
 		}
 	case "RunKYCRulesEngine":

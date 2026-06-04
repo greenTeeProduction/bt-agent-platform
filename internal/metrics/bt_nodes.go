@@ -108,7 +108,7 @@ func BlockFitnessRanking() []string {
 		id    string
 		score int64
 	}
-	var pairs []pair
+	pairs := make([]pair, 0, len(snap))
 	for key, val := range snap {
 		labels := parseLabelKey(key)
 		id := labels["block_id"]

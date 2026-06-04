@@ -12,7 +12,7 @@ import (
 // BuildTimeout wraps the child with a tick-based timeout (TimeoutMs on node).
 func BuildTimeout(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	d := time.Duration(node.TimeoutMs) * time.Millisecond
 	if d <= 0 && node.Metadata != nil {
@@ -30,7 +30,7 @@ func BuildTimeout(node *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 // BuildInverter inverts child success/failure.
 func BuildInverter(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	return btdec.NewInverter(buildNode(&node.Children[0], bb, node.Name))
 }
@@ -38,7 +38,7 @@ func BuildInverter(node *evolution.SerializableNode, bb *Blackboard) btcore.Comm
 // BuildSucceeder always succeeds (go-bt Optional).
 func BuildSucceeder(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	}
 	return btdec.NewOptional(buildNode(&node.Children[0], bb, node.Name))
 }
@@ -46,7 +46,7 @@ func BuildSucceeder(node *evolution.SerializableNode, bb *Blackboard) btcore.Com
 // BuildRepeater repeats child up to max_retries.
 func BuildRepeater(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	times := node.MaxRetries
 	if times <= 0 {
@@ -58,7 +58,7 @@ func BuildRepeater(node *evolution.SerializableNode, bb *Blackboard) btcore.Comm
 // BuildRunner executes the child once (explicit leaf decorator).
 func BuildRunner(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	return buildNode(&node.Children[0], bb, node.Name)
 }
@@ -66,7 +66,7 @@ func BuildRunner(node *evolution.SerializableNode, bb *Blackboard) btcore.Comman
 // BuildCircuitBreaker opens after consecutive failures (metadata: threshold, cooldown_ms).
 func BuildCircuitBreaker(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	threshold := 3
 	cooldown := 5 * time.Minute

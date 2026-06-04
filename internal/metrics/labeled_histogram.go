@@ -39,17 +39,17 @@ func (lh *LabeledHistogram) Observe(v float64, labels map[string]string) {
 }
 
 // Snapshot returns sum and count per label key for export.
-func (lh *LabeledHistogram) Snapshot() map[string]histogramSnap {
+func (lh *LabeledHistogram) Snapshot() map[string]HistogramSnap {
 	lh.mu.RLock()
 	defer lh.mu.RUnlock()
-	out := make(map[string]histogramSnap, len(lh.buckets))
+	out := make(map[string]HistogramSnap, len(lh.buckets))
 	for k, h := range lh.buckets {
 		out[k] = h.SnapshotStats()
 	}
 	return out
 }
 
-type histogramSnap struct {
+type HistogramSnap struct {
 	Sum   float64
 	Count uint64
 }

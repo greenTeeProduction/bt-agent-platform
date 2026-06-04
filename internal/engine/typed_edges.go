@@ -26,7 +26,7 @@ func buildCompositeChildren(node *evolution.SerializableNode, bb *Blackboard, pa
 		child := buildNode(&node.Children[i], bb, parentName)
 		if cond := guardConditionForChild(node.Edges, i); cond != "" {
 			if !evaluateGuardCondition(cond, bb) {
-				child = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+				child = btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 			}
 		}
 		if hasQualityGateForChild(node.Edges, i) {

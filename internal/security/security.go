@@ -347,10 +347,12 @@ func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Han
 				}
 				tw.Header().Set("Content-Type", "application/json")
 				tw.WriteHeader(http.StatusGatewayTimeout)
-				json.NewEncoder(tw).Encode(map[string]string{
+				if err := json.NewEncoder(tw).Encode(map[string]string{
 					"error":   "request_timeout",
 					"message": "Request exceeded maximum processing time.",
-				})
+				}); err != nil {
+					return
+				}
 			}
 		})
 	}

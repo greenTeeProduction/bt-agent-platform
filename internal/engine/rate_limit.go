@@ -28,7 +28,7 @@ func getRateLimiter(name string, interval time.Duration) *rateLimiter {
 // BuildRateLimit throttles child execution (returns Running/0 until interval elapses).
 func BuildRateLimit(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
 	}
 	interval := time.Second
 	if node.Metadata != nil {

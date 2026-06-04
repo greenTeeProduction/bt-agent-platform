@@ -5,6 +5,8 @@
 set -euo pipefail
 
 GO="${GO:-go}"
+GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.3}"
+export GOTOOLCHAIN
 GOPATH_BIN="$("${GO}" env GOPATH)/bin"
 export PATH="${GOPATH_BIN}:${PATH}"
 

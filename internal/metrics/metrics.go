@@ -47,10 +47,10 @@ func NewHistogram(bounds []float64) *Histogram {
 }
 
 // SnapshotStats returns aggregate sum and count.
-func (h *Histogram) SnapshotStats() histogramSnap {
+func (h *Histogram) SnapshotStats() HistogramSnap {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return histogramSnap{Sum: h.sum, Count: h.total}
+	return HistogramSnap{Sum: h.sum, Count: h.total}
 }
 
 func (h *Histogram) Observe(v float64) {

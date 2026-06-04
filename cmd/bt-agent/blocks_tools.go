@@ -80,19 +80,20 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 			reg := blocks.DefaultRegistry
 			var tree *evolution.SerializableNode
 			var err error
-			if params.Preset != "" {
+			switch {
+			case params.Preset != "":
 				var strategy *evolution.SerializableNode
 				if params.Strategy != "" {
 					strategy = resolveTree(params.Strategy)
 				}
 				tree, err = blocks.ComposePresetWithTools(reg, params.Preset, params.ToolsProfile, params.Name, strategy)
-			} else if params.TaskTree {
+			case params.TaskTree:
 				var strategy *evolution.SerializableNode
 				if params.Strategy != "" {
 					strategy = resolveTree(params.Strategy)
 				}
 				tree, err = blocks.ComposeTaskTree(reg, params.Name, strategy)
-			} else {
+			default:
 				ids := strings.Split(params.BlockIDs, ",")
 				for i := range ids {
 					ids[i] = strings.TrimSpace(ids[i])
@@ -163,7 +164,9 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 				BlockIDs string `json:"block_ids"`
 				Name     string `json:"name"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			ids := strings.Split(params.BlockIDs, ",")
 			for i := range ids {
 				ids[i] = strings.TrimSpace(ids[i])

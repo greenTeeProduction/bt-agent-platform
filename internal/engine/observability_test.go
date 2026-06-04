@@ -14,7 +14,7 @@ func TestObserveNode_RecordsMetrics(t *testing.T) {
 	before := len(metrics.NodeMetricsSnapshot())
 
 	node := &evolution.SerializableNode{Type: "Action", Name: "MarkSuccessful"}
-	child := btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+	child := btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	cmd := observeNode(node, "Parent", child)
 
 	bb := &Blackboard{ChainState: make(map[string]any)}

@@ -471,7 +471,9 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 			resp["hitl_status"] = string(req.Status)
 		}
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return
+	}
 }
 
 func handleTaskReject(w http.ResponseWriter, r *http.Request) {
@@ -488,7 +490,9 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 			resp["hitl_status"] = string(req.Status)
 		}
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return
+	}
 }
 func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	approved := taskStore.Approved()

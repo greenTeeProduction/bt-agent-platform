@@ -3,12 +3,13 @@ package blocks
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/nico/go-bt-evolve/internal/evolution"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // Registry stores reusable building blocks (built-in + persisted custom).
@@ -252,7 +253,7 @@ func (r *Registry) FilterEvolutionMutations(ops []evolution.MutationOp) []evolut
 	if len(ops) == 0 {
 		return ops
 	}
-	var out []evolution.MutationOp
+	out := make([]evolution.MutationOp, 0, len(ops))
 	for _, op := range ops {
 		bid := blockIDFromOp(op)
 		if bid != "" && !r.IsEvolutionMutable(bid) {

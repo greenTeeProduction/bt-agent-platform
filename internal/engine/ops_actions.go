@@ -143,10 +143,10 @@ func fitnessScoreFromBB(outcome string, qualityScore float64, success bool) floa
 	return score
 }
 
-func truncateStr(s string, max int) string {
+func truncateStr(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "..."
+	return s[:maxLen] + "..."
 }

@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/llm"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/llm"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"

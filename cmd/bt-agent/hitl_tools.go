@@ -21,7 +21,9 @@ func registerHITLTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				PendingOnly bool `json:"pending_only"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			if hitl.DefaultStore == nil {
 				return mcpErr(fmt.Errorf("HITL store not initialized"))
 			}
@@ -44,7 +46,9 @@ func registerHITLTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				RequestID string `json:"request_id"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			if hitl.DefaultStore == nil {
 				return mcpErr(fmt.Errorf("HITL store not initialized"))
 			}
@@ -69,7 +73,9 @@ func registerHITLTools(server *mcp.Server, deps *mcpDeps) {
 				Reviewer  string `json:"reviewer"`
 				Comment   string `json:"comment"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			if params.Reviewer == "" {
 				params.Reviewer = "human"
 			}
@@ -94,7 +100,9 @@ func registerHITLTools(server *mcp.Server, deps *mcpDeps) {
 				Reviewer  string `json:"reviewer"`
 				Reason    string `json:"reason"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			if params.Reviewer == "" {
 				params.Reviewer = "human"
 			}
@@ -119,7 +127,9 @@ func registerHITLTools(server *mcp.Server, deps *mcpDeps) {
 				Strategy string `json:"strategy"`
 				Save     bool   `json:"save"`
 			}
-			json.Unmarshal(args, &params)
+			if err := json.Unmarshal(args, &params); err != nil {
+				return mcpErr(err)
+			}
 			var strategy *evolution.SerializableNode
 			if params.Strategy != "" {
 				strategy = resolveTree(params.Strategy)

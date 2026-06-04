@@ -140,7 +140,7 @@ func (s *Store) ListPending() []*Request {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
-	var out []*Request
+	out := make([]*Request, 0, len(s.records))
 	for _, r := range s.records {
 		if r.Status != StatusPending {
 			continue

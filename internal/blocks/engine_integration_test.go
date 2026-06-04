@@ -15,20 +15,20 @@ import (
 
 type pipelineMockLLM struct{}
 
-func (pipelineMockLLM) AnalyzeComplexity(task string) string { return "low" }
-func (pipelineMockLLM) GeneratePlan(task, complexity string) string {
+func (pipelineMockLLM) AnalyzeComplexity(_ string) string { return "low" }
+func (pipelineMockLLM) GeneratePlan(_, _ string) string {
 	return "1. Analyze\n2. Execute\n3. Verify"
 }
-func (pipelineMockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (pipelineMockLLM) Reflect(_, _, _ string) (string, string) {
 	return "ok", "none"
 }
-func (pipelineMockLLM) Generate(prompt string) (string, error) {
+func (pipelineMockLLM) Generate(_ string) (string, error) {
 	return "Mock agent output with enough length for quality validation checks in tests.", nil
 }
-func (pipelineMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (pipelineMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return pipelineMockLLM{}.Generate(prompt)
 }
-func (pipelineMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (pipelineMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return pipelineMockLLM{}.Generate(prompt)
 }
 

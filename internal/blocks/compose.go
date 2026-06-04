@@ -39,11 +39,10 @@ func Compose(reg *Registry, spec ComposeSpec, inline bool) (*evolution.Serializa
 	if spec.Middle != nil {
 		// Insert middle after first block when multiple leading blocks exist, else append before last recovery block
 		mid := *cloneTree(spec.Middle)
-		if len(children) == 0 {
+		switch len(children) {
+		case 0, 1:
 			children = append(children, mid)
-		} else if len(children) == 1 {
-			children = append(children, mid)
-		} else {
+		default:
 			// [pre..., middle, ...post] — insert middle between first and rest
 			rest := append([]evolution.SerializableNode{mid}, children[1:]...)
 			children = append([]evolution.SerializableNode{children[0]}, rest...)
