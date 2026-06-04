@@ -1,7 +1,10 @@
 package blocks
 
 import (
+	"path/filepath"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/agent"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -104,8 +107,11 @@ func TestMemoryWriteRoundTrip(t *testing.T) {
 	if load(ctx2) != 1 {
 		t.Fatal("load failed")
 	}
-	mem, _ := bb2.ChainState["agent_memory"].(string)
-	if mem == "" {
-		t.Fatal("expected memory context")
+	importMS, err := agent.NewMemoryStore(filepath.Join(dir, ".go-bt-evolve", "memory"), "test-agent", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if importMS.Read("last_run_summary") == "" {
+		t.Fatal("expected written memory entry")
 	}
 }

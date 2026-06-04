@@ -74,9 +74,9 @@ func TestComposeTaskTreeAgentic_WithStrategyMiddle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// pre, plan, strategy, tool, quality, error = 6 refs
-	if len(tree.Children) != 6 {
-		t.Fatalf("expected 6 children, got %d", len(tree.Children))
+	// pre, plan, tools, strategy, tool, quality, error = 7 refs
+	if len(tree.Children) != 7 {
+		t.Fatalf("expected 7 children, got %d", len(tree.Children))
 	}
 }
 
