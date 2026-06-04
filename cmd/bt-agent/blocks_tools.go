@@ -10,9 +10,16 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/mcp"
 )
-
 // registerBlockTools registers MCP tools for reusable tree building blocks.
 func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
+	server.RegisterTool("bt_blocks_list_profiles", "List tool-profile building blocks (core:tools_*)",
+		map[string]mcp.Property{}, []string{},
+		func(_ json.RawMessage) *mcp.ToolResult {
+			ids := blocks.ListToolProfileBlocks()
+			data, _ := json.Marshal(map[string]any{"profiles": ids})
+			return &mcp.ToolResult{Content: []mcp.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
 	server.RegisterTool("bt_blocks_list", "List reusable behavior-tree building blocks",
 		map[string]mcp.Property{},
 		[]string{},
@@ -46,6 +53,7 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{
 			"name":      {Type: "string", Description: "Root sequence name"},
 			"block_ids": {Type: "string", Description: "Comma-separated block ids"},
+			"tools_profile": {Type: "string", Description: "Tool profile: default, dev, research, startup, universal"},
 			"preset": {Type: "string", Description: "Compose preset: default, agentic, hitl, full (overrides block_ids when set)"},
 			"task_tree": {Type: "boolean", Description: "If true, use default task layout: pre_gate + strategy + tool_execution + error_handling"},
 			"strategy":  {Type: "string", Description: "Optional tree id for middle StrategyRouter (domain:code_review, etc.)"},
@@ -57,7 +65,8 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Name     string `json:"name"`
 				BlockIDs string `json:"block_ids"`
-				Preset   string `json:"preset"`
+				Preset       string `json:"preset"`
+				ToolsProfile string `json:"tools_profile"`
 				TaskTree bool   `json:"task_tree"`
 				Strategy string `json:"strategy"`
 				Save     bool   `json:"save"`
@@ -74,7 +83,7 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 				if params.Strategy != "" {
 					strategy = resolveTree(params.Strategy)
 				}
-				tree, err = blocks.ComposePreset(reg, params.Preset, params.Name, strategy)
+				tree, err = blocks.ComposePresetWithTools(reg, params.Preset, params.ToolsProfile, params.Name, strategy)
 			} else if params.TaskTree {
 				var strategy *evolution.SerializableNode
 				if params.Strategy != "" {

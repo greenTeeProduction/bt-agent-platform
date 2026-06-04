@@ -10,16 +10,11 @@ func builtinBlocks() []Block {
 			Description: "Input validation and default tool setup (timeout + graceful validation handling)",
 			Category:    CategoryCore,
 			Mutable:     false,
-			Version:     2,
-			Tree: &evolution.SerializableNode{
-				Type: "Sequence",
-				Name: "PreGate",
-				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
-					{Type: "Condition", Name: "HasClearTask", Description: "Task has clear goal"},
-					{Type: "Action", Name: "SetupDefaultTools", Description: "Populate bb.ChainTools"},
-				},
-			},
+			Version:     3,
+			Tree: func() *evolution.SerializableNode {
+				n := PreGateValidationOnly()
+				return &n
+			}(),
 		},
 		{
 			ID:          "core:tool_execution",
@@ -164,6 +159,79 @@ func builtinBlocks() []Block {
 				return &n
 			}(),
 		},
+
+		{
+			ID:          "core:delegate",
+			Name:        "Delegate",
+			Description: "Delegate task to another behavior tree (requires delegate_tree_id)",
+			Category:    CategoryTool,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := DelegateBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:a2a_handoff",
+			Name:        "A2AHandoff",
+			Description: "Hand off task to external A2A agent",
+			Category:    CategoryTool,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := A2AHandoffBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:parallel_fanout",
+			Name:        "ParallelFanout",
+			Description: "Map-reduce over plan and merge results",
+			Category:    CategoryTool,
+			Mutable:     true,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := ParallelFanoutBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:merge_results",
+			Name:        "MergeResults",
+			Description: "Merge bb.Results into bb.Result",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := MergeResultsBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:memory_load",
+			Name:        "MemoryLoad",
+			Description: "Load agent memory into chain state",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := MemoryLoadBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:memory_write",
+			Name:        "MemoryWrite",
+			Description: "Persist run summary to agent memory",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := MemoryWriteBlock()
+				return &n
+			}(),
+		},
 		{
 			ID:          "core:reflect_only",
 			Name:        "ReflectOnly",
@@ -187,6 +255,7 @@ func builtinBlocks() []Block {
 			},
 		},
 	}
+	blocks = append(blocks, ToolProfileBlocks()...)
 	for i := range blocks {
 		switch blocks[i].ID {
 		case "core:pre_gate":
@@ -204,6 +273,15 @@ func builtinBlocks() []Block {
 			ApplyReliability(&blocks[i], SpecClarifyGate)
 		case "core:quality_gate":
 			ApplyReliability(&blocks[i], SpecQualityGate)
+
+		case "core:delegate":
+			ApplyReliability(&blocks[i], SpecDelegate)
+		case "core:a2a_handoff":
+			ApplyReliability(&blocks[i], SpecA2AHandoff)
+		case "core:parallel_fanout":
+			ApplyReliability(&blocks[i], SpecFanout)
+		case "core:tools_dev", "core:tools_research", "core:tools_startup", "core:tools_universal", "core:tools_default":
+			ApplyReliability(&blocks[i], SpecToolsProfile)
 		case "core:reflect_only":
 			ApplyReliability(&blocks[i], SpecReflect)
 		}

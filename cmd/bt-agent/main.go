@@ -256,6 +256,19 @@ func main() {
 		os.Exit(1)
 	}
 	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
+
+	engine.AgentMemoryBaseDir = agentHome
+	engine.DelegateToTreeFn = func(treeID string, bb *engine.Blackboard) (string, error) {
+		ser := resolveTree(treeID)
+		if ser == nil {
+			return "", fmt.Errorf("unknown tree: %s", treeID)
+		}
+		cmd, err := engine.BuildAndValidate(ser, bb)
+		if err != nil {
+			return "", err
+		}
+		return engine.RunTask(bb, cmd), nil
+	}
 	if _, err := hitl.InitStore(filepath.Join(home, ".go-bt-evolve")); err != nil {
 		btlog.Warn("hitl store init failed", "error", err)
 	}
