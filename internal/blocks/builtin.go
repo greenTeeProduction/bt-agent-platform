@@ -98,6 +98,42 @@ func builtinBlocks() []Block {
 				return &n
 			}(),
 		},
+		{
+			ID:          "core:human_review",
+			Name:        "HumanReview",
+			Description: "Post-execution human review before marking success",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := HumanReviewBlock("HumanReview", "Review the agent output and approve before finalizing.")
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:hitl_tiered",
+			Name:        "HITLTiered",
+			Description: "Human gate only for external or destructive side effects",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := HITLTieredBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:human_escalate",
+			Name:        "HITLEscalate",
+			Description: "Escalate to operator on repeated HITL failures",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := HITLEscalateBlock()
+				return &n
+			}(),
+		},
 
 		{
 			ID:          "core:plan",

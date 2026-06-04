@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/hitl"
 )
 
 // Config holds all runtime configuration for the BT platform.
@@ -87,8 +89,18 @@ type Config struct {
 	// Metadata
 	ConfigFile string `json:"-" env:"BT_CONFIG_FILE" default:""` // path to JSON config file
 
+	// HITL — human-in-the-loop approval policy
+	HITL HITLSettings `json:"hitl,omitempty"`
+
 	// Paths — resolved file paths (populated by ResolvePaths())
 	Paths PathConfig `json:"paths,omitempty"`
+}
+
+// HITLSettings configures human approval gates.
+type HITLSettings struct {
+	Enabled     bool `json:"enabled" default:"true"`
+	AutoApprove bool `json:"auto_approve" default:"false"`
+	TimeoutSecs int  `json:"timeout_secs" default:"86400"`
 }
 
 // PathConfig provides resolved file paths for all BT platform components.
@@ -271,6 +283,11 @@ func newDefaultConfig() *Config {
 		CBThreshold:                  3,
 		CBCooldownSecs:               300,
 		DLQMaxEntries:                1000,
+		HITL: HITLSettings{
+			Enabled:     true,
+			AutoApprove: false,
+			TimeoutSecs: 86400,
+		},
 	}
 }
 
@@ -591,6 +608,22 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("BT_DLQ_MAX_ENTRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			c.DLQMaxEntries = n
+		}
+	}
+
+	// HITL
+	if v := os.Getenv("BT_HITL_ENABLED"); v != "" {
+		c.HITL.Enabled = v != "false" && v != "0"
+		if v == "false" || v == "0" {
+			c.HITL.AutoApprove = true
+		}
+	}
+	if v := os.Getenv("BT_HITL_AUTO_APPROVE"); v != "" {
+		c.HITL.AutoApprove = v == "true" || v == "1"
+	}
+	if v := os.Getenv("BT_HITL_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.HITL.TimeoutSecs = n
 		}
 	}
 
@@ -1385,3 +1418,15 @@ func (c *Config) deepseekReachable() bool {
 // to avoid real network calls. Tests set it to a mock; production code leaves
 // it nil, which causes deepseekReachable to use a real HTTP client.
 var deepseekChecker func(host string) bool
+
+// ApplyHITLPolicy syncs loaded configuration into the global HITL policy.
+func ApplyHITLPolicy(c *Config) {
+	if c == nil {
+		return
+	}
+	hitl.ApplyConfig(hitl.HITLConfig{
+		Enabled:     c.HITL.Enabled,
+		AutoApprove: c.HITL.AutoApprove,
+		TimeoutSecs: c.HITL.TimeoutSecs,
+	})
+}

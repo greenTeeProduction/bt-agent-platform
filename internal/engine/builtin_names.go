@@ -61,6 +61,7 @@ var builtinActionNames = map[string]bool{
 	"DraftEarningsNote":         true,
 	"DraftSections":             true,
 	"EscalateToOperator":        true,
+	"EscalateHITL":              true,
 	"EvaluateCombatResult":      true,
 	"ExecuteCombatAction":       true,
 	"ExecutePatrol":             true,

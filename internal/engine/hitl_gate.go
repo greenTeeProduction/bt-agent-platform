@@ -29,6 +29,11 @@ func registerHITLNodes() {
 		st := hitlStatus(b)
 		return st == string(hitl.StatusRejected) || st == string(hitl.StatusExpired)
 	})
+	RegisterCondition("RequiresExternalApproval", func(b *Blackboard) bool {
+		sec, _ := b.ChainState["side_effect_class"].(string)
+		sec = strings.ToLower(sec)
+		return sec == "destroy" || sec == "external"
+	})
 	RegisterCondition("HumanApprovalPending", func(b *Blackboard) bool {
 		return hitlStatus(b) == string(hitl.StatusPending)
 	})
@@ -74,6 +79,32 @@ func promptFromNode(node *evolution.SerializableNode) string {
 	return ""
 }
 
+
+func hitlPhase(node *evolution.SerializableNode) string {
+	if node != nil && node.Metadata != nil {
+		if p, ok := node.Metadata["phase"].(string); ok && p != "" {
+			return p
+		}
+	}
+	return "pre"
+}
+
+func childExecuted(bb *Blackboard) bool {
+	if bb == nil || bb.ChainState == nil {
+		return false
+	}
+	v, ok := bb.ChainState["hitl_child_executed"].(bool)
+	return ok && v
+}
+
+func markChildExecuted(bb *Blackboard, code int) {
+	if bb.ChainState == nil {
+		bb.ChainState = make(map[string]any)
+	}
+	bb.ChainState["hitl_child_executed"] = true
+	bb.ChainState["hitl_child_code"] = code
+}
+
 func autoApproveFromNode(node *evolution.SerializableNode) bool {
 	if node.Metadata != nil {
 		if v, ok := node.Metadata["auto_approve"].(bool); ok && v {
@@ -113,18 +144,33 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		req, ok = store.Get(reqID)
 	}
 
+	phase := hitlPhase(h.node)
+	if phase == "post" && !childExecuted(bb) && h.child != nil {
+		code := h.child.Run(ctx)
+		markChildExecuted(bb, code)
+		if code != 1 {
+			delete(bb.ChainState, chainKeyHITLRequestID)
+			delete(bb.ChainState, chainKeyHITLStatus)
+			return code
+		}
+	}
+
 	if !ok || req == nil {
 		proposed := bb.Result
 		if proposed == "" {
 			proposed = bb.Plan
 		}
-		meta := map[string]any{}
+		meta := map[string]any{"phase": phase}
 		if bb.ChainState != nil {
 			if a, ok := bb.ChainState["agent_name"].(string); ok {
 				meta["agent_name"] = a
 			}
+			if tid, ok := bb.ChainState["task_id"].(string); ok {
+				meta["task_id"] = tid
+			}
 		}
 		req = hitl.NewRequest(h.node.Name, h.node.Type, bb.Task, bb.Plan, proposed, promptFromNode(h.node), meta)
+		req.Phase = phase
 		req = hitl.ApplyAutoApproveIfPolicy(req)
 		if store != nil {
 			_ = store.Create(req)
@@ -142,9 +188,17 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		bb.Outcome = string(reflection.Failure)
 		return -1
 	case hitl.StatusApproved, hitl.StatusSkipped:
-		if h.child != nil {
+		if phase == "post" && childExecuted(bb) {
+			if c, ok := bb.ChainState["hitl_child_code"].(int); ok {
+				delete(bb.ChainState, chainKeyHITLRequestID)
+				delete(bb.ChainState, chainKeyHITLStatus)
+				delete(bb.ChainState, "hitl_child_executed")
+				delete(bb.ChainState, "hitl_child_code")
+				return c
+			}
+		}
+		if h.child != nil && phase != "post" {
 			code := h.child.Run(ctx)
-			// Clear pending state after child runs so sibling gates get fresh requests
 			delete(bb.ChainState, chainKeyHITLRequestID)
 			delete(bb.ChainState, chainKeyHITLStatus)
 			return code

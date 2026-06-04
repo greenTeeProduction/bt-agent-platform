@@ -20,6 +20,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/finance"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/metrics"
@@ -186,6 +187,13 @@ func main() {
 		dashConfig = cfg
 		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
 	}
+	config.ApplyHITLPolicy(dashConfig)
+	hitlBase := filepath.Join(os.Getenv("HOME"), ".go-bt-evolve")
+	if _, err := hitl.InitStore(hitlBase); err != nil {
+		slog.Warn("HITL store init failed", "error", err)
+	} else {
+		slog.Info("HITL store initialized", "path", hitlBase+"/hitl")
+	}
 
 	// CORS origin: default to wildcard for dev, restrict in production via config
 	corsOrigin := dashConfig.CORSDashboardOrigin
@@ -242,6 +250,8 @@ func main() {
 	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
 	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
 	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
+	mux.HandleFunc("/api/hitl/pending", sessionAuth(dashboard.HandleHITLPending))
+	mux.HandleFunc("/api/hitl/", sessionAuth(dashboard.HandleHITL))
 	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
 	mux.HandleFunc("/api/sprint/status", sessionAuth(handleSprintStatus))
 	mux.HandleFunc("/api/tree/structure", sessionAuth(handleTreeStructure))
@@ -454,7 +464,14 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"status": "approved", "id": taskID})
+	resp := map[string]string{"status": "approved", "id": taskID}
+	if hitl.DefaultStore != nil {
+		if req, err := hitl.DefaultStore.ApproveByTaskID(taskID, "dashboard", "task approved via dashboard"); err == nil {
+			resp["hitl_request_id"] = req.ID
+			resp["hitl_status"] = string(req.Status)
+		}
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func handleTaskReject(w http.ResponseWriter, r *http.Request) {
@@ -464,7 +481,14 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"status": "rejected", "id": taskID})
+	resp := map[string]string{"status": "rejected", "id": taskID}
+	if hitl.DefaultStore != nil {
+		if req, err := hitl.DefaultStore.RejectByTaskID(taskID, "dashboard", "task rejected via dashboard"); err == nil {
+			resp["hitl_request_id"] = req.ID
+			resp["hitl_status"] = string(req.Status)
+		}
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	approved := taskStore.Approved()

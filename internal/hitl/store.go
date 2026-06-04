@@ -41,6 +41,8 @@ type Request struct {
 	RejectedAt *time.Time        `json:"rejected_at,omitempty"`
 	AgentName  string            `json:"agent_name,omitempty"`
 	TreeID     string            `json:"tree_id,omitempty"`
+	TaskID     string            `json:"task_id,omitempty"`
+	Phase      string            `json:"phase,omitempty"`
 }
 
 // Store persists approval requests.

@@ -272,6 +272,7 @@ func main() {
 	if _, err := hitl.InitStore(filepath.Join(home, ".go-bt-evolve")); err != nil {
 		btlog.Warn("hitl store init failed", "error", err)
 	}
+	config.ApplyHITLPolicy(cfg)
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)

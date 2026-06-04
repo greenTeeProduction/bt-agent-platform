@@ -704,16 +704,22 @@ func registerMCPTools(server *mcp.Server, deps *mcpDeps) {
 			if reqID == "" {
 				reqID = params.TaskID
 			}
-			if reqID != "" && hitl.DefaultStore != nil && strings.HasPrefix(reqID, "hitl-") {
+			if reqID != "" && hitl.DefaultStore != nil {
 				if params.Reviewer == "" {
 					params.Reviewer = "workflow"
 				}
 				var req *hitl.Request
 				var err error
-				if params.Action == "reject" {
-					req, err = hitl.DefaultStore.Reject(reqID, params.Reviewer, params.Comment)
+				if strings.HasPrefix(reqID, "hitl-") {
+					if params.Action == "reject" {
+						req, err = hitl.DefaultStore.Reject(reqID, params.Reviewer, params.Comment)
+					} else {
+						req, err = hitl.DefaultStore.Approve(reqID, params.Reviewer, params.Comment)
+					}
+				} else if params.Action == "reject" {
+					req, err = hitl.DefaultStore.RejectByTaskID(reqID, params.Reviewer, params.Comment)
 				} else {
-					req, err = hitl.DefaultStore.Approve(reqID, params.Reviewer, params.Comment)
+					req, err = hitl.DefaultStore.ApproveByTaskID(reqID, params.Reviewer, params.Comment)
 				}
 				if err != nil {
 					data, _ := json.Marshal(map[string]interface{}{"request_id": reqID, "error": err.Error()})

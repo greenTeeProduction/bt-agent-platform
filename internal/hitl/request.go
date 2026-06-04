@@ -43,6 +43,9 @@ func NewRequest(nodeName, nodeType, task, plan, proposed, prompt string, meta ma
 	if tree, ok := meta["tree_id"].(string); ok {
 		req.TreeID = tree
 	}
+	if taskID, ok := meta["task_id"].(string); ok && taskID != "" {
+		req.SetTaskID(taskID)
+	}
 	return req
 }
 
