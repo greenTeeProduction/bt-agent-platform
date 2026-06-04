@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         id: setup-go
         with:
@@ -49,6 +51,7 @@ jobs:
         with:
           version: v1.64.8
           install-mode: goinstall
+          only-new-issues: true
           args: --timeout=5m --out-format=colored-line-number
 
   security:

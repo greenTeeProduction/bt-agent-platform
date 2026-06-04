@@ -28,6 +28,7 @@ This document describes how to catch **high/critical** security findings and **l
 ## Tool versions
 
 - **golangci-lint build** — install with `GOTOOLCHAIN=go1.26.3` (CI uses `install-mode: goinstall`); pre-built v1.64.8 binaries use Go 1.24 and fail typecheck on `go 1.26` modules.
+- **Lint scope** — CI uses `only-new-issues: true` on PRs/pushes so existing baseline findings do not block merges; new code must pass `golangci-lint run --new-from-rev origin/master` locally.
 
 - **Go** — CI uses `actions/setup-go` with `go-version-file: go.mod` (currently **1.26.3**). golangci-lint must run with the same toolchain as `go build`; older runners (e.g. 1.23/1.24) fail typecheck with `package requires newer Go version go1.26`.
 
