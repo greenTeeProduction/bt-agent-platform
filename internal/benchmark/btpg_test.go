@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/llm"
+
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -65,9 +67,7 @@ func TestBTPG_QualityMetrics_AllDomainTrees(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping LLM-dependent BTPG test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	tasks := BuiltinBTPGTasks()
 	if len(tasks) != 8 {
 		t.Errorf("expected 8 BTPG tasks, got %d", len(tasks))
@@ -84,10 +84,10 @@ func TestBTPG_TaskExecution(t *testing.T) {
 		}
 	}
 
-	// Run with real LLM (falls back to mock if Ollama unavailable)
+	// Run with real LLM (falls back to llmBackend if Ollama unavailable)
 	tree := evolution.GoDeveloperTree()
-	llm := DefaultLLM()
-	result := EvaluateBTPG(tree, tasks, llm)
+	llmClient := RealLLM(t)
+	result := EvaluateBTPG(tree, tasks, llmClient)
 
 	fmt.Printf("\nBTPG Task Execution: success=%.0f%% efficiency=%.4f robustness=%.2f\n",
 		result.Metrics.SuccessRate*100,
@@ -114,15 +114,13 @@ func TestBTPG_TaskExecution(t *testing.T) {
 }
 
 func TestBTPG_TaskExecution_FiveTasks(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping LLM-dependent BTPG test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Test with subset of 5 tasks as specified
 	tasks := BuiltinBTPGTasks()[:5]
 	tree := evolution.GoDeveloperTree()
-	llm := DefaultLLM()
+	llmClient := RealLLM(t)
 
-	result := EvaluateBTPG(tree, tasks, llm)
+	result := EvaluateBTPG(tree, tasks, llmClient)
 
 	fmt.Printf("\nBTPG 5-Task: success=%.0f%% robustness=%.2f\n",
 		result.Metrics.SuccessRate*100, result.Metrics.RobustnessScore)
@@ -147,9 +145,7 @@ func TestBTPG_EmptyTasks(t *testing.T) {
 }
 
 func TestBTPG_EdgeCaseRobustness(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping LLM-dependent BTPG test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Tasks that are edge cases should test robustness
 	edgeTasks := []string{
 		"bring coffee", // very short
@@ -158,8 +154,8 @@ func TestBTPG_EdgeCaseRobustness(t *testing.T) {
 	}
 
 	tree := evolution.GoDeveloperTree()
-	llm := DefaultLLM()
-	result := EvaluateBTPG(tree, edgeTasks, llm)
+	llmClient := RealLLM(t)
+	result := EvaluateBTPG(tree, edgeTasks, llmClient)
 
 	fmt.Printf("\nBTPG Edge Cases: success=%.0f%% robustness=%.2f\n",
 		result.Metrics.SuccessRate*100, result.Metrics.RobustnessScore)

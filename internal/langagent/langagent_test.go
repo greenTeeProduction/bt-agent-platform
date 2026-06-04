@@ -18,26 +18,26 @@ import (
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *mockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *mockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
-func (m *mockLLM) Generate(prompt string) (string, error) {
+func (m *mockLLM) Generate(_ string) (string, error) {
 	return "mock response", nil
 }
 
-func (m *mockLLM) AnalyzeComplexity(task string) string {
+func (m *mockLLM) AnalyzeComplexity(_ string) string {
 	return "medium"
 }
 
-func (m *mockLLM) GeneratePlan(task, complexity string) string {
+func (m *mockLLM) GeneratePlan(_, _ string) string {
 	return "1. Analyze\n2. Execute\n3. Verify"
 }
 
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *mockLLM) Reflect(_, _, _ string) (string, string) {
 	return "good planning", "better execution"
 }
 
@@ -47,11 +47,11 @@ var _ llm.LLM = (*mockLLM)(nil)
 
 type mockModel struct{}
 
-func (m *mockModel) Call(ctx context.Context, prompt string, opts ...llms.CallOption) (string, error) {
+func (m *mockModel) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	return "Final Answer: test passed", nil
 }
 
-func (m *mockModel) GenerateContent(ctx context.Context, msgs []llms.MessageContent, opts ...llms.CallOption) (*llms.ContentResponse, error) {
+func (m *mockModel) GenerateContent(_ context.Context, _ []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {
 	return &llms.ContentResponse{
 		Choices: []*llms.ContentChoice{{Content: "test"}},
 	}, nil
@@ -82,7 +82,7 @@ func newConfig(t *testing.T) Config {
 		RefStore:     refStore,
 		TreeStore:    treeStore,
 		AgentFactory: nil, // no factory
-		RunTaskFn: func(task string) string {
+		RunTaskFn: func(_ string) string {
 			return "task completed"
 		},
 		BB: &engine.Blackboard{

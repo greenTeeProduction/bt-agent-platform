@@ -792,9 +792,9 @@ func TestSelectorOptimizer_ShouldPrune(t *testing.T) {
 		t.Error("ShouldPrune with nil best should return false")
 	}
 
-	// Child has worse stats than best
-	bad := &ChildStats{Name: "bad", Successes: 1, Failures: 10}
-	good := &ChildStats{Name: "good", Successes: 10, Failures: 1}
+	// Child has worse stats than best (50/50 vs all-success so Gini impurity is higher)
+	bad := &ChildStats{Name: "bad", Successes: 5, Failures: 5}
+	good := &ChildStats{Name: "good", Successes: 10, Failures: 0}
 	if !so.ShouldPrune(bad, good) {
 		t.Error("ShouldPrune should return true for statistically inferior child")
 	}

@@ -335,7 +335,7 @@ func TestSessionStore_SessionInfo(t *testing.T) {
 	}
 }
 
-func TestSessionStore_ConcurrentAccess(t *testing.T) {
+func TestSessionStore_ConcurrentAccess(_ *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{
 		DefaultTTL:      1 * time.Hour,
 		MaxSessions:     500,
@@ -355,7 +355,7 @@ func TestSessionStore_ConcurrentAccess(t *testing.T) {
 			// Mix of validate, refresh, and create
 			ss.ValidateSession(token)
 			ss.RefreshSession(token)
-			ss.CreateSession("")
+			_, _ = ss.CreateSession("")
 			ss.SessionInfo(token)
 			ss.Count()
 		}()
@@ -414,7 +414,7 @@ func TestSessionStore_BackgroundCleanup(t *testing.T) {
 
 	// Create sessions
 	for i := 0; i < 3; i++ {
-		ss.CreateSession("")
+		_, _ = ss.CreateSession("")
 	}
 
 	// Initially all present
@@ -445,7 +445,7 @@ func TestSessionMiddleware_ValidCookie(t *testing.T) {
 	middleware := ss.SessionMiddleware("", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
@@ -471,7 +471,7 @@ func TestSessionMiddleware_NoCookieOrKey(t *testing.T) {
 	middleware := ss.SessionMiddleware("sk-secret", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	})
 
@@ -494,7 +494,7 @@ func TestSessionMiddleware_APIKeyFallback(t *testing.T) {
 	middleware := ss.SessionMiddleware("sk-secret", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	})
 
@@ -519,7 +519,7 @@ func TestSessionMiddleware_InvalidAPIKey(t *testing.T) {
 	middleware := ss.SessionMiddleware("sk-secret", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	})
 
@@ -545,7 +545,7 @@ func TestSessionMiddleware_NoAPIKeyWhenEmpty(t *testing.T) {
 	middleware := ss.SessionMiddleware("", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	})
 
@@ -574,7 +574,7 @@ func TestSessionMiddleware_ExpiredCookie(t *testing.T) {
 	middleware := ss.SessionMiddleware("sk-secret", nil)
 
 	called := false
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	})
 
@@ -603,7 +603,7 @@ func TestSessionMiddleware_CustomCheckFunc(t *testing.T) {
 		return key == "valid-custom-key"
 	})
 
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -655,7 +655,7 @@ func TestSessionStore_ConfigDefaults(t *testing.T) {
 
 func TestSessionStore_Stop(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{CleanupInterval: 10 * time.Millisecond})
-	ss.CreateSession("")
+	_, _ = ss.CreateSession("")
 
 	// Stop should not panic
 	ss.Stop()
@@ -706,7 +706,7 @@ func TestSessionStore_AuthorizedHeader(t *testing.T) {
 
 	middleware := ss.SessionMiddleware("sk-secret", nil)
 
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 

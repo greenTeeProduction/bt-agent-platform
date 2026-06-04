@@ -14,7 +14,7 @@ type mockLLMWithError struct {
 	errMsg string
 }
 
-func (m *mockLLMWithError) Generate(prompt string) (string, error) {
+func (m *mockLLMWithError) Generate(_ string) (string, error) {
 	return "", errors.New(m.errMsg)
 }
 

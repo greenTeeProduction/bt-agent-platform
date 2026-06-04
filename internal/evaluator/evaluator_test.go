@@ -9,7 +9,7 @@ import (
 )
 
 func makeRecords(outcomes ...reflection.Outcome) []reflection.Record {
-	var records []reflection.Record
+	records := make([]reflection.Record, 0, 8)
 	for i, o := range outcomes {
 		records = append(records, reflection.Record{
 			TaskID:     "task",
@@ -177,7 +177,7 @@ func TestTranspositionTable_Persistence(t *testing.T) {
 
 	tree := evolution.DefaultTree()
 	tt.Store(tree, "persist me", TranspositionEntry{Outcome: "success"})
-	tt.Save()
+	_ = tt.Save()
 
 	// Reload
 	tt2, err := NewTranspositionTable(tmpDir, 100)

@@ -51,8 +51,8 @@ func TestCatalog_ListTemplates(t *testing.T) {
 
 	// Create a template directory with one template
 	tmplDir := filepath.Join(dir, "templates")
-	os.MkdirAll(tmplDir, 0755)
-	os.WriteFile(filepath.Join(tmplDir, "code-reviewer.yaml"), []byte(`name: code-reviewer
+	_ = os.MkdirAll(tmplDir, 0755)
+	_ = os.WriteFile(filepath.Join(tmplDir, "code-reviewer.yaml"), []byte(`name: code-reviewer
 description: Reviews code
 tree: domain:code_review
 category: software-development
@@ -72,9 +72,9 @@ func TestCatalog_Search(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
 	tmplDir := filepath.Join(dir, "templates")
-	os.MkdirAll(tmplDir, 0755)
+	_ = os.MkdirAll(tmplDir, 0755)
 
-	reg.Create(Definition{
+	_, _ = reg.Create(Definition{
 		Name:        "search-test",
 		Description: "Searchable agent",
 		Version:     "1.0.0",
@@ -91,7 +91,7 @@ func TestCatalog_Search(t *testing.T) {
 
 func TestCatalog_SkillToAgent(t *testing.T) {
 	skillPath := filepath.Join(t.TempDir(), "SKILL.md")
-	os.WriteFile(skillPath, []byte(`---
+	_ = os.WriteFile(skillPath, []byte(`---
 name: test-skill
 description: A skill for testing code review
 tags: [test, review]
@@ -118,7 +118,7 @@ tags: [test, review]
 func TestCatalog_Export(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{
+	_, _ = reg.Create(Definition{
 		Name:        "export-test",
 		Description: "Export me",
 		Version:     "1.0.0",

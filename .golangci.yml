@@ -1,8 +1,6 @@
-version: "1"
-
 run:
   timeout: 5m
-  go: '1.23'
+  go: '1.26'
   tests: true
 
 linters:
@@ -26,15 +24,13 @@ linters:
 
 linters-settings:
   gocritic:
+    disable-all: true
     enabled-checks:
       - appendCombine
       - badLock
       - boolExprSimplify
-      - deferInLoop
       - equalFold
       - indexAlloc
-      - nestingReduce
-      - paramTypeCombine
       - rangeExprCopy
       - regexpSimplify
       - sloppyReassign

@@ -343,7 +343,7 @@ func getStringSlice(cs map[string]interface{}, key string) []string {
 }
 
 // buildGoapStepPrompt creates an LLM prompt for executing a GOAP step.
-func buildGoapStepPrompt(task, stepName string, cs map[string]interface{}) string {
+func buildGoapStepPrompt(task, stepName string, _ map[string]interface{}) string {
 	prompt := "You are executing a GOAP (Goal-Oriented Action Planning) step.\n"
 	prompt += "Task: " + task + "\n"
 	prompt += "Step: " + stepName + "\n\n"

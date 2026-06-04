@@ -47,7 +47,7 @@ func (s *TaskStore) Load() {
 	if err != nil {
 		return // fresh store, no tasks yet
 	}
-	json.Unmarshal(data, s)
+	_ = json.Unmarshal(data, s)
 }
 
 func (s *TaskStore) Save() error {

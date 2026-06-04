@@ -128,7 +128,7 @@ func TestNewMCTSMutator(t *testing.T) {
 
 func TestMCTSMutator_SetFitnessEvaluator(t *testing.T) {
 	m := NewMCTSMutator()
-	fn := func(tree *SerializableNode) float64 { return 1.0 }
+	fn := func(_ *SerializableNode) float64 { return 1.0 }
 
 	m.SetFitnessEvaluator(fn)
 	if m.FitnessEvaluator == nil {
@@ -163,7 +163,7 @@ func TestMCTSMutator_Mutate_NoEvaluator(t *testing.T) {
 	}
 	// Should be a different tree (mutation applied)
 	if result.Name != tree.Name {
-		// Names can differ after mutation; just verify it's valid
+		_ = struct{}{}
 	}
 	if CountNodes(result) == 0 {
 		t.Error("result tree has 0 nodes — invalid")
@@ -269,7 +269,7 @@ func TestMCTSMutator_ExpandNode(t *testing.T) {
 	if child.Parent != root {
 		t.Error("child.Parent not set")
 	}
-	if root.UntriedOps != nil && len(root.UntriedOps) != 0 {
+	if len(root.UntriedOps) != 0 {
 		t.Errorf("expected root.UntriedOps empty, got %v", root.UntriedOps)
 	}
 	// Should have its own untried ops

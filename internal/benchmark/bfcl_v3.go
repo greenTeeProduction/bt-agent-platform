@@ -82,7 +82,7 @@ func LoadBFCLV3Entries(path string) ([]BFCLV3Entry, error) {
 // output or detected path matches the expected tool for that turn.
 // A multi-step entry is fully correct only if ALL turns match.
 func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llmClient llm.LLM) *BFCLV3Metrics {
-	var results []BFCLV3Result
+	results := make([]BFCLV3Result, 0, 32)
 	totalTurns := 0
 	correctTurns := 0
 	fullyCorrect := 0

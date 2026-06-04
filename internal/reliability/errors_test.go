@@ -678,7 +678,7 @@ func TestRetryPolicy_NetworkRetries(t *testing.T) {
 	policy.LLMBase = time.Millisecond
 
 	calls := 0
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		calls++
 		return &net.OpError{Op: "dial", Err: errors.New("connection refused")}
 	})
@@ -693,7 +693,7 @@ func TestRetryPolicy_TimeoutRetries(t *testing.T) {
 	policy.Base = time.Millisecond
 
 	calls := 0
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		calls++
 		return os.ErrDeadlineExceeded
 	})
@@ -709,7 +709,7 @@ func TestRetryPolicy_LLMRetries(t *testing.T) {
 	policy.LLMBase = time.Millisecond
 
 	calls := 0
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		calls++
 		return errors.New("ollama: model not found")
 	})
@@ -742,7 +742,7 @@ func TestRetryPolicy_UnknownRetries_WhenEnabled(t *testing.T) {
 	policy.RetryUnknown = true
 
 	calls := 0
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		calls++
 		return errors.New("some completely unknown error")
 	})
@@ -759,12 +759,12 @@ func TestRetryPolicy_OnRetryCallback(t *testing.T) {
 	var retryAttempts []int
 	var retryCategories []ErrorCategory
 
-	policy.OnRetry = func(attempt int, cat ErrorCategory, delay time.Duration) {
+	policy.OnRetry = func(attempt int, cat ErrorCategory, _ time.Duration) {
 		retryAttempts = append(retryAttempts, attempt)
 		retryCategories = append(retryCategories, cat)
 	}
 
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		return errors.New("connection timed out")
 	})
 
@@ -836,7 +836,7 @@ func TestRetryPolicy_CategorizedError_Retryable(t *testing.T) {
 	policy.LLMBase = time.Millisecond
 
 	calls := 0
-	policy.Execute(func() error {
+	_ = policy.Execute(func() error {
 		calls++
 		return NewCategorizedError(ErrCatNetwork, errors.New("dial tcp: connection refused"))
 	})
@@ -1068,7 +1068,7 @@ func TestGetErrorContext_Nil(t *testing.T) {
 
 func TestErrorContext_Summary_Full(t *testing.T) {
 	ec := NewErrorContext(errors.New("connection timeout"), "code-reviewer", "review code", "Execute")
-	ec.WithNode("jetson-01")
+	_ = ec.WithNode("jetson-01")
 	summary := ec.Summary()
 	if !strings.Contains(summary, "code-reviewer/Execute") {
 		t.Errorf("Summary should contain agent/op: %s", summary)
@@ -1116,7 +1116,7 @@ func TestErrorContext_Integration_RetryPolicy(t *testing.T) {
 	// Verify ErrorContext wraps errors properly through RetryPolicy.Execute
 	orig := errors.New("i/o timeout")
 	ec := NewErrorContext(orig, "bt-agent", "run tests", "RunAgent")
-	ec.WithAttempt(2)
+	_ = ec.WithAttempt(2)
 
 	// ErrorContext should be found through wrapping.
 	policy := DefaultRetryPolicy()
@@ -1169,12 +1169,12 @@ func TestErrorContext_Chained(t *testing.T) {
 	}
 }
 
-func TestErrorContext_Concurrent(t *testing.T) {
+func TestErrorContext_Concurrent(_ *testing.T) {
 	// Verify ErrorContext is safe for concurrent use patterns.
 	ec := NewErrorContext(errors.New("error"), "agent", "task", "op")
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
-		go func(id int) {
+		go func(_ int) {
 			_ = ec.Error()
 			_ = ec.Summary()
 			done <- true
@@ -1514,7 +1514,7 @@ func TestRetryPolicy_CallbackContext(t *testing.T) {
 		MaxDelay:     10 * time.Millisecond,
 		Jitter:       NoJitter,
 		RetryUnknown: true,
-		OnRetry: func(attempt int, cat ErrorCategory, delay time.Duration) {
+		OnRetry: func(_ int, _ ErrorCategory, _ time.Duration) {
 			called = true
 		},
 	}

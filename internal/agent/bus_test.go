@@ -17,8 +17,8 @@ func TestInitAgentBus(t *testing.T) {
 	if GlobalAgentBus == nil {
 		t.Fatal("GlobalAgentBus not set")
 	}
-	if cap := bus.maxHistory; cap != 50 {
-		t.Fatalf("expected maxHistory 50, got %d", cap)
+	if capVal := bus.maxHistory; capVal != 50 {
+		t.Fatalf("expected maxHistory 50, got %d", capVal)
 	}
 }
 
@@ -364,7 +364,7 @@ func TestPublishServiceDown(t *testing.T) {
 	}
 }
 
-func TestPublishServiceDown_NilGlobalBus(t *testing.T) {
+func TestPublishServiceDown_NilGlobalBus(_ *testing.T) {
 	GlobalAgentBus = nil
 	// Must not panic or crash
 	PublishServiceDown("monitor", "bt-agent")
@@ -394,7 +394,7 @@ func TestPublishHealthAlert(t *testing.T) {
 	}
 }
 
-func TestPublishHealthAlert_NilGlobalBus(t *testing.T) {
+func TestPublishHealthAlert_NilGlobalBus(_ *testing.T) {
 	GlobalAgentBus = nil
 	PublishHealthAlert("health", "CPU at 95%")
 	// No panic check
@@ -432,7 +432,7 @@ func TestAgentBus_ConcurrentPublish(t *testing.T) {
 	}
 }
 
-func TestAgentBus_MultipleCloseIdempotent(t *testing.T) {
+func TestAgentBus_MultipleCloseIdempotent(_ *testing.T) {
 	GlobalAgentBus = nil
 	bus := InitAgentBus(100)
 	bus.Close()

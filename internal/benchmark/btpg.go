@@ -39,7 +39,7 @@ type BTPGResult struct {
 // counts nodes visited, and tracks the execution path. Edge-case tasks
 // (very short or ambiguous) contribute to the robustness score.
 func EvaluateBTPG(tree *evolution.SerializableNode, tasks []string, llm llm.LLM) *BTPGResult {
-	var results []BTPGTaskResult
+	results := make([]BTPGTaskResult, 0, 32)
 	successes := 0
 	edgeSuccesses := 0
 	edgeTotal := 0

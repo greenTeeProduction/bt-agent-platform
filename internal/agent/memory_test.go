@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// memoryTestDir creates a temp dir for memory store tests.
-func memoryTestDir(t *testing.T) string {
-	t.Helper()
-	dir := filepath.Join(t.TempDir(), "memory-test")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
 func storeForTest(t *testing.T, agentName string, maxSize int) *MemoryStore {
 	t.Helper()
 	ms, err := NewMemoryStore(t.TempDir(), agentName, maxSize)
@@ -103,8 +93,8 @@ func TestWrite_UpdatesExistingEntry(t *testing.T) {
 
 func TestWrite_UpdateDoesNotOverwriteCategory(t *testing.T) {
 	ms := storeForTest(t, "write-update-cat", 50)
-	ms.Write("k", "v1", "fact", "high", "manual")
-	ms.Write("k", "v2", "", "", "") // empty category/priority should not overwrite
+	_ = ms.Write("k", "v1", "fact", "high", "manual")
+	_ = ms.Write("k", "v2", "", "", "") // empty category/priority should not overwrite
 	results := ms.Query("fact", "", 0)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result with category=fact, got %d", len(results))
@@ -113,13 +103,13 @@ func TestWrite_UpdateDoesNotOverwriteCategory(t *testing.T) {
 
 func TestWrite_EvictsOldestWhenFull(t *testing.T) {
 	ms := storeForTest(t, "write-evict", 3)
-	ms.Write("a", "1", "fact", "low", "test")
+	_ = ms.Write("a", "1", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond) // ensure different timestamps
-	ms.Write("b", "2", "fact", "low", "test")
+	_ = ms.Write("b", "2", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond)
-	ms.Write("c", "3", "fact", "low", "test")
+	_ = ms.Write("c", "3", "fact", "low", "test")
 	// Now a 4th write should evict "a" (oldest)
-	ms.Write("d", "4", "fact", "low", "test")
+	_ = ms.Write("d", "4", "fact", "low", "test")
 
 	stats := ms.Stats()
 	if stats["total"] != 3 {
@@ -160,7 +150,7 @@ func TestRead_ReturnsEmptyForMissing(t *testing.T) {
 
 func TestRead_IncrementsHitCount(t *testing.T) {
 	ms := storeForTest(t, "read-hit", 50)
-	ms.Write("k", "v", "fact", "high", "test")
+	_ = ms.Write("k", "v", "fact", "high", "test")
 	ms.Read("k")
 	ms.Read("k")
 	ms.Read("k")
@@ -175,9 +165,9 @@ func TestRead_IncrementsHitCount(t *testing.T) {
 
 func TestQuery_ByCategory(t *testing.T) {
 	ms := storeForTest(t, "query-cat", 100)
-	ms.Write("fact:a", "1", "fact", "high", "test")
-	ms.Write("pitfall:err", "2", "pitfall", "medium", "test")
-	ms.Write("pattern:ok", "3", "pattern", "low", "test")
+	_ = ms.Write("fact:a", "1", "fact", "high", "test")
+	_ = ms.Write("pitfall:err", "2", "pitfall", "medium", "test")
+	_ = ms.Write("pattern:ok", "3", "pattern", "low", "test")
 
 	facts := ms.Query("fact", "", 0)
 	if len(facts) != 1 {
@@ -187,9 +177,9 @@ func TestQuery_ByCategory(t *testing.T) {
 
 func TestQuery_ByPriority(t *testing.T) {
 	ms := storeForTest(t, "query-pri", 100)
-	ms.Write("a", "1", "fact", "high", "test")
-	ms.Write("b", "2", "fact", "medium", "test")
-	ms.Write("c", "3", "fact", "low", "test")
+	_ = ms.Write("a", "1", "fact", "high", "test")
+	_ = ms.Write("b", "2", "fact", "medium", "test")
+	_ = ms.Write("c", "3", "fact", "low", "test")
 
 	high := ms.Query("", "high", 0)
 	if len(high) != 1 {
@@ -199,9 +189,9 @@ func TestQuery_ByPriority(t *testing.T) {
 
 func TestQuery_ByCategoryAndPriority(t *testing.T) {
 	ms := storeForTest(t, "query-cat-pri", 100)
-	ms.Write("a", "1", "fact", "high", "test")
-	ms.Write("b", "2", "fact", "medium", "test")
-	ms.Write("c", "3", "pitfall", "high", "test")
+	_ = ms.Write("a", "1", "fact", "high", "test")
+	_ = ms.Write("b", "2", "fact", "medium", "test")
+	_ = ms.Write("c", "3", "pitfall", "high", "test")
 
 	results := ms.Query("fact", "high", 0)
 	if len(results) != 1 {
@@ -211,11 +201,11 @@ func TestQuery_ByCategoryAndPriority(t *testing.T) {
 
 func TestQuery_SortsByPriorityThenRecency(t *testing.T) {
 	ms := storeForTest(t, "query-sort", 100)
-	ms.Write("a", "1", "fact", "low", "test")
+	_ = ms.Write("a", "1", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond)
-	ms.Write("b", "2", "fact", "high", "test")
+	_ = ms.Write("b", "2", "fact", "high", "test")
 	time.Sleep(1 * time.Millisecond)
-	ms.Write("c", "3", "fact", "medium", "test")
+	_ = ms.Write("c", "3", "fact", "medium", "test")
 
 	results := ms.Query("fact", "", 0)
 	if len(results) != 3 {
@@ -231,7 +221,7 @@ func TestQuery_LimitResults(t *testing.T) {
 	ms := storeForTest(t, "query-limit", 100)
 	for i := 0; i < 10; i++ {
 		key := fmt.Sprintf("k%d", i)
-		ms.Write(key, "v", "fact", "low", "test")
+		_ = ms.Write(key, "v", "fact", "low", "test")
 	}
 	results := ms.Query("", "", 3)
 	if len(results) != 3 {
@@ -242,7 +232,7 @@ func TestQuery_LimitResults(t *testing.T) {
 func TestQuery_ReturnsAllWhenNoFilter(t *testing.T) {
 	ms := storeForTest(t, "query-all", 100)
 	for i := 0; i < 5; i++ {
-		ms.Write(fmt.Sprintf("k%d", i), "v", "fact", "low", "test")
+		_ = ms.Write(fmt.Sprintf("k%d", i), "v", "fact", "low", "test")
 	}
 	results := ms.Query("", "", 0)
 	if len(results) != 5 {
@@ -259,9 +249,9 @@ func TestContextBlock_EmptyStoreReturnsEmpty(t *testing.T) {
 
 func TestContextBlock_IncludesFactsPitfallsPatterns(t *testing.T) {
 	ms := storeForTest(t, "ctx-full", 50)
-	ms.Write("fact:test_key", "test_value_123", "fact", "high", "manual")
-	ms.Write("pitfall:dont_do", "do_not_do_this_thing", "pitfall", "high", "agent")
-	ms.Write("pattern:good", "do_this_instead", "pattern", "high", "extracted")
+	_ = ms.Write("fact:test_key", "test_value_123", "fact", "high", "manual")
+	_ = ms.Write("pitfall:dont_do", "do_not_do_this_thing", "pitfall", "high", "agent")
+	_ = ms.Write("pattern:good", "do_this_instead", "pattern", "high", "extracted")
 
 	block := ms.ContextBlock()
 	if !strings.Contains(block, "test_key") {
@@ -280,7 +270,7 @@ func TestContextBlock_IncludesFactsPitfallsPatterns(t *testing.T) {
 
 func TestContextBlock_SkipsNonHighPriorityItems(t *testing.T) {
 	ms := storeForTest(t, "ctx-skip", 50)
-	ms.Write("fact:a", "low_priority_value", "fact", "low", "test")
+	_ = ms.Write("fact:a", "low_priority_value", "fact", "low", "test")
 	block := ms.ContextBlock()
 	if strings.Contains(block, "low_priority_value") {
 		t.Fatal("expected low-priority fact to not appear in ContextBlock")
@@ -302,9 +292,9 @@ func TestPreviousRunContext_ReturnsSuccessfulRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.Record(RunRecord{AgentName: "test-agent", Task: "task1", Outcome: "success", Output: "output1", Duration: "100ms"})
-	h.Record(RunRecord{AgentName: "test-agent", Task: "task2", Outcome: "failure", Output: "", Duration: "50ms"})
-	h.Record(RunRecord{AgentName: "test-agent", Task: "task3", Outcome: "success", Output: "output3 long output text here for testing", Duration: "200ms"})
+	_ = h.Record(RunRecord{AgentName: "test-agent", Task: "task1", Outcome: "success", Output: "output1", Duration: "100ms"})
+	_ = h.Record(RunRecord{AgentName: "test-agent", Task: "task2", Outcome: "failure", Output: "", Duration: "50ms"})
+	_ = h.Record(RunRecord{AgentName: "test-agent", Task: "task3", Outcome: "success", Output: "output3 long output text here for testing", Duration: "200ms"})
 
 	got := ms.PreviousRunContext(h, "test-agent", 2)
 	if !strings.Contains(got, "PREVIOUS RUNS") {
@@ -332,9 +322,9 @@ func TestStats_EmptyStore(t *testing.T) {
 
 func TestStats_CountsByCategoryAndPriority(t *testing.T) {
 	ms := storeForTest(t, "stats-full", 100)
-	ms.Write("a", "1", "fact", "high", "test")
-	ms.Write("b", "2", "fact", "high", "test")
-	ms.Write("c", "3", "pitfall", "medium", "test")
+	_ = ms.Write("a", "1", "fact", "high", "test")
+	_ = ms.Write("b", "2", "fact", "high", "test")
+	_ = ms.Write("c", "3", "pitfall", "medium", "test")
 
 	stats := ms.Stats()
 	if stats["total"] != 3 {
@@ -356,7 +346,7 @@ func TestStats_CountsByCategoryAndPriority(t *testing.T) {
 
 func TestDelete_RemovesEntry(t *testing.T) {
 	ms := storeForTest(t, "delete-ok", 100)
-	ms.Write("k", "v", "fact", "high", "test")
+	_ = ms.Write("k", "v", "fact", "high", "test")
 	if ok := ms.Delete("k"); !ok {
 		t.Fatal("expected Delete to return true")
 	}
@@ -378,7 +368,7 @@ func TestDelete_PersistsAfterReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ms.Write("k", "v", "fact", "high", "test")
+	_ = ms.Write("k", "v", "fact", "high", "test")
 	ms.Delete("k")
 
 	// Reopen and verify
@@ -438,9 +428,9 @@ func TestSummarizeOutput(t *testing.T) {
 
 func TestQueryWithCategoryPrefix(t *testing.T) {
 	ms := storeForTest(t, "query-prefix", 50)
-	ms.Write("fact:a", "1", "fact_alpha", "high", "test")
-	ms.Write("fact:b", "2", "fact_beta", "high", "test")
-	ms.Write("pitfall:x", "3", "pitfall", "high", "test")
+	_ = ms.Write("fact:a", "1", "fact_alpha", "high", "test")
+	_ = ms.Write("fact:b", "2", "fact_beta", "high", "test")
+	_ = ms.Write("pitfall:x", "3", "pitfall", "high", "test")
 
 	// Query with prefix "fact_" should match fact_alpha and fact_beta
 	results := ms.Query("fact_", "", 0)
@@ -451,19 +441,19 @@ func TestQueryWithCategoryPrefix(t *testing.T) {
 
 func TestEvictLRU_RemovesOldestEntry(t *testing.T) {
 	ms := storeForTest(t, "evict-lru", 10)
-	ms.Write("old", "1", "fact", "low", "test")
+	_ = ms.Write("old", "1", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond)
-	ms.Write("new", "2", "fact", "high", "test")
+	_ = ms.Write("new", "2", "fact", "high", "test")
 
 	// evictLRU is unexported; trigger it via full store
 	// Write to a full store to trigger eviction
 	smallStore := storeForTest(t, "evict-small", 2)
-	smallStore.Write("first", "a", "fact", "low", "test")
+	_ = smallStore.Write("first", "a", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond)
-	smallStore.Write("second", "b", "fact", "low", "test")
+	_ = smallStore.Write("second", "b", "fact", "low", "test")
 	time.Sleep(1 * time.Millisecond)
 	// This should evict "first"
-	smallStore.Write("third", "c", "fact", "low", "test")
+	_ = smallStore.Write("third", "c", "fact", "low", "test")
 
 	if smallStore.Read("first") != "" {
 		t.Fatal("expected 'first' to be evicted (LRU)")

@@ -328,7 +328,7 @@ func TestAgentActionFails(t *testing.T) {
 	}
 	planner := DefaultPlanner(actions)
 	registry := ActionRegistry{
-		"eat": func(state WorldState) (WorldState, error) {
+		"eat": func(_ WorldState) (WorldState, error) {
 			return WorldState{}, assertError("food poisoned")
 		},
 	}
@@ -396,10 +396,10 @@ func TestAgentCallbacks(t *testing.T) {
 	}
 	agent := NewAgent(planner, registry)
 	agent.Callbacks = AgentCallbacks{
-		OnPlanFound:    func(p *Plan) { planFound = true },
-		OnStepStart:    func(i int, a *Action) { stepStarted = true },
-		OnStepComplete: func(i int, a *Action, err error) { stepComplete = true },
-		OnComplete:     func(r *AgentRun) { completed = true },
+		OnPlanFound:    func(_ *Plan) { planFound = true },
+		OnStepStart:    func(_ int, _ *Action) { stepStarted = true },
+		OnStepComplete: func(_ int, _ *Action, _ error) { stepComplete = true },
+		OnComplete:     func(_ *AgentRun) { completed = true },
 	}
 	agent.SetState("hungry", true)
 	agent.SetGoals(NewGoal("not hungry", 1.0, WorldState{"hungry": false}))

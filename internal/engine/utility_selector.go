@@ -149,7 +149,7 @@ func evaluateGuardCondition(condition string, bb *Blackboard) bool {
 
 // ScoreChildren evaluates all children and returns ranked scores.
 func ScoreChildren(node *evolution.SerializableNode, bb *Blackboard, criteria ScoringCriteria) []UtilityScore {
-	var scores []UtilityScore
+	scores := make([]UtilityScore, 0, 16)
 	for i := range node.Children {
 		score := ScoreChild(&node.Children[i], bb, criteria)
 		score.ChildIndex = i

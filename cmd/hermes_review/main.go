@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
 )
@@ -26,7 +27,7 @@ func main() {
 
 	// Phase 1: Research
 	fmt.Println("Phase 1: Independent Fellow Research...")
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 	for _, f := range tt.ResearchFindings {
 		fmt.Printf("  %s (%s): %d insights, confidence %.0f%%\n",
 			f.FellowName, f.Role, len(f.KeyInsights), f.ConfidenceScore*100)
@@ -35,13 +36,13 @@ func main() {
 
 	// Phase 2: Debate
 	fmt.Println("Phase 2: Structured Dialectic Debate...")
-	orch.RunDebate()
+	_ = orch.RunDebate()
 	fmt.Printf("  %d debate turns across %d rounds\n", len(tt.DebateTranscript), tt.DelphiRounds)
 	fmt.Println()
 
 	// Phase 3: Synthesis
 	fmt.Println("Phase 3: Hegelian Synthesis...")
-	orch.RunSynthesis()
+	_ = orch.RunSynthesis()
 	if tt.Synthesis != nil {
 		fmt.Printf("  Thesis: %s\n", tt.Synthesis.Thesis)
 		fmt.Printf("  Antithesis: %s\n", tt.Synthesis.Antithesis)
@@ -53,7 +54,7 @@ func main() {
 
 	// Phase 4: Peer Review
 	fmt.Println("Phase 4: Peer Review...")
-	orch.RunPeerReview()
+	_ = orch.RunPeerReview()
 	critical := 0
 	for _, r := range tt.PeerReview {
 		if r.Severity == "critical" {
@@ -65,7 +66,7 @@ func main() {
 
 	// Phase 5: Report
 	fmt.Println("Phase 5: Final Report...")
-	orch.RunReportGeneration()
+	_ = orch.RunReportGeneration()
 	if tt.FinalReport != nil {
 		fmt.Printf("  Title: %s\n", tt.FinalReport.Title)
 		fmt.Printf("  Recommendation: %s\n", tt.FinalReport.Recommendation)

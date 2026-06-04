@@ -31,7 +31,7 @@ func main() {
 	server.RegisterTool("ev_evaluate", "Multi-dimensional fitness evaluation of the behavior tree (Stockfish-style)",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, err := treeStore.Load()
 			if err != nil || tree == nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{
@@ -58,7 +58,7 @@ func main() {
 	server.RegisterTool("ev_order_mutations", "Rank mutation candidates using Stockfish-style move ordering",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, _ := treeStore.Load()
 			records, _ := refStore.LoadAll()
 			fitness := evaluator.EvaluateTree(tree, records)
@@ -99,7 +99,7 @@ func main() {
 			var params struct {
 				MaxDepth int `json:"max_depth"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.MaxDepth == 0 {
 				params.MaxDepth = 2
 			}
@@ -139,7 +139,7 @@ func main() {
 	server.RegisterTool("ev_tt_stats", "Transposition table statistics (cache hits, size)",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			stats := map[string]interface{}{
 				"entries":  tt.Stats(),
 				"max_size": 1000,
@@ -153,7 +153,7 @@ func main() {
 	server.RegisterTool("ev_tt_save", "Persist transposition table to disk",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			if err := tt.Save(); err != nil {
 				return &mcp.ToolResult{Content: []mcp.ContentItem{{
 					Type: "text", Text: fmt.Sprintf(`{"saved": false, "error": %q}`, err.Error()),

@@ -48,7 +48,7 @@ type toolStub struct {
 
 func (t toolStub) Name() string        { return t.name }
 func (t toolStub) Description() string { return t.desc }
-func (t toolStub) Call(input string) string {
+func (t toolStub) Call(_ string) string {
 	return "" // empty → triggers LLM simulation fallback
 }
 
@@ -76,6 +76,13 @@ type Blackboard struct {
 	QualityScore float64        // 0.0-1.0 output quality score
 	CurrentPath  string         // currently executing strategy path (set by tree traversal)
 	VisitedPaths []string       // all strategy paths visited during execution
+
+	// Budget tracking (Budget decorator / agent limits)
+	TokensUsed int
+	TickBudget int
+	TreeTicks  int
+
+	TraceContext context.Context `json:"-"`
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -95,13 +102,18 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 }
 
 // BuildAndValidate constructs a tree and validates it before execution.
+// SubTreeRef nodes are expanded first when a tree expander is registered (internal/blocks).
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
-	info := ValidateTreeFull(serTree)
+	expanded, err := prepareTreeForBuild(serTree)
+	if err != nil {
+		return nil, err
+	}
+	info := ValidateTreeFull(expanded)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(serTree, bb, ""), nil
+	return buildNode(expanded, bb, ""), nil
 }
 
 // buildNode recursively builds a go-bt Command from a SerializableNode.
@@ -126,20 +138,55 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 
 	switch node.Type {
 	case "Sequence":
+		if len(node.Edges) > 0 {
+			return buildSequenceWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSequence(children...)
 	case "Selector":
+		if len(node.Edges) > 0 {
+			return buildSelectorWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
+	case "Parallel":
+		return BuildParallel(node, bb)
+	case "Budget":
+		return BuildBudget(node, bb)
+	case "RateLimit":
+		return BuildRateLimit(node, bb)
+	case "Timeout":
+		return BuildTimeout(node, bb)
+	case "CircuitBreaker":
+		return BuildCircuitBreaker(node, bb)
+	case "Inverter":
+		return BuildInverter(node, bb)
+	case "Succeeder":
+		return BuildSucceeder(node, bb)
+	case "Repeater":
+		return BuildRepeater(node, bb)
+	case "Runner":
+		return BuildRunner(node, bb)
+	case "Monitor":
+		return BuildMonitor(node, bb)
+	case "QualityGate":
+		return BuildQualityGate(node, bb)
 	case "Retry":
+		if len(node.Children) == 0 {
+			return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
+		}
 		child := buildNode(&node.Children[0], bb, node.Name)
-		return btdec.NewRepeat(child, node.MaxRetries)
+		times := node.MaxRetries
+		if times <= 0 {
+			times = 1
+		}
+		return btdec.NewRepeat(child, times)
 	case "Action":
 		return btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":
@@ -159,10 +206,21 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildEventDrivenAbort(node, bb)
 	case "ReactiveParallel":
 		return BuildReactiveParallel(node, bb)
-	default:
-		// Unknown node type → pass-through action (always succeeds)
+	case "HumanApprovalGate":
+		return buildHumanApprovalGate(node, bb, parentName)
+	case "SubTreeRef":
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Outcome = "SubTreeRef not expanded — run BuildAndValidate with tree expander"
+			return -1
+		})
+	case "AlwaysSucceed":
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int {
 			return 1
+		})
+	default:
+		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Outcome = fmt.Sprintf("unsupported node type %q", node.Type)
+			return -1
 		})
 	}
 }
@@ -175,7 +233,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	}
 	switch name {
 	case "SetupDevTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
 				newGoBuildTool(),
 				newGoTestTool(),
@@ -185,7 +243,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SetupUniversalTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
 				newShellExecTool(),
 				newFileReadTool(),
@@ -196,7 +254,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SetupResearchTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
 				newWebSearchTool(),
 				newGraphifyTool(),
@@ -205,7 +263,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SetupStartupTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
 				newWebSearchTool(),
 				toolStub{name: "calculator", desc: "Financial calculations: runway, burn rate, valuation"},
@@ -214,7 +272,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SetupDefaultTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{
 				newShellExecTool(),
 				newFileReadTool(),
@@ -227,7 +285,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	// --- Stockfish evolution actions ---
 	case "InitTranspositionTable":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
 			}
@@ -240,7 +298,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "LoadCachedFitness":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState != nil {
 				if f, ok := bb.ChainState["cached_fitness"].(float64); ok {
 					bb.CachedResult = fmt.Sprintf("cached_fitness:%.2f", f)
@@ -249,7 +307,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "StoreInTranspositionTable":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState != nil {
 				bb.ChainState["tt_hits"] = bb.ChainState["tt_hits"].(int) + 1
 				// Store current fitness as cached
@@ -262,7 +320,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	case "hasCachedFitness":
 		// This is used as a Condition despite being in actionForName
 		// The getCondition in registry handles this properly
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState != nil {
 				if _, ok := bb.ChainState["cached_fitness"]; ok {
 					return 1
@@ -272,42 +330,42 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	// --- Go developer actions ---
 	case "ReviewGoCode":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan(bb.Task, "medium")
 			bb.Result = fmt.Sprintf("## Code Review\n\nTask: %s\n\nPlan: %s\n\nKey findings based on idiomatic Go review.", bb.Task, util.Truncate(bb.Plan, 300))
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "SuggestImprovements":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n## Suggested Improvements\n- Use idiomatic Go patterns\n- Check error handling\n- Consider concurrency safety", bb.Result)
 			return 1
 		}
 	case "CompileGoCode":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Compilation\n\nRan `go build` on: %s\n\nOutput would show compilation results.", bb.Task)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "FixBuildErrors":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("fix compilation errors in: "+bb.Task, "medium")
 			bb.Result = fmt.Sprintf("## Fixed Build Errors\n\n%s\n\nSuggested fix based on compilation output.", util.Truncate(bb.Plan, 300))
 			return 1
 		}
 	case "RunGoTests":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Test Results\n\nRan `go test` on: %s\n\nAll tests pass (simulated).", bb.Task)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "AnalyzeTestResults":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n## Test Analysis\n- Coverage: good\n- Performance: acceptable", bb.Result)
 			return 1
 		}
 	case "ExplainGoConcept":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan(bb.Task, "low")
 			bb.Result = fmt.Sprintf("## Go Explanation\n\nTask: %s\n\n%s", bb.Task, util.Truncate(bb.Plan, 500))
 			bb.Outcome = string(reflection.Success)
@@ -315,845 +373,845 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 		}
 	// --- Finance actions ---
 	case "FetchCompsData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Comparable Company Analysis\n\nPulling comps data for: %s", bb.Task)
 			return 1
 		}
 	case "BuildCompsTable":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nMultiples table built with EV/EBITDA, P/E, EV/Revenue.", bb.Result)
 			return 1
 		}
 	case "ValidateComps":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nValidation: ranges checked, outliers flagged, sector alignment verified.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "FetchPrecedentsData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Precedent Transactions\n\nPulling deal data for: %s", bb.Task)
 			return 1
 		}
 	case "BuildPrecedentsTable":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nTransaction comps with premiums and deal context.", bb.Result)
 			return 1
 		}
 	case "AnalyzePremiums":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nControl premiums: 20-35%%, synergy assumptions documented.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "BuildLBOModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("build LBO model for: "+bb.Task, "high")
 			bb.Result = fmt.Sprintf("## LBO Model\n\nTemplate filled with: Entry %%, Debt structure, Exit assumptions")
 			return 1
 		}
 	case "VerifyLBOModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nSources=Uses balanced. IRR: 18-25%%, MOIC: 2.0-3.0x.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "FormatLBOOutput":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBlue/grey palette applied. Formula colors: blue=inputs, black=calcs.", bb.Result)
 			return 1
 		}
 	case "BuildDCFModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("build DCF model for: "+bb.Task, "high")
-			bb.Result = fmt.Sprintf("## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected.")
+			bb.Result = "## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected."
 			return 1
 		}
 	case "BuildSensitivityTables":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n3 sensitivity tables (5x5): WACC×Growth, Exit×Growth, WACC×Exit.", bb.Result)
 			return 1
 		}
 	case "VerifyDCFModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nRecalculation: 0 errors. No #REF!/#DIV/0! in sensitivity tables.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "AssemblePitchDeck":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "QCDeck":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nQC: fonts consistent, charts correct, source footnotes complete.", bb.Result)
 			return 1
 		}
 	case "IngestEarningsData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Earnings Review\n\nData ingested: transcript, press release, 8-K for: %s", bb.Task)
 			return 1
 		}
 	case "ExtractKeyMetrics":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nKey metrics: Revenue, EPS, Guidance, Segment breakdown.", bb.Result)
 			return 1
 		}
 	case "CompareVsConsensus":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nVs. Consensus: Revenue beat/miss, EPS beat/miss, Guidance vs. Street.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "UpdateFinancialModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Model Updated\n\nDCF/comps model refreshed with latest quarter data.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Model Updated\n\nDCF/comps model refreshed with latest quarter data."
 			return 1
 		}
 	case "RollForwardProjections":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nProjection period rolled forward 1 quarter.", bb.Result)
 			return 1
 		}
 	case "VerifyModelIntegrity":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nModel integrity: A=L+E, cash flow ties.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "DraftEarningsNote":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "QCResearchNote":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nQC: disclaimers present, formatting consistent.", bb.Result)
 			return 1
 		}
 	case "ResearchIndustry":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Industry Research\n\nMarket size, growth, trends for: %s", bb.Task)
 			return 1
 		}
 	case "BuildIndustryOverview":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nIndustry overview: TAM, CAGR, key players, regulatory landscape.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "MapCompetitors":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Competitive Landscape\n\nMarket share, positioning, key differentiators.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Competitive Landscape\n\nMarket share, positioning, key differentiators."
 			return 1
 		}
 	case "BuildPeerComparison":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nPeer comparison: revenue, margins, growth, valuation multiples.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "ScreenForIdeas":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation."
 			return 1
 		}
 	case "RankAndPrioritize":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nRanked by conviction, upside potential, catalyst timeline.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "Build3StatementModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified."
 			return 1
 		}
 	case "VerifyModelBalance":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBalance check: Assets = Liabilities + Equity ✓", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "GatherClientContext":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences."
 			return 1
 		}
 	case "BuildBriefingPack":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBriefing: portfolio review, market update, talking points.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "QCBriefingPack":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved."
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "IngestGPPackage":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## GP Package\n\nCapital account statements, cap tables ingested.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## GP Package\n\nCapital account statements, cap tables ingested."
 			return 1
 		}
 	case "RunValuationTemplate":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nValuation: market approach, income approach, NAV.", bb.Result)
 			return 1
 		}
 	case "StageLPReporting":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nLP reports staged: capital accounts, performance summaries.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "CompareGLEntries":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## GL Reconciliation\n\nComparing GL to sub-ledger for: %s", bb.Task)
 			return 1
 		}
 	case "IdentifyBreaks":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBreaks identified, categorized by type.", bb.Result)
 			return 1
 		}
 	case "TraceRootCause":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nRoot cause traced to source transaction.", bb.Result)
 			return 1
 		}
 	case "RouteForSignOff":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nReconciliation package routed for reviewer approval.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "CalculateAccruals":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Month-End Close\n\nAccruals calculated for: %s", bb.Task)
 			return 1
 		}
 	case "RunRollForward":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBalance sheet accounts rolled forward.", bb.Result)
 			return 1
 		}
 	case "AnalyzeVariance":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nVariance analysis: actuals vs. budget, commentary written.", bb.Result)
 			return 1
 		}
 	case "PrepareClosePackage":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nClose package assembled for controller review.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "IngestLPStatements":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## LP Statement Audit\n\nStatements loaded for: %s", bb.Task)
 			return 1
 		}
 	case "ValidateCalculations":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nNAV, allocations, waterfall verified.", bb.Result)
 			return 1
 		}
 	case "CheckDisclosures":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nRegulatory disclosures and footnotes checked.", bb.Result)
 			return 1
 		}
 	case "GenerateAuditReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nAudit findings report generated.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "ParseOnboardingDocs":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			bb.Result = fmt.Sprintf("## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners.")
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			bb.Result = "## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners."
 			return 1
 		}
 	case "RunKYCRulesEngine":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nScreened: sanctions lists, PEP databases, adverse media.", bb.Result)
 			return 1
 		}
 	case "FlagGaps":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nGaps flagged: missing docs, red flags, escalation items.", bb.Result)
 			return 1
 		}
 	case "GenerateKYCReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nKYC report generated with risk rating.", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	// --- Research actions ---
 	case "AskClarifyingQuestions":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Clarifying Questions\n\nTo better answer: %s\n\n1. What is the scope?\n2. Any specific constraints?\n3. Preferred depth?", bb.Task)
 			return 1
 		}
 	case "RefineQueryWithAnswers":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Task = fmt.Sprintf("%s [refined with clarifications]", bb.Task)
 			return 1
 		}
 	case "ProceedDirectly":
-		return func(ctx *btcore.BTContext[Blackboard]) int { return 1 }
+		return func(_ *btcore.BTContext[Blackboard]) int { return 1 }
 	case "DecomposeQuery":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("decompose into sub-questions: "+bb.Task, "medium")
 			bb.Result = fmt.Sprintf("## Research Plan\n\nQuery: %s\n\nDecomposed into sub-questions.", bb.Task)
 			return 1
 		}
 	case "AssessComplexity":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Complexity = bb.LLM.AnalyzeComplexity(bb.Task)
 			bb.Result = fmt.Sprintf("%s\n\nComplexity: %s", bb.Result, bb.Complexity)
 			return 1
 		}
 	case "ExecuteSingleSearch":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Quick Research: %s\n\n1 agent, broad search, top sources extracted.", bb.Task)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "SpawnResearchThreads":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Comparison Research: %s\n\n2-4 parallel research threads launched. Each: 10-15 searches.", bb.Task)
 			return 1
 		}
 	case "SpawnDeepThreads":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Deep Investigation: %s\n\n10+ parallel research threads. Iterative refinement enabled.", bb.Task)
 			return 1
 		}
 	case "SearchBroadFirst":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nBroad search complete. Landscape mapped.", bb.Result)
 			return 1
 		}
 	case "FilterAndRankSources":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nSources filtered by authority, recency, relevance.", bb.Result)
 			return 1
 		}
 	case "ExtractKeyFindings":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nKey claims, data points, and quotes extracted.", bb.Result)
 			return 1
 		}
 	case "CrossReferenceFacts":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nFacts cross-referenced across 2+ independent sources.", bb.Result)
 			return 1
 		}
 	case "TargetedDeepDive":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nTargeted deep dive into knowledge gaps.", bb.Result)
 			return 1
 		}
 	case "PivotOnDeadEnds":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nDead ends detected — pivoting to alternative sources.", bb.Result)
 			return 1
 		}
 	case "CoverageComplete":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nCoverage complete: all sub-questions answered.", bb.Result)
 			return 1
 		}
 	case "IterateSearch":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nIterating search with refined queries.", bb.Result)
 			return 1
 		}
 	case "StructureReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("## Research Report: %s\n\n**Executive Summary**\n\n**Background**\n\n**Findings**\n\n**Analysis**\n\n**Conclusion**", bb.Task)
 			return 1
 		}
 	case "DraftSections":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Plan = bb.LLM.GeneratePlan("draft research report sections for: "+bb.Task, "high")
 			bb.Result = fmt.Sprintf("%s\n\nSections drafted with inline citations.", bb.Result)
 			return 1
 		}
 	case "GenerateVisualizations":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\nCharts, tables, and comparison matrices generated.", bb.Result)
 			return 1
 		}
 	case "AddCitations":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n**Sources:** [1] ... [2] ... [3] ...", bb.Result)
 			return 1
 		}
 	case "AddReasoningChain":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n## Research Methodology\n- Search strategy: broad → narrow\n- Key decisions made\n- Pivots from dead ends\n- Coverage: all sub-questions addressed", bb.Result)
 			bb.Outcome = string(reflection.Success)
 			return 1
 		}
 	case "FlagRemainingGaps":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = fmt.Sprintf("%s\n\n## Limitations\n- Areas for further research noted.", bb.Result)
 			return 1
 		}
 	case "QueryKG":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.KgResults = fmt.Sprintf("KG results for: %s", bb.Task)
 			return 1
 		}
 	case "ApplyKnowledge":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Task = fmt.Sprintf("%s [KG: %s]", bb.Task, bb.KgResults)
 			return 1
 		}
 	case "UseCachedResult":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = bb.CachedResult
 			return 1
 		}
 	// --- Domain tree actions ---
 	case "ScanForBugs":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Bug Scan\n\nAnalyzing code for null derefs, off-by-one, race conditions."
 			return 1
 		}
 	case "SuggestBugFixes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Suggested Fix\n- Before/after code with explanation"
 			bb.Outcome = "success"
 			return 1
 		}
 	case "ScanForVulns":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Security Scan\n\nOWASP Top 10, injection, auth bypass checked."
 			return 1
 		}
 	case "SuggestSecurityFixes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Secure Alternative\n- Parameterized queries, input validation"
 			bb.Outcome = "success"
 			return 1
 		}
 	case "CheckCodeStyle":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Style Check\n\nNaming conventions, formatting, idiomatic patterns verified."
 			return 1
 		}
 	case "SuggestStyleFixes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Style Corrections\n- Rename, reformat, restructure"
 			bb.Outcome = "success"
 			return 1
 		}
 	case "RunBuild":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Build Output\n\nExecuting build command..."
 			return 1
 		}
 	case "CheckBuildErrors":
-		return func(ctx *btcore.BTContext[Blackboard]) int { bb.Result += "\n\n0 errors, 3 warnings."; return 1 }
+		return func(_ *btcore.BTContext[Blackboard]) int { bb.Result += "\n\n0 errors, 3 warnings."; return 1 }
 	case "FixBuildIssues":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Fixes Applied\n- Missing import, type mismatch resolved"
 			return 1
 		}
 	case "RunTests":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Test Results\n\n42 passed, 0 failed, 2 skipped."
 			return 1
 		}
 	case "RunLinter":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Lint Output\n\n5 issues: 2 warnings, 3 info."
 			return 1
 		}
 	case "AnalyzeLintOutput":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nCategorized: 2 style, 1 complexity, 2 naming."
 			return 1
 		}
 	case "RunDeploy":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Deploy\n\nDeployment started to staging."
 			return 1
 		}
 	case "VerifyDeploy":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nHealth check: 200 OK, smoke tests passed."
 			return 1
 		}
 	case "RollbackOnFailure":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRollback: not needed (deploy succeeded)."
 			return 1
 		}
 	case "CheckAllAgents":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Agent Health\n\nPinging all MCP servers..."
 			return 1
 		}
 	case "IdentifyDeadAgents":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nDead: 0, Slow: 1 (td-agent 2.3s response)."
 			return 1
 		}
 	case "RestartDeadAgents":
-		return func(ctx *btcore.BTContext[Blackboard]) int { bb.Result += "\n\nRestarted: 0 needed."; return 1 }
+		return func(_ *btcore.BTContext[Blackboard]) int { bb.Result += "\n\nRestarted: 0 needed."; return 1 }
 	case "VerifyRestart":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRe-check: all agents healthy."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "SendAlert":
-		return func(ctx *btcore.BTContext[Blackboard]) int { bb.Result += "\n\n⚠ Alert sent to operator."; return 1 }
+		return func(_ *btcore.BTContext[Blackboard]) int { bb.Result += "\n\n⚠ Alert sent to operator."; return 1 }
 	case "EscalateToOperator":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nEscalated for human intervention."
 			return 1
 		}
 	case "CollectAgentMetrics":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Agent Metrics\n\nUptime, tool calls, error rates collected."
 			return 1
 		}
 	case "GenerateHealthReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nDashboard-ready health report generated."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "DetectCodeSmells":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Code Smells\n\nLong functions (3), deep nesting (2), duplication (1)."
 			return 1
 		}
 	case "SuggestRefactorings":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Suggestions\n- Extract method, simplify condition, DRY."
 			return 1
 		}
 	case "RecommendPatterns":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Pattern Recommendations\n\nStrategy, Factory, Observer applicable."
 			return 1
 		}
 	case "GeneratePatternCode":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nImplementation template generated."
 			return 1
 		}
 	case "VerifyBehavior":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nExisting tests: 42/42 pass. No regression."
 			return 1
 		}
 	case "ReportRefactoringImpact":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRisk: Low. Files changed: 3. Lines: +15/-8."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "RunSASTScan":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## SAST Results\n\nInjection: 0, XSS: 0, Auth: 1 (medium)."
 			return 1
 		}
 	case "GenerateSASTReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPrioritized: 0 critical, 1 medium, 2 low."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "ScanDependencies":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Dependency Scan\n\nCVE check: 0 critical, 2 moderate."
 			return 1
 		}
 	case "SuggestDependencyFixes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRecommend: bump xyz to v1.2.3, replace abc."
 			return 1
 		}
 	case "ScanForSecrets":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Secret Scan\n\nAPI keys found: 0, tokens: 0, passwords: 0."
 			return 1
 		}
 	case "ReportExposedSecrets":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nNo exposed secrets detected."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "BuildThreatModel":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Threat Model\n\nSTRIDE analysis complete. Attack surface mapped."
 			return 1
 		}
 	case "GenerateMitigations":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nControls: input validation, rate limiting, encryption."
 			return 1
 		}
 	case "ValidateDataSource":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Data Source\n\nConnectivity: OK, Schema: valid."
 			return 1
 		}
 	case "ExtractData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nExtracted: 10,420 rows, 0 errors."
 			return 1
 		}
 	case "ValidateTransform":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nTransform logic: valid, types: compatible."
 			return 1
 		}
 	case "ApplyTransform":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nTransformation applied: 10,420 → 10,418 rows."
 			return 1
 		}
 	case "VerifyOutput":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nOutput verified: nulls 0.1%, distribution matches."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "ValidateTarget":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nTarget: schema compatible, permissions OK."
 			return 1
 		}
 	case "LoadData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nLoaded: 10,418 rows, transaction committed."
 			return 1
 		}
 	case "VerifyLoad":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nLoad verified: row count matches, sample validated."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "ParseTranscript":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Transcript\n\nSpeakers: Alice (12 turns), Bob (8 turns)."
 			return 1
 		}
 	case "IdentifyTopics":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nTopics: Q1 Review, Hiring, Budget, Timeline."
 			return 1
 		}
 	case "ExtractActionItems":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nActions: 5 items extracted with owners and deadlines."
 			return 1
 		}
 	case "AssignOwners":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nOwners assigned: Alice (2), Bob (2), Carol (1)."
 			return 1
 		}
 	case "GenerateSummary":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Summary\nKey decisions, discussion points, outcomes."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "FormatMeetingNotes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nFormatted: date, attendees, agenda, notes, actions."
 			return 1
 		}
 	case "DistributeNotes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nDistributed to: team@example.com."
 			return 1
 		}
 	case "CheckActionStatus":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Follow-up\n\nActions: 3 complete, 1 in progress, 1 overdue."
 			return 1
 		}
 	case "SendReminders":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nReminders sent to Bob (overdue: Budget review)."
 			return 1
 		}
 	case "ParseStackFrames":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Stack Trace\n\nFrames: 12, Crash at: main.go:42 (nil pointer deref)."
 			return 1
 		}
 	case "IdentifyCrashSite":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nCrash site: processRequest(), nil config object."
 			return 1
 		}
 	case "TraceExecutionPath":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nExecution path: init() → loadConfig() → processRequest()."
 			return 1
 		}
 	case "IdentifyRootCause":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRoot cause: loadConfig() returns nil on file not found."
 			return 1
 		}
 	case "GenerateFix":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nFix: add nil check after loadConfig() call."
 			return 1
 		}
 	case "ApplyFix":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nFix applied: +3 lines, error handling added."
 			return 1
 		}
 	case "RunRegressionTests":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRegression tests: 42/42 pass. No new failures."
 			return 1
 		}
 	case "VerifyCrashResolved":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nCrash reproduced: NO. Fix confirmed."
 			bb.Outcome = "success"
 			return 1
 		}
 	case "SuggestGuards":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\n## Guards Added\n- Null checks, bounds checks, error wrapping."
 			return 1
 		}
 	case "AddMonitoring":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nMonitoring: alert on nil config, file-not-found."
 			return 1
 		}
 	case "SetPatrolRoute":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Patrol\n\nRoute: waypoints A→B→C→D→A. Speed: walk."
 			return 1
 		}
 	case "ExecutePatrol":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPatrolling... Interruption: none."
 			return 1
 		}
 	case "ScanEnvironment":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nScan: raycast 12m, proximity 5m, sound 0."
 			return 1
 		}
 	case "ClassifyThreat":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nThreat: player detected, threat level: 0.7."
 			return 1
 		}
 	case "CalculatePursuitPath":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPursuit: A* path 24m, ETA 3.2s."
 			return 1
 		}
 	case "ExecutePursuit":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPursuing... distance: 15m → 8m."
 			return 1
 		}
 	case "SelectTarget":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nTarget: player (threat 0.7, health 60, distance 8m)."
 			return 1
 		}
 	case "ChooseAction":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nAction: melee attack (70% hit chance)."
 			return 1
 		}
 	case "ExecuteCombatAction":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nCombat: 25 damage dealt. Enemy health: 35/60."
 			return 1
 		}
 	case "EvaluateCombatResult":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nEval: advantage, push forward."
 			return 1
 		}
 	case "FindSafePosition":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRetreat: cover at (-12, 8, 2). ETA 1.8s."
 			return 1
 		}
 	case "ExecuteRetreat":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nRetreating... reached cover. Health: 15/100."
 			return 1
 		}
 	case "FetchMarketData":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "## Market Data\n\nOHLCV fetched: AAPL 2024-01 to 2024-12."
 			return 1
 		}
 	case "ValidateDataQuality":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nQuality: 0 gaps, 0 outliers, data fresh."
 			return 1
 		}
 	case "CalculateIndicators":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nIndicators: SMA(20)=185.3, RSI(14)=62, MACD: bullish."
 			return 1
 		}
 	case "DetectPatterns":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPatterns: Ascending triangle (bullish), support at 180."
 			return 1
 		}
 	case "GenerateTASignals":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nSignals: BUY (RSI oversold exit + MACD cross)."
 			return 1
 		}
 	case "ComputeSignal":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nSignal: BUY, strength: 0.72/1.0."
 			return 1
 		}
 	case "AssessSignalStrength":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nConfidence: 72%. Historical accuracy: 68%."
 			return 1
 		}
 	case "CheckPositionLimits":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nPosition: 5% of portfolio. Limit: 10%. OK."
 			return 1
 		}
 	case "CalculateStopLoss":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nStop-loss: $175.80 (ATR-based, 5% below entry)."
 			return 1
 		}
 	case "AssessRiskReward":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result += "\n\nR:R = 2.1:1. Kelly = 15% allocation. Acceptable."
 			bb.Outcome = "success"
 			return 1
@@ -1161,12 +1219,12 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 
 	// ─── Arc42 Documentation Actions ───────────────────────────────
 	case "SetupDocTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.ChainTools = []any{newFileReadTool(), newShellExecTool(), newWebSearchTool()}
 			return 1
 		}
 	case "ReadGraphReport":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			data, err := os.ReadFile("/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md")
 			if err == nil {
 				bb.CachedResult = string(data)
@@ -1174,7 +1232,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadGitHistory":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("git", "-C", "/home/nico/go-bt-evolve", "log", "--oneline", "-30").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1183,7 +1241,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadADRs":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			files, _ := filepath.Glob("/home/nico/go-bt-evolve/docs/adr/ADR-*.md")
 			var adrs strings.Builder
 			for _, f := range files {
@@ -1200,7 +1258,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadGoMod":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			data, _ := os.ReadFile("/home/nico/go-bt-evolve/go.mod")
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1213,7 +1271,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadConfigFiles":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			data, _ := os.ReadFile("/home/nico/.hermes/config.yaml")
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1222,7 +1280,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "DetectHardware":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			cpu, _ := exec.Command("sh", "-c", "grep 'model name' /proc/cpuinfo | head -1").Output()
 			mem, _ := exec.Command("sh", "-c", "grep MemTotal /proc/meminfo").Output()
 			disk, _ := exec.Command("sh", "-c", "df -h / /mnt/ssd 2>/dev/null | tail -2").Output()
@@ -1234,7 +1292,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "DetectProcesses":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "ps aux | grep '[b]t-' | awk '{print $11, $2}'").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1243,7 +1301,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ListPackages":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "find /home/nico/go-bt-evolve/internal -maxdepth 1 -type d | sort | sed 's|.*/||'").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1252,7 +1310,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ListBinaries":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "find /home/nico/go-bt-evolve/cmd -name 'main.go' | sed 's|/main.go||' | sed 's|.*/||' | sort").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1261,19 +1319,19 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadEngineCode":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			data, _ := os.ReadFile("/home/nico/go-bt-evolve/internal/engine/tree.go")
 			bb.CachedResult = string(data[:min(len(data), 3000)])
 			return 1
 		}
 	case "ListExternalAPIs":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "grep -rn 'http.Get\\|http.Post\\|http.NewRequest\\|net.Dial' /home/nico/go-bt-evolve/internal/ 2>/dev/null | head -20").Output()
 			bb.CachedResult = string(out)
 			return 1
 		}
 	case "ListMCPTools":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "grep -rn 'RegisterTool\\|tools/call\\|bt_agent_\\|bt_evaluator_\\|bt_langagent_' /home/nico/go-bt-evolve/cmd/bt-agent/tools.go 2>/dev/null | wc -l").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1282,13 +1340,13 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadSection1":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			data, _ := os.ReadFile("/mnt/ssd/clawd/wiki/bt-research/docs/arc42/01-introduction-goals.md")
 			bb.CachedResult = string(data)
 			return 1
 		}
 	case "ReadTestCoverage":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "cd /home/nico/go-bt-evolve && go test -coverprofile=/tmp/arc42-cover.out ./... 2>&1 | grep 'coverage:' | head -10").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1297,7 +1355,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ReadErrorLogs":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "grep -i 'error\\|panic\\|fail' /home/nico/.hermes/logs/errors.log 2>/dev/null | tail -10").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1306,13 +1364,13 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "FallbackSection1":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			bb.Result = "# 1. Introduction and Goals\n\n## 1.1 Requirements Overview\n\ngo-bt-evolve is a behavior-tree-driven AI agent platform.\n\n## 1.2 Quality Goals\n\n| Goal | Scenario |\n|------|----------|\n| Correctness | Trees route tasks to correct domain paths |\n| Evolvability | 6 evolution algorithms continuously improve trees |\n| Reliability | Panic recovery, circuit breakers, retry with DLQ |\n\n## 1.3 Stakeholders\n\n| Role | Expectations |\n|------|-------------|\n| Nico | Platform architect and developer |\n| Hermes Agent | Automated operator via cron jobs |\n| Dashboard Users | Visual introspection of agents, trees, tasks |"
 			bb.Outcome = "success"
 			return 1
 		}
 	case "ValidateSection":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if len(bb.Result) < 100 {
 				bb.Result = "ERROR: section content too short"
 				bb.Outcome = "failure"
@@ -1321,15 +1379,15 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SaveSection":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			sectionName := bb.ChainState["section_file"].(string)
-			os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
+			_ = os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
 			path := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42/" + sectionName
-			os.WriteFile(path, []byte(bb.Result), 0644)
+			_ = os.WriteFile(path, []byte(bb.Result), 0644)
 			return 1
 		}
 	case "MarkSectionDone":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
 			}
@@ -1338,7 +1396,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ScanCodeComments":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "grep -rn '// Package ' /home/nico/go-bt-evolve/internal/ 2>/dev/null | head -30").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1347,7 +1405,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "ScanTypes":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			out, _ := exec.Command("sh", "-c", "grep -rn 'type.*struct {' /home/nico/go-bt-evolve/internal/engine/ /home/nico/go-bt-evolve/internal/evolution/ 2>/dev/null | head -20").Output()
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
@@ -1356,7 +1414,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "CollectAllSections":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			files, _ := filepath.Glob("/mnt/ssd/clawd/wiki/bt-research/docs/arc42/0*.md")
 			var all strings.Builder
 			for _, f := range files {
@@ -1370,7 +1428,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "GenerateTOC":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			var toc strings.Builder
 			toc.WriteString("# Table of Contents\n\n")
 			for i := 1; i <= 12; i++ {
@@ -1383,14 +1441,14 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	case "SaveDocument":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
-			os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
+		return func(_ *btcore.BTContext[Blackboard]) int {
+			_ = os.MkdirAll("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", 0755)
 			path := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42/go-bt-evolve-arc42.md"
-			os.WriteFile(path, []byte(bb.Result), 0644)
+			_ = os.WriteFile(path, []byte(bb.Result), 0644)
 			return 1
 		}
 	case "MarkDocAssembled":
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			if bb.ChainState == nil {
 				bb.ChainState = make(map[string]any)
 			}
@@ -1398,7 +1456,7 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 			return 1
 		}
 	default:
-		return func(ctx *btcore.BTContext[Blackboard]) int {
+		return func(_ *btcore.BTContext[Blackboard]) int {
 			return 1
 		}
 	}
@@ -1416,9 +1474,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "critical", "urgent", "asap")
 		}
 	case "ValidateOutput":
-		return func(b *Blackboard) bool {
-			return validateOutputQuality(b)
-		}
+		return validateOutputQuality
 	case "IsGoRelated":
 		return func(b *Blackboard) bool {
 			lower := strings.ToLower(b.Task)
@@ -1651,7 +1707,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	// --- Hermes self-evolution conditions ---
 	case "IsPeriodicCheck":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			// Always trigger — the agent node decides frequency
 			return true
 		}
@@ -1683,12 +1739,12 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 		}
 	// --- Auto Research conditions ---
 	case "IsDeepResearchDay":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			// Sunday only
 			return true // let the cron schedule handle this, always route
 		}
 	case "IsDailyResearch":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			return true // daily fallback
 		}
 	case "HasNewAlgorithm":
@@ -1837,11 +1893,11 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return len(b.Task) > 100 || util.ContainsAnyStr(b.Task, "comprehensive", "deep dive", "in-depth", "thorough", "full report")
 		}
 	case "DetectKnowledgeGaps":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			return bb.Result == "" || util.ContainsAnyStr(bb.Result, "gap", "missing", "unknown", "unclear", "TODO")
 		}
 	case "CheckSourceCount":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			return len(bb.Result) > 100
 		}
 	case "CheckCoverageCompleteness":
@@ -1849,20 +1905,26 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return (b.Outcome == string(reflection.Success) || b.Outcome == "chain_success") && len(bb.Result) > 50
 		}
 	case "CheckCitationFormat":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			return util.ContainsAnyStr(bb.Result, "[", "source:", "http")
 		}
 	// --- Domain tree conditions ---
 	case "IsCodeTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "code", "function", "bug", "fix", "refactor") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "code", "function", "bug", "fix", "refactor")
+		}
 	case "IsBugCheck":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "bug", "fix", "error", "crash", "null", "race") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "bug", "fix", "error", "crash", "null", "race")
+		}
 	case "IsSecurityCheck":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(strings.ToLower(b.Task), "security", "exploit", "vulnerability", "penetration", "auth", "audit", "xss", "sql injection", "csrf", "owasp", "injection")
 		}
 	case "IsStyleCheck":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "style", "lint", "format", "naming", "clean") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "style", "lint", "format", "naming", "clean")
+		}
 	case "IsCIBuildTask":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "build", "deploy", "ci", "cd", "pipeline", "release")
@@ -1876,15 +1938,19 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "NeedsDeploy":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "deploy", "release", "ship") }
 	case "IsMonitorTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "monitor", "health", "status", "agent", "watch") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "monitor", "health", "status", "agent", "watch")
+		}
 	case "HasDeadAgents":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "dead", "offline", "unreachable") }
+		return func(_ *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "dead", "offline", "unreachable") }
 	case "PersistentFailures":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "failed", "3+", "persistent") }
+		return func(_ *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "failed", "3+", "persistent") }
 	case "IsMetricsRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "metrics", "stats", "report") }
 	case "IsRefactorTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "refactor", "improve", "clean", "rewrite") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "refactor", "improve", "clean", "rewrite")
+		}
 	case "IsSmellCheck":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "smell", "cruft", "duplicate", "long") }
 	case "IsPatternRequest":
@@ -1892,11 +1958,15 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "NeedsVerification":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "verify", "test", "check") }
 	case "IsSecurityTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "security", "audit", "threat", "vulnerability") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "security", "audit", "threat", "vulnerability")
+		}
 	case "IsSASTRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "sast", "static analysis") }
 	case "IsDepScanRequest":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "dependency", "package", "cve", "library") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "dependency", "package", "cve", "library")
+		}
 	case "IsSecretScan":
 		return func(b *Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "secret", "credential", "key", "token", "password")
@@ -1910,7 +1980,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsLoadRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "load", "write", "store") }
 	case "HasTranscript":
-		return func(b *Blackboard) bool { return len(bb.Task) > 200 }
+		return func(_ *Blackboard) bool { return len(bb.Task) > 200 }
 	case "IsActionExtraction":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "action", "todo", "next") }
 	case "IsSummaryRequest":
@@ -1918,13 +1988,17 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	case "IsFollowUp":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "follow", "reminder") }
 	case "IsCrashTask":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "crash", "error", "stack", "panic", "trace") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "crash", "error", "stack", "panic", "trace")
+		}
 	case "HasStackTrace":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "at ", ".go:", ".rs:", "goroutine", "thread")
+		}
 	case "IsRootCauseRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "root cause", "why", "debug") }
 	case "HasProposedFix":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "fix", "patch", "change") }
+		return func(_ *Blackboard) bool { return util.ContainsAnyStr(bb.Result, "fix", "patch", "change") }
 	case "IsPreventionRequest":
 		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "prevent", "harden", "guard") }
 	case "IsGameTask":
@@ -1977,16 +2051,18 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return util.ContainsAnyStr(b.Task, "build", "compile", "install", "make", "go build")
 		}
 	case "IsImplementRequest":
-		return func(b *Blackboard) bool { return util.ContainsAnyStr(b.Task, "implement", "plan", "fix", "create", "pending") }
+		return func(b *Blackboard) bool {
+			return util.ContainsAnyStr(b.Task, "implement", "plan", "fix", "create", "pending")
+		}
 
 	// ─── Arc42 Documentation Conditions ────────────────────────────
 	case "GraphIsFresh":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			_, err := os.Stat("/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md")
 			return err == nil
 		}
 	case "Section1Done":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			if bb.ChainState == nil {
 				return false
 			}
@@ -1994,7 +2070,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return v
 		}
 	case "Section4Done":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			if bb.ChainState == nil {
 				return false
 			}
@@ -2002,7 +2078,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return v
 		}
 	case "Section5Done":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			if bb.ChainState == nil {
 				return false
 			}
@@ -2010,7 +2086,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return v
 		}
 	case "AllSectionsDone":
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			if bb.ChainState == nil {
 				return false
 			}
@@ -2023,7 +2099,7 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 			return true
 		}
 	default:
-		return func(b *Blackboard) bool {
+		return func(_ *Blackboard) bool {
 			return true
 		}
 	}

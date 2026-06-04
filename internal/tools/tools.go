@@ -147,7 +147,7 @@ func MemoryUsage() Tool {
 	return Tool{
 		name: "memory_usage",
 		desc: "Check memory usage and free RAM. Returns total, used, free, available memory and swap.",
-		call: func(input string) string {
+		call: func(_ string) string {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 

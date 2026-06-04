@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"

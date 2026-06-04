@@ -1,8 +1,9 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status
+.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status tools-install check-quick check-full security-high security-medium
 
 # Go binary path
 GO := /usr/local/go/bin/go
 GOFMT := /usr/local/go/bin/gofmt
+CHECK := ./scripts/check.sh
 
 # Build all binaries
 BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe
@@ -25,25 +26,35 @@ test-full:
 	$(GO) test -count=1 -timeout 600s ./...
 
 lint:
-	$(GO) vet ./...
+	@$(CHECK) golangci
 
-vet: lint
+vet:
+	@$(CHECK) vet
 
 fmt:
 	$(GOFMT) -w .
 
 fmt-check:
-	@test -z "$$($(GOFMT) -l .)" || (echo "Files need formatting:" && $(GOFMT) -l . && exit 1)
+	@$(CHECK) fmt
 
 # Verify go.mod and go.sum are in sync with source code
 mod-tidy:
-	@$(GO) mod tidy
-	@if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then \
-		echo "✗ go.mod or go.sum is out of sync. Run 'go mod tidy' and commit changes."; \
-		git checkout go.mod go.sum 2>/dev/null; \
-		exit 1; \
-	fi
-	@echo "✓ go.mod and go.sum are in sync"
+	@$(CHECK) mod-tidy
+
+tools-install:
+	@./scripts/dev-tools.sh
+
+check-quick:
+	@$(CHECK) quick
+
+check-full:
+	@$(CHECK) full
+
+security-high:
+	@$(CHECK) security-high
+
+security-medium:
+	@$(CHECK) security-medium
 
 # Run Go vulnerability scanner (govulncheck)
 vulncheck:
@@ -69,56 +80,9 @@ benchcmp-check:
 benchcmp-reset:
 	$(BIN_DIR)/benchcmp reset
 
-# Complete local CI pipeline — runs vet, fmt-check, go-mod-tidy, tests, and builds all binaries.
-# Use before pushing to avoid CI failures.
-ci:
-	@echo "=== CI Pipeline (local) ==="
-	@echo ""
-	@echo "1/7  go vet..."
-	@$(GO) vet ./...
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "2/7  gofmt check..."
-	@test -z "$$($(GOFMT) -l .)" || (echo "     ✗ Files need formatting:" && $(GOFMT) -l . && exit 1)
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "3/7  go mod tidy check..."
-	@$(GO) mod tidy
-	@if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then \
-		echo "     ✗ go.mod or go.sum is out of sync. Run 'go mod tidy' and commit changes."; \
-		git checkout go.mod go.sum 2>/dev/null; \
-		exit 1; \
-	fi
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "4/7  ci-doctor workflow maturity check..."
-	@$(MAKE) ci-doctor
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "5/7  runner status (advisory)..."
-	-@$(MAKE) runner-status 2>&1 || echo "     ⚠ runner not installed (non-blocking)"
-	@echo ""
-	@echo "6/7  govulncheck..."
-	-@$(GO) install golang.org/x/vuln/cmd/govulncheck@latest 2>/dev/null
-	-@$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1 || echo "     ⚠ warnings (non-blocking)"
-	@echo "     ✓ passed (non-blocking)"
-	@echo ""
-	@echo "7/7  scalability probe... (optional — requires dashboard on localhost:9800)"
-	-@$(MAKE) scalability-probe 2>&1 || echo "     ⚠ dashboard not reachable (non-blocking, requires running bt-dashboard on :9800)"
-	@echo "     ✓ done"
-	@echo ""
-	@echo "8/8  tests (short + race)..."
-	@$(GO) test -short -count=1 -race -timeout 120s ./...
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "9/8  build all binaries..."
-	@mkdir -p $(BIN_DIR)
-	@for bin in $(BINARIES); do \
-		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/ || exit 1; \
-	done
-	@echo "     ✓ passed"
-	@echo ""
-	@echo "=== CI Pipeline PASSED ==="
+# Local CI parity (Lint + Security high + Test + Build), then workflow maturity gate.
+ci: check-full ci-doctor
+
 
 # Nightly benchmark suite — runs all evaluation benchmarks (SWE-bench, BFCL, τ-bench, ToolBench)
 # Requires Ollama running and ~10GB disk for benchmark datasets.

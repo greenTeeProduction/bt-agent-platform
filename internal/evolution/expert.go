@@ -198,28 +198,28 @@ func referenceArchetypes() []TreeArchetype {
 		{
 			Name: "Agent Pipeline", Category: "research",
 			MinNodes: 10, MaxNodes: 25, TargetDepth: 3, TargetBF: 2.5,
-			MustHave:   []string{"PreGate", "ChainAction:agent", "ChainAction:refine", "OutcomeSelector"},
-			ShouldHave: []string{"ChainAction:rag_query", "QualityGate"},
+			MustHave:   []string{"core:pre_gate", "core:tool_execution", "ChainAction:agent", "OutcomeSelector"},
+			ShouldHave: []string{"core:rag_gate", "core:quality_gate"},
 			Example:    "research:deep_research",
 		},
 		{
 			Name: "Multi-Path Router", Category: "domain",
 			MinNodes: 20, MaxNodes: 40, TargetDepth: 3, TargetBF: 4.0,
-			MustHave:   []string{"PreGate", "StrategyRouter:Selector", "OutcomeSelector"},
+			MustHave:   []string{"core:pre_gate", "core:strategy_router", "OutcomeSelector"},
 			ShouldHave: []string{"ReflectOnOutcome", "SetupTools"},
 			Example:    "domain:code_review",
 		},
 		{
 			Name: "Financial Analyzer", Category: "finance",
 			MinNodes: 18, MaxNodes: 45, TargetDepth: 3, TargetBF: 3.5,
-			MustHave:   []string{"PreGate", "StrategyRouter", "ChainAction:agent"},
+			MustHave:   []string{"core:pre_gate", "core:strategy_router", "ChainAction:agent"},
 			ShouldHave: []string{"SetupFinanceTools", "ChainAction:structured_output"},
 			Example:    "finance:pitch_agent",
 		},
 		{
 			Name: "Role Agent", Category: "startup",
 			MinNodes: 8, MaxNodes: 15, TargetDepth: 2, TargetBF: 2.0,
-			MustHave:   []string{"PreGate", "ChainAction:agent"},
+			MustHave:   []string{"core:pre_gate", "core:tool_execution"},
 			ShouldHave: []string{"ReflectOnOutcome", "OutcomeSelector"},
 			Example:    "startup:ceo",
 		},
@@ -339,6 +339,9 @@ func hasNodeType(node *SerializableNode, nodeType string) bool {
 }
 
 func hasNodeMatching(node *SerializableNode, pattern string) bool {
+	if strings.HasPrefix(pattern, "core:") {
+		return MatchBlockPattern(node, pattern)
+	}
 	// Pattern format: "Type:Name" or just "Name"
 	if strings.Contains(node.Name, pattern) || strings.Contains(node.Type+":"+node.Name, pattern) {
 		return true
@@ -363,4 +366,41 @@ func MaxDepth(node *SerializableNode, currentDepth int) int {
 		}
 	}
 	return maxChild
+}
+
+// MatchBlockPattern returns true if the tree contains a SubTreeRef or metadata block_id for blockID.
+func MatchBlockPattern(tree *SerializableNode, blockID string) bool {
+	if tree == nil || blockID == "" {
+		return false
+	}
+	if tree.Type == "SubTreeRef" && BlockIDFromRef(tree) == blockID {
+		return true
+	}
+	if tree.Metadata != nil {
+		if id, ok := tree.Metadata["block_id"].(string); ok && id == blockID {
+			return true
+		}
+	}
+	for i := range tree.Children {
+		if MatchBlockPattern(&tree.Children[i], blockID) {
+			return true
+		}
+	}
+	return false
+}
+
+// BlockIDFromRef extracts block id from SubTreeRef node.
+func BlockIDFromRef(n *SerializableNode) string {
+	if n == nil {
+		return ""
+	}
+	if n.Metadata != nil {
+		if id, ok := n.Metadata["block_id"].(string); ok {
+			return id
+		}
+	}
+	if len(n.Name) > 4 && n.Name[:4] == "ref:" {
+		return n.Name[4:]
+	}
+	return ""
 }

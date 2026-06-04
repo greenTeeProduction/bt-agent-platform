@@ -54,7 +54,7 @@ func TestEventBus_SubscribePublish(t *testing.T) {
 	}
 }
 
-func TestEventBus_PublishMultipleSubscribers(t *testing.T) {
+func TestEventBus_PublishMultipleSubscribers(_ *testing.T) {
 	eb := NewEventBus()
 	ch1 := make(chan EventMessage, 1)
 	ch2 := make(chan EventMessage, 1)
@@ -86,7 +86,7 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 	}
 }
 
-func TestEventBus_UnsubscribeNonExistent(t *testing.T) {
+func TestEventBus_UnsubscribeNonExistent(_ *testing.T) {
 	eb := NewEventBus()
 	ch := make(chan EventMessage, 1)
 	// Should not panic
@@ -137,7 +137,7 @@ func TestEventBus_ResetFiredClearsAll(t *testing.T) {
 	}
 }
 
-func TestEventBus_DropOnFullChannel(t *testing.T) {
+func TestEventBus_DropOnFullChannel(_ *testing.T) {
 	eb := NewEventBus()
 	ch := make(chan EventMessage, 1)
 
@@ -183,7 +183,7 @@ func TestEventBus_CloseMultipleSubscribers(t *testing.T) {
 	}
 }
 
-func TestEventBus_ConcurrentAccess(t *testing.T) {
+func TestEventBus_ConcurrentAccess(_ *testing.T) {
 	eb := NewEventBus()
 	var wg sync.WaitGroup
 
@@ -221,7 +221,7 @@ func TestEventBus_ConcurrentAccess(t *testing.T) {
 	eb.Close()
 }
 
-func TestEventBus_SubscribeAfterClose(t *testing.T) {
+func TestEventBus_SubscribeAfterClose(_ *testing.T) {
 	eb := NewEventBus()
 	eb.Close()
 

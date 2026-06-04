@@ -48,7 +48,7 @@ func TestConfigWatcher_OnChange(t *testing.T) {
 	changed := false
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		changed = true
 		mu.Unlock()
@@ -86,7 +86,7 @@ func TestConfigWatcher_NoChangeNoCallback(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		mu.Unlock()
@@ -123,7 +123,7 @@ func TestConfigWatcher_InvalidConfigNoCallback(t *testing.T) {
 	callbackCount := 0
 	var mu sync.Mutex
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		mu.Unlock()
@@ -156,13 +156,13 @@ func TestConfigWatcher_MultipleCallbacks(t *testing.T) {
 	done1 := make(chan struct{})
 	done2 := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu1.Lock()
 		called1 = true
 		mu1.Unlock()
 		close(done1)
 	})
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu2.Lock()
 		called2 = true
 		mu2.Unlock()
@@ -194,7 +194,7 @@ func TestConfigWatcher_LargeChange(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		count := callbackCount
@@ -258,7 +258,7 @@ func TestConfigWatcher_FileAppears(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		mu.Unlock()
@@ -300,7 +300,7 @@ func TestConfigWatcher_SizeChangeDetection(t *testing.T) {
 	count := 0
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		count++
 		c := count
@@ -365,7 +365,7 @@ func TestConfigWatcher_DotEnvHotReload(t *testing.T) {
 	callbackCount := 0
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		c := callbackCount
@@ -413,7 +413,7 @@ func TestConfigWatcher_DotEnvChangeDoesNotTriggerOnNoChange(t *testing.T) {
 	callbackCount := 0
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		mu.Unlock()
@@ -456,7 +456,7 @@ func TestConfigWatcher_ConfigChangeWithDotEnv(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 
-	w.OnChange(func(cfg *Config) {
+	w.OnChange(func(_ *Config) {
 		mu.Lock()
 		callbackCount++
 		count := callbackCount

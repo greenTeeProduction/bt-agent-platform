@@ -8,10 +8,10 @@ import (
 
 type mockLLM struct{}
 
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *mockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *mockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
@@ -26,15 +26,15 @@ func (m *mockLLM) Generate(prompt string) (string, error) {
 	}
 	return "Mock analysis: " + prompt[:l] + "...", nil
 }
-func (m *mockLLM) AnalyzeComplexity(task string) string { return "medium" }
-func (m *mockLLM) GeneratePlan(task, complexity string) string {
+func (m *mockLLM) AnalyzeComplexity(_ string) string { return "medium" }
+func (m *mockLLM) GeneratePlan(task, _ string) string {
 	l := len(task)
 	if l > 30 {
 		l = 30
 	}
 	return "Execute: " + task[:l]
 }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *mockLLM) Reflect(_, _, _ string) (string, string) {
 	return "completed", "nothing to improve"
 }
 
@@ -133,7 +133,7 @@ func TestOrchestrator_ResearchRound(t *testing.T) {
 func TestOrchestrator_Debate(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, &mockLLM{})
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 	err := orch.RunDebate()
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestOrchestrator_Debate(t *testing.T) {
 func TestOrchestrator_Synthesis(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, &mockLLM{})
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 	err := orch.RunSynthesis()
 	if err != nil {
 		t.Fatal(err)
@@ -159,8 +159,8 @@ func TestOrchestrator_Synthesis(t *testing.T) {
 func TestOrchestrator_PeerReview(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, &mockLLM{})
-	orch.RunResearchRound()
-	orch.RunSynthesis()
+	_ = orch.RunResearchRound()
+	_ = orch.RunSynthesis()
 	err := orch.RunPeerReview()
 	if err != nil {
 		t.Fatal(err)
@@ -172,8 +172,8 @@ func TestOrchestrator_PeerReview(t *testing.T) {
 func TestOrchestrator_Report(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, &mockLLM{})
-	orch.RunResearchRound()
-	orch.RunSynthesis()
+	_ = orch.RunResearchRound()
+	_ = orch.RunSynthesis()
 	err := orch.RunReportGeneration()
 	if err != nil {
 		t.Fatal(err)

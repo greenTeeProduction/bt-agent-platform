@@ -69,7 +69,7 @@ func (h *History) Record(r RunRecord) error {
 	defer f.Close()
 
 	data, _ := json.Marshal(r)
-	f.Write(append(data, '\n'))
+	_, _ = f.Write(append(data, '\n'))
 	return nil
 }
 

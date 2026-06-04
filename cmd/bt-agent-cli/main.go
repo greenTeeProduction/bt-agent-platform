@@ -70,7 +70,7 @@ func cmdCreate(reg *agent.Registry) {
 	tree := fs.String("tree", "", "Tree ID (e.g., domain:code_review)")
 	desc := fs.String("desc", "", "Description")
 	tmpl := fs.String("from-template", "", "Create from template")
-	fs.Parse(os.Args[2:])
+	_ = fs.Parse(os.Args[2:])
 
 	var def agent.Definition
 
@@ -137,7 +137,7 @@ func cmdList(reg *agent.Registry) {
 func cmdRun(reg *agent.Registry) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	input := fs.String("input", "", "Task input text")
-	fs.Parse(os.Args[2:])
+	_ = fs.Parse(os.Args[2:])
 
 	name := fs.Arg(0)
 	if name == "" {
@@ -171,10 +171,10 @@ func cmdTest(reg *agent.Registry) {
 	_ = inst
 }
 
-func cmdSchedule(reg *agent.Registry) {
+func cmdSchedule(_ *agent.Registry) {
 	fs := flag.NewFlagSet("schedule", flag.ExitOnError)
 	every := fs.String("every", "", "Cron expression (e.g., '0 9 * * *' or 'every 1h')")
-	fs.Parse(os.Args[2:])
+	_ = fs.Parse(os.Args[2:])
 
 	name := fs.Arg(0)
 	if name == "" {

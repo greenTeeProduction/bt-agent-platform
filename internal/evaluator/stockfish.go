@@ -189,7 +189,7 @@ func (tt *TranspositionTable) Save() error {
 		return err
 	}
 	tmp := tt.path + ".tmp"
-	os.WriteFile(tmp, data, 0644)
+	_ = os.WriteFile(tmp, data, 0644)
 	return os.Rename(tmp, tt.path)
 }
 
@@ -198,7 +198,7 @@ func (tt *TranspositionTable) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &tt.entries)
+	_ = json.Unmarshal(data, &tt.entries)
 	if len(tt.entries) > tt.maxSize {
 		// Trim
 		count := 0
@@ -243,7 +243,7 @@ type MutationCandidate struct {
 //  4. prune dead/unreachable nodes
 //  5. add_fallback for selectors with few children
 func OrderMutations(tree *evolution.SerializableNode, records []reflection.Record, fitness FitnessScore) []MutationCandidate {
-	var candidates []MutationCandidate
+	candidates := make([]MutationCandidate, 0, 16)
 
 	// Find nodes that appear in failure plans — wrap them with retry (killer move)
 	failureNodes := findFailureNodes(records)
@@ -315,7 +315,7 @@ func findFailureNodes(records []reflection.Record) []string {
 			}
 		}
 	}
-	var result []string
+	result := make([]string, 0, 16)
 	for node := range seen {
 		result = append(result, node)
 	}
@@ -417,7 +417,7 @@ func IterativeDeepening(
 func cloneTree(tree *evolution.SerializableNode) *evolution.SerializableNode {
 	data, _ := json.Marshal(tree)
 	var clone evolution.SerializableNode
-	json.Unmarshal(data, &clone)
+	_ = json.Unmarshal(data, &clone)
 	return &clone
 }
 

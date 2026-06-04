@@ -215,10 +215,7 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 		}
 		router.Children = append(router.Children, path)
 	}
-	tree.Children = append(tree.Children, router)
-
-	// Outcome handling
-	tree.Children = append(tree.Children,
+	tree.Children = append(tree.Children, router,
 		evolution.SerializableNode{Type: "Action", Name: "ReflectOnOutcome"},
 		f.defaultOutcomeSelector(),
 	)
@@ -253,7 +250,7 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 
 // ─── Helpers ───
 
-func (f *Factory) selectParents(category, task string) []string {
+func (f *Factory) selectParents(category, _ string) []string {
 	// Prefer parents from same category
 	var candidates []string
 	for id, tmpl := range f.Templates {

@@ -1191,7 +1191,7 @@ func AgentsHandler(w http.ResponseWriter, r *http.Request)
 
 ## MCP Tools Inventory (40 total)
 
-**bt-agent** (32): `bt_run_task`, `bt_get_tree`, `bt_get_reflections`, `bt_evolve`, `bt_reset`, `bt_get_fitness`, `bt_create_agent`, `bt_use_go_tree`, `bt_use_finance_tree`, `bt_list_finance_trees`, `bt_use_research_tree`, `bt_use_domain_tree`, `bt_startup_simulate`, `bt_startup_summary`, `bt_thinktank_analyze`, `bt_delegate_to_tree`, `bt_kg_discover`, `bt_kg_query`, `bt_kg_auto_create`, `bt_kg_summary`, `bt_agent_create`, `bt_agent_list`, `bt_agent_run`, `bt_agent_history`, `bt_agent_schedule`, `bt_agent_delete`, `bt_factory_create`, `bt_evolve_expert`, `bt_evolve_genetic`, `bt_health`, `bt_workflow_run`, `bt_workflow_approve`
+**bt-agent** (45+): `bt_run_task`, `bt_get_tree`, `bt_get_reflections`, `bt_evolve`, `bt_reset`, `bt_get_fitness`, `bt_create_agent`, `bt_use_go_tree`, `bt_use_finance_tree`, `bt_list_finance_trees`, `bt_use_research_tree`, `bt_use_domain_tree`, `bt_startup_simulate`, `bt_startup_summary`, `bt_thinktank_analyze`, `bt_delegate_to_tree`, `bt_kg_discover`, `bt_kg_query`, `bt_kg_auto_create`, `bt_kg_summary`, `bt_agent_create`, `bt_agent_list`, `bt_agent_run`, `bt_agent_history`, `bt_agent_schedule`, `bt_agent_delete`, `bt_factory_create`, `bt_evolve_expert`, `bt_evolve_genetic`, `bt_health`, `bt_workflow_run`, `bt_workflow_approve`, `bt_blocks_list`, `bt_blocks_get`, `bt_blocks_compose`, `bt_blocks_register`, `bt_blocks_compose_evolve`, `bt_blocks_list_profiles`, `bt_blocks_fitness`, `bt_blocks_freeze`, `bt_blocks_promote`, `bt_hitl_list`, `bt_hitl_get`, `bt_hitl_approve`, `bt_hitl_reject`, `bt_hitl_compose_task`,
 
 **bt-evaluator** (5): `ev_evaluate`, `ev_order_mutations`, `ev_deepen`, `ev_tt_stats`, `ev_tt_save`
 

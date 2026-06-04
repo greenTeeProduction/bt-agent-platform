@@ -160,7 +160,7 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 	const mu = 0.6 // weight of similarity vs quality score
 	queryTokens := tokenize(query)
 
-	var candidates []scored
+	candidates := make([]scored, 0, 16)
 	for _, e := range eb.Entries {
 		// Build search text from entry fields
 		searchText := fmt.Sprintf("%s %s %s %s %s %s",
@@ -215,7 +215,7 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 // TransferExperiences finds experiences from sourceTree that may apply to targetTree.
 // Returns entries sorted by quality score — cross-tree transfer relies on the LLM
 // or similarity matching to determine applicability.
-func (eb *ExperienceBank) TransferExperiences(sourceTree, targetTree string) []ExperienceEntry {
+func (eb *ExperienceBank) TransferExperiences(_, targetTree string) []ExperienceEntry {
 	return eb.Retrieve(targetTree, 5)
 }
 
