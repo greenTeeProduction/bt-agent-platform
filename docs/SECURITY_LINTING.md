@@ -27,6 +27,8 @@ This document describes how to catch **high/critical** security findings and **l
 
 ## Tool versions
 
+- **Go** — CI uses `actions/setup-go` with `go-version-file: go.mod` (currently **1.26.3**). golangci-lint must run with the same toolchain as `go build`; older runners (e.g. 1.23/1.24) fail typecheck with `package requires newer Go version go1.26`.
+
 Pinned in `scripts/dev-tools.sh` / `make tools-install`:
 
 - **golangci-lint v1.64.8** — matches CI (`golangci-lint-action@v6` with `version: v1.64.8`). Do not use golangci-lint v2 CLI with the current `.golangci.yml` without migrating config.
