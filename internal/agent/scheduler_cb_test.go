@@ -325,7 +325,7 @@ func TestValidateAgentRun_Blocked(t *testing.T) {
 	}
 }
 
-func TestReportAgentOutcome_NilStore(t *testing.T) {
+func TestReportAgentOutcome_NilStore(_ *testing.T) {
 	// Should not panic
 	reportAgentOutcome(nil, "agent", true)
 	reportAgentOutcome(nil, "agent", false)

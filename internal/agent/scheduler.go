@@ -172,7 +172,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 		if outcome == "success" {
 			quality = estimateQuality(output)
 		}
-		s.history.Record(RunRecord{
+		_ = s.history.Record(RunRecord{
 			AgentName: agentName,
 			Task:      task,
 			Outcome:   outcome,
@@ -412,7 +412,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		if runErr != nil {
 			errStr = runErr.Error()
 		}
-		s.history.Record(RunRecord{
+		_ = s.history.Record(RunRecord{
 			AgentName: job.AgentName,
 			Task:      runCtx.Task,
 			Outcome:   outcome,
@@ -578,9 +578,9 @@ func nextCronTime(expr string, from time.Time) (time.Time, error) {
 
 // parseCronField parses a single cron field into a matching function.
 // Handles: * (all), N (specific), N,M (list), */N (step), N-M (range), N-M/N (ranged step)
-func parseCronField(field string, min, max int) (func(int) bool, error) {
+func parseCronField(field string, minVal, maxVal int) (func(int) bool, error) {
 	if field == "*" {
-		return func(v int) bool { return v >= min && v <= max }, nil
+		return func(v int) bool { return v >= minVal && v <= maxVal }, nil
 	}
 
 	// Check for step pattern: */N, N-M/N

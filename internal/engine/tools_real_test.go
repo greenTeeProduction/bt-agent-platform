@@ -203,18 +203,18 @@ func TestNewGraphifyTool_UpdateDefault(t *testing.T) {
 	t.Logf("graphify update result: %s", result[:min(len(result), 100)])
 }
 
-func TestNewGraphifyTool_UnknownActionIsQuery(t *testing.T) {
+func TestNewGraphifyTool_UnknownActionIsQuery(_ *testing.T) {
 	tool := newGraphifyTool()
 	// Fallback to query — graphify may complain but shouldn't panic
 	tool.Call("unknowncommand")
 }
 
-func TestNewGraphifyTool_QueryAction(t *testing.T) {
+func TestNewGraphifyTool_QueryAction(_ *testing.T) {
 	tool := newGraphifyTool()
 	tool.Call("query test")
 }
 
-func TestNewGraphifyTool_ExplainAction(t *testing.T) {
+func TestNewGraphifyTool_ExplainAction(_ *testing.T) {
 	tool := newGraphifyTool()
 	tool.Call("explain BuildTree")
 }

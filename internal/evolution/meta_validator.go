@@ -162,7 +162,7 @@ func (m *MetaValidator) checkNodeNames(candidate *SerializableNode, report *Meta
 	walk(candidate, candidate.Name)
 }
 
-func (m *MetaValidator) checkStructuralLimits(candidate *SerializableNode, report *MetaValidationReport) {
+func (m *MetaValidator) checkStructuralLimits(_ *SerializableNode, report *MetaValidationReport) {
 	if report.NodeCount == 0 {
 		report.addIssue("structural_limits", "critical", "tree has zero nodes", 0.50)
 	}
@@ -256,7 +256,7 @@ func (m *MetaValidator) checkFitness(preComposite, postComposite float64, report
 	}
 }
 
-func (m *MetaValidator) checkStructuralRegression(baseline, candidate *SerializableNode, report *MetaValidationReport) {
+func (m *MetaValidator) checkStructuralRegression(baseline, _ *SerializableNode, report *MetaValidationReport) {
 	baseNodes := CountNodes(baseline)
 	baseDepth := MaxDepth(baseline, 0)
 	if baseNodes > 0 && report.NodeCount > int(math.Ceil(float64(baseNodes)*2.5)) {

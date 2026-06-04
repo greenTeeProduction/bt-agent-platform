@@ -5,14 +5,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/llm"
+
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 func TestTauBench_Airline(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	entries := BuiltinTauBenchAirline()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 airline entries, got %d", len(entries))
@@ -30,9 +30,9 @@ func TestTauBench_Airline(t *testing.T) {
 
 	// Evaluate against GoDev tree (general-purpose)
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
-	metrics := EvaluateTauBench(tree, entries, mock)
+	metrics := EvaluateTauBench(tree, entries, llmBackend)
 
 	fmt.Printf("\nτ-bench Airline: %d/%d goals achieved, %.0f%% action accuracy\n",
 		metrics.GoalAchieved, metrics.TotalScenarios, metrics.ActionAccuracy*100)
@@ -50,7 +50,7 @@ func TestTauBench_Airline(t *testing.T) {
 		t.Errorf("expected 5 scenarios processed, got %d", metrics.TotalScenarios)
 	}
 
-	// With mock LLM, goal achievement is by design modest.
+	// With llmBackend LLM, goal achievement is by design modest.
 	// The key metric is action accuracy — the tree should at least reference some tools.
 	// A 0.0 would indicate the tree never outputs tool names at all.
 	t.Logf("Goal achievement: %.0f%%, Action accuracy: %.0f%%",
@@ -58,14 +58,12 @@ func TestTauBench_Airline(t *testing.T) {
 		metrics.ActionAccuracy*100)
 
 	if metrics.GoalAchieved == 0 {
-		t.Log("Note: 0 goal achievements with mock LLM — expected for complex scenarios")
+		t.Log("Note: 0 goal achievements with llmBackend LLM — expected for complex scenarios")
 	}
 }
 
 func TestTauBench_Retail(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	entries := BuiltinTauBenchRetail()
 	if len(entries) != 5 {
 		t.Fatalf("expected 5 retail entries, got %d", len(entries))
@@ -83,9 +81,9 @@ func TestTauBench_Retail(t *testing.T) {
 
 	// Use GoDev tree
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
-	metrics := EvaluateTauBench(tree, entries, mock)
+	metrics := EvaluateTauBench(tree, entries, llmBackend)
 
 	fmt.Printf("\nτ-bench Retail: %d/%d goals achieved, %.0f%% action accuracy\n",
 		metrics.GoalAchieved, metrics.TotalScenarios, metrics.ActionAccuracy*100)
@@ -109,9 +107,7 @@ func TestTauBench_Retail(t *testing.T) {
 }
 
 func TestTauBench_MultiDomain(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent τ-bench test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	allEntries := DefaultTauBenchEntries()
 	if len(allEntries) != 10 {
 		t.Fatalf("expected 10 total entries (5 airline + 5 retail), got %d", len(allEntries))
@@ -131,7 +127,7 @@ func TestTauBench_MultiDomain(t *testing.T) {
 	// Run each domain through different tree types
 	airlineEntries := BuiltinTauBenchAirline()
 	retailEntries := BuiltinTauBenchRetail()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
 	trees := map[string]*evolution.SerializableNode{
 		"godev":       evolution.GoDeveloperTree(),
@@ -140,13 +136,13 @@ func TestTauBench_MultiDomain(t *testing.T) {
 
 	for treeName, tree := range trees {
 		// Airline
-		airMetrics := EvaluateTauBench(tree, airlineEntries, mock)
+		airMetrics := EvaluateTauBench(tree, airlineEntries, llmBackend)
 		fmt.Printf("\nτ-bench Airline via %s: %d/%d goals, %.0f%% actions (%.1fs avg)\n",
 			treeName, airMetrics.GoalAchieved, airMetrics.TotalScenarios,
 			airMetrics.ActionAccuracy*100, airMetrics.AvgTurns)
 
 		// Retail
-		retailMetrics := EvaluateTauBench(tree, retailEntries, mock)
+		retailMetrics := EvaluateTauBench(tree, retailEntries, llmBackend)
 		fmt.Printf("τ-bench Retail via %s: %d/%d goals, %.0f%% actions (%.1fs avg)\n",
 			treeName, retailMetrics.GoalAchieved, retailMetrics.TotalScenarios,
 			retailMetrics.ActionAccuracy*100, retailMetrics.AvgTurns)
@@ -305,13 +301,11 @@ func TestTauBench_TaskLoading(t *testing.T) {
 }
 
 func TestTauBench_EmptyEntries(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Evaluate with empty entries should not panic
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultLLM()
-	metrics := EvaluateTauBench(tree, nil, mock)
+	llmBackend := RealLLM(t)
+	metrics := EvaluateTauBench(tree, nil, llmBackend)
 
 	if metrics.TotalScenarios != 0 {
 		t.Errorf("expected 0 scenarios, got %d", metrics.TotalScenarios)

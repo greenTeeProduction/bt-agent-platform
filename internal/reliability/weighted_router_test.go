@@ -73,7 +73,7 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			router.Execute("agent", "task")
+			_, _ = router.Execute("agent", "task")
 		}()
 	}
 	wg.Wait()
@@ -91,25 +91,25 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 	}
 
 	// Distribution should be reasonably even (within 2x of each other).
-	max := e1Count
-	min := e1Count
+	maxCount := e1Count
+	minCount := e1Count
 	for _, c := range []int{e2Count, e3Count} {
-		if c > max {
-			max = c
+		if c > maxCount {
+			maxCount = c
 		}
-		if c < min {
-			min = c
+		if c < minCount {
+			minCount = c
 		}
 	}
-	if max > 2*min {
+	if maxCount > 2*minCount {
 		t.Errorf("least-connections should balance load, got e1=%d e2=%d e3=%d (max=%d min=%d)",
-			callCount["e1"], callCount["e2"], callCount["e3"], max, min)
+			callCount["e1"], callCount["e2"], callCount["e3"], maxCount, minCount)
 	}
 }
 
 func TestLeastConnections_SkipsUnhealthy(t *testing.T) {
 	callCount := map[string]int{}
-	healthy := NewLocalExecutor("healthy", func(agent, task string) (*AgentResult, error) {
+	healthy := NewLocalExecutor("healthy", func(_, _ string) (*AgentResult, error) {
 		callCount["healthy"]++
 		return &AgentResult{Success: true}, nil
 	})
@@ -139,7 +139,7 @@ func TestLeastConnections_AllUnhealthyFallsBackToLocal(t *testing.T) {
 		WithHealthCheck(func() error { return errors.New("down") })
 	unhealthy2 := NewLocalExecutor("u2", nil).
 		WithHealthCheck(func() error { return errors.New("down") })
-	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local-fallback"}, nil
 	})
 
@@ -170,10 +170,10 @@ func TestLeastConnections_ActiveCounts(t *testing.T) {
 		t.Errorf("expected empty activeCounts with no executors, got %v", counts)
 	}
 
-	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
-	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e1)
@@ -191,12 +191,12 @@ func TestLeastConnections_ActiveCounts(t *testing.T) {
 func TestLeastConnections_TieGoesToFirst(t *testing.T) {
 	// When all executors have equal active counts, the first healthy one should win.
 	callOrder := []string{}
-	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
 		callOrder = append(callOrder, "e1")
 		time.Sleep(20 * time.Millisecond) // hold the connection
 		return &AgentResult{Success: true}, nil
 	})
-	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
 		callOrder = append(callOrder, "e2")
 		time.Sleep(20 * time.Millisecond)
 		return &AgentResult{Success: true}, nil
@@ -232,10 +232,10 @@ func TestLeastConnections_TieGoesToFirst(t *testing.T) {
 func TestLeastConnections_FailoverToNextHealthy(t *testing.T) {
 	// When the least-connections executor's Execute() fails, router should
 	// failover to the next healthy executor (second-least connections).
-	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "from e2"}, nil
 	})
 
@@ -252,13 +252,13 @@ func TestLeastConnections_FailoverToNextHealthy(t *testing.T) {
 }
 
 func TestLeastConnections_RespectsMaxFailover(t *testing.T) {
-	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
 		return nil, errors.New("e2 failed")
 	})
-	e3 := NewLocalExecutor("e3", func(agent, task string) (*AgentResult, error) {
+	e3 := NewLocalExecutor("e3", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "from e3"}, nil
 	})
 
@@ -279,7 +279,7 @@ func TestLeastConnections_DynamicExecutorAddition(t *testing.T) {
 	router := NewAgentRouter()
 	router.SetStrategy(RoutingLeastConnections)
 
-	e1 := NewLocalExecutor("e1", func(agent, task string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e1)
@@ -287,7 +287,7 @@ func TestLeastConnections_DynamicExecutorAddition(t *testing.T) {
 		t.Errorf("expected 1 active count after adding executor, got %d", len(router.ActiveCounts()))
 	}
 
-	e2 := NewLocalExecutor("e2", func(agent, task string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e2)

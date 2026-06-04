@@ -1,8 +1,9 @@
 package companies
 
 import (
-	"github.com/nico/go-bt-evolve/internal/startup"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/startup"
 )
 
 // BTStudioCompany creates a startup building a Flutter-based behavior tree visual editor.

@@ -187,9 +187,7 @@ func TestNSGAII_Evolve_Basic(t *testing.T) {
 
 	nsga2 := NewNSGAIIPopulation(6, baseTree, []FitnessDimension{DimSuccessRate, DimStability})
 
-	fitnessFn := func(node *SerializableNode) MultiFitness {
-		return StructuralMultiFitness(node)
-	}
+	fitnessFn := StructuralMultiFitness
 
 	result := nsga2.Evolve(3, fitnessFn)
 	if result == nil {

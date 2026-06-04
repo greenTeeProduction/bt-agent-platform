@@ -29,7 +29,7 @@ func act(name, desc string) evolution.SerializableNode {
 // chainAgent creates a ChainAction node for the agent: chain type.
 // systemPrompt is the system message, task is the user prompt,
 // tools is the list of tool names to make available.
-func chainAgent(name, systemPrompt string, tools []string) evolution.SerializableNode {
+func chainAgent(_, systemPrompt string, tools []string) evolution.SerializableNode {
 	ti := make([]any, len(tools))
 	for i, t := range tools {
 		ti[i] = t
@@ -45,8 +45,8 @@ func chainAgent(name, systemPrompt string, tools []string) evolution.Serializabl
 }
 
 // retry wraps a child with retry decorator.
-func retryW(name string, child evolution.SerializableNode, max int) evolution.SerializableNode {
-	return evolution.SerializableNode{Type: "Retry", Name: name, Children: []evolution.SerializableNode{child}, MaxRetries: max}
+func retryW(name string, child evolution.SerializableNode, maxRetries int) evolution.SerializableNode {
+	return evolution.SerializableNode{Type: "Retry", Name: name, Children: []evolution.SerializableNode{child}, MaxRetries: maxRetries}
 }
 
 // outcome builds the standard OutcomeSelector pattern.

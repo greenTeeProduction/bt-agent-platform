@@ -12,18 +12,18 @@ import (
 
 type regressionMockLLM struct{ resp string }
 
-func (m regressionMockLLM) Generate(prompt string) (string, error) { return m.resp, nil }
-func (m regressionMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m regressionMockLLM) Generate(_ string) (string, error) { return m.resp, nil }
+func (m regressionMockLLM) GenerateCtx(_ context.Context, _ string) (string, error) {
 	return m.resp, nil
 }
-func (m regressionMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m regressionMockLLM) GenerateWithTimeout(_ string, _ time.Duration) (string, error) {
 	return m.resp, nil
 }
-func (m regressionMockLLM) AnalyzeComplexity(task string) string { return "low" }
-func (m regressionMockLLM) GeneratePlan(task, complexity string) string {
+func (m regressionMockLLM) AnalyzeComplexity(_ string) string { return "low" }
+func (m regressionMockLLM) GeneratePlan(_, _ string) string {
 	return "plan"
 }
-func (m regressionMockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m regressionMockLLM) Reflect(_, _, _ string) (string, string) {
 	return "ok", "none"
 }
 

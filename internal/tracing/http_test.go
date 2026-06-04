@@ -21,7 +21,7 @@ func TestTracingMiddleware_BasicSpan(t *testing.T) {
 			t.Error("expected span in request context, got nil")
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 
 	mw := TracingMiddleware(handler)
@@ -67,7 +67,7 @@ func TestTracingMiddleware_StatusCodes(t *testing.T) {
 			SetGlobalTracer(tracer)
 			defer SetGlobalTracer(noopTracer{})
 
-			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
 			})
 
@@ -94,19 +94,13 @@ func TestTracingMiddleware_SlowRequest(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	mw := TracingMiddleware(handler)
-
 	// Simulate a slow request by using a handler that sleeps.
 	// But we want the span to think it took >5s, so we sleep in the test handler.
-	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(5 * time.Second)
 		w.WriteHeader(http.StatusOK)
 	})
-	mw = TracingMiddleware(slowHandler)
+	mw := TracingMiddleware(slowHandler)
 
 	req := httptest.NewRequest("GET", "/api/thinktank/analyze", nil)
 	rec := httptest.NewRecorder()
@@ -136,7 +130,7 @@ func TestTracingMiddleware_NoopTracerSafe(t *testing.T) {
 	SetGlobalTracer(noopTracer{})
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -156,7 +150,7 @@ func TestTracingMiddleware_FlushSupport(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
 		} else {
@@ -175,7 +169,7 @@ func TestTracingMiddleware_DifferentMethods(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -200,8 +194,8 @@ func TestTracingMiddleware_Implicit200(t *testing.T) {
 	defer SetGlobalTracer(noopTracer{})
 
 	// Handler that writes without calling WriteHeader should get 200
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hello"))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello"))
 	})
 
 	mw := TracingMiddleware(handler)
@@ -221,7 +215,7 @@ func TestTracingMiddleware_WroteHeaderGuard(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.WriteHeader(http.StatusOK) // Should be ignored
 	})

@@ -1,5 +1,14 @@
 # arc42 Section 5 — Building Block View
 
+## 5.0 Composable building blocks (`internal/blocks`)
+
+Reusable **SubTreeRef** blocks (`core:*`) compose on-demand task trees. `BuildAndValidate` expands refs at build time via `RegisterTreeExpander` (wired from `internal/blocks` init). Default pipelines:
+
+- `DefaultTaskBlocks` — pre_gate → tools profile → tool_execution → error_handling
+- Presets `agentic`, `full` — plan/RAG/clarify/HITL variants via `ComposePreset`
+
+Persistence: custom blocks under `~/.go-bt-evolve/blocks/`. Evolution can mutate block refs (`FilterEvolutionMutations`). See ADR-008.
+
 ## 5.1 Whitebox Overall System
 
 ### Layer Model

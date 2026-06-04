@@ -150,7 +150,7 @@ func TestContextWithTraceParent_NilContext(t *testing.T) {
 		TraceID:  "0af7651916cd43dd8448eb211c80319c",
 		ParentID: "b7ad6b7169203331",
 	}
-	result := ContextWithTraceParent(nil, tp)
+	result := ContextWithTraceParent(context.TODO(), tp)
 	if result != nil {
 		t.Error("expected nil when context is nil")
 	}
@@ -169,7 +169,7 @@ func TestContextWithTraceParent_Integration(t *testing.T) {
 	}
 
 	ctx := ContextWithTraceParent(context.Background(), tp)
-	ctx, span := StartSpan(ctx, "child-operation")
+	_, span := StartSpan(ctx, "child-operation")
 	if span == nil {
 		t.Fatal("expected non-nil span")
 	}
@@ -202,7 +202,7 @@ func TestContextWithTraceParent_WithoutParent(t *testing.T) {
 	defer SetGlobalTracer(noopTracer{})
 
 	ctx := context.Background()
-	ctx, span := StartSpan(ctx, "root-operation")
+	_, span := StartSpan(ctx, "root-operation")
 	span.End()
 
 	out := output()
@@ -346,7 +346,7 @@ func TestTracingMiddleware_WithTraceState(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -369,7 +369,7 @@ func TestTracingMiddleware_InvalidTraceParent(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -401,7 +401,7 @@ func TestTracingMiddleware_NoTraceParent(t *testing.T) {
 	SetGlobalTracer(tracer)
 	defer SetGlobalTracer(noopTracer{})
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 

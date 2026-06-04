@@ -60,7 +60,7 @@ func LoadBFCLSuite(path string) (*BFCLSuite, error) {
 
 // Evaluate runs all BFCL entries against a tree and returns routing accuracy.
 func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, mock llm.LLM) *BFCLMetrics {
-	var results []BFCLEvalResult
+	results := make([]BFCLEvalResult, 0, 32)
 	correct := 0
 	successes := 0
 

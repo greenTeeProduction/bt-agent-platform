@@ -1,7 +1,6 @@
 package evolution
 
 import (
-	"math/rand"
 	"strings"
 	"testing"
 )
@@ -47,7 +46,6 @@ func TestIslandModel_AddGetAndSingleIslandMigration(t *testing.T) {
 }
 
 func TestIslandModel_MigrateReplacesWorstWithClonedElite(t *testing.T) {
-	rand.Seed(1)
 	im := NewIslandModel(10, 0.5)
 	goPop := islandTestPopulation("go-elite", "go-mid", "go-low", "go-min")
 	opsPop := islandTestPopulation("ops-elite", "ops-mid", "ops-low", "ops-min")

@@ -42,7 +42,7 @@ func TestProbeDashboard_PassesHardenedStack(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		requestCount++
 		count := requestCount
@@ -62,7 +62,7 @@ func TestProbeDashboard_PassesHardenedStack(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/login", func(w http.ResponseWriter, _ *http.Request) {
 		// Simulate login that sets session cookie with proper security attributes
 		http.SetCookie(w, &http.Cookie{
 			Name:     "bt_session",
@@ -134,10 +134,10 @@ func TestProbeDashboard_PassesHardenedStack(t *testing.T) {
 
 func TestProbeDashboard_FailsMissingHardeningHeaders(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/tasks/approve", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/tasks/approve", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	server := httptest.NewServer(mux)
@@ -181,7 +181,7 @@ func TestProbeDashboard_RequiresTargetURL(t *testing.T) {
 
 func TestProbeDashboard_CSRFProtection(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -204,10 +204,10 @@ func TestProbeDashboard_CSRFProtection(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/dlq", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/dlq", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	})
 
@@ -238,7 +238,7 @@ func TestProbeDashboard_CSRFProtection(t *testing.T) {
 
 func TestProbeDashboard_WithAPIKey(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -255,7 +255,7 @@ func TestProbeDashboard_WithAPIKey(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/summary", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/api/dlq", func(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func TestProbeDashboard_WithAPIKey(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/api/scalability", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/scalability", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 

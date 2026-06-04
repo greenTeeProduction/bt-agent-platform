@@ -311,8 +311,6 @@ updates:
 	}
 	if report.RunnerInstalled {
 		t.Log("runner IS installed on this machine (unexpected in temp dir test)")
-	} else {
-		// Expected: no runner in temp dir
 	}
 }
 
@@ -370,32 +368,6 @@ jobs:
     timeout-minutes: 20
     needs: [lint, security, test, build]
     steps: [{run: 'GOARCH=amd64 go build ./... && GOARCH=arm64 go build ./... && bt-security-probe-linux-arm64 && bt-ci-doctor-linux-arm64 && bt-tree-integration-linux-arm64 && benchcmp-linux-arm64 && bt-scalability-probe-linux-arm64'}]
-`
-}
-
-func minimalCodeQL() string {
-	return `name: CodeQL Analysis
-on: {push: {}, pull_request: {}, schedule: [{cron: '0 6 * * 1'}]}
-permissions:
-  security-events: write
-  actions: read
-  contents: read
-jobs:
-  analyze:
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: {go-version: '1.23'}
-      - uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ hashFiles('**/go.sum') }}
-      - uses: github/codeql-action/init@v3
-        with: {languages: go, queries: +security-and-quality}
-      - run: go build ./...
-      - uses: github/codeql-action/analyze@v3
-        with: {category: /language:go}
 `
 }
 

@@ -138,7 +138,7 @@ func (a Analytics) FormatAnalytics() string {
 
 	if len(a.Centrality) > 0 {
 		s.WriteString("Centrality (most depended-on trees):\n")
-		for _, c := range a.Centrality[:min(5, len(a.Centrality))] {
+		for _, c := range a.Centrality[:minInt(5, len(a.Centrality))] {
 			s.WriteString(fmt.Sprintf("  %-35s %d dependents\n", c.TreeID, c.Dependents))
 		}
 		s.WriteString("\n")
@@ -184,7 +184,7 @@ func (a Analytics) FormatAnalytics() string {
 	return s.String()
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

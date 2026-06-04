@@ -87,7 +87,7 @@ func TestConvertToAgentCard_EmptyName(t *testing.T) {
 func TestBuildCardRegistry(t *testing.T) {
 	tmpDir := t.TempDir()
 	agentsDir := tmpDir + "/agents"
-	os.MkdirAll(agentsDir, 0755)
+	_ = os.MkdirAll(agentsDir, 0755)
 
 	agentYAML := `name: test-agent
 description: A test agent
@@ -95,7 +95,7 @@ version: 1.0.0
 tree: domain:code_review
 created_at: 2026-01-01T00:00:00Z
 `
-	os.WriteFile(agentsDir+"/test-agent.yaml", []byte(agentYAML), 0644)
+	_ = os.WriteFile(agentsDir+"/test-agent.yaml", []byte(agentYAML), 0644)
 
 	reg, err := agent.NewRegistry(agentsDir)
 	if err != nil {

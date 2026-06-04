@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestNewExperienceBank_Empty(t *testing.T) {
@@ -162,9 +161,9 @@ func TestRetrieveByTreeType(t *testing.T) {
 	goDevTree := GoDeveloperTree()
 
 	// Add entries for both tree types
-	eb.AddFromMutation(defaultTree, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.5, nil)
-	eb.AddFromMutation(defaultTree, MutationOp{Operation: "add_after", Target: "N2"}, 0.3, 0.55, nil)
-	eb.AddFromMutation(goDevTree, MutationOp{Operation: "wrap_retry", Target: "N3"}, 0.3, 0.6, nil)
+	_ = eb.AddFromMutation(defaultTree, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.5, nil)
+	_ = eb.AddFromMutation(defaultTree, MutationOp{Operation: "add_after", Target: "N2"}, 0.3, 0.55, nil)
+	_ = eb.AddFromMutation(goDevTree, MutationOp{Operation: "wrap_retry", Target: "N3"}, 0.3, 0.6, nil)
 
 	// Retrieve by GoDev type
 	results := eb.RetrieveByTreeType("GoDev", 5)
@@ -192,7 +191,7 @@ func TestRetrieve_RespectsTopK(t *testing.T) {
 	tree := DefaultTree()
 	for i := 0; i < 10; i++ {
 		op := MutationOp{Operation: "add_before", Target: "N"}
-		eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.02, nil)
+		_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.02, nil)
 	}
 
 	results := eb.Retrieve("Default", 1)
@@ -256,8 +255,8 @@ func TestStats(t *testing.T) {
 	}
 
 	tree := DefaultTree()
-	eb.AddFromMutation(tree, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.5, nil)
-	eb.AddFromMutation(tree, MutationOp{Operation: "add_after", Target: "N2"}, 0.3, 0.6, nil)
+	_ = eb.AddFromMutation(tree, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.5, nil)
+	_ = eb.AddFromMutation(tree, MutationOp{Operation: "add_after", Target: "N2"}, 0.3, 0.6, nil)
 
 	stats = eb.Stats()
 	if stats["total_entries"].(int) != 2 {
@@ -337,10 +336,10 @@ func TestTransferExperiences(t *testing.T) {
 	def := DefaultTree()
 
 	// Add GoDev experiences
-	eb.AddFromMutation(goDev, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.6, nil)
-	eb.AddFromMutation(goDev, MutationOp{Operation: "wrap_retry", Target: "N2"}, 0.3, 0.7, nil)
+	_ = eb.AddFromMutation(goDev, MutationOp{Operation: "add_before", Target: "N1"}, 0.3, 0.6, nil)
+	_ = eb.AddFromMutation(goDev, MutationOp{Operation: "wrap_retry", Target: "N2"}, 0.3, 0.7, nil)
 	// Add Default experiences
-	eb.AddFromMutation(def, MutationOp{Operation: "add_fallback", Target: "N3"}, 0.3, 0.5, nil)
+	_ = eb.AddFromMutation(def, MutationOp{Operation: "add_fallback", Target: "N3"}, 0.3, 0.5, nil)
 
 	// Transfer GoDev → Default
 	results := eb.TransferExperiences("GoDev", "Default")
@@ -375,7 +374,7 @@ func TestConcurrentAccess(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		go func(id int) {
 			op := MutationOp{Operation: "add_before", Target: "N"}
-			eb.AddFromMutation(tree, op, 0.3, 0.3+float64(id)*0.05, nil)
+			_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(id)*0.05, nil)
 			done <- true
 		}(i)
 	}
@@ -416,7 +415,7 @@ func TestAddFromMutation_MultipleTreeTypes(t *testing.T) {
 		ops := []string{"add_before", "add_after", "wrap_retry"}
 		for _, op := range ops {
 			opObj := MutationOp{Operation: op, Target: "N"}
-			eb.AddFromMutation(tree, opObj, 0.3, 0.3+rand.Float64()*0.2, nil)
+			_ = eb.AddFromMutation(tree, opObj, 0.3, 0.3+rand.Float64()*0.2, nil)
 		}
 	}
 
@@ -465,7 +464,7 @@ func BenchmarkAddFromMutation(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		op := MutationOp{Operation: "add_before", Target: "N"}
-		eb.AddFromMutation(tree, op, 0.3, 0.5, nil)
+		_ = eb.AddFromMutation(tree, op, 0.3, 0.5, nil)
 	}
 }
 
@@ -477,15 +476,11 @@ func BenchmarkRetrieve(b *testing.B) {
 	// Populate with 100 entries
 	for i := 0; i < 100; i++ {
 		op := MutationOp{Operation: "add_before", Target: "N"}
-		eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.005, nil)
+		_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.005, nil)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		eb.Retrieve("Default add_before", 5)
 	}
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }

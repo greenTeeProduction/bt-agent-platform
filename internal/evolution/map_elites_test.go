@@ -183,9 +183,7 @@ func TestMAPElitesPopulation_BasicFlow(t *testing.T) {
 	mp := NewMAPElitesPopulation(10, baseTree, "godev")
 
 	// Simple structural fitness function (no LLM needed)
-	fitnessFn := func(tree *SerializableNode) float64 {
-		return StructuralQuickEval(tree)
-	}
+	fitnessFn := StructuralQuickEval
 
 	mp.Evaluate(fitnessFn)
 
@@ -263,14 +261,14 @@ func countCondsActs(node *SerializableNode, conds, acts *int) {
 func TestMAPElitesPopulation_EvolveMAPElites(t *testing.T) {
 	baseTree := makeTestTree("base", 2, 4)
 	// Add conditions and actions for structural scoring
-	baseTree.Children = append(baseTree.Children, SerializableNode{Type: "Condition", Name: "test_cond"})
-	baseTree.Children = append(baseTree.Children, SerializableNode{Type: "Action", Name: "test_action"})
+	baseTree.Children = append(baseTree.Children,
+		SerializableNode{Type: "Condition", Name: "test_cond"},
+		SerializableNode{Type: "Action", Name: "test_action"},
+	)
 
 	mp := NewMAPElitesPopulation(8, baseTree, "godev")
 
-	fitnessFn := func(tree *SerializableNode) float64 {
-		return StructuralQuickEval(tree)
-	}
+	fitnessFn := StructuralQuickEval
 
 	result := mp.EvolveMAPElites(3, fitnessFn)
 	if result == nil {

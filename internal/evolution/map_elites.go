@@ -157,7 +157,7 @@ func (g *MAPElitesGrid) estimateTotalCells() int {
 	for key := range g.Cells {
 		var domain string
 		var nodeB, depthB int
-		fmt.Sscanf(key, "n%d|d%d|%s", &nodeB, &depthB, &domain)
+		_, _ = fmt.Sscanf(key, "n%d|d%d|%s", &nodeB, &depthB, &domain)
 		domains[domain] = true
 		nodeBuckets[nodeB] = true
 		depthBuckets[depthB] = true
@@ -320,7 +320,7 @@ func (g *MAPElitesGrid) Stats() MAPElitesStats {
 	for key, ind := range g.Cells {
 		var domain string
 		var nb, db int
-		fmt.Sscanf(key, "n%d|d%d|%s", &nb, &db, &domain)
+		_, _ = fmt.Sscanf(key, "n%d|d%d|%s", &nb, &db, &domain)
 		domains[domain] = true
 		if ind.Fitness > stats.BestFitness {
 			stats.BestFitness = ind.Fitness

@@ -92,7 +92,7 @@ func (mf MultiFitness) Dominates(other MultiFitness) bool {
 
 // String returns a compact representation.
 func (mf MultiFitness) String() string {
-	var parts []string
+	parts := make([]string, 0, 8)
 	for dim, score := range mf.Scores {
 		parts = append(parts, fmt.Sprintf("%s=%.1f", dim, score))
 	}

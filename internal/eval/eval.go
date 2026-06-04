@@ -56,14 +56,14 @@ type UseCaseScore struct {
 // EvalMockLLM is a mock that returns sufficiently long output to pass quality gates.
 type EvalMockLLM struct{}
 
-func (m *EvalMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *EvalMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *EvalMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *EvalMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
-func (m *EvalMockLLM) Generate(prompt string) (string, error) {
+func (m *EvalMockLLM) Generate(_ string) (string, error) {
 	return "EVAL_OUTPUT: This is a comprehensive response that addresses all aspects of the task in detail. " +
 		"It includes thorough analysis, specific recommendations, actionable steps, and supporting evidence. " +
 		"The response covers architecture considerations, implementation patterns, edge cases, and validation criteria. " +
@@ -71,9 +71,9 @@ func (m *EvalMockLLM) Generate(prompt string) (string, error) {
 		"for production-grade evaluation results with complete documentation and traceable decision logic. " +
 		"This ensures the response exceeds the minimum length requirement for the quality validation gate.", nil
 }
-func (m *EvalMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
-func (m *EvalMockLLM) GeneratePlan(task, complexity string) string         { return "plan: " + task }
-func (m *EvalMockLLM) Reflect(task, outcome, plan string) (string, string) { return "good", "none" }
+func (m *EvalMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *EvalMockLLM) GeneratePlan(task, _ string) string      { return "plan: " + task }
+func (m *EvalMockLLM) Reflect(_, _, _ string) (string, string) { return "good", "none" }
 
 // treeForSuite maps suite names to their optimal behavior trees.
 func treeForSuite(name string) *evolution.SerializableNode {
@@ -131,7 +131,7 @@ func RunPlatformEval() *PlatformEvalResult {
 	mock := &EvalMockLLM{}
 	suites := benchmark.AllSuites()
 
-	var allResults []SuiteEvalResult
+	allResults := make([]SuiteEvalResult, 0, 8)
 	totalPassed := 0
 	totalTasks := 0
 	totalDuration := int64(0)
@@ -257,7 +257,7 @@ func buildScorecard(results []SuiteEvalResult) PlatformScorecard {
 // FormatReport produces a human-readable report string.
 func (r *PlatformEvalResult) FormatReport() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== BT Platform Evaluation Report ===\n"))
+	sb.WriteString("=== BT Platform Evaluation Report ===\n")
 	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", r.Timestamp))
 	sb.WriteString(fmt.Sprintf("Suites: %d | Tasks: %d | Passed: %d | Failed: %d\n",
 		r.TotalSuites, r.TotalTasks, r.Passed, r.Failed))

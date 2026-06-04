@@ -137,7 +137,7 @@ func main() {
 	server.RegisterTool("la_fitness", "Get evolved agent fitness and tree stats",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, _ := treeStore.Load()
 			records, _ := refStore.LoadAll()
 			failures := refStore.CountFailures()
@@ -167,7 +167,7 @@ func main() {
 	server.RegisterTool("la_evolve", "Force evolution of the behavior tree",
 		map[string]mcp.Property{},
 		nil,
-		func(args json.RawMessage) *mcp.ToolResult {
+		func(_ json.RawMessage) *mcp.ToolResult {
 			tree, err := treeStore.Load()
 			if err != nil || tree == nil {
 				return &mcp.ToolResult{

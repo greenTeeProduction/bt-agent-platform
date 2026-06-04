@@ -187,7 +187,7 @@ func collectSystem() SystemMetrics {
 			secs, _ := strconv.ParseFloat(parts[0], 64)
 			hours := int(secs) / 3600
 			days := hours / 24
-			hours = hours % 24
+			hours %= 24
 			s.Uptime = fmt.Sprintf("%dd %dh", days, hours)
 		}
 	}

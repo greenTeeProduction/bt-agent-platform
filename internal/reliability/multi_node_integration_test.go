@@ -319,7 +319,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			_, err := router.Execute("concurrent-agent", "concurrent execution task")
 			if err != nil {

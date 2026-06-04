@@ -22,19 +22,19 @@ type mockLLM struct {
 	toImprove  string
 }
 
-func (m *mockLLM) AnalyzeComplexity(task string) string        { return m.complexity }
-func (m *mockLLM) GeneratePlan(task, complexity string) string { return m.plan }
-func (m *mockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *mockLLM) AnalyzeComplexity(_ string) string { return m.complexity }
+func (m *mockLLM) GeneratePlan(_, _ string) string   { return m.plan }
+func (m *mockLLM) Reflect(_, _, _ string) (string, string) {
 	return m.wentWell, m.toImprove
 }
-func (m *mockLLM) Generate(prompt string) (string, error) {
+func (m *mockLLM) Generate(_ string) (string, error) {
 	// Return 40+ chars to pass validateOutputQuality (30-char minimum).
 	return "Mock response with sufficient length for quality validation checks", nil
 }
-func (m *mockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *mockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *mockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *mockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
@@ -405,21 +405,21 @@ type retryMockLLM struct {
 	callCount  *int
 }
 
-func (m *retryMockLLM) AnalyzeComplexity(task string) string { return m.complexity }
-func (m *retryMockLLM) GeneratePlan(task, complexity string) string {
+func (m *retryMockLLM) AnalyzeComplexity(_ string) string { return m.complexity }
+func (m *retryMockLLM) GeneratePlan(_, _ string) string {
 	*m.callCount++
 	return m.plan
 }
-func (m *retryMockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *retryMockLLM) Reflect(_, _, _ string) (string, string) {
 	return m.wentWell, m.toImprove
 }
-func (m *retryMockLLM) Generate(prompt string) (string, error) {
+func (m *retryMockLLM) Generate(_ string) (string, error) {
 	return "RetryMock response with sufficient length for quality validation checks", nil
 }
-func (m *retryMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *retryMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *retryMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *retryMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
@@ -502,7 +502,7 @@ func truncate(s string, n int) string {
 func TestRegisterAction_And_GetAction(t *testing.T) {
 	// Register a custom action
 	called := false
-	RegisterAction("TestCustomAction", func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("TestCustomAction", func(_ *btcore.BTContext[Blackboard]) int {
 		called = true
 		return 1
 	})
@@ -523,7 +523,7 @@ func TestRegisterAction_And_GetAction(t *testing.T) {
 
 func TestRegisterCondition_And_GetCondition(t *testing.T) {
 	called := false
-	RegisterCondition("TestCustomCondition", func(b *Blackboard) bool {
+	RegisterCondition("TestCustomCondition", func(_ *Blackboard) bool {
 		called = true
 		return true
 	})

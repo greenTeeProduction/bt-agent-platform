@@ -11,7 +11,7 @@ import (
 // Events can come from: blackboard key changes, EventBus subscriptions, or timer signals.
 func BuildEventDrivenAbort(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 })
 	}
 
 	child := buildNode(&node.Children[0], bb, node.Name)

@@ -11,7 +11,7 @@ import (
 func TestRegistry_UpdateSchedule(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "sched-test", Tree: "domain:default"})
+	_, _ = reg.Create(Definition{Name: "sched-test", Tree: "domain:default"})
 
 	// Update schedule
 	if err := reg.UpdateSchedule("sched-test", "every 1h"); err != nil {
@@ -56,7 +56,7 @@ func TestRegistry_DeleteNonexistent(t *testing.T) {
 func TestRegistry_DeleteRemovesFile(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "delete-test", Tree: "domain:default"})
+	_, _ = reg.Create(Definition{Name: "delete-test", Tree: "domain:default"})
 
 	// Verify file exists
 	defPath := filepath.Join(dir, "delete-test.yaml")
@@ -92,7 +92,7 @@ func TestRegistry_LoadAllNonExistentDir(t *testing.T) {
 func TestRegistry_LoadAllBadYAML(t *testing.T) {
 	dir := t.TempDir()
 	// Write a file with invalid YAML
-	os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("name: {{invalid"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("name: {{invalid"), 0644)
 
 	reg, err := NewRegistry(dir)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestRegistry_LoadAllBadYAML(t *testing.T) {
 func TestRegistry_LoadAllNonYAMLFile(t *testing.T) {
 	dir := t.TempDir()
 	// Write a non-yaml file
-	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not an agent"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not an agent"), 0644)
 
 	reg, err := NewRegistry(dir)
 	if err != nil {
@@ -123,8 +123,8 @@ func TestRegistry_LoadAllSubdir(t *testing.T) {
 	dir := t.TempDir()
 	// Create a subdirectory with a yaml file inside
 	subDir := filepath.Join(dir, "subdir")
-	os.MkdirAll(subDir, 0755)
-	os.WriteFile(filepath.Join(subDir, "agent.yaml"), []byte("name: sub-agent\ntree: domain:default"), 0644)
+	_ = os.MkdirAll(subDir, 0755)
+	_ = os.WriteFile(filepath.Join(subDir, "agent.yaml"), []byte("name: sub-agent\ntree: domain:default"), 0644)
 
 	reg, err := NewRegistry(dir)
 	if err != nil {
@@ -171,7 +171,7 @@ func TestRegistry_saveDefDirRemoved(t *testing.T) {
 	reg, _ := NewRegistry(dir)
 
 	// Create an agent first
-	reg.Create(Definition{Name: "save-test", Tree: "domain:default"})
+	_, _ = reg.Create(Definition{Name: "save-test", Tree: "domain:default"})
 
 	// Remove the directory to cause saveDef failure
 	os.RemoveAll(dir)
@@ -189,10 +189,10 @@ func TestRegistry_saveDefFilePermissionDenied(t *testing.T) {
 	reg, _ := NewRegistry(dir)
 
 	// Create an initial agent before making dir readonly
-	reg.Create(Definition{Name: "perm-test", Tree: "domain:default"})
+	_, _ = reg.Create(Definition{Name: "perm-test", Tree: "domain:default"})
 
 	// Make the directory read-only
-	os.Chmod(dir, 0444)
+	_ = os.Chmod(dir, 0444)
 
 	// Try to update state (calls saveDef) — should fail with permission error
 	err := reg.UpdateState("perm-test", StateRunning, "")
@@ -201,7 +201,7 @@ func TestRegistry_saveDefFilePermissionDenied(t *testing.T) {
 	}
 
 	// Restore permissions for cleanup
-	os.Chmod(dir, 0755)
+	_ = os.Chmod(dir, 0755)
 }
 
 // ─── loadAll ReadDir Error (file-as-dir) ───
@@ -210,7 +210,7 @@ func TestRegistry_NewRegistryFileAsDir(t *testing.T) {
 	// Create a temporary file, then try to use it as a registry directory
 	// This triggers the ReadDir error path
 	tmpFile := filepath.Join(t.TempDir(), "notadir")
-	os.WriteFile(tmpFile, []byte("not a dir"), 0644)
+	_ = os.WriteFile(tmpFile, []byte("not a dir"), 0644)
 
 	_, err := NewRegistry(tmpFile)
 	if err == nil {

@@ -405,7 +405,7 @@ func (r *TraceReader) ListTraceIDs(limit int) ([]*AggregatedTrace, error) {
 	}
 
 	// Build aggregated traces
-	var traces []*AggregatedTrace
+	traces := make([]*AggregatedTrace, 0, 16)
 	for traceID, spans := range byTrace {
 		traces = append(traces, buildAggregatedTrace(traceID, spans))
 	}
@@ -507,7 +507,7 @@ func buildAggregatedTrace(traceID string, spans []TraceEntry) *AggregatedTrace {
 	}
 
 	totalDuration := endTime.Sub(startTime)
-	var opList []string
+	opList := make([]string, 0, 16)
 	for op := range ops {
 		opList = append(opList, op)
 	}

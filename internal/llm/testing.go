@@ -61,32 +61,32 @@ func (m *MockLLM) defPlan() string {
 }
 
 // Generate returns the canned GenerateResponse.
-func (m *MockLLM) Generate(prompt string) (string, error) {
+func (m *MockLLM) Generate(_ string) (string, error) {
 	return m.defGen(), nil
 }
 
 // GenerateCtx delegates to Generate, ignoring context (mock has no cancellation).
-func (m *MockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *MockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
 
 // GenerateWithTimeout delegates to Generate, ignoring timeout (mock is instant).
-func (m *MockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *MockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
 // AnalyzeComplexity returns the canned Complexity.
-func (m *MockLLM) AnalyzeComplexity(task string) string {
+func (m *MockLLM) AnalyzeComplexity(_ string) string {
 	return m.defComplexity()
 }
 
 // GeneratePlan returns the canned Plan.
-func (m *MockLLM) GeneratePlan(task, complexity string) string {
+func (m *MockLLM) GeneratePlan(_, _ string) string {
 	return m.defPlan()
 }
 
 // Reflect returns the canned WentWell and ToImprove.
-func (m *MockLLM) Reflect(task, outcome, plan string) (string, string) {
+func (m *MockLLM) Reflect(_, _, _ string) (string, string) {
 	wentWell := m.WentWell
 	if wentWell == "" {
 		wentWell = "ok"

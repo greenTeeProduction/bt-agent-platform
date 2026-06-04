@@ -126,7 +126,7 @@ func TestExpertKnowledge_DetectAntiPatterns(t *testing.T) {
 	}
 }
 
-func TestExpertKnowledge_ValidateArchetype(t *testing.T) {
+func TestExpertKnowledge_ValidateArchetype(_ *testing.T) {
 	ek := NewExpertKnowledge()
 	tree := DefaultTree()
 	fits, issues := ek.ValidateArchetype(tree, "core")

@@ -7,6 +7,15 @@ import (
 	"time"
 )
 
+func init() {
+	// CI sets BT_SKIP_LLM_TESTS=1 without Ollama; treat hosts as reachable so
+	// unrelated CheckRuntime tests are not failed by connectivity warnings.
+	if os.Getenv("BT_SKIP_LLM_TESTS") == "1" {
+		ollamaChecker = func(string) bool { return true }
+		deepseekChecker = func(string) bool { return true }
+	}
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	// Unset any env vars that might interfere
 	os.Unsetenv("BT_DASHBOARD_PORT")
@@ -1242,8 +1251,8 @@ func TestCheckRuntime_TLSFilesExist(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	os.WriteFile(certPath, []byte("fake-cert"), 0644)
-	os.WriteFile(keyPath, []byte("fake-key"), 0644)
+	_ = os.WriteFile(certPath, []byte("fake-cert"), 0644)
+	_ = os.WriteFile(keyPath, []byte("fake-key"), 0644)
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath
@@ -1271,7 +1280,7 @@ func TestCheckRuntime_DirExists(t *testing.T) {
 func TestCheckRuntime_DirIsFile(t *testing.T) {
 	tmp := t.TempDir()
 	filePath := filepath.Join(tmp, "notadir.txt")
-	os.WriteFile(filePath, []byte("data"), 0644)
+	_ = os.WriteFile(filePath, []byte("data"), 0644)
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = filePath
@@ -1338,7 +1347,7 @@ func TestCheckRuntime_OllamaUnreachable(t *testing.T) {
 	tmp := t.TempDir()
 	// Override ollamaChecker to simulate unreachable host.
 	oldChecker := ollamaChecker
-	ollamaChecker = func(host string) bool { return false }
+	ollamaChecker = func(_ string) bool { return false }
 	defer func() { ollamaChecker = oldChecker }()
 
 	c := newDefaultConfig()
@@ -1365,7 +1374,7 @@ func TestCheckRuntime_OllamaUnreachable(t *testing.T) {
 func TestCheckRuntime_OllamaReachable(t *testing.T) {
 	tmp := t.TempDir()
 	oldChecker := ollamaChecker
-	ollamaChecker = func(host string) bool { return true }
+	ollamaChecker = func(_ string) bool { return true }
 	defer func() { ollamaChecker = oldChecker }()
 
 	c := newDefaultConfig()
@@ -1407,7 +1416,7 @@ func TestCheckRuntime_DeepSeekUnreachable(t *testing.T) {
 	c.ReflectionsDir = tmp
 
 	oldChecker := deepseekChecker
-	deepseekChecker = func(host string) bool { return false }
+	deepseekChecker = func(_ string) bool { return false }
 	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
@@ -1437,7 +1446,7 @@ func TestCheckRuntime_DeepSeekReachable(t *testing.T) {
 	c.ReflectionsDir = tmp
 
 	oldChecker := deepseekChecker
-	deepseekChecker = func(host string) bool { return true }
+	deepseekChecker = func(_ string) bool { return true }
 	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
@@ -1503,7 +1512,7 @@ func TestCheckRuntime_MultipleIssues(t *testing.T) {
 	c.TLSCert = filepath.Join(tmp, "missing.pem")
 	c.TLSKey = filepath.Join(tmp, "also-missing.pem")
 	c.ReflectionsDir = filepath.Join(tmp, "notadir.txt")
-	os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
+	_ = os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
 	c.AgentDefsDir = "/nonexistent/parent/subdir"
 	c.ConfigFile = filepath.Join(tmp, "nosuch.json")
 
@@ -1520,7 +1529,7 @@ func TestCheckRuntime_CreatedDir_Valid(t *testing.T) {
 	// A newly-created temp dir should be valid.
 	tmp := t.TempDir()
 	subdir := filepath.Join(tmp, "subdir")
-	os.Mkdir(subdir, 0755)
+	_ = os.Mkdir(subdir, 0755)
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = subdir
@@ -1535,8 +1544,8 @@ func TestCheckRuntime_TLSBothFilesOk(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	os.WriteFile(certPath, []byte("cert"), 0644)
-	os.WriteFile(keyPath, []byte("key"), 0644)
+	_ = os.WriteFile(certPath, []byte("cert"), 0644)
+	_ = os.WriteFile(keyPath, []byte("key"), 0644)
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath
@@ -2680,59 +2689,52 @@ func TestLoad_DotEnvSetterClosures_AllTypesExercise(t *testing.T) {
 	envFile := filepath.Join(dir, ".env")
 
 	// Build a comprehensive .env file covering every field type
-	var lines []string
-
-	// String fields (applyDotEnvStr)
-	lines = append(lines, "BT_API_KEY=test-api-key")
-	lines = append(lines, "BT_TLS_CERT=/path/to/cert.pem")
-	lines = append(lines, "BT_TLS_KEY=/path/to/key.pem")
-	lines = append(lines, "BT_LLM_PROVIDER=deepseek")
-	lines = append(lines, "OLLAMA_HOST=http://ollama-test:11434")
-	lines = append(lines, "BT_OLLAMA_MODEL=test-model")
-	lines = append(lines, "BT_DEEPSEEK_HOST=https://api.test.com/v1")
-	lines = append(lines, "BT_DEEPSEEK_MODEL=test-deepseek-model")
-	lines = append(lines, "BT_DEEPSEEK_KEY=sk-test-deepseek-key")
-	lines = append(lines, "DEEPSEEK_API_KEY=sk-hermes-deepseek-key")
-	lines = append(lines, "BT_ACP_COMMAND=test-cmd")
-	lines = append(lines, "BT_ACP_ARGS=--test-flag")
-	lines = append(lines, "BT_ACP_CWD=/tmp/test-cwd")
-	lines = append(lines, "BT_FALLBACK_MODELS=deepseek:test,ollama:test2")
-	lines = append(lines, "BT_CORS_DASHBOARD_ORIGIN=https://test.example.com")
-	lines = append(lines, "BT_REFLECTIONS_DIR=/tmp/reflections")
-	lines = append(lines, "BT_AGENT_DEFS_DIR=/tmp/agents")
-	lines = append(lines, "BT_HISTORY_DIR=/tmp/history")
-	lines = append(lines, "BT_LOG_DIR=/tmp/logs")
-	lines = append(lines, "BT_RETRY_JITTER=decorrelated_jitter")
-
-	// Int fields (applyDotEnvInt)
-	lines = append(lines, "BT_DASHBOARD_PORT=7777")
-	lines = append(lines, "BT_LLM_TIMEOUT=123")
-	lines = append(lines, "BT_RATE_LIMIT_BURST=15")
-	lines = append(lines, "BT_GARDENER_CYCLE=600")
-	lines = append(lines, "BT_GARDENER_MUTATIONS=3")
-	lines = append(lines, "BT_GARDENER_MAX_NODES=50")
-	lines = append(lines, "BT_SCHEDULER_INTERVAL=120")
-	lines = append(lines, "BT_RETRY_MAX_RETRIES=5")
-	lines = append(lines, "BT_RETRY_BASE_DELAY_MS=2000")
-	lines = append(lines, "BT_RETRY_MAX_DELAY_MS=60000")
-	lines = append(lines, "BT_RETRY_LLM_BASE_MS=5000")
-	lines = append(lines, "BT_CB_THRESHOLD=10")
-	lines = append(lines, "BT_CB_COOLDOWN_SECS=600")
-	lines = append(lines, "BT_DLQ_MAX_ENTRIES=500")
-	lines = append(lines, "BT_MAX_BODY_SIZE=2097152")
-
-	// Float fields (applyDotEnvFloat)
-	lines = append(lines, "BT_RATE_LIMIT_RPS=55.5")
-
-	// Bool fields (applyDotEnvBool)
-	lines = append(lines, "BT_FEATURE_GARDENER=false")
-	lines = append(lines, "BT_FEATURE_SCHEDULER=false")
-	lines = append(lines, "BT_FEATURE_AUTO_EVOLVE=true")
-	lines = append(lines, "BT_FEATURE_KANBAN=false")
-	lines = append(lines, "BT_FEATURE_THINKTANK=false")
-	lines = append(lines, "BT_FEATURE_STARTUP_SIM=false")
-	lines = append(lines, "BT_API_ENFORCE_RESPONSE_VALIDATION=true")
-	lines = append(lines, "BT_RETRY_UNKNOWN=true")
+	lines := []string{
+		"BT_API_KEY=test-api-key",
+		"BT_TLS_CERT=/path/to/cert.pem",
+		"BT_TLS_KEY=/path/to/key.pem",
+		"BT_LLM_PROVIDER=deepseek",
+		"OLLAMA_HOST=http://ollama-test:11434",
+		"BT_OLLAMA_MODEL=test-model",
+		"BT_DEEPSEEK_HOST=https://api.test.com/v1",
+		"BT_DEEPSEEK_MODEL=test-deepseek-model",
+		"BT_DEEPSEEK_KEY=sk-test-deepseek-key",
+		"DEEPSEEK_API_KEY=sk-hermes-deepseek-key",
+		"BT_ACP_COMMAND=test-cmd",
+		"BT_ACP_ARGS=--test-flag",
+		"BT_ACP_CWD=/tmp/test-cwd",
+		"BT_FALLBACK_MODELS=deepseek:test,ollama:test2",
+		"BT_CORS_DASHBOARD_ORIGIN=https://test.example.com",
+		"BT_REFLECTIONS_DIR=/tmp/reflections",
+		"BT_AGENT_DEFS_DIR=/tmp/agents",
+		"BT_HISTORY_DIR=/tmp/history",
+		"BT_LOG_DIR=/tmp/logs",
+		"BT_RETRY_JITTER=decorrelated_jitter",
+		"BT_DASHBOARD_PORT=7777",
+		"BT_LLM_TIMEOUT=123",
+		"BT_RATE_LIMIT_BURST=15",
+		"BT_GARDENER_CYCLE=600",
+		"BT_GARDENER_MUTATIONS=3",
+		"BT_GARDENER_MAX_NODES=50",
+		"BT_SCHEDULER_INTERVAL=120",
+		"BT_RETRY_MAX_RETRIES=5",
+		"BT_RETRY_BASE_DELAY_MS=2000",
+		"BT_RETRY_MAX_DELAY_MS=60000",
+		"BT_RETRY_LLM_BASE_MS=5000",
+		"BT_CB_THRESHOLD=10",
+		"BT_CB_COOLDOWN_SECS=600",
+		"BT_DLQ_MAX_ENTRIES=500",
+		"BT_MAX_BODY_SIZE=2097152",
+		"BT_RATE_LIMIT_RPS=55.5",
+		"BT_FEATURE_GARDENER=false",
+		"BT_FEATURE_SCHEDULER=false",
+		"BT_FEATURE_AUTO_EVOLVE=true",
+		"BT_FEATURE_KANBAN=false",
+		"BT_FEATURE_THINKTANK=false",
+		"BT_FEATURE_STARTUP_SIM=false",
+		"BT_API_ENFORCE_RESPONSE_VALIDATION=true",
+		"BT_RETRY_UNKNOWN=true",
+	}
 
 	content := ""
 	for _, l := range lines {
@@ -2964,7 +2966,7 @@ func TestApplyDotEnvFiles_CwdDotEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create a temp dir with a .env file
 	dir := t.TempDir()
@@ -3004,7 +3006,7 @@ func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	dir := t.TempDir()
 

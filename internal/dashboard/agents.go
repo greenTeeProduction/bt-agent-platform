@@ -70,7 +70,7 @@ func ListAgents() []AgentInfo {
 		return nil
 	}
 
-	var agents []AgentInfo
+	agents := make([]AgentInfo, 0, 16)
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
 			continue

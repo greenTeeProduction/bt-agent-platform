@@ -197,9 +197,7 @@ func TestParetoPopulation_BasicFlow(t *testing.T) {
 		DimSuccessRate, DimPathCoverage, DimStability, DimNodeEfficiency, DimExecutionSpeed,
 	})
 
-	fitnessFn := func(tree *SerializableNode) MultiFitness {
-		return StructuralMultiFitness(tree)
-	}
+	fitnessFn := StructuralMultiFitness
 
 	pp.Evaluate(fitnessFn)
 
@@ -224,9 +222,7 @@ func TestParetoPopulation_EvolvePareto(t *testing.T) {
 		DimSuccessRate, DimPathCoverage, DimStability,
 	})
 
-	fitnessFn := func(tree *SerializableNode) MultiFitness {
-		return StructuralMultiFitness(tree)
-	}
+	fitnessFn := StructuralMultiFitness
 
 	result := pp.EvolvePareto(3, fitnessFn)
 	if result == nil {

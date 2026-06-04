@@ -337,7 +337,7 @@ func TestRegistry_PersistedTreeLoading(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(customTree, "", "  ")
 	treePath := filepath.Join(tempDir, "tree-custom_tree.json")
-	os.WriteFile(treePath, data, 0644)
+	_ = os.WriteFile(treePath, data, 0644)
 
 	// Now create the registry — it should load our custom tree
 	r := NewRegistry(tempDir)
@@ -362,7 +362,7 @@ func TestRegistry_InvalidJSONFileSkipped(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Write an invalid JSON file matching tree-*.json pattern
-	os.WriteFile(filepath.Join(tempDir, "tree-invalid.json"), []byte("{not json}"), 0644)
+	_ = os.WriteFile(filepath.Join(tempDir, "tree-invalid.json"), []byte("{not json}"), 0644)
 
 	// Should not panic
 	r := NewRegistry(tempDir)
@@ -378,8 +378,8 @@ func TestRegistry_SkipsNonTreeJSON(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Write files that should be skipped
-	os.WriteFile(filepath.Join(tempDir, "not-tree.json"), []byte(`{"type":"Test"}`), 0644)
-	os.WriteFile(filepath.Join(tempDir, "tree-valid.txt"), []byte("not json"), 0644)
+	_ = os.WriteFile(filepath.Join(tempDir, "not-tree.json"), []byte(`{"type":"Test"}`), 0644)
+	_ = os.WriteFile(filepath.Join(tempDir, "tree-valid.txt"), []byte("not json"), 0644)
 
 	r := NewRegistry(tempDir)
 	entries := r.List()
@@ -452,7 +452,7 @@ func TestMetricsTracker_Summary_Basic(t *testing.T) {
 func perTreeStats(summary map[string]interface{}) map[string]testTreeStats {
 	data, _ := json.Marshal(summary["per_tree"])
 	var result map[string]testTreeStats
-	json.Unmarshal(data, &result)
+	_ = json.Unmarshal(data, &result)
 	return result
 }
 
@@ -955,7 +955,7 @@ func TestNewMetricsTracker_InvalidDir(t *testing.T) {
 	// Create a file where a directory is expected
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "metrics")
-	os.WriteFile(filePath, []byte("data"), 0644)
+	_ = os.WriteFile(filePath, []byte("data"), 0644)
 
 	// NewMetricsTracker inside a file path? Actually it creates dir if missing.
 	// Test with a path where the parent exists as a file — should still work
@@ -1025,7 +1025,7 @@ func TestBenchmarkMockIntegration(t *testing.T) {
 	}
 }
 
-func TestQuickValidate_WithMockLLM(t *testing.T) {
+func TestQuickValidate_WithMockLLM(_ *testing.T) {
 	// Test the benchmark.QuickValidate function with mock LLM
 	mock := benchmark.DefaultMock()
 	tree := &evolution.SerializableNode{

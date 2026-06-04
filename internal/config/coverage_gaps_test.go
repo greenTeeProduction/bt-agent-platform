@@ -150,7 +150,7 @@ func TestValidate_NegativeLLMTimeout(t *testing.T) {
 func TestLoadFileWithDotEnv_NonexistentConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	dotEnvPath := filepath.Join(tmpDir, ".env")
-	os.WriteFile(dotEnvPath, []byte("BT_DASHBOARD_PORT=8888\n"), 0644)
+	_ = os.WriteFile(dotEnvPath, []byte("BT_DASHBOARD_PORT=8888\n"), 0644)
 
 	_, err := LoadFileWithDotEnv(filepath.Join(tmpDir, "nonexistent.json"), dotEnvPath)
 	if err == nil {
@@ -163,7 +163,7 @@ func TestLoadFileWithDotEnv_NonexistentDotEnv(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.json")
 	config := map[string]any{"dashboard_port": 7777}
 	data := marshalConfig(t, config)
-	os.WriteFile(configPath, data, 0644)
+	_ = os.WriteFile(configPath, data, 0644)
 
 	c, err := LoadFileWithDotEnv(configPath, filepath.Join(tmpDir, "nonexistent.env"))
 	if err != nil {

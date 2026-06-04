@@ -127,22 +127,22 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 			defaultBranch = branch
 		}
 	}
-	children = append(children, evolution.SerializableNode{
-		Type: "DecisionTree",
-		Name: "StrategyRouter",
-		Metadata: map[string]any{
-			"key":     "route",
-			"default": defaultBranch,
+	children = append(children,
+		evolution.SerializableNode{
+			Type: "DecisionTree",
+			Name: "StrategyRouter",
+			Metadata: map[string]any{
+				"key":     "route",
+				"default": defaultBranch,
+			},
+			Children: strategyKids,
 		},
-		Children: strategyKids,
-	})
-
-	// 3. ReflectOnOutcome (always)
-	children = append(children, evolution.SerializableNode{
-		Type:        "Action",
-		Name:        "ReflectOnOutcome",
-		Description: "Generate reflection: what went well, what to improve",
-	})
+		evolution.SerializableNode{
+			Type:        "Action",
+			Name:        "ReflectOnOutcome",
+			Description: "Generate reflection: what went well, what to improve",
+		},
+	)
 
 	// 4. OutcomeSelector: success detection + self-correct + escalation
 	outcomeKids := []evolution.SerializableNode{
@@ -173,18 +173,19 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 		})
 	}
 
-	children = append(children, evolution.SerializableNode{
-		Type:     "Selector",
-		Name:     "OutcomeSelector",
-		Children: outcomeKids,
-	})
-
-	// 5. UpdateBehaviorTree (adapt on failures)
-	children = append(children, evolution.SerializableNode{
-		Type:        "Action",
-		Name:        "UpdateBehaviorTree",
-		Description: "Adapt tree on 3+ consecutive failures",
-	})
+	// 4. OutcomeSelector + 5. UpdateBehaviorTree
+	children = append(children,
+		evolution.SerializableNode{
+			Type:     "Selector",
+			Name:     "OutcomeSelector",
+			Children: outcomeKids,
+		},
+		evolution.SerializableNode{
+			Type:        "Action",
+			Name:        "UpdateBehaviorTree",
+			Description: "Adapt tree on 3+ consecutive failures",
+		},
+	)
 
 	rootType := spec.RootType
 	if rootType == "" {

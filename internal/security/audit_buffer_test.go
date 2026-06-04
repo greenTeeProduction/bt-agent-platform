@@ -90,7 +90,7 @@ func TestAuditBuffer_RecentZero(t *testing.T) {
 	}
 }
 
-func TestAuditBuffer_NilPush(t *testing.T) {
+func TestAuditBuffer_NilPush(_ *testing.T) {
 	var ab *AuditBuffer
 	ab.Push("test", nil) // should not panic
 }
@@ -190,7 +190,7 @@ func TestCaptureAuditEvent_Basic(t *testing.T) {
 	}
 }
 
-func TestCaptureAuditEvent_NoBuffer(t *testing.T) {
+func TestCaptureAuditEvent_NoBuffer(_ *testing.T) {
 	SetGlobalAuditBuffer(nil)
 	// Should not panic
 	CaptureAuditEvent("test", "key", "val")

@@ -9,12 +9,15 @@ import (
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/audit"
+	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
 	"github.com/nico/go-bt-evolve/internal/finance"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	btlog "github.com/nico/go-bt-evolve/internal/log"
@@ -185,6 +188,41 @@ func resolveTree(id string) *evolution.SerializableNode {
 			return thinktank.SynthesisTree()
 		}
 	}
+
+	// composed:<block_id,...> or composed:task
+	if len(id) > 9 && id[:9] == "composed:" {
+		rest := id[9:]
+		if rest == "task" {
+			t, err := blocks.ComposeTaskTree(blocks.DefaultRegistry, "ComposedTask", nil)
+			if err == nil {
+				return t
+			}
+		}
+		if rest == "task:hitl" {
+			t, err := blocks.ComposeTaskTreeWithHITL(blocks.DefaultRegistry, "ComposedTaskHITL", nil)
+			if err == nil {
+				return t
+			}
+		}
+		if rest == "task:agentic" {
+			t, err := blocks.ComposeTaskTreeAgentic(blocks.DefaultRegistry, "ComposedTaskAgentic", nil)
+			if err == nil {
+				return t
+			}
+		}
+		if rest == "task:full" {
+			t, err := blocks.ComposeTaskTreeFull(blocks.DefaultRegistry, "ComposedTaskFull", nil)
+			if err == nil {
+				return t
+			}
+		}
+
+		ids := strings.Split(rest, ",")
+		t, err := blocks.Compose(blocks.DefaultRegistry, blocks.ComposeSpec{Name: "Composed_Main", Blocks: ids}, false)
+		if err == nil {
+			return t
+		}
+	}
 	// default: try as direct tree name
 	return evolution.DefaultTree()
 }
@@ -218,6 +256,25 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
+	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
+
+	engine.AgentMemoryBaseDir = agentHome
+	engine.DelegateToTreeFn = func(treeID string, bb *engine.Blackboard) (string, error) {
+		ser := resolveTree(treeID)
+		if ser == nil {
+			return "", fmt.Errorf("unknown tree: %s", treeID)
+		}
+		cmd, err := engine.BuildAndValidate(ser, bb)
+		if err != nil {
+			return "", err
+		}
+		return engine.RunTask(bb, cmd), nil
+	}
+	if _, err := hitl.InitStore(filepath.Join(home, ".go-bt-evolve")); err != nil {
+		btlog.Warn("hitl store init failed", "error", err)
+	}
+	config.ApplyHITLPolicy(cfg)
+	audit.Init(filepath.Join(home, ".go-bt-evolve"))
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -274,10 +331,11 @@ func main() {
 	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
 	agentLocalMem := agentHome + "/.go-bt-evolve/memory"
 	dlq := reliability.NewDeadLetterQueue(agentHome + "/.go-bt-evolve/dead_letter_queue.json")
+	engine.TaskDLQ = dlq
 
 	// Create jobs directory for scheduler persistence
 	jobStoreDir := agentHome + "/.go-bt-evolve/jobs"
-	os.MkdirAll(jobStoreDir, 0755)
+	_ = os.MkdirAll(jobStoreDir, 0755)
 
 	// Persistent agent scheduler (with FileJobStore for durability across restarts)
 	globalSched := agent.NewScheduler(agent.SchedulerConfig{
@@ -423,7 +481,7 @@ func main() {
 	// ── A2A Server ──────────────────────────────────────────────────────────
 	a2aPort := 8686
 	if p := os.Getenv("BT_A2A_PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &a2aPort)
+		_, _ = fmt.Sscanf(p, "%d", &a2aPort)
 	}
 	a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
 	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
