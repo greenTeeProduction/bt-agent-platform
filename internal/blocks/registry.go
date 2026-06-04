@@ -131,7 +131,12 @@ func (r *Registry) loadFromDisk() error {
 		if name != e.Name() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, name))
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			continue
+		}
+		data, err := root.ReadFile(name)
+		root.Close()
 		if err != nil {
 			continue
 		}

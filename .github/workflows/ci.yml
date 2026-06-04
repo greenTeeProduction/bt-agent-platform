@@ -68,7 +68,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: -no-fail -fmt sarif -out results.sarif -severity medium ./...
+          args: -no-fail -fmt sarif -out results.sarif -severity medium -conf .gosec.json ./...
 
       - name: Go vulnerability check (govulncheck)
         run: |
@@ -84,7 +84,7 @@ jobs:
       - name: Check for high/critical issues
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -quiet -severity high -exclude=G404,G703,G704,G115 ./...
+          gosec -quiet -severity high ./...
         continue-on-error: false
 
   test:

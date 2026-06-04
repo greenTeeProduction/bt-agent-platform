@@ -30,19 +30,26 @@ var (
 func Init(base string) {
 	mu.Lock()
 	defer mu.Unlock()
-	baseDir = base
-	if base != "" {
-		_ = os.MkdirAll(filepath.Join(base, "audit"), 0750)
-		taskPath = filepath.Join(base, "audit", "task.jsonl")
+	baseDir = ""
+	taskPath = ""
+	if base == "" {
+		return
 	}
+	clean, err := filepath.Abs(filepath.Clean(base))
+	if err != nil {
+		return
+	}
+	baseDir = clean
+	_ = os.MkdirAll(filepath.Join(clean, "audit"), 0750)
+	taskPath = filepath.Join(clean, "audit", "task.jsonl")
 }
 
 // Append writes one JSONL entry to the task audit log.
 func Append(e Entry) error {
 	mu.Lock()
-	path := taskPath
+	base := baseDir
 	mu.Unlock()
-	if path == "" {
+	if base == "" {
 		return fmt.Errorf("audit: not initialized")
 	}
 	if e.Timestamp.IsZero() {
@@ -52,9 +59,12 @@ func Append(e Entry) error {
 	if err != nil {
 		return err
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	root, err := os.OpenRoot(baseDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	f, err := root.OpenFile("audit/task.jsonl", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
