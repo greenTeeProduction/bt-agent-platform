@@ -3,14 +3,14 @@ package blocks
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
 func builtinBlocks() []Block {
-	return []Block{
+	blocks := []Block{
 		{
 			ID:          "core:pre_gate",
 			Name:        "PreGate",
-			Description: "Input validation and default tool setup",
+			Description: "Input validation and default tool setup (timeout + graceful validation handling)",
 			Category:    CategoryCore,
 			Mutable:     false,
-			Version:     1,
+			Version:     2,
 			Tree: &evolution.SerializableNode{
 				Type: "Sequence",
 				Name: "PreGate",
@@ -24,10 +24,10 @@ func builtinBlocks() []Block {
 		{
 			ID:          "core:tool_execution",
 			Name:        "ToolExecution",
-			Description: "Agent chain with real tools for task execution",
+			Description: "Reliable agent execution: CB, retry, 5m timeout, graceful transient/timeout recovery",
 			Category:    CategoryTool,
 			Mutable:     true,
-			Version:     1,
+			Version:     2,
 			Tree: &evolution.SerializableNode{
 				Type: "Sequence",
 				Name: "ToolExecution",
@@ -48,10 +48,10 @@ func builtinBlocks() []Block {
 		{
 			ID:          "core:error_handling",
 			Name:        "ErrorHandling",
-			Description: "Outcome routing: success, self-correct retry, escalation",
+			Description: "Reliable outcome routing with timeout-wrapped self-correct and escalation",
 			Category:    CategoryRecovery,
 			Mutable:     false,
-			Version:     1,
+			Version:     2,
 			Tree: &evolution.SerializableNode{
 				Type: "Sequence",
 				Name: "ErrorHandling",
@@ -67,10 +67,24 @@ func builtinBlocks() []Block {
 								Name:       "RetrySelfCorrect",
 								MaxRetries: 3,
 								Children: []evolution.SerializableNode{
-									{Type: "Action", Name: "SelfCorrect", Description: "Fix and retry"},
+									{
+										Type:      "Timeout",
+										Name:      "SelfCorrect_Timeout",
+										TimeoutMs: 120_000,
+										Children: []evolution.SerializableNode{
+											{Type: "Action", Name: "SelfCorrect", Description: "Fix and retry"},
+										},
+									},
 								},
 							},
-							{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM"},
+							{
+								Type:      "Timeout",
+								Name:      "Escalate_Timeout",
+								TimeoutMs: 180_000,
+								Children: []evolution.SerializableNode{
+									{Type: "Action", Name: "EscalateToDeepSeek", Description: "Escalate to external LLM"},
+								},
+							},
 						},
 					},
 					{Type: "Action", Name: "UpdateBehaviorTree", Description: "Adapt on repeated failures"},
@@ -80,19 +94,39 @@ func builtinBlocks() []Block {
 		{
 			ID:          "core:reflect_only",
 			Name:        "ReflectOnly",
-			Description: "Reflection without full outcome selector",
+			Description: "Reflection with timeout guard",
 			Category:    CategoryRecovery,
 			Mutable:     true,
-			Version:     1,
+			Version:     2,
 			Tree: &evolution.SerializableNode{
 				Type: "Sequence",
 				Name: "ReflectOnly",
 				Children: []evolution.SerializableNode{
-					{Type: "Action", Name: "ReflectOnOutcome", Description: "Reflect on output quality"},
+					{
+						Type:      "Timeout",
+						Name:      "Reflect_Timeout",
+						TimeoutMs: 60_000,
+						Children: []evolution.SerializableNode{
+							{Type: "Action", Name: "ReflectOnOutcome", Description: "Reflect on output quality"},
+						},
+					},
 				},
 			},
 		},
 	}
+	for i := range blocks {
+		switch blocks[i].ID {
+		case "core:pre_gate":
+			ApplyReliability(&blocks[i], SpecPreGate)
+		case "core:tool_execution":
+			ApplyReliability(&blocks[i], SpecToolExecution)
+		case "core:error_handling":
+			ApplyReliability(&blocks[i], SpecErrorHandling)
+		case "core:reflect_only":
+			ApplyReliability(&blocks[i], SpecReflect)
+		}
+	}
+	return blocks
 }
 
 // DefaultTaskBlocks is the standard on-demand task pipeline block order.

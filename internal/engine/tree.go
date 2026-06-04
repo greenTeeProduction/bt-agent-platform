@@ -145,6 +145,18 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
+	case "Timeout":
+		if len(node.Children) < 1 {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		}
+		child := buildNode(&node.Children[0], bb, node.Name)
+		return buildTimeout(node, child)
+	case "CircuitBreaker":
+		if len(node.Children) < 1 {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		}
+		child := buildNode(&node.Children[0], bb, node.Name)
+		return buildCircuitBreaker(node, child, bb)
 	case "Retry":
 		child := buildNode(&node.Children[0], bb, node.Name)
 		return btdec.NewRepeat(child, node.MaxRetries)

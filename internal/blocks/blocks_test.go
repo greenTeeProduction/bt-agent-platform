@@ -93,3 +93,36 @@ func TestPromoteSubtree(t *testing.T) {
 }
 
 func ptr(n evolution.SerializableNode) *evolution.SerializableNode { return &n }
+
+func TestWrapReliable_HasTimeoutAndFallbacks(t *testing.T) {
+	child := evolution.SerializableNode{Type: "Action", Name: "MarkSuccessful"}
+	wrapped := WrapReliable("ToolExecution", child, SpecToolExecution)
+	if wrapped.Type != "Selector" {
+		t.Fatalf("expected Selector root, got %s", wrapped.Type)
+	}
+	foundTimeout := false
+	var walk func(n evolution.SerializableNode)
+	walk = func(n evolution.SerializableNode) {
+		if n.Type == "Timeout" {
+			foundTimeout = true
+		}
+		for i := range n.Children {
+			walk(n.Children[i])
+		}
+	}
+	walk(wrapped)
+	if !foundTimeout {
+		t.Fatal("expected Timeout decorator in reliable wrapper")
+	}
+}
+
+func TestBuiltinBlocks_HaveReliabilityWrappers(t *testing.T) {
+	reg := NewRegistry("")
+	b := reg.Get("core:tool_execution")
+	if b == nil || b.Tree == nil {
+		t.Fatal("tool_execution block missing")
+	}
+	if b.Tree.Name != "ToolExecution_Reliable" {
+		t.Errorf("expected reliable wrapper root, got %q", b.Tree.Name)
+	}
+}
