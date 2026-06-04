@@ -5,7 +5,6 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/metrics"
-	"github.com/nico/go-bt-evolve/internal/tracing"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
