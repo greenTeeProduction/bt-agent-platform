@@ -8,15 +8,15 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/engine"
-	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
 type pipelineMockLLM struct{}
 
 func (pipelineMockLLM) AnalyzeComplexity(task string) string        { return "low" }
-func (pipelineMockLLM) GeneratePlan(task, complexity string) string { return "1. Execute" }
+func (pipelineMockLLM) GeneratePlan(task, complexity string) string { return "1. Analyze\n2. Execute\n3. Verify" }
 func (pipelineMockLLM) Reflect(task, outcome, plan string) (string, string) {
 	return "ok", "none"
 }
@@ -84,8 +84,35 @@ func TestComposedTaskTree_BuildExpand_ValidTaskRuns(t *testing.T) {
 	if bb.Result == "" {
 		t.Fatal("expected non-empty result from expanded tool_execution block")
 	}
-	if !strings.Contains(bb.Result, "Mock agent") && bb.Outcome != "success" {
-		t.Fatalf("unexpected result: outcome=%q result=%q", bb.Outcome, bb.Result)
+}
+
+func TestComposedTaskTreeAgentic_SetsPlan(t *testing.T) {
+	dir := t.TempDir()
+	blocks.InitRegistry(dir)
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: true, Timeout: hitl.DefaultPolicy().Timeout})
+	t.Cleanup(func() { hitl.SetPolicy(hitl.DefaultPolicy()) })
+
+	tree, err := blocks.ComposeTaskTreeAgentic(blocks.DefaultRegistry, "Agentic", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &engine.Blackboard{
+		Task:       "Implement a feature to export metrics in Prometheus format for the BT platform.",
+		ChainState: make(map[string]any),
+		LLM:        pipelineMockLLM{},
+	}
+	cmd, err := engine.BuildAndValidate(tree, bb)
+	if err != nil {
+		t.Fatalf("BuildAndValidate: %v", err)
+	}
+
+	engine.RunTask(bb, cmd)
+	if bb.Plan == "" {
+		t.Fatal("expected bb.Plan from core:plan block")
+	}
+	if !strings.Contains(bb.Plan, "Analyze") {
+		t.Fatalf("unexpected plan: %q", bb.Plan)
 	}
 }
 

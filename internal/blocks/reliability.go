@@ -32,6 +32,27 @@ var (
 		CBCooldownSecs: 60,
 		Graceful:       true,
 	}
+
+	SpecPlan = ReliabilitySpec{
+		TimeoutMs:  60_000,
+		MaxRetries: 1,
+		Graceful:   true,
+	}
+	SpecRAGGate = ReliabilitySpec{
+		TimeoutMs:  90_000,
+		MaxRetries: 2,
+		Graceful:   true,
+	}
+	SpecClarifyGate = ReliabilitySpec{
+		TimeoutMs:  30_000,
+		MaxRetries: 0,
+		Graceful:   true,
+	}
+	SpecQualityGate = ReliabilitySpec{
+		TimeoutMs:  30_000,
+		MaxRetries: 1,
+		Graceful:   true,
+	}
 	SpecReflect = ReliabilitySpec{
 		TimeoutMs:  60_000,
 		MaxRetries: 1,

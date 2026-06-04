@@ -46,6 +46,7 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 		map[string]mcp.Property{
 			"name":      {Type: "string", Description: "Root sequence name"},
 			"block_ids": {Type: "string", Description: "Comma-separated block ids"},
+			"preset": {Type: "string", Description: "Compose preset: default, agentic, hitl, full (overrides block_ids when set)"},
 			"task_tree": {Type: "boolean", Description: "If true, use default task layout: pre_gate + strategy + tool_execution + error_handling"},
 			"strategy":  {Type: "string", Description: "Optional tree id for middle StrategyRouter (domain:code_review, etc.)"},
 			"save":      {Type: "boolean", Description: "Save composed tree as active agent tree"},
@@ -56,6 +57,7 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 			var params struct {
 				Name     string `json:"name"`
 				BlockIDs string `json:"block_ids"`
+				Preset   string `json:"preset"`
 				TaskTree bool   `json:"task_tree"`
 				Strategy string `json:"strategy"`
 				Save     bool   `json:"save"`
@@ -67,7 +69,13 @@ func registerBlockTools(server *mcp.Server, deps *mcpDeps) {
 			reg := blocks.DefaultRegistry
 			var tree *evolution.SerializableNode
 			var err error
-			if params.TaskTree {
+			if params.Preset != "" {
+				var strategy *evolution.SerializableNode
+				if params.Strategy != "" {
+					strategy = resolveTree(params.Strategy)
+				}
+				tree, err = blocks.ComposePreset(reg, params.Preset, params.Name, strategy)
+			} else if params.TaskTree {
 				var strategy *evolution.SerializableNode
 				if params.Strategy != "" {
 					strategy = resolveTree(params.Strategy)

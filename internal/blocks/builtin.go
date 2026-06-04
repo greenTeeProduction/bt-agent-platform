@@ -103,6 +103,67 @@ func builtinBlocks() []Block {
 				return &n
 			}(),
 		},
+
+		{
+			ID:          "core:plan",
+			Name:        "Plan",
+			Description: "Assess complexity and generate execution plan",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := PlanBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:rag_gate",
+			Name:        "RAGGate",
+			Description: "Knowledge graph / cache lookup before expensive LLM calls",
+			Category:    CategoryCore,
+			Mutable:     true,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := RAGGateBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:clarify_gate",
+			Name:        "ClarifyGate",
+			Description: "Ask clarifying questions when the task is ambiguous",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := ClarifyGateBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:quality_gate",
+			Name:        "QualityGate",
+			Description: "Validate output quality before marking success",
+			Category:    CategoryCore,
+			Mutable:     false,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := QualityGateBlock()
+				return &n
+			}(),
+		},
+		{
+			ID:          "core:strategy_router",
+			Name:        "StrategyRouter",
+			Description: "Reusable intent router shell for ComposeSpec.Middle",
+			Category:    CategoryCore,
+			Mutable:     true,
+			Version:     1,
+			Tree: func() *evolution.SerializableNode {
+				n := StrategyRouterBlock()
+				return &n
+			}(),
+		},
 		{
 			ID:          "core:reflect_only",
 			Name:        "ReflectOnly",
@@ -134,6 +195,15 @@ func builtinBlocks() []Block {
 			ApplyReliability(&blocks[i], SpecToolExecution)
 		case "core:error_handling":
 			ApplyReliability(&blocks[i], SpecErrorHandling)
+
+		case "core:plan":
+			ApplyReliability(&blocks[i], SpecPlan)
+		case "core:rag_gate":
+			ApplyReliability(&blocks[i], SpecRAGGate)
+		case "core:clarify_gate":
+			ApplyReliability(&blocks[i], SpecClarifyGate)
+		case "core:quality_gate":
+			ApplyReliability(&blocks[i], SpecQualityGate)
 		case "core:reflect_only":
 			ApplyReliability(&blocks[i], SpecReflect)
 		}

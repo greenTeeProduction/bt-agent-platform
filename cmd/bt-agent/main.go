@@ -203,6 +203,19 @@ func resolveTree(id string) *evolution.SerializableNode {
 				return t
 			}
 		}
+		if rest == "task:agentic" {
+			t, err := blocks.ComposeTaskTreeAgentic(blocks.DefaultRegistry, "ComposedTaskAgentic", nil)
+			if err == nil {
+				return t
+			}
+		}
+		if rest == "task:full" {
+			t, err := blocks.ComposeTaskTreeFull(blocks.DefaultRegistry, "ComposedTaskFull", nil)
+			if err == nil {
+				return t
+			}
+		}
+
 		ids := strings.Split(rest, ",")
 		t, err := blocks.Compose(blocks.DefaultRegistry, blocks.ComposeSpec{Name: "Composed_Main", Blocks: ids}, false)
 		if err == nil {

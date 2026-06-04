@@ -147,6 +147,8 @@ func init() {
 	RegisterCondition("CheckCoverageCompleteness", wasSuccessfulCond)
 	RegisterCondition("TaskIsNotEmpty", func(b *Blackboard) bool { return b.Task != "" })
 	RegisterCondition("CachedResult", func(b *Blackboard) bool { return b.CachedResult != "" })
+		RegisterCondition("HasPlan", func(b *Blackboard) bool { return strings.TrimSpace(b.Plan) != "" })
+
 	RegisterCondition("HasKnowledgeResult", func(b *Blackboard) bool { return b.KgResults != "" })
 
 	// Domain-specific aliases (implementations in tree.go actionForName/conditionForName)

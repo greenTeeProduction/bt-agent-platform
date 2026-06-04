@@ -9,7 +9,7 @@ import (
 func TestRegistryBuiltinBlocks(t *testing.T) {
 	reg := NewRegistry("")
 	ids := reg.IDs()
-	if len(ids) < 4 {
+	if len(ids) < 10 {
 		t.Fatalf("expected at least 4 builtin blocks, got %d", len(ids))
 	}
 	for _, id := range []string{"core:pre_gate", "core:tool_execution", "core:error_handling"} {
