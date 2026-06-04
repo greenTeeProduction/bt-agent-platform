@@ -96,13 +96,18 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 }
 
 // BuildAndValidate constructs a tree and validates it before execution.
+// Composed trees with SubTreeRef nodes are expanded first when a tree expander is registered.
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
-	info := ValidateTreeFull(serTree)
+	tree, err := prepareTreeForBuild(serTree)
+	if err != nil {
+		return nil, err
+	}
+	info := ValidateTreeFull(tree)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(serTree, bb, ""), nil
+	return buildNode(tree, bb, ""), nil
 }
 
 // buildNode recursively builds a go-bt Command from a SerializableNode.
@@ -175,6 +180,22 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		cmd = BuildReactiveParallel(node, bb)
 	case "HumanApprovalGate":
 		cmd = buildHumanApprovalGate(node, bb, parentName)
+	case "SubTreeRef":
+		refID := ""
+		if node.Metadata != nil {
+			if id, ok := node.Metadata["block_id"].(string); ok {
+				refID = id
+			}
+		}
+		if refID == "" && len(node.Name) > 4 && node.Name[:4] == "ref:" {
+			refID = node.Name[4:]
+		}
+		msg := fmt.Sprintf("unexpanded SubTreeRef %q: register tree expander via internal/blocks", refID)
+		cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Result = msg
+			ctx.Blackboard.Outcome = msg
+			return -1
+		})
 	default:
 		cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
 	}
