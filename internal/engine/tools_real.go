@@ -173,6 +173,29 @@ func extractDuckDuckGoResults(html string) string {
 	return strings.TrimSpace(b.String())
 }
 
+// goModuleRoot returns the directory containing go.mod (CI workspace or local checkout).
+func goModuleRoot() string {
+	if dir := os.Getenv("BT_MODULE_ROOT"); dir != "" {
+		return dir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	dir := wd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return wd
+}
+
 func stripHTML(s string) string {
 	re := regexp.MustCompile(`<[^>]*>`)
 	return strings.TrimSpace(re.ReplaceAllString(s, ""))
@@ -191,7 +214,7 @@ func newGoBuildTool() *realTool {
 				args = []string{"./..."}
 			}
 			cmd := exec.CommandContext(ctx, "go", append([]string{"build"}, args...)...)
-			cmd.Dir = "/home/nico/go-bt-evolve"
+			cmd.Dir = goModuleRoot()
 			out, _ := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
 			if result == "" {
@@ -218,9 +241,16 @@ func newGoTestTool() *realTool {
 				args = []string{"./...", "-v", "-count=1"}
 			}
 			cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
-			cmd.Dir = "/home/nico/go-bt-evolve"
-			out, _ := cmd.CombinedOutput()
+			cmd.Dir = goModuleRoot()
+			out, err := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
+			if result == "" {
+				if err != nil {
+					result = fmt.Sprintf("go test failed: %v", err)
+				} else {
+					result = "go test completed (no output)"
+				}
+			}
 			if len(result) > 8192 {
 				result = result[:8192] + "\n... [output truncated]"
 			}
@@ -238,7 +268,7 @@ func newGoVetTool() *realTool {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, "go", "vet", "./...")
-			cmd.Dir = "/home/nico/go-bt-evolve"
+			cmd.Dir = goModuleRoot()
 			out, _ := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
 			if result == "" {
@@ -287,7 +317,7 @@ func newGraphifyTool() *realTool {
 				args = []string{"query", input}
 			}
 			cmd := exec.CommandContext(ctx, "graphify", args...)
-			cmd.Dir = "/home/nico/go-bt-evolve"
+			cmd.Dir = goModuleRoot()
 			out, err := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
 			if len(result) > 8192 {

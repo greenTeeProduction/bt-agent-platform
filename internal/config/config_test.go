@@ -7,6 +7,15 @@ import (
 	"time"
 )
 
+func init() {
+	// CI sets BT_SKIP_LLM_TESTS=1 without Ollama; treat hosts as reachable so
+	// unrelated CheckRuntime tests are not failed by connectivity warnings.
+	if os.Getenv("BT_SKIP_LLM_TESTS") == "1" {
+		ollamaChecker = func(string) bool { return true }
+		deepseekChecker = func(string) bool { return true }
+	}
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	// Unset any env vars that might interfere
 	os.Unsetenv("BT_DASHBOARD_PORT")

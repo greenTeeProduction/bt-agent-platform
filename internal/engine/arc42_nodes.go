@@ -20,6 +20,14 @@ func init() {
 	registerArc42Nodes()
 }
 
+// arc42OutputDir is the writable directory for arc42 doc assembly (override via BT_ARC42_OUTPUT_DIR).
+func arc42OutputDir() string {
+	if d := os.Getenv("BT_ARC42_OUTPUT_DIR"); d != "" {
+		return d
+	}
+	return filepath.Join(goModuleRoot(), "testdata", "arc42")
+}
+
 func registerArc42Nodes() {
 	// ─── Data Gathering Actions ──────────────────────────────────────────
 
@@ -197,7 +205,7 @@ func registerArc42Nodes() {
 
 	RegisterAction("ReadSection1", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		data, err := os.ReadFile("/mnt/ssd/clawd/wiki/bt-research/docs/arc42/01-introduction-goals.md")
+		data, err := os.ReadFile(filepath.Join(arc42OutputDir(), "01-introduction-goals.md"))
 		if err != nil {
 			bb.CachedResult = "section 1 not yet generated"
 			return 1
@@ -260,7 +268,7 @@ func registerArc42Nodes() {
 			bb.Outcome = "save_failed: no filename in chain state"
 			return 0
 		}
-		dir := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42"
+		dir := arc42OutputDir()
 		os.MkdirAll(dir, 0755)
 		path := filepath.Join(dir, filename)
 		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
@@ -273,7 +281,7 @@ func registerArc42Nodes() {
 
 	RegisterAction("SaveDocument", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		dir := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42"
+		dir := arc42OutputDir()
 		os.MkdirAll(dir, 0755)
 		path := filepath.Join(dir, "go-bt-evolve-arc42.md")
 		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
@@ -301,7 +309,7 @@ func registerArc42Nodes() {
 
 	RegisterAction("CollectAllSections", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		dir := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42"
+		dir := arc42OutputDir()
 		files, _ := filepath.Glob(filepath.Join(dir, "*-*.md"))
 		var sb strings.Builder
 		for _, f := range files {
@@ -383,7 +391,7 @@ func getBoolChainState(bb *Blackboard, key string) bool {
 }
 
 func sectionFileExists(filename string) bool {
-	_, err := os.Stat(filepath.Join("/mnt/ssd/clawd/wiki/bt-research/docs/arc42", filename))
+	_, err := os.Stat(filepath.Join(arc42OutputDir(), filename))
 	return err == nil
 }
 

@@ -213,6 +213,10 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 			ctx.Blackboard.Outcome = "SubTreeRef not expanded — run BuildAndValidate with tree expander"
 			return -1
 		})
+	case "AlwaysSucceed":
+		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			return 1
+		})
 	default:
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 			ctx.Blackboard.Outcome = fmt.Sprintf("unsupported node type %q", node.Type)

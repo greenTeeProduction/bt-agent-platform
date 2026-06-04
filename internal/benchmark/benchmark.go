@@ -12,8 +12,8 @@
 //     with Fisher's exact test and bootstrap confidence intervals
 //   - DefaultLLM() — returns real Ollama (qwen3.6:35b) with mock fallback
 //
-// All domain suite tasks use DefaultLLM() for production-grade validation (mock fallback).
-// Ollama-dependent tests call llm.SkipUnlessIntegration(t) and RealLLM(t); set BT_SKIP_LLM_TESTS=1 to skip them.
+// All domain suite tasks use DefaultLLM() for production-grade validation.
+// Use testing.Short() guards for Ollama-dependent tests on slow hardware.
 package benchmark
 
 import (
@@ -23,6 +23,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -469,6 +470,17 @@ func DefaultLLM() llm.LLM {
 	if err != nil {
 		log.Printf("benchmark: Ollama unavailable (%v), falling back to mock", err)
 		return DefaultMock()
+	}
+	return client
+}
+
+// RealLLM returns a live Ollama client or skips the test when no LLM is configured.
+func RealLLM(t *testing.T) llm.LLM {
+	t.Helper()
+	llm.SkipUnlessIntegration(t)
+	client, err := llm.NewClient(llm.DefaultConfig())
+	if err != nil {
+		t.Skipf("skipping: LLM client: %v", err)
 	}
 	return client
 }

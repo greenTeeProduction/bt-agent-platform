@@ -294,6 +294,33 @@ func CrossOriginMiddleware(origins, methods string) func(http.Handler) http.Hand
 	}
 }
 
+// timeoutResponseWriter ensures only one WriteHeader runs when a handler and the
+// timeout middleware both respond (avoids races on httptest.ResponseRecorder).
+type timeoutResponseWriter struct {
+	http.ResponseWriter
+	mu    sync.Mutex
+	wrote bool
+}
+
+func (tw *timeoutResponseWriter) WriteHeader(code int) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.wrote {
+		return
+	}
+	tw.wrote = true
+	tw.ResponseWriter.WriteHeader(code)
+}
+
+func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
+	tw.mu.Lock()
+	if !tw.wrote {
+		tw.wrote = true
+	}
+	tw.mu.Unlock()
+	return tw.ResponseWriter.Write(b)
+}
+
 // RequestTimeoutMiddleware enforces a maximum duration for request processing.
 func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -301,9 +328,10 @@ func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Han
 			ctx, cancel := context.WithTimeout(r.Context(), timeout)
 			defer cancel()
 
+			tw := &timeoutResponseWriter{ResponseWriter: w}
 			done := make(chan struct{})
 			go func() {
-				next.ServeHTTP(w, r.WithContext(ctx))
+				next.ServeHTTP(tw, r.WithContext(ctx))
 				close(done)
 			}()
 
@@ -311,9 +339,15 @@ func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Han
 			case <-done:
 				return
 			case <-ctx.Done():
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusGatewayTimeout)
-				json.NewEncoder(w).Encode(map[string]string{
+				tw.mu.Lock()
+				alreadyWrote := tw.wrote
+				tw.mu.Unlock()
+				if alreadyWrote {
+					return
+				}
+				tw.Header().Set("Content-Type", "application/json")
+				tw.WriteHeader(http.StatusGatewayTimeout)
+				json.NewEncoder(tw).Encode(map[string]string{
 					"error":   "request_timeout",
 					"message": "Request exceeded maximum processing time.",
 				})
