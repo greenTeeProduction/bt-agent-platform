@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reflection"
@@ -70,13 +69,14 @@ type Blackboard struct {
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
-	ChainMemory  any            // langchaingo memory (ConversationBuffer, etc.)
-	ChainTools   []any          // langchaingo tools available to chains
-	ChainState   map[string]any // arbitrary chain execution state
-	Results      []string       // accumulated results from all chain actions
-	QualityScore float64        // 0.0-1.0 output quality score
-	CurrentPath  string         // currently executing strategy path (set by tree traversal)
-	VisitedPaths []string       // all strategy paths visited during execution
+	ChainMemory  any             // langchaingo memory (ConversationBuffer, etc.)
+	ChainTools   []any           // langchaingo tools available to chains
+	ChainState   map[string]any  // arbitrary chain execution state
+	TraceContext context.Context // parent trace context for nested node spans (set by RunTask)
+	Results      []string        // accumulated results from all chain actions
+	QualityScore float64         // 0.0-1.0 output quality score
+	CurrentPath  string          // currently executing strategy path (set by tree traversal)
+	VisitedPaths []string        // all strategy paths visited during execution
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -98,13 +98,6 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 // BuildAndValidate constructs a tree and validates it before execution.
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
-	if blocks.HasSubTreeRefs(serTree) {
-		expanded, err := blocks.Expand(blocks.DefaultRegistry, serTree)
-		if err != nil {
-			return nil, err
-		}
-		serTree = expanded
-	}
 	info := ValidateTreeFull(serTree)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
@@ -115,10 +108,11 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 // buildNode recursively builds a go-bt Command from a SerializableNode.
 // parentName tracks the parent node's name for path-tracking in StrategyRouters.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
+	var cmd btcore.Command[Blackboard]
+
 	// If this Sequence is inside a StrategyRouter, record its name as the active path
 	if parentName == "StrategyRouter" && node.Type == "Sequence" && node.Name != "" {
 		origChildren := node.Children
-		// Prepend a path-recording action before the sequence's children
 		pathRecordAction := btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 			ctx.Blackboard.CurrentPath = node.Name
 			ctx.Blackboard.VisitedPaths = append(ctx.Blackboard.VisitedPaths, node.Name)
@@ -129,7 +123,7 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		for i := range origChildren {
 			children[i+1] = buildNode(&origChildren[i], bb, node.Name)
 		}
-		return btcomp.NewSequence(children...)
+		return observeNode(node, parentName, btcomp.NewSequence(children...))
 	}
 
 	switch node.Type {
@@ -138,53 +132,51 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
-		return btcomp.NewSequence(children...)
+		cmd = btcomp.NewSequence(children...)
 	case "Selector":
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
-		return btcomp.NewSelector(children...)
+		cmd = btcomp.NewSelector(children...)
 	case "Timeout":
 		if len(node.Children) < 1 {
-			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+			cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		} else {
+			child := buildNode(&node.Children[0], bb, node.Name)
+			cmd = buildTimeout(node, child)
 		}
-		child := buildNode(&node.Children[0], bb, node.Name)
-		return buildTimeout(node, child)
 	case "CircuitBreaker":
 		if len(node.Children) < 1 {
-			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+			cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		} else {
+			child := buildNode(&node.Children[0], bb, node.Name)
+			cmd = buildCircuitBreaker(node, child, bb)
 		}
-		child := buildNode(&node.Children[0], bb, node.Name)
-		return buildCircuitBreaker(node, child, bb)
 	case "Retry":
 		child := buildNode(&node.Children[0], bb, node.Name)
-		return btdec.NewRepeat(child, node.MaxRetries)
+		cmd = btdec.NewRepeat(child, node.MaxRetries)
 	case "Action":
-		return btleaf.NewAction(bb.actionForName(node.Name))
+		cmd = btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":
-		// Langchain chain node — reads ChainConfig from node metadata
 		cfg := parseChainConfig(node)
-		return BuildChainAction(cfg, bb)
+		cmd = BuildChainAction(cfg, bb)
 	case "Condition":
-		return btleaf.NewCondition(bb.conditionForName(node.Name))
+		cmd = btleaf.NewCondition(bb.conditionForName(node.Name))
 	case "UtilitySelector":
-		return BuildUtilitySelector(node, bb)
+		cmd = BuildUtilitySelector(node, bb)
 	case "DecisionTree":
-		return BuildDecisionTree(node, bb)
+		cmd = BuildDecisionTree(node, bb)
 	case "PlannerNode":
-		// PlannerNode extends UtilitySelector with GOAP goal management
-		return BuildPlannerNode(node, bb)
+		cmd = BuildPlannerNode(node, bb)
 	case "AbortOnEvent":
-		return BuildEventDrivenAbort(node, bb)
+		cmd = BuildEventDrivenAbort(node, bb)
 	case "ReactiveParallel":
-		return BuildReactiveParallel(node, bb)
+		cmd = BuildReactiveParallel(node, bb)
 	default:
-		// Unknown node type → pass-through action (always succeeds)
-		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-			return 1
-		})
+		cmd = btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 })
 	}
+	return observeNode(node, parentName, cmd)
 }
 
 func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboard]) int {
@@ -2147,8 +2139,9 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	if len(taskName) > 50 {
 		taskName = taskName[:50]
 	}
-	_, span := tracing.StartSpan(context.Background(), "RunTask:"+taskName)
+	traceCtx, span := tracing.StartSpan(context.Background(), "RunTask:"+taskName)
 	defer span.End()
+	bb.TraceContext = traceCtx
 	span.SetAttribute("task", util.Truncate(bb.Task, 80))
 
 	// Panic recovery at the tree level — if the entire BT crashes, capture it.

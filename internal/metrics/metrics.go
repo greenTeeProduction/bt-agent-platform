@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,6 +44,13 @@ type Histogram struct {
 
 func NewHistogram(bounds []float64) *Histogram {
 	return &Histogram{bounds: bounds, counts: make([]uint64, len(bounds)+1)}
+}
+
+// SnapshotStats returns aggregate sum and count.
+func (h *Histogram) SnapshotStats() histogramSnap {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return histogramSnap{Sum: h.sum, Count: h.total}
 }
 
 func (h *Histogram) Observe(v float64) {
@@ -366,6 +374,30 @@ func PrometheusHandler() http.Handler {
 	})
 }
 
+func formatPromLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(k)
+		b.WriteString("=\"")
+		b.WriteString(labels[k])
+		b.WriteByte('"')
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
 func writePrometheusMetrics(w http.ResponseWriter) {
 	globalMetrics.mu.RLock()
 	defer globalMetrics.mu.RUnlock()
@@ -374,6 +406,30 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 	fmt.Fprintf(w, "# HELP bt_http_requests_total Total HTTP requests served.\n")
 	fmt.Fprintf(w, "# TYPE bt_http_requests_total counter\n")
 	fmt.Fprintf(w, "bt_http_requests_total %d\n\n", httpRequestsTotal.Value())
+	// BT node metrics
+	fmt.Fprintf(w, "# HELP bt_node_ticks_total Behavior tree node ticks by type, name, and status.\n")
+	fmt.Fprintf(w, "# TYPE bt_node_ticks_total counter\n")
+	for key, val := range nodeTicksTotal.Snapshot() {
+		labels := parseLabelKey(key)
+		fmt.Fprintf(w, "bt_node_ticks_total%s %d\n", formatPromLabels(labels), val)
+	}
+	fmt.Fprintf(w, "\n")
+
+	fmt.Fprintf(w, "# HELP bt_node_errors_total Behavior tree node failures.\n")
+	fmt.Fprintf(w, "# TYPE bt_node_errors_total counter\n")
+	for key, val := range nodeErrorsTotal.Snapshot() {
+		labels := parseLabelKey(key)
+		fmt.Fprintf(w, "bt_node_errors_total%s %d\n", formatPromLabels(labels), val)
+	}
+	fmt.Fprintf(w, "\n")
+
+	fmt.Fprintf(w, "# HELP bt_block_ops_total Block expand/compose operations.\n")
+	fmt.Fprintf(w, "# TYPE bt_block_ops_total counter\n")
+	for key, val := range blockOpsTotal.Snapshot() {
+		labels := parseLabelKey(key)
+		fmt.Fprintf(w, "bt_block_ops_total%s %d\n", formatPromLabels(labels), val)
+	}
+	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# HELP bt_http_errors_total Total HTTP error responses (4xx, 5xx).\n")
 	fmt.Fprintf(w, "# TYPE bt_http_errors_total counter\n")

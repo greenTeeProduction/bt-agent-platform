@@ -1,6 +1,7 @@
 package blocks
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -14,9 +15,16 @@ func Expand(reg *Registry, tree *evolution.SerializableNode) (*evolution.Seriali
 	if tree == nil {
 		return nil, fmt.Errorf("expand: nil tree")
 	}
-	expanded := expandNode(reg, tree, make(map[string]int))
-	if errs := expanded.Validate(); len(errs) > 0 {
-		return nil, fmt.Errorf("expand: invalid expanded tree: %v", errs)
+	var expanded *evolution.SerializableNode
+	err := traceBlockOp(context.Background(), "expand", "", func(ctx context.Context) error {
+		expanded = expandNode(reg, tree, make(map[string]int))
+		if errs := expanded.Validate(); len(errs) > 0 {
+			return fmt.Errorf("invalid expanded tree: %v", errs)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return expanded, nil
 }
@@ -48,6 +56,7 @@ func expandNode(reg *Registry, node *evolution.SerializableNode, stack map[strin
 			}
 		}
 		out := expandNode(reg, b.Tree, stack)
+		annotateBlockSource(out, id)
 		stack[id]--
 		return out
 	}

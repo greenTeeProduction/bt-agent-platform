@@ -2,8 +2,10 @@ package blocks
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/metrics"
 )
 
 // Compose builds a task/action tree from block IDs and an optional middle section.
@@ -12,8 +14,13 @@ func Compose(reg *Registry, spec ComposeSpec, inline bool) (*evolution.Serializa
 	if reg == nil {
 		reg = DefaultRegistry
 	}
+	start := time.Now()
+	var composeErr error
+	defer func() { metrics.ObserveBlockCompose(len(spec.Blocks), composeErr, start) }()
+
 	if len(spec.Blocks) == 0 && spec.Middle == nil {
-		return nil, fmt.Errorf("compose: at least one block or middle section required")
+		composeErr = fmt.Errorf("compose: at least one block or middle section required")
+		return nil, composeErr
 	}
 
 	var children []evolution.SerializableNode
