@@ -102,13 +102,18 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 }
 
 // BuildAndValidate constructs a tree and validates it before execution.
+// SubTreeRef nodes are expanded first when a tree expander is registered (internal/blocks).
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
-	info := ValidateTreeFull(serTree)
+	expanded, err := prepareTreeForBuild(serTree)
+	if err != nil {
+		return nil, err
+	}
+	info := ValidateTreeFull(expanded)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(serTree, bb, ""), nil
+	return buildNode(expanded, bb, ""), nil
 }
 
 // buildNode recursively builds a go-bt Command from a SerializableNode.

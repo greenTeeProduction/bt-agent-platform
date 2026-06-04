@@ -16,12 +16,12 @@ func HumanGateBlock(name, prompt string) evolution.SerializableNode {
 }
 
 // DefaultTaskBlocksWithHITL is the standard pipeline with a human checkpoint before tool execution.
-var DefaultTaskBlocksWithHITL = []string{
+var DefaultTaskBlocksWithHITL = PipelineWithToolsProfile([]string{
 	"core:pre_gate",
 	"core:human_gate",
 	"core:tool_execution",
 	"core:error_handling",
-}
+}, "default")
 
 // ComposeTaskTreeWithHITL composes the task pipeline with human approval before execution.
 func ComposeTaskTreeWithHITL(reg *Registry, name string, strategy *evolution.SerializableNode) (*evolution.SerializableNode, error) {

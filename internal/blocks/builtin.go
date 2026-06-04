@@ -386,9 +386,9 @@ func builtinBlocks() []Block {
 	return blocks
 }
 
-// DefaultTaskBlocks is the standard on-demand task pipeline block order.
-var DefaultTaskBlocks = []string{
+// DefaultTaskBlocks is the standard on-demand task pipeline block order (includes tool profile).
+var DefaultTaskBlocks = PipelineWithToolsProfile([]string{
 	"core:pre_gate",
 	"core:tool_execution",
 	"core:error_handling",
-}
+}, "default")
