@@ -100,7 +100,7 @@ function initDoormateTab() {
 
 async function loadProfile() {
   try {
-    const res = await apiFetch('/api/doormate/profile');
+    const res = await apiFetch('/doormate/profile');
     if (res) renderProfileTags(res.preference_tags || []);
   } catch (err) {
     console.error('load profile error', err);
@@ -135,8 +135,9 @@ async function sendPhrase(customText = null) {
   }
 
   try {
-    const res = await apiFetch('/api/doormate/intent', {
+    const res = await apiFetch('/doormate/intent', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: text })
     });
 
@@ -379,8 +380,9 @@ function renderBlock(block) {
 async function toggleBookmark() {
   if (!activePageID) return;
   try {
-    const res = await apiFetch('/api/doormate/bookmark', {
+    const res = await apiFetch('/doormate/bookmark', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ page_id: activePageID })
     });
     if (res && res.status === "success") {
@@ -401,8 +403,9 @@ async function toggleBookmark() {
 async function ratePage(starCount) {
   if (!activePageID) return;
   try {
-    const res = await apiFetch('/api/doormate/rate', {
+    const res = await apiFetch('/doormate/rate', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ page_id: activePageID, rating: starCount })
     });
     if (res && res.status === "success") {

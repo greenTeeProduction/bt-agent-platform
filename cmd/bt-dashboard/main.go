@@ -247,6 +247,9 @@ func main() {
 	// This preserves backward compatibility with existing X-API-Key header workflows
 	// while adding cookie-based browser sessions via /api/login.
 	sessionAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		if apiKey == "" {
+			return next
+		}
 		return sessionStore.SessionMiddleware(apiKey, nil)(next)
 	}
 

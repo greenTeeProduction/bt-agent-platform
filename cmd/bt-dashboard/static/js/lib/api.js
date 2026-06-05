@@ -2,6 +2,12 @@
 
 const API = '/api';
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
 /**
  * Fetch JSON from API endpoint with automatic retry.
  * @param {string} path - API path (e.g. '/trees')
@@ -11,6 +17,17 @@ const API = '/api';
  */
 async function apiFetch(path, opts = {}, retries = 2) {
   const url = API + path;
+  
+  // Auto-inject CSRF token for state-changing requests
+  const method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    opts.headers = opts.headers || {};
+    const csrfToken = getCookie('_csrf_token');
+    if (csrfToken) {
+      opts.headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, opts);

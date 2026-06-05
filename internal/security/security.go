@@ -733,12 +733,13 @@ func CSRFMiddleware(tokenFn func() string) func(http.Handler) http.Handler {
 			if safeMethods[r.Method] {
 				if cookieToken == "" {
 					cookieToken = tokenFn()
+					isLocal := strings.HasPrefix(r.Host, "localhost:") || strings.HasPrefix(r.Host, "127.0.0.1:") || strings.HasPrefix(r.Host, "[::1]:") || r.Host == "localhost" || r.Host == "127.0.0.1" || r.Host == "[::1]"
 					http.SetCookie(w, &http.Cookie{
 						Name:     csrfCookieName,
 						Value:    cookieToken,
 						Path:     "/",
 						HttpOnly: false, // JS must be able to read it for the header
-						Secure:   true,
+						Secure:   !isLocal,
 						SameSite: http.SameSiteStrictMode,
 						MaxAge:   86400, // 24 hours
 					})
