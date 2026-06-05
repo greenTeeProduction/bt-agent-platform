@@ -18,6 +18,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/doormate"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/finance"
 	"github.com/nico/go-bt-evolve/internal/hitl"
@@ -77,8 +78,19 @@ var taskStore *dashboard.TaskStore
 // companyState holds the startup simulation state.
 var companyState *startup.CompanyState
 
+func getHomeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	if home == "" {
+		home = "."
+	}
+	return home
+}
+
 func init() {
-	home := os.Getenv("HOME")
+	home := getHomeDir()
 	taskStore = dashboard.NewTaskStore(home + "/.go-bt-evolve/tasks.json")
 	companyState = startup.NewDefaultCompany()
 }
@@ -99,7 +111,7 @@ func main() {
 	kg = knowledge.BuildKnowledgeGraph()
 
 	// Dead letter queue — persisted alongside other agent state
-	dlqPath := os.Getenv("HOME") + "/.go-bt-evolve/dead_letter_queue.json"
+	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"
 	dlq = reliability.NewDeadLetterQueue(dlqPath)
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 
@@ -111,7 +123,7 @@ func main() {
 		"concurrency_limit", 2)
 
 	// Distributed tracing — writes to shared traces log
-	traceLogPath := os.Getenv("HOME") + "/.go-bt-evolve/logs/traces.log"
+	traceLogPath := getHomeDir() + "/.go-bt-evolve/logs/traces.log"
 	if f, err := os.OpenFile(traceLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		tracer := tracing.NewConsoleTracer("bt-dashboard", f)
 		otlpEnabled := tracing.ConfigureOTLPFromEnv(tracer)
@@ -188,7 +200,7 @@ func main() {
 		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
 	}
 	config.ApplyHITLPolicy(dashConfig)
-	hitlBase := filepath.Join(os.Getenv("HOME"), ".go-bt-evolve")
+	hitlBase := filepath.Join(getHomeDir(), ".go-bt-evolve")
 	if _, err := hitl.InitStore(hitlBase); err != nil {
 		slog.Warn("HITL store init failed", "error", err)
 	} else {
@@ -239,6 +251,7 @@ func main() {
 	}
 
 	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
+	mux.HandleFunc("/api/metrics/live", sessionAuth(handleMetricsLive))
 	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
 	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
@@ -259,6 +272,21 @@ func main() {
 	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
 	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
 	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
+
+	// DoorMate components initialization & registration
+	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+	if err != nil {
+		slog.Error("DoorMate store initialization failed", "error", err)
+	} else {
+		slog.Info("DoorMate store initialized", "path", filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+		dmAgent := doormate.NewPageAgent(sharedLLM)
+		dmHandler := doormate.NewHandler(dmStore, dmAgent)
+
+		mux.HandleFunc("/api/doormate/intent", sessionAuth(dmHandler.HandleIntent))
+		mux.HandleFunc("/api/doormate/bookmark", sessionAuth(dmHandler.HandleBookmark))
+		mux.HandleFunc("/api/doormate/rate", sessionAuth(dmHandler.HandleRate))
+		mux.HandleFunc("/api/doormate/profile", sessionAuth(dmHandler.HandleProfile))
+	}
 
 	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
 	tlsCert := os.Getenv("BT_TLS_CERT")
@@ -339,11 +367,29 @@ func serveStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSummary(w http.ResponseWriter, _ *http.Request) {
+	cats := make(map[string]int)
+	for _, t := range kg.Trees {
+		cats[t.Category]++
+	}
+	model := "qwen3.6:35b-a3b"
+	if dashConfig != nil && dashConfig.OllamaModel != "" {
+		model = dashConfig.OllamaModel
+	}
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_trees": 41, "categories": map[string]int{
-			"core": 2, "finance": 10, "research": 2, "domain": 13, "startup": 6, "thinktank": 5, "evolution": 3,
-		}, "mcp_tools": 26, "model": "qwen3.6:35b-a3b",
+		"total_trees": len(kg.Trees),
+		"categories":  cats,
+		"mcp_tools":   26,
+		"model":       model,
 	})
+}
+
+func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
+	cats := make(map[string]int)
+	for _, t := range kg.Trees {
+		cats[t.Category]++
+	}
+	m := dashboard.Collect(len(kg.Trees), cats)
+	_ = json.NewEncoder(w).Encode(m)
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	r2 := make([]map[string]interface{}, 0, 8)
@@ -1030,6 +1076,7 @@ func handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
 	gen.AddTag("Scalability", "Horizontal scaling, worker pool, queues")
 	gen.AddTag("Reliability", "Dead letter queue, circuit breaker")
 	gen.AddTag("Session", "Login, logout, session management")
+	gen.AddTag("DoorMate", "Page-First AI Assistant endpoints")
 
 	for _, route := range api.DashboardRoutes() {
 		gen.AddRoute(route)
