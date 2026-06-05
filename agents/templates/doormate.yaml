@@ -1,0 +1,21 @@
+name: doormate
+description: DoorMate Personal AI Assistant — page-first interaction, bubble intent parsing, dynamic templates, profile learning
+version: "1.0.0"
+tree: domain:doormate
+schedule: on_demand
+inputs:
+  - name: query
+    type: text
+    required: true
+    description: User query or intent bubble click
+outputs:
+  - name: page_schema
+    type: json
+    description: Structured JSON page schema matching the dynamic template rendering contract
+quality:
+  min_length: 50
+  required_sections: ["title", "summary", "template_id", "blocks"]
+  required_keywords: ["doormate", "intent", "template"]
+metadata:
+  category: hermes-builtin
+  tags: "doormate,assistant,intent,bubble,template"
