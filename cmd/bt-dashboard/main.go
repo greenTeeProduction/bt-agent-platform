@@ -153,8 +153,21 @@ func main() {
 		sharedLLM = nil
 	}
 
-	// API key from env — if set, all /api/* endpoints require X-API-Key header
+	// Load runtime configuration
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		slog.Warn("Failed to load config, using defaults", "error", cfgErr)
+		dashConfig = &config.Config{}
+	} else {
+		dashConfig = cfg
+		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
+	}
+
+	// API key from env/config — if set, all /api/* endpoints require X-API-Key header
 	apiKey := os.Getenv("BT_API_KEY")
+	if apiKey == "" && dashConfig != nil {
+		apiKey = dashConfig.APIKey
+	}
 
 	// Session store — cookie-based session management with TTL-based expiry.
 	// Sessions are backed by the same API key for password-based login.
@@ -173,16 +186,6 @@ func main() {
 		"lockout_threshold", 20,
 		"lockout_duration", "30m",
 	)
-
-	// Load runtime configuration
-	cfg, cfgErr := config.Load()
-	if cfgErr != nil {
-		slog.Warn("Failed to load config, using defaults", "error", cfgErr)
-		dashConfig = &config.Config{}
-	} else {
-		dashConfig = cfg
-		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
-	}
 
 	// CORS origin: default to wildcard for dev, restrict in production via config
 	corsOrigin := dashConfig.CORSDashboardOrigin

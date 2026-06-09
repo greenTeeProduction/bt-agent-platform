@@ -511,8 +511,8 @@ func TradingSignalTree() *evolution.SerializableNode {
 
 // --- GoapPlanning Tree ---
 
-func GoapPlanningTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{Type: "Sequence", Name: "GoapPlanning_Main", Children: []evolution.SerializableNode{
+func GoapPlanningTree(withCheckpointVerifier bool) *evolution.SerializableNode {
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapPlanning_Main", Children: []evolution.SerializableNode{
 		act("SetupUniversalTools", "Give chain agents access to web_search, file_read, shell_exec"),
 		seq("PreGate", cond("ValidateInput", "Non-empty")),
 		sel("StrategyRouter",
@@ -538,12 +538,16 @@ func GoapPlanningTree() *evolution.SerializableNode {
 		outcome(),
 		act("UpdateBehaviorTree", "Evolve"),
 	}}
+	if withCheckpointVerifier {
+		return evolution.WrapWithCheckpointVerifier(tree, 3, "has_result=true,task_status=completed")
+	}
+	return tree
 }
 
 // --- GoapResearch Tree ---
 
-func GoapResearchTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{Type: "Sequence", Name: "GoapResearch_Main", Children: []evolution.SerializableNode{
+func GoapResearchTree(withCheckpointVerifier bool) *evolution.SerializableNode {
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapResearch_Main", Children: []evolution.SerializableNode{
 		act("SetupResearchTools", "Give chain agents access to web_search, knowledge_graph, calculator"),
 		seq("PreGate", cond("ValidateInput", "Non-empty")),
 		sel("StrategyRouter",
@@ -569,12 +573,16 @@ func GoapResearchTree() *evolution.SerializableNode {
 		outcome(),
 		act("UpdateBehaviorTree", "Evolve"),
 	}}
+	if withCheckpointVerifier {
+		return evolution.WrapWithCheckpointVerifier(tree, 3, "has_result=true,task_status=completed")
+	}
+	return tree
 }
 
 // --- GoapDevops Tree ---
 
-func GoapDevopsTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{Type: "Sequence", Name: "GoapDevops_Main", Children: []evolution.SerializableNode{
+func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapDevops_Main", Children: []evolution.SerializableNode{
 		act("SetupDevTools", "Give chain agents access to go_build, go_test, go_vet, web_search"),
 		seq("PreGate", cond("ValidateInput", "Non-empty")),
 		sel("StrategyRouter",
@@ -600,6 +608,10 @@ func GoapDevopsTree() *evolution.SerializableNode {
 		outcome(),
 		act("UpdateBehaviorTree", "Evolve"),
 	}}
+	if withCheckpointVerifier {
+		return evolution.WrapWithCheckpointVerifier(tree, 3, "has_result=true,task_status=completed")
+	}
+	return tree
 }
 
 // AllDomainTrees returns all domain trees keyed by name.
@@ -616,9 +628,9 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"game_ai":             GameAITree(),
 		"trading_signal":      TradingSignalTree(),
 		"alert_router":        AlertRouterTree(),
-		"goap_planning":       GoapPlanningTree(),
-		"goap_research":       GoapResearchTree(),
-		"goap_devops":         GoapDevopsTree(),
+		"goap_planning":       GoapPlanningTree(true),
+		"goap_research":       GoapResearchTree(true),
+		"goap_devops":         GoapDevopsTree(true),
 		"bt_manager":          BTManagerTree(),
 		"notebooklm":          NotebookLMTree(),
 		"notebooklm_consumer": NotebookLMConsumerTree(),

@@ -320,7 +320,7 @@ func (ss *SessionStore) SessionMiddleware(apiKey string, checkAPIKey func(key st
 				return
 			}
 
-			// Fall back to API key
+			// Fall back to API key validation if provided
 			if apiKey != "" {
 				provided := r.Header.Get("X-API-Key")
 				if checkAPIKey != nil {

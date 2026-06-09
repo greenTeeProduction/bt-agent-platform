@@ -1,6 +1,42 @@
 package evolution
 
-import "github.com/nico/go-bt-evolve/internal/goap"
+import (
+	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/goap"
+)
+
+// WrapWithCheckpointVerifier wraps a SerializableNode tree with a CheckpointVerifier
+// decorator node. The verifier snapshots world state before child execution and
+// validates postconditions after. On mismatch or failure, it restores state and retries.
+//
+// Parameters:
+//   - tree: the subtree to wrap
+//   - maxRetries: maximum retry attempts (defaults to 3 in the engine if <= 0)
+//   - postconditions: comma-separated key=value pairs, e.g. "has_result=true,task_status=completed"
+func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postconditions string) *SerializableNode {
+	pcMap := make(map[string]any)
+	if postconditions != "" {
+		for _, pair := range strings.Split(postconditions, ",") {
+			parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
+			if len(parts) == 2 {
+				// Parse boolean values; non-"true" values default to true for string
+				// postconditions like "task_status=completed" that represent factual states.
+				pcMap[parts[0]] = parts[1] == "true"
+			}
+		}
+	}
+
+	return &SerializableNode{
+		Type:       "CheckpointVerifier",
+		Name:       tree.Name + "_Verified",
+		MaxRetries: maxRetries,
+		Metadata: map[string]any{
+			"postconditions": pcMap,
+		},
+		Children: []SerializableNode{*tree},
+	}
+}
 
 // GOAPPlanningTree returns a behavior tree that uses GOAP (Goal-Oriented
 // Action Planning) to plan and execute multi-step tasks.

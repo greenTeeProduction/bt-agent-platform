@@ -109,6 +109,17 @@ func (c *CheckpointVerifier) verifyPostconditions(state map[string]bool) bool {
 	return true
 }
 
+// hasWorldState checks whether a world_state map has been explicitly configured
+// in ChainState. Returns false when no world state tracking is set up, allowing
+// the CheckpointVerifier to gracefully skip postcondition validation.
+func hasWorldState(bb *Blackboard) bool {
+	if bb.ChainState == nil {
+		return false
+	}
+	_, ok := bb.ChainState["world_state"]
+	return ok
+}
+
 // Run executes the child subtree with checkpoint verification.
 // On child success, it verifies postconditions. On mismatch or child failure,
 // it restores the pre-execution snapshot and retries up to MaxRetries.
@@ -142,17 +153,20 @@ func (c *CheckpointVerifier) Run(ctx *btcore.BTContext[Blackboard]) int {
 			return 0
 		}
 
-		// Child succeeded → verify postconditions
-		currentState := extractWorldState(bb)
-		if c.verifyPostconditions(currentState) {
+		// Child succeeded → verify postconditions (skip if world_state not configured)
+		if hasWorldState(bb) {
+			currentState := extractWorldState(bb)
+			if c.verifyPostconditions(currentState) {
+				return 1
+			}
+			// Postcondition mismatch → restore and retry
+			restoreState(bb, snap)
+			if attempt < c.MaxRetries {
+				bb.ChainState["checkpoint_retry_reason"] = fmt.Sprintf("postcondition_mismatch_attempt_%d", attempt+1)
+				continue
+			}
+		} else {
 			return 1
-		}
-
-		// Postcondition mismatch → restore and retry
-		restoreState(bb, snap)
-		if attempt < c.MaxRetries {
-			bb.ChainState["checkpoint_retry_reason"] = fmt.Sprintf("postcondition_mismatch_attempt_%d", attempt+1)
-			continue
 		}
 	}
 

@@ -132,9 +132,9 @@ func TestDomainFallbacksUseChainAction(t *testing.T) {
 		"crash_investigator": CrashInvestigatorTree(),
 		"game_ai":            GameAITree(),
 		"trading_signal":     TradingSignalTree(),
-		"goap_planning":      GoapPlanningTree(),
-		"goap_research":      GoapResearchTree(),
-		"goap_devops":        GoapDevopsTree(),
+		"goap_planning":      GoapPlanningTree(false),
+		"goap_research":      GoapResearchTree(false),
+		"goap_devops":        GoapDevopsTree(false),
 	}
 
 	for name, tree := range planTrees {
