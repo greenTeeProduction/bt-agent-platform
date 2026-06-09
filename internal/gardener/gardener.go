@@ -317,6 +317,7 @@ type Config struct {
 	Gate           *evolution.QualityGate    // quality gate for regression detection
 	CrisisDetector *evolution.CrisisDetector // crisis detection & diversity injection
 	SnapshotDir    string                    // directory for pre-mutation snapshots
+	ValidationGate ValidationGateConfig      // validation gate for decentralized coordination (Gap 5)
 }
 
 // Gardener is the 24/7 tree evolution agent.

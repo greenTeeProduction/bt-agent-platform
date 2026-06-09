@@ -136,6 +136,7 @@ func main() {
 		Interval:       5 * time.Minute,
 		MaxMutations:   2,
 		UseRealLLM:     false, // mock LLM for benchmark validation (speed > accuracy on 41 trees)
+		ValidationGate: gardener.DefaultValidationGateConfig(),
 	})
 
 	// Ollama LLM for langchain agent — uses platform config

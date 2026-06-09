@@ -3,6 +3,7 @@ package gardener
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -290,6 +291,16 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		rollbacks++
 	}
 	improved := newFitness.Composite > baseFitness.Composite
+	if applied > 0 {
+		// ── P5: Validation Gate (Gap 5 — Decentralized Coordination) ──
+		// Prevent deploying evolved trees that fail quality thresholds.
+		// A rejection skips deployment but does NOT abort the cycle for other agents.
+		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
+		if gateErr != nil {
+			log.Printf("[gardener] validation gate REJECTED %s: %v — skipping deployment", entry.Name, gateErr)
+			applied = 0
+		}
+	}
 	if applied > 0 {
 		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
