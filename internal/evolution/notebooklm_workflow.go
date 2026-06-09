@@ -40,7 +40,7 @@ func NotebooklmPlanImplementTree() *SerializableNode {
 			// Step 4: Implement — delegate tasks via subagents using ChainAction
 			{
 				Type: "ChainAction",
-				Name: "ImplementFromPlan:{{.Task}}",
+				Name: "agent:{{.Task}}",
 				Description: "Read the implementation plan and execute all tasks: modify/create source files, wire up registrations, implement functionality",
 				Metadata: map[string]any{
 					"system_msg": "You are an implementation agent executing a detailed plan. TASK: {{.Task}}. Read the implementation plan from .hermes/plans/, then execute each task: modify/create source files, wire up registrations, implement functionality. Use file_read to read plans and source files, file_write to create or modify files, shell_exec for go build and go test, go_build to compile, go_test to verify. Work through the task list methodically.",
