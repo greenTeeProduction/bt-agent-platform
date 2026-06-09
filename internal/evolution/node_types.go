@@ -86,8 +86,9 @@ var KnownNodeTypes = map[string]bool{
 	"ReactiveParallel": true, // Plan #3
 	"AbortOnEvent":     true, // Plan #3
 	// Domain-specific
-	"HumanApprovalGate": true,
-	"QualityGate":       true,
+	"HumanApprovalGate":  true,
+	"QualityGate":        true,
+	"CheckpointVerifier": true,
 }
 
 // ValidateEdge validates a single TypedEdge against the tree structure.

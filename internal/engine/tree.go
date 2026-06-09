@@ -156,6 +156,13 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildEventDrivenAbort(node, bb)
 	case "ReactiveParallel":
 		return BuildReactiveParallel(node, bb)
+	case "CheckpointVerifier":
+		if len(node.Children) == 0 {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
+		}
+		child := buildNode(&node.Children[0], bb, node.Name)
+		postconditions := readPostconditions(node)
+		return NewCheckpointVerifier(child, node.MaxRetries, postconditions)
 	default:
 		// Unknown node type → pass-through action (always succeeds)
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
