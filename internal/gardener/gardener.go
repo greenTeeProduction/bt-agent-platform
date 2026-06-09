@@ -29,6 +29,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
@@ -603,4 +604,29 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// CollectAgentSLOs reads all registered SLO metrics from the engine and returns
+// a flat map of key metrics per agent. The gardener calls this after each
+// evolution cycle to collect and export SLO data.
+//
+// Keys follow the pattern: <agentName>/<metric>, e.g.:
+//
+//	"default/success_rate", "default/recovery_rate", "default/avg_latency"
+func CollectAgentSLOs() map[string]float64 {
+	all := engine.AllSLOMetrics()
+	if len(all) == 0 {
+		return nil
+	}
+
+	result := make(map[string]float64, len(all)*3)
+	for key, m := range all {
+		prefix := key + "/"
+		result[prefix+"success_rate"] = m.SuccessRate()
+		result[prefix+"recovery_rate"] = m.RecoveryRate()
+		result[prefix+"avg_latency"] = m.AvgLatencyMs()
+
+		fmt.Printf("[gardener] SLO %s\n", m.Summary())
+	}
+	return result
 }

@@ -55,11 +55,12 @@ type TreeMetrics struct {
 
 // GardenerMetrics holds gardener stats from its metrics file.
 type GardenerMetrics struct {
-	Cycles       int     `json:"cycles"`
-	Trees        int     `json:"trees"`
-	Improvements int     `json:"improvements"`
-	BestFitness  float64 `json:"best_fitness"`
-	LastRun      string  `json:"last_run"`
+	Cycles       int                `json:"cycles"`
+	Trees        int                `json:"trees"`
+	Improvements int                `json:"improvements"`
+	BestFitness  float64            `json:"best_fitness"`
+	LastRun      string             `json:"last_run"`
+	SLOs         map[string]float64 `json:"slos,omitempty"`
 }
 
 var (
@@ -197,8 +198,11 @@ func collectSystem() SystemMetrics {
 }
 
 func loadGardenerMetrics() *GardenerMetrics {
-	path := os.Getenv("HOME") + "/.go-bt-gardener/gardener-metrics.json"
-	data, err := os.ReadFile(path)
+	home := os.Getenv("HOME")
+	metricsPath := home + "/.go-bt-gardener/gardener-metrics.json"
+	sloPath := home + "/.go-bt-gardener/slo-metrics.json"
+
+	data, err := os.ReadFile(metricsPath)
 	if err != nil {
 		return nil
 	}
@@ -213,13 +217,24 @@ func loadGardenerMetrics() *GardenerMetrics {
 	if raw.Cycles == 0 {
 		return nil
 	}
-	return &GardenerMetrics{
+
+	gm := &GardenerMetrics{
 		Cycles:       raw.Cycles,
 		Trees:        raw.Trees,
 		Improvements: 0, // computed later
 		BestFitness:  raw.BestFitness,
 		LastRun:      "recent",
 	}
+
+	// Load SLO metrics if available
+	if sloData, err := os.ReadFile(sloPath); err == nil {
+		var slos map[string]float64
+		if json.Unmarshal(sloData, &slos) == nil {
+			gm.SLOs = slos
+		}
+	}
+
+	return gm
 }
 
 // ToJSON serializes metrics to JSON bytes.

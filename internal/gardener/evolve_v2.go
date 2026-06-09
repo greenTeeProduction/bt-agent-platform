@@ -1,7 +1,10 @@
 package gardener
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -355,6 +358,18 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 			if migrated > 0 {
 				// Log migration (could be added to metrics)
 			}
+		}
+	}
+
+	// ── SLO metrics collection ──
+	// Collect per-agent SLO data after each cycle for dashboard export.
+	sloData := CollectAgentSLOs()
+	if len(sloData) > 0 {
+		sloPath := filepath.Join(filepath.Dir(g.cfg.MetricsTracker.path), "slo-metrics.json")
+		if data, err := json.MarshalIndent(sloData, "", "  "); err == nil {
+			tmp := sloPath + ".tmp"
+			os.WriteFile(tmp, data, 0644)
+			os.Rename(tmp, sloPath)
 		}
 	}
 
