@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -600,6 +601,79 @@ func registerDomainActions() {
 	RegisterAction("AssessRiskReward", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		bb.Result += "\n\nR:R = 2.1:1. Kelly = 15% allocation. Acceptable."
+		bb.Outcome = "success"
+		return 1
+	})
+
+	// ─── NotebookLM Plan-Implement Workflow Actions ────────────────────
+
+	// DoGrillMeReview critically reviews NotebookLM findings using the notebook's AI.
+	// It constructs a critical-review prompt from the task and accumulated results,
+	// then queries the notebook to surface gaps and demand a concrete implementation plan.
+	RegisterAction("DoGrillMeReview", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		nbID := defaultNotebook
+
+		// Build a critical review query from the task and accumulated research results.
+		// The query forces the notebook AI to identify gaps and demand a concrete plan.
+		previousResults := bb.Result
+		if previousResults == "" && len(bb.Results) > 0 {
+			previousResults = bb.Results[len(bb.Results)-1]
+		}
+		grillQuery := fmt.Sprintf(
+			"CRITICAL REVIEW — be brutally honest.\n\n"+
+				"Original task: %s\n\n"+
+				"Research findings so far: %s\n\n"+
+				"Your job:\n"+
+				"1. Identify every gap, missing detail, and unsupported assumption in the findings.\n"+
+				"2. List what concrete information is still needed to produce a working implementation.\n"+
+				"3. Demand a detailed implementation plan with: specific file paths to create/modify,\n"+
+				"   exact function signatures, test cases, and a step-by-step task breakdown.\n"+
+				"4. Output ONLY the gaps and required plan — no flattery, no summaries of what's good.\n"+
+				"Be critical. Be specific. Be actionable.",
+			bb.Task, previousResults,
+		)
+		out := nlmRun(180*time.Second, "notebook", "query", nbID, grillQuery)
+		bb.ChainState["nlm_grill_query"] = grillQuery
+		bb.Result = "## NotebookLM Grill-Me Review\n\n" + out + "\n"
+		bb.Outcome = "success"
+		return 1
+	})
+
+	// WriteImplementationPlan writes a detailed implementation plan to .hermes/plans/.
+	// The plan includes task breakdown, file paths, and test specifications.
+	RegisterAction("WriteImplementationPlan", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		// Collect context from prior steps
+		planContent := fmt.Sprintf("# Implementation Plan\n\n"+
+			"## Original Task\n%s\n\n"+
+			"## Research Findings\n%s\n\n"+
+			"## Grill-Me Review\n%s\n\n"+
+			"---\n"+
+			"## Implementation Plan\n\n"+
+			"_(Fill in the detailed task breakdown, file paths, and test cases based on research and review above.)_\n\n"+
+			"### File Checklist\n- [ ] \n\n"+
+			"### Test Plan\n- [ ] \n\n",
+			bb.Task, bb.Result, bb.ChainState["nlm_grill_query"])
+
+		plansDir := ".hermes/plans"
+		if err := os.MkdirAll(plansDir, 0755); err != nil {
+			bb.Result = fmt.Sprintf("## Plan Write Failed\n\nError creating %s: %v\n", plansDir, err)
+			bb.Outcome = "failure"
+			return -1
+		}
+
+		dateStr := time.Now().Format("2006-01-02")
+		planPath := filepath.Join(plansDir, fmt.Sprintf("plan-%s.md", dateStr))
+		if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+			bb.Result = fmt.Sprintf("## Plan Write Failed\n\nError writing %s: %v\n", planPath, err)
+			bb.Outcome = "failure"
+			return -1
+		}
+
+		bb.ChainState["plan_path"] = planPath
+		bb.Result = fmt.Sprintf("## Implementation Plan Written\n\n**Path:** `%s`\n\n%s", planPath, planContent)
 		bb.Outcome = "success"
 		return 1
 	})

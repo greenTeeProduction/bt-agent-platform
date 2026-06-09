@@ -632,8 +632,9 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"goap_research":       GoapResearchTree(true),
 		"goap_devops":         GoapDevopsTree(true),
 		"bt_manager":          BTManagerTree(),
-		"notebooklm":          NotebookLMTree(),
-		"notebooklm_consumer": NotebookLMConsumerTree(),
+		"notebooklm":               NotebookLMTree(),
+		"notebooklm_consumer":      NotebookLMConsumerTree(),
+		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -657,4 +658,5 @@ var Descriptions = map[string]string{
 	"bt_manager":          "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
 	"notebooklm":          "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
 	"notebooklm_consumer": "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
+	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 }

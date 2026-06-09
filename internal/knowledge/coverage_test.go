@@ -363,7 +363,7 @@ func TestListByCategory_All(t *testing.T) {
 
 	categories := []string{"core", "finance", "research", "domain", "startup", "thinktank", "evolution"}
 	counts := map[string]int{
-		"core": 2, "finance": 10, "research": 2, "domain": 13,
+		"core": 2, "finance": 10, "research": 2, "domain": 14,
 		"startup": 6, "thinktank": 5, "evolution": 3,
 	}
 
@@ -533,8 +533,8 @@ func TestSummary_GlobalGraph(t *testing.T) {
 	s := kg.Summary()
 	t.Logf("Summary: %s", s)
 
-	if !strings.Contains(s, "41 trees") {
-		t.Errorf("global summary should show 41 trees, got: %s", s)
+	if !strings.Contains(s, "42 trees") {
+		t.Errorf("global summary should show 42 trees, got: %s", s)
 	}
 	// Should contain category counts
 	for _, cat := range []string{"core", "finance", "research", "domain", "startup", "thinktank", "evolution"} {
@@ -1270,8 +1270,8 @@ func TestGlobalGraph(t *testing.T) {
 	if g == nil {
 		t.Fatal("GlobalGraph is nil")
 	}
-	if len(g.Trees) != 41 {
-		t.Errorf("expected 41 trees in GlobalGraph, got %d", len(g.Trees))
+	if len(g.Trees) != 42 {
+		t.Errorf("expected 42 trees in GlobalGraph, got %d", len(g.Trees))
 	}
 }
 

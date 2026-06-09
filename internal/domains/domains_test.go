@@ -104,6 +104,7 @@ func tasksForTree() map[string]string {
 		"bt_manager":          "analyze all agent failures and fix degraded ones",
 		"notebooklm":          "research latest BT framework developments using NotebookLM",
 		"notebooklm_consumer": "consume notebooklm synthesis and write summary",
+		"notebooklm_plan_implement": "plan and implement a new domain tree for NotebookLM workflow",
 		// Arc42 documentation trees
 		"arc42:section1":  "generate arc42 introduction and goals",
 		"arc42:section2":  "generate arc42 constraints section",
@@ -188,8 +189,8 @@ func TestAllDomainTrees(t *testing.T) {
 	tasks := tasksForTree()
 	mock := benchmark.DefaultMock()
 
-	if len(all) != 30 {
-		t.Errorf("expected 30 domain trees, got %d", len(all))
+	if len(all) != 31 {
+		t.Errorf("expected 31 domain trees, got %d", len(all))
 	}
 
 	for name, tree := range all {
@@ -215,7 +216,7 @@ func TestAllDomainTrees(t *testing.T) {
 
 		// bt_manager and notebooklm require real runtime state (Reflection store,
 		// nlm CLI) not available in offline mock tests. Structural smoke only.
-		if name == "bt_manager" || name == "notebooklm" || name == "notebooklm_consumer" {
+		if name == "bt_manager" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {

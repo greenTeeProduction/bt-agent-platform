@@ -365,6 +365,25 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 		},
 	})
 
+	// ── NotebookLM Domain Trees ────────────────────────────────────────────
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:notebooklm_plan_implement",
+		Category:    "domain",
+		Name:        "NotebookLM Plan-Implement",
+		Description: "Research → Grill → Plan → Implement → Verify → Deploy pipeline: NotebookLM deep research, critical review, implementation plan, subagent delegation, tests, build/deploy",
+		NodeCount:   12,
+		Keywords:    []string{"notebooklm", "plan", "implement", "research", "grill", "deploy", "pipeline", "build", "test"},
+		Capabilities: []Capability{
+			{Action: "deep_research", Domain: "research", Strength: 0.9},
+			{Action: "critical_review", Domain: "research", Strength: 0.85},
+			{Action: "write_plan", Domain: "engineering", Strength: 0.85},
+			{Action: "implement_code", Domain: "engineering", Strength: 0.9},
+			{Action: "run_tests", Domain: "engineering", Strength: 0.85},
+			{Action: "deploy_service", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
 	// ── GOAP DOMAIN TREES ─────────────────────────────────────────────────
 
 	kg.Register(&TreeMeta{
@@ -658,6 +677,8 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	kg.Connect("domain:trading_signal", "finance:market_researcher", "specializes")
 	kg.Connect("godev", "domain:code_review", "specializes")
 	kg.Connect("domain:game_ai", "default", "extends")
+	kg.Connect("domain:notebooklm_plan_implement", "domain:goap_planning", "specializes")
+	kg.Connect("domain:notebooklm_plan_implement", "domain:devops_ci", "specializes")
 
 	return kg
 }
