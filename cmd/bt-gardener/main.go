@@ -116,28 +116,25 @@ func main() {
 	home, _ := os.UserHomeDir()
 	refDir := filepath.Join(home, ".go-bt-reflections")
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
+	snapDir := filepath.Join(metricsDir, "snapshots")
 
 	os.MkdirAll(metricsDir, 0755)
 
-	refStore, _ := evolution.NewStore(refDir)
-	registry := gardener.NewRegistry(refDir)
-	metricsTracker, _ := gardener.NewMetricsTracker(metricsDir)
-	tt, _ := evaluator.NewTranspositionTable(refDir, 2000)
+	cfg, cfgErr := buildGardenerConfig(refDir, metricsDir, snapDir)
+	if cfgErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: build gardener config: %v\n", cfgErr)
+		os.Exit(1)
+	}
+
+	refStore := cfg.RefStore
+	registry := cfg.Registry
+	metricsTracker := cfg.MetricsTracker
 
 	// ── V2 Evolution Config (AlphaEvolve pipeline) ──
 	v2Cfg := gardener.DefaultEvolveV2Config()
 	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 
-	g := gardener.NewGardener(gardener.Config{
-		Registry:       registry,
-		MetricsTracker: metricsTracker,
-		RefStore:       refStore,
-		TT:             tt,
-		Interval:       5 * time.Minute,
-		MaxMutations:   2,
-		UseRealLLM:     false, // mock LLM for benchmark validation (speed > accuracy on 41 trees)
-		ValidationGate: gardener.DefaultValidationGateConfig(),
-	})
+	g := gardener.NewGardener(cfg)
 
 	// Ollama LLM for langchain agent — uses platform config
 	llmCfg := llm.DefaultConfig()

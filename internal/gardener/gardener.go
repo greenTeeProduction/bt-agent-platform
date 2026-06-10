@@ -458,7 +458,11 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 
 	// Quality gate: validate that mutations didn't cause regression.
 	// Runs after all mutations are applied to check the combined effect.
-	if applied > 0 && g.cfg.Gate != nil {
+	if applied > 0 && g.cfg.Gate != nil && g.cfg.Gate.IsDisabled() {
+		fmt.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught\n",
+			entry.Name, g.cfg.Gate.FailCount())
+	}
+	if applied > 0 && g.cfg.Gate != nil && !g.cfg.Gate.IsDisabled() {
 		postFitness := evaluator.EvaluateTree(tree, records)
 		result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)
 

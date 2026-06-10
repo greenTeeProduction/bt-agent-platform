@@ -246,7 +246,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			rejected++
 			continue
 		}
-		if g.cfg.Gate != nil {
+		if g.cfg.Gate != nil && g.cfg.Gate.IsDisabled() {
+			log.Printf("[gardener/v2] WARNING: quality gate is DISABLED (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
+				g.cfg.Gate.FailCount())
+		} else if g.cfg.Gate != nil {
 			gateResult := g.cfg.Gate.Validate(currentFitness.Composite, candidateFitness.Composite)
 			if gateResult != evolution.GateAccepted {
 				rejected++
