@@ -2069,20 +2069,21 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	if c.Paths.HomeDir != "/tmp/test-bt-home" {
 		t.Errorf("HomeDir = %q, want /tmp/test-bt-home", c.Paths.HomeDir)
 	}
-	if c.Paths.ConfigFile != "/tmp/test-bt-home/config.yaml" {
-		t.Errorf("ConfigFile = %q, want /tmp/test-bt-home/config.yaml", c.Paths.ConfigFile)
+	// Use filepath.Join for expectations so the test passes on Windows too.
+	if want := filepath.Join("/tmp/test-bt-home", "config.yaml"); c.Paths.ConfigFile != want {
+		t.Errorf("ConfigFile = %q, want %q", c.Paths.ConfigFile, want)
 	}
-	if c.Paths.DBFile != "/tmp/test-bt-home/agents.db" {
-		t.Errorf("DBFile = %q, want /tmp/test-bt-home/agents.db", c.Paths.DBFile)
+	if want := filepath.Join("/tmp/test-bt-home", "agents.db"); c.Paths.DBFile != want {
+		t.Errorf("DBFile = %q, want %q", c.Paths.DBFile, want)
 	}
-	if c.Paths.ReflectionsDir != "/tmp/test-bt-home/reflections" {
-		t.Errorf("ReflectionsDir = %q, want /tmp/test-bt-home/reflections", c.Paths.ReflectionsDir)
+	if want := filepath.Join("/tmp/test-bt-home", "reflections"); c.Paths.ReflectionsDir != want {
+		t.Errorf("ReflectionsDir = %q, want %q", c.Paths.ReflectionsDir, want)
 	}
-	if c.Paths.HistoryDir != "/tmp/test-bt-home/history" {
-		t.Errorf("HistoryDir = %q, want /tmp/test-bt-home/history", c.Paths.HistoryDir)
+	if want := filepath.Join("/tmp/test-bt-home", "history"); c.Paths.HistoryDir != want {
+		t.Errorf("HistoryDir = %q, want %q", c.Paths.HistoryDir, want)
 	}
-	if c.Paths.LogDir != "/tmp/test-bt-home/logs" {
-		t.Errorf("LogDir = %q, want /tmp/test-bt-home/logs", c.Paths.LogDir)
+	if want := filepath.Join("/tmp/test-bt-home", "logs"); c.Paths.LogDir != want {
+		t.Errorf("LogDir = %q, want %q", c.Paths.LogDir, want)
 	}
 }
 

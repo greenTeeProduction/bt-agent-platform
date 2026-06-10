@@ -157,7 +157,9 @@ func (r *Registry) saveBlock(b *Block) error {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
-	safe := filepath.Base(b.ID)
+	// Replace ":" (used in block IDs like "custom:plan_v2") because it is
+	// invalid in Windows filenames; the canonical ID lives in the JSON body.
+	safe := filepath.Base(strings.ReplaceAll(b.ID, ":", "_"))
 	if safe == "." || safe == ".." {
 		safe = "custom_block"
 	}

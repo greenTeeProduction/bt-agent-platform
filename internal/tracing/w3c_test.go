@@ -150,7 +150,9 @@ func TestContextWithTraceParent_NilContext(t *testing.T) {
 		TraceID:  "0af7651916cd43dd8448eb211c80319c",
 		ParentID: "b7ad6b7169203331",
 	}
-	result := ContextWithTraceParent(context.TODO(), tp)
+	// Use a typed nil to exercise the nil-context guard without tripping SA1012.
+	var nilCtx context.Context
+	result := ContextWithTraceParent(nilCtx, tp)
 	if result != nil {
 		t.Error("expected nil when context is nil")
 	}

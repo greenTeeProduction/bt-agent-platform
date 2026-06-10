@@ -3,10 +3,14 @@ package reflection
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestStore_NewStore_MkdirAllError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/proc does not exist on Windows; MkdirAll would succeed")
+	}
 	_, err := NewStore("/proc/reflection-test-unwritable")
 	if err == nil {
 		t.Error("expected error for unwritable path")
@@ -36,6 +40,9 @@ func TestStore_Save_RenameCleanup(t *testing.T) {
 }
 
 func TestStore_Save_WriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory chmod does not restrict writes on Windows")
+	}
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
@@ -97,6 +104,9 @@ func TestStore_LoadAll_DirNotExist(t *testing.T) {
 }
 
 func TestStore_LoadAll_ReadDirNonNotExistError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("reading a file as a directory is classified as not-exist on Windows")
+	}
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "not-a-dir")
 	_ = os.WriteFile(filePath, []byte(""), 0644)

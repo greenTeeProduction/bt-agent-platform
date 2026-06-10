@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -82,6 +83,9 @@ func TestRegistry_DeleteRemovesFile(t *testing.T) {
 // ─── NewRegistry Edge Cases ───
 
 func TestRegistry_LoadAllNonExistentDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("MkdirAll of a rooted path succeeds on Windows")
+	}
 	// loadAll with nonexistent dir should return error because MkdirAll fails
 	_, err := NewRegistry("/nonexistent/path/for/registry")
 	if err == nil {
@@ -184,6 +188,9 @@ func TestRegistry_saveDefDirRemoved(t *testing.T) {
 }
 
 func TestRegistry_saveDefFilePermissionDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory chmod does not restrict writes on Windows")
+	}
 	// Create a readonly dir to force permission error in saveDef
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
