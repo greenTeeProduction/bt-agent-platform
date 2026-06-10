@@ -141,6 +141,10 @@ func main() {
 	}
 	agentHome, _ := os.UserHomeDir()
 
+	// SLO evidence file shared with the gardener process (B1) — the validation
+	// gate reads this to verify trees before deployment.
+	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
+
 	// ── Persistence ────────────────────────────────────────────────────────
 	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
@@ -243,9 +247,12 @@ func main() {
 		// Resolve through agent registry first — agent names are not tree IDs.
 		// Only fall back to direct tree resolution if no agent found.
 		var tree *evolution.SerializableNode
+		treeName := ctx.AgentName
 		inst, getErr := agentReg.Get(ctx.AgentName)
 		if getErr == nil {
-			tree = resolveTree(inst.Definition.Tree)
+			if tree = resolveTree(inst.Definition.Tree); tree != nil {
+				treeName = inst.Definition.Tree
+			}
 		}
 		if tree == nil {
 			tree = resolveTree(ctx.AgentName)
@@ -273,17 +280,32 @@ func main() {
 		default:
 			policy.Jitter = reliability.FullJitterStrategy
 		}
+		// SLO evidence (B1): record per-attempt outcomes so the gardener's
+		// validation gate has real execution data to judge deployments by.
+		slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
+		attempts := 0
 		err = policy.ExecuteContext(ctx.Context, func() error {
+			attempts++
+			attemptStart := time.Now()
 			bb := &engine.Blackboard{Task: task, LLM: llmClient, Reflections: refStore, TreeStore: treeStore}
 			bt := engine.BuildTree(tree, bb)
 			_ = engine.RunTask(bb, bt)
 			outcome = bb.Outcome
 			output = bb.Result
 			if bb.Outcome == "success" {
+				slo.RecordSuccess(time.Since(attemptStart))
+				if attempts > 1 {
+					slo.RecordRecovery(0)
+				}
 				return nil
 			}
+			slo.RecordFailure(time.Since(attemptStart))
 			return fmt.Errorf("agent outcome: %s", bb.Outcome)
 		})
+
+		if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
+			engine.Error("failed to persist SLO evidence", "error", saveErr)
+		}
 
 		if err != nil {
 			dlq.Push(reliability.DeadLetterEntry{

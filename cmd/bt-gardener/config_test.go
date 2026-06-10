@@ -12,7 +12,7 @@ func TestBuildGardenerConfig_SafetyComponentsWired(t *testing.T) {
 	refDir := t.TempDir()
 	metricsDir := t.TempDir()
 
-	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir)
+	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
 	if err != nil {
 		t.Fatalf("buildGardenerConfig returned error: %v", err)
 	}
@@ -26,6 +26,10 @@ func TestBuildGardenerConfig_SafetyComponentsWired(t *testing.T) {
 	if cfg.CrisisDetector == nil {
 		t.Error("CrisisDetector is nil — crisis detector not wired into production config")
 	}
+	if cfg.ValidationGate.EvidencePath != "/tmp/slo-evidence.json" {
+		t.Errorf("ValidationGate.EvidencePath = %q — SLO evidence file not wired into production config (B1)",
+			cfg.ValidationGate.EvidencePath)
+	}
 }
 
 // TestBuildGardenerConfig_SnapshotDirCreated proves that buildGardenerConfig
@@ -36,7 +40,7 @@ func TestBuildGardenerConfig_SnapshotDirCreated(t *testing.T) {
 	refDir := t.TempDir()
 	metricsDir := t.TempDir()
 
-	_, err := buildGardenerConfig(refDir, metricsDir, snapDir)
+	_, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
 	if err != nil {
 		t.Fatalf("buildGardenerConfig returned error: %v", err)
 	}

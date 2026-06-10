@@ -121,10 +121,13 @@ func main() {
 	refDir := filepath.Join(home, ".go-bt-reflections")
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
 	snapDir := filepath.Join(metricsDir, "snapshots")
+	// SLO evidence written by the bt-agent process (B1) — must match the path
+	// bt-agent saves to.
+	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
 
 	os.MkdirAll(metricsDir, 0755)
 
-	cfg, cfgErr := buildGardenerConfig(refDir, metricsDir, snapDir)
+	cfg, cfgErr := buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath)
 	if cfgErr != nil {
 		fmt.Fprintf(os.Stderr, "fatal: build gardener config: %v\n", cfgErr)
 		os.Exit(1)
