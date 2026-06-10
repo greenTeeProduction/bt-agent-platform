@@ -113,7 +113,11 @@ func TestOrchestrator_Debate(t *testing.T) {
 
 func TestOrchestrator_Synthesis(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
-	orch := NewOrchestrator(tt, engine.NewMockLLM())
+	mock := engine.NewMockLLM()
+	mock.GenerateResp = "DOMINANT THESIS: Behavior trees enable modular agent control.\n" +
+		"SUPPORTING EVIDENCE: Findings from all fellows converge on modularity.\n" +
+		"SUPPORTING FELLOWS: analyst, researcher"
+	orch := NewOrchestrator(tt, mock)
 	orch.RunResearchRound()
 	err := orch.RunSynthesis()
 	if err != nil {

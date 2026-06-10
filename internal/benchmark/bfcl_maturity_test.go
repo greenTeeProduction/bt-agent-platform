@@ -207,7 +207,9 @@ func TestGAIABuiltinAndEvaluation(t *testing.T) {
 	}
 
 	metrics := EvaluateGAIA(benchmarkPlanTree(), []GAIAEntry{
-		{ID: "g1", Question: "what is LiFePO4", Answer: "executed plan", Level: 1},
+		// ExecutePlan returns the generated plan itself since b5c4d00
+		// (placeholder output removed); match DefaultMock's plan text.
+		{ID: "g1", Question: "what is LiFePO4", Answer: "execute workflow", Level: 1},
 		{ID: "g2", Question: "compare systems", Answer: "not-present", Level: 2},
 	}, DefaultMock())
 	if metrics.TotalQuestions != 2 || metrics.CorrectAnswers != 1 || metrics.Accuracy != 0.5 {
