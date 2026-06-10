@@ -9,3 +9,23 @@ __pycache__/
 *.log
 graphify-out/
 testdata/arc42/*.md
+
+# Compiled binaries (repo root)
+/bt-agent
+/bt-agent.previous
+/bt-agent~
+/bt-dashboard
+/bt-docgen
+/bt-evaluator
+/bt-gardener
+/bt-langagent
+/bt-security-probe
+
+# Dependencies and tool output
+node_modules/
+test-results/
+.playwright-mcp/
+.superpowers/
+
+# Temp files
+.tmp
