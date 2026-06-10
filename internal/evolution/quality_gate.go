@@ -79,10 +79,11 @@ func (q *QualityGate) Validate(preComposite, postComposite float64) GateResult {
 
 // IsDisabled returns true if consecutive failures have exceeded the threshold.
 //
-// NOTE: once disabled, nothing in production re-enables the gate for the process
-// lifetime (no ResetFailCount caller). Recovery semantics are owned by remediation
-// task A2 (fail-closed gate redesign). Until then a disabled gate stays disabled
-// until restart — deliberate, to avoid flapping.
+// NOTE (A2 fail-closed semantics): once disabled, nothing in production
+// re-enables the gate for the process lifetime (no ResetFailCount caller).
+// Disabled means evolution is PAUSED for affected trees until process restart —
+// the gardener skips/rolls back all mutations for trees whose gate is disabled,
+// it never applies them ungated. Deliberate, to avoid flapping.
 func (q *QualityGate) IsDisabled() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()

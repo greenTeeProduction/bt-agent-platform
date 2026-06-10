@@ -223,10 +223,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	currentFitness := baseFitness
 	gateDisabled := g.cfg.Gate != nil && g.cfg.Gate.IsDisabled()
 	if gateDisabled {
-		log.Printf("[gardener/v2] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
+		// Fail closed: a disabled gate means evolution is paused for this tree
+		// until process restart — skip every candidate, apply nothing ungated.
+		log.Printf("[gardener/v2] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — mutations are being SKIPPED (fail-closed), evolution paused until restart",
 			entry.Name, g.cfg.Gate.FailCount())
 	}
-	for i := 0; i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
+	for i := 0; !gateDisabled && i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
 		if candidates[i].Score < 0.45 {
 			break
 		}
@@ -251,7 +253,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			rejected++
 			continue
 		}
-		if !gateDisabled && g.cfg.Gate != nil {
+		if g.cfg.Gate != nil { // gateDisabled is always false inside this loop (fail-closed skip above)
 			gateResult := g.cfg.Gate.Validate(currentFitness.Composite, candidateFitness.Composite)
 			if gateResult != evolution.GateAccepted {
 				rejected++

@@ -461,8 +461,19 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	// Runs after all mutations are applied to check the combined effect.
 	if applied > 0 && g.cfg.Gate != nil {
 		if g.cfg.Gate.IsDisabled() {
-			log.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
+			// Fail closed: a disabled gate means evolution is paused for this
+			// tree until process restart — discard the mutations, do not apply
+			// them ungated.
+			log.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — mutations are being SKIPPED (fail-closed), evolution paused until restart",
 				entry.Name, g.cfg.Gate.FailCount())
+			rejections = applied
+			applied = 0
+			if snapshotTaken {
+				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
+					*entry.Tree = *restored
+					tree = entry.Tree
+				}
+			}
 		} else {
 			postFitness := evaluator.EvaluateTree(tree, records)
 			result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)

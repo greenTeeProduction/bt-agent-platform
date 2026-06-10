@@ -1,17 +1,26 @@
 package gardener
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
-func TestValidationGate_NoMetrics_Allow(t *testing.T) {
+// TestValidationGate_NoMetrics_FailClosed proves the gate REJECTS when no SLO
+// metrics exist (A2 fail-closed remediation). Previously the gate allowed
+// deployment on empty metrics, which made it decorative: the gardener process
+// never populates the in-process SLO map, so TotalCalls was always 0 and every
+// deployment was waved through.
+func TestValidationGate_NoMetrics_FailClosed(t *testing.T) {
 	config := DefaultValidationGateConfig()
-	err := ValidationGate("new_agent", "test_tree", config)
-	if err != nil {
-		t.Errorf("expected allow for agent with no metrics, got: %v", err)
+	err := ValidationGate("agent_with_no_metrics", "test_tree", config)
+	if err == nil {
+		t.Fatal("expected rejection when no SLO metrics exist (fail closed), got allow")
+	}
+	if !strings.Contains(err.Error(), "no SLO evidence") {
+		t.Errorf("rejection reason should mention missing SLO evidence, got: %v", err)
 	}
 }
 

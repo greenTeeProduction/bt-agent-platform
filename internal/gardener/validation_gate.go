@@ -32,10 +32,12 @@ func ValidationGate(agentName, treeName string, config ValidationGateConfig) err
 
 	metrics := engine.GetSLOMetrics(agentName, treeName)
 
-	// If no metrics exist yet (first run), allow deployment
+	// Fail closed: no SLO evidence means the tree cannot be verified safe to
+	// deploy. The gardener process never executes trees, so until SLO metrics
+	// are persisted and shared across processes (remediation task B1), missing
+	// metrics block deployment instead of waving it through unverified.
 	if metrics.TotalCalls == 0 {
-		log.Printf("[validation-gate] %s/%s: no metrics yet, allowing deployment", agentName, treeName)
-		return nil
+		return fmt.Errorf("validation gate REJECTED %s/%s: no SLO evidence; failing closed", agentName, treeName)
 	}
 
 	successRate := metrics.SuccessRate()
