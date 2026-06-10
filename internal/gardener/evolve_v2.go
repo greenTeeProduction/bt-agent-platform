@@ -304,7 +304,13 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// A rejection skips deployment but does NOT abort the cycle for other agents.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
 		if gateErr != nil {
-			log.Printf("[gardener] validation gate REJECTED %s: %v — skipping deployment", entry.Name, gateErr)
+			log.Printf("[gardener/v2] %v — skipping deployment", gateErr)
+			// Restore the in-memory tree to its pre-cycle state so that
+			// rejected mutations do not accumulate across cycles (baseline-leak fix).
+			*tree = *originalTree
+			newFitness = baseFitness
+			improved = false
+			nodesAfter = nodesBefore
 			applied = 0
 		}
 	}
