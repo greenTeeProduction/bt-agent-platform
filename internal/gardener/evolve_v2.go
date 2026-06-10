@@ -221,6 +221,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	rollbacks := 0
 	originalTree := cloneTreeForGardener(tree)
 	currentFitness := baseFitness
+	gateDisabled := g.cfg.Gate != nil && g.cfg.Gate.IsDisabled()
+	if gateDisabled {
+		log.Printf("[gardener/v2] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
+			entry.Name, g.cfg.Gate.FailCount())
+	}
 	for i := 0; i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
 		if candidates[i].Score < 0.45 {
 			break
@@ -246,10 +251,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			rejected++
 			continue
 		}
-		if g.cfg.Gate != nil && g.cfg.Gate.IsDisabled() {
-			log.Printf("[gardener/v2] WARNING: quality gate is DISABLED (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
-				g.cfg.Gate.FailCount())
-		} else if g.cfg.Gate != nil {
+		if !gateDisabled && g.cfg.Gate != nil {
 			gateResult := g.cfg.Gate.Validate(currentFitness.Composite, candidateFitness.Composite)
 			if gateResult != evolution.GateAccepted {
 				rejected++

@@ -78,6 +78,11 @@ func (q *QualityGate) Validate(preComposite, postComposite float64) GateResult {
 }
 
 // IsDisabled returns true if consecutive failures have exceeded the threshold.
+//
+// NOTE: once disabled, nothing in production re-enables the gate for the process
+// lifetime (no ResetFailCount caller). Recovery semantics are owned by remediation
+// task A2 (fail-closed gate redesign). Until then a disabled gate stays disabled
+// until restart — deliberate, to avoid flapping.
 func (q *QualityGate) IsDisabled() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -100,7 +105,7 @@ func (q *QualityGate) ResetFailCount() {
 
 // SnapshotTree saves a copy of the tree to the snapshot directory atomically.
 func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string, error) {
-	if err := os.MkdirAll(snapshotDir, 0755); err != nil {
+	if err := os.MkdirAll(snapshotDir, 0700); err != nil {
 		return "", fmt.Errorf("create snapshot dir: %w", err)
 	}
 
@@ -111,7 +116,7 @@ func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string,
 
 	path := filepath.Join(snapshotDir, fmt.Sprintf("snapshot_%s.json", treeName))
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return "", fmt.Errorf("write snapshot: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {

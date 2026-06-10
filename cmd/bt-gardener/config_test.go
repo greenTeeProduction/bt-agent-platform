@@ -48,4 +48,7 @@ func TestBuildGardenerConfig_SnapshotDirCreated(t *testing.T) {
 	if !info.IsDir() {
 		t.Errorf("snapshot path exists but is not a directory")
 	}
+	if perm := info.Mode().Perm(); perm != 0700 {
+		t.Errorf("snapshot dir permissions = %04o, want 0700", perm)
+	}
 }

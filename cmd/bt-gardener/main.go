@@ -113,7 +113,11 @@ func main() {
 	engine.Init()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
 
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: cannot determine home directory: %v\n", err)
+		os.Exit(1)
+	}
 	refDir := filepath.Join(home, ".go-bt-reflections")
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
 	snapDir := filepath.Join(metricsDir, "snapshots")
@@ -176,8 +180,8 @@ Question: {{.input}}`,
 	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
 
-	engine.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", 2)
-	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, 5min cycle, langchain analysis every 5th cycle\n", registry.Count())
+	engine.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", cfg.MaxMutations)
+	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, %s cycle, langchain analysis every 5th cycle\n", registry.Count(), cfg.Interval)
 	fmt.Fprintf(os.Stderr, "Metrics dir: %s\n", metricsDir)
 
 	// Run initial cycle immediately
@@ -194,7 +198,7 @@ Question: {{.input}}`,
 	metricsTracker.Save()
 
 	// 24/7 loop
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 
 	cycleCount := 1

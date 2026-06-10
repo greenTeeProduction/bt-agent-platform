@@ -20,6 +20,7 @@ package gardener
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -458,37 +459,38 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 
 	// Quality gate: validate that mutations didn't cause regression.
 	// Runs after all mutations are applied to check the combined effect.
-	if applied > 0 && g.cfg.Gate != nil && g.cfg.Gate.IsDisabled() {
-		fmt.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught\n",
-			entry.Name, g.cfg.Gate.FailCount())
-	}
-	if applied > 0 && g.cfg.Gate != nil && !g.cfg.Gate.IsDisabled() {
-		postFitness := evaluator.EvaluateTree(tree, records)
-		result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)
+	if applied > 0 && g.cfg.Gate != nil {
+		if g.cfg.Gate.IsDisabled() {
+			log.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — skipping gating, regressions will NOT be caught",
+				entry.Name, g.cfg.Gate.FailCount())
+		} else {
+			postFitness := evaluator.EvaluateTree(tree, records)
+			result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)
 
-		switch result {
-		case evolution.GateRejected:
-			// Revert all mutations — restore from snapshot
-			rejections = applied
-			applied = 0
-			if snapshotTaken {
-				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
-					*entry.Tree = *restored
-					tree = entry.Tree
+			switch result {
+			case evolution.GateRejected:
+				// Revert all mutations — restore from snapshot
+				rejections = applied
+				applied = 0
+				if snapshotTaken {
+					if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
+						*entry.Tree = *restored
+						tree = entry.Tree
+					}
 				}
-			}
-		case evolution.GateRollback:
-			// Regression detected — rollback to pre-mutation snapshot
-			rollbacks = applied
-			applied = 0
-			if snapshotTaken {
-				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
-					*entry.Tree = *restored
-					tree = entry.Tree
+			case evolution.GateRollback:
+				// Regression detected — rollback to pre-mutation snapshot
+				rollbacks = applied
+				applied = 0
+				if snapshotTaken {
+					if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
+						*entry.Tree = *restored
+						tree = entry.Tree
+					}
 				}
+			case evolution.GateAccepted:
+				// Passed — persist as normal
 			}
-		case evolution.GateAccepted:
-			// Passed — persist as normal
 		}
 	}
 
