@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -196,7 +197,11 @@ func collectSystem() SystemMetrics {
 }
 
 func loadGardenerMetrics() *GardenerMetrics {
-	path := os.Getenv("HOME") + "/.go-bt-gardener/gardener-metrics.json"
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	path := filepath.Join(home, ".go-bt-gardener", "gardener-metrics.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil

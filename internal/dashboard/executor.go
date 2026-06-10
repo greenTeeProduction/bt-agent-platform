@@ -45,7 +45,11 @@ func (e *AgentExecutor) RunTask(_, task, treeID string) (output string, outcome 
 		"--yolo",
 		"-m", "deepseek-v4-flash",
 	)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"))
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	cmd.Env = append(os.Environ(), "HOME="+home)
 
 	outBytes, err := cmd.CombinedOutput()
 	output = strings.TrimSpace(string(outBytes))
