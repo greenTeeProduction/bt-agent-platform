@@ -181,7 +181,7 @@ func TestStress_ConcurrentExecution(t *testing.T) {
 	wg.Wait()
 
 	close(errCh)
-	var failures []string
+	failures := make([]string, 0, 8)
 	for e := range errCh {
 		failures = append(failures, e)
 	}

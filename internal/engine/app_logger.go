@@ -76,3 +76,13 @@ func Warn(msg string, args ...any) { L().Warn(msg, args...) }
 
 // Error logs an error message.
 func Error(msg string, args ...any) { L().Error(msg, args...) }
+
+// Shutdown closes the rotating log writer if one was opened.
+func Shutdown() {
+	mu.Lock()
+	defer mu.Unlock()
+	if rotWriter != nil {
+		_ = rotWriter.Close()
+		rotWriter = nil
+	}
+}

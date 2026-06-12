@@ -90,14 +90,14 @@ func baselinePath() string {
 		home = "."
 	}
 	dir := filepath.Join(home, ".go-bt-benchcmp")
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	return filepath.Join(dir, "baseline.json")
 }
 
 func baselineCmd(args []string) {
 	fs := flag.NewFlagSet("baseline", flag.ExitOnError)
 	save := fs.Bool("save", false, "save stdin as new baseline")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 
 	store := benchmark.NewBaselineStore(baselinePath())
 	if *save {
@@ -136,7 +136,7 @@ func checkCmd(args []string) {
 	warning := fs.Float64("warning", 10.0, "warning threshold percentage")
 	critical := fs.Float64("critical", 25.0, "critical threshold percentage")
 	minNs := fs.Float64("min-ns", 100.0, "minimum ns/op to consider")
-	fs.Parse(args)
+	_ = fs.Parse(args)
 
 	config := benchmark.RegressionConfig{
 		WarningThreshold:  *warning,

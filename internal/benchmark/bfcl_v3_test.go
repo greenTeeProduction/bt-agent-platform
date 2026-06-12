@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/llm"
+
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use 2 base entries from BuiltinBFCLV3
 	all := BuiltinBFCLV3()
 	var baseEntries []BFCLV3Entry
@@ -27,7 +27,7 @@ func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
 
 	// Run against GoDeveloperTree
 	tree := evolution.GoDeveloperTree()
-	llmClient := DefaultLLM()
+	llmClient := RealLLM(t)
 	metrics := EvaluateBFCLV3(tree, baseEntries, llmClient)
 
 	fmt.Printf("\nBFCL V3 Multi-Turn Basic: %d/%d correct turns (%.0f%%), %d/%d fully correct (%.0f%%)\n",
@@ -49,9 +49,7 @@ func TestBFCLV3_MultiTurn_Basic(t *testing.T) {
 }
 
 func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use 2 composite entries
 	all := BuiltinBFCLV3()
 	var compEntries []BFCLV3Entry
@@ -76,7 +74,7 @@ func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
 	// First entry: code review domain
 	{
 		tree := domains.CodeReviewTree()
-		llmClient := DefaultLLM()
+		llmClient := RealLLM(t)
 		metrics := EvaluateBFCLV3(tree, compEntries[:1], llmClient)
 		allResults = append(allResults, metrics.Results...)
 		totalCorrect += metrics.CorrectTurns
@@ -87,7 +85,7 @@ func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
 	// Second entry: finance domain
 	{
 		tree := evolution.PitchAgentTree()
-		llmClient := DefaultLLM()
+		llmClient := RealLLM(t)
 		metrics := EvaluateBFCLV3(tree, compEntries[1:], llmClient)
 		allResults = append(allResults, metrics.Results...)
 		totalCorrect += metrics.CorrectTurns
@@ -120,9 +118,7 @@ func TestBFCLV3_MultiTurn_Composite(t *testing.T) {
 }
 
 func TestBFCLV3_LongContext(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use long_context entries to verify tree handles long conversations
 	all := BuiltinBFCLV3()
 	var longCtxEntries []BFCLV3Entry
@@ -137,7 +133,7 @@ func TestBFCLV3_LongContext(t *testing.T) {
 
 	// Run against DeepResearchTree (handles research-type long context)
 	tree := evolution.DeepResearchTree()
-	llmClient := DefaultLLM()
+	llmClient := RealLLM(t)
 	metrics := EvaluateBFCLV3(tree, longCtxEntries, llmClient)
 
 	fmt.Printf("\nBFCL V3 Long Context: %d/%d correct turns (%.0f%%), %d/%d fully correct (%.0f%%)\n",
@@ -160,15 +156,13 @@ func TestBFCLV3_LongContext(t *testing.T) {
 }
 
 func TestSWEVerified_Evaluation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	// Use a sample of 5 entries from BuiltinSWEVerifiedSample
 	all := BuiltinSWEVerifiedSample()
 	entries := all[:minInt(5, len(all))]
 
 	tree := evolution.GoDeveloperTree()
-	llmClient := DefaultLLM()
+	llmClient := RealLLM(t)
 	metrics := EvaluateSWEVerified(tree, entries, llmClient)
 
 	fmt.Printf("\nSWE-bench Verified: %d/%d resolved (%.0f%% resolve rate)\n",

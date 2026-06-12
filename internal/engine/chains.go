@@ -48,7 +48,7 @@ func BuildChainAction(cfg ChainConfig, bb *Blackboard) *btleaf.Action[Blackboard
 
 // buildChainActionFn creates the inner action function with panic recovery.
 func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[Blackboard]) int {
-	return func(ctx *btcore.BTContext[Blackboard]) (result int) {
+	return func(_ *btcore.BTContext[Blackboard]) (result int) {
 		start := time.Now()
 		defer func() { bb.DurationMs = time.Since(start).Milliseconds() }()
 
@@ -363,7 +363,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 
 	// Process each subtask (simplified: process first 2 for speed)
 	lines := splitLines(subtasks)
-	var results []string
+	results := make([]string, 0, 8)
 	for i, line := range lines {
 		if i >= 3 || line == "" {
 			break
@@ -585,7 +585,7 @@ func execToolAction(cfg ChainConfig, bb *Blackboard) int {
 
 // buildToolList creates a text description of available tools.
 func buildToolList(cfg ChainConfig, bb *Blackboard) string {
-	var parts []string
+	parts := make([]string, 0, 8)
 
 	// Tools from node config
 	for _, t := range cfg.Tools {
@@ -807,10 +807,10 @@ func expandChainStateTemplates(s string, bb *Blackboard) string {
 	return s
 }
 
-func replaceAll(s, old, new string) string {
+func replaceAll(s, old, newStr string) string {
 	result := s
 	for {
-		next := strings.Replace(result, old, new, 1)
+		next := strings.Replace(result, old, newStr, 1)
 		if next == result {
 			break
 		}

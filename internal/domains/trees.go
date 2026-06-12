@@ -29,7 +29,7 @@ func act(name, desc string) evolution.SerializableNode {
 // chainAgent creates a ChainAction node for the agent: chain type.
 // systemPrompt is the system message, task is the user prompt,
 // tools is the list of tool names to make available.
-func chainAgent(name, systemPrompt string, tools []string) evolution.SerializableNode {
+func chainAgent(_, systemPrompt string, tools []string) evolution.SerializableNode {
 	ti := make([]any, len(tools))
 	for i, t := range tools {
 		ti[i] = t
@@ -46,8 +46,8 @@ func chainAgent(name, systemPrompt string, tools []string) evolution.Serializabl
 }
 
 // retry wraps a child with retry decorator.
-func retryW(name string, child evolution.SerializableNode, max int) evolution.SerializableNode {
-	return evolution.SerializableNode{Type: "Retry", Name: name, Children: []evolution.SerializableNode{child}, MaxRetries: max}
+func retryW(name string, child evolution.SerializableNode, maxRetries int) evolution.SerializableNode {
+	return evolution.SerializableNode{Type: "Retry", Name: name, Children: []evolution.SerializableNode{child}, MaxRetries: maxRetries}
 }
 
 // outcome builds the standard OutcomeSelector pattern.
@@ -617,23 +617,23 @@ func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
 	trees := map[string]*evolution.SerializableNode{
-		"code_review":         CodeReviewTree(),
-		"devops_ci":           DevOpsCITree(),
-		"agent_monitor":       AgentMonitorTree(),
-		"refactoring":         RefactoringTree(),
-		"security_audit":      SecurityAuditTree(),
-		"data_pipeline":       DataPipelineTree(),
-		"meeting_notes":       MeetingNotesTree(),
-		"crash_investigator":  CrashInvestigatorTree(),
-		"game_ai":             GameAITree(),
-		"trading_signal":      TradingSignalTree(),
-		"alert_router":        AlertRouterTree(),
-		"goap_planning":       GoapPlanningTree(true),
-		"goap_research":       GoapResearchTree(true),
-		"goap_devops":         GoapDevopsTree(true),
-		"bt_manager":          BTManagerTree(),
-		"notebooklm":               NotebookLMTree(),
-		"notebooklm_consumer":      NotebookLMConsumerTree(),
+		"code_review":               CodeReviewTree(),
+		"devops_ci":                 DevOpsCITree(),
+		"agent_monitor":             AgentMonitorTree(),
+		"refactoring":               RefactoringTree(),
+		"security_audit":            SecurityAuditTree(),
+		"data_pipeline":             DataPipelineTree(),
+		"meeting_notes":             MeetingNotesTree(),
+		"crash_investigator":        CrashInvestigatorTree(),
+		"game_ai":                   GameAITree(),
+		"trading_signal":            TradingSignalTree(),
+		"alert_router":              AlertRouterTree(),
+		"goap_planning":             GoapPlanningTree(true),
+		"goap_research":             GoapResearchTree(true),
+		"goap_devops":               GoapDevopsTree(true),
+		"bt_manager":                BTManagerTree(),
+		"notebooklm":                NotebookLMTree(),
+		"notebooklm_consumer":       NotebookLMConsumerTree(),
 		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
@@ -645,18 +645,18 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 
 // Descriptions maps tree names to descriptions.
 var Descriptions = map[string]string{
-	"code_review":         "Bug detection, security review, style checking for any language",
-	"devops_ci":           "Build → test → lint → deploy → verify → rollback pipeline",
-	"agent_monitor":       "Health-check MCP servers, restart dead agents, send alerts",
-	"refactoring":         "Detect code smells, suggest rewrites, verify behavior preserved",
-	"security_audit":      "SAST scan, dependency CVE check, secret detection, threat modeling",
-	"data_pipeline":       "ETL validation: extract → transform → load with integrity checks",
-	"meeting_notes":       "Transcribe → extract actions → assign → summarize → distribute",
-	"crash_investigator":  "Parse stack trace → root cause → fix → verify → prevent recurrence",
-	"game_ai":             "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
-	"trading_signal":      "Market data → technical analysis → signal generation → risk management",
-	"bt_manager":          "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
-	"notebooklm":          "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
-	"notebooklm_consumer": "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
+	"code_review":               "Bug detection, security review, style checking for any language",
+	"devops_ci":                 "Build → test → lint → deploy → verify → rollback pipeline",
+	"agent_monitor":             "Health-check MCP servers, restart dead agents, send alerts",
+	"refactoring":               "Detect code smells, suggest rewrites, verify behavior preserved",
+	"security_audit":            "SAST scan, dependency CVE check, secret detection, threat modeling",
+	"data_pipeline":             "ETL validation: extract → transform → load with integrity checks",
+	"meeting_notes":             "Transcribe → extract actions → assign → summarize → distribute",
+	"crash_investigator":        "Parse stack trace → root cause → fix → verify → prevent recurrence",
+	"game_ai":                   "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
+	"trading_signal":            "Market data → technical analysis → signal generation → risk management",
+	"bt_manager":                "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
+	"notebooklm":                "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
+	"notebooklm_consumer":       "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 }

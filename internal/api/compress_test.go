@@ -25,10 +25,10 @@ func gzipDecompress(t *testing.T, r io.Reader) string {
 }
 
 func TestCompressionMiddleware_GzipRequest(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"message":"hello world","count":42}`))
+		_, _ = w.Write([]byte(`{"message":"hello world","count":42}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
@@ -64,10 +64,10 @@ func TestCompressionMiddleware_GzipRequest(t *testing.T) {
 }
 
 func TestCompressionMiddleware_NoGzipHeader(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
@@ -91,10 +91,10 @@ func TestCompressionMiddleware_NoGzipHeader(t *testing.T) {
 }
 
 func TestCompressionMiddleware_BinaryContentType(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("fake-png-data-here"))
+		_, _ = w.Write([]byte("fake-png-data-here"))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/image", nil)
@@ -119,10 +119,10 @@ func TestCompressionMiddleware_BinaryContentType(t *testing.T) {
 }
 
 func TestCompressionMiddleware_HTMLContentType(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<html><body><h1>Dashboard</h1></body></html>"))
+		_, _ = w.Write([]byte("<html><body><h1>Dashboard</h1></body></html>"))
 	}))
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -146,7 +146,7 @@ func TestCompressionMiddleware_HTMLContentType(t *testing.T) {
 }
 
 func TestCompressionMiddleware_EmptyBody(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNoContent) // 204, no body
 	}))
@@ -167,10 +167,10 @@ func TestCompressionMiddleware_EmptyBody(t *testing.T) {
 func TestCompressionMiddleware_LargeJSONResponse(t *testing.T) {
 	// Build a large JSON payload to verify compression ratio.
 	largePayload := strings.Repeat(`{"key":"value","num":12345}`, 200) // ~6KB
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(largePayload))
+		_, _ = w.Write([]byte(largePayload))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/big", nil)
@@ -196,12 +196,12 @@ func TestCompressionMiddleware_LargeJSONResponse(t *testing.T) {
 
 func TestCompressionMiddleware_StreamingResponse(t *testing.T) {
 	// Multiple Write() calls should be compressed as a stream.
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`["item1",`))
-		w.Write([]byte(`"item2",`))
-		w.Write([]byte(`"item3"]`))
+		_, _ = w.Write([]byte(`["item1",`))
+		_, _ = w.Write([]byte(`"item2",`))
+		_, _ = w.Write([]byte(`"item3"]`))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/stream", nil)
@@ -216,10 +216,10 @@ func TestCompressionMiddleware_StreamingResponse(t *testing.T) {
 }
 
 func TestCompressionMiddleware_VaryHeader(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
@@ -238,10 +238,10 @@ func TestCompressionMiddleware_StatusCodePreserved(t *testing.T) {
 	for _, code := range codes {
 		t.Run(http.StatusText(code), func(t *testing.T) {
 			wantCode := code
-			handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(wantCode)
-				w.Write([]byte(`{"error":"test"}`))
+				_, _ = w.Write([]byte(`{"error":"test"}`))
 			}))
 
 			req := httptest.NewRequest("GET", "/api/test", nil)
@@ -297,10 +297,10 @@ func TestIsCompressibleContentType(t *testing.T) {
 func TestGzipWriterPool_Reuse(t *testing.T) {
 	// Run many concurrent compression requests to exercise the pool.
 	for i := 0; i < 100; i++ {
-		handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"iter":` + strings.Repeat("x", 100) + `}`))
+			_, _ = w.Write([]byte(`{"iter":` + strings.Repeat("x", 100) + `}`))
 		}))
 		req := httptest.NewRequest("GET", "/api/pool", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
@@ -317,12 +317,12 @@ func TestGzipWriterPool_Reuse(t *testing.T) {
 // Test that the middleware doesn't double-compress and respects
 // custom Content-Encoding set by upstream handlers.
 func TestCompressionMiddleware_AlreadyCompressed(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Simulate an upstream handler that already set Content-Encoding.
 		w.Header().Set("Content-Encoding", "identity")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"already":"done"}`))
+		_, _ = w.Write([]byte(`{"already":"done"}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/test", nil)

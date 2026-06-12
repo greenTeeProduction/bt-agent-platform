@@ -285,7 +285,7 @@ func (rc *responseCapture) Status() int {
 func (rc *responseCapture) Flush() {
 	if rc.enforce && rc.wroteHeader {
 		rc.ResponseWriter.WriteHeader(rc.statusCode)
-		rc.ResponseWriter.Write(rc.buffered.Bytes())
+		_, _ = rc.ResponseWriter.Write(rc.buffered.Bytes())
 	}
 }
 
@@ -392,7 +392,7 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 						errBody, _ := json.Marshal(enforceResp)
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write(errBody)
+						_, _ = w.Write(errBody)
 						return
 					}
 				}

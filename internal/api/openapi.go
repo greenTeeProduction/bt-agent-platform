@@ -574,6 +574,60 @@ func DeprecatedHandlerFunc(next http.HandlerFunc, sunsetDate string) http.Handle
 
 // DashboardRoutes returns the standard set of dashboard API routes.
 func DashboardRoutes() []Route {
+	userProfileSchema := ObjectSchema(map[string]*Schema{
+		"id":              StringSchema("User ID"),
+		"preference_tags": ArraySchema(StringSchema("Preference tag"), "Preference tags"),
+		"bookmark_ids":    ArraySchema(StringSchema("Page ID"), "IDs of bookmarked pages"),
+		"preferred_style": StringSchema("Preferred presentation style"),
+		"updated_at":      IntSchema("Unix timestamp of last update"),
+	}, "id", "preference_tags", "bookmark_ids", "preferred_style", "updated_at")
+
+	chartDataPointSchema := ObjectSchema(map[string]*Schema{
+		"label": StringSchema("Label for data point"),
+		"value": NumberSchema("Numerical value"),
+	}, "label", "value")
+
+	diagramNodeSchema := ObjectSchema(map[string]*Schema{
+		"id":    StringSchema("Node ID"),
+		"label": StringSchema("Node label"),
+		"type":  StringSchema("Node type"),
+	}, "id", "label")
+
+	diagramEdgeSchema := ObjectSchema(map[string]*Schema{
+		"from":  StringSchema("Source node ID"),
+		"to":    StringSchema("Target node ID"),
+		"label": StringSchema("Edge label"),
+	}, "from", "to")
+
+	blockSchema := ObjectSchema(map[string]*Schema{
+		"type":        StringSchema("Block type"),
+		"title":       StringSchema("Block title"),
+		"content":     StringSchema("Paragraph content"),
+		"items":       ArraySchema(StringSchema("Item text"), "List or card items"),
+		"headers":     ArraySchema(StringSchema("Header title"), "Table columns"),
+		"rows":        ArraySchema(ArraySchema(StringSchema("Cell text"), "Row cells"), "Table rows"),
+		"data_points": ArraySchema(chartDataPointSchema, "Chart data points"),
+		"nodes":       ArraySchema(diagramNodeSchema, "Diagram nodes"),
+		"edges":       ArraySchema(diagramEdgeSchema, "Diagram edges"),
+	}, "type")
+
+	pageSchema := ObjectSchema(map[string]*Schema{
+		"title":       StringSchema("Page title"),
+		"summary":     StringSchema("Brief summary"),
+		"template_id": StringSchema("Template ID"),
+		"blocks":      ArraySchema(blockSchema, "Content blocks"),
+		"follow_ups":  ArraySchema(StringSchema("Follow up bubble text"), "Follow up actions"),
+	}, "title", "summary", "template_id", "blocks", "follow_ups")
+
+	generatedPageSchema := ObjectSchema(map[string]*Schema{
+		"id":         StringSchema("Generated page ID"),
+		"session_id": StringSchema("Session ID"),
+		"schema":     pageSchema,
+		"bookmarked": BoolSchema("Whether page is bookmarked"),
+		"rating":     IntSchema("Rating (1-5, 0 if unrated)"),
+		"created_at": IntSchema("Unix timestamp of creation"),
+	}, "id", "session_id", "schema", "bookmarked", "rating", "created_at")
+
 	return []Route{
 		// Public endpoints
 		NewRoute("/api/health", GET).
@@ -730,6 +784,52 @@ func DashboardRoutes() []Route {
 				"mcp_tools": IntSchema("Total MCP tools"),
 				"model":     StringSchema("LLM model name"),
 			}, "total_trees", "categories", "mcp_tools", "model")).WithAuth().Build(),
+
+		NewRoute("/api/metrics/live", GET).
+			Summary("Get live platform and system metrics").
+			Description("Returns real-time system and platform metrics including disk, memory, process count, uptime, tree counts, and gardener metrics.").
+			Tags("Platform").
+			OperationID("getMetricsLive").
+			JSONResponse(200, "Live metrics snapshot", ObjectSchema(map[string]*Schema{
+				"timestamp": IntSchema("Unix timestamp"),
+				"system": ObjectSchema(map[string]*Schema{
+					"disk_root": ObjectSchema(map[string]*Schema{
+						"mount":        StringSchema("Mount point"),
+						"total_gb":     IntSchema("Total GB"),
+						"used_gb":      IntSchema("Used GB"),
+						"percent_use":  IntSchema("Percentage used"),
+						"available_gb": IntSchema("Available GB"),
+						"ok":           BoolSchema("True if usage < 90%"),
+					}),
+					"disk_ssd": ObjectSchema(map[string]*Schema{
+						"mount":        StringSchema("Mount point"),
+						"total_gb":     IntSchema("Total GB"),
+						"used_gb":      IntSchema("Used GB"),
+						"percent_use":  IntSchema("Percentage used"),
+						"available_gb": IntSchema("Available GB"),
+						"ok":           BoolSchema("True if usage < 90%"),
+					}),
+					"memory": ObjectSchema(map[string]*Schema{
+						"total_gb":     IntSchema("Total GB"),
+						"used_gb":      IntSchema("Used GB"),
+						"available_gb": IntSchema("Available GB"),
+						"percent_use":  IntSchema("Percentage used"),
+					}),
+					"processes": IntSchema("Number of active processes"),
+					"uptime":    StringSchema("System uptime"),
+				}),
+				"trees": ObjectSchema(map[string]*Schema{
+					"total":      IntSchema("Total trees"),
+					"categories": ObjectSchema(map[string]*Schema{}, "Tree counts per category"),
+				}),
+				"gardener": ObjectSchema(map[string]*Schema{
+					"cycles":       IntSchema("Total cycles"),
+					"trees":        IntSchema("Active trees"),
+					"improvements": IntSchema("Improvements"),
+					"best_fitness": NumberSchema("Best fitness"),
+					"last_run":     StringSchema("Last run timestamp"),
+				}),
+			}, "timestamp", "system", "trees")).WithAuth().Build(),
 
 		NewRoute("/api/trees", GET).
 			Summary("List behavior trees").
@@ -1000,5 +1100,72 @@ func DashboardRoutes() []Route {
 				"remaining":   StringSchema("Time until session expiry (session only)"),
 			}, "status")).
 			ErrorResponse(401, "Not authenticated").Build(),
+
+		NewRoute("/api/doormate/intent", POST).
+			Summary("Process user intent").
+			Description("Parses user intent and returns predicted options along with a generated dynamic layout/page schema.").
+			Tags("DoorMate").
+			OperationID("postDoormateIntent").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"input": StringSchema("User raw request/input"),
+			}, "input")).
+			JSONResponse(200, "Intent response containing layout/page and profile", ObjectSchema(map[string]*Schema{
+				"session_id": StringSchema("Session ID"),
+				"intent":     StringSchema("Parsed intent"),
+				"bubbles":    ArraySchema(StringSchema("Suggested option bubbles"), "Predicted option bubbles"),
+				"page":       generatedPageSchema,
+				"profile":    userProfileSchema,
+			}, "session_id", "intent", "bubbles", "page", "profile")).
+			ErrorResponse(400, "Bad request").
+			ErrorResponse(500, "Generation failed").WithAuth().Build(),
+
+		NewRoute("/api/doormate/bookmark", POST).
+			Summary("Toggle bookmark").
+			Description("Toggles bookmark status of a generated page, logging bookmark event as user feedback.").
+			Tags("DoorMate").
+			OperationID("postDoormateBookmark").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"page_id": StringSchema("Page ID to toggle bookmark"),
+			}, "page_id")).
+			JSONResponse(200, "Bookmark toggle result", ObjectSchema(map[string]*Schema{
+				"status":     StringSchema("Status of action"),
+				"bookmarked": BoolSchema("New bookmark state"),
+			}, "status", "bookmarked")).
+			ErrorResponse(400, "Bad request").
+			ErrorResponse(404, "Page not found").WithAuth().Build(),
+
+		NewRoute("/api/doormate/rate", POST).
+			Summary("Rate page").
+			Description("Applies star rating (1-5) to a generated page, logging it in database and user feedback log.").
+			Tags("DoorMate").
+			OperationID("postDoormateRate").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"page_id": StringSchema("Page ID to rate"),
+				"rating":  IntSchema("Rating (1-5)"),
+			}, "page_id", "rating")).
+			JSONResponse(200, "Rating result", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("Status of action"),
+				"rating": IntSchema("Rating assigned"),
+			}, "status", "rating")).
+			ErrorResponse(400, "Bad request").
+			ErrorResponse(404, "Page not found").WithAuth().Build(),
+
+		NewRoute("/api/doormate/profile", GET).
+			Summary("Get user profile").
+			Description("Returns active user profile preferences, preference tags, style preference, and bookmarks.").
+			Tags("DoorMate").
+			OperationID("getDoormateProfile").
+			JSONResponse(200, "User profile preferences", userProfileSchema).WithAuth().Build(),
+
+		NewRoute("/api/doormate/profile", POST).
+			Summary("Update user profile").
+			Description("Updates active user profile preferences (tags, preferred style) and returns updated profile.").
+			Tags("DoorMate").
+			OperationID("postDoormateProfile").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"tags":  ArraySchema(StringSchema("Tag name"), "Profile preference tags"),
+				"style": StringSchema("Preferred presentation style (visual, minimal, detailed)"),
+			}, "tags", "style")).
+			JSONResponse(200, "Updated user profile preferences", userProfileSchema).WithAuth().Build(),
 	}
 }

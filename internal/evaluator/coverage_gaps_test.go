@@ -602,7 +602,7 @@ func TestEvaluateTree_NegativeDuration(t *testing.T) {
 func TestCascadeEvaluator_AllRejectedAtQuick(t *testing.T) {
 	cfg := DefaultCascadeConfig()
 	ce := NewCascadeEvaluator(cfg,
-		func(tree *evolution.SerializableNode) float64 { return 0 }, // all fail quick
+		func(_ *evolution.SerializableNode) float64 { return 0 }, // all fail quick
 		nil,
 		nil,
 	)

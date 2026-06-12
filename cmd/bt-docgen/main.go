@@ -102,7 +102,7 @@ func main() {
 	fmt.Println()
 
 	outputDir := "/mnt/ssd/clawd/wiki/bt-research/docs/arc42"
-	os.MkdirAll(outputDir, 0755)
+	_ = os.MkdirAll(outputDir, 0755)
 
 	statePath := filepath.Join(outputDir, ".docgen-state.json")
 
@@ -118,7 +118,7 @@ func main() {
 	// Load previous state for incremental mode
 	var state docgenState
 	if data, err := os.ReadFile(statePath); err == nil {
-		json.Unmarshal(data, &state)
+		_ = json.Unmarshal(data, &state)
 	}
 
 	if *incremental && *sections == "" {
@@ -252,7 +252,7 @@ func main() {
 
 		if bb.Result != "" {
 			path := filepath.Join(outputDir, sm.Filename)
-			os.WriteFile(path, []byte(bb.Result), 0644)
+			_ = os.WriteFile(path, []byte(bb.Result), 0644)
 			fmt.Printf("    ✅ Saved: %s (%d bytes)\n", sm.Filename, len(bb.Result))
 
 			// Record source hash for incremental tracking
@@ -291,7 +291,7 @@ func main() {
 			}
 			if bb.Result != "" {
 				path := filepath.Join(outputDir, "go-bt-evolve-arc42.md")
-				os.WriteFile(path, []byte(bb.Result), 0644)
+				_ = os.WriteFile(path, []byte(bb.Result), 0644)
 				fmt.Printf("    ✅ Final document: %s (%d bytes)\n", path, len(bb.Result))
 			}
 			successCount++
@@ -301,7 +301,7 @@ func main() {
 	// Save state
 	state.LastRun = time.Now().Format(time.RFC3339)
 	data, _ := json.MarshalIndent(state, "", "  ")
-	os.WriteFile(statePath, data, 0644)
+	_ = os.WriteFile(statePath, data, 0644)
 
 	// Summary
 	fmt.Println()
@@ -324,7 +324,7 @@ func allSections() []int {
 
 func parseSections(s string) []int {
 	parts := strings.Split(s, ",")
-	var result []int
+	result := make([]int, 0, 16)
 	for _, p := range parts {
 		n, err := strconv.Atoi(strings.TrimSpace(p))
 		if err != nil || n < 1 || n > 12 {

@@ -27,7 +27,7 @@ func mockOllamaServer(handler func(body map[string]any) string) *httptest.Server
 
 		bodyBytes, _ := io.ReadAll(r.Body)
 		var body map[string]any
-		json.Unmarshal(bodyBytes, &body)
+		_ = json.Unmarshal(bodyBytes, &body)
 
 		responseText := handler(body)
 
@@ -42,7 +42,7 @@ func mockOllamaServer(handler func(body map[string]any) string) *httptest.Server
 			"done": true,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 }
 
@@ -62,7 +62,7 @@ func newTestClient(t *testing.T, srv *httptest.Server) *Client {
 }
 
 func TestClient_Generate(t *testing.T) {
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "test response"
 	})
 	defer srv.Close()
@@ -79,7 +79,7 @@ func TestClient_Generate(t *testing.T) {
 }
 
 func TestClient_AnalyzeComplexity(t *testing.T) {
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "low"
 	})
 	defer srv.Close()
@@ -95,7 +95,7 @@ func TestClient_AnalyzeComplexity(t *testing.T) {
 func TestClient_GeneratePlan(t *testing.T) {
 	planText := "1. Analyze requirements\n2. Implement solution\n3. Test and verify"
 
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return planText
 	})
 	defer srv.Close()
@@ -109,7 +109,7 @@ func TestClient_GeneratePlan(t *testing.T) {
 }
 
 func TestClient_Reflect(t *testing.T) {
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "WENT_WELL: the implementation was clean\nTO_IMPROVE: add more tests"
 	})
 	defer srv.Close()
@@ -136,7 +136,7 @@ func TestClient_GenerateTracing(t *testing.T) {
 	tracing.SetGlobalTracer(tracer)
 	defer tracing.SetGlobalTracer(orig)
 
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "test response"
 	})
 	defer srv.Close()
@@ -177,7 +177,7 @@ func TestClient_GenerateTracing_NoopDefault(t *testing.T) {
 	tracing.SetGlobalTracer(nil)
 	defer tracing.SetGlobalTracer(orig)
 
-	srv := mockOllamaServer(func(body map[string]any) string {
+	srv := mockOllamaServer(func(_ map[string]any) string {
 		return "noop test response"
 	})
 	defer srv.Close()

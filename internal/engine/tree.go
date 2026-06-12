@@ -44,7 +44,7 @@ type toolStub struct {
 
 func (t toolStub) Name() string        { return t.name }
 func (t toolStub) Description() string { return t.desc }
-func (t toolStub) Call(input string) string {
+func (t toolStub) Call(_ string) string {
 	return fmt.Sprintf("STUB_ERROR: tool '%s' is a stub with no real implementation. Do not fabricate output — report that this tool is unavailable and proceed with available tools only.", t.name)
 }
 
@@ -73,6 +73,13 @@ type Blackboard struct {
 	CurrentPath  string         // currently executing strategy path (set by tree traversal)
 	VisitedPaths []string       // all strategy paths visited during execution
 	EventBus     *EventBus      // inter-node event bus (Plan #3: AbortOnEvent, ReactiveParallel)
+
+	// Budget tracking (Budget decorator / agent limits)
+	TokensUsed int
+	TickBudget int
+	TreeTicks  int
+
+	TraceContext context.Context `json:"-"`
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -92,13 +99,18 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 }
 
 // BuildAndValidate constructs a tree and validates it before execution.
+// SubTreeRef nodes are expanded first when a tree expander is registered (internal/blocks).
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
-	info := ValidateTreeFull(serTree)
+	expanded, err := prepareTreeForBuild(serTree)
+	if err != nil {
+		return nil, err
+	}
+	info := ValidateTreeFull(expanded)
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(serTree, bb, ""), nil
+	return buildNode(expanded, bb, ""), nil
 }
 
 // buildNode recursively builds a go-bt Command from a SerializableNode.
@@ -123,20 +135,55 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 
 	switch node.Type {
 	case "Sequence":
+		if len(node.Edges) > 0 {
+			return buildSequenceWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSequence(children...)
 	case "Selector":
+		if len(node.Edges) > 0 {
+			return buildSelectorWithEdges(node, bb)
+		}
 		children := make([]btcore.Command[Blackboard], len(node.Children))
 		for i := range node.Children {
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
+	case "Parallel":
+		return BuildParallel(node, bb)
+	case "Budget":
+		return BuildBudget(node, bb)
+	case "RateLimit":
+		return BuildRateLimit(node, bb)
+	case "Timeout":
+		return BuildTimeout(node, bb)
+	case "CircuitBreaker":
+		return BuildCircuitBreaker(node, bb)
+	case "Inverter":
+		return BuildInverter(node, bb)
+	case "Succeeder":
+		return BuildSucceeder(node, bb)
+	case "Repeater":
+		return BuildRepeater(node, bb)
+	case "Runner":
+		return BuildRunner(node, bb)
+	case "Monitor":
+		return BuildMonitor(node, bb)
+	case "QualityGate":
+		return BuildQualityGate(node, bb)
 	case "Retry":
+		if len(node.Children) == 0 {
+			return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 })
+		}
 		child := buildNode(&node.Children[0], bb, node.Name)
-		return btdec.NewRepeat(child, node.MaxRetries)
+		times := node.MaxRetries
+		if times <= 0 {
+			times = 1
+		}
+		return btdec.NewRepeat(child, times)
 	case "Action":
 		return btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":
@@ -163,10 +210,21 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		child := buildNode(&node.Children[0], bb, node.Name)
 		postconditions := readPostconditions(node)
 		return NewCheckpointVerifier(child, node.MaxRetries, postconditions)
-	default:
-		// Unknown node type → pass-through action (always succeeds)
+	case "HumanApprovalGate":
+		return buildHumanApprovalGate(node, bb, parentName)
+	case "SubTreeRef":
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Outcome = "SubTreeRef not expanded — run BuildAndValidate with tree expander"
+			return -1
+		})
+	case "AlwaysSucceed":
+		return btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int {
 			return 1
+		})
+	default:
+		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+			ctx.Blackboard.Outcome = fmt.Sprintf("unsupported node type %q", node.Type)
+			return -1
 		})
 	}
 }

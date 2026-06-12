@@ -16,10 +16,10 @@ type chainMockLLM struct {
 	responses map[string]string
 }
 
-func (m *chainMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *chainMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *chainMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *chainMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
@@ -32,11 +32,11 @@ func (m *chainMockLLM) Generate(prompt string) (string, error) {
 	}
 	return "mock response for: " + prompt, nil
 }
-func (m *chainMockLLM) AnalyzeComplexity(task string) string { return "medium" }
-func (m *chainMockLLM) GeneratePlan(task, complexity string) string {
+func (m *chainMockLLM) AnalyzeComplexity(_ string) string { return "medium" }
+func (m *chainMockLLM) GeneratePlan(_, _ string) string {
 	return "1. Step one\n2. Step two"
 }
-func (m *chainMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "better" }
+func (m *chainMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
 
 // DemoChainTree builds a tree that uses ChainAction nodes for a conversational RAG pipeline.
 func DemoChainTree() *evolution.SerializableNode {
@@ -441,14 +441,14 @@ type agentTestMockLLM struct {
 	callCount *int
 }
 
-func (m *agentTestMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *agentTestMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *agentTestMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *agentTestMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
 
-func (m *agentTestMockLLM) Generate(prompt string) (string, error) {
+func (m *agentTestMockLLM) Generate(_ string) (string, error) {
 	idx := *m.callCount
 	*m.callCount++
 	if idx < len(m.responses) {
@@ -456,9 +456,9 @@ func (m *agentTestMockLLM) Generate(prompt string) (string, error) {
 	}
 	return "Final Answer: done.", nil
 }
-func (m *agentTestMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
-func (m *agentTestMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
-func (m *agentTestMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
+func (m *agentTestMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *agentTestMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *agentTestMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
 
 func TestChainAction_Agent_NoTools(t *testing.T) {
 	var callCount int
@@ -684,16 +684,16 @@ type errorMockLLM struct {
 	err error
 }
 
-func (m *errorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *errorMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *errorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *errorMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *errorMockLLM) Generate(prompt string) (string, error)              { return "", m.err }
-func (m *errorMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
-func (m *errorMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
-func (m *errorMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
+func (m *errorMockLLM) Generate(_ string) (string, error)       { return "", m.err }
+func (m *errorMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *errorMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *errorMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
 
 func TestChainAction_ToolCall_ChainToolsOnly(t *testing.T) {
 	// cfg.Tools is empty/nil, but bb.ChainTools has tools
@@ -1506,13 +1506,13 @@ type countedErrorMockLLM struct {
 	count      *int
 }
 
-func (m *countedErrorMockLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+func (m *countedErrorMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *countedErrorMockLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+func (m *countedErrorMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
 	return m.Generate(prompt)
 }
-func (m *countedErrorMockLLM) Generate(prompt string) (string, error) {
+func (m *countedErrorMockLLM) Generate(_ string) (string, error) {
 	*m.count++
 	if *m.count >= m.failOnCall {
 		return "", fmt.Errorf("simulated error on call %d", *m.count)
@@ -1522,9 +1522,9 @@ func (m *countedErrorMockLLM) Generate(prompt string) (string, error) {
 	}
 	return "mock response", nil
 }
-func (m *countedErrorMockLLM) AnalyzeComplexity(task string) string                { return "medium" }
-func (m *countedErrorMockLLM) GeneratePlan(task, complexity string) string         { return "plan" }
-func (m *countedErrorMockLLM) Reflect(task, outcome, plan string) (string, string) { return "ok", "ok" }
+func (m *countedErrorMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *countedErrorMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *countedErrorMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
 
 func TestChainAction_LLMCall_Error(t *testing.T) {
 	// execLLMCall: LLM.Generate error → failure path

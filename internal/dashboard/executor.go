@@ -20,7 +20,7 @@ func NewAgentExecutor() *AgentExecutor {
 
 // RunTask executes a task through the specified BT agent tree using Hermes CLI.
 // Returns the agent's output and outcome (success/failure).
-func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, outcome string, err error) {
+func (e *AgentExecutor) RunTask(_, task, treeID string) (output string, outcome string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	defer cancel()
 
@@ -45,7 +45,11 @@ func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, 
 		"--yolo",
 		"-m", "deepseek-v4-flash",
 	)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"))
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	cmd.Env = append(os.Environ(), "HOME="+home)
 
 	outBytes, err := cmd.CombinedOutput()
 	output = strings.TrimSpace(string(outBytes))

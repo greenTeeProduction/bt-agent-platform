@@ -114,12 +114,12 @@ func TestRegisterProviders_Both(t *testing.T) {
 	}
 }
 
-func TestRegisterProviders_Empty(t *testing.T) {
+func TestRegisterProviders_Empty(_ *testing.T) {
 	// Should not panic with no providers
 	RegisterProviders()
 }
 
-func TestRegisterProviders_Nil(t *testing.T) {
+func TestRegisterProviders_Nil(_ *testing.T) {
 	// Should not panic with nil interface
 	RegisterProviders(nil)
 }
@@ -384,7 +384,7 @@ func TestEngine_Independence(t *testing.T) {
 	}
 
 	// Modifying one engine should not affect the other
-	e1.Actions["custom_test_action"] = func(ctx *btcore.BTContext[Blackboard]) int { return 1 }
+	e1.Actions["custom_test_action"] = func(_ *btcore.BTContext[Blackboard]) int { return 1 }
 	if _, exists := e2.Actions["custom_test_action"]; exists {
 		t.Error("modifying e1 should not affect e2")
 	}

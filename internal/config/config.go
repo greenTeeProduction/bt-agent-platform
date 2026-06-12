@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/hitl"
 )
 
 // Config holds all runtime configuration for the BT platform.
@@ -87,8 +89,18 @@ type Config struct {
 	// Metadata
 	ConfigFile string `json:"-" env:"BT_CONFIG_FILE" default:""` // path to JSON config file
 
+	// HITL — human-in-the-loop approval policy
+	HITL HITLSettings `json:"hitl,omitempty"`
+
 	// Paths — resolved file paths (populated by ResolvePaths())
 	Paths PathConfig `json:"paths,omitempty"`
+}
+
+// HITLSettings configures human approval gates.
+type HITLSettings struct {
+	Enabled     bool `json:"enabled" default:"true"`
+	AutoApprove bool `json:"auto_approve" default:"false"`
+	TimeoutSecs int  `json:"timeout_secs" default:"86400"`
 }
 
 // PathConfig provides resolved file paths for all BT platform components.
@@ -148,7 +160,7 @@ func (e *ValidationError) Error() string {
 type ValidationErrors []ValidationError
 
 func (e ValidationErrors) Error() string {
-	var msgs []string
+	msgs := make([]string, 0, 8)
 	for _, err := range e {
 		msgs = append(msgs, err.Error())
 	}
@@ -274,6 +286,11 @@ func newDefaultConfig() *Config {
 		CBThreshold:                  defaultCBThreshold,
 		CBCooldownSecs:               defaultCBCooldownSecs,
 		DLQMaxEntries:                defaultDLQMaxEntries,
+		HITL: HITLSettings{
+			Enabled:     true,
+			AutoApprove: false,
+			TimeoutSecs: 86400,
+		},
 	}
 }
 
@@ -594,6 +611,22 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("BT_DLQ_MAX_ENTRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			c.DLQMaxEntries = n
+		}
+	}
+
+	// HITL
+	if v := os.Getenv("BT_HITL_ENABLED"); v != "" {
+		c.HITL.Enabled = v != "false" && v != "0"
+		if v == "false" || v == "0" {
+			c.HITL.AutoApprove = true
+		}
+	}
+	if v := os.Getenv("BT_HITL_AUTO_APPROVE"); v != "" {
+		c.HITL.AutoApprove = v == "true" || v == "1"
+	}
+	if v := os.Getenv("BT_HITL_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.HITL.TimeoutSecs = n
 		}
 	}
 
@@ -972,31 +1005,13 @@ func (c *Config) Diff(other *Config) []string {
 		diffs = append(diffs, fmt.Sprintf("DashboardPort: %d → %d", c.DashboardPort, other.DashboardPort))
 	}
 	if c.APIKey != other.APIKey {
-		if c.APIKey == "" {
-			diffs = append(diffs, "APIKey: set")
-		} else if other.APIKey == "" {
-			diffs = append(diffs, "APIKey: removed")
-		} else {
-			diffs = append(diffs, "APIKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("APIKey", c.APIKey, other.APIKey))
 	}
 	if c.TLSCert != other.TLSCert {
-		if c.TLSCert == "" {
-			diffs = append(diffs, "TLSCert: set")
-		} else if other.TLSCert == "" {
-			diffs = append(diffs, "TLSCert: removed")
-		} else {
-			diffs = append(diffs, "TLSCert: changed")
-		}
+		diffs = append(diffs, diffSecretField("TLSCert", c.TLSCert, other.TLSCert))
 	}
 	if c.TLSKey != other.TLSKey {
-		if c.TLSKey == "" {
-			diffs = append(diffs, "TLSKey: set")
-		} else if other.TLSKey == "" {
-			diffs = append(diffs, "TLSKey: removed")
-		} else {
-			diffs = append(diffs, "TLSKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("TLSKey", c.TLSKey, other.TLSKey))
 	}
 
 	// LLM
@@ -1016,13 +1031,7 @@ func (c *Config) Diff(other *Config) []string {
 		diffs = append(diffs, fmt.Sprintf("DeepSeekModel: %s → %s", c.DeepSeekModel, other.DeepSeekModel))
 	}
 	if c.DeepSeekKey != other.DeepSeekKey {
-		if c.DeepSeekKey == "" {
-			diffs = append(diffs, "DeepSeekKey: set")
-		} else if other.DeepSeekKey == "" {
-			diffs = append(diffs, "DeepSeekKey: removed")
-		} else {
-			diffs = append(diffs, "DeepSeekKey: changed")
-		}
+		diffs = append(diffs, diffSecretField("DeepSeekKey", c.DeepSeekKey, other.DeepSeekKey))
 	}
 	if c.LLMTimeout != other.LLMTimeout {
 		diffs = append(diffs, fmt.Sprintf("LLMTimeout: %ds → %ds", c.LLMTimeout, other.LLMTimeout))
@@ -1388,3 +1397,26 @@ func (c *Config) deepseekReachable() bool {
 // to avoid real network calls. Tests set it to a mock; production code leaves
 // it nil, which causes deepseekReachable to use a real HTTP client.
 var deepseekChecker func(host string) bool
+
+// ApplyHITLPolicy syncs loaded configuration into the global HITL policy.
+func ApplyHITLPolicy(c *Config) {
+	if c == nil {
+		return
+	}
+	hitl.ApplyConfig(hitl.HITLConfig{
+		Enabled:     c.HITL.Enabled,
+		AutoApprove: c.HITL.AutoApprove,
+		TimeoutSecs: c.HITL.TimeoutSecs,
+	})
+}
+
+func diffSecretField(name, current, other string) string {
+	switch {
+	case current == "":
+		return name + ": set"
+	case other == "":
+		return name + ": removed"
+	default:
+		return name + ": changed"
+	}
+}

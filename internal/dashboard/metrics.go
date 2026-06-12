@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,7 +190,7 @@ func collectSystem() SystemMetrics {
 			secs, _ := strconv.ParseFloat(parts[0], 64)
 			hours := int(secs) / 3600
 			days := hours / 24
-			hours = hours % 24
+			hours %= 24
 			s.Uptime = fmt.Sprintf("%dd %dh", days, hours)
 		}
 	}
@@ -198,9 +199,12 @@ func collectSystem() SystemMetrics {
 }
 
 func loadGardenerMetrics() *GardenerMetrics {
-	home := os.Getenv("HOME")
-	metricsPath := home + "/.go-bt-gardener/gardener-metrics.json"
-	sloPath := home + "/.go-bt-gardener/slo-metrics.json"
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	metricsPath := filepath.Join(home, ".go-bt-gardener", "gardener-metrics.json")
+	sloPath := filepath.Join(home, ".go-bt-gardener", "slo-metrics.json")
 
 	data, err := os.ReadFile(metricsPath)
 	if err != nil {

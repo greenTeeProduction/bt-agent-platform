@@ -3,10 +3,14 @@ package evolution
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestStore_NewStore_MkdirAllError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/proc does not exist on Windows; MkdirAll would succeed")
+	}
 	_, err := NewStore("/proc/reflection-test-unwritable")
 	if err == nil {
 		t.Error("expected error for unwritable path")
@@ -36,13 +40,16 @@ func TestStore_Save_RenameCleanup(t *testing.T) {
 }
 
 func TestStore_Save_WriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory chmod does not restrict writes on Windows")
+	}
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Skipf("cannot make dir read-only: %v", err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 
 	r := &Record{TaskID: "write-err", Task: "test", Outcome: Success}
 	err := store.Save(r)
@@ -55,10 +62,10 @@ func TestStore_LoadAll_WithBadJSON(t *testing.T) {
 	dir := t.TempDir()
 	store := &Store{dir: dir}
 
-	store.Save(&Record{TaskID: "load-test", Task: "test", Outcome: Success})
+	_ = store.Save(&Record{TaskID: "load-test", Task: "test", Outcome: Success})
 
 	badPath := filepath.Join(dir, "bad.json")
-	os.WriteFile(badPath, []byte("{invalid json}"), 0644)
+	_ = os.WriteFile(badPath, []byte("{invalid json}"), 0644)
 
 	records, err := store.LoadAll()
 	if err != nil {
@@ -74,7 +81,7 @@ func TestStore_LoadAll_NonJSONFilesSkipped(t *testing.T) {
 	store := &Store{dir: dir}
 
 	nonJSONPath := filepath.Join(dir, "not-a-json.txt")
-	os.WriteFile(nonJSONPath, []byte("hello"), 0644)
+	_ = os.WriteFile(nonJSONPath, []byte("hello"), 0644)
 
 	records, err := store.LoadAll()
 	if err != nil {
@@ -97,9 +104,12 @@ func TestStore_LoadAll_DirNotExist(t *testing.T) {
 }
 
 func TestStore_LoadAll_ReadDirNonNotExistError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("reading a file as a directory is classified as not-exist on Windows")
+	}
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "not-a-dir")
-	os.WriteFile(filePath, []byte(""), 0644)
+	_ = os.WriteFile(filePath, []byte(""), 0644)
 
 	store := &Store{dir: filePath}
 	records, err := store.LoadAll()
@@ -122,7 +132,7 @@ func TestStore_CountFailures_NonexistentDir(t *testing.T) {
 func TestStore_CountFailures_LoadAllError(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "not-a-dir")
-	os.WriteFile(filePath, []byte(""), 0644)
+	_ = os.WriteFile(filePath, []byte(""), 0644)
 
 	store := &Store{dir: filePath}
 	count := store.CountFailures()
@@ -135,10 +145,10 @@ func TestStore_CountFailures_MixedRecords(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
-	store.Save(&Record{TaskID: "a", Outcome: Success, Task: "ok"})
-	store.Save(&Record{TaskID: "b", Outcome: Failure, Task: "fail"})
-	store.Save(&Record{TaskID: "c", Outcome: Partial, Task: "partial"})
-	store.Save(&Record{TaskID: "d", Outcome: Failure, Task: "fail2"})
+	_ = store.Save(&Record{TaskID: "a", Outcome: Success, Task: "ok"})
+	_ = store.Save(&Record{TaskID: "b", Outcome: Failure, Task: "fail"})
+	_ = store.Save(&Record{TaskID: "c", Outcome: Partial, Task: "partial"})
+	_ = store.Save(&Record{TaskID: "d", Outcome: Failure, Task: "fail2"})
 
 	count := store.CountFailures()
 	if count != 2 {
@@ -150,8 +160,8 @@ func TestStore_CountFailures_NoFailures(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
-	store.Save(&Record{TaskID: "a", Outcome: Success, Task: "ok"})
-	store.Save(&Record{TaskID: "b", Outcome: Partial, Task: "partial"})
+	_ = store.Save(&Record{TaskID: "a", Outcome: Success, Task: "ok"})
+	_ = store.Save(&Record{TaskID: "b", Outcome: Partial, Task: "partial"})
 
 	count := store.CountFailures()
 	if count != 0 {
@@ -170,7 +180,7 @@ func TestStore_RecentFailures_NonexistentDir(t *testing.T) {
 func TestStore_RecentFailures_LoadAllError(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "not-a-dir")
-	os.WriteFile(filePath, []byte(""), 0644)
+	_ = os.WriteFile(filePath, []byte(""), 0644)
 
 	store := &Store{dir: filePath}
 	failures := store.RecentFailures(5)
@@ -183,11 +193,11 @@ func TestStore_RecentFailures_Ordering(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
-	store.Save(&Record{TaskID: "f1", Outcome: Failure, Task: "fail1"})
-	store.Save(&Record{TaskID: "s1", Outcome: Success, Task: "ok1"})
-	store.Save(&Record{TaskID: "f2", Outcome: Failure, Task: "fail2"})
-	store.Save(&Record{TaskID: "f3", Outcome: Failure, Task: "fail3"})
-	store.Save(&Record{TaskID: "s2", Outcome: Success, Task: "ok2"})
+	_ = store.Save(&Record{TaskID: "f1", Outcome: Failure, Task: "fail1"})
+	_ = store.Save(&Record{TaskID: "s1", Outcome: Success, Task: "ok1"})
+	_ = store.Save(&Record{TaskID: "f2", Outcome: Failure, Task: "fail2"})
+	_ = store.Save(&Record{TaskID: "f3", Outcome: Failure, Task: "fail3"})
+	_ = store.Save(&Record{TaskID: "s2", Outcome: Success, Task: "ok2"})
 
 	failures := store.RecentFailures(2)
 	if len(failures) != 2 {
@@ -211,10 +221,10 @@ func TestStore_LoadAll_WithSubdirs(t *testing.T) {
 	store, _ := NewStore(dir)
 
 	// Save a record
-	store.Save(&Record{TaskID: "subdir-test", Task: "test", Outcome: Success})
+	_ = store.Save(&Record{TaskID: "subdir-test", Task: "test", Outcome: Success})
 
 	// Create a subdirectory inside the store dir (should be skipped by LoadAll)
-	os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
+	_ = os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
 
 	records, err := store.LoadAll()
 	if err != nil {

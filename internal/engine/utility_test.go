@@ -130,8 +130,8 @@ func TestIntSliceFromInterface_Empty(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelAll_AllSuccess(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelAll, nil, nil, true, ctx)
@@ -142,8 +142,8 @@ func TestRunReactiveParallel_ParallelAll_AllSuccess(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelAll_OneFails(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelAll, nil, nil, true, ctx)
@@ -154,8 +154,8 @@ func TestRunReactiveParallel_ParallelAll_OneFails(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelAny_FirstWins(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelAny, nil, nil, true, ctx)
@@ -166,8 +166,8 @@ func TestRunReactiveParallel_ParallelAny_FirstWins(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelAny_AllFail(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelAny, nil, nil, true, ctx)
@@ -178,8 +178,8 @@ func TestRunReactiveParallel_ParallelAny_AllFail(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelRace_TerminalReturned(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 0 }), // running
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }), // success
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 0 }), // running
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }), // success
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelRace, nil, nil, true, ctx)
@@ -190,8 +190,8 @@ func TestRunReactiveParallel_ParallelRace_TerminalReturned(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelRace_AllRunning(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 0 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 0 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 0 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 0 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelRace, nil, nil, true, ctx)
@@ -202,8 +202,8 @@ func TestRunReactiveParallel_ParallelRace_AllRunning(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelMonitor_MonitorFails(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }), // monitor fails
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),  // action
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }), // monitor fails
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),  // action
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMonitor, []int{0}, []int{1}, true, ctx)
@@ -214,8 +214,8 @@ func TestRunReactiveParallel_ParallelMonitor_MonitorFails(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelMonitor_AllSucceed(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMonitor, []int{0}, []int{1}, true, ctx)
@@ -226,8 +226,8 @@ func TestRunReactiveParallel_ParallelMonitor_AllSucceed(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelMonitor_ActionFailsCancelOnMonitor(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),  // monitor ok
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }), // action fails
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),  // monitor ok
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }), // action fails
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMonitor, []int{0}, []int{1}, true, ctx)
@@ -238,8 +238,8 @@ func TestRunReactiveParallel_ParallelMonitor_ActionFailsCancelOnMonitor(t *testi
 
 func TestRunReactiveParallel_ParallelMonitor_ActionFailsNoCancel(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),  // monitor ok
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }), // action fails
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),  // monitor ok
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }), // action fails
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMonitor, []int{0}, []int{1}, false, ctx)
@@ -250,8 +250,8 @@ func TestRunReactiveParallel_ParallelMonitor_ActionFailsNoCancel(t *testing.T) {
 
 func TestRunReactiveParallel_DefaultMode_Sequential(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMode(99), nil, nil, true, ctx)
@@ -262,8 +262,8 @@ func TestRunReactiveParallel_DefaultMode_Sequential(t *testing.T) {
 
 func TestRunReactiveParallel_DefaultMode_Fails(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 }),
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return -1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	result := runReactiveParallel(children, ParallelMode(99), nil, nil, true, ctx)
@@ -274,7 +274,7 @@ func TestRunReactiveParallel_DefaultMode_Fails(t *testing.T) {
 
 func TestRunReactiveParallel_ParallelMonitor_OutOfBoundsIndex(t *testing.T) {
 	children := []btcore.Command[Blackboard]{
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
+		btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int { return 1 }),
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: &Blackboard{}}
 	// Index 99 is out of bounds — should be ignored without panic

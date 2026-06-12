@@ -97,7 +97,7 @@ func main() {
 			var params struct {
 				MaxDepth int `json:"max_depth"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if params.MaxDepth == 0 {
 				params.MaxDepth = 2
 			}

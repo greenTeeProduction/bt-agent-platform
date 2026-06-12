@@ -74,6 +74,9 @@ func (f *AgentFactory) CreateFromContent(name, content string) (*GeneratedAgent,
 	if err != nil {
 		return nil, fmt.Errorf("generate tree: %w", err)
 	}
+	if info := engine.ValidateTreeFull(agent.SerTree); !info.Valid() {
+		return nil, fmt.Errorf("generated invalid tree: %v", info.Errors)
+	}
 
 	// Step 4: Persist the tree under a skill-specific name
 	skillTreePath := filepath.Join(f.treeStore.Dir(), fmt.Sprintf("tree-%s.json", name))

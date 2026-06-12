@@ -65,8 +65,8 @@ func (b *AgentBus) Subscribe(eventType string) <-chan AgentEvent {
 
 // Publish sends an event to all matching subscribers.
 func (b *AgentBus) Publish(event AgentEvent) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	if b.closed {
 		return

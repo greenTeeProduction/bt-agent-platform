@@ -363,7 +363,7 @@ func TestListByCategory_All(t *testing.T) {
 
 	categories := []string{"core", "finance", "research", "domain", "startup", "thinktank", "evolution"}
 	counts := map[string]int{
-		"core": 2, "finance": 10, "research": 2, "domain": 14,
+		"core": 2, "finance": 10, "research": 2, "domain": 15,
 		"startup": 6, "thinktank": 5, "evolution": 3,
 	}
 
@@ -533,8 +533,8 @@ func TestSummary_GlobalGraph(t *testing.T) {
 	s := kg.Summary()
 	t.Logf("Summary: %s", s)
 
-	if !strings.Contains(s, "42 trees") {
-		t.Errorf("global summary should show 42 trees, got: %s", s)
+	if !strings.Contains(s, "43 trees") {
+		t.Errorf("global summary should show 43 trees, got: %s", s)
 	}
 	// Should contain category counts
 	for _, cat := range []string{"core", "finance", "research", "domain", "startup", "thinktank", "evolution"} {
@@ -557,7 +557,7 @@ func TestItoa(t *testing.T) {
 		{1, "1"},
 		{9, "9"},
 		{10, "10"},
-		{42, "42"},
+		{43, "43"},
 		{100, "100"},
 		{999, "999"},
 		{1000, "1000"},
@@ -665,9 +665,9 @@ func TestExtractTemplates(t *testing.T) {
 
 	f := NewFactory(kg)
 
-	// Templates should exist (last one per category wins due to map overwrite)
-	if f.Templates["finance"].SourceID != "test:c" {
-		t.Errorf("expected finance template from test:c, got %s", f.Templates["finance"].SourceID)
+	// Category template should keep the highest-fitness representative.
+	if f.Templates["finance"].SourceID != "test:a" {
+		t.Errorf("expected finance template from highest-fitness test:a, got %s", f.Templates["finance"].SourceID)
 	}
 	if f.Templates["research"].SourceID != "test:b" {
 		t.Errorf("expected research template from test:b, got %s", f.Templates["research"].SourceID)
@@ -1270,8 +1270,8 @@ func TestGlobalGraph(t *testing.T) {
 	if g == nil {
 		t.Fatal("GlobalGraph is nil")
 	}
-	if len(g.Trees) != 42 {
-		t.Errorf("expected 42 trees in GlobalGraph, got %d", len(g.Trees))
+	if len(g.Trees) != 43 {
+		t.Errorf("expected 43 trees in GlobalGraph, got %d", len(g.Trees))
 	}
 }
 

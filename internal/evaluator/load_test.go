@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -63,6 +64,9 @@ func TestTranspositionTable_Load_JSONError(t *testing.T) {
 // ─── NewTranspositionTable with directory create error ───
 
 func TestNewTranspositionTable_MkdirError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/proc does not exist on Windows; MkdirAll would succeed")
+	}
 	// /proc is not writable
 	_, err := NewTranspositionTable("/proc/readonly-test", 100)
 	if err == nil {

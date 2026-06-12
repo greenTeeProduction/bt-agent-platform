@@ -175,7 +175,7 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 		return err
 	}
 	tmp := entry.FilePath + ".tmp"
-	os.WriteFile(tmp, data, 0644)
+	_ = os.WriteFile(tmp, data, 0644)
 	return os.Rename(tmp, entry.FilePath)
 }
 
@@ -207,7 +207,7 @@ type MetricsTracker struct {
 
 // NewMetricsTracker creates a tracker with persistent storage.
 func NewMetricsTracker(dir string) (*MetricsTracker, error) {
-	os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0755)
 	mt := &MetricsTracker{path: filepath.Join(dir, "gardener-metrics.json")}
 	mt.load()
 	return mt, nil
@@ -229,13 +229,13 @@ func (mt *MetricsTracker) Save() error {
 	defer mt.mu.RUnlock()
 	data, _ := json.MarshalIndent(mt.history, "", "  ")
 	tmp := mt.path + ".tmp"
-	os.WriteFile(tmp, data, 0644)
+	_ = os.WriteFile(tmp, data, 0644)
 	return os.Rename(tmp, mt.path)
 }
 
 func (mt *MetricsTracker) load() {
 	data, _ := os.ReadFile(mt.path)
-	json.Unmarshal(data, &mt.history)
+	_ = json.Unmarshal(data, &mt.history)
 }
 
 // CyclesForTree returns how many cycles a specific tree has been processed.
@@ -338,7 +338,7 @@ func (g *Gardener) RunCycle() ([]CycleMetrics, error) {
 		return entries[i].Name < entries[j].Name
 	})
 
-	var results []CycleMetrics
+	results := make([]CycleMetrics, 0, 8)
 
 	for _, entry := range entries {
 		if !entry.Active {
@@ -353,7 +353,7 @@ func (g *Gardener) RunCycle() ([]CycleMetrics, error) {
 		g.cfg.MetricsTracker.Record(metrics)
 	}
 
-	g.cfg.MetricsTracker.Save()
+	_ = g.cfg.MetricsTracker.Save()
 	return results, nil
 }
 
@@ -506,13 +506,13 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	}
 
 	if applied > 0 {
-		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 		// Sync to tree.json so bt-agent picks up mutations on restart
 		treeJSONPath := filepath.Join(g.cfg.Registry.dir, "tree.json")
 		data, _ := json.MarshalIndent(tree, "", "  ")
 		tmp := treeJSONPath + ".tmp"
-		os.WriteFile(tmp, data, 0644)
-		os.Rename(tmp, treeJSONPath)
+		_ = os.WriteFile(tmp, data, 0644)
+		_ = os.Rename(tmp, treeJSONPath)
 	}
 
 	// If crisis intervention was triggered and mutations were accepted,

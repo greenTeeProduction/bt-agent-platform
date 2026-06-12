@@ -20,12 +20,84 @@ function renderTasks() {
       <button class="btn btn-ghost btn-sm" style="margin-left:auto"
         onclick="taskView=taskView==='list'?'kanban':'list';refreshTasks()">${taskView==='list'?'📋 Kanban':'📋 List'}</button>
     </div>
+    <div id="hitl-panel" style="margin-bottom:16px"></div>
     <div id="tasks-container"><div class="loading">Loading tasks...</div></div>
     <div id="task-modal" style="display:none"></div>
   `;
 }
 
+let hitlPollTimer = null;
+
+async function refreshHITL() {
+  const panel = document.getElementById('hitl-panel');
+  if (!panel) return;
+  try {
+    const pending = await apiFetch('/hitl/pending');
+    if (!pending || pending.length === 0) {
+      panel.innerHTML = '';
+      return;
+    }
+    panel.innerHTML = `
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px">
+        <div style="font-weight:600;margin-bottom:8px">⏳ Pending approvals (${pending.length})</div>
+        ${pending.map(h => `
+          <div class="task-card" style="margin-bottom:8px;padding:10px">
+            <div style="font-weight:500;font-size:13px">${h.node_name || 'Approval'} — ${h.phase || 'pre'}</div>
+            <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0">${(h.prompt || '').slice(0, 120)}</div>
+            <div style="font-size:11px;color:var(--text-quaternary)">id: ${h.id} · task: ${(h.task || '').slice(0, 60)}</div>
+            <div class="task-actions" style="margin-top:8px">
+              <button class="btn btn-success btn-sm" onclick="approveHITL('${h.id}',this)">✓ Approve</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectHITL('${h.id}',this)">✗ Reject</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch (e) {
+    panel.innerHTML = '';
+  }
+}
+
+async function approveHITL(id, btn) {
+  if (btn) { btn.disabled = true; }
+  try {
+    await apiFetch('/hitl/' + id + '/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewer: 'dashboard', comment: 'approved' })
+    });
+    toast('HITL ' + id + ' approved');
+    refreshHITL();
+  } catch (e) {
+    toast('HITL approve error: ' + e);
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function rejectHITL(id, btn) {
+  if (btn) { btn.disabled = true; }
+  try {
+    await apiFetch('/hitl/' + id + '/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewer: 'dashboard', reason: 'rejected' })
+    });
+    toast('HITL ' + id + ' rejected');
+    refreshHITL();
+  } catch (e) {
+    toast('HITL reject error: ' + e);
+    if (btn) btn.disabled = false;
+  }
+}
+
+function startHITLPoll() {
+  if (hitlPollTimer) clearInterval(hitlPollTimer);
+  refreshHITL();
+  hitlPollTimer = setInterval(refreshHITL, 10000);
+}
+
+
 async function refreshTasks() {
+  startHITLPoll();
   try {
     const tasks = await apiFetch('/tasks');
     state._cachedTasks = tasks;

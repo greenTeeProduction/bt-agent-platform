@@ -81,8 +81,8 @@ const (
 	globalErrorSpikeThreshold = 10 // raw count threshold in evaluation window
 
 	// No request / no activity thresholds.
-	noRequestDuration        = 10 * time.Minute
-	lowActivitySuppressHours = 1 * time.Hour
+	noRequestDuration      = 10 * time.Minute
+	lowActivitySuppressDur = 1 * time.Hour
 )
 
 // ─── Alert Evaluation ───────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 			Severity:    SeverityInfo,
 			Component:   "dashboard",
 			Summary:     "Dashboard has received no requests",
-			Description: "Dashboard has received no HTTP requests. This may be normal during low-usage periods.",
+			Description: fmt.Sprintf("Dashboard has received no HTTP requests for at least %s. This may be normal during low-usage periods.", noRequestDuration),
 			Firing:      true,
 		})
 	}
@@ -240,7 +240,7 @@ func evaluateHTTPAlerts(metrics MetricsJSON) []Alert {
 	return alerts
 }
 
-func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
+func evaluateGlobalAlerts(metrics MetricsJSON, _ time.Time) []Alert {
 	var alerts []Alert
 
 	// No platform activity: no requests AND no agents have recent activity
@@ -278,7 +278,7 @@ func evaluateGlobalAlerts(metrics MetricsJSON, now time.Time) []Alert {
 			Severity:    SeverityInfo,
 			Component:   "platform",
 			Summary:     "Low platform activity — consider suppressing alerts",
-			Description: "Platform request rate is near zero. Non-critical alert noise may be unnecessary during idle periods.",
+			Description: fmt.Sprintf("Platform request rate is near zero for at least %s. Non-critical alert noise may be unnecessary during idle periods.", lowActivitySuppressDur),
 			Firing:      true,
 		})
 	}

@@ -8,7 +8,7 @@ import (
 
 func TestRunSuite_SmokeErrorPath(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "", "", errors.New("connection refused")
 		},
 	}
@@ -38,7 +38,7 @@ func TestRunSuite_SmokeErrorPath(t *testing.T) {
 func TestRunSuite_SmokeShortOutput(t *testing.T) {
 	// Smoke test output shorter than 30 chars should fail
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Hi", nil // too short
 		},
 	}
@@ -60,7 +60,7 @@ func TestRunSuite_SmokeShortOutput(t *testing.T) {
 
 func TestRunSuite_Routing(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Task completed. All paths exercised.", nil
 		},
 	}
@@ -86,7 +86,7 @@ func TestRunSuite_Routing(t *testing.T) {
 
 func TestRunSuite_RoutingFailure(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "failure", "routing error: path not found", nil
 		},
 	}
@@ -112,7 +112,7 @@ func TestRunSuite_RoutingFailure(t *testing.T) {
 
 func TestRunSuite_RoutingError(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "", "", errors.New("agent not found")
 		},
 	}
@@ -137,7 +137,7 @@ func TestRunSuite_RoutingError(t *testing.T) {
 
 func TestRunSuite_Output(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Here is a detailed analysis of the code quality, security issues, and suggested improvements.", nil
 		},
 	}
@@ -159,7 +159,7 @@ func TestRunSuite_Output(t *testing.T) {
 
 func TestRunSuite_OutputFailureShort(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Too short", nil
 		},
 	}
@@ -178,7 +178,7 @@ func TestRunSuite_OutputFailureShort(t *testing.T) {
 
 func TestRunSuite_OutputFailureContainsError(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Here is the error: unable to process the request", nil
 		},
 	}
@@ -197,7 +197,7 @@ func TestRunSuite_OutputFailureContainsError(t *testing.T) {
 
 func TestRunSuite_OutputFailureOutcomeNotSuccess(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "failure", "A very long output that would pass length check but outcome is failure", nil
 		},
 	}
@@ -216,7 +216,7 @@ func TestRunSuite_OutputFailureOutcomeNotSuccess(t *testing.T) {
 
 func TestRunSuite_OutputError(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "", "", errors.New("LLM unavailable")
 		},
 	}
@@ -238,7 +238,7 @@ func TestRunSuite_OutputError(t *testing.T) {
 
 func TestRunSuite_EdgeEmptyInput(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "failure", "empty input received", nil
 		},
 	}
@@ -261,7 +261,7 @@ func TestRunSuite_EdgeEmptyInput(t *testing.T) {
 
 func TestRunSuite_EdgePanicOutput(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "chain_panic", "PANIC: runtime error: invalid memory address", nil
 		},
 	}
@@ -280,7 +280,7 @@ func TestRunSuite_EdgePanicOutput(t *testing.T) {
 
 func TestRunSuite_EdgeLongInput(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Processed long input successfully with detailed analysis and recommendations.", nil
 		},
 	}
@@ -299,7 +299,7 @@ func TestRunSuite_EdgeLongInput(t *testing.T) {
 
 func TestRunSuite_EdgeError(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "", "", errors.New("service unavailable")
 		},
 	}
@@ -319,7 +319,7 @@ func TestRunSuite_EdgeError(t *testing.T) {
 
 func TestRunSuite_RegressionSkip(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "some output", nil
 		},
 	}
@@ -344,7 +344,7 @@ func TestRunSuite_TotalsMixedCounts(t *testing.T) {
 	// Verify counting: passed=yes, failed=yes, but skipped never hits because
 	// no code path sets Passed=false with Error="" on the same result.
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "A sufficiently long output that passes all quality checks without errors.", nil
 		},
 	}

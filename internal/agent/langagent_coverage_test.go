@@ -22,11 +22,11 @@ import (
 // must return content that matches the ReAct "Final Answer:" format.
 type mockModelCorrect struct{}
 
-func (m *mockModelCorrect) Call(ctx context.Context, prompt string, opts ...llms.CallOption) (string, error) {
+func (m *mockModelCorrect) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	return "Final Answer: test passed", nil
 }
 
-func (m *mockModelCorrect) GenerateContent(ctx context.Context, msgs []llms.MessageContent, opts ...llms.CallOption) (*llms.ContentResponse, error) {
+func (m *mockModelCorrect) GenerateContent(_ context.Context, _ []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {
 	return &llms.ContentResponse{
 		Choices: []*llms.ContentChoice{{Content: "Final Answer: test passed"}},
 	}, nil
@@ -35,11 +35,11 @@ func (m *mockModelCorrect) GenerateContent(ctx context.Context, msgs []llms.Mess
 // mockModelError implements llms.Model and always returns an error.
 type mockModelError struct{}
 
-func (m *mockModelError) Call(ctx context.Context, prompt string, opts ...llms.CallOption) (string, error) {
+func (m *mockModelError) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	return "", context.DeadlineExceeded
 }
 
-func (m *mockModelError) GenerateContent(ctx context.Context, msgs []llms.MessageContent, opts ...llms.CallOption) (*llms.ContentResponse, error) {
+func (m *mockModelError) GenerateContent(_ context.Context, _ []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {
 	return nil, context.DeadlineExceeded
 }
 
@@ -392,7 +392,7 @@ func TestGetReflectionsTool_Call_Truncation(t *testing.T) {
 
 func TestBuildEvolvedPrompt(t *testing.T) {
 	fakeTools := []tools.Tool{
-		&RunTaskTool{run: func(s string) string { return "" }},
+		&RunTaskTool{run: func(_ string) string { return "" }},
 		&ReflectTool{},
 	}
 	prompt := buildEvolvedPrompt(fakeTools)
@@ -612,7 +612,7 @@ func TestNewEvolvedAgent_NilBlackboard(t *testing.T) {
 		LangLLM:   &mockModel{},
 		RefStore:  nil,
 		TreeStore: nil,
-		RunTaskFn: func(task string) string {
+		RunTaskFn: func(_ string) string {
 			return "result"
 		},
 		BB: nil, // nil blackboard
@@ -631,7 +631,7 @@ func TestNewEvolvedAgent_MinimalConfig(t *testing.T) {
 	// Only LangLLM is required; other fields can be nil
 	cfg := Config{
 		LangLLM:   &mockModel{},
-		RunTaskFn: func(task string) string { return "ok" },
+		RunTaskFn: func(_ string) string { return "ok" },
 	}
 	agent, err := NewEvolvedAgent(cfg)
 	if err != nil {
@@ -765,20 +765,14 @@ func TestMockLLM_SatisfiesInterface(t *testing.T) {
 func TestMockModel_SatisfiesInterface(t *testing.T) {
 	var m llms.Model = &mockModel{}
 
-	result, err := m.Call(context.Background(), "test")
-	if err != nil {
-		t.Fatalf("Call: %v", err)
-	}
-	if result != "Final Answer: test passed" {
-		t.Errorf("Call: %q", result)
-	}
-
-	resp, err := m.GenerateContent(context.Background(), []llms.MessageContent{}, nil...)
+	resp, err := m.GenerateContent(context.Background(), []llms.MessageContent{
+		{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextContent{Text: "test"}}},
+	})
 	if err != nil {
 		t.Fatalf("GenerateContent: %v", err)
 	}
-	if resp == nil {
-		t.Fatal("GenerateContent returned nil")
+	if len(resp.Choices) == 0 || resp.Choices[0].Content != "test" {
+		t.Errorf("GenerateContent: %+v", resp)
 	}
 }
 
@@ -792,7 +786,7 @@ func TestEvolvedAgent_Run_Error(t *testing.T) {
 		LangLLM:   &mockModelError{},
 		RefStore:  nil,
 		TreeStore: nil,
-		RunTaskFn: func(task string) string { return "x" },
+		RunTaskFn: func(_ string) string { return "x" },
 		BB:        &engine.Blackboard{},
 	}
 

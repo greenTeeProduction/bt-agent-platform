@@ -107,7 +107,7 @@ func TestHealthMonitorProbe(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/tags" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"models":[{"name":"qwen3.6:35b-a3b"}]}`))
+			_, _ = w.Write([]byte(`{"models":[{"name":"qwen3.6:35b-a3b"}]}`))
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -127,7 +127,7 @@ func TestHealthMonitorProbe(t *testing.T) {
 
 func TestHealthMonitorProbeFailure(t *testing.T) {
 	// Simulate a server that returns 500.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -175,7 +175,7 @@ func TestHealthMonitorNilSafety(t *testing.T) {
 }
 
 func TestHealthMonitorStopStart(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()

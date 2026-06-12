@@ -8,15 +8,15 @@ import (
 func TestKnowledgeGraph(t *testing.T) {
 	g := GlobalGraph
 
-	if len(g.Trees) != 42 {
-		t.Errorf("expected 42 trees, got %d", len(g.Trees))
+	if len(g.Trees) != 43 {
+		t.Errorf("expected 43 trees, got %d", len(g.Trees))
 	}
 
 	expectedCats := map[string]int{
 		"core":      2,
 		"finance":   10,
 		"research":  2,
-		"domain":    14,
+		"domain":    15,
 		"startup":   6,
 		"thinktank": 5,
 		"evolution": 3,
@@ -27,6 +27,14 @@ func TestKnowledgeGraph(t *testing.T) {
 		if len(trees) != expected {
 			t.Errorf("category %s: expected %d trees, got %d", cat, expected, len(trees))
 		}
+	}
+
+	// Verify domain:doormate is registered and its name is "DoorMate Assistant"
+	doormateTree, exists := g.Trees["domain:doormate"]
+	if !exists {
+		t.Error("expected domain:doormate tree to be registered")
+	} else if doormateTree.Name != "DoorMate Assistant" {
+		t.Errorf("expected domain:doormate name to be 'DoorMate Assistant', got '%s'", doormateTree.Name)
 	}
 
 	fmt.Println(g.Summary())

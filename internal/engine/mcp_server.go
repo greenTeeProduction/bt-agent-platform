@@ -317,7 +317,7 @@ func (s *Server) handleMessage(data []byte) {
 			var authParams struct {
 				BtAPIKey string `json:"bt_api_key"`
 			}
-			json.Unmarshal(msg.Params, &authParams)
+			_ = json.Unmarshal(msg.Params, &authParams)
 			if authParams.BtAPIKey != s.apiKey {
 				if s.auditEnabled {
 					security.AuditSecurityEvent(context.Background(), "mcp_auth_failure",

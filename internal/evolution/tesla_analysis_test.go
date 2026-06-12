@@ -2,12 +2,13 @@ package evolution_test
 
 import (
 	"fmt"
-	"github.com/nico/go-bt-evolve/internal/engine"
-	evolution "github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/llm"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
 func requireOllamaFinanceTest(t *testing.T) {
@@ -116,11 +117,7 @@ func TestTeslaValuation(t *testing.T) {
 
 func runTeslaTree(t *testing.T, name string, tree *evolution.SerializableNode) {
 	t.Helper()
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama unavailable: %v", err)
-		return
-	}
+	client := llm.NewClientOrSkip(t)
 	bb := &engine.Blackboard{
 		Task: "Analyze Tesla (TSLA): current stock price, market cap, last 4 quarters earnings (revenue, EPS, margins), EV deliveries growth, energy storage, FSD/AI progress, competitive position vs BYD/Ford/GM/Rivian, balance sheet (cash, debt, FCF), valuation (P/E, EV/EBITDA vs auto), risks (China, regulatory, competition, Musk concentration), bull/bear cases with price targets, investment recommendation.",
 		LLM:  client,

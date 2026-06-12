@@ -199,7 +199,7 @@ func TestTranspositionTable_Persistence(t *testing.T) {
 
 	tree := evolution.DefaultTree()
 	tt.Store(tree, "persist me", TranspositionEntry{Outcome: "success"})
-	tt.Save()
+	_ = tt.Save()
 
 	// Reload
 	tt2, err := NewTranspositionTable(tmpDir, 100)

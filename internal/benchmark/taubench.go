@@ -121,7 +121,7 @@ func LoadTauBenchTasks(domain string) ([]TauBenchEntry, error) {
 	}
 
 	tools := toolsForDomain(domain)
-	var entries []TauBenchEntry
+	entries := make([]TauBenchEntry, 0, 32)
 
 	for _, t := range rawTasks {
 		// Build scenario from reason_for_call and known_info
@@ -408,7 +408,7 @@ func retailTools() []TauBenchTool {
 // The evaluation tracks: goal achievement (success outcome), action accuracy
 // (how many expected tool names appear in the result), and average turns.
 func EvaluateTauBench(tree *evolution.SerializableNode, entries []TauBenchEntry, llmClient llm.LLM) *TauBenchMetrics {
-	var results []TauBenchResult
+	results := make([]TauBenchResult, 0, 32)
 	goalAchieved := 0
 	totalActionsMatched := 0
 	totalActionsExpected := 0

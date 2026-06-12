@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,6 +66,9 @@ func TestArc42Action_ReadConfigFiles_NoFile(t *testing.T) {
 }
 
 func TestArc42Action_DetectHardware(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hardware detection reads /proc and runs uname/df (Linux only)")
+	}
 	bb := &Blackboard{}
 	status := callArc42Action(t, "DetectHardware", bb)
 	if status != 1 {

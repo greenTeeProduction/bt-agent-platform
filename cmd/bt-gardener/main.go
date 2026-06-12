@@ -32,7 +32,7 @@ func (t *GardenerStatusTool) Name() string { return "gardener_status" }
 func (t *GardenerStatusTool) Description() string {
 	return "Get current status: tree count, metrics summary, improvement rate."
 }
-func (t *GardenerStatusTool) Call(ctx context.Context, input string) (string, error) {
+func (t *GardenerStatusTool) Call(_ context.Context, _ string) (string, error) {
 	summary := t.metrics.Summary()
 	summary["tree_count"] = t.registry.Count()
 	data, _ := json.MarshalIndent(summary, "", "  ")
@@ -47,7 +47,7 @@ func (t *GardenerRunCycleTool) Name() string { return "gardener_run_cycle" }
 func (t *GardenerRunCycleTool) Description() string {
 	return "Run one evolution cycle over ALL behavior trees. Returns per-tree fitness deltas."
 }
-func (t *GardenerRunCycleTool) Call(ctx context.Context, input string) (string, error) {
+func (t *GardenerRunCycleTool) Call(_ context.Context, _ string) (string, error) {
 	cfg := gardener.DefaultEvolveV2Config()
 	results, err := t.gardener.RunCycleV2(cfg)
 	if err != nil {
@@ -59,7 +59,7 @@ func (t *GardenerRunCycleTool) Call(ctx context.Context, input string) (string, 
 		Delta     float64 `json:"delta"`
 		Mutations int     `json:"mutations"`
 	}
-	var items []r
+	items := make([]r, 0, 16)
 	for _, m := range results {
 		items = append(items, r{Tree: m.TreeName, Improved: m.Improved, Delta: m.Delta, Mutations: m.Mutations})
 	}
@@ -76,7 +76,7 @@ func (t *GardenerRecommendTool) Name() string { return "gardener_recommend" }
 func (t *GardenerRecommendTool) Description() string {
 	return "Analyze all trees and their fitness scores. Recommend which need urgent attention."
 }
-func (t *GardenerRecommendTool) Call(ctx context.Context, input string) (string, error) {
+func (t *GardenerRecommendTool) Call(_ context.Context, _ string) (string, error) {
 	entries := t.registry.List()
 	records, _ := t.refStore.LoadAll()
 
@@ -86,13 +86,13 @@ func (t *GardenerRecommendTool) Call(ctx context.Context, input string) (string,
 		Nodes   int     `json:"nodes"`
 		Action  string  `json:"action"`
 	}
-	var recs []rec
+	recs := make([]rec, 0, 16)
 	for _, e := range entries {
 		if e.Tree == nil {
 			continue
 		}
 		f := evaluator.EvaluateTree(e.Tree, records)
-		action := "monitor"
+		var action string
 		switch {
 		case f.Composite < 40:
 			action = "URGENT: prune dead paths, add retries"
@@ -125,7 +125,7 @@ func main() {
 	// bt-agent saves to.
 	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
 
-	os.MkdirAll(metricsDir, 0755)
+	_ = os.MkdirAll(metricsDir, 0755)
 
 	cfg, cfgErr := buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath)
 	if cfgErr != nil {
@@ -198,7 +198,7 @@ Question: {{.input}}`,
 		fmt.Fprintf(os.Stderr, "%s%-25s %.1f → %.1f (Δ%+.1f) mut=%d\n",
 			mark, r.TreeName, r.BaseFitness, r.NewFitness, r.Delta, r.Mutations)
 	}
-	metricsTracker.Save()
+	_ = metricsTracker.Save()
 
 	// 24/7 loop
 	ticker := time.NewTicker(cfg.Interval)
@@ -240,7 +240,7 @@ Question: {{.input}}`,
 			}
 		}
 
-		metricsTracker.Save()
+		_ = metricsTracker.Save()
 		sum := metricsTracker.Summary()
 		fmt.Fprintf(os.Stderr, "Total: %v cycles | Rate: %v\n", sum["total_cycles"], sum["improvement_rate"])
 	}

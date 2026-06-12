@@ -137,25 +137,20 @@ func (ss *SessionStore) CreateSession(userID string) (string, error) {
 func (ss *SessionStore) ValidateSession(token string) (*Session, bool) {
 	hash := sha256Hex(token)
 
-	ss.mu.RLock()
-	s, ok := ss.sessions[hash]
-	ss.mu.RUnlock()
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
 
+	s, ok := ss.sessions[hash]
 	if !ok {
 		return nil, false
 	}
 
-	if time.Now().After(s.ExpiresAt) {
+	now := time.Now()
+	if now.After(s.ExpiresAt) {
 		return nil, false
 	}
 
-	// Update LastUsed
-	ss.mu.Lock()
-	if s2, ok := ss.sessions[hash]; ok {
-		s2.LastUsed = time.Now()
-	}
-	ss.mu.Unlock()
-
+	s.LastUsed = now
 	return s, true
 }
 
@@ -271,15 +266,24 @@ func (ss *SessionStore) Count() int {
 // SessionInfo returns public information about a session given the raw token.
 // Returns nil if the session is invalid or expired.
 func (ss *SessionStore) SessionInfo(token string) *SessionInfo {
-	s, ok := ss.ValidateSession(token)
+	hash := sha256Hex(token)
+
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	s, ok := ss.sessions[hash]
 	if !ok {
+		return nil
+	}
+	now := time.Now()
+	if now.After(s.ExpiresAt) {
 		return nil
 	}
 	return &SessionInfo{
 		CreatedAt: s.CreatedAt,
 		ExpiresAt: s.ExpiresAt,
 		LastUsed:  s.LastUsed,
-		Remaining: time.Until(s.ExpiresAt),
+		Remaining: s.ExpiresAt.Sub(now),
 	}
 }
 

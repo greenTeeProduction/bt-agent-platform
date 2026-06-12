@@ -168,7 +168,7 @@ func TestRotatingWriter_Size(t *testing.T) {
 		t.Errorf("initial size %d, want 0", rw.Size())
 	}
 
-	rw.Write([]byte("hello"))
+	_, _ = rw.Write([]byte("hello"))
 	if rw.Size() != 5 {
 		t.Errorf("size after write %d, want 5", rw.Size())
 	}
@@ -183,7 +183,7 @@ func TestRotatingWriter_Close(t *testing.T) {
 		t.Fatalf("NewRotatingWriter: %v", err)
 	}
 
-	rw.Write([]byte("data"))
+	_, _ = rw.Write([]byte("data"))
 	if err := rw.Close(); err != nil {
 		t.Errorf("Close: %v", err)
 	}

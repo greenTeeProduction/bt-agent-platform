@@ -6,7 +6,7 @@ import (
 
 func TestSuite_Smoke(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "success", "Hello! I am a test agent. How can I help you today?", nil
 		},
 	}
@@ -24,7 +24,7 @@ func TestSuite_Smoke(t *testing.T) {
 
 func TestSuite_Failure(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "failure", "error: something went wrong", nil
 		},
 	}
@@ -39,7 +39,7 @@ func TestSuite_Failure(t *testing.T) {
 
 func TestSuite_Panic(t *testing.T) {
 	runner := &Runner{
-		RunFunc: func(agentName, treeID, task string) (string, string, error) {
+		RunFunc: func(_, _, _ string) (string, string, error) {
 			return "chain_panic", "PANIC: runtime error", nil
 		},
 	}

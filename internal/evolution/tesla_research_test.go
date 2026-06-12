@@ -1,21 +1,16 @@
 package evolution_test
 
 import (
+	"testing"
+
 	"github.com/nico/go-bt-evolve/internal/engine"
 	evolution "github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"testing"
 )
 
 func TestTeslaDeepResearch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama: %v", err)
-		return
-	}
+	llm.SkipUnlessIntegration(t)
+	client := llm.NewClientOrSkip(t)
 
 	tree := evolution.DeepResearchTree()
 	bb := &engine.Blackboard{
@@ -28,14 +23,8 @@ func TestTeslaDeepResearch(t *testing.T) {
 }
 
 func TestTeslaQuickResearch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent test in short mode")
-	}
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		t.Skipf("Ollama: %v", err)
-		return
-	}
+	llm.SkipUnlessIntegration(t)
+	client := llm.NewClientOrSkip(t)
 
 	tree := evolution.QuickResearchTree()
 	bb := &engine.Blackboard{

@@ -12,7 +12,7 @@ func TestConsoleTracer_BasicSpan(t *testing.T) {
 	tracer, output := TestTracer("test")
 	ctx := context.Background()
 
-	ctx, span := tracer.StartSpan(ctx, "TestOperation")
+	_, span := tracer.StartSpan(ctx, "TestOperation")
 	if span == nil {
 		t.Fatal("expected non-nil span")
 	}
@@ -45,7 +45,7 @@ func TestConsoleTracer_ParentChild(t *testing.T) {
 
 	ctx := context.Background()
 	ctx, parent := tracer.StartSpan(ctx, "ParentOp")
-	ctx, child := tracer.StartSpan(ctx, "ChildOp")
+	_, child := tracer.StartSpan(ctx, "ChildOp")
 
 	child.SetAttribute("child", "true")
 	child.End()
@@ -166,7 +166,7 @@ func TestNoopTracer(t *testing.T) {
 func TestStartSpan_NilCtx(t *testing.T) {
 	// Test that StartSpan with nil context works (uses background)
 	tracer, _ := TestTracer("test")
-	ctx, span := tracer.StartSpan(nil, "NilCtxOp")
+	ctx, span := tracer.StartSpan(context.TODO(), "NilCtxOp")
 	if ctx == nil {
 		t.Fatal("expected non-nil context")
 	}
@@ -294,7 +294,7 @@ func TestConsoleTracer_OutputFormat(t *testing.T) {
 	}
 }
 
-func TestConsoleTracer_NilWriter(t *testing.T) {
+func TestConsoleTracer_NilWriter(_ *testing.T) {
 	// Should default to os.Stderr without panicking
 	tracer := NewConsoleTracer("nil-writer", nil)
 	ctx := context.Background()
@@ -408,9 +408,6 @@ func TestRatioSampler_EdgeTraceIDs(t *testing.T) {
 	rs := NewRatioSampler(0.01) // 1% sampling
 
 	// Trace ID starting with 00000000 should NOT be sampled (hash=0, threshold is 1%)
-	if !rs.ShouldSample("00000000-abcd", "op") {
-		// Actually 0 <= threshold so it IS sampled. Let me fix.
-	}
 	// 00000000 has hash=0, which is <= threshold for any ratio > 0
 	if !rs.ShouldSample("00000000-abcd", "op") {
 		t.Error("trace with hash 0 should be sampled at ratio 0.01")
@@ -430,7 +427,7 @@ func TestRatioSampler_ShortTraceID(t *testing.T) {
 	}
 }
 
-func TestRatioSampler_NonHexTraceID(t *testing.T) {
+func TestRatioSampler_NonHexTraceID(_ *testing.T) {
 	rs := NewRatioSampler(0.5)
 	// Non-hex characters use position-based fallback
 	// Just verify it doesn't panic
@@ -527,7 +524,7 @@ func TestConsoleTracer_ChildSpansNotSampled(t *testing.T) {
 	}
 }
 
-func TestConsoleTracer_SamplerConcurrent(t *testing.T) {
+func TestConsoleTracer_SamplerConcurrent(_ *testing.T) {
 	tracer, _ := TestTracer("concurrent-sampler")
 
 	var wg sync.WaitGroup

@@ -26,7 +26,7 @@ type BTAgentExecutor struct {
 }
 
 // Execute runs the BT agent for the given A2A task.
-func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (e *BTAgentExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		// Submit the task
 		if execCtx.StoredTask == nil {
@@ -120,7 +120,7 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 }
 
 // Cancel handles task cancellation.
-func (e *BTAgentExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (e *BTAgentExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCanceled,
 			a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("task cancelled by client"))), nil) {
@@ -130,7 +130,7 @@ func (e *BTAgentExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorCo
 }
 
 // resolveTreeByID is injected from main.go via SetTreeResolver.
-var resolveTreeByID = func(id string) *evolution.SerializableNode {
+var resolveTreeByID = func(_ string) *evolution.SerializableNode {
 	return nil
 }
 
@@ -192,7 +192,7 @@ func (s *Server) Start() error {
 }
 
 // handleGlobalAgentCard serves the global Agent Card.
-func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, _ *http.Request) {
 	card := &a2a.AgentCard{
 		Name:               "BT Agent Platform",
 		Description:        "Go behavior tree agent platform — 41+ trees across 7 domains",
@@ -209,7 +209,7 @@ func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(card)
+	_ = json.NewEncoder(w).Encode(card)
 }
 
 // handleWellKnown serves well-known discovery.
@@ -238,7 +238,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 			names = append(names, name)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"agents": names})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"agents": names})
 		return
 	}
 
@@ -256,9 +256,9 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHealth serves health check.
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "healthy",
 		"server": "a2a",
 		"agents": len(s.CardCache),

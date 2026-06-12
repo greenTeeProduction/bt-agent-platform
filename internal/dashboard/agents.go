@@ -85,9 +85,24 @@ type CircuitBreakers struct {
 
 // ListAgents reads agent definitions from YAML templates and combines with scheduler state.
 func ListAgents() []AgentInfo {
-	home := os.Getenv("HOME")
-	templatesDir := filepath.Join(home, "go-bt-evolve", "agents", "templates")
-	schedulerPath := filepath.Join(home, ".go-bt-evolve", "jobs", "scheduler-jobs.json")
+	// Try current directory first for local development, fallback to home directory
+	templatesDir := filepath.Join("agents", "templates")
+	if _, err := os.Stat(templatesDir); err != nil {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			home = os.Getenv("HOME")
+		}
+		templatesDir = filepath.Join(home, "go-bt-evolve", "agents", "templates")
+	}
+
+	schedulerPath := filepath.Join(".go-bt-evolve", "jobs", "scheduler-jobs.json")
+	if _, err := os.Stat(schedulerPath); err != nil {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			home = os.Getenv("HOME")
+		}
+		schedulerPath = filepath.Join(home, ".go-bt-evolve", "jobs", "scheduler-jobs.json")
+	}
 
 	// Load scheduler state for live stats
 	sched := loadScheduler(schedulerPath)
@@ -98,7 +113,7 @@ func ListAgents() []AgentInfo {
 		return nil
 	}
 
-	var agents []AgentInfo
+	agents := make([]AgentInfo, 0, 16)
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
 			continue

@@ -30,7 +30,7 @@ func TestUseCase_FullAgentLifecycle(t *testing.T) {
 	}
 
 	// 3. Update state
-	reg.UpdateState("lifecycle", StateRunning, "")
+	_ = reg.UpdateState("lifecycle", StateRunning, "")
 	got2, _ := reg.Get("lifecycle")
 	if got2.State != StateRunning {
 		t.Error("state update")
@@ -38,9 +38,9 @@ func TestUseCase_FullAgentLifecycle(t *testing.T) {
 
 	// 4. Record runs
 	for i := 0; i < 3; i++ {
-		hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "success", Duration: "1s", Quality: 0.9})
+		_ = hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "success", Duration: "1s", Quality: 0.9})
 	}
-	hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "failure", Duration: "2s", Quality: 0.3})
+	_ = hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "failure", Duration: "2s", Quality: 0.3})
 
 	// 5. Check stats
 	stats := hist.Stats("lifecycle")
@@ -64,7 +64,7 @@ func TestUseCase_FullAgentLifecycle(t *testing.T) {
 	}
 
 	// 8. Delete
-	reg.Delete("lifecycle")
+	_ = reg.Delete("lifecycle")
 	if _, err := reg.Get("lifecycle"); err == nil {
 		t.Error("should be deleted")
 	}
@@ -74,8 +74,8 @@ func TestUseCase_CatalogSearchExport(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
 	tmplDir := filepath.Join(dir, "templates")
-	os.MkdirAll(tmplDir, 0755)
-	os.WriteFile(filepath.Join(tmplDir, "search-agent.yaml"), []byte("name: search-agent\ndescription: A searchable test agent\ntree: domain:code_review\ncategory: testing\ntags: \"test,search,example\""), 0644)
+	_ = os.MkdirAll(tmplDir, 0755)
+	_ = os.WriteFile(filepath.Join(tmplDir, "search-agent.yaml"), []byte("name: search-agent\ndescription: A searchable test agent\ntree: domain:code_review\ncategory: testing\ntags: \"test,search,example\""), 0644)
 
 	cat := NewCatalog(reg, tmplDir)
 
@@ -110,7 +110,7 @@ func TestUseCase_CatalogSearchExport(t *testing.T) {
 
 	// Export
 	outPath := filepath.Join(dir, "exported.yaml")
-	cat.Export("search-agent", outPath)
+	_ = cat.Export("search-agent", outPath)
 	data, _ := os.ReadFile(outPath)
 	if len(data) < 30 {
 		t.Error("export")
@@ -123,7 +123,7 @@ func TestUseCase_SchedulerRunAndHistory(t *testing.T) {
 	histDir := filepath.Join(dir, "history")
 	hist, _ := NewHistory(histDir)
 
-	reg.Create(Definition{Name: "scheduled", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "scheduled", Tree: "domain:default", Version: "1.0.0"})
 	sched := NewScheduler(SchedulerConfig{Registry: reg, History: hist})
 
 	// Schedule
@@ -136,7 +136,7 @@ func TestUseCase_SchedulerRunAndHistory(t *testing.T) {
 	}
 
 	// Run now
-	runner := func(ctx RunContext) (string, string, error) {
+	runner := func(_ RunContext) (string, string, error) {
 		return "success", "executed", nil
 	}
 	outcome, _, err := sched.RunNow("scheduled", "test", runner, "10s")
@@ -166,7 +166,7 @@ func TestUseCase_DuplicateHandling(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
 
-	reg.Create(Definition{Name: "dup", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "dup", Tree: "domain:default", Version: "1.0.0"})
 	_, err := reg.Create(Definition{Name: "dup", Tree: "domain:default", Version: "1.0.0"})
 	if err == nil {
 		t.Error("duplicate should error")
@@ -196,7 +196,7 @@ func TestUseCase_EmptyRegistry(t *testing.T) {
 func TestUseCase_PersistenceAcrossInstances(t *testing.T) {
 	dir := t.TempDir()
 	reg1, _ := NewRegistry(dir)
-	reg1.Create(Definition{Name: "persist", Tree: "domain:default", Description: "test persist", Version: "1.0.0"})
+	_, _ = reg1.Create(Definition{Name: "persist", Tree: "domain:default", Description: "test persist", Version: "1.0.0"})
 
 	// New instance loads from same dir
 	reg2, _ := NewRegistry(dir)

@@ -18,7 +18,7 @@ func TestDelegateToA2A_MissingURL(t *testing.T) {
 
 	// Save and restore DelegateToA2AFn
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(targetURL, task string) (string, error) {
+	DelegateToA2AFn = func(_, _ string) (string, error) {
 		return "ok", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -45,7 +45,7 @@ func TestDelegateToA2A_MissingTaskEmptyChainState(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(targetURL, task string) (string, error) {
+	DelegateToA2AFn = func(_, _ string) (string, error) {
 		return "ok", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -73,7 +73,7 @@ func TestDelegateToA2A_UsesTaskFromChainState(t *testing.T) {
 
 	var capturedTask string
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(targetURL, task string) (string, error) {
+	DelegateToA2AFn = func(_, task string) (string, error) {
 		capturedTask = task
 		return "ok", nil
 	}
@@ -134,7 +134,7 @@ func TestDelegateToA2A_FnReturnsError(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(targetURL, task string) (string, error) {
+	DelegateToA2AFn = func(_, _ string) (string, error) {
 		return "", fmt.Errorf("connection refused")
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -164,7 +164,7 @@ func TestDelegateToA2A_Success(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(targetURL, task string) (string, error) {
+	DelegateToA2AFn = func(_, _ string) (string, error) {
 		return "A2A response: task completed", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()

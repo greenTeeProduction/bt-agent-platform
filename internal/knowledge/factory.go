@@ -31,6 +31,9 @@ type Factory struct {
 
 // NewFactory creates a tree factory backed by the knowledge graph.
 func NewFactory(kg *KnowledgeGraph) *Factory {
+	if kg == nil {
+		kg = NewKnowledgeGraph()
+	}
 	f := &Factory{
 		Graph:     kg,
 		Expert:    evolution.NewExpertKnowledge(),
@@ -61,8 +64,21 @@ func (f *Factory) extractTemplates() {
 				"keywords":   meta.Keywords,
 			},
 		}
-		f.Templates[meta.Category] = tmpl
+		f.Templates[id] = tmpl
+		if existing := f.Templates[meta.Category]; existing == nil || templateFitness(tmpl) > templateFitness(existing) {
+			f.Templates[meta.Category] = tmpl
+		}
 	}
+}
+
+func templateFitness(tmpl *TreeTemplate) float64 {
+	if tmpl == nil || tmpl.Metadata == nil {
+		return 0
+	}
+	if f, ok := tmpl.Metadata["fitness"].(float64); ok {
+		return f
+	}
+	return 0
 }
 
 // Breed creates a new tree by crossing over templates from 2-3 parent categories.
@@ -87,8 +103,12 @@ func (f *Factory) crossoverBreed(category string, parentIDs []string, task strin
 		if tmpl, ok := f.Templates[pid]; ok {
 			templates = append(templates, tmpl)
 		} else {
-			// Try by category
-			if tmpl, ok := f.Templates[pid]; ok {
+			// Try by category prefix for callers that pass "category:name" IDs.
+			category := pid
+			if parts := strings.SplitN(pid, ":", 2); len(parts) == 2 {
+				category = parts[0]
+			}
+			if tmpl, ok := f.Templates[category]; ok {
 				templates = append(templates, tmpl)
 			}
 		}
@@ -195,10 +215,7 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 		}
 		router.Children = append(router.Children, path)
 	}
-	tree.Children = append(tree.Children, router)
-
-	// Outcome handling
-	tree.Children = append(tree.Children,
+	tree.Children = append(tree.Children, router,
 		evolution.SerializableNode{Type: "Action", Name: "ReflectOnOutcome"},
 		f.defaultOutcomeSelector(),
 	)
@@ -233,7 +250,7 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 
 // ─── Helpers ───
 
-func (f *Factory) selectParents(category, task string) []string {
+func (f *Factory) selectParents(category, _ string) []string {
 	// Prefer parents from same category
 	var candidates []string
 	for id, tmpl := range f.Templates {

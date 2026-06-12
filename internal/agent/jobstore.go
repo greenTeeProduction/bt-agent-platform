@@ -40,7 +40,7 @@ func (fs *FileJobStore) Save(jobs []ScheduledJob) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	os.MkdirAll(filepath.Dir(fs.path), 0755)
+	_ = os.MkdirAll(filepath.Dir(fs.path), 0755)
 	tmp := fs.path + ".tmp"
 	data, err := json.MarshalIndent(jobs, "", "  ")
 	if err != nil {

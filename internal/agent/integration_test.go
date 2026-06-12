@@ -52,7 +52,7 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 func TestRegistry_DuplicateCreate(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "dup", Tree: "domain:default"})
+	_, _ = reg.Create(Definition{Name: "dup", Tree: "domain:default"})
 	_, err := reg.Create(Definition{Name: "dup", Tree: "domain:default"})
 	if err == nil {
 		t.Error("duplicate create should fail")
@@ -62,7 +62,7 @@ func TestRegistry_DuplicateCreate(t *testing.T) {
 func TestRegistry_Persistence(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
-	reg.Create(Definition{Name: "persist", Tree: "domain:default", Description: "test", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "persist", Tree: "domain:default", Description: "test", Version: "1.0.0"})
 
 	// Reload
 	reg2, _ := NewRegistry(dir)
@@ -81,8 +81,8 @@ func TestCatalog_InstallAndSearch(t *testing.T) {
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
 	tmplDir := filepath.Join(dir, "templates")
-	os.MkdirAll(tmplDir, 0755)
-	os.WriteFile(filepath.Join(tmplDir, "test-agent.yaml"), []byte(`name: test-agent
+	_ = os.MkdirAll(tmplDir, 0755)
+	_ = os.WriteFile(filepath.Join(tmplDir, "test-agent.yaml"), []byte(`name: test-agent
 description: Test agent for catalog
 tree: domain:default
 category: testing
@@ -124,8 +124,8 @@ func TestHistory_Cleanup(t *testing.T) {
 	oldTime := time.Now().Add(-48 * time.Hour)
 	recentTime := time.Now()
 
-	h.Record(RunRecord{AgentName: "clean", Outcome: "success", EndedAt: oldTime})
-	h.Record(RunRecord{AgentName: "clean", Outcome: "success", EndedAt: recentTime})
+	_ = h.Record(RunRecord{AgentName: "clean", Outcome: "success", EndedAt: oldTime})
+	_ = h.Record(RunRecord{AgentName: "clean", Outcome: "success", EndedAt: recentTime})
 
 	removed, err := h.Cleanup(24 * time.Hour)
 	if err != nil {
@@ -144,8 +144,8 @@ func TestHistory_Cleanup(t *testing.T) {
 func TestHistory_AllStats(t *testing.T) {
 	dir := t.TempDir()
 	h, _ := NewHistory(dir)
-	h.Record(RunRecord{AgentName: "a", Outcome: "success", Duration: "5s", Quality: 0.9, EndedAt: time.Now()})
-	h.Record(RunRecord{AgentName: "b", Outcome: "failure", Duration: "2s", Quality: 0.3, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "a", Outcome: "success", Duration: "5s", Quality: 0.9, EndedAt: time.Now()})
+	_ = h.Record(RunRecord{AgentName: "b", Outcome: "failure", Duration: "2s", Quality: 0.3, EndedAt: time.Now()})
 
 	allStats := h.AllStats()
 	if len(allStats) != 2 {

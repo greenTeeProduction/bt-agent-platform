@@ -333,11 +333,11 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 }) {
 	// Phase 1: Thinktank analysis
 	w.Status = "analyzing"
-	ttOrch.RunResearchRound()
-	ttOrch.RunDebate()
-	ttOrch.RunSynthesis()
-	ttOrch.RunPeerReview()
-	ttOrch.RunReportGeneration()
+	_ = ttOrch.RunResearchRound()
+	_ = ttOrch.RunDebate()
+	_ = ttOrch.RunSynthesis()
+	_ = ttOrch.RunPeerReview()
+	_ = ttOrch.RunReportGeneration()
 
 	// Phase 2: Convert recommendations to tasks
 	w.RecommendationsToTasks()

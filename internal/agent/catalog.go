@@ -67,7 +67,7 @@ func (c *Catalog) ListTemplates() ([]CatalogEntry, error) {
 		return nil, err
 	}
 
-	var result []CatalogEntry
+	result := make([]CatalogEntry, 0, 32)
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
 			continue

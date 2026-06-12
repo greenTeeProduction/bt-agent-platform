@@ -543,7 +543,6 @@ func findNextSection(text string) int {
 					if i < best {
 						best = i
 					}
-					break
 				}
 			}
 		}
@@ -583,7 +582,6 @@ func extractBulletPoints(text string) []string {
 				switch trimmed[i+1] {
 				case '.', ')', ' ':
 					trimmed = strings.TrimSpace(trimmed[i+2:])
-					break
 				}
 			}
 		}

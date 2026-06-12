@@ -246,6 +246,8 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 		return applyAddTool(tree, op.Target, op.Metadata)
 	case "improve_prompt":
 		return applyImprovePrompt(tree, op.Target, op.Metadata)
+	case "insert_block_before", "insert_block_after", "replace_with_block", "compose_blocks":
+		return tryApplyBlockMutations(tree, op)
 	}
 	return false
 }
@@ -444,7 +446,7 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 			if rand.Intn(2) == 0 {
 				// Shift first to last
 				first := children[0]
-				tree.Children[i].Children = append(children[1:], first)
+				tree.Children[i].Children = append(tree.Children[i].Children[1:], first)
 			} else {
 				// Shift last to first
 				last := children[len(children)-1]

@@ -93,7 +93,7 @@ func TestACPClientGenerateTalksToHermesACP(t *testing.T) {
 
 // TestACPHelperProcess is not a real test. It is a helper subprocess used by
 // ACP client tests to emulate a newline-delimited JSON-RPC ACP server.
-func TestACPHelperProcess(t *testing.T) {
+func TestACPHelperProcess(_ *testing.T) {
 	if len(os.Args) < 2 || os.Args[len(os.Args)-2] != "--" {
 		return
 	}

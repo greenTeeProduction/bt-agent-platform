@@ -117,14 +117,14 @@ func TestGenerator_BuildsCorrectTree(t *testing.T) {
 
 	// PreGate
 	preGate := serTree.Children[0]
-	if preGate.Name != "PreGate" || len(preGate.Children) != 1 {
-		t.Errorf("PreGate: expected 1 child, got %d", len(preGate.Children))
+	if preGate.Name != "PreGate" || len(preGate.Children) != 2 {
+		t.Errorf("PreGate: expected 2 known runtime children, got %d", len(preGate.Children))
 	}
 
 	// StrategyRouter
 	router := serTree.Children[1]
-	if router.Type != "Selector" {
-		t.Errorf("StrategyRouter: expected Selector, got %s", router.Type)
+	if router.Type != "DecisionTree" {
+		t.Errorf("StrategyRouter: expected DecisionTree, got %s", router.Type)
 	}
 	// One skill path + fallback execution
 	if len(router.Children) < 2 {
@@ -242,7 +242,7 @@ func TestFactory_CreateFromContent(t *testing.T) {
 func TestFactory_CreateFromFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	skillPath := filepath.Join(tmpDir, "SKILL.md")
-	os.WriteFile(skillPath, []byte("# Test\nCheck input, then act."), 0644)
+	_ = os.WriteFile(skillPath, []byte("# Test\nCheck input, then act."), 0644)
 
 	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	factory, _ := NewAgentFactory(mock, tmpDir)
@@ -260,7 +260,7 @@ func TestFactory_CreateFromFile(t *testing.T) {
 func TestFactory_CreateFromSkillDir_MdPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	skillPath := filepath.Join(tmpDir, "myskill.md")
-	os.WriteFile(skillPath, []byte("# My Skill"), 0644)
+	_ = os.WriteFile(skillPath, []byte("# My Skill"), 0644)
 
 	mock := &engine.MockLLM{GenerateResp: validTreeSpecJSON()}
 	factory, _ := NewAgentFactory(mock, tmpDir)

@@ -176,8 +176,8 @@ func TestKeyRing_RotateEmptyOldKey(t *testing.T) {
 func TestKeyRing_ListKeys(t *testing.T) {
 	kr := NewKeyRing()
 
-	kr.GenerateKey("label-a", 0)
-	kr.GenerateKey("label-b", 1*time.Hour)
+	_, _ = kr.GenerateKey("label-a", 0)
+	_, _ = kr.GenerateKey("label-b", 1*time.Hour)
 
 	keys := kr.ListKeys()
 	if len(keys) != 2 {
@@ -290,8 +290,8 @@ func TestKeyRing_CleanupExpired_None(t *testing.T) {
 	kr := NewKeyRing()
 
 	// Generate non-expiring keys
-	kr.GenerateKey("permanent-1", 0)
-	kr.GenerateKey("permanent-2", 0)
+	_, _ = kr.GenerateKey("permanent-1", 0)
+	_, _ = kr.GenerateKey("permanent-2", 0)
 
 	removed := kr.CleanupExpired()
 	if removed != 0 {
@@ -349,8 +349,8 @@ func TestExpiringKeys_EmptyRing(t *testing.T) {
 
 func TestExpiringKeys_OnlyPermanent(t *testing.T) {
 	kr := NewKeyRing()
-	kr.GenerateKey("perm-1", 0)
-	kr.GenerateKey("perm-2", 0)
+	_, _ = kr.GenerateKey("perm-1", 0)
+	_, _ = kr.GenerateKey("perm-2", 0)
 
 	hashes := kr.ExpiringKeys(1 * time.Hour)
 	if len(hashes) != 0 {
@@ -360,7 +360,7 @@ func TestExpiringKeys_OnlyPermanent(t *testing.T) {
 
 func TestExpiringKeys_WithinWindow(t *testing.T) {
 	kr := NewKeyRing()
-	kr.GenerateKey("expiring-soon", 100*time.Millisecond)
+	_, _ = kr.GenerateKey("expiring-soon", 100*time.Millisecond)
 
 	hashes := kr.ExpiringKeys(1 * time.Hour)
 	if len(hashes) != 1 {
@@ -370,7 +370,7 @@ func TestExpiringKeys_WithinWindow(t *testing.T) {
 
 func TestExpiringKeys_OutsideWindow(t *testing.T) {
 	kr := NewKeyRing()
-	kr.GenerateKey("expiring-later", 2*time.Hour)
+	_, _ = kr.GenerateKey("expiring-later", 2*time.Hour)
 
 	hashes := kr.ExpiringKeys(1 * time.Hour)
 	if len(hashes) != 0 {
@@ -457,7 +457,7 @@ func TestKeyRotationScheduler_RotateNow(t *testing.T) {
 
 func TestKeyRotationScheduler_NoExpiringKeys(t *testing.T) {
 	kr := NewKeyRing()
-	kr.GenerateKey("perm-key", 0) // never expires
+	_, _ = kr.GenerateKey("perm-key", 0) // never expires
 
 	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "rotated", nil)
 	rotated := krs.RotateNow()
@@ -534,7 +534,7 @@ func TestKeyRotationScheduler_BackgroundLoop(t *testing.T) {
 
 	var rotations int
 	var mu sync.Mutex
-	onRotate := func(hash, newKey string) {
+	onRotate := func(_, _ string) {
 		mu.Lock()
 		rotations++
 		mu.Unlock()
@@ -572,7 +572,7 @@ func TestKeyRotationScheduler_MultipleExpiring(t *testing.T) {
 
 	// Create 3 keys that expire soon
 	for i := 0; i < 3; i++ {
-		kr.GenerateKey("multi-key", 50*time.Millisecond)
+		_, _ = kr.GenerateKey("multi-key", 50*time.Millisecond)
 	}
 
 	time.Sleep(60 * time.Millisecond)
@@ -584,7 +584,7 @@ func TestKeyRotationScheduler_MultipleExpiring(t *testing.T) {
 	}
 }
 
-func TestKeyRotationScheduler_StartStopSafe(t *testing.T) {
+func TestKeyRotationScheduler_StartStopSafe(_ *testing.T) {
 	kr := NewKeyRing()
 	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Hour, "safe", nil)
 	krs.Start()

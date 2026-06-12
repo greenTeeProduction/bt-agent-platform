@@ -54,24 +54,24 @@ func (n *MCTSNode) Clone() *MCTSNode {
 
 // UCB1 computes the Upper Confidence Bound score for child selection.
 // Returns +inf for unvisited children to guarantee exploration.
-func (n *MCTSNode) UCB1(C float64) float64 {
+func (n *MCTSNode) UCB1(cExpl float64) float64 {
 	if n.N == 0 {
 		return math.Inf(1)
 	}
 	exploitation := n.Q / float64(n.N)
-	exploration := C * math.Sqrt(math.Log(float64(n.Parent.N))/float64(n.N))
+	exploration := cExpl * math.Sqrt(math.Log(float64(n.Parent.N))/float64(n.N))
 	return exploitation + exploration
 }
 
 // BestChild returns the child with the highest UCB1 score.
-func (n *MCTSNode) BestChild(C float64) *MCTSNode {
+func (n *MCTSNode) BestChild(cExpl float64) *MCTSNode {
 	if len(n.Children) == 0 {
 		return nil
 	}
 	best := n.Children[0]
-	bestScore := best.UCB1(C)
+	bestScore := best.UCB1(cExpl)
 	for _, ch := range n.Children[1:] {
-		score := ch.UCB1(C)
+		score := ch.UCB1(cExpl)
 		if score > bestScore {
 			best = ch
 			bestScore = score
@@ -354,7 +354,7 @@ func (m *MCTSMutator) backpropagate(node *MCTSNode, fitness float64) {
 
 // buildMutationOps creates the set of mutation operations to try from a given tree.
 // Includes warm-start hints from the experience bank if available.
-func (m *MCTSMutator) buildMutationOps(tree *SerializableNode) []string {
+func (m *MCTSMutator) buildMutationOps(_ *SerializableNode) []string {
 	ops := make([]string, len(AllMutationOps))
 	copy(ops, AllMutationOps)
 

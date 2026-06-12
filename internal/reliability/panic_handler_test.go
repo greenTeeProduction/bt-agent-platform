@@ -11,6 +11,7 @@ func TestSafeGo_RecoversPanic(t *testing.T) {
 	var handlerCalled bool
 	var handlerVal any
 	var handlerCtx string
+	handlerDone := make(chan struct{})
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -22,10 +23,11 @@ func TestSafeGo_RecoversPanic(t *testing.T) {
 		handlerCalled = true
 		handlerVal = v
 		handlerCtx = ctx
+		close(handlerDone)
 	})
 
 	wg.Wait()
-	time.Sleep(10 * time.Millisecond) // let handler goroutine run
+	<-handlerDone
 
 	if !handlerCalled {
 		t.Error("handler was not called after panic")
@@ -54,7 +56,7 @@ func TestSafeGo_NormalExecution(t *testing.T) {
 	}
 }
 
-func TestSafeGo_HandlerPanicIsRecovered(t *testing.T) {
+func TestSafeGo_HandlerPanicIsRecovered(_ *testing.T) {
 	// If the panic handler itself panics, it should be recovered.
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -62,7 +64,7 @@ func TestSafeGo_HandlerPanicIsRecovered(t *testing.T) {
 	SafeGo("handler-panic", func() {
 		defer wg.Done()
 		panic("original panic")
-	}, func(v any, ctx string) {
+	}, func(_ any, _ string) {
 		panic("handler crashed too")
 	})
 

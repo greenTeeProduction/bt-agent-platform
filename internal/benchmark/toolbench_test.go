@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/llm"
+
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -49,14 +51,12 @@ func TestToolBench_APISelection(t *testing.T) {
 }
 
 func TestToolBench_EvaluateWithGoDevTree(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent ToolBench test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	tree := evolution.GoDeveloperTree()
 	entries := BuiltinToolBench()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
-	metrics := EvaluateToolBench(tree, entries, mock)
+	metrics := EvaluateToolBench(tree, entries, llmBackend)
 
 	fmt.Printf("\nToolBench GoDev: %d tasks, API accuracy=%.0f%%, step completion=%.0f%%, success=%.0f%%\n",
 		metrics.TotalTasks, metrics.APISelectionAccuracy*100, metrics.StepCompletionRate*100, metrics.SuccessRate*100)
@@ -74,14 +74,12 @@ func TestToolBench_EvaluateWithGoDevTree(t *testing.T) {
 }
 
 func TestToolBench_EvaluateWithCodeReviewTree(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Ollama-dependent ToolBench test in short mode")
-	}
+	llm.SkipUnlessIntegration(t)
 	tree := domains.CodeReviewTree()
 	entries := BuiltinToolBench()
-	mock := DefaultLLM()
+	llmBackend := RealLLM(t)
 
-	metrics := EvaluateToolBench(tree, entries, mock)
+	metrics := EvaluateToolBench(tree, entries, llmBackend)
 
 	fmt.Printf("\nToolBench CodeReview: %d tasks, API accuracy=%.0f%%, step completion=%.0f%%\n",
 		metrics.TotalTasks, metrics.APISelectionAccuracy*100, metrics.StepCompletionRate*100)
@@ -104,8 +102,8 @@ func TestToolBench_EvaluateWithCodeReviewTree(t *testing.T) {
 
 func TestToolBench_EmptyEntries(t *testing.T) {
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
-	metrics := EvaluateToolBench(tree, nil, mock)
+	llmBackend := DefaultMock()
+	metrics := EvaluateToolBench(tree, nil, llmBackend)
 
 	if metrics.TotalTasks != 0 {
 		t.Errorf("empty entries should give 0 tasks, got %d", metrics.TotalTasks)
@@ -118,11 +116,11 @@ func TestToolBench_EmptyEntries(t *testing.T) {
 func TestToolBench_IndividualEntries(t *testing.T) {
 	entries := BuiltinToolBench()
 	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
+	llmBackend := DefaultMock()
 
 	// Test a few entries individually to verify they don't panic
 	sample := entries[:5]
-	metrics := EvaluateToolBench(tree, sample, mock)
+	metrics := EvaluateToolBench(tree, sample, llmBackend)
 
 	fmt.Printf("\nToolBench sample (5 entries): API accuracy=%.0f%%\n", metrics.APISelectionAccuracy*100)
 

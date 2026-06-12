@@ -318,7 +318,7 @@ func TestPrioritize_SamePriority(t *testing.T) {
 	}
 }
 
-func TestPrioritize_Empty(t *testing.T) {
+func TestPrioritize_Empty(_ *testing.T) {
 	wf := NewWorkflow("test", nil, nil)
 	wf.Tasks = []WorkflowTask{}
 	// Should not panic

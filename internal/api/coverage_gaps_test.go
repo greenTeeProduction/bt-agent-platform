@@ -525,9 +525,9 @@ func TestRouteBuilder_SunsetDate(t *testing.T) {
 }
 
 func TestCompressionMiddleware_NoGzipSupport(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -547,9 +547,9 @@ func TestCompressionMiddleware_NoGzipSupport(t *testing.T) {
 }
 
 func TestCompressionMiddleware_WithGzip(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true,"data":"hello world"}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":"hello world"}`))
 	}))
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -570,9 +570,9 @@ func TestCompressionMiddleware_WithGzip(t *testing.T) {
 }
 
 func TestDeprecatedHandler_WithSunsetDate(t *testing.T) {
-	h := DeprecatedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := DeprecatedHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}), "2026-12-31")
 
 	rec := httptest.NewRecorder()
@@ -594,8 +594,8 @@ func TestDeprecatedHandler_WithSunsetDate(t *testing.T) {
 }
 
 func TestDeprecatedHandler_NoSunset(t *testing.T) {
-	h := DeprecatedHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+	h := DeprecatedHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
 	}), "")
 
 	rec := httptest.NewRecorder()
@@ -611,8 +611,8 @@ func TestDeprecatedHandler_NoSunset(t *testing.T) {
 }
 
 func TestDeprecatedHandlerFunc(t *testing.T) {
-	h := DeprecatedHandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+	h := DeprecatedHandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
 	}, "2026-06-30")
 
 	rec := httptest.NewRecorder()
@@ -645,7 +645,7 @@ func TestGzipResponseWriter_NonCompressibleWrite(t *testing.T) {
 	}
 }
 
-func TestGzipResponseWriter_WriteHeaderIdempotent(t *testing.T) {
+func TestGzipResponseWriter_WriteHeaderIdempotent(_ *testing.T) {
 	inner := httptest.NewRecorder()
 	grw := &gzipResponseWriter{ResponseWriter: inner, Writer: io.Discard}
 	grw.Header().Set("Content-Type", "application/json")
@@ -658,9 +658,9 @@ func TestGzipResponseWriter_WriteHeaderIdempotent(t *testing.T) {
 // ─── CompressionMiddleware edge cases ────────────────────────────────────────
 
 func TestCompressionMiddleware_NonCompressibleType(t *testing.T) {
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
-		w.Write([]byte("PNG data"))
+		_, _ = w.Write([]byte("PNG data"))
 	}))
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -679,8 +679,8 @@ func TestCompressionMiddleware_NonCompressibleType(t *testing.T) {
 
 func TestCompressionMiddleware_NoContentType(t *testing.T) {
 	// Default to compressible when Content-Type is not set
-	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("raw data"))
+	handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("raw data"))
 	}))
 
 	req := httptest.NewRequest("GET", "/", nil)

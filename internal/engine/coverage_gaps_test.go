@@ -83,7 +83,7 @@ func TestValidateOutputQuality_MarkdownStructure(t *testing.T) {
 
 func TestBuildPlannerNode_FailThenSuccess(t *testing.T) {
 	// Register a temporary action that returns failure
-	RegisterAction("__test_fail2__", func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("__test_fail2__", func(_ *btcore.BTContext[Blackboard]) int {
 		return -1
 	})
 	defer func() {
@@ -120,7 +120,7 @@ func TestBuildPlannerNode_FailThenSuccess(t *testing.T) {
 
 func TestBuildPlannerNode_AllFail(t *testing.T) {
 	// Register a temporary action that returns failure
-	RegisterAction("__test_fail__", func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("__test_fail__", func(_ *btcore.BTContext[Blackboard]) int {
 		return -1
 	})
 	defer func() {

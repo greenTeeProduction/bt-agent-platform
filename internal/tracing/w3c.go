@@ -116,12 +116,12 @@ type traceParentSpan struct {
 	sc SpanContext
 }
 
-func (s *traceParentSpan) End()                                {}
-func (s *traceParentSpan) AddEvent(name string, attrs ...Attr) {}
-func (s *traceParentSpan) SetAttribute(key, value string)      {}
-func (s *traceParentSpan) RecordError(err error)               {}
-func (s *traceParentSpan) SpanContext() SpanContext            { return s.sc }
-func (s *traceParentSpan) IsRecording() bool                   { return false }
+func (s *traceParentSpan) End()                         {}
+func (s *traceParentSpan) AddEvent(_ string, _ ...Attr) {}
+func (s *traceParentSpan) SetAttribute(_, _ string)     {}
+func (s *traceParentSpan) RecordError(_ error)          {}
+func (s *traceParentSpan) SpanContext() SpanContext     { return s.sc }
+func (s *traceParentSpan) IsRecording() bool            { return false }
 
 // ContextWithTraceParent injects a TraceParent as the parent span context
 // into a context. This allows StartSpan calls on this context to produce

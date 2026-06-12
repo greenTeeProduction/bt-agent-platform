@@ -102,7 +102,7 @@ func (s *Store) LoadAll() ([]Record, error) {
 		}
 		return nil, fmt.Errorf("read dir: %w", err)
 	}
-	var records []Record
+	records := make([]Record, 0, 64)
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue

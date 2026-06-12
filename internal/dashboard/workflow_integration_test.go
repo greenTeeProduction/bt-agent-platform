@@ -11,7 +11,7 @@ import (
 func TestPipeline_IncidentResponse(t *testing.T) {
 	steps := []string{}
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, _ string) (string, string, error) {
 			steps = append(steps, agentName)
 			return "success", fmt.Sprintf("%s result", agentName), nil
 		},
@@ -41,7 +41,7 @@ func TestPipeline_IncidentResponse(t *testing.T) {
 
 func TestPipeline_SkipOnFailure(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, _ string) (string, string, error) {
 			if agentName == "flaky" {
 				return "failure", "failed", fmt.Errorf("oops")
 			}
@@ -66,7 +66,7 @@ func TestPipeline_SkipOnFailure(t *testing.T) {
 
 func TestPipeline_ConditionalGate(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			return "success", "degraded", nil
 		},
 	}
@@ -87,7 +87,7 @@ func TestPipeline_ConditionalGate(t *testing.T) {
 
 func TestPipeline_ConditionalGateFails(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			return "success", "healthy", nil
 		},
 	}
@@ -108,7 +108,7 @@ func TestPipeline_ConditionalGateFails(t *testing.T) {
 
 func TestPipeline_ApprovalStep(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			return "success", "ok", nil
 		},
 	}
@@ -129,7 +129,7 @@ func TestPipeline_ApprovalStep(t *testing.T) {
 
 func TestPipeline_UnknownStepKind(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			return "success", "ok", nil
 		},
 	}
@@ -152,7 +152,7 @@ func TestPipeline_UnknownStepKind(t *testing.T) {
 
 func TestPipeline_ParallelMixedResults(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(agentName, _, _ string) (string, string, error) {
 			if agentName == "failing" {
 				return "failure", "failed", fmt.Errorf("err")
 			}
@@ -183,7 +183,7 @@ func TestPipeline_ParallelMixedResults(t *testing.T) {
 func TestPipeline_LoopMaxIterations(t *testing.T) {
 	count := 0
 	runner := &Runner{
-		RunAgent: func(agentName, treeID, task string) (string, string, error) {
+		RunAgent: func(_, _, _ string) (string, string, error) {
 			count++
 			return "success", fmt.Sprintf("iter-%d", count), nil
 		},

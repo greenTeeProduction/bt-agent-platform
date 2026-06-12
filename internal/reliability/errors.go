@@ -528,13 +528,8 @@ func (p *RetryPolicy) ExecuteContext(ctx context.Context, fn func() error) error
 		lastCat = ClassifyError(err)
 
 		// Check if this category is retryable.
-		if !lastCat.IsRetryable() {
-			// Also check unknown — treated specially per RetryUnknown.
-			if lastCat == ErrCatUnknown && p.RetryUnknown {
-				// Fall through to retry logic.
-			} else {
-				return fmt.Errorf("retry refused for %s error: %w", lastCat, err)
-			}
+		if !lastCat.IsRetryable() && (lastCat != ErrCatUnknown || !p.RetryUnknown) {
+			return fmt.Errorf("retry refused for %s error: %w", lastCat, err)
 		}
 
 		// Don't sleep on the last attempt.

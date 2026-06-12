@@ -209,7 +209,7 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 
 	// Aggregate: success if all succeeded
 	allSuccess := true
-	var outputs []string
+	outputs := make([]string, 0, 8)
 	for _, sr := range results {
 		if sr.Outcome != "success" {
 			allSuccess = false
@@ -300,13 +300,13 @@ func expandTemplate(input string, state *wfState) string {
 	return result
 }
 
-func replaceAll(s, old, new string) string {
+func replaceAll(s, old, newStr string) string {
 	result := s
 	for {
 		next := result
 		for i := 0; i <= len(result)-len(old); i++ {
 			if result[i:i+len(old)] == old {
-				result = result[:i] + new + result[i+len(old):]
+				result = result[:i] + newStr + result[i+len(old):]
 				break
 			}
 		}

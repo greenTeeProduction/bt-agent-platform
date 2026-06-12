@@ -40,7 +40,7 @@ func TestRemoteExecutor_Execute_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expected)
+		_ = json.NewEncoder(w).Encode(expected)
 	}))
 	defer server.Close()
 
@@ -71,9 +71,9 @@ func TestRemoteExecutor_Execute_Success(t *testing.T) {
 }
 
 func TestRemoteExecutor_Execute_FailureResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(&AgentResult{
+		_ = json.NewEncoder(w).Encode(&AgentResult{
 			Agent:   "bad-agent",
 			Task:    "bad task",
 			Success: false,
@@ -100,9 +100,9 @@ func TestRemoteExecutor_Execute_FailureResponse(t *testing.T) {
 }
 
 func TestRemoteExecutor_Execute_HTTPError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("boom"))
+		_, _ = w.Write([]byte("boom"))
 	}))
 	defer server.Close()
 
@@ -121,9 +121,9 @@ func TestRemoteExecutor_Execute_HTTPError(t *testing.T) {
 }
 
 func TestRemoteExecutor_Execute_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer server.Close()
 
@@ -164,7 +164,7 @@ func TestRemoteExecutor_Health_OK(t *testing.T) {
 }
 
 func TestRemoteExecutor_Health_Down(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
@@ -226,7 +226,7 @@ func TestRemoteExecutor_WithAPIKey(t *testing.T) {
 		APIKey:  "secret-token-123",
 	})
 
-	exec.Health()
+	_ = exec.Health()
 
 	if receivedKey != "secret-token-123" {
 		t.Errorf("expected API key 'secret-token-123', got %q", receivedKey)
@@ -247,7 +247,7 @@ func TestRemoteExecutor_WithoutAPIKey(t *testing.T) {
 		// No APIKey set
 	})
 
-	exec.Health()
+	_ = exec.Health()
 
 	if receivedKey != "" {
 		t.Errorf("expected no API key header, got %q", receivedKey)
@@ -259,7 +259,7 @@ func TestRemoteExecutor_WithPoolTimeoutsExecuteAndHealth(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		if r.URL.Path == "/api/agents/execute" {
-			json.NewEncoder(w).Encode(&AgentResult{Success: true})
+			_ = json.NewEncoder(w).Encode(&AgentResult{Success: true})
 		}
 	}))
 	defer server.Close()
@@ -305,7 +305,7 @@ func TestAgentRouter_RemoteExecutorMultiNodeDistribution(t *testing.T) {
 				calls[name]++
 				mu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(&AgentResult{
+				_ = json.NewEncoder(w).Encode(&AgentResult{
 					Agent:   "distributed-agent",
 					Task:    "validate multi-node routing",
 					Output:  name,
@@ -356,7 +356,7 @@ func TestAgentRouter_RemoteExecutorMultiNodeDistribution(t *testing.T) {
 }
 
 func TestRemoteExecutor_CustomTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -385,7 +385,7 @@ func TestRemoteExecutor_DefaultTimeout(t *testing.T) {
 	}
 }
 
-func TestRemoteExecutor_ImplementsAgentExecutor(t *testing.T) {
+func TestRemoteExecutor_ImplementsAgentExecutor(_ *testing.T) {
 	var _ AgentExecutor = (*RemoteExecutor)(nil)
 }
 
@@ -397,7 +397,7 @@ func TestAgentRouter_WithRemoteExecutor(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case "/api/agents/execute":
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(&AgentResult{
+			_ = json.NewEncoder(w).Encode(&AgentResult{
 				Agent:        "test-agent",
 				Task:         "hello",
 				Output:       "from remote",

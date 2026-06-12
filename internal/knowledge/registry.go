@@ -365,6 +365,21 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 		},
 	})
 
+	kg.Register(&TreeMeta{
+		ID:          "domain:doormate",
+		Category:    "domain",
+		Name:        "DoorMate Assistant",
+		Description: "Page-first AI assistant: intent-predicting bubble engine, dynamic template-based page generation, and personalized profile learning",
+		NodeCount:   28,
+		Keywords:    []string{"doormate", "assistant", "page-first", "intent", "bubble", "template", "profile", "feedback"},
+		Capabilities: []Capability{
+			{Action: "parse_intent", Domain: "productivity", Strength: 0.9},
+			{Action: "generate_page", Domain: "productivity", Strength: 0.95},
+			{Action: "predict_bubbles", Domain: "productivity", Strength: 0.85},
+			{Action: "learn_profile", Domain: "productivity", Strength: 0.8},
+		},
+	})
+
 	// ── NotebookLM Domain Trees ────────────────────────────────────────────
 
 	kg.Register(&TreeMeta{

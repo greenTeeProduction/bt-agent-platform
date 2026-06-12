@@ -1,10 +1,11 @@
 {
-  "name": "go-bt-evolve",
+  "name": "bt-agent-platform-master",
   "version": "1.0.0",
   "description": "**Behavior-tree-driven AI agent framework** — 41 trees, 7 categories, 3 MCP servers, continuous self-evolution.",
-  "main": "test_dashboard.spec.js",
+  "main": "playwright.config.js",
   "directories": {
-    "doc": "docs"
+    "doc": "docs",
+    "test": "tests"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -16,11 +17,12 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/greenTeeProduction/bt-agent-platform/issues"
   },
   "homepage": "https://github.com/greenTeeProduction/bt-agent-platform#readme",
-  "dependencies": {
-    "playwright": "^1.60.0"
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

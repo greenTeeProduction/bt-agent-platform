@@ -451,7 +451,7 @@ func findChildByName(node *evolution.SerializableNode, name string) *evolution.S
 func TestRegisterAction_And_GetAction(t *testing.T) {
 	// Register a custom action
 	called := false
-	RegisterAction("TestCustomAction", func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("TestCustomAction", func(_ *btcore.BTContext[Blackboard]) int {
 		called = true
 		return 1
 	})
@@ -472,7 +472,7 @@ func TestRegisterAction_And_GetAction(t *testing.T) {
 
 func TestRegisterCondition_And_GetCondition(t *testing.T) {
 	called := false
-	RegisterCondition("TestCustomCondition", func(b *Blackboard) bool {
+	RegisterCondition("TestCustomCondition", func(_ *Blackboard) bool {
 		called = true
 		return true
 	})
