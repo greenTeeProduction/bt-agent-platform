@@ -242,3 +242,43 @@ func stringsContains(s, substr string) bool {
 	}
 	return false
 }
+
+// Summary used to take RLock and then call SuccessRate/RecoveryRate/AvgLatencyMs,
+// which RLock again. sync.RWMutex blocks recursive RLock when a writer is
+// queued between the two acquisitions, deadlocking reader and writer.
+func TestSLOMetrics_Summary_NoDeadlockWithConcurrentWriters(t *testing.T) {
+	m := &SLOMetrics{AgentName: "agent1", TreeName: "main"}
+
+	stop := make(chan struct{})
+	var writers sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		writers.Add(1)
+		go func() {
+			defer writers.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					m.RecordSuccess(time.Millisecond)
+				}
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 2000; i++ {
+			_ = m.Summary()
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		close(stop)
+		writers.Wait()
+	case <-time.After(10 * time.Second):
+		t.Fatal("Summary deadlocked with concurrent writers (recursive RLock)")
+	}
+}

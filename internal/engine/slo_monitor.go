@@ -25,6 +25,11 @@ type SLOMetrics struct {
 func (m *SLOMetrics) SuccessRate() float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.successRateLocked()
+}
+
+// successRateLocked requires m.mu held (read or write).
+func (m *SLOMetrics) successRateLocked() float64 {
 	if m.TotalCalls == 0 {
 		return 1.0
 	}
@@ -34,6 +39,11 @@ func (m *SLOMetrics) SuccessRate() float64 {
 func (m *SLOMetrics) RecoveryRate() float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.recoveryRateLocked()
+}
+
+// recoveryRateLocked requires m.mu held (read or write).
+func (m *SLOMetrics) recoveryRateLocked() float64 {
 	if m.FailedCalls == 0 {
 		return 0
 	}
@@ -43,6 +53,11 @@ func (m *SLOMetrics) RecoveryRate() float64 {
 func (m *SLOMetrics) AvgLatencyMs() float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.avgLatencyMsLocked()
+}
+
+// avgLatencyMsLocked requires m.mu held (read or write).
+func (m *SLOMetrics) avgLatencyMsLocked() float64 {
 	if m.TotalCalls == 0 {
 		return 0
 	}
@@ -83,8 +98,8 @@ func (m *SLOMetrics) Summary() string {
 	defer m.mu.RUnlock()
 	return fmt.Sprintf("[%s/%s] success=%.1f%% recovery=%.1f%% avg_latency=%.0fms calls=%d",
 		m.AgentName, m.TreeName,
-		m.SuccessRate()*100, m.RecoveryRate()*100,
-		m.AvgLatencyMs(), m.TotalCalls)
+		m.successRateLocked()*100, m.recoveryRateLocked()*100,
+		m.avgLatencyMsLocked(), m.TotalCalls)
 }
 
 // sloRegistry stores per-agent SLO metrics.
