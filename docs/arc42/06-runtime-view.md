@@ -65,21 +65,23 @@ Gardener                       bt-evaluator (MCP)            Evolution Engine   
 **Trigger:** Dashboard user POSTs to `/api/sprint` with company/quarter info.
 
 ```
-Browser                         bt-dashboard (:9800)           Goroutine                   bt-agent (MCP)
+Browser                         bt-dashboard (:9800)           Goroutine                   RunOnce (in-process)
   │                               │                            │                            │
   │──POST /api/sprint────────────▶│                            │                            │
-  │                               │──orch.RunSprint()─────────▶│                            │
-  │                               │                            │──Create tasks (5 roles)──▶│
+  │                               │──RunSprint()──────────────▶│                            │
+  │                               │                            │──Create tasks (5 roles)    │
   │                               │                            │──for each task:           │
-  │                               │                            │   hermes chat -q          │
-  │                               │                            │   "delegate to {tree}"───▶│──bt_run_task()──▶
-  │                               │                            │                            │◀──result────────
+  │                               │                            │   agent.RunAgent()───────▶│──BuildTree→Ollama
+  │                               │                            │◀──result──────────────────│
   │                               │                            │──mark task done           │
   │◀──{sprint_id}─────────────────│                            │                            │
   │                               │                            │                            │
   │──GET /api/sprint/status──────▶│                            │                            │
   │◀──{progress, tasks}───────────│                            │                            │
 ```
+
+**Fallback:** If the dashboard LLM runner failed to initialize at startup, `AgentExecutor` falls back to Hermes CLI delegation.
+
 
 **Duration:** 5-15 minutes (5+ Ollama calls per sprint). Poll-based status via `/api/sprint/status`.
 

@@ -99,6 +99,7 @@ See `internal/config/config.go` for full list.
 ## Links
 
 - Dashboard: http://localhost:9800
+- **BT Agents operator guide:** [docs/agents.md](./agents.md)
 - Architecture Decision Records: `docs/adr/`
 - Hands-on tutorial: `docs/TUTORIAL.md`
 - Troubleshooting guide: `docs/TROUBLESHOOTING.md`

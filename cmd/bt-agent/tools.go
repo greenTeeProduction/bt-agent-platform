@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -9,11 +10,13 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/agentexec"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -52,13 +55,13 @@ type mcpDeps struct {
 	llmClient    llm.LLM
 	llmHealth    *llm.HealthMonitor
 	cfg          *config.Config
-	agentHome    string
 	// Agent platform
 	agentReg    *agent.Registry
 	agentHist   *agent.History
 	agentMem    *agent.MemoryStore
 	globalSched *agent.Scheduler
 	dlq         *reliability.DeadLetterQueue
+	agentRunner *agent.RunDeps
 }
 
 // registerMCPTools registers all 36 MCP tools on the server.
@@ -667,35 +670,142 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── WORKFLOW ─────────────────────────────────────────────────────
 
-	server.RegisterTool("bt_workflow_run", "Run full thinktank->company pipeline: analyze, create tasks, execute",
-		map[string]engine.Property{"topic": {Type: "string", Description: "Topic for thinktank analysis"}},
-		[]string{"topic"},
+	server.RegisterTool("bt_workflow_run", "Run a YAML workflow pipeline or thinktank analysis on a topic",
+		map[string]engine.Property{
+			"pipeline": {Type: "string", Description: "Workflow name from agents/workflows/ (e.g. daily-research)"},
+			"input":    {Type: "string", Description: "Initial input passed to the workflow"},
+			"topic":    {Type: "string", Description: "Topic for thinktank:synthesis when pipeline is omitted"},
+		},
+		[]string{},
 		func(args json.RawMessage) *engine.ToolResult {
+			if degraded := checkLLMHealth(deps.llmHealth, "bt_workflow_run"); degraded != nil {
+				return degraded
+			}
 			var params struct {
-				Topic string `json:"topic"`
+				Pipeline string `json:"pipeline"`
+				Input    string `json:"input"`
+				Topic    string `json:"topic"`
 			}
 			_ = json.Unmarshal(args, &params)
-			data, _ := json.Marshal(map[string]interface{}{"topic": params.Topic, "status": "pipeline ready — use bt_thinktank_analyze + bt_startup_simulate"})
+
+			if deps.agentRunner == nil {
+				data, _ := json.Marshal(map[string]string{"error": "agent runner not configured"})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			if params.Pipeline != "" {
+				pipeline, err := agentexec.LoadPipeline(params.Pipeline)
+				if err != nil {
+					data, _ := json.Marshal(map[string]string{"error": err.Error()})
+					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+				}
+				result, err := agentexec.RunPipeline(context.Background(), deps.agentRunner, pipeline, params.Input)
+				if err != nil && result == nil {
+					data, _ := json.Marshal(map[string]string{"error": err.Error()})
+					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+				}
+				resp := map[string]interface{}{
+					"pipeline": params.Pipeline,
+					"run_id":   result.RunID,
+					"workflow": result.Workflow,
+					"outcome":  result.Outcome,
+					"duration": result.Duration.String(),
+					"steps":    result.Steps,
+				}
+				if err != nil {
+					resp["error"] = err.Error()
+				}
+				data, _ := json.Marshal(resp)
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			if params.Topic == "" {
+				data, _ := json.Marshal(map[string]string{
+					"error": "provide pipeline (YAML workflow name) or topic (thinktank analysis)",
+				})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+
+			res, err := deps.agentRunner.RunOnce(context.Background(), "thinktank:synthesis", params.Topic, agent.RunOptions{
+				InjectMemory:   true,
+				EnforceQuality: false,
+				RecordHistory:  true,
+				DisplayName:    "thinktank:synthesis",
+			})
+			if res == nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			resp := map[string]interface{}{
+				"topic":   params.Topic,
+				"tree":    res.TreeID,
+				"outcome": res.Outcome,
+				"result":  res.Output,
+			}
+			if err != nil {
+				resp["error"] = err.Error()
+			}
+			data, _ := json.Marshal(resp)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_workflow_approve", "Approve or reject a task",
+	server.RegisterTool("bt_workflow_approve", "Approve or reject a workflow/HITL task (by task_id or request_id)",
 		map[string]engine.Property{
-			"task_id": {Type: "string", Description: "Task ID"},
-			"action":  {Type: "string", Description: "approve or reject"},
+			"task_id":    {Type: "string", Description: "Workflow approval task id (wf:name:step:run) or dashboard task id"},
+			"request_id": {Type: "string", Description: "HITL request id (hitl-xxxxxxxx)"},
+			"action":     {Type: "string", Description: "approve or reject"},
+			"reviewer":   {Type: "string", Description: "Reviewer name (default: mcp)"},
+			"comment":    {Type: "string", Description: "Approval comment or rejection reason"},
 		},
-		[]string{"task_id", "action"},
+		[]string{"action"},
 		func(args json.RawMessage) *engine.ToolResult {
 			var params struct {
-				TaskID string `json:"task_id"`
-				Action string `json:"action"`
+				TaskID    string `json:"task_id"`
+				RequestID string `json:"request_id"`
+				Action    string `json:"action"`
+				Reviewer  string `json:"reviewer"`
+				Comment   string `json:"comment"`
 			}
 			_ = json.Unmarshal(args, &params)
-			status := "approved"
-			if params.Action == "reject" {
-				status = "rejected"
+			if hitl.DefaultStore == nil {
+				data, _ := json.Marshal(map[string]string{"error": "HITL store not initialized"})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			data, _ := json.Marshal(map[string]interface{}{"task_id": params.TaskID, "status": status})
+			if params.Reviewer == "" {
+				params.Reviewer = "mcp"
+			}
+			reject := params.Action == "reject"
+			if params.RequestID != "" {
+				var req *hitl.Request
+				var err error
+				if reject {
+					req, err = hitl.DefaultStore.Reject(params.RequestID, params.Reviewer, params.Comment)
+				} else {
+					req, err = hitl.DefaultStore.Approve(params.RequestID, params.Reviewer, params.Comment)
+				}
+				if err != nil {
+					data, _ := json.Marshal(map[string]string{"error": err.Error()})
+					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+				}
+				data, _ := json.Marshal(req)
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			if params.TaskID == "" {
+				data, _ := json.Marshal(map[string]string{"error": "task_id or request_id required"})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			var req *hitl.Request
+			var err error
+			if reject {
+				req, err = hitl.DefaultStore.RejectByTaskID(params.TaskID, params.Reviewer, params.Comment)
+			} else {
+				req, err = hitl.DefaultStore.ApproveByTaskID(params.TaskID, params.Reviewer, params.Comment)
+			}
+			if err != nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			data, _ := json.Marshal(req)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -725,7 +835,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			var inst *agent.Instance
 			var err error
 			if params.FromTemplate != "" {
-				tmplDir := deps.agentHome + "/go-bt-evolve/agents/templates"
+				tmplDir := agent.TemplatesDir()
 				cat := agent.NewCatalog(deps.agentReg, tmplDir)
 				inst, err = cat.InstallFromTemplate(params.FromTemplate)
 			} else {
@@ -759,8 +869,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	server.RegisterTool("bt_agent_run", "Run an agent with a task immediately",
 		map[string]engine.Property{
-			"agent": {Type: "string", Description: "Agent name or tree ID to run"},
-			"task":  {Type: "string", Description: "Task to execute"},
+			"agent":  {Type: "string", Description: "Agent name or tree ID to run"},
+			"task":   {Type: "string", Description: "Task to execute"},
+			"inputs": {Type: "object", Description: "Named input values matching agent YAML inputs spec"},
 		},
 		[]string{"agent", "task"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -768,37 +879,40 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return degraded
 			}
 			var params struct {
-				Agent string `json:"agent"`
-				Task  string `json:"task"`
+				Agent  string            `json:"agent"`
+				Task   string            `json:"task"`
+				Inputs map[string]string `json:"inputs"`
 			}
 			json.Unmarshal(args, &params)
-			bb := &engine.Blackboard{Task: params.Task, LLM: deps.llmClient, Reflections: deps.refStore, TreeStore: deps.treeStore}
-
-			// Resolve through agent registry first — agent names are not tree IDs.
-			// Only fall back to direct tree resolution if no agent found.
-			var tree *evolution.SerializableNode
-			inst, err := deps.agentReg.Get(params.Agent)
-			if err == nil {
-				tree = resolveTree(inst.Definition.Tree)
-			}
-			if tree == nil {
-				tree = resolveTree(params.Agent)
-			}
-			if tree == nil {
-				data, _ := json.Marshal(map[string]string{"error": "no tree found for: " + params.Agent})
+			if deps.agentRunner == nil {
+				data, _ := json.Marshal(map[string]string{"error": "agent runner not configured"})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			start := time.Now()
-			bt := engine.BuildTree(tree, bb)
-			_ = engine.RunTask(bb, bt)
-			outcome := bb.Outcome
-			duration := time.Since(start)
-			_ = deps.agentHist.Record(agent.RunRecord{
-				AgentName: params.Agent, Task: params.Task, Outcome: outcome,
-				Output: bb.Result, Duration: duration.String(), Quality: bb.QualityScore,
-				StartedAt: start, EndedAt: time.Now(),
+			res, err := deps.agentRunner.RunOnce(context.Background(), params.Agent, params.Task, agent.RunOptions{
+				InjectMemory:   true,
+				EnforceQuality: true,
+				RecordHistory:  true,
+				InputValues:    params.Inputs,
 			})
-			data, _ := json.Marshal(map[string]interface{}{"outcome": outcome, "result": bb.Result, "quality": bb.QualityScore, "duration": duration.String()})
+			if res == nil {
+				data, _ := json.Marshal(map[string]string{"error": err.Error()})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			resp := map[string]interface{}{
+				"outcome": res.Outcome, "result": res.Output, "quality": res.Quality,
+				"quality_passed": res.QualityPassed, "duration": res.Duration.String(),
+				"tree": res.TreeID, "output_passed": res.OutputPassed,
+			}
+			if len(res.QualityReasons) > 0 {
+				resp["quality_reasons"] = res.QualityReasons
+			}
+			if len(res.OutputReasons) > 0 {
+				resp["output_reasons"] = res.OutputReasons
+			}
+			if err != nil {
+				resp["error"] = err.Error()
+			}
+			data, _ := json.Marshal(resp)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -857,7 +971,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Agent string `json:"agent"`
 			}
 			_ = json.Unmarshal(args, &params)
-			if err := deps.agentReg.Delete(params.Agent); err != nil {
+			if deps.globalSched != nil {
+				_, _ = deps.globalSched.Schedule(params.Agent, "on_demand", "2h", 3)
+			}
+			if err := agent.DeleteRegisteredAgent(deps.agentReg, params.Agent); err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
@@ -898,7 +1015,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 
 			// Create per-agent memory store
-			agentMem, err := agent.NewMemoryStore(deps.agentHome+"/.go-bt-evolve/memory", params.Agent, 100)
+			agentMem, err := agent.NewMemoryStore(agent.MemoryDir(), params.Agent, 100)
 			if err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -941,7 +1058,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 
 			// Create per-agent memory store
-			agentMem, err := agent.NewMemoryStore(deps.agentHome+"/.go-bt-evolve/memory", params.Agent, 100)
+			agentMem, err := agent.NewMemoryStore(agent.MemoryDir(), params.Agent, 100)
 			if err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -977,7 +1094,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = json.Unmarshal(args, &params)
 
-			agentMem, err := agent.NewMemoryStore(deps.agentHome+"/.go-bt-evolve/memory", params.Agent, 100)
+			agentMem, err := agent.NewMemoryStore(agent.MemoryDir(), params.Agent, 100)
 			if err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

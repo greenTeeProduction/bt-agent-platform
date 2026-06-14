@@ -4,6 +4,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -44,17 +45,20 @@ type Pipeline struct {
 
 // StepResult captures the output of a single workflow step.
 type StepResult struct {
-	StepID   string        `json:"step_id"`
-	Agent    string        `json:"agent"`
-	Outcome  string        `json:"outcome"` // success, failure, skipped
-	Output   string        `json:"output"`
-	Duration time.Duration `json:"duration"`
-	Error    string        `json:"error,omitempty"`
+	StepID        string        `json:"step_id"`
+	Agent         string        `json:"agent"`
+	Outcome       string        `json:"outcome"` // success, failure, skipped, timeout, rejected
+	Output        string        `json:"output"`
+	Duration      time.Duration `json:"duration"`
+	Error         string        `json:"error,omitempty"`
+	HitlTaskID    string        `json:"hitl_task_id,omitempty"`
+	HitlRequestID string        `json:"hitl_request_id,omitempty"`
 }
 
 // WorkflowResult is the complete result of a workflow execution.
 type PipelineResult struct {
 	Workflow string        `json:"workflow"`
+	RunID    string        `json:"run_id,omitempty"`
 	Steps    []StepResult  `json:"steps"`
 	Outcome  string        `json:"outcome"` // success, failure, partial
 	Duration time.Duration `json:"duration"`
@@ -63,18 +67,33 @@ type PipelineResult struct {
 // Runner executes a workflow by delegating steps to the BT MCP agent.
 // It uses a RunnerFunc to execute individual agent steps (injected for testability).
 type Runner struct {
-	RunAgent func(agentName, treeID, task string) (outcome, output string, err error)
+	RunID        string // optional external run id (dashboard API); generated if empty
+	RunAgent     func(ctx context.Context, agentName, treeID, task string) (outcome, output string, err error)
+	WaitApproval func(ctx context.Context, step Step, state *wfState) (ApprovalWaitResult, error)
+}
+
+// ApprovalWaitResult carries HITL identifiers for workflow approval steps.
+type ApprovalWaitResult struct {
+	Approved  bool
+	TaskID    string
+	RequestID string
 }
 
 // Run executes the workflow and returns the result.
 func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*PipelineResult, error) {
 	start := time.Now()
-	result := &PipelineResult{Workflow: wf.Name}
+	runID := r.RunID
+	if runID == "" {
+		runID = fmt.Sprintf("%d", start.UnixNano())
+	}
+	result := &PipelineResult{Workflow: wf.Name, RunID: runID}
 
 	// Context carries state between steps
 	state := &wfState{
-		input: initialInput,
-		prev:  make(map[string]StepResult),
+		input:    initialInput,
+		prev:     make(map[string]StepResult),
+		workflow: wf.Name,
+		runID:    runID,
 	}
 
 	for _, step := range wf.Steps {
@@ -88,8 +107,12 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 
 		sr, err := r.executeStep(ctx, step, state)
 		if err != nil {
-			sr.Error = err.Error()
-			sr.Outcome = "failure"
+			if sr.Error == "" {
+				sr.Error = err.Error()
+			}
+			if sr.Outcome == "" {
+				sr.Outcome = "failure"
+			}
 		}
 		result.Steps = append(result.Steps, sr)
 		state.prev[step.ID] = sr
@@ -97,8 +120,8 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 		// Update state for next step
 		state.input = sr.Output
 
-		// Handle failure
-		if sr.Outcome == "failure" {
+		// Handle failure (including timeout and rejected approval)
+		if sr.Outcome == "failure" || sr.Outcome == "timeout" || sr.Outcome == "rejected" {
 			switch step.OnFailure {
 			case "skip":
 				continue
@@ -132,8 +155,26 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 }
 
 type wfState struct {
-	input string
-	prev  map[string]StepResult
+	input    string
+	prev     map[string]StepResult
+	workflow string
+	runID    string
+}
+
+func (s *wfState) cloneForParallel() *wfState {
+	if s == nil {
+		return &wfState{prev: make(map[string]StepResult)}
+	}
+	cp := &wfState{
+		input:    s.input,
+		workflow: s.workflow,
+		runID:    s.runID,
+		prev:     make(map[string]StepResult, len(s.prev)),
+	}
+	for k, v := range s.prev {
+		cp.prev[k] = v
+	}
+	return cp
 }
 
 func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (StepResult, error) {
@@ -143,12 +184,24 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 	switch step.Kind {
 	case StepAgent:
 		task := expandTemplate(step.Input, state)
-		outcome, output, err := r.RunAgent(step.Agent, "", task)
+		stepCtx, cancel := stepContext(ctx, step.Timeout)
+		defer cancel()
+		outcome, output, err := r.RunAgent(stepCtx, step.Agent, "", task)
 		sr.Outcome = outcome
 		sr.Output = output
 		sr.Duration = time.Since(start)
+		if errors.Is(stepCtx.Err(), context.DeadlineExceeded) {
+			sr.Outcome = "timeout"
+			if sr.Error == "" {
+				sr.Error = "step timeout exceeded"
+			}
+			return sr, stepCtx.Err()
+		}
 		if err != nil {
 			sr.Error = err.Error()
+			if sr.Outcome == "" || sr.Outcome == "success" {
+				sr.Outcome = "failure"
+			}
 		}
 		return sr, err
 
@@ -171,8 +224,36 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 		return r.executeLoop(ctx, step, state)
 
 	case StepApproval:
+		taskID := WorkflowApprovalTaskID(state.workflow, step.ID, state.runID)
+		sr.HitlTaskID = taskID
+		if r.WaitApproval != nil {
+			res, err := r.WaitApproval(ctx, step, state)
+			sr.HitlTaskID = res.TaskID
+			sr.HitlRequestID = res.RequestID
+			sr.Duration = time.Since(start)
+			if err != nil {
+				sr.Error = err.Error()
+				if errors.Is(err, context.DeadlineExceeded) {
+					sr.Outcome = "timeout"
+				} else if !res.Approved {
+					sr.Outcome = "rejected"
+					sr.Output = "approval rejected"
+				} else {
+					sr.Outcome = "failure"
+				}
+				return sr, err
+			}
+			if !res.Approved {
+				sr.Outcome = "rejected"
+				sr.Output = "approval rejected"
+				return sr, fmt.Errorf("approval rejected")
+			}
+			sr.Outcome = "success"
+			sr.Output = "approved"
+			return sr, nil
+		}
 		sr.Outcome = "pending_approval"
-		sr.Output = fmt.Sprintf("Waiting for approval: %s", step.Input)
+		sr.Output = fmt.Sprintf("Waiting for approval (hitl_task_id=%s): %s", taskID, expandTemplate(step.Input, state))
 		sr.Duration = time.Since(start)
 		return sr, nil
 
@@ -191,7 +272,8 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 		wg.Add(1)
 		go func(idx int, s Step) {
 			defer wg.Done()
-			sr, err := r.executeStep(ctx, s, state)
+			childState := state.cloneForParallel()
+			sr, err := r.executeStep(ctx, s, childState)
 			mu.Lock()
 			if err != nil {
 				if sr.Error == "" {
@@ -347,4 +429,16 @@ func trimQuotes(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
+}
+
+// stepContext returns a child context with step timeout when timeoutStr is valid (e.g. "30s", "5m").
+func stepContext(ctx context.Context, timeoutStr string) (context.Context, context.CancelFunc) {
+	if timeoutStr == "" {
+		return ctx, func() {}
+	}
+	d, err := time.ParseDuration(timeoutStr)
+	if err != nil || d <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, d)
 }

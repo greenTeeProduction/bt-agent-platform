@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,10 +202,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 
 	// Record history
 	if s.history != nil {
-		quality := 0.0
-		if outcome == "success" {
-			quality = estimateQuality(output)
-		}
+		quality := historyQualityScore(inst, outcome, output)
 		_ = s.history.Record(RunRecord{
 			AgentName: agentName,
 			Task:      task,
@@ -269,6 +267,7 @@ func (s *Scheduler) Start(runner AgentRunner) {
 						log.Printf("Scheduler: tick panicked (recovered): %v", r)
 					}
 				}()
+				s.SyncFromRegistry()
 				s.tick(runner)
 			}()
 		}
@@ -349,6 +348,72 @@ func betterScheduledJob(candidate, current *ScheduledJob) bool {
 	return candidate.ID > current.ID
 }
 
+// ApplySchedule persists an agent schedule to registry YAML and scheduler-jobs.json.
+// Use from CLI tools; a running bt-agent picks up YAML changes on the next scheduler sync tick.
+func ApplySchedule(reg *Registry, agentName, schedule, timeout string, maxRetries int) (*ScheduledJob, error) {
+	if timeout == "" {
+		timeout = "2h"
+	}
+	if maxRetries <= 0 {
+		maxRetries = 3
+	}
+	if err := os.MkdirAll(JobsDir(), 0755); err != nil {
+		return nil, fmt.Errorf("create jobs dir: %w", err)
+	}
+	store := NewFileJobStore(SchedulerJobsFile())
+	sched := NewScheduler(SchedulerConfig{Registry: reg, JobStore: store})
+	return sched.Schedule(agentName, schedule, timeout, maxRetries)
+}
+
+// RemoveAgentJobs drops persisted scheduler jobs for an agent name.
+func RemoveAgentJobs(agentName string) error {
+	store := NewFileJobStore(SchedulerJobsFile())
+	jobs, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+	filtered := make([]ScheduledJob, 0, len(jobs))
+	for _, job := range jobs {
+		if job.AgentName != agentName {
+			filtered = append(filtered, job)
+		}
+	}
+	if len(filtered) == len(jobs) {
+		return nil
+	}
+	return store.Save(filtered)
+}
+
+// DeleteRegisteredAgent removes an agent from the registry and clears scheduler jobs.
+func DeleteRegisteredAgent(reg *Registry, name string) error {
+	if reg == nil {
+		return fmt.Errorf("registry required")
+	}
+	if _, err := reg.Get(name); err != nil {
+		return err
+	}
+	if _, err := ApplySchedule(reg, name, "on_demand", "2h", 3); err != nil {
+		return fmt.Errorf("clear schedule for %q: %w", name, err)
+	}
+	if err := reg.Delete(name); err != nil {
+		return err
+	}
+	return RemoveAgentJobs(name)
+}
+
+// SyncFromRegistry reloads registry YAML from disk and reconciles in-memory jobs.
+func (s *Scheduler) SyncFromRegistry() {
+	if s.reg != nil {
+		if err := s.reg.ReloadFromDisk(); err != nil {
+			log.Printf("Scheduler: registry reload: %v", err)
+		}
+	}
+	s.ReconcileWithRegistry()
+}
+
 // ReconcileWithRegistry canonicalizes scheduler state using agent YAML as the
 // source of truth. It removes jobs for deleted agents, removes all jobs for
 // on_demand agents, collapses duplicates for scheduled agents, forces job
@@ -381,7 +446,7 @@ func (s *Scheduler) ReconcileWithRegistry() {
 			continue
 		}
 		if sched != "" {
-			job.Schedule = sched
+			applyJobSchedule(job, sched)
 		}
 		job.Active = true
 		if existing, ok := bestByAgent[job.AgentName]; !ok || betterScheduledJob(job, existing) {
@@ -522,10 +587,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 
 	// Record history
 	if s.history != nil {
-		quality := 0.0
-		if outcome == "success" {
-			quality = estimateQuality(output)
-		}
+		quality := historyQualityScore(inst, outcome, output)
 		errStr := ""
 		if runErr != nil {
 			errStr = runErr.Error()
@@ -592,6 +654,22 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	reportAgentOutcome(s.cbStore, job.AgentName, isSuccess)
 }
 
+// historyQualityScore combines heuristic and YAML QualitySpec scoring for history records.
+func historyQualityScore(inst *Instance, outcome, output string) float64 {
+	quality := 0.0
+	if outcome != "success" {
+		return quality
+	}
+	quality = estimateQuality(output)
+	if inst != nil && inst.Definition.Quality != nil {
+		specScore, _, _ := ValidateQualitySpec(inst.Definition.Quality, output)
+		if specScore > quality {
+			quality = specScore
+		}
+	}
+	return quality
+}
+
 // estimateQuality is a fast quality heuristic for output text.
 func estimateQuality(output string) float64 {
 	trimmed := strings.TrimSpace(output)
@@ -649,6 +727,16 @@ func estimateQuality(output string) float64 {
 		score = 1.0
 	}
 	return score
+}
+
+func applyJobSchedule(job *ScheduledJob, sched string) {
+	prev := job.Schedule
+	job.Schedule = sched
+	if sched != prev {
+		if next, err := parseSchedule(sched); err == nil {
+			job.NextRun = next
+		}
+	}
 }
 
 // parseSchedule converts a schedule string to the next run time.

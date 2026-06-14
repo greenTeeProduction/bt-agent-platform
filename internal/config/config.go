@@ -119,9 +119,20 @@ type PathConfig struct {
 // ResolvePaths populates cfg.Paths from env vars (BT_HOME, BT_CONFIG_FILE, etc.)
 // with sensible defaults. Call after Load().
 func (c *Config) ResolvePaths() {
-	home := os.Getenv("BT_HOME")
+	home := os.Getenv("BT_AGENT_HOME")
 	if home == "" {
-		home = filepath.Join(os.Getenv("HOME"), ".bt-agent")
+		home = os.Getenv("BT_HOME")
+	}
+	if home == "" {
+		if c.AgentDefsDir != "" {
+			home = filepath.Dir(c.AgentDefsDir)
+		} else {
+			userHome, err := os.UserHomeDir()
+			if err != nil || userHome == "" {
+				userHome = os.Getenv("HOME")
+			}
+			home = filepath.Join(userHome, ".go-bt-evolve")
+		}
 	}
 	c.Paths.HomeDir = home
 
@@ -131,7 +142,7 @@ func (c *Config) ResolvePaths() {
 	}
 	c.Paths.DBFile = filepath.Join(home, "agents.db")
 	c.Paths.DLQFile = filepath.Join(home, "dead_letter_queue.json")
-	c.Paths.TemplateDir = filepath.Join(home, "templates")
+	c.Paths.TemplateDir = filepath.Join(home, "agents", "templates")
 	c.Paths.ReflectionsDir = c.ReflectionsDir
 	if c.Paths.ReflectionsDir == "" {
 		c.Paths.ReflectionsDir = filepath.Join(home, "reflections")

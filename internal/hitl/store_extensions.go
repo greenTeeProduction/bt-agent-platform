@@ -1,6 +1,7 @@
 package hitl
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -56,6 +57,47 @@ func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
 	}
 	cp := *best
 	return &cp, true
+}
+
+// WaitForRequest polls until the request leaves pending state or ctx is cancelled.
+func (s *Store) WaitForRequest(ctx context.Context, id string, pollEvery time.Duration) (*Request, error) {
+	if s == nil {
+		return nil, fmt.Errorf("hitl: store not initialized")
+	}
+	if pollEvery <= 0 {
+		pollEvery = 500 * time.Millisecond
+	}
+	for {
+		st, err := s.RefreshStatus(id)
+		if err != nil {
+			return nil, err
+		}
+		switch st {
+		case StatusApproved, StatusSkipped:
+			req, ok := s.Get(id)
+			if !ok {
+				return nil, fmt.Errorf("hitl: request %q not found", id)
+			}
+			return req, nil
+		case StatusRejected, StatusExpired:
+			req, _ := s.Get(id)
+			return req, fmt.Errorf("hitl: request %s", st)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollEvery):
+		}
+	}
+}
+
+// WaitForTaskID polls the latest request for taskID until resolved.
+func (s *Store) WaitForTaskID(ctx context.Context, taskID string, pollEvery time.Duration) (*Request, error) {
+	req, ok := s.FindPendingByTaskID(taskID)
+	if !ok {
+		return nil, fmt.Errorf("hitl: no pending request for task %q", taskID)
+	}
+	return s.WaitForRequest(ctx, req.ID, pollEvery)
 }
 
 // ApproveByTaskID approves the latest pending request for taskID.

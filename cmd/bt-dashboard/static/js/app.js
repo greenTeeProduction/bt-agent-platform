@@ -45,6 +45,7 @@ function renderTab(tab) {
     case 'evolution': main.innerHTML = renderEvolution(); break;
     case 'traces':    main.innerHTML = renderTraces(); setTimeout(startTracesPolling, 200); break;
     case 'agents':    main.innerHTML = renderAgents(); setTimeout(loadAgents, 200); break;
+    case 'workflows': main.innerHTML = renderWorkflows(); setTimeout(loadWorkflows, 200); break;
     case 'scalability': main.innerHTML = renderScalability(); break;
     case 'doormate': main.innerHTML = renderDoormate(); setTimeout(initDoormateTab, 100); break;
   }

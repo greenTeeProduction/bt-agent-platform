@@ -7,10 +7,13 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/agent"
 )
 
-// AgentExecutor runs tasks through BT agents via Hermes CLI.
+// AgentExecutor runs tasks in-process when Runner is set, else falls back to Hermes CLI.
 type AgentExecutor struct {
+	Runner  *agent.RunDeps
 	Timeout time.Duration
 }
 
@@ -18,9 +21,25 @@ func NewAgentExecutor() *AgentExecutor {
 	return &AgentExecutor{Timeout: 5 * time.Minute}
 }
 
-// RunTask executes a task through the specified BT agent tree using Hermes CLI.
+// RunTask executes a task through the specified BT agent tree.
 // Returns the agent's output and outcome (success/failure).
-func (e *AgentExecutor) RunTask(_, task, treeID string) (output string, outcome string, err error) {
+func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, outcome string, err error) {
+	if e.Runner != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
+		defer cancel()
+		opts := agent.RunOptions{
+			InjectMemory:   true,
+			EnforceQuality: true,
+			RecordHistory:  true,
+			DisplayName:    agentName,
+		}
+		outcome, output, _, err = agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
+		return output, outcome, err
+	}
+	return e.runViaHermes(task, treeID)
+}
+
+func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	defer cancel()
 

@@ -135,7 +135,7 @@ func section5BuildingBlocks() *evolution.SerializableNode {
 				),
 				// Level 2: Dashboard whitebox
 				seq("Level2_Dashboard",
-					chain("llm_call:Generate Level 2 whitebox for bt-dashboard:\n- cmd/bt-dashboard/main.go: HTTP server on :9800, embed FS for static files\n- 8 tabs: Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap\n- API endpoints: /api/summary, /api/tree, /api/agents, /api/tasks, /api/sprint, /api/openapi.json\n- internal/dashboard/: agents.go, executor.go, tasks.go, metrics.go\n- AgentExecutor: shells out to hermes chat for BT task delegation", 1024),
+					chain("llm_call:Generate Level 2 whitebox for bt-dashboard:\n- cmd/bt-dashboard/main.go: HTTP server on :9800, embed FS for static files\n- Tabs: Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, Workflows, MindMap\n- API endpoints: /api/summary, /api/tree, /api/agents, /api/pipelines, /api/tasks, /api/sprint, /api/openapi.json\n- internal/dashboard/: agents.go, executor.go, workflow_orchestrator.go, tasks.go, metrics.go\n- AgentExecutor: in-process RunOnce via agent.RunAgent; Hermes CLI fallback when runner unavailable", 1024),
 				),
 				// Level 3: Chain types detail
 				seq("Level3_Chains",
@@ -155,7 +155,7 @@ func section6RuntimeView() *evolution.SerializableNode {
 			seq("PreGate", cond("Section5Done", "")),
 			sel("StrategyRouter",
 				seq("TaskExecution",
-					chain("llm_call:Generate arc42 Section 6 — Runtime View.\n\n6.1 Task Execution Scenario:\nSequence: Hermes → MCP Server (stdio) → bt-agent → RunTask() → BuildTree() → Tick loop → chainAction → Ollama → result → evolution.\n\n6.2 Evolution Cycle:\nGardener cron → ev_evaluate → ev_order_mutations → apply top mutation → ev_evaluate → compare fitness → accept/rollback → git commit.\n\n6.3 Sprint Execution:\nDashboard POST /api/sprint → Create tasks → goroutine → orch.RunSprint() → engineer tree → Ollama (2-4 min) → mark done → poll /api/sprint/status.\n\n6.4 Error Recovery:\nChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue if exhausted.\n\nFor each scenario, describe the step-by-step interaction between building blocks.", 2048),
+					chain("llm_call:Generate arc42 Section 6 — Runtime View.\n\n6.1 Task Execution Scenario:\nSequence: MCP client (Hermes/Cursor) → bt-agent MCP → RunTask() → BuildTree() → tick loop → ChainAction → Ollama → result.\n\n6.2 Evolution Cycle:\nGardener cron → ev_evaluate → ev_order_mutations → apply top mutation → ev_evaluate → compare fitness → accept/rollback → git commit.\n\n6.3 Sprint Execution:\nDashboard POST /api/sprint → Create tasks → goroutine → RunSprint() → agent.RunAgent/RunOnce in-process → mark done → poll /api/sprint/status.\n\n6.4 Error Recovery:\nChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue if exhausted.\n\nFor each scenario, describe the step-by-step interaction between building blocks.", 2048),
 				),
 			),
 			act("ValidateSection", "check 4 scenarios present"),

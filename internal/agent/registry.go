@@ -201,6 +201,31 @@ func (r *Registry) Delete(name string) error {
 	return nil
 }
 
+// ReloadFromDisk refreshes agent definitions from YAML files on disk.
+// Runtime stats (run count, success rate, last run) are preserved for agents that still exist.
+func (r *Registry) ReloadFromDisk() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	prev := r.instances
+	r.instances = make(map[string]*Instance)
+	if err := r.loadAll(); err != nil {
+		r.instances = prev
+		return err
+	}
+	for name, inst := range r.instances {
+		if old, ok := prev[name]; ok {
+			inst.ID = old.ID
+			inst.State = old.State
+			inst.RunCount = old.RunCount
+			inst.SuccessRate = old.SuccessRate
+			inst.LastRun = old.LastRun
+			inst.LastError = old.LastError
+		}
+	}
+	return nil
+}
+
 // saveDef persists an agent definition to disk as YAML.
 func (r *Registry) saveDef(def Definition) error {
 	path := filepath.Join(r.dir, def.Name+".yaml")

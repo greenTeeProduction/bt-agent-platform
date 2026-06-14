@@ -82,6 +82,10 @@ async function deleteAgent(name) {
 }
 
 async function runAgent(name) {
+  const task = window.prompt('Task for agent "' + name + '":', '');
+  if (task === null) return;
+  const taskText = task.trim() || 'Execute agent task';
+
   const buttons = document.querySelectorAll('.agent-run-btn');
   let btn = null;
   buttons.forEach(function(b) {
@@ -89,7 +93,7 @@ async function runAgent(name) {
   });
   if (btn) { btn.textContent = '⏳ Running...'; btn.disabled = true; }
   try {
-    const resp = await apiFetch('/agents/run?agent=' + encodeURIComponent(name) + '&task=Execute+scheduled+task');
+    const resp = await apiFetch('/agents/run?agent=' + encodeURIComponent(name) + '&task=' + encodeURIComponent(taskText));
     if (btn) { btn.textContent = '▶ Run'; btn.disabled = false; }
     const outcome = resp.outcome || 'unknown';
     if (btn) {

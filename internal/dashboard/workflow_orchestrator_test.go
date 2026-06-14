@@ -9,7 +9,7 @@ import (
 
 func TestWorkflow_Sequential(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, _, task string) (string, string, error) {
+		RunAgent: func(ctx context.Context, agentName, _, task string) (string, string, error) {
 			return "success", fmt.Sprintf("agent %q completed task: %s", agentName, task), nil
 		},
 	}
@@ -39,7 +39,7 @@ func TestWorkflow_Sequential(t *testing.T) {
 
 func TestWorkflow_Conditional(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(_, _, _ string) (string, string, error) {
+		RunAgent: func(ctx context.Context, _, _, _ string) (string, string, error) {
 			return "success", "degraded", nil
 		},
 	}
@@ -66,7 +66,7 @@ func TestWorkflow_Conditional(t *testing.T) {
 
 func TestWorkflow_Parallel(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, _, _ string) (string, string, error) {
+		RunAgent: func(ctx context.Context, agentName, _, _ string) (string, string, error) {
 			time.Sleep(10 * time.Millisecond)
 			return "success", fmt.Sprintf("%s done", agentName), nil
 		},
@@ -98,7 +98,7 @@ func TestWorkflow_Parallel(t *testing.T) {
 
 func TestWorkflow_OnFailureAbort(t *testing.T) {
 	runner := &Runner{
-		RunAgent: func(agentName, _, _ string) (string, string, error) {
+		RunAgent: func(ctx context.Context, agentName, _, _ string) (string, string, error) {
 			if agentName == "failing-agent" {
 				return "failure", "error output", fmt.Errorf("simulated failure")
 			}
@@ -130,7 +130,7 @@ func TestWorkflow_OnFailureAbort(t *testing.T) {
 func TestWorkflow_Loop(t *testing.T) {
 	iterations := 0
 	runner := &Runner{
-		RunAgent: func(_, _, _ string) (string, string, error) {
+		RunAgent: func(ctx context.Context, _, _, _ string) (string, string, error) {
 			iterations++
 			return "success", fmt.Sprintf("iteration %d", iterations), nil
 		},
@@ -160,10 +160,60 @@ func TestWorkflow_Loop(t *testing.T) {
 	}
 }
 
+func TestWorkflow_StepTimeout(t *testing.T) {
+	runner := &Runner{
+		RunAgent: func(ctx context.Context, _, _, _ string) (string, string, error) {
+			select {
+			case <-ctx.Done():
+				return "timeout", "", ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+				return "success", "done", nil
+			}
+		},
+	}
+
+	wf := Pipeline{
+		Name: "test-timeout",
+		Steps: []Step{
+			{ID: "slow", Kind: StepAgent, Agent: "slow-agent", Input: "work", Timeout: "50ms", OnFailure: "abort"},
+		},
+	}
+
+	result, _ := runner.Run(context.Background(), wf, "")
+	if result.Outcome != "failure" {
+		t.Errorf("expected failure outcome, got %s", result.Outcome)
+	}
+	if len(result.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(result.Steps))
+	}
+	if result.Steps[0].Outcome != "timeout" {
+		t.Errorf("expected timeout step outcome, got %s", result.Steps[0].Outcome)
+	}
+}
+
+func TestWorkflow_RunIDPropagation(t *testing.T) {
+	externalID := "abc123run"
+	runner := &Runner{
+		RunID: externalID,
+		RunAgent: func(ctx context.Context, _, _, _ string) (string, string, error) {
+			return "success", "ok", nil
+		},
+	}
+	result, err := runner.Run(context.Background(), Pipeline{Name: "rid-test", Steps: []Step{
+		{ID: "s1", Kind: StepAgent, Agent: "a", Input: "go"},
+	}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RunID != externalID {
+		t.Fatalf("expected run_id %q, got %q", externalID, result.RunID)
+	}
+}
+
 func TestWorkflow_OnFailureRetry(t *testing.T) {
 	attempts := 0
 	runner := &Runner{
-		RunAgent: func(_, _, _ string) (string, string, error) {
+		RunAgent: func(ctx context.Context, _, _, _ string) (string, string, error) {
 			attempts++
 			if attempts == 1 {
 				return "failure", "first attempt failed", fmt.Errorf("fail")

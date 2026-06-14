@@ -305,7 +305,7 @@ repository: "https://github.com/greenTeeProduction/bt-agent-platform"
 87|
 88|internal/dashboard/
 89|├── agents.go            — Agent listing, CRUD operations
-90|├── executor.go          — AgentExecutor: shells out to `hermes chat` for BT delegation
+90|├── executor.go          — AgentExecutor: in-process RunOnce via agent.RunAgent; Hermes CLI fallback when runner unavailable
 91|├── workflow_engine.go   — Workflow orchestration
 92|├── workflow_orchestrator.go — Multi-agent workflow coordination
 93|└── tasks.go             — Task CRUD
@@ -408,7 +408,7 @@ repository: "https://github.com/greenTeeProduction/bt-agent-platform"
 71|  │                               │──orch.RunSprint()─────────▶│                            │
 72|  │                               │                            │──Create tasks (5 roles)──▶│
 73|  │                               │                            │──for each task:           │
-74|  │                               │                            │   hermes chat -q          │
+74|  │                               │                            │   agent.RunAgent() in-process
 75|  │                               │                            │   "delegate to {tree}"───▶│──bt_run_task()──▶
 76|  │                               │                            │                            │◀──result────────
 77|  │                               │                            │──mark task done           │

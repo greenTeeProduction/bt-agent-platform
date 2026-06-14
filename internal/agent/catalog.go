@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // CatalogEntry is a lightweight listing for the agent marketplace.
@@ -131,16 +133,32 @@ func (c *Catalog) InstallFromTemplate(name string) (*Instance, error) {
 	}
 
 	// Parse the YAML template into a Definition
-	def := Definition{
-		Name:        name,
-		Description: extractYAMLField(string(data), "description"),
-		Version:     extractYAMLField(string(data), "version"),
-		Tree:        extractYAMLField(string(data), "tree"),
-		Schedule:    extractYAMLField(string(data), "schedule"),
-		Metadata: map[string]string{
-			"category": extractYAMLField(string(data), "category"),
-			"tags":     extractYAMLField(string(data), "tags"),
-		},
+	var def Definition
+	if err := yaml.Unmarshal(data, &def); err != nil {
+		return nil, fmt.Errorf("parse template %q: %w", name, err)
+	}
+	if def.Name == "" {
+		def.Name = name
+	}
+	if def.Schedule == "" {
+		def.Schedule = "on_demand"
+	}
+	if def.Version == "" {
+		def.Version = "1.0.0"
+	}
+	// Legacy templates may use top-level category/tags instead of metadata.*
+	if def.Metadata == nil {
+		def.Metadata = make(map[string]string)
+	}
+	if def.Metadata["category"] == "" {
+		if cat := extractYAMLField(string(data), "category"); cat != "" {
+			def.Metadata["category"] = cat
+		}
+	}
+	if def.Metadata["tags"] == "" {
+		if tags := extractYAMLField(string(data), "tags"); tags != "" {
+			def.Metadata["tags"] = tags
+		}
 	}
 
 	return c.reg.Create(def)

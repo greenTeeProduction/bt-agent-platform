@@ -45,7 +45,7 @@ func NotebooklmPlanImplementTree() *SerializableNode {
 				Metadata: map[string]any{
 					"system_msg": "You are an implementation agent executing a detailed plan. TASK: {{.Task}}. Read the implementation plan from .hermes/plans/, then execute each task: modify/create source files, wire up registrations, implement functionality. Use file_read to read plans and source files, file_write to create or modify files, shell_exec for go build and go test, go_build to compile, go_test to verify. Work through the task list methodically.",
 					"tools":      []any{"file_read", "file_write", "shell_exec", "go_build", "go_test", "go_vet", "web_search"},
-					"max_tokens": float64(15),
+					"max_tokens": float64(8192),
 				},
 			},
 

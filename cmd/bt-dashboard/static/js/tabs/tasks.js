@@ -44,7 +44,7 @@ async function refreshHITL() {
           <div class="task-card" style="margin-bottom:8px;padding:10px">
             <div style="font-weight:500;font-size:13px">${h.node_name || 'Approval'} — ${h.phase || 'pre'}</div>
             <div style="font-size:12px;color:var(--text-tertiary);margin:4px 0">${(h.prompt || '').slice(0, 120)}</div>
-            <div style="font-size:11px;color:var(--text-quaternary)">id: ${h.id} · task: ${(h.task || '').slice(0, 60)}</div>
+            <div style="font-size:11px;color:var(--text-quaternary)">id: ${h.id}${h.task_id ? ' · task_id: ' + h.task_id : ''}</div>
             <div class="task-actions" style="margin-top:8px">
               <button class="btn btn-success btn-sm" onclick="approveHITL('${h.id}',this)">✓ Approve</button>
               <button class="btn btn-danger btn-sm" onclick="rejectHITL('${h.id}',this)">✗ Reject</button>

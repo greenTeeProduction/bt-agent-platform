@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/nico/go-bt-evolve/internal/agent"
 )
 
 // AgentInfo holds the dashboard-facing agent summary.
@@ -27,17 +30,8 @@ type AgentInfo struct {
 
 // AgentWithStatus extends AgentInfo with circuit breaker status.
 type AgentWithStatus struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Tree        string  `json:"tree"`
-	Status      string  `json:"status"`
-	Schedule    string  `json:"schedule"`
-	SuccessRate float64 `json:"success_rate"`
-	TotalRuns   int     `json:"total_runs"`
-	AvgQuality  float64 `json:"avg_quality"`
-	LastRun     string  `json:"last_run"`
-	LastOutcome string  `json:"last_outcome"`
-	CBStatus    string  `json:"cb_status,omitempty"` // circuit breaker: "open", "closed", "half_open", "unknown"
+	AgentInfo
+	CBStatus string `json:"cb_status,omitempty"` // circuit breaker: "open", "closed", "half_open", "unknown"
 }
 
 // AgentYAMLConfig mirrors the agent YAML template format.
@@ -83,164 +77,146 @@ type CircuitBreakers struct {
 	Breakers map[string]CircuitBreakerEntry `json:"breakers"`
 }
 
-// ListAgents reads agent definitions from YAML templates and combines with scheduler state.
+// ListAgents reads installed agents from the registry and merges scheduler/history stats.
 func ListAgents() []AgentInfo {
-	// Try current directory first for local development, fallback to home directory
-	templatesDir := filepath.Join("agents", "templates")
-	if _, err := os.Stat(templatesDir); err != nil {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			home = os.Getenv("HOME")
-		}
-		templatesDir = filepath.Join(home, "go-bt-evolve", "agents", "templates")
+	out := make([]AgentInfo, 0, 16)
+	for _, a := range listRegistryAgents(false) {
+		out = append(out, a.AgentInfo)
 	}
-
-	schedulerPath := filepath.Join(".go-bt-evolve", "jobs", "scheduler-jobs.json")
-	if _, err := os.Stat(schedulerPath); err != nil {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			home = os.Getenv("HOME")
-		}
-		schedulerPath = filepath.Join(home, ".go-bt-evolve", "jobs", "scheduler-jobs.json")
-	}
-
-	// Load scheduler state for live stats
-	sched := loadScheduler(schedulerPath)
-
-	// Read agent YAML definitions
-	entries, err := os.ReadDir(templatesDir)
-	if err != nil {
-		return nil
-	}
-
-	agents := make([]AgentInfo, 0, 16)
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(templatesDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var cfg AgentYAMLConfig
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			continue
-		}
-		if cfg.Name == "" {
-			cfg.Name = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		}
-
-		info := AgentInfo{
-			Name:        cfg.Name,
-			Description: cfg.Description,
-			Tree:        cfg.Tree,
-			Status:      "created",
-			Schedule:    cfg.Schedule,
-		}
-
-		// Merge scheduler state
-		for _, job := range sched {
-			if job.AgentName == cfg.Name {
-				info.SuccessRate = job.SuccessRate
-				info.TotalRuns = job.TotalRuns
-				info.AvgQuality = job.AvgQuality
-				info.LastRun = job.LastRun
-				info.LastOutcome = job.LastOutcome
-				info.Status = job.Status
-				if info.Status == "" {
-					info.Status = "scheduled"
-				}
-			}
-		}
-
-		agents = append(agents, info)
-	}
-
-	// Sort alphabetically
-	sort.Slice(agents, func(i, j int) bool {
-		return agents[i].Name < agents[j].Name
-	})
-
-	return agents
+	return out
 }
 
-// ListAgentsWithCB reads agent definitions and includes circuit breaker status.
+// ListAgentsWithCB reads registry agents and includes circuit breaker status.
 func ListAgentsWithCB() []AgentWithStatus {
-	home := os.Getenv("HOME")
-	templatesDir := filepath.Join(home, "go-bt-evolve", "agents", "templates")
-	schedulerPath := filepath.Join(home, ".go-bt-evolve", "jobs", "scheduler-jobs.json")
-	cbPath := filepath.Join(home, ".go-bt-evolve", "circuit_breakers.json")
+	return listRegistryAgents(true)
+}
 
-	// Load scheduler state for live stats
-	sched := loadScheduler(schedulerPath)
-
-	// Load circuit breaker state
-	cbMap := loadCircuitBreakers(cbPath)
-
-	// Read agent YAML definitions
-	entries, err := os.ReadDir(templatesDir)
+func listRegistryAgents(withCB bool) []AgentWithStatus {
+	reg, err := agent.NewRegistry(agent.RegistryDir())
 	if err != nil {
 		return nil
 	}
+	sched := loadScheduler(agent.SchedulerJobsFile())
+	cbMap := loadCircuitBreakers(agent.CircuitBreakersFile())
+	hist, _ := agent.NewHistory(agent.HistoryDir())
 
-	var agents []AgentWithStatus
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(templatesDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var cfg AgentYAMLConfig
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			continue
-		}
-		if cfg.Name == "" {
-			cfg.Name = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		}
-
+	agents := make([]AgentWithStatus, 0, len(reg.List()))
+	for _, inst := range reg.List() {
+		def := inst.Definition
 		info := AgentWithStatus{
-			Name:        cfg.Name,
-			Description: cfg.Description,
-			Tree:        cfg.Tree,
-			Status:      "created",
-			Schedule:    cfg.Schedule,
-			CBStatus:    "unknown",
+			AgentInfo: AgentInfo{
+				Name:        def.Name,
+				Description: def.Description,
+				Tree:        def.Tree,
+				Schedule:    def.Schedule,
+				Status:      agentStatus(def, inst),
+				SuccessRate: inst.SuccessRate,
+				TotalRuns:   inst.RunCount,
+			},
+			CBStatus: "unknown",
 		}
-
-		// Merge scheduler state
-		for _, job := range sched {
-			if job.AgentName == cfg.Name {
-				info.SuccessRate = job.SuccessRate
-				info.TotalRuns = job.TotalRuns
-				info.AvgQuality = job.AvgQuality
-				info.LastRun = job.LastRun
-				info.LastOutcome = job.LastOutcome
-				info.Status = job.Status
-				if info.Status == "" {
-					info.Status = "scheduled"
-				}
+		if withCB {
+			if cb, ok := cbMap[def.Name]; ok {
+				info.CBStatus = cb.Status
 			}
 		}
 
-		// Merge circuit breaker status
-		if cb, ok := cbMap[cfg.Name]; ok {
-			info.CBStatus = cb.Status
+		mergeSchedulerJob(&info.AgentInfo, sched)
+		if hist != nil {
+			mergeHistoryStats(&info.AgentInfo, hist.Stats(def.Name))
 		}
-
+		if !inst.LastRun.IsZero() && info.LastRun == "" {
+			info.LastRun = inst.LastRun.Format(time.RFC3339)
+		}
 		agents = append(agents, info)
 	}
 
-	// Sort alphabetically
 	sort.Slice(agents, func(i, j int) bool {
 		return agents[i].Name < agents[j].Name
 	})
-
 	return agents
 }
 
-// CreateAgent writes a new agent YAML template to disk.
+func agentStatus(def agent.Definition, inst *agent.Instance) string {
+	if inst.State == agent.StateRunning {
+		return "running"
+	}
+	if inst.State == agent.StateError {
+		return "error"
+	}
+	if def.Schedule != "" && def.Schedule != "on_demand" {
+		return "scheduled"
+	}
+	return "created"
+}
+
+func mergeSchedulerJob(info *AgentInfo, sched []ScheduledJob) {
+	for _, job := range sched {
+		if job.AgentName != info.Name {
+			continue
+		}
+		if job.TotalRuns > info.TotalRuns {
+			info.TotalRuns = job.TotalRuns
+		}
+		if job.SuccessRate > 0 {
+			info.SuccessRate = job.SuccessRate
+		}
+		if job.AvgQuality > 0 {
+			info.AvgQuality = job.AvgQuality
+		}
+		if job.LastRun != "" {
+			info.LastRun = job.LastRun
+		}
+		if job.LastOutcome != "" {
+			info.LastOutcome = job.LastOutcome
+		}
+		if job.Status != "" {
+			info.Status = job.Status
+		} else if info.Status == "created" {
+			info.Status = "scheduled"
+		}
+	}
+}
+
+func mergeHistoryStats(info *AgentInfo, stats agent.RunStats) {
+	if stats.TotalRuns == 0 {
+		return
+	}
+	if stats.TotalRuns >= info.TotalRuns {
+		info.TotalRuns = stats.TotalRuns
+		info.SuccessRate = stats.SuccessRate
+		info.AvgQuality = stats.AvgQuality
+		if !stats.LastRun.IsZero() {
+			info.LastRun = stats.LastRun.Format(time.RFC3339)
+		}
+		if stats.LastOutcome != "" {
+			info.LastOutcome = stats.LastOutcome
+		}
+	}
+}
+
+// DefaultAgentTask returns task text when the caller did not supply one.
+// Uses the agent description from registry YAML, then the agent name.
+func DefaultAgentTask(agentName string) string {
+	agentName = strings.TrimSpace(agentName)
+	if agentName == "" {
+		return "Execute agent task"
+	}
+	reg, err := agent.NewRegistry(agent.RegistryDir())
+	if err != nil {
+		return agentName
+	}
+	inst, err := reg.Get(agentName)
+	if err != nil {
+		return agentName
+	}
+	if desc := strings.TrimSpace(inst.Definition.Description); desc != "" {
+		return desc
+	}
+	return agentName
+}
+
+// CreateAgent writes a new agent YAML to the registry.
 func CreateAgent(info AgentYAMLConfig) error {
 	if info.Name == "" {
 		return fmt.Errorf("agent name is required")
@@ -249,56 +225,63 @@ func CreateAgent(info AgentYAMLConfig) error {
 		return fmt.Errorf("tree is required")
 	}
 
-	home := os.Getenv("HOME")
-	templatesDir := filepath.Join(home, "go-bt-evolve", "agents", "templates")
-
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(templatesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create templates directory: %w", err)
+	if err := os.MkdirAll(agent.RegistryDir(), 0755); err != nil {
+		return fmt.Errorf("failed to create registry directory: %w", err)
 	}
 
-	// Set defaults
 	if info.Schedule == "" {
 		info.Schedule = "on_demand"
 	}
 
-	// Marshal to YAML
 	data, err := yaml.Marshal(info)
 	if err != nil {
 		return fmt.Errorf("failed to marshal agent YAML: %w", err)
 	}
 
-	// Write the file
-	filePath := filepath.Join(templatesDir, info.Name+".yaml")
+	filePath := filepath.Join(agent.RegistryDir(), info.Name+".yaml")
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write agent file: %w", err)
+	}
+
+	if info.Schedule != "" && info.Schedule != "on_demand" {
+		reg, err := agent.NewRegistry(agent.RegistryDir())
+		if err != nil {
+			return fmt.Errorf("created agent but failed to open registry: %w", err)
+		}
+		if _, err := agent.ApplySchedule(reg, info.Name, info.Schedule, "2h", 3); err != nil {
+			return fmt.Errorf("created agent but failed to register schedule: %w", err)
+		}
 	}
 
 	return nil
 }
 
-// DeleteAgent removes an agent YAML template from disk.
+// DeleteAgent removes an agent from the registry and clears its scheduler jobs.
 func DeleteAgent(name string) error {
 	if name == "" {
 		return fmt.Errorf("agent name is required")
 	}
 
-	home := os.Getenv("HOME")
-	filePath := filepath.Join(home, "go-bt-evolve", "agents", "templates", name+".yaml")
-
-	// Also try .yml extension
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		filePath = filepath.Join(home, "go-bt-evolve", "agents", "templates", name+".yml")
+	reg, err := agent.NewRegistry(agent.RegistryDir())
+	if err != nil {
+		return fmt.Errorf("open registry: %w", err)
 	}
 
+	if err := agent.DeleteRegisteredAgent(reg, name); err == nil {
+		return nil
+	}
+
+	filePath := filepath.Join(agent.RegistryDir(), name+".yaml")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		filePath = filepath.Join(agent.RegistryDir(), name+".yml")
+	}
 	if err := os.Remove(filePath); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("agent %q not found", name)
 		}
 		return fmt.Errorf("failed to delete agent %q: %w", name, err)
 	}
-
-	return nil
+	return agent.RemoveAgentJobs(name)
 }
 
 func loadScheduler(path string) []ScheduledJob {
@@ -306,12 +289,10 @@ func loadScheduler(path string) []ScheduledJob {
 	if err != nil {
 		return nil
 	}
-	// Try wrapped {jobs: [...]} format first
 	var store SchedulerJobs
-	if err := json.Unmarshal(data, &store); err == nil {
+	if err := json.Unmarshal(data, &store); err == nil && len(store.Jobs) > 0 {
 		return store.Jobs
 	}
-	// Fall back to bare array format [...]
 	var jobs []ScheduledJob
 	if err := json.Unmarshal(data, &jobs); err != nil {
 		return nil
@@ -324,12 +305,10 @@ func loadCircuitBreakers(path string) map[string]CircuitBreakerEntry {
 	if err != nil {
 		return nil
 	}
-	// Try wrapped {breakers: {...}} format
 	var store CircuitBreakers
-	if err := json.Unmarshal(data, &store); err == nil {
+	if err := json.Unmarshal(data, &store); err == nil && store.Breakers != nil {
 		return store.Breakers
 	}
-	// Fall back to flat map format {"agent_name": {"status": "open", ...}}
 	var flat map[string]CircuitBreakerEntry
 	if err := json.Unmarshal(data, &flat); err != nil {
 		return nil

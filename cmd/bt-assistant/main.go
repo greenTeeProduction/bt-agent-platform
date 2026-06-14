@@ -224,7 +224,7 @@ func (a *app) cmdDelete(args []string) int {
 		fmt.Fprintln(a.err, "Error: delete requires --yes")
 		return 2
 	}
-	if err := a.registry.Delete(name); err != nil {
+	if err := agent.DeleteRegisteredAgent(a.registry, name); err != nil {
 		fmt.Fprintf(a.err, "Error: %v\n", err)
 		return 1
 	}
@@ -244,7 +244,7 @@ func (a *app) cmdSchedule(args []string) int {
 		fmt.Fprintln(a.err, "Error: name and --every required")
 		return 2
 	}
-	if err := a.registry.UpdateSchedule(name, *every); err != nil {
+	if _, err := agent.ApplySchedule(a.registry, name, *every, "2h", 3); err != nil {
 		fmt.Fprintf(a.err, "Error: %v\n", err)
 		return 1
 	}

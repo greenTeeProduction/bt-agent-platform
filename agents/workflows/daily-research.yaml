@@ -10,12 +10,12 @@ steps:
 
   - id: notebooklm
     kind: agent
-    agent: notebooklm
+    agent: notebooklm-bridge
     input: "Create a research notebook and generate artifacts for: {{.prev.research.output}}"
     on_failure: skip
 
   - id: vault
     kind: agent
-    agent: vault
+    agent: session-indexer
     input: "Store the following research output and notebook details: {{.prev.notebooklm.output}}"
     on_failure: skip

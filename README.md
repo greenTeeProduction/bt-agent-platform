@@ -166,6 +166,7 @@ evaluate → order_mutations → apply_top → re-evaluate → accept (commit) /
 - [arc42 Architecture (12 sections)](docs/arc42/go-bt-evolve-arc42.md)
 - [Architecture Decision Records](docs/adr/INDEX.md) (7 ADRs)
 - [Getting Started](docs/GETTING_STARTED.md)
+- [BT Agents operator guide](docs/agents.md)
 - [API Reference](docs/API_REFERENCE.md)
 - [Tutorial](docs/TUTORIAL.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)

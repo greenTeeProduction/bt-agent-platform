@@ -1,7 +1,7 @@
 name: doormate
-description: DoorMate Personal AI Assistant — page-first interaction, bubble intent parsing, dynamic templates, profile learning
+description: DoorMate Personal AI Assistant — page-first interaction via REST API (not a behavior-tree agent)
 version: "1.0.0"
-tree: domain:doormate
+tree: ""
 schedule: on_demand
 inputs:
   - name: query
@@ -19,3 +19,5 @@ quality:
 metadata:
   category: hermes-builtin
   tags: "doormate,assistant,intent,bubble,template"
+  rest_only: "true"
+  api_base: "/api/doormate"

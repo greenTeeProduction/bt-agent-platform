@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 2026-05-28
+## [Unreleased]
+
+### Added
+
+- **(agents):** Unified agent platform — canonical `~/.go-bt-evolve/` paths, `RunOnce()` runner with memory/quality/input enforcement, registry-first dashboard listing, Workflows tab, async pipeline API, HITL approval wiring, MCP `bt_workflow_run` pipeline mode, operator guide (`docs/agents.md`).
+- **(agents):** Runtime YAML contracts — `inputs`, `quality`, and `outputs` validation on scheduler, MCP, CLI, and dashboard runs.
+- **(agents):** Live scheduling — `bt-agent-cli schedule` and dashboard create persist `scheduler-jobs.json`; running `bt-agent` syncs registry changes each tick.
+
+### Changed
+
+- **(agents):** Dashboard and CLI execute agents in-process via `RunOnce()` (Hermes CLI fallback only when runner unavailable).
+- **(agents):** Agent delete clears scheduler jobs across dashboard, CLI, MCP, and `bt-assistant`.
+
+### Prior (2026-05-28)
 
 ### Added
 

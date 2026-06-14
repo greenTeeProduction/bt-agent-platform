@@ -12,88 +12,68 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 )
 
-// pipelineResults stores in-memory results of pipeline executions.
+type pipelineRunRecord struct {
+	Status    string                    `json:"status"`
+	RunID     string                    `json:"run_id"`
+	Result    *dashboard.PipelineResult `json:"result,omitempty"`
+	Error     string                    `json:"error,omitempty"`
+	StartedAt time.Time                 `json:"started_at"`
+}
+
 var (
-	pipelineResults   = make(map[string]*dashboard.PipelineResult)
-	pipelineResultsMu sync.RWMutex
+	pipelineRuns   = make(map[string]*pipelineRunRecord)
+	pipelineRunsMu sync.RWMutex
 )
 
-// agentToTree maps pipeline agent names to BT tree IDs.
-// This allows YAML pipeline definitions to use friendly agent names.
-var agentToTree = map[string]string{
-	// Research agents
-	"hermes-researcher": "research:deep_research",
-	"daily-researcher":  "research:deep_research",
-	"research-agent":    "research:deep_research",
-	"quick-researcher":  "research:quick_research",
-
-	// Code / dev agents
-	"code-reviewer":        "domain:code_review",
-	"hermes-code-reviewer": "domain:code_review",
-	"bt-implementer":       "godev",
-	"refactoring-agent":    "domain:refactoring",
-
-	// DevOps agents
-	"system-monitor": "domain:agent_monitor",
-	"devops-agent":   "domain:devops_ci",
-	"ci-agent":       "domain:devops_ci",
-
-	// Security agents
-	"security-auditor": "domain:security_audit",
-
-	// Data / notebook agents
-	"notebooklm":          "research:deep_research",
-	"data-pipeline-agent": "domain:data_pipeline",
-
-	// Notification / routing agents
-	"notification-router": "godev",
-
-	// Vault / storage agents
-	"vault": "godev",
-
-	// Thinktank / analysis agents
-	"thinktank": "thinktank:synthesis",
-
-	// Default fallback
-	"default": "godev",
-}
-
-// resolveTree maps an agent name to a tree ID.
-func resolveTree(agentName string) string {
-	if tid, ok := agentToTree[agentName]; ok {
-		return tid
-	}
-	// Try lowercased variant
-	if tid, ok := agentToTree[strings.ToLower(agentName)]; ok {
-		return tid
-	}
-	return "godev"
-}
-
-// newRunID generates a unique execution ID for pipeline runs.
 func newRunID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
+func runPipelineAgentStep(ctx context.Context, runner *agent.RunDeps, agentName, task string) (outcome, output string, err error) {
+	opts := agent.RunOptions{
+		InjectMemory:   true,
+		EnforceQuality: true,
+		RecordHistory:  true,
+		DisplayName:    agentName,
+	}
+	outcome, output, _, err = agent.RunAgent(ctx, runner, agentName, task, "", opts)
+	return outcome, output, err
+}
+
+func newPipelineRunner(runID string, logAttrs ...any) *dashboard.Runner {
+	return &dashboard.Runner{
+		RunID: runID,
+		RunAgent: func(stepCtx context.Context, agentName, _, task string) (outcome, output string, err error) {
+			slog.Info("pipeline: running agent step", append([]any{
+				"run_id", runID, "agent", agentName, "task_len", len(task),
+			}, logAttrs...)...)
+			outcome, output, err = runPipelineAgentStep(stepCtx, dashAgentRunner, agentName, task)
+			slog.Info("pipeline: agent step complete",
+				"run_id", runID, "agent", agentName, "outcome", outcome, "output_len", len(output))
+			return outcome, output, err
+		},
+		WaitApproval: dashboard.WorkflowApprovalWait,
+	}
+}
+
 // handlePipelines lists all pipeline YAML files from agents/workflows/.
-// GET /api/pipelines
 func handlePipelines(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
 
-	home := os.Getenv("HOME")
-	workflowsDir := filepath.Join(home, "go-bt-evolve", "agents", "workflows")
-
+	workflowsDir := agent.WorkflowsDir()
 	entries, err := os.ReadDir(workflowsDir)
 	if err != nil {
 		slog.Warn("pipelines: cannot read workflows dir", "path", workflowsDir, "error", err)
@@ -120,19 +100,14 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("pipelines: cannot read file", "path", filePath, "error", err)
 			continue
 		}
-
 		var wf dashboard.Pipeline
 		if err := yaml.Unmarshal(data, &wf); err != nil {
 			slog.Warn("pipelines: cannot parse YAML", "path", filePath, "error", err)
 			continue
 		}
-
 		pipelines = append(pipelines, pipelineInfo{
-			Name:        wf.Name,
-			Filename:    entry.Name(),
-			Description: wf.Description,
-			Version:     wf.Version,
-			StepCount:   len(wf.Steps),
+			Name: wf.Name, Filename: entry.Name(), Description: wf.Description,
+			Version: wf.Version, StepCount: len(wf.Steps),
 		})
 	}
 
@@ -140,9 +115,8 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pipelines)
 }
 
-// handlePipelineRun executes a pipeline from agents/workflows/.
-// POST /api/pipelines/run
-// Body: {"pipeline_name": "daily-research", "input": "Research topic X"}
+// handlePipelineRun starts pipeline execution asynchronously.
+// POST /api/pipelines/run — returns run_id immediately; poll /api/pipelines/status?id=
 func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -166,15 +140,11 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the YAML file
-	home := os.Getenv("HOME")
 	filename := req.PipelineName
 	if !strings.HasSuffix(filename, ".yaml") {
 		filename += ".yaml"
 	}
-	filePath := filepath.Join(home, "go-bt-evolve", "agents", "workflows", filename)
-
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Join(agent.WorkflowsDir(), filename))
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -193,67 +163,41 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	runID := newRunID()
+	rec := &pipelineRunRecord{Status: "running", RunID: runID, StartedAt: time.Now()}
+	pipelineRunsMu.Lock()
+	pipelineRuns[runID] = rec
+	pipelineRunsMu.Unlock()
+
 	slog.Info("pipeline: starting execution", "run_id", runID, "pipeline", pipeline.Name)
 
-	// Build the runner with real agent execution via dashboard executor.
-	runner := &dashboard.Runner{
-		RunAgent: func(agentName, treeID, task string) (outcome, output string, err error) {
-			// Resolve tree ID from agent name if not explicitly provided.
-			if treeID == "" {
-				treeID = resolveTree(agentName)
-			}
-			slog.Info("pipeline: running agent step",
-				"run_id", runID,
-				"agent", agentName,
-				"tree", treeID,
-				"task_len", len(task),
-			)
+	go func() {
+		runner := newPipelineRunner(runID, "pipeline", pipeline.Name)
+		result, runErr := runner.Run(context.Background(), pipeline, req.Input)
 
-			executor := dashboard.NewAgentExecutor()
-			stepOutput, stepOutcome, stepErr := executor.RunTask(agentName, task, treeID)
-
-			slog.Info("pipeline: agent step complete",
-				"run_id", runID,
-				"agent", agentName,
-				"outcome", stepOutcome,
-				"output_len", len(stepOutput),
-			)
-			return stepOutcome, stepOutput, stepErr
-		},
-	}
-
-	ctx := context.Background()
-	result, runErr := runner.Run(ctx, pipeline, req.Input)
-
-	// Store result
-	pipelineResultsMu.Lock()
-	pipelineResults[runID] = result
-	pipelineResultsMu.Unlock()
-
-	if runErr != nil {
-		slog.Warn("pipeline: execution completed with error", "run_id", runID, "error", runErr)
-	} else {
-		slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
-	}
-
-	// Return result with the run_id
-	response := map[string]interface{}{
-		"run_id":   runID,
-		"workflow": result.Workflow,
-		"outcome":  result.Outcome,
-		"duration": result.Duration.String(),
-		"steps":    result.Steps,
-	}
-	if runErr != nil {
-		response["error"] = runErr.Error()
-	}
+		pipelineRunsMu.Lock()
+		defer pipelineRunsMu.Unlock()
+		if runErr != nil {
+			rec.Status = "failed"
+			rec.Error = runErr.Error()
+			slog.Warn("pipeline: execution completed with error", "run_id", runID, "error", runErr)
+		} else {
+			rec.Status = "complete"
+			slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
+		}
+		rec.Result = result
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"run_id":   runID,
+		"status":   "running",
+		"pipeline": pipeline.Name,
+		"message":  "Poll GET /api/pipelines/status?id=" + runID,
+	})
 }
 
-// handlePipelineStatus returns the result of a pipeline execution.
-// GET /api/pipelines/status?id=<run_id>
+// handlePipelineStatus returns pipeline run status and result when complete.
 func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -268,10 +212,9 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pipelineResultsMu.RLock()
-	result, ok := pipelineResults[runID]
-	pipelineResultsMu.RUnlock()
-
+	pipelineRunsMu.RLock()
+	rec, ok := pipelineRuns[runID]
+	pipelineRunsMu.RUnlock()
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -279,12 +222,21 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp := map[string]interface{}{
+		"run_id":     rec.RunID,
+		"status":     rec.Status,
+		"started_at": rec.StartedAt.Format(time.RFC3339),
+	}
+	if rec.Error != "" {
+		resp["error"] = rec.Error
+	}
+	if rec.Result != nil {
+		resp["workflow"] = rec.Result.Workflow
+		resp["outcome"] = rec.Result.Outcome
+		resp["duration"] = rec.Result.Duration.String()
+		resp["steps"] = rec.Result.Steps
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"run_id":   runID,
-		"workflow": result.Workflow,
-		"outcome":  result.Outcome,
-		"duration": result.Duration.String(),
-		"steps":    result.Steps,
-	})
+	json.NewEncoder(w).Encode(resp)
 }

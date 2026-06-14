@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/agentexec"
 	"github.com/nico/go-bt-evolve/internal/api"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
@@ -36,6 +37,7 @@ var staticFS embed.FS
 
 var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
+var dashAgentRunner *agent.RunDeps
 
 // dlq is the dead letter queue for failed agent tasks.
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
@@ -174,6 +176,13 @@ func main() {
 	} else {
 		dashConfig = cfg
 		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
+	}
+
+	if runner, err := agentexec.NewRunDeps(); err != nil {
+		slog.Warn("In-process agent runner unavailable (pipelines will fail)", "error", err)
+	} else {
+		dashAgentRunner = runner
+		slog.Info("In-process agent runner initialized")
 	}
 
 	// API key from env/config — if set, all /api/* endpoints require X-API-Key header
@@ -584,7 +593,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 			sprintState.Unlock()
 		}()
 
-		executor := dashboard.NewAgentExecutor()
+		executor := newAgentExecutor()
 
 		for i, task := range approved {
 			sprintState.Lock()
@@ -1417,13 +1426,10 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Task == "" {
-		req.Task = "Execute your scheduled workflow"
+		req.Task = dashboard.DefaultAgentTask(req.Agent)
 	}
 
 	treeID := req.Tree
-	if treeID == "" {
-		treeID = "godev"
-	}
 
 	// Acquire concurrency slot before submitting to worker pool.
 	// The limiter prevents more than 2 simultaneous LLM-bound agent
@@ -1442,7 +1448,7 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 		dashWorkerPool.Submit(func() {
 			defer releaseLimiter()
 			start := time.Now()
-			executor := dashboard.NewAgentExecutor()
+			executor := newAgentExecutor()
 			output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
 			elapsed := time.Since(start)
 
@@ -1464,7 +1470,7 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Fallback: execute synchronously (no worker pool configured)
 		start := time.Now()
-		executor := dashboard.NewAgentExecutor()
+		executor := newAgentExecutor()
 		output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
 		elapsed := time.Since(start)
 		releaseLimiter()
@@ -1509,13 +1515,10 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if task == "" {
-		task = "Execute your scheduled workflow"
+		task = dashboard.DefaultAgentTask(agentName)
 	}
 
 	treeID := r.URL.Query().Get("tree")
-	if treeID == "" {
-		treeID = "godev"
-	}
 
 	// Acquire concurrency slot to prevent LLM resource exhaustion.
 	if dashConcurrencyLimiter != nil {
@@ -1530,7 +1533,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 					dashConcurrencyLimiter.Release()
 				}
 			}()
-			executor := dashboard.NewAgentExecutor()
+			executor := newAgentExecutor()
 			output, outcome, err := executor.RunTask(agentName, task, treeID)
 			res := map[string]interface{}{
 				"agent": agentName, "outcome": outcome, "output": output,
@@ -1541,7 +1544,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 			result <- res
 		})
 	} else {
-		executor := dashboard.NewAgentExecutor()
+		executor := newAgentExecutor()
 		output, outcome, err := executor.RunTask(agentName, task, treeID)
 		if dashConcurrencyLimiter != nil {
 			dashConcurrencyLimiter.Release()
@@ -1559,7 +1562,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-// handleAgentCreate handles POST /api/agents/create — creates a new agent YAML template.
+// handleAgentCreate handles POST /api/agents/create — creates a new agent in the registry.
 func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
@@ -1609,12 +1612,14 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Return the created agent info
 	info := dashboard.AgentWithStatus{
-		Name:        cfg.Name,
-		Description: cfg.Description,
-		Tree:        cfg.Tree,
-		Status:      "created",
-		Schedule:    cfg.Schedule,
-		CBStatus:    "unknown",
+		AgentInfo: dashboard.AgentInfo{
+			Name:        cfg.Name,
+			Description: cfg.Description,
+			Tree:        cfg.Tree,
+			Status:      "created",
+			Schedule:    cfg.Schedule,
+		},
+		CBStatus: "unknown",
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

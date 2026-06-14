@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
@@ -20,141 +19,11 @@ import (
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reliability"
-	"github.com/nico/go-bt-evolve/internal/startup"
-	"github.com/nico/go-bt-evolve/internal/thinktank"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
-// resolveTree maps a tree identifier string to the actual tree object.
 func resolveTree(id string) *evolution.SerializableNode {
-	// hermes self-evolution tree
-	if id == "hermes_evolve" {
-		return domains.HermesSelfEvolutionTree()
-	}
-	// stockfish evolution trees
-	if id == "stockfish_evolve" {
-		return evolution.StockfishEvolutionTree()
-	}
-	if id == "stockfish_loop" {
-		return evolution.StockfishEvolutionLoop()
-	}
-	if id == "vault_manager" {
-		return evolution.VaultManagerTree()
-	}
-	// Kanban trees
-	if id == "kanban:task_creator" {
-		return domains.KanbanTaskCreatorTree()
-	}
-	if id == "kanban:refiner" {
-		return domains.KanbanRefinerTree()
-	}
-	if id == "kanban:qa" {
-		return domains.KanbanQATree()
-	}
-	if id == "kanban:monitor" {
-		return domains.KanbanBoardMonitorTree()
-	}
-	if id == "kanban:workflow" {
-		return domains.KanbanWorkflowTree()
-	}
-	if id == "kanban:autopilot" {
-		return domains.KanbanAutoPilotTree()
-	}
-	// NotebookLM tree
-	if id == "notebooklm" {
-		return domains.NotebookLMTree()
-	}
-	if id == "notebooklm-consumer" {
-		return domains.NotebookLMConsumerTree()
-	}
-	if id == "notebooklm-bridge" {
-		return evolution.NotebookLMBridgeTree()
-	}
-	if id == "hermes_obsidian" {
-		return domains.HermesObsidianOptimizerTree()
-	}
-	// godev
-	if id == "godev" {
-		return evolution.GoDeveloperTree()
-	}
-	// finance:<name>
-	if len(id) > 8 && id[:8] == "finance:" {
-		name := id[8:]
-		trees := evolution.AllFinanceTrees()
-		return trees[name]
-	}
-	// research:<name>
-	if len(id) > 9 && id[:9] == "research:" {
-		name := id[9:]
-		trees := evolution.ResearchTrees()
-		return trees[name]
-	}
-	// domain:<name>
-	if len(id) > 7 && id[:7] == "domain:" {
-		name := id[7:]
-		trees := domains.AllDomainTrees()
-		return trees[name]
-	}
-	// startup:<role>
-	if len(id) > 8 && id[:8] == "startup:" {
-		role := id[8:]
-		trees := startup.StartupTrees()
-		if t, ok := trees[role]; ok {
-			return t
-		}
-		roles := startup.Roles()
-		return roles[role]
-	}
-	// thinktank:<role>
-	if len(id) > 10 && id[:10] == "thinktank:" {
-		switch role := id[10:]; role {
-		case "synthesis":
-			return thinktank.SynthesisTree()
-		case "peer_review":
-			return thinktank.PeerReviewTree()
-		case "report":
-			return thinktank.ReportGenerationTree()
-		default:
-			return thinktank.SynthesisTree()
-		}
-	}
-
-	// composed:<block_id,...> or composed:task
-	if len(id) > 9 && id[:9] == "composed:" {
-		rest := id[9:]
-		if rest == "task" {
-			t, err := blocks.ComposeTaskTree(blocks.DefaultRegistry, "ComposedTask", nil)
-			if err == nil {
-				return t
-			}
-		}
-		if rest == "task:hitl" {
-			t, err := blocks.ComposeTaskTreeWithHITL(blocks.DefaultRegistry, "ComposedTaskHITL", nil)
-			if err == nil {
-				return t
-			}
-		}
-		if rest == "task:agentic" {
-			t, err := blocks.ComposeTaskTreeAgentic(blocks.DefaultRegistry, "ComposedTaskAgentic", nil)
-			if err == nil {
-				return t
-			}
-		}
-		if rest == "task:full" {
-			t, err := blocks.ComposeTaskTreeFull(blocks.DefaultRegistry, "ComposedTaskFull", nil)
-			if err == nil {
-				return t
-			}
-		}
-
-		ids := strings.Split(rest, ",")
-		t, err := blocks.Compose(blocks.DefaultRegistry, blocks.ComposeSpec{Name: "Composed_Main", Blocks: ids}, false)
-		if err == nil {
-			return t
-		}
-	}
-	// default: try as direct tree name
-	return evolution.DefaultTree()
+	return domains.ResolveTreeID(id)
 }
 
 func main() {
@@ -178,21 +47,7 @@ func main() {
 		engine.Error("failed to get home directory", "error", err)
 		os.Exit(1)
 	}
-	agentHome, _ := os.UserHomeDir()
-
-	// SLO evidence file shared with the gardener process (B1) — the validation
-	// gate reads this to verify trees before deployment.
-	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
-
-	// ── Persistence ────────────────────────────────────────────────────────
-	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
-		os.Exit(1)
-	}
-	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
-
-	engine.AgentMemoryBaseDir = agentHome
+	engine.AgentMemoryBaseDir = home
 	engine.DelegateToTreeFn = func(treeID string, bb *engine.Blackboard) (string, error) {
 		ser := resolveTree(treeID)
 		if ser == nil {
@@ -204,11 +59,22 @@ func main() {
 		}
 		return engine.RunTask(bb, cmd), nil
 	}
-	if _, err := hitl.InitStore(filepath.Join(home, ".go-bt-evolve")); err != nil {
+	platformHome := agent.HomeDir()
+	if _, err := hitl.InitStore(platformHome); err != nil {
 		engine.Warn("hitl store init failed", "error", err)
 	}
 	config.ApplyHITLPolicy(cfg)
-	audit.Init(filepath.Join(home, ".go-bt-evolve"))
+	audit.Init(platformHome)
+	sloEvidencePath := filepath.Join(platformHome, "slo", "slo-metrics.json")
+
+	// ── Persistence ────────────────────────────────────────────────────────
+	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
+
 	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -261,63 +127,44 @@ func main() {
 	bt := engine.BuildTree(tree, bb)
 
 	// ── Agent Platform ─────────────────────────────────────────────────────
-	agentReg, _ := agent.NewRegistry(agentHome + "/.go-bt-evolve/agents")
-	agentHist, _ := agent.NewHistory(agentHome + "/.go-bt-evolve/history")
-	agentLocalMem := agentHome + "/.go-bt-evolve/memory"
-	dlq := reliability.NewDeadLetterQueue(agentHome + "/.go-bt-evolve/dead_letter_queue.json")
+	agentReg, _ := agent.NewRegistry(agent.RegistryDir())
+	agentHist, _ := agent.NewHistory(agent.HistoryDir())
+	agentLocalMem := agent.MemoryDir()
+	dlq := reliability.NewDeadLetterQueue(agent.DLQFile())
 	engine.TaskDLQ = dlq
 
-	// Create jobs directory for scheduler persistence
-	jobStoreDir := agentHome + "/.go-bt-evolve/jobs"
+	jobStoreDir := agent.JobsDir()
 	_ = os.MkdirAll(jobStoreDir, 0755)
 
 	// Persistent agent scheduler (with FileJobStore for durability across restarts)
 	globalSched := agent.NewScheduler(agent.SchedulerConfig{
 		Registry: agentReg,
 		History:  agentHist,
-		JobStore: agent.NewFileJobStore(jobStoreDir + "/scheduler-jobs.json"),
+		JobStore: agent.NewFileJobStore(agent.SchedulerJobsFile()),
 		CBStore: agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
 			Threshold: cfg.CBThreshold,
 			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
 		}),
 	})
+
+	agentRunner := &agent.RunDeps{
+		Registry:    agentReg,
+		History:     agentHist,
+		LLM:         llmClient,
+		RefStore:    refStore,
+		TreeStore:   treeStore,
+		ResolveTree: resolveTree,
+	}
+
 	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
-		// ctx.Task is set by the scheduler from the agent's description.
-		// Don't prepend "scheduled run" — that causes self-referential loops
-		// when the agent investigates itself instead of its actual purpose.
 		task := ctx.Task
 		if task == "" {
 			task = ctx.AgentName
 		}
 
-		// Inject agent memory context into the task
-		agentMem, memErr := agent.NewMemoryStore(agentLocalMem, ctx.AgentName, 100)
-		if memErr == nil {
-			memCtx := agentMem.ContextBlock()
-			if memCtx != "" {
-				task = task + "\n\n" + memCtx
-			}
-			prevCtx := agentMem.PreviousRunContext(agentHist, ctx.AgentName, 2)
-			if prevCtx != "" {
-				task = task + "\n\n" + prevCtx
-			}
-		}
-
-		// Resolve through agent registry first — agent names are not tree IDs.
-		// Only fall back to direct tree resolution if no agent found.
-		var tree *evolution.SerializableNode
 		treeName := ctx.AgentName
-		inst, getErr := agentReg.Get(ctx.AgentName)
-		if getErr == nil {
-			if tree = resolveTree(inst.Definition.Tree); tree != nil {
-				treeName = inst.Definition.Tree
-			}
-		}
-		if tree == nil {
-			tree = resolveTree(ctx.AgentName)
-		}
-		if tree == nil {
-			return "failure", "", fmt.Errorf("no tree found for agent %s", ctx.AgentName)
+		if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
+			treeName = inst.Definition.Tree
 		}
 
 		policy := reliability.RetryPolicy{
@@ -346,12 +193,15 @@ func main() {
 		err = policy.ExecuteContext(ctx.Context, func() error {
 			attempts++
 			attemptStart := time.Now()
-			bb := &engine.Blackboard{Task: task, LLM: llmClient, Reflections: refStore, TreeStore: treeStore}
-			bt := engine.BuildTree(tree, bb)
-			_ = engine.RunTask(bb, bt)
-			outcome = bb.Outcome
-			output = bb.Result
-			if bb.Outcome == "success" {
+			res, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
+				InjectMemory:   true,
+				EnforceQuality: true,
+			})
+			if res != nil {
+				outcome = res.Outcome
+				output = res.Output
+			}
+			if runErr == nil && res != nil && res.Outcome == "success" {
 				slo.RecordSuccess(time.Since(attemptStart))
 				if attempts > 1 {
 					slo.RecordRecovery(0)
@@ -359,7 +209,10 @@ func main() {
 				return nil
 			}
 			slo.RecordFailure(time.Since(attemptStart))
-			return fmt.Errorf("agent outcome: %s", bb.Outcome)
+			if runErr != nil {
+				return runErr
+			}
+			return fmt.Errorf("agent outcome: %s", outcome)
 		})
 
 		if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
@@ -410,12 +263,12 @@ func main() {
 		llmClient:    llmClient,
 		llmHealth:    llmHealth,
 		cfg:          cfg,
-		agentHome:    agentHome,
 		agentReg:     agentReg,
 		agentHist:    agentHist,
 		agentMem:     sharedMem,
 		globalSched:  globalSched,
 		dlq:          dlq,
+		agentRunner:  agentRunner,
 	})
 
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
@@ -423,7 +276,7 @@ func main() {
 	server.SetMaxMessageSize(1 << 20)
 
 	// ── Tracing ────────────────────────────────────────────────────────────
-	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
+	tracingLogPath := filepath.Join(agent.LogsDir(), "traces.log")
 	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		tracer := tracing.NewConsoleTracer("bt-agent", f)
 		tracing.ConfigureOTLPFromEnv(tracer)

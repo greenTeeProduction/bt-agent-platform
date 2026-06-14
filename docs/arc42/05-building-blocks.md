@@ -96,7 +96,7 @@ cmd/bt-dashboard/
 
 internal/dashboard/
 ├── agents.go            — Agent listing, CRUD operations
-├── executor.go          — AgentExecutor: shells out to `hermes chat` for BT delegation
+├── executor.go          — AgentExecutor: in-process RunOnce via agent.RunAgent; Hermes CLI fallback
 ├── workflow_engine.go   — Workflow orchestration
 ├── workflow_orchestrator.go — Multi-agent workflow coordination
 └── tasks.go             — Task CRUD
