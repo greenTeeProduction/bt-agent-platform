@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -439,43 +440,108 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 }
 
 func execRefine(cfg ChainConfig, bb *Blackboard) int {
-	// Refine chain: iterative improvement through multiple passes
+	// Refine chain: iterative critique-then-revise. Each pass first critiques the
+	// current answer against the task, then revises it to address that critique.
+	// The loop stops early when the critique reports the answer has converged
+	// (nothing material left to add) — this avoids wasted LLM calls and the
+	// quality regression a blind "improve again" pass can cause on an already-good
+	// answer. Refinement progress (rounds run, why it stopped) is recorded in
+	// bb.ChainState so downstream nodes can inspect how much work was done.
 	task := expandTemplate(cfg.Prompt, bb)
-	maxRefinements := 2
 
 	if bb.LLM == nil {
 		bb.Outcome = "chain_failed"
+		bb.Result = "no LLM available for refine"
 		return -1
+	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+
+	maxRefinements := 3
+	if v, ok := cfg.Params["max_refinements"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 && n <= 10 {
+			maxRefinements = n
+		}
 	}
 
 	// Initial answer
 	current, err := bb.LLM.Generate(task)
 	if err != nil {
 		bb.Outcome = "chain_failed"
+		bb.Result = fmt.Sprintf("refine initial error: %v", err)
 		return -1
 	}
 
+	rounds := 0
+	stopReason := "max_refinements_reached"
 	for i := 0; i < maxRefinements; i++ {
-		refinePrompt := fmt.Sprintf(`Review and improve this answer. Make it more comprehensive, accurate, and well-structured.
+		critiquePrompt := fmt.Sprintf(`Critique this answer against the task. List concrete, specific weaknesses — missing detail, inaccuracies, poor structure. If the answer is already complete and accurate with nothing material to add, reply with exactly: NO_FURTHER_IMPROVEMENT
 
-ORIGINAL TASK:
+TASK:
 %s
 
 CURRENT ANSWER:
 %s
 
-Identify weaknesses and provide an improved version.`, task, current)
+Critique:`, task, current)
 
-		improved, err := bb.LLM.Generate(refinePrompt)
+		critique, err := bb.LLM.Generate(critiquePrompt)
 		if err != nil {
+			stopReason = "critique_error"
+			break
+		}
+		if refineConverged(critique) {
+			stopReason = "converged"
+			break
+		}
+
+		revisePrompt := fmt.Sprintf(`Revise the answer so it addresses every point in the critique. Output only the full improved answer — no critique, no commentary.
+
+TASK:
+%s
+
+CURRENT ANSWER:
+%s
+
+CRITIQUE:
+%s
+
+Improved answer:`, task, current, critique)
+
+		improved, err := bb.LLM.Generate(revisePrompt)
+		if err != nil {
+			stopReason = "revise_error"
 			break
 		}
 		current = improved
+		rounds++
 	}
+
+	bb.ChainState["refine_rounds"] = rounds
+	bb.ChainState["refine_stop_reason"] = stopReason
 
 	bb.Outcome = "chain_success"
 	bb.Result = current
+	bb.Results = append(bb.Results, current)
 	return 1
+}
+
+// refineConverged reports whether a refine critique signals the answer is good
+// enough to stop iterating. It matches the explicit sentinel plus the common
+// natural-language ways an LLM says "nothing more to improve".
+func refineConverged(critique string) bool {
+	lower := strings.ToLower(critique)
+	for _, m := range []string{
+		"no_further_improvement", "no further improvement", "no significant",
+		"no material", "no changes needed", "already complete", "already comprehensive",
+		"nothing to add", "no weaknesses", "no notable",
+	} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // execAgent runs a ReAct-style agent loop: Thought → Action → Observation → repeat → Final Answer.
