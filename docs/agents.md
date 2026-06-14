@@ -331,11 +331,47 @@ MCP tools:
 - `bt_agent_memory_read` — read key or full context block
 - `bt_agent_memory_delete`
 
-Scheduled runs auto-inject `ContextBlock()` and last 2 successful outputs into the task prompt.
+Scheduled runs auto-inject memory and history into the **run blackboard** (keys `memory/*`, `history/runs`) with a short prompt hint to use `bb_read`. Legacy prompt stuffing applies only when blackboard is disabled (`DisableBlackboard: true`).
 
 ### History (`${AGENT_HOME}/history/<agent>.jsonl`)
 
 Each run records outcome, duration, output, quality score. MCP `bt_agent_history` returns runs + aggregate stats (success rate, avg quality).
+
+---
+
+## Blackboard (context offloading)
+
+Scoped key-value store for moving large context off the prompt. See [ADR-009](./adr/ADR-009-blackboard-context-offloading.md).
+
+| Scope | ID | Lifetime | On disk |
+|-------|-----|----------|---------|
+| `run` | per agent execution | ends when run completes | no |
+| `session` | pipeline `run_id` | workflow execution | `${AGENT_HOME}/blackboard/session/<id>.json` |
+| `agent` | agent name | until deleted | `${AGENT_HOME}/blackboard/agent/<name>.json` |
+
+### ReAct tools (in `agent:` chains)
+
+Run scope: `bb_read`, `bb_write`, `bb_list`.  
+Pipeline session (when `SessionID` set): `bb_session_read`, `bb_session_write`, `bb_session_list`.
+
+Workflow steps auto-populate session keys: `input`, `steps/<step_id>/output`, `prev/output`.
+
+### Chain templates
+
+- `{{.BB.run_id}}`, `{{.BB.session_id}}`, `{{.BB.agent}}`
+- `{{.BB.<key>}}` — run-scope value (summary when large); falls back to session scope
+- `{{.RunID}}` — alias for run id
+
+### MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| `bt_bb_read` | Read entry (`scope`, `scope_id`, `key`) |
+| `bt_bb_write` | Write entry |
+| `bt_bb_list` | List keys (optional `prefix`, `limit`) |
+| `bt_bb_delete` | Delete key |
+
+Scopes: `run`, `session`, `agent`.
 
 ---
 
@@ -405,6 +441,7 @@ Orchestrator supports `agent`, `condition`, `parallel`, `loop`, and `approval` s
 | `bt_agent_schedule` | Add/update scheduler job |
 | `bt_agent_delete` | Remove from registry and clear scheduler jobs |
 | `bt_agent_memory_write` / `_read` / `_delete` | Persistent memory |
+| `bt_bb_read` / `bt_bb_write` / `bt_bb_list` / `bt_bb_delete` | Scoped blackboard (run/session/agent) |
 | `bt_circuit_status` | Circuit breaker state |
 | `bt_delegate_to_tree` | Run task on tree (bypass registry) |
 | `bt_workflow_run` | Run YAML workflow (`pipeline` + `input`) or thinktank topic analysis |

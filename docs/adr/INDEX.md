@@ -10,6 +10,7 @@
 | [ADR-006](./ADR-006-chainaction-architecture.md) | ChainAction — LLM Integration via BT Nodes | Accepted | 2026-05-28 |
 | [ADR-007](./ADR-007-reliability-architecture.md) | Reliability Architecture — Circuit Breakers, Retry, DLQ | Accepted | 2026-05-29 |
 | [ADR-008](./ADR-008-composable-blocks.md) | Composable Blocks | Accepted | 2026-06-04 |
+| [ADR-009](./ADR-009-blackboard-context-offloading.md) | Scoped Blackboard for Context Offloading | Accepted | 2026-06-14 |
 
 Operator guide: [BT Agents (docs/agents.md)](../agents.md)
 

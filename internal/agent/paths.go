@@ -27,7 +27,8 @@ func HomeDir() string {
 func RegistryDir() string  { return filepath.Join(HomeDir(), "agents") }
 func TemplatesDir() string { return filepath.Join(HomeDir(), "agents", "templates") }
 func WorkflowsDir() string { return filepath.Join(HomeDir(), "agents", "workflows") }
-func MemoryDir() string    { return filepath.Join(HomeDir(), "memory") }
+func MemoryDir() string      { return filepath.Join(HomeDir(), "memory") }
+func BlackboardDir() string  { return filepath.Join(HomeDir(), "blackboard") }
 func HistoryDir() string   { return filepath.Join(HomeDir(), "history") }
 func JobsDir() string      { return filepath.Join(HomeDir(), "jobs") }
 func DLQFile() string      { return filepath.Join(HomeDir(), "dead_letter_queue.json") }

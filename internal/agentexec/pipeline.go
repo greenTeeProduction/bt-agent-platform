@@ -38,13 +38,15 @@ func RunPipeline(ctx context.Context, d *agent.RunDeps, pipeline dashboard.Pipel
 // RunPipelineWithID executes a workflow and uses runID for HITL task correlation when set.
 func RunPipelineWithID(ctx context.Context, d *agent.RunDeps, pipeline dashboard.Pipeline, input, runID string) (*dashboard.PipelineResult, error) {
 	runner := &dashboard.Runner{
-		RunID: runID,
+		RunID:       runID,
+		Blackboards: d.BoardManager(),
 		RunAgent: func(stepCtx context.Context, agentName, _, task string) (string, string, error) {
 			opts := agent.RunOptions{
 				InjectMemory:   true,
 				EnforceQuality: true,
 				RecordHistory:  true,
 				DisplayName:    agentName,
+				SessionID:      runID,
 			}
 			outcome, output, _, err := agent.RunAgent(stepCtx, d, agentName, task, "", opts)
 			return outcome, output, err

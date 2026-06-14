@@ -9,6 +9,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 )
 
 // TreeResolver maps a tree ID string to a serializable behavior tree.
@@ -22,6 +23,7 @@ type RunDeps struct {
 	RefStore    *evolution.Store
 	TreeStore   *evolution.TreeStore
 	ResolveTree TreeResolver
+	Blackboards *blackboard.Manager
 }
 
 // RunOptions configures a single agent run.
@@ -32,6 +34,8 @@ type RunOptions struct {
 	RecordHistory    bool
 	InputValues      map[string]string // named inputs from YAML inputs spec
 	DisplayName      string            // history label; defaults to agentName
+	SessionID        string            // pipeline session scope (future promote)
+	DisableBlackboard bool             // when true, skip run-scoped blackboard tools
 }
 
 // RunResult is the outcome of RunOnce.
@@ -95,10 +99,6 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 		fullTask = BuildTaskFromInputs(def, fullTask, vals)
 	}
-	if opts.InjectMemory && d.Registry != nil {
-		fullTask = d.injectMemoryContext(agentName, fullTask, opts.PreviousRunLimit)
-	}
-
 	tree := d.ResolveTree(treeID)
 	if tree == nil {
 		tree = d.ResolveTree(agentName)
@@ -125,11 +125,22 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	bb := &engine.Blackboard{
-		Task:        fullTask,
 		LLM:         d.LLM,
 		Reflections: d.RefStore,
 		TreeStore:   d.TreeStore,
 	}
+	if !opts.DisableBlackboard {
+		runID := blackboard.NewRunID()
+		bb.RunID = runID
+		bb.BB = blackboard.NewHandle(d.boardManager(), runID, opts.SessionID, agentName)
+		engine.PrepareBlackboard(bb)
+		if opts.InjectMemory {
+			fullTask = d.seedMemoryToBlackboard(agentName, fullTask, opts.PreviousRunLimit, bb.BB)
+		}
+	} else if opts.InjectMemory {
+		fullTask = d.injectMemoryContext(agentName, fullTask, opts.PreviousRunLimit)
+	}
+	bb.Task = fullTask
 	bt, err := engine.BuildAndValidate(tree, bb)
 	if err != nil {
 		result.Outcome = "failure"
@@ -215,6 +226,23 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	return result, nil
+}
+
+// BoardManager returns the shared blackboard manager (lazy default).
+func (d *RunDeps) BoardManager() *blackboard.Manager {
+	return d.boardManager()
+}
+
+func (d *RunDeps) boardManager() *blackboard.Manager {
+	if d == nil {
+		return blackboard.DefaultManager()
+	}
+	if d.Blackboards == nil {
+		mgr := blackboard.DefaultManager()
+		_ = mgr.EnablePersistence(BlackboardDir())
+		d.Blackboards = mgr
+	}
+	return d.Blackboards
 }
 
 func (d *RunDeps) injectMemoryContext(agentName, task string, prevLimit int) string {

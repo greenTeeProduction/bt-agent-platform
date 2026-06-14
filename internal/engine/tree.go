@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/tracing"
@@ -80,6 +81,10 @@ type Blackboard struct {
 	TreeTicks  int
 
 	TraceContext context.Context `json:"-"`
+
+	// Blackboard management (Phase 1): scoped key-value store for context offloading.
+	BB     *blackboard.Handle
+	RunID  string
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.

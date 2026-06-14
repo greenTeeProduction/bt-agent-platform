@@ -6,8 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // StepKind defines the type of workflow step.
@@ -70,6 +74,7 @@ type Runner struct {
 	RunID        string // optional external run id (dashboard API); generated if empty
 	RunAgent     func(ctx context.Context, agentName, treeID, task string) (outcome, output string, err error)
 	WaitApproval func(ctx context.Context, step Step, state *wfState) (ApprovalWaitResult, error)
+	Blackboards  *blackboard.Manager // optional: promote step outputs to session scope
 }
 
 // ApprovalWaitResult carries HITL identifiers for workflow approval steps.
@@ -94,6 +99,11 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 		prev:     make(map[string]StepResult),
 		workflow: wf.Name,
 		runID:    runID,
+	}
+
+	if r.Blackboards != nil && runID != "" && strings.TrimSpace(initialInput) != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeSession, ID: runID}
+		_ = r.Blackboards.Set(scope, "input", initialInput, "Initial workflow input", "text")
 	}
 
 	for _, step := range wf.Steps {
@@ -203,6 +213,7 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 				sr.Outcome = "failure"
 			}
 		}
+		r.promoteStepToSession(state, step.ID, output)
 		return sr, err
 
 	case StepCondition:
@@ -429,6 +440,16 @@ func trimQuotes(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
+}
+
+func (r *Runner) promoteStepToSession(state *wfState, stepID, output string) {
+	if r == nil || r.Blackboards == nil || state == nil || state.runID == "" || output == "" {
+		return
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeSession, ID: state.runID}
+	summary := util.Truncate(output, 200)
+	_ = r.Blackboards.Set(scope, "steps/"+stepID+"/output", output, summary, "text")
+	_ = r.Blackboards.Set(scope, "prev/output", output, summary, "text")
 }
 
 // stepContext returns a child context with step timeout when timeoutStr is valid (e.g. "30s", "5m").

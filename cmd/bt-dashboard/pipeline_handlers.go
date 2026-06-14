@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 )
 
@@ -39,25 +40,31 @@ func newRunID() string {
 	return hex.EncodeToString(b)
 }
 
-func runPipelineAgentStep(ctx context.Context, runner *agent.RunDeps, agentName, task string) (outcome, output string, err error) {
+func runPipelineAgentStep(ctx context.Context, runner *agent.RunDeps, agentName, task, sessionID string) (outcome, output string, err error) {
 	opts := agent.RunOptions{
 		InjectMemory:   true,
 		EnforceQuality: true,
 		RecordHistory:  true,
 		DisplayName:    agentName,
+		SessionID:      sessionID,
 	}
 	outcome, output, _, err = agent.RunAgent(ctx, runner, agentName, task, "", opts)
 	return outcome, output, err
 }
 
 func newPipelineRunner(runID string, logAttrs ...any) *dashboard.Runner {
+	var bbMgr *blackboard.Manager
+	if dashAgentRunner != nil {
+		bbMgr = dashAgentRunner.BoardManager()
+	}
 	return &dashboard.Runner{
-		RunID: runID,
+		RunID:       runID,
+		Blackboards: bbMgr,
 		RunAgent: func(stepCtx context.Context, agentName, _, task string) (outcome, output string, err error) {
 			slog.Info("pipeline: running agent step", append([]any{
 				"run_id", runID, "agent", agentName, "task_len", len(task),
 			}, logAttrs...)...)
-			outcome, output, err = runPipelineAgentStep(stepCtx, dashAgentRunner, agentName, task)
+			outcome, output, err = runPipelineAgentStep(stepCtx, dashAgentRunner, agentName, task, runID)
 			slog.Info("pipeline: agent step complete",
 				"run_id", runID, "agent", agentName, "outcome", outcome, "output_len", len(output))
 			return outcome, output, err

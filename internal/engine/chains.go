@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -778,9 +779,81 @@ func expandTemplate(tmpl string, bb *Blackboard) string {
 	result = replaceAll(result, "{{.QualityScore}}", fmt.Sprintf("%.2f", bb.QualityScore))
 	result = replaceAll(result, "{{.CurrentPath}}", bb.CurrentPath)
 	result = replaceAll(result, "{{.FailureCount}}", fmt.Sprintf("%d", bb.FailureCount))
+	result = replaceAll(result, "{{.RunID}}", bbRunID(bb))
+	result = expandBBTemplates(result, bb)
 	// Expand {{.ChainState.<key>}} patterns
 	result = expandChainStateTemplates(result, bb)
 	return result
+}
+
+const bbTemplateMaxLen = 500
+
+func bbRunID(bb *Blackboard) string {
+	if bb == nil {
+		return ""
+	}
+	if bb.RunID != "" {
+		return bb.RunID
+	}
+	if bb.BB != nil {
+		return bb.BB.RunID
+	}
+	return ""
+}
+
+// expandBBTemplates replaces {{.BB.run_id}}, {{.BB.session_id}}, {{.BB.agent}},
+// and {{.BB.<key>}} (run scope value/summary) when a blackboard handle is attached.
+func expandBBTemplates(s string, bb *Blackboard) string {
+	if bb == nil || bb.BB == nil {
+		return s
+	}
+	h := bb.BB
+	s = replaceAll(s, "{{.BB.run_id}}", h.RunID)
+	s = replaceAll(s, "{{.BB.session_id}}", h.SessionID)
+	s = replaceAll(s, "{{.BB.agent}}", h.AgentName)
+	for {
+		idx := strings.Index(s, "{{.BB.")
+		if idx < 0 {
+			break
+		}
+		end := strings.Index(s[idx:], "}}")
+		if end < 0 {
+			break
+		}
+		key := s[idx+len("{{.BB.") : idx+end]
+		if key == "run_id" || key == "session_id" || key == "agent" {
+			s = s[:idx] + s[idx+end+2:]
+			continue
+		}
+		val := bbTemplateValue(h, key)
+		s = s[:idx] + val + s[idx+end+2:]
+	}
+	return s
+}
+
+func bbTemplateValue(h *blackboard.Handle, key string) string {
+	if h == nil || strings.TrimSpace(key) == "" {
+		return ""
+	}
+	if e, err := h.Get(key); err == nil {
+		return bbTemplateDisplay(e)
+	}
+	if h.SessionID != "" {
+		if e, err := h.GetSession(key); err == nil {
+			return bbTemplateDisplay(e)
+		}
+	}
+	return ""
+}
+
+func bbTemplateDisplay(e blackboard.Entry) string {
+	if e.Summary != "" && len(e.Value) > bbTemplateMaxLen {
+		return e.Summary
+	}
+	if len(e.Value) > bbTemplateMaxLen {
+		return e.Value[:bbTemplateMaxLen] + "..."
+	}
+	return e.Value
 }
 
 // expandChainStateTemplates replaces {{.ChainState.<key>}} with bb.ChainState[key].

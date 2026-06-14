@@ -1105,6 +1105,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
+	// ─── BLACKBOARD (run / session / agent scopes) ───────────────────
+
+	registerBlackboardTools(server, deps)
+
 	// ─── HEALTH ───────────────────────────────────────────────────────
 
 	server.RegisterTool("bt_health", "Health check: reports LLM provider availability and server status",
