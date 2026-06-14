@@ -96,12 +96,54 @@ async function runAgent(name) {
     const resp = await apiFetch('/agents/run?agent=' + encodeURIComponent(name) + '&task=' + encodeURIComponent(taskText));
     if (btn) { btn.textContent = '▶ Run'; btn.disabled = false; }
     const outcome = resp.outcome || 'unknown';
+    if (typeof toast === 'function') {
+      var msg = name + ': ' + outcome;
+      if (resp.run_id) msg += ' · run ' + resp.run_id;
+      toast(msg, 4000);
+    }
     if (btn) {
       btn.textContent = outcome === 'success' ? '✅ Done' : '❌ Failed';
       setTimeout(function() { if (btn) btn.textContent = '▶ Run'; }, 2000);
     }
+    if (outcome === 'success') {
+      viewAgentBlackboard(name, true);
+    }
   } catch (e) {
     if (btn) { btn.textContent = '▶ Run'; btn.disabled = false; }
+    if (typeof toast === 'function') toast('Run failed: ' + e.message);
+  }
+}
+
+async function viewAgentBlackboard(name, silent) {
+  var panel = document.getElementById('bb-panel-' + name.replace(/[^a-zA-Z0-9_-]/g, '_'));
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="loading">Loading blackboard...</div>';
+  try {
+    const bb = await apiFetch('/blackboard?scope=agent&scope_id=' + encodeURIComponent(name) + '&limit=30');
+    if (!bb.entries || !bb.entries.length) {
+      panel.innerHTML = '<div style="font-size:11px;color:var(--text-tertiary)">No agent-scoped blackboard keys yet.</div>';
+      return;
+    }
+    var html = '<div style="font-size:11px;font-weight:600;margin-bottom:4px">Agent blackboard</div><table style="width:100%;border-collapse:collapse;font-size:11px">';
+    bb.entries.forEach(function(e) {
+      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px 6px 3px 0;font-family:monospace">' + e.key + '</td>'
+        + '<td style="padding:3px 0;color:var(--text-tertiary)">' + (e.summary || '').replace(/</g, '&lt;') + '</td></tr>';
+    });
+    html += '</table>';
+    panel.innerHTML = html;
+  } catch (e) {
+    if (!silent) panel.innerHTML = '<div style="color:var(--danger);font-size:11px">Failed to load blackboard</div>';
+  }
+}
+
+function toggleAgentBlackboard(name) {
+  var panel = document.getElementById('bb-panel-' + name.replace(/[^a-zA-Z0-9_-]/g, '_'));
+  if (!panel) return;
+  if (panel.style.display === 'none' || panel.style.display === '') {
+    viewAgentBlackboard(name, false);
+  } else {
+    panel.style.display = 'none';
   }
 }
 
@@ -134,6 +176,7 @@ async function loadAgents() {
       var rateColor = ratePct >= 50 ? 'green' : ratePct >= 25 ? 'amber' : 'red';
       var cbStatus = a.cb_status || 'unknown';
       var escName = a.name.replace(/'/g, "\\'");
+      var panelId = 'bb-panel-' + a.name.replace(/[^a-zA-Z0-9_-]/g, '_');
       return ''
         + '<div class="task-card">'
         + '  <div class="task-header">'
@@ -154,8 +197,10 @@ async function loadAgents() {
         + '  </div>'
         + '  <div style="margin-top:10px;display:flex;gap:8px">'
         + '    <button class="agent-run-btn" data-agent="' + escName + '" onclick="runAgent(\'' + escName + '\')" style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600">▶ Run</button>'
+        + '    <button onclick="toggleAgentBlackboard(\'' + escName + '\')" style="padding:4px 12px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px">📋 BB</button>'
         + '    <button onclick="deleteAgent(\'' + escName + '\')" style="padding:4px 12px;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">🗑 Delete</button>'
         + '  </div>'
+        + '  <div id="' + panelId + '" style="display:none;margin-top:10px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)"></div>'
         + '</div>';
     }).join('');
   } catch (e) {

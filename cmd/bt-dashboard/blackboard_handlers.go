@@ -56,6 +56,49 @@ func handleBlackboard(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/blackboard/scopes?scope=session|agent
+func handleBlackboardScopes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	if dashAgentRunner == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "agent runner not configured"})
+		return
+	}
+
+	scopeKind := r.URL.Query().Get("scope")
+	var kind blackboard.ScopeKind
+	switch scopeKind {
+	case string(blackboard.ScopeSession):
+		kind = blackboard.ScopeSession
+	case string(blackboard.ScopeAgent):
+		kind = blackboard.ScopeAgent
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "scope must be session or agent"})
+		return
+	}
+
+	ids, err := dashAgentRunner.BoardManager().ListPersistedScopeIDs(kind)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"scope": scopeKind,
+		"count": len(ids),
+		"ids":   ids,
+	})
+}
+
 func parseBlackboardScope(kind, id string) (blackboard.Scope, error) {
 	if id == "" {
 		return blackboard.Scope{}, errScopeIDRequired

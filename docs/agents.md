@@ -379,6 +379,16 @@ Successful agent runs auto-promote to agent scope: `runs/latest/output`, `runs/l
 
 `GET /api/blackboard?scope=session&scope_id=<pipeline_run_id>&prefix=steps/&limit=50` — list entries (auth required). Workflow tab shows session keys when a pipeline completes.
 
+`GET /api/blackboard/scopes?scope=session|agent` — list persisted scope IDs on disk.
+
+CLI:
+
+```bash
+go run ./cmd/bt-agent-cli/ bb list --scope agent --id code-reviewer
+go run ./cmd/bt-agent-cli/ bb read --scope agent --id code-reviewer --key runs/latest/output
+go run ./cmd/bt-agent-cli/ bb scopes --scope session
+```
+
 ---
 
 ## Shipped templates (22)

@@ -292,6 +292,7 @@ func main() {
 	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
 	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
 	mux.HandleFunc("/api/blackboard", sessionAuth(handleBlackboard))
+	mux.HandleFunc("/api/blackboard/scopes", sessionAuth(handleBlackboardScopes))
 
 	// DoorMate components initialization & registration
 	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))

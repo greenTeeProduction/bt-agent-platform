@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - **(blackboard):** Scoped context store (`run`, `session`, `agent`) with ReAct `bb_*` tools, memory/history offloading, pipeline session sharing, MCP `bt_bb_*` tools, `{{.BB.*}}` chain templates, and session/agent JSON persistence under `${AGENT_HOME}/blackboard/` (ADR-009).
 - **(blackboard):** Agent-scope auto-promotion (`runs/latest/*`), `run_id`/`session_id` on run responses, dashboard `GET /api/blackboard`, workflow session key viewer.
+- **(blackboard):** CLI `bb list/read/scopes`, dashboard Agents tab BB panel, `GET /api/blackboard/scopes`.
 - **(agents):** Unified agent platform — canonical `~/.go-bt-evolve/` paths, `RunOnce()` runner with memory/quality/input enforcement, registry-first dashboard listing, Workflows tab, async pipeline API, HITL approval wiring, MCP `bt_workflow_run` pipeline mode, operator guide (`docs/agents.md`).
 - **(agents):** Runtime YAML contracts — `inputs`, `quality`, and `outputs` validation on scheduler, MCP, CLI, and dashboard runs.
 - **(agents):** Live scheduling — `bt-agent-cli schedule` and dashboard create persist `scheduler-jobs.json`; running `bt-agent` syncs registry changes each tick.

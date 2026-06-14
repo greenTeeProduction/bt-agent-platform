@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -124,4 +125,31 @@ func (s *scopedStore) snapshot() map[string]Entry {
 		out[k] = e
 	}
 	return out
+}
+
+// ListPersistedScopeIDs returns scope IDs that have on-disk storage (session/agent only).
+func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
+	if m == nil || m.persistDir == "" {
+		return nil, fmt.Errorf("blackboard persistence not enabled")
+	}
+	if !isPersistentScope(kind) {
+		return nil, fmt.Errorf("scope kind %q is not persisted", kind)
+	}
+	dir := filepath.Join(m.persistDir, string(kind))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		out = append(out, strings.TrimSuffix(e.Name(), ".json"))
+	}
+	sort.Strings(out)
+	return out, nil
 }

@@ -45,6 +45,8 @@ func main() {
 		cmdTemplates()
 	case "install-templates":
 		cmdInstallTemplates()
+	case "bb":
+		cmdBB()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -66,6 +68,9 @@ Usage:
   bt-agent-cli delete <name>
   bt-agent-cli templates
   bt-agent-cli install-templates
+  bt-agent-cli bb list --scope agent --id <name> [--prefix runs/]
+  bt-agent-cli bb read --scope agent --id <name> --key runs/latest/output
+  bt-agent-cli bb scopes --scope session
 
 Templates: code-reviewer, daily-researcher, system-monitor, meeting-summarizer, data-pipeline, notification-router`)
 }
@@ -200,6 +205,12 @@ func cmdRun(reg *agent.Registry) {
 			"output_passed":  res.OutputPassed,
 			"duration":       res.Duration.String(),
 		}
+		if res.RunID != "" {
+			out["run_id"] = res.RunID
+		}
+		if res.SessionID != "" {
+			out["session_id"] = res.SessionID
+		}
 		if len(res.QualityReasons) > 0 {
 			out["quality_reasons"] = res.QualityReasons
 		}
@@ -214,6 +225,9 @@ func cmdRun(reg *agent.Registry) {
 		_ = enc.Encode(out)
 	} else {
 		fmt.Printf("Outcome: %s (quality=%.2f, duration=%s)\n", res.Outcome, res.Quality, res.Duration.Truncate(time.Second))
+		if res.RunID != "" {
+			fmt.Printf("Run ID: %s (run scope is in-memory; agent scope has runs/latest/*)\n", res.RunID)
+		}
 		if len(res.QualityReasons) > 0 {
 			fmt.Printf("Quality: %s\n", strings.Join(res.QualityReasons, "; "))
 		}

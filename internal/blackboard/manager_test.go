@@ -66,3 +66,22 @@ func TestHandle_SessionScope(t *testing.T) {
 		t.Fatalf("session list: %v err=%v", list, err)
 	}
 }
+
+func TestListPersistedScopeIDs(t *testing.T) {
+	dir := t.TempDir()
+	m := DefaultManager()
+	if err := m.EnablePersistence(dir); err != nil {
+		t.Fatal(err)
+	}
+	scope := Scope{Kind: ScopeAgent, ID: "demo-agent"}
+	if err := m.Set(scope, "runs/latest/output", "hello", "", "text"); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := m.ListPersistedScopeIDs(ScopeAgent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != "demo-agent" {
+		t.Fatalf("unexpected ids: %v", ids)
+	}
+}
