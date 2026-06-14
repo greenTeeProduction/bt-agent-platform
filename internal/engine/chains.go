@@ -346,12 +346,20 @@ Provide a comprehensive answer. If the information is insufficient, state what's
 }
 
 func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
-	// Map-Reduce: split task into subtasks (map), process each, combine results (reduce)
+	// Map-Reduce: split a complex task into subtasks (map), process each while
+	// carrying forward earlier results (so later subtasks can build on them —
+	// multi-step reasoning, not just independent splits), then combine (reduce).
+	// Progress is tracked in bb.ChainState and partial failures are recorded
+	// rather than silently dropped, so downstream nodes can react to gaps.
 	task := expandTemplate(cfg.Prompt, bb)
 
 	if bb.LLM == nil {
 		bb.Outcome = "chain_failed"
+		bb.Result = "no LLM available for map_reduce"
 		return -1
+	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
 	}
 
 	// Map phase: decompose
@@ -359,21 +367,53 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	subtasks, err := bb.LLM.Generate(mapPrompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
+		bb.Result = fmt.Sprintf("map_reduce decompose error: %v", err)
 		return -1
 	}
 
-	// Process each subtask (simplified: process first 2 for speed)
+	// Process each subtask, threading accumulated context into later subtasks.
+	const maxSubtasks = 5
 	lines := splitLines(subtasks)
-	results := make([]string, 0, 8)
+	results := make([]string, 0, maxSubtasks)
+	var failedSubtasks []string
+	completed, failed := 0, 0
+	accumulated := ""
 	for i, line := range lines {
-		if i >= 3 || line == "" {
+		if i >= maxSubtasks || line == "" {
 			break
 		}
-		subResult, err := bb.LLM.Generate(fmt.Sprintf("Complete this subtask:\n%s\n\nResult:", line))
+		subPrompt := fmt.Sprintf("Complete this subtask:\n%s\n", line)
+		if accumulated != "" {
+			subPrompt += fmt.Sprintf("\nResults from earlier subtasks (build on these, do not repeat them):\n%s\n", accumulated)
+		}
+		subPrompt += "\nResult:"
+		subResult, err := bb.LLM.Generate(subPrompt)
 		if err != nil {
+			// Partial failure recovery: record the failed subtask instead of
+			// silently dropping it, then continue with the remaining subtasks.
+			failed++
+			failedSubtasks = append(failedSubtasks, line)
 			continue
 		}
 		results = append(results, subResult)
+		accumulated += fmt.Sprintf("- %s\n", subResult)
+		completed++
+	}
+
+	// Record progress so downstream nodes can inspect subtask outcomes.
+	bb.ChainState["map_reduce_total"] = completed + failed
+	bb.ChainState["map_reduce_completed"] = completed
+	bb.ChainState["map_reduce_failed"] = failed
+	if len(failedSubtasks) > 0 {
+		bb.ChainState["map_reduce_failed_subtasks"] = failedSubtasks
+	}
+
+	// If every subtask failed there is nothing to combine — fail honestly rather
+	// than fabricate a unified answer from no inputs.
+	if completed == 0 {
+		bb.Outcome = "chain_failed"
+		bb.Result = fmt.Sprintf("map_reduce: all %d subtask(s) failed, no results to combine", failed)
+		return -1
 	}
 
 	// Reduce phase: combine
@@ -381,15 +421,20 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	for i, r := range results {
 		reducePrompt += fmt.Sprintf("%d. %s\n", i+1, r)
 	}
+	if failed > 0 {
+		reducePrompt += fmt.Sprintf("\nNote: %d subtask(s) could not be completed; produce the best answer from the available results and flag the missing parts.\n", failed)
+	}
 	reducePrompt += "\nUnified answer:"
 
 	final, err := bb.LLM.Generate(reducePrompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
+		bb.Result = fmt.Sprintf("map_reduce reduce error: %v", err)
 		return -1
 	}
 	bb.Outcome = "chain_success"
 	bb.Result = final
+	bb.Results = append(bb.Results, final)
 	return 1
 }
 

@@ -1623,6 +1623,91 @@ func TestChainAction_MapReduce_SubResultErrors(t *testing.T) {
 	}
 }
 
+// indexedErrorMockLLM errors only on a specific call number, succeeding on all
+// others. Used to simulate a single failing subtask within map_reduce.
+type indexedErrorMockLLM struct {
+	decompose  string
+	failOnCall int
+	count      *int
+}
+
+func (m *indexedErrorMockLLM) Generate(_ string) (string, error) {
+	*m.count++
+	n := *m.count
+	if n == m.failOnCall {
+		return "", fmt.Errorf("simulated error on call %d", n)
+	}
+	if n == 1 {
+		return m.decompose, nil
+	}
+	return fmt.Sprintf("result for call %d with sufficient length to pass checks", n), nil
+}
+func (m *indexedErrorMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *indexedErrorMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *indexedErrorMockLLM) AnalyzeComplexity(_ string) string       { return "high" }
+func (m *indexedErrorMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *indexedErrorMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+// TestChainAction_MapReduce_PartialFailureRecovery verifies that when one
+// subtask fails, map_reduce records the failure, completes the remaining
+// subtasks, tracks progress in ChainState, and still reduces to a success.
+func TestChainAction_MapReduce_PartialFailureRecovery(t *testing.T) {
+	callCount := 0
+	mock := &indexedErrorMockLLM{
+		decompose:  "1. Subtask A\n2. Subtask B\n3. Subtask C",
+		failOnCall: 3, // call 1 = decompose, call 2 = A, call 3 = B (fails), call 4 = C, call 5 = reduce
+		count:      &callCount,
+	}
+	bb := &Blackboard{Task: "analyze a complex multi-part topic", LLM: mock}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+
+	if result != 1 || bb.Outcome != "chain_success" {
+		t.Fatalf("expected chain_success, got result=%d outcome=%s: %s", result, bb.Outcome, bb.Result)
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 2 {
+		t.Errorf("map_reduce_completed = %v, want 2", got)
+	}
+	if got := bb.ChainState["map_reduce_failed"]; got != 1 {
+		t.Errorf("map_reduce_failed = %v, want 1", got)
+	}
+	if got := bb.ChainState["map_reduce_total"]; got != 3 {
+		t.Errorf("map_reduce_total = %v, want 3", got)
+	}
+	failedList, ok := bb.ChainState["map_reduce_failed_subtasks"].([]string)
+	if !ok || len(failedList) != 1 || !strings.Contains(failedList[0], "Subtask B") {
+		t.Errorf("map_reduce_failed_subtasks = %v, want [Subtask B]", bb.ChainState["map_reduce_failed_subtasks"])
+	}
+	if len(bb.Results) == 0 {
+		t.Error("expected final result appended to bb.Results")
+	}
+}
+
+// TestChainAction_MapReduce_AllSubtasksFail verifies that when every subtask
+// fails, map_reduce fails honestly instead of reducing over no inputs.
+func TestChainAction_MapReduce_AllSubtasksFail(t *testing.T) {
+	callCount := 0
+	mock := &countedErrorMockLLM{
+		responses:  map[string]string{"generate": "1. Sub1\n2. Sub2\n3. Sub3"},
+		failOnCall: 2, // decompose ok, every subtask errors
+		count:      &callCount,
+	}
+	bb := &Blackboard{Task: "analyze complex topic", LLM: mock}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+
+	if result != -1 || bb.Outcome != "chain_failed" {
+		t.Fatalf("expected chain_failed, got result=%d outcome=%s", result, bb.Outcome)
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 0 {
+		t.Errorf("map_reduce_completed = %v, want 0", got)
+	}
+}
+
 func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
 	// execAgent: Test MaxTokens boundary values (0, 1, 31)
 	tests := []struct {
