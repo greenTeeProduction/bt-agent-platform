@@ -822,6 +822,40 @@ func TestAssignComplexityAction_NoLLM_DefaultsMedium(t *testing.T) {
 	}
 }
 
+func TestEstimateComplexityHeuristic(t *testing.T) {
+	cases := []struct {
+		name string
+		task string
+		want string
+	}{
+		{"empty defaults medium", "", "medium"},
+		{"short ambiguous defaults medium", "test task", "medium"},
+		{"simple lookup is low", "what is a goroutine", "low"},
+		{"explain short is low", "explain channels", "low"},
+		{"multi-step conjunction is high", "refactor the engine and migrate the pipeline", "high"},
+		{"broad scope is high", "comprehensive end-to-end architecture review across all services", "high"},
+		{"single verb stays medium", "build the parser", "medium"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := estimateComplexityHeuristic(tc.task); got != tc.want {
+				t.Errorf("estimateComplexityHeuristic(%q) = %q, want %q", tc.task, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAssignComplexityAction_NoLLM_HeuristicHigh(t *testing.T) {
+	bb := &Blackboard{Task: "refactor the engine and migrate the pipeline architecture"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	if result := assignComplexityAction(ctx); result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+	if bb.Complexity != "high" {
+		t.Errorf("expected heuristic 'high' for multi-step task, got %q", bb.Complexity)
+	}
+}
+
 func TestAssignComplexityAction_WithLLM(t *testing.T) {
 	mock := &MockLLM{ComplexityResp: "high"}
 	bb := &Blackboard{Task: "complex task", LLM: mock}

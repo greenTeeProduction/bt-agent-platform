@@ -610,9 +610,62 @@ func assignComplexityAction(ctx *btcore.BTContext[Blackboard]) int {
 	if bb.LLM != nil {
 		bb.Complexity = bb.LLM.AnalyzeComplexity(bb.Task)
 	} else {
-		bb.Complexity = "medium"
+		// No LLM wired up (template-only / offline mode): fall back to a
+		// heuristic so routing can still tell a multi-step task apart from a
+		// trivial lookup instead of treating everything as "medium".
+		bb.Complexity = estimateComplexityHeuristic(bb.Task)
 	}
 	return 1
+}
+
+// estimateComplexityHeuristic classifies task complexity as "low", "medium", or
+// "high" without an LLM. It starts from "medium" and escalates to "high" when
+// the task shows multi-step or broad-scope signals (conjoined steps, many
+// clauses, heavy engineering verbs, long descriptions), or drops to "low" for
+// short single-intent lookups. Keeping "medium" as the baseline preserves the
+// previous offline default for tasks that show no clear signal either way.
+func estimateComplexityHeuristic(task string) string {
+	lower := strings.ToLower(strings.TrimSpace(task))
+	if lower == "" {
+		return "medium"
+	}
+	wordCount := len(strings.Fields(lower))
+
+	// High-complexity signals: multi-step sequencing, broad scope, or verbs
+	// that imply substantial multi-file/multi-stage work.
+	highSignals := []string{
+		" and ", " then ", "after that", "step by step", "step-by-step",
+		"end-to-end", "end to end", "comprehensive", "across all", "multi-",
+		"pipeline", "migrate", "refactor", "architecture", "investigate",
+		"orchestrate", "all of", "as well as", "followed by", "decompose",
+	}
+	highScore := 0
+	for _, s := range highSignals {
+		if strings.Contains(lower, s) {
+			highScore++
+		}
+	}
+	// Multiple sentences or clause separators also indicate multi-step work.
+	if strings.Count(task, ".") >= 2 || strings.Count(task, ";") >= 1 {
+		highScore++
+	}
+	if wordCount > 30 {
+		highScore++
+	}
+	if highScore >= 2 || wordCount > 60 {
+		return "high"
+	}
+
+	// Low-complexity signals: short, single-intent questions or lookups.
+	if wordCount <= 12 {
+		for _, s := range []string{"what is", "what's", "explain", "define", "show ", "list ", "how do i", "tell me"} {
+			if strings.Contains(lower, s) {
+				return "low"
+			}
+		}
+	}
+
+	return "medium"
 }
 
 func validateInputAction(ctx *btcore.BTContext[Blackboard]) int {
