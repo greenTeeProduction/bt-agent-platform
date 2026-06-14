@@ -373,6 +373,12 @@ Workflow steps auto-populate session keys: `input`, `steps/<step_id>/output`, `p
 
 Scopes: `run`, `session`, `agent`.
 
+Successful agent runs auto-promote to agent scope: `runs/latest/output`, `runs/latest/task`, `runs/latest/run_id`, `runs/latest/at`.
+
+### Dashboard API
+
+`GET /api/blackboard?scope=session&scope_id=<pipeline_run_id>&prefix=steps/&limit=50` — list entries (auth required). Workflow tab shows session keys when a pipeline completes.
+
 ---
 
 ## Shipped templates (22)

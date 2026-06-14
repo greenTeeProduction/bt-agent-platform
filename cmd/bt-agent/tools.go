@@ -903,6 +903,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"quality_passed": res.QualityPassed, "duration": res.Duration.String(),
 				"tree": res.TreeID, "output_passed": res.OutputPassed,
 			}
+			if res.RunID != "" {
+				resp["run_id"] = res.RunID
+			}
+			if res.SessionID != "" {
+				resp["session_id"] = res.SessionID
+			}
 			if len(res.QualityReasons) > 0 {
 				resp["quality_reasons"] = res.QualityReasons
 			}

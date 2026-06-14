@@ -291,6 +291,7 @@ func main() {
 	mux.HandleFunc("/api/pipelines", sessionAuth(handlePipelines))
 	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
 	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
+	mux.HandleFunc("/api/blackboard", sessionAuth(handleBlackboard))
 
 	// DoorMate components initialization & registration
 	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
@@ -1534,28 +1535,48 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 				}
 			}()
 			executor := newAgentExecutor()
-			output, outcome, err := executor.RunTask(agentName, task, treeID)
-			res := map[string]interface{}{
-				"agent": agentName, "outcome": outcome, "output": output,
+			res, err := executor.RunTaskResult(agentName, task, treeID)
+			resp := map[string]interface{}{
+				"agent": agentName, "outcome": "failure", "output": "",
+			}
+			if res != nil {
+				resp["outcome"] = res.Outcome
+				resp["output"] = res.Output
+				if res.RunID != "" {
+					resp["run_id"] = res.RunID
+				}
+				if res.SessionID != "" {
+					resp["session_id"] = res.SessionID
+				}
 			}
 			if err != nil {
-				res["error"] = err.Error()
+				resp["error"] = err.Error()
 			}
-			result <- res
+			result <- resp
 		})
 	} else {
 		executor := newAgentExecutor()
-		output, outcome, err := executor.RunTask(agentName, task, treeID)
+		res, err := executor.RunTaskResult(agentName, task, treeID)
 		if dashConcurrencyLimiter != nil {
 			dashConcurrencyLimiter.Release()
 		}
-		res := map[string]interface{}{
-			"agent": agentName, "outcome": outcome, "output": output,
+		resp := map[string]interface{}{
+			"agent": agentName, "outcome": "failure", "output": "",
+		}
+		if res != nil {
+			resp["outcome"] = res.Outcome
+			resp["output"] = res.Output
+			if res.RunID != "" {
+				resp["run_id"] = res.RunID
+			}
+			if res.SessionID != "" {
+				resp["session_id"] = res.SessionID
+			}
 		}
 		if err != nil {
-			res["error"] = err.Error()
+			resp["error"] = err.Error()
 		}
-		result <- res
+		result <- resp
 	}
 
 	res := <-result

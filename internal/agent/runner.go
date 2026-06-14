@@ -36,6 +36,7 @@ type RunOptions struct {
 	DisplayName      string            // history label; defaults to agentName
 	SessionID        string            // pipeline session scope (future promote)
 	DisableBlackboard bool             // when true, skip run-scoped blackboard tools
+	DisableAgentPromote bool           // when true, skip runs/latest/* on agent scope after success
 }
 
 // RunResult is the outcome of RunOnce.
@@ -50,6 +51,8 @@ type RunResult struct {
 	QualityReasons []string `json:"quality_reasons,omitempty"`
 	OutputPassed   bool     `json:"output_passed"`
 	OutputReasons  []string `json:"output_reasons,omitempty"`
+	RunID          string   `json:"run_id,omitempty"`
+	SessionID      string   `json:"session_id,omitempty"`
 	Duration       time.Duration
 	StartedAt      time.Time
 	EndedAt        time.Time
@@ -133,6 +136,8 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		runID := blackboard.NewRunID()
 		bb.RunID = runID
 		bb.BB = blackboard.NewHandle(d.boardManager(), runID, opts.SessionID, agentName)
+		result.RunID = runID
+		result.SessionID = opts.SessionID
 		engine.PrepareBlackboard(bb)
 		if opts.InjectMemory {
 			fullTask = d.seedMemoryToBlackboard(agentName, fullTask, opts.PreviousRunLimit, bb.BB)
@@ -213,6 +218,10 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 			StartedAt: start,
 			EndedAt:   result.EndedAt,
 		})
+	}
+
+	if result.Outcome == "success" && !opts.DisableBlackboard && !opts.DisableAgentPromote && bb.BB != nil {
+		d.promoteRunToAgentScope(agentName, bb, task, result.Output)
 	}
 
 	if result.Outcome != "success" {

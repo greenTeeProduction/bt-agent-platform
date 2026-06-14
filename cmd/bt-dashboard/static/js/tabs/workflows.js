@@ -140,6 +140,7 @@ function pollWorkflowStatus(runId) {
       if (s.status === 'complete' || s.status === 'failed') {
         clearInterval(workflowPollTimer);
         workflowPollTimer = null;
+        loadWorkflowBlackboard(runId);
       }
     } catch (e) {
       statusEl.innerHTML = '<div class="empty">Status poll failed</div>';
@@ -149,6 +150,27 @@ function pollWorkflowStatus(runId) {
 
   tick();
   workflowPollTimer = setInterval(tick, 2000);
+}
+
+async function loadWorkflowBlackboard(runId) {
+  const statusEl = document.getElementById('workflow-status');
+  if (!statusEl || !runId) return;
+  try {
+    const bb = await apiFetch('/blackboard?scope=session&scope_id=' + encodeURIComponent(runId) + '&limit=30');
+    if (!bb.entries || !bb.entries.length) return;
+    let html = '<div style="margin-top:12px;font-size:12px"><strong>Session blackboard</strong>';
+    html += '<table style="width:100%;margin-top:6px;border-collapse:collapse">';
+    bb.entries.forEach(function(e) {
+      html += '<tr style="border-bottom:1px solid var(--border)">'
+        + '<td style="padding:4px 8px 4px 0;font-family:monospace;font-size:11px">' + e.key + '</td>'
+        + '<td style="padding:4px 0;color:var(--text-tertiary)">' + (e.summary || (e.value ? e.value.substring(0, 80) : '')) + '</td>'
+        + '</tr>';
+    });
+    html += '</table></div>';
+    statusEl.innerHTML += html;
+  } catch (e) {
+    /* blackboard optional */
+  }
 }
 
 setTimeout(function() {

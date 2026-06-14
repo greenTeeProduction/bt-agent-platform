@@ -22,8 +22,16 @@ func NewAgentExecutor() *AgentExecutor {
 }
 
 // RunTask executes a task through the specified BT agent tree.
-// Returns the agent's output and outcome (success/failure).
 func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, outcome string, err error) {
+	res, err := e.RunTaskResult(agentName, task, treeID)
+	if res == nil {
+		return "", "failure", err
+	}
+	return res.Output, res.Outcome, err
+}
+
+// RunTaskResult executes a task and returns the full RunResult (includes blackboard run_id).
+func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.RunResult, error) {
 	if e.Runner != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 		defer cancel()
@@ -33,10 +41,19 @@ func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, 
 			RecordHistory:  true,
 			DisplayName:    agentName,
 		}
-		outcome, output, _, err = agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
-		return output, outcome, err
+		_, _, res, err := agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
+		return res, err
 	}
-	return e.runViaHermes(task, treeID)
+	output, outcome, err := e.runViaHermes(task, treeID)
+	if err != nil && outcome == "" {
+		outcome = "failure"
+	}
+	return &agent.RunResult{
+		AgentName: agentName,
+		Task:      task,
+		Outcome:   outcome,
+		Output:    output,
+	}, err
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {
