@@ -1774,6 +1774,69 @@ func TestChainAction_Agent_UnparseableScratchpad(t *testing.T) {
 	}
 }
 
+func TestChainAction_Agent_RepeatedToolCallsAborts(t *testing.T) {
+	// execAgent: an agent that keeps issuing the SAME (action, input) call must
+	// be detected as stuck and the loop aborted before it burns the whole
+	// iteration budget, with progress recorded in ChainState.
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Thought: keep searching\nAction: search\nAction Input: same query",
+	}}
+	bb := &Blackboard{
+		Task: "investigate something complex",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "search", description: "Search the web", result: "no results"},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Investigate: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(15),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if got := bb.ChainState["agent_stop_reason"]; got != "repeated_tool_calls" {
+		t.Errorf("expected stop_reason repeated_tool_calls, got %v", got)
+	}
+	// The guard caps a single call at maxRepeatedCalls (3) executions, so the
+	// loop must abort far short of the 15-iteration budget.
+	iters, _ := bb.ChainState["agent_iterations"].(int)
+	if iters <= 0 || iters > 5 {
+		t.Errorf("expected loop to abort early (<=5 iterations), got %d", iters)
+	}
+	if used, _ := bb.ChainState["agent_tools_used"].(int); used != 3 {
+		t.Errorf("expected 3 successful tool calls before abort, got %d", used)
+	}
+}
+
+func TestChainAction_Agent_ProgressRecordedOnFinalAnswer(t *testing.T) {
+	// execAgent: a clean final-answer run records stop_reason=final_answer.
+	var callCount int
+	mock := &agentTestMockLLM{
+		responses: []string{
+			"Final Answer: The capital of France is Paris.",
+		},
+		callCount: &callCount,
+	}
+	bb := &Blackboard{Task: "what is the capital of France?", LLM: mock}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:{{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(5)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if got := bb.ChainState["agent_stop_reason"]; got != "final_answer" {
+		t.Errorf("expected stop_reason final_answer, got %v", got)
+	}
+}
+
 func TestChainAction_Conversation_NilLLM(t *testing.T) {
 	// execConversation: bb.LLM == nil → failure path
 	bb := &Blackboard{

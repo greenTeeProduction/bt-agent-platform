@@ -559,6 +559,9 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 		bb.Result = "no LLM available for agent"
 		return -1
 	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
 
 	// Build tool descriptions
 	toolList := buildToolList(cfg, bb)
@@ -574,7 +577,19 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	toolUsed := false
 	toolsRequired := hasRealTools(bb)
 
+	// Stuck-loop detection: complex tasks frequently send a ReAct agent into a
+	// loop where it repeats the same (action, input) call and burns its whole
+	// iteration budget without progress. We count identical calls, nudge the
+	// agent once a repeat appears, and abort the loop once a call has been
+	// attempted maxRepeatedCalls times so the budget isn't wasted.
+	const maxRepeatedCalls = 3
+	toolCallCounts := map[string]int{}
+	iterations := 0
+	successfulToolCalls := 0
+	stopReason := "max_iterations"
+
 	for i := 0; i < maxIter; i++ {
+		iterations = i + 1
 		prompt := fmt.Sprintf(`%s
 
 TASK: %s
@@ -611,6 +626,7 @@ What is your next step?`, systemMsg, task, toolList, scratchpad)
 					continue
 				}
 				finalAnswer = fa
+				stopReason = "final_answer"
 				break
 			}
 			// Unparseable — treat as thought
@@ -618,16 +634,38 @@ What is your next step?`, systemMsg, task, toolList, scratchpad)
 			continue
 		}
 
+		// Stuck-loop guard: if the agent has already attempted this exact call the
+		// maximum number of times, stop rather than spend the rest of the budget
+		// repeating it. Downstream nodes can read agent_stop_reason to react.
+		sig := action + "\x00" + actionInput
+		toolCallCounts[sig]++
+		if toolCallCounts[sig] > maxRepeatedCalls {
+			stopReason = "repeated_tool_calls"
+			break
+		}
+
 		// Execute the tool
 		toolResult := executeAgentTool(action, actionInput, bb)
 		scratchpad += fmt.Sprintf("Step %d: Action: %s(%s) → %s\n", i+1, action, actionInput, toolResult)
 		if !isToolUnavailableResult(toolResult) {
 			toolUsed = true
+			successfulToolCalls++
+		}
+		// On a detected repeat, nudge the agent to change approach before it
+		// exhausts its remaining iterations on the same dead end.
+		if toolCallCounts[sig] > 1 {
+			scratchpad += fmt.Sprintf("Note: you have already run %s(%s) %d times with the same result. Do not repeat it — try a different tool, different input, or give your Final Answer.\n", action, actionInput, toolCallCounts[sig])
 		}
 
 		// Store tool result for downstream use
 		bb.CachedResult = toolResult
 	}
+
+	// Record agent progress so downstream nodes can inspect how far the loop got
+	// and why it stopped (mirrors map_reduce/refine progress tracking).
+	bb.ChainState["agent_iterations"] = iterations
+	bb.ChainState["agent_tools_used"] = successfulToolCalls
+	bb.ChainState["agent_stop_reason"] = stopReason
 
 	if toolsRequired && !toolUsed {
 		bb.Outcome = "tool_evidence_missing"
