@@ -1848,6 +1848,39 @@ func TestChainAction_Agent_RepeatedToolCallsAborts(t *testing.T) {
 	}
 }
 
+func TestChainAction_Agent_NoProgressAborts(t *testing.T) {
+	// execAgent: an agent that only ever emits unparseable "Thought" output — no
+	// Action and no Final Answer — makes zero progress. It must be detected and the
+	// loop aborted well short of the iteration budget, with stop_reason=no_progress.
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "Thought: I am still pondering the approach and have not decided anything yet.",
+	}}
+	bb := &Blackboard{
+		Task:       "investigate something complex",
+		LLM:        mock,
+		ChainTools: []any{},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Investigate: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(20),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if got := bb.ChainState["agent_stop_reason"]; got != "no_progress" {
+		t.Errorf("expected stop_reason no_progress, got %v", got)
+	}
+	// The guard aborts after maxNoProgressSteps (4), far short of the 20 budget.
+	iters, _ := bb.ChainState["agent_iterations"].(int)
+	if iters <= 0 || iters > 6 {
+		t.Errorf("expected loop to abort early (<=6 iterations), got %d", iters)
+	}
+}
+
 func TestChainAction_Agent_ProgressRecordedOnFinalAnswer(t *testing.T) {
 	// execAgent: a clean final-answer run records stop_reason=final_answer.
 	var callCount int

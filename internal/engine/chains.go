@@ -724,6 +724,17 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	stopReason := "max_iterations"
 	scratchpadWindowed := false
 
+	// No-progress detection: the repeated_tool_calls guard catches an agent stuck
+	// repeating one tool call, but the complementary failure mode on complex tasks
+	// is an agent that never emits a usable step at all — it rambles in pure
+	// "Thought:" output (unparseable, no Action) or keeps proposing a Final Answer
+	// it isn't allowed to give (unevidenced, tools required). Left unchecked it
+	// burns the entire iteration budget making zero progress. We count consecutive
+	// no-progress iterations and abort once they exceed maxNoProgressSteps, resetting
+	// the streak whenever a tool actually runs.
+	const maxNoProgressSteps = 4
+	noProgressStreak := 0
+
 	for i := 0; i < maxIter; i++ {
 		iterations = i + 1
 		// Context management: a long-running agent accumulates a large scratchpad,
@@ -769,6 +780,11 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 			if fa := parseFinalAnswer(response); fa != "" {
 				if toolsRequired && !toolUsed {
 					scratchpad += fmt.Sprintf("Step %d: rejected unevidenced final answer because no real tool was used. Available tools: %s\n", i+1, availableToolNames(bb))
+					noProgressStreak++
+					if noProgressStreak >= maxNoProgressSteps {
+						stopReason = "no_progress"
+						break
+					}
 					continue
 				}
 				finalAnswer = fa
@@ -777,6 +793,11 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 			}
 			// Unparseable — treat as thought
 			scratchpad += fmt.Sprintf("Step %d: %s\n", i+1, strings.TrimSpace(response))
+			noProgressStreak++
+			if noProgressStreak >= maxNoProgressSteps {
+				stopReason = "no_progress"
+				break
+			}
 			continue
 		}
 
@@ -793,6 +814,8 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 		// Execute the tool
 		toolResult := executeAgentTool(action, actionInput, bb)
 		scratchpad += fmt.Sprintf("Step %d: Action: %s(%s) → %s\n", i+1, action, actionInput, toolResult)
+		// A parsed, executed tool call is real progress — reset the no-progress streak.
+		noProgressStreak = 0
 		if !isToolUnavailableResult(toolResult) {
 			toolUsed = true
 			successfulToolCalls++
