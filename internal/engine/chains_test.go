@@ -1837,6 +1837,105 @@ func TestChainAction_Agent_ProgressRecordedOnFinalAnswer(t *testing.T) {
 	}
 }
 
+func TestWindowScratchpad(t *testing.T) {
+	// Short scratchpad is returned untouched.
+	short := "Step 1: did a thing\nStep 2: did another\n"
+	if got := windowScratchpad(short, 6000); got != short {
+		t.Errorf("short scratchpad should be unchanged, got %q", got)
+	}
+	// maxLen <= 0 disables windowing.
+	if got := windowScratchpad(short, 0); got != short {
+		t.Errorf("maxLen<=0 should disable windowing, got %q", got)
+	}
+	// Oversized scratchpad is trimmed to the tail with an elision marker, never
+	// exceeding the budget by more than the marker line, and starting on a clean
+	// line boundary (no half step).
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		sb.WriteString(fmt.Sprintf("Step %d: %s\n", i, strings.Repeat("x", 80)))
+	}
+	full := sb.String()
+	got := windowScratchpad(full, 1000)
+	if len(got) >= len(full) {
+		t.Fatalf("expected windowed output shorter than input (%d), got %d", len(full), len(got))
+	}
+	if !strings.Contains(got, "elided to manage context") {
+		t.Errorf("expected elision marker, got prefix %q", got[:60])
+	}
+	// The retained tail must include the most recent step and exclude the oldest.
+	if !strings.Contains(got, "Step 199:") {
+		t.Errorf("windowed scratchpad should retain the most recent step")
+	}
+	if strings.Contains(got, "Step 0:") {
+		t.Errorf("windowed scratchpad should drop the oldest step")
+	}
+}
+
+func TestChainAction_Agent_ScratchpadWindowed(t *testing.T) {
+	// execAgent: a long-running agent with large tool outputs must window its
+	// scratchpad so per-iteration prompts stay bounded instead of growing with
+	// every step. Without windowing, prompt size grows with iteration count and
+	// eventually overflows the model's context window on complex tasks.
+	bigOutput := strings.Repeat("DATA ", 400) // ~2000 chars per tool result
+	mock := &windowingMockLLM{bigToolEnough: true}
+	bb := &Blackboard{
+		Task: "investigate a complex multi-step problem",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "search", description: "Search", result: bigOutput},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:{{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(15)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if windowed, _ := bb.ChainState["agent_scratchpad_windowed"].(bool); !windowed {
+		t.Fatalf("expected scratchpad to be windowed over a long run, got %v", bb.ChainState["agent_scratchpad_windowed"])
+	}
+	// Per-iteration prompts (the ones asking for the next step) must stay bounded
+	// near the scratchpad budget plus fixed overhead — never the full unbounded
+	// accumulation of all step outputs.
+	if mock.maxLoopPrompt == 0 {
+		t.Fatal("expected at least one per-iteration prompt to be recorded")
+	}
+	if mock.maxLoopPrompt > maxScratchpadLen+3000 {
+		t.Errorf("per-iteration prompt grew unbounded: max %d chars (budget %d)", mock.maxLoopPrompt, maxScratchpadLen)
+	}
+}
+
+// windowingMockLLM emits a distinct tool action on each call (so the stuck-loop
+// guard never fires) and records the size of every per-iteration agent prompt.
+type windowingMockLLM struct {
+	bigToolEnough bool
+	calls         int
+	maxLoopPrompt int
+}
+
+func (m *windowingMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "What is your next step?") {
+		if len(prompt) > m.maxLoopPrompt {
+			m.maxLoopPrompt = len(prompt)
+		}
+	}
+	m.calls++
+	// Unique input each call avoids the repeated-tool-call abort.
+	return fmt.Sprintf("Thought: keep going\nAction: search\nAction Input: query-%d", m.calls), nil
+}
+func (m *windowingMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *windowingMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *windowingMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *windowingMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *windowingMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
 func TestChainAction_Conversation_NilLLM(t *testing.T) {
 	// execConversation: bb.LLM == nil → failure path
 	bb := &Blackboard{

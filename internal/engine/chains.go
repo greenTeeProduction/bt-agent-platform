@@ -722,9 +722,20 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	iterations := 0
 	successfulToolCalls := 0
 	stopReason := "max_iterations"
+	scratchpadWindowed := false
 
 	for i := 0; i < maxIter; i++ {
 		iterations = i + 1
+		// Context management: a long-running agent accumulates a large scratchpad,
+		// and the whole scratchpad is re-sent every iteration. Left unbounded this
+		// makes prompt size grow with iteration count (quadratic total token cost)
+		// and eventually overflows the model's context window — the failure mode for
+		// complex, many-step tasks. Window it to the most recent steps, which carry
+		// the agent's live reasoning state.
+		recentSteps := windowScratchpad(scratchpad, maxScratchpadLen)
+		if len(recentSteps) < len(scratchpad) {
+			scratchpadWindowed = true
+		}
 		prompt := fmt.Sprintf(`%s
 
 TASK: %s
@@ -742,7 +753,7 @@ Final Answer: <your complete answer — INCLUDE ALL tool output data verbatim, d
 Previous steps:
 %s
 
-What is your next step?`, systemMsg, task, toolList, scratchpad)
+What is your next step?`, systemMsg, task, toolList, recentSteps)
 
 		response, err := bb.LLM.Generate(prompt)
 		if err != nil {
@@ -801,6 +812,7 @@ What is your next step?`, systemMsg, task, toolList, scratchpad)
 	bb.ChainState["agent_iterations"] = iterations
 	bb.ChainState["agent_tools_used"] = successfulToolCalls
 	bb.ChainState["agent_stop_reason"] = stopReason
+	bb.ChainState["agent_scratchpad_windowed"] = scratchpadWindowed
 
 	if toolsRequired && !toolUsed {
 		bb.Outcome = "tool_evidence_missing"
@@ -831,6 +843,29 @@ Final Answer:`, task, scratchpad)
 	bb.Result = finalAnswer
 	bb.Results = append(bb.Results, finalAnswer)
 	return 1
+}
+
+// maxScratchpadLen bounds how much of the ReAct scratchpad is fed back into the
+// agent prompt each iteration. It is a character budget, not a hard token limit,
+// chosen to leave ample headroom for the task, tool list, and format instructions
+// within typical model context windows while preserving several recent steps.
+const maxScratchpadLen = 6000
+
+// windowScratchpad returns the scratchpad unchanged when it fits within maxLen,
+// otherwise it keeps the most recent content (cut at a line boundary so a step is
+// never fed back half-formed) prefixed with an elision marker. Keeping the tail
+// rather than the head preserves the agent's live reasoning state: the latest
+// observations and the stuck-loop nudges that steer it away from dead ends.
+func windowScratchpad(scratchpad string, maxLen int) string {
+	if maxLen <= 0 || len(scratchpad) <= maxLen {
+		return scratchpad
+	}
+	tail := scratchpad[len(scratchpad)-maxLen:]
+	// Advance to the start of the next whole line so we don't begin mid-step.
+	if nl := strings.IndexByte(tail, '\n'); nl >= 0 && nl < len(tail)-1 {
+		tail = tail[nl+1:]
+	}
+	return "... (earlier steps elided to manage context; most recent steps shown) ...\n" + tail
 }
 
 // execToolAction directly invokes a tool by name without an agent loop.
