@@ -9,7 +9,7 @@ import (
 )
 
 // NewProvider creates the appropriate LLM client based on configuration.
-// Supports "ollama", "deepseek", and "acp" providers. Reads API keys,
+// Supports "ollama", "deepseek", "openrouter", and "acp" providers. Reads API keys,
 // model settings, and ACP process settings from config or environment.
 func NewProvider(cfg *config.Config) (LLM, error) {
 	primary, primaryName, err := buildProvider(cfg.LLMProvider, primaryModel(cfg), cfg)
@@ -52,6 +52,19 @@ func buildProvider(provider, model string, cfg *config.Config) (LLM, string, err
 			dsCfg.Timeout = time.Duration(cfg.LLMTimeout) * time.Second
 		}
 		return NewDeepSeekClient(dsCfg), fmt.Sprintf("deepseek:%s", dsCfg.Model), nil
+	case "openrouter":
+		orModel := model
+		if orModel == "" {
+			orModel = cfg.OpenRouterModel
+		}
+		client := NewOpenAICompatClient(OpenAICompatConfig{
+			APIKey:  cfg.OpenRouterKey,
+			BaseURL: cfg.OpenRouterHost,
+			Model:   orModel,
+			Timeout: time.Duration(cfg.LLMTimeout) * time.Second,
+			AppName: "go-bt-evolve",
+		})
+		return client, fmt.Sprintf("openrouter:%s", orModel), nil
 	case "acp":
 		client := NewACPClient(ACPConfig{
 			Command: cfg.ACPCommand,
@@ -75,7 +88,7 @@ func buildProvider(provider, model string, cfg *config.Config) (LLM, string, err
 		}
 		return client, fmt.Sprintf("ollama:%s", ollamaModel), nil
 	default:
-		return nil, "", fmt.Errorf("unknown LLM provider: %s (valid: ollama, deepseek, acp)", provider)
+		return nil, "", fmt.Errorf("unknown LLM provider: %s (valid: ollama, deepseek, openrouter, acp)", provider)
 	}
 }
 
@@ -89,6 +102,8 @@ func primaryModel(cfg *config.Config) string {
 	switch cfg.LLMProvider {
 	case "deepseek":
 		return cfg.DeepSeekModel
+	case "openrouter":
+		return cfg.OpenRouterModel
 	case "ollama":
 		return cfg.OllamaModel
 	default:
@@ -126,7 +141,7 @@ func parseFallbackModels(raw string, defaultProvider string) []fallbackSpec {
 
 func isKnownProvider(provider string) bool {
 	switch provider {
-	case "ollama", "deepseek", "acp":
+	case "ollama", "deepseek", "openrouter", "acp":
 		return true
 	default:
 		return false
