@@ -60,6 +60,9 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 	if id == "godev" {
 		return evolution.GoDeveloperTree()
 	}
+	if id == "fusion" || id == "fusion_deliberation" {
+		return evolution.FusionDeliberationTree()
+	}
 	if len(id) > 8 && id[:8] == "finance:" {
 		return evolution.AllFinanceTrees()[id[8:]]
 	}

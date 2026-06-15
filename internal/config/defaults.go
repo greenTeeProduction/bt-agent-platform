@@ -18,14 +18,16 @@ const (
 	defaultDashboardPort = 9800
 
 	// ── LLM Provider ──
-	defaultLLMProvider   = "ollama"
-	defaultOllamaHost    = "http://localhost:11434"
-	defaultOllamaModel   = "qwen3.6:35b-a3b"
-	defaultDeepSeekHost  = "https://api.deepseek.com/v1"
-	defaultDeepSeekModel = "deepseek-v4-flash"
-	defaultACPCommand    = "hermes"
-	defaultACPArgs       = "acp --accept-hooks"
-	defaultLLMTimeout    = 300
+	defaultLLMProvider     = "ollama"
+	defaultOllamaHost      = "http://localhost:11434"
+	defaultOllamaModel     = "qwen3.6:35b-a3b"
+	defaultDeepSeekHost    = "https://api.deepseek.com/v1"
+	defaultDeepSeekModel   = "deepseek-v4-flash"
+	defaultOpenRouterHost  = "https://openrouter.ai/api/v1"
+	defaultOpenRouterModel = "openrouter/auto"
+	defaultACPCommand      = "hermes"
+	defaultACPArgs         = "acp --accept-hooks"
+	defaultLLMTimeout      = 300
 
 	// ── Rate Limiting ──
 	defaultRateLimitRPS   = 100.0

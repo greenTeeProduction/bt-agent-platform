@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/fusion"
 
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
@@ -38,6 +41,7 @@ const (
 	ChainRetrievalQA      ChainKind = "retrieval_qa"
 	ChainMapReduce        ChainKind = "map_reduce"
 	ChainRefine           ChainKind = "refine"
+	ChainFusion           ChainKind = "fusion"
 	ChainAgent            ChainKind = "agent"       // ReAct agent loop with tool use
 	ChainToolAction       ChainKind = "tool_action" // direct tool invocation without agent loop
 )
@@ -81,6 +85,8 @@ func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[
 			return execMapReduce(cfg, bb)
 		case ChainRefine:
 			return execRefine(cfg, bb)
+		case ChainFusion:
+			return execFusion(cfg, bb)
 		case ChainAgent:
 			return execAgent(cfg, bb)
 		case ChainToolAction:
@@ -542,6 +548,135 @@ func refineConverged(critique string) bool {
 		}
 	}
 	return false
+}
+
+func execFusion(cfg ChainConfig, bb *Blackboard) int {
+	if bb.LLM == nil {
+		bb.Outcome = "chain_failed"
+		bb.Result = "no LLM available for fusion"
+		return -1
+	}
+	prompt := expandTemplate(cfg.Prompt, bb)
+	fcfg := fusionConfigFromParams(cfg.Params)
+	caller := fusionCaller{llm: bb.LLM}
+	result, err := fusion.Run(context.Background(), caller, fcfg, prompt, fusionToolsFromBB(bb))
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+	bb.ChainState["fusion_status"] = result.Status
+	bb.ChainState["fusion_responses"] = result.Responses
+	bb.ChainState["fusion_analysis"] = result.Analysis
+	bb.ChainState["fusion_models"] = fcfg.Normalize().AnalysisModels
+	bb.ChainState["fusion_panel_count"] = len(result.Responses)
+	bb.ChainState["fusion_success_count"] = len(fusionSuccessfulResponses(result.Responses))
+	persistFusionArtifacts(bb, prompt, result)
+	if err != nil {
+		bb.Outcome = "chain_failed"
+		bb.Result = fmt.Sprintf("fusion error: %v", err)
+		return -1
+	}
+	bb.Outcome = "chain_success"
+	bb.Result = result.Final
+	bb.Results = append(bb.Results, result.Final)
+	return 1
+}
+
+type fusionCaller struct{ llm interface{} }
+
+func (c fusionCaller) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
+	if m, ok := c.llm.(interface {
+		GenerateWithModel(context.Context, string, string, string) (string, error)
+	}); ok {
+		return m.GenerateWithModel(ctx, model, system, prompt)
+	}
+	if m, ok := c.llm.(interface {
+		GenerateCtx(context.Context, string) (string, error)
+	}); ok {
+		return m.GenerateCtx(ctx, system+"\n\n"+prompt)
+	}
+	if m, ok := c.llm.(interface{ Generate(string) (string, error) }); ok {
+		return m.Generate(system + "\n\n" + prompt)
+	}
+	return "", fmt.Errorf("LLM does not support Generate")
+}
+
+func fusionConfigFromParams(params map[string]string) fusion.Config {
+	cfg := fusion.DefaultConfig()
+	if params == nil {
+		return cfg
+	}
+	if raw := strings.TrimSpace(params["analysis_models"]); raw != "" {
+		cfg.AnalysisModels = splitCSV(raw)
+	}
+	if raw := strings.TrimSpace(params["model"]); raw != "" {
+		cfg.JudgeModel = raw
+	}
+	if raw := strings.TrimSpace(params["max_tool_calls"]); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			cfg.MaxToolCalls = n
+		}
+	}
+	if raw := strings.TrimSpace(params["force"]); raw != "" {
+		cfg.Force = raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
+	}
+	if raw := strings.TrimSpace(params["enabled"]); raw != "" {
+		cfg.Enabled = !(raw == "0" || strings.EqualFold(raw, "false") || strings.EqualFold(raw, "no"))
+	}
+	return cfg
+}
+
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func fusionToolsFromBB(bb *Blackboard) []fusion.Tool {
+	if bb == nil {
+		return nil
+	}
+	tools := make([]fusion.Tool, 0, len(bb.ChainTools))
+	for _, raw := range bb.ChainTools {
+		if t, ok := raw.(interface {
+			Name() string
+			Description() string
+			Call(string) string
+		}); ok {
+			tools = append(tools, t)
+		}
+	}
+	return tools
+}
+
+func fusionSuccessfulResponses(responses []fusion.Response) []fusion.Response {
+	out := make([]fusion.Response, 0, len(responses))
+	for _, r := range responses {
+		if r.Error == "" && strings.TrimSpace(r.Content) != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func persistFusionArtifacts(bb *Blackboard, prompt string, result fusion.Result) {
+	if bb == nil || bb.BB == nil {
+		return
+	}
+	_ = bb.BB.Set("fusion/input", prompt, "Fusion input", "text")
+	if b, err := json.MarshalIndent(result.Responses, "", "  "); err == nil {
+		_ = bb.BB.Set("fusion/responses.json", string(b), "Fusion panel responses", "json")
+	}
+	if b, err := json.MarshalIndent(result.Analysis, "", "  "); err == nil {
+		_ = bb.BB.Set("fusion/analysis.json", string(b), "Fusion judge analysis", "json")
+	}
+	if result.Final != "" {
+		_ = bb.BB.Set("fusion/final.md", result.Final, "Fusion final answer", "markdown")
+	}
 }
 
 // execAgent runs a ReAct-style agent loop: Thought → Action → Observation → repeat → Final Answer.

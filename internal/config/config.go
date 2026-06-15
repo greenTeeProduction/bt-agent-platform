@@ -30,17 +30,20 @@ type Config struct {
 	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	LLMProvider    string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek, acp
-	OllamaHost     string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
-	OllamaModel    string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
-	DeepSeekHost   string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
-	DeepSeekModel  string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
-	DeepSeekKey    string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
-	ACPCommand     string `json:"acp_command" env:"BT_ACP_COMMAND" default:"hermes"`
-	ACPArgs        string `json:"acp_args" env:"BT_ACP_ARGS" default:"acp --accept-hooks"`
-	ACPCwd         string `json:"acp_cwd,omitempty" env:"BT_ACP_CWD" default:""`
-	FallbackModels string `json:"fallback_models,omitempty" env:"BT_FALLBACK_MODELS" default:""` // CSV: model or provider:model/provider/model
-	LLMTimeout     int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"`                // seconds
+	LLMProvider     string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek, openrouter, acp
+	OllamaHost      string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
+	OllamaModel     string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
+	DeepSeekHost    string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
+	DeepSeekModel   string `json:"deepseek_model" env:"BT_DEEPSEEK_MODEL" default:"deepseek-v4-flash"`
+	DeepSeekKey     string `json:"deepseek_key,omitempty" env:"BT_DEEPSEEK_KEY" default:""`
+	OpenRouterHost  string `json:"openrouter_host" env:"OPENROUTER_HOST" default:"https://openrouter.ai/api/v1"`
+	OpenRouterModel string `json:"openrouter_model" env:"BT_OPENROUTER_MODEL" default:"openrouter/auto"`
+	OpenRouterKey   string `json:"openrouter_key,omitempty" env:"OPENROUTER_API_KEY" default:""`
+	ACPCommand      string `json:"acp_command" env:"BT_ACP_COMMAND" default:"hermes"`
+	ACPArgs         string `json:"acp_args" env:"BT_ACP_ARGS" default:"acp --accept-hooks"`
+	ACPCwd          string `json:"acp_cwd,omitempty" env:"BT_ACP_CWD" default:""`
+	FallbackModels  string `json:"fallback_models,omitempty" env:"BT_FALLBACK_MODELS" default:""` // CSV: model or provider:model/provider/model
+	LLMTimeout      int    `json:"llm_timeout" env:"BT_LLM_TIMEOUT" default:"300"`                // seconds
 
 	// CORS
 	CORSDashboardOrigin string `json:"cors_dashboard_origin,omitempty" env:"BT_CORS_DASHBOARD_ORIGIN" default:"*"`
@@ -272,6 +275,8 @@ func newDefaultConfig() *Config {
 		OllamaModel:                  defaultOllamaModel,
 		DeepSeekHost:                 defaultDeepSeekHost,
 		DeepSeekModel:                defaultDeepSeekModel,
+		OpenRouterHost:               defaultOpenRouterHost,
+		OpenRouterModel:              defaultOpenRouterModel,
 		ACPCommand:                   defaultACPCommand,
 		ACPArgs:                      defaultACPArgs,
 		LLMTimeout:                   defaultLLMTimeout,
@@ -360,6 +365,15 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 	if file.DeepSeekKey != "" {
 		c.DeepSeekKey = file.DeepSeekKey
+	}
+	if file.OpenRouterHost != "" {
+		c.OpenRouterHost = file.OpenRouterHost
+	}
+	if file.OpenRouterModel != "" {
+		c.OpenRouterModel = file.OpenRouterModel
+	}
+	if file.OpenRouterKey != "" {
+		c.OpenRouterKey = file.OpenRouterKey
 	}
 	if file.ACPCommand != "" {
 		c.ACPCommand = file.ACPCommand
@@ -490,6 +504,15 @@ func applyEnvOverrides(c *Config) {
 	} else if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
 		// Fallback: read from Hermes's env
 		c.DeepSeekKey = v
+	}
+	if v := os.Getenv("OPENROUTER_HOST"); v != "" {
+		c.OpenRouterHost = v
+	}
+	if v := os.Getenv("BT_OPENROUTER_MODEL"); v != "" {
+		c.OpenRouterModel = v
+	}
+	if v := os.Getenv("OPENROUTER_API_KEY"); v != "" {
+		c.OpenRouterKey = v
 	}
 	if v := os.Getenv("BT_ACP_COMMAND"); v != "" {
 		c.ACPCommand = v
@@ -813,6 +836,9 @@ func applyDotEnvToConfig(c *Config, kv map[string]string) {
 	applyDotEnvStr("BT_DEEPSEEK_KEY", "BT_DEEPSEEK_KEY", func(v string) { c.DeepSeekKey = v })
 	// Also check the standard DEEPSEEK_API_KEY for .env files (Hermes convention)
 	applyDotEnvStr("DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", func(v string) { c.DeepSeekKey = v })
+	applyDotEnvStr("OPENROUTER_HOST", "OPENROUTER_HOST", func(v string) { c.OpenRouterHost = v })
+	applyDotEnvStr("BT_OPENROUTER_MODEL", "BT_OPENROUTER_MODEL", func(v string) { c.OpenRouterModel = v })
+	applyDotEnvStr("OPENROUTER_API_KEY", "OPENROUTER_API_KEY", func(v string) { c.OpenRouterKey = v })
 	applyDotEnvStr("BT_ACP_COMMAND", "BT_ACP_COMMAND", func(v string) { c.ACPCommand = v })
 	applyDotEnvStr("BT_ACP_ARGS", "BT_ACP_ARGS", func(v string) { c.ACPArgs = v })
 	applyDotEnvStr("BT_ACP_CWD", "BT_ACP_CWD", func(v string) { c.ACPCwd = v })
@@ -935,14 +961,17 @@ func (c *Config) Validate() error {
 	if c.OllamaModel == "" && c.LLMProvider == "ollama" {
 		errs = append(errs, ValidationError{"OllamaModel", "must not be empty when LLMProvider is ollama"})
 	}
-	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" && c.LLMProvider != "acp" {
-		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama', 'deepseek', or 'acp'"})
+	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" && c.LLMProvider != "openrouter" && c.LLMProvider != "acp" {
+		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama', 'deepseek', 'openrouter', or 'acp'"})
 	}
 	if c.LLMProvider == "ollama" && c.OllamaHost == "" {
 		errs = append(errs, ValidationError{"OllamaHost", "must not be empty when LLMProvider is ollama"})
 	}
 	if c.LLMProvider == "deepseek" && c.DeepSeekKey == "" {
 		errs = append(errs, ValidationError{"DeepSeekKey", "must not be empty when LLMProvider is deepseek"})
+	}
+	if c.LLMProvider == "openrouter" && c.OpenRouterKey == "" {
+		errs = append(errs, ValidationError{"OpenRouterKey", "must not be empty when LLMProvider is openrouter"})
 	}
 	if c.LLMProvider == "acp" && c.ACPCommand == "" {
 		errs = append(errs, ValidationError{"ACPCommand", "must not be empty when LLMProvider is acp"})
