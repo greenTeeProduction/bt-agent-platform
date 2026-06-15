@@ -507,6 +507,41 @@ func TestChainAction_Agent_Parse(t *testing.T) {
 	}
 }
 
+func TestParseAgentAction_MultiLineInput(t *testing.T) {
+	// A complex task passes a multi-line JSON payload as the tool argument.
+	// The whole body must survive, with interior indentation preserved.
+	resp := "Thought: write the config file\n" +
+		"Action: write_file\n" +
+		"Action Input: {\n" +
+		"  \"path\": \"config.json\",\n" +
+		"  \"content\": \"value\"\n" +
+		"}"
+	action, input := parseAgentAction(resp)
+	if action != "write_file" {
+		t.Fatalf("action = %q, want write_file", action)
+	}
+	wantInput := "{\n  \"path\": \"config.json\",\n  \"content\": \"value\"\n}"
+	if input != wantInput {
+		t.Fatalf("input = %q, want %q", input, wantInput)
+	}
+}
+
+func TestParseAgentAction_StopsAtNextSection(t *testing.T) {
+	// Anything after a following ReAct section marker is not part of the input.
+	resp := "Action: search\n" +
+		"Action Input: line one\n" +
+		"line two\n" +
+		"Observation: should not be captured\n" +
+		"Final Answer: nor this"
+	action, input := parseAgentAction(resp)
+	if action != "search" {
+		t.Fatalf("action = %q, want search", action)
+	}
+	if input != "line one\nline two" {
+		t.Fatalf("input = %q, want %q", input, "line one\nline two")
+	}
+}
+
 func TestChainAction_Agent_ToolExecution(t *testing.T) {
 	bb := &Blackboard{
 		ChainTools: []any{

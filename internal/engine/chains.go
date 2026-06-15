@@ -935,18 +935,51 @@ func buildToolList(cfg ChainConfig, bb *Blackboard) string {
 }
 
 // parseAgentAction extracts Action and Action Input from a ReAct response.
+//
+// Action Input may span multiple lines. Complex tasks routinely pass structured
+// arguments to tools — a JSON payload, a code block, or file contents — and the
+// model emits them across several lines after the "Action Input:" marker. Capturing
+// only the first line (the previous behavior) silently truncated those arguments,
+// so a write_file or run_query tool received `{` instead of the whole body. We now
+// capture every line from the marker until the next ReAct section marker
+// (Thought:/Observation:/Final Answer:/a subsequent Action:) or end of response,
+// preserving interior indentation so JSON and code survive intact. Single-line
+// inputs are unaffected.
 func parseAgentAction(response string) (action string, input string) {
 	lines := strings.Split(response, "\n")
+	inInput := false
+	var inputLines []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Action:") {
+		switch {
+		case strings.HasPrefix(trimmed, "Action Input:"):
+			inInput = true
+			inputLines = append(inputLines, strings.TrimSpace(strings.TrimPrefix(trimmed, "Action Input:")))
+		case strings.HasPrefix(trimmed, "Action:"):
 			action = strings.TrimSpace(strings.TrimPrefix(trimmed, "Action:"))
-		}
-		if strings.HasPrefix(trimmed, "Action Input:") {
-			input = strings.TrimSpace(strings.TrimPrefix(trimmed, "Action Input:"))
+			inInput = false
+		case isReActSectionMarker(trimmed):
+			// A new Thought/Observation/Final Answer section ends the input block.
+			inInput = false
+		case inInput:
+			// Preserve the raw line (with its original indentation) so multi-line
+			// JSON and code blocks are passed to the tool verbatim.
+			inputLines = append(inputLines, line)
 		}
 	}
+	input = strings.TrimSpace(strings.Join(inputLines, "\n"))
 	return
+}
+
+// isReActSectionMarker reports whether a trimmed line starts a ReAct section other
+// than Action/Action Input, marking the end of a multi-line Action Input block.
+func isReActSectionMarker(trimmed string) bool {
+	for _, m := range []string{"Thought:", "Observation:", "Final Answer:"} {
+		if strings.HasPrefix(trimmed, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseFinalAnswer extracts Final Answer from agent response.
