@@ -55,7 +55,7 @@ func (m *Manager) storeFor(scope Scope) (*scopedStore, error) {
 	}
 	lim, ok := m.limits[scope.Kind]
 	if !ok {
-		lim = Limits{MaxEntries: 200, MaxTotalBytes: 10 * 1024 * 1024}
+		lim = Limits{MaxEntries: 200, MaxTotalBytes: 10 * 1024 * 1024, Evict: true}
 	}
 	s := newScopedStore(lim)
 	if m.persistDir != "" && isPersistentScope(scope.Kind) {

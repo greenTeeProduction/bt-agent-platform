@@ -9,9 +9,9 @@ import (
 )
 
 type scopedStore struct {
-	mu       sync.RWMutex
-	entries  map[string]Entry
-	limits   Limits
+	mu         sync.RWMutex
+	entries    map[string]Entry
+	limits     Limits
 	totalBytes int64
 }
 
@@ -38,16 +38,33 @@ func (s *scopedStore) set(key string, entry Entry) error {
 	defer s.mu.Unlock()
 
 	size := int64(len(entry.Value))
-	if old, ok := s.entries[key]; ok {
-		s.totalBytes -= int64(len(old.Value))
+	_, isUpdate := s.entries[key]
+	if isUpdate {
+		s.totalBytes -= int64(len(s.entries[key].Value))
 	}
-	if s.limits.MaxEntries > 0 && len(s.entries) >= s.limits.MaxEntries {
-		if _, exists := s.entries[key]; !exists {
+
+	// Entry-count limit. A new key needs a free slot; an update reuses its own.
+	if s.limits.MaxEntries > 0 && !isUpdate && len(s.entries) >= s.limits.MaxEntries {
+		if !s.limits.Evict {
 			return fmt.Errorf("blackboard entry limit reached (%d)", s.limits.MaxEntries)
 		}
+		for len(s.entries) >= s.limits.MaxEntries {
+			if !s.evictOldest(key) {
+				return fmt.Errorf("blackboard entry limit reached (%d)", s.limits.MaxEntries)
+			}
+		}
 	}
+
+	// Byte limit. Evict oldest entries until the incoming value fits.
 	if s.limits.MaxTotalBytes > 0 && s.totalBytes+size > s.limits.MaxTotalBytes {
-		return fmt.Errorf("blackboard byte limit reached")
+		if !s.limits.Evict {
+			return fmt.Errorf("blackboard byte limit reached")
+		}
+		for s.totalBytes+size > s.limits.MaxTotalBytes {
+			if !s.evictOldest(key) {
+				return fmt.Errorf("blackboard byte limit reached: value too large (%d bytes)", size)
+			}
+		}
 	}
 
 	now := time.Now()
@@ -80,6 +97,29 @@ func (s *scopedStore) delete(key string) error {
 	delete(s.entries, key)
 	s.totalBytes -= int64(len(old.Value))
 	return nil
+}
+
+// evictOldest removes the least-recently-updated entry (excluding exceptKey, the
+// key currently being written) to free a slot/bytes. Callers must hold s.mu.
+// Returns false when there is nothing left to evict.
+func (s *scopedStore) evictOldest(exceptKey string) bool {
+	var oldestKey string
+	var oldestAt time.Time
+	found := false
+	for k, e := range s.entries {
+		if k == exceptKey {
+			continue
+		}
+		if !found || e.UpdatedAt.Before(oldestAt) {
+			oldestKey, oldestAt, found = k, e.UpdatedAt, true
+		}
+	}
+	if !found {
+		return false
+	}
+	s.totalBytes -= int64(len(s.entries[oldestKey].Value))
+	delete(s.entries, oldestKey)
+	return true
 }
 
 func (s *scopedStore) list(prefix string, limit int) []Entry {
