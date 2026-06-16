@@ -1956,6 +1956,63 @@ func TestChainAction_Agent_ProgressRecordedOnFinalAnswer(t *testing.T) {
 	}
 }
 
+func TestChainAction_Agent_ToolTraceRecorded(t *testing.T) {
+	// execAgent: a multi-step task calls two distinct real tools and one
+	// hallucinated tool. Only the LAST observation survives in bb.CachedResult, so
+	// the full subtask-result history must be preserved in agent_tool_trace for
+	// downstream nodes — successful calls flagged ok, the hallucinated one flagged
+	// not ok as error context.
+	var callCount int
+	mock := &agentTestMockLLM{
+		responses: []string{
+			"Thought: search first\nAction: search\nAction Input: TSLA price",
+			"Thought: now compute\nAction: calculator\nAction Input: 250 * 2",
+			"Thought: try a bogus tool\nAction: time_machine\nAction Input: yesterday",
+			"Final Answer: Tesla is $250; doubled is $500.",
+		},
+		callCount: &callCount,
+	}
+	bb := &Blackboard{
+		Task: "research and compute",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "search", description: "Search the web", result: "TSLA: $250.00"},
+			&mockAgentTool{name: "calculator", description: "Perform calculations", result: "500"},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:{{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(20)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	trace, ok := bb.ChainState["agent_tool_trace"].([]map[string]any)
+	if !ok {
+		t.Fatalf("expected agent_tool_trace []map[string]any, got %T", bb.ChainState["agent_tool_trace"])
+	}
+	if len(trace) != 3 {
+		t.Fatalf("expected 3 trace entries (2 real + 1 hallucinated), got %d: %v", len(trace), trace)
+	}
+	// First two are successful real-tool calls; preserved even though CachedResult
+	// only holds the last observation.
+	if trace[0]["action"] != "search" || trace[0]["ok"] != true {
+		t.Errorf("entry 0 should be a successful search, got %v", trace[0])
+	}
+	if trace[1]["action"] != "calculator" || trace[1]["ok"] != true {
+		t.Errorf("entry 1 should be a successful calculator call, got %v", trace[1])
+	}
+	if res, _ := trace[1]["result"].(string); !strings.Contains(res, "500") {
+		t.Errorf("entry 1 should preserve the calculator observation, got %v", trace[1]["result"])
+	}
+	// The hallucinated tool is recorded as error context, flagged not ok.
+	if trace[2]["action"] != "time_machine" || trace[2]["ok"] != false {
+		t.Errorf("entry 2 should be a failed hallucinated-tool attempt, got %v", trace[2])
+	}
+}
+
 func TestWindowScratchpad(t *testing.T) {
 	// Short scratchpad is returned untouched.
 	short := "Step 1: did a thing\nStep 2: did another\n"

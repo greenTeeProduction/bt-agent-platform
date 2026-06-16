@@ -735,6 +735,15 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	const maxNoProgressSteps = 4
 	noProgressStreak := 0
 
+	// Tool-call trace: every real tool invocation overwrites bb.CachedResult, so
+	// once the agent chain node finishes only the LAST observation survives for
+	// downstream nodes. Complex multi-step tasks call several tools and the earlier
+	// observations are otherwise buried in the local scratchpad and discarded. We
+	// record each invocation (including hallucinated/unavailable tool attempts, as
+	// error context) into bb.ChainState so routers, quality gates, and audits can
+	// inspect the full subtask-result history across nodes.
+	var toolTrace []map[string]any
+
 	for i := 0; i < maxIter; i++ {
 		iterations = i + 1
 		// Context management: a long-running agent accumulates a large scratchpad,
@@ -827,6 +836,13 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 			// toward a valid tool and count it against the no-progress streak so the
 			// loop aborts instead of spinning.
 			scratchpad += fmt.Sprintf("Note: '%s' is not an available tool. Choose one of: %s\n", action, availableToolNames(bb))
+			toolTrace = append(toolTrace, map[string]any{
+				"step":   i + 1,
+				"action": action,
+				"input":  truncateStr(actionInput, 200),
+				"result": truncateStr(toolResult, 400),
+				"ok":     false,
+			})
 			noProgressStreak++
 			if noProgressStreak >= maxNoProgressSteps {
 				stopReason = "no_progress"
@@ -839,6 +855,13 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 		noProgressStreak = 0
 		toolUsed = true
 		successfulToolCalls++
+		toolTrace = append(toolTrace, map[string]any{
+			"step":   i + 1,
+			"action": action,
+			"input":  truncateStr(actionInput, 200),
+			"result": truncateStr(toolResult, 400),
+			"ok":     true,
+		})
 		// On a detected repeat, nudge the agent to change approach before it
 		// exhausts its remaining iterations on the same dead end.
 		if toolCallCounts[sig] > 1 {
@@ -852,6 +875,9 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 	bb.ChainState["agent_tools_used"] = successfulToolCalls
 	bb.ChainState["agent_stop_reason"] = stopReason
 	bb.ChainState["agent_scratchpad_windowed"] = scratchpadWindowed
+	if len(toolTrace) > 0 {
+		bb.ChainState["agent_tool_trace"] = toolTrace
+	}
 
 	if toolsRequired && !toolUsed {
 		bb.Outcome = "tool_evidence_missing"
