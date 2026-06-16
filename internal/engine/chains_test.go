@@ -1002,6 +1002,61 @@ func TestChainAction_MapReduce_SubtaskRetryRecovers(t *testing.T) {
 	}
 }
 
+// --- {{.ChainHistory}} template token ---
+
+func TestRenderChainHistory_Empty(t *testing.T) {
+	if got := renderChainHistory(nil); got != "" {
+		t.Errorf("nil blackboard should render empty, got %q", got)
+	}
+	bb := &Blackboard{}
+	if got := renderChainHistory(bb); got != "" {
+		t.Errorf("nil ChainState should render empty, got %q", got)
+	}
+	bb.ChainState = map[string]any{}
+	if got := renderChainHistory(bb); got != "" {
+		t.Errorf("missing history should render empty, got %q", got)
+	}
+}
+
+func TestRenderChainHistory_ReadableLines(t *testing.T) {
+	bb := &Blackboard{}
+	// Drive the real recorder so the rendered shape matches what runs in production.
+	bb.Result = "first node output"
+	recordChainHistory(bb, "map_reduce", 1, 1200)
+	bb.Result = "second node failed"
+	recordChainHistory(bb, "agent", -1, 800)
+
+	got := renderChainHistory(bb)
+	for _, want := range []string{
+		"#1 map_reduce → success (1200ms)",
+		"first node output",
+		"#2 agent → failure (800ms)",
+		"second node failed",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered history missing %q\ngot:\n%s", want, got)
+		}
+	}
+	// Must be readable lines, not a Go-map dump.
+	if strings.Contains(got, "map[") {
+		t.Errorf("rendered history leaked Go-map syntax:\n%s", got)
+	}
+}
+
+func TestExpandTemplate_ChainHistoryToken(t *testing.T) {
+	bb := &Blackboard{}
+	bb.Result = "did the thing"
+	recordChainHistory(bb, "llm_call", 1, 42)
+
+	out := expandTemplate("Prior steps:\n{{.ChainHistory}}\nNow continue.", bb)
+	if !strings.Contains(out, "#1 llm_call → success (42ms)") {
+		t.Errorf("expandTemplate did not render {{.ChainHistory}}, got:\n%s", out)
+	}
+	if strings.Contains(out, "{{.ChainHistory}}") {
+		t.Errorf("token left unexpanded:\n%s", out)
+	}
+}
+
 // --- execRefine edge cases ---
 
 func TestChainAction_Refine_InitialError(t *testing.T) {

@@ -158,6 +158,50 @@ func recordChainHistory(bb *Blackboard, chainType string, result int, durationMs
 	bb.ChainState["chain_history"] = history
 }
 
+// renderChainHistory turns the cross-node chain_history records into a compact,
+// human-readable block suitable for injecting into a downstream prompt via the
+// {{.ChainHistory}} template token.
+//
+// recordChainHistory stores history as []map[string]any. The only existing way to
+// surface it in a prompt was {{.ChainState.chain_history}}, which renders the slice
+// of maps through fmt.Sprintf("%v", ...) — an unreadable Go-map dump no model can
+// reason over. A synthesis or quality-gate node that wants to reason about what ran
+// before it (which chains succeeded/failed, how long they took) therefore had no
+// usable view of the task history this run accumulates. This formats each entry as a
+// single readable line so that context is actually consumable.
+//
+// chainHistoryRenderLimit bounds how many of the most recent entries are rendered:
+// the full history can hold up to chainHistoryLimit entries, but a prompt only needs
+// the recent tail, and the count keeps the injected block bounded.
+const chainHistoryRenderLimit = 15
+
+func renderChainHistory(bb *Blackboard) string {
+	if bb == nil || bb.ChainState == nil {
+		return ""
+	}
+	history, ok := bb.ChainState["chain_history"].([]map[string]any)
+	if !ok || len(history) == 0 {
+		return ""
+	}
+	if len(history) > chainHistoryRenderLimit {
+		history = history[len(history)-chainHistoryRenderLimit:]
+	}
+	var sb strings.Builder
+	for _, e := range history {
+		seq, _ := e["seq"].(int)
+		chainType, _ := e["chain_type"].(string)
+		status, _ := e["status"].(string)
+		durationMs, _ := e["duration_ms"].(int64)
+		preview, _ := e["preview"].(string)
+		sb.WriteString(fmt.Sprintf("#%d %s → %s (%dms)", seq, chainType, status, durationMs))
+		if preview != "" {
+			sb.WriteString(": " + preview)
+		}
+		sb.WriteString("\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 // --- Chain executors ---
 
 func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
@@ -1316,6 +1360,7 @@ func parseChainConfig(node *evolution.SerializableNode) ChainConfig {
 // expandTemplate replaces {{.Field}} placeholders with blackboard values.
 // Supports: .Task, .Plan, .Result, .Outcome, .Complexity, .CachedResult,
 // .KgResults, .DurationMs, .QualityScore, .CurrentPath, .FailureCount.
+// .ChainHistory renders the cross-node chain execution history as a readable block.
 // Also supports .ChainState.<key> for arbitrary chain state lookups.
 func expandTemplate(tmpl string, bb *Blackboard) string {
 	if tmpl == "" {
@@ -1334,6 +1379,7 @@ func expandTemplate(tmpl string, bb *Blackboard) string {
 	result = replaceAll(result, "{{.CurrentPath}}", bb.CurrentPath)
 	result = replaceAll(result, "{{.FailureCount}}", fmt.Sprintf("%d", bb.FailureCount))
 	result = replaceAll(result, "{{.RunID}}", bbRunID(bb))
+	result = replaceAll(result, "{{.ChainHistory}}", renderChainHistory(bb))
 	result = expandBBTemplates(result, bb)
 	// Expand {{.ChainState.<key>}} patterns
 	result = expandChainStateTemplates(result, bb)
