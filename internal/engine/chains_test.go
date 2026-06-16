@@ -2422,3 +2422,74 @@ func TestChainAction_Agent_SummaryScratchpadWindowed(t *testing.T) {
 		t.Errorf("expected agent_scratchpad_windowed=true after windowing the summary log")
 	}
 }
+
+// TestChainHistory_RecordsAcrossNodes verifies that every chain node in a
+// multi-node tree appends an ordered entry to bb.ChainState["chain_history"],
+// giving downstream nodes and audits a single task-history view of the run —
+// including which chain ran, its status, and a result preview.
+func TestChainHistory_RecordsAcrossNodes(t *testing.T) {
+	mock := &chainMockLLM{responses: map[string]string{
+		"generate": "first node result",
+	}}
+	bb := &Blackboard{
+		Task: "multi-step task",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "history-test",
+		Children: []evolution.SerializableNode{
+			{Type: "ChainAction", Name: "llm_call:{{.Task}}"},
+			{Type: "ChainAction", Name: "refine:{{.Task}}"},
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	hist, ok := bb.ChainState["chain_history"].([]map[string]any)
+	if !ok {
+		t.Fatalf("expected chain_history to be recorded, got %T", bb.ChainState["chain_history"])
+	}
+	if len(hist) != 2 {
+		t.Fatalf("expected 2 history entries (one per chain node), got %d", len(hist))
+	}
+	if hist[0]["chain_type"] != "llm_call" || hist[1]["chain_type"] != "refine" {
+		t.Errorf("history did not record nodes in execution order: %v", hist)
+	}
+	if hist[0]["seq"] != 1 || hist[1]["seq"] != 2 {
+		t.Errorf("expected monotonic seq 1,2, got %v and %v", hist[0]["seq"], hist[1]["seq"])
+	}
+	if hist[0]["status"] != "success" {
+		t.Errorf("expected first node status=success, got %v", hist[0]["status"])
+	}
+	if preview, _ := hist[0]["preview"].(string); preview == "" {
+		t.Errorf("expected a non-empty result preview for the first node")
+	}
+}
+
+// TestChainHistory_RecordsFailureStatus verifies a failed chain node is recorded
+// with failure status and its error preview, so a later node can see the prior
+// partial failure rather than only the most recent result.
+func TestChainHistory_RecordsFailureStatus(t *testing.T) {
+	// No LLM available → map_reduce fails honestly.
+	bb := &Blackboard{Task: "decompose me"}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	hist, ok := bb.ChainState["chain_history"].([]map[string]any)
+	if !ok || len(hist) != 1 {
+		t.Fatalf("expected 1 history entry, got %v", bb.ChainState["chain_history"])
+	}
+	if hist[0]["status"] != "failure" {
+		t.Errorf("expected status=failure for failed chain, got %v", hist[0]["status"])
+	}
+	if hist[0]["outcome"] != "chain_failed" {
+		t.Errorf("expected outcome=chain_failed, got %v", hist[0]["outcome"])
+	}
+}

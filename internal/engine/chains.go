@@ -56,7 +56,13 @@ func BuildChainAction(cfg ChainConfig, bb *Blackboard) *btleaf.Action[Blackboard
 func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[Blackboard]) int {
 	return func(_ *btcore.BTContext[Blackboard]) (result int) {
 		start := time.Now()
-		defer func() { bb.DurationMs = time.Since(start).Milliseconds() }()
+		// Registered first → runs last (LIFO), so it observes the final result,
+		// including any value set by the panic-recovery defer below. Records this
+		// chain node's execution into the cross-node task history on the blackboard.
+		defer func() {
+			bb.DurationMs = time.Since(start).Milliseconds()
+			recordChainHistory(bb, cfg.ChainType, result, bb.DurationMs)
+		}()
 
 		// Panic recovery: chain actions call LLMs and external tools — assume they WILL panic.
 		// Recover, log, and return failure so the BT's retry/escalation logic can handle it.
@@ -97,6 +103,59 @@ func buildChainActionFn(cfg ChainConfig, bb *Blackboard) func(*btcore.BTContext[
 			return -1
 		}
 	}
+}
+
+// chainHistoryLimit bounds how many chain-node execution records are retained on
+// the blackboard. Complex trees run many chain nodes; keeping the most recent N
+// gives downstream routers, quality gates, and audits a task-history view without
+// letting ChainState grow unbounded over a long run.
+const chainHistoryLimit = 50
+
+// recordChainHistory appends one entry per chain-node execution to
+// bb.ChainState["chain_history"], building a single chronological record of the
+// whole run: which chain ran, its outcome, success/failure, how long it took, and
+// a short preview of the result (or error message). Individual chain executors
+// each write their own progress keys (map_reduce_*, agent_*, refine_*), but none
+// can see the sequence of nodes that ran before them — this fills that gap so a
+// later node can reason about task history and prior partial failures.
+//
+// seq is a monotonic counter derived from the last entry so it stays meaningful
+// even after the oldest entries are trimmed off.
+func recordChainHistory(bb *Blackboard, chainType string, result int, durationMs int64) {
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+	history, _ := bb.ChainState["chain_history"].([]map[string]any)
+
+	seq := 1
+	if n := len(history); n > 0 {
+		if prev, ok := history[n-1]["seq"].(int); ok {
+			seq = prev + 1
+		}
+	}
+
+	status := "running"
+	switch {
+	case result > 0:
+		status = "success"
+	case result < 0:
+		status = "failure"
+	}
+
+	history = append(history, map[string]any{
+		"seq":         seq,
+		"chain_type":  chainType,
+		"outcome":     bb.Outcome,
+		"status":      status,
+		"duration_ms": durationMs,
+		"result_len":  len(bb.Result),
+		"preview":     truncateStr(strings.TrimSpace(bb.Result), 160),
+	})
+	// Retain only the most recent entries so a long run can't grow ChainState without bound.
+	if len(history) > chainHistoryLimit {
+		history = history[len(history)-chainHistoryLimit:]
+	}
+	bb.ChainState["chain_history"] = history
 }
 
 // --- Chain executors ---
