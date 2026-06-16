@@ -442,7 +442,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	lines := splitLines(subtasks)
 	results := make([]string, 0, maxSubtasks)
 	var failedSubtasks []string
-	completed, failed := 0, 0
+	completed, failed, retried := 0, 0, 0
 	accumulated := ""
 	for i, line := range lines {
 		if i >= maxSubtasks || line == "" {
@@ -455,7 +455,15 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		subPrompt += "\nResult:"
 		subResult, err := bb.LLM.Generate(subPrompt)
 		if err != nil {
-			// Partial failure recovery: record the failed subtask instead of
+			// Partial failure recovery: a single LLM error is often transient
+			// (rate limit, timeout, blip), and dropping a whole subtask loses a
+			// chunk of the decomposed task. Retry once before giving up so one
+			// flaky call doesn't permanently gap the final answer.
+			retried++
+			subResult, err = bb.LLM.Generate(subPrompt)
+		}
+		if err != nil {
+			// Still failed after the retry — record the subtask instead of
 			// silently dropping it, then continue with the remaining subtasks.
 			failed++
 			failedSubtasks = append(failedSubtasks, line)
@@ -470,6 +478,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	bb.ChainState["map_reduce_total"] = completed + failed
 	bb.ChainState["map_reduce_completed"] = completed
 	bb.ChainState["map_reduce_failed"] = failed
+	bb.ChainState["map_reduce_retried"] = retried
 	if len(failedSubtasks) > 0 {
 		bb.ChainState["map_reduce_failed_subtasks"] = failedSubtasks
 	}

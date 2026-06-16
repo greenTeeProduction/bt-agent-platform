@@ -942,6 +942,66 @@ func TestChainAction_MapReduce_DecomposeError(t *testing.T) {
 	}
 }
 
+// flakySubtaskMockLLM errors on the first N "Complete this subtask" calls and
+// succeeds otherwise, simulating transient subtask-generation failures so the
+// map_reduce retry path can be exercised.
+type flakySubtaskMockLLM struct {
+	failFirstN int
+	seen       int
+}
+
+func (m *flakySubtaskMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "Complete this subtask") {
+		m.seen++
+		if m.seen <= m.failFirstN {
+			return "", fmt.Errorf("transient subtask error %d", m.seen)
+		}
+	}
+	if strings.Contains(prompt, "Break down this task") {
+		return "1. first subtask\n2. second subtask", nil
+	}
+	return "subtask result with sufficient length for validation", nil
+}
+func (m *flakySubtaskMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakySubtaskMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakySubtaskMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *flakySubtaskMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *flakySubtaskMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// A first-attempt failure on a subtask must be retried, not dropped: the subtask
+// should still complete and be counted, with the retry recorded in ChainState.
+func TestChainAction_MapReduce_SubtaskRetryRecovers(t *testing.T) {
+	mock := &flakySubtaskMockLLM{failFirstN: 1}
+	bb := &Blackboard{
+		Task: "analyze a complex topic",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after subtask retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 2 {
+		t.Errorf("expected 2 completed subtasks (failure recovered via retry), got %v", got)
+	}
+	if got := bb.ChainState["map_reduce_failed"]; got != 0 {
+		t.Errorf("expected 0 failed subtasks, got %v", got)
+	}
+	if got := bb.ChainState["map_reduce_retried"]; got != 1 {
+		t.Errorf("expected 1 retried subtask, got %v", got)
+	}
+}
+
 // --- execRefine edge cases ---
 
 func TestChainAction_Refine_InitialError(t *testing.T) {
@@ -1658,18 +1718,20 @@ func TestChainAction_MapReduce_SubResultErrors(t *testing.T) {
 	}
 }
 
-// indexedErrorMockLLM errors only on a specific call number, succeeding on all
-// others. Used to simulate a single failing subtask within map_reduce.
+// indexedErrorMockLLM errors on specific call numbers, succeeding on all
+// others. Used to simulate a failing subtask within map_reduce. A subtask that
+// must stay failed has to error on both its original call and its retry, so the
+// failing call numbers are given as a set.
 type indexedErrorMockLLM struct {
-	decompose  string
-	failOnCall int
-	count      *int
+	decompose   string
+	failOnCalls map[int]bool
+	count       *int
 }
 
 func (m *indexedErrorMockLLM) Generate(_ string) (string, error) {
 	*m.count++
 	n := *m.count
-	if n == m.failOnCall {
+	if m.failOnCalls[n] {
 		return "", fmt.Errorf("simulated error on call %d", n)
 	}
 	if n == 1 {
@@ -1693,9 +1755,11 @@ func (m *indexedErrorMockLLM) Reflect(_, _, _ string) (string, string) { return 
 func TestChainAction_MapReduce_PartialFailureRecovery(t *testing.T) {
 	callCount := 0
 	mock := &indexedErrorMockLLM{
-		decompose:  "1. Subtask A\n2. Subtask B\n3. Subtask C",
-		failOnCall: 3, // call 1 = decompose, call 2 = A, call 3 = B (fails), call 4 = C, call 5 = reduce
-		count:      &callCount,
+		decompose: "1. Subtask A\n2. Subtask B\n3. Subtask C",
+		// call 1 = decompose, 2 = A, 3 = B (fails), 4 = B retry (fails),
+		// 5 = C, 6 = reduce. B fails on both attempts so it stays failed.
+		failOnCalls: map[int]bool{3: true, 4: true},
+		count:       &callCount,
 	}
 	bb := &Blackboard{Task: "analyze a complex multi-part topic", LLM: mock}
 
@@ -1712,6 +1776,9 @@ func TestChainAction_MapReduce_PartialFailureRecovery(t *testing.T) {
 	}
 	if got := bb.ChainState["map_reduce_total"]; got != 3 {
 		t.Errorf("map_reduce_total = %v, want 3", got)
+	}
+	if got := bb.ChainState["map_reduce_retried"]; got != 1 {
+		t.Errorf("map_reduce_retried = %v, want 1", got)
 	}
 	failedList, ok := bb.ChainState["map_reduce_failed_subtasks"].([]string)
 	if !ok || len(failedList) != 1 || !strings.Contains(failedList[0], "Subtask B") {
