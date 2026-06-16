@@ -800,8 +800,14 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 				stopReason = "final_answer"
 				break
 			}
-			// Unparseable — treat as thought
+			// Unparseable — the model emitted neither a usable Action nor a Final
+			// Answer (commonly pure "Thought:" rambling on complex tasks). Record it,
+			// then append a corrective format nudge so the model has a concrete chance
+			// to recover *within* the no-progress budget instead of drifting off-format
+			// until the guard aborts the run. The nudge restates the exact format the
+			// next step must use, steering the agent back toward progress.
 			scratchpad += fmt.Sprintf("Step %d: %s\n", i+1, strings.TrimSpace(response))
+			scratchpad += unparseableNudge(bb)
 			noProgressStreak++
 			if noProgressStreak >= maxNoProgressSteps {
 				stopReason = "no_progress"
@@ -908,6 +914,20 @@ Final Answer:`, task, scratchpad)
 	bb.Result = finalAnswer
 	bb.Results = append(bb.Results, finalAnswer)
 	return 1
+}
+
+// unparseableNudge returns a corrective note appended to the scratchpad when the
+// agent's last response could not be parsed into a ReAct step (no Action/Action
+// Input and no Final Answer). It restates the exact format the next step must use,
+// giving an off-format model a concrete chance to recover instead of repeating
+// freeform reasoning until the no-progress guard fires. The instruction adapts to
+// whether real tools are available: with tools the agent may act or answer, without
+// tools the only forward move is a Final Answer.
+func unparseableNudge(bb *Blackboard) string {
+	if hasRealTools(bb) {
+		return fmt.Sprintf("Note: that response could not be parsed — it had no 'Action:'/'Action Input:' line and no 'Final Answer:'. Reply with EITHER an Action plus Action Input using one of these tools: %s, OR a Final Answer. Do not reply with reasoning alone.\n", availableToolNames(bb))
+	}
+	return "Note: that response could not be parsed — it had no 'Action:'/'Action Input:' line and no 'Final Answer:'. Reply with your Final Answer now. Do not reply with reasoning alone.\n"
 }
 
 // maxScratchpadLen bounds how much of the ReAct scratchpad is fed back into the

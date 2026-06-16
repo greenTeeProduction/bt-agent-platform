@@ -1881,6 +1881,66 @@ func TestChainAction_Agent_NoProgressAborts(t *testing.T) {
 	}
 }
 
+// nudgeRecoveryMockLLM emits off-format ("unparseable") output until it sees the
+// corrective format nudge in the prompt, then produces a Final Answer. It models a
+// real LLM that drifts off the ReAct format on a complex task but recovers once
+// told exactly what format to use.
+type nudgeRecoveryMockLLM struct{ sawNudge bool }
+
+func (m *nudgeRecoveryMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "could not be parsed") {
+		m.sawNudge = true
+		return "Final Answer: recovered after the format correction.", nil
+	}
+	return "I am still mulling over the various angles of this problem.", nil
+}
+func (m *nudgeRecoveryMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *nudgeRecoveryMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *nudgeRecoveryMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *nudgeRecoveryMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *nudgeRecoveryMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+func TestChainAction_Agent_UnparseableNudgeRecovers(t *testing.T) {
+	// execAgent: when the model drifts off-format (no Action, no Final Answer), the
+	// loop appends a corrective format nudge to the scratchpad. A model that reads
+	// the nudge can recover and finish, rather than rambling until the no-progress
+	// guard aborts the run. This keeps complex agentic tasks from failing on a
+	// transient format slip.
+	mock := &nudgeRecoveryMockLLM{}
+	bb := &Blackboard{
+		Task: "do something complex",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:Work on: {{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(20)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if !mock.sawNudge {
+		t.Fatal("expected the corrective nudge to appear in a later prompt")
+	}
+	if got := bb.ChainState["agent_stop_reason"]; got != "final_answer" {
+		t.Errorf("expected stop_reason final_answer after recovery, got %v", got)
+	}
+	if !strings.Contains(bb.Result, "recovered") {
+		t.Errorf("expected recovered final answer, got %q", bb.Result)
+	}
+	// Recovery must happen well before the no-progress guard (maxNoProgressSteps=4):
+	// one unparseable step, then the nudged recovery.
+	iters, _ := bb.ChainState["agent_iterations"].(int)
+	if iters <= 0 || iters > 3 {
+		t.Errorf("expected quick recovery (<=3 iterations), got %d", iters)
+	}
+}
+
 func TestChainAction_Agent_HallucinatedToolsAbort(t *testing.T) {
 	// execAgent: an agent that keeps calling NON-EXISTENT tools, each with a
 	// different input, makes no real progress. Because the repeated_tool_calls
