@@ -610,15 +610,84 @@ func generatePlanAction(ctx *btcore.BTContext[Blackboard]) int {
 
 func assignComplexityAction(ctx *btcore.BTContext[Blackboard]) int {
 	bb := ctx.Blackboard
-	if bb.LLM != nil {
-		bb.Complexity = bb.LLM.AnalyzeComplexity(bb.Task)
-	} else {
+	if bb.LLM == nil {
 		// No LLM wired up (template-only / offline mode): fall back to a
 		// heuristic so routing can still tell a multi-step task apart from a
 		// trivial lookup instead of treating everything as "medium".
 		bb.Complexity = estimateComplexityHeuristic(bb.Task)
+		return 1
 	}
+
+	// LLM path. Two real-world problems are corrected here so complex tasks
+	// route to the right handler:
+	//
+	//  1. Most real LLM clients classify complexity purely by task *length*
+	//     (e.g. <50 chars = "low"). That under-rates short-but-multi-step tasks
+	//     like "migrate the DB and refactor auth, then update tests", sending
+	//     them to a lightweight handler. The semantic heuristic catches the
+	//     multi-step signal the length check misses, so we escalate to whichever
+	//     verdict is higher. We never downgrade the LLM — only correct
+	//     under-estimation, which is the failure mode for complex tasks.
+	//
+	//  2. The raw LLM output may be unnormalized ("High", "complexity: high",
+	//     empty, or garbage). Left as-is it makes every Is{Low,Medium,High}
+	//     Complexity condition silently false and breaks routing. We normalize
+	//     to a known bucket and fall back to the heuristic when it isn't one.
+	llmComplexity, ok := normalizeComplexity(bb.LLM.AnalyzeComplexity(bb.Task))
+	heuristic := estimateComplexityHeuristic(bb.Task)
+	if !ok {
+		bb.Complexity = heuristic
+		return 1
+	}
+	bb.Complexity = maxComplexity(llmComplexity, heuristic)
 	return 1
+}
+
+// complexityRank orders the complexity buckets so they can be compared.
+// Unknown values rank -1 (below "low") so they never win a max comparison.
+func complexityRank(c string) int {
+	switch c {
+	case "low":
+		return 0
+	case "medium":
+		return 1
+	case "high":
+		return 2
+	default:
+		return -1
+	}
+}
+
+// normalizeComplexity maps a free-form complexity string (as returned by an LLM)
+// to a canonical "low"/"medium"/"high" bucket. It is tolerant of surrounding
+// text, casing, and whitespace (e.g. "Complexity: HIGH" → "high"). The bool is
+// false when no recognizable bucket is present, signalling the caller to fall
+// back to the heuristic rather than store an unroutable value.
+func normalizeComplexity(raw string) (string, bool) {
+	lower := strings.ToLower(strings.TrimSpace(raw))
+	if lower == "" {
+		return "", false
+	}
+	// Order matters: check "high" before "low"/"medium" is irrelevant since the
+	// buckets are distinct substrings, but check longest-meaning first anyway.
+	switch {
+	case strings.Contains(lower, "high"):
+		return "high", true
+	case strings.Contains(lower, "medium"), strings.Contains(lower, "moderate"):
+		return "medium", true
+	case strings.Contains(lower, "low"), strings.Contains(lower, "simple"), strings.Contains(lower, "trivial"):
+		return "low", true
+	default:
+		return "", false
+	}
+}
+
+// maxComplexity returns the higher-ranked of two complexity buckets.
+func maxComplexity(a, b string) string {
+	if complexityRank(b) > complexityRank(a) {
+		return b
+	}
+	return a
 }
 
 // estimateComplexityHeuristic classifies task complexity as "low", "medium", or
