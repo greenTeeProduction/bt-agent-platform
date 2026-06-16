@@ -1881,6 +1881,57 @@ func TestChainAction_Agent_NoProgressAborts(t *testing.T) {
 	}
 }
 
+func TestChainAction_Agent_HallucinatedToolsAbort(t *testing.T) {
+	// execAgent: an agent that keeps calling NON-EXISTENT tools, each with a
+	// different input, makes no real progress. Because the repeated_tool_calls
+	// guard keys on the exact (action, input) pair, varying the input on every
+	// call evades it — so this must be caught by the no-progress guard instead of
+	// burning the whole iteration budget on tools that can never run.
+	var callCount int
+	mock := &agentTestMockLLM{
+		responses: []string{
+			"Thought: try one\nAction: query_database\nAction Input: alpha",
+			"Thought: try two\nAction: search_index\nAction Input: beta",
+			"Thought: try three\nAction: lookup_records\nAction Input: gamma",
+			"Thought: try four\nAction: fetch_data\nAction Input: delta",
+			"Thought: try five\nAction: scan_files\nAction Input: epsilon",
+		},
+		callCount: &callCount,
+	}
+	bb := &Blackboard{
+		Task: "investigate something complex",
+		LLM:  mock,
+		// A real tool is present (so tool evidence is required), but the agent
+		// never calls it — it only invokes hallucinated tool names.
+		ChainTools: []any{
+			&mockAgentTool{name: "calculator", description: "Perform calculations", result: "42"},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:Investigate: {{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(20),
+		},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if got := bb.ChainState["agent_stop_reason"]; got != "no_progress" {
+		t.Errorf("expected stop_reason no_progress, got %v", got)
+	}
+	// The guard aborts after maxNoProgressSteps (4), far short of the 20 budget.
+	iters, _ := bb.ChainState["agent_iterations"].(int)
+	if iters <= 0 || iters > 6 {
+		t.Errorf("expected loop to abort early (<=6 iterations), got %d", iters)
+	}
+	// No hallucinated call ran a real tool, so no successful tool calls recorded.
+	if used, _ := bb.ChainState["agent_tools_used"].(int); used != 0 {
+		t.Errorf("expected 0 successful tool calls, got %d", used)
+	}
+}
+
 func TestChainAction_Agent_ProgressRecordedOnFinalAnswer(t *testing.T) {
 	// execAgent: a clean final-answer run records stop_reason=final_answer.
 	var callCount int

@@ -814,20 +814,36 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 		// Execute the tool
 		toolResult := executeAgentTool(action, actionInput, bb)
 		scratchpad += fmt.Sprintf("Step %d: Action: %s(%s) → %s\n", i+1, action, actionInput, toolResult)
-		// A parsed, executed tool call is real progress — reset the no-progress streak.
-		noProgressStreak = 0
-		if !isToolUnavailableResult(toolResult) {
-			toolUsed = true
-			successfulToolCalls++
+		// Store tool result for downstream use
+		bb.CachedResult = toolResult
+
+		if isToolUnavailableResult(toolResult) {
+			// The agent named a tool that does not exist — a common complex-task
+			// failure where the model hallucinates tool names. Varying the input on
+			// each call evades the repeated_tool_calls guard (which keys on the exact
+			// (action, input) pair), so an agent cycling through made-up tool names
+			// would otherwise burn its whole iteration budget on calls that can never
+			// run. A call that executed no real tool is not progress: nudge the agent
+			// toward a valid tool and count it against the no-progress streak so the
+			// loop aborts instead of spinning.
+			scratchpad += fmt.Sprintf("Note: '%s' is not an available tool. Choose one of: %s\n", action, availableToolNames(bb))
+			noProgressStreak++
+			if noProgressStreak >= maxNoProgressSteps {
+				stopReason = "no_progress"
+				break
+			}
+			continue
 		}
+
+		// A parsed call that ran a real tool is genuine progress — reset the streak.
+		noProgressStreak = 0
+		toolUsed = true
+		successfulToolCalls++
 		// On a detected repeat, nudge the agent to change approach before it
 		// exhausts its remaining iterations on the same dead end.
 		if toolCallCounts[sig] > 1 {
 			scratchpad += fmt.Sprintf("Note: you have already run %s(%s) %d times with the same result. Do not repeat it — try a different tool, different input, or give your Final Answer.\n", action, actionInput, toolCallCounts[sig])
 		}
-
-		// Store tool result for downstream use
-		bb.CachedResult = toolResult
 	}
 
 	// Record agent progress so downstream nodes can inspect how far the loop got
