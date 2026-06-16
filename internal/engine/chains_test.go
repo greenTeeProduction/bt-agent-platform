@@ -2351,3 +2351,74 @@ func TestChainAction_BuildChainActionFn_Panic(t *testing.T) {
 		t.Errorf("expected failure or chain_panic, got %s: %s", bb.Outcome, bb.Result)
 	}
 }
+
+// summaryWindowMockLLM emits a unique real-tool action on every call (so the
+// agent never gives a Final Answer and the stuck-loop guard never fires),
+// driving the loop to its iteration budget and into the fallback summary path.
+// It records the size of the fallback synthesis prompt (the one containing the
+// "INVESTIGATION LOG:" marker) so the test can assert that prompt is bounded.
+type summaryWindowMockLLM struct {
+	calls           int
+	maxSummaryBytes int
+}
+
+func (m *summaryWindowMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "INVESTIGATION LOG:") {
+		if len(prompt) > m.maxSummaryBytes {
+			m.maxSummaryBytes = len(prompt)
+		}
+		return "Final Answer: synthesized from the investigation.", nil
+	}
+	m.calls++
+	return fmt.Sprintf("Thought: keep digging\nAction: search\nAction Input: query-%d", m.calls), nil
+}
+func (m *summaryWindowMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *summaryWindowMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *summaryWindowMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *summaryWindowMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *summaryWindowMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+func TestChainAction_Agent_SummaryScratchpadWindowed(t *testing.T) {
+	// execAgent: a long multi-step agent that exhausts its iteration budget
+	// without a Final Answer falls back to a synthesis prompt built from the
+	// accumulated scratchpad. With large tool outputs across many steps the raw
+	// scratchpad grows far past the model context; the fallback prompt must be
+	// windowed (like the per-iteration prompts) instead of sent whole.
+	bigOutput := strings.Repeat("DATA ", 500) // ~2500 chars per tool result
+	mock := &summaryWindowMockLLM{}
+	bb := &Blackboard{
+		Task: "investigate a complex multi-step problem",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "search", description: "Search", result: bigOutput},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:{{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(15)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success from fallback synthesis, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if mock.maxSummaryBytes == 0 {
+		t.Fatal("expected the fallback synthesis prompt to be recorded")
+	}
+	// 15 steps * ~2500 chars = ~37.5KB of raw scratchpad. The windowed summary
+	// prompt must stay near the summary budget plus fixed template overhead, never
+	// the full unbounded accumulation.
+	if mock.maxSummaryBytes > maxSummaryScratchpadLen+2000 {
+		t.Errorf("fallback synthesis prompt grew unbounded: %d chars (budget %d)", mock.maxSummaryBytes, maxSummaryScratchpadLen)
+	}
+	if windowed, _ := bb.ChainState["agent_scratchpad_windowed"].(bool); !windowed {
+		t.Errorf("expected agent_scratchpad_windowed=true after windowing the summary log")
+	}
+}

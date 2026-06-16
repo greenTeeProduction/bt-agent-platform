@@ -893,7 +893,20 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 	}
 
 	if finalAnswer == "" {
-		// No final answer produced — generate one from scratchpad
+		// No final answer produced — generate one from the scratchpad. The loop
+		// reached here without a Final Answer, which on complex tasks means it ran
+		// many steps (max_iterations / repeated_tool_calls / no_progress), so the
+		// accumulated scratchpad can be large. Sending it whole would overflow the
+		// model context — the same failure the per-iteration windowing prevents — so
+		// bound this synthesis prompt too. The budget is larger than the per-step
+		// window because this is the final pass where we want as much of the
+		// investigation as fits; the most recent steps (kept by windowScratchpad)
+		// carry the freshest tool observations, and bb.ChainState["agent_tool_trace"]
+		// still retains the per-step results for any downstream node.
+		summaryLog := windowScratchpad(scratchpad, maxSummaryScratchpadLen)
+		if len(summaryLog) < len(scratchpad) {
+			bb.ChainState["agent_scratchpad_windowed"] = true
+		}
 		summaryPrompt := fmt.Sprintf(`Based on the following investigation, provide a final answer. Include ALL data from the investigation log verbatim — do not summarize or omit any results.
 
 TASK: %s
@@ -901,7 +914,7 @@ TASK: %s
 INVESTIGATION LOG:
 %s
 
-Final Answer:`, task, scratchpad)
+Final Answer:`, task, summaryLog)
 		var err error
 		finalAnswer, err = bb.LLM.Generate(summaryPrompt)
 		if err != nil {
@@ -935,6 +948,13 @@ func unparseableNudge(bb *Blackboard) string {
 // chosen to leave ample headroom for the task, tool list, and format instructions
 // within typical model context windows while preserving several recent steps.
 const maxScratchpadLen = 6000
+
+// maxSummaryScratchpadLen bounds the investigation log fed into the fallback
+// final-answer synthesis prompt (when the loop ends without a Final Answer). It
+// is larger than the per-iteration window because this is the final pass — we
+// want as much of the investigation as fits in one prompt — while still capping
+// it so a long, many-step complex task cannot overflow the model's context.
+const maxSummaryScratchpadLen = 12000
 
 // windowScratchpad returns the scratchpad unchanged when it fits within maxLen,
 // otherwise it keeps the most recent content (cut at a line boundary so a step is
