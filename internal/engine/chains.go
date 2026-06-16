@@ -966,14 +966,21 @@ What is your next step?`, systemMsg, task, toolList, recentSteps)
 		if len(summaryLog) < len(scratchpad) {
 			bb.ChainState["agent_scratchpad_windowed"] = true
 		}
-		summaryPrompt := fmt.Sprintf(`Based on the following investigation, provide a final answer. Include ALL data from the investigation log verbatim — do not summarize or omit any results.
+		// Reaching the fallback means the loop ended without the agent emitting its
+		// own Final Answer, which on complex tasks is precisely when it ran out of
+		// budget (max_iterations) or got stuck (repeated_tool_calls / no_progress).
+		// The investigation is therefore incomplete, so steer the synthesis toward an
+		// honest answer that flags the gaps instead of one that reads as confidently
+		// complete — mirroring the map_reduce note that flags failed subtasks.
+		incompleteNote := incompleteInvestigationNote(stopReason)
+		summaryPrompt := fmt.Sprintf(`Based on the following investigation, provide a final answer. Include ALL data from the investigation log verbatim — do not summarize or omit any results.%s
 
 TASK: %s
 
 INVESTIGATION LOG:
 %s
 
-Final Answer:`, task, summaryLog)
+Final Answer:`, incompleteNote, task, summaryLog)
 		var err error
 		finalAnswer, err = bb.LLM.Generate(summaryPrompt)
 		if err != nil {
@@ -986,6 +993,28 @@ Final Answer:`, task, summaryLog)
 	bb.Result = finalAnswer
 	bb.Results = append(bb.Results, finalAnswer)
 	return 1
+}
+
+// incompleteInvestigationNote returns a sentence appended to the fallback
+// synthesis prompt when the agent loop stopped without producing its own Final
+// Answer. It names the reason the investigation was cut short and instructs the
+// model to answer only from the evidence gathered and to explicitly flag what
+// remains unresolved, so a budget-exhausted or stuck run yields an honest,
+// caveated answer rather than a confidently complete-sounding one. A natural stop
+// (or any unrecognized reason) adds no note.
+func incompleteInvestigationNote(stopReason string) string {
+	var why string
+	switch stopReason {
+	case "max_iterations":
+		why = "the agent reached its step limit before finishing"
+	case "repeated_tool_calls":
+		why = "the agent got stuck repeating the same tool call"
+	case "no_progress":
+		why = "the agent stopped making progress"
+	default:
+		return ""
+	}
+	return fmt.Sprintf("\n\nNote: this investigation is INCOMPLETE — %s. Base your answer only on the evidence actually gathered above, and explicitly flag what could not be determined or verified. Do not invent results that are not present in the log.", why)
 }
 
 // unparseableNudge returns a corrective note appended to the scratchpad when the

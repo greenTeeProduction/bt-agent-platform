@@ -2493,3 +2493,85 @@ func TestChainHistory_RecordsFailureStatus(t *testing.T) {
 		t.Errorf("expected outcome=chain_failed, got %v", hist[0]["outcome"])
 	}
 }
+
+// incompleteSynthMockLLM emits a unique real-tool action every call so the agent
+// never gives its own Final Answer and exhausts the iteration budget, landing in
+// the fallback synthesis path. It captures the synthesis prompt so the test can
+// assert it carries the incomplete-investigation note.
+type incompleteSynthMockLLM struct {
+	calls       int
+	synthPrompt string
+}
+
+func (m *incompleteSynthMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "INVESTIGATION LOG:") {
+		m.synthPrompt = prompt
+		return "Final Answer: best-effort synthesis.", nil
+	}
+	m.calls++
+	return fmt.Sprintf("Thought: keep digging\nAction: search\nAction Input: query-%d", m.calls), nil
+}
+func (m *incompleteSynthMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *incompleteSynthMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *incompleteSynthMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *incompleteSynthMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *incompleteSynthMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+// TestChainAction_Agent_IncompleteSynthesisFlagsGaps verifies that when the agent
+// loop ends without its own Final Answer (here: budget exhausted, stop_reason=
+// max_iterations), the fallback synthesis prompt instructs the model to treat the
+// investigation as incomplete and flag what could not be determined — so a stuck
+// or budget-limited complex task yields an honest, caveated answer rather than a
+// confidently complete one.
+func TestChainAction_Agent_IncompleteSynthesisFlagsGaps(t *testing.T) {
+	mock := &incompleteSynthMockLLM{}
+	bb := &Blackboard{
+		Task: "investigate a complex multi-step problem",
+		LLM:  mock,
+		ChainTools: []any{
+			&mockAgentTool{name: "search", description: "Search", result: "partial finding"},
+		},
+	}
+	tree := &evolution.SerializableNode{
+		Type:     "ChainAction",
+		Name:     "agent:{{.Task}}",
+		Metadata: map[string]any{"max_tokens": float64(5)},
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success from fallback synthesis, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if got := bb.ChainState["agent_stop_reason"]; got != "max_iterations" {
+		t.Fatalf("precondition: expected stop_reason max_iterations, got %v", got)
+	}
+	if m := mock.synthPrompt; m == "" {
+		t.Fatal("expected the fallback synthesis prompt to be captured")
+	}
+	if !strings.Contains(mock.synthPrompt, "INCOMPLETE") {
+		t.Errorf("synthesis prompt did not flag the investigation as incomplete:\n%s", mock.synthPrompt)
+	}
+	if !strings.Contains(mock.synthPrompt, "step limit") {
+		t.Errorf("synthesis prompt did not name the budget-exhaustion reason:\n%s", mock.synthPrompt)
+	}
+}
+
+// TestIncompleteInvestigationNote_StopReasons verifies the note is emitted for
+// every early-stop reason and is empty for a natural final answer (so a clean run
+// is never told its investigation was incomplete).
+func TestIncompleteInvestigationNote_StopReasons(t *testing.T) {
+	for _, reason := range []string{"max_iterations", "repeated_tool_calls", "no_progress"} {
+		if note := incompleteInvestigationNote(reason); !strings.Contains(note, "INCOMPLETE") {
+			t.Errorf("expected an incomplete note for stop reason %q, got %q", reason, note)
+		}
+	}
+	if note := incompleteInvestigationNote("final_answer"); note != "" {
+		t.Errorf("expected no note for a natural final answer, got %q", note)
+	}
+}
