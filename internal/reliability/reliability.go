@@ -906,7 +906,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	var start int
 	var activeIdx int = -1 // executor index for active-count tracking (least-connections)
 
-	if strategy == RoutingLeastConnections {
+	if strategy == RoutingLeastConnections || strategy == RoutingAuction {
 		// Snapshot active counts before releasing lock.
 		activeSnapshot := make([]int64, len(r.activeCounts))
 		for i := range r.activeCounts {
@@ -914,8 +914,12 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		}
 		r.mu.Unlock()
 
-		// Health() may make network calls — do NOT hold lock.
-		start = r.pickLeastConnections(executors, activeSnapshot)
+		// Health() / Bid() may make network calls — do NOT hold lock.
+		if strategy == RoutingAuction {
+			start = r.pickAuctionWinner(executors, activeSnapshot, agent, task)
+		} else {
+			start = r.pickLeastConnections(executors, activeSnapshot)
+		}
 		if start < 0 {
 			if r.local != nil {
 				return r.local.Execute(agent, task)

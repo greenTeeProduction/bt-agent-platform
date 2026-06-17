@@ -36,8 +36,172 @@ func TestRoutingStrategy_String(t *testing.T) {
 	if s := RoutingLeastConnections.String(); s != "least_connections" {
 		t.Errorf("unexpected: %q", s)
 	}
+	if s := RoutingAuction.String(); s != "auction" {
+		t.Errorf("unexpected: %q", s)
+	}
 	if s := RoutingStrategy(99).String(); s != "unknown(99)" {
 		t.Errorf("unexpected: %q", s)
+	}
+}
+
+// ─── Auction Routing Tests ───────────────────────────────────────────────────
+
+// biddingExecutor is a LocalExecutor that also implements Bidder, returning a
+// fixed bid so tests can deterministically control auction outcomes.
+type biddingExecutor struct {
+	*LocalExecutor
+	bid float64
+}
+
+func (b *biddingExecutor) Bid(_, _ string) float64 { return b.bid }
+
+func newBiddingExecutor(name string, bid float64, fn func(agent, task string) (*AgentResult, error)) *biddingExecutor {
+	return &biddingExecutor{LocalExecutor: NewLocalExecutor(name, fn), bid: bid}
+}
+
+func TestAuction_SetAndGetStrategy(t *testing.T) {
+	router := NewAgentRouter()
+	router.SetStrategy(RoutingAuction)
+	if router.Strategy() != RoutingAuction {
+		t.Errorf("expected auction, got %s", router.Strategy())
+	}
+	// Auction routing also initializes the in-flight counter slice.
+	if router.ActiveCounts() == nil {
+		t.Error("auction strategy should initialize activeCounts")
+	}
+}
+
+func TestAuction_LowestBidderWins(t *testing.T) {
+	var got string
+	mark := func(name string) func(string, string) (*AgentResult, error) {
+		return func(agent, task string) (*AgentResult, error) {
+			got = name
+			return &AgentResult{Agent: agent, Task: task, Success: true, Output: name}, nil
+		}
+	}
+	high := newBiddingExecutor("high", 10.0, mark("high"))
+	low := newBiddingExecutor("low", 1.0, mark("low"))
+	mid := newBiddingExecutor("mid", 5.0, mark("mid"))
+
+	router := NewAgentRouter(high, low, mid)
+	router.SetStrategy(RoutingAuction)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "low" || result.Output != "low" {
+		t.Errorf("expected lowest bidder 'low' to win, got %q", got)
+	}
+}
+
+func TestAuction_AbstainingExecutorExcluded(t *testing.T) {
+	// A negative bid means the executor declines; it must not be selected even
+	// though it appears first.
+	abstain := newBiddingExecutor("abstain", -1.0, func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "abstain"}, nil
+	})
+	willing := newBiddingExecutor("willing", 3.0, func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "willing"}, nil
+	})
+
+	router := NewAgentRouter(abstain, willing)
+	router.SetStrategy(RoutingAuction)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Output != "willing" {
+		t.Errorf("abstaining executor should be excluded, got %q", result.Output)
+	}
+}
+
+func TestAuction_AllAbstainFallsBackToLocal(t *testing.T) {
+	a1 := newBiddingExecutor("a1", -1.0, nil)
+	a2 := newBiddingExecutor("a2", -1.0, nil)
+	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "local-fallback"}, nil
+	})
+
+	router := NewAgentRouter(a1, a2)
+	router.SetStrategy(RoutingAuction)
+	router.SetLocal(local)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected local fallback, got error: %v", err)
+	}
+	if result.Output != "local-fallback" {
+		t.Errorf("expected local-fallback, got %q", result.Output)
+	}
+}
+
+func TestAuction_DefaultBidUsesLoadAndFailures(t *testing.T) {
+	// Plain LocalExecutors (no Bidder) get a default bid. With equal zero load
+	// and no failures, all bids tie at 0 and the first healthy executor wins.
+	var got string
+	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+		got = "e1"
+		return &AgentResult{Success: true}, nil
+	})
+	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+		got = "e2"
+		return &AgentResult{Success: true}, nil
+	})
+
+	router := NewAgentRouter(e1, e2)
+	router.SetStrategy(RoutingAuction)
+
+	if _, err := router.Execute("agent", "task"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "e1" {
+		t.Errorf("tie should resolve to first executor, got %q", got)
+	}
+}
+
+func TestAuction_SkipsUnhealthyBidder(t *testing.T) {
+	// Lowest bidder is unhealthy and must be skipped despite the better bid.
+	unhealthy := newBiddingExecutor("unhealthy", 1.0, func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "unhealthy"}, nil
+	})
+	unhealthy.WithHealthCheck(func() error { return errors.New("down") })
+	healthy := newBiddingExecutor("healthy", 9.0, func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "healthy"}, nil
+	})
+
+	router := NewAgentRouter(unhealthy, healthy)
+	router.SetStrategy(RoutingAuction)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Output != "healthy" {
+		t.Errorf("unhealthy lowest bidder should be skipped, got %q", result.Output)
+	}
+}
+
+func TestAuction_FailoverFromWinner(t *testing.T) {
+	// The auction winner's Execute() fails; the router should fail over to the
+	// next healthy executor.
+	winner := newBiddingExecutor("winner", 1.0, func(_, _ string) (*AgentResult, error) {
+		return nil, errors.New("winner failed")
+	})
+	backup := newBiddingExecutor("backup", 5.0, func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "backup"}, nil
+	})
+
+	router := NewAgentRouter(winner, backup)
+	router.SetStrategy(RoutingAuction)
+
+	result, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("expected failover to backup, got error: %v", err)
+	}
+	if result.Output != "backup" {
+		t.Errorf("expected backup after winner failed, got %q", result.Output)
 	}
 }
 
