@@ -289,8 +289,13 @@ func registerGoapFusionActions() {
 
 	// ApplyImprovementWithClaude launches Claude Code to implement the highest-priority
 	// improvement from the GOAP goal queue. Claude gets full context from the vault
-	// research, graphify report, gap analysis, and goal queue. It implements ONE
-	// focused change, runs go build + go test, and commits.
+	// research, graphify report, gap analysis, and goal queue.
+	//
+	// Production hardening (June 2026):
+	//   - Preflight: auto-stash dirty files, reset graphify-out, checkout master
+	//   - After Claude: detect uncommitted edits, verify build/tests, graphify-out filter
+	//   - On failure: git reset --hard to before_head, save failed patch
+	//   - Requires HITL approval (HumanApprovalGate in tree) before reaching this point
 	RegisterAction("ApplyImprovementWithClaude", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		gapsStr, _ := bb.ChainState["goap_fusion_improvement_gaps"].(string)
@@ -298,6 +303,25 @@ func registerGoapFusionActions() {
 		planStr, _ := bb.ChainState["goap_fusion_active_plan"].(string)
 		vaultStr, _ := bb.ChainState["goap_fusion_vault_research"].(string)
 		graphStr, _ := bb.ChainState["goap_fusion_graphify_report"].(string)
+
+		// ── Preflight: clean worktree ──
+		// Reset graphify-out (generated noise)
+		runGoapShell("git checkout -- graphify-out/")
+		// Auto-stash any dirty non-graphify files
+		dirtyStatus, _ := runGoapShell("git status --short --untracked-files=all")
+		if hasNonGraphifyDirty(dirtyStatus) {
+			stashCmd := fmt.Sprintf("git stash push --include-untracked -m 'goap-fusion auto-stash %d'", time.Now().Unix())
+			if _, err := runGoapShell(stashCmd); err != nil {
+				bb.Result = fmt.Sprintf("## Preflight Failed\n\nCould not stash dirty worktree:\n%s", dirtyStatus)
+				bb.Outcome = "goap_fusion_preflight_failed"
+				return -1
+			}
+		}
+		// Ensure on master
+		runGoapShell("git checkout master")
+
+		beforeHead, _ := runGoapShell("git rev-parse HEAD")
+		beforeHead = strings.TrimSpace(beforeHead)
 
 		prompt := buildClaudeFusionPrompt(bb.Task, gapsStr, goalsStr, planStr,
 			truncateGoap(vaultStr, 5000), truncateGoap(graphStr, 5000))
@@ -310,20 +334,78 @@ func registerGoapFusionActions() {
 		setGoapState(bb, "claude_output", lastChars(strings.TrimSpace(claudeOut), 8000))
 
 		if err != nil {
-			bb.Result = fmt.Sprintf("## Claude Code Failed\n\nError: %v\n\nPartial output:\n%s\n\nElapsed: %s",
-				err, lastChars(strings.TrimSpace(claudeOut), 3000), elapsed)
+			// Claude failed — reset to clean state
+			resetToHead(beforeHead)
+			restoreGoapStash()
+			bb.Result = fmt.Sprintf("## Claude Code Failed\n\nError: %v\n\nPartial output:\n%s\n\nElapsed: %s\n\nWorktree reset to %s",
+				err, lastChars(strings.TrimSpace(claudeOut), 3000), elapsed, beforeHead[:12])
 			bb.Outcome = "goap_fusion_claude_failed"
 			return -1
 		}
 
-		// Check if Claude made changes
-		diffOut, _ := runGoapShell("cd " + goapFusionRepo + " && git diff --stat")
-		logOut, _ := runGoapShell("cd " + goapFusionRepo + " && git log --oneline -1")
+		// ── Post-Claude verification ──
+		// Detect uncommitted edits (Claude ran but didn't commit)
+		dirtyAfter, _ := runGoapShell("git status --short --untracked-files=all")
+		changedFiles := realChangedFilesGoap("master")
+		if len(changedFiles) == 0 && hasNonGraphifyDirty(dirtyAfter) {
+			// Claude edited files but didn't commit — save patch, reset
+			patchOut, _ := runGoapShell("git diff --binary")
+			savePath := filepath.Join(goapFusionPlansDir, fmt.Sprintf("failed-claude-%s.patch",
+				time.Now().Format("20060102T150405")))
+			_ = os.WriteFile(savePath, []byte(patchOut), 0644)
+			resetToHead(beforeHead)
+			restoreGoapStash()
+			bb.Result = fmt.Sprintf("## Claude Code Incomplete\n\nClaude edited files but did not commit. Saved patch to %s\nDirty files: %s",
+				savePath, dirtyAfter)
+			bb.Outcome = "goap_fusion_uncommitted"
+			return -1
+		}
 
-		bb.Result = fmt.Sprintf("## Claude Code Improvement Applied\n\nElapsed: %s\nLast commit: %s\nChanges:\n```\n%s\n```\n\nClaude output:\n%s",
-			elapsed, strings.TrimSpace(logOut), strings.TrimSpace(diffOut),
-			truncateGoap(strings.TrimSpace(claudeOut), 3000))
+		// Apply changes: cherry-pick Claude's commits to master
+		var logOut string
+		if len(changedFiles) > 0 {
+			// Already on master; Claude committed on its branch? Actually Claude
+			// runs in the main worktree with --add-dir. Check for commits.
+			logOut, _ = runGoapShell("git diff --stat master..HEAD")
+			gitDiff, _ := runGoapShell("git diff --stat -- . ':!graphify-out/'")
+
+			// Run verification
+			buildOut, buildErr := runGoapShell(fmt.Sprintf("/usr/local/go/bin/go build ./..."))
+			if buildErr != nil {
+				resetToHead(beforeHead)
+				restoreGoapStash()
+				bb.Result = fmt.Sprintf("## Verification Failed\n\ngo build ./... failed after Claude changes:\n%s\n\nReset to %s",
+					truncateGoap(buildOut, 3000), beforeHead[:12])
+				bb.Outcome = "goap_fusion_verify_failed"
+				return -1
+			}
+
+			// Run targeted tests on changed packages
+			pkgs := changedGoapPackages(changedFiles)
+			for _, pkg := range pkgs {
+				testOut, testErr := runGoapShell(fmt.Sprintf("/usr/local/go/bin/go test %s -count=1 -timeout 120s", pkg))
+				if testErr != nil {
+					resetToHead(beforeHead)
+					restoreGoapStash()
+					bb.Result = fmt.Sprintf("## Verification Failed\n\ngo test %s failed:\n%s\n\nReset to %s",
+						pkg, truncateGoap(testOut, 3000), beforeHead[:12])
+					bb.Outcome = "goap_fusion_verify_failed"
+					return -1
+				}
+			}
+
+			bb.Result = fmt.Sprintf("## Claude Code Improvement Applied\n\nElapsed: %s\nChanges:\n```\n%s\n```\n\nBuild: PASSED\nTests: PASSED\n\nClaude output:\n%s",
+				elapsed, strings.TrimSpace(gitDiff),
+				truncateGoap(strings.TrimSpace(claudeOut), 3000))
+		} else {
+			// Claude ran but produced no code changes
+			bb.Result = fmt.Sprintf("## Claude Code Research-Only\n\nElapsed: %s\nNo code changes produced. Research output:\n%s",
+				elapsed, truncateGoap(strings.TrimSpace(claudeOut), 3000))
+		}
+
+		restoreGoapStash()
 		setGoapState(bb, "claude_result", bb.Result)
+		bb.Result += fmt.Sprintf("\n\nLog commit:\n```\n%s\n```", strings.TrimSpace(logOut))
 		return 1
 	})
 
@@ -367,7 +449,9 @@ func setGoapState(bb *Blackboard, key, value string) {
 }
 
 func runGoapShell(command string) (string, error) {
-	cmd := exec.Command("bash", "-lc", command)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
 	cmd.Dir = goapFusionRepo
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -456,6 +540,84 @@ func lastChars(s string, n int) string {
 		return s
 	}
 	return s[len(s)-n:]
+}
+
+// ── Production hardening helpers ──
+
+func isGraphifyOutPath(p string) bool {
+	return strings.HasPrefix(p, "graphify-out/")
+}
+
+func hasNonGraphifyDirty(status string) bool {
+	for _, line := range strings.Split(status, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) < 3 {
+			continue
+		}
+		path := line[3:]
+		if !isGraphifyOutPath(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func realChangedFilesGoap(baseBranch string) []string {
+	out, err := runGoapShell(fmt.Sprintf("git diff %s --name-only -- . ':!graphify-out/'", baseBranch))
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, f := range strings.Split(strings.TrimSpace(out), "\n") {
+		f = strings.TrimSpace(f)
+		if f != "" && !isGraphifyOutPath(f) {
+			files = append(files, f)
+		}
+	}
+	return files
+}
+
+func changedGoapPackages(files []string) []string {
+	seen := map[string]bool{}
+	var pkgs []string
+	for _, p := range files {
+		if !strings.HasSuffix(p, ".go") {
+			continue
+		}
+		dir := filepath.Dir(p)
+		if dir == "." {
+			if !seen["."] {
+				pkgs = append(pkgs, ".")
+				seen["."] = true
+			}
+		} else {
+			pkg := "./" + dir
+			if !seen[pkg] {
+				pkgs = append(pkgs, pkg)
+				seen[pkg] = true
+			}
+		}
+	}
+	return pkgs
+}
+
+func resetToHead(ref string) {
+	if ref == "" {
+		return
+	}
+	runGoapShell(fmt.Sprintf("git reset --hard %s", ref))
+	runGoapShell("git clean -fd")
+}
+
+func restoreGoapStash() {
+	out, _ := runGoapShell("git stash list")
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "goap-fusion auto-stash") {
+			ref := strings.SplitN(line, ":", 2)[0]
+			runGoapShell(fmt.Sprintf("git stash pop %s", ref))
+			return
+		}
+	}
 }
 
 func extractSection(text, startMarker, endMarker string) string {

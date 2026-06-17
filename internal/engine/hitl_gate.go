@@ -148,7 +148,21 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		req, ok = store.Get(reqID)
 	}
 
+	// Deduplicate: when no request is found in the blackboard (fresh scheduler
+	// tick), search the persistent store for an existing pending request with
+	// the same NodeName.  This prevents duplicate HITL requests when the
+	// scheduler re-enters the gate on every tick.
 	phase := hitlPhase(h.node)
+	if (!ok || req == nil) && store != nil {
+		for _, r := range store.ListPending() {
+			if r.NodeName == h.node.Name && (r.Phase == "" || r.Phase == phase) {
+				req = r
+				ok = true
+				setHITLState(bb, r.ID, r.Status)
+				break
+			}
+		}
+	}
 	if phase == "post" && !childExecuted(bb) && h.child != nil {
 		code := h.child.Run(ctx)
 		markChildExecuted(bb, code)

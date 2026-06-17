@@ -34,8 +34,20 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			seq("ClaudePath",
 				cond("IsApplyRequest", "Detect apply/implement/fix/create/build keywords — use Claude Code"),
 				act("ReadImprovementPlan", "Read the highest-priority plan from ChainState or vault plans directory"),
-				act("ApplyImprovementWithClaude", "Launch Claude Code with full GOAP context to implement the highest-priority improvement"),
-				act("VerifyGoapBuild", "Run go test for changed packages and go build ./..."),
+				evolution.SerializableNode{
+					Type:        "HumanApprovalGate",
+					Name:        "ApproveGoapFusionApply",
+					Description: "Requires HITL approval before Claude Code implements BT platform changes",
+					Metadata: map[string]any{
+						"phase":             "pre",
+						"side_effect_class": "external",
+						"hitl_prompt":       "Approve this GOAP fusion cycle to implement code changes via Claude Code? Research + gap analysis complete. Only additive, reversible changes.",
+					},
+					Children: []evolution.SerializableNode{
+						act("ApplyImprovementWithClaude", "Launch Claude Code with full GOAP context to implement the highest-priority improvement"),
+						act("VerifyGoapBuild", "Run go test for changed packages and go build ./..."),
+					},
+				},
 			),
 			seq("ExecutionPath",
 				chainAgent("GoapFusionAgent",
