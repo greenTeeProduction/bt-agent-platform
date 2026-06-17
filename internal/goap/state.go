@@ -54,9 +54,9 @@ func (p *Plan) String() string {
 		return fmt.Sprintf("Plan for %q: (empty, trivially satisfied)", p.Goal.Name)
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Plan for %q (cost=%.1f, %d steps):\n", p.Goal.Name, p.Cost, len(p.Steps)))
+	fmt.Fprintf(&sb, "Plan for %q (cost=%.1f, %d steps):\n", p.Goal.Name, p.Cost, len(p.Steps))
 	for i, step := range p.Steps {
-		sb.WriteString(fmt.Sprintf("  %d. %s (cost=%.1f)\n", i+1, step.Name, step.Cost))
+		fmt.Fprintf(&sb, "  %d. %s (cost=%.1f)\n", i+1, step.Name, step.Cost)
 	}
 	return sb.String()
 }
@@ -122,7 +122,7 @@ func (ws WorldState) String() string {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString(fmt.Sprintf("%s: %v", k, ws[k]))
+		fmt.Fprintf(&sb, "%s: %v", k, ws[k])
 	}
 	sb.WriteString("}")
 	return sb.String()

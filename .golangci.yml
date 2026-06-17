@@ -1,69 +1,78 @@
+version: "2"
 run:
-  timeout: 5m
-  go: '1.26.3'
+  go: 1.26.3
   tests: true
-
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - misspell
-    - gocritic
-    - unconvert
-    - goimports
-    - prealloc
     - bodyclose
+    - gocritic
+    - misspell
     - nilerr
+    - prealloc
     - revive
-  disable-all: false
-  fast: false
-
-linters-settings:
-  gocritic:
-    disable-all: true
-    enabled-checks:
-      - appendCombine
-      - badLock
-      - boolExprSimplify
-      - equalFold
-      - indexAlloc
-      - rangeExprCopy
-      - regexpSimplify
-      - sloppyReassign
-      - truncateCmp
-      - unnecessaryDefer
-      - weakCond
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: increment-decrement
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-        disabled: true
-      - name: unreachable-code
-      - name: redefines-builtin-id
-
+    - unconvert
+  settings:
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - appendCombine
+        - badLock
+        - boolExprSimplify
+        - equalFold
+        - indexAlloc
+        - rangeExprCopy
+        - regexpSimplify
+        - sloppyReassign
+        - truncateCmp
+        - unnecessaryDefer
+        - weakCond
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+          disabled: true
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - vendor
+      - .git
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-dirs:
-    - vendor
-    - .git
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - .git
+      - third_party$
+      - builtin$
+      - examples$

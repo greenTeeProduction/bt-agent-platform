@@ -30,10 +30,9 @@ type OpenAICompatClient struct {
 }
 
 type openAICompatRequest struct {
-	Model    string                 `json:"model"`
-	Messages []openAICompatMessage  `json:"messages"`
-	Stream   bool                   `json:"stream"`
-	Extra    map[string]interface{} `json:"-,omitempty"`
+	Model    string                `json:"model"`
+	Messages []openAICompatMessage `json:"messages"`
+	Stream   bool                  `json:"stream"`
 }
 
 type openAICompatMessage struct {

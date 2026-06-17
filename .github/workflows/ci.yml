@@ -43,11 +43,10 @@ jobs:
           fi
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
-          install-mode: goinstall
-          args: --timeout=5m --out-format=colored-line-number
+          version: v2.12.2
+          args: --timeout=5m
 
   security:
     name: Security Scan

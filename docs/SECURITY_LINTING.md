@@ -27,14 +27,14 @@ This document describes how to catch **high/critical** security findings and **l
 
 ## Tool versions
 
-- **golangci-lint build** — install with `GOTOOLCHAIN=go1.26.3` (CI uses `install-mode: goinstall`); pre-built v1.64.8 binaries use Go 1.24 and fail typecheck on `go 1.26` modules.
+- **golangci-lint build** — install via `make tools-install` (`GOTOOLCHAIN=go1.26.3`); CI uses `golangci-lint-action@v9` with pre-built v2.12.2 binaries (Go 1.26+).
 - **Lint scope** — CI uses `only-new-issues: true` on PRs/pushes so existing baseline findings do not block merges; new code must pass `golangci-lint run --new-from-rev origin/master` locally.
 
 - **Go** — CI uses `actions/setup-go` with `go-version-file: go.mod` (currently **1.26.3**). golangci-lint must run with the same toolchain as `go build`; older runners (e.g. 1.23/1.24) fail typecheck with `package requires newer Go version go1.26`.
 
 Pinned in `scripts/dev-tools.sh` / `make tools-install`:
 
-- **golangci-lint v1.64.8** — matches CI (`golangci-lint-action@v6` with `version: v1.64.8`). Do not use golangci-lint v2 CLI with the current `.golangci.yml` without migrating config.
+- **golangci-lint v2.12.2** — matches CI (`golangci-lint-action@v9` with `version: v2.12.2`); config uses schema `version: "2"` with full staticcheck strictness (including QF* quick-fix checks).
 - **gosec v2.27.1** — same family as CI `go install github.com/securego/gosec/v2/cmd/gosec@latest`.
 
 ## Gosec excludes
@@ -56,7 +56,7 @@ New code should **fix** issues when possible; add `#nosec` or update excludes on
 - [x] `scripts/check.sh` — `quick` / `full` and per-step modes
 - [x] `scripts/dev-tools.sh` — pinned `tools-install`
 - [x] Makefile — `check-quick`, `check-full`, `security-*`, `tools-install`; `ci` → `check-full` + `ci-doctor`
-- [x] CI — golangci-lint `v1.64.8`, gosec high `v2.27.1` with `-exclude=G404,G304,G703,G704,G115`, tests set `BT_SKIP_LLM_TESTS=1`
+- [x] CI — golangci-lint `v2.12.2`, gosec high `v2.27.1` with `-exclude=G404,G304,G703,G704,G115`, tests set `BT_SKIP_LLM_TESTS=1`
 - [ ] Pre-commit: optional `make check-quick` (install hook still uses vet-only fast path)
 - [ ] Burn down excludes / add `scripts/security-changed.sh` for new-issues-only gosec
 

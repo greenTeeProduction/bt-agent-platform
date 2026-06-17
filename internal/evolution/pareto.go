@@ -254,7 +254,7 @@ func (pp *ParetoPopulation) Evaluate(fitnessFn func(*SerializableNode) MultiFitn
 func (pp *ParetoPopulation) SelectPareto() []*SerializableNode {
 	front := pp.Front.Individuals
 	if len(front) < 2 {
-		return pp.Population.Select()
+		return pp.Select()
 	}
 
 	// Pick two parents from opposite ends of the Pareto front (maximally diverse)

@@ -189,7 +189,7 @@ func toolNames(tools []tools.Tool) string {
 func toolDescriptions(tools []tools.Tool) string {
 	var b strings.Builder
 	for _, t := range tools {
-		b.WriteString(fmt.Sprintf("- %s: %s\n", t.Name(), t.Description()))
+		fmt.Fprintf(&b, "- %s: %s\n", t.Name(), t.Description())
 	}
 	return b.String()
 }

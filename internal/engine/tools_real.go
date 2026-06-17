@@ -215,9 +215,9 @@ func extractDuckDuckGoResults(html string) string {
 		if i >= len(snippets) {
 			break
 		}
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, stripHTML(s[1])))
+		fmt.Fprintf(&b, "%d. %s\n", i+1, stripHTML(s[1]))
 		if i < len(urls) {
-			b.WriteString(fmt.Sprintf("   URL: %s\n", stripHTML(urls[i][1])))
+			fmt.Fprintf(&b, "   URL: %s\n", stripHTML(urls[i][1]))
 		}
 	}
 
@@ -226,7 +226,7 @@ func extractDuckDuckGoResults(html string) string {
 		linkRe := regexp.MustCompile(`class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
 		links := linkRe.FindAllStringSubmatch(html, 5)
 		for i, l := range links {
-			b.WriteString(fmt.Sprintf("%d. %s\n   URL: %s\n", i+1, stripHTML(l[2]), l[1]))
+			fmt.Fprintf(&b, "%d. %s\n   URL: %s\n", i+1, stripHTML(l[2]), l[1])
 		}
 	}
 	return strings.TrimSpace(b.String())
@@ -647,10 +647,7 @@ func newNotebookLMResearchImportTool() *realTool {
 			}
 			nbID := parts[0]
 			taskID := parts[1]
-			citedOnly := false
-			if len(parts) >= 3 && strings.TrimSpace(parts[2]) == "true" {
-				citedOnly = true
-			}
+			citedOnly := len(parts) >= 3 && strings.TrimSpace(parts[2]) == "true"
 			args := []string{"research", "import", nbID, taskID}
 			if citedOnly {
 				args = append(args, "--cited-only")

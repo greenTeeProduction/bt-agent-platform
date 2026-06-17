@@ -523,7 +523,7 @@ func TestTokenValidator_TypeCompatibility(_ *testing.T) {
 	}))
 	defer ts.Close()
 
-	var v TokenValidator = OAuth2IntrospectionValidator(OAuth2IntrospectionConfig{
+	v := OAuth2IntrospectionValidator(OAuth2IntrospectionConfig{
 		IntrospectionURL: ts.URL,
 		ClientID:         "test",
 		ClientSecret:     "test",

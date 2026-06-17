@@ -228,7 +228,7 @@ func (mp *MAPElitesPopulation) SelectElites() []*SerializableNode {
 
 	// If grid is too sparse for selection, fall back to standard tournament
 	if len(elites) < 2 {
-		return mp.Population.Select()
+		return mp.Select()
 	}
 
 	// Pick two parents from different niches (if possible)

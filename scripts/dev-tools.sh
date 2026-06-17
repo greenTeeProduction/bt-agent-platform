@@ -10,14 +10,14 @@ export GOTOOLCHAIN
 GOPATH_BIN="$("${GO}" env GOPATH)/bin"
 export PATH="${GOPATH_BIN}:${PATH}"
 
-# Match golangci/golangci-lint-action@v6 with version: v1.64.8 (config schema v1).
-GOLANGCI_VERSION="${GOLANGCI_VERSION:-v1.64.8}"
+# Match golangci/golangci-lint-action@v9 with version: v2.12.2 (config schema v2).
+GOLANGCI_VERSION="${GOLANGCI_VERSION:-v2.12.2}"
 GOSEC_PKG="${GOSEC_PKG:-github.com/securego/gosec/v2/cmd/gosec@v2.27.1}"
 GOVULN_PKG="${GOVULN_PKG:-golang.org/x/vuln/cmd/govulncheck@latest}"
 
 echo "→ Installing dev tools to ${GOPATH_BIN}"
 echo "  golangci-lint ${GOLANGCI_VERSION}"
-"${GO}" install "github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_VERSION}"
+"${GO}" install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
 echo "  gosec (${GOSEC_PKG})"
 "${GO}" install "${GOSEC_PKG}"
 echo "  govulncheck"

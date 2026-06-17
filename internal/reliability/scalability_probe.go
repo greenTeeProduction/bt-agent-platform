@@ -114,10 +114,10 @@ func ProbeMultiNodeDashboard(ctx context.Context, cfg MultiNodeProbeConfig) (Mul
 			defer wg.Done()
 			probeNode(ctx, cfg, s)
 			mu.Lock()
-			if s.Healthy && s.ScalabilityOK && (!cfg.Execute || s.ExecuteOK) {
+			healthy := s.Healthy && s.ScalabilityOK && (!cfg.Execute || s.ExecuteOK)
+			if healthy {
 				report.HealthyNodes++
-			}
-			if !(s.Healthy && s.ScalabilityOK && (!cfg.Execute || s.ExecuteOK)) {
+			} else {
 				report.Passed = false
 			}
 			mu.Unlock()

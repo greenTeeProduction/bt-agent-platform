@@ -139,7 +139,7 @@ func (a Analytics) FormatAnalytics() string {
 	if len(a.Centrality) > 0 {
 		s.WriteString("Centrality (most depended-on trees):\n")
 		for _, c := range a.Centrality[:minInt(5, len(a.Centrality))] {
-			s.WriteString(fmt.Sprintf("  %-35s %d dependents\n", c.TreeID, c.Dependents))
+			fmt.Fprintf(&s, "  %-35s %d dependents\n", c.TreeID, c.Dependents)
 		}
 		s.WriteString("\n")
 	}
@@ -148,12 +148,13 @@ func (a Analytics) FormatAnalytics() string {
 		s.WriteString("Tool Contention:\n")
 		for _, c := range a.ToolContention {
 			riskIcon := "\u2705" // ✅
-			if c.Risk == "high" {
+			switch c.Risk {
+			case "high":
 				riskIcon = "\U0001F534" // 🔴
-			} else if c.Risk == "medium" {
+			case "medium":
 				riskIcon = "\U0001F7E1" // 🟡
 			}
-			s.WriteString(fmt.Sprintf("  %s %s: %v\n", riskIcon, c.ToolID, c.Trees))
+			fmt.Fprintf(&s, "  %s %s: %v\n", riskIcon, c.ToolID, c.Trees)
 		}
 		s.WriteString("\n")
 	}
@@ -161,7 +162,7 @@ func (a Analytics) FormatAnalytics() string {
 	if len(a.CoverageGaps) > 0 {
 		s.WriteString("Coverage Gaps (skills without KG trees):\n")
 		for _, gap := range a.CoverageGaps {
-			s.WriteString(fmt.Sprintf("  - %s\n", gap))
+			fmt.Fprintf(&s, "  - %s\n", gap)
 		}
 		s.WriteString("\n")
 	}
@@ -169,7 +170,7 @@ func (a Analytics) FormatAnalytics() string {
 	if len(a.Bottlenecks) > 0 {
 		s.WriteString("Bottlenecks (low success rate):\n")
 		for _, b := range a.Bottlenecks {
-			s.WriteString(fmt.Sprintf("  %-35s %.0f%% success (%d runs)\n", b.TreeID, b.SuccessRate, b.Runs))
+			fmt.Fprintf(&s, "  %-35s %.0f%% success (%d runs)\n", b.TreeID, b.SuccessRate, b.Runs)
 		}
 		s.WriteString("\n")
 	}
@@ -177,7 +178,7 @@ func (a Analytics) FormatAnalytics() string {
 	if len(a.SuggestedActions) > 0 {
 		s.WriteString("Suggested Actions:\n")
 		for i, action := range a.SuggestedActions {
-			s.WriteString(fmt.Sprintf("  %d. %s\n", i+1, action))
+			fmt.Fprintf(&s, "  %d. %s\n", i+1, action)
 		}
 	}
 

@@ -59,20 +59,20 @@ func registerBTManagerActions() {
 				healthy++
 			}
 
-			report.WriteString(fmt.Sprintf(
+			fmt.Fprintf(&report,
 				"| %-25s | SR=%.2f | %d runs | %d consecutive fails | %s |\n",
 				trunc(treeName, 25), sr, total, cf, status,
-			))
+			)
 
 			// For degraded trees, diagnose the failure mode
 			if status == "DEGRADED" {
 				mode := diagnoseFailureMode(recs)
-				report.WriteString(fmt.Sprintf("  → Failure mode: %s\n", mode))
+				fmt.Fprintf(&report, "  → Failure mode: %s\n", mode)
 			}
 		}
 
-		report.WriteString(fmt.Sprintf("\n**Summary:** %d trees scanned, %d healthy, %d degraded\n",
-			len(byTree), healthy, degraded))
+		fmt.Fprintf(&report, "\n**Summary:** %d trees scanned, %d healthy, %d degraded\n",
+			len(byTree), healthy, degraded)
 
 		bb.Result = report.String()
 		bb.Outcome = "success"
@@ -138,11 +138,11 @@ func registerBTManagerActions() {
 				Plan:          mutation,
 			}
 			if saveErr := bb.Reflections.Save(mutationRecord); saveErr != nil {
-				report.WriteString(fmt.Sprintf("| %-30s | %-25s | SAVE ERROR: %v |\n",
-					trunc(treeName, 30), mutation, saveErr))
+				fmt.Fprintf(&report, "| %-30s | %-25s | SAVE ERROR: %v |\n",
+					trunc(treeName, 30), mutation, saveErr)
 			} else {
-				report.WriteString(fmt.Sprintf("| %-30s | %-25s | ✅ applied |\n",
-					trunc(treeName, 30), mutation))
+				fmt.Fprintf(&report, "| %-30s | %-25s | ✅ applied |\n",
+					trunc(treeName, 30), mutation)
 				mutationsApplied++
 			}
 		}
@@ -150,7 +150,7 @@ func registerBTManagerActions() {
 		if mutationsApplied == 0 {
 			report.WriteString("_(no mutations needed — all trees healthy)_\n")
 		} else {
-			report.WriteString(fmt.Sprintf("\n**%d mutation(s) applied.** Monitor next 5 runs for each.\n", mutationsApplied))
+			fmt.Fprintf(&report, "\n**%d mutation(s) applied.** Monitor next 5 runs for each.\n", mutationsApplied)
 		}
 
 		bb.Result = report.String()
@@ -325,7 +325,7 @@ func inferAgentName(s string) string {
 		"data-", "meeting-", "webhook-", "maturity-", "plan-",
 	}
 	fields := strings.FieldsFunc(lower, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-')
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-'
 	})
 	for _, f := range fields {
 		for _, prefix := range knownPrefixes {

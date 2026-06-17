@@ -214,15 +214,16 @@ func FormatReport(results []ComparisonResult) string {
 	criticals := 0
 	warnings := 0
 	for _, r := range results {
-		if r.Severity == "critical" {
+		switch r.Severity {
+		case "critical":
 			criticals++
-		} else if r.Severity == "warning" {
+		case "warning":
 			warnings++
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("Total: %d benchmarks | %d critical | %d warning | %d ok\n\n",
-		len(results), criticals, warnings, len(results)-criticals-warnings))
+	fmt.Fprintf(&sb, "Total: %d benchmarks | %d critical | %d warning | %d ok\n\n",
+		len(results), criticals, warnings, len(results)-criticals-warnings)
 
 	for _, r := range results {
 		icon := "✅"
@@ -232,12 +233,12 @@ func FormatReport(results []ComparisonResult) string {
 		case "warning":
 			icon = "🟡"
 		}
-		sb.WriteString(fmt.Sprintf("%s %s\n", icon, r.Name))
+		fmt.Fprintf(&sb, "%s %s\n", icon, r.Name)
 		if r.Baseline > 0 {
-			sb.WriteString(fmt.Sprintf("   baseline: %.0f ns/op  current: %.0f ns/op  delta: %+.1f%%\n",
-				r.Baseline, r.Current, r.DeltaPct))
+			fmt.Fprintf(&sb, "   baseline: %.0f ns/op  current: %.0f ns/op  delta: %+.1f%%\n",
+				r.Baseline, r.Current, r.DeltaPct)
 		} else {
-			sb.WriteString(fmt.Sprintf("   current: %.0f ns/op  (new benchmark, no baseline)\n", r.Current))
+			fmt.Fprintf(&sb, "   current: %.0f ns/op  (new benchmark, no baseline)\n", r.Current)
 		}
 		sb.WriteString("\n")
 	}

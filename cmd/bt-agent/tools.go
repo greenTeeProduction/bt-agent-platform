@@ -243,8 +243,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Description string `json:"description"`
 				Nodes       int    `json:"nodes"`
 			}
-			var agents []agent
-			for name, tree := range evolution.AllFinanceTrees() {
+			trees := evolution.AllFinanceTrees()
+			agents := make([]agent, 0, len(trees))
+			for name, tree := range trees {
 				agents = append(agents, agent{Name: name, Description: evolution.AgentDescriptions[name], Nodes: evolution.CountNodes(tree)})
 			}
 			result := map[string]interface{}{"total": len(agents), "agents": agents}
@@ -853,8 +854,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	server.RegisterTool("bt_agent_list", "List all installed agents with their status and stats",
 		nil, nil,
 		func(args json.RawMessage) *engine.ToolResult {
-			var result []map[string]interface{}
-			for _, inst := range deps.agentReg.List() {
+			instances := deps.agentReg.List()
+			result := make([]map[string]interface{}, 0, len(instances))
+			for _, inst := range instances {
 				stats := deps.agentHist.Stats(inst.Definition.Name)
 				result = append(result, map[string]interface{}{
 					"name": inst.Definition.Name, "description": inst.Definition.Description,

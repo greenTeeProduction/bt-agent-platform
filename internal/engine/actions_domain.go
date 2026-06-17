@@ -758,17 +758,17 @@ func dataFileMetrics(path string) (string, error) {
 		}
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("- bytes: %d\n- lines: %d\n- mod_time: %s", info.Size(), lineCount, info.ModTime().Format("2006-01-02T15:04:05Z07:00")))
+	fmt.Fprintf(&sb, "- bytes: %d\n- lines: %d\n- mod_time: %s", info.Size(), lineCount, info.ModTime().Format("2006-01-02T15:04:05Z07:00"))
 	if strings.EqualFold(filepath.Ext(path), ".csv") {
 		r := csv.NewReader(strings.NewReader(string(data)))
 		r.FieldsPerRecord = -1
 		records, err := r.ReadAll()
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("\n- csv_parse_error: %v", err))
+			fmt.Fprintf(&sb, "\n- csv_parse_error: %v", err)
 		} else {
-			sb.WriteString(fmt.Sprintf("\n- csv_records_observed: %d", len(records)))
+			fmt.Fprintf(&sb, "\n- csv_records_observed: %d", len(records))
 			if len(records) > 0 {
-				sb.WriteString(fmt.Sprintf("\n- csv_columns_first_record: %d", len(records[0])))
+				fmt.Fprintf(&sb, "\n- csv_columns_first_record: %d", len(records[0]))
 			}
 		}
 	}

@@ -91,7 +91,7 @@ on: {push: {}, pull_request: {}}
 jobs:
   lint:
     timeout-minutes: 10
-    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+    steps: [{uses: 'golangci/golangci-lint-action@v9'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
   security:
     timeout-minutes: 10
     steps: [{run: 'echo no scanners'}]
@@ -140,7 +140,7 @@ func TestValidateWorkflowsDetectsCIJobMissingTimeout(t *testing.T) {
 on: {push: {}, pull_request: {}}
 jobs:
   lint:
-    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+    steps: [{uses: 'golangci/golangci-lint-action@v9'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
   security:
     timeout-minutes: 10
     steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]
@@ -354,7 +354,7 @@ on: {push: {}, pull_request: {}}
 jobs:
   lint:
     timeout-minutes: 10
-    steps: [{uses: 'golangci/golangci-lint-action@v6'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
+    steps: [{uses: 'golangci/golangci-lint-action@v9'}, {run: 'go vet ./...'}, {run: 'go mod tidy'}]
   security:
     timeout-minutes: 10
     steps: [{uses: 'securego/gosec@master'}, {run: 'govulncheck ./...'}]
