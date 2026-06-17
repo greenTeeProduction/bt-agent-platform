@@ -66,7 +66,7 @@ func registerNotebookLMActions() {
 
 		// Extract research query from task
 		query := bb.Task
-		report.WriteString(fmt.Sprintf("**Query:** %s\n\n", query))
+		fmt.Fprintf(&report, "**Query:** %s\n\n", query)
 
 		// Step 1: Get current notebook state
 		beforeOut := nlmRun(30*time.Second, "notebook", "get", nbID, "--json")
@@ -88,7 +88,7 @@ func registerNotebookLMActions() {
 			bb.Outcome = "failure"
 			return -1
 		}
-		report.WriteString(fmt.Sprintf("**Task ID:** `%s`\n\n", taskID))
+		fmt.Fprintf(&report, "**Task ID:** `%s`\n\n", taskID)
 
 		// Step 3: Poll research status (with longer timeout)
 		statusOut := nlmRun(360*time.Second,
@@ -116,9 +116,9 @@ func registerNotebookLMActions() {
 		savePath := fmt.Sprintf("/mnt/ssd/clawd/wiki/bt-research/syntheses/nlm-research-%s.md", dateStr)
 		saveErr := writeString(savePath, report.String())
 		if saveErr != nil {
-			report.WriteString(fmt.Sprintf("⚠ Save error: %v\n", saveErr))
+			fmt.Fprintf(&report, "⚠ Save error: %v\n", saveErr)
 		} else {
-			report.WriteString(fmt.Sprintf("✅ Saved to `%s`\n", savePath))
+			fmt.Fprintf(&report, "✅ Saved to `%s`\n", savePath)
 		}
 
 		bb.Result = report.String()

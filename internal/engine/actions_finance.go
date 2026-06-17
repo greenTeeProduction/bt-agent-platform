@@ -77,7 +77,7 @@ func registerFinanceActions() {
 	RegisterAction("BuildDCFModel", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		bb.Plan = bb.LLM.GeneratePlan("build DCF model for: "+bb.Task, "high")
-		bb.Result = fmt.Sprintf("## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected.")
+		bb.Result = "## DCF Model\n\n3 scenarios (Bear/Base/Bull), WACC calculated, FCF projected."
 		return 1
 	})
 
@@ -96,7 +96,7 @@ func registerFinanceActions() {
 
 	RegisterAction("AssemblePitchDeck", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary.")
+		bb.Result = "## Pitch Deck\n\nBranded deck assembled with comps, DCF, LBO, and executive summary."
 		bb.Outcome = string(evolution.Success)
 		return 1
 	})
@@ -128,7 +128,7 @@ func registerFinanceActions() {
 
 	RegisterAction("UpdateFinancialModel", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Model Updated\n\nDCF/comps model refreshed with latest quarter data.")
+		bb.Result = "## Model Updated\n\nDCF/comps model refreshed with latest quarter data."
 		return 1
 	})
 
@@ -147,7 +147,7 @@ func registerFinanceActions() {
 
 	RegisterAction("DraftEarningsNote", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL.")
+		bb.Result = "## Research Note\n\nKey takeaways, estimate changes, rating: BUY/HOLD/SELL."
 		bb.Outcome = string(evolution.Success)
 		return 1
 	})
@@ -173,7 +173,7 @@ func registerFinanceActions() {
 
 	RegisterAction("MapCompetitors", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Competitive Landscape\n\nMarket share, positioning, key differentiators.")
+		bb.Result = "## Competitive Landscape\n\nMarket share, positioning, key differentiators."
 		return 1
 	})
 
@@ -186,7 +186,7 @@ func registerFinanceActions() {
 
 	RegisterAction("ScreenForIdeas", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation.")
+		bb.Result = "## Investment Ideas\n\nScreened by: sector, market cap, growth, valuation."
 		return 1
 	})
 
@@ -199,7 +199,7 @@ func registerFinanceActions() {
 
 	RegisterAction("Build3StatementModel", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified.")
+		bb.Result = "## 3-Statement Model\n\nIS, BS, CFS linked. A=L+E verified."
 		return 1
 	})
 
@@ -212,7 +212,7 @@ func registerFinanceActions() {
 
 	RegisterAction("GatherClientContext", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences.")
+		bb.Result = "## Client Briefing\n\nContext gathered: holdings, recent interactions, preferences."
 		return 1
 	})
 
@@ -225,14 +225,14 @@ func registerFinanceActions() {
 
 	RegisterAction("QCBriefingPack", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved.")
+		bb.Result = "## Quality Check\n\n**Briefing**: Verified data accuracy, formatting, completeness.\n**Status**: Approved."
 		bb.Outcome = string(evolution.Success)
 		return 1
 	})
 
 	RegisterAction("IngestGPPackage", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## GP Package\n\nCapital account statements, cap tables ingested.")
+		bb.Result = "## GP Package\n\nCapital account statements, cap tables ingested."
 		return 1
 	})
 
@@ -326,7 +326,7 @@ func registerFinanceActions() {
 
 	RegisterAction("ParseOnboardingDocs", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		bb.Result = fmt.Sprintf("## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners.")
+		bb.Result = "## KYC Screening\n\nOnboarding docs parsed: entity info, beneficial owners."
 		return 1
 	})
 

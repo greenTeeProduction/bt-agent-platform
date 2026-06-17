@@ -22,7 +22,7 @@ func TestExportPreviousRuns(t *testing.T) {
 
 	block := exportPreviousRuns(hist, "demo", 1)
 	if !strings.Contains(block, "prior task") || !strings.Contains(block, "YYY") {
-		t.Fatalf("unexpected export: %q", block[:min(80, len(block))])
+		t.Fatalf("unexpected export: %q", block[:minInt(80, len(block))])
 	}
 }
 
@@ -68,7 +68,7 @@ func TestSeedMemoryToBlackboard_NilHandle(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

@@ -204,7 +204,7 @@ func BuildUtilitySelector(node *evolution.SerializableNode, bb *Blackboard) btco
 		scores := ScoreChildren(node, ctx.Blackboard, criteria)
 
 		// Find first valid child
-		var bestIdx int = -1
+		var bestIdx = -1
 		var bestScore float64 = -1
 		for i := range scores {
 			if scores[i].Valid && scores[i].WeightedScore > bestScore {

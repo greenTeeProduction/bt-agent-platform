@@ -1255,7 +1255,7 @@ func TestCondBulk_GraphIsFresh(t *testing.T) {
 	// Don't check the real file — just verify it doesn't panic
 	// and returns a bool (file may or may not exist on this system)
 	result := fn(&Blackboard{})
-	if !(result == true || result == false) {
+	if result != true && result != false {
 		t.Error("expected bool result")
 	}
 }

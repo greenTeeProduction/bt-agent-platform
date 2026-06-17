@@ -230,7 +230,7 @@ func init() {
 		dfOut, err := exec.Command("df", "-BM", "/", "/mnt/ssd").CombinedOutput()
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Disk: df failed: %v", err))
-			report.WriteString(fmt.Sprintf("### Disk ❌ ERROR\n`df` command failed: %v\n\n", err))
+			fmt.Fprintf(&report, "### Disk ❌ ERROR\n`df` command failed: %v\n\n", err)
 		} else {
 			okSections++
 			report.WriteString("### Disk ✅\n```\n")
@@ -245,7 +245,7 @@ func init() {
 					if usePct, err2 := parsePercentage(useStr); err2 == nil {
 						mount := fields[5]
 						if usePct >= 92 {
-							report.WriteString(fmt.Sprintf("**CRITICAL**: %s at %d%% usage (≥92%%)\n", mount, usePct))
+							fmt.Fprintf(&report, "**CRITICAL**: %s at %d%% usage (≥92%%)\n", mount, usePct)
 							if overallStatus == "OK" || overallStatus == "WARN" {
 								overallStatus = "CRITICAL"
 							}
@@ -265,7 +265,7 @@ func init() {
 		freeOut, err := exec.Command("free", "-m").CombinedOutput()
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Memory: free failed: %v", err))
-			report.WriteString(fmt.Sprintf("### Memory ❌ ERROR\n`free` command failed: %v\n\n", err))
+			fmt.Fprintf(&report, "### Memory ❌ ERROR\n`free` command failed: %v\n\n", err)
 		} else {
 			okSections++
 			report.WriteString("### Memory ✅\n```\n")
@@ -281,7 +281,7 @@ func init() {
 							if total, err3 := strconv.Atoi(fields[1]); err3 == nil && total > 0 {
 								availPct := avail * 100 / total
 								if availPct < 10 {
-									report.WriteString(fmt.Sprintf("**CRITICAL**: only %d%% memory available (%dMB/%dMB)\n", availPct, avail, total))
+									fmt.Fprintf(&report, "**CRITICAL**: only %d%% memory available (%dMB/%dMB)\n", availPct, avail, total)
 									if overallStatus != "CRITICAL" {
 										overallStatus = "CRITICAL"
 									}
@@ -303,7 +303,7 @@ func init() {
 		psOut, err := exec.Command("bash", "-c", "ps aux | grep '[b]t-' | awk '{print $11, $2, $3, $4}'").CombinedOutput()
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("BT Processes: ps failed: %v", err))
-			report.WriteString(fmt.Sprintf("### BT Processes ❌ ERROR\n`ps` command failed: %v\n\n", err))
+			fmt.Fprintf(&report, "### BT Processes ❌ ERROR\n`ps` command failed: %v\n\n", err)
 		} else {
 			okSections++
 			psTrim := strings.TrimSpace(string(psOut))
@@ -325,7 +325,7 @@ func init() {
 		uptimeOut, err := exec.Command("uptime").CombinedOutput()
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Load: uptime failed: %v", err))
-			report.WriteString(fmt.Sprintf("### Load ❌ ERROR\n`uptime` command failed: %v\n\n", err))
+			fmt.Fprintf(&report, "### Load ❌ ERROR\n`uptime` command failed: %v\n\n", err)
 		} else {
 			okSections++
 			report.WriteString("### Load ✅\n```\n")
@@ -339,7 +339,7 @@ func init() {
 		schedData, err := os.ReadFile(schedPath)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Scheduler: cannot read jobs file: %v", err))
-			report.WriteString(fmt.Sprintf("### Scheduler ❌ ERROR\nCannot read %s: %v\n\n", schedPath, err))
+			fmt.Fprintf(&report, "### Scheduler ❌ ERROR\nCannot read %s: %v\n\n", schedPath, err)
 		} else {
 			okSections++
 			active, inactive := 0, 0
@@ -359,11 +359,11 @@ func init() {
 				dupes[match[1]]++
 			}
 			report.WriteString("### Scheduler ✅\n")
-			report.WriteString(fmt.Sprintf("- Active jobs: %d\n", active))
-			report.WriteString(fmt.Sprintf("- Inactive jobs: %d\n", inactive))
+			fmt.Fprintf(&report, "- Active jobs: %d\n", active)
+			fmt.Fprintf(&report, "- Inactive jobs: %d\n", inactive)
 			for name, count := range dupes {
 				if count > 1 {
-					report.WriteString(fmt.Sprintf("- **DUPLICATE**: %s appears %d times\n", name, count))
+					fmt.Fprintf(&report, "- **DUPLICATE**: %s appears %d times\n", name, count)
 					warnings = append(warnings, fmt.Sprintf("scheduler duplicate: %s (%d entries)", name, count))
 					if overallStatus == "OK" {
 						overallStatus = "WARN"
@@ -381,27 +381,27 @@ func init() {
 			if os.IsNotExist(err) {
 				report.WriteString("### Cron Jobs ℹ️\nNo cron directory found.\n\n")
 			} else {
-				report.WriteString(fmt.Sprintf("### Cron Jobs ❌ ERROR\nCannot read %s: %v\n\n", cronPath, err))
+				fmt.Fprintf(&report, "### Cron Jobs ❌ ERROR\nCannot read %s: %v\n\n", cronPath, err)
 			}
 		} else {
 			okSections++
-			report.WriteString(fmt.Sprintf("### Cron Jobs ✅\n%d cron entries found\n\n", len(cronEntries)))
+			fmt.Fprintf(&report, "### Cron Jobs ✅\n%d cron entries found\n\n", len(cronEntries))
 		}
 
 		// ── Final status ─────────────────────────────────────────────────
 		report.WriteString("---\n")
-		report.WriteString(fmt.Sprintf("**Overall Status: %s**\n", overallStatus))
-		report.WriteString(fmt.Sprintf("**Sections: %d/%d OK**\n", okSections, sectionCount))
+		fmt.Fprintf(&report, "**Overall Status: %s**\n", overallStatus)
+		fmt.Fprintf(&report, "**Sections: %d/%d OK**\n", okSections, sectionCount)
 		if len(warnings) > 0 {
 			report.WriteString("\n**Warnings:**\n")
 			for _, w := range warnings {
-				report.WriteString(fmt.Sprintf("- %s\n", w))
+				fmt.Fprintf(&report, "- %s\n", w)
 			}
 		}
 		if len(errors) > 0 {
 			report.WriteString("\n**Errors:**\n")
 			for _, e := range errors {
-				report.WriteString(fmt.Sprintf("- %s\n", e))
+				fmt.Fprintf(&report, "- %s\n", e)
 			}
 		}
 
@@ -464,18 +464,18 @@ func init() {
 		for _, ep := range expectedProcs {
 			psOut, err := exec.Command("bash", "-c", fmt.Sprintf("ps aux | grep '[b]%s' || true", strings.TrimPrefix(ep.name, "bt-"))).CombinedOutput()
 			if err != nil || len(strings.TrimSpace(string(psOut))) == 0 {
-				report.WriteString(fmt.Sprintf("- **%s**: NOT RUNNING", ep.name))
+				fmt.Fprintf(&report, "- **%s**: NOT RUNNING", ep.name)
 				// Attempt restart via systemctl --user
 				restartOut, restartErr := exec.Command("systemctl", "--user", "restart", ep.service).CombinedOutput()
 				if restartErr != nil {
-					report.WriteString(fmt.Sprintf(" → RESTART FAILED: %v (%s)\n", restartErr, strings.TrimSpace(string(restartOut))))
+					fmt.Fprintf(&report, " → RESTART FAILED: %v (%s)\n", restartErr, strings.TrimSpace(string(restartOut)))
 					failed++
 				} else {
 					report.WriteString(" → RESTARTED\n")
 					restarted++
 				}
 			} else {
-				report.WriteString(fmt.Sprintf("- **%s**: running\n", ep.name))
+				fmt.Fprintf(&report, "- **%s**: running\n", ep.name)
 			}
 		}
 		// Clear stale in_flight scheduler entries
@@ -487,7 +487,7 @@ func init() {
 				restarted++
 			}
 		}
-		report.WriteString(fmt.Sprintf("\n**Summary:** %d restarted, %d failed\n", restarted, failed))
+		fmt.Fprintf(&report, "\n**Summary:** %d restarted, %d failed\n", restarted, failed)
 		bb.Result = report.String()
 		bb.Outcome = "success"
 		return 1

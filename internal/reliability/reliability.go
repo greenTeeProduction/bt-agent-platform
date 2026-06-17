@@ -904,7 +904,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	maxFailover := r.MaxFailover
 
 	var start int
-	var activeIdx int = -1 // executor index for active-count tracking (least-connections)
+	activeIdx := -1 // executor index for active-count tracking (least-connections)
 
 	if strategy == RoutingLeastConnections || strategy == RoutingAuction {
 		// Snapshot active counts before releasing lock.

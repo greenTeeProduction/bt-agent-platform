@@ -101,7 +101,7 @@ func TestOrchestrator_ResearchRound(t *testing.T) {
 func TestOrchestrator_Debate(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, engine.NewMockLLM())
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 	err := orch.RunDebate()
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestOrchestrator_Synthesis(t *testing.T) {
 		"SUPPORTING EVIDENCE: Findings from all fellows converge on modularity.\n" +
 		"SUPPORTING FELLOWS: analyst, researcher"
 	orch := NewOrchestrator(tt, mock)
-	orch.RunResearchRound()
+	_ = orch.RunResearchRound()
 	err := orch.RunSynthesis()
 	if err != nil {
 		t.Fatal(err)
@@ -131,8 +131,8 @@ func TestOrchestrator_Synthesis(t *testing.T) {
 func TestOrchestrator_PeerReview(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, engine.NewMockLLM())
-	orch.RunResearchRound()
-	orch.RunSynthesis()
+	_ = orch.RunResearchRound()
+	_ = orch.RunSynthesis()
 	err := orch.RunPeerReview()
 	if err != nil {
 		t.Fatal(err)
@@ -144,8 +144,8 @@ func TestOrchestrator_PeerReview(t *testing.T) {
 func TestOrchestrator_Report(t *testing.T) {
 	tt := NewThinkTank("Test", "topic")
 	orch := NewOrchestrator(tt, engine.NewMockLLM())
-	orch.RunResearchRound()
-	orch.RunSynthesis()
+	_ = orch.RunResearchRound()
+	_ = orch.RunSynthesis()
 	err := orch.RunReportGeneration()
 	if err != nil {
 		t.Fatal(err)

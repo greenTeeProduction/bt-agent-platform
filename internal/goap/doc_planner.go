@@ -148,13 +148,11 @@ var SectionMappings = []SectionMapping{
 // It defines 14 actions (AnalyzeCodebase + 12 sections + Assemble) and a
 // single goal (all sections done + document assembled).
 func NewDocPlanner() *DocPlanner {
-	actions := []Action{
-		// Step 0: Update the graph
-		NewAction("AnalyzeCodebase", 1.0,
-			WorldState{}, // no preconditions
-			WorldState{"graph_fresh": true},
-		),
-	}
+	actions := make([]Action, 0, 1+len(SectionMappings)+1)
+	actions = append(actions, NewAction("AnalyzeCodebase", 1.0,
+		WorldState{}, // no preconditions
+		WorldState{"graph_fresh": true},
+	))
 
 	// Steps 1-12: Generate each section
 	for _, sm := range SectionMappings {

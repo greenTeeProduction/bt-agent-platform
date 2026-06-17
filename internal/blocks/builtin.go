@@ -3,7 +3,7 @@ package blocks
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
 func builtinBlocks() []Block {
-	blocks := []Block{
+	coreBlocks := []Block{
 		{
 			ID:          "core:pre_gate",
 			Name:        "PreGate",
@@ -352,6 +352,8 @@ func builtinBlocks() []Block {
 			},
 		},
 	}
+	blocks := make([]Block, 0, len(coreBlocks)+8)
+	blocks = append(blocks, coreBlocks...)
 	blocks = append(blocks, ToolProfileBlocks()...)
 	for i := range blocks {
 		switch blocks[i].ID {

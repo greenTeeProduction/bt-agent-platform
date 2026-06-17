@@ -72,10 +72,7 @@ func ParseTraceParent(header string) (*TraceParent, error) {
 		return nil, fmt.Errorf("traceparent: invalid trace_flags %q", traceFlags)
 	}
 
-	sampled := false
-	if traceFlags == "01" || traceFlags == "03" {
-		sampled = true
-	}
+	sampled := traceFlags == "01" || traceFlags == "03"
 
 	return &TraceParent{
 		Version:    version,
@@ -99,7 +96,7 @@ func (tp *TraceParent) SpanContext() SpanContext {
 // isHex returns true if all characters in s are valid hex digits (0-9, a-f, A-F).
 func isHex(s string) bool {
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

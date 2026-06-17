@@ -219,7 +219,7 @@ func (o *BTOptimizer) optimizeNode(node *SerializableNode, changes *int) {
 			condition string
 			isDefault bool
 		}
-		var children []childInfo
+		children := make([]childInfo, 0, len(node.Children))
 		for i, child := range node.Children {
 			condition := extractCondition(&child)
 			isDefault := isDefaultPath(&child)

@@ -111,37 +111,37 @@ func (m *NotebookLMMetrics) Summary() string {
 
 	// Latency
 	sb.WriteString("### Latency (avg of recent)\n")
-	sb.WriteString(fmt.Sprintf("- notebook_get: %s\n", avgLatency(m.GetLatency)))
-	sb.WriteString(fmt.Sprintf("- notebook_list: %s\n", avgLatency(m.ListLatency)))
-	sb.WriteString(fmt.Sprintf("- research: %s\n", avgLatency(m.ResearchLatency)))
-	sb.WriteString(fmt.Sprintf("- import: %s\n", avgLatency(m.ImportLatency)))
-	sb.WriteString(fmt.Sprintf("- query: %s\n", avgLatency(m.QueryLatency)))
-	sb.WriteString(fmt.Sprintf("- auth_check: %s\n", avgLatency(m.AuthCheckLatency)))
+	fmt.Fprintf(&sb, "- notebook_get: %s\n", avgLatency(m.GetLatency))
+	fmt.Fprintf(&sb, "- notebook_list: %s\n", avgLatency(m.ListLatency))
+	fmt.Fprintf(&sb, "- research: %s\n", avgLatency(m.ResearchLatency))
+	fmt.Fprintf(&sb, "- import: %s\n", avgLatency(m.ImportLatency))
+	fmt.Fprintf(&sb, "- query: %s\n", avgLatency(m.QueryLatency))
+	fmt.Fprintf(&sb, "- auth_check: %s\n", avgLatency(m.AuthCheckLatency))
 
 	// Success rate
 	successRate := 0.0
 	if m.TotalCalls > 0 {
 		successRate = float64(m.TotalCalls-m.FailedCalls) / float64(m.TotalCalls) * 100
 	}
-	sb.WriteString(fmt.Sprintf("\n### Reliability\n- Total calls: %d\n- Failed: %d\n- Success rate: %.1f%%\n", m.TotalCalls, m.FailedCalls, successRate))
-	sb.WriteString(fmt.Sprintf("- Circuit breaker openings: %d\n", m.CBOpenedCount))
+	fmt.Fprintf(&sb, "\n### Reliability\n- Total calls: %d\n- Failed: %d\n- Success rate: %.1f%%\n", m.TotalCalls, m.FailedCalls, successRate)
+	fmt.Fprintf(&sb, "- Circuit breaker openings: %d\n", m.CBOpenedCount)
 	if m.CBOpen {
-		sb.WriteString(fmt.Sprintf("- Circuit breaker: OPEN (since %s)\n", m.CBLastOpened.Format(time.RFC3339)))
+		fmt.Fprintf(&sb, "- Circuit breaker: OPEN (since %s)\n", m.CBLastOpened.Format(time.RFC3339))
 	} else {
 		sb.WriteString("- Circuit breaker: closed\n")
 	}
-	sb.WriteString(fmt.Sprintf("- Auth refreshes: %d\n", m.AuthRefreshCount))
+	fmt.Fprintf(&sb, "- Auth refreshes: %d\n", m.AuthRefreshCount)
 
 	// Source metrics
-	sb.WriteString(fmt.Sprintf("\n### Sources\n- Total imported: %d\n", m.SourcesImported))
+	fmt.Fprintf(&sb, "\n### Sources\n- Total imported: %d\n", m.SourcesImported)
 	if len(m.SourcesPerRun) > 0 {
 		sum := 0
 		for _, c := range m.SourcesPerRun {
 			sum += c
 		}
-		sb.WriteString(fmt.Sprintf("- Avg per run: %.1f\n", float64(sum)/float64(len(m.SourcesPerRun))))
+		fmt.Fprintf(&sb, "- Avg per run: %.1f\n", float64(sum)/float64(len(m.SourcesPerRun)))
 	}
-	sb.WriteString(fmt.Sprintf("- Current source_count: %d (notebook: %s)\n", m.LastSourceCount, m.LastNotebookID))
+	fmt.Fprintf(&sb, "- Current source_count: %d (notebook: %s)\n", m.LastSourceCount, m.LastNotebookID)
 
 	return sb.String()
 }

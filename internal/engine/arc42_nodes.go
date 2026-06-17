@@ -71,7 +71,7 @@ func registerArc42Nodes() {
 			if err != nil {
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("\n### %s\n\n%s\n", filepath.Base(f), string(data)))
+			fmt.Fprintf(&sb, "\n### %s\n\n%s\n", filepath.Base(f), string(data))
 		}
 		setChainState(bb, "adrs", sb.String())
 		return 1
@@ -156,7 +156,7 @@ func registerArc42Nodes() {
 	RegisterAction("ListBinaries", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		files, _ := filepath.Glob("cmd/*/main.go")
-		var bins []string
+		bins := make([]string, 0, len(files))
 		for _, f := range files {
 			bins = append(bins, filepath.Dir(f))
 		}
@@ -322,7 +322,7 @@ func registerArc42Nodes() {
 			if err != nil {
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("\n---\n## %s\n\n%s\n", filepath.Base(f), string(data)))
+			fmt.Fprintf(&sb, "\n---\n## %s\n\n%s\n", filepath.Base(f), string(data))
 		}
 		bb.CachedResult = sb.String()
 		return 1

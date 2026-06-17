@@ -243,7 +243,7 @@ func generateTemplateOutput(prompt string, bb *Blackboard) string {
 			title = strings.TrimSpace(prompt[idx : idx+end])
 		}
 	}
-	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+	fmt.Fprintf(&sb, "# %s\n\n", title)
 
 	// Add available data from chain state
 	if bb.CachedResult != "" && bb.CachedResult != prompt {
@@ -264,7 +264,7 @@ func generateTemplateOutput(prompt string, bb *Blackboard) string {
 			if len(valStr) > 300 {
 				valStr = valStr[:300] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("- **%s**: %s\n", k, valStr))
+			fmt.Fprintf(&sb, "- **%s**: %s\n", k, valStr)
 		}
 		sb.WriteString("\n")
 	}
@@ -854,7 +854,7 @@ func fusionConfigFromParams(params map[string]string) fusion.Config {
 		cfg.Force = raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 	}
 	if raw := strings.TrimSpace(params["enabled"]); raw != "" {
-		cfg.Enabled = !(raw == "0" || strings.EqualFold(raw, "false") || strings.EqualFold(raw, "no"))
+		cfg.Enabled = raw != "0" && !strings.EqualFold(raw, "false") && !strings.EqualFold(raw, "no")
 	}
 	return cfg
 }

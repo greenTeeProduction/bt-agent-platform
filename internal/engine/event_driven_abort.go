@@ -164,18 +164,18 @@ func evaluateEventCondition(es EventSource, bb *Blackboard) bool {
 func evaluatePredicate(predicate string, val interface{}) bool {
 	// Convert val to float64 for numeric comparisons
 	fv, isNumeric := toFloat(val)
-	switch {
-	case predicate == "<= 0":
+	switch predicate {
+	case "<= 0":
 		return isNumeric && fv <= 0
-	case predicate == "> 0":
+	case "> 0":
 		return isNumeric && fv > 0
-	case predicate == "< 0":
+	case "< 0":
 		return isNumeric && fv < 0
-	case predicate == ">= 0":
+	case ">= 0":
 		return isNumeric && fv >= 0
-	case predicate == "= 0" || predicate == "== 0":
+	case "= 0", "== 0":
 		return isNumeric && fv == 0
-	case predicate == "!= true":
+	case "!= true":
 		b, ok := val.(bool)
 		return ok && !b
 	default:

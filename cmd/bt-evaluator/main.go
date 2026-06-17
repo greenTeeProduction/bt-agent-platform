@@ -69,7 +69,7 @@ func main() {
 				Score     float64 `json:"score"`
 				Reason    string  `json:"reason"`
 			}
-			var items []cand
+			items := make([]cand, 0, len(candidates))
 			for _, c := range candidates {
 				items = append(items, cand{
 					Operation: c.Op.Operation,

@@ -218,7 +218,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			var params struct {
 				Agent string `json:"agent"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			allTrees := evolution.AllFinanceTrees()
 			tree, ok := allTrees[params.Agent]
 			if !ok {
@@ -243,8 +243,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Description string `json:"description"`
 				Nodes       int    `json:"nodes"`
 			}
-			var agents []agent
-			for name, tree := range evolution.AllFinanceTrees() {
+			trees := evolution.AllFinanceTrees()
+			agents := make([]agent, 0, len(trees))
+			for name, tree := range trees {
 				agents = append(agents, agent{Name: name, Description: evolution.AgentDescriptions[name], Nodes: evolution.CountNodes(tree)})
 			}
 			result := map[string]interface{}{"total": len(agents), "agents": agents}
@@ -853,8 +854,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	server.RegisterTool("bt_agent_list", "List all installed agents with their status and stats",
 		nil, nil,
 		func(args json.RawMessage) *engine.ToolResult {
-			var result []map[string]interface{}
-			for _, inst := range deps.agentReg.List() {
+			instances := deps.agentReg.List()
+			result := make([]map[string]interface{}, 0, len(instances))
+			for _, inst := range instances {
 				stats := deps.agentHist.Stats(inst.Definition.Name)
 				result = append(result, map[string]interface{}{
 					"name": inst.Definition.Name, "description": inst.Definition.Description,
@@ -883,7 +885,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Task   string            `json:"task"`
 				Inputs map[string]string `json:"inputs"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if deps.agentRunner == nil {
 				data, _ := json.Marshal(map[string]string{"error": "agent runner not configured"})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

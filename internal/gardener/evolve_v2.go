@@ -312,7 +312,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 	if applied > 0 {
-		g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
 
 	// ── P3: Meta-Prompt Evolution — record outcome ──
@@ -386,8 +386,9 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		sloPath := filepath.Join(filepath.Dir(g.cfg.MetricsTracker.path), "slo-metrics.json")
 		if data, err := json.MarshalIndent(sloData, "", "  "); err == nil {
 			tmp := sloPath + ".tmp"
-			os.WriteFile(tmp, data, 0644)
-			os.Rename(tmp, sloPath)
+			if err := os.WriteFile(tmp, data, 0644); err == nil {
+				_ = os.Rename(tmp, sloPath)
+			}
 		}
 	}
 

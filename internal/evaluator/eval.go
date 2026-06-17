@@ -258,11 +258,11 @@ func buildScorecard(results []SuiteEvalResult) PlatformScorecard {
 func (r *PlatformEvalResult) FormatReport() string {
 	var sb strings.Builder
 	sb.WriteString("=== BT Platform Evaluation Report ===\n")
-	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", r.Timestamp))
-	sb.WriteString(fmt.Sprintf("Suites: %d | Tasks: %d | Passed: %d | Failed: %d\n",
-		r.TotalSuites, r.TotalTasks, r.Passed, r.Failed))
-	sb.WriteString(fmt.Sprintf("Overall Success Rate: %.1f%% | Avg Duration: %.0fms\n\n",
-		r.SuccessRate, r.AvgDurationMs))
+	fmt.Fprintf(&sb, "Timestamp: %s\n", r.Timestamp)
+	fmt.Fprintf(&sb, "Suites: %d | Tasks: %d | Passed: %d | Failed: %d\n",
+		r.TotalSuites, r.TotalTasks, r.Passed, r.Failed)
+	fmt.Fprintf(&sb, "Overall Success Rate: %.1f%% | Avg Duration: %.0fms\n\n",
+		r.SuccessRate, r.AvgDurationMs)
 
 	sb.WriteString("\n--- Suite Results ---\n")
 	for _, s := range r.BySuite {
@@ -273,8 +273,8 @@ func (r *PlatformEvalResult) FormatReport() string {
 		if s.SuccessRate < 40 {
 			icon = "✗"
 		}
-		sb.WriteString(fmt.Sprintf("%s %-24s %2d/%2d (%.0f%%) %5.0fms\n",
-			icon, s.Name, s.Passed, s.TotalTasks, s.SuccessRate, s.AvgDuration))
+		fmt.Fprintf(&sb, "%s %-24s %2d/%2d (%.0f%%) %5.0fms\n",
+			icon, s.Name, s.Passed, s.TotalTasks, s.SuccessRate, s.AvgDuration)
 	}
 
 	sb.WriteString("\n--- Task Failures (<100% suites) ---\n")
@@ -282,11 +282,11 @@ func (r *PlatformEvalResult) FormatReport() string {
 		if suite.SuccessRate >= 100.0 {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("\n[%s] %d/%d passed:\n", suite.Name, suite.Passed, suite.TotalTasks))
+		fmt.Fprintf(&sb, "\n[%s] %d/%d passed:\n", suite.Name, suite.Passed, suite.TotalTasks)
 		for _, res := range suite.Results {
 			if !res.Success {
-				sb.WriteString(fmt.Sprintf("  ✗ %-60s outcome=%-10s path=%-20s\n",
-					truncateForReport(res.Task, 58), res.Outcome, res.Path))
+				fmt.Fprintf(&sb, "  ✗ %-60s outcome=%-10s path=%-20s\n",
+					truncateForReport(res.Task, 58), res.Outcome, res.Path)
 			}
 		}
 	}
@@ -302,8 +302,8 @@ func (r *PlatformEvalResult) FormatReport() string {
 		case "gap":
 			icon = "🔴"
 		}
-		sb.WriteString(fmt.Sprintf("%s %-28s fit=%2d%% pass=%.0f%% freq=%-12s [%s]\n",
-			icon, uc.Name, int(uc.AutomationFit), uc.SuitePass, uc.Frequency, uc.Status))
+		fmt.Fprintf(&sb, "%s %-28s fit=%2d%% pass=%.0f%% freq=%-12s [%s]\n",
+			icon, uc.Name, int(uc.AutomationFit), uc.SuitePass, uc.Frequency, uc.Status)
 	}
 
 	return sb.String()

@@ -13,14 +13,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         id: setup-go
         with:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -44,26 +43,26 @@ jobs:
           fi
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        env:
-          GOTOOLCHAIN: ${{ steps.setup-go.outputs.go-version }}
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
-          install-mode: goinstall
-          args: --timeout=5m --out-format=colored-line-number
+          version: v2.12.2
+          args: --timeout=5m
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      security-events: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -83,7 +82,7 @@ jobs:
           govulncheck ./... || echo "::warning::Potential vulnerabilities found — review above output"
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
           category: gosec
@@ -100,12 +99,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -124,7 +123,7 @@ jobs:
           go tool cover -func=coverage.out | grep total | awk '{print "Total coverage: " $3}'
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.out
@@ -136,12 +135,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -179,12 +178,12 @@ jobs:
         with:
           fetch-depth: 0  # needed for git log since last tag
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod

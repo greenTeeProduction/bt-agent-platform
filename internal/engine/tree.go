@@ -371,11 +371,12 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 
 	bb.DurationMs = time.Since(start).Milliseconds()
 
-	if code == 1 {
+	switch code {
+	case 1:
 		bb.Outcome = string(evolution.Success)
-	} else if code == -1 {
+	case -1:
 		bb.Outcome = string(evolution.Failure)
-	} else {
+	default:
 		bb.Outcome = string(evolution.Partial)
 	}
 

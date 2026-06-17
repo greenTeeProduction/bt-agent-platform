@@ -3,7 +3,8 @@ package fusion
 import "testing"
 
 func TestConfig_DefaultsQualityPreset(t *testing.T) {
-	cfg := DefaultConfig().Normalize()
+	cfg := DefaultConfig()
+	cfg = cfg.Normalize()
 	if !cfg.Enabled {
 		t.Fatal("default config should be enabled")
 	}

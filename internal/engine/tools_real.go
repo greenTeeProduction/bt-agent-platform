@@ -215,9 +215,9 @@ func extractDuckDuckGoResults(html string) string {
 		if i >= len(snippets) {
 			break
 		}
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, stripHTML(s[1])))
+		fmt.Fprintf(&b, "%d. %s\n", i+1, stripHTML(s[1]))
 		if i < len(urls) {
-			b.WriteString(fmt.Sprintf("   URL: %s\n", stripHTML(urls[i][1])))
+			fmt.Fprintf(&b, "   URL: %s\n", stripHTML(urls[i][1]))
 		}
 	}
 
@@ -226,7 +226,7 @@ func extractDuckDuckGoResults(html string) string {
 		linkRe := regexp.MustCompile(`class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
 		links := linkRe.FindAllStringSubmatch(html, 5)
 		for i, l := range links {
-			b.WriteString(fmt.Sprintf("%d. %s\n   URL: %s\n", i+1, stripHTML(l[2]), l[1]))
+			fmt.Fprintf(&b, "%d. %s\n   URL: %s\n", i+1, stripHTML(l[2]), l[1])
 		}
 	}
 	return strings.TrimSpace(b.String())
@@ -496,7 +496,6 @@ func nlmRun(timeout time.Duration, args ...string) string {
 
 		// Success
 		nlmCircuitMu.Lock()
-		nlmSuccessCount++
 		nlmFailCount = 0
 		if nlmCircuitOpen && nlmCooldown > 0 {
 			nlmMetrics.RecordCBClosed()
@@ -532,7 +531,6 @@ func nlmRun(timeout time.Duration, args ...string) string {
 var (
 	nlmCircuitOpen   bool
 	nlmFailCount     int
-	nlmSuccessCount  int
 	nlmCircuitMu     sync.Mutex
 	nlmCircuitThresh = 5               // consecutive failures to open
 	nlmCooldown      = 5 * time.Minute // cooldown before half-open
@@ -649,10 +647,7 @@ func newNotebookLMResearchImportTool() *realTool {
 			}
 			nbID := parts[0]
 			taskID := parts[1]
-			citedOnly := false
-			if len(parts) >= 3 && strings.TrimSpace(parts[2]) == "true" {
-				citedOnly = true
-			}
+			citedOnly := len(parts) >= 3 && strings.TrimSpace(parts[2]) == "true"
 			args := []string{"research", "import", nbID, taskID}
 			if citedOnly {
 				args = append(args, "--cited-only")
@@ -722,69 +717,6 @@ func newHTTPGetTool() *realTool {
 			result := fmt.Sprintf("HTTP %d\n%s", resp.StatusCode, string(body))
 			if len(result) > 8192 {
 				result = result[:8192] + "\n... [truncated]"
-			}
-			return result
-		},
-	}
-}
-
-// newProcessCheckTool checks if a process is running by name.
-func newProcessCheckTool() *realTool {
-	return &realTool{
-		name: "process_check",
-		desc: "Check if a process is running by name. Input: process name (e.g., 'bt-agent', 'nginx'). Returns process info or 'not running'.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			name := strings.TrimSpace(input)
-			cmd := exec.CommandContext(ctx, "bash", "-c",
-				fmt.Sprintf("ps aux | grep -v grep | grep '%s' || echo 'NOT_RUNNING'", name))
-			out, _ := cmd.CombinedOutput()
-			result := strings.TrimSpace(string(out))
-			if len(result) > 4096 {
-				result = result[:4096] + "\n... [truncated]"
-			}
-			return result
-		},
-	}
-}
-
-// newDiskUsageTool checks disk usage on a mount point.
-func newDiskUsageTool() *realTool {
-	return &realTool{
-		name: "disk_usage",
-		desc: "Check disk usage on a mount point. Input: mount point path (default: /). Returns df output.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			path := strings.TrimSpace(input)
-			if path == "" {
-				path = "/"
-			}
-			cmd := exec.CommandContext(ctx, "df", "-BM", path)
-			out, _ := cmd.CombinedOutput()
-			result := strings.TrimSpace(string(out))
-			if len(result) > 4096 {
-				result = result[:4096] + "\n... [truncated]"
-			}
-			return result
-		},
-	}
-}
-
-// newMemoryUsageTool checks memory usage statistics.
-func newMemoryUsageTool() *realTool {
-	return &realTool{
-		name: "memory_usage",
-		desc: "Check memory usage statistics. Takes no input. Returns free -m output.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			cmd := exec.CommandContext(ctx, "free", "-m")
-			out, _ := cmd.CombinedOutput()
-			result := strings.TrimSpace(string(out))
-			if len(result) > 4096 {
-				result = result[:4096] + "\n... [truncated]"
 			}
 			return result
 		},

@@ -310,25 +310,6 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 	return nil
 }
 
-// dedupJobsLocked removes duplicate active jobs for the same agent,
-// keeping only the most recent/best one. Must be called with s.mu held.
-func (s *Scheduler) dedupJobsLocked() {
-	kept := make(map[string]*ScheduledJob)
-	for id, job := range s.jobs {
-		if !job.Active {
-			continue
-		}
-		if existing, ok := kept[job.AgentName]; !ok || betterScheduledJob(job, existing) {
-			if ok {
-				delete(s.jobs, existing.ID)
-			}
-			kept[job.AgentName] = job
-		} else {
-			delete(s.jobs, id)
-		}
-	}
-}
-
 func betterScheduledJob(candidate, current *ScheduledJob) bool {
 	if candidate == nil {
 		return false

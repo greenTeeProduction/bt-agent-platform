@@ -511,7 +511,8 @@ func AuditSecurityEvent(ctx context.Context, eventType string, attrs ...any) {
 		}
 	}
 
-	args := []any{"event", eventType, "timestamp", time.Now().UTC().Format(time.RFC3339)}
+	args := make([]any, 0, 4+len(attrs))
+	args = append(args, "event", eventType, "timestamp", time.Now().UTC().Format(time.RFC3339))
 	args = append(args, attrs...)
 	slog.Warn("SECURITY", args...)
 

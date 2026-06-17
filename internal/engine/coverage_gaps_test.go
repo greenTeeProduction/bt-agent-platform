@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -43,15 +42,6 @@ func TestScoreChild_NilChainState(t *testing.T) {
 }
 
 // ─── coverage gaps: registry.go execLLMCallAction err path ───
-
-// errMockLLM returns an error from Generate
-type errMockLLM struct {
-	MockLLM
-}
-
-func (e *errMockLLM) Generate(prompt string) (string, error) {
-	return "", errors.New("simulated error")
-}
 
 // ─── coverage gaps: tree.go validateOutputQuality ───
 

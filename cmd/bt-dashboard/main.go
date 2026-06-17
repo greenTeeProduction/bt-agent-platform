@@ -396,7 +396,7 @@ func handleSummary(w http.ResponseWriter, _ *http.Request) {
 	if dashConfig != nil && dashConfig.OllamaModel != "" {
 		model = dashConfig.OllamaModel
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"total_trees": len(kg.Trees),
 		"categories":  cats,
 		"mcp_tools":   26,
@@ -410,14 +410,14 @@ func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
 		cats[t.Category]++
 	}
 	m := dashboard.Collect(len(kg.Trees), cats)
-	_ = json.NewEncoder(w).Encode(m)
+	_ = encodeJSON(w, m)
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	r2 := make([]map[string]interface{}, 0, 8)
 	for _, t := range kg.Trees {
 		r2 = append(r2, map[string]interface{}{"id": t.ID, "name": t.Name, "category": t.Category, "node_count": t.NodeCount})
 	}
-	_ = json.NewEncoder(w).Encode(r2)
+	_ = encodeJSON(w, r2)
 }
 func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	f := thinktank.DefaultFellows()
@@ -425,13 +425,13 @@ func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	for _, x := range f {
 		r2 = append(r2, map[string]interface{}{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
 	}
-	_ = json.NewEncoder(w).Encode(r2)
+	_ = encodeJSON(w, r2)
 }
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Query().Get("topic")
 	c := sharedLLM
 	if c == nil {
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Ollama unavailable"})
+		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
 		return
 	}
 	tt := thinktank.NewThinkTank("Council", topic)
@@ -469,10 +469,10 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"topic": topic, "findings": ff})
+	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "findings": ff})
 }
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
-	_ = json.NewEncoder(w).Encode(companyState)
+	_ = encodeJSON(w, companyState)
 }
 
 func handleChat(w http.ResponseWriter, r *http.Request) {
@@ -497,16 +497,16 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sharedLLM == nil {
-		_ = json.NewEncoder(w).Encode(map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
+		_ = encodeJSON(w, map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
 		return
 	}
 
 	reply, err := sharedLLM.Generate(sys + "\n\nUser: " + msg)
 	if err != nil {
-		_ = json.NewEncoder(w).Encode(map[string]string{"reply": "Error: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"reply": "Error: " + err.Error()})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"reply": reply, "tab": tab})
+	_ = encodeJSON(w, map[string]string{"reply": reply, "tab": tab})
 }
 
 func handleTasks(w http.ResponseWriter, _ *http.Request) {
@@ -521,14 +521,14 @@ func handleTasks(w http.ResponseWriter, _ *http.Request) {
 			"tree_id": t.TreeID, "output": t.Output, "outcome": t.Outcome,
 		}
 	}
-	_ = json.NewEncoder(w).Encode(out)
+	_ = encodeJSON(w, out)
 }
 
 func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	if err := taskStore.UpdateStatus(taskID, "approved"); err != nil {
 		w.WriteHeader(404)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 	resp := map[string]string{"status": "approved", "id": taskID}
@@ -538,7 +538,7 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 			resp["hitl_status"] = string(req.Status)
 		}
 	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := encodeJSON(w, resp); err != nil {
 		return
 	}
 }
@@ -547,7 +547,7 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	if err := taskStore.UpdateStatus(taskID, "rejected"); err != nil {
 		w.WriteHeader(404)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 	resp := map[string]string{"status": "rejected", "id": taskID}
@@ -557,14 +557,14 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 			resp["hitl_status"] = string(req.Status)
 		}
 	}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := encodeJSON(w, resp); err != nil {
 		return
 	}
 }
 func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	approved := taskStore.Approved()
 	if len(approved) == 0 {
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "no_approved_tasks"})
+		_ = encodeJSON(w, map[string]string{"status": "no_approved_tasks"})
 		return
 	}
 
@@ -578,7 +578,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	sprintState.Progress = "dispatching"
 	sprintState.Unlock()
 
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"status": "sprint_started", "job_id": jobID,
 		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
 		"count":   len(approved),
@@ -652,7 +652,7 @@ func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
 			completed++
 		}
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
 		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
 		"tasks_completed": completed, "tasks_total": len(tasks),
@@ -671,7 +671,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 	// ── Domain trees (14) ──
 	domainTrees := domains.AllDomainTrees()
 	if tree, ok := domainTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -689,7 +689,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"kyc_screener":       evolution.KYCScreenerTree(),
 	}
 	if tree, ok := financeTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -703,7 +703,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"sales":     startup.SalesTree(),
 	}
 	if tree, ok := startupTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -713,7 +713,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"quick_research": evolution.QuickResearchTree(),
 	}
 	if tree, ok := researchTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -724,7 +724,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"report":      thinktank.ReportGenerationTree(),
 	}
 	if tree, ok := thinktankTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -734,7 +734,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 		"default": evolution.DefaultTree(),
 	}
 	if tree, ok := evolutionTrees[treeID]; ok {
-		_ = json.NewEncoder(w).Encode(tree)
+		_ = encodeJSON(w, tree)
 		return
 	}
 
@@ -745,7 +745,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 			name = name[idx+1:]
 		}
 		if name == treeID {
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = encodeJSON(w, map[string]interface{}{
 				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
 				"node_count": t.NodeCount,
 				"children":   []map[string]interface{}{},
@@ -763,7 +763,7 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 // If apiKey is empty, all requests pass through (no auth required).
 // If apiKey is set, requests must include X-API-Key header matching the key.// handleHealth returns platform health status.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"status":   "ok",
 		"version":  "1.0.0",
 		"uptime":   "operational",
@@ -786,7 +786,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use POST"})
 		return
 	}
 
@@ -794,7 +794,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if apiKey == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "login not configured — BT_API_KEY not set"})
+		_ = encodeJSON(w, map[string]string{"error": "login not configured — BT_API_KEY not set"})
 		return
 	}
 
@@ -809,7 +809,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
 		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = encodeJSON(w, map[string]string{
 			"error":    "too many failed login attempts — IP temporarily blocked",
 			"retry_in": remaining.String(),
 		})
@@ -828,7 +828,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
@@ -836,7 +836,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		loginThrottle.RecordFailure(r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid password"})
+		_ = encodeJSON(w, map[string]string{"error": "invalid password"})
 		security.AuditSecurityEvent(r.Context(), "login_failed",
 			"reason", "invalid_password",
 			"remote_addr", r.RemoteAddr,
@@ -852,7 +852,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create session: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "failed to create session: " + err.Error()})
 		return
 	}
 
@@ -863,7 +863,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"status":  "authenticated",
 		"message": "Session created. Include the session cookie in subsequent requests.",
 	})
@@ -875,7 +875,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use POST"})
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use POST"})
 		return
 	}
 
@@ -891,7 +891,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = encodeJSON(w, map[string]string{
 		"status":  "logged_out",
 		"message": "Session destroyed and cookie cleared.",
 	})
@@ -903,7 +903,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed — use GET"})
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use GET"})
 		return
 	}
 
@@ -911,7 +911,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("bt_session"); err == nil {
 		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = encodeJSON(w, map[string]interface{}{
 				"status":      "authenticated",
 				"auth_method": "session",
 				"created_at":  info.CreatedAt,
@@ -927,7 +927,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	apiKey := os.Getenv("BT_API_KEY")
 	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = encodeJSON(w, map[string]interface{}{
 			"status":      "authenticated",
 			"auth_method": "api_key",
 		})
@@ -936,7 +936,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = encodeJSON(w, map[string]string{
 		"status":  "unauthenticated",
 		"message": "No valid session cookie or API key found.",
 	})
@@ -960,7 +960,7 @@ func handleAlerts(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(report)
+	_ = encodeJSON(w, report)
 }
 
 // handleOTLPStats proxies the bt-otlp-collector stats endpoint. Returns OTLP
@@ -978,7 +978,7 @@ func handleOTLPStats(w http.ResponseWriter, _ *http.Request) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(collectorURL + "/api/otlp-stats")
 	if err != nil {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		_ = encodeJSON(w, map[string]any{
 			"status":           "unreachable",
 			"collector_url":    collectorURL,
 			"message":          "bt-otlp-collector is not running",
@@ -992,14 +992,14 @@ func handleOTLPStats(w http.ResponseWriter, _ *http.Request) {
 
 	var stats map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		_ = encodeJSON(w, map[string]any{
 			"status":  "error",
 			"message": fmt.Sprintf("decode error: %v", err),
 		})
 		return
 	}
 	stats["status"] = "connected"
-	_ = json.NewEncoder(w).Encode(stats)
+	_ = encodeJSON(w, stats)
 }
 
 // ─── Dead Letter Queue Handlers ────────────────────────────────────────────────
@@ -1017,7 +1017,7 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 		"entries": entries,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = encodeJSON(w, resp)
 }
 
 // handleDLQReplay removes an entry from the DLQ and returns it for re-execution.
@@ -1031,7 +1031,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing id parameter"})
+		_ = encodeJSON(w, map[string]string{"error": "missing id parameter"})
 		return
 	}
 
@@ -1039,7 +1039,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "entry not found", "id": id})
+		_ = encodeJSON(w, map[string]string{"error": "entry not found", "id": id})
 		return
 	}
 
@@ -1049,7 +1049,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		"pending": dlq.Len(),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = encodeJSON(w, resp)
 }
 
 // handleDLQPurge removes all entries from the dead letter queue.
@@ -1067,7 +1067,7 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 		"pending": 0,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = encodeJSON(w, resp)
 }
 
 // handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.
@@ -1196,7 +1196,7 @@ func handleSecurityAudit(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	buf := security.GlobalAuditBuffer()
 	if buf == nil {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		_ = encodeJSON(w, map[string]any{
 			"capacity":        0,
 			"total_events":    0,
 			"captured_events": 0,
@@ -1207,7 +1207,7 @@ func handleSecurityAudit(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	events := buf.Recent(200)
-	_ = json.NewEncoder(w).Encode(security.AuditBufferJSON{
+	_ = encodeJSON(w, security.AuditBufferJSON{
 		Capacity:       buf.Capacity(),
 		TotalEvents:    buf.Count(),
 		CapturedEvents: len(events),
@@ -1243,7 +1243,7 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	_ = json.NewEncoder(w).Encode(status)
+	_ = encodeJSON(w, status)
 }
 
 // handleTraces returns recent trace entries or aggregated traces from the shared traces log as JSON.
@@ -1279,7 +1279,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		_ = json.NewEncoder(w).Encode(trace)
+		_ = encodeJSON(w, trace)
 		return
 	}
 
@@ -1302,7 +1302,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = encodeJSON(w, map[string]interface{}{
 			"count":  len(traces),
 			"traces": traces,
 		})
@@ -1344,7 +1344,7 @@ func handleTraces(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"count":   len(entries),
 		"entries": entries,
 	})
@@ -1362,7 +1362,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	_ = json.NewEncoder(w).Encode(sanitized)
+	_ = encodeJSON(w, sanitized)
 }
 
 // handleTaskCreate creates a new task via query params (GET — avoids CSRF on API endpoints).
@@ -1370,7 +1370,7 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	if title == "" {
 		w.WriteHeader(400)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing title parameter"})
+		_ = encodeJSON(w, map[string]string{"error": "missing title parameter"})
 		return
 	}
 	task := dashboard.Task{
@@ -1390,10 +1390,10 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	task.TreeID = dashboard.PickTreeForTask(task)
 	if err := taskStore.Create(task); err != nil {
 		w.WriteHeader(500)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "created", "id": task.ID})
+	_ = encodeJSON(w, map[string]interface{}{"status": "created", "id": task.ID})
 }
 
 // ─── Agent Handlers ──────────────────────────────────────────────────────
@@ -1417,14 +1417,14 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
 	if req.Agent == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: agent"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: agent"})
 		return
 	}
 	if req.Task == "" {
@@ -1495,7 +1495,7 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 
 	res := <-result
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(res)
+	_ = encodeJSON(w, res)
 }
 
 // handleAgentsList returns all registered BT agents with their live status and circuit breaker info.
@@ -1504,7 +1504,7 @@ func handleAgentsList(w http.ResponseWriter, _ *http.Request) {
 	if agents == nil {
 		agents = []dashboard.AgentWithStatus{}
 	}
-	_ = json.NewEncoder(w).Encode(agents)
+	_ = encodeJSON(w, agents)
 }
 
 // handleAgentRun runs an agent with a given task.
@@ -1513,7 +1513,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	task := r.URL.Query().Get("task")
 	if agentName == "" {
 		w.WriteHeader(400)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing agent parameter"})
+		_ = encodeJSON(w, map[string]string{"error": "missing agent parameter"})
 		return
 	}
 	if task == "" {
@@ -1581,7 +1581,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := <-result
-	_ = json.NewEncoder(w).Encode(res)
+	_ = encodeJSON(w, res)
 }
 
 // handleAgentCreate handles POST /api/agents/create — creates a new agent in the registry.
@@ -1589,7 +1589,7 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -1602,20 +1602,20 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
 	if req.Name == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: name"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: name"})
 		return
 	}
 	if req.Tree == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: tree"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: tree"})
 		return
 	}
 
@@ -1628,7 +1628,7 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 	if err := dashboard.CreateAgent(cfg); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -1645,7 +1645,7 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(info)
+	_ = encodeJSON(w, info)
 }
 
 // handleAgentDelete handles POST /api/agents/delete — deletes an agent YAML template.
@@ -1653,7 +1653,7 @@ func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -1663,24 +1663,24 @@ func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 
 	if req.Name == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: name"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: name"})
 		return
 	}
 
 	if err := dashboard.DeleteAgent(req.Name); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "name": req.Name})
+	_ = encodeJSON(w, map[string]string{"status": "deleted", "name": req.Name})
 }
