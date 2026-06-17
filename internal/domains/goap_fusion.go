@@ -4,12 +4,16 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 
 // GoapFusionTree is a GOAP-driven behavior tree that reads NotebookLM research from
 // the Obsidian vault, analyzes the codebase via graphify, plans tree improvements,
-// implements safe changes, and verifies with build/tests.
+// implements safe changes via Claude Code, and verifies with build/tests.
+//
+// Architecture (flat Sequence — deterministic first, then route to implementation):
+//
+//	PreGate → ResearchAnalysis (always runs, <1s) → ImplementationRouter (Claude or fallback) → Reflect → Evolve
 //
 // Goals (GOAP priority order):
 //  1. ensure_research_loaded — NotebookLM syntheses and plans read from vault
 //  2. gap_analysis — Codebase structure checked against research findings
-//  3. apply_tree_improvement — One improvement implemented (domain tree, condition, action)
+//  3. apply_tree_improvement — One improvement implemented (Claude Code)
 //  4. verify_improvement — Build and tests pass for changed packages
 //
 // Destructive core runtime changes require HITL gating.
@@ -20,19 +24,15 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			cond("ValidateInput", "Task must be non-empty"),
 			cond("IsFusionTask", "Detect fusion/improve/expand/capability/research/evolve keywords"),
 		),
-		sel("StrategyRouter",
-			seq("ResearchGapPath",
-				cond("IsResearchOrGapRequest", "Detect research/gap/analyze/plan/assess keywords"),
-				act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
-				act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),
-				act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase: what's missing, what's stale, what's improvable"),
-				act("PrioritizeGoapGoals", "Build GOAP goal queue: highest-impact, lowest-risk tree improvements first"),
-				chainAgent("ResearchGapAgent",
-					"You are a GOAP fusion research agent. TASK: {{.Task}}. BLOCKED — use file_read to read the vault research and graphify report for analysis. Available actions in ChainState show what was already read. Use web_search only for external validation. Produce a structured gap analysis: (1) what research findings are NOT reflected in current trees, (2) what new domain trees or condition nodes are suggested, (3) what existing trees need improvement, (4) prioritized implementation order. DO NOT modify code — this is analysis only.",
-					[]string{"file_read", "shell_exec", "web_search"}),
-			),
-			seq("ApplyImprovementPath",
-				cond("IsApplyRequest", "Detect apply/implement/fix/create/build keywords"),
+		// ── Phase 1: Deterministic research analysis (always runs, <1s total) ──
+		act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
+		act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),
+		act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase: what's missing, what's stale, what's improvable"),
+		act("PrioritizeGoapGoals", "Build GOAP goal queue: highest-impact, lowest-risk tree improvements first"),
+		// ── Phase 2: Route to appropriate implementation engine ──
+		sel("ImplementationRouter",
+			seq("ClaudePath",
+				cond("IsApplyRequest", "Detect apply/implement/fix/create/build keywords — use Claude Code"),
 				act("ReadImprovementPlan", "Read the highest-priority plan from ChainState or vault plans directory"),
 				act("ApplyImprovementWithClaude", "Launch Claude Code with full GOAP context to implement the highest-priority improvement"),
 				act("VerifyGoapBuild", "Run go test for changed packages and go build ./..."),
@@ -43,7 +43,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 					[]string{"file_read", "file_write", "shell_exec", "web_search"}),
 			),
 		),
-		act("ReflectOnOutcome", "Reflect on fusion improvement quality: did we make a measurable improvement? was the research-actioned correctly?"),
+		act("ReflectOnOutcome", "Reflect on fusion improvement quality: did we make a measurable improvement? was the research correctly actioned?"),
 		outcome(),
 		act("UpdateBehaviorTree", "Evolve"),
 	}}

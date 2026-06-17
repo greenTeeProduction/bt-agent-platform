@@ -500,8 +500,8 @@
     "hash": "1925a202fb7fdcbb2842a6102a58f6ee"
   },
   "/home/nico/go-bt-evolve/internal/domains/goap_fusion.go": {
-    "mtime": 1781681437.8430653,
-    "hash": "cbfd72441651575507e5e7e5bbe1626a"
+    "mtime": 1781682655.4255097,
+    "hash": "f1a6611497bedde4c06a3ab8f47479ff"
   },
   "/home/nico/go-bt-evolve/internal/domains/hermes_obsidian.go": {
     "mtime": 1780495732.2162805,
@@ -912,8 +912,8 @@
     "hash": "42f98904345061123e3b05b52d125476"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion.go": {
-    "mtime": 1781681459.0591624,
-    "hash": "73fba62ad6804b84ef9b5aae1abf24a6"
+    "mtime": 1781682958.9708283,
+    "hash": "601e879e610a41efdf8fa6499125c9de"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_bus_test.go": {
     "mtime": 1781274740.5823095,
@@ -2228,11 +2228,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1781681472.9712267,
+    "mtime": 1781682976.6908486,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1781681473.2032278,
+    "mtime": 1781682977.034849,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
