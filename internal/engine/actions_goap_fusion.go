@@ -1,12 +1,14 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/util"
 
@@ -14,11 +16,13 @@ import (
 )
 
 const (
-	goapFusionVaultDir     = "/mnt/ssd/clawd/wiki/bt-research"
-	goapFusionSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
-	goapFusionPlansDir     = "/mnt/ssd/clawd/wiki/bt-research/plans"
-	goapFusionGraphReport  = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
-	goapFusionRepo         = "/home/nico/go-bt-evolve"
+	goapFusionVaultDir      = "/mnt/ssd/clawd/wiki/bt-research"
+	goapFusionSynthesesDir  = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
+	goapFusionPlansDir      = "/mnt/ssd/clawd/wiki/bt-research/plans"
+	goapFusionGraphReport   = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
+	goapFusionRepo          = "/home/nico/go-bt-evolve"
+	goapFusionClaudeBin     = "/home/nico/.local/bin/claude"
+	goapFusionClaudeTimeout = 600 // seconds
 )
 
 func init() {
@@ -282,6 +286,46 @@ func registerGoapFusionActions() {
 		return 1
 	})
 
+	// ApplyImprovementWithClaude launches Claude Code to implement the highest-priority
+	// improvement from the GOAP goal queue. Claude gets full context from the vault
+	// research, graphify report, gap analysis, and goal queue. It implements ONE
+	// focused change, runs go build + go test, and commits.
+	RegisterAction("ApplyImprovementWithClaude", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		gapsStr, _ := bb.ChainState["goap_fusion_improvement_gaps"].(string)
+		goalsStr, _ := bb.ChainState["goap_fusion_goal_queue"].(string)
+		planStr, _ := bb.ChainState["goap_fusion_active_plan"].(string)
+		vaultStr, _ := bb.ChainState["goap_fusion_vault_research"].(string)
+		graphStr, _ := bb.ChainState["goap_fusion_graphify_report"].(string)
+
+		prompt := buildClaudeFusionPrompt(bb.Task, gapsStr, goalsStr, planStr,
+			truncateGoap(vaultStr, 5000), truncateGoap(graphStr, 5000))
+
+		startTime := time.Now()
+		claudeOut, err := runClaudeCode(prompt)
+		elapsed := time.Since(startTime)
+
+		setGoapState(bb, "claude_elapsed", elapsed.String())
+		setGoapState(bb, "claude_output", lastChars(strings.TrimSpace(claudeOut), 8000))
+
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Claude Code Failed\n\nError: %v\n\nPartial output:\n%s\n\nElapsed: %s",
+				err, lastChars(strings.TrimSpace(claudeOut), 3000), elapsed)
+			bb.Outcome = "goap_fusion_claude_failed"
+			return -1
+		}
+
+		// Check if Claude made changes
+		diffOut, _ := runGoapShell("cd " + goapFusionRepo + " && git diff --stat")
+		logOut, _ := runGoapShell("cd " + goapFusionRepo + " && git log --oneline -1")
+
+		bb.Result = fmt.Sprintf("## Claude Code Improvement Applied\n\nElapsed: %s\nLast commit: %s\nChanges:\n```\n%s\n```\n\nClaude output:\n%s",
+			elapsed, strings.TrimSpace(logOut), strings.TrimSpace(diffOut),
+			truncateGoap(strings.TrimSpace(claudeOut), 3000))
+		setGoapState(bb, "claude_result", bb.Result)
+		return 1
+	})
+
 	// VerifyGoapBuild runs go test on changed packages and go build ./...
 	RegisterAction("VerifyGoapBuild", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -333,6 +377,84 @@ func truncateGoap(s string, max int) string {
 		return s
 	}
 	return s[:max] + "\n...<truncated>"
+}
+
+func buildClaudeFusionPrompt(task, gaps, goals, plan, vault, graph string) string {
+	return fmt.Sprintf(`You are improving the go-bt-evolve behavior tree agent platform.
+
+WORKING DIRECTORY: %s
+Go is at: /usr/local/go/bin/go
+
+Before reading source files, read graphify-out/GRAPH_REPORT.md for the codebase map.
+
+CONTEXT FROM GOAP FUSION ANALYSIS:
+
+TASK: %s
+
+GAP ANALYSIS:
+%s
+
+GOAL QUEUE:
+%s
+
+IMPLEMENTATION PLAN:
+%s
+
+VAULT RESEARCH HIGHLIGHTS:
+%s
+
+GRAPHIFY CODEBASE STRUCTURE:
+%s
+
+YOUR TASK: Implement the HIGHEST-PRIORITY improvement from the goal queue above.
+Rules:
+- One focused change per run (1-3 files max).
+- Read source files before editing them.
+- Do NOT modify evaluator/, gardener/, secrets, configs, graphify-out/.
+- Do NOT remove existing functionality.
+- Build must pass: go build ./...
+- Run tests: go test <changed package> -count=1 -timeout 120s
+- Commit: git add <files> && git commit -m "improve: <area> — <what changed>"
+- If pre-commit blocks on go-test/gofmt hook only: SKIP=go-test,gofmt git commit -m ...
+
+OUTPUT FORMAT:
+FILES_CHANGED: ...
+WHAT_YOU_DID: ...
+TESTS_RUN: ...
+CONFIDENCE: high|medium|low
+
+Stop after ONE improvement.`,
+		goapFusionRepo, task, gaps, goals, plan, vault, graph)
+}
+
+func runClaudeCode(prompt string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(goapFusionClaudeTimeout)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx,
+		goapFusionClaudeBin, "--print",
+		"--model", "opus",
+		"--allowedTools", "Bash(git diff:git log:git status:go test:go build:go vet:*),Read,Write,Edit,Glob,Grep",
+		"--add-dir", goapFusionRepo,
+		"-p", prompt,
+	)
+	cmd.Dir = goapFusionRepo
+	cmd.Env = append(os.Environ(),
+		"PATH=/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"),
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("claude code failed: %w\noutput: %s", err, lastChars(string(out), 2000))
+	}
+	return string(out), nil
+}
+
+func lastChars(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
 }
 
 func extractSection(text, startMarker, endMarker string) string {
