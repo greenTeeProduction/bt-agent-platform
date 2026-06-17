@@ -1844,6 +1844,63 @@ func TestChainAction_MapReduce_PartialFailureRecovery(t *testing.T) {
 	}
 }
 
+// largeSubtaskMockLLM decomposes into several subtasks and returns a large result
+// for each, so the accumulated earlier-subtask context threaded into later
+// subtask prompts grows past the windowing budget.
+type largeSubtaskMockLLM struct {
+	count *int
+	big   string
+}
+
+func (m *largeSubtaskMockLLM) Generate(_ string) (string, error) {
+	*m.count++
+	if *m.count == 1 {
+		return "1. Subtask A\n2. Subtask B\n3. Subtask C\n4. Subtask D", nil
+	}
+	return m.big, nil
+}
+func (m *largeSubtaskMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *largeSubtaskMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *largeSubtaskMockLLM) AnalyzeComplexity(_ string) string       { return "high" }
+func (m *largeSubtaskMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *largeSubtaskMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+// TestChainAction_MapReduce_ContextWindowed verifies that when subtasks produce
+// large results, the accumulated earlier-subtask context threaded into later
+// subtask prompts is windowed (bounded) instead of growing unbounded and
+// overflowing the model context — and that the windowing is recorded for
+// downstream nodes via map_reduce_context_windowed.
+func TestChainAction_MapReduce_ContextWindowed(t *testing.T) {
+	// Each subtask result is large enough that two of them exceed the budget.
+	count := 0
+	mock := &largeSubtaskMockLLM{count: &count, big: strings.Repeat("x", maxMapReduceContextLen/2+500)}
+	bb := &Blackboard{Task: "analyze a large multi-part topic", LLM: mock}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+
+	if result != 1 || bb.Outcome != "chain_success" {
+		t.Fatalf("expected chain_success, got result=%d outcome=%s", result, bb.Outcome)
+	}
+	if got, _ := bb.ChainState["map_reduce_context_windowed"].(bool); !got {
+		t.Errorf("expected map_reduce_context_windowed=true when accumulated context exceeds budget")
+	}
+
+	// Small results should NOT trip the window — confirms the flag is meaningful.
+	smallCount := 0
+	smallMock := &largeSubtaskMockLLM{count: &smallCount, big: "a concise subtask result"}
+	smallBB := &Blackboard{Task: "analyze a small topic", LLM: smallMock}
+	if r := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, smallBB); r != 1 {
+		t.Fatalf("expected success on small case, got %d", r)
+	}
+	if got, _ := smallBB.ChainState["map_reduce_context_windowed"].(bool); got {
+		t.Errorf("expected map_reduce_context_windowed=false for small subtask results")
+	}
+}
+
 // TestChainAction_MapReduce_AllSubtasksFail verifies that when every subtask
 // fails, map_reduce fails honestly instead of reducing over no inputs.
 func TestChainAction_MapReduce_AllSubtasksFail(t *testing.T) {

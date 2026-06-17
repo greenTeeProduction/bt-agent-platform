@@ -498,13 +498,25 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	var failedSubtasks []string
 	completed, failed, retried := 0, 0, 0
 	accumulated := ""
+	contextWindowed := false
 	for i, line := range lines {
 		if i >= maxSubtasks || line == "" {
 			break
 		}
 		subPrompt := fmt.Sprintf("Complete this subtask:\n%s\n", line)
 		if accumulated != "" {
-			subPrompt += fmt.Sprintf("\nResults from earlier subtasks (build on these, do not repeat them):\n%s\n", accumulated)
+			// Context management: the accumulated earlier-subtask results are
+			// prepended to every later subtask prompt and grow with each completed
+			// subtask. On a complex task whose subtasks produce large results this
+			// grows unbounded and eventually overflows the model's context window —
+			// the same failure mode windowScratchpad guards against in execAgent.
+			// Window to the most recent results, which are the ones a later subtask
+			// most needs to build on.
+			carried := windowScratchpad(accumulated, maxMapReduceContextLen)
+			if len(carried) < len(accumulated) {
+				contextWindowed = true
+			}
+			subPrompt += fmt.Sprintf("\nResults from earlier subtasks (build on these, do not repeat them):\n%s\n", carried)
 		}
 		subPrompt += "\nResult:"
 		subResult, err := bb.LLM.Generate(subPrompt)
@@ -533,6 +545,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	bb.ChainState["map_reduce_completed"] = completed
 	bb.ChainState["map_reduce_failed"] = failed
 	bb.ChainState["map_reduce_retried"] = retried
+	bb.ChainState["map_reduce_context_windowed"] = contextWindowed
 	if len(failedSubtasks) > 0 {
 		bb.ChainState["map_reduce_failed_subtasks"] = failedSubtasks
 	}
@@ -1150,6 +1163,15 @@ func unparseableNudge(bb *Blackboard) string {
 // chosen to leave ample headroom for the task, tool list, and format instructions
 // within typical model context windows while preserving several recent steps.
 const maxScratchpadLen = 6000
+
+// maxMapReduceContextLen bounds the accumulated earlier-subtask results that
+// execMapReduce threads into each later subtask prompt. Like the agent
+// scratchpad, this context grows with every completed subtask and would
+// otherwise overflow the model context window on a complex task whose subtasks
+// produce large results. The budget keeps the most recent results — the ones a
+// later subtask most needs to build on — while leaving room for the subtask
+// instruction itself.
+const maxMapReduceContextLen = 8000
 
 // maxSummaryScratchpadLen bounds the investigation log fed into the fallback
 // final-answer synthesis prompt (when the loop ends without a Final Answer). It
