@@ -4,7 +4,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -46,30 +45,9 @@ func allPlatformTrees() []namedTree {
 		{"statement_auditor", evolution.StatementAuditorTree(), "audit the lp statement for accuracy"},
 		{"kyc_screener", evolution.KYCScreenerTree(), "screen kyc documents for aml compliance"},
 
-		// Domain trees (10+)
-		{"code_review", domains.CodeReviewTree(), "review code for bugs and security issues"},
-		{"devops_ci", domains.DevOpsCITree(), "deploy the application with ci/cd pipeline"},
-		{"agent_monitor", domains.AgentMonitorTree(), "check system health status (real system commands)"},
-		{"refactoring", domains.RefactoringTree(), "refactor the legacy module"},
-		{"security_audit", domains.SecurityAuditTree(), "audit security vulnerabilities"},
-		{"data_pipeline", domains.DataPipelineTree(), "extract transform load the dataset"},
-		{"meeting_notes", domains.MeetingNotesTree(), "summarize the meeting transcript"},
-		{"crash_investigator", domains.CrashInvestigatorTree(), "investigate the crash dump"},
-		{"game_ai", domains.GameAITree(), "design npc behavior tree for game"},
-		{"trading_signal", domains.TradingSignalTree(), "generate trading signal from market data"},
-
 		// Evolution trees
-		{"hermes_evolve", domains.HermesSelfEvolutionTree(), "periodic check to evaluate skill gaps and improvements"},
 		{"stockfish", evolution.StockfishEvolutionTree(), "evolve the behavior tree with stockfish"},
 		{"stockfish_loop", evolution.StockfishEvolutionLoop(), "run continuous evolution cycle"},
-
-		// Kanban trees
-		{"kanban_task_creator", domains.KanbanTaskCreatorTree(), "create a new kanban task card"},
-		{"kanban_refiner", domains.KanbanRefinerTree(), "refine the kanban backlog tasks"},
-		{"kanban_qa", domains.KanbanQATree(), "validate kanban qa pass status"},
-		{"kanban_monitor", domains.KanbanBoardMonitorTree(), "check kanban for stale cards"},
-		{"kanban_workflow", domains.KanbanWorkflowTree(), "run the kanban workflow pipeline"},
-		{"kanban_autopilot", domains.KanbanAutoPilotTree(), "auto-dispatch kanban tasks"},
 	}
 }
 

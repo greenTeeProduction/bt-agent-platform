@@ -132,7 +132,7 @@
     "hash": "6097c7a6a669d9136f1741b991588ce7"
   },
   "/home/nico/go-bt-evolve/internal/dashboard/executor.go": {
-    "mtime": 1781492054.4326146,
+    "mtime": 1781618451.3345263,
     "hash": "0c5ce1555cc867f7c3e0cf931596c52c"
   },
   "/home/nico/go-bt-evolve/internal/dashboard/workflow_orchestrator_test.go": {
@@ -196,7 +196,7 @@
     "hash": "5cd8ed7183930967b77e8423feddfc6f"
   },
   "/home/nico/go-bt-evolve/internal/knowledge/registry.go": {
-    "mtime": 1781275042.732039,
+    "mtime": 1781618451.3465264,
     "hash": "e38e38edfb72f79d7fda036162b554eb"
   },
   "/home/nico/go-bt-evolve/internal/knowledge/traces_test.go": {
@@ -296,7 +296,7 @@
     "hash": "61ccfd2ec55789274c0baf151a2ba406"
   },
   "/home/nico/go-bt-evolve/internal/config/defaults.go": {
-    "mtime": 1781524728.8040035,
+    "mtime": 1781527079.0040047,
     "hash": "7c85647a2b1df0f76b31586cce28f541"
   },
   "/home/nico/go-bt-evolve/internal/config/coverage_validate_test.go": {
@@ -312,7 +312,7 @@
     "hash": "006cd72f3beb446d1b70868743729d27"
   },
   "/home/nico/go-bt-evolve/internal/config/config.go": {
-    "mtime": 1781524728.8120036,
+    "mtime": 1781527079.0040047,
     "hash": "53e98486bd8c19480c352b3bfb03864a"
   },
   "/home/nico/go-bt-evolve/internal/config/watcher_test.go": {
@@ -320,7 +320,7 @@
     "hash": "933084269572a07877beaafdd69cdb02"
   },
   "/home/nico/go-bt-evolve/internal/config/openrouter_test.go": {
-    "mtime": 1781525430.4261606,
+    "mtime": 1781527079.0040047,
     "hash": "28b9ad6b7a37d1638eda6284386c534a"
   },
   "/home/nico/go-bt-evolve/internal/audit/audit.go": {
@@ -328,7 +328,7 @@
     "hash": "a2e5c48b5c0a4a2ac3f50529e165691e"
   },
   "/home/nico/go-bt-evolve/internal/llm/provider.go": {
-    "mtime": 1781524678.179678,
+    "mtime": 1781527079.0120046,
     "hash": "88bfbd743ec7ed2dcbcb712a075ba052"
   },
   "/home/nico/go-bt-evolve/internal/llm/health_test.go": {
@@ -348,7 +348,7 @@
     "hash": "39bfd00c018fde3d3e631c261f40300f"
   },
   "/home/nico/go-bt-evolve/internal/llm/openai_compat_test.go": {
-    "mtime": 1781524492.2384737,
+    "mtime": 1781527079.0120046,
     "hash": "67d1e256b77a2f0aecf22fc349d347a2"
   },
   "/home/nico/go-bt-evolve/internal/llm/health.go": {
@@ -372,7 +372,7 @@
     "hash": "6f824996a11e03ba7cae365ac1c101c8"
   },
   "/home/nico/go-bt-evolve/internal/llm/openai_compat.go": {
-    "mtime": 1781524536.842764,
+    "mtime": 1781527079.0120046,
     "hash": "ca2750e0accd3373445a92c701f30814"
   },
   "/home/nico/go-bt-evolve/internal/llm/fallback_test.go": {
@@ -404,7 +404,7 @@
     "hash": "b4fe925865e866f352122a5a4dd082f5"
   },
   "/home/nico/go-bt-evolve/internal/a2a/server.go": {
-    "mtime": 1781274740.326308,
+    "mtime": 1781632856.9267137,
     "hash": "919c9ed87fa095bef00e41f41961070e"
   },
   "/home/nico/go-bt-evolve/internal/a2a/doc.go": {
@@ -440,7 +440,7 @@
     "hash": "7fb8f71fe093c7f914168300d0aa7eed"
   },
   "/home/nico/go-bt-evolve/internal/domains/fusion_resolver_test.go": {
-    "mtime": 1781525418.3660228,
+    "mtime": 1781527079.0040047,
     "hash": "043470ad69ffb141ff859255010ec2b4"
   },
   "/home/nico/go-bt-evolve/internal/domains/templates_resolve_test.go": {
@@ -451,8 +451,12 @@
     "mtime": 1780498243.6578677,
     "hash": "e9b6e87ffd2f85d2f5eefa27d3ed548b"
   },
+  "/home/nico/go-bt-evolve/internal/domains/bt_fusion.go": {
+    "mtime": 1781676012.0218427,
+    "hash": "227bb1d2af21431cf58af85d5bbe76af"
+  },
   "/home/nico/go-bt-evolve/internal/domains/bt_manager.go": {
-    "mtime": 1780496814.2548711,
+    "mtime": 1781632856.9267137,
     "hash": "30a211dbe01864e6eceaec50440d65f9"
   },
   "/home/nico/go-bt-evolve/internal/domains/alert_router.go": {
@@ -460,7 +464,7 @@
     "hash": "02f9be34968d280565bf766b3f3f44c3"
   },
   "/home/nico/go-bt-evolve/internal/domains/fusion_bt_integration_test.go": {
-    "mtime": 1781525562.611596,
+    "mtime": 1781527079.0040047,
     "hash": "2169e3ab8355d527179b379e764fb519"
   },
   "/home/nico/go-bt-evolve/internal/domains/notebooklm_consumer.go": {
@@ -476,11 +480,15 @@
     "hash": "cba7ee11dfd4685d900d9bbc3538398b"
   },
   "/home/nico/go-bt-evolve/internal/domains/tree_resolver.go": {
-    "mtime": 1781525366.1174119,
+    "mtime": 1781618451.3345263,
     "hash": "37eafaf98c33ecf926955499c0f15fe7"
   },
+  "/home/nico/go-bt-evolve/internal/domains/engine_domain_execution_test.go": {
+    "mtime": 1781676389.3076038,
+    "hash": "1da640e8470be4ee33b1198f5e51f3b1"
+  },
   "/home/nico/go-bt-evolve/internal/domains/notebooklm.go": {
-    "mtime": 1780515311.367572,
+    "mtime": 1781632856.9267137,
     "hash": "cefef50f786f9271e225c221f21e48ed"
   },
   "/home/nico/go-bt-evolve/internal/domains/arc42_trees.go": {
@@ -488,16 +496,16 @@
     "hash": "2c7d75c6e843c8a369e114e6d65d1526"
   },
   "/home/nico/go-bt-evolve/internal/domains/trees.go": {
-    "mtime": 1781276263.5917032,
-    "hash": "75f78db3ba56a7ba6a8a55b2b60ba202"
+    "mtime": 1781676012.0298426,
+    "hash": "d8d45a1a475aa667f110e5b3f40d8b16"
   },
   "/home/nico/go-bt-evolve/internal/domains/hermes_obsidian.go": {
     "mtime": 1780495732.2162805,
     "hash": "21fe92ac41bf3a0468a4b3b8df5c7491"
   },
   "/home/nico/go-bt-evolve/internal/domains/domains_test.go": {
-    "mtime": 1781028689.2837927,
-    "hash": "baba57af78dfc5b2ee6393a47445b8de"
+    "mtime": 1781676685.077031,
+    "hash": "97082fa17194c047f5962e7313137597"
   },
   "/home/nico/go-bt-evolve/internal/domains/hermes_evolve.go": {
     "mtime": 1780495727.4162502,
@@ -644,7 +652,7 @@
     "hash": "47f3f537806189afe837cd6ea3e8ece2"
   },
   "/home/nico/go-bt-evolve/internal/engine/script_nodes.go": {
-    "mtime": 1780212236.430722,
+    "mtime": 1781618451.3465264,
     "hash": "9e70e365d2480ed68bd61d1d9a8a9c39"
   },
   "/home/nico/go-bt-evolve/internal/engine/hitl_gate.go": {
@@ -672,7 +680,7 @@
     "hash": "c17f2e2c4aee5b56e5a1cf60bad4f2fc"
   },
   "/home/nico/go-bt-evolve/internal/engine/conditions_domain.go": {
-    "mtime": 1781489906.624486,
+    "mtime": 1781632856.9307137,
     "hash": "88b4573f417bb4cfa79070fbb14ba074"
   },
   "/home/nico/go-bt-evolve/internal/engine/tree.go": {
@@ -704,8 +712,8 @@
     "hash": "5b2a049559684dbcbefd4951acbe760b"
   },
   "/home/nico/go-bt-evolve/internal/engine/coverage_test.go": {
-    "mtime": 1781274740.5863097,
-    "hash": "970ed2f498717561977a4022cf508820"
+    "mtime": 1781676108.706285,
+    "hash": "f08603cfa874445a7ea243784698d585"
   },
   "/home/nico/go-bt-evolve/internal/engine/utility_test.go": {
     "mtime": 1781274740.5503094,
@@ -716,8 +724,8 @@
     "hash": "6a41f719f61dbf33adf08f3f6f32534f"
   },
   "/home/nico/go-bt-evolve/internal/engine/production_tools_test.go": {
-    "mtime": 1780517519.1845753,
-    "hash": "f29251e4609f1d7193049959cd4471b2"
+    "mtime": 1781676216.8187876,
+    "hash": "e177525d3a86dd58dedc6c1b1e6e455a"
   },
   "/home/nico/go-bt-evolve/internal/engine/goap_nodes.go": {
     "mtime": 1781274740.338308,
@@ -836,7 +844,7 @@
     "hash": "65a47c4949965a7e28824b2c6d960d0a"
   },
   "/home/nico/go-bt-evolve/internal/engine/fusion_conditions.go": {
-    "mtime": 1781524930.3172915,
+    "mtime": 1781527079.0080047,
     "hash": "4f3c8f7e82c314cbb57f5ea144ebea44"
   },
   "/home/nico/go-bt-evolve/internal/engine/app_logger.go": {
@@ -856,8 +864,8 @@
     "hash": "6d87de71a616e0f16b2beef65c43759b"
   },
   "/home/nico/go-bt-evolve/internal/engine/stress_test.go": {
-    "mtime": 1781274740.5663095,
-    "hash": "620fc89c7e0d6e9884b90da55afa5de7"
+    "mtime": 1781676159.250519,
+    "hash": "e7900e2798c1312296ebbc30708f18f4"
   },
   "/home/nico/go-bt-evolve/internal/engine/notebooklm_evidence_test.go": {
     "mtime": 1780466900.3474126,
@@ -868,24 +876,24 @@
     "hash": "17cd47f38213a7ad9d743772e61d2ca5"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains_test.go": {
-    "mtime": 1781517626.0742164,
-    "hash": "efd59f0c6e9d5d26552ce6728041ab08"
+    "mtime": 1781676011.9498425,
+    "hash": "7423469dfa04eef0785cc86d8a124a40"
   },
   "/home/nico/go-bt-evolve/internal/engine/mcp_server.go": {
     "mtime": 1781274740.5743096,
     "hash": "7ca3f28c940ee2d87cd45a8c7925ad76"
   },
   "/home/nico/go-bt-evolve/internal/engine/registry.go": {
-    "mtime": 1781524938.9653466,
-    "hash": "aca4f29ad1884f7e588bb56e1b40492e"
+    "mtime": 1781640059.470951,
+    "hash": "d053230ee4b3cd6b08cef651af0de13f"
   },
   "/home/nico/go-bt-evolve/internal/engine/log_rotate_test.go": {
     "mtime": 1781274740.5743096,
     "hash": "6dd6812a82f1c9f4c8834d912db0447d"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains.go": {
-    "mtime": 1781525007.6817832,
-    "hash": "db4167c346b672ff05ccfe925d15d9d7"
+    "mtime": 1781676011.9498425,
+    "hash": "226dc34dc9d3e8260ed3770bcd7b5fd9"
   },
   "/home/nico/go-bt-evolve/internal/engine/checkpoint_verifier.go": {
     "mtime": 1781026907.5420964,
@@ -948,8 +956,8 @@
     "hash": "78ed72767796f3ed17f8d6fbd58715b5"
   },
   "/home/nico/go-bt-evolve/internal/engine/integration_test.go": {
-    "mtime": 1781275531.5173614,
-    "hash": "906f5e1147948923b55c5e659f8a86ac"
+    "mtime": 1781676139.870429,
+    "hash": "93649c0de378df023937f02eb1a61eb4"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_driven_abort_test.go": {
     "mtime": 1780490156.5332272,
@@ -1015,6 +1023,10 @@
     "mtime": 1781274740.338308,
     "hash": "38e0cd75d9369f9012573a4d6f2eda88"
   },
+  "/home/nico/go-bt-evolve/internal/engine/actions_btfusion.go": {
+    "mtime": 1781676012.0218427,
+    "hash": "6fa4579c6ad1cd47bb47f92453b508ba"
+  },
   "/home/nico/go-bt-evolve/internal/engine/script_nodes_test.go": {
     "mtime": 1780337503.0297942,
     "hash": "0a9707ed2412d19f4c6c2fb6f95830d6"
@@ -1028,7 +1040,7 @@
     "hash": "08a7f18bd13af9a9724096f8c915807c"
   },
   "/home/nico/go-bt-evolve/internal/engine/builtin_names.go": {
-    "mtime": 1781489906.624486,
+    "mtime": 1781632856.9307137,
     "hash": "943566a4aa7fafc1dfcd2a59976e8c62"
   },
   "/home/nico/go-bt-evolve/internal/engine/observability_test.go": {
@@ -1052,7 +1064,7 @@
     "hash": "5608c97a90946932b2107ada668e44c4"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_notebooklm.go": {
-    "mtime": 1780498136.9852846,
+    "mtime": 1781632856.9267137,
     "hash": "dc518dd27230432aa127a88671b0c001"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_research.go": {
@@ -1392,19 +1404,19 @@
     "hash": "e773df86a51bb2248e40bde10162566c"
   },
   "/home/nico/go-bt-evolve/internal/fusion/config_test.go": {
-    "mtime": 1781524371.613683,
+    "mtime": 1781527079.0080047,
     "hash": "bf51430809ce6b11a85b3ce6270c8ef3"
   },
   "/home/nico/go-bt-evolve/internal/fusion/config.go": {
-    "mtime": 1781524416.621979,
+    "mtime": 1781527079.0080047,
     "hash": "ad5b9e2feb6cab37bc8e1300ff118155"
   },
   "/home/nico/go-bt-evolve/internal/fusion/run.go": {
-    "mtime": 1781524833.496674,
+    "mtime": 1781527079.0120046,
     "hash": "ed9950b5ed6d4330f11d76f0ea29a7be"
   },
   "/home/nico/go-bt-evolve/internal/fusion/fusion_test.go": {
-    "mtime": 1781524777.9283185,
+    "mtime": 1781527079.0080047,
     "hash": "ad27cc91f498d375141ffeca89fbae59"
   },
   "/home/nico/go-bt-evolve/internal/agentexec/pipeline.go": {
@@ -1744,11 +1756,11 @@
     "hash": "1b03028db57b232bcc37fb8975673524"
   },
   "/home/nico/go-bt-evolve/internal/evolution/fusion_trees.go": {
-    "mtime": 1781525021.805873,
+    "mtime": 1781527079.0080047,
     "hash": "7a850cc4a0b20cb441d0beb260882db2"
   },
   "/home/nico/go-bt-evolve/internal/evolution/fusion_trees_test.go": {
-    "mtime": 1781525410.7299352,
+    "mtime": 1781527079.0080047,
     "hash": "14cc0da8d38e86b4fe4116e1ca95ede7"
   },
   "/home/nico/go-bt-evolve/internal/evolution/decision_tree.go": {
@@ -2116,8 +2128,8 @@
     "hash": "069f41e83c9cc3aa58e43b79499ee81c"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/main.go": {
-    "mtime": 1781492054.4246144,
-    "hash": "05ce03fd1c681b131365fddfd4bab724"
+    "mtime": 1781676012.0258427,
+    "hash": "f335fcea6f6272d21f495bf0f5c60843"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/hitl_tools.go": {
     "mtime": 1781276038.3828177,
@@ -2208,11 +2220,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1781491799.3914297,
+    "mtime": 1781677144.1043837,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1781491799.5634305,
+    "mtime": 1781677144.316385,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
@@ -2220,7 +2232,7 @@
     "hash": "e266effa9ae4a89a7be5c4524b110bb4"
   },
   "/home/nico/go-bt-evolve/docs/fusion-bt-agent.md": {
-    "mtime": 1781525491.8708436,
+    "mtime": 1781527078.9520042,
     "hash": "cc5207ef78c9a76fbd1191bd0b7b2eb4"
   },
   "/home/nico/go-bt-evolve/docs/agents.md": {
@@ -2316,7 +2328,7 @@
     "hash": "ffed878120c5e5c024aa40e86b4be9fd"
   },
   "/home/nico/go-bt-evolve/docs/plans/2026-06-15-fusion-bt-agent.md": {
-    "mtime": 1781523652.536648,
+    "mtime": 1781527078.9520042,
     "hash": "db2e1f1a9d2b761c50f93db5a4488191"
   },
   "/home/nico/go-bt-evolve/docs/adr/ADR-009-blackboard-context-offloading.md": {
@@ -2428,7 +2440,7 @@
     "hash": "48ccadcecac96046fdf064184b729b3a"
   },
   "/home/nico/go-bt-evolve/agents/templates/fusion-research-agent.yaml": {
-    "mtime": 1781525394.5697477,
+    "mtime": 1781527078.9480042,
     "hash": "ae209f074735b2a538aef9e2af1d82a2"
   },
   "/home/nico/go-bt-evolve/agents/templates/bt-research-agent.yaml": {

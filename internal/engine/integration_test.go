@@ -3,7 +3,6 @@ package engine
 import (
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -40,20 +39,7 @@ func TestIntegration_AllTreesExecute(t *testing.T) {
 		{"statement_auditor", evolution.StatementAuditorTree(), "audit LP statement for accuracy"},
 		{"kyc_screener", evolution.KYCScreenerTree(), "screen KYC documents for sanctions"},
 
-		// Domain trees (10)
-		{"code_review", domains.CodeReviewTree(), "review code for bugs and security issues"},
-		{"devops_ci", domains.DevOpsCITree(), "deploy the application with CI/CD pipeline"},
-		{"agent_monitor", domains.AgentMonitorTree(), "check system health status"},
-		{"refactoring", domains.RefactoringTree(), "refactor the legacy module"},
-		{"security_audit", domains.SecurityAuditTree(), "audit security vulnerabilities"},
-		{"data_pipeline", domains.DataPipelineTree(), "extract transform load the dataset"},
-		{"meeting_notes", domains.MeetingNotesTree(), "summarize the meeting transcript"},
-		{"crash_investigator", domains.CrashInvestigatorTree(), "investigate the crash dump"},
-		{"game_ai", domains.GameAITree(), "design NPC behavior tree for game"},
-		{"trading_signal", domains.TradingSignalTree(), "generate trading signal from market data"},
-
 		// Evolution trees
-		{"hermes_evolve", domains.HermesSelfEvolutionTree(), "periodic self-improvement check"},
 		{"stockfish", evolution.StockfishEvolutionTree(), "evolve the behavior tree with stockfish"},
 		{"stockfish_loop", evolution.StockfishEvolutionLoop(), "run continuous evolution cycle"},
 	}
@@ -252,30 +238,6 @@ func TestIntegration_ReflectionAndPersistence(t *testing.T) {
 	loaded, err := treeStore.Load()
 	if err == nil && loaded != nil {
 		t.Log("tree persisted successfully")
-	}
-}
-
-func TestIntegration_AllKanbanTrees(t *testing.T) {
-	trees := map[string]*evolution.SerializableNode{
-		"task_creator": domains.KanbanTaskCreatorTree(),
-		"refiner":      domains.KanbanRefinerTree(),
-		"qa":           domains.KanbanQATree(),
-		"monitor":      domains.KanbanBoardMonitorTree(),
-		"workflow":     domains.KanbanWorkflowTree(),
-		"autopilot":    domains.KanbanAutoPilotTree(),
-	}
-	for name, tree := range trees {
-		t.Run(name, func(t *testing.T) {
-			if tree == nil {
-				t.Fatal("tree is nil")
-			}
-			bb := &Blackboard{Task: "kanban " + name, LLM: &MockLLM{}}
-			bt := BuildTree(tree, bb)
-			outcome := RunTask(bb, bt)
-			if outcome == "" {
-				t.Errorf("%s: no outcome", name)
-			}
-		})
 	}
 }
 

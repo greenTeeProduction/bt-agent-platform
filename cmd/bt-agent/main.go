@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
@@ -325,8 +327,26 @@ func main() {
 		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
 	}
 
+	if noMCPMode() {
+		engine.Info("MCP server disabled (--no-mcp), A2A + scheduler running")
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		engine.Info("bt-agent shutdown signal received")
+		return
+	}
+
 	if err := server.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func noMCPMode() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--no-mcp" || arg == "no-mcp" {
+			return true
+		}
+	}
+	return false
 }
