@@ -482,9 +482,15 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	}
 
 	// Process each subtask, threading accumulated context into later subtasks.
+	// Each completed result is kept paired with the subtask line it answers so the
+	// reduce phase can attribute content to the right part of the decomposition.
+	type subtaskResult struct {
+		task   string
+		result string
+	}
 	const maxSubtasks = 5
 	lines := splitLines(subtasks)
-	results := make([]string, 0, maxSubtasks)
+	results := make([]subtaskResult, 0, maxSubtasks)
 	var failedSubtasks []string
 	completed, failed, retried := 0, 0, 0
 	accumulated := ""
@@ -513,7 +519,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 			failedSubtasks = append(failedSubtasks, line)
 			continue
 		}
-		results = append(results, subResult)
+		results = append(results, subtaskResult{task: line, result: subResult})
 		accumulated += fmt.Sprintf("- %s\n", subResult)
 		completed++
 	}
@@ -536,9 +542,13 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	}
 
 	// Reduce phase: combine
-	reducePrompt := fmt.Sprintf("Combine these results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task)
+	// Pair each result with the subtask it answers. The reducer can then attribute
+	// each block to the right part of the decomposition (and notice if a result
+	// drifted off its subtask) instead of combining anonymous, unlabeled blobs —
+	// symmetric with the failed-subtask list below, which already names its parts.
+	reducePrompt := fmt.Sprintf("Combine these subtask results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task)
 	for i, r := range results {
-		reducePrompt += fmt.Sprintf("%d. %s\n", i+1, r)
+		reducePrompt += fmt.Sprintf("%d. Subtask: %s\n   Result: %s\n", i+1, r.task, r.result)
 	}
 	if failed > 0 {
 		// Name the specific subtasks that are missing rather than only their count.
