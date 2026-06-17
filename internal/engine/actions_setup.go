@@ -87,6 +87,12 @@ func registerSetupActions() {
 		bb.ChainTools = buildRealTools("web_search", "calculator")
 		return 1
 	})
+
+	RegisterAction("SetupFusionTools", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		bb.ChainTools = buildRealTools("file_read", "file_write", "shell_exec", "web_search", "graphify", "calculator")
+		return 1
+	})
 }
 
 func appendMissingRealTools(bb *Blackboard, names ...string) []string {
