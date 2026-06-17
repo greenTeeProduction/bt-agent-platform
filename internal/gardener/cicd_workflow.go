@@ -229,8 +229,8 @@ func (r *WorkflowReport) validateCodeQL(wf workflow) {
 		r.add("codeql job: "+job, ok, boolDetail(ok, "job present", "job missing"))
 	}
 	r.add("codeql runs on push and pull_request and schedule", workflowHasEvents(wf.On, "push", "pull_request", "schedule"), "codeql must run on push + PR + weekly schedule")
-	r.add("codeql uses github/codeql-action/init@v3", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/init@v3"), "codeql must use init@v3")
-	r.add("codeql uses github/codeql-action/analyze@v3", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/analyze@v3"), "codeql must use analyze@v3")
+	r.add("codeql uses github/codeql-action/init@v4", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/init@v4"), "codeql must use init@v4")
+	r.add("codeql uses github/codeql-action/analyze@v4", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/analyze@v4"), "codeql must use analyze@v4")
 	r.add("codeql has security-events write permission", r.hasPermission(wf, "security-events"), "codeql needs security-events: write permission")
 	r.add("codeql uses security-and-quality query suite", jobRuns(wf.Jobs["analyze"], "security-and-quality"), "codeql should use +security-and-quality queries")
 	r.add("codeql provides Go module caching", jobUsesOrRuns(wf.Jobs["analyze"], "actions/cache@"), "codeql job should use Go module cache")

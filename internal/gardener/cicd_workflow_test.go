@@ -49,7 +49,7 @@ jobs:
     steps:
       - run: curl localhost:11434
       - run: go test -count=1 -timeout 90m ./...
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
   benchmark-compare:
     needs: [full-tests]
     steps:
@@ -226,12 +226,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: {go-version: '1.23'}
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with: {languages: go, queries: +security-and-quality}
       - run: go build ./...
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with: {category: /language:go}
 `)
 	report, err := ValidateWorkflows(root)
@@ -270,12 +270,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: {go-version: '1.23'}
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with: {languages: go, queries: +security-and-quality}
       - run: go build ./...
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with: {category: /language:go}
 `)
 	report, err := ValidateWorkflows(root)
@@ -380,7 +380,7 @@ jobs:
     steps:
       - run: curl localhost:11434
       - run: go test -count=1 -timeout 90m ./...
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
   benchmark-compare:
     needs: [full-tests]
     steps:
