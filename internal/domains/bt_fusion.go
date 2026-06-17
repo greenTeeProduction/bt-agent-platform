@@ -23,7 +23,19 @@ func BTFusionTree() *evolution.SerializableNode {
 			act("CheckCodebaseFit", "Inspect repository, agent registry, service state, and tree registrations"),
 			act("AssessFusionComplexity", "Rank changes by risk: additive tree/report vs gardener pool vs core runtime"),
 			act("PrioritizeFusionTargets", "Pick the highest impact safe next steps for this cycle"),
-			act("ApplyFusion", "Write the BT Fusion report to the Obsidian vault as durable research input"),
+			{
+				Type:        "HumanApprovalGate",
+				Name:        "ApproveFusionReportWrite",
+				Description: "Requires HITL approval before BT Fusion writes durable research output or future expansion changes",
+				Metadata: map[string]any{
+					"phase":             "pre",
+					"side_effect_class": "external",
+					"hitl_prompt":       "Approve this BT Fusion cycle to write/update the durable Obsidian research report and proceed to verification?",
+				},
+				Children: []evolution.SerializableNode{
+					act("ApplyFusion", "Write the BT Fusion report to the Obsidian vault as durable research input"),
+				},
+			},
 			act("VerifyFusionBuild", "Run domain tree smoke tests and bt-agent build"),
 			act("ReportFusionStatus", "Summarize applied safe changes and next gated expansion target"),
 			outcome(),
