@@ -83,8 +83,8 @@ type Blackboard struct {
 	TraceContext context.Context `json:"-"`
 
 	// Blackboard management (Phase 1): scoped key-value store for context offloading.
-	BB     *blackboard.Handle
-	RunID  string
+	BB    *blackboard.Handle
+	RunID string
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.

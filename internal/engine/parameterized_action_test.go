@@ -21,8 +21,8 @@ func TestBindTemplate_NoPlaceholders(t *testing.T) {
 func TestParamAction_Bind_FullTemplate(t *testing.T) {
 	pa := ParamAction{
 		GOAPAction: GOAPAction{
-			Name:  "pick_${fruit}_from_${tree}",
-			Cost:  1.0,
+			Name: "pick_${fruit}_from_${tree}",
+			Cost: 1.0,
 			Preconditions: map[string]bool{
 				"near_${tree}": true,
 			},

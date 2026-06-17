@@ -113,9 +113,9 @@ func TestEngineExpandBBTemplate_InLLMCall(t *testing.T) {
 		seqMockLLM: seqMockLLM{responses: []string{"Final Answer: done"}},
 	}
 	bb := &engine.Blackboard{
-		Task: "base task",
-		LLM:  mock,
-		BB:   h,
+		Task:  "base task",
+		LLM:   mock,
+		BB:    h,
 		RunID: "run_tpl",
 	}
 	tree := &evolution.SerializableNode{

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
-	"github.com/nico/go-bt-evolve/internal/blackboard"
 )
 
 // TreeResolver maps a tree ID string to a serializable behavior tree.
@@ -28,15 +28,15 @@ type RunDeps struct {
 
 // RunOptions configures a single agent run.
 type RunOptions struct {
-	InjectMemory     bool
-	PreviousRunLimit int  // used when InjectMemory; default 2
-	EnforceQuality   bool // fail run when QualitySpec gates miss
-	RecordHistory    bool
-	InputValues      map[string]string // named inputs from YAML inputs spec
-	DisplayName      string            // history label; defaults to agentName
-	SessionID        string            // pipeline session scope (future promote)
-	DisableBlackboard bool             // when true, skip run-scoped blackboard tools
-	DisableAgentPromote bool           // when true, skip runs/latest/* on agent scope after success
+	InjectMemory        bool
+	PreviousRunLimit    int  // used when InjectMemory; default 2
+	EnforceQuality      bool // fail run when QualitySpec gates miss
+	RecordHistory       bool
+	InputValues         map[string]string // named inputs from YAML inputs spec
+	DisplayName         string            // history label; defaults to agentName
+	SessionID           string            // pipeline session scope (future promote)
+	DisableBlackboard   bool              // when true, skip run-scoped blackboard tools
+	DisableAgentPromote bool              // when true, skip runs/latest/* on agent scope after success
 }
 
 // RunResult is the outcome of RunOnce.

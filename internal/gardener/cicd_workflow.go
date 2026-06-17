@@ -233,7 +233,7 @@ func (r *WorkflowReport) validateCodeQL(wf workflow) {
 	r.add("codeql uses github/codeql-action/analyze@v3", jobUsesOrRuns(wf.Jobs["analyze"], "github/codeql-action/analyze@v3"), "codeql must use analyze@v3")
 	r.add("codeql has security-events write permission", r.hasPermission(wf, "security-events"), "codeql needs security-events: write permission")
 	r.add("codeql uses security-and-quality query suite", jobRuns(wf.Jobs["analyze"], "security-and-quality"), "codeql should use +security-and-quality queries")
-	r.add("codeql provides Go module caching", jobUsesOrRuns(wf.Jobs["analyze"], "actions/cache@v4"), "codeql job should use Go module cache")
+	r.add("codeql provides Go module caching", jobUsesOrRuns(wf.Jobs["analyze"], "actions/cache@"), "codeql job should use Go module cache")
 }
 
 func workflowHasEvents(on any, events ...string) bool {

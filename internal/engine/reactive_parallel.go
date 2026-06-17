@@ -1,12 +1,32 @@
 package engine
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
+
+// forkBlackboard returns an isolated copy for parallel child execution.
+// Shared read-only dependencies (LLM, stores) are reused; mutable fields are copied.
+func forkBlackboard(bb *Blackboard) *Blackboard {
+	if bb == nil {
+		return nil
+	}
+	cp := *bb
+	if bb.ChainState != nil {
+		cp.ChainState = maps.Clone(bb.ChainState)
+	}
+	if len(bb.Results) > 0 {
+		cp.Results = append([]string(nil), bb.Results...)
+	}
+	if len(bb.VisitedPaths) > 0 {
+		cp.VisitedPaths = append([]string(nil), bb.VisitedPaths...)
+	}
+	return &cp
+}
 
 // BuildReactiveParallel builds a go-bt Command for a ReactiveParallel node.
 // Plan #3: Parallel execution with monitoring — monitor children can cancel
@@ -61,8 +81,7 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 				wg.Add(1)
 				go func(idx int, cmd btcore.Command[Blackboard], isMonitor bool) {
 					defer wg.Done()
-					// Create a context copy for the goroutine
-					localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					if isMonitor && result <= 0 {
 						// Monitor failed/signalled — cancel actions
@@ -108,7 +127,7 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 				wg.Add(1)
 				go func(idx int, cmd btcore.Command[Blackboard]) {
 					defer wg.Done()
-					localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					resultCh <- result
 				}(i, child)
@@ -139,7 +158,7 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 				wg.Add(1)
 				go func(idx int, cmd btcore.Command[Blackboard]) {
 					defer wg.Done()
-					localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					// Send result before stop signal to avoid Go select
 					// randomly picking the stopCh read and discarding result.
@@ -177,7 +196,7 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 				wg.Add(1)
 				go func(idx int, cmd btcore.Command[Blackboard]) {
 					defer wg.Done()
-					localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					resultCh <- result
 				}(i, child)
@@ -230,7 +249,7 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 			wg.Add(1)
 			go func(idx int, cmd btcore.Command[Blackboard], monitor bool) {
 				defer wg.Done()
-				localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				if monitor && result <= 0 && cancelOnMonitor {
 					select {
@@ -267,7 +286,7 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 			wg.Add(1)
 			go func(idx int, cmd btcore.Command[Blackboard]) {
 				defer wg.Done()
-				localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				resultCh <- result
 			}(i, child)
@@ -295,7 +314,7 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 			wg.Add(1)
 			go func(idx int, cmd btcore.Command[Blackboard]) {
 				defer wg.Done()
-				localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				// Send result before stop signal to avoid Go select
 				// randomly picking the stopCh read and discarding result.
@@ -329,7 +348,7 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 			wg.Add(1)
 			go func(idx int, cmd btcore.Command[Blackboard]) {
 				defer wg.Done()
-				localCtx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				resultCh <- result
 			}(i, child)

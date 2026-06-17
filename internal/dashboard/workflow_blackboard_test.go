@@ -12,7 +12,7 @@ func TestRunner_PromotesStepOutputToSession(t *testing.T) {
 	mgr := blackboard.DefaultManager()
 	runID := "sess_test_run"
 	r := &Runner{
-		RunID: runID,
+		RunID:       runID,
 		Blackboards: mgr,
 		RunAgent: func(ctx context.Context, agentName, _, task string) (string, string, error) {
 			return "success", "agent output for " + task, nil
