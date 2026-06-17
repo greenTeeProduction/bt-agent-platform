@@ -14,15 +14,31 @@ import (
 // EnvSkipLLMTests disables LLM integration tests when set to 1, true, or yes.
 const EnvSkipLLMTests = "BT_SKIP_LLM_TESTS"
 
+// EnvRunLLMTests opts INTO LLM integration tests. When unset, integration tests
+// skip by default — even if a backend happens to be reachable — so that a plain
+// `go test ./...` never hangs on real (slow) LLM calls. Set to 1, true, or yes
+// to actually exercise the LLM backend.
+const EnvRunLLMTests = "BT_RUN_LLM_TESTS"
+
 var (
 	configuredOnce sync.Once
 	configuredVal  bool
 )
 
+// envEnabled reports whether the named env var is set to 1, true, or yes.
+func envEnabled(name string) bool {
+	v := strings.TrimSpace(os.Getenv(name))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+}
+
 // TestsDisabled reports explicit opt-out via BT_SKIP_LLM_TESTS.
 func TestsDisabled() bool {
-	v := strings.TrimSpace(os.Getenv(EnvSkipLLMTests))
-	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+	return envEnabled(EnvSkipLLMTests)
+}
+
+// IntegrationOptedIn reports explicit opt-in via BT_RUN_LLM_TESTS.
+func IntegrationOptedIn() bool {
+	return envEnabled(EnvRunLLMTests)
 }
 
 // OllamaReachable probes the Ollama /api/tags endpoint (fast; no model load).
@@ -78,11 +94,18 @@ func SkipIfUnavailable(t *testing.T) {
 	t.Skip("skipping: no LLM configured or reachable (unset BT_SKIP_LLM_TESTS, configure Ollama/ACP/DeepSeek, or start Ollama)")
 }
 
-// SkipUnlessIntegration skips under -short, when BT_SKIP_LLM_TESTS is set, or when the LLM is unreachable.
+// SkipUnlessIntegration skips an LLM integration test unless it is explicitly
+// opted in. Integration tests run only when BT_RUN_LLM_TESTS is set AND not in
+// -short mode AND a backend is reachable/configured. This makes `go test ./...`
+// safe by default: real LLM calls (which can take minutes) never run — and never
+// hang the suite — unless the caller asks for them.
 func SkipUnlessIntegration(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping LLM integration test in short mode")
+	}
+	if !IntegrationOptedIn() {
+		t.Skip("skipping LLM integration test; set BT_RUN_LLM_TESTS=1 to enable")
 	}
 	SkipIfUnavailable(t)
 }

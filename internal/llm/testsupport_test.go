@@ -20,6 +20,32 @@ func TestTestsDisabled(t *testing.T) {
 	}
 }
 
+func TestIntegrationOptedIn(t *testing.T) {
+	os.Unsetenv(EnvRunLLMTests)
+	if IntegrationOptedIn() {
+		t.Fatal("expected false when env unset")
+	}
+	t.Cleanup(func() { os.Unsetenv(EnvRunLLMTests) })
+	for _, v := range []string{"1", "true", "YES"} {
+		os.Setenv(EnvRunLLMTests, v)
+		if !IntegrationOptedIn() {
+			t.Fatalf("expected true when BT_RUN_LLM_TESTS=%q", v)
+		}
+	}
+	os.Setenv(EnvRunLLMTests, "0")
+	if IntegrationOptedIn() {
+		t.Fatal("expected false when BT_RUN_LLM_TESTS=0")
+	}
+}
+
+func TestSkipUnlessIntegration_SkipsWithoutOptIn(t *testing.T) {
+	os.Unsetenv(EnvRunLLMTests)
+	t.Cleanup(func() { os.Unsetenv(EnvRunLLMTests) })
+	// Without opt-in, this must skip rather than attempt a real LLM call.
+	SkipUnlessIntegration(t)
+	t.Fatal("test should have been skipped without BT_RUN_LLM_TESTS")
+}
+
 func TestOllamaReachable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {

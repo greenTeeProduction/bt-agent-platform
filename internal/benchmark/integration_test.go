@@ -291,13 +291,31 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 				return
 			}
 
-			// Run just the first task of each suite for a fast smoke check
+			// Run just the first task of each suite for a fast smoke check.
+			// Some trees (e.g. domain_notebooklm) contain action nodes that
+			// shell out to a real CLI (nlmRun execs `nlm`) regardless of the
+			// injected mock LLM, and those calls can block for minutes. Bound
+			// each tree with a timeout so one external dependency can't hang the
+			// whole suite — mirrors the goroutine+timeout guard in
+			// domains_test.go. A mock-only tree completes in milliseconds.
+			type runResult struct{ metrics *RunMetrics }
+			done := make(chan runResult, 1)
 			firstTask := suite.Tasks[0]
 			firstSuite := Suite{Name: suite.Name + "_first", Tasks: []TaskCase{firstTask}}
-			metrics := RunSuite(nt.tree, firstSuite, llm)
-			if metrics == nil {
-				t.Error("RunSuite returned nil")
-				return
+			go func() {
+				done <- runResult{metrics: RunSuite(nt.tree, firstSuite, llm)}
+			}()
+
+			select {
+			case res := <-done:
+				if res.metrics == nil {
+					t.Error("RunSuite returned nil")
+				}
+			case <-time.After(15 * time.Second):
+				// Structural validation already passed (tree built, suite
+				// matched). The tree is blocked on a real external dependency,
+				// which is out of scope for this mock-LLM smoke check.
+				t.Skip("skipping runtime check: tree blocked on external dependency (>15s)")
 			}
 		})
 	}
