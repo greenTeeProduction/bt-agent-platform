@@ -36,7 +36,9 @@ var (
 
 func newRunID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("run-%d", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -84,7 +86,7 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(workflowsDir)
 	if err != nil {
 		slog.Warn("pipelines: cannot read workflows dir", "path", workflowsDir, "error", err)
-		json.NewEncoder(w).Encode([]map[string]string{})
+		_ = encodeJSON(w, []map[string]string{})
 		return
 	}
 
@@ -96,7 +98,7 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 		StepCount   int    `json:"step_count"`
 	}
 
-	var pipelines []pipelineInfo
+	var pipelines = make([]pipelineInfo, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
@@ -119,7 +121,7 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(pipelines)
+	_ = encodeJSON(w, pipelines)
 }
 
 // handlePipelineRun starts pipeline execution asynchronously.
@@ -137,13 +139,13 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON body: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
 		return
 	}
 	if req.PipelineName == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required field: pipeline_name"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: pipeline_name"})
 		return
 	}
 
@@ -155,7 +157,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = encodeJSON(w, map[string]string{
 			"error": fmt.Sprintf("pipeline not found: %s (%v)", req.PipelineName, err),
 		})
 		return
@@ -165,7 +167,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	if err := yaml.Unmarshal(data, &pipeline); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid pipeline YAML: " + err.Error()})
+		_ = encodeJSON(w, map[string]string{"error": "invalid pipeline YAML: " + err.Error()})
 		return
 	}
 
@@ -196,7 +198,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = encodeJSON(w, map[string]interface{}{
 		"run_id":   runID,
 		"status":   "running",
 		"pipeline": pipeline.Name,
@@ -215,7 +217,7 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	if runID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "missing required parameter: id"})
+		_ = encodeJSON(w, map[string]string{"error": "missing required parameter: id"})
 		return
 	}
 
@@ -225,7 +227,7 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "pipeline run not found: " + runID})
+		_ = encodeJSON(w, map[string]string{"error": "pipeline run not found: " + runID})
 		return
 	}
 
@@ -245,5 +247,5 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = encodeJSON(w, resp)
 }

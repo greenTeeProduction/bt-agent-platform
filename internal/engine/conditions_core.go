@@ -1,8 +1,9 @@
 package engine
 
 import (
-	"github.com/nico/go-bt-evolve/internal/util"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 func init() {

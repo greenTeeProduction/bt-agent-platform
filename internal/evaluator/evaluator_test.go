@@ -8,7 +8,7 @@ import (
 )
 
 func makeRecords(outcomes ...evolution.Outcome) []evolution.Record {
-	var records []evolution.Record
+	var records = make([]evolution.Record, 0, len(outcomes))
 	for i, o := range outcomes {
 		records = append(records, evolution.Record{
 			TaskID:     "task",

@@ -218,7 +218,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			var params struct {
 				Agent string `json:"agent"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			allTrees := evolution.AllFinanceTrees()
 			tree, ok := allTrees[params.Agent]
 			if !ok {
@@ -883,7 +883,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Task   string            `json:"task"`
 				Inputs map[string]string `json:"inputs"`
 			}
-			json.Unmarshal(args, &params)
+			_ = json.Unmarshal(args, &params)
 			if deps.agentRunner == nil {
 				data, _ := json.Marshal(map[string]string{"error": "agent runner not configured"})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

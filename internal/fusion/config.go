@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func (c Config) Normalize() Config {
+func (c *Config) Normalize() Config {
 	if len(c.AnalysisModels) == 0 {
 		c.AnalysisModels = append([]string(nil), QualityPreset...)
 	}
@@ -46,10 +46,10 @@ func (c Config) Normalize() Config {
 	if c.Timeout == 0 {
 		c.Timeout = 300 * time.Second
 	}
-	return c
+	return *c
 }
 
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if len(c.AnalysisModels) == 0 {
 		c.AnalysisModels = append([]string(nil), QualityPreset...)
 	}

@@ -70,7 +70,7 @@ func exportMemoryCategory(mem *MemoryStore, category, priority string, limit int
 
 func exportPreviousRuns(history *History, agentName string, n int) string {
 	runs := history.List(agentName, n+5)
-	var lines []string
+	lines := make([]string, 0, len(runs))
 	for _, r := range runs {
 		if r.Outcome != "success" || r.Output == "" {
 			continue

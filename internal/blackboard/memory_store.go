@@ -149,10 +149,10 @@ func normalizeKey(key string) string {
 	return key
 }
 
-func truncateSummary(s string, max int) string {
+func truncateSummary(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "..."
+	return s[:maxLen] + "..."
 }

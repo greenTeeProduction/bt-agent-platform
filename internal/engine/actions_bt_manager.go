@@ -202,8 +202,8 @@ func registerBTManagerActions() {
 			}
 		}
 
-		report += fmt.Sprintf("| Metric | Value |\n")
-		report += fmt.Sprintf("|---|---|\n")
+		report += "| Metric | Value |\n"
+		report += "|---|---|\n"
 		report += fmt.Sprintf("| Trees tracked | %d |\n", totalTrees)
 		report += fmt.Sprintf("| Healthy | %d |\n", healthyTrees)
 		report += fmt.Sprintf("| Degraded | %d |\n", degradedTrees)
@@ -266,7 +266,7 @@ func registerBTManagerActions() {
 			WhatWentWell:  []string{bb.Result},
 			WhatToImprove: []string{"Verify improvement in next 5 agent runs"},
 		}
-		bb.Reflections.Save(record)
+		_ = bb.Reflections.Save(record)
 		bb.Outcome = "success"
 		return 1
 	})
@@ -284,7 +284,7 @@ func registerBTManagerActions() {
 			WhatWentWell:  []string{"retries=3, timeout=60s, fallback=enabled"},
 			WhatToImprove: []string{"Monitor first 5 runs for tuning opportunities"},
 		}
-		bb.Reflections.Save(record)
+		_ = bb.Reflections.Save(record)
 		bb.Outcome = "success"
 		return 1
 	})
@@ -413,24 +413,24 @@ func diagnoseFailureMode(records []evolution.Record) string {
 	}
 
 	// Return the dominant failure mode
-	max := timeouts
+	topCount := timeouts
 	mode := "unknown"
-	if emptyOutputs > max {
-		max = emptyOutputs
+	if emptyOutputs > topCount {
+		topCount = emptyOutputs
 		mode = "empty_output"
 	}
-	if parseErrors > max {
-		max = parseErrors
+	if parseErrors > topCount {
+		topCount = parseErrors
 		mode = "parse_error"
 	}
-	if toolErrors > max {
-		max = toolErrors
+	if toolErrors > topCount {
+		topCount = toolErrors
 		mode = "tool_error"
 	}
-	if timeouts > max || (max == timeouts && timeouts > 0) {
+	if timeouts > topCount || (topCount == timeouts && timeouts > 0) {
 		mode = "timeout"
 	}
-	if max == 0 && len(records) > 0 {
+	if topCount == 0 && len(records) > 0 {
 		// Check for LLM refusal patterns
 		for _, r := range records {
 			if strings.Contains(strings.ToLower(r.Task), "i can't") ||

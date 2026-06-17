@@ -134,20 +134,15 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			}
 			// Wait for first terminal result
 			var firstResult int
-			select {
-			case r := <-resultCh:
-				if r != 0 {
-					firstResult = r
-					close(stopCh) // Cancel remaining goroutines
-					go func() { wg.Wait(); close(resultCh) }()
-					return firstResult
-				}
+			r := <-resultCh
+			if r != 0 {
+				firstResult = r
+				close(stopCh) // Cancel remaining goroutines
+				go func() { wg.Wait(); close(resultCh) }()
+				return firstResult
 			}
 			// If first was Running, wait for next
-			select {
-			case r := <-resultCh:
-				firstResult = r
-			}
+			firstResult = <-resultCh
 			close(stopCh)
 			go func() { wg.Wait(); close(resultCh) }()
 			return firstResult
@@ -292,19 +287,14 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 			}(i, child)
 		}
 		var firstResult int
-		select {
-		case r := <-resultCh:
-			if r != 0 {
-				firstResult = r
-				close(stopCh)
-				go func() { wg.Wait(); close(resultCh) }()
-				return firstResult
-			}
-		}
-		select {
-		case r := <-resultCh:
+		r := <-resultCh
+		if r != 0 {
 			firstResult = r
+			close(stopCh)
+			go func() { wg.Wait(); close(resultCh) }()
+			return firstResult
 		}
+		firstResult = <-resultCh
 		close(stopCh)
 		go func() { wg.Wait(); close(resultCh) }()
 		return firstResult
