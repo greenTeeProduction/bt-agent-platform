@@ -19,7 +19,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -62,7 +62,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -104,7 +104,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -140,7 +140,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
@@ -183,7 +183,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Go module cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/pkg/mod
