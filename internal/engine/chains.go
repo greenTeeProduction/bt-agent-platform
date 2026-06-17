@@ -455,6 +455,14 @@ Provide a comprehensive answer. If the information is insufficient, state what's
 	return 1
 }
 
+// mapReduceSubtask pairs a decomposed subtask line with the result produced for
+// it, so the reduce phase (and the deterministic fallback) can attribute each
+// block to the right part of the decomposition.
+type mapReduceSubtask struct {
+	task   string
+	result string
+}
+
 func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// Map-Reduce: split a complex task into subtasks (map), process each while
 	// carrying forward earlier results (so later subtasks can build on them —
@@ -484,13 +492,9 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// Process each subtask, threading accumulated context into later subtasks.
 	// Each completed result is kept paired with the subtask line it answers so the
 	// reduce phase can attribute content to the right part of the decomposition.
-	type subtaskResult struct {
-		task   string
-		result string
-	}
 	const maxSubtasks = 5
 	lines := splitLines(subtasks)
-	results := make([]subtaskResult, 0, maxSubtasks)
+	results := make([]mapReduceSubtask, 0, maxSubtasks)
 	var failedSubtasks []string
 	completed, failed, retried := 0, 0, 0
 	accumulated := ""
@@ -519,7 +523,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 			failedSubtasks = append(failedSubtasks, line)
 			continue
 		}
-		results = append(results, subtaskResult{task: line, result: subResult})
+		results = append(results, mapReduceSubtask{task: line, result: subResult})
 		accumulated += fmt.Sprintf("- %s\n", subResult)
 		completed++
 	}
@@ -565,16 +569,53 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	}
 	reducePrompt += "\nUnified answer:"
 
+	// Reduce phase: combine. A failure here after subtasks have already completed
+	// would otherwise discard every completed result and fail the whole node over a
+	// single (often transient) final call — the most wasteful failure mode, since
+	// all the per-subtask reasoning is gone. Retry once for transient errors, then
+	// fall back to a deterministic synthesis that stitches the completed subtask
+	// results together rather than throwing them away. Downstream nodes can detect
+	// the degraded combine via map_reduce_reduce_degraded.
 	final, err := bb.LLM.Generate(reducePrompt)
 	if err != nil {
-		bb.Outcome = "chain_failed"
-		bb.Result = fmt.Sprintf("map_reduce reduce error: %v", err)
-		return -1
+		bb.ChainState["map_reduce_reduce_retried"] = true
+		final, err = bb.LLM.Generate(reducePrompt)
 	}
+	if err != nil {
+		bb.ChainState["map_reduce_reduce_degraded"] = true
+		bb.Outcome = "chain_partial"
+		bb.Result = buildMapReduceFallback(task, results, failedSubtasks)
+		bb.Results = append(bb.Results, bb.Result)
+		return 1
+	}
+	bb.ChainState["map_reduce_reduce_degraded"] = false
 	bb.Outcome = "chain_success"
 	bb.Result = final
 	bb.Results = append(bb.Results, final)
 	return 1
+}
+
+// buildMapReduceFallback deterministically assembles the completed subtask results
+// into a single answer when the reduce (combine) LLM call fails. It preserves the
+// work already done — each completed subtask is emitted as its own section paired
+// with the subtask it answers — and explicitly flags any subtasks that could not be
+// completed, so the degraded output is honest about its gaps instead of silently
+// dropping the missing parts. Mirrors execAgent's fallback synthesis and the
+// reduce prompt's MISSING-subtask note.
+func buildMapReduceFallback(task string, results []mapReduceSubtask, failedSubtasks []string) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# %s\n\n", strings.TrimSpace(task)))
+	sb.WriteString("*Note: the combine step could not run, so these are the completed subtask results stitched together verbatim rather than a synthesized unified answer.*\n\n")
+	for i, r := range results {
+		sb.WriteString(fmt.Sprintf("## %d. %s\n\n%s\n\n", i+1, strings.TrimSpace(r.task), strings.TrimSpace(r.result)))
+	}
+	if len(failedSubtasks) > 0 {
+		sb.WriteString("## Unresolved subtasks\n\nThe following subtasks could not be completed and are missing from the results above:\n\n")
+		for _, ft := range failedSubtasks {
+			sb.WriteString(fmt.Sprintf("- %s\n", ft))
+		}
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func execRefine(cfg ChainConfig, bb *Blackboard) int {

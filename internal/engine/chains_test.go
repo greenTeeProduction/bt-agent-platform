@@ -1929,6 +1929,48 @@ func TestChainAction_MapReduce_ReduceNamesFailedSubtasks(t *testing.T) {
 	}
 }
 
+// TestChainAction_MapReduce_ReduceFallback verifies that when every subtask
+// completes but the reduce (combine) call keeps failing, map_reduce does NOT
+// discard the completed work: it retries the combine once, then falls back to a
+// deterministic synthesis of the subtask results and still reports a usable
+// (partial) success rather than failing the whole node.
+func TestChainAction_MapReduce_ReduceFallback(t *testing.T) {
+	callCount := 0
+	// 3 subtasks: call 1 = decompose, calls 2-4 = subtasks (succeed),
+	// call 5 = reduce (fails, >=5), call 6 = reduce retry (fails). Fallback fires.
+	mock := &countedErrorMockLLM{
+		responses:  map[string]string{"generate": "1. Subtask A\n2. Subtask B\n3. Subtask C"},
+		failOnCall: 5,
+		count:      &callCount,
+	}
+	bb := &Blackboard{Task: "analyze a complex multi-part topic", LLM: mock}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+
+	if result != 1 {
+		t.Fatalf("expected recovered success (result=1), got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome != "chain_partial" {
+		t.Errorf("expected outcome chain_partial, got %s", bb.Outcome)
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 3 {
+		t.Errorf("map_reduce_completed = %v, want 3", got)
+	}
+	if got := bb.ChainState["map_reduce_reduce_retried"]; got != true {
+		t.Errorf("map_reduce_reduce_retried = %v, want true", got)
+	}
+	if got := bb.ChainState["map_reduce_reduce_degraded"]; got != true {
+		t.Errorf("map_reduce_reduce_degraded = %v, want true", got)
+	}
+	// The completed subtask results must be preserved in the fallback output.
+	if !strings.Contains(bb.Result, "Subtask A") || !strings.Contains(bb.Result, "Subtask C") {
+		t.Errorf("fallback should preserve completed subtask sections, got:\n%s", bb.Result)
+	}
+	if len(bb.Results) == 0 {
+		t.Error("expected fallback result appended to bb.Results")
+	}
+}
+
 func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
 	// execAgent: Test MaxTokens boundary values (0, 1, 31)
 	tests := []struct {
