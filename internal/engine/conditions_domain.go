@@ -133,9 +133,7 @@ func init() {
 	RegisterCondition("HasDeadAgents", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Result, "dead", "offline", "unreachable")
 	})
-	RegisterCondition("PersistentFailures", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Result, "failed", "3+", "persistent")
-	})
+	RegisterCondition("PersistentFailures", persistentFailuresCond)
 	RegisterCondition("IsMetricsRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Task, "metrics", "stats", "report")
 	})
@@ -256,4 +254,30 @@ func init() {
 	RegisterCondition("IsImplementRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Task, "implement", "plan", "fix", "create", "pending")
 	})
+}
+
+// persistentFailuresThreshold is the number of recorded node failures at which a
+// run is treated as persistently failing. It matches the default circuit-breaker
+// trip threshold (see circuitBreakerFor) and the legacy "3+" text marker so that
+// numeric and string signals escalate at the same point.
+const persistentFailuresThreshold = 3
+
+// persistentFailuresCond reports whether a run has hit repeated, unrecovered
+// failures and should escalate (DLQ, HITL hand-off, or re-evolution).
+//
+// It prefers the authoritative numeric signal: FailureCount, which the reliability
+// decorators (errorAwareCmd / circuitBreakerCmd) increment on every failed node.
+// Earlier this condition only matched magic substrings in bb.Result ("failed",
+// "3+", "persistent"), so escalation never fired off the real failure tally and
+// silently depended on a handler happening to print one of those words. The text
+// heuristics are kept as a fallback for nodes that surface failure in prose
+// without going through the decorators.
+func persistentFailuresCond(bb *Blackboard) bool {
+	if bb == nil {
+		return false
+	}
+	if bb.FailureCount >= persistentFailuresThreshold {
+		return true
+	}
+	return util.ContainsAnyStr(bb.Result, "failed", "3+", "persistent")
 }

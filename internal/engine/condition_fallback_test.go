@@ -1207,6 +1207,14 @@ func TestCondBulk_BBResultConditions(t *testing.T) {
 		if fn(&Blackboard{Result: "all passed"}) {
 			t.Error("expected false when result is clean")
 		}
+		// Numeric signal: escalate once FailureCount reaches the threshold even
+		// when the result text gives no hint of failure.
+		if !fn(&Blackboard{FailureCount: persistentFailuresThreshold, Result: "still going"}) {
+			t.Error("expected true when FailureCount reaches threshold")
+		}
+		if fn(&Blackboard{FailureCount: persistentFailuresThreshold - 1, Result: "still going"}) {
+			t.Error("expected false when FailureCount is below threshold and text is clean")
+		}
 	})
 	t.Run("HasTranscript", func(t *testing.T) {
 		fn := (&Blackboard{}).conditionForName("HasTranscript")
