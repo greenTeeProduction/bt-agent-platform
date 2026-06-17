@@ -681,9 +681,20 @@ func execRefine(cfg ChainConfig, bb *Blackboard) int {
 		}
 	}
 
-	// Initial answer
+	// Initial answer. This single call gates the whole refine chain — no initial
+	// answer means nothing to critique or revise — yet it was the only LLM call
+	// here without the retry resilience map_reduce and agent already have. Retry
+	// once on a transient error (rate limit, timeout, blip) before hard-failing so
+	// one flaky call doesn't sink a complex refinement task. refine_retried counts
+	// every retried call across all phases, mirroring map_reduce_retried.
+	retried := 0
 	current, err := bb.LLM.Generate(task)
 	if err != nil {
+		retried++
+		current, err = bb.LLM.Generate(task)
+	}
+	if err != nil {
+		bb.ChainState["refine_retried"] = retried
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("refine initial error: %v", err)
 		return -1
@@ -703,6 +714,12 @@ CURRENT ANSWER:
 Critique:`, task, current)
 
 		critique, err := bb.LLM.Generate(critiquePrompt)
+		if err != nil {
+			// A transient critique failure shouldn't end refinement prematurely —
+			// retry once before giving up, symmetric with the initial/revise calls.
+			retried++
+			critique, err = bb.LLM.Generate(critiquePrompt)
+		}
 		if err != nil {
 			stopReason = "critique_error"
 			break
@@ -727,6 +744,12 @@ Improved answer:`, task, current, critique)
 
 		improved, err := bb.LLM.Generate(revisePrompt)
 		if err != nil {
+			// Retry once before abandoning this revision round, so a single transient
+			// blip doesn't discard a round of critique-driven improvement.
+			retried++
+			improved, err = bb.LLM.Generate(revisePrompt)
+		}
+		if err != nil {
 			stopReason = "revise_error"
 			break
 		}
@@ -736,6 +759,7 @@ Improved answer:`, task, current, critique)
 
 	bb.ChainState["refine_rounds"] = rounds
 	bb.ChainState["refine_stop_reason"] = stopReason
+	bb.ChainState["refine_retried"] = retried
 
 	bb.Outcome = "chain_success"
 	bb.Result = current

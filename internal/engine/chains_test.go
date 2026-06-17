@@ -1175,6 +1175,59 @@ func TestChainAction_Refine_InitialError(t *testing.T) {
 	}
 }
 
+// flakyRefineMockLLM errors on the first N calls (regardless of phase) and
+// succeeds otherwise, simulating a transient blip on the refine chain's initial
+// generation so the retry-once recovery path can be exercised.
+type flakyRefineMockLLM struct {
+	failFirstN int
+	seen       int
+}
+
+func (m *flakyRefineMockLLM) Generate(prompt string) (string, error) {
+	m.seen++
+	if m.seen <= m.failFirstN {
+		return "", fmt.Errorf("transient refine error %d", m.seen)
+	}
+	// Signal convergence after the first revision so the loop stops cleanly.
+	if strings.Contains(prompt, "Critique this answer") {
+		return "NO_FURTHER_IMPROVEMENT", nil
+	}
+	return "refined answer with sufficient length for validation", nil
+}
+func (m *flakyRefineMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyRefineMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyRefineMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *flakyRefineMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *flakyRefineMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// A first-attempt failure on the initial generation must be retried, not fatal:
+// the refine chain should still succeed, with the retry recorded in ChainState.
+func TestChainAction_Refine_InitialRetryRecovers(t *testing.T) {
+	mock := &flakyRefineMockLLM{failFirstN: 1}
+	bb := &Blackboard{
+		Task: "improve a complex answer",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "refine:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after initial-generation retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if got := bb.ChainState["refine_retried"]; got != 1 {
+		t.Errorf("expected 1 retried call, got %v", got)
+	}
+}
+
 // --- execAgent edge cases ---
 
 func TestChainAction_Agent_LLMError(t *testing.T) {
