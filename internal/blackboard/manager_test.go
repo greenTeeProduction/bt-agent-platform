@@ -38,6 +38,65 @@ func TestHandle_RunScope(t *testing.T) {
 	}
 }
 
+func TestManager_Append(t *testing.T) {
+	m := DefaultManager()
+	scope := Scope{Kind: ScopeRun, ID: "run_append"}
+
+	// First append creates the key with no leading separator.
+	e, err := m.Append(scope, "work/log", "first", "\n", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "first" {
+		t.Fatalf("create append: %q", e.Value)
+	}
+
+	// Second append joins with the separator.
+	e, err = m.Append(scope, "work/log", "second", "\n", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "first\nsecond" {
+		t.Fatalf("join append: %q", e.Value)
+	}
+
+	got, err := m.Get(scope, "work/log")
+	if err != nil || got.Value != "first\nsecond" {
+		t.Fatalf("get after append: %+v err=%v", got, err)
+	}
+	if got.SizeBytes != len("first\nsecond") {
+		t.Fatalf("size not updated: %d", got.SizeBytes)
+	}
+}
+
+func TestManager_AppendConcurrent(t *testing.T) {
+	m := DefaultManager()
+	scope := Scope{Kind: ScopeSession, ID: "sess_append"}
+
+	const n = 50
+	done := make(chan struct{})
+	for i := 0; i < n; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			if _, err := m.Append(scope, "steps/log", "x", "\n", "text"); err != nil {
+				t.Errorf("append: %v", err)
+			}
+		}()
+	}
+	for i := 0; i < n; i++ {
+		<-done
+	}
+
+	e, err := m.Get(scope, "steps/log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// n "x" values joined by n-1 newlines — no lost updates under the store lock.
+	if want := n + (n - 1); len(e.Value) != want {
+		t.Fatalf("concurrent append lost updates: got %d bytes, want %d", len(e.Value), want)
+	}
+}
+
 func TestManager_Limits(t *testing.T) {
 	m := NewManager(map[ScopeKind]Limits{
 		ScopeRun: {MaxEntries: 1, MaxTotalBytes: 100},

@@ -36,7 +36,47 @@ func (s *scopedStore) set(key string, entry Entry) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.setLocked(key, entry)
+}
 
+// appendVal atomically appends value to the entry at key, creating it when
+// absent. When the key already holds content, sep is inserted between the
+// existing value and the new value. The whole read-modify-write happens under
+// the store lock so concurrent appends to a shared scope (e.g. a pipeline
+// session accumulating subtask results) never lose updates. Limits and
+// eviction are enforced exactly as set does. The resulting entry is returned.
+func (s *scopedStore) appendVal(key, value, sep, contentType string) (Entry, error) {
+	key = normalizeKey(key)
+	if key == "" {
+		return Entry{}, fmt.Errorf("blackboard key required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, ok := s.entries[key]
+	newVal := value
+	if ok && existing.Value != "" {
+		if sep != "" {
+			newVal = existing.Value + sep + value
+		} else {
+			newVal = existing.Value + value
+		}
+	}
+	entry := Entry{Key: key, Value: newVal, ContentType: contentType}
+	if ok {
+		entry.CreatedAt = existing.CreatedAt
+		if contentType == "" {
+			entry.ContentType = existing.ContentType
+		}
+	}
+	if err := s.setLocked(key, entry); err != nil {
+		return Entry{}, err
+	}
+	return s.entries[key], nil
+}
+
+// setLocked writes entry under key. Callers must hold s.mu.
+func (s *scopedStore) setLocked(key string, entry Entry) error {
 	size := int64(len(entry.Value))
 	_, isUpdate := s.entries[key]
 	if isUpdate {

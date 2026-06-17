@@ -83,6 +83,54 @@ Action Input: work/payload`,
 	}
 }
 
+func TestEngineBlackboardAppendTool(t *testing.T) {
+	mock := &seqMockLLM{
+		responses: []string{
+			`Thought: record first subtask result
+Action: bb_append
+Action Input: {"key":"work/history","value":"subtask-1 done"}`,
+			`Thought: record second subtask result
+Action: bb_append
+Action Input: {"key":"work/history","value":"subtask-2 done"}`,
+			`Thought: review accumulated history
+Action: bb_read
+Action Input: work/history`,
+			"Final Answer: history recorded.",
+		},
+	}
+
+	mgr := blackboard.DefaultManager()
+	h := blackboard.NewHandle(mgr, "run_append_tool", "", "demo")
+	bb := &engine.Blackboard{
+		Task: "accumulate subtask results into a single history key",
+		LLM:  mock,
+		BB:   h,
+	}
+	engine.PrepareBlackboard(bb)
+
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "agent:{{.Task}}",
+		Metadata: map[string]any{
+			"max_tokens": float64(6),
+		},
+	}
+
+	bt := engine.BuildTree(tree, bb)
+	engine.RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success, got %s: %s", bb.Outcome, bb.Result)
+	}
+	e, err := h.Get("work/history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "subtask-1 done\nsubtask-2 done" {
+		t.Fatalf("accumulated history mismatch: %q", e.Value)
+	}
+}
+
 func TestEnginePrepareBlackboard_Idempotent(t *testing.T) {
 	h := blackboard.NewHandle(blackboard.DefaultManager(), "run_idem", "", "a")
 	bb := &engine.Blackboard{BB: h}
@@ -113,9 +161,9 @@ func TestEngineExpandBBTemplate_InLLMCall(t *testing.T) {
 		seqMockLLM: seqMockLLM{responses: []string{"Final Answer: done"}},
 	}
 	bb := &engine.Blackboard{
-		Task: "base task",
-		LLM:  mock,
-		BB:   h,
+		Task:  "base task",
+		LLM:   mock,
+		BB:    h,
 		RunID: "run_tpl",
 	}
 	tree := &evolution.SerializableNode{

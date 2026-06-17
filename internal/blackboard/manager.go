@@ -95,6 +95,26 @@ func (m *Manager) Set(scope Scope, key, value, summary, contentType string) erro
 	return m.persistScope(scope, s)
 }
 
+// Append atomically appends value to the entry at key in scope, joining with
+// sep when the key already holds content. It returns the resulting entry. Use
+// it to accumulate running context (task history, subtask results, error logs)
+// across nodes without a separate read-modify-write that could race on a shared
+// scope.
+func (m *Manager) Append(scope Scope, key, value, sep, contentType string) (Entry, error) {
+	s, err := m.storeFor(scope)
+	if err != nil {
+		return Entry{}, err
+	}
+	e, err := s.appendVal(key, value, sep, contentType)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := m.persistScope(scope, s); err != nil {
+		return Entry{}, err
+	}
+	return e, nil
+}
+
 // Delete removes a key from a scope.
 func (m *Manager) Delete(scope Scope, key string) error {
 	s, err := m.storeFor(scope)
