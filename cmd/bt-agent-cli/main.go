@@ -140,9 +140,24 @@ func cmdRun(reg *agent.Registry) {
 		params = append(params, s)
 		return nil
 	})
-	_ = fs.Parse(os.Args[2:])
 
-	name := fs.Arg(0)
+	// Extract the agent name (first positional arg) before flag parsing,
+	// then parse the remaining args as flags. Go's flag.FlagSet stops at
+	// the first non-flag argument by default, so `--input` after the agent
+	// name was silently ignored.
+	args := os.Args[2:]
+	var agentName string
+	var flagArgs []string
+	for _, a := range args {
+		if agentName == "" && !strings.HasPrefix(a, "-") {
+			agentName = a
+		} else {
+			flagArgs = append(flagArgs, a)
+		}
+	}
+	_ = fs.Parse(flagArgs)
+
+	name := agentName
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "Error: agent name required")
 		os.Exit(1)
