@@ -164,13 +164,25 @@ func runFusionShell(command string) (string, int) {
 }
 
 func fusionMarkdown(bb *Blackboard) string {
+	// Strip injected blackboard context from both the task and the result.
+	// The blackboard seeder appends a standardized hint to bb.Task;
+	// the report should show the clean task and result only.
+	result := bb.Result
+	const fusionHeader = "## BT Fusion Research Findings"
+	if idx := strings.Index(result, fusionHeader); idx >= 0 {
+		result = result[idx:]
+	}
+	task := bb.Task
+	if idx := strings.Index(task, "\n\nBLACKBOARD CONTEXT"); idx >= 0 {
+		task = task[:idx]
+	}
 	return fmt.Sprintf(`# BT Fusion Report
 
 Generated: %s
 Task: %s
 
 %s
-`, time.Now().Format(time.RFC3339), bb.Task, bb.Result)
+`, time.Now().Format(time.RFC3339), task, result)
 }
 
 func truncateFusion(s string, max int) string {
