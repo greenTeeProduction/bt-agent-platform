@@ -1,10 +1,11 @@
-package engine
+package engine_test
 
 import (
 	"sync"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -104,14 +105,14 @@ func TestStress_Idempotency(t *testing.T) {
 			}
 
 			// First run
-			bb1 := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
-			bt1 := BuildTree(nt.tree, bb1)
-			_ = RunTask(bb1, bt1)
+			bb1 := &engine.Blackboard{Task: nt.task, LLM: &engine.MockLLM{}}
+			bt1 := engine.BuildTree(nt.tree, bb1)
+			_ = engine.RunTask(bb1, bt1)
 
 			// Second run — identical input
-			bb2 := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
-			bt2 := BuildTree(nt.tree, bb2)
-			_ = RunTask(bb2, bt2)
+			bb2 := &engine.Blackboard{Task: nt.task, LLM: &engine.MockLLM{}}
+			bt2 := engine.BuildTree(nt.tree, bb2)
+			_ = engine.RunTask(bb2, bt2)
 
 			// Compare outcomes from the blackboard (bb.Outcome, not RunTask return
 			// value which is bb.Result — result text varies with mock LLM output)
@@ -170,9 +171,9 @@ func TestStress_ConcurrentExecution(t *testing.T) {
 			}()
 			sem <- struct{}{}
 
-			bb := &Blackboard{Task: nt.task, LLM: &MockLLM{}}
-			bt := BuildTree(nt.tree, bb)
-			_ = RunTask(bb, bt)
+			bb := &engine.Blackboard{Task: nt.task, LLM: &engine.MockLLM{}}
+			bt := engine.BuildTree(nt.tree, bb)
+			_ = engine.RunTask(bb, bt)
 			if bb.Outcome == "" {
 				errCh <- nt.name + ": empty outcome"
 			}
@@ -221,9 +222,9 @@ func TestStress_EdgeInputs(t *testing.T) {
 							t.Errorf("panic with task=%q: %v", task, r)
 						}
 					}()
-					bb := &Blackboard{Task: task, LLM: &MockLLM{}}
-					bt := BuildTree(nt.tree, bb)
-					_ = RunTask(bb, bt)
+					bb := &engine.Blackboard{Task: task, LLM: &engine.MockLLM{}}
+					bt := engine.BuildTree(nt.tree, bb)
+					_ = engine.RunTask(bb, bt)
 					// No panic is the success criterion
 				}()
 			}
@@ -246,8 +247,8 @@ func TestStress_MaxTicksSafetyLimit(t *testing.T) {
 		},
 	}
 
-	bb := &Blackboard{Task: "hello", LLM: &MockLLM{}}
-	bt := BuildTree(infiniteTree, bb)
+	bb := &engine.Blackboard{Task: "hello", LLM: &engine.MockLLM{}}
+	bt := engine.BuildTree(infiniteTree, bb)
 
 	// Must complete without infinite loop — RunTask's 1000-tick cap should fire
 	defer func() {
@@ -256,7 +257,7 @@ func TestStress_MaxTicksSafetyLimit(t *testing.T) {
 		}
 	}()
 
-	outcome := RunTask(bb, bt)
+	outcome := engine.RunTask(bb, bt)
 	if outcome == "" {
 		t.Error("expected non-empty outcome even from safety-limit termination")
 	}

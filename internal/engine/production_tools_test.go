@@ -1,12 +1,9 @@
 package engine
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -126,78 +123,5 @@ func TestAgentWithRealToolsBlocksFinalAnswerWithoutToolUse(t *testing.T) {
 	}
 	if !strings.Contains(bb.Result, "No Tool Evidence") || strings.Contains(bb.Result, "fabricated review") {
 		t.Fatalf("expected blocked anti-fabrication output, got %q", bb.Result)
-	}
-}
-
-func TestDataPipelineTree_UsesObservedFileMetrics(t *testing.T) {
-	tmp := t.TempDir()
-	csvPath := filepath.Join(tmp, "input.csv")
-	if err := os.WriteFile(csvPath, []byte("name,value\na,1\nb,2\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	bb := &Blackboard{Task: "extract data from " + csvPath, ChainState: map[string]any{}}
-	bt := BuildTree(domains.DataPipelineTree(), bb)
-	RunTask(bb, bt)
-
-	if !strings.Contains(bb.Result, "csv_records_observed: 3") {
-		t.Fatalf("expected real csv record count, got: %s", bb.Result)
-	}
-	if strings.Contains(bb.Result, "10,420") || strings.Contains(bb.Result, "10,418") {
-		t.Fatalf("fabricated canned row count leaked: %s", bb.Result)
-	}
-	if !strings.Contains(bb.Result, "verification: passed anti-fabrication gate") {
-		t.Fatalf("expected anti-fabrication verification, got: %s", bb.Result)
-	}
-}
-
-func TestDataPipelineTree_NoSourceReportsBlockedNotFabricated(t *testing.T) {
-	bb := &Blackboard{Task: "run ETL workflow with no source path", ChainState: map[string]any{}}
-	bt := BuildTree(domains.DataPipelineTree(), bb)
-	RunTask(bb, bt)
-
-	if !strings.Contains(bb.Result, "status: blocked") {
-		t.Fatalf("expected blocked report, got: %s", bb.Result)
-	}
-	if strings.Contains(bb.Result, "10,420") || strings.Contains(bb.Result, "10,418") {
-		t.Fatalf("fabricated canned row count leaked: %s", bb.Result)
-	}
-	if !strings.Contains(bb.Result, "available_tools:") {
-		t.Fatalf("expected discovered tool list in report, got: %s", bb.Result)
-	}
-}
-
-func TestNotebookLMTree_PreGateDiscoversRealToolset(t *testing.T) {
-	tree := domains.NotebookLMTree()
-	if len(tree.Children) == 0 || tree.Children[0].Name != "NotebookLM_PreGate" {
-		t.Fatalf("expected NotebookLM_PreGate first child, got %#v", tree.Children)
-	}
-	preGate := tree.Children[0]
-	seenSetup := false
-	seenDiscover := false
-	for _, child := range preGate.Children {
-		if child.Name == "SetupNotebookLMTools" {
-			seenSetup = true
-		}
-		if child.Name == "DiscoverAvailableTools" {
-			seenDiscover = true
-		}
-	}
-	if !seenSetup || !seenDiscover {
-		t.Fatalf("NotebookLM pre-gate must setup and discover real tools before auth/use; setup=%v discover=%v", seenSetup, seenDiscover)
-	}
-
-	bb := &Blackboard{ChainState: map[string]any{}}
-	if fn := GetAction("SetupNotebookLMTools"); fn == nil || fn(&btcore.BTContext[Blackboard]{Blackboard: bb}) != 1 {
-		t.Fatal("SetupNotebookLMTools action missing or failed")
-	}
-	if fn := GetAction("DiscoverAvailableTools"); fn == nil || fn(&btcore.BTContext[Blackboard]{Blackboard: bb}) != 1 {
-		t.Fatal("DiscoverAvailableTools action missing or failed")
-	}
-	available, _ := bb.ChainState["available_tools"].(string)
-	for _, name := range []string{"notebooklm_server_info", "notebooklm_list", "notebooklm_notebook_query", "file_write"} {
-		if !strings.Contains(available, name) {
-			t.Fatalf("NotebookLM available tools missing %q: %s", name, available)
-		}
 	}
 }

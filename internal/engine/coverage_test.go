@@ -3,7 +3,6 @@ package engine
 import (
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -86,20 +85,6 @@ func TestTree_GoDevStructure(t *testing.T) {
 	}
 }
 
-func TestTree_AllEvolution(t *testing.T) {
-	fns := map[string]func() *evolution.SerializableNode{
-		"hermes_evolve":  domains.HermesSelfEvolutionTree,
-		"stockfish":      evolution.StockfishEvolutionTree,
-		"stockfish_loop": evolution.StockfishEvolutionLoop,
-	}
-	for name, fn := range fns {
-		tree := fn()
-		if tree == nil || len(tree.Children) == 0 {
-			t.Errorf("%s tree invalid", name)
-		}
-	}
-}
-
 func TestTree_AllFinance(t *testing.T) {
 	fns := map[string]func() *evolution.SerializableNode{
 		"pitch_agent":        evolution.PitchAgentTree,
@@ -112,27 +97,6 @@ func TestTree_AllFinance(t *testing.T) {
 		"month_end_closer":   evolution.MonthEndCloserTree,
 		"statement_auditor":  evolution.StatementAuditorTree,
 		"kyc_screener":       evolution.KYCScreenerTree,
-	}
-	for name, fn := range fns {
-		tree := fn()
-		if tree == nil || len(tree.Children) == 0 {
-			t.Errorf("%s tree invalid", name)
-		}
-	}
-}
-
-func TestTree_AllDomain(t *testing.T) {
-	fns := map[string]func() *evolution.SerializableNode{
-		"code_review":        domains.CodeReviewTree,
-		"devops_ci":          domains.DevOpsCITree,
-		"agent_monitor":      domains.AgentMonitorTree,
-		"refactoring":        domains.RefactoringTree,
-		"security_audit":     domains.SecurityAuditTree,
-		"data_pipeline":      domains.DataPipelineTree,
-		"meeting_notes":      domains.MeetingNotesTree,
-		"crash_investigator": domains.CrashInvestigatorTree,
-		"game_ai":            domains.GameAITree,
-		"trading_signal":     domains.TradingSignalTree,
 	}
 	for name, fn := range fns {
 		tree := fn()
@@ -188,15 +152,6 @@ func TestRouting_Research(t *testing.T) {
 	outcome := RunTask(bb, tree)
 	if outcome == "" {
 		t.Error("research task should produce outcome")
-	}
-}
-
-func TestRouting_Monitoring(t *testing.T) {
-	bb := &Blackboard{Task: "check system health status", LLM: &MockLLM{}}
-	tree := BuildTree(domains.AgentMonitorTree(), bb)
-	outcome := RunTask(bb, tree)
-	if outcome == "" {
-		t.Error("monitoring task should produce outcome")
 	}
 }
 

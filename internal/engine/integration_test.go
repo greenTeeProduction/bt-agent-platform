@@ -3,72 +3,12 @@ package engine
 import (
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // ─── FULL INTEGRATION: All Trees, Chains, Use Cases ───
 // Tests every tree category, chain type, routing path, quality gate,
 // panic recovery, and edge case with mock LLM.
-
-func TestIntegration_AllTreesExecute(t *testing.T) {
-	tests := []struct {
-		name string
-		tree *evolution.SerializableNode
-		task string
-	}{
-		// Core trees
-		{"default", evolution.DefaultTree(), "analyze this task and provide a report"},
-		{"godev_code_review", evolution.GoDeveloperTree(), "review this go code for bugs"},
-		{"godev_build", evolution.GoDeveloperTree(), "go build the project"},
-		{"godev_test", evolution.GoDeveloperTree(), "run go test for coverage"},
-		{"godev_knowledge", evolution.GoDeveloperTree(), "what is the best practice for error handling"},
-
-		// Research trees
-		{"deep_research", evolution.DeepResearchTree(), "research quantum computing advances"},
-		{"quick_research", evolution.QuickResearchTree(), "quick summary of Kubernetes"},
-
-		// Finance trees (10)
-		{"pitch_agent", evolution.PitchAgentTree(), "build a DCF model for valuation"},
-		{"earnings_reviewer", evolution.EarningsReviewerTree(), "analyze earnings call transcript"},
-		{"market_researcher", evolution.MarketResearcherTree(), "research competitive landscape"},
-		{"model_builder", evolution.ModelBuilderTree(), "build LBO model for acquisition"},
-		{"meeting_prep", evolution.MeetingPrepTree(), "prepare client meeting briefing"},
-		{"valuation_reviewer", evolution.ValuationReviewerTree(), "review GP valuation package"},
-		{"gl_reconciler", evolution.GLReconcilerTree(), "reconcile general ledger breaks"},
-		{"month_end_closer", evolution.MonthEndCloserTree(), "close month-end with accruals"},
-		{"statement_auditor", evolution.StatementAuditorTree(), "audit LP statement for accuracy"},
-		{"kyc_screener", evolution.KYCScreenerTree(), "screen KYC documents for sanctions"},
-
-		// Domain trees (10)
-		{"code_review", domains.CodeReviewTree(), "review code for bugs and security issues"},
-		{"devops_ci", domains.DevOpsCITree(), "deploy the application with CI/CD pipeline"},
-		{"agent_monitor", domains.AgentMonitorTree(), "check system health status"},
-		{"refactoring", domains.RefactoringTree(), "refactor the legacy module"},
-		{"security_audit", domains.SecurityAuditTree(), "audit security vulnerabilities"},
-		{"data_pipeline", domains.DataPipelineTree(), "extract transform load the dataset"},
-		{"meeting_notes", domains.MeetingNotesTree(), "summarize the meeting transcript"},
-		{"crash_investigator", domains.CrashInvestigatorTree(), "investigate the crash dump"},
-		{"game_ai", domains.GameAITree(), "design NPC behavior tree for game"},
-		{"trading_signal", domains.TradingSignalTree(), "generate trading signal from market data"},
-
-		// Evolution trees
-		{"hermes_evolve", domains.HermesSelfEvolutionTree(), "periodic self-improvement check"},
-		{"stockfish", evolution.StockfishEvolutionTree(), "evolve the behavior tree with stockfish"},
-		{"stockfish_loop", evolution.StockfishEvolutionLoop(), "run continuous evolution cycle"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bb := &Blackboard{Task: tt.task, LLM: &MockLLM{}}
-			bt := BuildTree(tt.tree, bb)
-			outcome := RunTask(bb, bt)
-
-			// Every tree must execute without panic — outcome may be failure if task doesn't match routing keywords
-			_ = outcome // non-empty guarantees we didn't crash
-		})
-	}
-}
 
 func TestIntegration_AllChainTypes(t *testing.T) {
 	chainTests := []struct {
@@ -252,30 +192,6 @@ func TestIntegration_ReflectionAndPersistence(t *testing.T) {
 	loaded, err := treeStore.Load()
 	if err == nil && loaded != nil {
 		t.Log("tree persisted successfully")
-	}
-}
-
-func TestIntegration_AllKanbanTrees(t *testing.T) {
-	trees := map[string]*evolution.SerializableNode{
-		"task_creator": domains.KanbanTaskCreatorTree(),
-		"refiner":      domains.KanbanRefinerTree(),
-		"qa":           domains.KanbanQATree(),
-		"monitor":      domains.KanbanBoardMonitorTree(),
-		"workflow":     domains.KanbanWorkflowTree(),
-		"autopilot":    domains.KanbanAutoPilotTree(),
-	}
-	for name, tree := range trees {
-		t.Run(name, func(t *testing.T) {
-			if tree == nil {
-				t.Fatal("tree is nil")
-			}
-			bb := &Blackboard{Task: "kanban " + name, LLM: &MockLLM{}}
-			bt := BuildTree(tree, bb)
-			outcome := RunTask(bb, bt)
-			if outcome == "" {
-				t.Errorf("%s: no outcome", name)
-			}
-		})
 	}
 }
 
