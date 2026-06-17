@@ -34,7 +34,8 @@ func registerGoapFusionActions() {
 	RegisterCondition("IsFusionTask", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task),
 			"fusion", "improve", "expand", "capability", "research", "evolve", "update",
-			"enhance", "upgrade", "optimize", "refactor", "extend")
+			"enhance", "upgrade", "optimize", "refactor", "extend",
+			"apply", "implement", "fix", "create", "build", "add", "install")
 	})
 	RegisterCondition("IsResearchOrGapRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task),

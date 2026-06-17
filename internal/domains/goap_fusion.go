@@ -18,7 +18,7 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 //
 // Destructive core runtime changes require HITL gating.
 func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
-	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapFusion_Main", Children: []evolution.SerializableNode{
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapFusion_Main", TimeoutMs: 3600_000, Children: []evolution.SerializableNode{
 		act("SetupFusionTools", "Give chain agents access to file_read, shell_exec, web_search, graphify, vault paths"),
 		seq("PreGate",
 			cond("ValidateInput", "Task must be non-empty"),

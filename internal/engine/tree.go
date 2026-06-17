@@ -66,14 +66,15 @@ type Blackboard struct {
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
-	ChainMemory  any            // langchaingo memory (ConversationBuffer, etc.)
-	ChainTools   []any          // langchaingo tools available to chains
-	ChainState   map[string]any // arbitrary chain execution state
-	Results      []string       // accumulated results from all chain actions
-	QualityScore float64        // 0.0-1.0 output quality score
-	CurrentPath  string         // currently executing strategy path (set by tree traversal)
-	VisitedPaths []string       // all strategy paths visited during execution
-	EventBus     *EventBus      // inter-node event bus (Plan #3: AbortOnEvent, ReactiveParallel)
+	ChainMemory   any            // langchaingo memory (ConversationBuffer, etc.)
+	ChainTools    []any          // langchaingo tools available to chains
+	ChainState    map[string]any // arbitrary chain execution state
+	Results       []string       // accumulated results from all chain actions
+	QualityScore  float64        // 0.0-1.0 output quality score
+	CurrentPath   string         // currently executing strategy path (set by tree traversal)
+	VisitedPaths  []string       // all strategy paths visited during execution
+	EventBus      *EventBus      // inter-node event bus (Plan #3: AbortOnEvent, ReactiveParallel)
+	TreeTimeoutMs int64          // custom tree timeout in ms (0 = use default 120s)
 
 	// Budget tracking (Budget decorator / agent limits)
 	TokensUsed int
@@ -83,8 +84,8 @@ type Blackboard struct {
 	TraceContext context.Context `json:"-"`
 
 	// Blackboard management (Phase 1): scoped key-value store for context offloading.
-	BB     *blackboard.Handle
-	RunID  string
+	BB    *blackboard.Handle
+	RunID string
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
@@ -110,6 +111,9 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 	expanded, err := prepareTreeForBuild(serTree)
 	if err != nil {
 		return nil, err
+	}
+	if serTree != nil && serTree.TimeoutMs > 0 {
+		bb.TreeTimeoutMs = serTree.TimeoutMs
 	}
 	info := ValidateTreeFull(expanded)
 	if !info.Valid() {
@@ -348,7 +352,11 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	treeTimeout := 120 * time.Second
+	if bb.TreeTimeoutMs > 0 {
+		treeTimeout = time.Duration(bb.TreeTimeoutMs) * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), treeTimeout)
 	defer cancel()
 	btCtx := btcore.NewBTContext(ctx, bb)
 
