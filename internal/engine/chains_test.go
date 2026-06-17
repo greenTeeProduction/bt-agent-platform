@@ -1865,6 +1865,70 @@ func TestChainAction_MapReduce_AllSubtasksFail(t *testing.T) {
 	}
 }
 
+// promptRecordingMockLLM records every prompt it is asked to generate, so a test
+// can assert on the content of a specific phase's prompt (e.g. the reduce prompt).
+// Subtasks at the given call indices error on both their attempts so they stay
+// failed; all other calls succeed.
+type promptRecordingMockLLM struct {
+	decompose   string
+	failOnCalls map[int]bool
+	count       int
+	prompts     []string
+}
+
+func (m *promptRecordingMockLLM) Generate(prompt string) (string, error) {
+	m.count++
+	m.prompts = append(m.prompts, prompt)
+	n := m.count
+	if m.failOnCalls[n] {
+		return "", fmt.Errorf("simulated error on call %d", n)
+	}
+	if n == 1 {
+		return m.decompose, nil
+	}
+	return fmt.Sprintf("result for call %d with sufficient length to pass checks", n), nil
+}
+func (m *promptRecordingMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *promptRecordingMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *promptRecordingMockLLM) AnalyzeComplexity(_ string) string       { return "high" }
+func (m *promptRecordingMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *promptRecordingMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "ok" }
+
+// TestChainAction_MapReduce_ReduceNamesFailedSubtasks verifies that when a subtask
+// fails, the reduce-phase prompt names that specific subtask (not just a count) so
+// the synthesizer can flag the exact gap instead of fabricating the missing piece.
+func TestChainAction_MapReduce_ReduceNamesFailedSubtasks(t *testing.T) {
+	mock := &promptRecordingMockLLM{
+		decompose: "1. Subtask A\n2. Subtask B\n3. Subtask C",
+		// call 1 = decompose, 2 = A, 3 = B (fails), 4 = B retry (fails),
+		// 5 = C, 6 = reduce. B fails on both attempts so it stays failed.
+		failOnCalls: map[int]bool{3: true, 4: true},
+	}
+	bb := &Blackboard{Task: "analyze a complex multi-part topic", LLM: mock}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+	if result != 1 || bb.Outcome != "chain_success" {
+		t.Fatalf("expected chain_success, got result=%d outcome=%s: %s", result, bb.Outcome, bb.Result)
+	}
+
+	reducePrompt := mock.prompts[len(mock.prompts)-1]
+	if !strings.Contains(reducePrompt, "MISSING") {
+		t.Errorf("reduce prompt should flag missing subtasks, got:\n%s", reducePrompt)
+	}
+	if !strings.Contains(reducePrompt, "Subtask B") {
+		t.Errorf("reduce prompt should name the failed subtask 'Subtask B', got:\n%s", reducePrompt)
+	}
+	// Completed subtasks must NOT be listed as missing.
+	missingIdx := strings.Index(reducePrompt, "MISSING")
+	if strings.Contains(reducePrompt[missingIdx:], "Subtask A") || strings.Contains(reducePrompt[missingIdx:], "Subtask C") {
+		t.Errorf("completed subtasks should not appear in the missing list, got:\n%s", reducePrompt[missingIdx:])
+	}
+}
+
 func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
 	// execAgent: Test MaxTokens boundary values (0, 1, 31)
 	tests := []struct {

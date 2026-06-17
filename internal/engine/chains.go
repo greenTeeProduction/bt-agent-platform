@@ -541,7 +541,17 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		reducePrompt += fmt.Sprintf("%d. %s\n", i+1, r)
 	}
 	if failed > 0 {
-		reducePrompt += fmt.Sprintf("\nNote: %d subtask(s) could not be completed; produce the best answer from the available results and flag the missing parts.\n", failed)
+		// Name the specific subtasks that are missing rather than only their count.
+		// A complex task decomposes into distinct parts; telling the reducer exactly
+		// which parts have no result lets the final answer flag each gap precisely
+		// (and resist fabricating the missing piece) instead of vaguely noting that
+		// "N parts" are absent. Mirrors execAgent's incompleteInvestigationNote, which
+		// names why an investigation was cut short.
+		reducePrompt += fmt.Sprintf("\nNote: %d subtask(s) could not be completed and are MISSING from the results above:\n", failed)
+		for _, ft := range failedSubtasks {
+			reducePrompt += fmt.Sprintf("  - %s\n", ft)
+		}
+		reducePrompt += "Produce the best answer from the available results. Explicitly flag each missing subtask above as unresolved — do not fabricate a result for it.\n"
 	}
 	reducePrompt += "\nUnified answer:"
 
