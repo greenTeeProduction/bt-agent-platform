@@ -657,6 +657,7 @@ var Descriptions = map[string]string{
 	"crash_investigator":        "Parse stack trace → root cause → fix → verify → prevent recurrence",
 	"game_ai":                   "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
 	"trading_signal":            "Market data → technical analysis → signal generation → risk management",
+	"alert_router":              "Route any alert (critical/security/trading/disk/health) by severity and type to the right channel — keyword-matching only, no LLM, instant execution",
 	"goap_planning":             "Goal-driven planning: assess → plan → execute with GOAP agent routing",
 	"goap_research":             "Research pipeline: web search → knowledge graph → synthesis with GOAP agent routing",
 	"goap_devops":               "Build, test, lint, deploy pipeline with GOAP goal-driven agent selection — routes to build/implement/investigate agents based on task keywords",

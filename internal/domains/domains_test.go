@@ -313,3 +313,21 @@ func TestAllDomainTrees(t *testing.T) {
 			name, metrics.Successes, metrics.TotalTasks, metrics.SuccessRate, int64(metrics.AvgDurationMs))
 	}
 }
+
+// TestAllDomainTreesHaveDescriptions guards that every curated (non-arc42)
+// registered tree carries a non-empty entry in the Descriptions map. The
+// gardener (gardener.go) and the bt-agent switch_tree tool surface these
+// descriptions verbatim, so a missing entry silently registers a blank
+// builtin. arc42 trees are generated dynamically and described per-section,
+// so they are exempt from this curated-map check.
+func TestAllDomainTreesHaveDescriptions(t *testing.T) {
+	for name := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		desc, ok := Descriptions[name]
+		if !ok || strings.TrimSpace(desc) == "" {
+			t.Errorf("tree %q is registered in AllDomainTrees but has no Descriptions entry", name)
+		}
+	}
+}
