@@ -331,3 +331,22 @@ func TestAllDomainTreesHaveDescriptions(t *testing.T) {
 		}
 	}
 }
+
+// TestDescriptionsHaveNoOrphans is the reverse guard to
+// TestAllDomainTreesHaveDescriptions: every entry in the Descriptions map must
+// correspond to a tree actually registered in AllDomainTrees. The gardener and
+// the bt-agent switch_tree tool surface these descriptions verbatim, so an
+// orphaned entry (left behind after a tree is renamed or removed) advertises a
+// builtin that can never be selected. arc42 trees are described per-section and
+// intentionally absent from the curated Descriptions map, so they are exempt.
+func TestDescriptionsHaveNoOrphans(t *testing.T) {
+	all := AllDomainTrees()
+	for name := range Descriptions {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		if _, ok := all[name]; !ok {
+			t.Errorf("Descriptions has entry %q but no such tree is registered in AllDomainTrees", name)
+		}
+	}
+}
