@@ -480,9 +480,18 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		bb.ChainState = map[string]any{}
 	}
 
-	// Map phase: decompose
+	// Map phase: decompose. This call gates the entire map-reduce — every subtask
+	// and the final reduce depend on it — yet it was the only LLM call in this
+	// function without retry resilience. A single transient blip (rate limit,
+	// timeout) on decomposition would sink the whole node even though the subtask
+	// and reduce calls each retry once. Retry once here too, symmetric with the
+	// rest of the function, so one flaky decompose call doesn't fail a complex task.
 	mapPrompt := fmt.Sprintf("Break down this task into 3-5 independent subtasks:\n%s\n\nSubtasks (one per line, numbered):", task)
 	subtasks, err := bb.LLM.Generate(mapPrompt)
+	if err != nil {
+		bb.ChainState["map_reduce_decompose_retried"] = true
+		subtasks, err = bb.LLM.Generate(mapPrompt)
+	}
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("map_reduce decompose error: %v", err)
@@ -494,6 +503,20 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// reduce phase can attribute content to the right part of the decomposition.
 	const maxSubtasks = 5
 	lines := splitLines(subtasks)
+	// Decomposition recovery: the model sometimes returns prose, an apology, or an
+	// empty/unparseable list instead of subtask lines — more likely on an unusually
+	// phrased complex task. With no parseable lines the map loop below does nothing,
+	// completed stays 0, and the node hard-fails with "all 0 subtasks failed",
+	// abandoning the task entirely. Degrade gracefully to a single subtask (the whole
+	// task) so it is still attempted end-to-end rather than dropped, and flag the
+	// degraded mode so downstream nodes can see decomposition did not really split.
+	decomposeEmpty := false
+	if len(lines) == 0 {
+		if t := strings.TrimSpace(task); t != "" {
+			lines = []string{t}
+			decomposeEmpty = true
+		}
+	}
 	results := make([]mapReduceSubtask, 0, maxSubtasks)
 	var failedSubtasks []string
 	completed, failed, retried := 0, 0, 0
@@ -546,6 +569,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	bb.ChainState["map_reduce_failed"] = failed
 	bb.ChainState["map_reduce_retried"] = retried
 	bb.ChainState["map_reduce_context_windowed"] = contextWindowed
+	bb.ChainState["map_reduce_decompose_empty"] = decomposeEmpty
 	if len(failedSubtasks) > 0 {
 		bb.ChainState["map_reduce_failed_subtasks"] = failedSubtasks
 	}

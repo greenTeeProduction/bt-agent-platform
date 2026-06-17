@@ -1002,6 +1002,103 @@ func TestChainAction_MapReduce_SubtaskRetryRecovers(t *testing.T) {
 	}
 }
 
+// flakyDecomposeMockLLM errors on the first N "Break down this task" calls and
+// succeeds otherwise, simulating a transient decomposition failure so the
+// map_reduce decompose-retry path can be exercised.
+type flakyDecomposeMockLLM struct {
+	failFirstN int
+	seen       int
+}
+
+func (m *flakyDecomposeMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "Break down this task") {
+		m.seen++
+		if m.seen <= m.failFirstN {
+			return "", fmt.Errorf("transient decompose error %d", m.seen)
+		}
+		return "1. first subtask\n2. second subtask", nil
+	}
+	return "subtask result with sufficient length for validation", nil
+}
+func (m *flakyDecomposeMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyDecomposeMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyDecomposeMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *flakyDecomposeMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *flakyDecomposeMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// A first-attempt failure on the decompose call must be retried, not fatal: the
+// whole map_reduce should still run, with the retry recorded in ChainState.
+func TestChainAction_MapReduce_DecomposeRetryRecovers(t *testing.T) {
+	mock := &flakyDecomposeMockLLM{failFirstN: 1}
+	bb := &Blackboard{
+		Task: "analyze a complex topic",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after decompose retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if got, _ := bb.ChainState["map_reduce_decompose_retried"].(bool); !got {
+		t.Errorf("expected map_reduce_decompose_retried=true, got %v", bb.ChainState["map_reduce_decompose_retried"])
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 2 {
+		t.Errorf("expected 2 completed subtasks after decompose recovered, got %v", got)
+	}
+}
+
+// emptyDecomposeMockLLM returns an unparseable (whitespace-only) decomposition so
+// the map_reduce decompose-empty fallback can be exercised; other calls succeed.
+type emptyDecomposeMockLLM struct{}
+
+func (m *emptyDecomposeMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "Break down this task") {
+		return "   \n  \n", nil // no parseable subtask lines
+	}
+	return "subtask result with sufficient length for validation", nil
+}
+func (m *emptyDecomposeMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *emptyDecomposeMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *emptyDecomposeMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *emptyDecomposeMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *emptyDecomposeMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// When decomposition yields no parseable subtasks, map_reduce must not hard-fail
+// with "all 0 subtasks failed"; it should degrade to treating the whole task as a
+// single subtask, still produce an answer, and flag the degraded mode.
+func TestChainAction_MapReduce_EmptyDecompositionFallback(t *testing.T) {
+	bb := &Blackboard{
+		Task: "analyze a complex topic that the model fails to split",
+		LLM:  &emptyDecomposeMockLLM{},
+	}
+
+	result := execMapReduce(ChainConfig{ChainType: "map_reduce", Prompt: "{{.Task}}"}, bb)
+
+	if result != 1 {
+		t.Fatalf("expected success (1) via single-subtask fallback, got %d: %s", result, bb.Result)
+	}
+	if got, _ := bb.ChainState["map_reduce_decompose_empty"].(bool); !got {
+		t.Errorf("expected map_reduce_decompose_empty=true, got %v", bb.ChainState["map_reduce_decompose_empty"])
+	}
+	if got := bb.ChainState["map_reduce_completed"]; got != 1 {
+		t.Errorf("expected 1 completed subtask (whole task), got %v", got)
+	}
+}
+
 // --- {{.ChainHistory}} template token ---
 
 func TestRenderChainHistory_Empty(t *testing.T) {
