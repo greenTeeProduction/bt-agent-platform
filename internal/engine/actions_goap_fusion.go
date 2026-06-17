@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nico/go-bt-evolve/internal/util"
+
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -24,6 +26,22 @@ func init() {
 }
 
 func registerGoapFusionActions() {
+	// Conditions for GOAP fusion tree routing
+	RegisterCondition("IsFusionTask", func(bb *Blackboard) bool {
+		return util.ContainsAnyStr(strings.ToLower(bb.Task),
+			"fusion", "improve", "expand", "capability", "research", "evolve", "update",
+			"enhance", "upgrade", "optimize", "refactor", "extend")
+	})
+	RegisterCondition("IsResearchOrGapRequest", func(bb *Blackboard) bool {
+		return util.ContainsAnyStr(strings.ToLower(bb.Task),
+			"research", "gap", "analyze", "plan", "assess", "review", "scan",
+			"audit", "evaluate", "survey", "study", "compare")
+	})
+	RegisterCondition("IsApplyRequest", func(bb *Blackboard) bool {
+		return util.ContainsAnyStr(strings.ToLower(bb.Task),
+			"apply", "implement", "fix", "create", "build", "add", "register",
+			"deploy", "install", "patch", "write", "generate")
+	})
 	// ReadVaultResearch reads all NotebookLM research syntheses, evolution reports,
 	// and improvement plans from the Obsidian vault into the blackboard.
 	RegisterAction("ReadVaultResearch", func(ctx *btcore.BTContext[Blackboard]) int {

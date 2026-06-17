@@ -912,8 +912,8 @@
     "hash": "42f98904345061123e3b05b52d125476"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion.go": {
-    "mtime": 1781680084.6761782,
-    "hash": "d94c88e0819a78532f72412421bbf8a4"
+    "mtime": 1781680752.6204777,
+    "hash": "5fa79688c98a6889755f2ceffcaf1fa4"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_bus_test.go": {
     "mtime": 1781274740.5823095,
@@ -2228,11 +2228,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1781680436.4984634,
+    "mtime": 1781681092.8216712,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1781680436.778465,
+    "mtime": 1781681093.0336719,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
