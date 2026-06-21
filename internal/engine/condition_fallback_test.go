@@ -1246,6 +1246,36 @@ func TestCondBulk_ValidateOutput(t *testing.T) {
 	}
 }
 
+// TestCond_CaseInsensitiveRouting verifies that keyword-matching conditions
+// route correctly regardless of input casing. Real-world task strings arrive
+// with arbitrary capitalization ("URGENT: ...", "Review this PR"); before the
+// ContainsAnyFold conversion these matched bb.Task case-sensitively against
+// lowercase keywords and silently failed to route capitalized tasks.
+func TestCond_CaseInsensitiveRouting(t *testing.T) {
+	cases := []struct {
+		cond string
+		task string
+	}{
+		{"IsHighPriority", "URGENT: production is down"},
+		{"IsHighPriority", "Critical outage in payments"},
+		{"IsCodeReview", "Review this pull request"},
+		{"NeedsCompilation", "BUILD the release binary"},
+		{"NeedsTesting", "Add Coverage for the parser"},
+		{"IsLBORequest", "Model an LBO for the target"},
+		{"IsKYCRequest", "Run KYC and AML screening"},
+		{"NeedsAudit", "AUDIT the capital accounts"},
+	}
+	for _, c := range cases {
+		fn := (&Blackboard{}).conditionForName(c.cond)
+		if fn == nil {
+			t.Fatalf("conditionForName(%q) returned nil", c.cond)
+		}
+		if !fn(&Blackboard{Task: c.task}) {
+			t.Errorf("conditionForName(%q)(%q) = false, want true (case-insensitive match)", c.cond, c.task)
+		}
+	}
+}
+
 // TestCondBulk_GraphIsFresh — checks file existence on disk
 func TestCondBulk_GraphIsFresh(t *testing.T) {
 	fn := (&Blackboard{}).conditionForName("GraphIsFresh")

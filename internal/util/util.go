@@ -36,3 +36,18 @@ func ContainsAnyStr(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+// ContainsAnyFold reports whether s contains any of the given substrings,
+// ignoring ASCII/Unicode case on both sides. It is the case-insensitive
+// counterpart to ContainsAnyStr, intended for keyword routing where the input
+// casing is unknown (e.g. "URGENT: fix prod" must still match "urgent").
+// Returns false if substrs is empty.
+func ContainsAnyFold(s string, substrs ...string) bool {
+	lower := strings.ToLower(s)
+	for _, sub := range substrs {
+		if strings.Contains(lower, strings.ToLower(sub)) {
+			return true
+		}
+	}
+	return false
+}

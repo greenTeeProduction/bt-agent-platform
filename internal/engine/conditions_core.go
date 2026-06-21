@@ -8,7 +8,7 @@ import (
 
 func init() {
 	RegisterCondition("IsHighPriority", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "critical", "urgent", "asap")
+		return util.ContainsAnyFold(bb.Task, "critical", "urgent", "asap")
 	})
 	RegisterCondition("ValidateOutput", func(bb *Blackboard) bool {
 		return validateOutputQuality(bb)
@@ -23,16 +23,16 @@ func init() {
 			"fix:", "bug:", "issue:", "refactor:", "engine:", "gardener:", "mcp:")
 	})
 	RegisterCondition("IsCodeReview", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "review", "inspect", "lint", "vet", "staticcheck", "code review")
+		return util.ContainsAnyFold(bb.Task, "review", "inspect", "lint", "vet", "staticcheck", "code review")
 	})
 	RegisterCondition("NeedsCompilation", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "build", "compile", "go build", "go run", "go install")
+		return util.ContainsAnyFold(bb.Task, "build", "compile", "go build", "go run", "go install")
 	})
 	RegisterCondition("NeedsTesting", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "test", "coverage", "benchmark", "go test", "testing")
+		return util.ContainsAnyFold(bb.Task, "test", "coverage", "benchmark", "go test", "testing")
 	})
 	RegisterCondition("IsGoQuestion", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "what is", "how to", "explain", "best practice", "pattern", "idiom", "convention")
+		return util.ContainsAnyFold(bb.Task, "what is", "how to", "explain", "best practice", "pattern", "idiom", "convention")
 	})
 	RegisterCondition("IsDevOps", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task),
@@ -122,58 +122,58 @@ func init() {
 			"close", "audit", "statement", "screening")
 	})
 	RegisterCondition("IsCompsRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "comps", "comparable", "multiples", "trading comp", "peer")
+		return util.ContainsAnyFold(bb.Task, "comps", "comparable", "multiples", "trading comp", "peer")
 	})
 	RegisterCondition("IsPrecedentsRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "precedent", "transaction", "m&a comp", "acquisition")
+		return util.ContainsAnyFold(bb.Task, "precedent", "transaction", "m&a comp", "acquisition")
 	})
 	RegisterCondition("IsLBORequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "lbo", "leveraged buyout", "buyout", "private equity")
+		return util.ContainsAnyFold(bb.Task, "lbo", "leveraged buyout", "buyout", "private equity")
 	})
 	RegisterCondition("IsDCFRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "dcf", "discounted cash flow", "intrinsic value", "wacc")
+		return util.ContainsAnyFold(bb.Task, "dcf", "discounted cash flow", "intrinsic value", "wacc")
 	})
 	RegisterCondition("IsDeckRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "deck", "pitch", "presentation", "powerpoint", "slide")
+		return util.ContainsAnyFold(bb.Task, "deck", "pitch", "presentation", "powerpoint", "slide")
 	})
 	RegisterCondition("IsEarningsRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "earnings", "quarterly", "10-q", "10-k", "8-k", "press release", "transcript")
+		return util.ContainsAnyFold(bb.Task, "earnings", "quarterly", "10-q", "10-k", "8-k", "press release", "transcript")
 	})
 	RegisterCondition("NeedsModelUpdate", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "update model", "refresh", "revise", "roll forward")
+		return util.ContainsAnyFold(bb.Task, "update model", "refresh", "revise", "roll forward")
 	})
 	RegisterCondition("IsNoteRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "note", "report", "write-up", "draft", "research")
+		return util.ContainsAnyFold(bb.Task, "note", "report", "write-up", "draft", "research")
 	})
 	RegisterCondition("IsIndustryRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "industry", "sector", "market", "theme", "trend")
+		return util.ContainsAnyFold(bb.Task, "industry", "sector", "market", "theme", "trend")
 	})
 	RegisterCondition("IsCompetitiveRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "competitive", "landscape", "peer", "market share")
+		return util.ContainsAnyFold(bb.Task, "competitive", "landscape", "peer", "market share")
 	})
 	RegisterCondition("IsIdeaRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "idea", "opportunity", "screen", "shortlist")
+		return util.ContainsAnyFold(bb.Task, "idea", "opportunity", "screen", "shortlist")
 	})
 	RegisterCondition("Is3StatementRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "3-statement", "three statement", "operating model", "income statement")
+		return util.ContainsAnyFold(bb.Task, "3-statement", "three statement", "operating model", "income statement")
 	})
 	RegisterCondition("IsMeetingPrep", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "briefing", "meeting", "client", "prep", "talking points")
+		return util.ContainsAnyFold(bb.Task, "briefing", "meeting", "client", "prep", "talking points")
 	})
 	RegisterCondition("IsValuationRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "valuation", "gp", "lp", "capital account", "nav")
+		return util.ContainsAnyFold(bb.Task, "valuation", "gp", "lp", "capital account", "nav")
 	})
 	RegisterCondition("IsGLReconRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "gl", "general ledger", "reconcil", "break", "sub-ledger")
+		return util.ContainsAnyFold(bb.Task, "gl", "general ledger", "reconcil", "break", "sub-ledger")
 	})
 	RegisterCondition("IsMonthEndRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "month-end", "close", "accrual", "roll-forward", "variance")
+		return util.ContainsAnyFold(bb.Task, "month-end", "close", "accrual", "roll-forward", "variance")
 	})
 	RegisterCondition("IsAuditRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "audit", "statement", "verify", "lp", "capital account")
+		return util.ContainsAnyFold(bb.Task, "audit", "statement", "verify", "lp", "capital account")
 	})
 	RegisterCondition("IsKYCRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "kyc", "aml", "onboarding", "screening", "sanctions", "pep")
+		return util.ContainsAnyFold(bb.Task, "kyc", "aml", "onboarding", "screening", "sanctions", "pep")
 	})
 	RegisterCondition("ValidateCompanyState", func(bb *Blackboard) bool {
 		if bb.ChainState == nil {
@@ -205,13 +205,13 @@ func init() {
 		return true
 	})
 	RegisterCondition("HasSkillGaps", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "skill", "outdated", "missing", "improve skill", "update skill")
+		return util.ContainsAnyFold(bb.Task, "skill", "outdated", "missing", "improve skill", "update skill")
 	})
 	RegisterCondition("HasWorkflowInefficiencies", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "workflow", "inefficient", "optimize", "redundant", "slow", "pattern")
+		return util.ContainsAnyFold(bb.Task, "workflow", "inefficient", "optimize", "redundant", "slow", "pattern")
 	})
 	RegisterCondition("HasModelToolIssues", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "model", "tool", "config", "switch", "tune", "provider")
+		return util.ContainsAnyFold(bb.Task, "model", "tool", "config", "switch", "tune", "provider")
 	})
 	RegisterCondition("HasFeatureGaps", func(bb *Blackboard) bool {
 		// Triggered when test results indicate missing features
@@ -230,22 +230,22 @@ func init() {
 		return true // daily fallback
 	})
 	RegisterCondition("HasNewAlgorithm", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "implement", "new algorithm", "research", "create")
+		return util.ContainsAnyFold(bb.Task, "implement", "new algorithm", "research", "create")
 	})
 	RegisterCondition("HasImprovement", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "improve", "enhance", "optimize", "tune")
+		return util.ContainsAnyFold(bb.Task, "improve", "enhance", "optimize", "tune")
 	})
 	RegisterCondition("NeedsIntegration", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "integrate", "connect", "pipeline", "wire")
+		return util.ContainsAnyFold(bb.Task, "integrate", "connect", "pipeline", "wire")
 	})
 	RegisterCondition("NeedsSweep", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "sweep", "update notes", "refresh", "maintain")
+		return util.ContainsAnyFold(bb.Task, "sweep", "update notes", "refresh", "maintain")
 	})
 	RegisterCondition("NeedsAudit", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "audit", "review", "check", "verify", "assess", "gap")
+		return util.ContainsAnyFold(bb.Task, "audit", "review", "check", "verify", "assess", "gap")
 	})
 	RegisterCondition("NeedsPublish", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "publish", "export", "generate", "report", "slide", "briefing")
+		return util.ContainsAnyFold(bb.Task, "publish", "export", "generate", "report", "slide", "briefing")
 	})
 	RegisterCondition("IsIngestTask", func(bb *Blackboard) bool {
 		lower := strings.ToLower(bb.Task)
