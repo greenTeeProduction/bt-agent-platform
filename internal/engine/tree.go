@@ -295,10 +295,13 @@ func validateOutputQuality(b *Blackboard) bool {
 		return false
 	}
 
-	// 2. Error pattern check
+	// 2. Error/incomplete pattern check. These markers indicate the agent is
+	// explicitly reporting unfinished or unverified work, so they must not be
+	// allowed to score as successful structured output.
 	errorPatterns := []string{
 		"output quality failed", "i cannot", "i can't", "unable to", "error:", "failed to",
-		"i don't know", "i'm not sure", "not implemented",
+		"i don't know", "i'm not sure", "not implemented", "incomplete", "step limit",
+		"could not be determined", "could not be verified", "not verified", "unverified",
 	}
 	for _, p := range errorPatterns {
 		if strings.Contains(lowerResult, p) {

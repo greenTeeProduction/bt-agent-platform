@@ -7,21 +7,15 @@ import (
 )
 
 // TestGoapFusion_Structure is a structural smoke test for GoapFusionTree.
-//
-// It deliberately does NOT run the tree end-to-end: the ClaudePath reaches
-// ApplyImprovementWithClaude, which launches Claude Code and is neither
-// deterministic nor test-safe (see domains_test.go TestAllDomainTrees, which
-// also restricts goap_fusion to structural smoke only). Instead we verify the
-// tree builds without panicking, has the expected GOAP node shape, and that
-// every condition and action it references is registered in the engine.
+// It deliberately does NOT execute the Claude path. It verifies the production
+// dual-mode shape: scheduled runs are deterministic while explicit apply runs
+// route through HITL-gated Superpowers runtime, with no ChainAgent fallback.
 func TestGoapFusion_Structure(t *testing.T) {
 	bb := &engine.Blackboard{
 		Task: "analyze research gaps and apply the highest-priority improvement: implement one concrete fix",
 		LLM:  &engine.MockLLM{},
 	}
 
-	// 1. BuildTree must not panic and must return a runnable command, for both
-	//    the plain tree and the checkpoint-verifier-wrapped variant.
 	for _, withVerifier := range []bool{false, true} {
 		tree := GoapFusionTree(withVerifier)
 		if tree == nil {
@@ -34,21 +28,25 @@ func TestGoapFusion_Structure(t *testing.T) {
 
 	tree := GoapFusionTree(false)
 
-	// 2. Verify the GOAP node shape: deterministic research phase followed by a
-	//    router that picks the Claude implementation path or the agent fallback.
 	requiredNodes := []string{
 		"PreGate",
-		"ImplementationRouter",
-		"ClaudePath",
-		"ExecutionPath",
+		"ExecutionRouter",
+		"ClaudeSuperpowersPath",
+		"ScheduledAnalysisPath",
+		"ApproveGoapFusionApply",
 	}
 	for _, name := range requiredNodes {
 		if findNode(*tree, name) == nil {
 			t.Errorf("GoapFusionTree missing expected node %q", name)
 		}
 	}
+	if containsNodeType(*tree, "ChainAgent") {
+		t.Fatalf("GoapFusionTree must not contain ChainAgent fallback")
+	}
+	if !containsNodeType(*tree, "HumanApprovalGate") {
+		t.Fatalf("explicit GOAP apply path must use HumanApprovalGate")
+	}
 
-	// 3. Every condition the tree references must be registered in the engine.
 	requiredConditions := []string{
 		"ValidateInput",
 		"IsFusionTask",
@@ -60,16 +58,18 @@ func TestGoapFusion_Structure(t *testing.T) {
 		}
 	}
 
-	// 4. Every action node the tree references must be registered in the engine.
 	requiredActions := []string{
 		"SetupFusionTools",
 		"ReadVaultResearch",
 		"ReadGraphifyReport",
 		"AnalyzeImprovementGaps",
 		"PrioritizeGoapGoals",
-		"ReadImprovementPlan",
-		"ApplyImprovementWithClaude",
+		"WriteSuperpowersImplementationPlan",
+		"RunSuperpowersClaudeImplementation",
 		"VerifyGoapBuild",
+		"ReportSuperpowersImplementation",
+		"WriteFusionAnalysis",
+		"ReportFusionCycle",
 		"ReflectOnOutcome",
 		"UpdateBehaviorTree",
 	}
@@ -79,6 +79,5 @@ func TestGoapFusion_Structure(t *testing.T) {
 		}
 	}
 
-	// 5. Sanity: the tree must not contain deprecated stub nodes.
 	assertNoExecutePlanStubs(t, "goap_fusion", *tree)
 }

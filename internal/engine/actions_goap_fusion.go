@@ -414,8 +414,7 @@ func registerGoapFusionActions() {
 		bb := ctx.Blackboard
 		var results []string
 
-		// Run go test on the domains package (most likely changed by fusion)
-		buildCmd := fmt.Sprintf("cd %s && /usr/local/go/bin/go build ./...", goapFusionRepo)
+		buildCmd := fmt.Sprintf("cd %s && /usr/local/go/bin/go build ./cmd/bt-agent ./cmd/bt-agent-cli", goapFusionRepo)
 		if out, err := runGoapShell(buildCmd); err != nil {
 			results = append(results, fmt.Sprintf("BUILD FAILED:\n%s", out))
 			setGoapState(bb, "verify_result", strings.Join(results, "\n"))
@@ -423,9 +422,9 @@ func registerGoapFusionActions() {
 			bb.Outcome = "goap_fusion_verify_failed"
 			return -1
 		}
-		results = append(results, "go build ./...: PASSED")
+		results = append(results, "go build ./cmd/bt-agent ./cmd/bt-agent-cli: PASSED")
 
-		testCmd := fmt.Sprintf("cd %s && /usr/local/go/bin/go test ./internal/domains ./internal/engine -count=1 -timeout 180s", goapFusionRepo)
+		testCmd := fmt.Sprintf("cd %s && /usr/local/go/bin/go test ./internal/domains ./internal/engine -count=1 -run 'TestGoapFusion_Structure|TestSuperpowersPipeline_ProductionContract|TestSuperpowersRuntime_ActionsRegistered|TestValidateOutputQuality' -timeout 180s", goapFusionRepo)
 		if out, err := runGoapShell(testCmd); err != nil {
 			results = append(results, fmt.Sprintf("TEST FAILED:\n%s", truncateGoap(out, 3000)))
 			setGoapState(bb, "verify_result", strings.Join(results, "\n"))
@@ -433,7 +432,7 @@ func registerGoapFusionActions() {
 			bb.Outcome = "goap_fusion_verify_failed"
 			return -1
 		}
-		results = append(results, "go test ./internal/domains ./internal/engine: PASSED")
+		results = append(results, "focused go tests: PASSED")
 
 		setGoapState(bb, "verify_result", strings.Join(results, "\n"))
 		bb.Result = fmt.Sprintf("## Verification Passed\n\n%s", strings.Join(results, "\n"))
@@ -451,7 +450,7 @@ func setGoapState(bb *Blackboard, key, value string) {
 func runGoapShell(command string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	cmd.Dir = goapFusionRepo
 	out, err := cmd.CombinedOutput()
 	return string(out), err

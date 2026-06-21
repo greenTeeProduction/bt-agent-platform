@@ -2,60 +2,52 @@ package domains
 
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
-// GoapFusionTree is a GOAP-driven behavior tree that reads NotebookLM research from
-// the Obsidian vault, analyzes the codebase via graphify, plans tree improvements,
-// implements safe changes via Claude Code, and verifies with build/tests.
+// GoapFusionTree is a dual-mode GOAP fusion runner.
 //
-// Architecture (flat Sequence — deterministic first, then route to implementation):
+// Scheduled/default tasks stay deterministic and non-HITL:
+// shared analysis -> ScheduledAnalysisPath -> report.
 //
-//	PreGate → ResearchAnalysis (always runs, <1s) → ImplementationRouter (Claude or fallback) → Reflect → Evolve
-//
-// Goals (GOAP priority order):
-//  1. ensure_research_loaded — NotebookLM syntheses and plans read from vault
-//  2. gap_analysis — Codebase structure checked against research findings
-//  3. apply_tree_improvement — One improvement implemented (Claude Code)
-//  4. verify_improvement — Build and tests pass for changed packages
-//
-// Destructive core runtime changes require HITL gating.
+// Explicit apply/fix/implement tasks write a Superpowers implementation plan,
+// request native HITL approval, then delegate code-changing work to the typed
+// production Superpowers runtime. There is intentionally no ChainAgent fallback.
 func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapFusion_Main", TimeoutMs: 3600_000, Children: []evolution.SerializableNode{
-		act("SetupFusionTools", "Give chain agents access to file_read, shell_exec, web_search, graphify, vault paths"),
+		act("SetupFusionTools", "Give GOAP fusion actions access to vault, graphify, git, and Superpowers runtime tools"),
 		seq("PreGate",
 			cond("ValidateInput", "Task must be non-empty"),
 			cond("IsFusionTask", "Detect fusion/improve/expand/capability/research/evolve keywords"),
 		),
-		// ── Phase 1: Deterministic research analysis (always runs, <1s total) ──
 		act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
 		act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),
-		act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase: what's missing, what's stale, what's improvable"),
-		act("PrioritizeGoapGoals", "Build GOAP goal queue: highest-impact, lowest-risk tree improvements first"),
-		// ── Phase 2: Route to appropriate implementation engine ──
-		sel("ImplementationRouter",
-			seq("ClaudePath",
-				cond("IsApplyRequest", "Detect apply/implement/fix/create/build keywords — use Claude Code"),
-				act("ReadImprovementPlan", "Read the highest-priority plan from ChainState or vault plans directory"),
+		act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase gaps"),
+		act("PrioritizeGoapGoals", "Build GOAP goal queue: highest-impact, lowest-risk improvements first"),
+		sel("ExecutionRouter",
+			seq("ClaudeSuperpowersPath",
+				cond("IsApplyRequest", "Explicit apply/implement/fix/create/build requests use Superpowers runtime after HITL"),
+				act("WriteSuperpowersImplementationPlan", "Write a concrete Superpowers plan with files, tests, risks, and verification commands"),
 				evolution.SerializableNode{
 					Type:        "HumanApprovalGate",
 					Name:        "ApproveGoapFusionApply",
-					Description: "Requires HITL approval before Claude Code implements BT platform changes",
+					Description: "Approve the written GOAP fusion Superpowers plan before Claude Code modifies files",
 					Metadata: map[string]any{
 						"phase":             "pre",
 						"side_effect_class": "external",
-						"hitl_prompt":       "Approve this GOAP fusion cycle to implement code changes via Claude Code? Research + gap analysis complete. Only additive, reversible changes.",
+						"hitl_prompt":       "Approve GOAP fusion to run Claude Code through the production Superpowers runtime? The previous action wrote a plan with changed files, tests, risk, and verification evidence; reject if the plan is unclear or too broad.",
 					},
 					Children: []evolution.SerializableNode{
-						act("ApplyImprovementWithClaude", "Launch Claude Code with full GOAP context to implement the highest-priority improvement"),
-						act("VerifyGoapBuild", "Run go test for changed packages and go build ./..."),
+						act("RunSuperpowersClaudeImplementation", "Execute approved plan through production Superpowers runtime and Claude Code"),
+						act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
+						act("ReportSuperpowersImplementation", "Report artifacts, finish evidence, and changed files"),
 					},
 				},
 			),
-			seq("ExecutionPath",
-				chainAgent("GoapFusionAgent",
-					"You are a GOAP-driven BT platform fusion agent. TASK: {{.Task}}. GOAP goals loaded in ChainState — check goap_fusion_* keys for research findings, gap analysis, and priorities. Use file_read to read the vault research, graphify report, and source files. Use file_write to implement safe tree improvements. Use shell_exec for go build, go test, git operations. Complete the highest-priority improvement in this cycle.",
-					[]string{"file_read", "file_write", "shell_exec", "web_search"}),
+			seq("ScheduledAnalysisPath",
+				act("WriteFusionAnalysis", "Write deterministic fusion analysis to the vault"),
+				act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
+				act("ReportFusionCycle", "Summarize deterministic scheduled cycle with verification evidence"),
 			),
 		),
-		act("ReflectOnOutcome", "Reflect on fusion improvement quality: did we make a measurable improvement? was the research correctly actioned?"),
+		act("ReflectOnOutcome", "Reflect on fusion cycle quality"),
 		outcome(),
 		act("UpdateBehaviorTree", "Evolve"),
 	}}
