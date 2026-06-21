@@ -43,10 +43,9 @@ func registerGoapFusionActions() {
 			"audit", "evaluate", "survey", "study", "compare")
 	})
 	RegisterCondition("IsApplyRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(strings.ToLower(bb.Task),
-			"apply", "implement", "fix", "create", "build", "add", "register",
-			"deploy", "install", "patch", "write", "generate")
+		return isGoapFusionApplyRequest(bb.Task)
 	})
+
 	// ReadVaultResearch reads all NotebookLM research syntheses, evolution reports,
 	// and improvement plans from the Obsidian vault into the blackboard.
 	RegisterAction("ReadVaultResearch", func(ctx *btcore.BTContext[Blackboard]) int {
@@ -630,4 +629,20 @@ func extractSection(text, startMarker, endMarker string) string {
 		return strings.TrimSpace(text[start:])
 	}
 	return strings.TrimSpace(text[start : start+end])
+}
+
+func isGoapFusionApplyRequest(task string) bool {
+	lower := strings.ToLower(task)
+	if util.ContainsAnyStr(lower,
+		"analysis only", "report only", "research only", "scheduled analysis",
+		"deterministic analysis", "do not apply", "no code", "without code") {
+		return false
+	}
+	return util.ContainsAnyStr(lower,
+		"apply", "implement", "fix", "patch",
+		"modify code", "edit code", "change code", "write code",
+		"add code", "add test", "add feature",
+		"register action", "register condition",
+		"create tree", "create domain", "build feature",
+		"deploy code", "install dependency")
 }
