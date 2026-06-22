@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -48,6 +49,19 @@ func BuildDecisionTree(node *evolution.SerializableNode, bb *Blackboard) btcore.
 
 func chooseDecisionBranch(node *evolution.SerializableNode, bb *Blackboard) int {
 	value := decisionValue(node, bb)
+	// Model-routed DecisionTrees resolve the branch label via the configured LLM
+	// (structured label + confidence + rationale, persisted to the Blackboard).
+	// The resolved label feeds the same exact-match dispatch below; deterministic
+	// exact/default fallback applies when the model is unavailable or low confidence.
+	if isModelRouted(node) {
+		input := value
+		if strings.TrimSpace(input) == "" && bb != nil {
+			input = bb.Task
+		}
+		decision := classifyTaskRoute(bb, input, collectBranchLabels(node), routeThreshold(node))
+		persistRouteDecision(bb, node, decision)
+		value = decision.Label
+	}
 	for i := range node.Children {
 		if childMatchesDecision(&node.Children[i], value) {
 			return i
