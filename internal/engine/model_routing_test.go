@@ -127,6 +127,97 @@ func TestModelRouting_NilLLMUsesDeterministicFallback(t *testing.T) {
 	}
 }
 
+func TestModelRouting_LowConfidencePreservesRejectedProposal(t *testing.T) {
+	registerDecisionTreeAction(t, "ModelRouteCodePath", "code path selected")
+	registerDecisionTreeAction(t, "ModelRouteResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "ModelRouteFallbackPath", "fallback selected")
+
+	bb := &Blackboard{
+		Task:       "something genuinely ambiguous",
+		ChainState: map[string]any{},
+		LLM:        &MockLLM{GenerateResp: `{"label":"code_review","confidence":0.3,"rationale":"unsure"}`},
+	}
+
+	bt := BuildTree(modelRouterTree(), bb)
+	if result := RunTask(bb, bt); result != "fallback selected" {
+		t.Fatalf("expected fallback branch, got %q", result)
+	}
+	if bb.ChainState["route_rejected"] != rejectLowConfidence {
+		t.Fatalf("expected rejected=%s, got %v", rejectLowConfidence, bb.ChainState["route_rejected"])
+	}
+	if bb.ChainState["route_model_label"] != "code_review" {
+		t.Fatalf("expected preserved model_label code_review, got %v", bb.ChainState["route_model_label"])
+	}
+	if mc, _ := bb.ChainState["route_model_confidence"].(float64); mc != 0.3 {
+		t.Fatalf("expected preserved model_confidence 0.3, got %v", bb.ChainState["route_model_confidence"])
+	}
+}
+
+func TestModelRouting_UnknownLabelRejected(t *testing.T) {
+	registerDecisionTreeAction(t, "ModelRouteCodePath", "code path selected")
+	registerDecisionTreeAction(t, "ModelRouteResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "ModelRouteFallbackPath", "fallback selected")
+
+	bb := &Blackboard{
+		Task:       "do something",
+		ChainState: map[string]any{},
+		// High confidence but the label is not one of the candidates (hallucinated).
+		LLM: &MockLLM{GenerateResp: `{"label":"deploy","confidence":0.95,"rationale":"sure"}`},
+	}
+
+	bt := BuildTree(modelRouterTree(), bb)
+	if result := RunTask(bb, bt); result != "fallback selected" {
+		t.Fatalf("expected fallback branch, got %q", result)
+	}
+	if bb.ChainState["route_rejected"] != rejectUnknownLabel {
+		t.Fatalf("expected rejected=%s, got %v", rejectUnknownLabel, bb.ChainState["route_rejected"])
+	}
+	if bb.ChainState["route_model_label"] != "deploy" {
+		t.Fatalf("expected preserved model_label deploy, got %v", bb.ChainState["route_model_label"])
+	}
+}
+
+func TestModelRouting_LLMErrorRecordsRejection(t *testing.T) {
+	registerDecisionTreeAction(t, "ModelRouteCodePath", "code path selected")
+	registerDecisionTreeAction(t, "ModelRouteResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "ModelRouteFallbackPath", "fallback selected")
+
+	bb := &Blackboard{
+		Task:       "no exact label here",
+		ChainState: map[string]any{},
+		LLM:        &MockLLM{GenerateErr: errors.New("ollama down")},
+	}
+
+	bt := BuildTree(modelRouterTree(), bb)
+	if result := RunTask(bb, bt); result != "fallback selected" {
+		t.Fatalf("expected fallback branch, got %q", result)
+	}
+	if bb.ChainState["route_rejected"] != rejectLLMError {
+		t.Fatalf("expected rejected=%s, got %v", rejectLLMError, bb.ChainState["route_rejected"])
+	}
+}
+
+func TestModelRouting_NilLLMHasNoRejection(t *testing.T) {
+	registerDecisionTreeAction(t, "ModelRouteCodePath", "code path selected")
+	registerDecisionTreeAction(t, "ModelRouteResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "ModelRouteFallbackPath", "fallback selected")
+
+	bb := &Blackboard{
+		Task:       "no model configured and not an exact label",
+		ChainState: map[string]any{},
+		LLM:        nil,
+	}
+
+	bt := BuildTree(modelRouterTree(), bb)
+	if result := RunTask(bb, bt); result != "fallback selected" {
+		t.Fatalf("expected fallback branch, got %q", result)
+	}
+	// Model was never consulted, so there is no rejection to report.
+	if r, _ := bb.ChainState["route_rejected"].(string); r != "" {
+		t.Fatalf("expected empty rejection when model not consulted, got %q", r)
+	}
+}
+
 func TestParseRouteResponse_LineBasedFallback(t *testing.T) {
 	label, conf, rationale, ok := parseRouteResponse("label: research\nconfidence: 0.8\nrationale: gather info")
 	if !ok || label != "research" || conf != 0.8 || rationale != "gather info" {

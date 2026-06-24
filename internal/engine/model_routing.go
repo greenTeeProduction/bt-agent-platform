@@ -21,6 +21,19 @@ const (
 // exact/default matching.
 const defaultRouteThreshold = 0.5
 
+// Rejection reasons explain why a model proposal was consulted but discarded in
+// favour of the deterministic exact/default fallback. They are persisted to the
+// Blackboard so a chain of model-routed DecisionTrees can be debugged: an empty
+// reason means the model's answer was accepted, or the model was never consulted
+// (LLM unavailable / no candidate labels).
+const (
+	rejectLLMError      = "llm_error"       // LLM call returned an error
+	rejectEmptyResponse = "empty_response"  // LLM returned blank text
+	rejectUnparseable   = "unparseable"     // no JSON object or label line found
+	rejectUnknownLabel  = "unknown_label"   // model picked a label that is not a candidate
+	rejectLowConfidence = "below_threshold" // model confidence under the node threshold
+)
+
 // routeHistoryKey is the ChainState key under which an append-only slice of every
 // routing decision in a run is accumulated. The singleton route_* keys reflect
 // only the latest decision; the history preserves earlier decisions so multi-step
@@ -36,6 +49,17 @@ type RouteDecision struct {
 	Confidence float64 `json:"confidence"`
 	Rationale  string  `json:"rationale"`
 	Source     string  `json:"source"`
+
+	// Diagnostics for a model proposal that was consulted but rejected in favour
+	// of the deterministic fallback. ModelLabel/ModelConfidence preserve what the
+	// model actually proposed (e.g. a near-miss below threshold or a hallucinated
+	// non-candidate label) and Rejected names why it was discarded. All three are
+	// empty/zero when the model's answer was accepted or the model was never
+	// consulted, so downstream nodes can tell "default branch, model not asked"
+	// apart from "default branch, model proposed X at 0.42 (below_threshold)".
+	ModelLabel      string  `json:"model_label,omitempty"`
+	ModelConfidence float64 `json:"model_confidence,omitempty"`
+	Rejected        string  `json:"rejected,omitempty"`
 }
 
 // RouteHistoryEntry records a single routing decision together with the decision
@@ -153,8 +177,9 @@ func collectBranchLabels(node *evolution.SerializableNode) []string {
 func classifyTaskRoute(bb *Blackboard, input string, candidates []string, threshold float64) RouteDecision {
 	exact := exactLabel(input, candidates)
 
+	// Model not consulted: no proposal to diagnose, just deterministic fallback.
 	if bb == nil || bb.LLM == nil || len(candidates) == 0 {
-		return fallbackDecision(exact)
+		return fallbackDecision(exact, RouteDecision{})
 	}
 
 	ctx := bb.TraceContext
@@ -163,17 +188,28 @@ func classifyTaskRoute(bb *Blackboard, input string, candidates []string, thresh
 	}
 
 	resp, err := bb.LLM.GenerateCtx(ctx, buildRoutePrompt(input, candidates))
-	if err != nil || strings.TrimSpace(resp) == "" {
-		return fallbackDecision(exact)
+	if err != nil {
+		return fallbackDecision(exact, RouteDecision{Rejected: rejectLLMError})
+	}
+	if strings.TrimSpace(resp) == "" {
+		return fallbackDecision(exact, RouteDecision{Rejected: rejectEmptyResponse})
 	}
 
 	label, conf, rationale, ok := parseRouteResponse(resp)
 	if !ok {
-		return fallbackDecision(exact)
+		return fallbackDecision(exact, RouteDecision{Rejected: rejectUnparseable})
 	}
+	// Preserve what the model actually proposed so a rejected near-miss or a
+	// hallucinated non-candidate label is still inspectable after fallback.
+	proposed := RouteDecision{ModelLabel: strings.TrimSpace(label), ModelConfidence: conf}
 	canon := exactLabel(label, candidates)
-	if canon == "" || conf < threshold {
-		return fallbackDecision(exact)
+	if canon == "" {
+		proposed.Rejected = rejectUnknownLabel
+		return fallbackDecision(exact, proposed)
+	}
+	if conf < threshold {
+		proposed.Rejected = rejectLowConfidence
+		return fallbackDecision(exact, proposed)
 	}
 
 	return RouteDecision{
@@ -184,12 +220,23 @@ func classifyTaskRoute(bb *Blackboard, input string, candidates []string, thresh
 	}
 }
 
-// fallbackDecision builds a deterministic decision from an exact-match result.
-func fallbackDecision(exact string) RouteDecision {
-	if exact != "" {
-		return RouteDecision{Label: exact, Confidence: 1.0, Source: routeSourceExact}
+// fallbackDecision builds a deterministic decision from an exact-match result,
+// carrying forward any model-proposal diagnostics (ModelLabel/ModelConfidence/
+// Rejected) so observers can see why the model's answer, if any, was discarded.
+func fallbackDecision(exact string, diag RouteDecision) RouteDecision {
+	d := RouteDecision{
+		ModelLabel:      diag.ModelLabel,
+		ModelConfidence: diag.ModelConfidence,
+		Rejected:        diag.Rejected,
 	}
-	return RouteDecision{Source: routeSourceDefault}
+	if exact != "" {
+		d.Label = exact
+		d.Confidence = 1.0
+		d.Source = routeSourceExact
+		return d
+	}
+	d.Source = routeSourceDefault
+	return d
 }
 
 // exactLabel returns the canonical candidate equal to value (case-insensitive,
@@ -288,6 +335,11 @@ func persistRouteDecision(bb *Blackboard, node *evolution.SerializableNode, d Ro
 	bb.ChainState["route_confidence"] = d.Confidence
 	bb.ChainState["route_rationale"] = d.Rationale
 	bb.ChainState["route_source"] = d.Source
+	// Rejected-proposal diagnostics: present only when the model was consulted and
+	// its answer discarded, so a fallback to default/exact is explainable.
+	bb.ChainState["route_rejected"] = d.Rejected
+	bb.ChainState["route_model_label"] = d.ModelLabel
+	bb.ChainState["route_model_confidence"] = d.ModelConfidence
 	// Scope the resolved label under the node's decision key too, so re-entrant
 	// reads and chained DecisionTrees observe the same value.
 	bb.ChainState[decisionKey(node)] = d.Label
