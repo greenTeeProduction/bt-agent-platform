@@ -21,6 +21,12 @@ const (
 // exact/default matching.
 const defaultRouteThreshold = 0.5
 
+// routeHistoryKey is the ChainState key under which an append-only slice of every
+// routing decision in a run is accumulated. The singleton route_* keys reflect
+// only the latest decision; the history preserves earlier decisions so multi-step
+// trees with several model-routed DecisionTree nodes don't lose context.
+const routeHistoryKey = "route_history"
+
 // RouteDecision is the structured result of model-assisted task routing.
 // It is produced by classifyTaskRoute and persisted into the Blackboard's
 // ChainState so downstream nodes, conditions, and observability can inspect
@@ -30,6 +36,14 @@ type RouteDecision struct {
 	Confidence float64 `json:"confidence"`
 	Rationale  string  `json:"rationale"`
 	Source     string  `json:"source"`
+}
+
+// RouteHistoryEntry records a single routing decision together with the decision
+// node's key, so a chain of model-routed DecisionTrees produces an ordered,
+// inspectable trail of how each branch was chosen.
+type RouteHistoryEntry struct {
+	Key string `json:"key"`
+	RouteDecision
 }
 
 // isModelRouted reports whether a DecisionTree node is configured to resolve its
@@ -277,4 +291,19 @@ func persistRouteDecision(bb *Blackboard, node *evolution.SerializableNode, d Ro
 	// Scope the resolved label under the node's decision key too, so re-entrant
 	// reads and chained DecisionTrees observe the same value.
 	bb.ChainState[decisionKey(node)] = d.Label
+	// Append to the ordered, append-only history so earlier routing decisions in a
+	// multi-step run survive subsequent overwrites of the singleton route_* keys.
+	hist, _ := bb.ChainState[routeHistoryKey].([]RouteHistoryEntry)
+	bb.ChainState[routeHistoryKey] = append(hist, RouteHistoryEntry{Key: decisionKey(node), RouteDecision: d})
+}
+
+// RouteHistory returns the ordered trail of routing decisions accumulated on the
+// Blackboard during a run, or nil if none were made. Downstream nodes and
+// observability use it to inspect every branch choice, not just the latest.
+func RouteHistory(bb *Blackboard) []RouteHistoryEntry {
+	if bb == nil || bb.ChainState == nil {
+		return nil
+	}
+	hist, _ := bb.ChainState[routeHistoryKey].([]RouteHistoryEntry)
+	return hist
 }

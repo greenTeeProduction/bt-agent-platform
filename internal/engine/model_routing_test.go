@@ -134,6 +134,48 @@ func TestParseRouteResponse_LineBasedFallback(t *testing.T) {
 	}
 }
 
+func TestRouteHistory_AccumulatesAcrossDecisions(t *testing.T) {
+	registerDecisionTreeAction(t, "ModelRouteCodePath", "code path selected")
+	registerDecisionTreeAction(t, "ModelRouteResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "ModelRouteFallbackPath", "fallback selected")
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+
+	// First decision: model picks research with high confidence.
+	first := RouteDecision{Label: "research", Confidence: 0.81, Rationale: "gather info", Source: routeSourceModel}
+	persistRouteDecision(bb, modelRouterTree(), first)
+
+	// Second decision under a distinct node key: deterministic exact fallback.
+	secondNode := modelRouterTree()
+	secondNode.Name = "SecondRouter"
+	second := RouteDecision{Label: "code_review", Confidence: 1.0, Source: routeSourceExact}
+	persistRouteDecision(bb, secondNode, second)
+
+	hist := RouteHistory(bb)
+	if len(hist) != 2 {
+		t.Fatalf("expected 2 history entries, got %d", len(hist))
+	}
+	if hist[0].Key != "ModelTaskRouter" || hist[0].Label != "research" || hist[0].Source != routeSourceModel {
+		t.Fatalf("unexpected first entry: %+v", hist[0])
+	}
+	if hist[1].Key != "SecondRouter" || hist[1].Label != "code_review" || hist[1].Source != routeSourceExact {
+		t.Fatalf("unexpected second entry: %+v", hist[1])
+	}
+	// Singleton keys still reflect only the latest decision.
+	if bb.ChainState["route_label"] != "code_review" {
+		t.Fatalf("expected latest route_label code_review, got %v", bb.ChainState["route_label"])
+	}
+}
+
+func TestRouteHistory_NilBlackboard(t *testing.T) {
+	if RouteHistory(nil) != nil {
+		t.Fatal("expected nil history for nil blackboard")
+	}
+	if RouteHistory(&Blackboard{}) != nil {
+		t.Fatal("expected nil history when ChainState is nil")
+	}
+}
+
 func TestCollectBranchLabels_SkipsDefault(t *testing.T) {
 	labels := collectBranchLabels(modelRouterTree())
 	if len(labels) != 2 {
