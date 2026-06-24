@@ -182,6 +182,41 @@ func (s *scopedStore) list(prefix string, limit int) []Entry {
 	return out
 }
 
+// listRecent returns entries (optionally filtered by prefix) ordered by
+// UpdatedAt descending — most recently written first — capped to limit.
+//
+// list sorts by key and then truncates, so once a scope holds more than limit
+// matching entries it returns the lexically-smallest keys and silently hides the
+// newest ones (and "subtask:10" sorts before "subtask:2"). That makes it
+// impossible for a node to ask for "the latest N entries" — exactly what error
+// recovery and context management need when accumulating subtask results or
+// error logs across a long multi-step run. listRecent surfaces that latest
+// context instead, with key as a deterministic tie-breaker for equal timestamps.
+func (s *scopedStore) listRecent(prefix string, limit int) []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if limit <= 0 {
+		limit = 100
+	}
+	prefix = normalizeKey(prefix)
+	out := make([]Entry, 0, 8)
+	for k, e := range s.entries {
+		if prefix == "" || strings.HasPrefix(k, prefix) {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].UpdatedAt.After(out[j].UpdatedAt)
+		}
+		return out[i].Key < out[j].Key
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
 func normalizeKey(key string) string {
 	key = strings.TrimSpace(key)
 	key = strings.Trim(key, "/")

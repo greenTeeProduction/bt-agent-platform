@@ -37,9 +37,9 @@ func attachBlackboardTools(bb *Blackboard) {
 	for _, t := range bb.ChainTools {
 		if n, ok := t.(interface{ Name() string }); ok {
 			switch n.Name() {
-			case "bb_read", "bb_write", "bb_list", "bb_append":
+			case "bb_read", "bb_write", "bb_list", "bb_recent", "bb_append":
 				hasRunTools = true
-			case "bb_session_read", "bb_session_write", "bb_session_list", "bb_session_append":
+			case "bb_session_read", "bb_session_write", "bb_session_list", "bb_session_recent", "bb_session_append":
 				hasSessionTools = true
 			}
 		}
@@ -53,6 +53,7 @@ func attachBlackboardTools(bb *Blackboard) {
 			&bbTool{name: "bb_read", description: "Read a value from the run blackboard by key. Action Input: key (e.g. work/notes).", handle: h, kind: "read"},
 			&bbTool{name: "bb_write", description: "Write a value to the run blackboard. Action Input: JSON {\"key\":\"work/x\",\"value\":\"...\",\"summary\":\"optional\"}.", handle: h, kind: "write"},
 			&bbTool{name: "bb_list", description: "List blackboard keys in the run scope. Action Input: optional key prefix.", handle: h, kind: "list"},
+			&bbTool{name: "bb_recent", description: "List the most recent run blackboard entries, newest first (use during error recovery to see the latest errors or subtask results). Action Input: optional key prefix.", handle: h, kind: "recent"},
 			&bbTool{name: "bb_append", description: "Append a line to a run blackboard key, creating it if absent (good for accumulating task history or subtask results). Action Input: JSON {\"key\":\"work/log\",\"value\":\"...\"}.", handle: h, kind: "append"},
 		)
 	}
@@ -61,6 +62,7 @@ func attachBlackboardTools(bb *Blackboard) {
 			&bbTool{name: "bb_session_read", description: "Read a value from the pipeline session blackboard (shared across workflow steps). Action Input: key (e.g. steps/analyze/output).", handle: h, kind: "session_read"},
 			&bbTool{name: "bb_session_write", description: "Write to the pipeline session blackboard. Action Input: JSON {\"key\":\"work/x\",\"value\":\"...\",\"summary\":\"optional\"}.", handle: h, kind: "session_write"},
 			&bbTool{name: "bb_session_list", description: "List keys in the pipeline session blackboard. Action Input: optional key prefix.", handle: h, kind: "session_list"},
+			&bbTool{name: "bb_session_recent", description: "List the most recent pipeline session blackboard entries, newest first (use to see the latest cross-step results during recovery). Action Input: optional key prefix.", handle: h, kind: "session_recent"},
 			&bbTool{name: "bb_session_append", description: "Append a line to a session blackboard key shared across workflow steps (good for accumulating cross-step results). Action Input: JSON {\"key\":\"steps/log\",\"value\":\"...\"}.", handle: h, kind: "session_append"},
 		)
 	}
@@ -84,6 +86,10 @@ func (t *bbTool) Call(input string) string {
 		return bbToolWrite(t.handle, input)
 	case "list":
 		return bbToolList(t.handle, input)
+	case "recent":
+		return bbToolRecent(t.handle, input)
+	case "session_recent":
+		return bbToolSessionRecent(t.handle, input)
 	case "append":
 		return bbToolAppend(t.handle, input)
 	case "session_append":
@@ -124,6 +130,32 @@ func bbToolWrite(h *blackboard.Handle, input string) string {
 
 func bbToolList(h *blackboard.Handle, input string) string {
 	entries, err := h.List(strings.TrimSpace(input), 50)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	return formatBBEntries(entries)
+}
+
+func bbToolRecent(h *blackboard.Handle, input string) string {
+	if h == nil || h.Mgr == nil || h.RunID == "" {
+		return "error: blackboard handle not configured"
+	}
+	entries, err := h.Mgr.ListRecent(h.RunScope(), strings.TrimSpace(input), 50)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	return formatBBEntries(entries)
+}
+
+func bbToolSessionRecent(h *blackboard.Handle, input string) string {
+	if h == nil || h.Mgr == nil {
+		return "error: blackboard handle not configured"
+	}
+	if h.SessionID == "" {
+		return "error: session scope not configured"
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeSession, ID: h.SessionID}
+	entries, err := h.Mgr.ListRecent(scope, strings.TrimSpace(input), 50)
 	if err != nil {
 		return "error: " + err.Error()
 	}

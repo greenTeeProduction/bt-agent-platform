@@ -97,6 +97,49 @@ func TestManager_AppendConcurrent(t *testing.T) {
 	}
 }
 
+func TestManager_ListRecent(t *testing.T) {
+	m := DefaultManager()
+	scope := Scope{Kind: ScopeRun, ID: "run_recent"}
+
+	// Write subtask results in order. Keys are chosen so that lexical order is
+	// NOT write order ("sub/10" sorts before "sub/2").
+	for _, k := range []string{"sub/1", "sub/2", "sub/10", "sub/3"} {
+		if err := m.Set(scope, k, "result-"+k, "", "text"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Re-write sub/2 last so it is unambiguously the most recently updated entry.
+	if err := m.Set(scope, "sub/2", "result-sub/2-updated", "", "text"); err != nil {
+		t.Fatal(err)
+	}
+
+	recent, err := m.ListRecent(scope, "sub/", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recent) != 2 {
+		t.Fatalf("ListRecent limit: got %d entries, want 2", len(recent))
+	}
+	if recent[0].Key != "sub/2" {
+		t.Fatalf("ListRecent must surface the newest write first, got %q", recent[0].Key)
+	}
+
+	// Contrast: key-sorted List truncates to the lexically smallest keys and so
+	// hides the most recent write behind the limit — the gap ListRecent fills.
+	byKey, err := m.List(scope, "sub/", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byKey[0].Key != "sub/1" {
+		t.Fatalf("List should be key-sorted, got %q first", byKey[0].Key)
+	}
+	for _, e := range byKey {
+		if e.Key == "sub/2" {
+			t.Fatal("expected key-sorted List to hide the newest write (sub/2) behind the limit")
+		}
+	}
+}
+
 func TestManager_Limits(t *testing.T) {
 	m := NewManager(map[ScopeKind]Limits{
 		ScopeRun: {MaxEntries: 1, MaxTotalBytes: 100},

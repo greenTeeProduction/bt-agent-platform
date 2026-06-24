@@ -135,3 +135,17 @@ func (m *Manager) List(scope Scope, prefix string, limit int) ([]Entry, error) {
 	}
 	return s.list(prefix, limit), nil
 }
+
+// ListRecent returns entries in a scope with an optional key prefix, ordered by
+// most-recently-updated first and capped to limit. Where List sorts by key —
+// and so hides the newest entries behind the limit once a scope fills — ListRecent
+// always surfaces the latest context (recent subtask results, error logs), which
+// is what nodes need for error recovery and context management across a long
+// multi-step run.
+func (m *Manager) ListRecent(scope Scope, prefix string, limit int) ([]Entry, error) {
+	s, err := m.storeFor(scope)
+	if err != nil {
+		return nil, err
+	}
+	return s.listRecent(prefix, limit), nil
+}
