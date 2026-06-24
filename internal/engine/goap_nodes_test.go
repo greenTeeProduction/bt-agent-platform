@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -482,5 +483,168 @@ func TestAction_SetupGoapTools_NilChainState(t *testing.T) {
 	}
 	if _, ok := bb.ChainState["goap_actions"]; !ok {
 		t.Error("goap_actions should be set")
+	}
+}
+
+// ─── buildGoapStepPrompt — prior result injection ──────────────────────────
+
+func TestBuildGoapStepPrompt_IncludesPriorResults(t *testing.T) {
+	cs := map[string]interface{}{
+		"goap_step_results": []GoapStepResult{
+			{Step: 1, Result: "analyzed requirements successfully"},
+			{Step: 2, Result: "built deployment pipeline config"},
+		},
+	}
+	prompt := buildGoapStepPrompt("build a pipeline", "execute_final", cs)
+	if !stringContains(prompt, "Prior step results:") {
+		t.Error("prompt should include prior step results header")
+	}
+	if !stringContains(prompt, "Step 1: analyzed requirements successfully") {
+		t.Error("prompt should include step 1 result")
+	}
+	if !stringContains(prompt, "Step 2: built deployment pipeline config") {
+		t.Error("prompt should include step 2 result")
+	}
+}
+
+func TestBuildGoapStepPrompt_CapsLongPriorResult(t *testing.T) {
+	// Build a result > goapPriorResultCap (600 chars)
+	longResult := strings.Repeat("x", goapPriorResultCap+200)
+	cs := map[string]interface{}{
+		"goap_step_results": []GoapStepResult{
+			{Step: 1, Result: longResult},
+		},
+	}
+	prompt := buildGoapStepPrompt("task", "step2", cs)
+	// The capped version should appear, truncated with "..."
+	expectedCapped := longResult[:goapPriorResultCap] + "..."
+	if !stringContains(prompt, expectedCapped) {
+		t.Errorf("prompt should contain capped result with '...', got:\n%s", prompt)
+	}
+	if stringContains(prompt, longResult) {
+		t.Error("full long result should not appear in prompt")
+	}
+}
+
+func TestBuildGoapStepPrompt_NoPriorResults(t *testing.T) {
+	cs := map[string]interface{}{}
+	prompt := buildGoapStepPrompt("task", "step1", cs)
+	if stringContains(prompt, "Prior step results:") {
+		t.Error("prompt without prior results should not include header")
+	}
+}
+
+// ─── ExecuteGoapStep — accumulation and synthesis ──────────────────────────
+
+func TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes(t *testing.T) {
+	// Build a plan with 2 steps
+	stepPlan := &goap.Plan{
+		Goal: goap.NewGoal("task_completed", 1.0,
+			goap.WorldState{"task_status": "completed"}),
+		Steps: []goap.Action{
+			{
+				Name:    "analyze_requirements",
+				Effects: goap.WorldState{"has_analysis": true},
+			},
+			{
+				Name:    "execute_build",
+				Effects: goap.WorldState{"has_result": true, "task_status": "completed"},
+			},
+		},
+	}
+
+	bb := &Blackboard{
+		Task: "build a pipeline",
+		LLM:  &MockLLM{GenerateResp: "mock step output"},
+		ChainState: map[string]interface{}{
+			"goap_step_index": 0,
+			"goap_steps":      []string{"analyze_requirements", "execute_build"},
+			"goap_plan":       stepPlan,
+			"goap_plan_found": true,
+			"goap_world_state": goap.WorldState{
+				"task":        "build a pipeline",
+				"has_result":  false,
+				"task_status": "pending",
+			},
+		},
+	}
+
+	// Execute step 0
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	fn := GetAction("ExecuteGoapStep")
+	if fn == nil {
+		t.Fatal("ExecuteGoapStep action not registered")
+	}
+	res := fn(ctx)
+	if res != 1 {
+		t.Fatalf("step 0 failed: %d, %s", res, bb.Result)
+	}
+
+	// Verify first step accumulated
+	results := getStepResults(bb.ChainState)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 step result after step 0, got %d", len(results))
+	}
+	if results[0].Step != 1 || results[0].Result != "mock step output" {
+		t.Errorf("unexpected step 0 result: %+v", results[0])
+	}
+
+	// Execute step 1
+	bb.LLM = &MockLLM{GenerateResp: "second step output"}
+	res = fn(ctx)
+	if res != 1 {
+		t.Fatalf("step 1 failed: %d, %s", res, bb.Result)
+	}
+
+	// Verify both steps accumulated
+	results = getStepResults(bb.ChainState)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 step results after step 1, got %d", len(results))
+	}
+	if results[1].Step != 2 || results[1].Result != "second step output" {
+		t.Errorf("unexpected step 1 result: %+v", results[1])
+	}
+
+	// Now test ReflectGoapOutcome synthesis
+	bb.Outcome = "success"
+	reflectFn := GetAction("ReflectGoapOutcome")
+	if reflectFn == nil {
+		t.Fatal("ReflectGoapOutcome action not registered")
+	}
+	res = reflectFn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if res != 1 {
+		t.Errorf("ReflectGoapOutcome failed: %d", res)
+	}
+	if !stringContains(bb.Result, "Step 1: mock step output") {
+		t.Errorf("synthesized result should contain step 1: %q", bb.Result)
+	}
+	if !stringContains(bb.Result, "Step 2: second step output") {
+		t.Errorf("synthesized result should contain step 2: %q", bb.Result)
+	}
+
+	// Verify backward compatibility: goap_last_step_result still set
+	lastResult, ok := bb.ChainState["goap_last_step_result"].(string)
+	if !ok || lastResult != "second step output" {
+		t.Errorf("goap_last_step_result should still be set: %q", lastResult)
+	}
+}
+
+func TestAction_ReflectGoapOutcome_NoResultsFallsBack(t *testing.T) {
+	bb := &Blackboard{
+		Outcome: "success",
+		ChainState: map[string]interface{}{
+			"goap_plan_found": true,
+		},
+	}
+	reflectFn := GetAction("ReflectGoapOutcome")
+	if reflectFn == nil {
+		t.Fatal("ReflectGoapOutcome action not registered")
+	}
+	res := reflectFn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if res != 1 {
+		t.Errorf("expected 1, got %d", res)
+	}
+	if !stringContains(bb.Result, "no step results") {
+		t.Errorf("expected fallback message, got %q", bb.Result)
 	}
 }

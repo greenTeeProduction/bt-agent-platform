@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -260,6 +261,7 @@ func registerGoapNodes() {
 		stepName := steps[idx]
 
 		// Execute step via LLM if available
+		var stepOutput string
 		if b.LLM != nil {
 			prompt := buildGoapStepPrompt(b.Task, stepName, cs)
 			result, err := b.LLM.Generate(prompt)
@@ -269,9 +271,17 @@ func registerGoapNodes() {
 				return -1
 			}
 			cs["goap_last_step_result"] = result
+			stepOutput = result
 		} else {
-			cs["goap_last_step_result"] = "step " + stepName + " marked complete (no LLM)"
+			fallback := "step " + stepName + " marked complete (no LLM)"
+			cs["goap_last_step_result"] = fallback
+			stepOutput = fallback
 		}
+
+		// Accumulate step result for multi-step reasoning context
+		stepResults := getStepResults(cs)
+		stepResults = append(stepResults, GoapStepResult{Step: len(stepResults) + 1, Result: stepOutput})
+		cs["goap_step_results"] = stepResults
 
 		// Update world state based on the plan step effects
 		if plan, ok := cs["goap_plan"]; ok {
@@ -302,7 +312,8 @@ func registerGoapNodes() {
 		return 1
 	}
 
-	// ReflectGoapOutcome reflects on the GOAP execution outcome.
+	// ReflectGoapOutcome reflects on the GOAP execution outcome and synthesizes
+	// a final result from all accumulated step outputs.
 	actionRegistry["ReflectGoapOutcome"] = func(ctx *btcore.BTContext[Blackboard]) int {
 		b := ctx.Blackboard
 		cs := b.ChainState
@@ -316,11 +327,47 @@ func registerGoapNodes() {
 
 		if b.Outcome == "success" && planFound {
 			b.Outcome = "success"
-			b.Result = "GOAP plan executed successfully"
+			// Synthesize final result from all step outputs
+			results := getStepResults(cs)
+			if len(results) > 0 {
+				var parts []string
+				for _, r := range results {
+					parts = append(parts, fmt.Sprintf("Step %d: %s", r.Step, r.Result))
+				}
+				b.Result = strings.Join(parts, "\n")
+			} else {
+				b.Result = "GOAP plan executed successfully (no step results)"
+			}
 		}
 
 		return 1
 	}
+}
+
+// GoapStepResult records the output of a single GOAP step execution.
+type GoapStepResult struct {
+	Step   int    // 1-based step number
+	Result string // step output text
+}
+
+// goapPriorResultCap is the maximum characters kept per prior step result
+// when injected as context into subsequent step prompts.
+const goapPriorResultCap = 600
+
+// getStepResults safely extracts accumulated step results from chain state.
+func getStepResults(cs map[string]interface{}) []GoapStepResult {
+	if cs == nil {
+		return nil
+	}
+	raw, ok := cs["goap_step_results"]
+	if !ok {
+		return nil
+	}
+	results, ok := raw.([]GoapStepResult)
+	if !ok {
+		return nil
+	}
+	return results
 }
 
 // planStepsToStrings extracts step names from a plan.
@@ -342,13 +389,29 @@ func getStringSlice(cs map[string]interface{}, key string) []string {
 	return []string{}
 }
 
-// buildGoapStepPrompt creates an LLM prompt for executing a GOAP step.
-func buildGoapStepPrompt(task, stepName string, _ map[string]interface{}) string {
-	prompt := "You are executing a GOAP (Goal-Oriented Action Planning) step.\n"
-	prompt += "Task: " + task + "\n"
-	prompt += "Step: " + stepName + "\n\n"
-	prompt += "Execute this step and return only the result. Be concise.\n"
-	return prompt
+// buildGoapStepPrompt creates an LLM prompt for executing a GOAP step,
+// including prior step results as context for multi-step reasoning.
+func buildGoapStepPrompt(task, stepName string, cs map[string]interface{}) string {
+	var b strings.Builder
+	b.WriteString("You are executing a GOAP (Goal-Oriented Action Planning) step.\n")
+	b.WriteString("Task: " + task + "\n")
+	b.WriteString("Step: " + stepName + "\n")
+
+	// Inject prior step results so later steps can build on earlier ones.
+	results := getStepResults(cs)
+	if len(results) > 0 {
+		b.WriteString("\nPrior step results:\n")
+		for _, r := range results {
+			capped := r.Result
+			if len(capped) > goapPriorResultCap {
+				capped = capped[:goapPriorResultCap] + "..."
+			}
+			fmt.Fprintf(&b, "Step %d: %s\n", r.Step, capped)
+		}
+	}
+
+	b.WriteString("\nExecute this step and return only the result. Be concise.\n")
+	return b.String()
 }
 
 func worldStateFromMap(m map[string]interface{}) map[string]interface{} {
