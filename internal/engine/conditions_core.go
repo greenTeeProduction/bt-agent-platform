@@ -223,6 +223,24 @@ func init() {
 	RegisterCondition("HasAPIIssues", func(bb *Blackboard) bool {
 		return bb.ChainState != nil && bb.ChainState["has_api_issues"] == true
 	})
+
+	// ─── Agent loop outcome conditions ──────────────────────────────────
+	// execAgent records why its ReAct loop stopped in
+	// ChainState["agent_stop_reason"]: "final_answer" when the agent produced
+	// its own answer, or "max_iterations" / "no_progress" /
+	// "repeated_tool_calls" when the loop was cut short on a complex task. The
+	// fallback synthesis still emits a (caveated) answer in the cut-short cases,
+	// so bb.Outcome alone cannot distinguish a clean completion from a stuck or
+	// budget-exhausted run. These conditions surface that distinction to the
+	// tree so a Selector can route a stalled agent into a recovery, escalation,
+	// or decomposition branch instead of treating the partial result as final.
+	RegisterCondition("AgentStalled", func(bb *Blackboard) bool {
+		r := agentStopReason(bb)
+		return r != "" && r != "final_answer"
+	})
+	RegisterCondition("AgentCompleted", func(bb *Blackboard) bool {
+		return agentStopReason(bb) == "final_answer"
+	})
 	RegisterCondition("IsDeepResearchDay", func(bb *Blackboard) bool {
 		return true // let the cron schedule handle this, always route
 	})
@@ -317,4 +335,16 @@ func init() {
 		}
 		return true
 	})
+}
+
+// agentStopReason returns the reason the most recent execAgent ReAct loop
+// stopped, as recorded in ChainState["agent_stop_reason"], or "" if no agent
+// loop has run on this blackboard. Used by the AgentStalled / AgentCompleted
+// conditions to let a tree branch on whether the agent finished cleanly.
+func agentStopReason(bb *Blackboard) string {
+	if bb == nil || bb.ChainState == nil {
+		return ""
+	}
+	r, _ := bb.ChainState["agent_stop_reason"].(string)
+	return r
 }

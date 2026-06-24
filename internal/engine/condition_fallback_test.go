@@ -1276,6 +1276,50 @@ func TestCond_CaseInsensitiveRouting(t *testing.T) {
 	}
 }
 
+// ─── Agent loop outcome conditions ───
+// execAgent records ChainState["agent_stop_reason"]; these conditions let a
+// tree branch a stalled/incomplete agent run into a recovery branch.
+
+func TestCondFallback_AgentStalled(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("AgentStalled")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	// No agent has run yet → not stalled.
+	if fn(&Blackboard{}) {
+		t.Error("expected false without ChainState")
+	}
+	if fn(&Blackboard{ChainState: map[string]any{}}) {
+		t.Error("expected false when agent_stop_reason absent")
+	}
+	// Clean completion → not stalled.
+	if fn(&Blackboard{ChainState: map[string]any{"agent_stop_reason": "final_answer"}}) {
+		t.Error("expected false for final_answer")
+	}
+	// Cut-short reasons → stalled.
+	for _, reason := range []string{"max_iterations", "no_progress", "repeated_tool_calls"} {
+		if !fn(&Blackboard{ChainState: map[string]any{"agent_stop_reason": reason}}) {
+			t.Errorf("expected true for stop reason %q", reason)
+		}
+	}
+}
+
+func TestCondFallback_AgentCompleted(t *testing.T) {
+	fn := (&Blackboard{}).conditionForName("AgentCompleted")
+	if fn == nil {
+		t.Fatal("expected non-nil")
+	}
+	if fn(&Blackboard{}) {
+		t.Error("expected false without ChainState")
+	}
+	if !fn(&Blackboard{ChainState: map[string]any{"agent_stop_reason": "final_answer"}}) {
+		t.Error("expected true for final_answer")
+	}
+	if fn(&Blackboard{ChainState: map[string]any{"agent_stop_reason": "max_iterations"}}) {
+		t.Error("expected false for max_iterations")
+	}
+}
+
 // TestCondBulk_GraphIsFresh — checks file existence on disk
 func TestCondBulk_GraphIsFresh(t *testing.T) {
 	fn := (&Blackboard{}).conditionForName("GraphIsFresh")
