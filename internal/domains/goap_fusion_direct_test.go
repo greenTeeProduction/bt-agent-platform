@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // TestGoapFusion_Structure is a structural smoke test for GoapFusionTree.
 // It deliberately does NOT execute the Claude path. It verifies the production
-// dual-mode shape: both paths use auto-approved HumanApprovalGate for code changes.
+// dual-mode shape: explicit apply tasks use Superpowers, while scheduled/default
+// runs stay deterministic analysis-only and never invoke Claude Code.
 func TestGoapFusion_Structure(t *testing.T) {
 	bb := &engine.Blackboard{
 		Task: "analyze research gaps and apply the highest-priority improvement: implement one concrete fix",
@@ -33,7 +35,6 @@ func TestGoapFusion_Structure(t *testing.T) {
 		"ClaudeSuperpowersPath",
 		"ScheduledAnalysisPath",
 		"ApproveGoapFusionApply",
-		"ApproveScheduledGoapApply",
 	}
 	for _, name := range requiredNodes {
 		if findNode(*tree, name) == nil {
@@ -67,6 +68,7 @@ func TestGoapFusion_Structure(t *testing.T) {
 		"WriteSuperpowersImplementationPlan",
 		"RunSuperpowersClaudeImplementation",
 		"VerifyGoapBuild",
+		"RunGraphifyUpdate",
 		"ReportSuperpowersImplementation",
 		"WriteFusionAnalysis",
 		"ReportFusionCycle",
@@ -79,5 +81,33 @@ func TestGoapFusion_Structure(t *testing.T) {
 		}
 	}
 
+	scheduled := findNode(*tree, "ScheduledAnalysisPath")
+	if scheduled == nil {
+		t.Fatal("missing ScheduledAnalysisPath")
+	}
+	if containsNodeType(*scheduled, "HumanApprovalGate") {
+		t.Fatalf("scheduled/default GOAP path must be analysis-only and must not create HITL gates")
+	}
+	if containsNodeName(*scheduled, "RunSuperpowersClaudeImplementation") {
+		t.Fatalf("scheduled/default GOAP path must not invoke Claude/Superpowers implementation")
+	}
+	for _, name := range []string{"WriteFusionAnalysis", "VerifyGoapBuild", "RunGraphifyUpdate", "ReportFusionCycle"} {
+		if !containsNodeName(*scheduled, name) {
+			t.Fatalf("scheduled/default GOAP path missing %q", name)
+		}
+	}
+
 	assertNoExecutePlanStubs(t, "goap_fusion", *tree)
+}
+
+func containsNodeName(node evolution.SerializableNode, name string) bool {
+	if node.Name == name {
+		return true
+	}
+	for _, child := range node.Children {
+		if containsNodeName(child, name) {
+			return true
+		}
+	}
+	return false
 }

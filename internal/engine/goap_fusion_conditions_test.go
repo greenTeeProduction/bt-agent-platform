@@ -12,6 +12,7 @@ func TestGoapFusion_IsApplyRequestDoesNotTreatReportWritingAsCodeApply(t *testin
 		"research goap fusion status and write deterministic analysis only",
 		"generate scheduled fusion report only",
 		"analyze gaps and do not apply code changes",
+		"Scheduled GOAP fusion cycle: read vault research and graphify report, identify improvement gaps, prioritize goals, apply highest-priority improvements via Superpowers runtime, run health checks, and record vault analysis.",
 	}
 	for _, task := range shouldNotApply {
 		if fn(&Blackboard{Task: task}) {

@@ -3,21 +3,42 @@
 # Usage: scripts/check.sh <mode>
 #   quick          vet, fmt, mod-tidy, golangci-lint (fast pre-push)
 #   full           quick + security-high + race tests + build (+ advisory extras)
-#   vet | fmt | mod-tidy | golangci | golangci-verify
+#   build          build-quality (vet/fmt/tidy/golangci/gosec-high) + all Makefile binaries + graphify update
+#   vet | fmt | mod-tidy | golangci | golangci-verify | graphify-update
 #   security-high  gosec high severity (uses .gosec.json)
 #   security-medium gosec medium severity (SARIF job parity)
 #   test           short tests with race (BT_SKIP_LLM_TESTS=1)
-#   build          all Makefile binaries
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
-GO="${GO:-go}"
-GOFMT="${GOFMT:-gofmt}"
+if [[ -z "${GO:-}" && -x /usr/local/go/bin/go ]]; then
+  GO="/usr/local/go/bin/go"
+else
+  GO="${GO:-go}"
+fi
+
+if [[ -z "${GOFMT:-}" && -x /usr/local/go/bin/gofmt ]]; then
+  GOFMT="/usr/local/go/bin/gofmt"
+else
+  GOFMT="${GOFMT:-gofmt}"
+fi
+
+if [[ "${GO}" == */* ]]; then
+  export PATH="$(dirname "${GO}"):${PATH}"
+fi
+
+if GOPATH_BIN="$("${GO}" env GOPATH 2>/dev/null)/bin"; then
+  export PATH="${GOPATH_BIN}:${PATH}"
+fi
+
 GOLANGCI="${GOLANGCI:-golangci-lint}"
 GOSEC="${GOSEC:-gosec}"
+GRAPHIFY="${GRAPHIFY:-graphify}"
+GRAPHIFY_ON_BUILD="${GRAPHIFY_ON_BUILD:-1}"
+BUILD_CHECKS="${BUILD_CHECKS:-1}"
 GOSEC_CONF="${GOSEC_CONF:-.gosec.json}"
 GOSEC_EXCLUDE="${GOSEC_EXCLUDE:-G404,G304,G703,G704,G115}"
 GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.3}"
@@ -101,6 +122,9 @@ run_test() {
 }
 
 run_build() {
+  if [[ "${BUILD_CHECKS}" != "0" ]]; then
+    run_build_quality
+  fi
   step "build binaries"
   mkdir -p "${BIN_DIR}"
   local bin
@@ -108,6 +132,26 @@ run_build() {
     "${GO}" build -o "${BIN_DIR}/${bin}" "./cmd/${bin}/"
   done
   ok "build"
+
+  if [[ "${GRAPHIFY_ON_BUILD}" != "0" ]]; then
+    run_graphify_update
+  fi
+}
+
+run_build_quality() {
+  echo "=== build-quality (runs before each local build) ==="
+  run_vet
+  run_fmt
+  run_mod_tidy
+  run_golangci
+  run_security_high
+}
+
+run_graphify_update() {
+  require_cmd "${GRAPHIFY}"
+  step "graphify update"
+  "${GRAPHIFY}" update .
+  ok "graphify update"
 }
 
 run_quick() {
@@ -125,7 +169,7 @@ run_full() {
   run_quick
   run_security_high
   run_test
-  run_build
+  BUILD_CHECKS=0 run_build
   step "govulncheck (advisory)"
   if command -v govulncheck >/dev/null 2>&1; then
     govulncheck ./... || echo "  ⚠ govulncheck reported issues (non-blocking locally)"
@@ -144,6 +188,8 @@ case "${MODE}" in
   mod-tidy) run_mod_tidy ;;
   golangci-verify) run_golangci_verify ;;
   golangci) run_golangci ;;
+  build-quality) run_build_quality ;;
+  graphify-update) run_graphify_update ;;
   security-high) run_security_high ;;
   security-medium) run_security_medium ;;
   test) run_test ;;
@@ -151,7 +197,7 @@ case "${MODE}" in
   quick) run_quick ;;
   full) run_full ;;
   *)
-    echo "Usage: $0 {quick|full|vet|fmt|mod-tidy|golangci|golangci-verify|security-high|security-medium|test|build}" >&2
+    echo "Usage: $0 {quick|full|vet|fmt|mod-tidy|golangci|golangci-verify|build-quality|graphify-update|security-high|security-medium|test|build}" >&2
     exit 2
     ;;
 esac

@@ -37,6 +37,9 @@ type SuperpowersRun struct {
 	Tasks          []SuperpowersTask   `json:"tasks"`
 	Verification   []VerificationCheck `json:"verification"`
 	ChangedFiles   []string            `json:"changed_files"`
+	ApplyStatus    string              `json:"apply_status,omitempty"`
+	PatchPath      string              `json:"patch_path,omitempty"`
+	AppliedCommit  string              `json:"applied_commit,omitempty"`
 	StartedAt      time.Time           `json:"started_at"`
 	UpdatedAt      time.Time           `json:"updated_at"`
 }

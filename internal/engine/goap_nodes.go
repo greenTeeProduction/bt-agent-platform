@@ -330,7 +330,7 @@ func registerGoapNodes() {
 			// Synthesize final result from all step outputs
 			results := getStepResults(cs)
 			if len(results) > 0 {
-				var parts []string
+				parts := make([]string, 0, len(results))
 				for _, r := range results {
 					parts = append(parts, fmt.Sprintf("Step %d: %s", r.Step, r.Result))
 				}

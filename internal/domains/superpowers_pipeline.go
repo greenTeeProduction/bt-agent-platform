@@ -39,12 +39,13 @@ func SuperpowersPipelineTree() *evolution.SerializableNode {
 						Description: "Approve the written Superpowers implementation plan before Claude Code modifies files",
 						Metadata: map[string]any{
 							"phase":             "pre",
-							"side_effect_class": "external",
+							"side_effect_class": "local_reversible",
 							"hitl_prompt":       "Approve Claude Code execution of the written Superpowers plan?",
 						},
 						Children: []evolution.SerializableNode{
 							act("ExecuteSuperpowersTaskBatch", "Execute approved plan tasks with Claude Code and TDD"),
-							act("VerifySuperpowersRun", "Run layered verification"),
+							act("VerifySuperpowersRun", "Run layered worktree verification"),
+							act("ApplySuperpowersRunToMainRepo", "Apply verified worktree patch to the main repo, run main-repo checks, graphify update, and commit"),
 							act("WriteSuperpowersFinishReport", "Write finish.md with evidence"),
 							act("UpdateBlackboard", "Mark Superpowers run complete"),
 						},

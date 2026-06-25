@@ -15,6 +15,13 @@ func init() {
 	registerSuperpowersProductionActions()
 }
 
+func titleSuperpowersVerb(verb string) string {
+	if verb == "" {
+		return ""
+	}
+	return strings.ToUpper(verb[:1]) + verb[1:]
+}
+
 func registerSuperpowersProductionActions() {
 	RegisterAction("LoadSuperpowersSkills", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -98,7 +105,7 @@ func registerSuperpowersProductionActions() {
 		if written {
 			verb = "written"
 		}
-		bb.Result = fmt.Sprintf("## Design Artifact %s\n\nPath: `%s`", strings.Title(verb), run.DesignPath)
+		bb.Result = fmt.Sprintf("## Design Artifact %s\n\nPath: `%s`", titleSuperpowersVerb(verb), run.DesignPath)
 		return 1
 	})
 
@@ -197,7 +204,7 @@ func registerSuperpowersProductionActions() {
 		if written {
 			verb = "written"
 		}
-		bb.Result = fmt.Sprintf("## Implementation Plan %s\n\nPath: `%s`\nTasks: %d", strings.Title(verb), run.PlanPath, len(tasks))
+		bb.Result = fmt.Sprintf("## Implementation Plan %s\n\nPath: `%s`\nTasks: %d", titleSuperpowersVerb(verb), run.PlanPath, len(tasks))
 		return 1
 	})
 
@@ -260,6 +267,24 @@ func registerSuperpowersProductionActions() {
 			return -1
 		}
 		bb.Result = fmt.Sprintf("## Superpowers Verification Passed\n\nChecks: %d", len(run.Verification))
+		return 1
+	})
+
+	RegisterAction("ApplySuperpowersRunToMainRepo", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, ok := getSuperpowersRun(bb)
+		if !ok {
+			bb.Result = "## Superpowers Apply Failed\n\nNo run state."
+			return -1
+		}
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		if err := applySuperpowersRunToMainRepo(c, defaultSuperpowersCommandRunner, run); err != nil {
+			bb.Result = "## Superpowers Pending Patch\n\n" + err.Error()
+			bb.Outcome = "pending_patch"
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Applied To Main Repo\n\nStatus: `%s`\nCommit: `%s`", run.ApplyStatus, run.AppliedCommit)
 		return 1
 	})
 
@@ -332,9 +357,16 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		bb.Result = "## GOAP Superpowers Verification Failed\n\n" + err.Error()
 		return -1
 	}
+	if err := applySuperpowersRunToMainRepo(c, defaultSuperpowersCommandRunner, run); err != nil {
+		finishPath := filepath.Join(run.ArtifactDir, "finish.md")
+		_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
+		bb.Result = "## GOAP Superpowers Pending Patch\n\n" + err.Error()
+		bb.Outcome = "pending_patch"
+		return -1
+	}
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
-	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`", run.ID, finishPath)
+	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`\nApply status: `%s`\nCommit: `%s`", run.ID, finishPath, run.ApplyStatus, run.AppliedCommit)
 	return 1
 }
 
@@ -401,6 +433,15 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 	fmt.Fprintf(&b, "- Task: %s\n", run.Task)
 	fmt.Fprintf(&b, "- Artifact dir: `%s`\n", run.ArtifactDir)
 	fmt.Fprintf(&b, "- Worktree: `%s`\n", run.WorktreePath)
+	if run.ApplyStatus != "" {
+		fmt.Fprintf(&b, "- Apply status: `%s`\n", run.ApplyStatus)
+	}
+	if run.PatchPath != "" {
+		fmt.Fprintf(&b, "- Patch: `%s`\n", run.PatchPath)
+	}
+	if run.AppliedCommit != "" {
+		fmt.Fprintf(&b, "- Applied commit: `%s`\n", run.AppliedCommit)
+	}
 	fmt.Fprintf(&b, "- Generated: %s\n\n", nowRFC3339())
 	fmt.Fprintf(&b, "## Tasks\n")
 	for _, task := range run.Tasks {

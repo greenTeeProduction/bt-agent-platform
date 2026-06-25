@@ -2523,7 +2523,7 @@ func TestWindowScratchpad(t *testing.T) {
 	// line boundary (no half step).
 	var sb strings.Builder
 	for i := 0; i < 200; i++ {
-		sb.WriteString(fmt.Sprintf("Step %d: %s\n", i, strings.Repeat("x", 80)))
+		fmt.Fprintf(&sb, "Step %d: %s\n", i, strings.Repeat("x", 80))
 	}
 	full := sb.String()
 	got := windowScratchpad(full, 1000)

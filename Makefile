@@ -1,4 +1,4 @@
-.PHONY: all build test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status tools-install check-quick check-full security-high security-medium
+.PHONY: all build build-quality graphify-update test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status tools-install check-quick check-full security-high security-medium
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -12,12 +12,13 @@ BIN_DIR := bin
 all: build
 
 build:
-	@mkdir -p $(BIN_DIR)
-	@for bin in $(BINARIES); do \
-		echo "Building $$bin..."; \
-		$(GO) build -o $(BIN_DIR)/$$bin ./cmd/$$bin/; \
-	done
-	@echo "All binaries built."
+	@GO=$(GO) GOFMT=$(GOFMT) BIN_DIR=$(BIN_DIR) BINARIES="$(BINARIES)" $(CHECK) build
+
+build-quality:
+	@GO=$(GO) GOFMT=$(GOFMT) $(CHECK) build-quality
+
+graphify-update:
+	@$(CHECK) graphify-update
 
 test:
 	$(GO) test -short -count=1 -race ./...
@@ -274,7 +275,9 @@ help:
 	@echo "BT Platform Makefile"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build             Build all binaries (default)"
+	@echo "  build             Run local quality checks, build all binaries, update graphify graph (default)"
+	@echo "  build-quality     Run the local quality gates used by make build"
+	@echo "  graphify-update   Refresh graphify-out with graphify update ."
 	@echo "  test              Run fast tests with race detector"
 	@echo "  test-full         Run full test suite (includes Ollama)"
 	@echo "  lint / vet        Run go vet"

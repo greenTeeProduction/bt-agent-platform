@@ -36,6 +36,7 @@ func TestSuperpowersPipeline_ProductionContract_NoPlaceholderPath(t *testing.T) 
 		"ApproveSuperpowersPlan",
 		"ExecuteSuperpowersTaskBatch",
 		"VerifySuperpowersRun",
+		"ApplySuperpowersRunToMainRepo",
 		"WriteSuperpowersFinishReport",
 		"ReportPipelineComplete",
 	}

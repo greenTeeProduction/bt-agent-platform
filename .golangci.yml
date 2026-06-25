@@ -3,13 +3,19 @@ run:
   go: 1.26.3
   tests: true
 linters:
+  disable:
+    - unused
   enable:
     - bodyclose
+    - errcheck
     - gocritic
+    - govet
+    - ineffassign
     - misspell
     - nilerr
     - prealloc
     - revive
+    - staticcheck
     - unconvert
   settings:
     gocritic:

@@ -305,7 +305,11 @@ func registerGoapFusionActions() {
 
 		// ── Preflight: clean worktree ──
 		// Reset graphify-out (generated noise)
-		runGoapShell("git checkout -- graphify-out/")
+		if out, err := runGoapShell("git checkout -- graphify-out/"); err != nil {
+			bb.Result = fmt.Sprintf("## Preflight Failed\n\nCould not reset graphify-out:\n%s", out)
+			bb.Outcome = "goap_fusion_preflight_failed"
+			return -1
+		}
 		// Auto-stash any dirty non-graphify files
 		dirtyStatus, _ := runGoapShell("git status --short --untracked-files=all")
 		if hasNonGraphifyDirty(dirtyStatus) {
@@ -317,7 +321,11 @@ func registerGoapFusionActions() {
 			}
 		}
 		// Ensure on master
-		runGoapShell("git checkout master")
+		if out, err := runGoapShell("git checkout master"); err != nil {
+			bb.Result = fmt.Sprintf("## Preflight Failed\n\nCould not checkout master:\n%s", out)
+			bb.Outcome = "goap_fusion_preflight_failed"
+			return -1
+		}
 
 		beforeHead, _ := runGoapShell("git rev-parse HEAD")
 		beforeHead = strings.TrimSpace(beforeHead)
@@ -369,7 +377,7 @@ func registerGoapFusionActions() {
 			gitDiff, _ := runGoapShell("git diff --stat -- . ':!graphify-out/'")
 
 			// Run verification
-			buildOut, buildErr := runGoapShell(fmt.Sprintf("/usr/local/go/bin/go build ./..."))
+			buildOut, buildErr := runGoapShell("/usr/local/go/bin/go build ./...")
 			if buildErr != nil {
 				resetToHead(beforeHead)
 				restoreGoapStash()
@@ -455,11 +463,11 @@ func runGoapShell(command string) (string, error) {
 	return string(out), err
 }
 
-func truncateGoap(s string, max int) string {
-	if len(s) <= max {
+func truncateGoap(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max] + "\n...<truncated>"
+	return s[:limit] + "\n...<truncated>"
 }
 
 func buildClaudeFusionPrompt(task, gaps, goals, plan, vault, graph string) string {
@@ -603,8 +611,8 @@ func resetToHead(ref string) {
 	if ref == "" {
 		return
 	}
-	runGoapShell(fmt.Sprintf("git reset --hard %s", ref))
-	runGoapShell("git clean -fd")
+	_, _ = runGoapShell(fmt.Sprintf("git reset --hard %s", ref))
+	_, _ = runGoapShell("git clean -fd")
 }
 
 func restoreGoapStash() {
@@ -612,7 +620,7 @@ func restoreGoapStash() {
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "goap-fusion auto-stash") {
 			ref := strings.SplitN(line, ":", 2)[0]
-			runGoapShell(fmt.Sprintf("git stash pop %s", ref))
+			_, _ = runGoapShell(fmt.Sprintf("git stash pop %s", ref))
 			return
 		}
 	}
@@ -635,7 +643,7 @@ func isGoapFusionApplyRequest(task string) bool {
 	lower := strings.ToLower(task)
 	if util.ContainsAnyStr(lower,
 		"analysis only", "report only", "research only", "scheduled analysis",
-		"deterministic analysis", "do not apply", "no code", "without code") {
+		"scheduled goap fusion cycle", "deterministic analysis", "do not apply", "no code", "without code") {
 		return false
 	}
 	return util.ContainsAnyStr(lower,

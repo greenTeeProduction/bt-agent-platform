@@ -30,3 +30,26 @@ func TestSafeSlug(t *testing.T) {
 		t.Fatalf("safeSlug = %q", got)
 	}
 }
+
+func TestSuperpowersPlanAttemptSaturatedInDir(t *testing.T) {
+	dir := t.TempDir()
+	task := "repeat me"
+	suffix := superpowersTaskHashSuffix(task)
+	for _, name := range []string{"20260625T050617-" + suffix, "20260625T053048-" + suffix} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saturated, matches := superpowersPlanAttemptSaturatedInDir(dir, task, 2)
+	if !saturated {
+		t.Fatalf("expected task hash %s to be saturated; matches=%v", suffix, matches)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("matches = %d, want 2 (%v)", len(matches), matches)
+	}
+
+	saturated, _ = superpowersPlanAttemptSaturatedInDir(dir, "different task", 2)
+	if saturated {
+		t.Fatal("different task should not be saturated")
+	}
+}

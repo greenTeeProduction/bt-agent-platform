@@ -16,8 +16,34 @@ const superpowersRepoDir = "/home/nico/go-bt-evolve"
 const superpowersRunsDir = "/home/nico/go-bt-evolve/docs/superpowers/runs"
 
 func newSuperpowersRunID(task string, now time.Time) string {
+	return fmt.Sprintf("%s-%s", now.Format("20060102T150405"), superpowersTaskHashSuffix(task))
+}
+
+func superpowersTaskHashSuffix(task string) string {
 	h := sha1.Sum([]byte(task))
-	return fmt.Sprintf("%s-%s", now.Format("20060102T150405"), hex.EncodeToString(h[:])[:8])
+	return hex.EncodeToString(h[:])[:8]
+}
+
+func superpowersPlanAttemptSaturatedInDir(baseDir, task string, maxAttempts int) (bool, []string) {
+	if maxAttempts <= 0 {
+		return false, nil
+	}
+	suffix := "-" + superpowersTaskHashSuffix(task)
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return false, nil
+	}
+	var matches []string
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasSuffix(entry.Name(), suffix) {
+			matches = append(matches, filepath.Join(baseDir, entry.Name()))
+		}
+	}
+	return len(matches) >= maxAttempts, matches
+}
+
+func superpowersPlanAttemptSaturated(task string, maxAttempts int) (bool, []string) {
+	return superpowersPlanAttemptSaturatedInDir(superpowersRunsDir, task, maxAttempts)
 }
 
 func ensureSuperpowersRunDirs(run *SuperpowersRun) error {

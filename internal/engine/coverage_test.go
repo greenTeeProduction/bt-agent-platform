@@ -245,7 +245,7 @@ func TestTree_SerializeRoundtrip(t *testing.T) {
 // ─── Helpers ───
 
 func collectNames(node *evolution.SerializableNode) []string {
-	var names []string
+	names := make([]string, 0, len(node.Children)+1)
 	names = append(names, node.Name)
 	for i := range node.Children {
 		names = append(names, collectNames(&node.Children[i])...)

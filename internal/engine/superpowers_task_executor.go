@@ -35,25 +35,58 @@ func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *Superpowe
 		_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green.txt"), []byte("DRY RUN: GREEN command not executed."), 0o644)
 		return task, nil
 	}
+	if len(task.Tests) == 0 {
+		task.Status = "failed"
+		return task, fmt.Errorf("superpowers task %q has no test command; refusing non-TDD implementation", task.Title)
+	}
 
 	before := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
-	claudeRes := e.Claude.RunClaude(ctx, run.WorktreePath, prompt)
-	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte(claudeRes.Output), 0o644)
-	if claudeRes.Err != nil {
+
+	redPrompt := buildSuperpowersRedPrompt(run, task)
+	redClaudeRes := e.Claude.RunClaude(ctx, run.WorktreePath, redPrompt)
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red-claude-output.md"), []byte(redClaudeRes.Output), 0o644)
+	if redClaudeRes.Err != nil {
 		task.Status = "failed"
-		return task, fmt.Errorf("claude failed: %v\n%s", claudeRes.Err, claudeRes.Output)
+		return task, fmt.Errorf("red-phase claude failed: %v\n%s", redClaudeRes.Err, redClaudeRes.Output)
+	}
+
+	redCmd := task.Tests[0]
+	redRes := runShellCommand(ctx, e.Runner, run.WorktreePath, redCmd)
+	redEvidence := formatCommandResult(redRes)
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red.txt"), []byte(redEvidence), 0o644)
+	if redRes.Err == nil {
+		task.Status = "failed"
+		return task, fmt.Errorf("RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: %s", redCmd)
+	}
+
+	redStatus := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
+	if nonTest := nonTestGoFiles(changedFilesDeltaText(before.Output, redStatus.Output)); len(nonTest) > 0 {
+		task.Status = "failed"
+		return task, fmt.Errorf("RED phase modified production Go files before GREEN: %s", strings.Join(nonTest, ", "))
+	}
+
+	greenPrompt := buildSuperpowersGreenPrompt(run, task, redEvidence)
+	greenClaudeRes := e.Claude.RunClaude(ctx, run.WorktreePath, greenPrompt)
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green-claude-output.md"), []byte(greenClaudeRes.Output), 0o644)
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte("# RED phase\n\n"+redClaudeRes.Output+"\n\n# GREEN phase\n\n"+greenClaudeRes.Output), 0o644)
+	if greenClaudeRes.Err != nil {
+		task.Status = "failed"
+		return task, fmt.Errorf("green-phase claude failed: %v\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
 	}
 
 	for i, cmd := range task.Tests {
 		res := runShellCommand(ctx, e.Runner, run.WorktreePath, cmd)
 		name := "green.txt"
-		if i == 0 && strings.Contains(strings.ToLower(task.Body), "red") {
-			name = "red.txt"
+		if len(task.Tests) > 1 {
+			name = fmt.Sprintf("green-%02d.txt", i+1)
 		}
 		_ = os.WriteFile(filepath.Join(task.ArtifactDir, name), []byte(formatCommandResult(res)), 0o644)
-		if i == len(task.Tests)-1 && res.Err != nil {
+		if i == len(task.Tests)-1 && name != "green.txt" {
+			_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green.txt"), []byte(formatCommandResult(res)), 0o644)
+		}
+		if res.Err != nil {
 			task.Status = "failed"
-			return task, fmt.Errorf("task verification failed: %s\n%s", cmd, res.Output)
+			return task, fmt.Errorf("task GREEN verification failed: %s\n%s", cmd, res.Output)
 		}
 	}
 	after := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
@@ -176,6 +209,16 @@ func changedFilesFromGitStatus(status string) []string {
 		}
 	}
 	return files
+}
+
+func nonTestGoFiles(files []string) []string {
+	var out []string
+	for _, f := range files {
+		if strings.HasSuffix(f, ".go") && !strings.HasSuffix(f, "_test.go") {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func nowRFC3339() string { return time.Now().Format(time.RFC3339) }

@@ -13,6 +13,7 @@ func TestSuperpowersRuntime_ActionsRegistered(t *testing.T) {
 		"ValidateImplementationPlanStrict",
 		"ExecuteSuperpowersTaskBatch",
 		"VerifySuperpowersRun",
+		"ApplySuperpowersRunToMainRepo",
 		"WriteSuperpowersFinishReport",
 		"RunSuperpowersRuntimeFromExistingPlan",
 		"RunSuperpowersClaudeImplementation",

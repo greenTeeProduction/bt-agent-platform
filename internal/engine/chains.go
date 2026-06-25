@@ -193,7 +193,7 @@ func renderChainHistory(bb *Blackboard) string {
 		status, _ := e["status"].(string)
 		durationMs, _ := e["duration_ms"].(int64)
 		preview, _ := e["preview"].(string)
-		sb.WriteString(fmt.Sprintf("#%d %s → %s (%dms)", seq, chainType, status, durationMs))
+		fmt.Fprintf(&sb, "#%d %s → %s (%dms)", seq, chainType, status, durationMs)
 		if preview != "" {
 			sb.WriteString(": " + preview)
 		}
@@ -641,15 +641,15 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 // reduce prompt's MISSING-subtask note.
 func buildMapReduceFallback(task string, results []mapReduceSubtask, failedSubtasks []string) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# %s\n\n", strings.TrimSpace(task)))
+	fmt.Fprintf(&sb, "# %s\n\n", strings.TrimSpace(task))
 	sb.WriteString("*Note: the combine step could not run, so these are the completed subtask results stitched together verbatim rather than a synthesized unified answer.*\n\n")
 	for i, r := range results {
-		sb.WriteString(fmt.Sprintf("## %d. %s\n\n%s\n\n", i+1, strings.TrimSpace(r.task), strings.TrimSpace(r.result)))
+		fmt.Fprintf(&sb, "## %d. %s\n\n%s\n\n", i+1, strings.TrimSpace(r.task), strings.TrimSpace(r.result))
 	}
 	if len(failedSubtasks) > 0 {
 		sb.WriteString("## Unresolved subtasks\n\nThe following subtasks could not be completed and are missing from the results above:\n\n")
 		for _, ft := range failedSubtasks {
-			sb.WriteString(fmt.Sprintf("- %s\n", ft))
+			fmt.Fprintf(&sb, "- %s\n", ft)
 		}
 	}
 	return strings.TrimRight(sb.String(), "\n")
