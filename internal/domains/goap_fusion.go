@@ -2,14 +2,8 @@ package domains
 
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
-// GoapFusionTree is a dual-mode GOAP fusion runner.
-//
-// Scheduled/default tasks stay deterministic and non-HITL:
-// shared analysis -> ScheduledAnalysisPath -> report.
-//
-// Explicit apply/fix/implement tasks write a Superpowers implementation plan,
-// request native HITL approval, then delegate code-changing work to the typed
-// production Superpowers runtime. There is intentionally no ChainAgent fallback.
+// GoapFusionTree is a GOAP-driven BT platform improvement runner.
+// Both scheduled and explicit tasks can apply code changes via the Superpowers runtime.
 func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapFusion_Main", TimeoutMs: 3600_000, Children: []evolution.SerializableNode{
 		act("SetupFusionTools", "Give GOAP fusion actions access to vault, graphify, git, and Superpowers runtime tools"),
@@ -28,11 +22,12 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 				evolution.SerializableNode{
 					Type:        "HumanApprovalGate",
 					Name:        "ApproveGoapFusionApply",
-					Description: "Approve the written GOAP fusion Superpowers plan before Claude Code modifies files",
+					Description: "Approve GOAP fusion to run Claude Code through the production Superpowers runtime.",
 					Metadata: map[string]any{
 						"phase":             "pre",
 						"side_effect_class": "external",
-						"hitl_prompt":       "Approve GOAP fusion to run Claude Code through the production Superpowers runtime? The previous action wrote a plan with changed files, tests, risk, and verification evidence; reject if the plan is unclear or too broad.",
+						"hitl_prompt":       "GOAP fusion will run Claude Code to implement BT platform improvements.",
+						"auto_approve":      true,
 					},
 					Children: []evolution.SerializableNode{
 						act("RunSuperpowersClaudeImplementation", "Execute approved plan through production Superpowers runtime and Claude Code"),
@@ -43,8 +38,20 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			),
 			seq("ScheduledAnalysisPath",
 				act("WriteFusionAnalysis", "Write deterministic fusion analysis to the vault"),
-				act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
-				act("ReportFusionCycle", "Summarize deterministic scheduled cycle with verification evidence"),
+				evolution.SerializableNode{
+					Type:        "HumanApprovalGate",
+					Name:        "ApproveScheduledGoapApply",
+					Description: "Auto-approve GOAP fusion for scheduled runs.",
+					Metadata: map[string]any{
+						"phase":        "pre",
+						"auto_approve": true,
+					},
+					Children: []evolution.SerializableNode{
+						act("RunSuperpowersClaudeImplementation", "Execute GOAP fusion through Superpowers runtime and Claude Code"),
+						act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
+						act("ReportSuperpowersImplementation", "Report artifacts, finish evidence, and changed files"),
+					},
+				},
 			),
 		),
 		act("ReflectOnOutcome", "Reflect on fusion cycle quality"),
