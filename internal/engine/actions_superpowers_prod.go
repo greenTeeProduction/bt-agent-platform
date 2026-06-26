@@ -310,6 +310,15 @@ func registerSuperpowersProductionActions() {
 	RegisterAction("RunSuperpowersRuntimeFromExistingPlan", runSuperpowersRuntimeFromExistingPlanAction)
 	RegisterAction("RunSuperpowersClaudeImplementation", runSuperpowersRuntimeFromExistingPlanAction)
 
+	// RunScheduledGoapFusionCycle drives the research-to-implementation cycle
+	// end-to-end: the GOAP fusion stage reads vault research and the graphify
+	// report, identifies improvement gaps, prioritizes goals, and writes a
+	// Superpowers implementation plan; this action then implements that plan via
+	// the Superpowers runtime (Claude Code execution, TDD verification, apply, and
+	// finish reporting). It reuses the existing-plan runtime so the scheduled
+	// cycle shares the same durable, idempotent execution path.
+	RegisterAction("RunScheduledGoapFusionCycle", runSuperpowersRuntimeFromExistingPlanAction)
+
 }
 
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) int {
