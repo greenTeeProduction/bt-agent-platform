@@ -45,7 +45,7 @@ func registerGoapFusionProductionAdditions() {
 			goals = "Implement the highest-priority GOAP fusion improvement safely."
 		}
 		task := fmt.Sprintf("%s\n\nGOAP goals:\n%s\n\nGaps:\n%s", bb.Task, goals, gaps)
-		maxAttempts := 2
+		maxAttempts := 12
 		if raw := os.Getenv("BT_SUPERPOWERS_MAX_PLAN_REPEATS"); raw != "" {
 			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 				maxAttempts = parsed

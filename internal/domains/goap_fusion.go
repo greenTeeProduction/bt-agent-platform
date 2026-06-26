@@ -19,12 +19,11 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 		act("PrioritizeGoapGoals", "Build GOAP goal queue: highest-impact, lowest-risk improvements first"),
 		sel("ExecutionRouter",
 			seq("ClaudeSuperpowersPath",
-				cond("IsApplyRequest", "Explicit apply/implement/fix/create/build requests use Superpowers runtime after HITL"),
 				act("WriteSuperpowersImplementationPlan", "Write a concrete Superpowers plan with files, tests, risks, and verification commands"),
 				evolution.SerializableNode{
 					Type:        "HumanApprovalGate",
 					Name:        "ApproveGoapFusionApply",
-					Description: "Approve GOAP fusion to run Claude Code through the production Superpowers runtime.",
+					Description: "GOAP fusion automatically implements findings via Superpowers runtime.",
 					Metadata: map[string]any{
 						"phase":             "pre",
 						"side_effect_class": "local_reversible",
@@ -32,7 +31,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 						"auto_approve":      true,
 					},
 					Children: []evolution.SerializableNode{
-						act("RunSuperpowersClaudeImplementation", "Execute approved plan through production Superpowers runtime and Claude Code"),
+						act("RunSuperpowersClaudeImplementation", "Execute plan through production Superpowers runtime and Claude Code"),
 						act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
 						act("ReportSuperpowersImplementation", "Report artifacts, finish evidence, and changed files"),
 					},

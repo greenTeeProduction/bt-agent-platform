@@ -20,7 +20,11 @@ func newSuperpowersRunID(task string, now time.Time) string {
 }
 
 func superpowersTaskHashSuffix(task string) string {
-	h := sha1.Sum([]byte(task))
+	// Include the date so the same scheduled task gets a different hash each day,
+	// allowing fresh Superpowers implementation attempts on every tick without
+	// the saturation guard blocking legitimate recurring research-to-implementation
+	// cycles.
+	h := sha1.Sum([]byte(task + time.Now().Format("2006-01-02")))
 	return hex.EncodeToString(h[:])[:8]
 }
 
