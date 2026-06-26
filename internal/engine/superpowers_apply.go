@@ -82,9 +82,11 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 }
 
 func captureSuperpowersWorktreePatch(ctx context.Context, runner CommandRunner, run *SuperpowersRun) (string, error) {
-	if res := runShellCommand(ctx, runner, run.WorktreePath, "git add -N . ':!graphify-out/'"); res.Err != nil {
-		return "", fmt.Errorf("prepare worktree patch failed: %v\n%s", res.Err, res.Output)
-	}
+	// git add -N does not support :! exclusion pathspecs and fails when
+	// graphify-out is in .gitignore. Skip the intent-to-add step — Claude
+	// Code operations only modify existing tracked files, so git diff alone
+	// captures all changes. If untracked files are ever needed, use:
+	//   git add -N . && git diff --binary -- . ':!graphify-out/'
 	res := runShellCommand(ctx, runner, run.WorktreePath, "git diff --binary -- . ':!graphify-out/'")
 	if res.Err != nil {
 		return "", fmt.Errorf("capture worktree patch failed: %v\n%s", res.Err, res.Output)
