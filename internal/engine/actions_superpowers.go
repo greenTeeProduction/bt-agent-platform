@@ -165,6 +165,33 @@ func registerSuperpowersVerificationActions() {
 	})
 }
 
+// VerifyScheduledGoapFusionInputs is the preflight guard for the unattended
+// scheduled GOAP fusion cycle. Before the automatic research-to-implementation
+// run proceeds, it confirms the cycle's required research inputs are readable —
+// the vault research directory and the graphify report — so a scheduled run
+// fails fast with a clear diagnosis instead of silently producing a plan from
+// missing context.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionInputs", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		var missing []string
+
+		if info, err := os.Stat(goapFusionVaultDir); err != nil || !info.IsDir() {
+			missing = append(missing, fmt.Sprintf("vault research directory `%s` is not readable: %v", goapFusionVaultDir, err))
+		}
+		if info, err := os.Stat(goapFusionGraphReport); err != nil || info.IsDir() {
+			missing = append(missing, fmt.Sprintf("graphify report `%s` is not readable: %v", goapFusionGraphReport, err))
+		}
+
+		if len(missing) > 0 {
+			bb.Result = "## Scheduled GOAP Fusion Preflight Failed\n\nRequired research inputs are unavailable:\n- " + strings.Join(missing, "\n- ")
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Preflight Passed\n\nVault research: `%s`\nGraphify report: `%s`", goapFusionVaultDir, goapFusionGraphReport)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

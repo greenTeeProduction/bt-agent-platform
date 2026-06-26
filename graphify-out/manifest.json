@@ -508,8 +508,8 @@
     "hash": "59b544e1eb7bad6b18e69cc1c50d9d6a"
   },
   "/home/nico/go-bt-evolve/internal/domains/goap_fusion.go": {
-    "mtime": 1782380362.5596642,
-    "hash": "81a04f5e4ff20cecc00b353132af09f6"
+    "mtime": 1782469133.745247,
+    "hash": "6f3c372c2aeb3a2752ea13bd7e38bbdf"
   },
   "/home/nico/go-bt-evolve/internal/domains/hermes_obsidian.go": {
     "mtime": 1780495732.2162805,
@@ -732,8 +732,8 @@
     "hash": "1dd43643f5d343843ae8496f4704a9ea"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_apply.go": {
-    "mtime": 1782380276.150887,
-    "hash": "c00f24a2cff31b77821668ff1e7e25f4"
+    "mtime": 1782475610.8577232,
+    "hash": "b8ba32506013aa182f116e01b5624094"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_runner.go": {
     "mtime": 1782055763.102695,
@@ -792,8 +792,8 @@
     "hash": "00b7859353011ac4895fa5f01d810a69"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_artifacts.go": {
-    "mtime": 1782380410.0240855,
-    "hash": "d5d6824954f10815bb7842455fac7f12"
+    "mtime": 1782469139.6133137,
+    "hash": "80d0a635697c036437d872ef0dc901bf"
   },
   "/home/nico/go-bt-evolve/internal/engine/monitor_node.go": {
     "mtime": 1781274740.338308,
@@ -888,7 +888,7 @@
     "hash": "c7df5b3b8623723390ae981cdf655b0e"
   },
   "/home/nico/go-bt-evolve/internal/engine/model_routing.go": {
-    "mtime": 1782367245.2747226,
+    "mtime": 1782403258.4116004,
     "hash": "e261f1798938fe9e75189b8072e240e2"
   },
   "/home/nico/go-bt-evolve/internal/engine/utility_selector.go": {
@@ -936,8 +936,8 @@
     "hash": "17cd47f38213a7ad9d743772e61d2ca5"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_runtime_contract_test.go": {
-    "mtime": 1782380334.7474158,
-    "hash": "efac321066de1b62f6fd630decf00a51"
+    "mtime": 1782499214.5171695,
+    "hash": "5b337b31681244d5bfbb0269806f5ad5"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains_test.go": {
     "mtime": 1782378048.617005,
@@ -952,8 +952,8 @@
     "hash": "cc2308b66705b6fc52193b0538c05bed"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_superpowers_prod.go": {
-    "mtime": 1782380319.199276,
-    "hash": "659af6506cce7fbbc5171737c21167d8"
+    "mtime": 1782475513.3608837,
+    "hash": "add4b107aae9455fb1346a8e1e9da7aa"
   },
   "/home/nico/go-bt-evolve/internal/engine/log_rotate_test.go": {
     "mtime": 1781274740.5743096,
@@ -1036,7 +1036,7 @@
     "hash": "b25c394bb653aecc2b4db64ab78f6a5d"
   },
   "/home/nico/go-bt-evolve/internal/engine/decision_tree.go": {
-    "mtime": 1782165633.4578288,
+    "mtime": 1782392454.2546163,
     "hash": "63dd7c5fcbd127d7630e5b0212751e7c"
   },
   "/home/nico/go-bt-evolve/internal/engine/parameterized_action.go": {
@@ -1076,8 +1076,8 @@
     "hash": "5ef90f1b75cdd1a1065c658bd7c0a3e1"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_superpowers.go": {
-    "mtime": 1782055763.102695,
-    "hash": "539fa9da7d20743a9a76dbdf806c5274"
+    "mtime": 1782499214.5171695,
+    "hash": "6a85cc5b771a948acf0c83345e1fe7ba"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_bt_manager.go": {
     "mtime": 1781731255.243679,
@@ -1128,7 +1128,7 @@
     "hash": "38e0cd75d9369f9012573a4d6f2eda88"
   },
   "/home/nico/go-bt-evolve/internal/engine/model_routing_test.go": {
-    "mtime": 1782367245.2747226,
+    "mtime": 1782403258.4116004,
     "hash": "5064db849b58dacb29744ec039561d89"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_btfusion.go": {
@@ -1156,8 +1156,8 @@
     "hash": "943566a4aa7fafc1dfcd2a59976e8c62"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion_prod_additions.go": {
-    "mtime": 1782380533.0931616,
-    "hash": "6911e4bf660fa8a82373b2a589b24e5e"
+    "mtime": 1782469158.9255335,
+    "hash": "aeefd90170daf693e8757fbce6ee4bcd"
   },
   "/home/nico/go-bt-evolve/internal/engine/observability_test.go": {
     "mtime": 1781275980.0906057,
@@ -2344,11 +2344,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1782381153.1783605,
+    "mtime": 1782475637.029949,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1782381153.358362,
+    "mtime": 1782475637.241951,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
@@ -2451,10 +2451,6 @@
     "mtime": 1780522112.5540385,
     "hash": "ffed878120c5e5c024aa40e86b4be9fd"
   },
-  "/home/nico/go-bt-evolve/docs/plans/2026-06-18-superpowers-pipeline.md": {
-    "mtime": 1782378048.577005,
-    "hash": "abc5bf6cfcab2e0283cef6ee2b7c8178"
-  },
   "/home/nico/go-bt-evolve/docs/plans/2026-06-20-goap-fusion-superpowers-bridge.md": {
     "mtime": 1782055763.098695,
     "hash": "111bb7024036fac9348fa0203419c656"
@@ -2507,309 +2503,61 @@
     "mtime": 1780260849.8034062,
     "hash": "5b23fcacaa6160c8072ec31d3cbee9a9"
   },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/finish.md": {
-    "mtime": 1782376389.1284604,
-    "hash": "b967952c4434ef51318c6198fb556ab6"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782376385.25643,
-    "hash": "eb86a2887e4c2fb2bb9eb9cb69d8d726"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782376386.412439,
-    "hash": "d9a127f3f9d823d77dd5cd721a2f5a7d"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782376201.7429836,
-    "hash": "2c7a7bcd076b7047c3c987acc410df66"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782376384.0804207,
-    "hash": "684d190e894b4679e4ff13bb635aed26"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/verification/build.txt": {
-    "mtime": 1782376389.1284604,
-    "hash": "b9e8930d79f2e5fbd9ff33d58b057092"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T103000-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782376387.6364486,
-    "hash": "72aaab62f87a72f4c576cc55a122581a"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/finish.md": {
-    "mtime": 1782378048.597005,
-    "hash": "72bd5d98abec19f339545cf01cbaaf1d"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782378048.601005,
-    "hash": "7f2051a05c2c99c8945f0b9506c72011"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782378048.601005,
-    "hash": "e6179525a789804d45e8825a2b983d09"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.601005,
-    "hash": "3b0080c00059988f8de91cede9d6d11a"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782378048.601005,
-    "hash": "de6fcac8aa3ba15fd7569503d3af8a1d"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/verification/build.txt": {
-    "mtime": 1782378048.601005,
-    "hash": "606a9b34225e5bc7065eae276ff7a040"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T083031-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782378048.601005,
-    "hash": "eb7e7d3e454bb32663ee0fb9947e9f68"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182519-0bed39bb/design.md": {
-    "mtime": 1782378048.5850048,
-    "hash": "bb5c65f692fc6fda30074a25a9e45315"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182519-0bed39bb/plan.md": {
-    "mtime": 1782378048.5850048,
-    "hash": "6d89c79e9fefdcffa968aebfeebc66dc"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182519-0bed39bb/verification/baseline-build.txt": {
-    "mtime": 1782378048.5850048,
-    "hash": "bd2f368b4c818a40cc361a091faabd60"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/finish.md": {
-    "mtime": 1782379974.1160254,
-    "hash": "cf60a68903f587a0f896da01a99b1708"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782379969.951984,
-    "hash": "c175d932a7199f033a1d4a3308e0573d"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782379971.0959954,
-    "hash": "aa1763c75a516069499ff4275cd60c8a"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782379801.6742463,
-    "hash": "489c98a8dd2fed5825cc40c244d9fa9b"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782379968.759972,
-    "hash": "7ce3e41c20e63cd8e49625049a18116b"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/verification/build.txt": {
-    "mtime": 1782379974.1120253,
-    "hash": "5ecb4549b2522e5a0cd7a0963470be9c"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T113000-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782379972.5960102,
-    "hash": "fd53a0b0b725c268e048a594481919ac"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/finish.md": {
-    "mtime": 1782378048.5850048,
-    "hash": "1ddfe0e45b62a3dfc1fbb1281a3746ba"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782378048.589005,
-    "hash": "4acec5d8cc81c838f146858947adabf5"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782378048.589005,
-    "hash": "3f2269d7290dfc97617b079865479d3b"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.589005,
-    "hash": "68e0ce327179420b920a50d7d813f593"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782378048.589005,
-    "hash": "49fa04df3c33a701dd51470d9f7a4afa"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/verification/build.txt": {
-    "mtime": 1782378048.589005,
-    "hash": "e86d5ecff089a22ac181b57a42d5d964"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T050617-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782378048.589005,
-    "hash": "7c0d2323eec08600e14652e339f452e3"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/design.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "152bc8b33a307b9c441fc6b1fd3f74f3"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/finish.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "a42c456051f12e990e4110dc3ab4e2ef"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/plan.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "a0cc73a360f3f03654a49a9a8e76311c"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782378048.5810049,
-    "hash": "1a12a962a920a46ec52a45aa5c7b60b4"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782378048.5810049,
-    "hash": "a322e275e9572421e94869ca779e5697"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "ca7ad141e3b89c184611c9ba9b282314"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "e33bd7604738d4ed3a92bab5c7ba00ef"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/verification/baseline-build.txt": {
-    "mtime": 1782378048.5850048,
-    "hash": "c522625752da095a600dd023e8faed10"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/verification/build.txt": {
-    "mtime": 1782378048.5850048,
-    "hash": "76cd511eff830ae189cd812010f2628a"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260620T182454-66a0960f/verification/focused-tests.txt": {
-    "mtime": 1782378048.5850048,
-    "hash": "2290f31216bbfe1c89f28801e0ebf3c6"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/finish.md": {
-    "mtime": 1782378048.593005,
-    "hash": "ba27fe6436de3e5e21d98c6b64e50cfe"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782378048.597005,
-    "hash": "9b2241e5a69213810224885012a7e155"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782378048.597005,
-    "hash": "9af4e06cbee5d990e5bcf99dbfa8796b"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.597005,
-    "hash": "acfbe4a1db81b32c77c68257d833ebd5"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782378048.597005,
-    "hash": "1634992448be83df08cce43fc32943e2"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/verification/build.txt": {
-    "mtime": 1782378048.597005,
-    "hash": "a5fcf3a6cbaa64cb33c87a4b426604d1"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T073006-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782378048.597005,
-    "hash": "2777aa6ff949a1db6a957d12138c4f67"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/finish.md": {
-    "mtime": 1782372750.1642387,
-    "hash": "e949b6dcae59d6c51da59ab93ddff3da"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782372745.9482045,
-    "hash": "f904118d749559e96b4ff3ac86db4d0e"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782372747.1562142,
-    "hash": "ab9ec7650af070bb9cc8d065d113ef1e"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782372601.7550309,
-    "hash": "50d177ea970f6162df1ed10de0a122e1"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782372744.772195,
-    "hash": "998d4b8d572d540c462e7e36ec23884e"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/verification/build.txt": {
-    "mtime": 1782372750.1562386,
-    "hash": "012045c6ada3645d82ae895011f00650"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T093000-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782372748.6442263,
-    "hash": "7f8d57245c1cacf9d9ca93241e764423"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T063154-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.593005,
-    "hash": "9d03a0db5c31dac2fb164fa57a7e8beb"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/finish.md": {
-    "mtime": 1782378048.589005,
-    "hash": "41c2c0c62a18cd2e9c6d20a1066f70d7"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/tasks/01-1-execute-requested-superpowers-change/red.txt": {
-    "mtime": 1782378048.593005,
-    "hash": "6a1d38842d8339c45b82b3a8b7ae7bc7"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/tasks/01-1-execute-requested-superpowers-change/green.txt": {
-    "mtime": 1782378048.593005,
-    "hash": "fd15a9dd41900de592d2155e933f9be5"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
-    "mtime": 1782378048.593005,
-    "hash": "34d4e5bf529599c6374ec0261beb3497"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
-    "mtime": 1782378048.593005,
-    "hash": "9c8a4099344d116e7127ea70aa82bb25"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/verification/build.txt": {
-    "mtime": 1782378048.593005,
-    "hash": "15499cd1582a3c1be2f5272706ee6e13"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260625T053048-8e9ec121/verification/focused-tests.txt": {
-    "mtime": 1782378048.593005,
-    "hash": "cb8cebb21ee97d9d0dd6cbc0007b042c"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T093000-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782372600.6430218,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T113000-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782379800.6342351,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T103000-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782376200.6549752,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T083031-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.5810049,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-2026-06-20T171218-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing.md": {
-    "mtime": 1782378048.577005,
-    "hash": "3e92d42c881274bde7bd7336ac8f7c73"
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/green-claude-output.md": {
+    "mtime": 1782499206.2730985,
+    "hash": "77d11907aa9d4c5fe185e4b377d14b51"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782499135.5564861,
+    "hash": "3c94208173d75fc3dcb0221a054c604b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/red.txt": {
+    "mtime": 1782499136.7364964,
+    "hash": "a1ee552514fde54999252e4a8058dd6b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/green-01.txt": {
+    "mtime": 1782499207.4571087,
+    "hash": "b122dfb33c427ccc0437e56a54acd0bb"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/green.txt": {
+    "mtime": 1782499208.6371188,
+    "hash": "e1e3794c78202c099870bde9458cffca"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/green-02.txt": {
+    "mtime": 1782499208.6371188,
+    "hash": "e1e3794c78202c099870bde9458cffca"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782498953.2948902,
+    "hash": "07ddcb6c4d31f7ede46cd6e1a9a96542"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
+    "mtime": 1782499206.2730985,
+    "hash": "0bf41d9b4be4cbdd63c1c20d5c1756fe"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/verification/main-build.txt": {
+    "mtime": 1782499222.3732374,
+    "hash": "0e1c45a72e9a070bef74d52d03a1dc01"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/verification/main-focused-tests.txt": {
+    "mtime": 1782499220.2372189,
+    "hash": "77a474f6c1f01dd8494b06bee40cad1c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/verification/build.txt": {
+    "mtime": 1782499214.4811692,
+    "hash": "d4abfcdab11bd079499e5ef1779e669a"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260626T203552-d013151e/verification/focused-tests.txt": {
+    "mtime": 1782499212.4011514,
+    "hash": "fc0d02945076ea7978d11d450f081e2c"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/2026-06-05-doormate-page-first-ai-plan.md": {
     "mtime": 1781274740.326308,
     "hash": "8c7a255da131d1447c3e0abfe1a28c6a"
   },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T053048-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T050509-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T063154-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T050419-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-2026-06-20T171507-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing.md": {
-    "mtime": 1782378048.577005,
-    "hash": "b21d060223c6c19c1046d5703fadaba8"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T073006-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
-  },
-  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260625T050617-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
-    "mtime": 1782378048.577005,
-    "hash": "05c900e8ed54bc84841519810d0bf867"
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260626T203552-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
+    "mtime": 1782498952.1708803,
+    "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/specs/2026-06-05-doormate-page-first-ai-design.md": {
     "mtime": 1781274740.326308,
