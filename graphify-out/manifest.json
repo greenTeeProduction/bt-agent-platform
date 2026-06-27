@@ -2344,11 +2344,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1782566013.9929495,
+    "mtime": 1782566296.1118813,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1782566014.2449517,
+    "mtime": 1782566296.431885,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
@@ -2515,6 +2515,10 @@
     "mtime": 1782553152.7959437,
     "hash": "4eddc80703603c8886c4c040db4bdf48"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T151447-fdce6d43/finish.md": {
+    "mtime": 1782566320.5961556,
+    "hash": "ecc3b6e404e075e2aa38aa42b505802a"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T151447-fdce6d43/tasks/01-1-execute-requested-superpowers-change/green-claude-output.md": {
     "mtime": 1782566263.1555078,
     "hash": "30a909d2747d668fa1179eac03cf9e83"
@@ -2550,6 +2554,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T151447-fdce6d43/verification/main-build.txt": {
     "mtime": 1782566276.791663,
     "hash": "0d5340c154f49313bc2b5667befe179b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T151447-fdce6d43/verification/graphify-update.txt": {
+    "mtime": 1782566288.5637963,
+    "hash": "d12797be0279fd2d4d58cf7238995abe"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T151447-fdce6d43/verification/main-focused-tests.txt": {
     "mtime": 1782566274.5236373,
