@@ -44,6 +44,9 @@ func TestGoapFusion_Structure(t *testing.T) {
 	if containsNodeType(*tree, "ChainAgent") {
 		t.Fatalf("GoapFusionTree must not contain ChainAgent fallback")
 	}
+	if containsNodeName(*tree, "SelfCorrect") || containsNodeName(*tree, "EscalateToDeepSeek") {
+		t.Fatalf("GoapFusionTree must not use LLM self-correction/escalation; scheduled outputs need deterministic evidence gates")
+	}
 	if !containsNodeType(*tree, "HumanApprovalGate") {
 		t.Fatalf("explicit GOAP apply path must use HumanApprovalGate")
 	}
@@ -72,8 +75,8 @@ func TestGoapFusion_Structure(t *testing.T) {
 		"ReportSuperpowersImplementation",
 		"WriteFusionAnalysis",
 		"ReportFusionCycle",
-		"ReflectOnOutcome",
-		"UpdateBehaviorTree",
+		"VerifyGoapFusionEvidence",
+		"MarkSuccessful",
 	}
 	for _, name := range requiredActions {
 		if engine.GetAction(name) == nil {

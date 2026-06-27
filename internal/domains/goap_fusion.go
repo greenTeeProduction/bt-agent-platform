@@ -44,9 +44,8 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 				act("ReportFusionCycle", "Report deterministic analysis and verification evidence"),
 			),
 		),
-		act("ReflectOnOutcome", "Reflect on fusion cycle quality"),
-		outcome(),
-		act("UpdateBehaviorTree", "Evolve"),
+		act("VerifyGoapFusionEvidence", "Reject fabricated/self-corrected outputs and require concrete artifact evidence"),
+		act("MarkSuccessful", "Mark GOAP fusion complete only after deterministic evidence verification"),
 	}}
 	if withCheckpointVerifier {
 		return evolution.WrapWithCheckpointVerifier(tree, 3, "has_result=true,task_status=completed")

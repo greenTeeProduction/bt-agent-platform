@@ -102,6 +102,79 @@ func registerGoapFusionProductionAdditions() {
 		return 1
 	})
 
+	RegisterAction("VerifyGoapFusionEvidence", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		out := strings.TrimSpace(bb.Result)
+		lower := strings.ToLower(out)
+		fail := func(reason string) int {
+			bb.Outcome = "failure"
+			bb.Result = fmt.Sprintf("## GOAP Fusion Evidence Failed\n\n%s\n\nPrevious output:\n```\n%s\n```", reason, truncateGoap(out, 2000))
+			return -1
+		}
+		if out == "" {
+			return fail("empty output; no GOAP fusion artifact evidence")
+		}
+		fabricationMarkers := []string{
+			"self-corrected output",
+			"simulated",
+			"fabricated",
+			"pretend",
+			"claude code commands executed",
+			"src/goap_runner.py",
+			"fusion.py",
+			"verify.sh",
+		}
+		for _, marker := range fabricationMarkers {
+			if strings.Contains(lower, marker) {
+				return fail("fabrication marker found: " + marker)
+			}
+		}
+
+		if strings.Contains(out, "## Superpowers Implementation Complete") {
+			if !strings.Contains(out, "Run: `") || !strings.Contains(out, "Artifacts: `") || !strings.Contains(out, "Apply status: `committed`") || !strings.Contains(out, "Commit: `") {
+				return fail("Superpowers completion missing run/artifact/committed/commit evidence")
+			}
+			artifactPath := goapBacktickValueAfter(out, "Artifacts: `")
+			if artifactPath == "" {
+				return fail("Superpowers completion missing parseable artifact path")
+			}
+			if info, err := os.Stat(artifactPath); err != nil || !info.IsDir() {
+				return fail(fmt.Sprintf("Superpowers artifact directory `%s` is not present: %v", artifactPath, err))
+			}
+			if _, err := os.Stat(filepath.Join(artifactPath, "run.json")); err != nil {
+				return fail(fmt.Sprintf("Superpowers artifact `%s` missing run.json: %v", artifactPath, err))
+			}
+			if _, err := os.Stat(filepath.Join(artifactPath, "finish.md")); err != nil {
+				return fail(fmt.Sprintf("Superpowers artifact `%s` missing finish.md: %v", artifactPath, err))
+			}
+			return 1
+		}
+
+		if strings.Contains(out, "## GOAP Fusion Cycle Complete") {
+			analysisPath := goapBacktickValueAfter(out, "Analysis: `")
+			if analysisPath == "" {
+				return fail("deterministic analysis output missing parseable Analysis path")
+			}
+			if _, err := os.Stat(analysisPath); err != nil {
+				return fail(fmt.Sprintf("analysis artifact `%s` is not present: %v", analysisPath, err))
+			}
+			requiredEvidence := []string{
+				"Verification:",
+				"go build ./cmd/bt-agent ./cmd/bt-agent-cli: PASSED",
+				"focused go tests: PASSED",
+				"graphify update .: PASSED",
+			}
+			for _, evidence := range requiredEvidence {
+				if !strings.Contains(out, evidence) {
+					return fail("deterministic analysis output missing evidence: " + evidence)
+				}
+			}
+			return 1
+		}
+
+		return fail("unrecognized GOAP fusion output shape; expected deterministic analysis or committed Superpowers artifact report")
+	})
+
 	RegisterAction("ReportFusionCycle", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		path, _ := bb.ChainState["goap_fusion_fusion_analysis_path"].(string)
@@ -133,4 +206,18 @@ func registerGoapFusionProductionAdditions() {
 		bb.Result = fmt.Sprintf("%s\n\nRun: `%s`\nArtifacts: `%s`\nApply status: `%s`\nPatch: `%s`\nCommit: `%s`\nChanged files:\n```\n%s\n```", heading, run.ID, run.ArtifactDir, status, run.PatchPath, run.AppliedCommit, changed)
 		return 1
 	})
+}
+
+func goapBacktickValueAfter(s, prefix string) string {
+	idx := strings.Index(s, prefix)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(prefix)
+	rest := s[start:]
+	end := strings.Index(rest, "`")
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:end])
 }
