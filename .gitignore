@@ -28,5 +28,9 @@ test-results/
 .playwright-mcp/
 .superpowers/
 
+# Generated Superpowers runtime evidence (kept on disk, not committed)
+docs/superpowers/runs/
+docs/superpowers/plans/goap-fusion-*.md
+
 # Temp files
 .tmp
