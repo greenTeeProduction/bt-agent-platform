@@ -232,6 +232,35 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionRuntime is the preflight guard for the implementation
+// runtime of the unattended scheduled GOAP fusion cycle. The input preflight
+// (VerifyScheduledGoapFusionInputs) only confirms the research inputs are
+// readable; before the automatic cycle commits to producing a Superpowers plan
+// it must also confirm the implementation runtime is available — the
+// go-bt-evolve repository working directory and the Claude Code binary used to
+// implement findings — so a scheduled run fails fast with a clear diagnosis
+// instead of producing a plan it can never implement.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionRuntime", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		var missing []string
+
+		if info, err := os.Stat(goapFusionRepo); err != nil || !info.IsDir() {
+			missing = append(missing, fmt.Sprintf("go-bt-evolve repository working directory `%s` is not readable: %v", goapFusionRepo, err))
+		}
+		if info, err := os.Stat(goapFusionClaudeBin); err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+			missing = append(missing, fmt.Sprintf("Claude Code binary `%s` is not an executable file: %v", goapFusionClaudeBin, err))
+		}
+
+		if len(missing) > 0 {
+			bb.Result = "## Scheduled GOAP Fusion Runtime Preflight Failed\n\nRequired implementation runtime is unavailable:\n- " + strings.Join(missing, "\n- ")
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Runtime Preflight Passed\n\nRepository: `%s`\nClaude Code binary: `%s`", goapFusionRepo, goapFusionClaudeBin)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

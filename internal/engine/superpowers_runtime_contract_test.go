@@ -63,3 +63,17 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionResearchPresent
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionResearchPresent")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRuntime asserts the
+// presence of the preflight action that guards the implementation runtime of the
+// unattended scheduled GOAP fusion cycle. The input preflight only confirms the
+// research inputs are readable; before the automatic cycle commits to producing a
+// Superpowers plan it must also confirm the implementation runtime is available —
+// the go-bt-evolve repository working directory and the Claude Code binary used to
+// implement findings — so a scheduled run fails fast with a clear diagnosis
+// instead of producing a plan it can never implement.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRuntime(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionRuntime") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionRuntime")
+	}
+}
