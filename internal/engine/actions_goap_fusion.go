@@ -22,6 +22,7 @@ const (
 	goapFusionGraphReport   = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
 	goapFusionRepo          = "/home/nico/go-bt-evolve"
 	goapFusionClaudeBin     = "/home/nico/.local/bin/claude"
+	goapFusionGoBin         = "/usr/local/go/bin/go"
 	goapFusionClaudeTimeout = 3600 // seconds (1 hour)
 )
 

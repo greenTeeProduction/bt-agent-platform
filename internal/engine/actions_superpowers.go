@@ -290,6 +290,30 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionToolchain is the preflight guard for the Go toolchain
+// the unattended scheduled GOAP fusion cycle depends on. The runtime guard
+// (VerifyScheduledGoapFusionRuntime) only confirms the repository working
+// directory and the Claude Code binary are available; the cycle's build and TDD
+// verification step additionally shells out to the hardcoded Go toolchain
+// (goapFusionGoBin), so a scheduled run could pass every other preflight yet
+// still fail at verification when that toolchain is missing or not executable.
+// This guard closes that gap by requiring the Go toolchain binary to be an
+// executable file before the automatic research-to-implementation cycle
+// proceeds — the verification-toolchain analogue of the runtime guard.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionToolchain", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if info, err := os.Stat(goapFusionGoBin); err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Toolchain Preflight Failed\n\nGo toolchain binary `%s` is not an executable file: %v", goapFusionGoBin, err)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Toolchain Preflight Passed\n\nGo toolchain: `%s`", goapFusionGoBin)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

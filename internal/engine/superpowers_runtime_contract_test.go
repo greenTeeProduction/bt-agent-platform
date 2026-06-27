@@ -93,3 +93,20 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphReportPres
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGraphReportPresent")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionToolchain asserts
+// the presence of the preflight action that guards the Go toolchain the
+// unattended scheduled GOAP fusion cycle depends on. The existing runtime guard
+// (VerifyScheduledGoapFusionRuntime) only confirms the repository working
+// directory and the Claude Code binary are available; the cycle's build and TDD
+// verification step additionally shells out to the hardcoded Go toolchain
+// (/usr/local/go/bin/go), so a scheduled run could pass every current preflight
+// yet still fail at verification when that toolchain is missing or not
+// executable. This action closes that gap by requiring the Go toolchain binary
+// to be an executable file before the automatic research-to-implementation cycle
+// proceeds — the verification-toolchain analogue of the runtime guard.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionToolchain(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionToolchain") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionToolchain")
+	}
+}
