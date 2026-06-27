@@ -77,3 +77,19 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRuntime(t *test
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionRuntime")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphReportPresent
+// asserts the presence of the preflight action that guards the unattended
+// scheduled GOAP fusion cycle against an empty graphify report. The existing
+// VerifyScheduledGoapFusionInputs guard only confirms the graphify report file
+// exists (os.Stat, not a directory); a zero-byte or contentless graphify report
+// would still pass it, letting a scheduled run silently derive its improvement
+// gaps from an empty report. This action closes that gap by requiring the
+// graphify report to contain readable content before the automatic
+// research-to-implementation cycle proceeds — the report-content analogue of the
+// VerifyScheduledGoapFusionResearchPresent vault-content guard.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphReportPresent(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionGraphReportPresent") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGraphReportPresent")
+	}
+}

@@ -261,6 +261,35 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionGraphReportPresent is the preflight guard that
+// protects the unattended scheduled GOAP fusion cycle against an empty graphify
+// report. VerifyScheduledGoapFusionInputs only confirms the graphify report file
+// exists (os.Stat, not a directory); a zero-byte or contentless graphify report
+// would still pass it, letting a scheduled run silently derive its improvement
+// gaps from an empty report. This guard closes that gap by requiring the
+// graphify report to contain readable content before the automatic
+// research-to-implementation cycle proceeds — the report-content analogue of the
+// VerifyScheduledGoapFusionResearchPresent vault-content guard.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionGraphReportPresent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		b, err := os.ReadFile(goapFusionGraphReport)
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Report Preflight Failed\n\nGraphify report `%s` is not readable: %v", goapFusionGraphReport, err)
+			return -1
+		}
+
+		if len(strings.TrimSpace(string(b))) == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Report Preflight Failed\n\nGraphify report `%s` exists but contains no readable content; a scheduled run would derive its improvement gaps from an empty report.", goapFusionGraphReport)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Report Preflight Passed\n\n%d bytes of content present in `%s`", len(b), goapFusionGraphReport)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()
