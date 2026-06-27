@@ -192,6 +192,46 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionResearchPresent is the preflight guard that protects
+// the unattended scheduled GOAP fusion cycle against an empty research corpus.
+// VerifyScheduledGoapFusionInputs only confirms the vault directory and graphify
+// report exist; a vault directory that exists but contains zero research files
+// would still pass it, letting a scheduled run silently produce a plan from no
+// actual research. This guard closes that gap by requiring the vault research
+// directory to contain at least one readable research file before the automatic
+// research-to-implementation cycle proceeds.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionResearchPresent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		entries, err := os.ReadDir(goapFusionVaultDir)
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Research Preflight Failed\n\nVault research directory `%s` is not readable: %v", goapFusionVaultDir, err)
+			return -1
+		}
+
+		var research []string
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(goapFusionVaultDir, e.Name())
+			if info, statErr := os.Stat(path); statErr != nil || info.Size() == 0 {
+				continue
+			}
+			research = append(research, e.Name())
+		}
+
+		if len(research) == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Research Preflight Failed\n\nVault research directory `%s` exists but contains no readable research files; a scheduled run would produce a plan from no research.", goapFusionVaultDir)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Research Preflight Passed\n\n%d research file(s) present in `%s`", len(research), goapFusionVaultDir)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

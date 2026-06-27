@@ -48,3 +48,18 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionInputs(t *testi
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionInputs")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionResearchPresent
+// asserts the presence of the preflight action that guards the unattended
+// scheduled GOAP fusion cycle against an empty research corpus. The existing
+// VerifyScheduledGoapFusionInputs guard only confirms the vault directory and
+// graphify report exist; a vault directory that exists but contains zero
+// research files would still pass it, letting a scheduled run silently produce
+// a plan from no actual research. This action closes that gap by requiring the
+// vault research directory to contain at least one readable research file
+// before the automatic research-to-implementation cycle proceeds.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionResearchPresent(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionResearchPresent") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionResearchPresent")
+	}
+}
