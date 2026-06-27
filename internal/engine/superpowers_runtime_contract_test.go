@@ -110,3 +110,22 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionToolchain(t *te
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionToolchain")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPlansWritable
+// asserts the presence of the preflight action that guards the plan output
+// location the unattended scheduled GOAP fusion cycle writes to. The existing
+// guards confirm the cycle's inputs (vault research, graphify report) and its
+// implementation runtime (repo, Claude Code, Go toolchain) are available, but
+// nothing confirms the cycle can persist its output: the cycle writes a
+// Superpowers implementation plan and, on an incomplete Claude run, saves the
+// failed patch into the plans directory (goapFusionPlansDir). A scheduled run
+// could pass every current preflight yet still fail when that plans directory
+// is missing or not writable, losing its plan and patch with no clear
+// diagnosis. This action closes that gap by requiring the plans directory to be
+// a writable directory before the automatic research-to-implementation cycle
+// proceeds — the output-location analogue of the input and runtime guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPlansWritable(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionPlansWritable") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionPlansWritable")
+	}
+}

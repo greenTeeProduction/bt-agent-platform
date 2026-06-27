@@ -314,6 +314,40 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionPlansWritable is the preflight guard for the plan
+// output location the unattended scheduled GOAP fusion cycle writes to. The
+// existing guards confirm the cycle's inputs (vault research, graphify report)
+// and its implementation runtime (repo, Claude Code, Go toolchain) are
+// available, but nothing confirms the cycle can persist its output: the cycle
+// writes a Superpowers implementation plan and, on an incomplete Claude run,
+// saves the failed patch into the plans directory (goapFusionPlansDir). A
+// scheduled run could pass every other preflight yet still fail when that plans
+// directory is missing or not writable, losing its plan and patch with no clear
+// diagnosis. This guard closes that gap by requiring the plans directory to be a
+// writable directory before the automatic research-to-implementation cycle
+// proceeds — the output-location analogue of the input and runtime guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionPlansWritable", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		info, err := os.Stat(goapFusionPlansDir)
+		if err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Plans Preflight Failed\n\nPlans output directory `%s` is not an accessible directory: %v", goapFusionPlansDir, err)
+			return -1
+		}
+
+		probe := filepath.Join(goapFusionPlansDir, ".goap-fusion-write-probe")
+		if err := os.WriteFile(probe, []byte("probe"), 0o644); err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Plans Preflight Failed\n\nPlans output directory `%s` is not writable: %v", goapFusionPlansDir, err)
+			return -1
+		}
+		_ = os.Remove(probe)
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Plans Preflight Passed\n\nPlans output directory `%s` is a writable directory", goapFusionPlansDir)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()
