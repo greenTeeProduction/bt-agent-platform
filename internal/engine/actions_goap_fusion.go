@@ -46,6 +46,10 @@ func registerGoapFusionActions() {
 	RegisterCondition("IsApplyRequest", func(bb *Blackboard) bool {
 		return isGoapFusionApplyRequest(bb.Task)
 	})
+	RegisterCondition("HasNewGaps", func(bb *Blackboard) bool {
+		v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string)
+		return v != "true"
+	})
 
 	// ReadVaultResearch reads all NotebookLM research syntheses, evolution reports,
 	// and improvement plans from the Obsidian vault into the blackboard.
@@ -248,7 +252,20 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P2] Review and improve condition node routing coverage across all domain trees")
 		}
 
-		setGoapState(bb, "goal_queue", strings.Join(goals, "\n"))
+		currentGoals := strings.Join(goals, "\n")
+		// Compare with previous run — skip if identical (no new gaps)
+		latestPath := filepath.Join(goapFusionVaultDir, "goap-fusion-latest.md")
+		if b, err := os.ReadFile(latestPath); err == nil {
+			prevGoals := extractGoapGoals(string(b))
+			if prevGoals == currentGoals && currentGoals != "" {
+				setGoapState(bb, "goal_queue", currentGoals)
+				setGoapState(bb, "goals_unchanged", "true")
+				bb.Result = fmt.Sprintf("## Goals Unchanged\n\nNo new gaps detected. Same %d goal(s) as previous run:\n\n%s", len(goals), currentGoals)
+				return 1
+			}
+		}
+
+		setGoapState(bb, "goal_queue", currentGoals)
 		bb.Result = fmt.Sprintf("## GOAP Goal Queue\n\n%d goals prioritized:\n\n%s", len(goals), strings.Join(goals, "\n"))
 		return 1
 	})
@@ -326,6 +343,14 @@ func registerGoapFusionActions() {
 			bb.Result = fmt.Sprintf("## Preflight Failed\n\nCould not checkout master:\n%s", out)
 			bb.Outcome = "goap_fusion_preflight_failed"
 			return -1
+		}
+		// Sync with origin before making local changes
+		if fetchOut, fetchErr := runGoapShell("git fetch origin"); fetchErr != nil {
+			setGoapState(bb, "git_fetch_warning", fmt.Sprintf("git fetch origin failed: %s", truncateGoap(fetchOut, 300)))
+		}
+		if pullOut, pullErr := runGoapShell("git pull origin master --ff-only"); pullErr != nil {
+			// Non-fatal: branches may be diverged (local commits ahead of origin)
+			setGoapState(bb, "git_pull_warning", fmt.Sprintf("git pull --ff-only failed (diverged?): %s", truncateGoap(pullOut, 300)))
 		}
 
 		beforeHead, _ := runGoapShell("git rev-parse HEAD")
@@ -405,6 +430,10 @@ func registerGoapFusionActions() {
 			bb.Result = fmt.Sprintf("## Claude Code Improvement Applied\n\nElapsed: %s\nChanges:\n```\n%s\n```\n\nBuild: PASSED\nTests: PASSED\n\nClaude output:\n%s",
 				elapsed, strings.TrimSpace(gitDiff),
 				truncateGoap(strings.TrimSpace(claudeOut), 3000))
+			// Push to origin — non-fatal if network/auth fails
+			if pushOut, pushErr := runGoapShell("git push origin master"); pushErr != nil {
+				setGoapState(bb, "git_push_warning", fmt.Sprintf("git push origin master failed: %s", truncateGoap(pushOut, 500)))
+			}
 		} else {
 			// Claude ran but produced no code changes
 			bb.Result = fmt.Sprintf("## Claude Code Research-Only\n\nElapsed: %s\nNo code changes produced. Research output:\n%s",
@@ -638,6 +667,19 @@ func extractSection(text, startMarker, endMarker string) string {
 		return strings.TrimSpace(text[start:])
 	}
 	return strings.TrimSpace(text[start : start+end])
+}
+
+// extractGoapGoals extracts goal lines (starting with [P0], [P1], or [P2]) from
+// a goap-fusion analysis file for comparison with the current run.
+func extractGoapGoals(text string) string {
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[P0]") || strings.HasPrefix(trimmed, "[P1]") || strings.HasPrefix(trimmed, "[P2]") {
+			lines = append(lines, trimmed)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func isGoapFusionApplyRequest(task string) bool {

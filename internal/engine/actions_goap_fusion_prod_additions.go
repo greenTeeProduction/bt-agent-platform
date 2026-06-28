@@ -206,6 +206,14 @@ func registerGoapFusionProductionAdditions() {
 		bb.Result = fmt.Sprintf("%s\n\nRun: `%s`\nArtifacts: `%s`\nApply status: `%s`\nPatch: `%s`\nCommit: `%s`\nChanged files:\n```\n%s\n```", heading, run.ID, run.ArtifactDir, status, run.PatchPath, run.AppliedCommit, changed)
 		return 1
 	})
+
+	RegisterAction("CleanupGraphifyOut", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if out, err := runGoapShell("git checkout -- graphify-out/"); err != nil {
+			setGoapState(bb, "graphify_cleanup_warning", fmt.Sprintf("git checkout -- graphify-out/ failed: %s", truncateGoap(out, 200)))
+		}
+		return 1
+	})
 }
 
 func goapBacktickValueAfter(s, prefix string) string {
