@@ -88,9 +88,9 @@ func registerGoapFusionProductionAdditions() {
 		path := filepath.Join(goapFusionVaultDir, fmt.Sprintf("goap-fusion-analysis-%s.md", ts))
 		latest := filepath.Join(goapFusionVaultDir, "goap-fusion-latest.md")
 
-		// Fast path: goals unchanged — write minimal note, skip full boilerplate
+		// Fast path: goals unchanged — write minimal note with goals for future comparison
 		if v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); v == "true" {
-			report := fmt.Sprintf("# GOAP Fusion — %s\n\n**No new gaps.** Goals unchanged from previous run. Skipping implementation.\n", ts)
+			report := fmt.Sprintf("# GOAP Fusion — %s\n\n**No new gaps.** Goals unchanged from previous run.\n\n## Goals\n%s\n", ts, goals)
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				bb.Result = err.Error()
 				return -1
