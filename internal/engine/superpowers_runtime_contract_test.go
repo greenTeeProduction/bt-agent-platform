@@ -129,3 +129,24 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPlansWritable(t
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionPlansWritable")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesPresent
+// asserts the presence of the preflight action that guards the unattended
+// scheduled GOAP fusion cycle against a missing or empty research-syntheses
+// corpus. The cycle's ReadVaultResearch step reads the syntheses directory
+// (goapFusionSynthesesDir) first and newest-first, treating it as the highest
+// priority research input, but it swallows a read error (os.ReadDir ... err ==
+// nil) — so a syntheses directory that is missing, unreadable, or contains zero
+// synthesis files would silently degrade the research corpus and let a
+// scheduled run produce a plan from the most recent research being absent, with
+// no diagnosis. The existing VerifyScheduledGoapFusionResearchPresent guard only
+// covers the vault directory itself, not this distinct syntheses subdirectory.
+// This action closes that gap by requiring the syntheses directory to contain at
+// least one readable synthesis file before the automatic
+// research-to-implementation cycle proceeds — the syntheses-content analogue of
+// the vault-content and graph-report-content guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesPresent(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionSynthesesPresent") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionSynthesesPresent")
+	}
+}

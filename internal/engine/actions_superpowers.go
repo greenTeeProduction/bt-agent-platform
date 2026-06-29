@@ -348,6 +348,53 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionSynthesesPresent is the preflight guard that protects
+// the unattended scheduled GOAP fusion cycle against a missing or empty
+// research-syntheses corpus. The cycle's ReadVaultResearch step reads the
+// syntheses directory (goapFusionSynthesesDir) first and newest-first, treating
+// it as the highest priority research input, but it swallows a read error
+// (os.ReadDir ... err == nil) — so a syntheses directory that is missing,
+// unreadable, or contains zero synthesis files would silently degrade the
+// research corpus and let a scheduled run produce a plan from the most recent
+// research being absent, with no diagnosis. The existing
+// VerifyScheduledGoapFusionResearchPresent guard only covers the vault directory
+// itself, not this distinct syntheses subdirectory. This guard closes that gap
+// by requiring the syntheses directory to contain at least one readable
+// synthesis file before the automatic research-to-implementation cycle proceeds
+// — the syntheses-content analogue of the vault-content and graph-report-content
+// guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionSynthesesPresent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		entries, err := os.ReadDir(goapFusionSynthesesDir)
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Preflight Failed\n\nResearch syntheses directory `%s` is not readable: %v", goapFusionSynthesesDir, err)
+			return -1
+		}
+
+		var syntheses []string
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(goapFusionSynthesesDir, e.Name())
+			if info, statErr := os.Stat(path); statErr != nil || info.Size() == 0 {
+				continue
+			}
+			syntheses = append(syntheses, e.Name())
+		}
+
+		if len(syntheses) == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Preflight Failed\n\nResearch syntheses directory `%s` exists but contains no readable synthesis files; a scheduled run would produce a plan with the most recent research absent.", goapFusionSynthesesDir)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Preflight Passed\n\n%d synthesis file(s) present in `%s`", len(syntheses), goapFusionSynthesesDir)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

@@ -406,13 +406,18 @@ func registerGoapFusionActions() {
 			bb.Outcome = "goap_fusion_preflight_failed"
 			return -1
 		}
-		// Sync with origin before making local changes
+		// Sync with origin before making local changes. This is strict for unattended
+		// runs: if master cannot be fast-forwarded from origin/master, do not let
+		// Claude implement on stale or divergent local code.
 		if fetchOut, fetchErr := runGoapShell("git fetch origin"); fetchErr != nil {
-			setGoapState(bb, "git_fetch_warning", fmt.Sprintf("git fetch origin failed: %s", truncateGoap(fetchOut, 300)))
+			bb.Result = fmt.Sprintf("## Preflight Failed\n\nCould not fetch origin before GOAP implementation:\n%s", truncateGoap(fetchOut, 1000))
+			bb.Outcome = "goap_fusion_preflight_failed"
+			return -1
 		}
 		if pullOut, pullErr := runGoapShell("git pull origin master --ff-only"); pullErr != nil {
-			// Non-fatal: branches may be diverged (local commits ahead of origin)
-			setGoapState(bb, "git_pull_warning", fmt.Sprintf("git pull --ff-only failed (diverged?): %s", truncateGoap(pullOut, 300)))
+			bb.Result = fmt.Sprintf("## Preflight Failed\n\nLocal master is not safely up to date with origin/master. Refusing to run implementation on stale or divergent code.\n\n```\n%s\n```", truncateGoap(pullOut, 1000))
+			bb.Outcome = "goap_fusion_preflight_failed"
+			return -1
 		}
 
 		beforeHead, _ := runGoapShell("git rev-parse HEAD")

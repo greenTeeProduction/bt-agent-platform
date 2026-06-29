@@ -137,6 +137,12 @@ func commitAppliedSuperpowersRun(ctx context.Context, runner CommandRunner, run 
 		run.AppliedCommit = strings.TrimSpace(head.Output)
 	}
 	run.ApplyStatus = "committed"
+
+	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
+	if push.Err != nil {
+		run.ApplyStatus = "committed_unpushed"
+		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
+	}
 	return nil
 }
 

@@ -114,6 +114,8 @@ func (r *cleanApplyScriptRunner) Run(_ context.Context, dir string, name string,
 		return res
 	case name == "git" && len(args) >= 1 && args[0] == "commit":
 		return res
+	case name == "git" && len(args) >= 1 && args[0] == "push":
+		return res
 	case name == "git" && len(args) >= 2 && args[0] == "rev-parse":
 		res.Output = "abc1234\n"
 		return res
@@ -158,7 +160,7 @@ func TestApplySuperpowersRunToMainRepoAppliesVerifiesGraphifiesAndCommits(t *tes
 		t.Fatalf("AppliedCommit = %q, want abc1234", run.AppliedCommit)
 	}
 	joined := strings.Join(runner.calls, "\n")
-	for _, want := range []string{"git apply --check", "git apply ", "go test", "go build", "graphify update .", "git commit -m"} {
+	for _, want := range []string{"git apply --check", "git apply ", "go test", "go build", "graphify update .", "git commit -m", "git push origin master"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected command containing %q; calls:\n%s", want, joined)
 		}
