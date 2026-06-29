@@ -13,6 +13,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			cond("ValidateInput", "Task must be non-empty"),
 			cond("IsFusionTask", "Detect fusion/improve/expand/capability/research/evolve keywords"),
 		),
+		act("RunGoapFusionNotebookLMResearch", "Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
 		act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
 		act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),
 		act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase gaps"),

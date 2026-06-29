@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -49,6 +50,52 @@ func registerGoapFusionActions() {
 	RegisterCondition("HasNewGaps", func(bb *Blackboard) bool {
 		v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string)
 		return v != "true"
+	})
+
+	// RunGoapFusionNotebookLMResearch performs a GOAP-owned NotebookLM query so the
+	// scheduled fusion runner is not dependent on the separate notebooklm-researcher
+	// agent or its vault handoff. It writes a dedicated synthesis file that the
+	// normal ReadVaultResearch step ingests immediately afterwards.
+	RegisterAction("RunGoapFusionNotebookLMResearch", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
+		query := buildGoapFusionNotebookLMQuery(bb.Task, truncateGoap(string(graphBytes), 3500))
+		out := nlmRun(180*time.Second, "notebook", "query", defaultNotebook, query)
+		if isGoapNotebookLMFailure(out) {
+			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nNotebookLM query failed or auth is unavailable; refusing to proceed from stale vault research.\n\n```\n%s\n```", truncateGoap(out, 2000))
+			bb.Outcome = "goap_fusion_notebooklm_failed"
+			return -1
+		}
+
+		answer := extractNotebookLMAnswer(out)
+		goal, gap := extractGoapNotebookLMRecommendation(answer)
+		if goal == "" {
+			goal = firstNonEmptyGoapLine(answer)
+		}
+		if gap == "" {
+			gap = "NotebookLM produced a cited recommendation for BT platform improvement; see raw answer."
+		}
+		if goal == "" {
+			bb.Result = "## GOAP NotebookLM Research Failed\n\nNotebookLM returned no parseable recommendation."
+			bb.Outcome = "goap_fusion_notebooklm_failed"
+			return -1
+		}
+
+		ts := time.Now().Format("2006-01-02T150405")
+		path := filepath.Join(goapFusionSynthesesDir, fmt.Sprintf("goap-fusion-notebooklm-%s.md", ts))
+		report := fmt.Sprintf("# GOAP Fusion NotebookLM Research — %s\n\n## Notebook\n`%s`\n\n## Recommendation\nGOAL: %s\nGAP: %s\n\n## Raw NotebookLM Answer\n%s\n", ts, defaultNotebook, goal, gap, answer)
+		if err := writeString(path, report); err != nil {
+			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nCould not write `%s`: %v", path, err)
+			bb.Outcome = "goap_fusion_notebooklm_failed"
+			return -1
+		}
+
+		setGoapState(bb, "notebooklm_research", report)
+		setGoapState(bb, "notebooklm_goal", goal)
+		setGoapState(bb, "notebooklm_gap", gap)
+		setGoapState(bb, "notebooklm_research_path", path)
+		bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Complete\n\nPath: `%s`\n\nGOAL: %s\n\nGAP: %s", path, goal, gap)
+		return 1
 	})
 
 	// ReadVaultResearch reads all NotebookLM research syntheses, evolution reports,
@@ -186,6 +233,17 @@ func registerGoapFusionActions() {
 			}
 		}
 
+		// Add the GOAP-owned NotebookLM recommendation before static graph checks so
+		// research-backed improvements are not starved by stale heuristic P0/P2 goals.
+		if nlmGoal, _ := bb.ChainState["goap_fusion_notebooklm_goal"].(string); strings.TrimSpace(nlmGoal) != "" {
+			nlmGap, _ := bb.ChainState["goap_fusion_notebooklm_gap"].(string)
+			if strings.TrimSpace(nlmGap) == "" {
+				nlmGap = "NotebookLM recommended this implementation target."
+			}
+			gaps = append(gaps, "NOTEBOOKLM_GOAL: "+strings.TrimSpace(nlmGoal))
+			gaps = append(gaps, "NOTEBOOKLM_GAP: "+strings.TrimSpace(nlmGap))
+		}
+
 		// Check for domain coverage gaps
 		if strings.Contains(graphReport, "AllDomainTrees") {
 			gaps = append(gaps, "CHECK: AllDomainTrees coverage — verify all registered trees have smoke tests and descriptions")
@@ -215,6 +273,10 @@ func registerGoapFusionActions() {
 		// P0: Verifiable correctness (test blockers, build failures)
 		// P1: New capability (domain tree, condition node, action)
 		// P2: Quality improvement (coverage, refactoring)
+
+		if nlmGoal := goapFusionNotebookLMGoalFromGaps(gapsStr); nlmGoal != "" {
+			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
+		}
 
 		if strings.Contains(gapsStr, "import cycle") || strings.Contains(gapsStr, "test compilation") {
 			goals = append(goals, "[P0] Unblock engine tests — fix import cycle or test blockers preventing test execution")
@@ -667,6 +729,91 @@ func extractSection(text, startMarker, endMarker string) string {
 		return strings.TrimSpace(text[start:])
 	}
 	return strings.TrimSpace(text[start : start+end])
+}
+
+func buildGoapFusionNotebookLMQuery(task, graphReport string) string {
+	return fmt.Sprintf(`You are grounding an autonomous GOAP fusion code-improvement cycle in the BT Platform Research notebook.
+
+Task: %s
+
+Current graphify/codebase context:
+%s
+
+Return EXACTLY this format, with one concrete implementation target and citations in the text where possible:
+GOAL: <one specific code change the next automated Superpowers/Claude run should implement>
+GAP: <why the current go-bt-evolve codebase needs it>
+FILES: <likely files or packages to inspect/change>
+TESTS: <specific Go tests/build commands to verify it>
+CITATIONS: <NotebookLM citation numbers or source ids>
+
+Rules:
+- Prefer implementation work over documentation.
+- Do not repeat these stale goals unless you have a new concrete variant: "Unblock engine tests" or "Ensure all domain trees have smoke tests".
+- The goal must be small enough for one scheduled coding run.
+- If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`, task, graphReport)
+}
+
+func isGoapNotebookLMFailure(out string) bool {
+	lower := strings.ToLower(out)
+	failureMarkers := []string{
+		"authentication expired",
+		"authentication failed",
+		"notebooklm circuit breaker open",
+		"query failed",
+		"auth_status\":\"stale",
+		"not_configured",
+		"nlm error:",
+	}
+	for _, marker := range failureMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractNotebookLMAnswer(out string) string {
+	var payload struct {
+		Answer string `json:"answer"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err == nil && strings.TrimSpace(payload.Answer) != "" {
+		return strings.TrimSpace(payload.Answer)
+	}
+	return strings.TrimSpace(out)
+}
+
+func extractGoapNotebookLMRecommendation(answer string) (goal, gap string) {
+	for _, line := range strings.Split(answer, "\n") {
+		trimmed := strings.TrimSpace(strings.Trim(line, "-*• "))
+		upper := strings.ToUpper(trimmed)
+		switch {
+		case strings.HasPrefix(upper, "GOAL:"):
+			goal = strings.TrimSpace(trimmed[len("GOAL:"):])
+		case strings.HasPrefix(upper, "GAP:"):
+			gap = strings.TrimSpace(trimmed[len("GAP:"):])
+		}
+	}
+	return goal, gap
+}
+
+func goapFusionNotebookLMGoalFromGaps(gaps string) string {
+	for _, line := range strings.Split(gaps, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "NOTEBOOKLM_GOAL:") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, "NOTEBOOKLM_GOAL:"))
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyGoapLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(strings.Trim(line, "-*• "))
+		if line != "" && !strings.HasPrefix(line, "{") && !strings.HasPrefix(line, "}") {
+			return line
+		}
+	}
+	return ""
 }
 
 // extractGoapGoals extracts goal lines (starting with [P0], [P1], or [P2]) from
