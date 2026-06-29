@@ -36,6 +36,9 @@ func createSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *S
 		run.WorktreeBranch = "dry-run"
 		return nil
 	}
+	if err := syncSuperpowersRepoForWorktree(ctx, runner, run.RepoDir); err != nil {
+		return err
+	}
 	path, branch := planSuperpowersWorktree(run)
 	if err := validateSuperpowersWorktreePath(path); err != nil {
 		return err
@@ -54,6 +57,32 @@ func createSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *S
 	}
 	run.WorktreePath = path
 	run.WorktreeBranch = branch
+	return nil
+}
+
+func syncSuperpowersRepoForWorktree(ctx context.Context, runner CommandRunner, repoDir string) error {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	status := runner.Run(ctx, repoDir, "git", "status", "--short", "--untracked-files=all")
+	if status.Err != nil {
+		return fmt.Errorf("could not inspect repo status before Superpowers worktree sync: %v\n%s", status.Err, status.Output)
+	}
+	if hasBlockingMainRepoDirty(status.Output) {
+		return fmt.Errorf("main repo has blocking dirty files before Superpowers worktree sync; refusing to run on non-reproducible state:\n%s", blockingMainRepoDirtySummary(status.Output))
+	}
+	if checkoutGraph := runner.Run(ctx, repoDir, "git", "checkout", "--", "graphify-out/"); checkoutGraph.Err != nil {
+		return fmt.Errorf("could not reset generated graphify-out before Superpowers worktree sync: %v\n%s", checkoutGraph.Err, checkoutGraph.Output)
+	}
+	if checkout := runner.Run(ctx, repoDir, "git", "checkout", "master"); checkout.Err != nil {
+		return fmt.Errorf("could not checkout master before Superpowers worktree sync: %v\n%s", checkout.Err, checkout.Output)
+	}
+	if fetch := runner.Run(ctx, repoDir, "git", "fetch", "origin"); fetch.Err != nil {
+		return fmt.Errorf("could not fetch origin before Superpowers worktree sync: %v\n%s", fetch.Err, fetch.Output)
+	}
+	if pull := runner.Run(ctx, repoDir, "git", "pull", "origin", "master", "--ff-only"); pull.Err != nil {
+		return fmt.Errorf("local master is not safely up to date with origin/master before Superpowers worktree sync: %v\n%s", pull.Err, pull.Output)
+	}
 	return nil
 }
 
