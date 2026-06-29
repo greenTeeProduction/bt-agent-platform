@@ -6,8 +6,8 @@ import (
 )
 
 func TestGoapFusionNotebookLMRecommendationExtraction(t *testing.T) {
-	answer := `GOAL: Add a deterministic failure-cluster-to-regression-test action for BT incidents [1].
-GAP: The platform stores failures but does not yet convert representative clusters into executable regression tests [1-2].
+	answer := `**GOAL**: Add a deterministic failure-cluster-to-regression-test action for BT incidents [1].
+**GAP**: The platform stores failures but does not yet convert representative clusters into executable regression tests [1-2].
 FILES: internal/engine/actions_failures.go, internal/engine/actions_failures_test.go
 TESTS: /usr/local/go/bin/go test ./internal/engine -run TestFailureClusterRegression -count=1`
 
@@ -17,6 +17,14 @@ TESTS: /usr/local/go/bin/go test ./internal/engine -run TestFailureClusterRegres
 	}
 	if !strings.Contains(gap, "executable regression tests") {
 		t.Fatalf("gap not extracted from NotebookLM answer: %q", gap)
+	}
+}
+
+func TestExtractNotebookLMAnswerFromTruncatedJSON(t *testing.T) {
+	raw := "{\"answer\": \"**GOAL**: Implement GatedAction\\n\\n**GAP**: Missing deterministic gates [1]\", \"conversation_id\": \"abc\", \"references\": ["
+	answer := extractNotebookLMAnswer(raw)
+	if !strings.Contains(answer, "Implement GatedAction") || strings.Contains(answer, `"answer"`) {
+		t.Fatalf("extractNotebookLMAnswer did not recover answer field from partial JSON: %q", answer)
 	}
 }
 

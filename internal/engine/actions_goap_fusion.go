@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +51,10 @@ func registerGoapFusionActions() {
 	RegisterCondition("HasNewGaps", func(bb *Blackboard) bool {
 		v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string)
 		return v != "true"
+	})
+	RegisterCondition("NoNewGaps", func(bb *Blackboard) bool {
+		v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string)
+		return v == "true"
 	})
 
 	// RunGoapFusionNotebookLMResearch performs a GOAP-owned NotebookLM query so the
@@ -784,18 +789,55 @@ func extractNotebookLMAnswer(out string) string {
 	if err := json.Unmarshal([]byte(out), &payload); err == nil && strings.TrimSpace(payload.Answer) != "" {
 		return strings.TrimSpace(payload.Answer)
 	}
+	if answer := extractJSONStringField(out, "answer"); strings.TrimSpace(answer) != "" {
+		return strings.TrimSpace(answer)
+	}
 	return strings.TrimSpace(out)
+}
+
+func extractJSONStringField(out, field string) string {
+	marker := `"` + field + `"`
+	idx := strings.Index(out, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := out[idx+len(marker):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return ""
+	}
+	rest = strings.TrimSpace(rest[colon+1:])
+	if !strings.HasPrefix(rest, `"`) {
+		return ""
+	}
+	end := 1
+	for end < len(rest) {
+		if rest[end] == '\\' {
+			end += 2
+			continue
+		}
+		if rest[end] == '"' {
+			quoted := rest[:end+1]
+			if unquoted, err := strconv.Unquote(quoted); err == nil {
+				return unquoted
+			}
+			return strings.Trim(quoted, `"`)
+		}
+		end++
+	}
+	return strings.Trim(rest, `"`)
 }
 
 func extractGoapNotebookLMRecommendation(answer string) (goal, gap string) {
 	for _, line := range strings.Split(answer, "\n") {
-		trimmed := strings.TrimSpace(strings.Trim(line, "-*• "))
+		trimmed := strings.TrimSpace(strings.Trim(line, "-*• 	"))
+		trimmed = strings.TrimSpace(strings.ReplaceAll(trimmed, "**", ""))
 		upper := strings.ToUpper(trimmed)
 		switch {
 		case strings.HasPrefix(upper, "GOAL:"):
-			goal = strings.TrimSpace(trimmed[len("GOAL:"):])
+			goal = strings.Trim(strings.TrimSpace(trimmed[len("GOAL:"):]), `"`)
 		case strings.HasPrefix(upper, "GAP:"):
-			gap = strings.TrimSpace(trimmed[len("GAP:"):])
+			gap = strings.Trim(strings.TrimSpace(trimmed[len("GAP:"):]), `"`)
 		}
 	}
 	return goal, gap

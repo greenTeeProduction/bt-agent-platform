@@ -3,9 +3,9 @@ package domains
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
 // GoapFusionTree is a GOAP-driven BT platform improvement runner.
-// Explicit apply tasks can run Claude Code via the Superpowers runtime; scheduled
-// and default runs stay analysis-only so they do not repeatedly mutate isolated
-// worktrees or create duplicate HITL gates.
+// New research-backed goals run through the Superpowers/Claude implementation
+// path. Only unchanged goals fall back to deterministic analysis so implementation
+// failures cannot be silently reported as analysis success.
 func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 	tree := &evolution.SerializableNode{Type: "Sequence", Name: "GoapFusion_Main", TimeoutMs: 3600_000, Children: []evolution.SerializableNode{
 		act("SetupFusionTools", "Give GOAP fusion actions access to vault, graphify, git, and Superpowers runtime tools"),
@@ -41,6 +41,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 				act("CleanupGraphifyOut", "Reset graphify-out to prevent perpetual staged changes"),
 			),
 			seq("ScheduledAnalysisPath",
+				cond("NoNewGaps", "Only use deterministic analysis fallback when goals are unchanged"),
 				act("WriteFusionAnalysis", "Write deterministic fusion analysis to the vault"),
 				act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
 				act("RunGraphifyUpdate", "Refresh graphify-out after local verification"),

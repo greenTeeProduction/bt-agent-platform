@@ -508,16 +508,16 @@
     "hash": "59b544e1eb7bad6b18e69cc1c50d9d6a"
   },
   "/home/nico/go-bt-evolve/internal/domains/goap_fusion.go": {
-    "mtime": 1782756328.173903,
-    "hash": "bd05e333e2855c9e26efca46f1a14f39"
+    "mtime": 1782757073.7431014,
+    "hash": "f87711f0845fc8d5fc5200c9d5c339a7"
   },
   "/home/nico/go-bt-evolve/internal/domains/hermes_obsidian.go": {
     "mtime": 1780495732.2162805,
     "hash": "21fe92ac41bf3a0468a4b3b8df5c7491"
   },
   "/home/nico/go-bt-evolve/internal/domains/goap_fusion_direct_test.go": {
-    "mtime": 1782565833.5794373,
-    "hash": "544a03f31de41bb9c79f39bc80858e4f"
+    "mtime": 1782757097.0952616,
+    "hash": "1caee0c2fa17866d204d5d84c8e7ac66"
   },
   "/home/nico/go-bt-evolve/internal/domains/domains_test.go": {
     "mtime": 1781883009.3767846,
@@ -828,8 +828,8 @@
     "hash": "a4a328e0c69a87326952e6629091830a"
   },
   "/home/nico/go-bt-evolve/internal/engine/goap_fusion_notebooklm_test.go": {
-    "mtime": 1782756345.2700536,
-    "hash": "b49a0ad938fe4a41c0acca0714aa092c"
+    "mtime": 1782757161.3757117,
+    "hash": "7723badd7112aacab2089ac409212d1a"
   },
   "/home/nico/go-bt-evolve/internal/engine/ops_actions.go": {
     "mtime": 1781275961.2265391,
@@ -988,8 +988,8 @@
     "hash": "42f98904345061123e3b05b52d125476"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion.go": {
-    "mtime": 1782756664.5246627,
-    "hash": "cbfb7b1dfdebb5c7aaa619b695df1ec2"
+    "mtime": 1782757058.1069949,
+    "hash": "b9c3481b870fd00a907dffcdbf309469"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_bus_test.go": {
     "mtime": 1781274740.5823095,
@@ -2348,11 +2348,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1782756542.2757964,
+    "mtime": 1782756752.8091145,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1782756542.6197994,
+    "mtime": 1782756753.113116,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
@@ -3010,6 +3010,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T153503-fdce6d43/verification/focused-tests.txt": {
     "mtime": 1782567475.2394395,
     "hash": "3883d045051840a08597869a261b2055"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T201536-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782756941.8102303,
+    "hash": "c42f52633f56e554e93b8a74935d2e2b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T201536-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782756937.3062017,
+    "hash": "834b4673907bfb45a313073aead1d848"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T183503-fdce6d43/finish.md": {
     "mtime": 1782578259.4171479,
@@ -3786,6 +3794,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T033503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782610503.317537,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T201536-p0-notebooklm-research-answer-goal-implement-a-gatedaction-decorator-and.md": {
+    "mtime": 1782756936.2861953,
+    "hash": "89e36f455f53f6da6e73b838fb68ddc1"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T063503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782621303.3110895,

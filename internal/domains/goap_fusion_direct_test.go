@@ -8,9 +8,9 @@ import (
 )
 
 // TestGoapFusion_Structure is a structural smoke test for GoapFusionTree.
-// It deliberately does NOT execute the Claude path. It verifies the production
-// dual-mode shape: explicit apply tasks use Superpowers, while scheduled/default
-// runs stay deterministic analysis-only and never invoke Claude Code.
+// It verifies the production dual-mode shape: new research-backed gaps use the
+// Superpowers implementation path, while unchanged goals can fall back to
+// deterministic analysis without creating HITL gates.
 func TestGoapFusion_Structure(t *testing.T) {
 	bb := &engine.Blackboard{
 		Task: "analyze research gaps and apply the highest-priority improvement: implement one concrete fix",
@@ -55,6 +55,8 @@ func TestGoapFusion_Structure(t *testing.T) {
 		"ValidateInput",
 		"IsFusionTask",
 		"IsApplyRequest",
+		"HasNewGaps",
+		"NoNewGaps",
 	}
 	for _, name := range requiredConditions {
 		if engine.GetCondition(name) == nil {
@@ -93,6 +95,9 @@ func TestGoapFusion_Structure(t *testing.T) {
 	}
 	if containsNodeName(*scheduled, "RunSuperpowersClaudeImplementation") {
 		t.Fatalf("scheduled/default GOAP path must not invoke Claude/Superpowers implementation")
+	}
+	if !containsNodeName(*scheduled, "NoNewGaps") {
+		t.Fatalf("scheduled/default analysis fallback must be guarded by NoNewGaps so implementation failures are not swallowed")
 	}
 	for _, name := range []string{"WriteFusionAnalysis", "VerifyGoapBuild", "RunGraphifyUpdate", "ReportFusionCycle"} {
 		if !containsNodeName(*scheduled, name) {
