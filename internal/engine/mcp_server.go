@@ -369,9 +369,7 @@ func (s *Server) handleMessage(data []byte) {
 		// the span starts a new trace (context.Background).
 		traceCtx := context.Background()
 		if params.Traceparent != "" {
-			if tp, err := tracing.ParseTraceParent(params.Traceparent); err == nil {
-				traceCtx = tracing.ContextWithTraceParent(traceCtx, tp)
-			}
+			traceCtx = tracing.ContextWithTraceParentHeader(traceCtx, params.Traceparent)
 		}
 
 		// Execute the tool, recording timing for audit.

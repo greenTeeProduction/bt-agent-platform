@@ -1,11 +1,11 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -128,11 +128,37 @@ func TestClient_Reflect(t *testing.T) {
 // Verify the LLM interface is satisfied.
 var _ LLM = (*Client)(nil)
 
-// TestClient_GenerateTracing verifies that LLM calls produce tracing spans
-// when the global tracer is a ConsoleTracer.
+// fakeSpan and fakeTracer are minimal tracing.Span/tracing.Tracer test
+// doubles that record the span name and attributes in memory. They replace
+// the old ConsoleTracer-backed TestTracer, which parsed a text log format
+// that no longer exists now that tracing is a thin OTel facade.
+type fakeSpan struct {
+	name  string
+	attrs map[string]string
+}
+
+func (s *fakeSpan) End()                                 {}
+func (s *fakeSpan) AddEvent(_ string, _ ...tracing.Attr) {}
+func (s *fakeSpan) SetAttribute(key, value string)       { s.attrs[key] = value }
+func (s *fakeSpan) RecordError(_ error)                  {}
+func (s *fakeSpan) SpanContext() tracing.SpanContext     { return tracing.SpanContext{} }
+func (s *fakeSpan) IsRecording() bool                    { return true }
+
+type fakeTracer struct {
+	spans []*fakeSpan
+}
+
+func (t *fakeTracer) StartSpan(ctx context.Context, name string) (context.Context, tracing.Span) {
+	s := &fakeSpan{name: name, attrs: make(map[string]string)}
+	t.spans = append(t.spans, s)
+	return ctx, s
+}
+
+// TestClient_GenerateTracing verifies that LLM calls produce a tracing span
+// with the expected name and attributes when a global tracer is installed.
 func TestClient_GenerateTracing(t *testing.T) {
-	tracer, output := tracing.TestTracer("test-llm")
-	orig := tracing.GetGlobalTracer()
+	tracer := &fakeTracer{}
+	orig := tracing.GlobalTracer()
 	tracing.SetGlobalTracer(tracer)
 	defer tracing.SetGlobalTracer(orig)
 
@@ -151,21 +177,21 @@ func TestClient_GenerateTracing(t *testing.T) {
 		t.Errorf("expected %q, got %q", "test response", result)
 	}
 
-	out := output()
-	if out == "" {
-		t.Error("expected tracing output, got empty string")
+	if len(tracer.spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(tracer.spans))
 	}
-	if !strings.Contains(out, "op=llm:generate") {
-		t.Errorf("expected 'op=llm:generate' in trace output, got: %s", out)
+	span := tracer.spans[0]
+	if span.name != "llm:generate" {
+		t.Errorf("expected span name %q, got %q", "llm:generate", span.name)
 	}
-	if !strings.Contains(out, "llm.model=test-model") {
-		t.Errorf("expected 'llm.model=test-model' in trace output, got: %s", out)
+	if span.attrs["llm.model"] != "test-model" {
+		t.Errorf("expected llm.model=test-model, got %q", span.attrs["llm.model"])
 	}
-	if !strings.Contains(out, "llm.prompt_len=11") {
-		t.Errorf("expected 'llm.prompt_len=11' in trace output, got: %s", out)
+	if span.attrs["llm.prompt_len"] != "11" {
+		t.Errorf("expected llm.prompt_len=11, got %q", span.attrs["llm.prompt_len"])
 	}
-	if !strings.Contains(out, "llm.response_len=13") {
-		t.Errorf("expected 'llm.response_len=13' in trace output, got: %s", out)
+	if span.attrs["llm.response_len"] != "13" {
+		t.Errorf("expected llm.response_len=13, got %q", span.attrs["llm.response_len"])
 	}
 }
 
@@ -173,7 +199,7 @@ func TestClient_GenerateTracing(t *testing.T) {
 // set, LLM calls use the noop tracer and don't panic or log anything.
 func TestClient_GenerateTracing_NoopDefault(t *testing.T) {
 	// Save and clear the global tracer to test noop fallback
-	orig := tracing.GetGlobalTracer()
+	orig := tracing.GlobalTracer()
 	tracing.SetGlobalTracer(nil)
 	defer tracing.SetGlobalTracer(orig)
 

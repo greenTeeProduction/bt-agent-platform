@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -278,13 +279,13 @@ func main() {
 	server.SetRateLimit(2, 5)
 	server.SetMaxMessageSize(1 << 20)
 
-	// ── Tracing ────────────────────────────────────────────────────────────
-	tracingLogPath := filepath.Join(agent.LogsDir(), "traces.log")
-	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracer := tracing.NewConsoleTracer("bt-agent", f)
-		tracing.ConfigureOTLPFromEnv(tracer)
-		tracing.SetGlobalTracer(tracer)
-	}
+	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
+	tracingShutdown := tracing.InitFromEnv("bt-agent")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
 
 	// ── A2A Server ──────────────────────────────────────────────────────────
 	a2aPort := 8686

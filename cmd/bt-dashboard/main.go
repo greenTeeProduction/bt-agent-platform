@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -49,9 +50,6 @@ var dashConcurrencyLimiter *reliability.ConcurrencyLimiter
 
 // dashConfig holds the runtime configuration loaded at startup.
 var dashConfig *config.Config
-
-// traceReader reads and parses the shared traces log for the /api/traces endpoint.
-var traceReader *tracing.TraceReader
 
 // sessionStore manages authenticated user sessions (login/logout, cookie-based auth).
 var sessionStore *security.SessionStore
@@ -121,20 +119,13 @@ func main() {
 		"worker_pool_size", 4,
 		"concurrency_limit", 2)
 
-	// Distributed tracing — writes to shared traces log
-	traceLogPath := getHomeDir() + "/.go-bt-evolve/logs/traces.log"
-	if f, err := os.OpenFile(traceLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracer := tracing.NewConsoleTracer("bt-dashboard", f)
-		otlpEnabled := tracing.ConfigureOTLPFromEnv(tracer)
-		tracing.SetGlobalTracer(tracer)
-		slog.Info("Tracing enabled", "output", traceLogPath, "otlp", otlpEnabled)
-	} else {
-		slog.Warn("Tracing log unavailable", "path", traceLogPath, "error", err)
-	}
-
-	// Trace reader for /api/traces endpoint
-	traceReader = tracing.NewTraceReader(traceLogPath)
-	slog.Info("Trace reader initialized", "path", traceLogPath)
+	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
+	tracingShutdown := tracing.InitFromEnv("bt-dashboard")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
 
 	// Auto-start bt-otlp-collector as a companion process if OTEL endpoint is
 	// not already configured. This enables production-grade distributed tracing
@@ -250,7 +241,6 @@ func main() {
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/scalability", handleScalability)
-	mux.HandleFunc("/api/traces", handleTraces)
 	mux.HandleFunc("/api/login", handleLogin)
 	mux.HandleFunc("/api/logout", handleLogout)
 	mux.HandleFunc("/api/session", handleSession)
@@ -332,7 +322,7 @@ func main() {
 	var handler http.Handler = mux
 	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
 	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
-	handler = tracing.TracingMiddleware(handler)    // distributed tracing spans per request
+	handler = tracingMiddleware(handler)            // distributed tracing spans per request
 	handler = security.CrossOriginMiddleware(corsOrigin, "GET, POST, PUT, DELETE, OPTIONS")(handler)
 	handler = security.CSRFMiddleware(nil)(handler)                   // CSRF protection for state-changing requests
 	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
@@ -366,6 +356,63 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+// tracingResponseWriter wraps http.ResponseWriter to capture the status code
+// for the tracing middleware's http.status_code span attribute.
+type tracingResponseWriter struct {
+	http.ResponseWriter
+	statusCode  int
+	wroteHeader bool
+}
+
+func (rw *tracingResponseWriter) WriteHeader(code int) {
+	if !rw.wroteHeader {
+		rw.statusCode = code
+		rw.wroteHeader = true
+	}
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *tracingResponseWriter) Write(b []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.statusCode = http.StatusOK
+		rw.wroteHeader = true
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+func (rw *tracingResponseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+var _ http.Flusher = (*tracingResponseWriter)(nil)
+
+// tracingMiddleware creates an OTel span (via the tracing facade, activated
+// by tracing.InitFromEnv at startup) for every HTTP request. If the incoming
+// request carries a W3C traceparent header, the span joins the remote trace
+// as a child — mirroring internal/engine/mcp_server.go's traceparent handling.
+func tracingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+		if tp := r.Header.Get("traceparent"); tp != "" {
+			ctx = tracing.ContextWithTraceParentHeader(ctx, tp)
+		}
+
+		ctx, span := tracing.StartSpan(ctx, "http:"+r.Method+" "+r.URL.Path)
+		defer span.End()
+		span.SetAttribute("http.method", r.Method)
+		span.SetAttribute("http.url", r.URL.String())
+
+		rw := &tracingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(rw, r.WithContext(ctx))
+
+		span.SetAttribute("http.status_code", fmt.Sprintf("%d", rw.statusCode))
+		span.SetAttribute("http.duration_ms", fmt.Sprintf("%d", time.Since(start).Milliseconds()))
+	})
 }
 
 func serveDashboard(w http.ResponseWriter, _ *http.Request) {
@@ -1246,112 +1293,6 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 	_ = encodeJSON(w, status)
 }
 
-// handleTraces returns recent trace entries or aggregated traces from the shared traces log as JSON.
-// Supports query params:
-//
-//	?limit=50        — max entries (default 50, max 500) for flat list mode
-//	?since=5m        — relative duration filter for flat list mode
-//	?trace_id=xxx    — fetch a specific trace (returns AggregatedTrace with span tree)
-//	?list=true       — list aggregated traces (returns []AggregatedTrace, newest first)
-//
-// Public endpoint (no auth) — monitoring tool compatible.
-func handleTraces(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
-		return
-	}
-
-	if traceReader == nil {
-		http.Error(w, `{"error":"trace reader not initialized"}`, http.StatusServiceUnavailable)
-		return
-	}
-
-	// ─── Aggregated trace by ID ────────────────────────────────────────────
-	if traceID := r.URL.Query().Get("trace_id"); traceID != "" {
-		trace, err := traceReader.GetTrace(traceID)
-		if err != nil {
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
-			return
-		}
-		if trace == nil {
-			http.Error(w, `{"error":"trace not found"}`, http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		_ = encodeJSON(w, trace)
-		return
-	}
-
-	// ─── Aggregated trace listing ──────────────────────────────────────────
-	if r.URL.Query().Get("list") == "true" {
-		limit := 20
-		if l := r.URL.Query().Get("limit"); l != "" {
-			if n, err := fmt.Sscanf(l, "%d", &limit); err != nil || n != 1 || limit < 1 || limit > 100 {
-				http.Error(w, `{"error":"limit must be 1-100"}`, http.StatusBadRequest)
-				return
-			}
-		}
-		traces, err := traceReader.ListTraceIDs(limit)
-		if err != nil {
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
-			return
-		}
-		if traces == nil {
-			traces = []*tracing.AggregatedTrace{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		_ = encodeJSON(w, map[string]interface{}{
-			"count":  len(traces),
-			"traces": traces,
-		})
-		return
-	}
-
-	// ─── Flat span list (existing behavior) ────────────────────────────────
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := fmt.Sscanf(l, "%d", &limit); err != nil || n != 1 || limit < 1 || limit > 500 {
-			http.Error(w, `{"error":"limit must be 1-500"}`, http.StatusBadRequest)
-			return
-		}
-	}
-
-	var entries []tracing.TraceEntry
-	var readErr error
-
-	if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
-		dur, err := time.ParseDuration(sinceStr)
-		if err != nil {
-			http.Error(w, `{"error":"invalid since duration: `+err.Error()+`"}`, http.StatusBadRequest)
-			return
-		}
-		since := time.Now().Add(-dur)
-		entries, readErr = traceReader.ReadSince(since, limit)
-	} else {
-		entries, readErr = traceReader.ReadRecent(limit)
-	}
-
-	if readErr != nil {
-		http.Error(w, `{"error":"`+readErr.Error()+`"}`, http.StatusInternalServerError)
-		return
-	}
-
-	if entries == nil {
-		entries = []tracing.TraceEntry{}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	_ = encodeJSON(w, map[string]interface{}{
-		"count":   len(entries),
-		"entries": entries,
-	})
-}
-
-// handleConfig returns the current runtime configuration with secrets redacted.
-// Public endpoint (no auth) — provides visibility into effective configuration.
 func handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)

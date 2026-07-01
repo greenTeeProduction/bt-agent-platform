@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -167,13 +169,13 @@ func main() {
 	server.SetRateLimit(5, 10)        // 5 req/s, burst 10 (evaluator is fast, no Ollama)
 	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
 
-	// ── Tracing: initialize global tracer ──
-	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
-	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracer := tracing.NewConsoleTracer("bt-evaluator", f)
-		tracing.ConfigureOTLPFromEnv(tracer)
-		tracing.SetGlobalTracer(tracer)
-	}
+	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
+	tracingShutdown := tracing.InitFromEnv("bt-evaluator")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
 
 	if err := server.Run(); err != nil {
 		engine.Error("bt-evaluator: server error", "error", err)

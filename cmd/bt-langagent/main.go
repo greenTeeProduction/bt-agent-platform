@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -198,13 +199,13 @@ func main() {
 	server.SetRateLimit(2, 5)         // 2 req/s, burst 5
 	server.SetMaxMessageSize(1 << 20) // 1 MB message size limit
 
-	// ── Tracing: initialize global tracer ──
-	tracingLogPath := filepath.Join(home, ".go-bt-evolve", "logs", "traces.log")
-	if f, err := os.OpenFile(tracingLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		tracer := tracing.NewConsoleTracer("bt-langagent", f)
-		tracing.ConfigureOTLPFromEnv(tracer)
-		tracing.SetGlobalTracer(tracer)
-	}
+	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
+	tracingShutdown := tracing.InitFromEnv("bt-langagent")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
 
 	if err := server.Run(); err != nil {
 		engine.Error("bt-langagent: server error", "error", err)
