@@ -17,6 +17,13 @@ All notable changes to this project will be documented in this file.
 
 - **(agents):** Dashboard and CLI execute agents in-process via `RunOnce()` (Hermes CLI fallback only when runner unavailable).
 - **(agents):** Agent delete clears scheduler jobs across dashboard, CLI, MCP, and `bt-assistant`.
+- **(agents):** Webhook event fields `failure_reason` and `nodes` carry raw values (error message, `a → b → c` node trace) without embedded display labels — consumer templates do the labeling.
+
+### Fixed
+
+- **(reliability):** Rate-limit handling is functional end-to-end — 429 detection moved before response-body parsing in the DeepSeek and OpenAI-compatible clients (shared `checkRateLimit` helper), the typed `RateLimitError` survives `FallbackLLM` aggregation (`errors.Join`) and BT engine execution (LLM error recorder in `RunOnce`), and rate-limit classification runs ahead of the generic LLM patterns with a typed `errors.As` fast path.
+- **(reliability):** Server `Retry-After` values are clamped to 5m with additive jitter (no uncapped, lockstep sleeps); missing or already-elapsed headers fall back to the policy's backoff instead of a hardcoded 60s; bare `429`/`rpm`/`tpm` substrings no longer misclassify permanent failures as retryable rate limits; the openai-compatible 429 message reports the per-call model.
+- **(agents):** Scheduler webhook events carry the current run's node trace via the `AgentRunner` return path — previously a stale trace from the prior run was published after panics, and the full `RunResult` (including LLM output) was pinned on the registry `Instance` indefinitely.
 
 ### Prior (2026-05-28)
 

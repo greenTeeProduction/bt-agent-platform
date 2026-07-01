@@ -128,8 +128,19 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 	}
 
+	// Engine nodes flatten LLM errors into blackboard strings, severing the
+	// error chain. The recorder preserves the typed error (e.g. RateLimitError
+	// with Retry-After) so the failure return below can re-attach it with %w
+	// for the caller's retry policy. Wrap only a non-nil LLM — engine nodes
+	// guard on bb.LLM == nil.
+	var llmRecorder *llm.ErrorRecorder
+	llmForRun := d.LLM
+	if d.LLM != nil {
+		llmRecorder = llm.NewErrorRecorder(d.LLM)
+		llmForRun = llmRecorder
+	}
 	bb := &engine.Blackboard{
-		LLM:         d.LLM,
+		LLM:         llmForRun,
 		Reflections: d.RefStore,
 		TreeStore:   d.TreeStore,
 	}
@@ -232,6 +243,11 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 		if opts.EnforceQuality && spec != nil && !passed {
 			return result, fmt.Errorf("quality gate failed: %s", strings.Join(reasons, "; "))
+		}
+		if llmRecorder != nil {
+			if llmErr := llmRecorder.LastError(); llmErr != nil {
+				return result, fmt.Errorf("agent outcome: %s: %w", result.Outcome, llmErr)
+			}
 		}
 		return result, fmt.Errorf("agent outcome: %s", result.Outcome)
 	}

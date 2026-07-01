@@ -126,8 +126,9 @@ func GetCategory(err error) ErrorCategory {
 }
 
 // ClassifyError inspects an error and its chain to determine the category.
-// It checks for known error patterns in order of specificity:
-// validation → auth → resource → timeout → network → LLM → unknown.
+// Typed errors in the chain (CategorizedError, RateLimitError) win over
+// string matching. String patterns are checked in order of specificity:
+// auth → validation → resource → timeout → network → rate limit → LLM → unknown.
 func ClassifyError(err error) ErrorCategory {
 	if err == nil {
 		return ErrCatUnknown
@@ -136,6 +137,13 @@ func ClassifyError(err error) ErrorCategory {
 	// Check the chain first for an existing CategorizedError.
 	if cat := GetCategory(err); cat != ErrCatUnknown {
 		return cat
+	}
+
+	// A typed RateLimitError in the chain is authoritative — classification
+	// must not depend on its message dodging the string patterns below.
+	var rle *RateLimitError
+	if errors.As(err, &rle) {
+		return ErrCatRateLimited
 	}
 
 	msg := err.Error()
@@ -166,14 +174,16 @@ func ClassifyError(err error) ErrorCategory {
 		return ErrCatNetwork
 	}
 
+	// ─── Rate limit errors (before LLM — provider-wrapped rate-limit
+	// messages like "deepseek api error: rate limit reached" would
+	// otherwise match the broader LLM patterns first) ──────────────────
+	if isRateLimitError(lower) {
+		return ErrCatRateLimited
+	}
+
 	// ─── LLM errors ────────────────────────────────────────────────────
 	if isLLMError(lower) {
 		return ErrCatLLM
-	}
-
-	// ─── Rate limit errors (check after LLM — "rate limit" patterns) ───
-	if isRateLimitError(lower) {
-		return ErrCatRateLimited
 	}
 
 	return ErrCatUnknown
@@ -316,14 +326,18 @@ func isLLMError(lower string) bool {
 // Detects HTTP 429, Retry-After, and rate-limit language from Claude,
 // OpenAI, DeepSeek, and other providers.
 func isRateLimitError(lower string) bool {
+	// Bare substrings like "429", "rpm", or "tpm" are deliberately absent:
+	// they match unrelated messages ("record 14290 not found", "rpm package",
+	// "tpm device") and would turn permanent failures into retryable ones.
 	rateLimitPatterns := []string{
 		"rate limit", "rate limited", "rate_limit",
-		"too many requests", "429",
+		"too many requests",
+		"http 429", "status 429", "429 too many",
 		"retry after", "retry-after",
 		"quota exceeded", "quota_exceeded",
 		"request limit reached",
-		"requests per minute", "rpm",
-		"tokens per minute", "tpm",
+		"requests per minute",
+		"tokens per minute",
 	}
 	for _, p := range rateLimitPatterns {
 		if strings.Contains(lower, p) {
@@ -355,7 +369,7 @@ type RateLimitError struct {
 // Error implements the error interface.
 func (rle *RateLimitError) Error() string {
 	if rle.Message != "" {
-		return fmt.Sprintf("rate limited (%s, retry after %s): %s", rle.RetryAfter, rle.RetryAfter, rle.Message)
+		return fmt.Sprintf("rate limited (retry after %s): %s", rle.RetryAfter, rle.Message)
 	}
 	if rle.Err != nil {
 		return fmt.Sprintf("rate limited (retry after %s): %v", rle.RetryAfter, rle.Err)
@@ -380,11 +394,11 @@ func RetryAfterFromError(err error) time.Duration {
 
 // ParseRetryAfter parses an HTTP Retry-After header value into a time.Duration.
 // Handles both delta-seconds (e.g. "120") and HTTP-date formats.
-// Returns a default of 60s for unparseable values so the caller always has a
-// reasonable fallback.
+// Returns 0 for missing, unparseable, or already-elapsed values so the retry
+// policy falls back to its own category backoff instead of a hardcoded wait.
 func ParseRetryAfter(header string) time.Duration {
 	if header == "" {
-		return 60 * time.Second // sensible default for rate limits
+		return 0
 	}
 	// Try delta-seconds format (e.g. "120")
 	if secs, err := strconv.Atoi(strings.TrimSpace(header)); err == nil && secs > 0 {
@@ -392,12 +406,11 @@ func ParseRetryAfter(header string) time.Duration {
 	}
 	// Try HTTP-date format (e.g. "Wed, 21 Oct 2015 07:28:00 GMT")
 	if t, err := time.Parse(time.RFC1123, header); err == nil {
-		d := time.Until(t)
-		if d > 0 {
+		if d := time.Until(t); d > 0 {
 			return d
 		}
 	}
-	return 60 * time.Second // fallback
+	return 0
 }
 
 // ─── Jitter Strategies ─────────────────────────────────────────────────────────
@@ -666,14 +679,25 @@ func sleepWithContext(ctx context.Context, delay time.Duration) error {
 	}
 }
 
+// maxRetryAfterDelay bounds server-provided Retry-After values so a large or
+// hostile header cannot stall the retry loop indefinitely. Deliberately
+// higher than typical MaxDelay values — genuine rate-limit windows often
+// exceed the exponential-backoff cap.
+const maxRetryAfterDelay = 5 * time.Minute
+
 // delayForCategory returns the backoff delay for a given attempt and category,
 // applying jitter if configured. If the error carries a RateLimitError with
 // a Retry-After duration, that server-provided value takes precedence over
-// the computed exponential backoff.
+// the computed exponential backoff (clamped to maxRetryAfterDelay, with
+// additive jitter so synchronized clients don't retry in lockstep).
 func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory, err error) time.Duration {
-	// If the server provided a Retry-After, use it unconditionally.
 	if ra := RetryAfterFromError(err); ra > 0 {
-		return ra
+		if ra > maxRetryAfterDelay {
+			ra = maxRetryAfterDelay
+		}
+		// Additive jitter (up to +10%) — never below the server-requested
+		// wait, but desynchronized across clients hitting the same limit.
+		return ra + time.Duration(rand.Int63n(int64(ra/10)+1))
 	}
 
 	base := p.Base

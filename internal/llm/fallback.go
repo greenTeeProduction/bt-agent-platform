@@ -2,8 +2,8 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -46,20 +46,22 @@ func (f *FallbackLLM) generate(call func(LLM) (string, error)) (string, error) {
 		return "", fmt.Errorf("no LLM models configured")
 	}
 
-	failures := make([]string, 0, len(f.models))
+	// Wrap with %w and join so typed errors (e.g. *reliability.RateLimitError
+	// carrying Retry-After) survive the aggregation for errors.As upstream.
+	errs := make([]error, 0, len(f.models))
 	for _, model := range f.models {
 		if model.LLM == nil {
-			failures = append(failures, fmt.Sprintf("%s: nil model", model.Name))
+			errs = append(errs, fmt.Errorf("%s: nil model", model.Name))
 			continue
 		}
 		result, err := call(model.LLM)
 		if err == nil {
 			return result, nil
 		}
-		failures = append(failures, fmt.Sprintf("%s: %v", model.Name, err))
+		errs = append(errs, fmt.Errorf("%s: %w", model.Name, err))
 	}
 
-	return "", fmt.Errorf("all LLM models failed: %s", strings.Join(failures, "; "))
+	return "", fmt.Errorf("all LLM models failed: %w", errors.Join(errs...))
 }
 
 func (f *FallbackLLM) AnalyzeComplexity(task string) string {

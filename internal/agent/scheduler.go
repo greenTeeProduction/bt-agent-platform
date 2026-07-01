@@ -65,9 +65,10 @@ type RunContext struct {
 }
 
 // AgentRunner is the function that actually executes an agent. Injected for testability.
-// Returns (outcome, output, error).
+// Returns (outcome, output, result, error). res carries per-run detail (node
+// trace etc.) and may be nil when the run produced no result.
 // For long-running agents, the runner should periodically update the checkpoint.
-type AgentRunner func(ctx RunContext) (outcome, output string, err error)
+type AgentRunner func(ctx RunContext) (outcome, output string, res *RunResult, err error)
 
 // SchedulerConfig configures a new scheduler.
 type SchedulerConfig struct {
@@ -197,7 +198,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	}
 
 	start := time.Now()
-	outcome, output, err = runner(runCtx)
+	outcome, output, _, err = runner(runCtx)
 	duration := time.Since(start)
 
 	// Record history
@@ -536,6 +537,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	// Recover from panics in the runner so one bad agent doesn't
 	// block all subsequent jobs. Panic is recorded as a failure.
 	var outcome, output string
+	var runRes *RunResult
 	var runErr error
 	func() {
 		defer func() {
@@ -545,7 +547,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 				runErr = fmt.Errorf("agent panicked: %v", r)
 			}
 		}()
-		outcome, output, runErr = runner(runCtx)
+		outcome, output, runRes, runErr = runner(runCtx)
 	}()
 	duration := time.Since(start)
 
@@ -596,18 +598,18 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		if outcome == "panic" || outcome == "error" {
 			eventType = "error_detected"
 		}
-		// Build failure reason (self-documenting — empty on success)
+		// Raw values — consumers (Hermes webhook templates) do the labeling.
+		// Empty on success / when unavailable.
 		failureReason := ""
 		if runErr != nil {
-			failureReason = fmt.Sprintf("\nFailure Reason: %s", runErr.Error())
+			failureReason = runErr.Error()
 		} else if outcome != "success" {
-			failureReason = fmt.Sprintf("\nFailure Reason: agent outcome: %s", outcome)
+			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
 		}
 
-		// Build node execution trace (self-documenting — empty when unavailable)
 		nodesStr := ""
-		if inst != nil && inst.LastRunResult != nil && len(inst.LastRunResult.NodePaths) > 0 {
-			nodesStr = "\nExecution:\n  " + strings.Join(inst.LastRunResult.NodePaths, " → ")
+		if runRes != nil && len(runRes.NodePaths) > 0 {
+			nodesStr = strings.Join(runRes.NodePaths, " → ")
 		}
 
 		GlobalAgentBus.Publish(AgentEvent{

@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // DeepSeekClient implements the LLM interface using the DeepSeek API.
@@ -109,6 +107,12 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	// Rate limiting must be detected before the body is interpreted:
+	// 429 bodies are often non-JSON or carry a provider error object.
+	if err := checkRateLimit(resp, "DeepSeek API", d.model); err != nil {
+		return "", err
+	}
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
@@ -121,15 +125,6 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 
 	if dsResp.Error != nil {
 		return "", fmt.Errorf("deepseek api error: %s", dsResp.Error.Message)
-	}
-
-	// Check for rate limiting (HTTP 429) and extract Retry-After.
-	if resp.StatusCode == 429 {
-		retryAfter := reliability.ParseRetryAfter(resp.Header.Get("Retry-After"))
-		return "", &reliability.RateLimitError{
-			RetryAfter: retryAfter,
-			Message:    fmt.Sprintf("DeepSeek API rate limited (model=%s)", d.model),
-		}
 	}
 
 	if len(dsResp.Choices) == 0 {

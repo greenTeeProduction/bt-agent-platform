@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 type OpenAICompatConfig struct {
@@ -122,6 +120,11 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		return "", fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
+	// Rate limiting must be detected before the body is interpreted:
+	// 429 bodies are often non-JSON or carry a provider error object.
+	if err := checkRateLimit(resp, "openai-compatible API", model); err != nil {
+		return "", err
+	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
@@ -132,14 +135,6 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 	}
 	if parsed.Error != nil {
 		return "", fmt.Errorf("openai-compatible api error: %s", parsed.Error.Message)
-	}
-	// Check for rate limiting (HTTP 429) and extract Retry-After.
-	if resp.StatusCode == 429 {
-		retryAfter := reliability.ParseRetryAfter(resp.Header.Get("Retry-After"))
-		return "", &reliability.RateLimitError{
-			RetryAfter: retryAfter,
-			Message:    fmt.Sprintf("openai-compatible API rate limited (model=%s)", c.model),
-		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, string(respBody))

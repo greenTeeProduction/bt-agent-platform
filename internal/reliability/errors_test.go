@@ -25,6 +25,7 @@ func TestErrorCategory_String(t *testing.T) {
 		{ErrCatLLM, "llm"},
 		{ErrCatValidation, "validation"},
 		{ErrCatResourceExhausted, "resource_exhausted"},
+		{ErrCatRateLimited, "rate_limited"},
 		{ErrCatAuth, "auth"},
 		{ErrorCategory(99), "unknown"},
 	}
@@ -40,6 +41,7 @@ func TestErrorCategory_IsRetryable(t *testing.T) {
 		ErrCatNetwork:           true,
 		ErrCatTimeout:           true,
 		ErrCatLLM:               true,
+		ErrCatRateLimited:       true,
 		ErrCatUnknown:           false,
 		ErrCatValidation:        false,
 		ErrCatResourceExhausted: false,
@@ -211,7 +213,6 @@ func TestClassifyError_LLM(t *testing.T) {
 		"llm inference failed",
 		"context length exceeded",
 		"token limit reached",
-		"rate limit exceeded",
 		"api error",
 		"server error 502",
 		"HTTP 503",
@@ -223,6 +224,125 @@ func TestClassifyError_LLM(t *testing.T) {
 		if cat := ClassifyError(err); cat != ErrCatLLM {
 			t.Errorf("ClassifyError(%q) = %s, want llm", msg, cat)
 		}
+	}
+}
+
+func TestClassifyError_RateLimited(t *testing.T) {
+	tests := []string{
+		"rate limit exceeded",
+		"rate limited",
+		"HTTP 429 too many requests",
+		"retry-after: 120",
+		"quota exceeded",
+		"request limit reached",
+		"tokens per minute exceeded",
+	}
+	for _, msg := range tests {
+		err := errors.New(msg)
+		if cat := ClassifyError(err); cat != ErrCatRateLimited {
+			t.Errorf("ClassifyError(%q) = %s, want rate_limited", msg, cat)
+		}
+	}
+}
+
+func TestClassifyError_ProviderWrappedRateLimit(t *testing.T) {
+	// Provider wrappers contain LLM patterns ("api error") — the rate-limit
+	// check must win for these real-world strings.
+	tests := []string{
+		"deepseek api error: rate limit reached for requests",
+		"openai-compatible api error: Rate limit exceeded",
+	}
+	for _, msg := range tests {
+		if cat := ClassifyError(errors.New(msg)); cat != ErrCatRateLimited {
+			t.Errorf("ClassifyError(%q) = %s, want rate_limited", msg, cat)
+		}
+	}
+}
+
+func TestClassifyError_TypedRateLimitError(t *testing.T) {
+	// A typed RateLimitError must classify as rate_limited regardless of
+	// message content or wrapping.
+	rle := &RateLimitError{RetryAfter: 30 * time.Second, Message: "llm api error"}
+	wrapped := fmt.Errorf("llm call failed: %w", rle)
+	if cat := ClassifyError(wrapped); cat != ErrCatRateLimited {
+		t.Errorf("ClassifyError(wrapped RateLimitError) = %s, want rate_limited", cat)
+	}
+}
+
+func TestClassifyError_NoBareSubstringFalsePositives(t *testing.T) {
+	// These must NOT classify as rate_limited (previously matched by bare
+	// "429"/"rpm"/"tpm" substrings, turning permanent failures retryable).
+	tests := []string{
+		"record 14290 not found",
+		"failed to install rpm package",
+		"tpm device missing",
+	}
+	for _, msg := range tests {
+		if cat := ClassifyError(errors.New(msg)); cat == ErrCatRateLimited {
+			t.Errorf("ClassifyError(%q) = rate_limited, want anything else", msg)
+		}
+	}
+}
+
+func TestRateLimitError_ErrorMessage(t *testing.T) {
+	rle := &RateLimitError{RetryAfter: time.Minute, Message: "DeepSeek API rate limited"}
+	want := "rate limited (retry after 1m0s): DeepSeek API rate limited"
+	if got := rle.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	tests := []struct {
+		header string
+		want   time.Duration
+	}{
+		{"", 0},
+		{"120", 120 * time.Second},
+		{" 5 ", 5 * time.Second},
+		{"0", 0},
+		{"-3", 0},
+		{"garbage", 0},
+		{"Mon, 02 Jan 2006 15:04:05 GMT", 0}, // long past → retry now
+	}
+	for _, tt := range tests {
+		if got := ParseRetryAfter(tt.header); got != tt.want {
+			t.Errorf("ParseRetryAfter(%q) = %v, want %v", tt.header, got, tt.want)
+		}
+	}
+	// Future HTTP-date yields a positive duration close to the delta.
+	future := time.Now().Add(90 * time.Second).UTC().Format(time.RFC1123)
+	if got := ParseRetryAfter(future); got < 80*time.Second || got > 90*time.Second {
+		t.Errorf("ParseRetryAfter(future date) = %v, want ~90s", got)
+	}
+}
+
+func TestDelayForCategory_RetryAfterHonoredWithJitter(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 3, Base: 100 * time.Millisecond, MaxDelay: 1 * time.Second}
+	err := &RateLimitError{RetryAfter: 10 * time.Second}
+	delay := policy.delayForCategory(1, ErrCatRateLimited, err)
+	// Never below the server-requested wait; additive jitter ≤ 10%.
+	if delay < 10*time.Second || delay > 11*time.Second {
+		t.Errorf("delay = %v, want [10s, 11s]", delay)
+	}
+}
+
+func TestDelayForCategory_RetryAfterCapped(t *testing.T) {
+	policy := &RetryPolicy{MaxRetries: 3}
+	err := &RateLimitError{RetryAfter: 24 * time.Hour}
+	delay := policy.delayForCategory(1, ErrCatRateLimited, err)
+	if delay < 5*time.Minute || delay > 5*time.Minute+30*time.Second {
+		t.Errorf("delay = %v, want clamped to [5m, 5m30s]", delay)
+	}
+}
+
+func TestDelayForCategory_ZeroRetryAfterFallsBack(t *testing.T) {
+	// A RateLimitError without Retry-After (headerless 429) must fall back
+	// to the normal category backoff, not a hardcoded wait.
+	policy := &RetryPolicy{MaxRetries: 3, Base: 100 * time.Millisecond, Jitter: NoJitter}
+	err := &RateLimitError{RetryAfter: 0}
+	if delay := policy.delayForCategory(1, ErrCatRateLimited, err); delay != 100*time.Millisecond {
+		t.Errorf("delay = %v, want base backoff 100ms", delay)
 	}
 }
 

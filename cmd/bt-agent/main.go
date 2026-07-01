@@ -158,7 +158,7 @@ func main() {
 		ResolveTree: resolveTree,
 	}
 
-	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, err error) {
+	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
 		task := ctx.Task
 		if task == "" {
 			task = ctx.AgentName
@@ -195,19 +195,16 @@ func main() {
 		err = policy.ExecuteContext(ctx.Context, func() error {
 			attempts++
 			attemptStart := time.Now()
-			res, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
+			attemptRes, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
 				InjectMemory:   true,
 				EnforceQuality: true,
 			})
-			if res != nil {
-				outcome = res.Outcome
-				output = res.Output
-				// Store on Instance so scheduler can enrich webhook with trace data
-				if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
-					inst.LastRunResult = res
-				}
+			if attemptRes != nil {
+				outcome = attemptRes.Outcome
+				output = attemptRes.Output
+				res = attemptRes
 			}
-			if runErr == nil && res != nil && res.Outcome == "success" {
+			if runErr == nil && attemptRes != nil && attemptRes.Outcome == "success" {
 				slo.RecordSuccess(time.Since(attemptStart))
 				if attempts > 1 {
 					slo.RecordRecovery(0)
@@ -237,7 +234,7 @@ func main() {
 			})
 		}
 
-		return outcome, output, err
+		return outcome, output, res, err
 	})
 
 	// Auto-load agent schedules on startup

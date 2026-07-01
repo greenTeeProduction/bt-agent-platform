@@ -478,6 +478,8 @@ func TestDeepSeekClient_Generate_Success(t *testing.T) {
 }
 
 func TestDeepSeekClient_Generate_APIError(t *testing.T) {
+	// Non-429 status: exercises the provider error-body path.
+	// (429 responses yield a typed RateLimitError — see ratelimit_test.go.)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"error": map[string]any{
@@ -485,7 +487,7 @@ func TestDeepSeekClient_Generate_APIError(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
+		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()

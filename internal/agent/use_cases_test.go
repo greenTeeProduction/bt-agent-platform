@@ -136,8 +136,8 @@ func TestUseCase_SchedulerRunAndHistory(t *testing.T) {
 	}
 
 	// Run now
-	runner := func(_ RunContext) (string, string, error) {
-		return "success", "executed", nil
+	runner := func(_ RunContext) (string, string, *RunResult, error) {
+		return "success", "executed", nil, nil
 	}
 	outcome, _, err := sched.RunNow("scheduled", "test", runner, "10s")
 	if err != nil {

@@ -156,8 +156,8 @@ func TestScheduler_RunNow(t *testing.T) {
 
 	sched := NewScheduler(SchedulerConfig{Registry: reg, History: hist})
 
-	runner := func(ctx RunContext) (string, string, error) {
-		return "success", "Executed task: " + ctx.Task, nil
+	runner := func(ctx RunContext) (string, string, *RunResult, error) {
+		return "success", "Executed task: " + ctx.Task, nil, nil
 	}
 
 	outcome, output, err := sched.RunNow("runnow-agent", "test task", runner, "30s")
@@ -193,7 +193,7 @@ func TestScheduler_RunJobPanicRecovery(t *testing.T) {
 	})
 
 	// Runner that panics
-	panickingRunner := func(_ RunContext) (string, string, error) {
+	panickingRunner := func(_ RunContext) (string, string, *RunResult, error) {
 		panic("agent-crash")
 	}
 
@@ -249,11 +249,11 @@ func TestScheduler_NormalJobAfterPanic(t *testing.T) {
 	})
 
 	// Runner that panics for bad-agent, succeeds for good-agent
-	runner := func(ctx RunContext) (string, string, error) {
+	runner := func(ctx RunContext) (string, string, *RunResult, error) {
 		if ctx.AgentName == "bad-agent" {
 			panic("bad-agent-panic")
 		}
-		return "success", "all good", nil
+		return "success", "all good", nil, nil
 	}
 
 	job1, _ := sched.Schedule("bad-agent", "every 1h", "30m", 0)
