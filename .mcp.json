@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "bt-agent": {
+      "type": "stdio",
+      "command": "bin/bt-agent"
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
