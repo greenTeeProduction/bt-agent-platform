@@ -50,9 +50,12 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	if bin == "" {
 		bin = getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")
 	}
-	model := getenvDefault("BT_SUPERPOWERS_CLAUDE_MODEL", "opus")
+	model := getenvDefault("BT_SUPERPOWERS_CLAUDE_MODEL", "")
 	allowed := getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", "Bash(git diff:git status:gofmt:go test:go build:go vet:*),Read,Write,Edit,Glob,Grep")
-	args := []string{"--print", "--model", model, "--allowedTools", allowed, "-p", prompt}
+	args := []string{"--print", "--allowedTools", allowed, "-p", prompt}
+	if model != "" {
+		args = append([]string{"--model", model}, args...)
+	}
 	if strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
 		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
 	}

@@ -754,13 +754,16 @@ func runClaudeCode(prompt string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(goapFusionClaudeTimeout)*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx,
-		goapFusionClaudeBin, "--print",
-		"--model", "opus",
+	model := os.Getenv("BT_SUPERPOWERS_CLAUDE_MODEL")
+	args := []string{goapFusionClaudeBin, "--print",
 		"--allowedTools", "Bash(git diff:git log:git status:go test:go build:go vet:*),Read,Write,Edit,Glob,Grep",
 		"--add-dir", goapFusionRepo,
 		"-p", prompt,
-	)
+	}
+	if model != "" {
+		args = append([]string{args[0], "--model", model}, args[1:]...)
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = goapFusionRepo
 	cmd.Env = append(os.Environ(),
 		"PATH=/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"),

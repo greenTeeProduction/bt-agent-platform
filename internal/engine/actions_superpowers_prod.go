@@ -359,7 +359,17 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	c, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
-		bb.Result = "## GOAP Superpowers Execution Failed\n\n" + err.Error()
+		errStr := err.Error()
+		if isClaudeRateLimit(errStr) {
+			// Claude rate-limited — save the plan for the next cycle and fall
+			// back gracefully. Set goals_unchanged so the Selector falls through
+			// to ScheduledAnalysisPath instead of dead-ending.
+			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
+			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude Code session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", planPath, errStr)
+			bb.Outcome = "goap_fusion_rate_limited"
+			return 0 // non-fatal — let the tree fall through to analysis path
+		}
+		bb.Result = "## GOAP Superpowers Execution Failed\n\n" + errStr
 		return -1
 	}
 	if err := VerifySuperpowersRunRuntime(c, run); err != nil {
@@ -481,4 +491,17 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 		}
 	}
 	return b.String()
+}
+
+// isClaudeRateLimit returns true if the error string indicates a Claude Code
+// rate limit (session limit, usage limit, or quota exhaustion). The Superpowers
+// pipeline treats these as non-fatal: the plan is saved for the next cycle
+// instead of failing the entire GOAP fusion run.
+func isClaudeRateLimit(errStr string) bool {
+	lower := strings.ToLower(errStr)
+	return strings.Contains(lower, "session limit") ||
+		strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "usage limit") ||
+		strings.Contains(lower, "quota exceeded") ||
+		strings.Contains(lower, "resets")
 }
