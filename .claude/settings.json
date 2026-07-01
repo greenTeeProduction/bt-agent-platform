@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.go) /usr/local/go/bin/gofmt -w \"$f\" ;; esac",
+            "timeout": 10,
+            "statusMessage": "Running gofmt on edited Go file..."
+          }
+        ]
+      }
+    ]
+  }
+}
