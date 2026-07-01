@@ -1,4 +1,4 @@
-.PHONY: all build build-quality graphify-update test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status tools-install check-quick check-full security-high security-medium
+.PHONY: all build build-quality graphify-update test lint vet clean changelog changelog-prepend bench bench-nightly ci help setup-runner pre-commit-install security-probe scalability-probe ci-doctor tree-integration doc-drift-check runner-status tools-install check-quick check-full security-high security-medium observability-up observability-down
 
 # Go binary path
 GO := /usr/local/go/bin/go
@@ -56,6 +56,13 @@ security-high:
 
 security-medium:
 	@$(CHECK) security-medium
+
+observability-up:
+	docker compose -f monitoring/docker-compose.yml up -d
+	@echo "Grafana: http://localhost:$${BT_GRAFANA_PORT:-3000}  Tempo OTLP: :$${BT_TEMPO_OTLP_PORT:-4318}  Loki: :$${BT_LOKI_PORT:-3100}"
+
+observability-down:
+	docker compose -f monitoring/docker-compose.yml down
 
 # Run Go vulnerability scanner (govulncheck)
 vulncheck:
@@ -299,6 +306,8 @@ help:
 	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + golangci-lint + mod-tidy + test — CI Lint parity)"
 	@echo "  security-probe    Run dashboard security probe (TARGET=http://host:9800)"
 	@echo "  scalability-probe Run dashboard scalability probe (TARGET=http://host:9800)"
+	@echo "  observability-up  Start local Grafana stack (Tempo+Loki+Grafana) for traces/logs"
+	@echo "  observability-down Stop the local Grafana stack"
 	@echo "  ci-doctor         Validate GitHub Actions workflow maturity gates"
 	@echo "  tree-integration  Run real-Ollama BT tree integration validation"
 	@echo "  walkthrough       Produce live platform walkthrough evidence artifact"
