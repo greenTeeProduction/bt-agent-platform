@@ -518,6 +518,72 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionGitTool is the preflight guard for the external `git`
+// binary the unattended scheduled GOAP fusion cycle depends on. The cycle's
+// ApplyImprovementWithClaude step shells out to `git` dozens of times via
+// runGoapShell — `git checkout`, `git fetch origin`, `git pull origin master
+// --ff-only`, `git status`, `git stash`, `git diff`, `git reset --hard`, `git
+// clean`, and `git push origin master` — to synchronize, isolate, and publish
+// every improvement. The VerifyScheduledGoapFusionGitRemote guard runs `git
+// remote get-url origin`, but if the `git` binary is missing entirely that guard
+// fails with a misleading "origin remote is not configured" diagnosis rather than
+// naming the real cause. A scheduled run could otherwise pass every tool guard
+// (Claude Code, Go toolchain, graphify, NotebookLM) yet still fail at the very
+// first git sync when `git` is not installed or not on PATH, wasting the cycle
+// with no clear diagnosis. This guard closes that gap by requiring the `git`
+// binary to be resolvable on PATH before the automatic research-to-implementation
+// cycle proceeds — the git-binary analogue of the graphify-tool and NotebookLM-tool
+// guards, and the prerequisite of the git-remote guard.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionGitTool", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		path, err := exec.LookPath("git")
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Tool Preflight Failed\n\nGit binary %q is not resolvable on PATH: %v; a scheduled run would fail at the very first git sync in ApplyImprovementWithClaude.", "git", err)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Tool Preflight Passed\n\nGit binary resolved to `%s`", path)
+		return 1
+	})
+}
+
+// VerifyScheduledGoapFusionGitRemote is the preflight guard for the git `origin`
+// remote the unattended scheduled GOAP fusion cycle depends on. The runtime guard
+// (VerifyScheduledGoapFusionRuntime) only confirms the repository working
+// directory and the Claude Code binary are available, but the cycle's
+// ApplyImprovementWithClaude step synchronizes against origin before letting
+// Claude implement (`git fetch origin`, `git pull origin master --ff-only`) and
+// publishes the result afterwards (`git push origin master`). A scheduled run
+// could pass every current preflight yet still fail at the fetch/pull sync
+// (goap_fusion_preflight_failed) — or silently degrade at push — when the
+// `origin` remote is unconfigured or unreachable, wasting the cycle with no early
+// diagnosis. This guard closes that gap by requiring the repository's `origin`
+// remote to be configured before the automatic research-to-implementation cycle
+// proceeds — the git-remote analogue of the runtime and toolchain guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionGitRemote", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if info, err := os.Stat(goapFusionRepo); err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Remote Preflight Failed\n\ngo-bt-evolve repository working directory `%s` is not readable: %v", goapFusionRepo, err)
+			return -1
+		}
+
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		res := runShellCommand(c, defaultSuperpowersCommandRunner, goapFusionRepo, "git remote get-url origin")
+		if res.Err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Remote Preflight Failed\n\nGit `origin` remote is not configured in `%s`; a scheduled run would fail at the fetch/pull sync or push step:\n\n%s", goapFusionRepo, formatCommandResult(res))
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Remote Preflight Passed\n\nGit `origin` remote configured in `%s`:\n\n%s", goapFusionRepo, strings.TrimSpace(res.Output))
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

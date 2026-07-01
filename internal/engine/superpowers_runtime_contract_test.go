@@ -235,3 +235,48 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebook(t *tes
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionNotebook")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitRemote asserts
+// the presence of the preflight action that guards the git `origin` remote the
+// unattended scheduled GOAP fusion cycle depends on. The existing runtime guard
+// (VerifyScheduledGoapFusionRuntime) only confirms the repository working
+// directory and the Claude Code binary are available; but the cycle's
+// ApplyImprovementWithClaude step synchronizes against origin before letting
+// Claude implement (`git fetch origin`, `git pull origin master --ff-only`) and
+// publishes the result afterwards (`git push origin master`). A scheduled run
+// could pass every current preflight yet still fail at the fetch/pull sync
+// (goap_fusion_preflight_failed) — or silently degrade at push — when the
+// `origin` remote is unconfigured or unreachable, wasting the cycle with no
+// early diagnosis. This action closes that gap by requiring the repository's
+// `origin` remote to be configured before the automatic
+// research-to-implementation cycle proceeds — the git-remote analogue of the
+// runtime and toolchain guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitRemote(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionGitRemote") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGitRemote")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitTool asserts the
+// presence of the preflight action that guards the external `git` binary the
+// unattended scheduled GOAP fusion cycle depends on. The cycle's
+// ApplyImprovementWithClaude step shells out to `git` dozens of times via
+// runGoapShell — `git checkout`, `git fetch origin`, `git pull origin master
+// --ff-only`, `git status`, `git stash`, `git diff`, `git reset --hard`, `git
+// clean`, and `git push origin master` — to synchronize, isolate, and publish
+// every improvement. The existing VerifyScheduledGoapFusionGitRemote guard runs
+// `git remote get-url origin`, but if the `git` binary is missing entirely that
+// guard fails with a misleading "origin remote is not configured" diagnosis
+// rather than naming the real cause. A scheduled run could otherwise pass every
+// tool guard (Claude Code, Go toolchain, graphify, NotebookLM) yet still fail at
+// the very first git sync when `git` is not installed or not on PATH, wasting the
+// cycle with no clear diagnosis. This action closes that gap by requiring the
+// `git` binary to be resolvable on PATH before the automatic
+// research-to-implementation cycle proceeds — the git-binary analogue of the
+// graphify-tool and NotebookLM-tool guards, and the prerequisite of the
+// git-remote guard.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitTool(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionGitTool") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGitTool")
+	}
+}
