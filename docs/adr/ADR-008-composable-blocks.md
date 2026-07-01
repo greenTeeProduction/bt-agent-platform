@@ -1,8 +1,6 @@
 # ADR-008: Composable Behavior-Tree Building Blocks
 
-## Status
-
-Accepted (2026-06-04)
+**Status:** Accepted (2026-06-04)
 
 ## Context
 

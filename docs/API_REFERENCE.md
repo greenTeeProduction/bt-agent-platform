@@ -45,6 +45,13 @@
 | [`log`](#package-log) | 150+ | 58% | Structured logging with file rotation (10MB, 5 backups) |
 | [`util`](#package-util) | 100+ | 100% | Shared utility functions, string conversions |
 | [`persistence`](#package-persistence) | 100+ | — | Generic persistence primitives for BT state |
+| [`agentexec`](#package-agentexec) | 400+ | — | AgentExecutor interface, AgentRouter with health-aware round-robin routing |
+| [`audit`](#package-audit) | 150+ | — | Structured audit event logging for MCP servers and dashboards |
+| [`blackboard`](#package-blackboard) | 800+ | — | Scoped context store (run/session/agent), persistence, eviction (ADR-009) |
+| [`blocks`](#package-blocks) | 700+ | — | Composable BT building blocks, SubTreeRef expansion (ADR-008) |
+| [`doormate`](#package-doormate) | 400+ | — | DoorMate domain trees and UI backing logic |
+| [`fusion`](#package-fusion) | 500+ | — | Multi-model fusion deliberation runs, judge/deliberation orchestration |
+| [`hitl`](#package-hitl) | 300+ | — | Human-in-the-loop approval gates, pending-approval store |
 
 ---
 
