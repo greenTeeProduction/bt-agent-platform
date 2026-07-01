@@ -103,6 +103,7 @@ func tasksForTree() map[string]string {
 		"goap_research":             "research best practices for Go microservices",
 		"goap_devops":               "diagnose why the CI pipeline is failing",
 		"goap_fusion":               "analyze research gaps and improve the BT platform trees",
+		"goap_fusion_loop":          "start the self-improving GOAP fusion loop cycle",
 		"bt_manager":                "analyze all agent failures and fix degraded ones",
 		"notebooklm":                "research latest BT framework developments using NotebookLM",
 		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
@@ -292,7 +293,7 @@ func TestAllDomainTrees(t *testing.T) {
 		// goap_fusion, bt_manager, bt_fusion, and notebooklm flows require real runtime state
 		// (Reflection store, nlm CLI, or persisted fusion candidates) not available
 		// in offline mock tests. Structural smoke only.
-		if name == "goap_fusion" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" {
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {

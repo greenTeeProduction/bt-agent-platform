@@ -150,3 +150,88 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesPresen
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionSynthesesPresent")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphifyTool
+// asserts the presence of the preflight action that guards the external
+// graphify tool the unattended scheduled GOAP fusion cycle depends on. The
+// existing runtime and toolchain guards confirm the Claude Code binary
+// (VerifyScheduledGoapFusionRuntime) and the Go toolchain
+// (VerifyScheduledGoapFusionToolchain) are available, but the cycle's
+// RunGraphifyUpdate step shells out to the external `graphify` command to
+// regenerate the graphify report from which the cycle derives every improvement
+// gap. A scheduled run could pass every current preflight yet still fail when
+// the graphify tool is not installed or not on PATH, leaving the cycle's gap
+// analysis grounded in a stale report with no clear diagnosis. This action
+// closes that gap by requiring the graphify tool to be resolvable before the
+// automatic research-to-implementation cycle proceeds — the graphify-tool
+// analogue of the runtime and toolchain guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphifyTool(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionGraphifyTool") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGraphifyTool")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookLMTool
+// asserts the presence of the preflight action that guards the external NotebookLM
+// (`nlm`) binary the unattended scheduled GOAP fusion cycle depends on. The
+// existing runtime, toolchain, and graphify-tool guards confirm the Claude Code
+// binary (VerifyScheduledGoapFusionRuntime), the Go toolchain
+// (VerifyScheduledGoapFusionToolchain), and the graphify tool
+// (VerifyScheduledGoapFusionGraphifyTool) are available, but the cycle's
+// RunGoapFusionNotebookLMResearch step — which now runs independent NotebookLM
+// research before implementation — shells out to the `nlm` binary (nlmBin) via
+// nlmRun and hard-fails ("refusing to proceed from stale vault research") when it
+// is unavailable. A scheduled run could pass every current preflight yet still
+// abort at the research step when that binary is missing or not executable,
+// wasting the cycle with no early diagnosis. This action closes that gap by
+// requiring the NotebookLM binary to be an executable file before the automatic
+// research-to-implementation cycle proceeds — the NotebookLM-tool analogue of the
+// runtime, toolchain, and graphify-tool guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookLMTool(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionNotebookLMTool") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionNotebookLMTool")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesWritable
+// asserts the presence of the preflight action that guards the syntheses output
+// location the unattended scheduled GOAP fusion cycle writes to. The cycle's
+// RunGoapFusionNotebookLMResearch step writes a dedicated synthesis file
+// (goap-fusion-notebooklm-<ts>.md) into the syntheses directory
+// (goapFusionSynthesesDir) via writeString, and the immediately following
+// ReadVaultResearch step ingests that newest synthesis as its highest-priority
+// research input. The existing VerifyScheduledGoapFusionSynthesesPresent guard
+// only confirms the directory is readable and already contains synthesis files;
+// it does not confirm the cycle can persist a new one. The existing
+// VerifyScheduledGoapFusionPlansWritable guard confirms writability but for a
+// distinct directory (goapFusionPlansDir), not this syntheses directory. A
+// scheduled run could pass every current preflight yet still fail when the
+// syntheses directory is not writable, losing the freshly generated NotebookLM
+// research with no clear diagnosis. This action closes that gap by requiring the
+// syntheses directory to be a writable directory before the automatic
+// research-to-implementation cycle proceeds — the syntheses-output-location
+// analogue of the VerifyScheduledGoapFusionPlansWritable guard.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesWritable(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionSynthesesWritable") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionSynthesesWritable")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebook asserts
+// the presence of the preflight action that guards the configured NotebookLM
+// notebook id the unattended scheduled GOAP fusion cycle queries against. The
+// existing VerifyScheduledGoapFusionNotebookLMTool guard only confirms the `nlm`
+// binary is an executable file; it does not confirm a notebook is actually
+// configured. The cycle's RunGoapFusionNotebookLMResearch step shells out to
+// `nlm notebook query <defaultNotebook> ...` — so an empty or unset notebook id
+// would let a scheduled run pass the binary check yet still query against no
+// notebook, silently degrading the research corpus and producing a plan from
+// stale vault research with no clear diagnosis. This action closes that gap by
+// requiring the configured notebook id to be non-empty before the automatic
+// research-to-implementation cycle proceeds — the notebook-id analogue of the
+// NotebookLM-tool guard.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebook(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionNotebook") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionNotebook")
+	}
+}

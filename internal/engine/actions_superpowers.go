@@ -9,6 +9,7 @@ package engine
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -391,6 +392,128 @@ func init() {
 		}
 
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Preflight Passed\n\n%d synthesis file(s) present in `%s`", len(syntheses), goapFusionSynthesesDir)
+		return 1
+	})
+}
+
+// VerifyScheduledGoapFusionGraphifyTool is the preflight guard for the external
+// graphify tool the unattended scheduled GOAP fusion cycle depends on. The
+// runtime and toolchain guards confirm the Claude Code binary
+// (VerifyScheduledGoapFusionRuntime) and the Go toolchain
+// (VerifyScheduledGoapFusionToolchain) are available, but the cycle's
+// RunGraphifyUpdate step shells out to the external `graphify` command to
+// regenerate the graphify report from which the cycle derives every improvement
+// gap. A scheduled run could pass every other preflight yet still fail when the
+// graphify tool is not installed or not on PATH, leaving the cycle's gap
+// analysis grounded in a stale report with no clear diagnosis. This guard closes
+// that gap by requiring the graphify tool to be resolvable before the automatic
+// research-to-implementation cycle proceeds — the graphify-tool analogue of the
+// runtime and toolchain guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionGraphifyTool", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		path, err := exec.LookPath(goapFusionGraphifyTool)
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graphify Tool Preflight Failed\n\nGraphify tool %q is not resolvable on PATH: %v; a scheduled run would derive its improvement gaps from a stale report.", goapFusionGraphifyTool, err)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graphify Tool Preflight Passed\n\nGraphify tool resolved to `%s`", path)
+		return 1
+	})
+}
+
+// VerifyScheduledGoapFusionNotebookLMTool is the preflight guard for the
+// external NotebookLM (`nlm`) binary the unattended scheduled GOAP fusion cycle
+// depends on. The runtime, toolchain, and graphify-tool guards confirm the
+// Claude Code binary (VerifyScheduledGoapFusionRuntime), the Go toolchain
+// (VerifyScheduledGoapFusionToolchain), and the graphify tool
+// (VerifyScheduledGoapFusionGraphifyTool) are available, but the cycle's
+// RunGoapFusionNotebookLMResearch step — which runs independent NotebookLM
+// research before implementation — shells out to the `nlm` binary (nlmBin) and
+// hard-fails ("refusing to proceed from stale vault research") when it is
+// unavailable. A scheduled run could pass every other preflight yet still abort
+// at the research step when that binary is missing or not executable, wasting
+// the cycle with no early diagnosis. This guard closes that gap by requiring the
+// NotebookLM binary to be an executable file before the automatic
+// research-to-implementation cycle proceeds — the NotebookLM-tool analogue of
+// the runtime, toolchain, and graphify-tool guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionNotebookLMTool", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if info, err := os.Stat(nlmBin); err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion NotebookLM Tool Preflight Failed\n\nNotebookLM binary `%s` is not an executable file: %v; a scheduled run would abort at the research step and proceed from stale vault research.", nlmBin, err)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion NotebookLM Tool Preflight Passed\n\nNotebookLM binary: `%s`", nlmBin)
+		return 1
+	})
+}
+
+// VerifyScheduledGoapFusionSynthesesWritable is the preflight guard for the
+// syntheses output location the unattended scheduled GOAP fusion cycle writes
+// to. The cycle's RunGoapFusionNotebookLMResearch step writes a dedicated
+// synthesis file (goap-fusion-notebooklm-<ts>.md) into the syntheses directory
+// (goapFusionSynthesesDir) via writeString, and the immediately following
+// ReadVaultResearch step ingests that newest synthesis as its highest-priority
+// research input. The existing VerifyScheduledGoapFusionSynthesesPresent guard
+// only confirms the directory is readable and already contains synthesis files;
+// it does not confirm the cycle can persist a new one. The existing
+// VerifyScheduledGoapFusionPlansWritable guard confirms writability but for a
+// distinct directory (goapFusionPlansDir), not this syntheses directory. A
+// scheduled run could pass every other preflight yet still fail when the
+// syntheses directory is not writable, losing the freshly generated NotebookLM
+// research with no clear diagnosis. This guard closes that gap by requiring the
+// syntheses directory to be a writable directory before the automatic
+// research-to-implementation cycle proceeds — the syntheses-output-location
+// analogue of the VerifyScheduledGoapFusionPlansWritable guard.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionSynthesesWritable", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		info, err := os.Stat(goapFusionSynthesesDir)
+		if err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Writable Preflight Failed\n\nSyntheses output directory `%s` is not an accessible directory: %v", goapFusionSynthesesDir, err)
+			return -1
+		}
+
+		probe := filepath.Join(goapFusionSynthesesDir, ".goap-fusion-syntheses-write-probe")
+		if err := os.WriteFile(probe, []byte("probe"), 0o644); err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Writable Preflight Failed\n\nSyntheses output directory `%s` is not writable: %v; a scheduled run would lose the freshly generated NotebookLM research.", goapFusionSynthesesDir, err)
+			return -1
+		}
+		_ = os.Remove(probe)
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Syntheses Writable Preflight Passed\n\nSyntheses output directory `%s` is a writable directory", goapFusionSynthesesDir)
+		return 1
+	})
+}
+
+// VerifyScheduledGoapFusionNotebook is the preflight guard for the configured
+// NotebookLM notebook id the unattended scheduled GOAP fusion cycle queries
+// against. The VerifyScheduledGoapFusionNotebookLMTool guard only confirms the
+// `nlm` binary is an executable file; it does not confirm a notebook is actually
+// configured. The cycle's RunGoapFusionNotebookLMResearch step shells out to
+// `nlm notebook query <defaultNotebook> ...` — so an empty or unset notebook id
+// would let a scheduled run pass the binary check yet still query against no
+// notebook, silently degrading the research corpus and producing a plan from
+// stale vault research with no clear diagnosis. This guard closes that gap by
+// requiring the configured notebook id to be non-empty before the automatic
+// research-to-implementation cycle proceeds — the notebook-id analogue of the
+// NotebookLM-tool guard.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionNotebook", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if strings.TrimSpace(defaultNotebook) == "" {
+			bb.Result = "## Scheduled GOAP Fusion Notebook Preflight Failed\n\nNotebookLM notebook id is empty; a scheduled run would query against no notebook and proceed from stale vault research."
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Notebook Preflight Passed\n\nNotebookLM notebook id: `%s`", defaultNotebook)
 		return 1
 	})
 }

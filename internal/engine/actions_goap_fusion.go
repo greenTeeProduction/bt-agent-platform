@@ -25,6 +25,7 @@ const (
 	goapFusionRepo          = "/home/nico/go-bt-evolve"
 	goapFusionClaudeBin     = "/home/nico/.local/bin/claude"
 	goapFusionGoBin         = "/usr/local/go/bin/go"
+	goapFusionGraphifyTool  = "graphify"
 	goapFusionClaudeTimeout = 3600 // seconds (1 hour)
 )
 
@@ -547,6 +548,128 @@ func registerGoapFusionActions() {
 		bb.Result = fmt.Sprintf("## Verification Passed\n\n%s", strings.Join(results, "\n"))
 		return 1
 	})
+
+	// ── GrillMeNotebookLM — Multi-turn critical review ("grill me" pattern) ──
+	// Uses conversation_id to chain 3 rounds of questioning:
+	//   Round 1: "What is the BT framework missing? Be critical."
+	//   Round 2: "Push harder. What exact code should change? File paths, tree types."
+	//   Round 3: "Final demand: concrete implementation plan with test commands."
+	// The final answer is saved to ChainState and the vault.
+	RegisterAction("GrillMeNotebookLM", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
+		graphSnippet := truncateGoap(string(graphBytes), 3500)
+
+		// Read grill round tracking from ChainState (survives across loop iterations)
+		grillRound := 1
+		if r, ok := bb.ChainState["goap_fusion_grill_round"].(float64); ok {
+			grillRound = int(r)
+		} else if r, ok := bb.ChainState["goap_fusion_grill_round"].(int); ok {
+			grillRound = r
+		}
+		conversationID, _ := bb.ChainState["goap_fusion_grill_conversation_id"].(string)
+
+		// Build round-specific query
+		var query string
+		switch grillRound {
+		case 1:
+			query = fmt.Sprintf(`You are a critical reviewer / coach grilling the go-bt-evolve behavior tree agent platform team.
+
+		Current codebase structure (from graphify):
+		%s
+
+		Your job: Be brutally honest. What is this BT framework MISSING?
+
+		For EACH gap you identify, push hard:
+		- What specifically must be built?
+		- How do we measure success?
+		- What is the concrete implementation — exact tree types, nodes, metrics?
+		- What existing platform components can we leverage?
+		- What's the minimum viable fix vs the full solution?
+
+		Prioritize ruthlessly — which 2 gaps must be addressed first?
+
+		Rules:
+		- No vague advice. Demand exact tree types, node names, metric thresholds.
+		- Prefer implementation work over documentation.
+		- Return in format: GAP n: <gap> | FIX: <concrete fix> | FILES: <likely files> | TESTS: <test commands>`, graphSnippet)
+		case 2:
+			query = `Push harder. Your previous answer identified gaps — now get CONCRETE.
+
+		For each gap you identified:
+		- What EXACT Go files need to change? (give file paths in internal/engine/, internal/domains/, etc.)
+		- What tree node types are needed? (Action, Condition, Selector, Sequence, HumanApprovalGate, ChainAction, etc.)
+		- What new action/condition names should be registered?
+		- What tests should verify the change?
+
+		Be specific enough that an automated Claude Code run could implement this without further clarification.`
+		default: // round 3+
+			query = `FINAL DEMAND: Convert your analysis into an implementation plan.
+
+		Give me a task breakdown ordered by impact:
+		1. P0 item: exact file path, what to add/change, test command
+		2. P1 item: exact file path, what to add/change, test command
+		3. P2 item: exact file path, what to add/change, test command
+
+		Format each as:
+		GOAL: <one-sentence implementation target>
+		GAP: <why current codebase needs it>
+		FILES: <specific file paths>
+		CHANGE: <exact code changes — what to add/modify>
+		TESTS: <specific go test commands>
+
+		This will be executed by an automated Claude Code pipeline. Make it executable.`
+		}
+
+		// Execute NotebookLM query
+		var args []string
+		args = append(args, "notebook", "query", "--json", "--timeout", "180", defaultNotebook, query)
+		if conversationID != "" {
+			args = append(args, "--conversation-id", conversationID)
+		}
+		out := nlmRun(200*time.Second, args...)
+
+		if isGoapNotebookLMFailure(out) {
+			// If grill fails, fall back to single-shot research path
+			bb.Result = fmt.Sprintf("## GrillMe Round %d Failed\n\nNotebookLM query failed; falling back to single-shot research.\n\n```\n%s\n```", grillRound, truncateGoap(out, 2000))
+			bb.Outcome = "goap_fusion_grill_failed"
+			return 0 // non-fatal — let the pipeline continue with single-shot
+		}
+
+		answer := extractNotebookLMAnswer(out)
+		newConvID := extractConversationID(out)
+		if newConvID != "" {
+			conversationID = newConvID
+		}
+
+		// Save grill state for next iteration
+		setGoapState(bb, "grill_conversation_id", conversationID)
+		if grillRound >= 3 {
+			// Reset to round 1 for next loop iteration
+			setGoapState(bb, "grill_round", "1")
+		} else {
+			setGoapState(bb, "grill_round", strconv.Itoa(grillRound+1))
+		}
+
+		// Extract implementation targets from grill answer
+		goal, gap := extractGoapNotebookLMRecommendation(answer)
+		if goal != "" {
+			setGoapState(bb, "notebooklm_goal", goal)
+			setGoapState(bb, "notebooklm_gap", gap)
+		}
+
+		// Save grill transcript to vault
+		ts := time.Now().Format("2006-01-02T150405")
+		path := filepath.Join(goapFusionSynthesesDir, fmt.Sprintf("goap-fusion-grill-r%d-%s.md", grillRound, ts))
+		report := fmt.Sprintf("# GOAP Fusion Grill Me — Round %d — %s\n\n## Notebook\n`%s`\n\n## Conversation\n`%s`\n\n## Answer\n%s\n\n## Extracted\nGOAL: %s\nGAP: %s\n",
+			grillRound, ts, defaultNotebook, conversationID, answer, goal, gap)
+		_ = writeString(path, report)
+		setGoapState(bb, "notebooklm_research_path", path)
+
+		bb.Result = fmt.Sprintf("## Grill Me — Round %d Complete\n\nConversation: `%s`\nPath: `%s`\n\nGOAL: %s\n\nGAP: %s",
+			grillRound, conversationID, path, goal, gap)
+		return 1
+	})
 }
 
 func setGoapState(bb *Blackboard, key, value string) {
@@ -890,4 +1013,16 @@ func isGoapFusionApplyRequest(task string) bool {
 		"register action", "register condition",
 		"create tree", "create domain", "build feature",
 		"deploy code", "install dependency")
+}
+
+// extractConversationID extracts the conversation_id from a NotebookLM JSON response.
+// The response looks like: {"answer": "...", "conversation_id": "abc123", ...}
+func extractConversationID(out string) string {
+	var payload struct {
+		ConversationID string `json:"conversation_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err == nil && payload.ConversationID != "" {
+		return payload.ConversationID
+	}
+	return extractJSONStringField(out, "conversation_id")
 }
