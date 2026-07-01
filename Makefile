@@ -107,7 +107,7 @@ pre-commit-install:
 	@cp scripts/git-hooks/pre-commit .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
 	@echo "✓ Pre-commit hook installed (scripts/git-hooks/pre-commit → .git/hooks/pre-commit)"
-	@echo "  Hook runs: gofmt → go vet → go test -short"
+	@echo "  Hook runs: gofmt → go vet → golangci-lint (staged pkgs) → mod-tidy → doc-drift → ci-doctor → go test -short"
 	@echo "  To skip: git commit --no-verify"
 
 # Run the lightweight dashboard security penetration/smoke probe.
@@ -296,7 +296,7 @@ help:
 	@echo "  benchcmp-reset    Reset benchmark baseline"
 	@echo "  bench-nightly     Run full benchmark suite (SWE-bench, BFCL, τ-bench, ToolBench)"
 	@echo "  setup-runner      Setup GitHub Actions self-hosted runner (TOKEN=<token>)"
-	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + test)"
+	@echo "  pre-commit-install Install git pre-commit hook (gofmt + vet + golangci-lint + mod-tidy + test — CI Lint parity)"
 	@echo "  security-probe    Run dashboard security probe (TARGET=http://host:9800)"
 	@echo "  scalability-probe Run dashboard scalability probe (TARGET=http://host:9800)"
 	@echo "  ci-doctor         Validate GitHub Actions workflow maturity gates"

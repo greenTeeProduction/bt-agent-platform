@@ -206,8 +206,9 @@ func registerGoapFusionActions() {
 			if strings.TrimSpace(nlmGap) == "" {
 				nlmGap = "NotebookLM recommended this implementation target."
 			}
-			gaps = append(gaps, "NOTEBOOKLM_GOAL: "+strings.TrimSpace(nlmGoal))
-			gaps = append(gaps, "NOTEBOOKLM_GAP: "+strings.TrimSpace(nlmGap))
+			gaps = append(gaps,
+				"NOTEBOOKLM_GOAL: "+strings.TrimSpace(nlmGoal),
+				"NOTEBOOKLM_GAP: "+strings.TrimSpace(nlmGap))
 		}
 
 		// Check for domain coverage gaps

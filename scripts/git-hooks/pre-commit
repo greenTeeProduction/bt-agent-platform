@@ -1,6 +1,9 @@
 #!/bin/bash
 # Pre-commit hook for go-bt-evolve
-# Runs: gofmt check → go vet → go test -short
+# Runs: gofmt check → go vet → golangci-lint (staged pkgs) → go mod tidy
+#       → doc drift → ci-doctor → go test -short
+# Mirrors the CI Lint job (.github/workflows/ci.yml) so commits don't pass
+# locally and fail the pipeline. Full-repo parity run: make check-quick.
 # Fails fast — blocks commit if any check fails.
 # Install: make pre-commit-install
 
@@ -42,7 +45,37 @@ if ! $GO vet ./... 2>&1; then
 fi
 echo "  ✓ passed"
 
-# 3a. Doc drift check if docs/ files are staged
+# 3. golangci-lint on packages with staged Go changes (CI Lint job parity —
+#    same binary version and .golangci.yml as the pipeline; full repo: make lint)
+GOLANGCI="$($GO env GOPATH)/bin/golangci-lint"
+if ! command -v "$GOLANGCI" &>/dev/null; then
+    GOLANGCI="golangci-lint"
+fi
+if [ -n "$STAGED_GO_FILES" ]; then
+    if command -v "$GOLANGCI" &>/dev/null; then
+        STAGED_PKG_DIRS=$(echo "$STAGED_GO_FILES" | xargs -n1 dirname | sort -u | sed 's|^|./|')
+        echo "→ golangci-lint (staged packages)..."
+        if ! "$GOLANGCI" run --timeout=5m $STAGED_PKG_DIRS 2>&1; then
+            echo "✗ golangci-lint found issues — the CI Lint job runs the same linters repo-wide."
+            echo "  Full parity run: make check-quick"
+            exit 1
+        fi
+        echo "  ✓ passed"
+    else
+        echo "  ⚠ golangci-lint not installed (make tools-install) — CI will still run it"
+    fi
+fi
+
+# 4. go mod tidy sync check (CI Lint job parity)
+echo "→ go mod tidy check..."
+$GO mod tidy
+if ! git diff --exit-code go.mod go.sum >/dev/null 2>&1; then
+    echo "✗ go.mod/go.sum out of sync — go mod tidy changed them; stage and retry."
+    exit 1
+fi
+echo "  ✓ passed"
+
+# 5. Doc drift check if docs/ files are staged
 STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/' || true)
 if [ -n "$STAGED_DOCS" ]; then
     echo "→ documentation drift check (docs/ changed)..."
@@ -54,7 +87,7 @@ if [ -n "$STAGED_DOCS" ]; then
     echo "  ✓ docs in sync"
 fi
 
-# 4. CI Doctor — validate workflow maturity (always runs, blocks commit on failure)
+# 6. CI Doctor — validate workflow maturity (always runs, blocks commit on failure)
 REPO_ROOT=$(git rev-parse --show-toplevel)
 echo "→ ci-doctor workflow maturity check..."
 if [ -f "$REPO_ROOT/bin/bt-ci-doctor" ]; then
@@ -86,9 +119,9 @@ else
     fi
 fi
 
-# 5. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
+# 7. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
 echo "→ go test -short..."
-if ! $GO test -short -count=1 -timeout 120s $(go list ./... | grep -v gardener) 2>&1; then
+if ! $GO test -short -count=1 -timeout 120s $($GO list ./... | grep -v gardener) 2>&1; then
     echo "✗ Tests failed. Fix before committing."
     exit 1
 fi
