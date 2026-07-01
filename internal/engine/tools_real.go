@@ -404,15 +404,24 @@ func nlmRun(timeout time.Duration, args ...string) string {
 	const baseDelay = 2 * time.Second
 	const maxDelay = 30 * time.Second
 
-	// Circuit breaker check
+	// Circuit breaker check — wait through cooldown instead of failing immediately.
+	// This prevents cascading failures in scheduled pipelines: if one agent
+	// trips the breaker, the next scheduled agent (e.g., goap-fusion-runner
+	// right after goap-fusion-loop-runner) would fail immediately without
+	// waiting for the cooldown to expire.
 	nlmCircuitMu.Lock()
 	if nlmCircuitOpen {
-		if time.Since(nlmOpenedAt) > nlmCooldown {
+		if elapsed := time.Since(nlmOpenedAt); elapsed < nlmCooldown {
+			remaining := nlmCooldown - elapsed
+			nlmCircuitMu.Unlock()
+			time.Sleep(remaining + 1*time.Second) // wait past cooldown + buffer
+			// After waiting, reset the circuit and proceed
+			nlmCircuitMu.Lock()
 			nlmCircuitOpen = false
 			nlmFailCount = 0
 		} else {
-			nlmCircuitMu.Unlock()
-			return `{"error": "NotebookLM circuit breaker open", "retry_after": "` + nlmCooldown.Truncate(time.Second).String() + `"}`
+			nlmCircuitOpen = false
+			nlmFailCount = 0
 		}
 	}
 	nlmCircuitMu.Unlock()
