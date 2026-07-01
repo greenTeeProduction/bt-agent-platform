@@ -241,7 +241,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebook(t *tes
 // unattended scheduled GOAP fusion cycle depends on. The existing runtime guard
 // (VerifyScheduledGoapFusionRuntime) only confirms the repository working
 // directory and the Claude Code binary are available; but the cycle's
-// ApplyImprovementWithClaude step synchronizes against origin before letting
+// Superpowers implementation step synchronizes against origin before letting
 // Claude implement (`git fetch origin`, `git pull origin master --ff-only`) and
 // publishes the result afterwards (`git push origin master`). A scheduled run
 // could pass every current preflight yet still fail at the fetch/pull sync
@@ -260,7 +260,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitRemote(t *te
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitTool asserts the
 // presence of the preflight action that guards the external `git` binary the
 // unattended scheduled GOAP fusion cycle depends on. The cycle's
-// ApplyImprovementWithClaude step shells out to `git` dozens of times via
+// Superpowers implementation step shells out to `git` via
 // runGoapShell — `git checkout`, `git fetch origin`, `git pull origin master
 // --ff-only`, `git status`, `git stash`, `git diff`, `git reset --hard`, `git
 // clean`, and `git push origin master` — to synchronize, isolate, and publish

@@ -41,6 +41,18 @@ func (execCommandRunner) Run(ctx context.Context, dir string, name string, args 
 	}
 }
 
+// defaultSuperpowersAllowedTools is the claude CLI --allowedTools default for
+// non-interactive (--print) runs, where denied tools cannot prompt. Claude Code
+// permission syntax allows ONE command prefix per Bash() rule ("Bash(go test:*)");
+// a colon-joined multi-command list would parse as a single unmatched prefix and
+// silently deny every shell command. The prompts instruct Claude to run go
+// test/build via the absolute Go path, so both bare and absolute forms are listed.
+// The apply step commits via superpowers_apply.go, so no git write commands here.
+const defaultSuperpowersAllowedTools = "Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(gofmt:*)," +
+	"Bash(go test:*),Bash(go build:*),Bash(go vet:*)," +
+	"Bash(/usr/local/go/bin/go test:*),Bash(/usr/local/go/bin/go build:*),Bash(/usr/local/go/bin/go vet:*)," +
+	"Read,Write,Edit,Glob,Grep"
+
 type execClaudeRunner struct {
 	Bin string
 }
@@ -50,15 +62,13 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	if bin == "" {
 		bin = getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")
 	}
-	model := getenvDefault("BT_SUPERPOWERS_CLAUDE_MODEL", "")
-	allowed := getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", "Bash(git diff:git status:gofmt:go test:go build:go vet:*),Read,Write,Edit,Glob,Grep")
+	model := resolvedSuperpowersClaudeModel()
+	allowed := getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", defaultSuperpowersAllowedTools)
 	args := []string{"--print", "--allowedTools", allowed, "-p", prompt}
-	if model != "" {
-		args = append([]string{"--model", model}, args...)
-	}
 	if strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
 		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
 	}
+	args = withSuperpowersClaudeModel(args, model)
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = repoDir
@@ -71,6 +81,35 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 		Err:      err,
 		Duration: time.Since(start),
 	}
+}
+
+// defaultSuperpowersClaudeModel is passed as --model to the claude CLI when
+// BT_SUPERPOWERS_CLAUDE_MODEL is unset. NOTE: this pins the model explicitly —
+// deployments that relied on the CLI's own configured default must set the
+// env var to "auto" (or "default"/"none") to omit the flag.
+const defaultSuperpowersClaudeModel = "opus"
+
+// resolvedSuperpowersClaudeModel returns the model for superpowers and
+// GOAP-fusion claude runs. BT_SUPERPOWERS_CLAUDE_MODEL semantics:
+// unset/empty → defaultSuperpowersClaudeModel; "auto"/"default"/"none" →
+// "" (no --model flag, CLI default); anything else → used verbatim.
+func resolvedSuperpowersClaudeModel() string {
+	model := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_CLAUDE_MODEL"))
+	if strings.EqualFold(model, "auto") || strings.EqualFold(model, "default") || strings.EqualFold(model, "none") {
+		return ""
+	}
+	if model != "" {
+		return model
+	}
+	return defaultSuperpowersClaudeModel
+}
+
+func withSuperpowersClaudeModel(args []string, model string) []string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return args
+	}
+	return append([]string{"--model", model}, args...)
 }
 
 func getenvDefault(key, fallback string) string {

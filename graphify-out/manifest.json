@@ -335,17 +335,25 @@
     "mtime": 1781274740.3463082,
     "hash": "e92c65f718dfeba82ef321e997fcfbee"
   },
+  "/home/nico/go-bt-evolve/internal/llm/ratelimit.go": {
+    "mtime": 1782941669.6031687,
+    "hash": "3dbe4d6818ac340e65855a78eeb34132"
+  },
   "/home/nico/go-bt-evolve/internal/llm/fallback.go": {
-    "mtime": 1780333215.4851677,
-    "hash": "1ba439888f09aed189b937458fd4bee7"
+    "mtime": 1782941727.0436637,
+    "hash": "356d08c1bbed0dba2c3f22581d0a4783"
   },
   "/home/nico/go-bt-evolve/internal/llm/coverage_test.go": {
-    "mtime": 1781274740.3423083,
-    "hash": "013403d5b3a7831c7d298aeb4f4a7a61"
+    "mtime": 1782942124.4589934,
+    "hash": "cf6acaf1a7e495256db32e7c13e68b4d"
   },
   "/home/nico/go-bt-evolve/internal/llm/ensemble.go": {
     "mtime": 1780295456.9583514,
     "hash": "39bfd00c018fde3d3e631c261f40300f"
+  },
+  "/home/nico/go-bt-evolve/internal/llm/recorder.go": {
+    "mtime": 1782941749.5078561,
+    "hash": "77cdf0bc1b2b0e4aa39694216aadff88"
   },
   "/home/nico/go-bt-evolve/internal/llm/openai_compat_test.go": {
     "mtime": 1781527079.0120046,
@@ -360,8 +368,8 @@
     "hash": "b310ab001c1e156a1ce254363ab59b7e"
   },
   "/home/nico/go-bt-evolve/internal/llm/deepseek.go": {
-    "mtime": 1781274740.3463082,
-    "hash": "6765061cd0724a8bcbc6f33be68d1526"
+    "mtime": 1782941686.0913112,
+    "hash": "0937f66d153bf3e9ec73c788ebc6563b"
   },
   "/home/nico/go-bt-evolve/internal/llm/testing.go": {
     "mtime": 1781274740.3463082,
@@ -371,9 +379,13 @@
     "mtime": 1781700310.806346,
     "hash": "bf713fd411c6d48a19fb0a9f43625fe7"
   },
+  "/home/nico/go-bt-evolve/internal/llm/ratelimit_test.go": {
+    "mtime": 1782942031.0502226,
+    "hash": "1823cee90c0de34478ef27589521e95c"
+  },
   "/home/nico/go-bt-evolve/internal/llm/openai_compat.go": {
-    "mtime": 1781731255.2516792,
-    "hash": "036869d31ffdbe249c64d1ba7e0a2bf2"
+    "mtime": 1782941697.6834114,
+    "hash": "331e630a031a28c7fe950f8bd71fe65c"
   },
   "/home/nico/go-bt-evolve/internal/llm/fallback_test.go": {
     "mtime": 1781274740.3463082,
@@ -520,8 +532,8 @@
     "hash": "21fe92ac41bf3a0468a4b3b8df5c7491"
   },
   "/home/nico/go-bt-evolve/internal/domains/goap_fusion_direct_test.go": {
-    "mtime": 1782757097.0952616,
-    "hash": "1caee0c2fa17866d204d5d84c8e7ac66"
+    "mtime": 1782943633.3986573,
+    "hash": "ae237b825ef5c68b9e291330598584c4"
   },
   "/home/nico/go-bt-evolve/internal/domains/domains_test.go": {
     "mtime": 1782886206.273385,
@@ -695,6 +707,10 @@
     "mtime": 1781245157.79114,
     "hash": "3c5a743f52e91a6ff6020b7e48821402"
   },
+  "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion_fixes_test.go": {
+    "mtime": 1782943945.7530305,
+    "hash": "ba9cd91deaf8581ac504379c8f61aac3"
+  },
   "/home/nico/go-bt-evolve/internal/engine/conditions_core.go": {
     "mtime": 1782336919.538139,
     "hash": "0f641bdf8b7ed39886b37eaa417aab34"
@@ -740,8 +756,8 @@
     "hash": "0df2c614ee86c185aa16416a10e072f3"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_runner.go": {
-    "mtime": 1782055763.102695,
-    "hash": "784a15a17bb6d3b036e970ad8920ad64"
+    "mtime": 1782943676.4069817,
+    "hash": "d1d8470fa748d7778a299a791cb404ac"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_plan_parser_test.go": {
     "mtime": 1782055763.102695,
@@ -824,8 +840,8 @@
     "hash": "de8f05e01b7a5db09227b0957d10008a"
   },
   "/home/nico/go-bt-evolve/internal/engine/tools_real.go": {
-    "mtime": 1781731255.2476792,
-    "hash": "cc227a1999bb285c19de3ffcadea02a4"
+    "mtime": 1782897816.3071587,
+    "hash": "7044cb363a38e79ed8b315f8946b835d"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_finance.go": {
     "mtime": 1781731255.2476792,
@@ -862,6 +878,10 @@
   "/home/nico/go-bt-evolve/internal/engine/coverage_surge_test.go": {
     "mtime": 1780495362.7178822,
     "hash": "71fc1c150887345d859c48d2b7f7013a"
+  },
+  "/home/nico/go-bt-evolve/internal/engine/superpowers_runner_test.go": {
+    "mtime": 1782930012.0561066,
+    "hash": "2633b71f540062fec4891b307c9a2fcf"
   },
   "/home/nico/go-bt-evolve/internal/engine/arc42_nodes.go": {
     "mtime": 1781731255.2476792,
@@ -944,8 +964,8 @@
     "hash": "17cd47f38213a7ad9d743772e61d2ca5"
   },
   "/home/nico/go-bt-evolve/internal/engine/superpowers_runtime_contract_test.go": {
-    "mtime": 1782892123.1411004,
-    "hash": "19be571c41f2c9519ca7b52e158c687b"
+    "mtime": 1782943616.2905288,
+    "hash": "b004db6c65a16f70049d9ba8c45b300c"
   },
   "/home/nico/go-bt-evolve/internal/engine/chains_test.go": {
     "mtime": 1782378048.617005,
@@ -964,8 +984,8 @@
     "hash": "cc2308b66705b6fc52193b0538c05bed"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_superpowers_prod.go": {
-    "mtime": 1782564335.199536,
-    "hash": "2d3d9ecebf0a6f176fd421da87649943"
+    "mtime": 1782900228.959127,
+    "hash": "01519d30f8b4987e35cd1f66c758fd44"
   },
   "/home/nico/go-bt-evolve/internal/engine/log_rotate_test.go": {
     "mtime": 1781274740.5743096,
@@ -996,8 +1016,8 @@
     "hash": "42f98904345061123e3b05b52d125476"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_goap_fusion.go": {
-    "mtime": 1782891345.0710378,
-    "hash": "43575e4bee883ac5811af53c74954e39"
+    "mtime": 1782944058.3218937,
+    "hash": "c3a3be6e9bb87751cde18dd0561e382f"
   },
   "/home/nico/go-bt-evolve/internal/engine/event_bus_test.go": {
     "mtime": 1781274740.5823095,
@@ -1038,10 +1058,6 @@
   "/home/nico/go-bt-evolve/internal/engine/parallel_mode.go": {
     "mtime": 1780487913.727531,
     "hash": "23c6ef34ba7c17c441f8968ec759ef16"
-  },
-  "/home/nico/go-bt-evolve/internal/engine/goap_fusion_conditions_test.go": {
-    "mtime": 1782565923.7681928,
-    "hash": "aca6f09f06734fa34121787c3db8946e"
   },
   "/home/nico/go-bt-evolve/internal/engine/log_rotate.go": {
     "mtime": 1780493465.8704166,
@@ -1088,8 +1104,8 @@
     "hash": "5ef90f1b75cdd1a1065c658bd7c0a3e1"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_superpowers.go": {
-    "mtime": 1782892123.1411004,
-    "hash": "95bc1e9bb3b99160cb70d93df379de6a"
+    "mtime": 1782943616.2905288,
+    "hash": "ea485cb8c82f517502b828c77b61a907"
   },
   "/home/nico/go-bt-evolve/internal/engine/actions_bt_manager.go": {
     "mtime": 1781731255.243679,
@@ -1644,8 +1660,8 @@
     "hash": "117642db2eb33dd2f278e33657aa84bd"
   },
   "/home/nico/go-bt-evolve/internal/agent/runner.go": {
-    "mtime": 1781731255.243679,
-    "hash": "7723e27a15c6abd8835ad6b6dea2192b"
+    "mtime": 1782941832.9445655,
+    "hash": "25874e07d2ca9dfd9c250710498448c4"
   },
   "/home/nico/go-bt-evolve/internal/agent/langagent_test.go": {
     "mtime": 1780495239.3010404,
@@ -1656,12 +1672,12 @@
     "hash": "ac648a097e9d78699b5e8e9bcf6c9802"
   },
   "/home/nico/go-bt-evolve/internal/agent/registry.go": {
-    "mtime": 1781492054.4286144,
+    "mtime": 1782941879.040954,
     "hash": "fc53cb9da4e06fae70de8864306ad302"
   },
   "/home/nico/go-bt-evolve/internal/agent/use_cases_test.go": {
-    "mtime": 1781274740.326308,
-    "hash": "1a5479864adb0319e7606a808642f2dd"
+    "mtime": 1782941983.3498266,
+    "hash": "5db3cf549c627eb7503cb4300b219d88"
   },
   "/home/nico/go-bt-evolve/internal/agent/monitoring.go": {
     "mtime": 1781274740.63831,
@@ -1680,8 +1696,8 @@
     "hash": "562081f215c59a008a2c42584e490aae"
   },
   "/home/nico/go-bt-evolve/internal/agent/scheduler.go": {
-    "mtime": 1781731255.243679,
-    "hash": "81bec2d5d92ea94a125c747a598c24da"
+    "mtime": 1782941864.3088303,
+    "hash": "b054a6af5b55a51129cba8a2b62799e5"
   },
   "/home/nico/go-bt-evolve/internal/agent/integration_test.go": {
     "mtime": 1781274740.326308,
@@ -1704,8 +1720,8 @@
     "hash": "42899bd2693aaa641be95a5e1f0eba99"
   },
   "/home/nico/go-bt-evolve/internal/agent/scheduler_test.go": {
-    "mtime": 1781274740.326308,
-    "hash": "f4b639f2c74beecec1ecb99b1deed9ef"
+    "mtime": 1782941983.3498266,
+    "hash": "8273600e16b8588add9d4bc3f6d3886b"
   },
   "/home/nico/go-bt-evolve/internal/agent/scheduler_cb.go": {
     "mtime": 1780372567.9492242,
@@ -2008,8 +2024,8 @@
     "hash": "d4d0e98d60b288098c51b9a77d87e0cc"
   },
   "/home/nico/go-bt-evolve/internal/reliability/errors_test.go": {
-    "mtime": 1781274740.3463082,
-    "hash": "c5cb35452634112deb8d9b861d07d2d4"
+    "mtime": 1782942073.0385697,
+    "hash": "a200915eea01e6dd84f217cc4767d860"
   },
   "/home/nico/go-bt-evolve/internal/reliability/heartbeat_router.go": {
     "mtime": 1781274740.3463082,
@@ -2032,8 +2048,8 @@
     "hash": "2c67b25b85001aaaffd70cbfe5f09a82"
   },
   "/home/nico/go-bt-evolve/internal/reliability/errors.go": {
-    "mtime": 1781274740.3463082,
-    "hash": "58aa19a027d5624d1e07cd915f0e6210"
+    "mtime": 1782941791.376213,
+    "hash": "aee4e7ddf4f6654809350e81c892df04"
   },
   "/home/nico/go-bt-evolve/internal/reliability/redis_queue.go": {
     "mtime": 1780055007.6471062,
@@ -2260,8 +2276,8 @@
     "hash": "069f41e83c9cc3aa58e43b79499ee81c"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/main.go": {
-    "mtime": 1781676012.0258427,
-    "hash": "f335fcea6f6272d21f495bf0f5c60843"
+    "mtime": 1782941919.2212913,
+    "hash": "a1ba9db8b95d413956ddfd9fcd13bff9"
   },
   "/home/nico/go-bt-evolve/cmd/bt-agent/hitl_tools.go": {
     "mtime": 1781276038.3828177,
@@ -2344,8 +2360,8 @@
     "hash": "4c311bb87871d57ffda826ab84b88cd0"
   },
   "/home/nico/go-bt-evolve/CHANGELOG.md": {
-    "mtime": 1781492054.4206145,
-    "hash": "2512947d46f998aa68179686341ce2af"
+    "mtime": 1782944317.907895,
+    "hash": "769d21d35d45f84773bfcbc3954dcf52"
   },
   "/home/nico/go-bt-evolve/AGENTS.md": {
     "mtime": 1781731255.239679,
@@ -2356,11 +2372,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1782889978.7410176,
+    "mtime": 1782944343.1160898,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1782889978.9410188,
+    "mtime": 1782944343.5520933,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve/cmd/bt-dashboard/static/index.html": {
@@ -2515,6 +2531,14 @@
     "mtime": 1780260849.8034062,
     "hash": "5b23fcacaa6160c8072ec31d3cbee9a9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100510-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782893116.9328878,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100510-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782893112.1048498,
+    "hash": "2e7ab839503314b6a8b096ad7e7e9830"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T204043-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782758613.1673505,
     "hash": "c42f52633f56e554e93b8a74935d2e2b"
@@ -2562,6 +2586,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T214552-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782762566.6983159,
     "hash": "b77c226bb227297be9a696a25cac8f5c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103351-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782894837.884905,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103351-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782894832.5968673,
+    "hash": "d06d3c68e339fe1dbf78b627eebd013e"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260628T023503-06275166/finish.md": {
     "mtime": 1782607054.4606462,
@@ -2626,6 +2658,30 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T183541-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782837440.5566757,
     "hash": "8ff45c3755d75876b801729737c52742"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T110126-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782896493.7611952,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T110126-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782896488.429155,
+    "hash": "d4d4549908d4f6ffdf45ae72d380ad6d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200125-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782928893.7639742,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200125-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782928888.1360219,
+    "hash": "79ced3d4d0a8b63656b994f5f1a4c927"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T114843-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782899725.2624745,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T114843-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782899720.282431,
+    "hash": "4df8ae45239464b5ab5c17bcfb7aefca"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260628T113512-06275166/finish.md": {
     "mtime": 1782639524.5970163,
@@ -2763,6 +2819,14 @@
     "mtime": 1782769118.7546308,
     "hash": "157f1a0f33a4a870f238943fc179b5a8"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193230-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782927157.2724829,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193230-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782927151.7884307,
+    "hash": "9c8d943f608c28fdc7e20c7bd57df165"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T073614-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782797950.0957592,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -2858,6 +2922,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T213556-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782761994.9851818,
     "hash": "7081c74a8c89d24acc1af3b9f5b528b0"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193127-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782927092.991872,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193127-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782927088.7438316,
+    "hash": "71bb914d53959a0ee199b0723296205a"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T074350-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782798426.695901,
@@ -3035,6 +3107,14 @@
     "mtime": 1782589056.0405948,
     "hash": "1c8358f7d0faa3e6bd092ee1cce0705f"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113851-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782898840.7984655,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113851-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782898835.7264168,
+    "hash": "b8e938ae093795e3c1b97ea3f982c411"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T003607-58939002/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782772794.1695778,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -3130,6 +3210,18 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T154121-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782826882.8183641,
     "hash": "c856c9c9fd753046f86f187a34e82ae8"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T191738-19be0c92/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782926343.1006575,
+    "hash": "c7901cf1ba252ff80e2fde29e26b6321"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T191738-19be0c92/tasks/01-1-execute-requested-superpowers-change/red.txt": {
+    "mtime": 1782926344.3246696,
+    "hash": "597fda582c7c9a21668520fa7436c0cf"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T191738-19be0c92/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782926260.591846,
+    "hash": "3a8579f5c691f09202ce10a68e7fa983"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T103612-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782808827.3462863,
@@ -3227,6 +3319,14 @@
     "mtime": 1782581856.354473,
     "hash": "60f8040d5b4c9d5a03bcdc2590cdfe4c"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103551-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782895058.6024985,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103551-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782895053.2544596,
+    "hash": "62eb1aed16736cce1637c948e870a92f"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T153503-fdce6d43/finish.md": {
     "mtime": 1782567496.9916375,
     "hash": "836ff02c7b4a221e58e6c8edb0e25d56"
@@ -3298,6 +3398,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T223618-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782765542.0474508,
     "hash": "97586ab29f17a19dd2c2c5fc35759220"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T194838-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782928520.9013636,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T194838-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782928515.4333122,
+    "hash": "60f0001a5afc0121377c004fd087ca26"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T201536-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782756941.8102303,
@@ -3371,6 +3479,14 @@
     "mtime": 1782787763.620086,
     "hash": "9ecfa102362683b9b7018d35ed82a178"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103508-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782894915.3374608,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103508-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782894909.8494213,
+    "hash": "f3b3d59ae24f565413eee5f3699ee7b7"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T063932-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782794548.255847,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -3407,6 +3523,10 @@
     "mtime": 1782773341.9700909,
     "hash": "1a0d12d8a381e3828282985575329af0"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T183005-c9b835fa/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782923408.1205256,
+    "hash": "47807f91891f150cb60eae38fbc39dd7"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T183751-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782837479.893014,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -3430,6 +3550,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T094044-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782805413.3232834,
     "hash": "6f7d05fe4338d534083075193f905e9d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200911-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782929358.5423596,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200911-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782929353.310359,
+    "hash": "fa77e03eb01c5c57ed878dd0d291d0fe"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T053556-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782790725.637206,
@@ -3503,6 +3631,18 @@
     "mtime": 1782632231.8273602,
     "hash": "8d133f92451f2210ffd5d86966d9b7b2"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193913-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782927662.0852625,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193913-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782927656.4532094,
+    "hash": "37508a6fbd22a638b1ae5b20a7a45060"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T094547-6d05bf1e/finish.md": {
+    "mtime": 1782892143.513259,
+    "hash": "9df67537d7457fb8057487f22a5fc097"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T094547-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/green-claude-output.md": {
     "mtime": 1782892114.3930323,
     "hash": "d5d4aa1a0bb6189c11ad231414db49ff"
@@ -3538,6 +3678,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T094547-6d05bf1e/verification/main-build.txt": {
     "mtime": 1782892131.073162,
     "hash": "c4aaf7556f77fe88b81b1f9515f463c2"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T094547-6d05bf1e/verification/graphify-update.txt": {
+    "mtime": 1782892143.3212574,
+    "hash": "ff834aab1c91a52552a5b2d39e6cc80b"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T094547-6d05bf1e/verification/main-focused-tests.txt": {
     "mtime": 1782892128.9011452,
@@ -3615,6 +3759,14 @@
     "mtime": 1782766061.6592224,
     "hash": "038a576da4103874baf69533aeb2ad31"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100635-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782893202.105558,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100635-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782893196.765516,
+    "hash": "24fdb0233c55defc6954d11ff34553cb"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T203610-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782758374.5093522,
     "hash": "c42f52633f56e554e93b8a74935d2e2b"
@@ -3622,6 +3774,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T203610-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782758369.7773128,
     "hash": "3c5af1f754f3eb470a6f1c47fdf02c58"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103236-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782894764.4043822,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103236-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782894759.4483473,
+    "hash": "b8243cc050e8fca8cc7e84e92c891315"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260627T203503-fdce6d43/finish.md": {
     "mtime": 1782585461.046789,
@@ -3887,6 +4047,14 @@
     "mtime": 1782815975.331755,
     "hash": "92105339778f76cc89787644139a4084"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113817-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782898704.5371313,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113817-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782898699.4090803,
+    "hash": "4a257fce072cbc92a22841f4a6e4ac06"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T214107-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782762293.3398416,
     "hash": "c42f52633f56e554e93b8a74935d2e2b"
@@ -3902,6 +4070,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T143638-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782823218.7388737,
     "hash": "a30be6e2245ec5717a7438c46f033c50"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T114604-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782899298.2067006,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T114604-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782899292.7266514,
+    "hash": "723d4ee5821cec77289ec5f89e544120"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260628T043503-06275166/finish.md": {
     "mtime": 1782614260.2380679,
@@ -3959,6 +4135,34 @@
     "mtime": 1782614237.4338694,
     "hash": "cee237ff73ab67fd3404ecb35f8a3f46"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100202-6fab5bee/tasks/01-1-execute-requested-superpowers-change/green-claude-output.md": {
+    "mtime": 1782893039.65628,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100202-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782893019.1641188,
+    "hash": "78646112f5ff005e28ae67d222c2db7e"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100202-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red.txt": {
+    "mtime": 1782893020.336128,
+    "hash": "c58a4c8ee286291d38c0e4a7576c767c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100202-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782892924.7513766,
+    "hash": "090f0b98a9a8a13f182dcb66c4b39007"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T100202-6fab5bee/tasks/01-1-execute-requested-superpowers-change/claude-output.md": {
+    "mtime": 1782893039.66028,
+    "hash": "371a4e3abd55d785c72b2bc26de568a5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T110233-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782896559.8576925,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T110233-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782896554.5416527,
+    "hash": "32c865ebf4228c29e3e51b5f9501d962"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T234703-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782769862.3716826,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -3967,6 +4171,14 @@
     "mtime": 1782769857.1076446,
     "hash": "18268e684eaedbbe3e9689ce427e72bd"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200747-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782929274.2863884,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T200747-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782929269.0063932,
+    "hash": "c740dcc75f9dcd5508e75fc94a6c290d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T202235-37a38d33/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782757492.622182,
     "hash": "c42f52633f56e554e93b8a74935d2e2b"
@@ -3974,6 +4186,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260629T202235-37a38d33/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782757489.6301587,
     "hash": "34c0a026eb9dd9bbe82dd26910df38b2"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113209-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782898336.7892213,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113209-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782898330.941154,
+    "hash": "8c165a29711d16223115d6581ea0c6ec"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T144133-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782823301.135661,
@@ -4006,6 +4226,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T063554-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782794309.6575692,
     "hash": "bd2c060ab0469818db18091c3b03453b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103808-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782895134.3190513,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T103808-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782895126.9509974,
+    "hash": "ed1694facdac851d3dab9d3b3e9d32ac"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T163610-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782830371.1571128,
@@ -4347,6 +4575,14 @@
     "mtime": 1782769548.1094456,
     "hash": "70f09807f1b5808bebc38ef4c8766e2c"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T194625-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782928093.777337,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T194625-6d05bf1e/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782928088.3932865,
+    "hash": "111de6241f3b503d4dda837d43bc13a6"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T034029-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782783816.7904313,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -4515,6 +4751,14 @@
     "mtime": 1782566267.0555522,
     "hash": "6b66de26a6be0d5f3c66f711be6a839b"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193836-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782927524.8599656,
+    "hash": "8bd59e6daba6255132d5a596cfb536b1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T193836-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782927518.98391,
+    "hash": "cb4e0509424e82007fafcf4b2feba8b0"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T043641-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782787237.1083245,
     "hash": "31fe9b4a520fa2912be61768966714a8"
@@ -4522,6 +4766,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T043641-a296536c/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
     "mtime": 1782787232.3442838,
     "hash": "b9cf6116d24532a698c3e2672f507e12"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113104-6fab5bee/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
+    "mtime": 1782898271.740462,
+    "hash": "c7cca7a60a0c0022d76e6c24068f6d9c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/runs/20260701T113104-6fab5bee/tasks/01-1-execute-requested-superpowers-change/prompt.md": {
+    "mtime": 1782898265.9803934,
+    "hash": "a9abf5446814bd206c12e3659096b448"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/runs/20260630T094502-a296536c/tasks/01-1-execute-requested-superpowers-change/red-claude-output.md": {
     "mtime": 1782805700.4619212,
@@ -4551,9 +4803,29 @@
     "mtime": 1782833741.2398665,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T200125-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782928885.7520423,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T180814-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782922094.361495,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T153850-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782913130.389652,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T145351-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782910431.8389807,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T024744-p0-notebooklm-research-implement-the-phase-adaptive-mutation-controller.md": {
     "mtime": 1782780464.1159074,
     "hash": "c5fc30bebfa67eab77e6615885f1d6ee"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T113103-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782898263.9763696,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T113608-p0-notebooklm-research-implement-the-swarm-architecture-planner-in-the-i.md": {
     "mtime": 1782812168.3529816,
@@ -4563,21 +4835,53 @@
     "mtime": 1782596103.3227234,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T153820-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782913100.369375,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T043503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782614103.3166897,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T163139-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782916299.246322,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T213957-p0-notebooklm-research-implement-the-behavior-signature-calculator-in-th.md": {
+    "mtime": 1782934797.9873226,
+    "hash": "6657fd2d8ecca99a74ca8da86e7e48fb"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T100635-p0-notebooklm-research-implement-the-signature-based-merge-discipline-in.md": {
+    "mtime": 1782893195.225504,
+    "hash": "26c88a956d72c5f3006293d5a7f3d307"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T053503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782617703.3392096,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T114843-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782899323.7229295,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T083512-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782628512.0591063,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T194838-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782928118.7535727,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T163503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782570903.329056,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T191522-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782926122.5144737,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T230240-p0-notebooklm-research-implement-the-hdbscan-based-failure-clusterer-in.md": {
+    "mtime": 1782939760.2673924,
+    "hash": "de5262be74f24bcd021d030d9acc3b13"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T153531-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782653731.990596,
@@ -4586,6 +4890,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T004025-p0-notebooklm-research-implement-the-autonomous-remedy-synthesizer-in-th.md": {
     "mtime": 1782772825.637842,
     "hash": "b8af10040ed60451f8df47c059350a95"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T224351-p0-notebooklm-research-implement-the-curator-module-in-the-internal-evol.md": {
+    "mtime": 1782938631.387076,
+    "hash": "1113c1922b14a263bd24f0113db280eb"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T193750-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782841070.6517813,
@@ -4603,6 +4911,10 @@
     "mtime": 1782819375.858092,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T203316-p0-notebooklm-research-implement-the-validpatch-deterministic-kernel-ope.md": {
+    "mtime": 1782930796.4201133,
+    "hash": "16b12dbdc2f44690942435b5149e310c"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T064306-p0-notebooklm-research-implement-the-intent-aware-subgroup-skill-distill.md": {
     "mtime": 1782794586.936216,
     "hash": "79c56128f17f262ed78fcdadcdce67c8"
@@ -4610,6 +4922,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T003503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782599703.3339334,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T203931-p0-notebooklm-research-implement-the-transactional-state-mutator-in-the.md": {
+    "mtime": 1782931171.9902484,
+    "hash": "abbe65d3f6114e94403a742007034ce1"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T034106-p0-notebooklm-research-implement-the-judge-led-immediate-fix-generator-i.md": {
     "mtime": 1782870066.5280645,
@@ -4619,9 +4935,25 @@
     "mtime": 1782884556.480402,
     "hash": "4965d7896dd443d25a2aa1bd833e27b5"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T194625-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782927985.0003111,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T123911-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782902351.3090181,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T043641-p0-notebooklm-research-implement-task-spine-memory-in-the-internal-agent.md": {
     "mtime": 1782787001.218308,
     "hash": "b22a4cad2e4e54db26da5d628f6a12c7"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T103508-p0-notebooklm-research-implement-the-validpatch-deterministic-kernel-ope.md": {
+    "mtime": 1782894908.1334088,
+    "hash": "85b7bd8916d102e5b951e1ab360f225c"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T190631-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782925591.3849182,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T013606-p0-notebooklm-research-implement-the-state-oscillation-circuit-breaker-i.md": {
     "mtime": 1782776166.7513552,
@@ -4635,9 +4967,25 @@
     "mtime": 1782801384.600935,
     "hash": "dcb9ed8ee370deaae7f2b78a47d2c614"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T113817-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782898697.793064,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T191217-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782925937.1245952,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T153117-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782912677.7852235,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T084409-p0-notebooklm-research-implement-the-runtime-multi-agent-circuit-breaker.md": {
     "mtime": 1782801849.7651746,
     "hash": "9ba5e05876d77b34eb513aca3572bbbd"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T230414-p0-notebooklm-research-implement-the-progressscore-estimator-in-the-inte.md": {
+    "mtime": 1782939854.5240953,
+    "hash": "2174b930c0ae341ce52d3120c686979d"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T074350-p0-notebooklm-research-implement-the-certified-non-regression-evaluator.md": {
     "mtime": 1782798230.6142251,
@@ -4651,9 +4999,29 @@
     "mtime": 1782887971.884202,
     "hash": "538c89a1d36a3c349db9579cc5a29a58"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T183215-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923535.9575741,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T165254-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782917574.7518854,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T144652-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782910012.5559914,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T103612-p0-notebooklm-research-implement-the-three-level-error-attribution-and-l.md": {
     "mtime": 1782808572.472072,
     "hash": "c685da0ebdc92d1fe9cbddb674697e2b"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T103351-p0-notebooklm-research-implement-the-validpatch-deterministic-kernel-ope.md": {
+    "mtime": 1782894831.000856,
+    "hash": "1d3f9dac81653818a656247436f95871"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T214427-p0-notebooklm-research-implement-the-deterministic-validation-kernel-in.md": {
+    "mtime": 1782935067.0809526,
+    "hash": "7e959d7887ae85d45d4154e5eb5adb01"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T164045-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782830445.9382014,
@@ -4663,6 +5031,10 @@
     "mtime": 1782862561.8821113,
     "hash": "0612aa2e8ce7aeb7cab92e5502c21ed5"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T233253-p0-notebooklm-research-implement-the-slice-operation-within-the-internal.md": {
+    "mtime": 1782941573.4023287,
+    "hash": "0afc62284bef8dbe044e6ac619dc3671"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T063932-p0-notebooklm-research-implement-the-codream-asymmetric-knowledge-transf.md": {
     "mtime": 1782794372.8541727,
     "hash": "4d925fde0f9cc3f1c5a9ac2b2978d4b1"
@@ -4671,13 +5043,41 @@
     "mtime": 1782848171.1464424,
     "hash": "9448e70e954df603875edd1e023b21d9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T150715-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782911235.836697,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T170621-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782918381.4061065,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T130151-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782903711.8032339,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T100202-p0-notebooklm-research-implement-the-architect-blueprint-synthesizer-in.md": {
+    "mtime": 1782892922.3553576,
+    "hash": "76c9a2fa6bea39f812cb418f41c23f93"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T093835-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-au.md": {
     "mtime": 1782891515.9763725,
     "hash": "afc30b44f05397a724aa6cd1f38bb357"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T213510-p0-notebooklm-research-implement-the-slice-deterministic-kernel-operatio.md": {
+    "mtime": 1782934510.508877,
+    "hash": "aea489db0ef02f5a3d651e799f7901c3"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T090409-p0-notebooklm-research-implement-the-fail-state-remedy-inducer-in-the-in.md": {
     "mtime": 1782889449.9051518,
     "hash": "2bfa86ab5b49e906a85d0d8dbd731c41"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T233553-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-au.md": {
+    "mtime": 1782941753.8638933,
+    "hash": "dfa417e2c8dfc998382e3a0df0fd5660"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T210151-p0-notebooklm-research-implement-the-behavior-path-extractor-in-the-inte.md": {
+    "mtime": 1782932511.4221132,
+    "hash": "58b67134b4238df80ff66b0300f91151"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T094502-p0-notebooklm-research-implement-the-confidence-grounded-task-family-rou.md": {
     "mtime": 1782805502.520105,
@@ -4695,9 +5095,17 @@
     "mtime": 1782862739.7516153,
     "hash": "fb82c119411e6df1901cf0bb02bb7411"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T200911-p0-notebooklm-research-implement-the-spine-based-context-realizer-in-the.md": {
+    "mtime": 1782929351.574359,
+    "hash": "feaff66942447b268c3222ce3810d5fb"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T024231-p0-notebooklm-research-implement-the-codream-reflective-pipeline-in-the.md": {
     "mtime": 1782780151.58525,
     "hash": "8643058f69878fdc9271bbeb6ce40e31"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T204315-p0-notebooklm-research-implement-the-behavior-signature-based-macro-merg.md": {
+    "mtime": 1782931395.8995461,
+    "hash": "d6c8e4e1d820b6ff5bd002c3c8143eb7"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T163610-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782830170.847225,
@@ -4727,6 +5135,18 @@
     "mtime": 1782884161.1697094,
     "hash": "5aa1938843d19a8b01332a3a62c2a6f4"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T185327-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782924807.6624308,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260702T001158-p0-notebooklm-research-implement-the-behavior-path-extractor-in-the-inte.md": {
+    "mtime": 1782943918.6008227,
+    "hash": "1ae870a64cb4aed1f8fc264d2bc696c6"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T191738-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782926258.267823,
+    "hash": "225f42d7d7e95d10bd8bf402cb0e04e7"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/2026-06-05-doormate-page-first-ai-plan.md": {
     "mtime": 1781274740.326308,
     "hash": "8c7a255da131d1447c3e0abfe1a28c6a"
@@ -4734,6 +5154,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T183541-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782837341.5918229,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260702T000817-p0-notebooklm-research-implement-the-codream-trigger-logic-within-the-in.md": {
+    "mtime": 1782943697.2871394,
+    "hash": "21d1718c4d71198c420c1250e8cf33b9"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T235736-p0-notebooklm-research-implement-the-patchboard-circuit-breaker-circuitp.md": {
     "mtime": 1782856656.1680012,
@@ -4743,9 +5167,17 @@
     "mtime": 1782812843.2501636,
     "hash": "82b49a6212c454c2cb7f1b276f6b3f20"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T134726-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782906446.1088507,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T153623-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782826583.6954985,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T193836-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782927516.459886,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T093512-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782632112.0583062,
@@ -4755,6 +5187,14 @@
     "mtime": 1782790781.9696898,
     "hash": "ae1f85134aa7bbcff013363815d85834"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T213606-p0-notebooklm-research-implement-the-blueprint-driven-event-scheduler-in.md": {
+    "mtime": 1782934566.4253576,
+    "hash": "f3d89ff1bda4eb870fc1b6b73ab56b64"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T191415-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782926055.1537967,
+    "hash": "225f42d7d7e95d10bd8bf402cb0e04e7"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T103512-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782635712.0556295,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
@@ -4762,6 +5202,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T043858-p0-notebooklm-research-implement-the-pev-precondition-execution-validati.md": {
     "mtime": 1782873538.2354767,
     "hash": "fc581b765043277bfb4a1ed4cd4932d0"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T110232-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782896552.9416406,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T153503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782567303.2938657,
@@ -4771,6 +5215,30 @@
     "mtime": 1782779793.5541267,
     "hash": "ff08d908d9bd171ae7dcdbe936ab7979"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T133812-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782905892.581024,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T220954-p0-notebooklm-research-implement-the-architect-led-contract-synthesizer.md": {
+    "mtime": 1782936594.4202228,
+    "hash": "dcf2f891f02dd70ca4ad5046c3c9f573"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T150618-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782911178.5362737,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T234242-p0-notebooklm-research-implement-the-deterministic-circuit-breaker-in-th.md": {
+    "mtime": 1782942162.8993092,
+    "hash": "095db85f342fea0fe6547352779fc623"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T213324-p0-notebooklm-research-implement-the-circuitpolicy-deterministic-loop-de.md": {
+    "mtime": 1782934404.591959,
+    "hash": "03c9e99841bd329d6de4029839c93ef2"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T173216-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782919936.4462392,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T183503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782578103.3237379,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
@@ -4778,6 +5246,10 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T074004-p0-notebooklm-research-implement-the-dijkstra-based-risk-aware-recovery.md": {
     "mtime": 1782798004.1842427,
     "hash": "81e9e2bd41348413ad43146cda475287"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T190729-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782925649.3255556,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T063554-p0-notebooklm-research-implement-the-probabilistic-semantic-message-tran.md": {
     "mtime": 1782794154.7680893,
@@ -4791,6 +5263,14 @@
     "mtime": 1782877170.0626485,
     "hash": "4cfd90d137d9f411b8a26729bb269e80"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T211013-p0-notebooklm-research-implement-the-deterministic-validation-kernel-in.md": {
+    "mtime": 1782933013.2764568,
+    "hash": "36a3f5057396a147979bf6b11b2406d1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T124607-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782902767.8998575,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T084017-p0-notebooklm-research-implement-the-schema-grounded-deterministic-mutat.md": {
     "mtime": 1782801617.2868774,
     "hash": "b2333f27a4d22eaa7158d332a1df29de"
@@ -4803,6 +5283,22 @@
     "mtime": 1782603303.3202136,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T181412-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782922452.6361558,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T124757-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782902877.4846692,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T164559-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782917159.6327126,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T114603-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782899163.8494852,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T233610-p0-notebooklm-research-implement-the-prefix-preserving-plan-adaptor-in-t.md": {
     "mtime": 1782855370.0960755,
     "hash": "dd0bf21ac673491525deaed9387dbc6b"
@@ -4810,6 +5306,14 @@
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T090251-p0-notebooklm-research-implement-the-inference-time-error-recovery-er-mo.md": {
     "mtime": 1782889371.0924854,
     "hash": "4bf546a76ee5db783c229056802e5f68"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T154730-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782913650.3502483,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T110126-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782896486.2531388,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T064220-p0-notebooklm-research-implement-the-post-execution-validation-pev-wrapp.md": {
     "mtime": 1782880940.7145278,
@@ -4823,9 +5327,25 @@
     "mtime": 1782783854.1347535,
     "hash": "55aeeeb051c41fc3ddd2ae09bdbdf0af"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T183909-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923949.944917,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T214107-p0-notebooklm-research-implement-a-behavior-signature-distiller-in-the-i.md": {
     "mtime": 1782762067.037819,
     "hash": "9a4caa0a1d0f72d77e8dee734bddecef"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T143324-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782909204.989697,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T224105-p0-notebooklm-research-implement-the-mineevolve-style-adaptor-module-in.md": {
+    "mtime": 1782938465.8178184,
+    "hash": "199e6aa662a96496418f6037af4e2f60"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T233640-p0-notebooklm-research-implement-the-replay-and-shrink-window-extractor.md": {
+    "mtime": 1782941800.5922914,
+    "hash": "a7b78ed3436d19f8e5c87128a85c90cf"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T204516-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-en.md": {
     "mtime": 1782845116.821939,
@@ -4835,13 +5355,37 @@
     "mtime": 1782851992.386624,
     "hash": "fb2ce697b6f3afed4ef43a6047ea52f2"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T223700-p0-notebooklm-research-implement-the-deterministic-validation-kernel-in.md": {
+    "mtime": 1782938220.6279633,
+    "hash": "8ad4f0f2b3294b193ba05922848fa29a"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T214546-p0-notebooklm-research-implement-the-signature-based-behavior-tree-merge.md": {
     "mtime": 1782848746.8387,
     "hash": "90f5fb48cfdc49003fe6726688d6f5b2"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T213202-p0-notebooklm-research-implement-the-codream-post-hoc-reflection-mechani.md": {
+    "mtime": 1782934322.155236,
+    "hash": "05610bcf15110f9ec62688d251c3c7ac"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T093614-p0-notebooklm-research-implement-the-intent-grounded-skill-hint-injector.md": {
     "mtime": 1782804974.2231982,
     "hash": "7ad2dc683f5a2b4780262effa99e7cd5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T223155-p0-notebooklm-research-implement-the-validpatch-kernel-operation-in-the.md": {
+    "mtime": 1782937915.0456703,
+    "hash": "a385bd81ddec918dea6341a226b2bdea"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T141353-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782908033.2284923,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T143920-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782909560.46047,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T220817-p0-notebooklm-research-implement-the-experience-grounded-transition-scor.md": {
+    "mtime": 1782936497.1594677,
+    "hash": "1ab8646cb2ae344d0b494a3767445256"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T083351-p0-notebooklm-research-implement-the-structural-entropy-pruner-in-the-in.md": {
     "mtime": 1782887631.6409562,
@@ -4871,9 +5415,29 @@
     "mtime": 1782787323.661063,
     "hash": "e408b60c2e290b7026b62413f4144017"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T203441-p0-notebooklm-research-implement-the-slice-deterministic-kernel-operatio.md": {
+    "mtime": 1782930881.9845934,
+    "hash": "6bced0c68f8d9a769718e851ea82d2a9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T170719-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782918439.5665586,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T133118-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782905478.7936294,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T184633-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782924393.3924487,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T083210-p0-notebooklm-research-implement-the-json-patch-transactional-mutator-in.md": {
     "mtime": 1782887530.612134,
     "hash": "1cba9c672a0abb90eb8e8d69d197910a"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T103550-p0-notebooklm-research-implement-the-validpatch-deterministic-kernel-ope.md": {
+    "mtime": 1782894950.9897177,
+    "hash": "cd93eec4fbc0c4d332a5760e4f380383"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T143638-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782822998.816754,
@@ -4883,9 +5447,17 @@
     "mtime": 1782891757.082263,
     "hash": "13cc0a6993aa444635da7c1eddb967df"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T183937-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923977.9411411,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T033503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782610503.317537,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T143228-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782909148.2532537,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T201536-p0-notebooklm-research-answer-goal-implement-a-gatedaction-decorator-and.md": {
     "mtime": 1782756936.2861953,
@@ -4903,6 +5475,10 @@
     "mtime": 1782768949.8296597,
     "hash": "8fbe34f7729166d93129881ead3390c4"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T113209-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782898329.2291343,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T233917-p0-notebooklm-research-implement-the-deterministic-circuit-policy-contro.md": {
     "mtime": 1782769157.3268661,
     "hash": "6e35d905ec69b452c235dea05c069dd2"
@@ -4915,9 +5491,25 @@
     "mtime": 1782772567.1876626,
     "hash": "b00a5b38cdfddf9099e840056941ddc1"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T133215-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782905535.7340963,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T103236-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-au.md": {
+    "mtime": 1782894756.7643282,
+    "hash": "fccb35f2861862fdc9179bbeabd6c9fc"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T160757-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782914877.51954,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T124047-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782816047.936455,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T210542-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-au.md": {
+    "mtime": 1782932742.3514805,
+    "hash": "d7279781c1b65194584f537b38983d7c"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T054259-p0-notebooklm-research-implement-the-workflow-hyper-evolution-kernel-in.md": {
     "mtime": 1782877379.080431,
@@ -4935,9 +5527,33 @@
     "mtime": 1782880755.2929502,
     "hash": "eda6b7b9046c6c872ad6d166a475eaae"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T183005-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923405.9005072,
+    "hash": "83de6963ccfbfe30fe9a6bb8d65357e1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T223459-p0-notebooklm-research-implement-the-deterministic-validation-kernel-in.md": {
+    "mtime": 1782938099.5590518,
+    "hash": "2fdd9aa42aed47486fcd40de428626bd"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T233432-p0-notebooklm-research-implement-the-patchboard-architect-in-the-interna.md": {
+    "mtime": 1782941672.183191,
+    "hash": "a593c35027effe833301e8b28ca6ce23"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T140757-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782907677.3897657,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T182759-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923279.6874602,
+    "hash": "b6a7d0281c6a1215c445d307e7191b06"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T043604-p0-notebooklm-research-implement-the-autonomous-collaboration-circuit-br.md": {
     "mtime": 1782873364.5822248,
     "hash": "8bcdf3a70214dd07e4129be9eac37cb8"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T143948-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782909588.040685,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T235336-p0-notebooklm-research-implement-dynamic-utility-driven-action-re-sequen.md": {
     "mtime": 1782856416.677822,
@@ -4947,9 +5563,21 @@
     "mtime": 1782840941.2470152,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T140700-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782907620.9053352,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T190825-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782925705.774167,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T223602-p0-notebooklm-research-implement-the-patchboard-deterministic-kernel-in.md": {
     "mtime": 1782851762.6246302,
     "hash": "a34b612cef3b30e7d816c16e15942a5d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T123221-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782901941.6464884,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T073614-p0-notebooklm-research-implement-the-structural-entropy-driven-dynamic-c.md": {
     "mtime": 1782797774.114149,
@@ -4963,9 +5591,17 @@
     "mtime": 1782592503.314522,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T133839-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782905919.7852473,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T104640-p0-notebooklm-research-implement-the-content-addressable-state-hash-loop.md": {
     "mtime": 1782809200.973513,
     "hash": "956700e3144bc1653995cadf71cee004"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T203552-p0-notebooklm-research-implement-the-architect-node-in-the-internal-engi.md": {
+    "mtime": 1782930952.3489914,
+    "hash": "960150336a99a964eac8522683e50100"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T224334-p0-notebooklm-research-implement-risk-aware-dijkstra-recovery-in-the-int.md": {
     "mtime": 1782765814.8253818,
@@ -4983,6 +5619,10 @@
     "mtime": 1782758170.2196531,
     "hash": "43f0de27d24a39035849de7fa638b0a2"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T180717-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782922037.2210724,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T004229-p0-notebooklm-research-implement-the-feedback-driven-topology-restructur.md": {
     "mtime": 1782859349.1586354,
     "hash": "57e9e0e5a12c4782a91fceb5e3970e20"
@@ -4991,9 +5631,17 @@
     "mtime": 1782787588.282832,
     "hash": "165677396176bfe7f33f351539dc3b2f"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T200747-p0-notebooklm-research-implement-the-replay-and-shrink-window-extractor.md": {
+    "mtime": 1782929267.4023948,
+    "hash": "dae509bd3720a3fe847ae8b870c2dfdb"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T083624-p0-notebooklm-research-implement-the-intent-grounded-skill-abstraction-k.md": {
     "mtime": 1782887784.8463745,
     "hash": "150939e1ddd087d1a2547b7a8222a5bb"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T100510-p0-notebooklm-research-implement-the-validpatch-deterministic-kernel-ope.md": {
+    "mtime": 1782893110.5528376,
+    "hash": "fb9c710f966411140339e92a2024d323"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T193503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782581703.3288674,
@@ -5019,9 +5667,17 @@
     "mtime": 1782624903.318941,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260702T001014-p0-notebooklm-research-implement-the-asymmetricdistiller-in-the-internal.md": {
+    "mtime": 1782943814.3280272,
+    "hash": "6ad9e4988fc0534eea26c59d7a8f4a6f"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T173503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782574503.3306653,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T103808-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782895088.6627176,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260627T213503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782588903.3234313,
@@ -5039,6 +5695,14 @@
     "mtime": 1782873762.5331523,
     "hash": "6061ffdbc5dcef1601c9f741d4996315"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T193913-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782927553.1082327,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T221201-p0-notebooklm-research-implement-the-experience-grounded-monotonicity-au.md": {
+    "mtime": 1782936721.013208,
+    "hash": "fe077a3e26f04508c736ea758e567226"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T173753-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782833873.385121,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
@@ -5047,21 +5711,57 @@
     "mtime": 1782891555.1406791,
     "hash": "71e12ff8968feafcaeadea7d480293a5"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T173116-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782919876.3537724,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T123122-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782901882.7819738,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T153218-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782912738.381856,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T224016-p0-notebooklm-research-implement-the-fragile-advance-audit-queue-in-the.md": {
     "mtime": 1782765616.283962,
     "hash": "795a7288019c69481354ddde9f423b22"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T223317-p0-notebooklm-research-implement-the-slice-kernel-operation-in-the-inter.md": {
+    "mtime": 1782937997.9782898,
+    "hash": "da24a80f0ae0c123cad9c1645f090d87"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T003936-p0-notebooklm-research-implement-the-genesis-specialist-generator-in-the.md": {
     "mtime": 1782859176.3008583,
     "hash": "61b313efbba36efbb76092429dbd2142"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T183314-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782923594.4540508,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T203159-p0-notebooklm-research-implement-the-transactional-patch-committer-in-th.md": {
+    "mtime": 1782930719.2596846,
+    "hash": "e6e0f985cb692b35e2a09913190ca843"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T204413-p0-notebooklm-research-implement-the-induceremedy-logic-in-the-internal.md": {
     "mtime": 1782758653.4076884,
     "hash": "8905f0487f9757e9983e0e94412b32d3"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T160657-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782914817.7751188,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T134532-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782906332.912144,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T093722-p0-notebooklm-research-implement-the-structural-entropy-guided-adaptive.md": {
     "mtime": 1782891442.5957987,
     "hash": "3ba2184b0a2c98d183ec42b698b19e4e"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T154538-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782913538.2252812,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T014230-p0-notebooklm-research-implement-the-dynamic-task-family-router-and-re-r.md": {
     "mtime": 1782862950.3334026,
@@ -5071,6 +5771,10 @@
     "mtime": 1782866158.4506483,
     "hash": "6ffb5e199b9702c1a73c635547cd146c"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T193230-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782927150.1564152,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260628T023503-p0-unblock-engine-tests-fix-import-cycle-or-test-blockers-preventing-tes.md": {
     "mtime": 1782606903.3233726,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
@@ -5079,9 +5783,33 @@
     "mtime": 1782783628.9887915,
     "hash": "88d9fd497137ce0f1ae5f1efb4b69a08"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T193127-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782927087.0598156,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T230743-p0-notebooklm-research-implement-the-deterministic-failure-diagnoser-in.md": {
+    "mtime": 1782940063.69766,
+    "hash": "1e5a79e6eed6a43d17b4a7ccfe2f54f1"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T161355-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782915235.7861567,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T233947-p0-notebooklm-research-implement-the-asymmetricdistiller-in-the-internal.md": {
+    "mtime": 1782941987.6818626,
+    "hash": "655133affcc9fd2627d4989d030ccbc9"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260629T202235-p0-notebooklm-research-implement-a-remedy-driven-local-replanner-adaptor.md": {
     "mtime": 1782757355.3971326,
     "hash": "883c9a6ae3cec7dde2c5cb5e4ef250a3"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T150813-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782911293.617125,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T123820-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782902300.5487108,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T014034-p0-notebooklm-research-implement-the-construction-time-schema-verifier-i.md": {
     "mtime": 1782776434.1613393,
@@ -5103,6 +5831,18 @@
     "mtime": 1782639312.0632117,
     "hash": "52ffd54ebc7731173e5d23702d47a4c9"
   },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T163835-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782916715.861381,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T170820-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782918500.1750362,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T163902-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782916742.065575,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T053559-p0-notebooklm-research-implement-the-runtime-behavior-tree-extension-bt.md": {
     "mtime": 1782876959.9728477,
     "hash": "5cfae83063257ef36dc371e5b2cfb01c"
@@ -5113,6 +5853,14 @@
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T154121-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
     "mtime": 1782826881.1263483,
+    "hash": "d3509b9cca4d043ffebdce993b0d193d"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T163236-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782916356.5787685,
+    "hash": "cfd2703ce327537481a1f2d23a46b6b5"
+  },
+  "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260701T113851-p0-notebooklm-research-error-google-rejected-the-query-error-code-8-reso.md": {
+    "mtime": 1782898731.793402,
     "hash": "d3509b9cca4d043ffebdce993b0d193d"
   },
   "/home/nico/go-bt-evolve/docs/superpowers/plans/goap-fusion-20260630T224523-p0-notebooklm-research-implement-protocol-style-state-offloading-in-the.md": {

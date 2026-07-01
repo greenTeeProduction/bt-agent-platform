@@ -54,7 +54,6 @@ func TestGoapFusion_Structure(t *testing.T) {
 	requiredConditions := []string{
 		"ValidateInput",
 		"IsFusionTask",
-		"IsApplyRequest",
 		"HasNewGaps",
 		"NoNewGaps",
 	}

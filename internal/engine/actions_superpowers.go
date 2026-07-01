@@ -520,11 +520,9 @@ func init() {
 
 // VerifyScheduledGoapFusionGitTool is the preflight guard for the external `git`
 // binary the unattended scheduled GOAP fusion cycle depends on. The cycle's
-// ApplyImprovementWithClaude step shells out to `git` dozens of times via
-// runGoapShell — `git checkout`, `git fetch origin`, `git pull origin master
-// --ff-only`, `git status`, `git stash`, `git diff`, `git reset --hard`, `git
-// clean`, and `git push origin master` — to synchronize, isolate, and publish
-// every improvement. The VerifyScheduledGoapFusionGitRemote guard runs `git
+// Superpowers implementation step (RunSuperpowersClaudeImplementation) shells
+// out to `git` for worktree isolation, diffing, and committing every
+// improvement. The VerifyScheduledGoapFusionGitRemote guard runs `git
 // remote get-url origin`, but if the `git` binary is missing entirely that guard
 // fails with a misleading "origin remote is not configured" diagnosis rather than
 // naming the real cause. A scheduled run could otherwise pass every tool guard
@@ -540,7 +538,7 @@ func init() {
 
 		path, err := exec.LookPath("git")
 		if err != nil {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Tool Preflight Failed\n\nGit binary %q is not resolvable on PATH: %v; a scheduled run would fail at the very first git sync in ApplyImprovementWithClaude.", "git", err)
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Git Tool Preflight Failed\n\nGit binary %q is not resolvable on PATH: %v; a scheduled run would fail at the first git operation of the Superpowers implementation step.", "git", err)
 			return -1
 		}
 
@@ -553,9 +551,8 @@ func init() {
 // remote the unattended scheduled GOAP fusion cycle depends on. The runtime guard
 // (VerifyScheduledGoapFusionRuntime) only confirms the repository working
 // directory and the Claude Code binary are available, but the cycle's
-// ApplyImprovementWithClaude step synchronizes against origin before letting
-// Claude implement (`git fetch origin`, `git pull origin master --ff-only`) and
-// publishes the result afterwards (`git push origin master`). A scheduled run
+// Superpowers implementation step synchronizes its worktree against the
+// repository state and needs a reachable origin remote. A scheduled run
 // could pass every current preflight yet still fail at the fetch/pull sync
 // (goap_fusion_preflight_failed) — or silently degrade at push — when the
 // `origin` remote is unconfigured or unreachable, wasting the cycle with no early

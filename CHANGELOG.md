@@ -17,10 +17,19 @@ All notable changes to this project will be documented in this file.
 
 - **(agents):** Dashboard and CLI execute agents in-process via `RunOnce()` (Hermes CLI fallback only when runner unavailable).
 - **(agents):** Agent delete clears scheduler jobs across dashboard, CLI, MCP, and `bt-assistant`.
+- **(engine):** Superpowers/GOAP-fusion claude runs default to `--model opus` when `BT_SUPERPOWERS_CLAUDE_MODEL` is unset — set the env var to `auto` (or `default`/`none`) to restore the CLI's own default model. Skip-permissions mode no longer drops the model flag.
 - **(agents):** Webhook event fields `failure_reason` and `nodes` carry raw values (error message, `a → b → c` node trace) without embedded display labels — consumer templates do the labeling.
+
+### Removed
+
+- **(engine):** Deleted the dead GOAP fusion apply path — `ApplyImprovementWithClaude`, `ReadImprovementPlan`, `IsApplyRequest`, `IsResearchOrGapRequest` and their helpers (`runClaudeCode`, `buildClaudeFusionPrompt`, stash/reset/push git machinery) were registered but referenced by no tree; the live loop implements via `RunSuperpowersClaudeImplementation` (worktree-isolated, commits via `superpowers_apply.go`).
 
 ### Fixed
 
+- **(engine):** GOAP fusion "grill me" escalation now actually advances rounds 1→2→3 — grill round and NotebookLM conversation id persist in the agent-scope blackboard across scheduled runs (previously stored as a string but read back with numeric type assertions, and ChainState died with each run, so every cycle was round 1 in a fresh conversation). After round 3 the cycle wraps to round 1 with a fresh conversation.
+- **(engine):** `VerifyGoapBuild` no longer self-destructs on slow hosts: `runGoapShell` gained a per-call timeout, the build gets 180s and the 180s-budget test run gets a 240s outer deadline (previously both were killed at the fixed 120s shell timeout and misreported as build/test failures); timeout kills are now labeled in the error.
+- **(engine):** claude CLI `--allowedTools` default rewritten as one prefix per `Bash()` rule (the colon-joined multi-command form parses as a single unmatched prefix, silently denying every shell command in `--print` mode) and now covers the absolute Go path the prompts use.
+- **(engine):** `ReadVaultResearch` caps vault reads to the newest 8 syntheses / 4 evolution reports / 4 plans (the vault had grown to 769 synthesis files, all re-read every 30-minute cycle) and stats files once before sorting.
 - **(reliability):** Rate-limit handling is functional end-to-end — 429 detection moved before response-body parsing in the DeepSeek and OpenAI-compatible clients (shared `checkRateLimit` helper), the typed `RateLimitError` survives `FallbackLLM` aggregation (`errors.Join`) and BT engine execution (LLM error recorder in `RunOnce`), and rate-limit classification runs ahead of the generic LLM patterns with a typed `errors.As` fast path.
 - **(reliability):** Server `Retry-After` values are clamped to 5m with additive jitter (no uncapped, lockstep sleeps); missing or already-elapsed headers fall back to the policy's backoff instead of a hardcoded 60s; bare `429`/`rpm`/`tpm` substrings no longer misclassify permanent failures as retryable rate limits; the openai-compatible 429 message reports the per-call model.
 - **(agents):** Scheduler webhook events carry the current run's node trace via the `AgentRunner` return path — previously a stale trace from the prior run was published after panics, and the full `RunResult` (including LLM output) was pinned on the registry `Instance` indefinitely.
