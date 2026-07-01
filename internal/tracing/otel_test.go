@@ -62,6 +62,40 @@ func TestInitFromEnv_NoEndpointIsNoop(t *testing.T) {
 	}
 }
 
+func TestParseOTLPEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		endpoint     string
+		wantHost     string
+		wantPath     string
+		wantInsecure bool
+		wantOK       bool
+	}{
+		{name: "https no port", endpoint: "https://host", wantHost: "host", wantPath: "", wantInsecure: false, wantOK: true},
+		{name: "http with port", endpoint: "http://host:4318", wantHost: "host:4318", wantPath: "", wantInsecure: true, wantOK: true},
+		{name: "bare host:port", endpoint: "host:4318", wantHost: "host:4318", wantPath: "", wantInsecure: true, wantOK: true},
+		{name: "bare host:port with path", endpoint: "host:4318/otlp", wantHost: "host:4318", wantPath: "/otlp/v1/traces", wantInsecure: true, wantOK: true},
+		{name: "http with path", endpoint: "http://host:4318/otlp", wantHost: "host:4318", wantPath: "/otlp/v1/traces", wantInsecure: true, wantOK: true},
+		{name: "empty", endpoint: "", wantOK: false},
+		{name: "missing scheme name", endpoint: "://bad", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, urlPath, insecure, ok := parseOTLPEndpoint(tt.endpoint)
+			if ok != tt.wantOK {
+				t.Fatalf("parseOTLPEndpoint(%q) ok = %v, want %v", tt.endpoint, ok, tt.wantOK)
+			}
+			if !tt.wantOK {
+				return
+			}
+			if host != tt.wantHost || urlPath != tt.wantPath || insecure != tt.wantInsecure {
+				t.Fatalf("parseOTLPEndpoint(%q) = (host=%q, path=%q, insecure=%v), want (host=%q, path=%q, insecure=%v)",
+					tt.endpoint, host, urlPath, insecure, tt.wantHost, tt.wantPath, tt.wantInsecure)
+			}
+		})
+	}
+}
+
 func TestContextWithTraceParentHeader(t *testing.T) {
 	_, tr := newRecordingTracer()
 	ctx := ContextWithTraceParentHeader(context.Background(),

@@ -2,8 +2,10 @@ package tracing
 
 import (
 	"context"
+	"log/slog"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -90,26 +92,57 @@ func Endpoint() string {
 	return os.Getenv("BT_OTLP_ENDPOINT")
 }
 
-// InitFromEnv installs an OTel-SDK-backed global tracer when an OTLP endpoint
-// is configured and returns a shutdown func. Without an endpoint the global
-// noop tracer stays installed and shutdown is a no-op. Export failures are
-// dropped by the SDK batcher — telemetry never blocks a run.
-func InitFromEnv(serviceName string) func(context.Context) error {
-	endpoint := Endpoint()
+// parseOTLPEndpoint normalizes an OTLP endpoint into exporter options.
+// Endpoints without a scheme (bare "host:port") are treated as http://.
+// urlPath is non-empty only when the endpoint carries a custom path prefix
+// (reverse-proxy setups), already joined with the OTLP "v1/traces" suffix.
+// insecure is true for any scheme other than https. ok is false when the
+// endpoint is empty or unparseable.
+func parseOTLPEndpoint(endpoint string) (host, urlPath string, insecure, ok bool) {
+	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
-		return func(context.Context) error { return nil }
+		return "", "", false, false
+	}
+	if !strings.Contains(endpoint, "://") {
+		endpoint = "http://" + endpoint
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" {
-		return func(context.Context) error { return nil }
+		return "", "", false, false
 	}
-	opts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(u.Host)}
-	if u.Scheme != "https" {
+	if p := strings.TrimRight(u.Path, "/"); p != "" {
+		urlPath = path.Join(p, "v1/traces")
+	}
+	return u.Host, urlPath, u.Scheme != "https", true
+}
+
+// InitFromEnv installs an OTel-SDK-backed global tracer when an OTLP endpoint
+// is configured and returns a shutdown func. Without an endpoint the global
+// noop tracer stays installed and shutdown is a no-op. Export failures are
+// dropped by the SDK batcher — telemetry never blocks a run. Misconfigured
+// endpoints disable tracing with a warning instead of failing the run.
+func InitFromEnv(serviceName string) func(context.Context) error {
+	noop := func(context.Context) error { return nil }
+	endpoint := Endpoint()
+	if endpoint == "" {
+		return noop
+	}
+	host, urlPath, insecure, ok := parseOTLPEndpoint(endpoint)
+	if !ok {
+		slog.Warn("tracing disabled: invalid OTLP endpoint", "endpoint", endpoint)
+		return noop
+	}
+	opts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(host)}
+	if insecure {
 		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+	if urlPath != "" {
+		opts = append(opts, otlptracehttp.WithURLPath(urlPath))
 	}
 	exp, err := otlptracehttp.New(context.Background(), opts...)
 	if err != nil {
-		return func(context.Context) error { return nil }
+		slog.Warn("tracing disabled: OTLP exporter init failed", "endpoint", endpoint, "error", err)
+		return noop
 	}
 	res := sdkresource.NewSchemaless(attribute.String("service.name", serviceName))
 	tp := sdktrace.NewTracerProvider(
