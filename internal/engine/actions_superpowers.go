@@ -620,6 +620,47 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionVaultWritable is the preflight guard for the vault
+// research directory the unattended scheduled GOAP fusion cycle writes its own
+// analysis back into. The cycle's WriteFusionAnalysis step persists its per-run
+// gap analysis (goap-fusion-analysis-<ts>.md) and a rolling pointer
+// (goap-fusion-latest.md) directly into the vault directory (goapFusionVaultDir)
+// via os.WriteFile — and the next scheduled run's ReadVaultResearch step ingests
+// those files as part of its research corpus. The existing
+// VerifyScheduledGoapFusionResearchPresent guard only confirms the vault
+// directory is readable and already contains research files; it does not confirm
+// the cycle can persist a new analysis. The existing
+// VerifyScheduledGoapFusionPlansWritable and
+// VerifyScheduledGoapFusionSynthesesWritable guards confirm writability but for
+// distinct directories (goapFusionPlansDir, goapFusionSynthesesDir), not this
+// vault directory. A scheduled run could pass every current preflight yet still
+// fail when the vault directory is not writable, silently dropping its own
+// analysis and starving the next run's research corpus with no clear diagnosis.
+// This guard closes that gap by requiring the vault directory to be a writable
+// directory before the automatic research-to-implementation cycle proceeds — the
+// vault-output-location analogue of the plans- and syntheses-writable guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionVaultWritable", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		info, err := os.Stat(goapFusionVaultDir)
+		if err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Vault Writable Preflight Failed\n\nVault research directory `%s` is not an accessible directory: %v", goapFusionVaultDir, err)
+			return -1
+		}
+
+		probe := filepath.Join(goapFusionVaultDir, ".goap-fusion-vault-write-probe")
+		if err := os.WriteFile(probe, []byte("probe"), 0o644); err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Vault Writable Preflight Failed\n\nVault research directory `%s` is not writable: %v; a scheduled run would silently drop its own analysis and starve the next run's research corpus.", goapFusionVaultDir, err)
+			return -1
+		}
+		_ = os.Remove(probe)
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Vault Writable Preflight Passed\n\nVault research directory `%s` is a writable directory", goapFusionVaultDir)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

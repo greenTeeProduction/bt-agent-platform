@@ -303,3 +303,30 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRejectedContext
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionRejectedContextLedger")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionVaultWritable
+// asserts the presence of the preflight action that guards the vault research
+// directory the unattended scheduled GOAP fusion cycle writes its own analysis
+// back into. The cycle's WriteFusionAnalysis step persists its per-run gap
+// analysis (goap-fusion-analysis-<ts>.md) and a rolling pointer
+// (goap-fusion-latest.md) directly into the vault directory
+// (goapFusionVaultDir) via os.WriteFile — and the next scheduled run's
+// ReadVaultResearch step ingests those files as part of its research corpus.
+// The existing VerifyScheduledGoapFusionResearchPresent guard only confirms the
+// vault directory is readable and already contains research files; it does not
+// confirm the cycle can persist a new analysis. The existing
+// VerifyScheduledGoapFusionPlansWritable and
+// VerifyScheduledGoapFusionSynthesesWritable guards confirm writability but for
+// distinct directories (goapFusionPlansDir, goapFusionSynthesesDir), not this
+// vault directory. A scheduled run could pass every current preflight yet still
+// fail when the vault directory is not writable, silently dropping its own
+// analysis and starving the next run's research corpus with no clear diagnosis.
+// This action closes that gap by requiring the vault directory to be a writable
+// directory before the automatic research-to-implementation cycle proceeds —
+// the vault-output-location analogue of the plans- and syntheses-writable
+// guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionVaultWritable(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionVaultWritable") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionVaultWritable")
+	}
+}
