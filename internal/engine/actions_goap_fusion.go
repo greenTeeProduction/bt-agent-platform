@@ -27,6 +27,13 @@ const (
 	goapFusionGoBin         = "/usr/local/go/bin/go"
 	goapFusionGraphifyTool  = "graphify"
 	goapFusionClaudeTimeout = 3600 // seconds (1 hour)
+
+	// goapFusionRejectedLedger is the persistent corpus of known rejected unsafe
+	// contexts (the rejected-context ledger) the continuous self-improving loop
+	// runner replays against every new candidate to enforce the Monotonicity
+	// Invariant of the Experience-Grounded Monotonicity Auditor — no mutation or
+	// self-evolution edit may re-admit a previously rejected unsafe context.
+	goapFusionRejectedLedger = "/mnt/ssd/clawd/wiki/bt-research/rejected-context-ledger.jsonl"
 )
 
 func init() {

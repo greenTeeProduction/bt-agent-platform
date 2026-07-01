@@ -584,6 +584,42 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionRejectedContextLedger is the preflight guard that
+// protects the continuous self-improving loop runner against safety-drift
+// regression. The prior guards protect a single cycle's inputs, runtime, and
+// external tools, but the loop runner introduces a distinct hazard: because it
+// re-runs the research-to-implementation cycle indefinitely, a later iteration
+// can generate a high-fitness improvement that re-admits a previously rejected
+// unsafe context — the "Safety Drift" / "Activity-Progress Confusion" failure
+// mode the Experience-Grounded Monotonicity Auditor exists to prevent [Source
+// 207, 214, 215, 250]. Enforcing the Monotonicity Invariant requires the loop
+// runner to replay a persistent corpus of known rejected unsafe contexts (the
+// rejected-context ledger) against every new candidate; if that ledger is
+// missing or unreadable, the loop has no historical safety-regression kernel and
+// silently relaxes previously patched security gates with no diagnosis. This
+// guard closes that gap by requiring the rejected-context ledger to be a
+// readable file with content before the continuous loop runner proceeds — the
+// monotonicity-ledger analogue of the input, runtime, and tool guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionRejectedContextLedger", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		b, err := os.ReadFile(goapFusionRejectedLedger)
+		if err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Rejected-Context Ledger Preflight Failed\n\nRejected-context ledger `%s` is not readable: %v; the continuous loop runner would have no historical safety-regression kernel and could silently re-admit a previously rejected unsafe context.", goapFusionRejectedLedger, err)
+			return -1
+		}
+
+		if len(strings.TrimSpace(string(b))) == 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Rejected-Context Ledger Preflight Failed\n\nRejected-context ledger `%s` exists but contains no readable entries; the continuous loop runner would replay an empty unsafe-context corpus and could re-admit a previously rejected unsafe context.", goapFusionRejectedLedger)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Rejected-Context Ledger Preflight Passed\n\n%d bytes of rejected-context entries present in `%s`", len(b), goapFusionRejectedLedger)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

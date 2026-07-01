@@ -280,3 +280,26 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGitTool(t *test
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGitTool")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRejectedContextLedger
+// asserts the presence of the preflight action that guards the continuous
+// self-improving loop runner against safety-drift regression. The prior guards
+// protect a single cycle's inputs, runtime, and external tools, but the loop
+// runner introduces a distinct hazard: because it re-runs the
+// research-to-implementation cycle indefinitely, a later iteration can generate
+// a high-fitness improvement that re-admits a previously rejected unsafe context
+// — the "Safety Drift" / "Activity-Progress Confusion" failure mode the
+// Experience-Grounded Monotonicity Auditor exists to prevent [Source 207, 214,
+// 215, 250]. Enforcing the Monotonicity Invariant requires the loop runner to
+// replay a persistent corpus of known rejected unsafe contexts (the
+// rejected-context ledger) against every new candidate; if that ledger is
+// missing or unreadable, the loop has no historical safety-regression kernel and
+// silently relaxes previously patched security gates with no diagnosis. This
+// action closes that gap by requiring the rejected-context ledger to be readable
+// before the continuous loop runner proceeds — the monotonicity-ledger analogue
+// of the input, runtime, and tool guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRejectedContextLedger(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionRejectedContextLedger") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionRejectedContextLedger")
+	}
+}
