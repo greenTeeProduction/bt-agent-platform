@@ -202,6 +202,10 @@ func main() {
 			if res != nil {
 				outcome = res.Outcome
 				output = res.Output
+				// Store on Instance so scheduler can enrich webhook with trace data
+				if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
+					inst.LastRunResult = res
+				}
 			}
 			if runErr == nil && res != nil && res.Outcome == "success" {
 				slo.RecordSuccess(time.Since(attemptStart))

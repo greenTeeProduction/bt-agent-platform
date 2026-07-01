@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -47,6 +48,11 @@ const (
 	// intervention or resource scaling.
 	ErrCatResourceExhausted
 
+	// ErrCatRateLimited covers API rate limit responses (429, Retry-After).
+	// Retryable but MUST use the server-provided Retry-After delay,
+	// not the standard exponential backoff.
+	ErrCatRateLimited
+
 	// ErrCatAuth covers authentication and authorization failures:
 	// invalid API keys, expired tokens, permission denied.
 	ErrCatAuth
@@ -65,6 +71,8 @@ func (c ErrorCategory) String() string {
 		return "validation"
 	case ErrCatResourceExhausted:
 		return "resource_exhausted"
+	case ErrCatRateLimited:
+		return "rate_limited"
 	case ErrCatAuth:
 		return "auth"
 	default:
@@ -76,7 +84,7 @@ func (c ErrorCategory) String() string {
 // Network errors and timeouts are transient; validation and auth are not.
 func (c ErrorCategory) IsRetryable() bool {
 	switch c {
-	case ErrCatNetwork, ErrCatTimeout, ErrCatLLM:
+	case ErrCatNetwork, ErrCatTimeout, ErrCatLLM, ErrCatRateLimited:
 		return true
 	default:
 		return false
@@ -161,6 +169,11 @@ func ClassifyError(err error) ErrorCategory {
 	// ─── LLM errors ────────────────────────────────────────────────────
 	if isLLMError(lower) {
 		return ErrCatLLM
+	}
+
+	// ─── Rate limit errors (check after LLM — "rate limit" patterns) ───
+	if isRateLimitError(lower) {
+		return ErrCatRateLimited
 	}
 
 	return ErrCatUnknown
@@ -285,7 +298,7 @@ func isLLMError(lower string) bool {
 		"model not found", "ollama",
 		"llm", "inference",
 		"context length", "token limit",
-		"max tokens", "rate limit",
+		"max tokens",
 		"api error", "server error",
 		"502", "503", "504",
 		"internal server error",
@@ -299,12 +312,92 @@ func isLLMError(lower string) bool {
 	return false
 }
 
+// isRateLimitError checks for API rate limit response patterns.
+// Detects HTTP 429, Retry-After, and rate-limit language from Claude,
+// OpenAI, DeepSeek, and other providers.
+func isRateLimitError(lower string) bool {
+	rateLimitPatterns := []string{
+		"rate limit", "rate limited", "rate_limit",
+		"too many requests", "429",
+		"retry after", "retry-after",
+		"quota exceeded", "quota_exceeded",
+		"request limit reached",
+		"requests per minute", "rpm",
+		"tokens per minute", "tpm",
+	}
+	for _, p := range rateLimitPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // contextDeadlineExceeded returns a sentinel error matching context.DeadlineExceeded
 // without importing the context package (avoiding circular deps in some contexts).
 // The ClassifyError function uses errors.Is which unwraps through the chain.
 func contextDeadlineExceeded() error {
 	// We use os.ErrDeadlineExceeded as a proxy — it has the same semantics.
 	return os.ErrDeadlineExceeded
+}
+
+// ─── Rate Limit Error ─────────────────────────────────────────────────────
+
+// RateLimitError wraps an API rate limit response and carries the
+// server-provided Retry-After duration. The retry policy uses this
+// instead of computed exponential backoff when present in the error chain.
+type RateLimitError struct {
+	Err        error
+	RetryAfter time.Duration
+	Message    string // human-readable description (e.g. "Claude API rate limited")
+}
+
+// Error implements the error interface.
+func (rle *RateLimitError) Error() string {
+	if rle.Message != "" {
+		return fmt.Sprintf("rate limited (%s, retry after %s): %s", rle.RetryAfter, rle.RetryAfter, rle.Message)
+	}
+	if rle.Err != nil {
+		return fmt.Sprintf("rate limited (retry after %s): %v", rle.RetryAfter, rle.Err)
+	}
+	return fmt.Sprintf("rate limited (retry after %s)", rle.RetryAfter)
+}
+
+// Unwrap returns the wrapped error for errors.Is/errors.As support.
+func (rle *RateLimitError) Unwrap() error {
+	return rle.Err
+}
+
+// RetryAfterFromError extracts the Retry-After duration from an error chain.
+// Returns 0 if no RateLimitError is found.
+func RetryAfterFromError(err error) time.Duration {
+	var rle *RateLimitError
+	if errors.As(err, &rle) {
+		return rle.RetryAfter
+	}
+	return 0
+}
+
+// ParseRetryAfter parses an HTTP Retry-After header value into a time.Duration.
+// Handles both delta-seconds (e.g. "120") and HTTP-date formats.
+// Returns a default of 60s for unparseable values so the caller always has a
+// reasonable fallback.
+func ParseRetryAfter(header string) time.Duration {
+	if header == "" {
+		return 60 * time.Second // sensible default for rate limits
+	}
+	// Try delta-seconds format (e.g. "120")
+	if secs, err := strconv.Atoi(strings.TrimSpace(header)); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	// Try HTTP-date format (e.g. "Wed, 21 Oct 2015 07:28:00 GMT")
+	if t, err := time.Parse(time.RFC1123, header); err == nil {
+		d := time.Until(t)
+		if d > 0 {
+			return d
+		}
+	}
+	return 60 * time.Second // fallback
 }
 
 // ─── Jitter Strategies ─────────────────────────────────────────────────────────
@@ -537,8 +630,8 @@ func (p *RetryPolicy) ExecuteContext(ctx context.Context, fn func() error) error
 			break
 		}
 
-		// Compute backoff delay based on category.
-		delay := p.delayForCategory(attempt, lastCat)
+		// Compute backoff delay based on category and error.
+		delay := p.delayForCategory(attempt, lastCat, err)
 
 		if p.OnRetry != nil {
 			p.OnRetry(attempt, lastCat, delay)
@@ -574,8 +667,15 @@ func sleepWithContext(ctx context.Context, delay time.Duration) error {
 }
 
 // delayForCategory returns the backoff delay for a given attempt and category,
-// applying jitter if configured.
-func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory) time.Duration {
+// applying jitter if configured. If the error carries a RateLimitError with
+// a Retry-After duration, that server-provided value takes precedence over
+// the computed exponential backoff.
+func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory, err error) time.Duration {
+	// If the server provided a Retry-After, use it unconditionally.
+	if ra := RetryAfterFromError(err); ra > 0 {
+		return ra
+	}
+
 	base := p.Base
 	if base <= 0 {
 		base = 1 * time.Second

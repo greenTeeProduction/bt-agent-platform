@@ -53,6 +53,7 @@ type RunResult struct {
 	OutputReasons  []string `json:"output_reasons,omitempty"`
 	RunID          string   `json:"run_id,omitempty"`
 	SessionID      string   `json:"session_id,omitempty"`
+	NodePaths      []string `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
 	Duration       time.Duration
 	StartedAt      time.Time
 	EndedAt        time.Time
@@ -158,6 +159,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 
 	result.Output = bb.Result
 	result.Outcome = bb.Outcome
+	result.NodePaths = bb.VisitedPaths
 	if result.Outcome == "" {
 		result.Outcome = "failure"
 	}

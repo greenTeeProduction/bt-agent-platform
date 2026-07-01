@@ -596,15 +596,31 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		if outcome == "panic" || outcome == "error" {
 			eventType = "error_detected"
 		}
+		// Build failure reason (self-documenting — empty on success)
+		failureReason := ""
+		if runErr != nil {
+			failureReason = fmt.Sprintf("\nFailure Reason: %s", runErr.Error())
+		} else if outcome != "success" {
+			failureReason = fmt.Sprintf("\nFailure Reason: agent outcome: %s", outcome)
+		}
+
+		// Build node execution trace (self-documenting — empty when unavailable)
+		nodesStr := ""
+		if inst != nil && inst.LastRunResult != nil && len(inst.LastRunResult.NodePaths) > 0 {
+			nodesStr = "\nExecution:\n  " + strings.Join(inst.LastRunResult.NodePaths, " → ")
+		}
+
 		GlobalAgentBus.Publish(AgentEvent{
 			Type:    eventType,
 			Source:  job.AgentName,
 			Message: fmt.Sprintf("%s: %s (%s)", job.AgentName, outcome, duration.Truncate(time.Second)),
 			Data: map[string]interface{}{
-				"tree":     tree,
-				"task":     runCtx.Task,
-				"outcome":  outcome,
-				"duration": duration.Truncate(time.Second).String(),
+				"tree":           tree,
+				"task":           runCtx.Task,
+				"outcome":        outcome,
+				"duration":       duration.Truncate(time.Second).String(),
+				"failure_reason": failureReason,
+				"nodes":          nodesStr,
 			},
 		})
 	}

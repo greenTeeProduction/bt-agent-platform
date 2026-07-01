@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // DeepSeekClient implements the LLM interface using the DeepSeek API.
@@ -119,6 +121,15 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 
 	if dsResp.Error != nil {
 		return "", fmt.Errorf("deepseek api error: %s", dsResp.Error.Message)
+	}
+
+	// Check for rate limiting (HTTP 429) and extract Retry-After.
+	if resp.StatusCode == 429 {
+		retryAfter := reliability.ParseRetryAfter(resp.Header.Get("Retry-After"))
+		return "", &reliability.RateLimitError{
+			RetryAfter: retryAfter,
+			Message:    fmt.Sprintf("DeepSeek API rate limited (model=%s)", d.model),
+		}
 	}
 
 	if len(dsResp.Choices) == 0 {

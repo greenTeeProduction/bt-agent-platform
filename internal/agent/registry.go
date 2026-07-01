@@ -66,13 +66,14 @@ const (
 
 // Instance is a running instance of an agent definition.
 type Instance struct {
-	ID          string     `json:"id"`
-	Definition  Definition `json:"definition"`
-	State       State      `json:"state"`
-	RunCount    int        `json:"run_count"`
-	SuccessRate float64    `json:"success_rate"`
-	LastRun     time.Time  `json:"last_run"`
-	LastError   string     `json:"last_error,omitempty"`
+	ID            string     `json:"id"`
+	Definition    Definition `json:"definition"`
+	State         State      `json:"state"`
+	RunCount      int        `json:"run_count"`
+	SuccessRate   float64    `json:"success_rate"`
+	LastRun       time.Time  `json:"last_run"`
+	LastError     string     `json:"last_error,omitempty"`
+	LastRunResult *RunResult `json:"-"` // last execution result (in-memory, not persisted)
 }
 
 // Registry manages agent definitions and instances.

@@ -780,7 +780,7 @@ func TestRetryPolicy_OnRetryCallback(t *testing.T) {
 
 func TestRetryPolicy_DelayForCategory_Defaults(t *testing.T) {
 	policy := &RetryPolicy{MaxRetries: 3}
-	delay := policy.delayForCategory(1, ErrCatNetwork)
+	delay := policy.delayForCategory(1, ErrCatNetwork, nil)
 	if delay != 1*time.Second {
 		t.Errorf("default base should be 1s, got %v", delay)
 	}
@@ -788,7 +788,7 @@ func TestRetryPolicy_DelayForCategory_Defaults(t *testing.T) {
 
 func TestRetryPolicy_DelayForCategory_LLMDefault(t *testing.T) {
 	policy := &RetryPolicy{MaxRetries: 3, Base: 500 * time.Millisecond}
-	delay := policy.delayForCategory(1, ErrCatLLM)
+	delay := policy.delayForCategory(1, ErrCatLLM, nil)
 	if delay != 1*time.Second {
 		t.Errorf("LLM default should use 2× Base for attempt 1 (2×500ms=1s), got %v", delay)
 	}
@@ -796,7 +796,7 @@ func TestRetryPolicy_DelayForCategory_LLMDefault(t *testing.T) {
 
 func TestRetryPolicy_DelayForCategory_LLMBaseSet(t *testing.T) {
 	policy := &RetryPolicy{MaxRetries: 3, Base: 100 * time.Millisecond, LLMBase: 500 * time.Millisecond}
-	delay := policy.delayForCategory(1, ErrCatLLM)
+	delay := policy.delayForCategory(1, ErrCatLLM, nil)
 	if delay != 500*time.Millisecond {
 		t.Errorf("explicit LLMBase should be 500ms, got %v", delay)
 	}
@@ -805,9 +805,9 @@ func TestRetryPolicy_DelayForCategory_LLMBaseSet(t *testing.T) {
 func TestRetryPolicy_DelayForCategory_ExponentialGrowth(t *testing.T) {
 	policy := &RetryPolicy{MaxRetries: 5, Base: 100 * time.Millisecond, MaxDelay: 10 * time.Second}
 
-	d1 := policy.delayForCategory(1, ErrCatNetwork)
-	d2 := policy.delayForCategory(2, ErrCatNetwork)
-	d3 := policy.delayForCategory(3, ErrCatNetwork)
+	d1 := policy.delayForCategory(1, ErrCatNetwork, nil)
+	d2 := policy.delayForCategory(2, ErrCatNetwork, nil)
+	d3 := policy.delayForCategory(3, ErrCatNetwork, nil)
 
 	if d1 != 100*time.Millisecond {
 		t.Errorf("attempt 1: expected 100ms, got %v", d1)
@@ -823,7 +823,7 @@ func TestRetryPolicy_DelayForCategory_ExponentialGrowth(t *testing.T) {
 func TestRetryPolicy_MaxDelayCap(t *testing.T) {
 	policy := &RetryPolicy{MaxRetries: 10, Base: 5 * time.Second, MaxDelay: 30 * time.Second}
 
-	delay := policy.delayForCategory(5, ErrCatNetwork)
+	delay := policy.delayForCategory(5, ErrCatNetwork, nil)
 	if delay != 30*time.Second {
 		t.Errorf("delay should be capped at 30s, got %v", delay)
 	}
