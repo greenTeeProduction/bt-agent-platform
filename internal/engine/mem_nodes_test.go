@@ -102,3 +102,38 @@ func TestMemSelector_ResumesAtRunningChildAndSkipsFailed(t *testing.T) {
 		t.Fatal("cursor must be cleared on completion")
 	}
 }
+
+func TestMemSelector_AllChildrenFailClearsCursorAndFails(t *testing.T) {
+	var aCalls, bCalls int
+	RegisterAction("TestMemSelAllFailA", func(_ *btcore.BTContext[Blackboard]) int {
+		aCalls++
+		return -1
+	})
+	RegisterAction("TestMemSelAllFailB", func(_ *btcore.BTContext[Blackboard]) int {
+		bCalls++
+		return -1
+	})
+	node := &evolution.SerializableNode{
+		Type: "MemSelector", Name: "MemSelAllFail",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "TestMemSelAllFailA"},
+			{Type: "Action", Name: "TestMemSelAllFailB"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+
+	if got := cmd.Run(ctx); got != -1 {
+		t.Fatalf("want FAILURE, got %d", got)
+	}
+	if aCalls != 1 {
+		t.Fatalf("child A should be called exactly once: got %d calls", aCalls)
+	}
+	if bCalls != 1 {
+		t.Fatalf("child B should be called exactly once: got %d calls", bCalls)
+	}
+	if _, ok := bb.ChainState["memsel/MemSelAllFail"]; ok {
+		t.Fatal("cursor must be cleared when all children fail")
+	}
+}
