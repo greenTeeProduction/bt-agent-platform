@@ -8,7 +8,7 @@ package agent
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -278,8 +278,8 @@ func reportAgentOutcome(store *AgentCircuitBreakerStore, agentName string, succe
 	// Log state changes for operator visibility
 	cb := store.Get(agentName)
 	if cb.State() == CircuitOpen {
-		log.Printf("Circuit breaker: agent %q is now OPEN (%d consecutive failures)", agentName, cb.FailureCount())
+		slog.Warn("circuit breaker: agent is now OPEN", "agent", agentName, "consecutive_failures", cb.FailureCount())
 	} else if cb.State() == CircuitClosed && cb.FailureCount() == 0 {
-		log.Printf("Circuit breaker: agent %q recovered to CLOSED", agentName)
+		slog.Info("circuit breaker: agent recovered to CLOSED", "agent", agentName)
 	}
 }

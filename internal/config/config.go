@@ -10,7 +10,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -253,7 +253,7 @@ func LoadFileWithDotEnv(configPath, dotenvPath string) (*Config, error) {
 	if kv, err := LoadDotEnv(dotenvPath); err == nil {
 		applyDotEnvToConfig(c, kv)
 	} else if !os.IsNotExist(err) {
-		log.Printf("[config] warning: reload .env %s: %v", dotenvPath, err)
+		slog.Warn("config: reload .env failed", "path", dotenvPath, "error", err)
 	}
 
 	applyEnvOverrides(c)
@@ -695,7 +695,7 @@ func applyDotEnvFiles(c *Config) {
 		kv, err := LoadDotEnv(path)
 		if err != nil {
 			// Log but don't fail — .env files are optional
-			log.Printf("[config] warning: loading .env %s: %v", path, err)
+			slog.Warn("config: loading .env failed", "path", path, "error", err)
 			continue
 		}
 		applyDotEnvToConfig(c, kv)
@@ -736,7 +736,7 @@ func LoadDotEnv(path string) (map[string]string, error) {
 		// Must have an equals sign
 		eqIdx := strings.IndexByte(line, '=')
 		if eqIdx < 1 {
-			log.Printf("[config] warning: %s:%d: invalid line, skipping: %q", path, lineNum+1, raw)
+			slog.Warn("config: invalid .env line, skipping", "path", path, "line", lineNum+1, "content", raw)
 			continue
 		}
 
@@ -1031,7 +1031,7 @@ func (c *Config) SaveFile(path string) error {
 //	watcher.OnChange(func(newCfg *Config) {
 //	    diffs := oldCfg.Diff(newCfg)
 //	    for _, d := range diffs {
-//	        log.Printf("config changed: %s", d)
+//	        slog.Info("config changed", "diff", d)
 //	    }
 //	})
 func (c *Config) Diff(other *Config) []string {

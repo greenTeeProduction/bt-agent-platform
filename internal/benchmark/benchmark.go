@@ -19,7 +19,7 @@ package benchmark
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -468,7 +468,7 @@ func DefaultMock() *MockLLM {
 func DefaultLLM() llm.LLM {
 	client, err := llm.NewClient(llm.DefaultConfig())
 	if err != nil {
-		log.Printf("benchmark: Ollama unavailable (%v), falling back to mock", err)
+		slog.Warn("benchmark: Ollama unavailable, falling back to mock", "error", err)
 		return DefaultMock()
 	}
 	return client

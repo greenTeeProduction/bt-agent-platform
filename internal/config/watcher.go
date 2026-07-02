@@ -8,7 +8,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -30,7 +30,7 @@ type ChangeCallback func(*Config)
 //
 //	watcher := NewConfigWatcher("/path/to/config.json", 30*time.Second)
 //	watcher.OnChange(func(cfg *Config) {
-//	    log.Printf("config reloaded: gardener_enabled=%v", cfg.GardenerEnabled)
+//	    slog.Info("config reloaded", "gardener_enabled", cfg.GardenerEnabled)
 //	})
 //	watcher.Start()
 //	defer watcher.Stop()
@@ -191,7 +191,7 @@ func (w *ConfigWatcher) checkAndReload() {
 			configChanged = true
 		}
 	} else if !os.IsNotExist(err) {
-		log.Printf("[config-watcher] stat %s: %v", w.path, err)
+		slog.Warn("config-watcher: stat failed", "path", w.path, "error", err)
 	}
 
 	// Check .env file if configured.
@@ -227,7 +227,7 @@ func (w *ConfigWatcher) checkAndReload() {
 	}
 
 	if reloadErr != nil {
-		log.Printf("[config-watcher] reload %s failed: %v (keeping previous config)", w.path, reloadErr)
+		slog.Warn("config-watcher: reload failed, keeping previous config", "path", w.path, "error", reloadErr)
 		return
 	}
 
@@ -247,8 +247,8 @@ func (w *ConfigWatcher) checkAndReload() {
 	copy(cbs, w.cbs)
 	w.mu.Unlock()
 
-	log.Printf("[config-watcher] reloaded %s (config_changed=%v dotenv_changed=%v, %d callbacks)",
-		w.path, configChanged, dotEnvChanged, len(cbs))
+	slog.Info("config-watcher: reloaded",
+		"path", w.path, "config_changed", configChanged, "dotenv_changed", dotEnvChanged, "callbacks", len(cbs))
 
 	for _, cb := range cbs {
 		cb(cfg)

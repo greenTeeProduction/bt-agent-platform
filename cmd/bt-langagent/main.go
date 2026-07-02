@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 func main() {
 	engine.Init()
+	slog.SetDefault(engine.L())
 	engine.Info("bt-langagent starting", "version", "1.0.0", "binary", "go-bt-langagent")
 
 	home, err := os.UserHomeDir()

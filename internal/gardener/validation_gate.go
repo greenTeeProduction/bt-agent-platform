@@ -2,7 +2,7 @@ package gardener
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 )
@@ -38,7 +38,7 @@ func ValidationGate(agentName, treeName string, config ValidationGateConfig) err
 	if evidence.TotalCalls == 0 && config.EvidencePath != "" {
 		fileEvidence, err := loadTreeEvidence(config.EvidencePath, treeName)
 		if err != nil {
-			log.Printf("[validation-gate] %s/%s: no usable file evidence: %v", agentName, treeName, err)
+			slog.Warn("validation-gate: no usable file evidence", "agent", agentName, "tree", treeName, "error", err)
 		} else {
 			evidence = fileEvidence
 		}
@@ -64,8 +64,8 @@ func ValidationGate(agentName, treeName string, config ValidationGateConfig) err
 			agentName, treeName, recoveryRate, config.MinRecoveryRate)
 	}
 
-	log.Printf("[validation-gate] %s/%s: PASSED (success=%.2f, recovery=%.2f, calls=%d)",
-		agentName, treeName, successRate, recoveryRate, evidence.TotalCalls)
+	slog.Info("validation-gate: passed",
+		"agent", agentName, "tree", treeName, "success_rate", successRate, "recovery_rate", recoveryRate, "calls", evidence.TotalCalls)
 	return nil
 }
 

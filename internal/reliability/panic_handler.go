@@ -5,7 +5,7 @@ package reliability
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 // PanicHandler is called when a goroutine panics. It receives the panic value
@@ -15,7 +15,7 @@ type PanicHandler func(panicVal any, context string)
 // DefaultPanicHandler logs the panic and stack trace to the default logger.
 // It is used by SafeGo when no custom handler is provided.
 func DefaultPanicHandler(panicVal any, context string) {
-	log.Printf("PANIC RECOVERED in [%s]: %v", context, panicVal)
+	slog.Error("panic recovered", "context", context, "panic", panicVal)
 }
 
 // SafeGo runs fn in a goroutine with panic recovery. If fn panics, handler
@@ -38,7 +38,7 @@ func SafeGo(context string, fn func(), handler PanicHandler) {
 				func() {
 					defer func() {
 						if r2 := recover(); r2 != nil {
-							log.Printf("PANIC HANDLER CRASHED in [%s]: %v", context, r2)
+							slog.Error("panic handler crashed", "context", context, "panic", r2)
 						}
 					}()
 					handler(r, context)
@@ -61,13 +61,13 @@ func SafeGo(context string, fn func(), handler PanicHandler) {
 //	    runJob(job, runner)
 //	})
 //	if err != nil {
-//	    log.Printf("job panicked: %v", err)
+//	    slog.Error("job panicked", "error", err)
 //	}
 func Recover(context string, fn func()) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in [%s]: %v", context, r)
-			log.Printf("PANIC RECOVERED in [%s]: %v", context, r)
+			slog.Error("panic recovered", "context", context, "panic", r)
 		}
 	}()
 	fn()

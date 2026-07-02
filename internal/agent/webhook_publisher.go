@@ -23,7 +23,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -99,13 +99,13 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	subscription, ok := eventRoute[event.Type]
 	if !ok {
 		// Unknown event type — log and skip
-		log.Printf("[webhook] unhandled event type: %s from %s", event.Type, event.Source)
+		slog.Warn("webhook: unhandled event type", "type", event.Type, "source", event.Source)
 		return
 	}
 
 	secret, ok := p.secrets[subscription]
 	if !ok {
-		log.Printf("[webhook] no secret for subscription: %s", subscription)
+		slog.Warn("webhook: no secret for subscription", "subscription", subscription)
 		return
 	}
 
@@ -122,13 +122,13 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("[webhook] marshal error: %v", err)
+		slog.Error("webhook: marshal error", "error", err)
 		return
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("[webhook] request error: %v", err)
+		slog.Error("webhook: request build error", "error", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -139,13 +139,13 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		log.Printf("[webhook] POST %s failed: %v", subscription, err)
+		slog.Error("webhook: POST failed", "subscription", subscription, "error", err)
 		return
 	}
 	resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		log.Printf("[webhook] POST %s returned %d", subscription, resp.StatusCode)
+		slog.Warn("webhook: POST returned error status", "subscription", subscription, "status", resp.StatusCode)
 	}
 }
 

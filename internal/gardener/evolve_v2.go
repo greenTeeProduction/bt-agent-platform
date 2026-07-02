@@ -3,7 +3,7 @@ package gardener
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -222,8 +222,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	if gateDisabled {
 		// Fail closed: a disabled gate means evolution is paused for this tree
 		// until process restart — skip every candidate, apply nothing ungated.
-		log.Printf("[gardener/v2] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — mutations are being SKIPPED (fail-closed), evolution paused until restart",
-			entry.Name, g.cfg.Gate.FailCount())
+		slog.Warn("gardener/v2: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
+			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCount())
 	}
 	for i := 0; !gateDisabled && i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
 		if candidates[i].Score < 0.45 {
@@ -301,7 +301,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// A rejection skips deployment but does NOT abort the cycle for other agents.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
 		if gateErr != nil {
-			log.Printf("[gardener/v2] %v — skipping deployment", gateErr)
+			slog.Warn("gardener/v2: validation gate rejected, skipping deployment", "error", gateErr)
 			// Restore the in-memory tree to its pre-cycle state so that
 			// rejected mutations do not accumulate across cycles (baseline-leak fix).
 			*tree = *originalTree

@@ -5,7 +5,7 @@ package reliability
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -344,7 +344,7 @@ func (wp *WorkerPool) worker() {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("WorkerPool: task panicked (worker recovered): %v", r)
+						slog.Error("workerpool: task panicked (worker recovered)", "panic", r)
 					}
 				}()
 				task()

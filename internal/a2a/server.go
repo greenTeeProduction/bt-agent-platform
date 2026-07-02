@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -187,7 +187,7 @@ func (s *Server) Start() error {
 		Handler: mux,
 	}
 
-	log.Printf("[a2a] Starting A2A server on %s", addr)
+	slog.Info("a2a: starting A2A server", "addr", addr)
 	return s.httpSrv.ListenAndServe()
 }
 

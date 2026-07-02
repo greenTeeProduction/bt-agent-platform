@@ -20,7 +20,7 @@ package gardener
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -464,8 +464,8 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 			// Fail closed: a disabled gate means evolution is paused for this
 			// tree until process restart — discard the mutations, do not apply
 			// them ungated.
-			log.Printf("[gardener] WARNING: quality gate is DISABLED for %s (consecutive_fails=%d) — mutations are being SKIPPED (fail-closed), evolution paused until restart",
-				entry.Name, g.cfg.Gate.FailCount())
+			slog.Warn("gardener: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
+				"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCount())
 			rejections = applied
 			applied = 0
 			if snapshotTaken {

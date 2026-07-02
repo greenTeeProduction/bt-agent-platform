@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -266,7 +266,7 @@ func (s *Scheduler) Start(runner AgentRunner) {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("Scheduler: tick panicked (recovered): %v", r)
+						slog.Error("scheduler: tick panicked (recovered)", "panic", r)
 					}
 				}()
 				s.SyncFromRegistry()
@@ -391,7 +391,7 @@ func DeleteRegisteredAgent(reg *Registry, name string) error {
 func (s *Scheduler) SyncFromRegistry() {
 	if s.reg != nil {
 		if err := s.reg.ReloadFromDisk(); err != nil {
-			log.Printf("Scheduler: registry reload: %v", err)
+			slog.Warn("scheduler: registry reload failed", "error", err)
 		}
 	}
 	s.ReconcileWithRegistry()
@@ -452,7 +452,7 @@ func (s *Scheduler) ReconcileWithRegistry() {
 		}
 		next, err := parseSchedule(sched)
 		if err != nil {
-			log.Printf("Scheduler: skipping invalid YAML schedule for %q: %q (%v)", name, sched, err)
+			slog.Warn("scheduler: skipping invalid YAML schedule", "agent", name, "schedule", sched, "error", err)
 			continue
 		}
 		job := &ScheduledJob{
@@ -489,8 +489,8 @@ func (s *Scheduler) tick(runner AgentRunner) {
 		if s.cbStore != nil {
 			if !s.cbStore.Allowed(job.AgentName) {
 				cb := s.cbStore.Get(job.AgentName)
-				log.Printf("Scheduler: skipping agent %q — circuit breaker %s (%d failures, cooldown %v)",
-					job.AgentName, cb.State(), cb.FailureCount(), cb.cooldown)
+				slog.Warn("scheduler: skipping agent — circuit breaker open",
+					"agent", job.AgentName, "state", cb.State(), "failures", cb.FailureCount(), "cooldown", cb.cooldown)
 				continue
 			}
 		}
@@ -543,7 +543,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("Scheduler: agent %q panicked in runJob (recovered): %v", job.AgentName, r)
+				slog.Error("scheduler: agent panicked in runJob (recovered)", "agent", job.AgentName, "panic", r)
 				outcome = "panic"
 				runErr = fmt.Errorf("agent panicked: %v", r)
 			}
@@ -761,7 +761,7 @@ func parseSchedule(sched string) (time.Time, error) {
 		next, err := nextCronTime(sched, now)
 		if err != nil {
 			// Fall back to 1h if we can't parse — better than crashing
-			log.Printf("Scheduler: cron parse error for %q: %v — falling back to +1h", sched, err)
+			slog.Warn("scheduler: cron parse error, falling back to +1h", "schedule", sched, "error", err)
 			return now.Add(1 * time.Hour), nil
 		}
 		return next, nil
@@ -921,7 +921,7 @@ func (s *Scheduler) saveState() {
 	s.mu.RUnlock()
 
 	if err := s.jobStore.Save(jobs); err != nil {
-		log.Printf("Scheduler: failed to persist jobs: %v", err)
+		slog.Warn("scheduler: failed to persist jobs", "error", err)
 	}
 }
 
@@ -936,7 +936,7 @@ func (s *Scheduler) saveStateLocked() {
 		jobs = append(jobs, *j)
 	}
 	if err := s.jobStore.Save(jobs); err != nil {
-		log.Printf("Scheduler: failed to persist jobs: %v", err)
+		slog.Warn("scheduler: failed to persist jobs", "error", err)
 	}
 }
 
@@ -951,7 +951,7 @@ func (s *Scheduler) loadState() {
 	}
 	jobs, err := s.jobStore.Load()
 	if err != nil {
-		log.Printf("Scheduler: failed to load persisted jobs: %v", err)
+		slog.Warn("scheduler: failed to load persisted jobs", "error", err)
 		return
 	}
 	s.mu.Lock()
@@ -964,8 +964,8 @@ func (s *Scheduler) loadState() {
 			// This job was running when bt-agent crashed.
 			// Clear in-flight flag, reset NextRun to "now" so it
 			// retries immediately on the next tick.
-			log.Printf("Scheduler: recovered crashed job %q (agent=%s, run_count=%d)",
-				j.ID, j.AgentName, j.RunCount)
+			slog.Warn("scheduler: recovered crashed job",
+				"job_id", j.ID, "agent", j.AgentName, "run_count", j.RunCount)
 			j.InFlight = false
 			j.NextRun = time.Time{} // run immediately on next tick
 			crashedCount++
@@ -973,6 +973,6 @@ func (s *Scheduler) loadState() {
 		s.jobs[j.ID] = &j
 	}
 	if crashedCount > 0 {
-		log.Printf("Scheduler: recovered %d in-flight job(s) from crash", crashedCount)
+		slog.Warn("scheduler: recovered in-flight jobs from crash", "count", crashedCount)
 	}
 }
