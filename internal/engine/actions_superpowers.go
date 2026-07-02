@@ -776,6 +776,19 @@ func init() {
 			return -1
 		}
 
+		// A bare main repo (core.bare=true) has no materialized working tree, so
+		// `git diff --name-only HEAD --` dies with "this operation must be run in a
+		// work tree" (exit 128). The run that produced HEAD was already build- and
+		// test-verified inside its worktree by the apply step, so re-checking the
+		// on-disk tree here would fail the whole cycle on stale, pre-conversion
+		// leftovers — the exact failure class 340dabb fixed for VerifyGoapBuild.
+		// Pass through with a delegation note (return 1) instead of -1-blocking
+		// every scheduled cycle.
+		if out, err := runGoapShell("git rev-parse --is-bare-repository"); err == nil && strings.TrimSpace(out) == "true" {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Delegated\n\nMain repo `%s` is bare (no working tree to materialize); the run's changes were build- and test-verified in its worktree during apply. Skipping stale-tree re-verification.", goapFusionRepo)
+			return 1
+		}
+
 		c, cancel := superpowersCommandTimeout()
 		defer cancel()
 		res := runShellCommand(c, defaultSuperpowersCommandRunner, goapFusionRepo, "git diff --name-only HEAD --")

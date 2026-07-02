@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -431,5 +432,42 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerH
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterialized(t *testing.T) {
 	if GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized") == nil {
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionBuildTreeMaterialized")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo
+// pins the bare-main-repo *behavior* of the build-tree preflight guard, aligning
+// it with the VerifyGoapBuild bare-repo delegation policy set in 340dabb — the
+// reconciliation the P0 NotebookLM research goal requires. The registration-only
+// test above (…ScheduledGoapFusionBuildTreeMaterialized) never exercised the
+// guard's -1/pass behavior, giving false confidence the P0 gap was closed. On a
+// bare main repo (core.bare=true) there is no materialized working tree, so the
+// guard's `git diff --name-only HEAD --` fails with "this operation must be run
+// in a work tree" (exit 128). The run that produced HEAD was already build- and
+// test-verified inside its worktree during apply, so re-checking the on-disk
+// tree here would fail the whole cycle on stale, pre-conversion leftovers — the
+// exact failure class 340dabb fixed for VerifyGoapBuild. The guard must therefore
+// pass through with a delegation note (return 1) on a bare repo instead of
+// -1-blocking every scheduled cycle. Before this change the guard treated the
+// bare-repo git-diff error as a hard failure and returned -1.
+//
+// Skips when goapFusionRepo is not a bare repo (CI checkouts): the non-bare path
+// runs a real HEAD comparison against the on-disk tree.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo(t *testing.T) {
+	out, err := runGoapShell("git rev-parse --is-bare-repository")
+	if err != nil || strings.TrimSpace(out) != "true" {
+		t.Skipf("goapFusionRepo is not a bare repo here (out=%q err=%v)", strings.TrimSpace(out), err)
+	}
+	fn := GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized")
+	if fn == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionBuildTreeMaterialized")
+	}
+	bb := &Blackboard{Task: "verify scheduled goap fusion build tree materialized"}
+	code := fn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("VerifyScheduledGoapFusionBuildTreeMaterialized on bare repo = %d, want 1 (delegate to apply-stage worktree verification)", code)
+	}
+	if !strings.Contains(bb.Result, "Delegated") {
+		t.Fatalf("expected a bare-repo delegation note in Result, got: %s", bb.Result[:min(len(bb.Result), 200)])
 	}
 }
