@@ -43,7 +43,7 @@ func parseGrillQuestions(out string) []grillQuestion {
 		if sevEnd < 0 {
 			continue
 		}
-		sev := rest[:sevEnd]
+		sev := strings.ToLower(strings.TrimSpace(rest[:sevEnd]))
 		body := strings.TrimSpace(rest[sevEnd+1:])
 		colon := strings.Index(body, ":")
 		if colon < 0 {

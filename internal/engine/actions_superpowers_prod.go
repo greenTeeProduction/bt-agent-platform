@@ -185,8 +185,8 @@ func registerSuperpowersProductionActions() {
 	// 50/day quota) falling back to a Web answerer, appends a "## Grill Q&A"
 	// section to design.md, and fails the phase iff any [critical] question
 	// is still OPEN after all fallbacks. There is no compatible web-research
-	// action to wire as the fallback (see webGrillAnswerer below), so Web is
-	// nil and unanswered questions degrade straight to OPEN.
+	// action to wire as the fallback, so Web is nil and unanswered questions
+	// degrade straight to OPEN.
 	RegisterAction("GrillDesignArtifact", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.ChainState == nil {
@@ -223,11 +223,26 @@ func registerSuperpowersProductionActions() {
 %s`, designContent)
 
 		claudeRes := defaultSuperpowersClaudeRunner.RunClaude(context.Background(), run.WorktreePathOrRepo(), grillPrompt)
+		if claudeRes.Err != nil {
+			bb.Result = "## Grill Design Failed\n\nClaude question-generation call failed: " + claudeRes.Err.Error() + "\n\n" + claudeRes.Output
+			bb.Outcome = "grill_claude_failed"
+			return -1
+		}
 		qs := parseGrillQuestions(claudeRes.Output)
+		if len(qs) == 0 {
+			// A non-error Claude run that yields zero parseable "Q [critical|
+			// normal] <branch>: ..." lines is a protocol failure, not a clean
+			// design: the prompt demands up to 12 Q-lines, so zero means the
+			// output was garbage (wrong format, refusal, empty response) —
+			// never treat it as "nothing to ask".
+			bb.Result = "## Grill Design Failed\n\nClaude produced no parseable grill questions.\n\n" + claudeRes.Output
+			bb.Outcome = "grill_no_questions_parsed"
+			return -1
+		}
 
-		res := resolveGrillQuestions(context.Background(), qs, grillAnswerers{
+		res := resolveGrillQuestions(ctx, qs, grillAnswerers{
 			NotebookLM: grillNotebookLMAnswerer,
-			Web:        nil, // no batched-question web-research action exists to wire; see comment above
+			Web:        nil, // no batched-question web-research action exists to wire
 		})
 
 		if err := os.WriteFile(run.DesignPath, []byte(designContent+res.Markdown), 0o644); err != nil {
@@ -919,13 +934,17 @@ func isClaudeRateLimit(errStr string) bool {
 // is what keeps the call count within the free-plan 50/day budget instead of
 // spending one call per question.
 //
-// Before spending the call, and again on the response, the output is checked
-// for auth/quota/error markers (including RESOURCE_EXHAUSTED — nlm error code
-// 8, the daily-quota-exhaustion signature) via nlmGrillUnavailable. A past bug
-// wrote quota error text straight into artifacts as if it were an answer;
-// this guard returns errAnswererUnavailable instead so resolveGrillQuestions
-// leaves those questions OPEN for the next answerer (or OPEN in the final
-// markdown) rather than fabricating content from error output.
+// Before spending the call (nlmGrillAuthGuard) and again on the response
+// (nlmGrillUnavailable), the answerer is checked for auth/quota/error
+// conditions. A past bug wrote quota error text straight into artifacts as if
+// it were an answer; these guards return errAnswererUnavailable instead so
+// resolveGrillQuestions leaves those questions OPEN for the next answerer (or
+// OPEN in the final markdown) rather than fabricating content from error
+// output. The same treatment applies to a batch response that comes back
+// empty/whitespace or with zero parseable "A<n>:" lines: that is NotebookLM
+// producing garbage, not "zero answers found", so it must stop batching
+// immediately rather than let resolveGrillQuestions keep spending calls on
+// later batches against a broken answerer.
 // grillNotebookLMAnswerer is the swappable indirection GrillDesignArtifact
 // calls through, mirroring defaultSuperpowersClaudeRunner /
 // defaultSuperpowersCommandRunner: production wiring is nlmGrillAnswerer,
@@ -934,12 +953,70 @@ func isClaudeRateLimit(errStr string) bool {
 // this var instead to stay off the network entirely.
 var grillNotebookLMAnswerer = nlmGrillAnswerer
 
-func nlmGrillAnswerer(_ context.Context, batch []grillQuestion) (map[int]string, error) {
+// nlmGrillRunFn is the swappable indirection for nlmGrillAnswerer's actual
+// `nlm notebook query` invocation. nlmRun execs the real nlm binary with no
+// interface seam of its own, so tests substitute this var to exercise
+// nlmGrillAnswerer's response handling (empty output, quota errors, valid
+// A1/A2 output) without ever touching the network.
+var nlmGrillRunFn = nlmRun
+
+// nlmGrillAuthGuard is the swappable indirection for nlmGrillAnswerer's
+// pre-flight auth check. Production wiring is defaultNlmGrillAuthGuard, which
+// invokes the registered CheckNotebookLMAuthAndRefresh action (the same
+// check-then-refresh guard the scheduled auth-guardian agent uses,
+// actions_notebooklm.go:161-176) instead of duplicating an inline
+// `nlm login --check` call. Tests substitute this var to avoid invoking that
+// action's own unconditional real nlm exec.
+var nlmGrillAuthGuard = defaultNlmGrillAuthGuard
+
+// defaultNlmGrillAuthGuard extracts the Blackboard GrillDesignArtifact's own
+// ctx carries (it is a *btcore.BTContext[Blackboard], which satisfies
+// context.Context via embedding) and drives CheckNotebookLMAuthAndRefresh
+// through it. The action's own bb.Result/bb.Outcome writes are saved and
+// restored around the call so they don't clobber GrillDesignArtifact's — this
+// is purely an auth side-effect (and possible `nlm login` refresh), not a
+// change GrillDesignArtifact's caller should see reflected in bb.Result. When
+// ctx carries no Blackboard (e.g. a unit test calling nlmGrillAnswerer with a
+// bare context.Context) the guard is skipped rather than panicking; output-
+// based checks (nlmGrillUnavailable) still apply to whatever the query call
+// returns.
+func defaultNlmGrillAuthGuard(ctx context.Context) error {
+	btctx, ok := ctx.(*btcore.BTContext[Blackboard])
+	if !ok || btctx == nil || btctx.Blackboard == nil {
+		return nil
+	}
+	act := GetAction("CheckNotebookLMAuthAndRefresh")
+	if act == nil {
+		return nil
+	}
+	return runGrillAuthGuardAction(btctx, act)
+}
+
+// runGrillAuthGuardAction invokes act (production: the registered
+// CheckNotebookLMAuthAndRefresh action) against btctx, saving and restoring
+// the Blackboard's Result/Outcome around the call so a check-then-refresh
+// side effect never clobbers GrillDesignArtifact's own bb.Result/bb.Outcome.
+// Extracted from defaultNlmGrillAuthGuard so this preserve/restore behavior
+// is directly unit-testable with a fake ActionFunc — the real
+// CheckNotebookLMAuthAndRefresh execs the nlm binary unconditionally with no
+// seam of its own, so it cannot be driven in tests.
+func runGrillAuthGuardAction(btctx *btcore.BTContext[Blackboard], act ActionFunc) error {
+	bb := btctx.Blackboard
+	prevResult, prevOutcome := bb.Result, bb.Outcome
+	code := act(btctx)
+	outcome := bb.Outcome
+	bb.Result, bb.Outcome = prevResult, prevOutcome
+	if code < 0 || outcome == "failure" {
+		return errAnswererUnavailable
+	}
+	return nil
+}
+
+func nlmGrillAnswerer(ctx context.Context, batch []grillQuestion) (map[int]string, error) {
 	if len(batch) == 0 {
 		return map[int]string{}, nil
 	}
-	authOut := nlmRun(30*time.Second, "login", "--check")
-	if nlmGrillUnavailable(authOut) {
+	if err := nlmGrillAuthGuard(ctx); err != nil {
 		return nil, errAnswererUnavailable
 	}
 
@@ -949,13 +1026,26 @@ func nlmGrillAnswerer(_ context.Context, batch []grillQuestion) (map[int]string,
 		fmt.Fprintf(&prompt, "Q%d [%s]: %s\n", i+1, q.Branch, q.Text)
 	}
 
-	out := nlmRun(180*time.Second, "notebook", "query", "--json", "--timeout", "150", defaultNotebook, prompt.String())
+	out := nlmGrillRunFn(180*time.Second, "notebook", "query", "--json", "--timeout", "150", defaultNotebook, prompt.String())
 	if nlmGrillUnavailable(out) {
+		return nil, errAnswererUnavailable
+	}
+	if strings.TrimSpace(out) == "" {
+		// Empty/whitespace output is NotebookLM producing nothing at all —
+		// treat it the same as an unavailable answerer instead of "0
+		// answers found", so resolveGrillQuestions stops sending it later
+		// batches rather than burning them against a broken answerer.
 		return nil, errAnswererUnavailable
 	}
 
 	answer := extractNotebookLMAnswer(out)
 	parsed := parseNumberedAnswers(answer)
+	if len(parsed) == 0 {
+		// Non-empty output but zero "A<n>:" lines means the response did not
+		// conform to the requested format at all (prose, refusal, garbage) —
+		// again an answerer-unavailable condition, not "0 answers found".
+		return nil, errAnswererUnavailable
+	}
 	result := map[int]string{}
 	for i := range batch {
 		text, ok := parsed[i+1]
@@ -972,21 +1062,32 @@ func nlmGrillAnswerer(_ context.Context, batch []grillQuestion) (map[int]string,
 }
 
 // nlmGrillUnavailable reports whether nlm CLI output indicates the
-// NotebookLM answerer cannot be trusted to have produced a real answer:
-// auth failures, the existing GOAP-fusion failure markers, or a quota/error
-// signature (RESOURCE_EXHAUSTED / "error code 8", the free-plan 50/day daily
-// quota exhaustion response).
+// NotebookLM answerer cannot be trusted to have produced a real answer: auth
+// failures (via isGoapNotebookLMFailure) or a quota/rate-limit/error
+// signature. The marker list is deliberately narrow and case-insensitive —
+// mirroring internal/reliability/errors.go's isRateLimitError precision — so
+// a legitimate answer that merely discusses "quota" as a concept (e.g. "set a
+// quota of 5 calls per batch") is never misclassified as unavailable. A bare
+// "quota" substring match previously caused exactly that false positive.
 func nlmGrillUnavailable(out string) bool {
 	if isGoapNotebookLMFailure(out) {
 		return true
 	}
 	lower := strings.ToLower(out)
-	return strings.Contains(lower, "resource_exhausted") ||
-		strings.Contains(lower, "quota") ||
-		strings.Contains(lower, "error code: 8") ||
-		strings.Contains(lower, "error code 8") ||
-		strings.Contains(lower, "unauthenticated") ||
-		strings.Contains(lower, "permission_denied")
+	markers := []string{
+		"resource_exhausted",
+		"resource exhausted",
+		"resourceexhausted",
+		"quota exceeded",
+		"rate limit",
+		"error code 8",
+	}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseNumberedAnswers splits a "A1: ...\nA2: ...\n" formatted NotebookLM

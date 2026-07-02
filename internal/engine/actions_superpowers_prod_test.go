@@ -197,3 +197,246 @@ func TestSuperpowersTaskCommitAction_ExcludesGeneratedPaths(t *testing.T) {
 		t.Fatalf("expected a git commit call once changes are staged, calls=%v", runner.calls)
 	}
 }
+
+// TestNlmGrillUnavailable_TrueMarkers proves finding 5(a): nlmGrillUnavailable
+// must still classify real quota/rate-limit/auth failures as unavailable
+// after the marker list is tightened for finding 3.
+func TestNlmGrillUnavailable_TrueMarkers(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+	}{
+		{"resource_exhausted_upper", "Error: RESOURCE_EXHAUSTED — daily quota reached"},
+		{"quota_exceeded_metric", "Quota exceeded for quota metric 'queries' and limit 'QueriesPerDay'"},
+		{"rate_limit", "429: rate limit hit, please slow down"},
+		{"stale_auth_marker", `{"auth_status":"stale","detail":"token expired"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !nlmGrillUnavailable(tc.out) {
+				t.Fatalf("nlmGrillUnavailable(%q) = false, want true", tc.out)
+			}
+		})
+	}
+}
+
+// TestNlmGrillUnavailable_FalseForLegitimateAnswerMentioningQuota is the
+// finding-3 regression test: a real NotebookLM answer that happens to
+// discuss "quota" as a concept must NOT be classified unavailable. A bare
+// "quota" substring match previously misfired on exactly this kind of
+// legitimate content.
+func TestNlmGrillUnavailable_FalseForLegitimateAnswerMentioningQuota(t *testing.T) {
+	out := "A1: set a quota of 5 calls per batch to respect the free-plan daily limit."
+	if nlmGrillUnavailable(out) {
+		t.Fatalf("nlmGrillUnavailable(%q) = true, want false (legitimate answer mentioning 'quota')", out)
+	}
+}
+
+// TestParseNumberedAnswers_ExtractsNumberedAnswers proves finding 5(b):
+// well-formed "A<n>: ..." output is split back into per-question text.
+func TestParseNumberedAnswers_ExtractsNumberedAnswers(t *testing.T) {
+	text := "A1: first answer\nA2: second answer\nA3: UNKNOWN\n"
+	got := parseNumberedAnswers(text)
+	want := map[int]string{1: "first answer", 2: "second answer", 3: "UNKNOWN"}
+	if len(got) != len(want) {
+		t.Fatalf("parseNumberedAnswers = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("parseNumberedAnswers[%d] = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+// TestParseNumberedAnswers_ProseOnlyYieldsEmptyMap proves finding 5(b): output
+// with no "A<n>:" markers at all (prose, not the requested format) must parse
+// to an empty map, not a spuriously "answered" one.
+func TestParseNumberedAnswers_ProseOnlyYieldsEmptyMap(t *testing.T) {
+	text := "I looked at the sources but there is nothing directly relevant to say here."
+	got := parseNumberedAnswers(text)
+	if len(got) != 0 {
+		t.Fatalf("parseNumberedAnswers(prose) = %v, want empty map", got)
+	}
+}
+
+// withNlmGrillSeams sets up nlmGrillAnswerer's two test seams — the auth
+// guard (bypassed, mirroring a bare context.Context in production) and the
+// nlm query invocation (fed canned output) — and restores both on cleanup.
+// This keeps nlmGrillAnswerer's real implementation under test while never
+// touching the network, per the "never exec real nlm/claude in tests" rule.
+func withNlmGrillSeams(t *testing.T, out string) {
+	t.Helper()
+	prevAuth := nlmGrillAuthGuard
+	prevRun := nlmGrillRunFn
+	t.Cleanup(func() {
+		nlmGrillAuthGuard = prevAuth
+		nlmGrillRunFn = prevRun
+	})
+	nlmGrillAuthGuard = func(_ context.Context) error { return nil }
+	nlmGrillRunFn = func(_ time.Duration, _ ...string) string { return out }
+}
+
+// TestNlmGrillAnswerer_EmptyOutputIsUnavailable proves finding 2: an empty
+// (or whitespace-only) nlm response must stop batching immediately via
+// errAnswererUnavailable instead of the pre-fix behavior of treating it as
+// "0 answers found" (which let resolveGrillQuestions keep sending later
+// batches to a broken answerer).
+func TestNlmGrillAnswerer_EmptyOutputIsUnavailable(t *testing.T) {
+	withNlmGrillSeams(t, "   \n  ")
+	got, err := nlmGrillAnswerer(context.Background(), []grillQuestion{{Branch: "D1", Text: "q1?"}})
+	if !errors.Is(err, errAnswererUnavailable) {
+		t.Fatalf("err = %v, want errAnswererUnavailable", err)
+	}
+	if got != nil {
+		t.Fatalf("got = %v, want nil map on unavailable", got)
+	}
+}
+
+// TestNlmGrillAnswerer_NoAnswerMarkersIsUnavailable proves finding 2's other
+// half: non-empty output with zero parseable "A<n>:" lines (e.g. prose
+// instead of the requested format) is a protocol failure, not "0 answers",
+// and must also stop batching.
+func TestNlmGrillAnswerer_NoAnswerMarkersIsUnavailable(t *testing.T) {
+	withNlmGrillSeams(t, `{"answer":"I don't have a structured response for this."}`)
+	got, err := nlmGrillAnswerer(context.Background(), []grillQuestion{{Branch: "D1", Text: "q1?"}})
+	if !errors.Is(err, errAnswererUnavailable) {
+		t.Fatalf("err = %v, want errAnswererUnavailable", err)
+	}
+	if got != nil {
+		t.Fatalf("got = %v, want nil map on unavailable", got)
+	}
+}
+
+// TestNlmGrillAnswerer_QuotaErrorIsUnavailable proves finding 5(c): a quota
+// error surfaced in the query response is classified unavailable via
+// nlmGrillUnavailable, same as before, now routed through the nlmGrillRunFn
+// seam instead of an unconditional real nlm exec.
+func TestNlmGrillAnswerer_QuotaErrorIsUnavailable(t *testing.T) {
+	withNlmGrillSeams(t, "RESOURCE_EXHAUSTED: quota exceeded for today")
+	got, err := nlmGrillAnswerer(context.Background(), []grillQuestion{{Branch: "D1", Text: "q1?"}})
+	if !errors.Is(err, errAnswererUnavailable) {
+		t.Fatalf("err = %v, want errAnswererUnavailable", err)
+	}
+	if got != nil {
+		t.Fatalf("got = %v, want nil map on unavailable", got)
+	}
+}
+
+// TestNlmGrillAnswerer_ValidOutputReturnsMap proves finding 5(c)'s happy
+// path: well-formed "A1:"/"A2:" JSON output maps back to the right question
+// indices with no error.
+func TestNlmGrillAnswerer_ValidOutputReturnsMap(t *testing.T) {
+	withNlmGrillSeams(t, `{"answer":"A1: cursor is persisted to disk\nA2: heuristics are cheaper than an LLM call"}`)
+	batch := []grillQuestion{
+		{Branch: "D1-persistence", Text: "does the cursor survive restarts?"},
+		{Branch: "D2-routing", Text: "why heuristics before LLM?"},
+	}
+	got, err := nlmGrillAnswerer(context.Background(), batch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got[0] != "cursor is persisted to disk" {
+		t.Fatalf("got[0] = %q, want %q", got[0], "cursor is persisted to disk")
+	}
+	if got[1] != "heuristics are cheaper than an LLM call" {
+		t.Fatalf("got[1] = %q, want %q", got[1], "heuristics are cheaper than an LLM call")
+	}
+}
+
+// TestNlmGrillAnswerer_AuthGuardFailureIsUnavailable proves finding 4: when
+// the auth guard (production: CheckNotebookLMAuthAndRefresh) reports failure,
+// nlmGrillAnswerer must not proceed to spend the query call at all.
+func TestNlmGrillAnswerer_AuthGuardFailureIsUnavailable(t *testing.T) {
+	prevAuth := nlmGrillAuthGuard
+	prevRun := nlmGrillRunFn
+	t.Cleanup(func() {
+		nlmGrillAuthGuard = prevAuth
+		nlmGrillRunFn = prevRun
+	})
+	nlmGrillAuthGuard = func(_ context.Context) error { return errAnswererUnavailable }
+	queryCalled := false
+	nlmGrillRunFn = func(_ time.Duration, _ ...string) string {
+		queryCalled = true
+		return `{"answer":"A1: should never get here"}`
+	}
+
+	got, err := nlmGrillAnswerer(context.Background(), []grillQuestion{{Branch: "D1", Text: "q1?"}})
+	if !errors.Is(err, errAnswererUnavailable) {
+		t.Fatalf("err = %v, want errAnswererUnavailable", err)
+	}
+	if got != nil {
+		t.Fatalf("got = %v, want nil map on auth-guard failure", got)
+	}
+	if queryCalled {
+		t.Fatal("nlmGrillAnswerer must not spend the query call when the auth guard fails")
+	}
+}
+
+// TestRunGrillAuthGuardAction_PreservesBlackboardResultAndOutcome proves
+// finding 4's blackboard-preservation requirement using a fake ActionFunc
+// standing in for CheckNotebookLMAuthAndRefresh (which execs the real nlm
+// binary unconditionally and so cannot be driven directly in a test): the
+// fake mutates bb.Result/bb.Outcome and fails, and runGrillAuthGuardAction
+// must restore the caller's original Result/Outcome while still reporting
+// errAnswererUnavailable for the failure.
+func TestRunGrillAuthGuardAction_PreservesBlackboardResultAndOutcome(t *testing.T) {
+	bb := newTestBlackboard()
+	bb.Result = "pristine result"
+	bb.Outcome = "pristine outcome"
+	btctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	fakeAuthAction := func(c *btcore.BTContext[Blackboard]) int {
+		c.Blackboard.Result = "## NotebookLM Auth\n\nstale, refresh failed"
+		c.Blackboard.Outcome = "failure"
+		return -1
+	}
+
+	err := runGrillAuthGuardAction(btctx, fakeAuthAction)
+	if !errors.Is(err, errAnswererUnavailable) {
+		t.Fatalf("err = %v, want errAnswererUnavailable", err)
+	}
+	if bb.Result != "pristine result" {
+		t.Fatalf("bb.Result = %q, want untouched %q", bb.Result, "pristine result")
+	}
+	if bb.Outcome != "pristine outcome" {
+		t.Fatalf("bb.Outcome = %q, want untouched %q", bb.Outcome, "pristine outcome")
+	}
+}
+
+// TestRunGrillAuthGuardAction_SuccessReturnsNilAndPreservesBlackboard proves
+// the mirror case: a successful auth-check action must not error, and must
+// likewise leave the caller's Result/Outcome untouched.
+func TestRunGrillAuthGuardAction_SuccessReturnsNilAndPreservesBlackboard(t *testing.T) {
+	bb := newTestBlackboard()
+	bb.Result = "pristine result"
+	bb.Outcome = "pristine outcome"
+	btctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	fakeAuthAction := func(c *btcore.BTContext[Blackboard]) int {
+		c.Blackboard.Result = "## NotebookLM Auth\n\nok"
+		c.Blackboard.Outcome = "success"
+		return 1
+	}
+
+	if err := runGrillAuthGuardAction(btctx, fakeAuthAction); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bb.Result != "pristine result" || bb.Outcome != "pristine outcome" {
+		t.Fatalf("bb.Result/Outcome = %q/%q, want untouched", bb.Result, bb.Outcome)
+	}
+}
+
+// TestParseNumberedAnswers_FewerAnswersThanQuestionsOK proves finding 5(b):
+// a partial response (fewer A<n> lines than questions asked) parses fine —
+// missing indices are simply absent from the map, letting the caller treat
+// them as unanswered rather than erroring out.
+func TestParseNumberedAnswers_FewerAnswersThanQuestionsOK(t *testing.T) {
+	text := "A1: only this one was answered\n"
+	got := parseNumberedAnswers(text)
+	if len(got) != 1 || got[1] != "only this one was answered" {
+		t.Fatalf("parseNumberedAnswers = %v, want {1: \"only this one was answered\"}", got)
+	}
+	if _, ok := got[2]; ok {
+		t.Fatalf("parseNumberedAnswers should not fabricate an entry for A2: %v", got)
+	}
+}
