@@ -584,6 +584,126 @@ func init() {
 		return 1
 	})
 
+	// HermesUpdateAgent — daily Hermes Agent update check.
+	// Runs hermes --version, git fetch, checks for updates, runs hermes update.
+	// Uses absolute paths to avoid PATH issues in systemd context.
+	RegisterAction("HermesUpdateAgent", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		home := homeDir()
+		repoPath := filepath.Join(home, ".hermes", "hermes-agent")
+		hermesBin := filepath.Join(home, ".local", "bin", "hermes")
+		gitBin := "/usr/bin/git"
+		env := append(os.Environ(),
+			"PATH="+filepath.Join(home, ".local", "bin")+":"+os.Getenv("PATH"),
+			"HOME="+home,
+		)
+
+		logf := func(f string, a ...interface{}) {
+			Info("HermesUpdateAgent: " + fmt.Sprintf(f, a...))
+		}
+		logf("ENTERED action")
+
+		var report strings.Builder
+		report.WriteString("## Hermes Update Report\n\n")
+
+		// 1. Current version
+		verCmd := exec.Command(hermesBin, "--version")
+		verCmd.Env = env
+		verOut, verErr := verCmd.CombinedOutput()
+		beforeVersion := "unknown"
+		if verErr == nil {
+			beforeVersion = firstLine(string(verOut))
+		}
+		logf("version check: bin=%s err=%v ver=%s", hermesBin, verErr, beforeVersion)
+		fmt.Fprintf(&report, "**Before**: %s\n\n", beforeVersion)
+
+		// 2. Current commit
+		commitOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--short", "HEAD").CombinedOutput()
+		beforeCommit := strings.TrimSpace(string(commitOut))
+
+		// 3. Fetch
+		fetchOut, fetchErr := exec.Command(gitBin, "-C", repoPath, "fetch", "origin").CombinedOutput()
+		if fetchErr != nil {
+			fmt.Fprintf(&report, "**WARN**: git fetch failed: %v\n%s\n\n", fetchErr, firstLine(string(fetchOut)))
+		}
+		logf("git fetch: err=%v", fetchErr)
+
+		// 4. Behind count
+		behindOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput()
+		behindStr := strings.TrimSpace(string(behindOut))
+		behindCount := 0
+		if behindStr != "" {
+			if n, pe := strconv.Atoi(behindStr); pe == nil {
+				behindCount = n
+			}
+		}
+		fmt.Fprintf(&report, "**Commits behind**: %d\n\n", behindCount)
+		logf("behind count: %d raw=%q", behindCount, behindStr)
+
+		if behindCount == 0 {
+			report.WriteString("**Status**: Already up to date\n")
+			bb.Result = report.String()
+			bb.Outcome = "success"
+			logf("DONE: already up to date")
+			return 1
+		}
+
+		// 5. Run update
+		report.WriteString("Running hermes update...\n")
+		logf("running hermes update, behind=%d", behindCount)
+		updateCmd := exec.Command("bash", "-c",
+			"HERMES_YOLO_MODE=1 timeout --kill-after=10 180 hermes update 2>&1")
+		updateCmd.Dir = repoPath
+		updateCmd.Env = env
+		updateOut, updateErr := updateCmd.CombinedOutput()
+		logf("update complete: err=%v output_len=%d", updateErr, len(updateOut))
+		if len(updateOut) > 0 {
+			outStr := string(updateOut)
+			if len(outStr) > 4000 {
+				outStr = outStr[:4000] + "\n... (truncated)"
+			}
+			fmt.Fprintf(&report, "```\n%s\n```\n\n", outStr)
+		}
+		if updateErr != nil {
+			fmt.Fprintf(&report, "**WARN**: update error: %v (will retry next run)\n", updateErr)
+			bb.Result = report.String()
+			bb.Outcome = "failure"
+			logf("DONE: update FAILED")
+			return -1
+		}
+
+		// 6. New version
+		afterVerCmd := exec.Command(hermesBin, "--version")
+		afterVerCmd.Env = env
+		afterVerOut, _ := afterVerCmd.CombinedOutput()
+		afterVersion := "unknown"
+		if len(afterVerOut) > 0 {
+			afterVersion = firstLine(string(afterVerOut))
+		}
+		afterCommitOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--short", "HEAD").CombinedOutput()
+		afterCommit := strings.TrimSpace(string(afterCommitOut))
+
+		fmt.Fprintf(&report, "**After**: %s\n", afterVersion)
+		if beforeCommit != "" && afterCommit != "" && beforeCommit != afterCommit {
+			fmt.Fprintf(&report, "**Commits**: %s → %s\n", beforeCommit, afterCommit)
+		}
+		fmt.Fprintf(&report, "\n**Status**: Updated (+%d commits)\n", behindCount)
+		bb.Result = report.String()
+		bb.Outcome = "success"
+		logf("DONE: updated successfully")
+		return 1
+	})
+
+	RegisterCondition("IsUpdateTask", func(b *Blackboard) bool {
+		task := strings.ToLower(b.Task)
+		for _, kw := range []string{"update", "upgrade", "hermes", "version", "git pull", "git fetch", "maintenance"} {
+			if strings.Contains(task, kw) {
+				return true
+			}
+		}
+		return false
+	})
+
 	// Domain-specific inits (their init() functions add to the registries)
 	// See goap_nodes.go init(), tree.go actionForName/conditionForName switches
 }
@@ -1041,4 +1161,10 @@ func parsePercentage(s string) (int, error) {
 	s = strings.TrimSuffix(s, "%")
 	s = strings.TrimSpace(s)
 	return strconv.Atoi(s)
+}
+
+// firstLine returns the first non-empty line of s, trimmed.
+func firstLine(s string) string {
+	lines := strings.SplitN(strings.TrimSpace(s), "\n", 2)
+	return strings.TrimSpace(lines[0])
 }

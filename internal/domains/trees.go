@@ -62,6 +62,46 @@ func outcome() evolution.SerializableNode {
 	)
 }
 
+// --- Hermes Update Tree ---
+
+// HermesUpdateTree returns a zero-LLM maintenance tree that checks for
+// Hermes Agent updates and applies them via hermes update. Follows the
+// same pattern as AgentMonitorTree: shell exec in Action nodes, minimal
+// LLM overhead.
+func HermesUpdateTree() *evolution.SerializableNode {
+	guard := func(label, condition string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeGuard, Label: label, Condition: condition, ChildIndex: -1}
+	}
+	qualityGate := func(label string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeQualityGate, Label: label, ChildIndex: -1}
+	}
+
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "HermesUpdate_Main",
+		Description: "Daily Hermes update: version check, git fetch, hermes update, report",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Sequence", Name: "PreGate",
+				Description: "Input validation — task must be update-related",
+				Edges:       []evolution.TypedEdge{guard("input-validation", "task must be non-empty and update-related")},
+				Children: []evolution.SerializableNode{
+					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task",
+						Edges: []evolution.TypedEdge{guard("non-empty-task", "task string must not be empty")},
+					},
+					{Type: "Condition", Name: "IsUpdateTask", Description: "Has update/upgrade/hermes/maintenance keywords",
+						Edges: []evolution.TypedEdge{guard("is-update-task", "task contains update/upgrade/hermes/maintenance keywords")},
+					},
+				},
+			},
+			{Type: "Action", Name: "HermesUpdateAgent",
+				Description: "Check version, git fetch, run hermes update if behind, report",
+				Edges:       []evolution.TypedEdge{qualityGate("update-report-completeness")},
+			},
+			outcome(),
+		},
+	}
+}
+
 // --- CodeReview Tree ---
 
 func CodeReviewTree() *evolution.SerializableNode {
@@ -639,6 +679,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"notebooklm_consumer":       NotebookLMConsumerTree(),
 		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
 		"superpowers_workflow":      SuperpowersWorkflowTree(),
+		"hermes_update":             HermesUpdateTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -671,4 +712,5 @@ var Descriptions = map[string]string{
 	"notebooklm_consumer":       "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 	"superpowers_workflow":      "Production Superpowers workflow v2: skill routing, grill gate, TDD task loop with review cycles, debug branch, finish options",
+	"hermes_update":             "Zero-LLM daily Hermes Agent maintenance: version check, git fetch, run hermes update when behind, report",
 }

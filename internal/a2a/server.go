@@ -88,6 +88,7 @@ func (e *BTAgentExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorCon
 		}
 
 		// Execute
+		engine.Info("A2A executing agent", "agent", agentName, "tree_name", tree.Name, "tree_type", tree.Type)
 		bb := &engine.Blackboard{
 			Task: taskText,
 			LLM:  e.LLM,

@@ -104,6 +104,7 @@ func tasksForTree() map[string]string {
 		"goap_devops":               "diagnose why the CI pipeline is failing",
 		"goap_fusion":               "analyze research gaps and improve the BT platform trees",
 		"goap_fusion_loop":          "start the self-improving GOAP fusion loop cycle",
+		"hermes_update":             "check for hermes agent updates and apply them",
 		"bt_manager":                "analyze all agent failures and fix degraded ones",
 		"notebooklm":                "research latest BT framework developments using NotebookLM",
 		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
@@ -296,8 +297,9 @@ func TestAllDomainTrees(t *testing.T) {
 		// in offline mock tests. superpowers_workflow likewise needs real git
 		// worktree/HITL/Claude Code state (RunSuite's mock LLM never resolves its
 		// HumanApprovalGate nodes or runs real git commands) — structural smoke
-		// only, same as the others in this list.
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" {
+		// only, same as the others in this list. hermes_update shells out to
+		// the real hermes/git binaries, so it is structural-only too.
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {
