@@ -166,10 +166,40 @@ func blockingMainRepoDirtySummary(status string) string {
 	return strings.Join(blocking, "\n")
 }
 
+// superpowersGeneratedPathPrefixes lists the repo-relative path prefixes that
+// hold generated Superpowers/graphify artifacts (task evidence, run/plan
+// bookkeeping, graphify output) rather than source changes.
+// isGeneratedSuperpowersOrGraphifyPath (dirty-repo gating) and
+// superpowersGeneratedCommitExclusions (commit pathspec scoping) both derive
+// from this single list so they cannot drift apart.
+var superpowersGeneratedPathPrefixes = []string{
+	"graphify-out/",
+	"docs/superpowers/runs/",
+	"docs/superpowers/plans/",
+}
+
 func isGeneratedSuperpowersOrGraphifyPath(path string) bool {
 	path = strings.TrimSpace(path)
 	path = strings.TrimPrefix(path, "-> ")
-	return strings.HasPrefix(path, "graphify-out/") ||
-		strings.HasPrefix(path, "docs/superpowers/runs/") ||
-		strings.HasPrefix(path, "docs/superpowers/plans/")
+	for _, prefix := range superpowersGeneratedPathPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// superpowersGeneratedCommitExclusions returns the git pathspec exclusion
+// arguments (":(exclude)<prefix>**") for `git add -A`, scoped away from the
+// generated paths in superpowersGeneratedPathPrefixes. Used by the per-task
+// commit (SuperpowersTaskCommit action, actions_superpowers_prod.go) so it
+// never stages generated Superpowers/graphify artifacts — mirroring the
+// exclusion pathspecs the whole-run apply commit (commitAppliedSuperpowersRun
+// below) already applies.
+func superpowersGeneratedCommitExclusions() []string {
+	out := make([]string, 0, len(superpowersGeneratedPathPrefixes))
+	for _, prefix := range superpowersGeneratedPathPrefixes {
+		out = append(out, ":(exclude)"+strings.TrimSuffix(prefix, "/")+"/**")
+	}
+	return out
 }

@@ -39,6 +39,34 @@ func currentSuperpowersForEachTask(bb *Blackboard) (*SuperpowersRun, *Superpower
 	return run, &run.Tasks[idx], true
 }
 
+// ensureSuperpowersForEachTaskSetup resolves the ForEachTask run/task exactly
+// like currentSuperpowersForEachTask, and — critically — also performs the
+// same one-time, idempotent per-task setup ExecuteTask runs via
+// ensureSuperpowersTaskSetup before any phase func touches the task. That
+// setup populates task.ArtifactDir (so each task's red.txt/green.txt/claude
+// output land in their own directory instead of colliding on an empty path)
+// and applies the same dry-run / no-test-command short-circuits the batch
+// path enforces. Every one of the five SuperpowersTask* actions calls this
+// instead of currentSuperpowersForEachTask directly, so each is self
+// contained and does not depend on ExecuteSuperpowersTaskBatch — or another
+// phase action — having already run setup for this task.
+//
+// ok is false when there is no run/task on the blackboard at all (same
+// meaning as currentSuperpowersForEachTask returning ok=false). When ok is
+// true, err carries any ensureSuperpowersTaskSetup failure (e.g. a task with
+// no test commands, which previously reached phase funcs like
+// superpowersTaskVerifyRed and panicked on an empty task.Tests slice) and
+// dryRun reports whether the task is already fully handled (dry-run mode),
+// mirroring ExecuteTask's own dryRun short-circuit.
+func ensureSuperpowersForEachTaskSetup(bb *Blackboard) (run *SuperpowersRun, task *SuperpowersTask, dryRun bool, ok bool, err error) {
+	run, task, ok = currentSuperpowersForEachTask(bb)
+	if !ok {
+		return nil, nil, false, false, nil
+	}
+	dryRun, err = ensureSuperpowersTaskSetup(run, task)
+	return run, task, dryRun, true, err
+}
+
 func registerSuperpowersProductionActions() {
 	RegisterAction("LoadSuperpowersSkills", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -274,19 +302,32 @@ func registerSuperpowersProductionActions() {
 	// phases one BT tick at a time, instead of running the whole task inside
 	// a single ExecuteSuperpowersTaskBatch tick. Each action resolves its
 	// target task from ChainState["superpowers_task_index"] (set by
-	// BuildForEachTask), calls the matching phase func extracted from
-	// SuperpowersTaskExecutor.ExecuteTask, persists the run, and reports
-	// SUCCESS/FAILURE for the tree to act on.
+	// BuildForEachTask) via ensureSuperpowersForEachTaskSetup — which also
+	// runs the same one-time per-task setup ExecuteTask relies on, so
+	// ArtifactDir is populated and dry-run/no-test-command tasks are handled
+	// consistently no matter which of these five actions runs first — calls
+	// the matching phase func extracted from SuperpowersTaskExecutor.ExecuteTask,
+	// persists the run, and reports SUCCESS/FAILURE for the tree to act on.
 	RegisterAction("SuperpowersTaskRed", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		run, task, ok := currentSuperpowersForEachTask(bb)
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
 		if !ok {
 			bb.Result = "## Superpowers Task RED Failed\n\nNo Superpowers run/task index on blackboard."
 			return -1
 		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task RED Failed\n\n" + err.Error()
+			return -1
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = fmt.Sprintf("## Superpowers Task RED Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
 		c, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
-		err := superpowersTaskRed(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		err = superpowersTaskRed(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
 			bb.Result = "## Superpowers Task RED Failed\n\n" + err.Error()
@@ -298,14 +339,24 @@ func registerSuperpowersProductionActions() {
 
 	RegisterAction("SuperpowersTaskVerifyRed", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		run, task, ok := currentSuperpowersForEachTask(bb)
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
 		if !ok {
 			bb.Result = "## Superpowers Task Verify RED Failed\n\nNo Superpowers run/task index on blackboard."
 			return -1
 		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task Verify RED Failed\n\n" + err.Error()
+			return -1
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = fmt.Sprintf("## Superpowers Task Verify RED Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		err := superpowersTaskVerifyRed(c, defaultSuperpowersCommandRunner, run, task)
+		err = superpowersTaskVerifyRed(c, defaultSuperpowersCommandRunner, run, task)
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
 			bb.Result = "## Superpowers Task Verify RED Failed\n\n" + err.Error()
@@ -317,14 +368,24 @@ func registerSuperpowersProductionActions() {
 
 	RegisterAction("SuperpowersTaskGreen", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		run, task, ok := currentSuperpowersForEachTask(bb)
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
 		if !ok {
 			bb.Result = "## Superpowers Task GREEN Failed\n\nNo Superpowers run/task index on blackboard."
 			return -1
 		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task GREEN Failed\n\n" + err.Error()
+			return -1
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = fmt.Sprintf("## Superpowers Task GREEN Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
 		c, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
-		err := superpowersTaskGreen(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		err = superpowersTaskGreen(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
 			bb.Result = "## Superpowers Task GREEN Failed\n\n" + err.Error()
@@ -336,14 +397,24 @@ func registerSuperpowersProductionActions() {
 
 	RegisterAction("SuperpowersTaskVerifyGreen", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		run, task, ok := currentSuperpowersForEachTask(bb)
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
 		if !ok {
 			bb.Result = "## Superpowers Task Verify GREEN Failed\n\nNo Superpowers run/task index on blackboard."
 			return -1
 		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task Verify GREEN Failed\n\n" + err.Error()
+			return -1
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = fmt.Sprintf("## Superpowers Task Verify GREEN Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		err := superpowersTaskVerifyGreen(c, defaultSuperpowersCommandRunner, run, task)
+		err = superpowersTaskVerifyGreen(c, defaultSuperpowersCommandRunner, run, task)
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
 			bb.Result = "## Superpowers Task Verify GREEN Failed\n\n" + err.Error()
@@ -355,15 +426,32 @@ func registerSuperpowersProductionActions() {
 
 	RegisterAction("SuperpowersTaskCommit", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		run, task, ok := currentSuperpowersForEachTask(bb)
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
 		if !ok {
 			bb.Result = "## Superpowers Task Commit Failed\n\nNo Superpowers run/task index on blackboard."
 			return -1
 		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task Commit Failed\n\n" + err.Error()
+			return -1
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = fmt.Sprintf("## Superpowers Task Commit Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
 		c, cancel := superpowersCommandTimeout()
 		defer cancel()
 		dir := run.WorktreePathOrRepo()
-		add := defaultSuperpowersCommandRunner.Run(c, dir, "git", "add", "-A")
+		// Scope `git add -A` away from generated Superpowers/graphify
+		// artifacts (task evidence dirs, graphify-out/, docs/superpowers/**),
+		// mirroring the exclusion pathspecs commitAppliedSuperpowersRun uses
+		// for the whole-run apply commit (superpowers_apply.go) — otherwise a
+		// per-task commit in the run worktree would also stage those
+		// generated paths.
+		addArgs := append([]string{"add", "-A", "--", "."}, superpowersGeneratedCommitExclusions()...)
+		add := defaultSuperpowersCommandRunner.Run(c, dir, "git", addArgs...)
 		if add.Err != nil {
 			bb.Result = "## Superpowers Task Commit Failed\n\n" + add.Output
 			return -1
