@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -187,5 +188,29 @@ func TestValidate_MemoryNodesRequireUniqueNames(t *testing.T) {
 	msgs := ValidateTree(root) // signature: func ValidateTree(*evolution.SerializableNode) []string (validate.go:7)
 	if len(msgs) == 0 {
 		t.Fatal("expected validation message for unnamed PersistentMemSequence")
+	}
+}
+
+func TestValidate_MemoryNodesDuplicateNames(t *testing.T) {
+	root := &evolution.SerializableNode{
+		Type: "Sequence", Name: "root",
+		Children: []evolution.SerializableNode{
+			{Type: "PersistentMemSequence", Name: "DupName", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed"}}},
+			{Type: "PersistentMemSequence", Name: "DupName", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed"}}},
+		},
+	}
+	msgs := ValidateTree(root)
+	if len(msgs) == 0 {
+		t.Fatal("expected validation message for duplicate memory node name")
+	}
+	found := false
+	for _, msg := range msgs {
+		if strings.Contains(msg, "duplicate") && strings.Contains(msg, "DupName") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected message containing both 'duplicate' and 'DupName', got: %v", msgs)
 	}
 }
