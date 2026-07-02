@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -112,7 +111,7 @@ func (t *GardenerRecommendTool) Call(_ context.Context, _ string) (string, error
 
 func main() {
 	engine.Init()
-	slog.SetDefault(engine.L())
+	engine.SetAsDefault()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
 
 	home, err := os.UserHomeDir()

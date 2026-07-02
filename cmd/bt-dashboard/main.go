@@ -95,7 +95,7 @@ func init() {
 
 func main() {
 	engine.Init()
-	slog.SetDefault(engine.L())
+	engine.SetAsDefault()
 
 	port := os.Getenv("BT_DASHBOARD_PORT")
 	if port == "" {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,7 +16,7 @@ import (
 
 func main() {
 	engine.Init()
-	slog.SetDefault(engine.L())
+	engine.SetAsDefault()
 	engine.Info("bt-evaluator starting", "version", "1.0.0", "binary", "go-bt-evaluator")
 
 	home, _ := os.UserHomeDir()

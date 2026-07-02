@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -32,7 +31,7 @@ func resolveTree(id string) *evolution.SerializableNode {
 
 func main() {
 	engine.Init()
-	slog.SetDefault(engine.L())
+	engine.SetAsDefault()
 	engine.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
 
 	// ── Configuration ─────────────────────────────────────────────────────

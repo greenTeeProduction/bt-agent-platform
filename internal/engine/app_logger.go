@@ -15,6 +15,7 @@ var (
 	logger        *slog.Logger
 	rotWriter     io.WriteCloser // rotating writer, closed on shutdown
 	extraHandlers []slog.Handler
+	isSlogDefault bool // engine logger installed as slog default; guarded by mu
 )
 
 // Init initializes the logger with output to ~/.go-bt-evolve/logs/bt.log
@@ -71,14 +72,33 @@ func buildBaseHandler() slog.Handler {
 	})
 }
 
+// SetAsDefault installs the engine logger as slog's process default and
+// keeps it current when the handler chain is rebuilt later (e.g.
+// InitLogExport attaching the OTLP bridge). Binaries call this instead of
+// slog.SetDefault(L()), which would freeze the pre-bridge chain.
+func SetAsDefault() {
+	mu.Lock()
+	defer mu.Unlock()
+	if logger == nil {
+		buildLogger()
+	}
+	isSlogDefault = true
+	slog.SetDefault(logger)
+}
+
 // attachLogHandler adds a handler (e.g. the OTLP bridge) to the global
-// logger's fanout. Must be called after Init; rebuilds the logger.
+// logger's fanout. Must be called after Init; rebuilds the logger. If the
+// engine logger is the slog default, the rebuilt instance is re-installed
+// so package-level slog calls keep following the current handler chain.
 func attachLogHandler(h slog.Handler) {
 	mu.Lock()
 	defer mu.Unlock()
 	extraHandlers = append(extraHandlers, h)
 	logger = nil // next L() rebuilds via Init path
 	buildLogger()
+	if isSlogDefault {
+		slog.SetDefault(logger)
+	}
 }
 
 // L returns the global logger. Calls Init() if not initialized.
