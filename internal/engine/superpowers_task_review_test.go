@@ -20,14 +20,14 @@ func (r *fixedDiffRunner) Run(_ context.Context, dir string, name string, _ ...s
 	return CommandResult{Command: name, Dir: dir, Output: r.diff}
 }
 
-// fakeReviewClaudeRunner is a minimal ClaudeRunner fake that records every
+// fakeSuperpowersReviewRunner is a minimal ClaudeRunner fake that records every
 // prompt it receives and always returns a fixed canned response.
-type fakeReviewClaudeRunner struct {
+type fakeSuperpowersReviewRunner struct {
 	response string
 	prompts  []string
 }
 
-func (r *fakeReviewClaudeRunner) RunClaude(_ context.Context, repoDir string, prompt string) CommandResult {
+func (r *fakeSuperpowersReviewRunner) RunClaude(_ context.Context, repoDir string, prompt string) CommandResult {
 	r.prompts = append(r.prompts, prompt)
 	return CommandResult{Command: "claude <prompt>", Dir: repoDir, Output: r.response}
 }
@@ -110,7 +110,7 @@ func TestSuperpowersTaskReviewAction_SetsChainStateFromVerdict(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			defaultSuperpowersCommandRunner = &fixedDiffRunner{diff: "diff --git a/foo.go b/foo.go\n+added line\n"}
-			claude := &fakeReviewClaudeRunner{response: tc.claudeOutput}
+			claude := &fakeSuperpowersReviewRunner{response: tc.claudeOutput}
 			defaultSuperpowersClaudeRunner = claude
 
 			run := &SuperpowersRun{
@@ -159,7 +159,7 @@ func TestSuperpowersTaskGreenAction_InjectsReviewFeedbackWhenPresent(t *testing.
 		defaultSuperpowersClaudeRunner = prevClaude
 	})
 	defaultSuperpowersCommandRunner = &fixedDiffRunner{}
-	claude := &fakeReviewClaudeRunner{response: "GREEN output"}
+	claude := &fakeSuperpowersReviewRunner{response: "GREEN output"}
 	defaultSuperpowersClaudeRunner = claude
 
 	run := &SuperpowersRun{
@@ -205,7 +205,7 @@ func TestSuperpowersTaskGreenAction_NoFeedback_PromptUnchanged(t *testing.T) {
 		defaultSuperpowersClaudeRunner = prevClaude
 	})
 	defaultSuperpowersCommandRunner = &fixedDiffRunner{}
-	claude := &fakeReviewClaudeRunner{response: "GREEN output"}
+	claude := &fakeSuperpowersReviewRunner{response: "GREEN output"}
 	defaultSuperpowersClaudeRunner = claude
 
 	run := &SuperpowersRun{
