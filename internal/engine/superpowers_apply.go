@@ -45,6 +45,12 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 	}
 	run.PatchPath = patchPath
 
+	// A bare main repo has no working tree to dirty-check, patch, verify, or
+	// commit in — land the run through its own worktree instead.
+	if isBareGitRepo(ctx, runner, run.RepoDir) {
+		return applySuperpowersRunFromBareRepo(ctx, runner, run)
+	}
+
 	status := runner.Run(ctx, run.RepoDir, "git", "status", "--short", "--untracked-files=all")
 	if status.Err != nil {
 		run.ApplyStatus = "pending_patch"
@@ -70,13 +76,60 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 		return fmt.Errorf("pending_patch: git apply failed for %s: %v\n%s", patchPath, apply.Err, apply.Output)
 	}
 	run.ApplyStatus = "applied"
-	if err := verifySuperpowersMainRepoRuntime(ctx, runner, run); err != nil {
+	if err := verifySuperpowersRuntimeInDir(ctx, runner, run, run.RepoDir); err != nil {
 		_ = writeSuperpowersRunJSON(run)
 		return err
 	}
 	if err := commitAppliedSuperpowersRun(ctx, runner, run); err != nil {
 		_ = writeSuperpowersRunJSON(run)
 		return err
+	}
+	return writeSuperpowersRunJSON(run)
+}
+
+// applySuperpowersRunFromBareRepo lands a run when the main repo is bare. The
+// run's worktree serves as the staging checkout: verification and the run
+// commit happen there, then the bare repo's master ref is fast-forwarded to
+// the run branch and pushed. The non-forced fetch refspec mirrors the
+// checkout flow's `git pull --ff-only` guarantee — if master moved since the
+// worktree was created, the ref update is refused and the run parks as
+// pending_patch with its patch artifact intact.
+func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	branch := strings.TrimSpace(run.WorktreeBranch)
+	if branch == "" {
+		run.ApplyStatus = "pending_patch"
+		_ = writeSuperpowersRunJSON(run)
+		return fmt.Errorf("pending_patch: bare-repo apply needs the run's worktree branch, but WorktreeBranch is empty; patch saved to %s", run.PatchPath)
+	}
+	run.ApplyStatus = "applied"
+	if err := verifySuperpowersRuntimeInDir(ctx, runner, run, run.WorktreePath); err != nil {
+		_ = writeSuperpowersRunJSON(run)
+		return err
+	}
+	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, run, run.WorktreePath)
+	if err != nil {
+		_ = writeSuperpowersRunJSON(run)
+		return err
+	}
+	if !committed {
+		run.ApplyStatus = "applied_no_commit"
+		return writeSuperpowersRunJSON(run)
+	}
+	ff := runner.Run(ctx, run.RepoDir, "git", "fetch", ".", branch+":master")
+	if ff.Err != nil {
+		run.ApplyStatus = "pending_patch"
+		_ = writeSuperpowersRunJSON(run)
+		return fmt.Errorf("pending_patch: fast-forward of master to %s refused (master moved since the worktree was created): %v\npatch: %s\n%s", branch, ff.Err, run.PatchPath, ff.Output)
+	}
+	if head := runner.Run(ctx, run.RepoDir, "git", "rev-parse", "--short", "master"); head.Err == nil {
+		run.AppliedCommit = strings.TrimSpace(head.Output)
+	}
+	run.ApplyStatus = "committed"
+	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
+	if push.Err != nil {
+		run.ApplyStatus = "committed_unpushed"
+		_ = writeSuperpowersRunJSON(run)
+		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
 	}
 	return writeSuperpowersRunJSON(run)
 }
@@ -181,7 +234,11 @@ func captureSuperpowersWorktreePatch(ctx context.Context, runner CommandRunner, 
 	return res.Output, nil
 }
 
-func verifySuperpowersMainRepoRuntime(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+// verifySuperpowersRuntimeInDir runs the post-apply verification checks in
+// dir — the main repo checkout in the classic flow, or the run's worktree
+// when the main repo is bare (the worktree then holds exactly the tree master
+// is about to fast-forward to).
+func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, run *SuperpowersRun, dir string) error {
 	checks := []struct {
 		name string
 		cmd  string
@@ -191,7 +248,7 @@ func verifySuperpowersMainRepoRuntime(ctx context.Context, runner CommandRunner,
 		{"graphify-update", "graphify update ."},
 	}
 	for _, check := range checks {
-		res := runShellCommand(ctx, runner, run.RepoDir, check.cmd)
+		res := runShellCommand(ctx, runner, dir, check.cmd)
 		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
 		run.Verification = append(run.Verification, vc)
 		_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)), 0o644)
@@ -203,21 +260,35 @@ func verifySuperpowersMainRepoRuntime(ctx context.Context, runner CommandRunner,
 	return nil
 }
 
-func commitAppliedSuperpowersRun(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
-	add := runner.Run(ctx, run.RepoDir, "git", "add", "-A", "--", ".", ":(exclude)docs/superpowers/runs/**", ":(exclude)docs/superpowers/plans/**")
+// stageAndCommitSuperpowersRunInDir stages and commits the run's changes in
+// dir with the standard artifact-path exclusions. It reports whether a commit
+// was created; "nothing staged" is (false, nil), not an error.
+func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner, run *SuperpowersRun, dir string) (bool, error) {
+	add := runner.Run(ctx, dir, "git", "add", "-A", "--", ".", ":(exclude)docs/superpowers/runs/**", ":(exclude)docs/superpowers/plans/**")
 	if add.Err != nil {
 		run.ApplyStatus = "applied_uncommitted"
-		return fmt.Errorf("applied_uncommitted: git add failed: %v\n%s", add.Err, add.Output)
+		return false, fmt.Errorf("applied_uncommitted: git add failed: %v\n%s", add.Err, add.Output)
 	}
-	staged := runShellCommand(ctx, runner, run.RepoDir, "git diff --cached --quiet -- . ':!docs/superpowers/runs/**' ':!docs/superpowers/plans/**'")
+	staged := runShellCommand(ctx, runner, dir, "git diff --cached --quiet -- . ':!docs/superpowers/runs/**' ':!docs/superpowers/plans/**'")
 	if staged.Err == nil {
-		run.ApplyStatus = "applied_no_commit"
-		return nil
+		return false, nil
 	}
-	commit := runner.Run(ctx, run.RepoDir, "git", "commit", "-m", fmt.Sprintf("superpowers: apply verified run %s", run.ID))
+	commit := runner.Run(ctx, dir, "git", "commit", "-m", fmt.Sprintf("superpowers: apply verified run %s", run.ID))
 	if commit.Err != nil {
 		run.ApplyStatus = "applied_uncommitted"
-		return fmt.Errorf("applied_uncommitted: git commit failed: %v\n%s", commit.Err, commit.Output)
+		return false, fmt.Errorf("applied_uncommitted: git commit failed: %v\n%s", commit.Err, commit.Output)
+	}
+	return true, nil
+}
+
+func commitAppliedSuperpowersRun(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, run, run.RepoDir)
+	if err != nil {
+		return err
+	}
+	if !committed {
+		run.ApplyStatus = "applied_no_commit"
+		return nil
 	}
 	head := runner.Run(ctx, run.RepoDir, "git", "rev-parse", "--short", "HEAD")
 	if head.Err == nil {

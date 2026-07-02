@@ -74,6 +74,16 @@ func syncSuperpowersRepoForWorktree(ctx context.Context, runner CommandRunner, r
 	if runner == nil {
 		runner = defaultSuperpowersCommandRunner
 	}
+	if isBareGitRepo(ctx, runner, repoDir) {
+		// A bare repo has no working tree to dirty, reset, or check out —
+		// just bring master up to date with origin. The non-forced refspec
+		// preserves the `git pull --ff-only` guarantee: a non-fast-forward
+		// master update is refused.
+		if fetch := runner.Run(ctx, repoDir, "git", "fetch", "origin", "master:master"); fetch.Err != nil {
+			return fmt.Errorf("could not fast-forward bare repo master from origin before Superpowers worktree sync: %v\n%s", fetch.Err, fetch.Output)
+		}
+		return nil
+	}
 	status := runner.Run(ctx, repoDir, "git", "status", "--short", "--untracked-files=all")
 	if status.Err != nil {
 		return fmt.Errorf("could not inspect repo status before Superpowers worktree sync: %v\n%s", status.Err, status.Output)
@@ -94,6 +104,14 @@ func syncSuperpowersRepoForWorktree(ctx context.Context, runner CommandRunner, r
 		return fmt.Errorf("local master is not safely up to date with origin/master before Superpowers worktree sync: %v\n%s", pull.Err, pull.Output)
 	}
 	return nil
+}
+
+// isBareGitRepo reports whether dir is a bare git repository — one with refs
+// but no working tree (worktree add/remove and ref updates work there;
+// status/checkout/pull/apply do not).
+func isBareGitRepo(ctx context.Context, runner CommandRunner, dir string) bool {
+	res := runner.Run(ctx, dir, "git", "rev-parse", "--is-bare-repository")
+	return res.Err == nil && strings.TrimSpace(res.Output) == "true"
 }
 
 func cleanupSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
