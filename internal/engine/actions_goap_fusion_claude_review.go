@@ -8,6 +8,10 @@ package engine
 // Spec: docs/superpowers/specs/2026-07-02-goap-fusion-claude-review-fallback-design.md
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -102,4 +106,99 @@ func loadLastReviewedSHA(bb *Blackboard) string {
 	}
 	s, _ := bb.ChainState["goap_fusion_last_reviewed_sha"].(string)
 	return strings.TrimSpace(s)
+}
+
+// goapReviewContext is what the Claude review fallback will look at: either a
+// concrete commit range ("commits") or, when nothing new was committed, the
+// graphify structure report ("graphify").
+type goapReviewContext struct {
+	mode      string
+	rangeDesc string
+	body      string
+}
+
+const (
+	goapReviewDiffLimit   = 12000
+	goapReviewStatLimit   = 4000
+	goapReviewReportLimit = 8000
+)
+
+func runGoapGit(repoDir string, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoDir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// gatherReviewContext picks the review target. Priority: commits after the
+// last reviewed SHA; else commits from the last 24h; else the graphify report.
+func gatherReviewContext(repoDir, lastSHA, graphReportPath string) goapReviewContext {
+	const gitTimeout = 30 * time.Second
+
+	logArgs := []string{"log", "--stat", "--since=24 hours ago"}
+	diffArgs := []string{"log", "-p", "--since=24 hours ago"}
+	rangeDesc := "commits from the last 24 hours"
+	if lastSHA != "" {
+		if _, err := runGoapGit(repoDir, gitTimeout, "merge-base", "--is-ancestor", lastSHA, "HEAD"); err == nil {
+			spec := lastSHA + "..HEAD"
+			logArgs = []string{"log", "--stat", spec}
+			diffArgs = []string{"diff", spec}
+			rangeDesc = spec
+		}
+	}
+
+	stat, statErr := runGoapGit(repoDir, gitTimeout, logArgs...)
+	if statErr == nil && strings.TrimSpace(stat) != "" {
+		diff, _ := runGoapGit(repoDir, gitTimeout, diffArgs...)
+		body := fmt.Sprintf("### Commits (%s)\n%s\n\n### Diff\n%s",
+			rangeDesc, truncateGoap(stat, goapReviewStatLimit), truncateGoap(diff, goapReviewDiffLimit))
+		return goapReviewContext{mode: "commits", rangeDesc: rangeDesc, body: body}
+	}
+
+	report, _ := os.ReadFile(graphReportPath)
+	return goapReviewContext{
+		mode:      "graphify",
+		rangeDesc: "codebase structure (no unreviewed commits)",
+		body:      truncateGoap(string(report), goapReviewReportLimit),
+	}
+}
+
+func buildClaudeReviewPrompt(task string, rc goapReviewContext) string {
+	var focus string
+	if rc.mode == "commits" {
+		focus = fmt.Sprintf(`Review the following recent commits to this repository (%s). They were
+implemented by an automated pipeline and auto-committed WITHOUT human review.
+Hunt for: bugs, regressions, missing or weak tests, convention violations,
+and half-finished work.
+
+%s`, rc.rangeDesc, rc.body)
+	} else {
+		focus = fmt.Sprintf(`There are no unreviewed commits. Instead, review the codebase structure
+report below (%s) and identify the single highest-impact structural fix.
+
+%s`, rc.rangeDesc, rc.body)
+	}
+
+	return fmt.Sprintf(`You are the code-review fallback of an autonomous GOAP fusion improvement cycle
+(NotebookLM research is unavailable). You may Read/Glob/Grep files and run
+read-only git commands to verify what you see. Do not edit any files — a later
+pipeline stage implements fixes.
+
+Task context: %s
+
+%s
+
+Return EXACTLY this format:
+GOAL: <one specific code change the next automated Superpowers/Claude run should implement>
+GAP: <why the current go-bt-evolve codebase needs it — cite the commit or file you reviewed>
+FILES: <likely files or packages to inspect/change>
+TESTS: <specific Go tests/build commands to verify it>
+FINDINGS: <bullet list of everything else you found, most severe first>
+
+Rules:
+- Prefer fixing a concrete defect you actually found over generic improvements.
+- The goal must be small enough for one scheduled coding run.
+- If the reviewed code is clean, say so in FINDINGS and put the best
+  code-level next step in GOAL.`, task, focus)
 }
