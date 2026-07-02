@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -174,6 +176,69 @@ func registerSuperpowersProductionActions() {
 			}
 		}
 		bb.Result = fmt.Sprintf("## Design Validated\n\nPath: `%s`", run.DesignPath)
+		return 1
+	})
+
+	// GrillDesignArtifact interrogates the validated design: it asks Claude
+	// to generate up to 12 "Q [critical|normal] <branch>: <question>" lines,
+	// answers them via NotebookLM (batched ≤5/call to respect the free-plan
+	// 50/day quota) falling back to a Web answerer, appends a "## Grill Q&A"
+	// section to design.md, and fails the phase iff any [critical] question
+	// is still OPEN after all fallbacks. There is no compatible web-research
+	// action to wire as the fallback (see webGrillAnswerer below), so Web is
+	// nil and unanswered questions degrade straight to OPEN.
+	RegisterAction("GrillDesignArtifact", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
+		run, ok := getSuperpowersRun(bb)
+		if !ok || run.DesignPath == "" {
+			bb.Result = "## Grill Design Failed\n\nNo Superpowers design path in run state."
+			return -1
+		}
+		data, err := os.ReadFile(run.DesignPath)
+		if err != nil {
+			bb.Result = "## Grill Design Failed\n\n" + err.Error()
+			return -1
+		}
+		designContent := string(data)
+
+		if run.Mode == SuperpowersModeDryRun {
+			dryMarkdown := "\n## Grill Q&A\n\n_DRY RUN: question generation and answerers skipped._\n\n" +
+				"**Q (dry-run, N/A):** N/A\n\n**A:** OPEN-dry-run\n\n"
+			if err := os.WriteFile(run.DesignPath, []byte(designContent+dryMarkdown), 0o644); err != nil {
+				bb.Result = "## Grill Design Failed\n\n" + err.Error()
+				return -1
+			}
+			bb.ChainState["grill_open_critical"] = 0
+			bb.Result = "## Grill Design (dry run)\n\nExternal calls skipped; marked OPEN-dry-run."
+			return 1
+		}
+
+		grillPrompt := fmt.Sprintf(`Interview this design relentlessly (grill-me). Walk every design-tree branch. Output ONLY lines "Q [critical|normal] <branch>: <question>". Max 12 questions. Mark [critical] only where a wrong answer breaks correctness, data, or security.
+
+## Design
+
+%s`, designContent)
+
+		claudeRes := defaultSuperpowersClaudeRunner.RunClaude(context.Background(), run.WorktreePathOrRepo(), grillPrompt)
+		qs := parseGrillQuestions(claudeRes.Output)
+
+		res := resolveGrillQuestions(context.Background(), qs, grillAnswerers{
+			NotebookLM: grillNotebookLMAnswerer,
+			Web:        nil, // no batched-question web-research action exists to wire; see comment above
+		})
+
+		if err := os.WriteFile(run.DesignPath, []byte(designContent+res.Markdown), 0o644); err != nil {
+			bb.Result = "## Grill Design Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.ChainState["grill_open_critical"] = res.OpenCritical
+		bb.Result = fmt.Sprintf("## Grill Design Complete\n\nQuestions: %d\nOpen critical: %d", len(qs), res.OpenCritical)
+		if res.OpenCritical > 0 {
+			return -1
+		}
 		return 1
 	})
 
@@ -843,4 +908,105 @@ func isClaudeRateLimit(errStr string) bool {
 		strings.Contains(lower, "usage limit") ||
 		strings.Contains(lower, "quota exceeded") ||
 		strings.Contains(lower, "resets")
+}
+
+// nlmGrillAnswerer answers a batch of grill questions (≤5, enforced by
+// resolveGrillQuestions) with a single `nlm notebook query` call. The nlm CLI
+// has no multi-question "ask" endpoint (confirmed via `nlm notebook query
+// --help`: it takes exactly one NOTEBOOK_ID and one QUESTION), so batching is
+// realized by folding all questions for this call into one numbered prompt
+// and asking NotebookLM to answer them with matching "A<n>:" markers — this
+// is what keeps the call count within the free-plan 50/day budget instead of
+// spending one call per question.
+//
+// Before spending the call, and again on the response, the output is checked
+// for auth/quota/error markers (including RESOURCE_EXHAUSTED — nlm error code
+// 8, the daily-quota-exhaustion signature) via nlmGrillUnavailable. A past bug
+// wrote quota error text straight into artifacts as if it were an answer;
+// this guard returns errAnswererUnavailable instead so resolveGrillQuestions
+// leaves those questions OPEN for the next answerer (or OPEN in the final
+// markdown) rather than fabricating content from error output.
+// grillNotebookLMAnswerer is the swappable indirection GrillDesignArtifact
+// calls through, mirroring defaultSuperpowersClaudeRunner /
+// defaultSuperpowersCommandRunner: production wiring is nlmGrillAnswerer,
+// but nlmRun (unlike ClaudeRunner/CommandRunner) execs the real nlm binary
+// unconditionally with no interface seam of its own, so tests substitute
+// this var instead to stay off the network entirely.
+var grillNotebookLMAnswerer = nlmGrillAnswerer
+
+func nlmGrillAnswerer(_ context.Context, batch []grillQuestion) (map[int]string, error) {
+	if len(batch) == 0 {
+		return map[int]string{}, nil
+	}
+	authOut := nlmRun(30*time.Second, "login", "--check")
+	if nlmGrillUnavailable(authOut) {
+		return nil, errAnswererUnavailable
+	}
+
+	var prompt strings.Builder
+	prompt.WriteString("Answer each question below using only the notebook sources. Respond in EXACTLY this format, one line per question:\nA1: <answer>\nA2: <answer>\n...\nIf a question cannot be answered from the sources, respond \"A<n>: UNKNOWN\".\n\n")
+	for i, q := range batch {
+		fmt.Fprintf(&prompt, "Q%d [%s]: %s\n", i+1, q.Branch, q.Text)
+	}
+
+	out := nlmRun(180*time.Second, "notebook", "query", "--json", "--timeout", "150", defaultNotebook, prompt.String())
+	if nlmGrillUnavailable(out) {
+		return nil, errAnswererUnavailable
+	}
+
+	answer := extractNotebookLMAnswer(out)
+	parsed := parseNumberedAnswers(answer)
+	result := map[int]string{}
+	for i := range batch {
+		text, ok := parsed[i+1]
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text == "" || strings.EqualFold(text, "UNKNOWN") {
+			continue
+		}
+		result[i] = text
+	}
+	return result, nil
+}
+
+// nlmGrillUnavailable reports whether nlm CLI output indicates the
+// NotebookLM answerer cannot be trusted to have produced a real answer:
+// auth failures, the existing GOAP-fusion failure markers, or a quota/error
+// signature (RESOURCE_EXHAUSTED / "error code 8", the free-plan 50/day daily
+// quota exhaustion response).
+func nlmGrillUnavailable(out string) bool {
+	if isGoapNotebookLMFailure(out) {
+		return true
+	}
+	lower := strings.ToLower(out)
+	return strings.Contains(lower, "resource_exhausted") ||
+		strings.Contains(lower, "quota") ||
+		strings.Contains(lower, "error code: 8") ||
+		strings.Contains(lower, "error code 8") ||
+		strings.Contains(lower, "unauthenticated") ||
+		strings.Contains(lower, "permission_denied")
+}
+
+// parseNumberedAnswers splits a "A1: ...\nA2: ...\n" formatted NotebookLM
+// answer back into per-question text, keyed by the 1-based question number
+// nlmGrillAnswerer assigned in its prompt.
+func parseNumberedAnswers(text string) map[int]string {
+	result := map[int]string{}
+	re := regexp.MustCompile(`(?m)^A(\d+):\s*`)
+	matches := re.FindAllStringSubmatchIndex(text, -1)
+	for i, m := range matches {
+		idx, err := strconv.Atoi(text[m[2]:m[3]])
+		if err != nil {
+			continue
+		}
+		start := m[1]
+		end := len(text)
+		if i+1 < len(matches) {
+			end = matches[i+1][0]
+		}
+		result[idx] = strings.TrimSpace(text[start:end])
+	}
+	return result
 }
