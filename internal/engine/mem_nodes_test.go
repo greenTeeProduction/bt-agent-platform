@@ -137,3 +137,55 @@ func TestMemSelector_AllChildrenFailClearsCursorAndFails(t *testing.T) {
 		t.Fatal("cursor must be cleared when all children fail")
 	}
 }
+
+func TestPersistentMemSequence_ResumesFromPersistedCursor(t *testing.T) {
+	var aCalls int
+	registerCountingAction(t, "TestPMSA", 0, &aCalls)
+	done := false
+	RegisterAction("TestPMSB", func(_ *btcore.BTContext[Blackboard]) int {
+		if done {
+			return 1
+		}
+		return 0
+	})
+	node := &evolution.SerializableNode{
+		Type: "PersistentMemSequence", Name: "PMSUnderTest",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "TestPMSA"},
+			{Type: "Action", Name: "TestPMSB"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+	if got := cmd.Run(ctx); got != 0 {
+		t.Fatalf("tick1: want RUNNING, got %d", got)
+	}
+
+	// Simulate process restart + JSON round-trip: rebuild tree on a blackboard
+	// whose cursor came back as float64.
+	bb2 := newTestBlackboard()
+	bb2.ChainState["memseq/PMSUnderTest"] = float64(1)
+	cmd2 := buildNode(node, bb2, "")
+	ctx2 := newTestBTContext(bb2)
+	done = true
+	if got := cmd2.Run(ctx2); got != 1 {
+		t.Fatalf("resumed tick: want SUCCESS, got %d", got)
+	}
+	if aCalls != 1 {
+		t.Fatalf("child A must not re-run after restart resume: %d calls", aCalls)
+	}
+}
+
+func TestValidate_MemoryNodesRequireUniqueNames(t *testing.T) {
+	root := &evolution.SerializableNode{
+		Type: "Sequence", Name: "root",
+		Children: []evolution.SerializableNode{
+			{Type: "PersistentMemSequence", Name: "", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed"}}},
+		},
+	}
+	msgs := ValidateTree(root) // signature: func ValidateTree(*evolution.SerializableNode) []string (validate.go:7)
+	if len(msgs) == 0 {
+		t.Fatal("expected validation message for unnamed PersistentMemSequence")
+	}
+}
