@@ -6,14 +6,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// superpowersWorktreeBase is the parent directory for all Superpowers run
+// worktrees. A var (not const) so sweep tests can point it at a temp dir.
+var superpowersWorktreeBase = "/tmp/worktrees"
+
+// staleSuperpowersWorktreeMaxAge is the grace period before an abandoned run
+// worktree is reaped by sweepStaleSuperpowersWorktrees. Failed runs keep
+// their worktree for diagnosis; anything older than this is a leak.
+const staleSuperpowersWorktreeMaxAge = 24 * time.Hour
 
 func planSuperpowersWorktree(run *SuperpowersRun) (string, string) {
 	slug := safeSlug(run.Task)
 	if len(slug) > 40 {
 		slug = slug[:40]
 	}
-	return filepath.Join("/tmp/worktrees", "superpowers-"+run.ID+"-"+slug), "superpowers/" + run.ID
+	return filepath.Join(superpowersWorktreeBase, "superpowers-"+run.ID+"-"+slug), "superpowers/" + run.ID
 }
 
 func validateSuperpowersWorktreePath(path string) error {
@@ -21,7 +31,7 @@ func validateSuperpowersWorktreePath(path string) error {
 		return fmt.Errorf("empty worktree path")
 	}
 	clean := filepath.Clean(path)
-	if !strings.HasPrefix(clean, "/tmp/worktrees/superpowers-") {
+	if !strings.HasPrefix(clean, filepath.Clean(superpowersWorktreeBase)+"/superpowers-") {
 		return fmt.Errorf("unsafe worktree path %q", path)
 	}
 	if strings.Contains(clean, "..") || clean == "/" || clean == "/tmp" || clean == superpowersRepoDir || clean == "/home/nico" {
@@ -98,4 +108,95 @@ func cleanupSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *
 		return fmt.Errorf("git worktree remove failed: %v\n%s", res.Err, res.Output)
 	}
 	return nil
+}
+
+// cleanupAppliedSuperpowersWorktree removes the run's worktree and deletes its
+// branch after a successful apply. At that point the branch's commits are on
+// master, so `git branch -d` succeeds; an unexpectedly unmerged branch makes
+// -d fail and is surfaced (not forced) so nothing unmerged is ever destroyed.
+func cleanupAppliedSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	if run == nil || run.Mode == SuperpowersModeDryRun || run.WorktreePath == "" || run.WorktreePath == run.RepoDir {
+		return nil
+	}
+	if err := cleanupSuperpowersWorktree(ctx, runner, run); err != nil {
+		return err
+	}
+	if branch := strings.TrimSpace(run.WorktreeBranch); branch != "" && branch != "dry-run" {
+		if res := runner.Run(ctx, run.RepoDir, "git", "branch", "-d", branch); res.Err != nil {
+			return fmt.Errorf("git branch -d %s failed: %v\n%s", branch, res.Err, res.Output)
+		}
+	}
+	return nil
+}
+
+// sweepStaleSuperpowersWorktrees reaps run worktrees under
+// superpowersWorktreeBase older than maxAge, except keepPath (the current
+// run). It exists because failure paths deliberately keep their worktree for
+// diagnosis — without a sweeper those leftovers accumulate until the disk
+// fills. Best-effort by design: it returns the removed paths and never fails
+// the calling run. Each swept worktree's branch is deleted with `git branch
+// -d` only, so a branch holding unmerged commits survives for manual triage.
+func sweepStaleSuperpowersWorktrees(ctx context.Context, runner CommandRunner, repoDir, keepPath string, maxAge time.Duration) []string {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	entries, err := os.ReadDir(superpowersWorktreeBase)
+	if err != nil {
+		return nil
+	}
+	branches := superpowersWorktreeBranches(ctx, runner, repoDir)
+	var removed []string
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "superpowers-") {
+			continue
+		}
+		path := filepath.Join(superpowersWorktreeBase, e.Name())
+		if keepPath != "" && path == filepath.Clean(keepPath) {
+			continue
+		}
+		if validateSuperpowersWorktreePath(path) != nil {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || time.Since(info.ModTime()) < maxAge {
+			continue
+		}
+		if res := runner.Run(ctx, repoDir, "git", "worktree", "remove", "--force", path); res.Err != nil {
+			// Not a registered worktree (orphan dir), or removal failed:
+			// prune stale registrations and delete the directory directly —
+			// path is guarded by validateSuperpowersWorktreePath above.
+			runner.Run(ctx, repoDir, "git", "worktree", "prune")
+			if os.RemoveAll(path) != nil {
+				continue
+			}
+		}
+		removed = append(removed, path)
+		if branch := branches[path]; branch != "" {
+			runner.Run(ctx, repoDir, "git", "branch", "-d", branch)
+		}
+	}
+	return removed
+}
+
+// superpowersWorktreeBranches maps registered worktree paths to their branch
+// names via `git worktree list --porcelain`.
+func superpowersWorktreeBranches(ctx context.Context, runner CommandRunner, repoDir string) map[string]string {
+	branches := map[string]string{}
+	res := runner.Run(ctx, repoDir, "git", "worktree", "list", "--porcelain")
+	if res.Err != nil {
+		return branches
+	}
+	var current string
+	for _, line := range strings.Split(res.Output, "\n") {
+		line = strings.TrimSpace(line)
+		if p, ok := strings.CutPrefix(line, "worktree "); ok {
+			current = filepath.Clean(p)
+		} else if b, ok := strings.CutPrefix(line, "branch "); ok && current != "" {
+			branches[current] = strings.TrimPrefix(b, "refs/heads/")
+		}
+	}
+	return branches
 }

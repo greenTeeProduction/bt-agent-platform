@@ -816,6 +816,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	}
 	c, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
+	// Reap worktrees leaked by earlier crashed/abandoned cycles before doing
+	// new work; failure paths below intentionally keep their worktree for
+	// diagnosis, and this sweep is what eventually reclaims them.
+	if swept := sweepStaleSuperpowersWorktrees(c, defaultSuperpowersCommandRunner, run.RepoDir, run.WorktreePath, staleSuperpowersWorktreeMaxAge); len(swept) > 0 {
+		Info("swept stale superpowers worktrees", "count", len(swept), "paths", strings.Join(swept, ", "))
+	}
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
 		errStr := err.Error()
 		if isClaudeRateLimit(errStr) {
@@ -851,6 +857,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	}
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
+	// The run's work is applied to master; the worktree and its merged branch
+	// are done. Cleanup is best-effort — a failure here must not turn a
+	// successfully applied run into a reported failure.
+	if err := cleanupAppliedSuperpowersWorktree(c, defaultSuperpowersCommandRunner, run); err != nil {
+		Info("superpowers worktree cleanup after apply failed (non-fatal)", "run", run.ID, "err", err.Error())
+	}
 	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`\nApply status: `%s`\nCommit: `%s`", run.ID, finishPath, run.ApplyStatus, run.AppliedCommit)
 	return 1
 }
