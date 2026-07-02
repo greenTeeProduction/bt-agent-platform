@@ -29,6 +29,9 @@ func TestClassifyTaskKind_Heuristics(t *testing.T) {
 	if k := runClassify(t, "gofmt the repo"); k != "direct" {
 		t.Fatalf("short no-keyword task: got %q", k)
 	}
+	if k := runClassify(t, "Fix the crash in the newly added dashboard feature build"); k != "bug" {
+		t.Fatalf("bug-over-creative priority: got %q", k)
+	}
 }
 
 func TestClassifyTaskKind_Idempotent(t *testing.T) {
