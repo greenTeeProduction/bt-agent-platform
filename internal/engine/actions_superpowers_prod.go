@@ -831,7 +831,10 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
 			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude Code session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", planPath, errStr)
 			bb.Outcome = "goap_fusion_rate_limited"
-			return 0 // non-fatal — let the tree fall through to analysis path
+			// -1, not 0: a Selector only advances to its next child on Failure;
+			// 0 means Running in this engine and re-ticks the tree until the
+			// runner's maxTicks cap stamps the run "partial".
+			return -1
 		}
 		bb.Result = "## GOAP Superpowers Execution Failed\n\n" + errStr
 		return -1

@@ -340,8 +340,10 @@ func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T) {
 	}
 
 	start := time.Now()
-	if got := grill(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 0 {
-		t.Fatalf("GrillMe status = %d, want 0 (soft skip)", got)
+	if got := grill(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		// 1 (Success), not 0: 0 is Running in this engine and re-ticks the
+		// memoryless Sequence until the runner stamps the run "partial".
+		t.Fatalf("GrillMe status = %d, want 1 (skip, continue to ResearchRouter)", got)
 	}
 	if bb.Outcome != "goap_fusion_grill_skipped_quota" {
 		t.Fatalf("GrillMe outcome = %q", bb.Outcome)

@@ -368,7 +368,11 @@ func registerGoapFusionActions() {
 			until, _ := nlmQuotaExhaustedUntil(bb)
 			bb.Result = fmt.Sprintf("## GrillMe Skipped\n\nNotebookLM daily quota window exhausted until %s; skipping to preserve calls.", until.Format(time.RFC3339))
 			bb.Outcome = "goap_fusion_grill_skipped_quota"
-			return 0 // non-fatal, same as a grill failure
+			// 1, not 0: in this engine 0 means Running — a memoryless Sequence
+			// re-ticks from the top forever and the run dies "partial" at the
+			// maxTicks cap. Success lets the Sequence advance to ResearchRouter,
+			// whose Claude review fallback exists exactly for this quota case.
+			return 1
 		}
 		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
 		graphSnippet := truncateGoap(string(graphBytes), 3500)
@@ -444,7 +448,9 @@ func registerGoapFusionActions() {
 			// If grill fails, fall back to single-shot research path
 			bb.Result = fmt.Sprintf("## GrillMe Round %d Failed\n\nNotebookLM query failed; falling back to single-shot research.\n\n```\n%s\n```", grillRound, truncateGoap(out, 2000))
 			bb.Outcome = "goap_fusion_grill_failed"
-			return 0 // non-fatal — let the pipeline continue with single-shot
+			// 1, not 0 (Running): see the quota-skip note above — the Sequence
+			// only continues to the single-shot research path on Success.
+			return 1
 		}
 
 		answer := extractNotebookLMAnswer(out)
