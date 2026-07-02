@@ -385,7 +385,13 @@ func registerSuperpowersProductionActions() {
 		}
 		c, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
-		err = superpowersTaskGreen(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		// review_feedback is set by a prior SuperpowersTaskReview "needs_work"
+		// verdict (see ReviewCycle decorator, review_cycle.go); when present it
+		// is injected into the GREEN prompt so Claude addresses the reviewer's
+		// concerns on this pass, and left in place until the decorator clears
+		// it on approval.
+		feedback, _ := bb.ChainState["review_feedback"].(string)
+		err = superpowersTaskGreen(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task, feedback)
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
 			bb.Result = "## Superpowers Task GREEN Failed\n\n" + err.Error()
@@ -421,6 +427,57 @@ func registerSuperpowersProductionActions() {
 			return -1
 		}
 		bb.Result = fmt.Sprintf("## Superpowers Task Verify GREEN Passed\n\nTask: %s (status: %s)", task.Title, task.Status)
+		return 1
+	})
+
+	// SuperpowersTaskReview backs the ReviewCycle decorator's reviewer_action
+	// slot (review_cycle.go): it makes a separate Claude call reviewing the
+	// worktree's current `git diff` against the task spec, and writes the
+	// parsed verdict/feedback onto ChainState["review_verdict"]/
+	// ["review_feedback"] for the decorator to act on. An unparseable or
+	// missing verdict defaults to "needs_work" (see
+	// parseSuperpowersReviewVerdict) — the same safe default the decorator
+	// itself falls back to.
+	RegisterAction("SuperpowersTaskReview", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, dryRun, ok, err := ensureSuperpowersForEachTaskSetup(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task Review Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		if err != nil {
+			_ = writeSuperpowersRunJSON(run)
+			bb.Result = "## Superpowers Task Review Failed\n\n" + err.Error()
+			return -1
+		}
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
+		if dryRun {
+			_ = writeSuperpowersRunJSON(run)
+			// Nothing was actually implemented in dry-run mode; approve
+			// trivially so a ReviewCycle wrapping this action does not spin
+			// through max_iterations reviewing a no-op change.
+			bb.ChainState["review_verdict"] = "approved"
+			delete(bb.ChainState, "review_feedback")
+			bb.Result = fmt.Sprintf("## Superpowers Task Review Skipped (dry run)\n\nTask: %s", task.Title)
+			return 1
+		}
+		c, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		verdict, feedback, err := superpowersTaskReview(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		_ = writeSuperpowersRunJSON(run)
+		if err != nil {
+			bb.Result = "## Superpowers Task Review Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.ChainState["review_verdict"] = verdict
+		if feedback != "" {
+			bb.ChainState["review_feedback"] = feedback
+		} else {
+			delete(bb.ChainState, "review_feedback")
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task Review Complete\n\nTask: %s\nVerdict: %s", task.Title, verdict)
 		return 1
 	})
 

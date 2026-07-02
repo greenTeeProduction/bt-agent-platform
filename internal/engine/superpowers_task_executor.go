@@ -91,10 +91,14 @@ func superpowersTaskVerifyRed(ctx context.Context, runner CommandRunner, run *Su
 
 // superpowersTaskGreen executes the GREEN/REFACTOR phase: it feeds the RED
 // evidence back to Claude Code and asks it to implement the minimal
-// production code needed to pass the RED test.
-func superpowersTaskGreen(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, task *SuperpowersTask) error {
+// production code needed to pass the RED test. When feedback is non-empty
+// (set by a prior SuperpowersTaskReview "needs_work" verdict via
+// ChainState["review_feedback"]), it is appended to the prompt so Claude
+// addresses the reviewer's concerns on the next pass; an empty feedback
+// leaves the prompt unchanged from before the ReviewCycle decorator existed.
+func superpowersTaskGreen(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, task *SuperpowersTask, feedback string) error {
 	redEvidence, _ := os.ReadFile(filepath.Join(task.ArtifactDir, "red.txt"))
-	greenPrompt := buildSuperpowersGreenPrompt(run, *task, string(redEvidence))
+	greenPrompt := buildSuperpowersGreenPrompt(run, *task, string(redEvidence), feedback)
 	greenClaudeRes := claude.RunClaude(ctx, run.WorktreePath, greenPrompt)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green-claude-output.md"), []byte(greenClaudeRes.Output), 0o644)
 	redClaudeOutput, _ := os.ReadFile(filepath.Join(task.ArtifactDir, "red-claude-output.md"))
@@ -159,7 +163,7 @@ func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *Superpowe
 	if err := superpowersTaskVerifyRed(ctx, e.Runner, run, &task); err != nil {
 		return task, err
 	}
-	if err := superpowersTaskGreen(ctx, e.Runner, e.Claude, run, &task); err != nil {
+	if err := superpowersTaskGreen(ctx, e.Runner, e.Claude, run, &task, ""); err != nil {
 		return task, err
 	}
 	if err := superpowersTaskVerifyGreen(ctx, e.Runner, run, &task); err != nil {
@@ -317,8 +321,8 @@ RED phase rules:
 `, run.WorktreePathOrRepo(), task.Index, task.Title, task.Objective, strings.Join(task.Files, ", "), strings.Join(task.Tests, "; "), task.Body)
 }
 
-func buildSuperpowersGreenPrompt(run *SuperpowersRun, task SuperpowersTask, redOutput string) string {
-	return fmt.Sprintf(`You are Claude Code executing the GREEN/REFACTOR phase of one Superpowers SDLC task.
+func buildSuperpowersGreenPrompt(run *SuperpowersRun, task SuperpowersTask, redOutput string, feedback string) string {
+	prompt := fmt.Sprintf(`You are Claude Code executing the GREEN/REFACTOR phase of one Superpowers SDLC task.
 
 Repo: %s
 Task %d: %s
@@ -341,4 +345,8 @@ GREEN phase rules:
 - Preserve existing functionality and do not edit graphify-out or secrets.
 - Return final schema: FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES.
 `, run.WorktreePathOrRepo(), task.Index, task.Title, task.Objective, strings.Join(task.Files, ", "), strings.Join(task.Tests, "; "), truncateGoap(redOutput, 4000), task.Body)
+	if strings.TrimSpace(feedback) != "" {
+		prompt += fmt.Sprintf("\nAddress this review feedback: %s\n", strings.TrimSpace(feedback))
+	}
+	return prompt
 }
