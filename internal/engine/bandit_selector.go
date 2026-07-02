@@ -8,11 +8,45 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
+
+// banditLocks is a package-level per-stats-path mutex registry, mirroring
+// the `semaphores` registry in semaphore_guard.go. Every load-modify-save
+// cycle for a given stats path holds that path's mutex (acquired via
+// banditLockFor), so two same-named BanditSelectors built for different
+// trees, or concurrent goroutines each ticking their own instance (e.g.
+// mcp_server.go dispatches tool calls to per-request goroutines), cannot
+// interleave a read with another's write and drop an outcome — in
+// particular it prevents concurrent writers from stepping on the same
+// "<path>.tmp" staging file used by saveBanditStats.
+//
+// This registry only covers races within a single process: it is in-memory,
+// so it cannot serialize two separate OS processes writing to the same
+// stats path. The atomic tmp+rename write (ADR-003) still guarantees the
+// file itself is never left half-written under a cross-process race, but a
+// lost update (one process's save overwriting another's) remains possible.
+// That's accepted: bandit stats are advisory ordering hints, not a
+// consistency-critical ledger.
+var banditLocks = struct {
+	mu sync.Mutex
+	m  map[string]*sync.Mutex
+}{m: map[string]*sync.Mutex{}}
+
+func banditLockFor(path string) *sync.Mutex {
+	banditLocks.mu.Lock()
+	defer banditLocks.mu.Unlock()
+	if l, ok := banditLocks.m[path]; ok {
+		return l
+	}
+	l := &sync.Mutex{}
+	banditLocks.m[path] = l
+	return l
+}
 
 // banditStats is the persisted outcome store for a BanditSelector node, keyed
 // by child name (fallback "child_<i>" for unnamed children). Each slice is
@@ -153,6 +187,26 @@ func banditUCB1Order(keys []string, stats *banditStats) []int {
 // name>.json, written atomically (tmp + rename, ADR-003). A missing or
 // corrupt stats file starts empty rather than failing the node. A malformed
 // config (zero children) yields a failing action instead of panicking.
+//
+// Concurrency: every load-modify-save cycle holds this node's path-scoped
+// lock from banditLockFor — see that registry's doc comment for exactly what
+// is (same-process races) and isn't (cross-process races) covered.
+//
+// Caching: stats are loaded once and cached in this closure; subsequent
+// ticks of the *same built command* reuse the cache instead of re-reading
+// the file (mutation of the cache is guarded by the same lock). This means
+// writes another closure makes to the same stats path after this one's
+// first load are not observed for the rest of this closure's lifetime —
+// acceptable, since these stats are advisory ordering hints, not ground
+// truth that selection correctness depends on.
+//
+// Resuming a RUNNING child: when enabled, a child that returns RUNNING is
+// pinned via a ChainState cursor ("bandit/<name>/running") and is resumed
+// first on the next tick regardless of what a fresh UCB1 recompute would
+// rank first — otherwise a re-tick could reorder arms out from under an
+// in-flight child and abandon it. The cursor is cleared once that child
+// reaches a terminal result; on failure, selection continues from the
+// remaining order in the same tick.
 func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
@@ -177,8 +231,41 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 		keys[i] = banditChildKey(&node.Children[i], i)
 	}
 
+	lock := banditLockFor(banditStatsPath(node.Name))
+	var cached *banditStats // guarded by lock; loaded once, then reused (Finding 2)
+	runningKey := "bandit/" + node.Name + "/running"
+
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		stats := loadBanditStats(node.Name)
+		lock.Lock()
+		defer lock.Unlock()
+
+		if cached == nil {
+			cached = loadBanditStats(node.Name)
+		}
+		stats := cached
+		dirty := false
+
+		// Resume a pinned RUNNING child first (Finding 3), bypassing
+		// whatever the current recompute would otherwise rank first.
+		resumed := -1
+		if idx, ok := chainStateInt(ctx.Blackboard, runningKey); ok && idx >= 0 && idx < len(children) {
+			resumed = idx
+			switch code := children[idx].Run(ctx); {
+			case code == 0:
+				ctx.Blackboard.ChainState[runningKey] = idx
+				return 0
+			case code > 0:
+				recordBanditOutcome(stats, keys[idx], true, window)
+				delete(ctx.Blackboard.ChainState, runningKey)
+				saveBanditStats(node.Name, stats)
+				return 1
+			default:
+				recordBanditOutcome(stats, keys[idx], false, window)
+				delete(ctx.Blackboard.ChainState, runningKey)
+				dirty = true
+				// fall through: continue selection from the remaining order
+			}
+		}
 
 		order := make([]int, len(children))
 		for i := range order {
@@ -188,11 +275,14 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 			order = banditUCB1Order(keys, stats)
 		}
 
-		dirty := false
 		result := -1
 		for _, idx := range order {
+			if idx == resumed {
+				continue // already tried (and failed) earlier this tick
+			}
 			code := children[idx].Run(ctx)
 			if code == 0 {
+				ctx.Blackboard.ChainState[runningKey] = idx
 				if dirty {
 					saveBanditStats(node.Name, stats)
 				}

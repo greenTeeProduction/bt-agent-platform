@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -195,6 +196,192 @@ func TestBanditSelector_ZeroChildrenFailsWithoutPanic(t *testing.T) {
 
 	if got := cmd.Run(ctx); got != -1 {
 		t.Fatalf("want FAILURE for zero-child BanditSelector, got %d", got)
+	}
+}
+
+// TestBanditSelector_ResumesRunningChildDespiteReordering (Finding 3): an
+// enabled BanditSelector must resume an in-flight RUNNING child on the next
+// tick even if a UCB1 recompute would otherwise rank a different arm first.
+// childA has the better seeded stats so it is tried (and ticked) first;
+// childA reports RUNNING (not recorded, so its own tally is untouched)
+// between the two ticks the on-disk stats file is rewritten so that, if
+// re-read, childB would now rank first — reproducing the "another actor
+// changed the ranking while we were mid-flight" scenario from the review
+// finding. The fix (a running-child cursor in ChainState) must resume
+// childA regardless; childB must never be touched.
+func TestBanditSelector_ResumesRunningChildDespiteReordering(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BT_BANDIT_DIR", dir)
+
+	nodeName := "BanditResumeUnderTest"
+	seed := banditStats{Outcomes: map[string][]bool{
+		"BanditResumeChildA": {true, true, true, true, true},      // mean 1.0: tried first
+		"BanditResumeChildB": {false, false, false, false, false}, // mean 0.0
+	}}
+	data, err := json.Marshal(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, nodeName+".json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	callsA, callsB := 0, 0
+	RegisterAction("BanditResumeChildA", func(_ *btcore.BTContext[Blackboard]) int {
+		callsA++
+		if callsA == 1 {
+			return 0 // RUNNING on the first tick, not recorded
+		}
+		return 1 // SUCCESS on resume
+	})
+	RegisterAction("BanditResumeChildB", func(_ *btcore.BTContext[Blackboard]) int {
+		callsB++
+		return 1
+	})
+
+	node := &evolution.SerializableNode{
+		Type:     "BanditSelector",
+		Name:     nodeName,
+		Metadata: map[string]any{"enabled": true},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "BanditResumeChildA"},
+			{Type: "Action", Name: "BanditResumeChildB"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+
+	if got := cmd.Run(ctx); got != 0 {
+		t.Fatalf("tick 1: want RUNNING, got %d", got)
+	}
+	if callsA != 1 || callsB != 0 {
+		t.Fatalf("tick 1: want childA tried first and childB untouched, got callsA=%d callsB=%d", callsA, callsB)
+	}
+
+	// Simulate the ranking-changing write a concurrent actor (or a stale
+	// per-tick reload) could observe between ticks: childB now dominates.
+	mutated := banditStats{Outcomes: map[string][]bool{
+		"BanditResumeChildA": {false, false, false, false, false},
+		"BanditResumeChildB": {true, true, true, true, true, true, true, true, true, true},
+	}}
+	mutatedData, err := json.Marshal(mutated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, nodeName+".json"), mutatedData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := cmd.Run(ctx); got != 1 {
+		t.Fatalf("tick 2: want SUCCESS, got %d", got)
+	}
+	if callsA != 2 {
+		t.Fatalf("tick 2: want childA resumed (2nd call), got callsA=%d", callsA)
+	}
+	if callsB != 0 {
+		t.Fatalf("tick 2: want childB never tried — the running-child cursor must pin childA, got callsB=%d", callsB)
+	}
+}
+
+// TestBanditSelector_ConcurrentTicksNoLostOutcomes (Finding 1): two
+// goroutines race a fresh BanditSelector command instance each tick against
+// the same node name (hence the same stats file). Without a per-path mutex
+// serializing each load-modify-save cycle, concurrent reads/writes to the
+// same tmp file (path+".tmp") and stale-read races drop outcomes. Run with
+// -race to also catch any in-memory race in the lock registry itself.
+func TestBanditSelector_ConcurrentTicksNoLostOutcomes(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BT_BANDIT_DIR", dir)
+
+	const nodeName = "BanditConcurrentUnderTest"
+	const perGoroutine = 150
+
+	RegisterAction("BanditConcurrentChild", func(_ *btcore.BTContext[Blackboard]) int {
+		return 1
+	})
+
+	node := &evolution.SerializableNode{
+		Type:     "BanditSelector",
+		Name:     nodeName,
+		Metadata: map[string]any{"enabled": false, "window": 1000}, // window large enough to hold every outcome
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "BanditConcurrentChild"},
+		},
+	}
+
+	tick := func() {
+		bb := newTestBlackboard()
+		cmd := buildNode(node, bb, "")
+		ctx := newTestBTContext(bb)
+		if got := cmd.Run(ctx); got != 1 {
+			t.Errorf("want SUCCESS, got %d", got)
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for g := 0; g < 2; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perGoroutine; i++ {
+				tick()
+			}
+		}()
+	}
+	wg.Wait()
+
+	stats := loadBanditStats(nodeName)
+	got := len(stats.Outcomes["BanditConcurrentChild"])
+	want := 2 * perGoroutine
+	if got != want {
+		t.Fatalf("recorded outcomes = %d, want %d (lost updates from an unsynchronized load-modify-save cycle)", got, want)
+	}
+}
+
+// TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload (Finding 2): a
+// cheap proxy for "no reload on every tick" — corrupt the on-disk stats file
+// after the first tick. loadBanditStats tolerates corrupt JSON by starting
+// empty, so a node that still reloads every tick would silently lose tick
+// 1's recorded outcome (the final file would hold only tick 2's). A node
+// that caches after the first load carries tick 1's outcome forward
+// regardless of what's on disk.
+func TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BT_BANDIT_DIR", dir)
+
+	nodeName := "BanditCacheUnderTest"
+	RegisterAction("BanditCacheChild", func(_ *btcore.BTContext[Blackboard]) int {
+		return 1
+	})
+	node := &evolution.SerializableNode{
+		Type:     "BanditSelector",
+		Name:     nodeName,
+		Metadata: map[string]any{"enabled": false, "window": 10},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "BanditCacheChild"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+
+	if got := cmd.Run(ctx); got != 1 {
+		t.Fatalf("tick 1: want SUCCESS, got %d", got)
+	}
+
+	if err := os.WriteFile(banditStatsPath(nodeName), []byte("not valid json{{{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := cmd.Run(ctx); got != 1 {
+		t.Fatalf("tick 2: want SUCCESS, got %d", got)
+	}
+
+	stats := loadBanditStats(nodeName)
+	outcomes := stats.Outcomes["BanditCacheChild"]
+	if len(outcomes) != 2 {
+		t.Fatalf("recorded outcomes = %d, want 2 (cache must survive a corrupted on-disk file between ticks)", len(outcomes))
 	}
 }
 

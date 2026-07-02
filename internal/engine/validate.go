@@ -12,10 +12,16 @@ import (
 // PersistentMemSequence, ForEachTask, BanditSelector) have unique, non-empty
 // names — their ChainState cursor keys (or, for BanditSelector, stats file
 // path) are derived from Name, so a missing or duplicate name causes cursor
-// collisions or clobbered stats files across resumed runs — and that
-// CachedCondition nodes never memoize an approval/HITL condition, since a
-// stale cached "approved" result would bypass a human gate. Returns a flat
-// list of validation messages.
+// collisions, or two logically distinct nodes to alias the same stats
+// file/cursor key within one tree — and that CachedCondition nodes never
+// memoize an approval/HITL condition, since a stale cached "approved" result
+// would bypass a human gate. This is a per-tree authoring check only: unique
+// names stop two *different* nodes from aliasing each other's state, but
+// they say nothing about concurrent access to a shared stats path (e.g. the
+// same node name reused across trees, or concurrent goroutines each ticking
+// their own instance) — see the locking and caching caveats documented on
+// BuildBanditSelector for what protects (and doesn't protect) that case.
+// Returns a flat list of validation messages.
 func ValidateTree(tree *evolution.SerializableNode) []string {
 	var msgs []string
 	nameCounts := map[string]int{}
