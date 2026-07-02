@@ -287,6 +287,13 @@ func main() {
 		_ = tracingShutdown(ctx)
 	}()
 
+	logShutdown := engine.InitLogExport("bt-agent")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = logShutdown(ctx)
+	}()
+
 	// ── A2A Server ──────────────────────────────────────────────────────────
 	a2aPort := 8686
 	if p := os.Getenv("BT_A2A_PORT"); p != "" {

@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	mu        sync.Mutex
-	logger    *slog.Logger
-	rotWriter io.WriteCloser // rotating writer, closed on shutdown
+	mu            sync.Mutex
+	logger        *slog.Logger
+	rotWriter     io.WriteCloser // rotating writer, closed on shutdown
+	extraHandlers []slog.Handler
 )
 
 // Init initializes the logger with output to ~/.go-bt-evolve/logs/bt.log
@@ -27,31 +28,57 @@ func Init() {
 		return // already initialized
 	}
 
+	buildLogger()
+}
+
+// buildLogger constructs the global logger's handler chain: a base JSON
+// handler (rotating file + stderr, exactly as before) fanned out to any
+// attached extra handlers (e.g. the OTLP bridge), wrapped in the
+// trace-correlation handler so every record gains trace_id/span_id when its
+// context carries a span. The file handler is always first in the fanout
+// and always receives every record. Must be called under mu.
+func buildLogger() {
+	base := buildBaseHandler()
+
+	children := append([]slog.Handler{base}, extraHandlers...)
+	logger = slog.New(newTraceContextHandler(&fanoutHandler{children: children}))
+}
+
+// buildBaseHandler creates the base JSON handler writing to the rotating
+// log file and stderr (or a stderr-only text handler as a fallback).
+func buildBaseHandler() slog.Handler {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		return
+		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 
 	logDir := filepath.Join(home, ".go-bt-evolve", "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
-		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		return
+		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 
 	logPath := filepath.Join(logDir, "bt.log")
 	rw, err := NewRotatingWriter(logPath)
 	if err != nil {
-		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		return
+		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 	rotWriter = rw
 
 	// Write to both rotating file and stderr
 	w := io.MultiWriter(rw, os.Stderr)
-	logger = slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{
+	return slog.NewJSONHandler(w, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
-	}))
+	})
+}
+
+// attachLogHandler adds a handler (e.g. the OTLP bridge) to the global
+// logger's fanout. Must be called after Init; rebuilds the logger.
+func attachLogHandler(h slog.Handler) {
+	mu.Lock()
+	defer mu.Unlock()
+	extraHandlers = append(extraHandlers, h)
+	logger = nil // next L() rebuilds via Init path
+	buildLogger()
 }
 
 // L returns the global logger. Calls Init() if not initialized.

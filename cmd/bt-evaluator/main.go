@@ -177,6 +177,13 @@ func main() {
 		_ = tracingShutdown(ctx)
 	}()
 
+	logShutdown := engine.InitLogExport("bt-evaluator")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = logShutdown(ctx)
+	}()
+
 	if err := server.Run(); err != nil {
 		engine.Error("bt-evaluator: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)

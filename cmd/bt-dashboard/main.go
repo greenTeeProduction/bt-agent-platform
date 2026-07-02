@@ -22,6 +22,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/doormate"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
@@ -125,6 +126,13 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = tracingShutdown(ctx)
+	}()
+
+	logShutdown := engine.InitLogExport("bt-dashboard")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = logShutdown(ctx)
 	}()
 
 	// Auto-start bt-otlp-collector as a companion process if OTEL endpoint is

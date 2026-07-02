@@ -207,6 +207,13 @@ func main() {
 		_ = tracingShutdown(ctx)
 	}()
 
+	logShutdown := engine.InitLogExport("bt-langagent")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = logShutdown(ctx)
+	}()
+
 	if err := server.Run(); err != nil {
 		engine.Error("bt-langagent: server error", "error", err)
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
