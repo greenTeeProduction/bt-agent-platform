@@ -1166,7 +1166,7 @@ func ValidateRunnerStatus() bool
 
 `github.com/nico/go-bt-evolve/internal/dashboard`
 
-Dashboard API handlers for the bt-dashboard web UI. Provides endpoints for agent management, task execution, tree visualization, scalability monitoring, and OTLP collector stats. Wraps the agent registry, scheduler, and evaluator for browser-accessible operations.
+Dashboard API handlers for the bt-dashboard web UI. Provides endpoints for agent management, task execution, tree visualization, and scalability monitoring. Wraps the agent registry, scheduler, and evaluator for browser-accessible operations.
 
 ```go
 type AgentInfo struct { Name, Status, Schedule string; SuccessRate float64 }
@@ -1174,7 +1174,6 @@ type ScheduledJob struct { Name, Agent, Schedule, Status, LastRun string }
 func TaskApproveHandler(w http.ResponseWriter, r *http.Request)
 func TaskRejectHandler(w http.ResponseWriter, r *http.Request)
 func ScalabilityHandler(w http.ResponseWriter, r *http.Request)
-func OtlpStatsHandler(w http.ResponseWriter, r *http.Request)
 func AgentsHandler(w http.ResponseWriter, r *http.Request)
 ```
 
@@ -1187,7 +1186,6 @@ func AgentsHandler(w http.ResponseWriter, r *http.Request)
 | `bt-langagent` | — (MCP stdio) | Langchain ReAct agent (3 tools) |
 | `bt-dashboard` | 9800 | Web dashboard (20+ API endpoints) |
 | `bt-gardener` | — (daemon) | 24/7 tree evolution, 5-min cycles |
-| `bt-otlp-collector` | 4318 | OTLP/HTTP trace collector, auto-started by dashboard |
 | `bt-security-probe` | — (CLI) | 23-check security posture assessment |
 | `bt-scalability-probe` | — (CLI) | Single-node scalability probe and multi-node probing |
 | `bt-agent-cli` | — (CLI) | Agent management CLI |

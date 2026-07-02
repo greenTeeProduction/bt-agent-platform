@@ -531,7 +531,6 @@ func init() {
 			{"bt-evaluator", "bt-evaluator.service"},
 			{"bt-langagent", "bt-langagent.service"},
 			{"bt-dashboard", "bt-dashboard.service"},
-			{"bt-otlp-collector", "bt-otlp-collector.service"},
 		}
 		for _, ep := range expectedProcs {
 			psOut, err := exec.Command("bash", "-c", fmt.Sprintf("ps aux | grep '[b]%s' || true", strings.TrimPrefix(ep.name, "bt-"))).CombinedOutput()

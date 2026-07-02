@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - **(agents):** Unified agent platform — canonical `~/.go-bt-evolve/` paths, `RunOnce()` runner with memory/quality/input enforcement, registry-first dashboard listing, Workflows tab, async pipeline API, HITL approval wiring, MCP `bt_workflow_run` pipeline mode, operator guide (`docs/agents.md`).
 - **(agents):** Runtime YAML contracts — `inputs`, `quality`, and `outputs` validation on scheduler, MCP, CLI, and dashboard runs.
 - **(agents):** Live scheduling — `bt-agent-cli schedule` and dashboard create persist `scheduler-jobs.json`; running `bt-agent` syncs registry changes each tick.
+- **(observability):** Local Grafana stack (Tempo + Loki + Grafana) via `monitoring/docker-compose.yml` with provisioned trace↔log correlation and a BT Agent Runs dashboard; `make observability-up/down`.
+- **(observability):** OTel-Go SDK behind the `internal/tracing` facade; per-node spans via the action/condition registry, `agent.run` root spans, LLM call spans, webhook/DLQ spans; slog gains trace_id/span_id correlation, a run-scoped logger, and an OTLP log bridge to Loki (`BT_OTLP_LOGS_ENDPOINT`).
 
 ### Changed
 
@@ -19,10 +21,12 @@ All notable changes to this project will be documented in this file.
 - **(agents):** Agent delete clears scheduler jobs across dashboard, CLI, MCP, and `bt-assistant`.
 - **(engine):** Superpowers/GOAP-fusion claude runs default to `--model opus` when `BT_SUPERPOWERS_CLAUDE_MODEL` is unset — set the env var to `auto` (or `default`/`none`) to restore the CLI's own default model. Skip-permissions mode no longer drops the model flag.
 - **(agents):** Webhook event fields `failure_reason` and `nodes` carry raw values (error message, `a → b → c` node trace) without embedded display labels — consumer templates do the labeling.
+- **(logging):** All library packages log through structured slog (`log.Printf` eliminated from `internal/`); binaries `slog.SetDefault(engine.L())`.
 
 ### Removed
 
 - **(engine):** Deleted the dead GOAP fusion apply path — `ApplyImprovementWithClaude`, `ReadImprovementPlan`, `IsApplyRequest`, `IsResearchOrGapRequest` and their helpers (`runClaudeCode`, `buildClaudeFusionPrompt`, stash/reset/push git machinery) were registered but referenced by no tree; the live loop implements via `RunSuperpowersClaudeImplementation` (worktree-isolated, commits via `superpowers_apply.go`).
+- **(observability):** Homegrown tracing internals (console tracer, OTLP exporter, batcher, W3C parser, trace reader) and `cmd/bt-otlp-collector` — superseded by the OTel SDK and Tempo.
 
 ### Fixed
 
