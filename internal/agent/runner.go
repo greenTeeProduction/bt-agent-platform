@@ -138,7 +138,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	llmForRun := d.LLM
 	if d.LLM != nil {
 		llmRecorder = llm.NewErrorRecorder(d.LLM)
-		llmForRun = llmRecorder
+		llmForRun = llm.NewTracedLLM(llmRecorder, "agent-llm")
 	}
 	bb := &engine.Blackboard{
 		LLM:         llmForRun,
