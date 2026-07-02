@@ -55,6 +55,9 @@ const defaultSuperpowersAllowedTools = "Bash(git diff:*),Bash(git status:*),Bash
 
 type execClaudeRunner struct {
 	Bin string
+	// AllowedTools, when non-empty, replaces the env/default --allowedTools
+	// list. Used by the GOAP review fallback to run Claude read-only.
+	AllowedTools string
 }
 
 func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
@@ -63,7 +66,10 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 		bin = getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")
 	}
 	model := resolvedSuperpowersClaudeModel()
-	allowed := getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", defaultSuperpowersAllowedTools)
+	allowed := r.AllowedTools
+	if allowed == "" {
+		allowed = getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", defaultSuperpowersAllowedTools)
+	}
 	args := []string{"--print", "--allowedTools", allowed, "-p", prompt}
 	if strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
 		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
