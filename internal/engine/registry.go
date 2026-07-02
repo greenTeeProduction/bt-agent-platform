@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -31,24 +33,86 @@ var (
 
 // ─── Public registration API ────────────────────────────────────────────────
 
-// RegisterAction adds an action to the global registry.
+// RegisterAction adds an action to the global registry, wrapped in a tracing
+// decorator: every invocation emits a span bt.action/<name> parented on
+// bb.TraceContext. One seam instruments all current and future nodes.
 func RegisterAction(name string, fn ActionFunc) {
 	regMu.Lock()
 	defer regMu.Unlock()
 	if _, exists := actionRegistry[name]; exists {
 		panic(fmt.Sprintf("action %q already registered", name))
 	}
-	actionRegistry[name] = fn
+	actionRegistry[name] = tracedAction(name, fn)
 }
 
-// RegisterCondition adds a condition to the global registry.
+// RegisterCondition adds a condition to the global registry, wrapped in a
+// tracing decorator emitting bt.condition/<name> spans.
 func RegisterCondition(name string, fn ConditionFunc) {
 	regMu.Lock()
 	defer regMu.Unlock()
 	if _, exists := conditionRegistry[name]; exists {
 		panic(fmt.Sprintf("condition %q already registered", name))
 	}
-	conditionRegistry[name] = fn
+	conditionRegistry[name] = tracedCondition(name, fn)
+}
+
+func tracedAction(name string, fn ActionFunc) ActionFunc {
+	return func(ctx *btcore.BTContext[Blackboard]) int {
+		var bb *Blackboard
+		if ctx != nil {
+			bb = ctx.Blackboard
+		}
+		parent := context.Background()
+		if bb != nil && bb.TraceContext != nil {
+			parent = bb.TraceContext
+		}
+		spanCtx, span := tracing.StartSpan(parent, "bt.action/"+name)
+		span.SetAttribute("bt.node.kind", "action")
+		span.SetAttribute("bt.node.name", name)
+		var prev context.Context
+		if bb != nil {
+			prev = bb.TraceContext
+			bb.TraceContext = spanCtx // nested spans (LLM calls) parent here
+		}
+		status := fn(ctx)
+		if bb != nil {
+			bb.TraceContext = prev
+		}
+		span.SetAttribute("bt.status", actionStatusString(status))
+		span.End()
+		return status
+	}
+}
+
+func tracedCondition(name string, fn ConditionFunc) ConditionFunc {
+	return func(bb *Blackboard) bool {
+		parent := context.Background()
+		if bb != nil && bb.TraceContext != nil {
+			parent = bb.TraceContext
+		}
+		_, span := tracing.StartSpan(parent, "bt.condition/"+name)
+		span.SetAttribute("bt.node.kind", "condition")
+		span.SetAttribute("bt.node.name", name)
+		result := fn(bb)
+		if result {
+			span.SetAttribute("bt.status", "true")
+		} else {
+			span.SetAttribute("bt.status", "false")
+		}
+		span.End()
+		return result
+	}
+}
+
+func actionStatusString(status int) string {
+	switch {
+	case status > 0:
+		return "success"
+	case status == 0:
+		return "running"
+	default:
+		return "failure"
+	}
 }
 
 // ─── Provider interface for domain packages ─────────────────────────────────
