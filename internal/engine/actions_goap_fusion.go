@@ -327,6 +327,18 @@ func registerGoapFusionActions() {
 		bb := ctx.Blackboard
 		var results []string
 
+		// A bare main repo has no working tree to build: any files on disk are
+		// frozen leftovers from the pre-bare conversion, and go's VCS stamping
+		// dies on `git status` (exit 128). The run's changes were already
+		// build- and test-verified inside its worktree by the apply step
+		// (applySuperpowersRunFromBareRepo) — re-verifying here would check
+		// stale source, not what landed. Report and pass through.
+		if out, err := runGoapShell("git rev-parse --is-bare-repository"); err == nil && strings.TrimSpace(out) == "true" {
+			bb.Result = "## Verification Delegated\n\nMain repo is bare (no working tree to build); the run's changes were build- and test-verified in its worktree during apply. Skipping stale-tree re-verification."
+			setGoapState(bb, "verify_result", "delegated to apply-stage worktree verification (bare main repo)")
+			return 1
+		}
+
 		// runGoapShell's Dir is already goapFusionRepo; no cd needed. Outer
 		// shell deadlines must exceed the inner go tool budgets (see
 		// runGoapShellTimeout) so slow-but-passing runs aren't killed and

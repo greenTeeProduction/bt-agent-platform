@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/tracing"
@@ -533,9 +534,16 @@ func init() {
 			{"bt-dashboard", "bt-dashboard.service"},
 		}
 		for _, ep := range expectedProcs {
-			psOut, err := exec.Command("bash", "-c", fmt.Sprintf("ps aux | grep '[b]%s' || true", strings.TrimPrefix(ep.name, "bt-"))).CombinedOutput()
+			psOut, err := exec.Command("bash", "-c", fmt.Sprintf("ps aux | grep '%s' || true", psGrepPattern(ep.name))).CombinedOutput()
 			if err != nil || len(strings.TrimSpace(string(psOut))) == 0 {
 				fmt.Fprintf(&report, "- **%s**: NOT RUNNING", ep.name)
+				if testing.Testing() {
+					// A test binary observes the fleet, it never manages it:
+					// smoke-running agent_monitor from the pre-commit hook used
+					// to restart every bt service and kill in-flight cycles.
+					report.WriteString(" → restart skipped (test mode)\n")
+					continue
+				}
 				// Attempt restart via systemctl --user
 				restartOut, restartErr := exec.Command("systemctl", "--user", "restart", ep.service).CombinedOutput()
 				if restartErr != nil {
@@ -1161,6 +1169,18 @@ func parsePercentage(s string) (int, error) {
 	s = strings.TrimSuffix(s, "%")
 	s = strings.TrimSpace(s)
 	return strconv.Atoi(s)
+}
+
+// psGrepPattern wraps the first character of a process name in brackets so
+// the grep in `ps aux | grep` never matches itself while still matching the
+// full process name (e.g. "bt-agent" → "[b]t-agent"). The pattern must reduce
+// to the exact process name — stripping the prefix first (the old "[b]agent")
+// matches nothing and misreports every service as dead.
+func psGrepPattern(name string) string {
+	if name == "" {
+		return name
+	}
+	return "[" + name[:1] + "]" + name[1:]
 }
 
 // firstLine returns the first non-empty line of s, trimmed.
