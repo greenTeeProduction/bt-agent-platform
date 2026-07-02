@@ -22,6 +22,23 @@ func titleSuperpowersVerb(verb string) string {
 	return strings.ToUpper(verb[:1]) + verb[1:]
 }
 
+// currentSuperpowersForEachTask resolves the Superpowers run and the task a
+// ForEachTask loop is currently iterating on, using the
+// ChainState["superpowers_task_index"] cursor that BuildForEachTask sets on
+// every tick. The returned *SuperpowersTask aliases run.Tasks[idx], so phase
+// funcs can mutate it directly and callers just need to persist run.
+func currentSuperpowersForEachTask(bb *Blackboard) (*SuperpowersRun, *SuperpowersTask, bool) {
+	run, ok := getSuperpowersRun(bb)
+	if !ok {
+		return nil, nil, false
+	}
+	idx, ok := chainStateInt(bb, "superpowers_task_index")
+	if !ok || idx < 0 || idx >= len(run.Tasks) {
+		return nil, nil, false
+	}
+	return run, &run.Tasks[idx], true
+}
+
 func registerSuperpowersProductionActions() {
 	RegisterAction("LoadSuperpowersSkills", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -250,6 +267,141 @@ func registerSuperpowersProductionActions() {
 		}
 		bb.Result = fmt.Sprintf("## Superpowers Task Batch Complete\n\nTasks: %d\nMode: `%s`", len(run.Tasks), run.Mode)
 		return 1
+	})
+
+	// The five actions below let a ForEachTask loop drive one Superpowers
+	// task through the RED -> verify RED -> GREEN -> verify GREEN -> commit
+	// phases one BT tick at a time, instead of running the whole task inside
+	// a single ExecuteSuperpowersTaskBatch tick. Each action resolves its
+	// target task from ChainState["superpowers_task_index"] (set by
+	// BuildForEachTask), calls the matching phase func extracted from
+	// SuperpowersTaskExecutor.ExecuteTask, persists the run, and reports
+	// SUCCESS/FAILURE for the tree to act on.
+	RegisterAction("SuperpowersTaskRed", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, ok := currentSuperpowersForEachTask(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task RED Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		c, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+		err := superpowersTaskRed(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		_ = writeSuperpowersRunJSON(run)
+		if err != nil {
+			bb.Result = "## Superpowers Task RED Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task RED Complete\n\nTask: %s", task.Title)
+		return 1
+	})
+
+	RegisterAction("SuperpowersTaskVerifyRed", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, ok := currentSuperpowersForEachTask(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task Verify RED Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		c, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		err := superpowersTaskVerifyRed(c, defaultSuperpowersCommandRunner, run, task)
+		_ = writeSuperpowersRunJSON(run)
+		if err != nil {
+			bb.Result = "## Superpowers Task Verify RED Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task Verify RED Passed\n\nTask: %s", task.Title)
+		return 1
+	})
+
+	RegisterAction("SuperpowersTaskGreen", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, ok := currentSuperpowersForEachTask(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task GREEN Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		c, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+		err := superpowersTaskGreen(c, defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner, run, task)
+		_ = writeSuperpowersRunJSON(run)
+		if err != nil {
+			bb.Result = "## Superpowers Task GREEN Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task GREEN Complete\n\nTask: %s", task.Title)
+		return 1
+	})
+
+	RegisterAction("SuperpowersTaskVerifyGreen", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, ok := currentSuperpowersForEachTask(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task Verify GREEN Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		c, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		err := superpowersTaskVerifyGreen(c, defaultSuperpowersCommandRunner, run, task)
+		_ = writeSuperpowersRunJSON(run)
+		if err != nil {
+			bb.Result = "## Superpowers Task Verify GREEN Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task Verify GREEN Passed\n\nTask: %s (status: %s)", task.Title, task.Status)
+		return 1
+	})
+
+	RegisterAction("SuperpowersTaskCommit", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, task, ok := currentSuperpowersForEachTask(bb)
+		if !ok {
+			bb.Result = "## Superpowers Task Commit Failed\n\nNo Superpowers run/task index on blackboard."
+			return -1
+		}
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		dir := run.WorktreePathOrRepo()
+		add := defaultSuperpowersCommandRunner.Run(c, dir, "git", "add", "-A")
+		if add.Err != nil {
+			bb.Result = "## Superpowers Task Commit Failed\n\n" + add.Output
+			return -1
+		}
+		staged := runShellCommand(c, defaultSuperpowersCommandRunner, dir, "git diff --cached --quiet")
+		if staged.Err == nil {
+			bb.Result = fmt.Sprintf("## Superpowers Task Commit Skipped\n\nNo changes to commit for task %q", task.Title)
+			return 1
+		}
+		commit := defaultSuperpowersCommandRunner.Run(c, dir, "git", "commit", "-m", fmt.Sprintf("superpowers: %s", task.Title))
+		if commit.Err != nil {
+			bb.Result = "## Superpowers Task Commit Failed\n\n" + commit.Output
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Task Committed\n\nTask: %s", task.Title)
+		return 1
+	})
+
+	RegisterCondition("PlanHasIndependentTasks", func(bb *Blackboard) bool {
+		run, ok := getSuperpowersRun(bb)
+		if !ok {
+			return false
+		}
+		seen := map[string]bool{}
+		pending := 0
+		for _, t := range run.Tasks {
+			if t.Status == "done" {
+				continue
+			}
+			pending++
+			for _, f := range t.Files {
+				if seen[f] {
+					return false
+				}
+				seen[f] = true
+			}
+		}
+		return pending >= 2
 	})
 
 	RegisterAction("VerifySuperpowersRun", func(ctx *btcore.BTContext[Blackboard]) int {

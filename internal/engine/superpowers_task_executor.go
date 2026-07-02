@@ -14,18 +14,26 @@ type SuperpowersTaskExecutor struct {
 	Claude ClaudeRunner
 }
 
-func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *SuperpowersRun, task SuperpowersTask) (SuperpowersTask, error) {
-	if e.Runner == nil {
-		e.Runner = defaultSuperpowersCommandRunner
-	}
-	if e.Claude == nil {
-		e.Claude = defaultSuperpowersClaudeRunner
-	}
+// preRedStatusArtifact durably records the worktree's `git status` output
+// captured immediately before the RED phase starts. superpowersTaskVerifyRed
+// and superpowersTaskVerifyGreen read it back to diff against later snapshots,
+// so the baseline survives even when each phase runs as an independent BT
+// tick (e.g. via the SuperpowersTaskRed/VerifyRed/Green/VerifyGreen actions)
+// rather than in one in-process call like ExecuteTask.
+const preRedStatusArtifact = "pre-red-status.txt"
+
+// ensureSuperpowersTaskSetup performs the one-time, idempotent per-task setup
+// that both ExecuteTask and the standalone SuperpowersTaskRed action rely on:
+// resolving/creating the task artifact directory, writing the combined task
+// prompt artifact, and short-circuiting dry-run or no-test-command tasks
+// exactly as the original ExecuteTask did before any RED/GREEN work began.
+// Returns dryRun=true when the task is already fully handled (dry run mode).
+func ensureSuperpowersTaskSetup(run *SuperpowersRun, task *SuperpowersTask) (dryRun bool, err error) {
 	task.ArtifactDir = filepath.Join(run.ArtifactDir, "tasks", fmt.Sprintf("%02d-%s", task.Index, safeSlug(task.Title)))
 	if err := os.MkdirAll(task.ArtifactDir, 0o755); err != nil {
-		return task, err
+		return false, err
 	}
-	prompt := buildSuperpowersTaskPrompt(run, task)
+	prompt := buildSuperpowersTaskPrompt(run, *task)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "prompt.md"), []byte(prompt), 0o644)
 
 	if run.Mode == SuperpowersModeDryRun {
@@ -33,49 +41,77 @@ func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *Superpowe
 		_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte("DRY RUN: Claude Code not invoked; task prompt generated for approval."), 0o644)
 		_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red.txt"), []byte("DRY RUN: RED command not executed."), 0o644)
 		_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green.txt"), []byte("DRY RUN: GREEN command not executed."), 0o644)
-		return task, nil
+		return true, nil
 	}
 	if len(task.Tests) == 0 {
 		task.Status = "failed"
-		return task, fmt.Errorf("superpowers task %q has no test command; refusing non-TDD implementation", task.Title)
+		return false, fmt.Errorf("superpowers task %q has no test command; refusing non-TDD implementation", task.Title)
 	}
+	return false, nil
+}
 
-	before := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
+// superpowersTaskRed executes the RED phase: it captures the pre-change
+// worktree status (baseline for later drift checks) and asks Claude Code to
+// add/update only the failing regression test for the task.
+func superpowersTaskRed(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, task *SuperpowersTask) error {
+	before := runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, preRedStatusArtifact), []byte(before.Output), 0o644)
 
-	redPrompt := buildSuperpowersRedPrompt(run, task)
-	redClaudeRes := e.Claude.RunClaude(ctx, run.WorktreePath, redPrompt)
+	redPrompt := buildSuperpowersRedPrompt(run, *task)
+	redClaudeRes := claude.RunClaude(ctx, run.WorktreePath, redPrompt)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red-claude-output.md"), []byte(redClaudeRes.Output), 0o644)
 	if redClaudeRes.Err != nil {
 		task.Status = "failed"
-		return task, fmt.Errorf("red-phase claude failed: %v\n%s", redClaudeRes.Err, redClaudeRes.Output)
+		return fmt.Errorf("red-phase claude failed: %v\n%s", redClaudeRes.Err, redClaudeRes.Output)
 	}
+	return nil
+}
 
+// superpowersTaskVerifyRed runs the task's first test command and requires it
+// to fail (proving the RED test is real), then confirms the RED phase touched
+// only test files, not production Go files.
+func superpowersTaskVerifyRed(ctx context.Context, runner CommandRunner, run *SuperpowersRun, task *SuperpowersTask) error {
 	redCmd := task.Tests[0]
-	redRes := runShellCommand(ctx, e.Runner, run.WorktreePath, redCmd)
+	redRes := runShellCommand(ctx, runner, run.WorktreePath, redCmd)
 	redEvidence := formatCommandResult(redRes)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red.txt"), []byte(redEvidence), 0o644)
 	if redRes.Err == nil {
 		task.Status = "failed"
-		return task, fmt.Errorf("RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: %s", redCmd)
+		return fmt.Errorf("RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: %s", redCmd)
 	}
 
-	redStatus := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
-	if nonTest := nonTestGoFiles(changedFilesDeltaText(before.Output, redStatus.Output)); len(nonTest) > 0 {
+	before, _ := os.ReadFile(filepath.Join(task.ArtifactDir, preRedStatusArtifact))
+	redStatus := runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
+	if nonTest := nonTestGoFiles(changedFilesDeltaText(string(before), redStatus.Output)); len(nonTest) > 0 {
 		task.Status = "failed"
-		return task, fmt.Errorf("RED phase modified production Go files before GREEN: %s", strings.Join(nonTest, ", "))
+		return fmt.Errorf("RED phase modified production Go files before GREEN: %s", strings.Join(nonTest, ", "))
 	}
+	return nil
+}
 
-	greenPrompt := buildSuperpowersGreenPrompt(run, task, redEvidence)
-	greenClaudeRes := e.Claude.RunClaude(ctx, run.WorktreePath, greenPrompt)
+// superpowersTaskGreen executes the GREEN/REFACTOR phase: it feeds the RED
+// evidence back to Claude Code and asks it to implement the minimal
+// production code needed to pass the RED test.
+func superpowersTaskGreen(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, task *SuperpowersTask) error {
+	redEvidence, _ := os.ReadFile(filepath.Join(task.ArtifactDir, "red.txt"))
+	greenPrompt := buildSuperpowersGreenPrompt(run, *task, string(redEvidence))
+	greenClaudeRes := claude.RunClaude(ctx, run.WorktreePath, greenPrompt)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "green-claude-output.md"), []byte(greenClaudeRes.Output), 0o644)
-	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte("# RED phase\n\n"+redClaudeRes.Output+"\n\n# GREEN phase\n\n"+greenClaudeRes.Output), 0o644)
+	redClaudeOutput, _ := os.ReadFile(filepath.Join(task.ArtifactDir, "red-claude-output.md"))
+	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte("# RED phase\n\n"+string(redClaudeOutput)+"\n\n# GREEN phase\n\n"+greenClaudeRes.Output), 0o644)
 	if greenClaudeRes.Err != nil {
 		task.Status = "failed"
-		return task, fmt.Errorf("green-phase claude failed: %v\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
+		return fmt.Errorf("green-phase claude failed: %v\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
 	}
+	return nil
+}
 
+// superpowersTaskVerifyGreen runs every listed test command and requires all
+// of them to pass, then records the net set of files changed by the task and
+// marks it done.
+func superpowersTaskVerifyGreen(ctx context.Context, runner CommandRunner, run *SuperpowersRun, task *SuperpowersTask) error {
 	for i, cmd := range task.Tests {
-		res := runShellCommand(ctx, e.Runner, run.WorktreePath, cmd)
+		res := runShellCommand(ctx, runner, run.WorktreePath, cmd)
 		name := "green.txt"
 		if len(task.Tests) > 1 {
 			name = fmt.Sprintf("green-%02d.txt", i+1)
@@ -86,12 +122,49 @@ func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *Superpowe
 		}
 		if res.Err != nil {
 			task.Status = "failed"
-			return task, fmt.Errorf("task GREEN verification failed: %s\n%s", cmd, res.Output)
+			return fmt.Errorf("task GREEN verification failed: %s\n%s", cmd, res.Output)
 		}
 	}
-	after := e.Runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
-	run.ChangedFiles = mergeChangedFiles(run.ChangedFiles, changedFilesDeltaText(before.Output, after.Output))
+	before, _ := os.ReadFile(filepath.Join(task.ArtifactDir, preRedStatusArtifact))
+	after := runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--untracked-files=all")
+	run.ChangedFiles = mergeChangedFiles(run.ChangedFiles, changedFilesDeltaText(string(before), after.Output))
 	task.Status = "done"
+	return nil
+}
+
+// ExecuteTask runs one Superpowers task end-to-end through the RED -> verify
+// RED -> GREEN -> verify GREEN phases. It is a thin sequential caller of the
+// four phase funcs above; the phase funcs themselves also back the
+// SuperpowersTaskRed/VerifyRed/Green/VerifyGreen BT actions so a single task
+// can alternatively be driven one phase per tick from a ForEachTask loop.
+func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *SuperpowersRun, task SuperpowersTask) (SuperpowersTask, error) {
+	if e.Runner == nil {
+		e.Runner = defaultSuperpowersCommandRunner
+	}
+	if e.Claude == nil {
+		e.Claude = defaultSuperpowersClaudeRunner
+	}
+
+	dryRun, err := ensureSuperpowersTaskSetup(run, &task)
+	if err != nil {
+		return task, err
+	}
+	if dryRun {
+		return task, nil
+	}
+
+	if err := superpowersTaskRed(ctx, e.Runner, e.Claude, run, &task); err != nil {
+		return task, err
+	}
+	if err := superpowersTaskVerifyRed(ctx, e.Runner, run, &task); err != nil {
+		return task, err
+	}
+	if err := superpowersTaskGreen(ctx, e.Runner, e.Claude, run, &task); err != nil {
+		return task, err
+	}
+	if err := superpowersTaskVerifyGreen(ctx, e.Runner, run, &task); err != nil {
+		return task, err
+	}
 	return task, nil
 }
 
