@@ -409,3 +409,27 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerH
 		t.Fatalf("expected CONTINUE (1) on a window of distinct state hashes, got %d", status)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterialized
+// asserts the presence of the preflight guard that closes the P0 NotebookLM
+// research gap: the on-disk build directory the unattended scheduled GOAP fusion
+// cycle compiles and TDD-verifies against must be materialized to match HEAD.
+// When the main repository is bare (core.bare=true), applying a run fast-forwards
+// the bare `master` ref (`git fetch . <branch>:master`) but never checks that
+// tree out to the on-disk working files (superpowers_apply.go:118) — updating a
+// ref in a bare repo touches no file, so goapFusionRepo's tracked source stays
+// frozen at whatever the working tree last held, arbitrarily many commits behind
+// HEAD. The cycle's build and TDD verification step then compiles that stale tree
+// and the deployed binary is built from source that does not match HEAD, so the
+// loop's own committed fixes never reach the running code. The existing runtime
+// and toolchain guards confirm the repository directory and Go toolchain exist
+// but never confirm the on-disk tree matches HEAD. This guard closes that gap by
+// requiring the build directory's tracked working tree to be materialized to HEAD
+// — no tracked file whose on-disk content differs from the committed HEAD — before
+// the automatic research-to-implementation cycle proceeds, so a bare-repo run
+// fails fast with a clear diagnosis instead of silently building a stale tree.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterialized(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionBuildTreeMaterialized")
+	}
+}

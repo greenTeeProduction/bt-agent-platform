@@ -749,6 +749,51 @@ func goapFusionStateHashes(bb *Blackboard) []string {
 	}
 }
 
+// VerifyScheduledGoapFusionBuildTreeMaterialized is the preflight guard that
+// closes the P0 NotebookLM research gap: the on-disk build directory the
+// unattended scheduled GOAP fusion cycle compiles and TDD-verifies against must
+// be materialized to match HEAD. When the main repository is bare
+// (core.bare=true), applying a run fast-forwards the bare `master` ref
+// (`git fetch . <branch>:master`) but never checks that tree out to the on-disk
+// working files — updating a ref in a bare repo touches no file, so
+// goapFusionRepo's tracked source stays frozen at whatever the working tree last
+// held, arbitrarily many commits behind HEAD. The cycle's build and TDD
+// verification step then compiles that stale tree and the deployed binary is
+// built from source that does not match HEAD, so the loop's own committed fixes
+// never reach the running code. The runtime and toolchain guards confirm the
+// repository directory and Go toolchain exist but never confirm the on-disk tree
+// matches HEAD. This guard closes that gap by requiring the build directory's
+// tracked working tree to be materialized to HEAD — no tracked file whose
+// on-disk content differs from the committed HEAD — before the automatic
+// research-to-implementation cycle proceeds, so a bare-repo run fails fast with
+// a clear diagnosis instead of silently building a stale tree.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionBuildTreeMaterialized", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if info, err := os.Stat(goapFusionRepo); err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\ngo-bt-evolve build directory `%s` is not readable: %v", goapFusionRepo, err)
+			return -1
+		}
+
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		res := runShellCommand(c, defaultSuperpowersCommandRunner, goapFusionRepo, "git diff --name-only HEAD --")
+		if res.Err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nCould not compare the on-disk build tree in `%s` against HEAD; a bare (`core.bare=true`) repository has no materialized working tree, so the cycle would build stale source:\n\n%s", goapFusionRepo, formatCommandResult(res))
+			return -1
+		}
+
+		if stale := strings.TrimSpace(res.Output); stale != "" {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nThe on-disk build tree in `%s` is not materialized to HEAD; the following tracked file(s) differ from the committed HEAD and would be compiled stale, so the deployed binary would not match HEAD:\n\n%s", goapFusionRepo, stale)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Passed\n\nThe on-disk build tree in `%s` is materialized to HEAD; no tracked file differs from the committed HEAD.", goapFusionRepo)
+		return 1
+	})
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()
