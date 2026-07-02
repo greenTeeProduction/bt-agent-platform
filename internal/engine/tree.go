@@ -187,6 +187,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildSemaphoreGuard(node, bb)
 	case "ForEachTask":
 		return BuildForEachTask(node, bb)
+	case "ReviewCycle":
+		return BuildReviewCycle(node, bb)
 	case "Parallel":
 		return BuildParallel(node, bb)
 	case "Budget":
