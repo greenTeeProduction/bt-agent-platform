@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - **(agents):** Live scheduling — `bt-agent-cli schedule` and dashboard create persist `scheduler-jobs.json`; running `bt-agent` syncs registry changes each tick.
 - **(observability):** Local Grafana stack (Tempo + Loki + Grafana) via `monitoring/docker-compose.yml` with provisioned trace↔log correlation and a BT Agent Runs dashboard; `make observability-up/down`.
 - **(observability):** OTel-Go SDK behind the `internal/tracing` facade; per-node spans via the action/condition registry, `agent.run` root spans, LLM call spans, webhook/DLQ spans; slog gains trace_id/span_id correlation, a run-scoped logger, and an OTLP log bridge to Loki (`BT_OTLP_LOGS_ENDPOINT`).
+- **(engine):** GOAP fusion NotebookLM research falls back to a read-only Claude Code review of recent daemon commits when NotebookLM is unavailable (`ResearchRouter` selector). Quota errors (`RESOURCE_EXHAUSTED`) are cached on the agent-scope blackboard until the Pacific-midnight reset so subsequent cycles skip `nlm` calls entirely. Env: `BT_GOAP_REVIEW_ALLOWED_TOOLS` overrides the review's read-only tool list.
 
 ### Changed
 
