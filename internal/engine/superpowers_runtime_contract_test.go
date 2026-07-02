@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -482,5 +483,81 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	}
 	if stale := strings.TrimSpace(diff); stale != "" {
 		t.Fatalf("expected the on-disk build tree materialized to HEAD (no tracked file differs), but these still differ:\n%s", stale)
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner asserts
+// the continuous self-improving *loop runner* itself — the driver the whole
+// preflight-guard and circuit-breaker apparatus in this file exists to protect.
+// Every sibling test so far guards one input, tool, output location, or a single
+// cycle; the P0 NotebookLM research goal's "loop runner" is the action that
+// re-runs the research-to-implementation cycle indefinitely. Left ungoverned that
+// driver is the source of the two failure modes the research names — "Safety
+// Drift" and "Activity-Progress Confusion" [Source 207, 214, 215, 250] — because
+// an unbounded loop can spin on syntactically valid but redundant no-op patches
+// or iterate forever without ever advancing the goal. A production-grade loop
+// runner must therefore be a bounded, self-halting kernel: before it drives
+// another iteration it consults the CIRCUITPOLICY circuit breaker over the loop's
+// recent state-hash history (published on the blackboard under
+// "goap_fusion_state_hashes") and HALTs (-1) when a state hash repeats within the
+// bounded window — the Activity-Progress Confusion cycle — and it additionally
+// enforces a finite runaway-loop backstop so the continuous loop can never
+// iterate unbounded even when every state hash is distinct. Only a short window
+// of distinct, progress-making hashes lets the runner CONTINUE (1) to drive the
+// next cycle. This closes the loop-runner gap: the sibling guards and the
+// circuit-breaker *evaluation* exist, but nothing wires them into the bounded
+// driver that the "loop runner" actually is.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *testing.T) {
+	action := GetAction("RunScheduledGoapFusionLoop")
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q", "RunScheduledGoapFusionLoop")
+	}
+
+	// A repeated state hash within the bounded history window is the
+	// "Activity-Progress Confusion" cycle: the loop returned to a prior state
+	// without advancing the goal. The loop runner must consult the circuit
+	// breaker and HALT (-1) rather than drive another redundant iteration.
+	cycle := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes": []string{"aaa", "bbb", "aaa"},
+		},
+	}
+	cycleCtx := &btcore.BTContext[Blackboard]{Blackboard: cycle}
+	if status := action(cycleCtx); status != -1 {
+		t.Fatalf("expected HALT (-1) when the circuit breaker detects a repeated state hash, got %d", status)
+	}
+	if !strings.Contains(cycle.Result, "HALT") {
+		t.Fatalf("expected a HALT diagnosis in Result on a repeated state hash, got %q", cycle.Result)
+	}
+
+	// A runaway-loop backstop: even when every state hash is distinct — so the
+	// circuit breaker's bounded window sees no cycle — a bounded loop runner must
+	// refuse to iterate forever. A history far longer than any sane finite bound
+	// must HALT (-1) on the backstop alone.
+	runaway := make([]string, 0, 100)
+	for i := 0; i < 100; i++ {
+		runaway = append(runaway, fmt.Sprintf("hash-%03d", i))
+	}
+	over := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes": runaway,
+		},
+	}
+	overCtx := &btcore.BTContext[Blackboard]{Blackboard: over}
+	if status := action(overCtx); status != -1 {
+		t.Fatalf("expected HALT (-1) once the loop reaches its runaway-loop backstop, got %d", status)
+	}
+
+	// A short window of distinct, progress-making state hashes — under the
+	// backstop and with no repeat in the bounded window — lets the loop runner
+	// CONTINUE (1) to drive the next cycle.
+	progress := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes": []string{"aaa", "bbb", "ccc"},
+		},
+	}
+	progressCtx := &btcore.BTContext[Blackboard]{Blackboard: progress}
+	if status := action(progressCtx); status != 1 {
+		t.Fatalf("expected CONTINUE (1) on a short window of distinct state hashes, got %d", status)
 	}
 }

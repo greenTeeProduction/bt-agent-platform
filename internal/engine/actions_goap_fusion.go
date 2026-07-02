@@ -45,6 +45,17 @@ const (
 	// run of consecutive no-op patch proposals, instead of wasting tokens
 	// indefinitely.
 	goapFusionCircuitHistoryWindow = 3
+
+	// goapFusionMaxLoopIterations is the finite runaway-loop backstop the
+	// continuous self-improving loop runner enforces in addition to the
+	// CIRCUITPOLICY window. The circuit breaker only halts on a *repeated* state
+	// hash within the bounded window; a loop that keeps producing distinct,
+	// never-repeating state hashes would slip past it and iterate forever. This
+	// backstop bounds the total published state-hash history so the loop runner
+	// always self-halts after a finite number of cycles even when every hash is
+	// distinct — the "iterate forever without ever advancing the goal" tail of the
+	// Activity-Progress Confusion failure mode.
+	goapFusionMaxLoopIterations = 50
 )
 
 func init() {

@@ -726,6 +726,62 @@ func init() {
 	})
 }
 
+// RunScheduledGoapFusionLoop is the continuous self-improving *loop runner* — the
+// bounded, self-halting driver the whole preflight-guard and circuit-breaker
+// apparatus in this package exists to protect. Every sibling action guards one
+// input, tool, output location, or a single circuit-breaker evaluation; this
+// action is the kernel that decides, before driving another research-to-
+// implementation cycle, whether the loop may CONTINUE (1) or must HALT (-1). It
+// composes two independent bounds over the loop's recent state-hash history
+// (published on the blackboard under "goap_fusion_state_hashes"):
+//
+//   - the CIRCUITPOLICY circuit breaker — HALT when a state hash repeats within
+//     the bounded goapFusionCircuitHistoryWindow, the "Activity-Progress
+//     Confusion" cycle where the loop returned to a prior state without advancing
+//     the goal [Source 207, 214, 215, 250]; and
+//   - a finite runaway-loop backstop — HALT once the total published history
+//     reaches goapFusionMaxLoopIterations, so the loop can never iterate unbounded
+//     even when every state hash is distinct and the circuit breaker's window
+//     never sees a repeat.
+//
+// Only a short window of distinct, progress-making hashes — under the backstop
+// and with no repeat in the bounded window — lets the runner CONTINUE to drive
+// the next cycle.
+func init() {
+	RegisterAction("RunScheduledGoapFusionLoop", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		hashes := goapFusionStateHashes(bb)
+
+		// CIRCUITPOLICY: inspect only the bounded, most-recent window — the
+		// PatchBoard 3-hash history the circuit breaker monitors — and HALT on a
+		// repeated state hash (the Activity-Progress Confusion cycle).
+		window := hashes
+		if len(window) > goapFusionCircuitHistoryWindow {
+			window = window[len(window)-goapFusionCircuitHistoryWindow:]
+		}
+		seen := make(map[string]struct{}, len(window))
+		for _, h := range window {
+			if _, dup := seen[h]; dup {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", h, goapFusionCircuitHistoryWindow)
+				return -1
+			}
+			seen[h] = struct{}{}
+		}
+
+		// Runaway-loop backstop: even when every state hash is distinct — so the
+		// circuit breaker's bounded window never sees a repeat — a bounded loop
+		// runner must refuse to iterate forever.
+		if len(hashes) >= goapFusionMaxLoopIterations {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nRunaway-loop backstop reached: %d state hash(es) in the published history meet or exceed the finite backstop (%d). Even with every hash distinct the loop must self-halt rather than iterate unbounded — the \"iterate forever without advancing the goal\" tail of Activity-Progress Confusion.", len(hashes), goapFusionMaxLoopIterations)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: CONTINUE\n\nThe most recent %d state hash(es) are distinct and under the runaway-loop backstop (%d/%d); no state-transition cycle detected. Driving the next research-to-implementation cycle.", len(window), len(hashes), goapFusionMaxLoopIterations)
+		return 1
+	})
+}
+
 // goapFusionStateHashes extracts the continuous loop's recent state-hash history
 // from the blackboard chain state under "goap_fusion_state_hashes", tolerating
 // either a []string (the canonical publish form) or a []any of strings.
