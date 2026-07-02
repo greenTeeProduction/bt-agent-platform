@@ -74,10 +74,22 @@ func registerGoapFusionActions() {
 	// normal ReadVaultResearch step ingests immediately afterwards.
 	RegisterAction("RunGoapFusionNotebookLMResearch", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		if nlmQuotaExhausted(bb) {
+			until, _ := nlmQuotaExhaustedUntil(bb)
+			reason := fmt.Sprintf("NotebookLM daily quota window exhausted until %s (cached from an earlier cycle)", until.Format(time.RFC3339))
+			setGoapState(bb, "notebooklm_skip_reason", reason)
+			bb.Result = "## GOAP NotebookLM Research Skipped\n\n" + reason
+			bb.Outcome = "goap_fusion_notebooklm_quota_cached"
+			return -1 // fail fast so ResearchRouter runs the Claude review fallback
+		}
 		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
 		query := buildGoapFusionNotebookLMQuery(bb.Task, truncateGoap(string(graphBytes), 3500))
 		out := nlmRun(180*time.Second, "notebook", "query", defaultNotebook, query)
 		if isGoapNotebookLMFailure(out) {
+			if isGoapNotebookLMQuotaError(out) {
+				saveNlmQuotaExhausted(bb, time.Now())
+			}
+			setGoapState(bb, "notebooklm_skip_reason", truncateGoap(out, 2000))
 			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nNotebookLM query failed or auth is unavailable; refusing to proceed from stale vault research.\n\n```\n%s\n```", truncateGoap(out, 2000))
 			bb.Outcome = "goap_fusion_notebooklm_failed"
 			return -1
@@ -352,6 +364,12 @@ func registerGoapFusionActions() {
 	// The final answer is saved to ChainState and the vault.
 	RegisterAction("GrillMeNotebookLM", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		if nlmQuotaExhausted(bb) {
+			until, _ := nlmQuotaExhaustedUntil(bb)
+			bb.Result = fmt.Sprintf("## GrillMe Skipped\n\nNotebookLM daily quota window exhausted until %s; skipping to preserve calls.", until.Format(time.RFC3339))
+			bb.Outcome = "goap_fusion_grill_skipped_quota"
+			return 0 // non-fatal, same as a grill failure
+		}
 		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
 		graphSnippet := truncateGoap(string(graphBytes), 3500)
 
@@ -420,6 +438,9 @@ func registerGoapFusionActions() {
 		out := nlmRun(200*time.Second, args...)
 
 		if isGoapNotebookLMFailure(out) {
+			if isGoapNotebookLMQuotaError(out) {
+				saveNlmQuotaExhausted(bb, time.Now())
+			}
 			// If grill fails, fall back to single-shot research path
 			bb.Result = fmt.Sprintf("## GrillMe Round %d Failed\n\nNotebookLM query failed; falling back to single-shot research.\n\n```\n%s\n```", grillRound, truncateGoap(out, 2000))
 			bb.Outcome = "goap_fusion_grill_failed"

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 func TestIsGoapNotebookLMQuotaError(t *testing.T) {
@@ -313,5 +314,38 @@ func TestRunClaudeCodeReviewResearch_NoParseableGoalFails(t *testing.T) {
 func TestRunClaudeCodeReviewResearchActionRegistered(t *testing.T) {
 	if GetAction("RunClaudeCodeReviewResearch") == nil {
 		t.Fatal("RunClaudeCodeReviewResearch not registered")
+	}
+}
+
+func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	saveNlmQuotaExhausted(bb, time.Now())
+
+	grill := GetAction("GrillMeNotebookLM")
+	research := GetAction("RunGoapFusionNotebookLMResearch")
+	if grill == nil || research == nil {
+		t.Fatal("goap fusion NotebookLM actions not registered")
+	}
+
+	start := time.Now()
+	if got := grill(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 0 {
+		t.Fatalf("GrillMe status = %d, want 0 (soft skip)", got)
+	}
+	if bb.Outcome != "goap_fusion_grill_skipped_quota" {
+		t.Fatalf("GrillMe outcome = %q", bb.Outcome)
+	}
+
+	if got := research(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("research status = %d, want -1 (fail fast to selector fallback)", got)
+	}
+	if bb.Outcome != "goap_fusion_notebooklm_quota_cached" {
+		t.Fatalf("research outcome = %q", bb.Outcome)
+	}
+	if reason, _ := bb.ChainState["goap_fusion_notebooklm_skip_reason"].(string); !strings.Contains(reason, "quota") {
+		t.Fatalf("skip reason not recorded: %q", reason)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("quota-cached actions must not call nlm (took %s)", elapsed)
 	}
 }
