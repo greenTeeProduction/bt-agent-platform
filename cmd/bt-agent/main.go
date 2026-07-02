@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
@@ -403,6 +405,8 @@ func main() {
 		for _, inst := range agentReg.List() {
 			if t := resolveTree(inst.Definition.Tree); t != nil {
 				a2aSrv.Executor.TreeMap[inst.Definition.Name] = t
+			} else {
+				engine.Info("tree resolution failed for agent", "agent", inst.Definition.Name, "tree", inst.Definition.Tree)
 			}
 		}
 		go func() {
@@ -417,4 +421,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+
+	// If MCP server exits (e.g. stdin closed in --no-mcp daemon mode), block
+	// until SIGTERM/SIGINT so the scheduler + A2A keep running.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	engine.Info("bt-agent running in daemon mode (--no-mcp), scheduler + A2A active")
+	<-sigCh
+	engine.Info("bt-agent shutdown signal received")
 }

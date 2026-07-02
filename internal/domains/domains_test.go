@@ -88,23 +88,23 @@ func TestGameAI(t *testing.T) {
 // tasksForTree returns a representative smoke task for each domain tree.
 func tasksForTree() map[string]string {
 	return map[string]string{
-		"code_review":         "find bugs in this code",
-		"devops_ci":           "build the project",
-		"agent_monitor":       "check health of all agents",
-		"refactoring":         "refactor this code to be cleaner",
-		"security_audit":      "audit this code for vulnerabilities",
-		"data_pipeline":       "extract data from source and transform",
-		"meeting_notes":       "summarize this meeting transcript",
-		"crash_investigator":  "parse this stack trace for crash",
-		"game_ai":             "game: patrol the area",
-		"trading_signal":      "calculate trading signals for AAPL",
-		"alert_router":        "critical disk alert: sda1 at 95%",
-		"goap_planning":       "plan the steps to deploy a new service",
-		"goap_research":       "research best practices for Go microservices",
-		"goap_devops":         "diagnose why the CI pipeline is failing",
-		"bt_manager":          "analyze all agent failures and fix degraded ones",
-		"notebooklm":          "research latest BT framework developments using NotebookLM",
-		"notebooklm_consumer": "consume notebooklm synthesis and write summary",
+		"code_review":               "find bugs in this code",
+		"devops_ci":                 "build the project",
+		"agent_monitor":             "check health of all agents",
+		"refactoring":               "refactor this code to be cleaner",
+		"security_audit":            "audit this code for vulnerabilities",
+		"data_pipeline":             "extract data from source and transform",
+		"meeting_notes":             "summarize this meeting transcript",
+		"crash_investigator":        "parse this stack trace for crash",
+		"game_ai":                   "game: patrol the area",
+		"trading_signal":            "calculate trading signals for AAPL",
+		"alert_router":              "critical disk alert: sda1 at 95%",
+		"goap_planning":             "plan the steps to deploy a new service",
+		"goap_research":             "research best practices for Go microservices",
+		"goap_devops":               "diagnose why the CI pipeline is failing",
+		"bt_manager":                "analyze all agent failures and fix degraded ones",
+		"notebooklm":                "research latest BT framework developments using NotebookLM",
+		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
 		"notebooklm_plan_implement": "plan and implement a new domain tree for NotebookLM workflow",
 		// Arc42 documentation trees
 		"arc42:section1":  "generate arc42 introduction and goals",
@@ -262,8 +262,8 @@ func TestAllDomainTrees(t *testing.T) {
 	tasks := tasksForTree()
 	mock := benchmark.DefaultMock()
 
-	if len(all) != 31 {
-		t.Errorf("expected 31 domain trees, got %d", len(all))
+	if len(all) != 32 {
+		t.Errorf("expected 32 domain trees, got %d", len(all))
 	}
 
 	for name, tree := range all {

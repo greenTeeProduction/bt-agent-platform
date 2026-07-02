@@ -62,6 +62,46 @@ func outcome() evolution.SerializableNode {
 	)
 }
 
+// --- Hermes Update Tree ---
+
+// HermesUpdateTree returns a zero-LLM maintenance tree that checks for
+// Hermes Agent updates and applies them via hermes update. Follows the
+// same pattern as AgentMonitorTree: shell exec in Action nodes, minimal
+// LLM overhead.
+func HermesUpdateTree() *evolution.SerializableNode {
+	guard := func(label, condition string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeGuard, Label: label, Condition: condition, ChildIndex: -1}
+	}
+	qualityGate := func(label string) evolution.TypedEdge {
+		return evolution.TypedEdge{Type: evolution.EdgeQualityGate, Label: label, ChildIndex: -1}
+	}
+
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "HermesUpdate_Main",
+		Description: "Daily Hermes update: version check, git fetch, hermes update, report",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Sequence", Name: "PreGate",
+				Description: "Input validation — task must be update-related",
+				Edges:       []evolution.TypedEdge{guard("input-validation", "task must be non-empty and update-related")},
+				Children: []evolution.SerializableNode{
+					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task",
+						Edges: []evolution.TypedEdge{guard("non-empty-task", "task string must not be empty")},
+					},
+					{Type: "Condition", Name: "IsUpdateTask", Description: "Has update/upgrade/hermes/maintenance keywords",
+						Edges: []evolution.TypedEdge{guard("is-update-task", "task contains update/upgrade/hermes/maintenance keywords")},
+					},
+				},
+			},
+			{Type: "Action", Name: "HermesUpdateAgent",
+				Description: "Check version, git fetch, run hermes update if behind, report",
+				Edges:       []evolution.TypedEdge{qualityGate("update-report-completeness")},
+			},
+			outcome(),
+		},
+	}
+}
+
 // --- CodeReview Tree ---
 
 func CodeReviewTree() *evolution.SerializableNode {
@@ -617,24 +657,25 @@ func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
 	trees := map[string]*evolution.SerializableNode{
-		"code_review":         CodeReviewTree(),
-		"devops_ci":           DevOpsCITree(),
-		"agent_monitor":       AgentMonitorTree(),
-		"refactoring":         RefactoringTree(),
-		"security_audit":      SecurityAuditTree(),
-		"data_pipeline":       DataPipelineTree(),
-		"meeting_notes":       MeetingNotesTree(),
-		"crash_investigator":  CrashInvestigatorTree(),
-		"game_ai":             GameAITree(),
-		"trading_signal":      TradingSignalTree(),
-		"alert_router":        AlertRouterTree(),
-		"goap_planning":       GoapPlanningTree(true),
-		"goap_research":       GoapResearchTree(true),
-		"goap_devops":         GoapDevopsTree(true),
-		"bt_manager":          BTManagerTree(),
-		"notebooklm":               NotebookLMTree(),
-		"notebooklm_consumer":      NotebookLMConsumerTree(),
+		"code_review":               CodeReviewTree(),
+		"devops_ci":                 DevOpsCITree(),
+		"agent_monitor":             AgentMonitorTree(),
+		"refactoring":               RefactoringTree(),
+		"security_audit":            SecurityAuditTree(),
+		"data_pipeline":             DataPipelineTree(),
+		"meeting_notes":             MeetingNotesTree(),
+		"crash_investigator":        CrashInvestigatorTree(),
+		"game_ai":                   GameAITree(),
+		"trading_signal":            TradingSignalTree(),
+		"alert_router":              AlertRouterTree(),
+		"goap_planning":             GoapPlanningTree(true),
+		"goap_research":             GoapResearchTree(true),
+		"goap_devops":               GoapDevopsTree(true),
+		"bt_manager":                BTManagerTree(),
+		"notebooklm":                NotebookLMTree(),
+		"notebooklm_consumer":       NotebookLMConsumerTree(),
 		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
+		"hermes_update":             HermesUpdateTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -645,18 +686,18 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 
 // Descriptions maps tree names to descriptions.
 var Descriptions = map[string]string{
-	"code_review":         "Bug detection, security review, style checking for any language",
-	"devops_ci":           "Build → test → lint → deploy → verify → rollback pipeline",
-	"agent_monitor":       "Health-check MCP servers, restart dead agents, send alerts",
-	"refactoring":         "Detect code smells, suggest rewrites, verify behavior preserved",
-	"security_audit":      "SAST scan, dependency CVE check, secret detection, threat modeling",
-	"data_pipeline":       "ETL validation: extract → transform → load with integrity checks",
-	"meeting_notes":       "Transcribe → extract actions → assign → summarize → distribute",
-	"crash_investigator":  "Parse stack trace → root cause → fix → verify → prevent recurrence",
-	"game_ai":             "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
-	"trading_signal":      "Market data → technical analysis → signal generation → risk management",
-	"bt_manager":          "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
-	"notebooklm":          "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
-	"notebooklm_consumer": "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
+	"code_review":               "Bug detection, security review, style checking for any language",
+	"devops_ci":                 "Build → test → lint → deploy → verify → rollback pipeline",
+	"agent_monitor":             "Health-check MCP servers, restart dead agents, send alerts",
+	"refactoring":               "Detect code smells, suggest rewrites, verify behavior preserved",
+	"security_audit":            "SAST scan, dependency CVE check, secret detection, threat modeling",
+	"data_pipeline":             "ETL validation: extract → transform → load with integrity checks",
+	"meeting_notes":             "Transcribe → extract actions → assign → summarize → distribute",
+	"crash_investigator":        "Parse stack trace → root cause → fix → verify → prevent recurrence",
+	"game_ai":                   "Patrol → detect → chase → combat → retreat (classic game BT patterns)",
+	"trading_signal":            "Market data → technical analysis → signal generation → risk management",
+	"bt_manager":                "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
+	"notebooklm":                "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
+	"notebooklm_consumer":       "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 }
