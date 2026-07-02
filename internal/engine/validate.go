@@ -9,9 +9,10 @@ import (
 
 // ValidateTree checks that all Action and Condition nodes in the tree have
 // registered handlers, that memory nodes (MemSelector,
-// PersistentMemSequence, ForEachTask) have unique, non-empty names — their
-// ChainState cursor keys are derived from Name, so a missing or duplicate
-// name causes cursor collisions across resumed runs — and that
+// PersistentMemSequence, ForEachTask, BanditSelector) have unique, non-empty
+// names — their ChainState cursor keys (or, for BanditSelector, stats file
+// path) are derived from Name, so a missing or duplicate name causes cursor
+// collisions or clobbered stats files across resumed runs — and that
 // CachedCondition nodes never memoize an approval/HITL condition, since a
 // stale cached "approved" result would bypass a human gate. Returns a flat
 // list of validation messages.
@@ -38,7 +39,7 @@ func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts m
 		if conditionRegistry[node.Name] == nil {
 			*msgs = append(*msgs, node.Name)
 		}
-	case "MemSelector", "PersistentMemSequence", "ForEachTask":
+	case "MemSelector", "PersistentMemSequence", "ForEachTask", "BanditSelector":
 		if strings.TrimSpace(node.Name) == "" {
 			*msgs = append(*msgs,
 				fmt.Sprintf("%s: memory node requires unique non-empty name", node.Type))

@@ -189,6 +189,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildForEachTask(node, bb)
 	case "ReviewCycle":
 		return BuildReviewCycle(node, bb)
+	case "BanditSelector":
+		return BuildBanditSelector(node, bb)
 	case "Parallel":
 		return BuildParallel(node, bb)
 	case "Budget":
