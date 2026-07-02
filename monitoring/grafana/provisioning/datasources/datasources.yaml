@@ -12,6 +12,7 @@ datasources:
         spanEndTimeShift: "5m"
         filterByTraceID: true
         customQuery: false
+        tags: [{key: "service.name", value: "service_name"}]
   - name: Loki
     uid: loki
     type: loki

@@ -55,6 +55,8 @@ type RunResult struct {
 	RunID          string   `json:"run_id,omitempty"`
 	SessionID      string   `json:"session_id,omitempty"`
 	NodePaths      []string `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
+	TraceID        string   `json:"trace_id,omitempty"`
+	SpanID         string   `json:"span_id,omitempty"`
 	Duration       time.Duration
 	StartedAt      time.Time
 	EndedAt        time.Time
@@ -187,6 +189,9 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	runSpan.SetAttribute("run_id", result.RunID)
 	runSpan.SetAttribute("agent", agentName)
 	runSpan.SetAttribute("tree", result.TreeID)
+	runSpanCtx := runSpan.SpanContext()
+	result.TraceID = runSpanCtx.TraceID
+	result.SpanID = runSpanCtx.SpanID
 	bb.TraceContext = spanCtx
 	_ = engine.RunTask(bb, bt)
 	runSpan.SetAttribute("outcome", bb.Outcome)

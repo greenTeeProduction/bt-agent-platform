@@ -225,7 +225,11 @@ func main() {
 		}
 
 		if err != nil {
-			_, dlqSpan := tracing.StartSpan(ctx.Context, "agent.dlq_push")
+			dlqParent := ctx.Context
+			if res != nil && res.TraceID != "" {
+				dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
+			}
+			_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
 			dlqSpan.SetAttribute("agent", ctx.AgentName)
 			dlqSpan.RecordError(err)
 			dlq.Push(reliability.DeadLetterEntry{

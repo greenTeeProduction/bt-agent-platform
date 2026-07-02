@@ -16,6 +16,9 @@ func TestEndToEndOTLPExport(t *testing.T) {
 	}
 	_ = conn.Close()
 
+	prev := GlobalTracer()
+	t.Cleanup(func() { SetGlobalTracer(prev) })
+
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 	shutdown := InitFromEnv("bt-e2e-test")
 	_, span := StartSpan(context.Background(), "e2e-test-span")
@@ -26,5 +29,4 @@ func TestEndToEndOTLPExport(t *testing.T) {
 	if err := shutdown(ctx); err != nil {
 		t.Fatalf("export/shutdown failed: %v", err)
 	}
-	SetGlobalTracer(noopTracer{})
 }

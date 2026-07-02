@@ -613,7 +613,11 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			nodesStr = strings.Join(runRes.NodePaths, " → ")
 		}
 
-		_, whSpan := tracing.StartSpan(runCtx.Context, "agent.webhook_publish")
+		webhookParent := runCtx.Context
+		if runRes != nil && runRes.TraceID != "" {
+			webhookParent = tracing.ContextWithTraceParentHeader(runCtx.Context, "00-"+runRes.TraceID+"-"+runRes.SpanID+"-01")
+		}
+		_, whSpan := tracing.StartSpan(webhookParent, "agent.webhook_publish")
 		whSpan.SetAttribute("agent", job.AgentName)
 		whSpan.SetAttribute("event_type", eventType)
 		GlobalAgentBus.Publish(AgentEvent{

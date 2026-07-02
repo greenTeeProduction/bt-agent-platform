@@ -20,7 +20,7 @@
       "type": "logs", "title": "Recent errors",
       "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
       "datasource": {"uid": "loki"},
-      "targets": [{"expr": "{service_name=~\"bt-.*\"} | json | level = `ERROR`", "refId": "A"}]
+      "targets": [{"expr": "{service_name=~\"bt-.*\"} | detected_level = `error`", "refId": "A"}]
     }
   ]
 }
