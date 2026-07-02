@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -404,13 +405,84 @@ func TestBanditSelector_ConcurrentTicksNoLostOutcomes(t *testing.T) {
 	}
 }
 
-// TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload (Finding 2): a
-// cheap proxy for "no reload on every tick" — corrupt the on-disk stats file
-// after the first tick. loadBanditStats tolerates corrupt JSON by starting
-// empty, so a node that still reloads every tick would silently lose tick
-// 1's recorded outcome (the final file would hold only tick 2's). A node
-// that caches after the first load carries tick 1's outcome forward
-// regardless of what's on disk.
+// TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled (Important
+// re-review finding): enabled mode's UCB1-ordering critical section loads
+// AND caches stats, then — after the unlocked child.Run — the record+save
+// critical section reused that same, now-stale, cached snapshot. Another
+// goroutine's persisted outcome saved during the unlocked window gets
+// clobbered when this closure's save writes back its stale-plus-one view.
+// Mirrors TestBanditSelector_ConcurrentTicksNoLostOutcomes (fresh command
+// instance per tick, two goroutines, window large enough to hold every
+// outcome) but with enabled:true (to exercise the ordering-then-save split)
+// and a tiny sleep in the child action to widen the unlocked race window
+// between the ordering load and the record+save.
+func TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BT_BANDIT_DIR", dir)
+
+	const nodeName = "BanditConcurrentEnabledUnderTest"
+	const perGoroutine = 100
+
+	RegisterAction("BanditConcurrentEnabledChild", func(_ *btcore.BTContext[Blackboard]) int {
+		time.Sleep(time.Millisecond) // widen the window between the ordering load and the record+save
+		return 1
+	})
+
+	node := &evolution.SerializableNode{
+		Type:     "BanditSelector",
+		Name:     nodeName,
+		Metadata: map[string]any{"enabled": true, "window": 1000}, // window large enough to hold every outcome
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "BanditConcurrentEnabledChild"},
+		},
+	}
+
+	tick := func() {
+		bb := newTestBlackboard()
+		cmd := buildNode(node, bb, "")
+		ctx := newTestBTContext(bb)
+		if got := cmd.Run(ctx); got != 1 {
+			t.Errorf("want SUCCESS, got %d", got)
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for g := 0; g < 2; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perGoroutine; i++ {
+				tick()
+			}
+		}()
+	}
+	wg.Wait()
+
+	stats := loadBanditStats(nodeName)
+	got := len(stats.Outcomes["BanditConcurrentEnabledChild"])
+	want := 2 * perGoroutine
+	if got != want {
+		t.Fatalf("recorded outcomes = %d, want %d (enabled-mode lost updates: the record+save section reused a stale cached snapshot loaded before the unlocked child.Run)", got, want)
+	}
+}
+
+// TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload (Finding 2,
+// narrowed by Fix 3's save-lock reload invariant): Finding 2's "no reload
+// on every tick" caching now only holds for accesses that do not save —
+// RUNNING re-ticks (which record nothing) and same-tick UCB1 recomputes.
+// Every terminal outcome instead now unconditionally reloads fresh from
+// disk immediately before its save (see recordAndSave's doc comment on
+// BuildBanditSelector), because that same-tick-only "no reload" behavior is
+// exactly what caused the enabled-mode lost update this fix closes: a
+// stale, previously-cached snapshot reused for a save can silently clobber
+// a write made by another goroutine or closure for the same node name in
+// between. This test is the deterministic, single-threaded mirror of
+// TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled: instead of a
+// race, an outcome is written directly to the stats file between two ticks
+// of the same long-lived closure, simulating what a concurrent writer's
+// save would look like. Pre-fix (or with a stale-cache reused for save),
+// this write would be silently lost; post-fix, tick 2's save must observe
+// and preserve it.
 func TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BT_BANDIT_DIR", dir)
@@ -435,7 +507,17 @@ func TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(t *testing.T) {
 		t.Fatalf("tick 1: want SUCCESS, got %d", got)
 	}
 
-	if err := os.WriteFile(banditStatsPath(nodeName), []byte("not valid json{{{"), 0o644); err != nil {
+	// Simulate a concurrent writer's save landing on disk between this
+	// closure's two ticks — exactly what a sibling goroutine's
+	// recordAndSave would produce.
+	external := banditStats{Outcomes: map[string][]bool{
+		"BanditCacheChild": {true, false},
+	}}
+	data, err := json.Marshal(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(banditStatsPath(nodeName), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -445,8 +527,8 @@ func TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(t *testing.T) {
 
 	stats := loadBanditStats(nodeName)
 	outcomes := stats.Outcomes["BanditCacheChild"]
-	if len(outcomes) != 2 {
-		t.Fatalf("recorded outcomes = %d, want 2 (cache must survive a corrupted on-disk file between ticks)", len(outcomes))
+	if len(outcomes) != 3 {
+		t.Fatalf("recorded outcomes = %d, want 3 (tick 2's save must reload the externally-written 2 outcomes before appending its own, not clobber them from a stale cache): %v", len(outcomes), outcomes)
 	}
 }
 

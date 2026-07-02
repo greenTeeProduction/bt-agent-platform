@@ -188,31 +188,43 @@ func banditUCB1Order(keys []string, stats *banditStats) []int {
 // corrupt stats file starts empty rather than failing the node. A malformed
 // config (zero children) yields a failing action instead of panicking.
 //
-// Concurrency: this node's path-scoped lock from banditLockFor guards only
-// stats access — the lazy load, each recorded outcome, each UCB1 recompute,
+// Concurrency: this node's path-scoped lock from banditLockFor guards all
+// stats access — every load, each recorded outcome, each UCB1 recompute,
 // and each save — and is always released before every children[idx].Run(ctx)
 // call, so a child ticking for an arbitrarily long time (including its own
 // nested BanditSelectors) never holds this node's stats file lock and never
 // serializes with a sibling/unrelated tree's tick of a same-named
-// BanditSelector. The lazy load is deferred until first actually needed
-// (the first UCB1 recompute when enabled, otherwise the first recorded
-// outcome) rather than performed eagerly before any child.Run: this keeps a
-// fresh closure's first load-modify-save cycle a single uninterrupted lock
-// hold with no child.Run in the middle, which is what makes it safe to
-// exclude child.Run from the lock in the first place — a load performed
-// well before the matching save, with only the lock (not the load-to-save
-// span) protecting it, would let a concurrent tick's full cycle interleave
-// and clobber it (a classic lost update). See banditLockFor's doc comment
-// for exactly what is (same-process races) and isn't (cross-process races)
-// covered.
+// BanditSelector.
 //
-// Caching: stats are loaded once and cached in this closure; subsequent
-// ticks of the *same built command* reuse the cache instead of re-reading
-// the file (mutation of the cache is guarded by the same lock). This means
-// writes another closure makes to the same stats path after this one's
-// first load are not observed for the rest of this closure's lifetime —
-// acceptable, since these stats are advisory ordering hints, not ground
-// truth that selection correctness depends on.
+// The invariant that makes this safe: any stats snapshot that will be
+// SAVED must be loaded inside the same lock hold as its save. Ordering may
+// use a cached/stale snapshot — that's fine, since UCB1 order is an
+// advisory hint, not a consistency-critical ledger — but recording
+// (recordAndSave) may not: it unconditionally invalidates the cache and
+// reloads fresh from disk before applying an outcome and saving, in both
+// enabled and disabled mode, through one shared code path. This is
+// deliberate, not incidental: enabled mode's UCB1 recompute loads and
+// caches stats to pick an order, then runs a child unlocked; if the
+// following record+save reused that same pre-child.Run snapshot instead of
+// reloading, another goroutine's or closure's save made during the
+// unlocked window would be silently clobbered — a classic lost update.
+// (A build of this node that instead let a fresh closure's first
+// record+save merely *coincide* with its first load — without an explicit
+// reload — depends on no other closure for the same node name having saved
+// first; that coincidence is what disabled mode relied on before this fix,
+// and it broke as soon as a long-lived closure's cache went stale.) See
+// banditLockFor's doc comment for exactly what is (same-process races) and
+// isn't (cross-process races) covered.
+//
+// Caching: outside of a save, stats are loaded once and cached in this
+// closure; a RUNNING re-tick (which records nothing) and a same-tick UCB1
+// recompute both reuse that cache instead of re-reading the file (mutation
+// of the cache is guarded by the same lock). Writes another closure makes
+// to the same stats path are therefore not guaranteed to be observed by
+// this closure's ordering decisions — acceptable, since UCB1 order is
+// advisory. But every terminal outcome still pays exactly one reload
+// immediately before its save (see recordAndSave below), which is what
+// makes that save correct, not merely what makes it cheap.
 //
 // Resuming a RUNNING child: when enabled, a child that returns RUNNING is
 // pinned via a ChainState cursor ("bandit/<name>/running") and is resumed
@@ -252,20 +264,48 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 	runningKey := "bandit/" + node.Name + "/running"
 
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		// ensureStats lazily loads (once per closure lifetime, Finding 2)
-		// and returns the cached stats object. Must be called with lock
-		// held. Deferring the load until it's actually needed — rather than
-		// eagerly before any child.Run — lets the *first* load happen
-		// inside the very same lock hold as that first recordBanditOutcome
-		// + save, with no child.Run in between: a genuinely atomic
-		// load-modify-save cycle, closing the lost-update window a
-		// load-then-later-save split across an unlocked child.Run would
-		// otherwise reopen.
+		// ensureStats lazily loads and caches the stats object, reusing the
+		// cache on later calls within the same closure (Finding 2). Must be
+		// called with lock held. On its own, this laziness is only a
+		// performance optimization for advisory reads (the UCB1 order
+		// computation below) — it does NOT by itself make a save correct.
+		// recordAndSave enforces that separately, by invalidating the cache
+		// immediately before calling this, forcing an actual disk read every
+		// time a save is about to happen: a stale cache reused for a save is
+		// exactly what caused the enabled-mode lost update this fix closes.
 		ensureStats := func() *banditStats {
 			if cached == nil {
 				cached = loadBanditStats(node.Name)
 			}
 			return cached
+		}
+
+		// recordAndSave is the terminal-outcome critical section (Fix 3),
+		// the single code path for every place this node records+persists a
+		// child's SUCCESS/FAILURE, whether enabled or disabled. It enforces
+		// the save-lock reload invariant: any snapshot that will be SAVED
+		// must be loaded inside the same lock hold as its save. Ordering
+		// (banditUCB1Order below) may use a cached/stale snapshot — that's
+		// advisory only — but a save never may, so this unconditionally
+		// invalidates the cache and reloads fresh from disk first. This is
+		// what closes the enabled-mode lost update: the UCB1-ordering load
+		// above happens before an unlocked children[idx].Run(ctx); without
+		// this reload, this critical section would otherwise reuse that
+		// same, now possibly stale, pre-child.Run snapshot and clobber
+		// whatever another goroutine/closure saved to the same stats path
+		// during the unlocked window. RUNNING re-ticks record nothing and so
+		// never call this, meaning the per-tick-load optimization (Finding
+		// 2: no reload across ticks of the same closure) still holds for
+		// them; every terminal outcome now pays one bounded reload instead,
+		// which is correct and cheap. The freshly reloaded, freshly recorded
+		// snapshot is left cached afterward for the next ordering pass.
+		recordAndSave := func(key string, success bool) {
+			lock.Lock()
+			cached = nil // invalidate: force the reload below, per the invariant
+			stats := ensureStats()
+			recordBanditOutcome(stats, key, success, window)
+			saveBanditStats(node.Name, stats)
+			lock.Unlock()
 		}
 
 		// Resume a pinned RUNNING child first (Finding 3), bypassing
@@ -282,19 +322,11 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 					ctx.Blackboard.ChainState[runningKey] = idx
 					return 0
 				case code > 0:
-					lock.Lock()
-					stats := ensureStats()
-					recordBanditOutcome(stats, keys[idx], true, window)
-					saveBanditStats(node.Name, stats)
-					lock.Unlock()
+					recordAndSave(keys[idx], true)
 					delete(ctx.Blackboard.ChainState, runningKey)
 					return 1
 				default:
-					lock.Lock()
-					stats := ensureStats()
-					recordBanditOutcome(stats, keys[idx], false, window)
-					saveBanditStats(node.Name, stats)
-					lock.Unlock()
+					recordAndSave(keys[idx], false)
 					delete(ctx.Blackboard.ChainState, runningKey)
 					// fall through: continue selection from the remaining order
 				}
@@ -323,11 +355,7 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 				}
 				return 0 // RUNNING propagates immediately; not recorded
 			}
-			lock.Lock()
-			stats := ensureStats()
-			recordBanditOutcome(stats, keys[idx], code > 0, window)
-			saveBanditStats(node.Name, stats)
-			lock.Unlock()
+			recordAndSave(keys[idx], code > 0)
 			if code > 0 {
 				result = 1
 				break
