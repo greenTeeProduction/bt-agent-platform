@@ -40,15 +40,23 @@ func TestGoapFusionNotebookLMFailureDetection(t *testing.T) {
 	for _, out := range []string{
 		`{"error": "NotebookLM circuit breaker open", "retry_after": "5m0s"}`,
 		"Error: Query failed: Authentication expired. Run 'nlm login' in your terminal",
+		"Error: Google rejected the query (error code 8: RESOURCE_EXHAUSTED) . This may \nindicate account-level restrictions on programmatic access.",
+		`{"error": "Google rejected the query (error code 8: RESOURCE_EXHAUSTED) [type.googleapis.com/google.internal.labs.tailwind.orchestration.v1.UserDisplayableError]."}`,
+		"Error: Failed to import sources: API error (code 9): unknown",
+		"Error: something novel the CLI has not printed before",
 	} {
 		if !isGoapNotebookLMFailure(out) {
 			t.Fatalf("expected NotebookLM failure for %q", out)
 		}
 	}
 
-	ok := `{"answer":"GOAL: Add a test\nGAP: missing test evidence with error budgets [1]","citations":{"1":"src"}}`
-	if isGoapNotebookLMFailure(ok) {
-		t.Fatalf("valid NotebookLM answer should not be classified as failure")
+	for _, ok := range []string{
+		`{"answer":"GOAL: Add a test\nGAP: missing test evidence with error budgets [1]","citations":{"1":"src"}}`,
+		`{"answer":"GOAL: Implement the Triple-Level Error Attribution Dispatcher\nGAP: Error: prefixed strings appear mid-answer [1]"}`,
+	} {
+		if isGoapNotebookLMFailure(ok) {
+			t.Fatalf("valid NotebookLM answer should not be classified as failure: %q", ok)
+		}
 	}
 }
 

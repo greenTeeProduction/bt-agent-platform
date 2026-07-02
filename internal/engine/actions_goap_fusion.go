@@ -609,6 +609,11 @@ Rules:
 
 func isGoapNotebookLMFailure(out string) bool {
 	lower := strings.ToLower(out)
+	// nlm prints CLI-level errors as plain "Error: ..." text instead of the
+	// JSON answer envelope; successful answers never start with that prefix.
+	if strings.HasPrefix(strings.TrimSpace(lower), "error:") {
+		return true
+	}
 	failureMarkers := []string{
 		"authentication expired",
 		"authentication failed",
@@ -617,6 +622,9 @@ func isGoapNotebookLMFailure(out string) bool {
 		"auth_status\":\"stale",
 		"not_configured",
 		"nlm error:",
+		"resource_exhausted",
+		"google rejected the query",
+		"api error (code",
 	}
 	for _, marker := range failureMarkers {
 		if strings.Contains(lower, marker) {
