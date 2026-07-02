@@ -181,6 +181,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 		return BuildMemSelector(node, bb)
 	case "PersistentMemSequence":
 		return BuildPersistentMemSequence(node, bb)
+	case "CachedCondition":
+		return BuildCachedCondition(node, bb)
 	case "Parallel":
 		return BuildParallel(node, bb)
 	case "Budget":

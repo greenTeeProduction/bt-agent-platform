@@ -8,11 +8,13 @@ import (
 )
 
 // ValidateTree checks that all Action and Condition nodes in the tree have
-// registered handlers, and that memory nodes (MemSelector,
+// registered handlers, that memory nodes (MemSelector,
 // PersistentMemSequence, ForEachTask) have unique, non-empty names — their
 // ChainState cursor keys are derived from Name, so a missing or duplicate
-// name causes cursor collisions across resumed runs. Returns a flat list of
-// validation messages (missing handler names and memory-node name issues).
+// name causes cursor collisions across resumed runs — and that
+// CachedCondition nodes never memoize an approval/HITL condition, since a
+// stale cached "approved" result would bypass a human gate. Returns a flat
+// list of validation messages.
 func ValidateTree(tree *evolution.SerializableNode) []string {
 	var msgs []string
 	nameCounts := map[string]int{}
@@ -42,6 +44,16 @@ func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts m
 				fmt.Sprintf("%s: memory node requires unique non-empty name", node.Type))
 		} else {
 			nameCounts[node.Name]++
+		}
+	case "CachedCondition":
+		for i := range node.Children {
+			child := &node.Children[i]
+			if child.Type == "Condition" &&
+				(strings.Contains(child.Name, "HITL") || strings.Contains(child.Name, "Approved")) {
+				*msgs = append(*msgs,
+					fmt.Sprintf("CachedCondition %s: must not wrap approval/HITL condition %s",
+						node.Name, child.Name))
+			}
 		}
 	}
 	for i := range node.Children {
