@@ -34,6 +34,17 @@ const (
 	// Invariant of the Experience-Grounded Monotonicity Auditor — no mutation or
 	// self-evolution edit may re-admit a previously rejected unsafe context.
 	goapFusionRejectedLedger = "/mnt/ssd/clawd/wiki/bt-research/rejected-context-ledger.jsonl"
+
+	// goapFusionCircuitHistoryWindow is the bounded state-hash history window the
+	// CIRCUITPOLICY circuit breaker monitors to detect "Activity-Progress
+	// Confusion" — the failure mode where the continuous self-improving loop
+	// remains active by proposing syntactically valid but redundant patches that
+	// never advance the task goal. Following the PatchBoard (2026) 3-hash window,
+	// the breaker inspects the most recent goapFusionCircuitHistoryWindow state
+	// hashes and HALTs the loop on a repeated hash (a state-transition cycle) or a
+	// run of consecutive no-op patch proposals, instead of wasting tokens
+	// indefinitely.
+	goapFusionCircuitHistoryWindow = 3
 )
 
 func init() {

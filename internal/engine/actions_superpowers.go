@@ -658,6 +658,97 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionCircuitPolicy is the CIRCUITPOLICY (circuit-breaker)
+// preflight guard that protects the continuous self-improving loop runner
+// against "Activity-Progress Confusion" — the failure mode surfaced by the P0
+// NotebookLM research goal, where the loop remains active by proposing
+// syntactically valid but redundant patches that never advance the task goal.
+// The prior VerifyScheduledGoapFusionRejectedContextLedger guard protects
+// against safety-drift by replaying a corpus of rejected unsafe contexts, but
+// nothing protects against the distinct hazard of the loop spinning on repeated
+// state hashes or consecutive no-op patch proposals. Production-grade
+// reliability requires a deterministic kernel-level circuit policy that monitors
+// a bounded state-hash history window (goapFusionCircuitHistoryWindow) and, on
+// detecting a repeated state hash or a run of consecutive no-op patches, halts
+// the loop instead of wasting tokens indefinitely. This guard closes that gap by
+// requiring the circuit-policy history window to be a positive, bounded value
+// before the continuous loop runner proceeds — the circuit-breaker analogue of
+// the rejected-context-ledger and input/runtime/tool guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionCircuitPolicy", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		if goapFusionCircuitHistoryWindow <= 0 {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Policy Preflight Failed\n\nCircuit-policy history window (%d) must be a positive, bounded value; the continuous loop runner would have no CIRCUITPOLICY window to detect repeated state hashes or consecutive no-op patches and could spin indefinitely.", goapFusionCircuitHistoryWindow)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Policy Preflight Passed\n\nCircuit-policy state-hash history window: %d", goapFusionCircuitHistoryWindow)
+		return 1
+	})
+}
+
+// EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
+// CIRCUITPOLICY evaluation that enforces the P0 NotebookLM research goal:
+// detecting and halting state-transition cycles and repeated no-op patch
+// proposals. The VerifyScheduledGoapFusionCircuitPolicy guard is only a config
+// preflight — it checks that goapFusionCircuitHistoryWindow is positive, but it
+// never inspects a running state-hash history and never actually halts the loop.
+// This action closes that gap: given the loop's recent state-hash history
+// (published on the blackboard under "goap_fusion_state_hashes"), it returns
+// HALT (-1) when a state hash repeats within goapFusionCircuitHistoryWindow —
+// the repeated-state cycle the PatchBoard 3-hash window is designed to catch —
+// and CONTINUE (1) when the window shows only distinct, progress-making hashes.
+func init() {
+	RegisterAction("EvaluateScheduledGoapFusionCircuitBreaker", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		hashes := goapFusionStateHashes(bb)
+
+		// Inspect only the bounded, most-recent window — the PatchBoard 3-hash
+		// history the CIRCUITPOLICY monitors.
+		window := hashes
+		if len(window) > goapFusionCircuitHistoryWindow {
+			window = window[len(window)-goapFusionCircuitHistoryWindow:]
+		}
+
+		seen := make(map[string]struct{}, len(window))
+		for _, h := range window {
+			if _, dup := seen[h]; dup {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", h, goapFusionCircuitHistoryWindow)
+				return -1
+			}
+			seen[h] = struct{}{}
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: CONTINUE\n\nThe most recent %d state hash(es) are distinct and progress-making; no state-transition cycle or repeated no-op patch detected.", len(window))
+		return 1
+	})
+}
+
+// goapFusionStateHashes extracts the continuous loop's recent state-hash history
+// from the blackboard chain state under "goap_fusion_state_hashes", tolerating
+// either a []string (the canonical publish form) or a []any of strings.
+func goapFusionStateHashes(bb *Blackboard) []string {
+	if bb == nil || bb.ChainState == nil {
+		return nil
+	}
+	switch v := bb.ChainState["goap_fusion_state_hashes"].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

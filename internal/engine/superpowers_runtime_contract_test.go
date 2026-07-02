@@ -1,6 +1,11 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	btcore "github.com/rvitorper/go-bt/core"
+)
 
 func TestSuperpowersRuntime_ActionsRegistered(t *testing.T) {
 	actions := []string{
@@ -328,5 +333,79 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRejectedContext
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionVaultWritable(t *testing.T) {
 	if GetAction("VerifyScheduledGoapFusionVaultWritable") == nil {
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionVaultWritable")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicy
+// asserts the presence of the CIRCUITPOLICY (circuit-breaker) preflight action
+// that guards the continuous self-improving loop runner against
+// "Activity-Progress Confusion" — the failure mode surfaced by the P0 NotebookLM
+// research goal, where the loop remains active by proposing syntactically valid
+// but redundant patches that never advance the task goal. The prior
+// VerifyScheduledGoapFusionRejectedContextLedger guard protects against
+// safety-drift by replaying a corpus of rejected unsafe contexts, but nothing
+// protects against the distinct hazard of the loop spinning on repeated state
+// hashes or consecutive no-op patch proposals. Production-grade reliability
+// requires a deterministic kernel-level circuit policy that monitors a bounded
+// state-hash history window (goapFusionCircuitHistoryWindow) and, on detecting a
+// repeated state hash or a run of consecutive no-op patches, halts the loop
+// instead of wasting tokens indefinitely. This action closes that gap by
+// requiring the circuit-policy history window to be a positive, bounded value
+// before the continuous loop runner proceeds — the circuit-breaker analogue of
+// the rejected-context-ledger and input/runtime/tool guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicy(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionCircuitPolicy") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionCircuitPolicy")
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts
+// asserts the actual CIRCUITPOLICY circuit-breaker *behavior* the P0 NotebookLM
+// research goal requires: detecting and halting state-transition cycles and
+// repeated no-op patch proposals. The existing
+// VerifyScheduledGoapFusionCircuitPolicy guard is only a config preflight — it
+// checks that goapFusionCircuitHistoryWindow is a positive, bounded value, but
+// it never evaluates a running state-hash history and never actually halts the
+// loop. That leaves "Activity-Progress Confusion" unmitigated: nothing inspects
+// the bounded state-hash window at runtime to detect that the continuous loop is
+// proposing syntactically valid but redundant patches that never advance the
+// task goal. This action closes that gap with a deterministic kernel-level
+// evaluation: given the loop's recent state-hash history (published on the
+// blackboard under "goap_fusion_state_hashes"), it returns HALT (-1) when a
+// state hash repeats within goapFusionCircuitHistoryWindow — the repeated-state
+// cycle the PatchBoard 3-hash window is designed to catch — and CONTINUE (1)
+// when the window shows only distinct, progress-making hashes.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts(t *testing.T) {
+	action := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q", "EvaluateScheduledGoapFusionCircuitBreaker")
+	}
+
+	// A repeated state hash within the bounded history window is the
+	// "Activity-Progress Confusion" cycle: the loop returned to a prior state
+	// without advancing the goal. The circuit breaker must HALT (-1).
+	halt := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes": []string{"aaa", "bbb", "aaa"},
+		},
+	}
+	haltCtx := &btcore.BTContext[Blackboard]{Blackboard: halt}
+	if status := action(haltCtx); status != -1 {
+		t.Fatalf("expected HALT (-1) on a repeated state hash within the window, got %d", status)
+	}
+	if !strings.Contains(halt.Result, "HALT") {
+		t.Fatalf("expected HALT diagnosis in Result, got %q", halt.Result)
+	}
+
+	// A window of only distinct, progress-making state hashes must let the loop
+	// CONTINUE (1).
+	cont := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes": []string{"aaa", "bbb", "ccc"},
+		},
+	}
+	contCtx := &btcore.BTContext[Blackboard]{Blackboard: cont}
+	if status := action(contCtx); status != 1 {
+		t.Fatalf("expected CONTINUE (1) on a window of distinct state hashes, got %d", status)
 	}
 }
