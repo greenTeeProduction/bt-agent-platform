@@ -435,25 +435,26 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	}
 }
 
-// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo
-// pins the bare-main-repo *behavior* of the build-tree preflight guard, aligning
-// it with the VerifyGoapBuild bare-repo delegation policy set in 340dabb — the
-// reconciliation the P0 NotebookLM research goal requires. The registration-only
-// test above (…ScheduledGoapFusionBuildTreeMaterialized) never exercised the
-// guard's -1/pass behavior, giving false confidence the P0 gap was closed. On a
-// bare main repo (core.bare=true) there is no materialized working tree, so the
-// guard's `git diff --name-only HEAD --` fails with "this operation must be run
-// in a work tree" (exit 128). The run that produced HEAD was already build- and
-// test-verified inside its worktree during apply, so re-checking the on-disk
-// tree here would fail the whole cycle on stale, pre-conversion leftovers — the
-// exact failure class 340dabb fixed for VerifyGoapBuild. The guard must therefore
-// pass through with a delegation note (return 1) on a bare repo instead of
-// -1-blocking every scheduled cycle. Before this change the guard treated the
-// bare-repo git-diff error as a hard failure and returned -1.
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedMaterializesOnBareRepo
+// pins the reconciled bare-main-repo *behavior* the P0 NotebookLM research goal
+// requires. Commit 54011e3 turned this guard into a bare-repo no-op: on a bare
+// (core.bare=true) main repo it returned 1 with a "Delegated" note and
+// materialized nothing — passing in exactly the stale-tree case the guard was
+// invented to catch. goapFusionRepo is bare yet keeps an on-disk working tree
+// that can sit arbitrarily many commits behind HEAD (updating the bare `master`
+// ref during apply touches no file). The cycle's build+TDD step then compiles
+// that stale tree, so the loop's own committed fixes never reach the deployed
+// binary — the live "silently building a stale tree" failure the guard exists to
+// block. The reconciled guard must therefore *materialize* the on-disk tree to
+// HEAD (e.g. `git checkout -f HEAD -- .`) before returning pass, not skip.
+//
+// This test asserts that on a bare repo the guard (1) returns 1, (2) reports that
+// it materialized the on-disk tree to HEAD rather than merely delegating, and
+// (3) leaves no tracked file on disk differing from the committed HEAD.
 //
 // Skips when goapFusionRepo is not a bare repo (CI checkouts): the non-bare path
-// runs a real HEAD comparison against the on-disk tree.
-func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo(t *testing.T) {
+// already runs a real HEAD comparison against the on-disk tree.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedMaterializesOnBareRepo(t *testing.T) {
 	out, err := runGoapShell("git rev-parse --is-bare-repository")
 	if err != nil || strings.TrimSpace(out) != "true" {
 		t.Skipf("goapFusionRepo is not a bare repo here (out=%q err=%v)", strings.TrimSpace(out), err)
@@ -465,9 +466,21 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	bb := &Blackboard{Task: "verify scheduled goap fusion build tree materialized"}
 	code := fn(btcore.NewBTContext(context.Background(), bb))
 	if code != 1 {
-		t.Fatalf("VerifyScheduledGoapFusionBuildTreeMaterialized on bare repo = %d, want 1 (delegate to apply-stage worktree verification)", code)
+		t.Fatalf("VerifyScheduledGoapFusionBuildTreeMaterialized on bare repo = %d, want 1 (materialize on-disk tree to HEAD)", code)
 	}
-	if !strings.Contains(bb.Result, "Delegated") {
-		t.Fatalf("expected a bare-repo delegation note in Result, got: %s", bb.Result[:min(len(bb.Result), 200)])
+	if !strings.Contains(bb.Result, "Materialized") {
+		t.Fatalf("expected a bare-repo materialization note in Result (guard must check out HEAD, not delegate), got: %s", bb.Result[:min(len(bb.Result), 300)])
+	}
+
+	// After the guard runs, the on-disk tracked tree must match HEAD: a bare repo
+	// with a work tree lets us compare via an explicit --git-dir/--work-tree diff.
+	// A delegation no-op leaves the stale files in place, so this stays non-empty
+	// until the guard actually materializes the tree.
+	diff, derr := runGoapShell("git --git-dir=.git --work-tree=. diff --name-only HEAD --")
+	if derr != nil {
+		t.Fatalf("post-materialization diff against HEAD failed: %v\n%s", derr, diff)
+	}
+	if stale := strings.TrimSpace(diff); stale != "" {
+		t.Fatalf("expected the on-disk build tree materialized to HEAD (no tracked file differs), but these still differ:\n%s", stale)
 	}
 }

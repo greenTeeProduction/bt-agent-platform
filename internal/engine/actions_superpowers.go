@@ -762,11 +762,14 @@ func goapFusionStateHashes(bb *Blackboard) []string {
 // built from source that does not match HEAD, so the loop's own committed fixes
 // never reach the running code. The runtime and toolchain guards confirm the
 // repository directory and Go toolchain exist but never confirm the on-disk tree
-// matches HEAD. This guard closes that gap by requiring the build directory's
-// tracked working tree to be materialized to HEAD — no tracked file whose
-// on-disk content differs from the committed HEAD — before the automatic
-// research-to-implementation cycle proceeds, so a bare-repo run fails fast with
-// a clear diagnosis instead of silently building a stale tree.
+// matches HEAD. This guard closes that gap by materializing the build
+// directory's tracked working tree to HEAD before the automatic
+// research-to-implementation cycle proceeds. On a bare main repo it runs an
+// explicit `git --git-dir=<dir> --work-tree=. checkout -f HEAD -- .` (a plain
+// diff/checkout dies with "must be run in a work tree"), then verifies no
+// tracked file still differs from HEAD; on a non-bare checkout it compares the
+// on-disk tree against HEAD directly. Either way the cycle only proceeds once
+// the on-disk tree matches HEAD, so it never silently builds a stale tree.
 func init() {
 	RegisterAction("VerifyScheduledGoapFusionBuildTreeMaterialized", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -776,16 +779,40 @@ func init() {
 			return -1
 		}
 
-		// A bare main repo (core.bare=true) has no materialized working tree, so
-		// `git diff --name-only HEAD --` dies with "this operation must be run in a
-		// work tree" (exit 128). The run that produced HEAD was already build- and
-		// test-verified inside its worktree by the apply step, so re-checking the
-		// on-disk tree here would fail the whole cycle on stale, pre-conversion
-		// leftovers — the exact failure class 340dabb fixed for VerifyGoapBuild.
-		// Pass through with a delegation note (return 1) instead of -1-blocking
-		// every scheduled cycle.
+		// A bare main repo (core.bare=true) keeps an on-disk working tree, but
+		// applying a run only fast-forwards the bare `master` ref
+		// (`git fetch . <branch>:master`) — updating a ref in a bare repo touches no
+		// file, so the tracked source stays frozen arbitrarily many commits behind
+		// HEAD. A plain `git diff --name-only HEAD --` there dies with "this
+		// operation must be run in a work tree" (exit 128), so the guard cannot even
+		// observe the drift. Rather than delegating (a no-op that materializes
+		// nothing and passes in exactly the stale-tree case this guard exists to
+		// catch), materialize the on-disk tree to HEAD with an explicit
+		// --git-dir/--work-tree checkout before the build+TDD step compiles it, then
+		// confirm no tracked file differs from HEAD.
 		if out, err := runGoapShell("git rev-parse --is-bare-repository"); err == nil && strings.TrimSpace(out) == "true" {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Delegated\n\nMain repo `%s` is bare (no working tree to materialize); the run's changes were build- and test-verified in its worktree during apply. Skipping stale-tree re-verification.", goapFusionRepo)
+			gitDir, gderr := runGoapShell("git rev-parse --git-dir")
+			if gderr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare but its git directory could not be resolved to materialize the on-disk tree: %v\n\n%s", goapFusionRepo, gderr, strings.TrimSpace(gitDir))
+				return -1
+			}
+			gd := strings.TrimSpace(gitDir)
+			checkout := fmt.Sprintf("git --git-dir=%s --work-tree=. checkout -f HEAD -- .", gd)
+			if co, coErr := runGoapShell(checkout); coErr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; could not materialize its on-disk tree to HEAD via `%s`: %v\n\n%s", goapFusionRepo, checkout, coErr, strings.TrimSpace(co))
+				return -1
+			}
+			verify := fmt.Sprintf("git --git-dir=%s --work-tree=. diff --name-only HEAD --", gd)
+			diff, derr := runGoapShell(verify)
+			if derr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materialized the on-disk tree to HEAD but could not verify it via `%s`: %v\n\n%s", goapFusionRepo, verify, derr, strings.TrimSpace(diff))
+				return -1
+			}
+			if stale := strings.TrimSpace(diff); stale != "" {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materializing the on-disk tree to HEAD left tracked file(s) still differing from HEAD, so the build would compile stale source:\n\n%s", goapFusionRepo, stale)
+				return -1
+			}
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Materialized\n\nMain repo `%s` is bare (no ref-update materializes the working tree during apply); materialized its on-disk tree to HEAD via `%s` so the build+TDD step compiles HEAD, not a stale tree. No tracked file now differs from HEAD.", goapFusionRepo, checkout)
 			return 1
 		}
 
