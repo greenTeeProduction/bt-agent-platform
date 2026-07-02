@@ -351,3 +351,32 @@ func TestDescriptionsHaveNoOrphans(t *testing.T) {
 		}
 	}
 }
+
+func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
+	tree := GoapFusionLoopTree()
+
+	var router *evolution.SerializableNode
+	var walk func(n *evolution.SerializableNode)
+	walk = func(n *evolution.SerializableNode) {
+		if n.Name == "ResearchRouter" {
+			router = n
+			return
+		}
+		for i := range n.Children {
+			walk(&n.Children[i])
+		}
+	}
+	walk(tree)
+
+	if router == nil {
+		t.Fatal("GoapFusionLoopTree has no ResearchRouter node")
+	}
+	if router.Type != "Selector" {
+		t.Fatalf("ResearchRouter type = %q, want Selector", router.Type)
+	}
+	if len(router.Children) != 2 ||
+		router.Children[0].Name != "RunGoapFusionNotebookLMResearch" ||
+		router.Children[1].Name != "RunClaudeCodeReviewResearch" {
+		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
+	}
+}

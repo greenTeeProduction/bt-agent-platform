@@ -4,7 +4,8 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 
 // GoapFusionLoopTree is a single-cycle GOAP fusion improvement runner that:
 //  1. Grills NotebookLM with critical review ("grill me" pattern)
-//  2. Runs NotebookLM research for fresh recommendations
+//  2. Runs NotebookLM research for fresh recommendations (falls back to a
+//     Claude Code review of recent commits when NotebookLM is unavailable)
 //  3. Reads vault research + graphify codebase analysis
 //  4. Identifies gaps, prioritizes goals
 //  5. Implements improvements via Claude Code (auto-approved)
@@ -32,8 +33,15 @@ func GoapFusionLoopTree() *evolution.SerializableNode {
 				"Multi-turn critical review: grill the research notebook on what the BT framework is missing, demand concrete implementation targets with file paths and test commands"),
 
 			// ── Phase 2: Fresh Research ──
-			act("RunGoapFusionNotebookLMResearch",
-				"Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
+			// NotebookLM first; when it is unavailable (daily quota exhausted,
+			// auth expired, circuit open) Claude Code reviews the daemon's
+			// recent commits instead so the cycle still produces findings.
+			sel("ResearchRouter",
+				act("RunGoapFusionNotebookLMResearch",
+					"Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
+				act("RunClaudeCodeReviewResearch",
+					"Fallback when NotebookLM is unavailable: Claude Code reviews recent daemon commits (or graphify hotspots) and emits GOAL/GAP/FILES/TESTS findings to the vault"),
+			),
 
 			// ── Phase 3: Read Context ──
 			act("ReadVaultResearch",
