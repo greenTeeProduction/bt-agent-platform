@@ -147,6 +147,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	if !opts.DisableBlackboard {
 		runID := blackboard.NewRunID()
 		bb.RunID = runID
+		bb.Logger = engine.L().With("run_id", runID, "agent", agentName, "tree", result.TreeID)
 		bb.BB = blackboard.NewHandle(d.boardManager(), runID, opts.SessionID, agentName)
 		result.RunID = runID
 		result.SessionID = opts.SessionID

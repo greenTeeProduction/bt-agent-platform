@@ -19,6 +19,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -82,10 +83,19 @@ type Blackboard struct {
 	TreeTicks  int
 
 	TraceContext context.Context `json:"-"`
+	Logger       *slog.Logger    `json:"-"` // run-scoped logger (run_id/agent/tree bound); use Log()
 
 	// Blackboard management (Phase 1): scoped key-value store for context offloading.
 	BB    *blackboard.Handle
 	RunID string
+}
+
+// Log returns the run-scoped logger when bound, else the global logger.
+func (bb *Blackboard) Log() *slog.Logger {
+	if bb.Logger != nil {
+		return bb.Logger
+	}
+	return L()
 }
 
 // BuildTree constructs a go-bt Command from a SerializableNode tree definition.
