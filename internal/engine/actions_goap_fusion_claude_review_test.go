@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -209,5 +211,107 @@ func TestBuildClaudeReviewPrompt_ContractMarkers(t *testing.T) {
 	}
 	if !strings.Contains(commits, "Do not edit any files") {
 		t.Fatal("review prompt must forbid edits")
+	}
+}
+
+type fakeReviewClaudeRunner struct {
+	output  string
+	err     error
+	prompts []string
+}
+
+func (f *fakeReviewClaudeRunner) RunClaude(_ context.Context, _ string, prompt string) CommandResult {
+	f.prompts = append(f.prompts, prompt)
+	return CommandResult{Output: f.output, Err: f.err}
+}
+
+func reviewTestDeps(t *testing.T, repo string, runner ClaudeRunner) goapReviewDeps {
+	t.Helper()
+	return goapReviewDeps{
+		runner:       runner,
+		repoDir:      repo,
+		synthesesDir: t.TempDir(),
+		graphReport:  filepath.Join(repo, "missing-report.md"),
+		timeout:      time.Minute,
+	}
+}
+
+func TestRunClaudeCodeReviewResearch_Success(t *testing.T) {
+	repo, first := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{output: `GOAL: Add regression test for var X initialization
+GAP: second commit added var X without any test coverage
+FILES: a.go, a_test.go
+TESTS: /usr/local/go/bin/go test ./... -run TestX
+FINDINGS: - a.go: exported var without doc comment`}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	saveLastReviewedSHA(bb, first)
+
+	deps := reviewTestDeps(t, repo, runner)
+	if got := runClaudeCodeReviewResearch(bb, deps); got != 1 {
+		t.Fatalf("status = %d, want 1; result: %s", got, bb.Result)
+	}
+
+	goal, _ := bb.ChainState["goap_fusion_notebooklm_goal"].(string)
+	if !strings.Contains(goal, "regression test for var X") {
+		t.Fatalf("goal not extracted: %q", goal)
+	}
+	if src, _ := bb.ChainState["goap_fusion_research_source"].(string); src != "claude_code_review" {
+		t.Fatalf("research_source = %q", src)
+	}
+
+	path, _ := bb.ChainState["goap_fusion_notebooklm_research_path"].(string)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("synthesis file not written: %v", err)
+	}
+	if !strings.Contains(string(data), "claude_code_review") ||
+		!strings.Contains(string(data), "GOAL: Add regression test") {
+		t.Fatalf("synthesis content wrong:\n%s", data)
+	}
+	if !strings.Contains(filepath.Base(path), "goap-fusion-claude-review-") {
+		t.Fatalf("synthesis filename convention violated: %s", path)
+	}
+
+	head, _ := runGoapGit(repo, 10*time.Second, "rev-parse", "HEAD")
+	if got := loadLastReviewedSHA(bb); got != head {
+		t.Fatalf("last reviewed SHA not advanced: got %q want %q", got, head)
+	}
+	if len(runner.prompts) != 1 || !strings.Contains(runner.prompts[0], "GOAL:") {
+		t.Fatalf("runner prompt malformed: %v", runner.prompts)
+	}
+}
+
+func TestRunClaudeCodeReviewResearch_RateLimited(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{
+		output: "Claude AI usage limit reached|resets 3pm",
+		err:    fmt.Errorf("exit status 1"),
+	}
+	bb := &Blackboard{Task: "improve"}
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != -1 {
+		t.Fatalf("status = %d, want -1", got)
+	}
+	if bb.Outcome != "goap_fusion_claude_review_rate_limited" {
+		t.Fatalf("outcome = %q", bb.Outcome)
+	}
+}
+
+func TestRunClaudeCodeReviewResearch_NoParseableGoalFails(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{output: ""}
+	bb := &Blackboard{Task: "improve"}
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != -1 {
+		t.Fatalf("status = %d, want -1", got)
+	}
+	if bb.Outcome != "goap_fusion_claude_review_failed" {
+		t.Fatalf("outcome = %q", bb.Outcome)
+	}
+}
+
+func TestRunClaudeCodeReviewResearchActionRegistered(t *testing.T) {
+	if GetAction("RunClaudeCodeReviewResearch") == nil {
+		t.Fatal("RunClaudeCodeReviewResearch not registered")
 	}
 }

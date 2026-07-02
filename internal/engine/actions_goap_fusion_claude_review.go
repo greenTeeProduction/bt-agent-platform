@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // isGoapNotebookLMQuotaError reports whether a NotebookLM CLI failure is the
@@ -201,4 +203,123 @@ Rules:
 - The goal must be small enough for one scheduled coding run.
 - If the reviewed code is clean, say so in FINDINGS and put the best
   code-level next step in GOAL.`, task, focus)
+}
+
+// goapReviewAllowedTools keeps the review run read-only: the review must not
+// edit code — the implementation phase does that. One command prefix per
+// Bash() rule (see defaultSuperpowersAllowedTools).
+const goapReviewAllowedTools = "Read,Glob,Grep," +
+	"Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*)"
+
+type goapReviewDeps struct {
+	runner       ClaudeRunner
+	repoDir      string
+	synthesesDir string
+	graphReport  string
+	timeout      time.Duration
+}
+
+func defaultGoapReviewDeps() goapReviewDeps {
+	return goapReviewDeps{
+		runner: execClaudeRunner{
+			AllowedTools: getenvDefault("BT_GOAP_REVIEW_ALLOWED_TOOLS", goapReviewAllowedTools),
+		},
+		repoDir:      goapFusionRepo,
+		synthesesDir: goapFusionSynthesesDir,
+		graphReport:  goapFusionGraphReport,
+		timeout:      15 * time.Minute,
+	}
+}
+
+func init() {
+	RegisterAction("RunClaudeCodeReviewResearch", func(ctx *btcore.BTContext[Blackboard]) int {
+		return runClaudeCodeReviewResearch(ctx.Blackboard, defaultGoapReviewDeps())
+	})
+}
+
+// runClaudeCodeReviewResearch is the ResearchRouter fallback: Claude Code
+// reviews the daemon's recent commits (or graphify hotspots) and its findings
+// feed the pipeline through the exact ChainState keys the NotebookLM research
+// action produces, so downstream phases need no changes.
+func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
+	rc := gatherReviewContext(deps.repoDir, loadLastReviewedSHA(bb), deps.graphReport)
+	prompt := buildClaudeReviewPrompt(bb.Task, rc)
+
+	runCtx, cancel := context.WithTimeout(context.Background(), deps.timeout)
+	defer cancel()
+	result := deps.runner.RunClaude(runCtx, deps.repoDir, prompt)
+
+	combined := result.Output
+	if result.Err != nil {
+		combined += " " + result.Err.Error()
+	}
+	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
+		if isClaudeRateLimit(combined) {
+			bb.Result = fmt.Sprintf("## Claude Review Fallback Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
+			bb.Outcome = "goap_fusion_claude_review_rate_limited"
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Claude Review Fallback Failed\n\n```\n%s\n```", truncateGoap(combined, 2000))
+		bb.Outcome = "goap_fusion_claude_review_failed"
+		return -1
+	}
+
+	answer := strings.TrimSpace(result.Output)
+	goal, gap := extractGoapNotebookLMRecommendation(answer)
+	if goal == "" {
+		goal = firstNonEmptyGoapLine(answer)
+	}
+	if goal == "" {
+		bb.Result = "## Claude Review Fallback Failed\n\nClaude returned no parseable recommendation."
+		bb.Outcome = "goap_fusion_claude_review_failed"
+		return -1
+	}
+	if gap == "" {
+		gap = "Claude Code review produced a recommendation; see raw findings."
+	}
+
+	skipReason, _ := bb.ChainState["goap_fusion_notebooklm_skip_reason"].(string)
+	if skipReason == "" {
+		skipReason = "NotebookLM research step failed or was skipped"
+	}
+
+	ts := time.Now().Format("2006-01-02T150405")
+	path := filepath.Join(deps.synthesesDir, fmt.Sprintf("goap-fusion-claude-review-%s.md", ts))
+	report := fmt.Sprintf(`# GOAP Fusion Claude Code Review — %s
+
+## Source
+claude_code_review (fallback; NotebookLM unavailable)
+
+## Why NotebookLM Was Skipped
+%s
+
+## Reviewed
+%s (%s mode)
+
+## Recommendation
+GOAL: %s
+GAP: %s
+
+## Raw Claude Review Findings
+%s
+`, ts, truncateGoap(skipReason, 1500), rc.rangeDesc, rc.mode, goal, gap, answer)
+	if err := writeString(path, report); err != nil {
+		bb.Result = fmt.Sprintf("## Claude Review Fallback Failed\n\nCould not write `%s`: %v", path, err)
+		bb.Outcome = "goap_fusion_claude_review_failed"
+		return -1
+	}
+
+	setGoapState(bb, "notebooklm_research", report)
+	setGoapState(bb, "notebooklm_goal", goal)
+	setGoapState(bb, "notebooklm_gap", gap)
+	setGoapState(bb, "notebooklm_research_path", path)
+	setGoapState(bb, "research_source", "claude_code_review")
+
+	if head, err := runGoapGit(deps.repoDir, 10*time.Second, "rev-parse", "HEAD"); err == nil && head != "" {
+		saveLastReviewedSHA(bb, head)
+	}
+
+	bb.Result = fmt.Sprintf("## Claude Code Review Fallback Complete\n\nReviewed: %s (%s)\n\nPath: `%s`\n\nGOAL: %s\n\nGAP: %s",
+		rc.rangeDesc, rc.mode, path, goal, gap)
+	return 1
 }
