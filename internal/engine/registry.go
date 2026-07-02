@@ -74,12 +74,19 @@ func tracedAction(name string, fn ActionFunc) ActionFunc {
 			prev = bb.TraceContext
 			bb.TraceContext = spanCtx // nested spans (LLM calls) parent here
 		}
+		// Restore + End unconditionally: RunTask recovers panics above this
+		// frame and keeps using the same Blackboard, so a panicking fn must
+		// not leave bb.TraceContext pointing at a dead, never-ended span.
+		// No recover() here — the caller's panic semantics stand; on panic
+		// the bt.status attribute is simply absent.
+		defer func() {
+			if bb != nil {
+				bb.TraceContext = prev
+			}
+			span.End()
+		}()
 		status := fn(ctx)
-		if bb != nil {
-			bb.TraceContext = prev
-		}
 		span.SetAttribute("bt.status", actionStatusString(status))
-		span.End()
 		return status
 	}
 }
@@ -93,13 +100,14 @@ func tracedCondition(name string, fn ConditionFunc) ConditionFunc {
 		_, span := tracing.StartSpan(parent, "bt.condition/"+name)
 		span.SetAttribute("bt.node.kind", "condition")
 		span.SetAttribute("bt.node.name", name)
+		// End unconditionally so a panicking fn cannot leak the span.
+		defer span.End()
 		result := fn(bb)
 		if result {
 			span.SetAttribute("bt.status", "true")
 		} else {
 			span.SetAttribute("bt.status", "false")
 		}
-		span.End()
 		return result
 	}
 }
