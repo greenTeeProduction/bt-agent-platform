@@ -62,3 +62,43 @@ func TestMemSequence_DoesNotRetickCompletedChildren(t *testing.T) {
 		t.Fatalf("child A re-ticked: %d calls, want 1", aCalls)
 	}
 }
+
+func TestMemSelector_ResumesAtRunningChildAndSkipsFailed(t *testing.T) {
+	var failCalls, runCalls int
+	RegisterAction("TestMemSelFail", func(_ *btcore.BTContext[Blackboard]) int {
+		failCalls++
+		return -1
+	})
+	ticks := 0
+	RegisterAction("TestMemSelRun", func(_ *btcore.BTContext[Blackboard]) int {
+		runCalls++
+		ticks++
+		if ticks < 2 {
+			return 0
+		}
+		return 1
+	})
+	node := &evolution.SerializableNode{
+		Type: "MemSelector", Name: "MemSelUnderTest",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "TestMemSelFail"},
+			{Type: "Action", Name: "TestMemSelRun"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+
+	if got := cmd.Run(ctx); got != 0 {
+		t.Fatalf("tick1: want RUNNING, got %d", got)
+	}
+	if got := cmd.Run(ctx); got != 1 {
+		t.Fatalf("tick2: want SUCCESS, got %d", got)
+	}
+	if failCalls != 1 {
+		t.Fatalf("failed child re-ticked while RUNNING: %d calls, want 1", failCalls)
+	}
+	if _, ok := bb.ChainState["memsel/MemSelUnderTest"]; ok {
+		t.Fatal("cursor must be cleared on completion")
+	}
+}

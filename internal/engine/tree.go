@@ -177,6 +177,8 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewMemSequence(children...)
+	case "MemSelector":
+		return BuildMemSelector(node, bb)
 	case "Parallel":
 		return BuildParallel(node, bb)
 	case "Budget":
