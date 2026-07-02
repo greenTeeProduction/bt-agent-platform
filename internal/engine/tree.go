@@ -171,6 +171,12 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 			children[i] = buildNode(&node.Children[i], bb, node.Name)
 		}
 		return btcomp.NewSelector(children...)
+	case "MemSequence":
+		children := make([]btcore.Command[Blackboard], len(node.Children))
+		for i := range node.Children {
+			children[i] = buildNode(&node.Children[i], bb, node.Name)
+		}
+		return btcomp.NewMemSequence(children...)
 	case "Parallel":
 		return BuildParallel(node, bb)
 	case "Budget":
