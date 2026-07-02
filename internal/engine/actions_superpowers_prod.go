@@ -665,6 +665,45 @@ func registerSuperpowersProductionActions() {
 		return 1
 	})
 
+	// PushBranchAndCreatePR and DiscardSuperpowersWorktree back the "pr" and
+	// "discard" (default) branches of the ChooseFinishOption/FinishRouter
+	// DecisionTree (superpowers_workflow.go) — the finishing-a-development-branch
+	// options beyond the existing merge path (ApplySuperpowersRunToMainRepo).
+	RegisterAction("PushBranchAndCreatePR", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, ok := getSuperpowersRun(bb)
+		if !ok {
+			bb.Result = "## Push Branch And Create PR Failed\n\nNo run state."
+			return -1
+		}
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		prURL, err := pushBranchAndCreatePR(c, defaultSuperpowersCommandRunner, run)
+		if err != nil {
+			bb.Result = "## Push Branch And Create PR Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Pull Request Created\n\nBranch: `%s`\nPR: %s", run.WorktreeBranch, prURL)
+		return 1
+	})
+
+	RegisterAction("DiscardSuperpowersWorktree", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		run, ok := getSuperpowersRun(bb)
+		if !ok {
+			bb.Result = "## Discard Superpowers Worktree Failed\n\nNo run state."
+			return -1
+		}
+		c, cancel := superpowersCommandTimeout()
+		defer cancel()
+		if err := discardSuperpowersWorktree(c, defaultSuperpowersCommandRunner, run); err != nil {
+			bb.Result = "## Discard Superpowers Worktree Failed\n\n" + err.Error()
+			return -1
+		}
+		bb.Result = fmt.Sprintf("## Superpowers Worktree Discarded\n\nWorktree: `%s`\nBranch: `%s`", run.WorktreePath, run.WorktreeBranch)
+		return 1
+	})
+
 	RegisterAction("WriteSuperpowersFinishReport", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		run, ok := getSuperpowersRun(bb)

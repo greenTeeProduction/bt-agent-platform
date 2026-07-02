@@ -81,6 +81,93 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 	return writeSuperpowersRunJSON(run)
 }
 
+// prBodyFooter is the standard attribution footer the plan
+// (docs/superpowers/plans/2026-07-02-superpowers-bt-workflow-nodes.md, Task 11)
+// asks PushBranchAndCreatePR to append to the PR body, mirroring the repo's
+// commit-message convention (CLAUDE.md).
+const prBodyFooter = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+
+// pushBranchAndCreatePR pushes the run's worktree branch to origin and opens
+// a GitHub pull request via `gh pr create --fill`, both run through runner in
+// the worktree directory — the "push" finish option from
+// finishing-a-development-branch (Part A of the plan).
+//
+// Footer note (documented per the task brief's explicit allowance): gh CLI's
+// `--fill` derives the PR title/body from the branch's commit log, and `gh pr
+// create` rejects combining `--fill` with `--title`/`--body`/`--body-file`
+// (they are mutually exclusive) — there is no single-call way to both fill
+// from commits and append prBodyFooter. A follow-up `gh pr view --json body`
+// + `gh pr edit --body` round trip could append it, but that doubles this
+// action's external command surface (and its failure modes: JSON field
+// availability, `--jq` support) for a cosmetic footer. Per the brief's
+// explicit allowance ("--fill alone is acceptable, document it"), this
+// implementation uses `--fill` alone; prBodyFooter is defined for reuse if a
+// future revision adds the edit round trip.
+func pushBranchAndCreatePR(ctx context.Context, runner CommandRunner, run *SuperpowersRun) (string, error) {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	if run == nil {
+		return "", fmt.Errorf("nil superpowers run")
+	}
+	dir := run.WorktreePathOrRepo()
+	branch := strings.TrimSpace(run.WorktreeBranch)
+	if branch == "" {
+		head := runner.Run(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
+		if head.Err != nil {
+			return "", fmt.Errorf("could not resolve current branch for PR: %v\n%s", head.Err, head.Output)
+		}
+		branch = strings.TrimSpace(head.Output)
+	}
+	if branch == "" || branch == "HEAD" {
+		return "", fmt.Errorf("no usable branch resolved for PushBranchAndCreatePR")
+	}
+
+	push := runner.Run(ctx, dir, "git", "push", "-u", "origin", branch)
+	if push.Err != nil {
+		return "", fmt.Errorf("git push -u origin %s failed: %v\n%s", branch, push.Err, push.Output)
+	}
+
+	create := runner.Run(ctx, dir, "gh", "pr", "create", "--fill")
+	if create.Err != nil {
+		return "", fmt.Errorf("gh pr create --fill failed: %v\n%s", create.Err, create.Output)
+	}
+	return strings.TrimSpace(create.Output), nil
+}
+
+// discardSuperpowersWorktree removes the run's worktree and deletes its
+// branch, both run from the MAIN repo directory (run.RepoDir) — the
+// "discard" finish option from finishing-a-development-branch. It is a
+// stricter sibling of cleanupSuperpowersWorktree (superpowers_worktree.go:89):
+// that helper silently no-ops on an empty/main-repo WorktreePath (a
+// best-effort cleanup call), whereas this action-backing function is a HARD
+// GUARD — a "discard" finish choice pointed at the main repo checkout must
+// refuse outright (running zero commands) rather than silently doing
+// nothing, since discard is destructive (branch deletion) and the caller
+// needs to see the refusal, not a quiet no-op.
+func discardSuperpowersWorktree(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	if run == nil {
+		return fmt.Errorf("nil superpowers run")
+	}
+	if run.WorktreePath == "" || run.WorktreePath == run.RepoDir {
+		return fmt.Errorf("refusing to discard: WorktreePath is empty or equals the main repo path (RepoDir=%q, WorktreePath=%q)", run.RepoDir, run.WorktreePath)
+	}
+	remove := runner.Run(ctx, run.RepoDir, "git", "worktree", "remove", "--force", run.WorktreePath)
+	if remove.Err != nil {
+		return fmt.Errorf("git worktree remove --force %s failed: %v\n%s", run.WorktreePath, remove.Err, remove.Output)
+	}
+	if branch := strings.TrimSpace(run.WorktreeBranch); branch != "" {
+		branchDelete := runner.Run(ctx, run.RepoDir, "git", "branch", "-D", branch)
+		if branchDelete.Err != nil {
+			return fmt.Errorf("git branch -D %s failed: %v\n%s", branch, branchDelete.Err, branchDelete.Output)
+		}
+	}
+	return nil
+}
+
 func captureSuperpowersWorktreePatch(ctx context.Context, runner CommandRunner, run *SuperpowersRun) (string, error) {
 	// git add -N does not support :! exclusion pathspecs and fails when
 	// graphify-out is in .gitignore. Skip the intent-to-add step — Claude
