@@ -284,6 +284,71 @@ func TestBanditSelector_ResumesRunningChildDespiteReordering(t *testing.T) {
 	}
 }
 
+// TestBanditSelector_DisabledRunningChildRestartsAtZero (Important
+// re-review finding): disabled mode is contractually "behaves EXACTLY like
+// Selector" — restart at child 0 every tick, zero cross-tick memory; the
+// vendored composite.Selector has no cursor at all. The running-child
+// resume cursor (added for Finding 3) was not gated by `enabled`, so a
+// disabled BanditSelector resumed a previously-RUNNING child on the next
+// tick instead of restarting at child 0 — skipping earlier children and
+// leaving a "bandit/<name>/running" ChainState key that plain Selector
+// semantics never produce.
+func TestBanditSelector_DisabledRunningChildRestartsAtZero(t *testing.T) {
+	t.Setenv("BT_BANDIT_DIR", t.TempDir())
+
+	nodeName := "BanditDisabledRestartUnderTest"
+	runningKey := "bandit/" + nodeName + "/running"
+
+	callsA, callsB := 0, 0
+	RegisterAction("BanditDisabledRestartChildA", func(_ *btcore.BTContext[Blackboard]) int {
+		callsA++
+		return -1 // always fails
+	})
+	RegisterAction("BanditDisabledRestartChildB", func(_ *btcore.BTContext[Blackboard]) int {
+		callsB++
+		if callsB == 1 {
+			return 0 // RUNNING on first tick
+		}
+		return 1 // SUCCESS on second tick
+	})
+
+	node := &evolution.SerializableNode{
+		Type:     "BanditSelector",
+		Name:     nodeName,
+		Metadata: map[string]any{"enabled": false},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "BanditDisabledRestartChildA"},
+			{Type: "Action", Name: "BanditDisabledRestartChildB"},
+		},
+	}
+	bb := newTestBlackboard()
+	cmd := buildNode(node, bb, "")
+	ctx := newTestBTContext(bb)
+
+	if got := cmd.Run(ctx); got != 0 {
+		t.Fatalf("tick 1: want RUNNING, got %d", got)
+	}
+	if callsA != 1 || callsB != 1 {
+		t.Fatalf("tick 1: want childA and childB each tried once (Selector semantics: A fails, falls through to B), got callsA=%d callsB=%d", callsA, callsB)
+	}
+	if _, ok := bb.ChainState[runningKey]; ok {
+		t.Fatalf("tick 1: disabled BanditSelector must never write a resume cursor, found %q in ChainState", runningKey)
+	}
+
+	if got := cmd.Run(ctx); got != 1 {
+		t.Fatalf("tick 2: want SUCCESS, got %d", got)
+	}
+	if callsA != 2 {
+		t.Fatalf("tick 2: want childA tried again before reaching childB (disabled mode restarts at child 0 every tick), got callsA=%d", callsA)
+	}
+	if callsB != 2 {
+		t.Fatalf("tick 2: want childB tried again, got callsB=%d", callsB)
+	}
+	if _, ok := bb.ChainState[runningKey]; ok {
+		t.Fatalf("tick 2: disabled BanditSelector must never write a resume cursor, found %q in ChainState", runningKey)
+	}
+}
+
 // TestBanditSelector_ConcurrentTicksNoLostOutcomes (Finding 1): two
 // goroutines race a fresh BanditSelector command instance each tick against
 // the same node name (hence the same stats file). Without a per-path mutex

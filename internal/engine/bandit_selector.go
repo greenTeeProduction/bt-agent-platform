@@ -188,9 +188,23 @@ func banditUCB1Order(keys []string, stats *banditStats) []int {
 // corrupt stats file starts empty rather than failing the node. A malformed
 // config (zero children) yields a failing action instead of panicking.
 //
-// Concurrency: every load-modify-save cycle holds this node's path-scoped
-// lock from banditLockFor — see that registry's doc comment for exactly what
-// is (same-process races) and isn't (cross-process races) covered.
+// Concurrency: this node's path-scoped lock from banditLockFor guards only
+// stats access — the lazy load, each recorded outcome, each UCB1 recompute,
+// and each save — and is always released before every children[idx].Run(ctx)
+// call, so a child ticking for an arbitrarily long time (including its own
+// nested BanditSelectors) never holds this node's stats file lock and never
+// serializes with a sibling/unrelated tree's tick of a same-named
+// BanditSelector. The lazy load is deferred until first actually needed
+// (the first UCB1 recompute when enabled, otherwise the first recorded
+// outcome) rather than performed eagerly before any child.Run: this keeps a
+// fresh closure's first load-modify-save cycle a single uninterrupted lock
+// hold with no child.Run in the middle, which is what makes it safe to
+// exclude child.Run from the lock in the first place — a load performed
+// well before the matching save, with only the lock (not the load-to-save
+// span) protecting it, would let a concurrent tick's full cycle interleave
+// and clobber it (a classic lost update). See banditLockFor's doc comment
+// for exactly what is (same-process races) and isn't (cross-process races)
+// covered.
 //
 // Caching: stats are loaded once and cached in this closure; subsequent
 // ticks of the *same built command* reuse the cache instead of re-reading
@@ -206,7 +220,9 @@ func banditUCB1Order(keys []string, stats *banditStats) []int {
 // rank first — otherwise a re-tick could reorder arms out from under an
 // in-flight child and abandon it. The cursor is cleared once that child
 // reaches a terminal result; on failure, selection continues from the
-// remaining order in the same tick.
+// remaining order in the same tick. Disabled mode never reads or writes
+// this cursor: it is contractually "behaves EXACTLY like Selector" — no
+// cursor, no cross-tick memory, restart at child 0 every tick.
 func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
 	if len(node.Children) == 0 {
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
@@ -236,34 +252,52 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 	runningKey := "bandit/" + node.Name + "/running"
 
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		lock.Lock()
-		defer lock.Unlock()
-
-		if cached == nil {
-			cached = loadBanditStats(node.Name)
+		// ensureStats lazily loads (once per closure lifetime, Finding 2)
+		// and returns the cached stats object. Must be called with lock
+		// held. Deferring the load until it's actually needed — rather than
+		// eagerly before any child.Run — lets the *first* load happen
+		// inside the very same lock hold as that first recordBanditOutcome
+		// + save, with no child.Run in between: a genuinely atomic
+		// load-modify-save cycle, closing the lost-update window a
+		// load-then-later-save split across an unlocked child.Run would
+		// otherwise reopen.
+		ensureStats := func() *banditStats {
+			if cached == nil {
+				cached = loadBanditStats(node.Name)
+			}
+			return cached
 		}
-		stats := cached
-		dirty := false
 
 		// Resume a pinned RUNNING child first (Finding 3), bypassing
-		// whatever the current recompute would otherwise rank first.
+		// whatever the current recompute would otherwise rank first. Gated
+		// behind `enabled`: disabled mode is contractually "behaves EXACTLY
+		// like Selector" — restart at child 0 every tick, zero cross-tick
+		// memory — so it must never read or write this cursor.
 		resumed := -1
-		if idx, ok := chainStateInt(ctx.Blackboard, runningKey); ok && idx >= 0 && idx < len(children) {
-			resumed = idx
-			switch code := children[idx].Run(ctx); {
-			case code == 0:
-				ctx.Blackboard.ChainState[runningKey] = idx
-				return 0
-			case code > 0:
-				recordBanditOutcome(stats, keys[idx], true, window)
-				delete(ctx.Blackboard.ChainState, runningKey)
-				saveBanditStats(node.Name, stats)
-				return 1
-			default:
-				recordBanditOutcome(stats, keys[idx], false, window)
-				delete(ctx.Blackboard.ChainState, runningKey)
-				dirty = true
-				// fall through: continue selection from the remaining order
+		if enabled {
+			if idx, ok := chainStateInt(ctx.Blackboard, runningKey); ok && idx >= 0 && idx < len(children) {
+				resumed = idx
+				switch code := children[idx].Run(ctx); {
+				case code == 0:
+					ctx.Blackboard.ChainState[runningKey] = idx
+					return 0
+				case code > 0:
+					lock.Lock()
+					stats := ensureStats()
+					recordBanditOutcome(stats, keys[idx], true, window)
+					saveBanditStats(node.Name, stats)
+					lock.Unlock()
+					delete(ctx.Blackboard.ChainState, runningKey)
+					return 1
+				default:
+					lock.Lock()
+					stats := ensureStats()
+					recordBanditOutcome(stats, keys[idx], false, window)
+					saveBanditStats(node.Name, stats)
+					lock.Unlock()
+					delete(ctx.Blackboard.ChainState, runningKey)
+					// fall through: continue selection from the remaining order
+				}
 			}
 		}
 
@@ -272,7 +306,9 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 			order[i] = i
 		}
 		if enabled {
-			order = banditUCB1Order(keys, stats)
+			lock.Lock()
+			order = banditUCB1Order(keys, ensureStats())
+			lock.Unlock()
 		}
 
 		result := -1
@@ -282,21 +318,20 @@ func BuildBanditSelector(node *evolution.SerializableNode, bb *Blackboard) btcor
 			}
 			code := children[idx].Run(ctx)
 			if code == 0 {
-				ctx.Blackboard.ChainState[runningKey] = idx
-				if dirty {
-					saveBanditStats(node.Name, stats)
+				if enabled {
+					ctx.Blackboard.ChainState[runningKey] = idx
 				}
 				return 0 // RUNNING propagates immediately; not recorded
 			}
+			lock.Lock()
+			stats := ensureStats()
 			recordBanditOutcome(stats, keys[idx], code > 0, window)
-			dirty = true
+			saveBanditStats(node.Name, stats)
+			lock.Unlock()
 			if code > 0 {
 				result = 1
 				break
 			}
-		}
-		if dirty {
-			saveBanditStats(node.Name, stats)
 		}
 		return result
 	})
