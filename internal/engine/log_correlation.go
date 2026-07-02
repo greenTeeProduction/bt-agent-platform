@@ -3,8 +3,9 @@ package engine
 import (
 	"context"
 	"log/slog"
-	"net/url"
 	"os"
+	"path"
+	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/tracing"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -82,29 +83,64 @@ func (h *fanoutHandler) WithGroup(name string) slog.Handler {
 	return &fanoutHandler{children: out}
 }
 
+// logExportTarget derives the OTLP/HTTP log exporter target from an
+// endpoint string, reusing the tracing package's endpoint normalization
+// (scheme-less "host:port" endpoints assume http, trailing slashes are
+// trimmed). urlPath is the custom path prefix joined with the OTLP
+// "v1/logs" suffix, or empty when the endpoint carries no path (the
+// exporter then uses its default /v1/logs). ok is false when the endpoint
+// is empty or unparseable.
+func logExportTarget(endpoint string) (host, urlPath string, insecure, ok bool) {
+	host, prefix, insecure, ok := tracing.ParseOTLPTarget(endpoint)
+	if !ok {
+		return "", "", false, false
+	}
+	if prefix != "" {
+		urlPath = path.Join(prefix, "v1/logs")
+	}
+	return host, urlPath, insecure, true
+}
+
+var (
+	logExportMu          sync.Mutex
+	logExportInitialized bool
+)
+
 // InitLogExport attaches an OTLP log bridge to the global logger when
 // BT_OTLP_LOGS_ENDPOINT is set (Loki 3.x native OTLP ingest, e.g.
 // http://localhost:3100/otlp). Returns a shutdown func; no-op when unset
-// or on any setup error — file logging is never affected.
+// or on any setup error — file logging is never affected. Idempotent:
+// a second call warns and returns a no-op instead of double-attaching
+// the bridge.
 func InitLogExport(serviceName string) func(context.Context) error {
 	noop := func(context.Context) error { return nil }
 	endpoint := os.Getenv("BT_OTLP_LOGS_ENDPOINT")
 	if endpoint == "" {
 		return noop
 	}
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Host == "" {
+	host, urlPath, insecure, ok := logExportTarget(endpoint)
+	if !ok {
+		slog.Warn("log export disabled: invalid OTLP logs endpoint", "endpoint", endpoint)
 		return noop
 	}
-	opts := []otlploghttp.Option{
-		otlploghttp.WithEndpoint(u.Host),
-		otlploghttp.WithURLPath(u.Path + "/v1/logs"),
+
+	logExportMu.Lock()
+	defer logExportMu.Unlock()
+	if logExportInitialized {
+		slog.Warn("log export already initialized")
+		return noop
 	}
-	if u.Scheme != "https" {
+
+	opts := []otlploghttp.Option{otlploghttp.WithEndpoint(host)}
+	if urlPath != "" {
+		opts = append(opts, otlploghttp.WithURLPath(urlPath))
+	}
+	if insecure {
 		opts = append(opts, otlploghttp.WithInsecure())
 	}
 	exp, err := otlploghttp.New(context.Background(), opts...)
 	if err != nil {
+		slog.Warn("log export disabled: OTLP exporter init failed", "endpoint", endpoint, "error", err)
 		return noop
 	}
 	provider := sdklog.NewLoggerProvider(
@@ -113,5 +149,6 @@ func InitLogExport(serviceName string) func(context.Context) error {
 	)
 	bridge := otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(provider))
 	attachLogHandler(bridge)
+	logExportInitialized = true
 	return provider.Shutdown
 }

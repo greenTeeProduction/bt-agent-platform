@@ -92,13 +92,14 @@ func Endpoint() string {
 	return os.Getenv("BT_OTLP_ENDPOINT")
 }
 
-// parseOTLPEndpoint normalizes an OTLP endpoint into exporter options.
+// ParseOTLPTarget normalizes an OTLP endpoint into exporter target parts.
 // Endpoints without a scheme (bare "host:port") are treated as http://.
-// urlPath is non-empty only when the endpoint carries a custom path prefix
-// (reverse-proxy setups), already joined with the OTLP "v1/traces" suffix.
-// insecure is true for any scheme other than https. ok is false when the
-// endpoint is empty or unparseable.
-func parseOTLPEndpoint(endpoint string) (host, urlPath string, insecure, ok bool) {
+// urlPath is the endpoint's custom path prefix (reverse-proxy setups) with
+// trailing slashes trimmed and WITHOUT any signal suffix — callers join
+// their own "v1/traces" / "v1/logs" suffix. It is empty when the endpoint
+// carries no path. insecure is true for any scheme other than https.
+// ok is false when the endpoint is empty or unparseable.
+func ParseOTLPTarget(endpoint string) (host, urlPath string, insecure, ok bool) {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
 		return "", "", false, false
@@ -110,10 +111,21 @@ func parseOTLPEndpoint(endpoint string) (host, urlPath string, insecure, ok bool
 	if err != nil || u.Host == "" {
 		return "", "", false, false
 	}
-	if p := strings.TrimRight(u.Path, "/"); p != "" {
-		urlPath = path.Join(p, "v1/traces")
+	return u.Host, strings.TrimRight(u.Path, "/"), u.Scheme != "https", true
+}
+
+// parseOTLPEndpoint is the trace-specific wrapper around ParseOTLPTarget:
+// when the endpoint carries a custom path prefix, the returned urlPath is
+// already joined with the OTLP "v1/traces" suffix.
+func parseOTLPEndpoint(endpoint string) (host, urlPath string, insecure, ok bool) {
+	host, prefix, insecure, ok := ParseOTLPTarget(endpoint)
+	if !ok {
+		return "", "", false, false
 	}
-	return u.Host, urlPath, u.Scheme != "https", true
+	if prefix != "" {
+		urlPath = path.Join(prefix, "v1/traces")
+	}
+	return host, urlPath, insecure, true
 }
 
 // InitFromEnv installs an OTel-SDK-backed global tracer when an OTLP endpoint
