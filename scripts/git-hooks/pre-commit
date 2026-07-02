@@ -18,6 +18,14 @@ if ! command -v "$GO" &>/dev/null; then
     GOFMT="gofmt"
 fi
 
+# golangci-lint and go's own subprocesses exec bare `go` from PATH. Hook
+# contexts without the toolchain on PATH (systemd daemon commits, worktree
+# commits from the goap-fusion runtime) die with "exec: go: executable file
+# not found" mid-hook — export the resolved toolchain dir for all children.
+if command -v "$GO" &>/dev/null && [[ "$GO" == /* ]]; then
+    export PATH="$(dirname "$GO"):$PATH"
+fi
+
 echo "🔍 pre-commit: go-bt-evolve checks..."
 echo ""
 
