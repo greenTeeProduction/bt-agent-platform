@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
 // Scheduler runs agents on cron-like schedules. Supports one-shot, recurring,
@@ -612,6 +613,9 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			nodesStr = strings.Join(runRes.NodePaths, " → ")
 		}
 
+		_, whSpan := tracing.StartSpan(runCtx.Context, "agent.webhook_publish")
+		whSpan.SetAttribute("agent", job.AgentName)
+		whSpan.SetAttribute("event_type", eventType)
 		GlobalAgentBus.Publish(AgentEvent{
 			Type:    eventType,
 			Source:  job.AgentName,
@@ -625,6 +629,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 				"nodes":          nodesStr,
 			},
 		})
+		whSpan.End()
 	}
 
 	// Feed back into knowledge graph

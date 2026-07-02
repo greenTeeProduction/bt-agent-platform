@@ -224,6 +224,9 @@ func main() {
 		}
 
 		if err != nil {
+			_, dlqSpan := tracing.StartSpan(ctx.Context, "agent.dlq_push")
+			dlqSpan.SetAttribute("agent", ctx.AgentName)
+			dlqSpan.RecordError(err)
 			dlq.Push(reliability.DeadLetterEntry{
 				ID:       fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
 				Task:     task,
@@ -233,6 +236,7 @@ func main() {
 				FailedAt: time.Now(),
 				Circuit:  "scheduler",
 			})
+			dlqSpan.End()
 		}
 
 		return outcome, output, res, err

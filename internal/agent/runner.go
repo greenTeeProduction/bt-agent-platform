@@ -10,6 +10,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
 // TreeResolver maps a tree ID string to a serializable behavior tree.
@@ -167,7 +168,21 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		result.Duration = result.EndedAt.Sub(start)
 		return result, err
 	}
+	runCtx := ctx
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	spanCtx, runSpan := tracing.StartSpan(runCtx, "agent.run/"+agentName)
+	runSpan.SetAttribute("run_id", result.RunID)
+	runSpan.SetAttribute("agent", agentName)
+	runSpan.SetAttribute("tree", result.TreeID)
+	bb.TraceContext = spanCtx
 	_ = engine.RunTask(bb, bt)
+	runSpan.SetAttribute("outcome", bb.Outcome)
+	if bb.Outcome != "success" && bb.Outcome != "" {
+		runSpan.RecordError(fmt.Errorf("agent outcome: %s", bb.Outcome))
+	}
+	runSpan.End()
 
 	result.Output = bb.Result
 	result.Outcome = bb.Outcome
