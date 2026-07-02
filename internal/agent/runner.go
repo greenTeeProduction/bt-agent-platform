@@ -129,21 +129,32 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 	}
 
+	bb := &engine.Blackboard{
+		Reflections: d.RefStore,
+		TreeStore:   d.TreeStore,
+	}
+
 	// Engine nodes flatten LLM errors into blackboard strings, severing the
 	// error chain. The recorder preserves the typed error (e.g. RateLimitError
 	// with Retry-After) so the failure return below can re-attach it with %w
 	// for the caller's retry policy. Wrap only a non-nil LLM — engine nodes
 	// guard on bb.LLM == nil.
+	//
+	// TracedLLM's context-less Generate/GenerateWithTimeout have no ctx param
+	// to carry the caller's active span, so they're given a parent closure
+	// that reads bb.TraceContext at call time — set below to the run's root
+	// span and updated per node by engine.tracedAction — so LLM spans nest
+	// under the active BT node span instead of always rooting at
+	// context.Background().
 	var llmRecorder *llm.ErrorRecorder
-	llmForRun := d.LLM
 	if d.LLM != nil {
 		llmRecorder = llm.NewErrorRecorder(d.LLM)
-		llmForRun = llm.NewTracedLLM(llmRecorder, "agent-llm")
-	}
-	bb := &engine.Blackboard{
-		LLM:         llmForRun,
-		Reflections: d.RefStore,
-		TreeStore:   d.TreeStore,
+		bb.LLM = llm.NewTracedLLMWithParent(llmRecorder, "agent-llm", func() context.Context {
+			if bb.TraceContext != nil {
+				return bb.TraceContext
+			}
+			return context.Background()
+		})
 	}
 	if !opts.DisableBlackboard {
 		runID := blackboard.NewRunID()
