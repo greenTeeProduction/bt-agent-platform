@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -43,5 +44,32 @@ func TestCachedCondition_RefusesHITLConditions(t *testing.T) {
 		Children: []evolution.SerializableNode{*node}})
 	if len(msgs) == 0 {
 		t.Fatal("caching an HITL/approval condition must produce a validation message")
+	}
+}
+
+func TestCachedCondition_RefusesNestedHITLConditions(t *testing.T) {
+	node := &evolution.SerializableNode{
+		Type: "CachedCondition", Name: "CCNested",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Sequence", Name: "seq",
+				Children: []evolution.SerializableNode{
+					{Type: "Condition", Name: "HITLAlreadyApproved"},
+					{Type: "AlwaysSucceed"},
+				},
+			},
+		},
+	}
+	msgs := ValidateTree(&evolution.SerializableNode{Type: "Sequence", Name: "r",
+		Children: []evolution.SerializableNode{*node}})
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "HITLAlreadyApproved") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("caching a subtree that contains a nested HITL/approval condition must produce a validation message, got: %v", msgs)
 	}
 }
