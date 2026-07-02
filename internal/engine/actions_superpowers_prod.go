@@ -616,6 +616,48 @@ func registerSuperpowersProductionActions() {
 	// cycle shares the same durable, idempotent execution path.
 	RegisterAction("RunScheduledGoapFusionCycle", runSuperpowersRuntimeFromExistingPlanAction)
 
+	RegisterAction("ClassifyTaskKind", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if k, _ := bb.ChainState["task_kind"].(string); k != "" {
+			return 1 // resumed run: never reclassify
+		}
+		task := strings.ToLower(bb.Task)
+		bugWords := []string{"fix", "bug", "error", "fail", "crash", "regression", "broken", "flake"}
+		creativeWords := []string{"build", "add", "implement", "create", "feature", "extend", "design", "refactor"}
+		kind := ""
+		for _, w := range bugWords {
+			if strings.Contains(task, w) {
+				kind = "bug"
+				break
+			}
+		}
+		if kind == "" {
+			for _, w := range creativeWords {
+				if strings.Contains(task, w) {
+					kind = "creative"
+					break
+				}
+			}
+		}
+		if kind == "" {
+			if len(bb.Task) <= 200 {
+				kind = "direct"
+			} else {
+				kind = "creative" // long ambiguous request ⇒ brainstorm first (using-superpowers bias)
+			}
+		}
+		bb.ChainState["task_kind"] = kind
+		return 1
+	})
+	RegisterCondition("TaskKindIsBug", func(bb *Blackboard) bool {
+		k, _ := bb.ChainState["task_kind"].(string)
+		return k == "bug"
+	})
+	RegisterCondition("TaskKindIsCreative", func(bb *Blackboard) bool {
+		k, _ := bb.ChainState["task_kind"].(string)
+		return k == "creative"
+	})
+
 }
 
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) int {
