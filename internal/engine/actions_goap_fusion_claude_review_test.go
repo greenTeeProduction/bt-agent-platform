@@ -117,7 +117,18 @@ func newReviewTestRepo(t *testing.T) (string, string) {
 	run := func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(),
+		// Hermetic git env: when this test itself runs under a git hook
+		// (pre-commit go test), git exports GIT_DIR/GIT_INDEX_FILE, which
+		// would redirect these commands at the PARENT repo and run its
+		// hooks. Strip all inherited GIT_* and isolate config via HOME.
+		env := []string{}
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "GIT_") {
+				env = append(env, kv)
+			}
+		}
+		cmd.Env = append(env,
+			"HOME="+dir, "GIT_CONFIG_NOSYSTEM=1",
 			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
 			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
 		out, err := cmd.CombinedOutput()

@@ -129,6 +129,18 @@ func runGoapGit(repoDir string, timeout time.Duration, args ...string) (string, 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoDir}, args...)...)
+	// -C names the target repo explicitly; drop repo-location vars that git
+	// exports inside hooks (they would silently redirect these commands at
+	// whatever repo triggered the hook).
+	env := make([]string, 0, len(os.Environ()))
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_WORK_TREE=") ||
+			strings.HasPrefix(kv, "GIT_INDEX_FILE=") || strings.HasPrefix(kv, "GIT_PREFIX=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
