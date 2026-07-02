@@ -109,6 +109,7 @@ func tasksForTree() map[string]string {
 		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
 		"notebooklm_plan_implement": "plan and implement a new domain tree for NotebookLM workflow",
 		"bt_fusion":                 "fuse behavior tree candidates into a stronger production tree",
+		"superpowers_workflow":      "dry_run: fix a small bug via the full superpowers workflow",
 		// Arc42 documentation trees
 		"arc42:section1":  "generate arc42 introduction and goals",
 		"arc42:section2":  "generate arc42 constraints section",
@@ -292,8 +293,11 @@ func TestAllDomainTrees(t *testing.T) {
 
 		// goap_fusion, bt_manager, bt_fusion, and notebooklm flows require real runtime state
 		// (Reflection store, nlm CLI, or persisted fusion candidates) not available
-		// in offline mock tests. Structural smoke only.
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" {
+		// in offline mock tests. superpowers_workflow likewise needs real git
+		// worktree/HITL/Claude Code state (RunSuite's mock LLM never resolves its
+		// HumanApprovalGate nodes or runs real git commands) — structural smoke
+		// only, same as the others in this list.
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {

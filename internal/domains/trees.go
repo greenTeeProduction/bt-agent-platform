@@ -638,6 +638,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"notebooklm":                NotebookLMTree(),
 		"notebooklm_consumer":       NotebookLMConsumerTree(),
 		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
+		"superpowers_workflow":      SuperpowersWorkflowTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -669,4 +670,5 @@ var Descriptions = map[string]string{
 	"notebooklm":                "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
 	"notebooklm_consumer":       "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
+	"superpowers_workflow":      "Production Superpowers workflow v2: skill routing, grill gate, TDD task loop with review cycles, debug branch, finish options",
 }
