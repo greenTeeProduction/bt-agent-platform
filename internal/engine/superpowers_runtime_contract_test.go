@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -3062,5 +3063,95 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTree(t
 	origPath, ok := findPath(tree)
 	if !ok || len(origPath.Children) == 0 || origPath.Children[0].Name != "HasNewGaps" {
 		t.Fatalf("WireGoapFusionLoopTree mutated the caller's %q subtree: %+v", claudePath, origPath)
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTreeIsIdempotent
+// pins the safety property the "goap-fusion-loop-runner" goal needs before the
+// domains GoapFusionLoopTree() adopts the whole-tree seam: WireGoapFusionLoopTree
+// must be IDEMPOTENT — wiring an already-wired tree must return a tree identical to
+// wiring it once.
+//
+// The seam is the single call the domains package is meant to make, but nothing
+// stops it from being applied to a tree that already carries the Phase-0 preflight
+// and the ClaudeSuperpowersPath CIRCUITPOLICY gate. Today WireGoapFusionLoopTree
+// unconditionally PrependGoapFusionPreflight's a fresh GoapFusionPreflight as the
+// tree's first child and unconditionally PrependGoapFusionImplementationGate's a
+// fresh breaker+loop-runner pair onto ClaudeSuperpowersPath's children, so a second
+// application prepends a SECOND preflight ahead of the first and a SECOND gate pair
+// ahead of the first — the loop runner and circuit breaker would then run twice per
+// cycle and the preflight sequence would execute its whole guard chain twice. A
+// re-invocation, a retry, or a tree that was hand-wired once and then routed through
+// the seam would silently double-gate, exactly the kind of drift the recorded
+// "registered but unwired" pitfall ([[goap-fusion-preflight-unwired]]) keeps
+// re-opening as the apparatus grows.
+//
+// This test asserts that wiring twice deep-equals wiring once, and — for a clear
+// diagnosis — that the twice-wired tree still has exactly one GoapFusionPreflight
+// top-level child. It fails today because the seam double-prepends both the
+// preflight and the implementation gate (RED) and passes once WireGoapFusionLoopTree
+// skips wiring a tree that is already wired (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this idempotency contract is pinned here at the
+// seam's own package, ready for GoapFusionLoopTree() to adopt in one safe call.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTreeIsIdempotent(t *testing.T) {
+	const (
+		preflight  = "GoapFusionPreflight"
+		claudePath = "ClaudeSuperpowersPath"
+		setup      = "SetupFusionTools"
+		planWriter = "WriteSuperpowersImplementationPlan"
+		impl       = "RunSuperpowersClaudeImplementation"
+	)
+
+	// The same minimal mirror of the production GoapFusionLoop_Main tree used by
+	// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTree.
+	tree := evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "GoapFusionLoop_Main",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: setup},
+			{
+				Type: "Selector",
+				Name: "ExecutionRouter",
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Sequence",
+						Name: claudePath,
+						Children: []evolution.SerializableNode{
+							{Type: "Condition", Name: "HasNewGaps"},
+							{Type: "Action", Name: planWriter},
+							{
+								Type: "HumanApprovalGate",
+								Name: "ApproveGoapFusionApply",
+								Children: []evolution.SerializableNode{
+									{Type: "Action", Name: impl},
+									{Type: "Action", Name: "VerifyGoapBuild"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	once := WireGoapFusionLoopTree(tree)
+	twice := WireGoapFusionLoopTree(once)
+
+	// A clear, specific diagnosis first: wiring an already-wired tree must not
+	// prepend a second Phase-0 preflight.
+	preflightCount := 0
+	for _, c := range twice.Children {
+		if c.Name == preflight {
+			preflightCount++
+		}
+	}
+	if preflightCount != 1 {
+		t.Fatalf("WireGoapFusionLoopTree is not idempotent: wiring an already-wired tree left %d %q top-level children, want exactly 1; a re-invocation double-prepends the Phase-0 preflight so its whole guard chain and the bounded loop runner would run twice per cycle", preflightCount, preflight)
+	}
+
+	// The full contract: wiring twice must be identical to wiring once, so the seam
+	// never double-gates the ClaudeSuperpowersPath implementation subtree either.
+	if !reflect.DeepEqual(once, twice) {
+		t.Fatalf("WireGoapFusionLoopTree is not idempotent: wiring an already-wired tree differs from wiring once, so the seam double-prepends the preflight and/or the ClaudeSuperpowersPath CIRCUITPOLICY gate.\nonce:  %+v\ntwice: %+v", once, twice)
 	}
 }

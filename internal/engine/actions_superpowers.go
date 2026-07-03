@@ -1349,15 +1349,33 @@ func WireGoapFusionLoopTree(tree evolution.SerializableNode) evolution.Serializa
 			}
 			n.Children = rewritten
 		}
-		if n.Name == "ClaudeSuperpowersPath" {
+		if n.Name == "ClaudeSuperpowersPath" && !goapFusionImplementationGateWired(n.Children) {
 			n.Children = PrependGoapFusionImplementationGate(n.Children)
 		}
 		return n
 	}
 
 	wired := rewrite(tree)
-	wired.Children = PrependGoapFusionPreflight(wired.Children)
+	if !goapFusionPreflightWired(wired.Children) {
+		wired.Children = PrependGoapFusionPreflight(wired.Children)
+	}
 	return wired
+}
+
+// goapFusionPreflightWired reports whether loopChildren already begins with the
+// Phase-0 GoapFusionPreflight node, so WireGoapFusionLoopTree stays idempotent and
+// a re-invocation never double-prepends the preflight ahead of an already-wired tree.
+func goapFusionPreflightWired(loopChildren []evolution.SerializableNode) bool {
+	return len(loopChildren) > 0 && loopChildren[0].Name == "GoapFusionPreflight"
+}
+
+// goapFusionImplementationGateWired reports whether implChildren already begins with
+// the circuit-breaker + bounded-loop-runner pair PrependGoapFusionImplementationGate
+// prepends, so wiring an already-gated ClaudeSuperpowersPath is a no-op.
+func goapFusionImplementationGateWired(implChildren []evolution.SerializableNode) bool {
+	return len(implChildren) >= 2 &&
+		implChildren[0].Name == "EvaluateScheduledGoapFusionCircuitBreaker" &&
+		implChildren[1].Name == "RunScheduledGoapFusionLoop"
 }
 
 func repoPathFromBlackboard(bb *Blackboard) string {
