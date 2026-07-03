@@ -156,7 +156,7 @@ func newReviewTestRepo(t *testing.T) (string, string) {
 
 func TestGatherReviewContext_CommitRangeSinceLastSHA(t *testing.T) {
 	repo, first := newReviewTestRepo(t)
-	rc := gatherReviewContext(repo, first, filepath.Join(repo, "missing-report.md"))
+	rc := gatherReviewContext(repo, first, filepath.Join(repo, "missing-report.md"), 0)
 	if rc.mode != "commits" {
 		t.Fatalf("mode = %q, want commits", rc.mode)
 	}
@@ -173,7 +173,7 @@ func TestGatherReviewContext_CommitRangeSinceLastSHA(t *testing.T) {
 
 func TestGatherReviewContext_InvalidSHAFallsBackToRecent(t *testing.T) {
 	repo, _ := newReviewTestRepo(t)
-	rc := gatherReviewContext(repo, "deadbeef", filepath.Join(repo, "missing-report.md"))
+	rc := gatherReviewContext(repo, "deadbeef", filepath.Join(repo, "missing-report.md"), 0)
 	if rc.mode != "commits" {
 		t.Fatalf("mode = %q, want commits (recent-window fallback)", rc.mode)
 	}
@@ -193,9 +193,9 @@ func TestGatherReviewContext_NoNewCommitsUsesGraphify(t *testing.T) {
 	if err := os.WriteFile(report, []byte("## Summary\ngod nodes everywhere\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rc := gatherReviewContext(repo, head, report)
-	if rc.mode != "graphify" {
-		t.Fatalf("mode = %q, want graphify when range is empty", rc.mode)
+	rc := gatherReviewContext(repo, head, report, 0)
+	if rc.mode != "structure" {
+		t.Fatalf("mode = %q, want structure when range is empty", rc.mode)
 	}
 	if !strings.Contains(rc.body, "god nodes everywhere") {
 		t.Fatalf("graphify mode must carry the report: %s", rc.body)
@@ -209,7 +209,7 @@ func TestBuildClaudeReviewPrompt_ContractMarkers(t *testing.T) {
 		mode: "graphify", rangeDesc: "codebase structure", body: "report body"})
 
 	for _, p := range []string{commits, graph} {
-		for _, marker := range []string{"GOAL:", "GAP:", "FILES:", "TESTS:", "FINDINGS:"} {
+		for _, marker := range []string{"GOAL1:", "GAP1:", "FILES1:", "TESTS:", "FINDINGS:", "PROGRAM:"} {
 			if !strings.Contains(p, marker) {
 				t.Fatalf("prompt missing %s contract marker:\n%s", marker, p)
 			}
@@ -279,7 +279,7 @@ FINDINGS: - a.go: exported var without doc comment`}
 		t.Fatalf("synthesis file not written: %v", err)
 	}
 	if !strings.Contains(string(data), "claude_code_review") ||
-		!strings.Contains(string(data), "GOAL: Add regression test") {
+		!strings.Contains(string(data), "Add regression test") {
 		t.Fatalf("synthesis content wrong:\n%s", data)
 	}
 	if !strings.Contains(filepath.Base(path), "goap-fusion-claude-review-") {
@@ -290,7 +290,7 @@ FINDINGS: - a.go: exported var without doc comment`}
 	if got := loadLastReviewedSHA(bb); got != head {
 		t.Fatalf("last reviewed SHA not advanced: got %q want %q", got, head)
 	}
-	if len(runner.prompts) != 1 || !strings.Contains(runner.prompts[0], "GOAL:") {
+	if len(runner.prompts) != 1 || !strings.Contains(runner.prompts[0], "GOAL1:") {
 		t.Fatalf("runner prompt malformed: %v", runner.prompts)
 	}
 }
@@ -360,5 +360,41 @@ func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("quota-cached actions must not call nlm (took %s)", elapsed)
+	}
+}
+
+func TestGatherReviewContextRotatesModes(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	report := filepath.Join(repo, "GRAPH_REPORT.md")
+	if err := os.WriteFile(report, []byte("## Summary\nstructure body\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Round 1 must run the structural review even though unreviewed commits
+	// exist — under the old selection this mode was dead code because the
+	// loop itself commits every cycle.
+	rc := gatherReviewContext(repo, "", report, 1)
+	if rc.mode != "structure" || !strings.Contains(rc.body, "structure body") {
+		t.Fatalf("round 1 must be structure mode, got %q", rc.mode)
+	}
+
+	// Round 2 reviews recent failures when the dead-letter queue has records.
+	dlq := filepath.Join(t.TempDir(), "dlq.json")
+	if err := os.WriteFile(dlq, []byte(`[{"agent":"x","failed_at":"2026-07-03T19:08:50","error":"boom"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldDLQ := goapDeadLetterPath
+	goapDeadLetterPath = dlq
+	t.Cleanup(func() { goapDeadLetterPath = oldDLQ })
+	rc2 := gatherReviewContext(repo, "", report, 2)
+	if rc2.mode != "failures" || !strings.Contains(rc2.body, "boom") {
+		t.Fatalf("round 2 with DLQ records must be failures mode, got %q", rc2.mode)
+	}
+
+	// Round 2 without failure records falls through to commit review.
+	goapDeadLetterPath = filepath.Join(t.TempDir(), "missing.json")
+	rc3 := gatherReviewContext(repo, "", report, 2)
+	if rc3.mode != "commits" {
+		t.Fatalf("round 2 without DLQ must fall back to commits, got %q", rc3.mode)
 	}
 }

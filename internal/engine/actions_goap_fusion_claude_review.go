@@ -9,6 +9,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -145,10 +146,35 @@ func runGoapGit(repoDir string, timeout time.Duration, args ...string) (string, 
 	return strings.TrimSpace(string(out)), err
 }
 
-// gatherReviewContext picks the review target. Priority: commits after the
-// last reviewed SHA; else commits from the last 24h; else the graphify report.
-func gatherReviewContext(repoDir, lastSHA, graphReportPath string) goapReviewContext {
+// gatherReviewContext picks the review target for this cycle's mode.
+//
+// The old selection reviewed commits whenever unreviewed commits existed and
+// fell back to structure review only when there were none — but the loop
+// itself commits every cycle, so structure mode was dead code and every
+// research finding was a commit-review-sized nibble. Modes now rotate per
+// cycle: commits → structure → failures, so architecture-scale and
+// failure-pattern findings surface regularly regardless of commit traffic.
+func gatherReviewContext(repoDir, lastSHA, graphReportPath string, round int) goapReviewContext {
 	const gitTimeout = 30 * time.Second
+
+	switch round % 3 {
+	case 1:
+		report, _ := os.ReadFile(graphReportPath)
+		return goapReviewContext{
+			mode:      "structure",
+			rangeDesc: "codebase structure (scheduled structural review)",
+			body:      truncateGoap(string(report), goapReviewReportLimit),
+		}
+	case 2:
+		if body := gatherFailureReviewBody(); body != "" {
+			return goapReviewContext{
+				mode:      "failures",
+				rangeDesc: "recent failure records (dead-letter queue)",
+				body:      body,
+			}
+		}
+		// No failure records — fall through to commits.
+	}
 
 	logArgs := []string{"log", "--stat", "--since=24 hours ago"}
 	diffArgs := []string{"log", "-p", "--since=24 hours ago"}
@@ -172,24 +198,56 @@ func gatherReviewContext(repoDir, lastSHA, graphReportPath string) goapReviewCon
 
 	report, _ := os.ReadFile(graphReportPath)
 	return goapReviewContext{
-		mode:      "graphify",
+		mode:      "structure",
 		rangeDesc: "codebase structure (no unreviewed commits)",
 		body:      truncateGoap(string(report), goapReviewReportLimit),
 	}
 }
 
+// goapDeadLetterPath is the scheduler's failure record (test seam).
+var goapDeadLetterPath = "/home/nico/.go-bt-evolve/dead_letter_queue.json"
+
+// gatherFailureReviewBody renders the newest dead-letter entries for the
+// failures review mode; empty when there is nothing to review.
+func gatherFailureReviewBody() string {
+	b, err := os.ReadFile(goapDeadLetterPath)
+	if err != nil {
+		return ""
+	}
+	var entries []map[string]any
+	if err := json.Unmarshal(b, &entries); err != nil || len(entries) == 0 {
+		return ""
+	}
+	if len(entries) > 15 {
+		entries = entries[len(entries)-15:]
+	}
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, fmt.Sprintf("- agent=%v failed_at=%v error=%v", e["agent"], e["failed_at"], e["error"]))
+	}
+	return "### Recent dead-letter failures (newest last)\n" + strings.Join(lines, "\n")
+}
+
 func buildClaudeReviewPrompt(task string, rc goapReviewContext) string {
 	var focus string
-	if rc.mode == "commits" {
+	switch rc.mode {
+	case "commits":
 		focus = fmt.Sprintf(`Review the following recent commits to this repository (%s). They were
 implemented by an automated pipeline and auto-committed WITHOUT human review.
 Hunt for: bugs, regressions, missing or weak tests, convention violations,
 and half-finished work.
 
 %s`, rc.rangeDesc, rc.body)
-	} else {
-		focus = fmt.Sprintf(`There are no unreviewed commits. Instead, review the codebase structure
-report below (%s) and identify the single highest-impact structural fix.
+	case "failures":
+		focus = fmt.Sprintf(`Review the recent failure records below (%s). Identify the highest-impact
+change that addresses a RECURRING failure pattern — not a one-off — and
+verify the pattern against the code before proposing it.
+
+%s`, rc.rangeDesc, rc.body)
+	default:
+		focus = fmt.Sprintf(`Review the codebase structure report below (%s) and identify the
+highest-impact structural improvements — architecture-level changes are in
+scope, not just local fixes.
 
 %s`, rc.rangeDesc, rc.body)
 	}
@@ -202,19 +260,25 @@ pipeline stage implements fixes.
 Task context: %s
 
 %s
-
-Return EXACTLY this format:
-GOAL: <one specific code change the next automated Superpowers/Claude run should implement>
-GAP: <why the current go-bt-evolve codebase needs it — cite the commit or file you reviewed>
-FILES: <likely files or packages to inspect/change>
-TESTS: <specific Go tests/build commands to verify it>
+%s
+Return EXACTLY this format, with up to THREE ranked targets:
+GOAL1: <the highest-impact concrete code change the next automated Superpowers/Claude run should implement>
+GAP1: <why the codebase needs it — cite the commit, file, or failure record you reviewed>
+FILES1: <repo-relative Go files/packages to change>
+GOAL2/GAP2/FILES2 and GOAL3/GAP3/FILES3: <optional further independent targets>
+TESTS: <specific Go tests/build commands to verify them>
 FINDINGS: <bullet list of everything else you found, most severe first>
+
+If the single highest-impact change is too large even for one multi-task run, return INSTEAD a program:
+PROGRAM: <title of the multi-cycle change>
+MILESTONE1..MILESTONE5: <self-contained milestones, each naming the repo-relative Go files it touches>
 
 Rules:
 - Prefer fixing a concrete defect you actually found over generic improvements.
-- The goal must be small enough for one scheduled coding run.
+- Each goal must be scoped to the named files/packages; multi-file and multi-package changes are welcome.
+- Prefer one coherent larger change over several trivial ones.
 - If the reviewed code is clean, say so in FINDINGS and put the best
-  code-level next step in GOAL.`, task, focus)
+  code-level next step in GOAL1.`, task, focus, implementedGoalsPromptBlock())
 }
 
 // goapReviewAllowedTools keeps the review run read-only: the review must not
@@ -254,7 +318,9 @@ func init() {
 // feed the pipeline through the exact ChainState keys the NotebookLM research
 // action produces, so downstream phases need no changes.
 func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
-	rc := gatherReviewContext(deps.repoDir, loadLastReviewedSHA(bb), deps.graphReport)
+	round := loadReviewModeRound(bb)
+	rc := gatherReviewContext(deps.repoDir, loadLastReviewedSHA(bb), deps.graphReport, round)
+	saveReviewModeRound(bb, round+1)
 	prompt := buildClaudeReviewPrompt(bb.Task, rc)
 
 	runCtx, cancel := context.WithTimeout(context.Background(), deps.timeout)
@@ -277,18 +343,23 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	}
 
 	answer := strings.TrimSpace(result.Output)
-	goal, gap := extractGoapNotebookLMRecommendation(answer)
-	if goal == "" {
-		goal = firstNonEmptyGoapLine(answer)
+	program := extractGoapProgram(answer)
+	goals := extractGoapResearchGoals(answer)
+	if len(goals) == 0 && program == nil {
+		if first := firstNonEmptyGoapLine(answer); first != "" {
+			goals = []goapResearchGoal{{Goal: first, Gap: "Claude Code review produced a recommendation; see raw findings."}}
+		}
 	}
-	if goal == "" {
+	if len(goals) == 0 && program == nil {
 		bb.Result = "## Claude Review Fallback Failed\n\nClaude returned no parseable recommendation."
 		bb.Outcome = "goap_fusion_claude_review_failed"
 		return -1
 	}
-	if gap == "" {
-		gap = "Claude Code review produced a recommendation; see raw findings."
+	if program != nil {
+		persistGoapProgram(bb, program, "claude_review:"+rc.mode)
 	}
+	appendGoapResearchGoals(bb, goals)
+	goalSummary := strings.Join(goapResearchGoalLines(bb), "\n- ")
 
 	skipReason, _ := bb.ChainState["goap_fusion_notebooklm_skip_reason"].(string)
 	if skipReason == "" {
@@ -308,13 +379,12 @@ claude_code_review (fallback; NotebookLM unavailable)
 ## Reviewed
 %s (%s mode)
 
-## Recommendation
-GOAL: %s
-GAP: %s
+## Recommendations
+- %s
 
 ## Raw Claude Review Findings
 %s
-`, ts, truncateGoap(skipReason, 1500), rc.rangeDesc, rc.mode, goal, gap, answer)
+`, ts, truncateGoap(skipReason, 1500), rc.rangeDesc, rc.mode, goalSummary, answer)
 	if err := writeString(path, report); err != nil {
 		bb.Result = fmt.Sprintf("## Claude Review Fallback Failed\n\nCould not write `%s`: %v", path, err)
 		bb.Outcome = "goap_fusion_claude_review_failed"
@@ -322,8 +392,6 @@ GAP: %s
 	}
 
 	setGoapState(bb, "notebooklm_research", report)
-	setGoapState(bb, "notebooklm_goal", goal)
-	setGoapState(bb, "notebooklm_gap", gap)
 	setGoapState(bb, "notebooklm_research_path", path)
 	setGoapState(bb, "research_source", "claude_code_review")
 
@@ -331,7 +399,7 @@ GAP: %s
 		saveLastReviewedSHA(bb, head)
 	}
 
-	bb.Result = fmt.Sprintf("## Claude Code Review Fallback Complete\n\nReviewed: %s (%s)\n\nPath: `%s`\n\nGOAL: %s\n\nGAP: %s",
-		rc.rangeDesc, rc.mode, path, goal, gap)
+	bb.Result = fmt.Sprintf("## Claude Code Review Fallback Complete\n\nReviewed: %s (%s)\n\nPath: `%s`\n\nGoals:\n- %s",
+		rc.rangeDesc, rc.mode, path, goalSummary)
 	return 1
 }

@@ -44,8 +44,19 @@ func registerGoapFusionProductionAdditions() {
 		if goals == "" {
 			goals = "Implement the highest-priority GOAP fusion improvement safely."
 		}
+		// Deterministically scope goal lines that name no Go files (git grep
+		// on the goal's keywords): a pathless goal can never become a plan
+		// task, and the biggest catalog/research goals are exactly the ones
+		// that tend to arrive pathless.
+		var scopedLines []string
+		for _, line := range strings.Split(goals, "\n") {
+			scopedLines = append(scopedLines, scopeGoapGoalLine(line))
+		}
+		goals = strings.Join(scopedLines, "\n")
 		task := fmt.Sprintf("%s\n\nGOAP goals:\n%s\n\nGaps:\n%s", bb.Task, goals, gaps)
-		maxAttempts := 12
+		// Two failed attempts at the same task hash are signal enough — the
+		// old default of 12 burned half a day of cycles on a stuck goal.
+		maxAttempts := 3
 		if raw := os.Getenv("BT_SUPERPOWERS_MAX_PLAN_REPEATS"); raw != "" {
 			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 				maxAttempts = parsed

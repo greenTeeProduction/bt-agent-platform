@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/research"
 	"github.com/nico/go-bt-evolve/internal/util"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -119,22 +120,27 @@ func registerGoapFusionActions() {
 		}
 
 		answer := extractNotebookLMAnswer(out)
-		goal, gap := extractGoapNotebookLMRecommendation(answer)
-		if goal == "" {
-			goal = firstNonEmptyGoapLine(answer)
+		program := extractGoapProgram(answer)
+		goals := extractGoapResearchGoals(answer)
+		if len(goals) == 0 && program == nil {
+			if first := firstNonEmptyGoapLine(answer); first != "" {
+				goals = []goapResearchGoal{{Goal: first, Gap: "NotebookLM produced a cited recommendation for BT platform improvement; see raw answer."}}
+			}
 		}
-		if gap == "" {
-			gap = "NotebookLM produced a cited recommendation for BT platform improvement; see raw answer."
-		}
-		if goal == "" {
+		if len(goals) == 0 && program == nil {
 			bb.Result = "## GOAP NotebookLM Research Failed\n\nNotebookLM returned no parseable recommendation."
 			bb.Outcome = "goap_fusion_notebooklm_failed"
 			return -1
 		}
+		if program != nil {
+			persistGoapProgram(bb, program, "notebooklm")
+		}
+		appendGoapResearchGoals(bb, goals)
+		goalSummary := strings.Join(goapResearchGoalLines(bb), "\n- ")
 
 		ts := time.Now().Format("2006-01-02T150405")
 		path := filepath.Join(goapFusionSynthesesDir, fmt.Sprintf("goap-fusion-notebooklm-%s.md", ts))
-		report := fmt.Sprintf("# GOAP Fusion NotebookLM Research — %s\n\n## Notebook\n`%s`\n\n## Recommendation\nGOAL: %s\nGAP: %s\n\n## Raw NotebookLM Answer\n%s\n", ts, defaultNotebook, goal, gap, answer)
+		report := fmt.Sprintf("# GOAP Fusion NotebookLM Research — %s\n\n## Notebook\n`%s`\n\n## Recommendations\n- %s\n\n## Raw NotebookLM Answer\n%s\n", ts, defaultNotebook, goalSummary, answer)
 		if err := writeString(path, report); err != nil {
 			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nCould not write `%s`: %v", path, err)
 			bb.Outcome = "goap_fusion_notebooklm_failed"
@@ -142,10 +148,8 @@ func registerGoapFusionActions() {
 		}
 
 		setGoapState(bb, "notebooklm_research", report)
-		setGoapState(bb, "notebooklm_goal", goal)
-		setGoapState(bb, "notebooklm_gap", gap)
 		setGoapState(bb, "notebooklm_research_path", path)
-		bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Complete\n\nPath: `%s`\n\nGOAL: %s\n\nGAP: %s", path, goal, gap)
+		bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Complete\n\nPath: `%s`\n\nGoals:\n- %s", path, goalSummary)
 		return 1
 	})
 
@@ -245,16 +249,19 @@ func registerGoapFusionActions() {
 			}
 		}
 
-		// Add the GOAP-owned NotebookLM recommendation before static graph checks so
-		// research-backed improvements are not starved by stale heuristic P0/P2 goals.
-		if nlmGoal, _ := bb.ChainState["goap_fusion_notebooklm_goal"].(string); strings.TrimSpace(nlmGoal) != "" {
-			nlmGap, _ := bb.ChainState["goap_fusion_notebooklm_gap"].(string)
-			if strings.TrimSpace(nlmGap) == "" {
-				nlmGap = "NotebookLM recommended this implementation target."
+		// Add every research-backed goal (grill + NotebookLM/Claude review all
+		// append to the shared list) before static graph checks so research
+		// goals are not starved by stale heuristic P0/P2 goals.
+		goalLines := goapResearchGoalLines(bb)
+		gapLines := goapResearchGapLines(bb)
+		for i, g := range goalLines {
+			gap := "research recommended this implementation target."
+			if i < len(gapLines) {
+				gap = gapLines[i]
 			}
 			gaps = append(gaps,
-				"NOTEBOOKLM_GOAL: "+strings.TrimSpace(nlmGoal),
-				"NOTEBOOKLM_GAP: "+strings.TrimSpace(nlmGap))
+				"NOTEBOOKLM_GOAL: "+g,
+				"NOTEBOOKLM_GAP: "+gap)
 		}
 
 		// Check for domain coverage gaps
@@ -287,7 +294,19 @@ func registerGoapFusionActions() {
 		// P1: New capability (domain tree, condition node, action)
 		// P2: Quality improvement (coverage, refactoring)
 
-		if nlmGoal := goapFusionNotebookLMGoalFromGaps(gapsStr); nlmGoal != "" {
+		// An active multi-cycle program's next milestone goes to the head of
+		// the queue: programs are how research proposes changes bigger than
+		// any single run, one file-scoped milestone per cycle.
+		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
+			if p := ps.Active(); p != nil {
+				if idx, m := p.NextMilestone(); m != nil {
+					goals = append(goals, fmt.Sprintf("[P0] Program %q milestone %d/%d: %s", p.Title, idx+1, len(p.Milestones), m.Goal))
+					setGoapState(bb, "program_milestone", fmt.Sprintf("%s:%d", p.ID, idx))
+				}
+			}
+		}
+
+		for _, nlmGoal := range goapFusionNotebookLMGoalsFromGaps(gapsStr) {
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 		}
 
@@ -295,32 +314,34 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P0] Unblock engine tests — fix import cycle or test blockers preventing test execution")
 		}
 
+		// Catalog goals carry real file anchors so the goal-driven plan
+		// builder can task them — pathless goals never become tasks.
 		if strings.Contains(gapsStr, "LLM-supervised") || strings.Contains(gapsStr, "meta-controller") {
-			goals = append(goals, "[P1] Add LLM-supervised population dynamics to gardener — dynamic mutation rate adjustment")
+			goals = append(goals, "[P1] Add LLM-supervised population dynamics to gardener — dynamic mutation rate adjustment (files: internal/gardener/gardener.go, internal/evolution/evolve_v2.go)")
 		}
 
 		if strings.Contains(gapsStr, "Auction-based") {
-			goals = append(goals, "[P1] Implement auction-based task allocation for A2A agent coordination")
+			goals = append(goals, "[P1] Implement auction-based task allocation for A2A agent coordination (files: internal/a2a/server.go, internal/a2a/client.go)")
 		}
 
 		if strings.Contains(gapsStr, "MetaClaw") || strings.Contains(gapsStr, "skill library") {
-			goals = append(goals, "[P1] Build failure-to-skill pipeline: extract BT mutations from agent failures into skills")
+			goals = append(goals, "[P1] Build failure-to-skill pipeline: extract BT mutations from agent failures into skills (files: internal/evolution/reflection_store.go, internal/gardener/gardener.go)")
 		}
 
 		if strings.Contains(gapsStr, "Code-BT") {
-			goals = append(goals, "[P2] Prototype code-driven BT generation: LLM generates Go code → compiled to executable BT")
+			goals = append(goals, "[P2] Prototype code-driven BT generation: LLM generates Go code → compiled to executable BT (files: internal/evolution/tree_builders.go, internal/evolution/node_types.go)")
 		}
 
 		if strings.Contains(gapsStr, "typed-edge") {
-			goals = append(goals, "[P2] Add typed-edge validation to tree generation: guard/effect/recovery/approval semantics")
+			goals = append(goals, "[P2] Add typed-edge validation to tree generation: guard/effect/recovery/approval semantics (files: internal/evolution/node_types.go, internal/evolution/tree_builders.go)")
 		}
 
 		if strings.Contains(gapsStr, "Checkpoint verification") {
-			goals = append(goals, "[P2] Extend checkpoint verification to all domain trees: deterministic postcondition checks")
+			goals = append(goals, "[P2] Extend checkpoint verification to all domain trees: deterministic postcondition checks (files: internal/engine/checkpoint_verifier.go, internal/domains/trees.go)")
 		}
 
 		if strings.Contains(gapsStr, "AllDomainTrees") || strings.Contains(gapsStr, "domain coverage") {
-			goals = append(goals, "[P2] Ensure all domain trees have smoke tests, descriptions, and condition coverage")
+			goals = append(goals, "[P2] Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: internal/domains/trees.go, internal/domains/domains_test.go)")
 		}
 
 		if len(goals) == 0 {
@@ -503,12 +524,14 @@ func registerGoapFusionActions() {
 			saveGrillState(bb, grillRound+1, conversationID)
 		}
 
-		// Extract implementation targets from grill answer
-		goal, gap := extractGoapNotebookLMRecommendation(answer)
-		if goal != "" {
-			setGoapState(bb, "notebooklm_goal", goal)
-			setGoapState(bb, "notebooklm_gap", gap)
+		// Extract implementation targets from grill answer: goals APPEND to
+		// the shared multi-goal list (the research router adds its own later)
+		// and a PROGRAM block registers a multi-cycle program.
+		if program := extractGoapProgram(answer); program != nil {
+			persistGoapProgram(bb, program, "grill")
 		}
+		appendGoapResearchGoals(bb, extractGoapResearchGoals(answer))
+		goal, gap := extractGoapNotebookLMRecommendation(answer)
 
 		// Save grill transcript to vault
 		ts := time.Now().Format("2006-01-02T150405")
@@ -548,16 +571,23 @@ func readNewestVaultDocs(dir, label string, match func(string) bool, maxFiles, p
 		docs = append(docs, vaultDoc{name: e.Name(), mod: info.ModTime()})
 	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].mod.After(docs[j].mod) })
-	if len(docs) > maxFiles {
-		docs = docs[:maxFiles]
-	}
-	out := make([]string, 0, len(docs))
+	out := make([]string, 0, maxFiles)
 	for _, d := range docs {
+		if len(out) == maxFiles {
+			break
+		}
 		b, rerr := os.ReadFile(filepath.Join(dir, d.name))
 		if rerr != nil {
 			continue
 		}
-		out = append(out, fmt.Sprintf("=== %s: %s ===\n%s", label, d.name, truncateGoap(string(b), perFileLimit)))
+		content := string(b)
+		// Quota-error garbage (pre-bd8c5b6 syntheses captured NotebookLM
+		// error output as "research") must not feed gap analysis — skip and
+		// take the next-newest doc instead.
+		if isFusionQuotaGarbage(content) {
+			continue
+		}
+		out = append(out, fmt.Sprintf("=== %s: %s ===\n%s", label, d.name, truncateGoap(content, perFileLimit)))
 	}
 	return out
 }
@@ -655,18 +685,36 @@ Task: %s
 Current graphify/codebase context:
 %s
 
-Return EXACTLY this format, with one concrete implementation target and citations in the text where possible:
-GOAL: <one specific code change the next automated Superpowers/Claude run should implement>
-GAP: <why the current go-bt-evolve codebase needs it>
-FILES: <likely files or packages to inspect/change>
-TESTS: <specific Go tests/build commands to verify it>
+%s
+Return EXACTLY this format, with up to THREE ranked implementation targets and citations in the text where possible:
+GOAL1: <the highest-impact concrete code change the next automated Superpowers/Claude run should implement>
+GAP1: <why the current go-bt-evolve codebase needs it>
+FILES1: <repo-relative Go files/packages to change>
+GOAL2/GAP2/FILES2 and GOAL3/GAP3/FILES3: <optional further independent targets>
+TESTS: <specific Go tests/build commands to verify them>
 CITATIONS: <NotebookLM citation numbers or source ids>
+
+If the single highest-impact change is too large even for one multi-task run, return INSTEAD a program:
+PROGRAM: <title of the multi-cycle change>
+MILESTONE1: <first self-contained milestone, naming the repo-relative Go files it touches>
+MILESTONE2..MILESTONE5: <further milestones, each independently verifiable>
 
 Rules:
 - Prefer implementation work over documentation.
+- Each goal must be scoped to the named files/packages; multi-file and multi-package changes are welcome.
+- Prefer one coherent larger change over several trivial ones.
 - Do not repeat these stale goals unless you have a new concrete variant: "Unblock engine tests" or "Ensure all domain trees have smoke tests".
-- The goal must be small enough for one scheduled coding run.
-- If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`, task, graphReport)
+- If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`, task, graphReport, implementedGoalsPromptBlock())
+}
+
+// implementedGoalsPromptBlock renders the "already done" list injected into
+// research prompts so cycles do not re-propose landed work.
+func implementedGoalsPromptBlock() string {
+	done := recentImplementedGoals(10)
+	if len(done) == 0 {
+		return ""
+	}
+	return "\nAlready implemented recently — do NOT re-propose these:\n- " + strings.Join(done, "\n- ") + "\n"
 }
 
 func isGoapNotebookLMFailure(out string) bool {
