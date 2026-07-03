@@ -26,7 +26,7 @@ type BTAgentExecutor struct {
 }
 
 // Execute runs the BT agent for the given A2A task.
-func (e *BTAgentExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		// Submit the task. The a2a-go v2 stream contract requires the FIRST
 		// event to be a Task (or message) — a leading TaskStatusUpdateEvent is
@@ -48,8 +48,14 @@ func (e *BTAgentExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorCon
 			}
 		}
 
-		// Find target agent from context ID
-		agentName := execCtx.ContextID
+		// Find the target agent: the per-agent endpoint's interceptor carries
+		// the name in ctx. ContextID is a fallback for direct callers only —
+		// the SDK owns that field (it must match the request's context id;
+		// overwriting it fails event validation with "context IDs don't match").
+		agentName, _ := ctx.Value(agentNameKey{}).(string)
+		if agentName == "" {
+			agentName = execCtx.ContextID
+		}
 		if agentName == "" {
 			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateFailed,
 				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("no agent specified"))), nil) {
@@ -221,14 +227,18 @@ func (s *Server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// agentNameInterceptor injects an agent name into the executor context.
+// agentNameKey carries the target agent name through the request context.
+type agentNameKey struct{}
+
+// agentNameInterceptor injects an agent name into the request context. It
+// must NOT touch execCtx.ContextID: that field is the SDK's server-generated
+// correlation id and every emitted event is validated against it.
 type agentNameInterceptor struct {
 	name string
 }
 
-func (a *agentNameInterceptor) Intercept(ctx context.Context, execCtx *a2asrv.ExecutorContext) (context.Context, error) {
-	execCtx.ContextID = a.name
-	return ctx, nil
+func (a *agentNameInterceptor) Intercept(ctx context.Context, _ *a2asrv.ExecutorContext) (context.Context, error) {
+	return context.WithValue(ctx, agentNameKey{}, a.name), nil
 }
 
 // handleAgentEndpoint routes per-agent A2A JSON-RPC calls.

@@ -49,3 +49,21 @@ func TestExecuteFirstEventIsTask(t *testing.T) {
 		}
 	}
 }
+
+// TestInterceptorCarriesNameWithoutTouchingContextID pins the interceptor
+// contract: agent name travels via ctx; execCtx.ContextID (the SDK's
+// correlation id, validated on every event) is left alone.
+func TestInterceptorCarriesNameWithoutTouchingContextID(t *testing.T) {
+	ic := &agentNameInterceptor{name: "some-agent"}
+	execCtx := &a2asrv.ExecutorContext{ContextID: "sdk-generated-id"}
+	ctx, err := ic.Intercept(context.Background(), execCtx)
+	if err != nil {
+		t.Fatalf("Intercept error: %v", err)
+	}
+	if execCtx.ContextID != "sdk-generated-id" {
+		t.Fatalf("ContextID overwritten to %q — SDK event validation will fail with 'context IDs don't match'", execCtx.ContextID)
+	}
+	if name, _ := ctx.Value(agentNameKey{}).(string); name != "some-agent" {
+		t.Fatalf("ctx agent name = %q, want some-agent", name)
+	}
+}
