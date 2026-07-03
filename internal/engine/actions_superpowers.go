@@ -963,7 +963,11 @@ func init() {
 // `graphify` tool the cycle's RunGraphifyUpdate step shells out to is proven
 // resolvable on PATH so the cycle never gates on the loop runner only to discover
 // at RunGraphifyUpdate that graphify is missing and derive its gaps from a stale
-// report, and the `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
+// report, and — immediately after that tool guard — the
+// VerifyScheduledGoapFusionGraphReportPresent guard proves the graphify report holds
+// readable content (not just that the binary is resolvable) so a scheduled cycle
+// never derives its improvement gaps from a zero-byte or contentless report, and the
+// `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
 // shells out to is proven an executable file so a cycle never gates on the loop
 // runner only to abort at the research step with a missing binary and degrade to
 // stale vault research, and — immediately after that binary guard — the
@@ -1023,6 +1027,15 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGraphifyTool",
+			},
+			// GraphifyTool only proves the `graphify` binary is resolvable on PATH; a
+			// zero-byte or contentless report it produced would still pass it, letting a
+			// scheduled cycle derive its improvement gaps from an empty report. Prove the
+			// graphify report holds readable content before the loop runner drives another
+			// iteration — the report-content analogue of the ResearchPresent vault guard.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionGraphReportPresent",
 			},
 			// The two NotebookLM guards are optional enrichment: an absent `nlm`
 			// binary or an unset notebook id must NOT abort the scheduled cycle,
