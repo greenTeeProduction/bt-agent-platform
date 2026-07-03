@@ -56,6 +56,18 @@ const (
 	// distinct — the "iterate forever without ever advancing the goal" tail of the
 	// Activity-Progress Confusion failure mode.
 	goapFusionMaxLoopIterations = 50
+
+	// goapFusionMaxNoopPatchStreak is the bounded run of consecutive no-op patch
+	// proposals the CIRCUITPOLICY loop runner tolerates before HALTing. The
+	// repeated-state-hash circuit breaker only catches the "returned to a prior
+	// state" cycle; a loop can instead publish an unbroken run of DISTINCT state
+	// hashes while every proposed patch is a no-op that never advances the goal —
+	// the "Activity-Progress Confusion" tail neither the repeated-hash breaker nor
+	// the runaway-loop backstop fires on. Following the same PatchBoard (2026)
+	// 3-window as the state-hash breaker, a streak of goapFusionMaxNoopPatchStreak
+	// or more consecutive no-op patches HALTs the loop rather than iterating on
+	// syntactically valid but empty patches indefinitely.
+	goapFusionMaxNoopPatchStreak = 3
 )
 
 func init() {

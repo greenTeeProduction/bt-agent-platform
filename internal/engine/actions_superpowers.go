@@ -804,6 +804,18 @@ func init() {
 			return -1
 		}
 
+		// Consecutive no-op-patch streak: the no-op-streak analogue of the
+		// repeated-state-hash breaker. A loop can publish an unbroken run of DISTINCT
+		// state hashes — so neither the repeated-hash breaker nor the runaway-loop
+		// backstop fires — while every proposed patch is a no-op that never advances
+		// the goal. A bounded run of consecutive no-op patches must still HALT the
+		// loop, breaking the "Activity-Progress Confusion" tail where the loop stays
+		// active producing syntactically valid but empty patches.
+		if streak := goapFusionNoopPatchStreak(bb); streak >= goapFusionMaxNoopPatchStreak {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so neither the repeated-hash circuit breaker nor the runaway-loop backstop fires — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			return -1
+		}
+
 		// Runaway-loop backstop: even when every state hash is distinct — so the
 		// circuit breaker's bounded window never sees a repeat — a bounded loop
 		// runner must refuse to iterate forever.
@@ -837,6 +849,28 @@ func goapFusionStateHashes(bb *Blackboard) []string {
 		return out
 	default:
 		return nil
+	}
+}
+
+// goapFusionNoopPatchStreak extracts the continuous loop's current run of
+// consecutive no-op patch proposals from the blackboard chain state under
+// "goap_fusion_noop_patch_streak", tolerating the numeric forms a blackboard may
+// carry (int, int64, or a JSON-decoded float64). It returns 0 when the key is
+// absent or of an unexpected type, so a loop that has never published the streak
+// is treated as making progress rather than halting.
+func goapFusionNoopPatchStreak(bb *Blackboard) int {
+	if bb == nil || bb.ChainState == nil {
+		return 0
+	}
+	switch v := bb.ChainState["goap_fusion_noop_patch_streak"].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
 	}
 }
 

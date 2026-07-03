@@ -563,6 +563,70 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *t
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches
+// pins the SECOND CIRCUITPOLICY halt condition the P0 NotebookLM research goal
+// names but the loop runner never implements: halting on a run of consecutive
+// no-op patch proposals. The VerifyScheduledGoapFusionCircuitPolicy guard's own
+// contract promises the loop halts "on detecting a repeated state hash or a run of
+// consecutive no-op patches" (actions_superpowers.go), and the circuit breaker's
+// doc names "detecting and halting state-transition cycles and repeated no-op
+// patch proposals" — yet goapFusionCircuitBreakerVerdict only scans the bounded
+// state-hash window for a repeat. That leaves the distinct "Activity-Progress
+// Confusion" tail uncaught: a loop can publish a run of DISTINCT state hashes — so
+// neither the repeated-hash circuit breaker nor, under the runaway-loop backstop,
+// the finite-iteration guard fires — while every proposed patch is a no-op that
+// never advances the goal. The loop stays "active" producing syntactically valid
+// but empty patches indefinitely, exactly the failure mode the CIRCUITPOLICY
+// promises to catch but does not.
+//
+// The loop runner publishes its consecutive-no-op-patch streak on the blackboard
+// under "goap_fusion_noop_patch_streak"; a bounded run of no-op patches must HALT
+// (-1) the loop even when the state hashes are all distinct. This test asserts
+// RunScheduledGoapFusionLoop HALTs on a run of consecutive no-op patches with
+// distinct state hashes, and CONTINUEs when no no-op streak is present. It fails
+// today because the loop runner returns CONTINUE for distinct hashes regardless of
+// the no-op streak (RED) and passes once the loop runner halts on a bounded
+// consecutive-no-op-patch run (GREEN) — the no-op-streak analogue of the
+// repeated-state-hash circuit breaker.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches(t *testing.T) {
+	action := GetAction("RunScheduledGoapFusionLoop")
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q", "RunScheduledGoapFusionLoop")
+	}
+
+	// Distinct state hashes so neither the repeated-hash circuit breaker nor the
+	// runaway-loop backstop fires; a run of consecutive no-op patch proposals is the
+	// only halt signal present. The loop runner must still HALT — the loop is
+	// "active" proposing empty patches that never advance the goal, the
+	// Activity-Progress Confusion the CIRCUITPOLICY exists to break.
+	noop := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes":      []string{"aaa", "bbb", "ccc"},
+			"goap_fusion_noop_patch_streak": 10,
+		},
+	}
+	noopCtx := &btcore.BTContext[Blackboard]{Blackboard: noop}
+	if status := action(noopCtx); status != -1 {
+		t.Fatalf("expected HALT (-1) on a run of consecutive no-op patch proposals even with distinct state hashes, got %d", status)
+	}
+	if !strings.Contains(noop.Result, "HALT") {
+		t.Fatalf("expected a HALT diagnosis in Result on a consecutive no-op patch run, got %q", noop.Result)
+	}
+
+	// No consecutive no-op patch run (and distinct hashes under the backstop) lets
+	// the loop runner CONTINUE (1) to drive the next cycle.
+	progress := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes":      []string{"aaa", "bbb", "ccc"},
+			"goap_fusion_noop_patch_streak": 0,
+		},
+	}
+	progressCtx := &btcore.BTContext[Blackboard]{Blackboard: progress}
+	if status := action(progressCtx); status != 1 {
+		t.Fatalf("expected CONTINUE (1) when no consecutive no-op patch run is present and state hashes are distinct, got %d", status)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircuitBreakerWindow
 // pins the drift-elimination the P0 NotebookLM research goal requires: the
 // bounded-window dedup that decides "did a state hash repeat within the most
