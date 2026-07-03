@@ -1945,6 +1945,96 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesSynthesesWritable
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the syntheses-output-location guard —
+// VerifyScheduledGoapFusionSynthesesWritable — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's
+// RunGoapFusionNotebookLMResearch step writes a dedicated synthesis file
+// (goap-fusion-notebooklm-<ts>.md) into the syntheses directory
+// (goapFusionSynthesesDir) via writeString, and the immediately following
+// ReadVaultResearch step ingests that newest synthesis as its highest-priority
+// research input. VerifyScheduledGoapFusionSynthesesWritable is the guard whose
+// own doc comment states a scheduled run "could pass every other preflight yet
+// still fail when the syntheses directory is not writable, losing the freshly
+// generated NotebookLM research with no clear diagnosis" — so it must prove the
+// syntheses directory is a writable directory before the loop runner drives a
+// cycle whose freshest research it can never persist. The already-composed
+// VerifyScheduledGoapFusionVaultWritable and VerifyScheduledGoapFusionPlansWritable
+// guards prove distinct directories (goapFusionVaultDir, goapFusionPlansDir) are
+// writable; neither covers this syntheses directory. Yet GoapFusionPreflightNode()
+// composes the build-tree materializer, the circuit-policy config guard, the
+// rejected-context ledger, the runtime, toolchain, plans-writable, git-tool,
+// git-remote, vault-writable, research-present, graphify-tool,
+// graph-report-present, and the two NotebookLM guards before the loop runner —
+// never the syntheses-writable guard — so a scheduled cycle could gate on the loop
+// runner and only then discover at the RunGoapFusionNotebookLMResearch step that
+// its syntheses output location is unwritable, losing the freshly generated
+// research with no early diagnosis. VerifyScheduledGoapFusionSynthesesWritable is
+// registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSynthesesWritable)
+// yet wired into no composed tree, so it can never run in a scheduled cycle — the
+// exact "registered but unwired" gap the preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionSynthesesWritable as a registered Action node AND that
+// it is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the syntheses-writable guard (RED) and passes once the syntheses-writable guard
+// is composed ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is pinned
+// here at the action's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesSynthesesWritable(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionSynthesesWritable"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q syntheses-output-location guard as a runnable Action node; the preflight drives the loop runner without first proving the syntheses directory is a writable directory, so a scheduled cycle would only discover its syntheses output location is unwritable at the RunGoapFusionNotebookLMResearch step and lose the freshly generated NotebookLM research", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the syntheses-writable guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q syntheses-output-location guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the syntheses directory the cycle persists its freshest research into is proven writable before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphReportPresent
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the graphify-report-content guard —

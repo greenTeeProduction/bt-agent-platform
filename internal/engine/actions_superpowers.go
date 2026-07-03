@@ -1016,6 +1016,18 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionVaultWritable",
 			},
+			// PlansWritable and VaultWritable prove distinct output directories are
+			// writable; neither covers the syntheses directory the cycle's
+			// RunGoapFusionNotebookLMResearch step writes its freshly generated
+			// synthesis into (and the following ReadVaultResearch step ingests as its
+			// highest-priority research). Prove that syntheses output location is a
+			// writable directory too, before the loop runner drives another iteration,
+			// so a cycle never discovers only at RunGoapFusionNotebookLMResearch that
+			// its syntheses output location is unwritable and loses that research.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionSynthesesWritable",
+			},
 			// VaultWritable only proves the vault is a writable directory; a vault that
 			// exists but holds zero research files would still pass it, letting a
 			// scheduled cycle plan from an empty corpus. Prove the vault holds at least
