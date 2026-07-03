@@ -2811,3 +2811,86 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerH
 		t.Fatalf("expected CONTINUE (1) when no consecutive no-op patch run is present and state hashes are distinct, got %d", status)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightDrivesCycleAfterLoopRunner
+// pins the increment the "goap-fusion-loop-runner" goal actually names: the
+// Phase-0 preflight node must compose the research-to-implementation cycle driver
+// — RunScheduledGoapFusionCycle — as a runnable Action node ordered AFTER the
+// bounded loop runner that gates it.
+//
+// Every prior increment wired the guards, the circuit-breaker evaluation, and the
+// bounded loop runner (RunScheduledGoapFusionLoop) into GoapFusionPreflightNode(),
+// but the loop runner only DECIDES: it returns CONTINUE (1) or HALT (-1) over the
+// loop's recent state-hash history and never drives the actual cycle. Nothing in
+// the composed node runs RunScheduledGoapFusionCycle — the action that reads vault
+// research and the graphify report, identifies improvement gaps, writes a
+// Superpowers implementation plan, and implements it via the Superpowers runtime
+// (actions_superpowers_prod.go). So RunScheduledGoapFusionCycle is registered and
+// unit-tested (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCycle)
+// yet wired into no composed tree — the exact "registered but unwired" gap the
+// preflight apparatus exists to close, now for the loop's own driver: a scheduled
+// cycle that embeds the preflight would run every guard and consult the loop
+// runner but never actually drive a research-to-implementation iteration.
+//
+// The cycle driver must run AFTER the loop runner so the CIRCUITPOLICY gate can
+// short-circuit it: in the preflight Sequence, a HALT from
+// RunScheduledGoapFusionLoop must stop the sequence before the cycle runs, so the
+// driver only executes once the loop runner has decided CONTINUE and every guard
+// ahead of it has passed.
+//
+// This test asserts the preflight sequence references RunScheduledGoapFusionCycle
+// as a registered Action node AND that it is ordered after
+// RunScheduledGoapFusionLoop. It fails while the builder ends at the loop runner
+// and never composes the cycle driver (RED) and passes once the cycle driver is
+// appended after the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is pinned
+// here at the action's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightDrivesCycleAfterLoopRunner(t *testing.T) {
+	const (
+		loopRunner = "RunScheduledGoapFusionLoop"
+		cycle      = "RunScheduledGoapFusionCycle"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the cycle driver must run after the loop runner gate).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	loopIdx := indexOf(loopRunner)
+	cycleIdx := indexOf(cycle)
+
+	if cycleIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q research-to-implementation cycle driver as a runnable Action node; the preflight gates the scheduled cycle on the loop runner but never actually drives a research-to-implementation iteration, so a scheduled run would decide CONTINUE and then do nothing", cycle)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the cycle driver runs after it", loopRunner)
+	}
+	if cycleIdx <= loopIdx {
+		t.Fatalf("expected the %q cycle driver (index %d) to be composed AFTER the %q loop runner (index %d), so a HALT from the loop runner short-circuits the sequence before the cycle drives another research-to-implementation iteration", cycle, cycleIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(cycle) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", cycle)
+	}
+}

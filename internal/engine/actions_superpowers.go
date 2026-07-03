@@ -1247,6 +1247,21 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "RunScheduledGoapFusionLoop",
 			},
+			// The loop runner only DECIDES CONTINUE (SUCCESS) or HALT (FAILURE) over
+			// the loop's recent state-hash history; on HALT the enclosing Sequence
+			// short-circuits here and the cycle driver below never runs. Once the loop
+			// runner decides CONTINUE and every guard ahead of it has passed, drive an
+			// actual research-to-implementation iteration: RunScheduledGoapFusionCycle
+			// reads the vault research and graphify report, identifies improvement
+			// gaps, writes a Superpowers implementation plan, and implements it via the
+			// Superpowers runtime. Composing it last — after RunScheduledGoapFusionLoop —
+			// closes the "registered but unwired" gap for the loop's own driver: without
+			// it a scheduled run would consult every gate, decide CONTINUE, and then do
+			// nothing.
+			{
+				Type: "Action",
+				Name: "RunScheduledGoapFusionCycle",
+			},
 		},
 	}
 }
