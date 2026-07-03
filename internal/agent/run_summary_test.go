@@ -22,9 +22,9 @@ func TestBuildRunActivitySummarySuccessfulSuperpowersRun(t *testing.T) {
 
 	for _, want := range []string{
 		"Superpowers Implementation Complete",
-		"Run: `20260703T073337-8f8576fe`",
-		"Commit: `aedcce9`",
-		"Apply status: `committed`",
+		"Run: 20260703T073337-8f8576fe",
+		"Commit: aedcce9",
+		"Apply status: committed",
 		"Steps: GrillMe → ResearchRouter → Implement → Verify",
 	} {
 		if !strings.Contains(sum, want) {
@@ -71,5 +71,36 @@ func TestBuildRunActivitySummaryTrimsLongStepTrails(t *testing.T) {
 func TestBuildRunActivitySummaryEmptyEverything(t *testing.T) {
 	if sum := buildRunActivitySummary("", "", ""); sum != "(no output)" {
 		t.Errorf("empty run summary = %q, want (no output)", sum)
+	}
+}
+
+// TestBuildRunActivitySummaryFoldsFencedListAfterEmptyLabel uses the exact
+// live output of run 20260703T083801: "Changed files:" is followed by a
+// fenced block of paths, which rendered on Telegram as a dangling label with
+// nothing after it. The fenced items must fold into the label's line, and
+// backticks must not leak into the plain-text notification.
+func TestBuildRunActivitySummaryFoldsFencedListAfterEmptyLabel(t *testing.T) {
+	output := "## Superpowers Implementation Complete\n\n" +
+		"Run: `20260703T083801-8f8576fe`\n" +
+		"Commit: `0ede946`\n" +
+		"Changed files:\n```\ninternal/engine/actions_superpowers.go\ninternal/engine/superpowers_runtime_contract_test.go\n```"
+	sum := buildRunActivitySummary(output, "", "")
+
+	if !strings.Contains(sum, "Changed files: internal/engine/actions_superpowers.go, internal/engine/superpowers_runtime_contract_test.go") {
+		t.Errorf("fenced list must fold into its label line:\n%s", sum)
+	}
+	if strings.Contains(sum, "`") {
+		t.Errorf("backticks must not leak into plain-text summary:\n%s", sum)
+	}
+	if strings.Contains(sum, "```") {
+		t.Errorf("fences must not appear:\n%s", sum)
+	}
+}
+
+func TestBuildRunActivitySummaryCapsLongFencedLists(t *testing.T) {
+	output := "## Done\nChanged files:\n```\na.go\nb.go\nc.go\nd.go\ne.go\nf.go\n```"
+	sum := buildRunActivitySummary(output, "", "")
+	if !strings.Contains(sum, "Changed files: a.go, b.go, c.go, d.go (+2 more)") {
+		t.Errorf("long fenced lists must cap with +N more:\n%s", sum)
 	}
 }

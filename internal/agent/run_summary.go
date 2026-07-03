@@ -1,6 +1,9 @@
 package agent
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // summaryMaxLen bounds {data.summary} to phone-notification size.
 const summaryMaxLen = 600
@@ -45,9 +48,21 @@ func buildRunActivitySummary(output, failureReason, nodes string) string {
 // …) from a run's output. Prose paragraphs are skipped: notifications need
 // facts, the full report lives in the run artifacts.
 func salientOutputLines(output string) (headline string, facts []string) {
-	for _, raw := range strings.Split(output, "\n") {
-		line := strings.TrimSpace(raw)
+	lines := strings.Split(output, "\n")
+	for i := 0; i < len(lines); i++ {
+		// Backticks are markdown affordances; the Telegram template renders
+		// plain text, so they would show up literally.
+		line := strings.ReplaceAll(strings.TrimSpace(lines[i]), "`", "")
 		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "```") {
+			// Stray fence (one not owned by an empty-label fact below):
+			// skip the whole block.
+			i++
+			for i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "```") {
+				i++
+			}
 			continue
 		}
 		if h, ok := strings.CutPrefix(line, "## "); ok {
@@ -57,7 +72,20 @@ func salientOutputLines(output string) (headline string, facts []string) {
 			continue
 		}
 		if isFactLine(line) && len(facts) < 8 {
-			facts = append(facts, strings.Trim(line, "*"))
+			fact := strings.Trim(line, "*")
+			// An empty-value label ("Changed files:") followed by a fenced
+			// block is a list rendered for the full report — fold the items
+			// into the label's line so the notification doesn't end on a
+			// dangling label (live bug: run 20260703T083801's Telegram
+			// message ended with a bare "Changed files:").
+			if strings.HasSuffix(fact, ":") {
+				items, next := fencedItems(lines, i+1)
+				if next > i {
+					fact += " " + joinCapped(items, 4)
+					i = next
+				}
+			}
+			facts = append(facts, fact)
 			continue
 		}
 		// Fallback: no headline yet and no facts — keep the first plain
@@ -67,6 +95,37 @@ func salientOutputLines(output string) (headline string, facts []string) {
 		}
 	}
 	return headline, facts
+}
+
+// fencedItems returns the content lines of a ``` block starting at or right
+// after index from (skipping blank lines), and the index of the closing
+// fence. Returns next <= from when no fence follows.
+func fencedItems(lines []string, from int) (items []string, next int) {
+	i := from
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) || !strings.HasPrefix(strings.TrimSpace(lines[i]), "```") {
+		return nil, from - 1
+	}
+	for i++; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "```") {
+			return items, i
+		}
+		if line != "" {
+			items = append(items, strings.Trim(line, "-* "))
+		}
+	}
+	return items, i - 1
+}
+
+// joinCapped joins up to limit items with commas, appending "(+N more)".
+func joinCapped(items []string, limit int) string {
+	if len(items) <= limit {
+		return strings.Join(items, ", ")
+	}
+	return strings.Join(items[:limit], ", ") + fmt.Sprintf(" (+%d more)", len(items)-limit)
 }
 
 // isFactLine reports whether a line looks like "Key: value" with a short key
