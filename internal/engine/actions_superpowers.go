@@ -1012,6 +1012,14 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionVaultWritable",
 			},
+			// VaultWritable only proves the vault is a writable directory; a vault that
+			// exists but holds zero research files would still pass it, letting a
+			// scheduled cycle plan from an empty corpus. Prove the vault holds at least
+			// one readable research file before the loop runner drives another iteration.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionResearchPresent",
+			},
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGraphifyTool",

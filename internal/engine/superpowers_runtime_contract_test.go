@@ -1860,3 +1860,87 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSchema
 		t.Fatalf("GoapFusionPreflightNode() is not schema-valid; every composed node type must be a known node type so the production tree that embeds it survives BuildAndValidate, but validation reported %d error(s):\n- %s", len(errs), strings.Join(errs, "\n- "))
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesResearchPresent
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the vault-research-corpus guard —
+// VerifyScheduledGoapFusionResearchPresent — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// The scheduled cycle's whole purpose is to read the vault research and derive
+// its improvement gaps from it; the cycle's ReadVaultResearch step ingests the
+// vault research directory as its corpus. VerifyScheduledGoapFusionResearchPresent
+// is the guard whose own doc comment states a vault directory that "exists but
+// contains zero research files would still pass [VerifyScheduledGoapFusionInputs],
+// letting a scheduled run silently produce a plan from no actual research" — so it
+// must prove the vault directory holds at least one readable research file before
+// the loop runner drives a cycle that would otherwise plan from an empty corpus.
+// The already-composed VerifyScheduledGoapFusionVaultWritable guard only proves the
+// vault directory is a writable directory; it does not confirm any research is
+// present to read. Yet GoapFusionPreflightNode() composes the build-tree
+// materializer, the circuit-policy config guard, the rejected-context ledger, the
+// runtime, toolchain, plans-writable, git-tool, git-remote, vault-writable,
+// graphify-tool, and the two NotebookLM guards before the loop runner — never the
+// research-present guard — so a scheduled cycle could gate on the loop runner and
+// only then produce a plan from an empty research corpus with no early diagnosis.
+// VerifyScheduledGoapFusionResearchPresent is registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionResearchPresent) yet
+// wired into no composed tree, so it can never run in a scheduled cycle — the exact
+// "registered but unwired" gap the preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionResearchPresent as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the research-present guard (RED) and passes once the research-present guard is
+// composed ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is pinned
+// here at the action's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesResearchPresent(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionResearchPresent"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q vault-research-corpus guard as a runnable Action node; the preflight drives the loop runner without first proving the vault directory holds at least one readable research file, so a scheduled cycle would produce a plan from an empty research corpus", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the research-present guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q vault-research-corpus guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the vault research the cycle derives its gaps from is proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
