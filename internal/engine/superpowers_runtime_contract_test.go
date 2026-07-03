@@ -852,3 +852,77 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitPolicy
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the CIRCUITPOLICY config guard —
+// VerifyScheduledGoapFusionCircuitPolicy — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// RunScheduledGoapFusionLoop's entire halt/continue decision is derived from the
+// bounded state-hash window whose size is goapFusionCircuitHistoryWindow; if that
+// window is not a positive, bounded value the loop runner has no CIRCUITPOLICY
+// window to detect repeated state hashes and could spin indefinitely — the
+// "Activity-Progress Confusion" tail the P0 NotebookLM research goal names.
+// VerifyScheduledGoapFusionCircuitPolicy is the config preflight that proves the
+// window is sound, yet GoapFusionPreflightNode() composes only the build-tree
+// materializer and the loop runner — never the circuit-policy guard — so a
+// scheduled cycle would drive the loop runner without first proving its
+// CIRCUITPOLICY window is valid.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionCircuitPolicy as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder
+// composes only the materializer guard and the loop runner (RED) and passes once
+// the circuit-policy guard is inserted ahead of the loop runner (GREEN). The
+// engine package cannot import internal/domains (import cycle), so this
+// runnable-composition contract is pinned here at the action's own package, ready
+// for the domains tree to embed as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitPolicy(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionCircuitPolicy"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q config guard as a runnable Action node; the preflight drives the loop runner without first proving its CIRCUITPOLICY window is a positive, bounded value", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the circuit-policy guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q config guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the loop runner's CIRCUITPOLICY window is proven sound before it drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}

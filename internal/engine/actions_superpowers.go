@@ -938,8 +938,10 @@ func init() {
 // lives) without an import cycle, so this builder lives here at the guards' own
 // package and is meant to be embedded by the domains tree as its Phase-0
 // preflight. It sequences the materializer guard — the concrete, observed
-// defect — ahead of the bounded loop runner, so the scheduled cycle only drives
-// another iteration after both the on-disk tree is proven fresh and the loop
+// defect — then the VerifyScheduledGoapFusionCircuitPolicy config guard, both
+// ahead of the bounded loop runner, so the scheduled cycle only drives another
+// iteration after the on-disk tree is proven fresh, the loop runner's
+// CIRCUITPOLICY history window is proven a positive, bounded value, and the loop
 // runner has consulted the circuit-breaker window / runaway-loop backstop.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
@@ -950,6 +952,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionBuildTreeMaterialized",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionCircuitPolicy",
 			},
 			{
 				Type: "Action",
