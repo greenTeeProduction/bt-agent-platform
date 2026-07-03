@@ -57,7 +57,7 @@ func registerGoapFusionProductionAdditions() {
 			bb.Outcome = "goap_fusion_plan_saturated"
 			return -1
 		}
-		plan := buildDeterministicImplementationPlan(task)
+		plan := buildGoalDrivenImplementationPlan(task)
 		dir := filepath.Join(goapFusionRepo, "docs", "superpowers", "plans")
 		path := filepath.Join(dir, fmt.Sprintf("goap-fusion-%s-%s.md", time.Now().Format("20060102T150405"), safeSlug(goals)))
 		if len(path) > 220 {

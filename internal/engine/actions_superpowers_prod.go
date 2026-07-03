@@ -309,7 +309,7 @@ func registerSuperpowersProductionActions() {
 		if run.PlanPath == "" {
 			run.PlanPath = filepath.Join(run.ArtifactDir, "plan.md")
 		}
-		plan := buildDeterministicImplementationPlan(run.Task)
+		plan := buildGoalDrivenImplementationPlan(run.Task)
 		written, err := writeArtifactOnce(run.PlanPath, []byte(plan))
 		if err != nil {
 			bb.Result = "## Plan Write Failed\n\n" + err.Error()
@@ -367,7 +367,10 @@ func registerSuperpowersProductionActions() {
 			return -1
 		}
 		run.Phase = SuperpowersPhaseImplementation
-		c, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+		// Goal-driven plans run up to maxGoalDrivenTasks full RED→GREEN
+		// Claude executions per cycle; 45 minutes fit only the legacy
+		// single-task template.
+		c, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 		defer cancel()
 		if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
 			bb.Result = "## Superpowers Task Execution Failed\n\n" + err.Error()

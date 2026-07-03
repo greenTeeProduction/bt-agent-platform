@@ -193,6 +193,15 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 		{"focused-tests", "/usr/local/go/bin/go test ./internal/domains ./internal/engine -count=1 -run 'TestSuperpowersPipeline_ProductionContract|TestSuperpowersRuntime_ActionsRegistered|TestGoapFusion_Structure|TestValidateOutputQuality' -timeout 180s"},
 		{"build", "/usr/local/go/bin/go build ./cmd/bt-agent ./cmd/bt-agent-cli"},
 	}
+	// Verification scales with the run's blast radius: bigger goal-driven
+	// runs touch more packages, and every touched package gets its full
+	// suite — not just the fixed contract set above.
+	if cmd := changedPackagesTestCommand(run.ChangedFiles); cmd != "" {
+		checks = append(checks, struct {
+			name string
+			cmd  string
+		}{"changed-packages-tests", cmd})
+	}
 	for _, check := range checks {
 		res := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)
 		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}

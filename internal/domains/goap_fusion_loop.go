@@ -35,7 +35,7 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:      "Sequence",
 		Name:      "GoapFusionLoop_Main",
-		TimeoutMs: 3600_000, // 1-hour ceiling per cycle
+		TimeoutMs: 7200_000, // 2-hour ceiling: goal-driven plans run up to 3 RED→GREEN Claude tasks per cycle
 		Children: []evolution.SerializableNode{
 			// ── Phase 0: Setup ──
 			act("SetupFusionTools",
@@ -78,7 +78,7 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 					cond("HasNewGaps",
 						"Only proceed with implementation if goals differ from previous run"),
 					act("WriteSuperpowersImplementationPlan",
-						"Write a concrete Superpowers plan with files, tests, risks, and verification commands"),
+						"Write a goal-driven Superpowers plan: one complete-change task per file-scoped prioritized goal (up to 3), file scope and test packages derived from the goals themselves"),
 					evolution.SerializableNode{
 						Type:        "HumanApprovalGate",
 						Name:        "ApproveGoapFusionApply",
