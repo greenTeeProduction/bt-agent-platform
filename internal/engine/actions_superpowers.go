@@ -1263,6 +1263,22 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "EvaluateScheduledGoapFusionCircuitBreaker",
 			},
+			// The scheduled cycle validates candidate mutations by ticking trees
+			// through the benchmark harnesses, which rely on the bb.Sandbox
+			// short-circuit in actionForName to keep structural ticks from
+			// dispatching real `nlm`/`git`/`claude` actions. That short-circuit is
+			// the single engine-side mechanism the whole "don't burn quotas during
+			// structural evaluation" defense rests on, yet no composed tree proved it
+			// intact. Compose the deterministic kernel-level sandbox-invariant guard
+			// here — the last gate before the loop runner — so a scheduled cycle
+			// proves the Sandbox short-circuit still blocks real action dispatch
+			// before RunScheduledGoapFusionLoop drives another benchmark-validating
+			// iteration; on a broken invariant it HALTs the preflight fast the same
+			// way its sibling input/runtime/tool guards do.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionSandbox",
+			},
 			{
 				Type: "Action",
 				Name: "RunScheduledGoapFusionLoop",

@@ -3277,3 +3277,78 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSandbox(t *test
 		t.Fatalf("expected a sandbox-invariant diagnosis in Result, got %q", bb.Result)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesSandbox
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the Phase-0
+// preflight node must compose the sandbox-invariant guard —
+// VerifyScheduledGoapFusionSandbox — as a runnable Action node ordered BEFORE the
+// bounded loop runner it protects.
+//
+// VerifyScheduledGoapFusionSandbox is the deterministic kernel-level preflight that
+// proves the single engine-side mechanism the whole "don't burn quotas during
+// structural evaluation" defense rests on (the bb.Sandbox short-circuit in
+// actionForName) is intact before the unattended scheduled cycle runs its
+// benchmark-based structural validation. Its own doc comment states it closes that
+// gap "the same way its sibling input/runtime/tool guards do" — but those siblings
+// ARE children of the preflight Sequence while this one is not, so it provides zero
+// runtime protection: the guard is registered and unit-tested (the sibling
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSandbox only asserts
+// GetAction != nil and the PASS behavior) yet composed into no tree, exactly the
+// recurring "registered but never embedded" defect the whole preflight apparatus
+// exists to close.
+//
+// This test asserts the preflight sequence references VerifyScheduledGoapFusionSandbox
+// as a registered Action node AND that it is ordered before RunScheduledGoapFusionLoop.
+// It fails while the builder omits the sandbox-invariant guard (RED) and passes once
+// that guard is inserted ahead of the loop runner (GREEN). The engine package cannot
+// import internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesSandbox(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionSandbox"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q sandbox-invariant guard as a runnable Action node; the preflight drives the loop runner without first proving the bb.Sandbox short-circuit still blocks real action dispatch, so a scheduled cycle's benchmark-based structural validation could silently spawn real nlm/git/claude subprocesses again", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the sandbox-invariant guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q sandbox-invariant guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the sandbox short-circuit is proven intact before the loop drives another benchmark-validating iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
