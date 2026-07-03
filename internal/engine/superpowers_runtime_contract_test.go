@@ -1407,6 +1407,89 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesNotebookLMTool
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the NotebookLM-binary guard —
+// VerifyScheduledGoapFusionNotebookLMTool — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// The P0 NotebookLM research goal makes independent NotebookLM research the first
+// step of every scheduled cycle: once RunScheduledGoapFusionLoop decides
+// CONTINUE, the cycle's RunGoapFusionNotebookLMResearch step shells out to the
+// `nlm` binary (nlmBin) and hard-fails ("refusing to proceed from stale vault
+// research") when it is unavailable. VerifyScheduledGoapFusionNotebookLMTool is
+// the guard whose own doc comment states a scheduled run "could pass every
+// current preflight yet still abort at the research step when that binary is
+// missing or not executable, wasting the cycle with no early diagnosis" — so it
+// must prove the `nlm` binary is an executable file before the loop runner drives
+// a cycle whose research it can never gather. Yet GoapFusionPreflightNode()
+// composes the build-tree materializer, the circuit-policy config guard, the
+// rejected-context ledger, the runtime, toolchain, plans-writable, git-tool,
+// git-remote, and vault-writable guards before the loop runner — never the
+// NotebookLM-tool guard — so a scheduled cycle could gate on the loop runner and
+// only then discover at the research step that the `nlm` binary is absent,
+// wasting the cycle and degrading to stale vault research with no early
+// diagnosis. VerifyScheduledGoapFusionNotebookLMTool is registered and
+// unit-tested (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookLMTool)
+// yet wired into no composed tree, so it can never run in a scheduled cycle.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionNotebookLMTool as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the NotebookLM-tool guard (RED) and passes once the NotebookLM-tool guard is
+// inserted ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed
+// as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesNotebookLMTool(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionNotebookLMTool"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q NotebookLM-binary guard as a runnable Action node; the preflight drives the loop runner without first proving the `nlm` binary is an executable file, so a scheduled cycle would only discover its NotebookLM binary is missing at the research step and degrade to stale vault research", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the NotebookLM-tool guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q NotebookLM-binary guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the `nlm` binary the research step needs is proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesVaultWritable
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the vault-output-location guard —

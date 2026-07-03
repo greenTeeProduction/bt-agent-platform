@@ -959,7 +959,11 @@ func init() {
 // implementation step fetches/pulls and pushes against is proven configured, and
 // the vault directory the cycle persists its per-run analysis back into is proven
 // a writable directory so a cycle never discovers only at WriteFusionAnalysis that
-// its vault output location is unwritable and starves the next run's corpus.
+// its vault output location is unwritable and starves the next run's corpus, and
+// the `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
+// shells out to is proven an executable file so a cycle never gates on the loop
+// runner only to abort at the research step with a missing binary and degrade to
+// stale vault research.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
@@ -1001,6 +1005,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionVaultWritable",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionNotebookLMTool",
 			},
 			{
 				Type: "Action",
