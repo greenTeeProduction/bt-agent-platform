@@ -978,6 +978,12 @@ func (s *Scheduler) loadState() {
 		if fi, statErr := os.Stat(SchedulerJobsFile()); statErr == nil && fi.Size() > 4 {
 			slog.Warn("scheduler: state file exists but restored zero jobs — possible clobbered or truncated state",
 				"path", SchedulerJobsFile(), "size", fi.Size())
+		} else {
+			// Not silent: a missing state file on a host with run history is
+			// itself the anomaly (observed 08:27 2026-07-03 — file vanished
+			// across a restart and every job lost last_run/run_count).
+			slog.Warn("scheduler: no persisted job state found — starting with fresh jobs",
+				"path", SchedulerJobsFile())
 		}
 	} else {
 		slog.Info("scheduler: restored persisted jobs", "count", len(jobs))
