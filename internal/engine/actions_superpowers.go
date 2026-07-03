@@ -1036,6 +1036,18 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionResearchPresent",
 			},
+			// SynthesesWritable only proves the syntheses directory is a writable
+			// directory; a syntheses directory that exists but holds zero synthesis
+			// files would still pass it, letting a scheduled cycle plan from an absent
+			// freshest research corpus (the cycle's ReadVaultResearch step reads the
+			// syntheses directory first and newest-first but swallows a read error).
+			// Prove the syntheses directory holds at least one readable synthesis file
+			// before the loop runner drives another iteration — the syntheses-content
+			// analogue of the ResearchPresent vault-content guard.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionSynthesesPresent",
+			},
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGraphifyTool",
