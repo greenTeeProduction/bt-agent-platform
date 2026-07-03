@@ -28,9 +28,12 @@ type BTAgentExecutor struct {
 // Execute runs the BT agent for the given A2A task.
 func (e *BTAgentExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
-		// Submit the task
+		// Submit the task. The a2a-go v2 stream contract requires the FIRST
+		// event to be a Task (or message) — a leading TaskStatusUpdateEvent is
+		// rejected with "first event must be a Task or a message" and the whole
+		// call fails as INVALID_AGENT_RESPONSE while the tree still executes.
 		if execCtx.StoredTask == nil {
-			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateSubmitted, nil), nil) {
+			if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
 				return
 			}
 		}

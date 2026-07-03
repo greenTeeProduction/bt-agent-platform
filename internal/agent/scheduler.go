@@ -420,6 +420,11 @@ func (s *Scheduler) ReconcileWithRegistry() {
 	for id, job := range s.jobs {
 		def, ok := defs[job.AgentName]
 		if !ok {
+			// Loud drop: if the registry is unexpectedly empty or partial at
+			// startup, this path silently discards run history (last_run,
+			// run_count) for every persisted job — make that visible.
+			slog.Warn("scheduler: dropping job for agent not in registry",
+				"job_id", id, "agent", job.AgentName, "run_count", job.RunCount)
 			delete(s.jobs, id)
 			continue
 		}
@@ -960,6 +965,19 @@ func (s *Scheduler) loadState() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Loud restore accounting: on 2026-07-02 scheduler-jobs.json came back
+	// with zeroed last_run/run_count after daemon kills, and the silent
+	// restore made the loss undiagnosable. If the state file exists but no
+	// jobs were restored, say so — that is the clobber signature.
+	if len(jobs) == 0 {
+		if fi, statErr := os.Stat(SchedulerJobsFile()); statErr == nil && fi.Size() > 4 {
+			slog.Warn("scheduler: state file exists but restored zero jobs — possible clobbered or truncated state",
+				"path", SchedulerJobsFile(), "size", fi.Size())
+		}
+	} else {
+		slog.Info("scheduler: restored persisted jobs", "count", len(jobs))
+	}
 
 	crashedCount := 0
 	for i := range jobs {
