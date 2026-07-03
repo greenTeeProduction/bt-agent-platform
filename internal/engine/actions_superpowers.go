@@ -1009,13 +1009,38 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionVaultWritable",
 			},
+			// The two NotebookLM guards are optional enrichment: an absent `nlm`
+			// binary or an unset notebook id must NOT abort the scheduled cycle,
+			// which still degrades cleanly to vault research. Each is Selector-wrapped
+			// with an AlwaysSucceed fallback so the guard runs and warns, but its
+			// FAILURE is swallowed rather than propagated to the preflight Sequence.
 			{
-				Type: "Action",
-				Name: "VerifyScheduledGoapFusionNotebookLMTool",
+				Type: "Selector",
+				Name: "GoapFusionNotebookLMToolOptional",
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Action",
+						Name: "VerifyScheduledGoapFusionNotebookLMTool",
+					},
+					{
+						Type: "AlwaysSucceed",
+						Name: "GoapFusionNotebookLMToolNonFatal",
+					},
+				},
 			},
 			{
-				Type: "Action",
-				Name: "VerifyScheduledGoapFusionNotebook",
+				Type: "Selector",
+				Name: "GoapFusionNotebookOptional",
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Action",
+						Name: "VerifyScheduledGoapFusionNotebook",
+					},
+					{
+						Type: "AlwaysSucceed",
+						Name: "GoapFusionNotebookNonFatal",
+					},
+				},
 			},
 			{
 				Type: "Action",

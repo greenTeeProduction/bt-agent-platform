@@ -1667,3 +1667,75 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsNonFatal
+// pins the P0 NotebookLM research goal's non-fatal requirement: the two external
+// NotebookLM guards the scheduled GOAP fusion preflight composes —
+// VerifyScheduledGoapFusionNotebookLMTool and VerifyScheduledGoapFusionNotebook —
+// must be NON-FATAL within GoapFusionPreflightNode().
+//
+// Every other preflight guard protects an input, tool, or output location the cycle
+// genuinely cannot run without, so a FAILURE there rightly aborts the top-level
+// GoapFusionPreflight Sequence. But the `nlm` binary and the configured NotebookLM
+// notebook id are optional enrichment: when they are absent the cycle should degrade
+// to the existing vault research and STILL drive its research-to-implementation loop,
+// not abort the whole scheduled cycle. Composed as direct Action children of the
+// top-level Sequence (actions_superpowers.go), a single NotebookLM FAILURE
+// short-circuits the entire preflight and the bounded loop runner never executes — the
+// scheduled cycle silently stops improving whenever `nlm` is missing or unconfigured,
+// exactly the abort the P0 goal calls out ("make the two NotebookLM guards non-fatal
+// ... so they don't abort the cycle").
+//
+// This test asserts each NotebookLM guard's nearest enclosing composite parent is a
+// Selector — the fallback node whose child FAILURE is caught rather than propagated —
+// so the guard runs and warns but its failure cannot abort the enclosing Sequence. It
+// fails while the guards are direct Sequence children (RED) and passes once each is
+// Selector-wrapped as a non-fatal preflight child (GREEN). The engine package cannot
+// import internal/domains (import cycle), so this non-fatal-composition contract is
+// pinned here at the guards' own package, ready for GoapFusionLoopTree() to embed via
+// PrependGoapFusionPreflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsNonFatal(t *testing.T) {
+	node := GoapFusionPreflightNode()
+
+	notebookGuards := []string{
+		"VerifyScheduledGoapFusionNotebookLMTool",
+		"VerifyScheduledGoapFusionNotebook",
+	}
+
+	// Walk the tree tracking the nearest enclosing composite (Selector/Sequence)
+	// parent of each Action, so we can prove each NotebookLM guard's FAILURE is
+	// swallowed by a Selector rather than propagated by a Sequence.
+	parentType := map[string]string{}
+	found := map[string]bool{}
+	var walk func(n evolution.SerializableNode, parent string)
+	walk = func(n evolution.SerializableNode, parent string) {
+		if n.Type == "Action" {
+			for _, g := range notebookGuards {
+				if n.Name == g {
+					parentType[g] = parent
+					found[g] = true
+				}
+			}
+		}
+		nextParent := parent
+		if n.Type == "Selector" || n.Type == "Sequence" {
+			nextParent = n.Type
+		}
+		for _, c := range n.Children {
+			walk(c, nextParent)
+		}
+	}
+	walk(node, "")
+
+	for _, g := range notebookGuards {
+		if !found[g] {
+			t.Fatalf("GoapFusionPreflightNode() no longer composes the %q NotebookLM guard as a runnable Action node; the optional NotebookLM enrichment must still run in the scheduled cycle", g)
+		}
+		if GetAction(g) == nil {
+			t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", g)
+		}
+		if parentType[g] != "Selector" {
+			t.Fatalf("expected the %q NotebookLM guard to be wrapped in a Selector (non-fatal) so its FAILURE cannot abort the GoapFusionPreflight Sequence, but its nearest composite parent is %q; an absent `nlm` binary or unset notebook id would short-circuit the whole preflight and the bounded loop runner would never run", g, parentType[g])
+		}
+	}
+}
