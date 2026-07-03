@@ -2540,3 +2540,71 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHaltsOnConsecutiveNoopPatches
+// pins the SECOND CIRCUITPOLICY halt condition the dedicated circuit-breaker
+// evaluation *promises but never enforces*: halting on a run of consecutive no-op
+// patch proposals. EvaluateScheduledGoapFusionCircuitBreaker's own doc comment
+// states it enforces "detecting and halting state-transition cycles and repeated
+// no-op patch proposals" (actions_superpowers.go), yet its implementation only
+// delegates to goapFusionCircuitBreakerVerdict(hashes) — the bounded state-hash
+// window dedup — and never consults goapFusionNoopPatchStreak. That leaves the
+// "Activity-Progress Confusion" tail uncaught AT THE DEDICATED GATE: because the
+// breaker is composed into GoapFusionPreflightNode() as an explicit, observable
+// BT gate immediately BEFORE RunScheduledGoapFusionLoop, a scheduled cycle that
+// publishes a run of DISTINCT state hashes while every proposed patch is a no-op
+// would sail past the dedicated circuit-breaker gate (it returns CONTINUE) and
+// only be caught one node later by the loop runner. The dedicated breaker — whose
+// whole purpose is to make the CIRCUITPOLICY verdict an explicit gate — must
+// enforce the SAME halt policy the loop runner does, from the single source of
+// truth, or the two drift on what counts as a trip.
+//
+// The loop's consecutive-no-op-patch streak is published on the blackboard under
+// "goap_fusion_noop_patch_streak"; a bounded run of no-op patches must HALT (-1)
+// the dedicated breaker even when the state hashes are all distinct. This test
+// asserts EvaluateScheduledGoapFusionCircuitBreaker HALTs on a run of consecutive
+// no-op patches with distinct state hashes, and CONTINUEs when no no-op streak is
+// present. It fails today because the breaker returns CONTINUE for distinct hashes
+// regardless of the no-op streak (RED) and passes once the breaker halts on a
+// bounded consecutive-no-op-patch run (GREEN) — the no-op-streak analogue of the
+// repeated-state-hash halt the breaker already enforces, and the dedicated-gate
+// counterpart of
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHaltsOnConsecutiveNoopPatches(t *testing.T) {
+	action := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q", "EvaluateScheduledGoapFusionCircuitBreaker")
+	}
+
+	// Distinct state hashes so the bounded-window dedup never trips; a run of
+	// consecutive no-op patch proposals is the only halt signal present. The
+	// dedicated circuit breaker must still HALT — the loop is "active" proposing
+	// empty patches that never advance the goal, the Activity-Progress Confusion
+	// its own doc comment promises to catch.
+	noop := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes":      []string{"aaa", "bbb", "ccc"},
+			"goap_fusion_noop_patch_streak": 10,
+		},
+	}
+	noopCtx := &btcore.BTContext[Blackboard]{Blackboard: noop}
+	if status := action(noopCtx); status != -1 {
+		t.Fatalf("expected HALT (-1) on a run of consecutive no-op patch proposals even with distinct state hashes, got %d", status)
+	}
+	if !strings.Contains(noop.Result, "HALT") {
+		t.Fatalf("expected a HALT diagnosis in Result on a consecutive no-op patch run, got %q", noop.Result)
+	}
+
+	// No consecutive no-op patch run (and distinct hashes) lets the dedicated
+	// circuit breaker CONTINUE (1) — the same verdict the loop runner reaches.
+	progress := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_state_hashes":      []string{"aaa", "bbb", "ccc"},
+			"goap_fusion_noop_patch_streak": 0,
+		},
+	}
+	progressCtx := &btcore.BTContext[Blackboard]{Blackboard: progress}
+	if status := action(progressCtx); status != 1 {
+		t.Fatalf("expected CONTINUE (1) when no consecutive no-op patch run is present and state hashes are distinct, got %d", status)
+	}
+}

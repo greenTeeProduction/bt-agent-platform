@@ -800,6 +800,18 @@ func init() {
 			return -1
 		}
 
+		// Consecutive no-op-patch streak: the dedicated breaker must enforce the SAME
+		// halt policy the loop runner does from the single source of truth. A loop can
+		// publish an unbroken run of DISTINCT state hashes — so the bounded-window dedup
+		// above never trips — while every proposed patch is a no-op that never advances
+		// the goal. A bounded run of consecutive no-op patches must HALT the breaker too,
+		// or the dedicated gate and the loop runner drift on what counts as a trip and
+		// the "Activity-Progress Confusion" tail sails past this gate uncaught.
+		if streak := goapFusionNoopPatchStreak(bb); streak >= goapFusionMaxNoopPatchStreak {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so the bounded-window dedup never trips — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			return -1
+		}
+
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: CONTINUE\n\nThe most recent %d state hash(es) are distinct and progress-making; no state-transition cycle or repeated no-op patch detected.", len(window))
 		return 1
 	})
