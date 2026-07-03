@@ -87,6 +87,11 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		bb := &engine.Blackboard{
 			Task: tc.Task,
 			LLM:  mock,
+			// Benchmark runs must never trigger real side effects (subprocess,
+			// network, external quotas) — production trees contain actions that
+			// shell out to nlm/git/claude. Sandbox simulates action success;
+			// conditions and tree structure still drive routing.
+			Sandbox: true,
 		}
 
 		bt := engine.BuildTree(tree, bb)

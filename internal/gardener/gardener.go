@@ -105,10 +105,13 @@ func (r *Registry) loadAll() {
 		if json.Unmarshal(data, &tree) != nil {
 			continue
 		}
-		// Check if already added as builtin
+		// Persisted evolved state takes precedence over the compiled-in
+		// builtin: SaveTree wrote this file in an earlier cycle, and dropping
+		// it on restart would reset evolution progress to zero.
 		already := false
-		for _, entry := range r.entries {
-			if entry.FilePath == path {
+		for i := range r.entries {
+			if r.entries[i].FilePath == path {
+				r.entries[i].Tree = &tree
 				already = true
 				break
 			}
@@ -460,12 +463,12 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	// Quality gate: validate that mutations didn't cause regression.
 	// Runs after all mutations are applied to check the combined effect.
 	if applied > 0 && g.cfg.Gate != nil {
-		if g.cfg.Gate.IsDisabled() {
+		if g.cfg.Gate.IsDisabledFor(entry.Name) {
 			// Fail closed: a disabled gate means evolution is paused for this
 			// tree until process restart — discard the mutations, do not apply
 			// them ungated.
 			slog.Warn("gardener: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
-				"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCount())
+				"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
 			rejections = applied
 			applied = 0
 			if snapshotTaken {
@@ -476,7 +479,7 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 			}
 		} else {
 			postFitness := evaluator.EvaluateTree(tree, records)
-			result := g.cfg.Gate.Validate(baseFitness.Composite, postFitness.Composite)
+			result := g.cfg.Gate.ValidateFor(entry.Name, baseFitness.Composite, postFitness.Composite)
 
 			switch result {
 			case evolution.GateRejected:
@@ -506,13 +509,11 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 	}
 
 	if applied > 0 {
+		// NOTE: no tree.json sync here — tree.json in the registry dir belongs
+		// to bt-agent's self-mutation TreeStore; overwriting it with arbitrary
+		// domain trees clobbered that store (each evolved tree replaced the
+		// agent's default tree in turn). Evolved state lives in tree-<name>.json.
 		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
-		// Sync to tree.json so bt-agent picks up mutations on restart
-		treeJSONPath := filepath.Join(g.cfg.Registry.dir, "tree.json")
-		data, _ := json.MarshalIndent(tree, "", "  ")
-		tmp := treeJSONPath + ".tmp"
-		_ = os.WriteFile(tmp, data, 0644)
-		_ = os.Rename(tmp, treeJSONPath)
 	}
 
 	// If crisis intervention was triggered and mutations were accepted,

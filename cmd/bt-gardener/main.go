@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -217,12 +219,23 @@ Question: {{.input}}`,
 	}
 	_ = metricsTracker.Save()
 
-	// 24/7 loop
+	// 24/7 loop — exits cleanly on SIGTERM/SIGINT (systemd stop) so metrics
+	// are flushed instead of being killed mid-cycle.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, os.Interrupt)
+
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 
 	cycleCount := 1
-	for range ticker.C {
+	for {
+		select {
+		case sig := <-sigCh:
+			engine.Info("bt-gardener: shutting down", "signal", sig.String(), "cycles", cycleCount)
+			_ = metricsTracker.Save()
+			return
+		case <-ticker.C:
+		}
 		cycleCount++
 		fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))
 
@@ -269,6 +282,3 @@ func truncateStr(s string, n int) string {
 	}
 	return s[:n] + "..."
 }
-
-// Ensure unused imports don't error
-var _ = llm.DefaultConfig

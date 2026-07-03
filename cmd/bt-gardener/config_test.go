@@ -30,6 +30,13 @@ func TestBuildGardenerConfig_SafetyComponentsWired(t *testing.T) {
 		t.Errorf("ValidationGate.EvidencePath = %q — SLO evidence file not wired into production config (B1)",
 			cfg.ValidationGate.EvidencePath)
 	}
+	// Production must allow trees without SLO evidence to persist: only 4 of
+	// ~50 registry trees are executed by live agents, and strict fail-closed
+	// froze evolution at 0 applied mutations for a month. Evidenced trees keep
+	// full threshold enforcement.
+	if !cfg.ValidationGate.AllowUnverified {
+		t.Error("ValidationGate.AllowUnverified = false — unevidenced trees would fail closed forever")
+	}
 }
 
 // TestBuildGardenerConfig_SnapshotDirCreated proves that buildGardenerConfig

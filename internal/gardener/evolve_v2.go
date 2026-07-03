@@ -218,12 +218,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	rollbacks := 0
 	originalTree := cloneTreeForGardener(tree)
 	currentFitness := baseFitness
-	gateDisabled := g.cfg.Gate != nil && g.cfg.Gate.IsDisabled()
+	gateDisabled := g.cfg.Gate != nil && g.cfg.Gate.IsDisabledFor(entry.Name)
 	if gateDisabled {
 		// Fail closed: a disabled gate means evolution is paused for this tree
 		// until process restart — skip every candidate, apply nothing ungated.
 		slog.Warn("gardener/v2: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
-			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCount())
+			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
 	}
 	for i := 0; !gateDisabled && i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
 		if candidates[i].Score < 0.45 {
@@ -251,7 +251,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			continue
 		}
 		if g.cfg.Gate != nil { // gateDisabled is always false inside this loop (fail-closed skip above)
-			gateResult := g.cfg.Gate.Validate(currentFitness.Composite, candidateFitness.Composite)
+			gateResult := g.cfg.Gate.ValidateFor(entry.Name, currentFitness.Composite, candidateFitness.Composite)
 			if gateResult != evolution.GateAccepted {
 				rejected++
 				if gateResult == evolution.GateRollback {
@@ -358,10 +358,6 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		if !entry.Active {
 			continue
 		}
-		// Skip heavy-IO documentation trees that run external commands
-		if strings.Contains(entry.Name, "arc42") {
-			continue
-		}
 
 		start := time.Now()
 		metrics := g.evolveTreeV2(entry, cfg)
@@ -369,6 +365,9 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		results = append(results, metrics)
 
 		g.cfg.MetricsTracker.Record(metrics)
+		// Persist after every tree so a mid-cycle crash or SIGTERM loses at
+		// most one tree's result, not the whole cycle.
+		_ = g.cfg.MetricsTracker.Save()
 	}
 
 	// ── P2: Island Model — run migration after cycle ──

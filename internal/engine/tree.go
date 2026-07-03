@@ -82,6 +82,13 @@ type Blackboard struct {
 	TickBudget int
 	TreeTicks  int
 
+	// Sandbox disables real action side effects: when true, actionForName
+	// returns a simulated success for every action instead of dispatching to
+	// the registered implementation. Used by benchmark/evolution harnesses so
+	// tree evaluation can never spawn subprocesses, hit the network, or burn
+	// external API quotas. Conditions still run (routing stays observable).
+	Sandbox bool
+
 	TraceContext context.Context `json:"-"`
 	Logger       *slog.Logger    `json:"-"` // run-scoped logger (run_id/agent/tree bound); use Log()
 
@@ -269,6 +276,15 @@ func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName stri
 }
 
 func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboard]) int {
+	// Sandbox mode: never dispatch to real implementations — simulate success
+	// so structural evaluation can tick trees without side effects.
+	if bb.Sandbox {
+		return func(ctx *btcore.BTContext[Blackboard]) int {
+			b := ctx.Blackboard
+			b.Results = append(b.Results, "[sandbox] "+name)
+			return 1
+		}
+	}
 	// Registry-first: packages register via engine.RegisterAction() in init().
 	// GetAction returns the zero-value ActionFunc (nil) for unknown names.
 	if fn := GetAction(name); fn != nil {

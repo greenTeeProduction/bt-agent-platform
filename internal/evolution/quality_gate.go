@@ -38,9 +38,13 @@ type QualityGate struct {
 	MaxRegressionRate float64 // 0.2 — rollback if fitness drops >20%
 	ConsecutiveFails  int     // 5 — auto-disable after N consecutive regressions
 	SnapshotDir       string  // backup tree.json before mutation
-	failCount         int
+	failCounts        map[string]int
 	mu                sync.Mutex
 }
+
+// globalGateKey is the failure-streak key used by the legacy tree-agnostic
+// Validate/IsDisabled/FailCount methods.
+const globalGateKey = ""
 
 // NewQualityGate creates a quality gate with sensible defaults.
 func NewQualityGate(snapshotDir string) *QualityGate {
@@ -55,25 +59,37 @@ func NewQualityGate(snapshotDir string) *QualityGate {
 // Validate checks pre- and post-mutation composite fitness and returns whether to
 // accept, reject, or rollback. Takes float64 composite scores to avoid circular
 // imports with the evaluator package.
+//
+// Failure streaks recorded here are tree-agnostic (global key); prefer
+// ValidateFor when gating multiple trees through one gate instance.
 func (q *QualityGate) Validate(preComposite, postComposite float64) GateResult {
+	return q.ValidateFor(globalGateKey, preComposite, postComposite)
+}
+
+// ValidateFor is Validate with a per-tree failure streak: consecutive failures
+// on one tree disable the gate for that tree only, never fleet-wide.
+func (q *QualityGate) ValidateFor(treeKey string, preComposite, postComposite float64) GateResult {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.failCounts == nil {
+		q.failCounts = make(map[string]int)
+	}
 
 	// Fitness floor — reject if composite falls below minimum
 	if postComposite < q.MinComposite {
-		q.failCount++
+		q.failCounts[treeKey]++
 		return GateRejected
 	}
 
 	// Regression threshold — rollback if fitness drops by more than MaxRegressionRate.
 	// Only triggers when preComposite > 0 (new trees have Composite=0 and can't regress).
 	if preComposite > 0 && postComposite < preComposite*(1-q.MaxRegressionRate) {
-		q.failCount++
+		q.failCounts[treeKey]++
 		return GateRollback
 	}
 
 	// Passed — reset fail counter
-	q.failCount = 0
+	q.failCounts[treeKey] = 0
 	return GateAccepted
 }
 
@@ -85,23 +101,40 @@ func (q *QualityGate) Validate(preComposite, postComposite float64) GateResult {
 // the gardener skips/rolls back all mutations for trees whose gate is disabled,
 // it never applies them ungated. Deliberate, to avoid flapping.
 func (q *QualityGate) IsDisabled() bool {
+	return q.IsDisabledFor(globalGateKey)
+}
+
+// IsDisabledFor reports whether treeKey's consecutive failures exceeded the
+// threshold. A global-key streak (legacy Validate) acts as a kill switch that
+// disables every tree; per-tree streaks disable only their own tree.
+// See IsDisabled's A2 note for disable semantics.
+func (q *QualityGate) IsDisabledFor(treeKey string) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return q.ConsecutiveFails > 0 && q.failCount >= q.ConsecutiveFails
+	if q.ConsecutiveFails <= 0 {
+		return false
+	}
+	return q.failCounts[treeKey] >= q.ConsecutiveFails ||
+		q.failCounts[globalGateKey] >= q.ConsecutiveFails
 }
 
 // FailCount returns the current consecutive failure count.
 func (q *QualityGate) FailCount() int {
+	return q.FailCountFor(globalGateKey)
+}
+
+// FailCountFor returns treeKey's current consecutive failure count.
+func (q *QualityGate) FailCountFor(treeKey string) int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return q.failCount
+	return q.failCounts[treeKey]
 }
 
 // ResetFailCount resets the consecutive failure counter.
 func (q *QualityGate) ResetFailCount() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.failCount = 0
+	q.failCounts = nil
 }
 
 // SnapshotTree saves a copy of the tree to the snapshot directory atomically.

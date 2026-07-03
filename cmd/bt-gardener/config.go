@@ -40,6 +40,11 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 
 	validationGate := gardener.DefaultValidationGateConfig()
 	validationGate.EvidencePath = sloEvidencePath
+	// Only the handful of trees executed by live agents have SLO evidence;
+	// strict fail-closed for the rest froze evolution at zero applied
+	// mutations. Unevidenced trees persist unverified (gardener output is not
+	// consumed by running agents); evidenced trees keep threshold enforcement.
+	validationGate.AllowUnverified = true
 
 	return gardener.Config{
 		Registry:       registry,
