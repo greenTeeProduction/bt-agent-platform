@@ -1433,6 +1433,12 @@ func WireGoapFusionLoopTree(tree evolution.SerializableNode) evolution.Serializa
 		if n.Name == "ClaudeSuperpowersPath" && !goapFusionImplementationGateWired(n.Children) {
 			n.Children = PrependGoapFusionImplementationGate(n.Children)
 		}
+		// Splice the goal-queue state-hash producer in wherever the Phase-4
+		// PrioritizeGoapGoals node lives, so every scheduled cycle hashes the freshly
+		// prioritized goals into the CIRCUITPOLICY history the circuit breaker and
+		// loop runner read. Doing it during the descent (rather than only at the top
+		// level) keeps the seam robust to the exact nesting depth of PrioritizeGoapGoals.
+		n.Children = spliceGoapFusionStateHashProducer(n.Children)
 		return n
 	}
 
@@ -1448,6 +1454,41 @@ func WireGoapFusionLoopTree(tree evolution.SerializableNode) evolution.Serializa
 // a re-invocation never double-prepends the preflight ahead of an already-wired tree.
 func goapFusionPreflightWired(loopChildren []evolution.SerializableNode) bool {
 	return len(loopChildren) > 0 && loopChildren[0].Name == "GoapFusionPreflight"
+}
+
+// spliceGoapFusionStateHashProducer returns a copy of children with a
+// PublishGoapFusionStateHash Action inserted immediately after PrioritizeGoapGoals,
+// so the goal queue that PrioritizeGoapGoals builds is hashed into the CIRCUITPOLICY
+// state-hash history before the ExecutionRouter consumes it. Without this producer
+// bb.ChainState["goap_fusion_state_hashes"] stays permanently empty in a real
+// scheduled cycle and the loop runner always returns CONTINUE — the very
+// "Activity-Progress Confusion" backstop the loop-runner apparatus exists to break.
+//
+// It is idempotent (a producer already sitting right after PrioritizeGoapGoals is
+// left untouched) and never mutates the caller's slice: it returns children unchanged
+// when there is nothing to splice, otherwise a freshly allocated slice.
+func spliceGoapFusionStateHashProducer(children []evolution.SerializableNode) []evolution.SerializableNode {
+	idx := -1
+	for i := range children {
+		if children[i].Name == "PrioritizeGoapGoals" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return children
+	}
+	if idx+1 < len(children) && children[idx+1].Name == "PublishGoapFusionStateHash" {
+		return children
+	}
+	spliced := make([]evolution.SerializableNode, 0, len(children)+1)
+	spliced = append(spliced, children[:idx+1]...)
+	spliced = append(spliced, evolution.SerializableNode{
+		Type: "Action",
+		Name: "PublishGoapFusionStateHash",
+	})
+	spliced = append(spliced, children[idx+1:]...)
+	return spliced
 }
 
 // goapFusionImplementationGateWired reports whether implChildren already begins with

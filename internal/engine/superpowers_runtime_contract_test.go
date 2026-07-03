@@ -3232,6 +3232,121 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTreeIs
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresStateHashProducer
+// pins the last unwired link of the "goap-fusion-loop-runner" goal: the whole-tree
+// seam must embed the PublishGoapFusionStateHash PRODUCER into the loop tree so the
+// CIRCUITPOLICY apparatus it feeds actually has a producer in a real scheduled cycle.
+//
+// PublishGoapFusionStateHash is registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPublishesStateHash),
+// and RunScheduledGoapFusionLoop + EvaluateScheduledGoapFusionCircuitBreaker derive
+// their entire halt/continue decision from bb.ChainState["goap_fusion_state_hashes"].
+// But WireGoapFusionLoopTree today only (1) prepends the Phase-0 preflight and (2)
+// gates ClaudeSuperpowersPath — it never embeds the producer that WRITES the history
+// those consumers read. So in the production wired tree the state-hash history stays
+// permanently empty every cycle, the bounded window never sees a repeat, the loop
+// runner always returns CONTINUE, and the "Activity-Progress Confusion" cycle the
+// whole loop-runner apparatus exists to detect can never fire ([[goap-fusion-state-hash-no-producer]]).
+//
+// The cycle's progress-relevant state is the prioritized goal queue that
+// PrioritizeGoapGoals publishes (Phase 4). So the seam must insert a
+// PublishGoapFusionStateHash Action immediately AFTER PrioritizeGoapGoals in its
+// parent's child list — after the goal queue exists, before the ExecutionRouter that
+// consumes it — so every cycle hashes the freshly prioritized goals and appends them
+// to the history the circuit breaker/loop runner then HALT on when a cycle repeats.
+//
+// This test asserts WireGoapFusionLoopTree embeds PublishGoapFusionStateHash as the
+// immediate next sibling of PrioritizeGoapGoals, produces a schema-valid tree, and
+// does not mutate the caller's input. It fails today because the seam never embeds
+// the producer (RED) and passes once WireGoapFusionLoopTree inserts it right after
+// PrioritizeGoapGoals (GREEN). The engine package cannot import internal/domains
+// (import cycle), so this producer-wiring contract is pinned here at the seam's own
+// package, ready for the domains GoapFusionLoopTree() to adopt in one call.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresStateHashProducer(t *testing.T) {
+	const (
+		prioritize = "PrioritizeGoapGoals"
+		producer   = "PublishGoapFusionStateHash"
+		analyze    = "AnalyzeImprovementGaps"
+		router     = "ExecutionRouter"
+		claudePath = "ClaudeSuperpowersPath"
+		setup      = "SetupFusionTools"
+		planWriter = "WriteSuperpowersImplementationPlan"
+		impl       = "RunSuperpowersClaudeImplementation"
+	)
+
+	// A minimal mirror of the production GoapFusionLoop_Main tree: Phase-0 setup, the
+	// Phase-4 AnalyzeImprovementGaps -> PrioritizeGoapGoals pair that builds the goal
+	// queue, then the ExecutionRouter Selector whose ClaudeSuperpowersPath consumes it.
+	tree := evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "GoapFusionLoop_Main",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: setup},
+			{Type: "Action", Name: analyze},
+			{Type: "Action", Name: prioritize},
+			{
+				Type: "Selector",
+				Name: router,
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Sequence",
+						Name: claudePath,
+						Children: []evolution.SerializableNode{
+							{Type: "Condition", Name: "HasNewGaps"},
+							{Type: "Action", Name: planWriter},
+							{Type: "Action", Name: impl},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	wired := WireGoapFusionLoopTree(tree)
+
+	// Locate the parent whose child list contains PrioritizeGoapGoals, and the index
+	// of the goal-queue producer within it.
+	var parent *evolution.SerializableNode
+	prioritizeIdx := -1
+	var find func(n *evolution.SerializableNode)
+	find = func(n *evolution.SerializableNode) {
+		for i := range n.Children {
+			if n.Children[i].Name == prioritize {
+				parent = n
+				prioritizeIdx = i
+			}
+			find(&n.Children[i])
+		}
+	}
+	find(&wired)
+
+	if parent == nil || prioritizeIdx < 0 {
+		t.Fatalf("WireGoapFusionLoopTree dropped the %q node; the seam must preserve the Phase-4 goal-queue producer it publishes state hashes from", prioritize)
+	}
+
+	// The producer must be the IMMEDIATE next sibling of PrioritizeGoapGoals: after the
+	// goal queue exists, before the ExecutionRouter that consumes it, so every cycle
+	// hashes the freshly prioritized goals into the CIRCUITPOLICY history.
+	if prioritizeIdx+1 >= len(parent.Children) {
+		t.Fatalf("WireGoapFusionLoopTree did not embed the %q producer after %q; the CIRCUITPOLICY history the loop runner reads stays permanently empty in a real scheduled cycle, so the Activity-Progress Confusion cycle can never be detected (siblings=%d)", producer, prioritize, len(parent.Children))
+	}
+	if next := parent.Children[prioritizeIdx+1]; next.Name != producer {
+		t.Fatalf("expected %q embedded as the immediate next sibling of %q (index %d), got %q; the producer must run right after the goal queue is prioritized and before the ExecutionRouter consumes it", producer, prioritize, prioritizeIdx+1, next.Name)
+	}
+
+	// The wired tree must be schema-valid end-to-end so the production tree that
+	// embeds it survives BuildAndValidate.
+	if errs := wired.Validate(); len(errs) > 0 {
+		t.Fatalf("WireGoapFusionLoopTree produced a tree that is not schema-valid after embedding %q; validation reported %d error(s):\n- %s", producer, len(errs), strings.Join(errs, "\n- "))
+	}
+
+	// The seam must not mutate the caller's input: the original Phase-4 pair is still
+	// AnalyzeImprovementGaps -> PrioritizeGoapGoals with no producer spliced in place.
+	if got := tree.Children[2].Name; got != prioritize {
+		t.Fatalf("WireGoapFusionLoopTree mutated the caller's tree: child index 2 is now %q, want %q (no producer may be spliced into the caller's input)", got, prioritize)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSandbox pins the
 // engine-side completion of the P0 NotebookLM research goal: structural tree
 // evaluation must never spawn subprocesses / hit the network / burn external
