@@ -951,7 +951,7 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
 		Name:        "GoapFusionPreflight",
-		Description: "Phase-0 preflight for the scheduled GOAP fusion loop; materializes the on-disk build tree to HEAD, proves the circuit policy and rejected-context ledger, then gates the cycle on the bounded loop runner before it builds and TDD-verifies another iteration.",
+		Description: "Phase-0 preflight for the scheduled GOAP fusion loop; materializes the on-disk build tree to HEAD, proves the circuit policy and rejected-context ledger, verifies the implementation runtime (repository working directory and Claude Code binary), then gates the cycle on the bounded loop runner before it builds and TDD-verifies another iteration.",
 		Children: []evolution.SerializableNode{
 			{
 				Type: "Action",
@@ -964,6 +964,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionRejectedContextLedger",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionRuntime",
 			},
 			{
 				Type: "Action",
