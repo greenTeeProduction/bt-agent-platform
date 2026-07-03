@@ -2,6 +2,18 @@ package domains
 
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
+// GoapFusionLoopWireFn is the production wiring seam for the scheduled
+// goap_fusion_loop tree: internal/agentexec installs
+// engine.WireGoapFusionLoopTree here so every runtime resolution gets the
+// Phase-0 preflight, the gated ClaudeSuperpowersPath, and the
+// PublishGoapFusionStateHash producer. It is a hook var because domains
+// cannot import engine (domains' in-package tests import engine, so a
+// production domains→engine import is a test-build cycle). The identity
+// default keeps evolution/gardener tooling operating on the raw tree.
+var GoapFusionLoopWireFn = func(tree evolution.SerializableNode) evolution.SerializableNode {
+	return tree
+}
+
 // GoapFusionLoopTree is a single-cycle GOAP fusion improvement runner that:
 //  1. Grills NotebookLM with critical review ("grill me" pattern)
 //  2. Runs NotebookLM research for fresh recommendations (falls back to a
@@ -15,7 +27,12 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 // per tick. Schedule it every 30 minutes: 0,30 * * * *
 // Each cycle advances the "grill me" conversation round (1→2→3→1).
 func GoapFusionLoopTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{
+	wired := GoapFusionLoopWireFn(rawGoapFusionLoopTree())
+	return &wired
+}
+
+func rawGoapFusionLoopTree() evolution.SerializableNode {
+	return evolution.SerializableNode{
 		Type:      "Sequence",
 		Name:      "GoapFusionLoop_Main",
 		TimeoutMs: 3600_000, // 1-hour ceiling per cycle
