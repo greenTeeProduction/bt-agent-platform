@@ -3352,3 +3352,135 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPublishesStateHash
+// pins the missing PRODUCER the "goap-fusion-loop-runner" goal actually depends on:
+// nothing on the blackboard ever publishes the state-hash history the whole
+// CIRCUITPOLICY apparatus consumes. RunScheduledGoapFusionLoop and
+// EvaluateScheduledGoapFusionCircuitBreaker both derive their entire halt/continue
+// decision from bb.ChainState["goap_fusion_state_hashes"] (goapFusionStateHashes),
+// and every prior increment built, wired, and unit-tested those consumers — yet
+// grep proves that key is only ever READ in production and WRITTEN only by test
+// fixtures. No registered action computes a state hash of the cycle's
+// progress-relevant state and appends it to the history, so in a real scheduled
+// cycle the history stays permanently empty: the circuit breaker's bounded window
+// never sees a repeat, the loop runner always returns CONTINUE, and the
+// "Activity-Progress Confusion" cycle the entire loop-runner apparatus exists to
+// break can never actually be detected [Source 207, 214, 215, 250].
+//
+// The progress-relevant state is the cycle's prioritized goal queue —
+// PrioritizeGoapGoals stores it under bb.ChainState["goap_fusion_goal_queue"], and
+// HasNewGaps already treats an unchanged goal queue as "no progress." So the
+// producer must hash that goal queue deterministically (identical goal queues →
+// identical hash) and append it to goap_fusion_state_hashes, preserving prior
+// history, so two consecutive cycles that produce the same goals append the same
+// hash and the circuit breaker/loop runner it feeds finally HALT on the repeat.
+//
+// This test asserts PublishGoapFusionStateHash (1) is a registered, runnable action,
+// (2) appends a non-empty, deterministic hash of the goal queue while preserving any
+// prior history, (3) hashes distinct goal queues to distinct values, and (4) feeds
+// the consumer: a run that publishes the same goal queue on two consecutive ticks
+// produces a repeated hash within the bounded window that RunScheduledGoapFusionLoop
+// then HALTs on. It fails today because the producer is not registered (RED) and
+// passes once PublishGoapFusionStateHash is implemented and appends the deterministic
+// goal-queue hash (GREEN). The engine package cannot import internal/domains (import
+// cycle), so this producer contract is pinned here at the action's own package,
+// ready for the domains tree to embed after the cycle prioritizes its goals.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPublishesStateHash(t *testing.T) {
+	const producer = "PublishGoapFusionStateHash"
+
+	action := GetAction(producer)
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q; the loop runner and circuit breaker consume goap_fusion_state_hashes but no registered action ever publishes it, so the Activity-Progress Confusion cycle can never be detected in a real scheduled cycle", producer)
+	}
+
+	// (2) Appends a non-empty, deterministic hash of the goal queue while preserving
+	// any prior state-hash history published on earlier ticks.
+	first := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_goal_queue":   "[P0] fix the loop runner\n[P2] add smoke tests",
+			"goap_fusion_state_hashes": []string{"prior-tick-hash"},
+		},
+	}
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: first}); status != 1 {
+		t.Fatalf("expected PublishGoapFusionStateHash to return SUCCESS (1), got %d: %s", status, first.Result)
+	}
+	hist := goapFusionStateHashes(first)
+	if len(hist) != 2 {
+		t.Fatalf("expected the producer to append exactly one hash to the existing history (len 2), got %d: %v", len(hist), hist)
+	}
+	if hist[0] != "prior-tick-hash" {
+		t.Fatalf("expected the prior state-hash history preserved as the first entry, got %q (full: %v)", hist[0], hist)
+	}
+	hashA := hist[1]
+	if strings.TrimSpace(hashA) == "" {
+		t.Fatalf("expected a non-empty state hash appended for a non-empty goal queue, got %q", hashA)
+	}
+
+	// (3a) Determinism: an identical goal queue on a fresh blackboard hashes to the
+	// SAME value — the property the repeated-state circuit breaker relies on to
+	// recognize the loop returned to a prior goal state without advancing.
+	same := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_goal_queue": "[P0] fix the loop runner\n[P2] add smoke tests",
+		},
+	}
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: same}); status != 1 {
+		t.Fatalf("expected SUCCESS (1) on the second publish, got %d: %s", status, same.Result)
+	}
+	sameHist := goapFusionStateHashes(same)
+	if len(sameHist) != 1 || sameHist[0] != hashA {
+		t.Fatalf("expected an identical goal queue to hash deterministically to %q, got %v", hashA, sameHist)
+	}
+
+	// (3b) A DIFFERENT goal queue must hash to a DIFFERENT value, so genuine goal
+	// progress advances the state and does not read as a repeated-state cycle.
+	other := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_goal_queue": "[P0] a completely different goal",
+		},
+	}
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: other}); status != 1 {
+		t.Fatalf("expected SUCCESS (1) on the third publish, got %d: %s", status, other.Result)
+	}
+	otherHist := goapFusionStateHashes(other)
+	if len(otherHist) != 1 {
+		t.Fatalf("expected exactly one hash appended for the different goal queue, got %v", otherHist)
+	}
+	if otherHist[0] == hashA {
+		t.Fatalf("expected a distinct goal queue to hash to a distinct value, but it collided with %q", hashA)
+	}
+
+	// (4) The producer feeds the consumer: publishing the same goal queue on two
+	// consecutive ticks appends the same hash twice, and the loop runner it feeds must
+	// HALT on that repeated state hash within the bounded window — the end-to-end
+	// closure the whole loop-runner apparatus was built for.
+	loop := &Blackboard{
+		ChainState: map[string]any{
+			"goap_fusion_goal_queue": "[P0] the same unchanged goal queue",
+		},
+	}
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: loop}); status != 1 {
+		t.Fatalf("expected SUCCESS (1) on the first loop-feed publish, got %d: %s", status, loop.Result)
+	}
+	// The next tick re-derives the same goal queue and publishes again onto the
+	// accumulated history.
+	loop.ChainState["goap_fusion_goal_queue"] = "[P0] the same unchanged goal queue"
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: loop}); status != 1 {
+		t.Fatalf("expected SUCCESS (1) on the second loop-feed publish, got %d: %s", status, loop.Result)
+	}
+	if fed := goapFusionStateHashes(loop); len(fed) != 2 || fed[0] != fed[1] {
+		t.Fatalf("expected two identical hashes accumulated across ticks for an unchanged goal queue, got %v", fed)
+	}
+
+	loopRunner := GetAction("RunScheduledGoapFusionLoop")
+	if loopRunner == nil {
+		t.Fatalf("missing production Superpowers action %q", "RunScheduledGoapFusionLoop")
+	}
+	if status := loopRunner(&btcore.BTContext[Blackboard]{Blackboard: loop}); status != -1 {
+		t.Fatalf("expected the loop runner to HALT (-1) on the repeated state hash the producer published, got %d: %s", status, loop.Result)
+	}
+	if !strings.Contains(loop.Result, "HALT") {
+		t.Fatalf("expected a HALT diagnosis once the producer feeds a repeated state hash, got %q", loop.Result)
+	}
+}

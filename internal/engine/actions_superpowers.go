@@ -7,6 +7,8 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -904,6 +906,49 @@ func init() {
 		}
 
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: CONTINUE\n\nThe most recent %d state hash(es) are distinct and under the runaway-loop backstop (%d/%d); no state-transition cycle detected. Driving the next research-to-implementation cycle.", len(window), len(hashes), goapFusionMaxLoopIterations)
+		return 1
+	})
+}
+
+// PublishGoapFusionStateHash is the missing PRODUCER the whole CIRCUITPOLICY
+// apparatus depends on. EvaluateScheduledGoapFusionCircuitBreaker and
+// RunScheduledGoapFusionLoop both derive their entire halt/continue decision from
+// bb.ChainState["goap_fusion_state_hashes"] (via goapFusionStateHashes), yet no
+// registered action ever WROTE that key in production — so in a real scheduled
+// cycle the history stayed permanently empty, the bounded window never saw a
+// repeat, the loop runner always returned CONTINUE, and the "Activity-Progress
+// Confusion" cycle the loop-runner apparatus exists to break could never be
+// detected [Source 207, 214, 215, 250].
+//
+// This action closes that producer gap. The cycle's progress-relevant state is its
+// prioritized goal queue — PrioritizeGoapGoals stores it under
+// bb.ChainState["goap_fusion_goal_queue"] and HasNewGaps already treats an
+// unchanged goal queue as "no progress." So this producer hashes that goal queue
+// deterministically (identical goal queues → identical SHA-256 hash) and appends
+// the hash to goap_fusion_state_hashes, preserving any prior history. Two
+// consecutive cycles that re-derive the same goals append the same hash, and the
+// circuit breaker / loop runner it feeds finally HALTs on the repeat; genuine goal
+// progress produces a distinct hash and reads as advancement, not a cycle.
+func init() {
+	RegisterAction("PublishGoapFusionStateHash", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
+
+		// The prioritized goal queue is the progress-relevant state; hashing it
+		// deterministically means identical goal queues collapse to the identical
+		// state hash the repeated-state breaker relies on.
+		queue, _ := bb.ChainState["goap_fusion_goal_queue"].(string)
+		sum := sha256.Sum256([]byte(queue))
+		hash := hex.EncodeToString(sum[:])
+
+		// Append onto any prior state-hash history published on earlier ticks so the
+		// bounded window accumulates across cycles rather than resetting each tick.
+		history := append(goapFusionStateHashes(bb), hash)
+		bb.ChainState["goap_fusion_state_hashes"] = history
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion State Hash Published\n\nDeterministic goal-queue state hash `%s` appended to the CIRCUITPOLICY history (window depth %d/%d). The circuit breaker and loop runner now have a real producer to detect the \"Activity-Progress Confusion\" cycle against.", hash, len(history), goapFusionCircuitHistoryWindow)
 		return 1
 	})
 }
