@@ -352,6 +352,49 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionRunsWritable is the preflight guard for the
+// Superpowers run-artifact output location the unattended scheduled GOAP fusion
+// cycle writes its entire implement-verify-report output into. The existing
+// writable-location guards each cover a distinct directory the cycle uses —
+// VerifyScheduledGoapFusionPlansWritable (goapFusionPlansDir),
+// VerifyScheduledGoapFusionVaultWritable (goapFusionVaultDir),
+// VerifyScheduledGoapFusionSynthesesWritable (goapFusionSynthesesDir), and
+// VerifyScheduledGoapFusionGraphOutputWritable (the graphify report's output
+// directory) — but none covers the Superpowers runs directory
+// (superpowersRunsDir). Every scheduled cycle's run is rooted at
+// filepath.Join(superpowersRunsDir, id): the cycle's "write Superpowers
+// implementation plan" step writes plan.md there, its verification step writes
+// baseline-build.txt / worktree.patch / per-check outputs under the run's
+// verification/ subdirectory, and its report step writes finish.md and run.json.
+// A scheduled run could pass every other preflight yet still fail the moment it
+// initializes its run when superpowersRunsDir is missing or not writable, losing
+// its plan, verification evidence, and finish report with no early diagnosis.
+// This guard closes that gap by requiring the Superpowers runs directory to be a
+// writable directory before the automatic research-to-implementation cycle
+// proceeds — the run-artifact-output analogue of the plans-, vault-, syntheses-,
+// and graph-output-writable guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionRunsWritable", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		info, err := os.Stat(superpowersRunsDir)
+		if err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Runs Preflight Failed\n\nSuperpowers runs output directory `%s` is not an accessible directory: %v", superpowersRunsDir, err)
+			return -1
+		}
+
+		probe := filepath.Join(superpowersRunsDir, ".goap-fusion-write-probe")
+		if err := os.WriteFile(probe, []byte("probe"), 0o644); err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Runs Preflight Failed\n\nSuperpowers runs output directory `%s` is not writable: %v", superpowersRunsDir, err)
+			return -1
+		}
+		_ = os.Remove(probe)
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Runs Preflight Passed\n\nSuperpowers runs output directory `%s` is a writable directory", superpowersRunsDir)
+		return 1
+	})
+}
+
 // VerifyScheduledGoapFusionSynthesesPresent is the preflight guard that protects
 // the unattended scheduled GOAP fusion cycle against a missing or empty
 // research-syntheses corpus. The cycle's ReadVaultResearch step reads the

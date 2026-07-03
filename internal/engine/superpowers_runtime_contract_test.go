@@ -3599,3 +3599,32 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPublishesStateH
 		t.Fatalf("expected a HALT diagnosis once the producer feeds a repeated state hash, got %q", loop.Result)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRunsWritable asserts
+// the presence of the preflight action that guards the Superpowers run artifact
+// directory the unattended scheduled GOAP fusion cycle writes its entire
+// implement-verify-report output into. The existing writable-location guards each
+// cover a distinct directory the cycle uses: VerifyScheduledGoapFusionPlansWritable
+// (goapFusionPlansDir), VerifyScheduledGoapFusionVaultWritable (goapFusionVaultDir),
+// VerifyScheduledGoapFusionSynthesesWritable (goapFusionSynthesesDir), and
+// VerifyScheduledGoapFusionGraphOutputWritable (the graphify report's output
+// directory) — but none covers the Superpowers runs directory
+// (superpowersRunsDir). Every scheduled cycle's run is rooted at
+// filepath.Join(superpowersRunsDir, id) (superpowers_artifacts.go): the cycle's
+// "write Superpowers implementation plan" step writes plan.md there, its
+// verification step writes baseline-build.txt / worktree.patch / per-check outputs
+// under the run's verification/ subdirectory, and its report step writes finish.md
+// and run.json — the exact "write plan ... verify ... report" outputs this
+// objective names. A scheduled run could pass every current preflight (inputs,
+// research corpus, runtime, toolchain, git, plans/vault/syntheses/graph-output
+// writability) yet still fail the moment it initializes its run when
+// superpowersRunsDir is missing or not writable, losing its plan, verification
+// evidence, and finish report with no early diagnosis. This action closes that gap
+// by requiring the Superpowers runs directory to be a writable directory before the
+// automatic research-to-implementation cycle proceeds — the run-artifact-output
+// analogue of the plans-, vault-, syntheses-, and graph-output-writable guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionRunsWritable(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionRunsWritable") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionRunsWritable")
+	}
+}
