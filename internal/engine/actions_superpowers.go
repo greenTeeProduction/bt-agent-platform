@@ -944,7 +944,8 @@ func init() {
 // VerifyScheduledGoapFusionToolchain Go-toolchain guard, then the
 // VerifyScheduledGoapFusionPlansWritable plan-output-location guard, then the
 // VerifyScheduledGoapFusionGitTool git-binary guard, then the
-// VerifyScheduledGoapFusionGitRemote git-`origin`-remote guard, all ahead of
+// VerifyScheduledGoapFusionGitRemote git-`origin`-remote guard, then the
+// VerifyScheduledGoapFusionVaultWritable vault-output-location guard, all ahead of
 // the bounded loop runner, so the scheduled cycle only drives another iteration
 // after the on-disk tree is proven fresh, the loop runner's CIRCUITPOLICY history
 // window is proven a positive, bounded value, the loop runner has consulted the
@@ -954,8 +955,11 @@ func init() {
 // the Go toolchain the build+TDD step shells out to is proven an executable file,
 // the plans directory the cycle writes its plan and failed patch into is proven
 // a writable directory, the `git` binary the implementation step commits and
-// publishes fixes with is proven resolvable on PATH, and the `origin` remote the
-// implementation step fetches/pulls and pushes against is proven configured.
+// publishes fixes with is proven resolvable on PATH, the `origin` remote the
+// implementation step fetches/pulls and pushes against is proven configured, and
+// the vault directory the cycle persists its per-run analysis back into is proven
+// a writable directory so a cycle never discovers only at WriteFusionAnalysis that
+// its vault output location is unwritable and starves the next run's corpus.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
@@ -993,6 +997,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGitRemote",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionVaultWritable",
 			},
 			{
 				Type: "Action",

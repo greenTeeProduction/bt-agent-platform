@@ -1406,3 +1406,88 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesVaultWritable
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the vault-output-location guard —
+// VerifyScheduledGoapFusionVaultWritable — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's
+// WriteFusionAnalysis step persists its per-run gap analysis
+// (goap-fusion-analysis-<ts>.md) and a rolling pointer (goap-fusion-latest.md)
+// directly into the vault research directory (goapFusionVaultDir) via
+// os.WriteFile, and the next scheduled run's ReadVaultResearch step ingests
+// those files as part of its research corpus.
+// VerifyScheduledGoapFusionVaultWritable is the guard whose own doc comment
+// states a scheduled run "could pass every current preflight yet still fail when
+// the vault directory is not writable, silently dropping its own analysis and
+// starving the next run's research corpus with no clear diagnosis" — so it must
+// prove the vault directory is a writable directory before the loop runner drives
+// a cycle whose analysis it can never persist. The already-composed
+// VerifyScheduledGoapFusionPlansWritable guard proves a distinct directory
+// (goapFusionPlansDir) is writable; it does not cover this vault directory. Yet
+// GoapFusionPreflightNode() composes only the build-tree materializer, the
+// circuit-policy config guard, the rejected-context ledger, the runtime guard,
+// the toolchain guard, the plans-writable guard, the git-tool guard, and the
+// git-remote guard before the loop runner — never the vault-writable guard — so a
+// scheduled cycle could gate on the loop runner and only then discover at the
+// WriteFusionAnalysis step that its vault output location is unwritable, wasting
+// the cycle and starving the next run's research corpus with no early diagnosis.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionVaultWritable as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the vault-writable guard (RED) and passes once the vault-writable guard is
+// inserted ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed
+// as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesVaultWritable(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionVaultWritable"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q vault-output-location guard as a runnable Action node; the preflight drives the loop runner without first proving the vault directory is a writable directory, so a scheduled cycle would only discover its vault output location is unwritable at the WriteFusionAnalysis step and starve the next run's research corpus", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the vault-writable guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q vault-output-location guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the vault directory the cycle persists its analysis into is proven writable before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
