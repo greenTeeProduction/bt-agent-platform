@@ -1019,6 +1019,134 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrepen
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGatesClaudeImplementation
+// pins the integration seam the P0 NotebookLM research goal names in its own words:
+// the production loop must "gate the Superpowers implementation path on
+// EvaluateScheduledGoapFusionCircuitBreaker / RunScheduledGoapFusionLoop" so those
+// CIRCUITPOLICY nodes run BEFORE RunSuperpowersClaudeImplementation. Every prior
+// increment wired the guards and the loop runner into the Phase-0
+// GoapFusionPreflightNode() and taught GoapFusionLoop_Main to prepend that preflight
+// via PrependGoapFusionPreflight, but nothing gates the implementation subtree
+// itself: the production ClaudeSuperpowersPath runs
+// WriteSuperpowersImplementationPlan and then RunSuperpowersClaudeImplementation
+// inside a HumanApprovalGate with no circuit-breaker / loop-runner check in front of
+// it. A non-progressing loop that reached the implementation path could therefore
+// still shell out to Claude Code to implement — the very "Activity-Progress
+// Confusion" the circuit breaker exists to break — because the gate lives only in
+// the top-level preflight, not immediately ahead of the implementation step it must
+// protect.
+//
+// The engine package cannot import internal/domains (import cycle), but
+// domains -> engine is the safe direction, so this seam belongs here at the guards'
+// own package: PrependGoapFusionImplementationGate takes the Superpowers
+// implementation path's child list (the WriteSuperpowersImplementationPlan +
+// RunSuperpowersClaudeImplementation subtree) and returns a new list with the
+// CIRCUITPOLICY gate — EvaluateScheduledGoapFusionCircuitBreaker then
+// RunScheduledGoapFusionLoop — prepended as the first children, so the
+// implementation only proceeds after the gate returns CONTINUE. This test asserts
+// the seam (1) composes both gate nodes as runnable Action nodes ordered BEFORE
+// RunSuperpowersClaudeImplementation, (2) keeps the circuit-breaker evaluation ahead
+// of the loop runner, (3) preserves the original implementation children in order
+// after the gate, and (4) does not mutate the caller's slice.
+//
+// It fails to compile until PrependGoapFusionImplementationGate is introduced (RED)
+// and passes once the seam returns the gate-prepended child list (GREEN), ready for
+// GoapFusionLoopTree()'s ClaudeSuperpowersPath to embed without duplicating the
+// composition.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGatesClaudeImplementation(t *testing.T) {
+	const (
+		circuitBreaker = "EvaluateScheduledGoapFusionCircuitBreaker"
+		loopRunner     = "RunScheduledGoapFusionLoop"
+		impl           = "RunSuperpowersClaudeImplementation"
+	)
+
+	// Mirror the production ClaudeSuperpowersPath implementation subtree: the plan
+	// writer followed by the HumanApprovalGate wrapping the Claude implementation
+	// and its build verification.
+	implChildren := []evolution.SerializableNode{
+		{Type: "Action", Name: "WriteSuperpowersImplementationPlan"},
+		{
+			Type: "HumanApprovalGate",
+			Name: "ApproveGoapFusionApply",
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: impl},
+				{Type: "Action", Name: "VerifyGoapBuild"},
+			},
+		},
+	}
+
+	got := PrependGoapFusionImplementationGate(implChildren)
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the gate must precede the implementation it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	for _, n := range got {
+		collect(n)
+	}
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	cbIdx := indexOf(circuitBreaker)
+	loopIdx := indexOf(loopRunner)
+	implIdx := indexOf(impl)
+
+	if cbIdx < 0 {
+		t.Fatalf("PrependGoapFusionImplementationGate does not compose the %q circuit-breaker evaluation as a runnable Action node; the implementation path would run RunSuperpowersClaudeImplementation without a CIRCUITPOLICY gate in front of it", circuitBreaker)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("PrependGoapFusionImplementationGate does not compose the %q loop runner as a runnable Action node; the implementation path would run RunSuperpowersClaudeImplementation without the bounded loop-runner gate in front of it", loopRunner)
+	}
+	if implIdx < 0 {
+		t.Fatalf("PrependGoapFusionImplementationGate dropped the %q implementation node; the gate must preserve the implementation path it protects", impl)
+	}
+	if cbIdx >= implIdx {
+		t.Fatalf("expected the %q circuit-breaker evaluation (index %d) to be composed BEFORE the %q implementation node (index %d), so a detected Activity-Progress Confusion cycle HALTs the path before Claude Code implements", circuitBreaker, cbIdx, impl, implIdx)
+	}
+	if loopIdx >= implIdx {
+		t.Fatalf("expected the %q loop runner (index %d) to be composed BEFORE the %q implementation node (index %d), so a non-progressing loop HALTs the path before Claude Code implements", loopRunner, loopIdx, impl, implIdx)
+	}
+	if cbIdx >= loopIdx {
+		t.Fatalf("expected the %q circuit-breaker evaluation (index %d) to run BEFORE the %q loop runner (index %d), matching the preflight's gate ordering", circuitBreaker, cbIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(circuitBreaker) == nil {
+		t.Fatalf("gate composes Action %q but it is not a registered, runnable action", circuitBreaker)
+	}
+	if GetAction(loopRunner) == nil {
+		t.Fatalf("gate composes Action %q but it is not a registered, runnable action", loopRunner)
+	}
+
+	// The original implementation children must be preserved, in order, after the
+	// gate — the gate only prepends, it never reorders or drops the path it wraps.
+	if len(got) != len(implChildren)+2 {
+		t.Fatalf("expected the CIRCUITPOLICY gate (2 nodes) prepended (len %d), got %d: %+v", len(implChildren)+2, len(got), got)
+	}
+	if got[len(got)-2].Name != "WriteSuperpowersImplementationPlan" || got[len(got)-1].Name != "ApproveGoapFusionApply" {
+		t.Fatalf("original implementation children not preserved in order after the gate: %+v", got)
+	}
+
+	// The seam must not mutate the caller's slice.
+	if len(implChildren) != 2 || implChildren[0].Name != "WriteSuperpowersImplementationPlan" || implChildren[1].Name != "ApproveGoapFusionApply" {
+		t.Fatalf("PrependGoapFusionImplementationGate mutated the caller's slice: %+v", implChildren)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the bounded loop runner —

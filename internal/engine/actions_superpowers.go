@@ -1269,6 +1269,40 @@ func PrependGoapFusionPreflight(loopChildren []evolution.SerializableNode) []evo
 	return prepended
 }
 
+// PrependGoapFusionImplementationGate is the integration seam that gates the
+// Superpowers implementation path on the CIRCUITPOLICY verdict: it takes the
+// production ClaudeSuperpowersPath's child list (WriteSuperpowersImplementationPlan
+// followed by the HumanApprovalGate wrapping RunSuperpowersClaudeImplementation) and
+// returns a new list with the circuit-breaker evaluation and the bounded loop runner
+// prepended as the first two children, in that order.
+//
+// The top-level GoapFusionPreflightNode() already gates the whole cycle, but nothing
+// gates the implementation subtree itself: a non-progressing loop that reached the
+// implementation path could still shell out to Claude Code. Prepending
+// EvaluateScheduledGoapFusionCircuitBreaker then RunScheduledGoapFusionLoop
+// immediately ahead of the implementation ensures a detected "Activity-Progress
+// Confusion" cycle HALTs the path before RunSuperpowersClaudeImplementation runs.
+//
+// Like PrependGoapFusionPreflight, it lives here at the guards' own package (the
+// domains -> engine direction is safe) so GoapFusionLoopTree()'s ClaudeSuperpowersPath
+// embeds it without duplicating the composition. It returns a freshly allocated slice
+// and never mutates the caller's input.
+func PrependGoapFusionImplementationGate(implChildren []evolution.SerializableNode) []evolution.SerializableNode {
+	gated := make([]evolution.SerializableNode, 0, len(implChildren)+2)
+	gated = append(gated,
+		evolution.SerializableNode{
+			Type: "Action",
+			Name: "EvaluateScheduledGoapFusionCircuitBreaker",
+		},
+		evolution.SerializableNode{
+			Type: "Action",
+			Name: "RunScheduledGoapFusionLoop",
+		},
+	)
+	gated = append(gated, implChildren...)
+	return gated
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()
