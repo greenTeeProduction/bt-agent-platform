@@ -62,14 +62,19 @@ func bareTestRun(t *testing.T) *SuperpowersRun {
 	}
 }
 
-func TestSyncSuperpowersRepoBareRepoFastForwardsMasterViaFetch(t *testing.T) {
+func TestSyncSuperpowersRepoBareRepoFetchesOriginTipBare(t *testing.T) {
 	runner := &bareApplyScriptRunner{}
 	if err := syncSuperpowersRepoForWorktree(context.Background(), runner, "/tmp/bare-repo"); err != nil {
 		t.Fatalf("bare-repo sync returned error: %v", err)
 	}
 	joined := runner.joined()
-	if !strings.Contains(joined, "git fetch origin master:master") {
-		t.Fatalf("bare sync must ff-update master via fetch refspec; calls:\n%s", joined)
+	if !strings.Contains(joined, "git fetch origin master") {
+		t.Fatalf("bare sync must fetch origin's master tip; calls:\n%s", joined)
+	}
+	// The ff refspec fetch rejects when local master is ahead of origin,
+	// stalling the loop on its own unpushed commits — never reintroduce it.
+	if strings.Contains(joined, "master:master") {
+		t.Fatalf("bare sync must not use the ff refspec fetch; calls:\n%s", joined)
 	}
 	for _, forbidden := range []string{"git status", "git checkout", "git pull"} {
 		if strings.Contains(joined, forbidden) {
@@ -79,10 +84,10 @@ func TestSyncSuperpowersRepoBareRepoFastForwardsMasterViaFetch(t *testing.T) {
 }
 
 func TestSyncSuperpowersRepoBareRepoSurfacesFetchFailure(t *testing.T) {
-	runner := &bareApplyScriptRunner{failOn: "fetch origin master:master"}
+	runner := &bareApplyScriptRunner{failOn: "fetch origin master"}
 	err := syncSuperpowersRepoForWorktree(context.Background(), runner, "/tmp/bare-repo")
-	if err == nil || !strings.Contains(err.Error(), "fast-forward") {
-		t.Fatalf("expected fast-forward failure to surface, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "could not fetch origin master") {
+		t.Fatalf("expected fetch failure to surface, got %v", err)
 	}
 }
 

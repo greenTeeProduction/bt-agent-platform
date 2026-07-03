@@ -76,13 +76,40 @@ func syncSuperpowersRepoForWorktree(ctx context.Context, runner CommandRunner, r
 	}
 	if isBareGitRepo(ctx, runner, repoDir) {
 		// A bare repo has no working tree to dirty, reset, or check out —
-		// just bring master up to date with origin. The non-forced refspec
-		// preserves the `git pull --ff-only` guarantee: a non-fast-forward
-		// master update is refused.
-		if fetch := runner.Run(ctx, repoDir, "git", "fetch", "origin", "master:master"); fetch.Err != nil {
-			return fmt.Errorf("could not fast-forward bare repo master from origin before Superpowers worktree sync: %v\n%s", fetch.Err, fetch.Output)
+		// just make sure local master contains everything origin has. A plain
+		// `git fetch origin master:master` is wrong here: it rejects when
+		// local master is AHEAD of origin (a locally landed but not yet
+		// pushed commit), which stalled every scheduled cycle on 2026-07-03.
+		// Fetch origin's tip without touching master, then decide by
+		// ancestry; only a genuine divergence fails the cycle.
+		if fetch := runner.Run(ctx, repoDir, "git", "fetch", "origin", "master"); fetch.Err != nil {
+			return fmt.Errorf("could not fetch origin master before Superpowers worktree sync: %v\n%s", fetch.Err, fetch.Output)
 		}
-		return nil
+		originTip := runner.Run(ctx, repoDir, "git", "rev-parse", "FETCH_HEAD")
+		if originTip.Err != nil {
+			return fmt.Errorf("could not resolve fetched origin master tip before Superpowers worktree sync: %v\n%s", originTip.Err, originTip.Output)
+		}
+		origin := strings.TrimSpace(originTip.Output)
+		// Local master already contains origin's tip (equal or ahead): the
+		// sync goal is met. Ahead commits reach origin via the apply-stage
+		// push; failing here would deadlock the loop on its own landed work.
+		if anc := runner.Run(ctx, repoDir, "git", "merge-base", "--is-ancestor", origin, "master"); anc.Err == nil {
+			return nil
+		}
+		// Local master is strictly behind: fast-forward it, guarded by the
+		// old value so a concurrent ref update loses cleanly instead of
+		// being clobbered. This preserves the ff-only guarantee.
+		if anc := runner.Run(ctx, repoDir, "git", "merge-base", "--is-ancestor", "master", origin); anc.Err == nil {
+			local := runner.Run(ctx, repoDir, "git", "rev-parse", "master")
+			if local.Err != nil {
+				return fmt.Errorf("could not resolve local master before Superpowers worktree sync: %v\n%s", local.Err, local.Output)
+			}
+			if upd := runner.Run(ctx, repoDir, "git", "update-ref", "refs/heads/master", origin, strings.TrimSpace(local.Output)); upd.Err != nil {
+				return fmt.Errorf("could not fast-forward bare repo master to origin tip %s before Superpowers worktree sync: %v\n%s", origin, upd.Err, upd.Output)
+			}
+			return nil
+		}
+		return fmt.Errorf("bare repo master and origin/master have diverged (neither contains the other) before Superpowers worktree sync; refusing to guess — reconcile manually (origin tip %s)", origin)
 	}
 	status := runner.Run(ctx, repoDir, "git", "status", "--short", "--untracked-files=all")
 	if status.Err != nil {
