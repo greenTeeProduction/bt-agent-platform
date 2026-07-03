@@ -618,3 +618,59 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircu
 		t.Fatalf("expected the bounded window to hold the most recent %d hashes, got %d: %v", goapFusionCircuitHistoryWindow, len(boundedWindow), boundedWindow)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircuitBreakerVerdict
+// pins the *remaining* single-source-of-truth the P0 NotebookLM research goal
+// requires. Commit f5d3eeb extracted only the bounded-window *dedup scan* into
+// goapFusionCircuitBreakerWindow, but both EvaluateScheduledGoapFusionCircuitBreaker
+// and RunScheduledGoapFusionLoop still independently re-derive the CIRCUITPOLICY
+// *verdict* from that scan and re-implement the `tripped → HALT` decision inline.
+// Sharing the scan but not the halt/continue *decision* leaves the exact class of
+// drift the commit set out to eliminate partially open: a future change to what
+// counts as a "trip" must still be applied in two places.
+//
+// This test asserts a single shared verdict helper —
+// goapFusionCircuitBreakerVerdict(hashes) (halt bool, window []string, repeated
+// string) — exists and encodes the breaker's halt DECISION (not merely the dedup)
+// in one place, so both actions can delegate their entire circuit-breaker verdict
+// to it and the loop runner layers only its runaway backstop on top. It fails to
+// compile until the shared verdict helper is introduced (RED), and passes once the
+// halt decision is extracted into one function both actions delegate to (GREEN).
+// The public-action behavior of both actions stays pinned by
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts
+// and TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner, so
+// after extraction both continue to enforce identical semantics — now the DECISION,
+// not just the scan, from a single source of truth.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircuitBreakerVerdict(t *testing.T) {
+	// A state hash that repeats within the bounded most-recent window is the
+	// "Activity-Progress Confusion" cycle: the shared verdict must decide HALT and
+	// report the repeated hash and the bounded window it inspected.
+	halt, window, repeated := goapFusionCircuitBreakerVerdict([]string{"aaa", "bbb", "aaa"})
+	if !halt {
+		t.Fatalf("expected halt=true on a repeated state hash within the window, got false (window=%v)", window)
+	}
+	if repeated != "aaa" {
+		t.Fatalf("expected the repeated hash to be reported as %q, got %q", "aaa", repeated)
+	}
+	if len(window) != 3 {
+		t.Fatalf("expected the returned window to hold all 3 hashes, got %d: %v", len(window), window)
+	}
+
+	// A window of only distinct, progress-making hashes must decide CONTINUE.
+	if halt, _, _ := goapFusionCircuitBreakerVerdict([]string{"aaa", "bbb", "ccc"}); halt {
+		t.Fatalf("expected halt=false on a window of distinct state hashes, got true")
+	}
+
+	// The verdict is BOUNDED: only the most recent goapFusionCircuitHistoryWindow
+	// (3) hashes are inspected. Here the earlier "aaa" falls outside the last-3
+	// window ["bbb","ccc","aaa"], so the two "aaa" occurrences are not both in the
+	// window and the verdict must decide CONTINUE — the exact window-slicing
+	// semantics the extracted decision must preserve for both actions.
+	boundedHalt, boundedWindow, _ := goapFusionCircuitBreakerVerdict([]string{"aaa", "bbb", "ccc", "aaa"})
+	if boundedHalt {
+		t.Fatalf("expected halt=false when the repeat lies outside the bounded window, got true (window=%v)", boundedWindow)
+	}
+	if len(boundedWindow) != goapFusionCircuitHistoryWindow {
+		t.Fatalf("expected the bounded window to hold the most recent %d hashes, got %d: %v", goapFusionCircuitHistoryWindow, len(boundedWindow), boundedWindow)
+	}
+}

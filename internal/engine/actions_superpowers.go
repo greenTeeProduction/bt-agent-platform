@@ -715,6 +715,23 @@ func goapFusionCircuitBreakerWindow(hashes []string) (window []string, repeated 
 	return window, "", false
 }
 
+// goapFusionCircuitBreakerVerdict is the single source of truth for the
+// CIRCUITPOLICY halt/continue *decision* — not merely the bounded-window dedup
+// scan goapFusionCircuitBreakerWindow performs. It layers the "trip → HALT"
+// decision on top of that scan so both EvaluateScheduledGoapFusionCircuitBreaker
+// and RunScheduledGoapFusionLoop delegate their entire circuit-breaker verdict
+// here rather than each re-deriving `halt` from `(window, repeated, tripped)`
+// inline. It returns whether the breaker decides to HALT, the bounded window it
+// inspected, and the repeated hash (empty when none repeats). A future change to
+// what counts as a "trip" — the window/dedup semantics or the halt decision
+// itself — is made once here and reaches both callers at once, closing the exact
+// class of drift the extraction set out to eliminate. The loop runner then layers
+// only its own runaway-loop backstop on top of this shared verdict.
+func goapFusionCircuitBreakerVerdict(hashes []string) (halt bool, window []string, repeated string) {
+	window, repeated, tripped := goapFusionCircuitBreakerWindow(hashes)
+	return tripped, window, repeated
+}
+
 // EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
 // CIRCUITPOLICY evaluation that enforces the P0 NotebookLM research goal:
 // detecting and halting state-transition cycles and repeated no-op patch
@@ -732,12 +749,12 @@ func init() {
 
 		hashes := goapFusionStateHashes(bb)
 
-		// Inspect only the bounded, most-recent window — the PatchBoard 3-hash
-		// history the CIRCUITPOLICY monitors — via the single shared helper both
-		// this breaker and RunScheduledGoapFusionLoop delegate to, so the two can
-		// never drift.
-		window, repeated, tripped := goapFusionCircuitBreakerWindow(hashes)
-		if tripped {
+		// Delegate the entire CIRCUITPOLICY verdict — the bounded-window dedup scan
+		// AND the halt/continue decision — to the single shared helper both this
+		// breaker and RunScheduledGoapFusionLoop use, so the two can never drift on
+		// what counts as a trip.
+		halt, window, repeated := goapFusionCircuitBreakerVerdict(hashes)
+		if halt {
 			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", repeated, goapFusionCircuitHistoryWindow)
 			return -1
 		}
@@ -774,14 +791,14 @@ func init() {
 
 		hashes := goapFusionStateHashes(bb)
 
-		// CIRCUITPOLICY: inspect only the bounded, most-recent window — the
-		// PatchBoard 3-hash history the circuit breaker monitors — and HALT on a
-		// repeated state hash (the Activity-Progress Confusion cycle). This
-		// delegates to the same shared helper EvaluateScheduledGoapFusionCircuitBreaker
-		// uses, so the loop runner and the dedicated breaker enforce one identical
-		// halt policy from a single source of truth.
-		window, repeated, tripped := goapFusionCircuitBreakerWindow(hashes)
-		if tripped {
+		// CIRCUITPOLICY: delegate the *entire* circuit-breaker verdict — both the
+		// bounded-window dedup scan and the halt/continue decision — to the same
+		// shared helper EvaluateScheduledGoapFusionCircuitBreaker uses, so the loop
+		// runner and the dedicated breaker enforce one identical halt DECISION from a
+		// single source of truth. The loop runner then layers only its own
+		// runaway-loop backstop below on top of this shared verdict.
+		halt, window, repeated := goapFusionCircuitBreakerVerdict(hashes)
+		if halt {
 			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", repeated, goapFusionCircuitHistoryWindow)
 			return -1
 		}
