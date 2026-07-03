@@ -101,128 +101,14 @@ func TestCloneTreeForGardener_NilMetadata(t *testing.T) {
 	}
 }
 
-func TestHashTreeForGardener(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Type: "Sequence", Name: "TestTree",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "Step"},
-		},
-	}
-	h := hashTreeForGardener(tree)
-	if h == "" {
-		t.Error("hash should not be empty")
-	}
-	// Same tree should produce same hash
-	h2 := hashTreeForGardener(tree)
-	if h != h2 {
-		t.Error("same tree should produce same hash")
-	}
-	// Very different tree should produce different hash
-	diffTree := &evolution.SerializableNode{
-		Type: "Sequence", Name: "A-Very-Different-Tree-Name",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "A"},
-			{Type: "Action", Name: "B"},
-			{Type: "Action", Name: "C"},
-		},
-	}
-	h3 := hashTreeForGardener(diffTree)
-	if h == h3 {
-		t.Errorf("different trees should produce different hashes: %q vs %q", h, h3)
-	}
-}
-
-func TestSerializeTreeForGardener_Nil(t *testing.T) {
-	got := serializeTreeForGardener(nil)
-	if got != "(nil)" {
-		t.Errorf("nil tree should serialize to '(nil)', got %q", got)
-	}
-}
-
-func TestSerializeTreeForGardener_NoChildren(t *testing.T) {
-	tree := &evolution.SerializableNode{Type: "Action", Name: "DoWork"}
-	got := serializeTreeForGardener(tree)
-	expected := "Action(DoWork)[0 children]"
-	if got != expected {
-		t.Errorf("got %q, want %q", got, expected)
-	}
-}
-
-func TestSerializeTreeForGardener_WithChildren(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Type: "Sequence", Name: "Root",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "Step1"},
-			{Type: "Action", Name: "Step2"},
-		},
-	}
-	got := serializeTreeForGardener(tree)
-	expected := "Sequence(Root)[2 children]"
-	if got != expected {
-		t.Errorf("got %q, want %q", got, expected)
-	}
-}
-
-func TestExtractDomain(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected string
-	}{
-		{"domain_code_review", "code_review"},
-		{"domain_devops_ci", "devops_ci"},
-		{"domain_agent_monitor", "agent_monitor"},
-		{"finance_pitch_agent", "finance"},
-		{"finance_earnings_reviewer", "finance"},
-		{"research_deep_research", "research"},
-		{"research_quick_research", "research"},
-		{"godev", "godev"},
-		{"default", "default"},
-		{"custom_tree", "general"},
-		{"unknown", "general"},
-	}
-	for _, tt := range tests {
-		got := extractDomain(tt.name)
-		if got != tt.expected {
-			t.Errorf("extractDomain(%q)=%q, want %q", tt.name, got, tt.expected)
-		}
-	}
-}
-
 // ============================================================================
 // DefaultEvolveV2Config tests
 // ============================================================================
 
 func TestDefaultEvolveV2Config(t *testing.T) {
 	cfg := DefaultEvolveV2Config()
-	if !cfg.MAPElitesEnabled {
-		t.Error("MAPElitesEnabled should default to true")
-	}
-	if cfg.MAPElitesGridSize != 5 {
-		t.Errorf("MAPElitesGridSize = %d, want 5", cfg.MAPElitesGridSize)
-	}
-	if !cfg.ParetoEnabled {
-		t.Error("ParetoEnabled should default to true")
-	}
-	if !cfg.IslandEnabled {
-		t.Error("IslandEnabled should default to true")
-	}
-	if cfg.MigrationInterval != 5 {
-		t.Errorf("MigrationInterval = %d, want 5", cfg.MigrationInterval)
-	}
-	if cfg.MigrationRate != 0.1 {
-		t.Errorf("MigrationRate = %f, want 0.1", cfg.MigrationRate)
-	}
-	if !cfg.EnsembleEnabled {
-		t.Error("EnsembleEnabled should default to true")
-	}
-	if !cfg.RichContextEnabled {
-		t.Error("RichContextEnabled should default to true")
-	}
 	if !cfg.BlocksEnabled {
 		t.Error("BlocksEnabled should default to true")
-	}
-	if !cfg.MetaPromptEnabled {
-		t.Error("MetaPromptEnabled should default to true")
 	}
 	if cfg.UseRealLLM {
 		t.Error("UseRealLLM should default to false")
@@ -485,14 +371,8 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 
 	// Use a config with RichContext/Ensemble disabled to avoid ensemble bugs
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   true,
-		ParetoEnabled:      true,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 	// evolveTreeV2 should not panic with a huge tree
 	_ = g.evolveTreeV2(TreeEntry{Name: "godev", Tree: bloatedTree, Active: true}, v2cfg)
@@ -535,14 +415,8 @@ func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 	cfg := Config{Registry: customReg, MetricsTracker: mt, RefStore: refStore, TT: tt, MaxMutations: 2, UseRealLLM: false}
 	g := NewGardener(cfg)
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   false,
-		ParetoEnabled:      false,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 
 	m := g.evolveTreeV2(TreeEntry{Name: "quality_tree", Tree: tree, FilePath: dir + "/tree-quality.json", Active: true}, v2cfg)
@@ -590,14 +464,8 @@ func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 
 	// Run with all features disabled
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   false,
-		ParetoEnabled:      false,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 
 	results, err := g.RunCycleV2(v2cfg)

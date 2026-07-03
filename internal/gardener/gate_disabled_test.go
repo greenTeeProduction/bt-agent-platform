@@ -207,14 +207,8 @@ func TestEvolveTreeV2_GateIsDisabled_Respected(t *testing.T) {
 	g := NewGardener(cfg)
 
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   false,
-		ParetoEnabled:      false,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 
 	metrics := g.evolveTreeV2(entries[0], v2cfg)

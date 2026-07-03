@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nico/go-bt-evolve/internal/gardener"
+	"github.com/nico/go-bt-evolve/internal/cicd"
 )
 
 func main() {
@@ -15,7 +15,7 @@ func main() {
 	jsonOut := flag.Bool("json", false, "print the full report as JSON")
 	flag.Parse()
 
-	report, err := gardener.ValidateWorkflows(*root)
+	report, err := cicd.ValidateWorkflows(*root)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bt-ci-doctor: %v\n", err)
 		os.Exit(2)

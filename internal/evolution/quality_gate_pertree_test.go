@@ -11,7 +11,7 @@ func TestQualityGatePerTreeIsolation(t *testing.T) {
 
 	// Tree A regresses hard 3 times -> disabled for A only.
 	for i := 0; i < 3; i++ {
-		if got := q.ValidateFor("tree-a", 50, 20); got != GateRollback {
+		if got := q.ValidateFor("tree-a", 90, 60); got != GateRollback {
 			t.Fatalf("ValidateFor(tree-a) = %v, want GateRollback", got)
 		}
 	}
@@ -46,11 +46,11 @@ func TestQualityGatePerTreeResetOnPass(t *testing.T) {
 	q := NewQualityGate(t.TempDir())
 	q.ConsecutiveFails = 2
 
-	q.ValidateFor("tree-a", 50, 20) // fail 1
+	q.ValidateFor("tree-a", 90, 60) // fail 1
 	if got := q.ValidateFor("tree-a", 50, 55); got != GateAccepted {
 		t.Fatalf("ValidateFor = %v, want GateAccepted", got)
 	}
-	q.ValidateFor("tree-a", 50, 20) // fail 1 again (streak was reset)
+	q.ValidateFor("tree-a", 90, 60) // fail 1 again (streak was reset)
 
 	if q.IsDisabledFor("tree-a") {
 		t.Error("tree-a disabled after non-consecutive failures — pass must reset the streak")

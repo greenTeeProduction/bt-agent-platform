@@ -2,12 +2,10 @@ package gardener
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
@@ -16,61 +14,38 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
-// EvolveV2Config controls the AlphaEvolve-derived evolution pipeline.
+// EvolveV2Config controls the v2 evolution pipeline: a structural quick-check
+// cascade, block-protected candidate filtering, and per-candidate pre-scored
+// mutation application.
+//
+// Earlier revisions declared MAP-Elites, Pareto, island-model, and ensemble
+// stages here; they were constructed and discarded without ever influencing
+// selection, so they were removed rather than kept as dead weight.
 type EvolveV2Config struct {
 	// Tiered evaluation cascade
 	CascadeCfg evaluator.CascadeConfig
-
-	// MAP-Elites diversity preservation
-	MAPElitesEnabled  bool
-	MAPElitesGridSize int // number of elites to preserve per domain
-
-	// Multi-objective Pareto
-	ParetoEnabled bool
-
-	// Island model (domain separation)
-	IslandEnabled     bool
-	MigrationInterval int     // generations between cross-domain migration
-	MigrationRate     float64 // fraction migrated
-
-	// Model ensemble (Ollama + DeepSeek)
-	EnsembleEnabled bool
-
-	// Rich context injection
-	RichContextEnabled bool
 
 	// Evolution blocks (protect stable nodes)
 	BlocksEnabled bool
 	BlockConfig   evolution.BlockConfig
 
-	// Meta-prompt evolution
-	MetaPromptEnabled bool
-
 	// Use real LLM or mock
 	UseRealLLM bool
 }
 
-// DefaultEvolveV2Config returns sensible defaults for the AlphaEvolve pipeline.
+// DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
 func DefaultEvolveV2Config() EvolveV2Config {
 	return EvolveV2Config{
-		CascadeCfg:         evaluator.DefaultCascadeConfig(),
-		MAPElitesEnabled:   true,
-		MAPElitesGridSize:  5,
-		ParetoEnabled:      true,
-		IslandEnabled:      true,
-		MigrationInterval:  5,
-		MigrationRate:      0.1,
-		EnsembleEnabled:    true,
-		RichContextEnabled: true,
-		BlocksEnabled:      true,
-		BlockConfig:        evolution.DefaultBlockConfig(),
-		MetaPromptEnabled:  true,
-		UseRealLLM:         false, // use mock by default for speed
+		CascadeCfg:    evaluator.DefaultCascadeConfig(),
+		BlocksEnabled: true,
+		BlockConfig:   evolution.DefaultBlockConfig(),
+		UseRealLLM:    false, // use mock by default for speed
 	}
 }
 
-// evolveTreeV2 runs the AlphaEvolve-derived evolution pipeline on a single tree.
-// This replaces the old evolveTree with the full cascade: MAP-Elites → Cascade → Pareto → Mutate.
+// evolveTreeV2 runs the v2 evolution pipeline on a single tree:
+// cascade quick-check → ordered candidates → block filter → per-candidate
+// benchmark + pre-score + quality gate → apply → validation-gated persist.
 func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetrics {
 	tree := entry.Tree
 	if tree == nil {
@@ -81,15 +56,9 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	records := evolution.FilterByTreeName(allRecords, entry.Name)
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
-	domain := extractDomain(entry.Name)
 
-	// ── P3: Evolution Blocks — check if tree can be mutated ──
-
-	// ── P0: Evaluation Cascade — structural Quick check first ──
-	cascadeStats := &evaluator.CascadeStats{Total: 1}
+	// ── Evaluation cascade — structural quick check first ──
 	quickScore := evaluator.StructuralQuickEval(tree)
-	cascadeStats.PassedQuick = 1 // structural always passes
-
 	if quickScore < cfg.CascadeCfg.QuickThreshold {
 		return CycleMetrics{
 			TreeName: entry.Name, Improved: false,
@@ -98,87 +67,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 
-	// ── P0: MAP-Elites Diversity Grid ──
-	var mapGrid *evolution.MAPElitesGrid
-	if cfg.MAPElitesEnabled {
-		mapGrid = evolution.NewMAPElitesGrid(cfg.MAPElitesGridSize)
-		// Seed grid with current tree
-		desc := evolution.Descriptor(tree, domain)
-		ind := &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: baseFitness.Composite, Genome: hashTreeForGardener(tree)}
-		mapGrid.Insert(desc, ind)
-	}
-
-	// ── P1: Multi-Objective Pareto Front ──
-	var paretoFront *evolution.ParetoFront
-	if cfg.ParetoEnabled {
-		dims := []evolution.FitnessDimension{
-			evolution.DimSuccessRate, evolution.DimPathCoverage,
-			evolution.DimStability, evolution.DimNodeEfficiency, evolution.DimExecutionSpeed,
-		}
-		paretoFront = evolution.NewParetoFront(dims)
-		fv := evolution.StructuralMultiFitness(tree)
-		paretoFront.Add(&evolution.MultiIndividual{
-			Individual: &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: baseFitness.Composite, Genome: hashTreeForGardener(tree)},
-			FitnessVec: fv,
-		})
-	}
-
-	// ── P1: Model Ensemble + Rich Context ──
-	var ensemble *llm.ModelEnsemble
-	if cfg.EnsembleEnabled {
-		var explorer llm.LLM
-		var refiner llm.LLM
-		if cfg.UseRealLLM {
-			ollamaClient, err := llm.NewClient(llm.DefaultConfig())
-			if err == nil {
-				explorer = ollamaClient
-			}
-			// Refiner uses DeepSeek if available
-			refiner = llm.NewDeepSeekClient(llm.DefaultDeepSeekConfig())
-		}
-		if explorer == nil {
-			explorer = benchmark.DefaultMock()
-		}
-		ensemble = llm.NewModelEnsemble(llm.EnsembleConfig{
-			Explorer: explorer,
-			Refiner:  refiner,
-		})
-	}
-
-	// ── P1: Rich Context — build mutation prompt ──
-	var evoCtx *llm.EvolutionContext
-	if cfg.RichContextEnabled {
-		evoCtx = &llm.EvolutionContext{
-			CurrentTree:    serializeTreeForGardener(tree),
-			CurrentFitness: baseFitness.Composite,
-			Domain:         domain,
-			EvaluatorBreakdown: map[string]float64{
-				"composite":     baseFitness.Composite,
-				"success_rate":  baseFitness.SuccessRate,
-				"path_coverage": baseFitness.PathCoverage,
-				"stability":     baseFitness.Stability,
-			},
-			ResearchHints: llm.DefaultResearchHints(),
-		}
-		// If ensemble available, use it to generate a targeted mutation
-		if ensemble != nil {
-			prompt := llm.BuildMutationPrompt(*evoCtx)
-			suggestion, err := ensemble.GenerateBreadth([]string{prompt})
-			if err == nil && len(suggestion) > 0 && len(suggestion[0]) > 20 {
-				truncated := suggestion[0]
-				if len(truncated) > 100 {
-					truncated = truncated[:100]
-				}
-				evoCtx.MutationHistory = append(evoCtx.MutationHistory, truncated)
-			}
-		}
-	}
-
 	// ── Generate and filter mutations ──
-	// Use existing OrderMutations for compatibility, but filter through new components
 	candidates := evaluator.OrderMutations(tree, records, baseFitness)
 
-	// P3: Evolution Blocks — filter mutations targeting frozen blocks
+	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
 		mutationOps := make([]evolution.MutationOp, len(candidates))
 		for i, c := range candidates {
@@ -199,10 +91,6 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			candidates = filtered
 		}
 	}
-
-	// ── P2: SEARCH/REPLACE Diff mutations (alternate path) ──
-	// Also consider diff-based mutations alongside traditional ops
-	_ = evolution.ApplyDiffMutation // available for future use
 
 	// ── Apply mutations with benchmark validation ──
 	suite := benchmark.SuiteForTree(entry.Name)
@@ -230,8 +118,6 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			break
 		}
 
-		// P2: SEARCH/REPLACE diff — try diff mutation as alternative
-		// (traditional op-based mutations are the primary path)
 		score := benchmark.QuickValidate(tree, suite, selectedLLM, []evolution.MutationOp{candidates[i].Op})
 		if score < 0 {
 			rejected++
@@ -264,22 +150,6 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
 			currentFitness = candidateFitness
-
-			// P0: Update MAP-Elites grid with mutated tree
-			if mapGrid != nil {
-				desc := evolution.Descriptor(tree, domain)
-				ind := &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: candidateFitness.Composite, Genome: hashTreeForGardener(tree)}
-				mapGrid.Insert(desc, ind)
-			}
-
-			// P1: Update Pareto front
-			if paretoFront != nil {
-				fv := evolution.StructuralMultiFitness(tree)
-				paretoFront.Add(&evolution.MultiIndividual{
-					Individual: &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: candidateFitness.Composite, Genome: hashTreeForGardener(tree)},
-					FitnessVec: fv,
-				})
-			}
 		}
 	}
 
@@ -296,9 +166,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 	improved := newFitness.Composite > baseFitness.Composite
 	if applied > 0 {
-		// ── P5: Validation Gate (Gap 5 — Decentralized Coordination) ──
-		// Prevent deploying evolved trees that fail quality thresholds.
-		// A rejection skips deployment but does NOT abort the cycle for other agents.
+		// ── Validation gate — prevent persisting evolved trees that fail
+		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
 		if gateErr != nil {
 			slog.Warn("gardener/v2: validation gate rejected, skipping deployment", "error", gateErr)
@@ -315,19 +184,6 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
 
-	// ── P3: Meta-Prompt Evolution — record outcome ──
-	// (template success rate tracked per mutation type)
-
-	// Log cascade stats
-	if mapGrid != nil {
-		stats := mapGrid.Stats()
-		_ = stats // available for logging
-	}
-	if paretoFront != nil {
-		paretoStats := paretoFront.Stats()
-		_ = paretoStats
-	}
-
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
@@ -339,7 +195,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 }
 
-// RunCycleV2 executes one full evolution cycle using the AlphaEvolve-derived pipeline.
+// RunCycleV2 executes one full evolution cycle using the v2 pipeline.
 func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	entries := g.cfg.Registry.List()
 	sort.Slice(entries, func(i, j int) bool {
@@ -347,12 +203,6 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	})
 
 	results := make([]CycleMetrics, 0, len(entries))
-
-	// ── P2: Island Model — evolve all domains, migrate periodically ──
-	var islandModel *evolution.IslandModel
-	if cfg.IslandEnabled {
-		islandModel = evolution.NewIslandModel(cfg.MigrationInterval, cfg.MigrationRate)
-	}
 
 	for _, entry := range entries {
 		if !entry.Active {
@@ -368,14 +218,6 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		// Persist after every tree so a mid-cycle crash or SIGTERM loses at
 		// most one tree's result, not the whole cycle.
 		_ = g.cfg.MetricsTracker.Save()
-	}
-
-	// ── P2: Island Model — run migration after cycle ──
-	if islandModel != nil && len(entries) > 1 {
-		islandModel.Generation++
-		if islandModel.Generation%cfg.MigrationInterval == 0 {
-			_ = islandModel.Migrate()
-		}
 	}
 
 	// ── SLO metrics collection ──
@@ -440,36 +282,4 @@ func cloneMetadataForGardener(src map[string]any) map[string]any {
 		}
 	}
 	return out
-}
-
-func hashTreeForGardener(t *evolution.SerializableNode) string {
-	// Simple stable hash based on name+type+node count
-	return fmt.Sprintf("%x", len(t.Name)+len(t.Type)+evolution.CountNodes(t))
-}
-
-func serializeTreeForGardener(t *evolution.SerializableNode) string {
-	if t == nil {
-		return "(nil)"
-	}
-	return fmt.Sprintf("%s(%s)[%d children]", t.Type, t.Name, len(t.Children))
-}
-
-func extractDomain(name string) string {
-	if strings.HasPrefix(name, "domain_") {
-		return strings.TrimPrefix(name, "domain_")
-	}
-	if strings.HasPrefix(name, "finance_") {
-		return "finance"
-	}
-	if strings.HasPrefix(name, "research_") {
-		return "research"
-	}
-	switch name {
-	case "godev":
-		return "godev"
-	case "default":
-		return "default"
-	default:
-		return "general"
-	}
 }

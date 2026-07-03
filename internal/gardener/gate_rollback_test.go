@@ -59,14 +59,8 @@ func TestEvolveTreeV2_ValidationGateRejection_RestoresTree(t *testing.T) {
 	g := NewGardener(cfg)
 
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   false,
-		ParetoEnabled:      false,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 
 	entries := registry.List()
@@ -157,14 +151,8 @@ func TestEvolveTreeV2_QualityGateRejection_TreeUnchanged(t *testing.T) {
 	g := NewGardener(cfg)
 
 	v2cfg := EvolveV2Config{
-		MAPElitesEnabled:   false,
-		ParetoEnabled:      false,
-		IslandEnabled:      false,
-		EnsembleEnabled:    false,
-		RichContextEnabled: false,
-		BlocksEnabled:      false,
-		MetaPromptEnabled:  false,
-		UseRealLLM:         false,
+		BlocksEnabled: false,
+		UseRealLLM:    false,
 	}
 
 	entries := registry.List()

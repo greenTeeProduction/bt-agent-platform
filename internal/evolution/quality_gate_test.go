@@ -38,9 +38,10 @@ func TestQualityGateValidate(t *testing.T) {
 			expected:      GateRejected,
 		},
 		{
+			// Above the floor, >20% drop: relative regression wins.
 			name:          "rollback large regression",
-			preComposite:  50,
-			postComposite: 20,
+			preComposite:  90,
+			postComposite: 60,
 			expected:      GateRollback,
 		},
 		{
@@ -53,7 +54,7 @@ func TestQualityGateValidate(t *testing.T) {
 			name:          "reject when pre is very low and post is below floor",
 			preComposite:  0.1,
 			postComposite: 0.09,
-			expected:      GateRejected, // postComposite < MinComposite (0.3)
+			expected:      GateRejected, // declining below MinComposite (30.0)
 		},
 		{
 			name:          "rollback on 25% regression",

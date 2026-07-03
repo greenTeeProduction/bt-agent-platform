@@ -156,7 +156,7 @@ func main() {
 	registry := cfg.Registry
 	metricsTracker := cfg.MetricsTracker
 
-	// ── V2 Evolution Config (AlphaEvolve pipeline) ──
+	// ── V2 Evolution Config ──
 	v2Cfg := gardener.DefaultEvolveV2Config()
 	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 

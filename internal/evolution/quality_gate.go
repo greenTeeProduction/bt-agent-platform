@@ -34,7 +34,7 @@ func (g GateResult) String() string {
 // Implements the EvoRepair-inspired pattern: every mutation must pass
 // a quality gate; regression triggers automatic rollback.
 type QualityGate struct {
-	MinComposite      float64 // 0.3 — reject below this floor
+	MinComposite      float64 // 30.0 — reject declines below this floor (composite is 0-100)
 	MaxRegressionRate float64 // 0.2 — rollback if fitness drops >20%
 	ConsecutiveFails  int     // 5 — auto-disable after N consecutive regressions
 	SnapshotDir       string  // backup tree.json before mutation
@@ -49,7 +49,7 @@ const globalGateKey = ""
 // NewQualityGate creates a quality gate with sensible defaults.
 func NewQualityGate(snapshotDir string) *QualityGate {
 	return &QualityGate{
-		MinComposite:      0.3,
+		MinComposite:      30.0,
 		MaxRegressionRate: 0.2,
 		ConsecutiveFails:  5,
 		SnapshotDir:       snapshotDir,
@@ -75,8 +75,10 @@ func (q *QualityGate) ValidateFor(treeKey string, preComposite, postComposite fl
 		q.failCounts = make(map[string]int)
 	}
 
-	// Fitness floor — reject if composite falls below minimum
-	if postComposite < q.MinComposite {
+	// Fitness floor — below the floor even small declines are rejected
+	// (stricter than the 20% regression tolerance). Improvements below the
+	// floor pass: weak trees must be allowed to climb out.
+	if postComposite < q.MinComposite && postComposite < preComposite {
 		q.failCounts[treeKey]++
 		return GateRejected
 	}
