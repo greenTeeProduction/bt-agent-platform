@@ -1306,6 +1306,19 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGraphOutputWritable",
 			},
+			// PlansWritable/VaultWritable/SynthesesWritable/GraphOutputWritable each
+			// prove a distinct cycle output directory is writable, but none covers the
+			// Superpowers runs directory (superpowersRunsDir) every scheduled run is
+			// rooted under: its plan.md, verification evidence, and finish.md/run.json
+			// all land there. Prove that runs directory is a writable directory too,
+			// before the loop runner drives another iteration, so a scheduled run fails
+			// fast with a clear diagnosis instead of losing its plan, verification
+			// evidence, and finish report the moment it initializes its run — the
+			// run-artifact-output analogue of the sibling writable-location guards.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionRunsWritable",
+			},
 			// The two NotebookLM guards are optional enrichment: an absent `nlm`
 			// binary or an unset notebook id must NOT abort the scheduled cycle,
 			// which still degrades cleanly to vault research. Each is Selector-wrapped

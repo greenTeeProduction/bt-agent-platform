@@ -945,6 +945,60 @@ func TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesRunsWritable
+// pins the increment the "goap-fusion-loop-runner" goal requires: the Phase-0
+// preflight node must compose the Superpowers run-artifact output-location guard —
+// VerifyScheduledGoapFusionRunsWritable — as a runnable Action node so it actually
+// executes in a scheduled cycle.
+//
+// Every scheduled cycle roots its run under filepath.Join(superpowersRunsDir, id):
+// the "write Superpowers implementation plan" step writes plan.md there, the
+// verification step writes baseline-build.txt / worktree.patch / per-check outputs
+// under the run's verification/ subdirectory, and the report step writes finish.md
+// and run.json. VerifyScheduledGoapFusionRunsWritable is the guard that proves the
+// Superpowers runs directory (superpowersRunsDir) is a writable directory before
+// the cycle proceeds, so a scheduled run fails fast with a clear diagnosis instead
+// of losing its plan, verification evidence, and finish report the moment it
+// initializes its run. Yet the guard is registered and unit-tested but never wired
+// into any composed tree: GoapFusionPreflightNode() composes the other
+// writable-location guards (plans, vault, syntheses, graph-output) but never this
+// runs-directory guard, so it can never run in a scheduled cycle.
+//
+// This test asserts GoapFusionPreflightNode() composes
+// VerifyScheduledGoapFusionRunsWritable as a runnable Action node and that the
+// composed name resolves to a registered, runnable action. It fails while the
+// builder omits the runs-writable guard (RED) and passes once the guard is composed
+// into the preflight node (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is pinned
+// here at the guard's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesRunsWritable(t *testing.T) {
+	const want = "VerifyScheduledGoapFusionRunsWritable"
+
+	node := GoapFusionPreflightNode()
+
+	var references func(n evolution.SerializableNode) bool
+	references = func(n evolution.SerializableNode) bool {
+		if n.Type == "Action" && n.Name == want {
+			return true
+		}
+		for _, c := range n.Children {
+			if references(c) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !references(node) {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q guard as a runnable Action node; the runs-writable guard is registered but never wired into any preflight, so a scheduled cycle would only discover its Superpowers runs output directory is unwritable when it initializes its run", want)
+	}
+
+	if GetAction(want) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrependsToLoopSequence
 // pins the integration seam the "goap-fusion-loop-runner" goal actually requires:
 // every prior run grew the orphan preflight builder (materializer guard, then
