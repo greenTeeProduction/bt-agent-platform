@@ -5,16 +5,31 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/research"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
 const btFusionRepo = "/home/nico/go-bt-evolve"
 const btFusionReport = "/mnt/ssd/clawd/wiki/bt-research/bt-fusion-latest.md"
+
+// btFusionMaxNewNotes bounds how many newly discovered vault notes one cycle
+// quotes in the report; further new notes are still recorded, just counted.
+const btFusionMaxNewNotes = 5
+
+// Knowledge-store seams (package vars for test override). The store is the
+// persistent dedup index every research action consults before reporting:
+// content already recorded by an earlier cycle is never re-reported as new.
+var (
+	btFusionKnowledgePath = research.DefaultPath()
+	btFusionVaultDirs     = []string{goapFusionVaultDir, goapFusionSynthesesDir}
+)
 
 // fusionCodebaseFitCmd gathers codebase-fit evidence from git HEAD content
 // (`git grep … HEAD`), never the working tree: the main repo is bare and its
@@ -36,42 +51,114 @@ func registerBTFusionActions() {
 			"Typed-edge validation: preserve guard/effect/recovery/approval semantics when generating new trees.",
 			"Checkpoint verification: generated trees should include deterministic postcondition checks before reporting success.",
 		}
-		setFusionState(bb, "research_findings", strings.Join(findings, "\n- "))
-		bb.Result = "## BT Fusion Research Findings\n\n- " + strings.Join(findings, "\n- ")
+		store, err := research.Open(btFusionKnowledgePath)
+		if err != nil {
+			bb.Outcome = "fusion_knowledge_store_failed"
+			bb.Result = "## BT Fusion Research Findings\n\nKnowledge store unavailable: " + err.Error()
+			return -1
+		}
+		var fresh []string
+		known := 0
+		for _, f := range findings {
+			if store.Record("bt_fusion:pattern", fusionTitle(f), f) {
+				fresh = append(fresh, f)
+			} else {
+				known++
+			}
+		}
+		if err := store.Save(); err != nil {
+			bb.Outcome = "fusion_knowledge_store_failed"
+			bb.Result = "## BT Fusion Research Findings\n\nFailed persisting knowledge store: " + err.Error()
+			return -1
+		}
+		addFusionNewCount(bb, len(fresh))
+		addFusionNewItems(bb, fresh)
+		setFusionState(bb, "research_findings", strings.Join(fresh, "\n- "))
+		bb.Result = "## BT Fusion Research Findings\n\n"
+		if len(fresh) > 0 {
+			bb.Result += "- " + strings.Join(fresh, "\n- ") + "\n\n"
+		}
+		bb.Result += fmt.Sprintf("%d new pattern finding(s); %d already recorded in the knowledge store (`%s`), not re-reported.", len(fresh), known, btFusionKnowledgePath)
 		bb.Outcome = string(evolution.Success)
 		return 1
 	})
 
 	RegisterAction("QueryNotebookLMResearch", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		paths := []string{
-			"/mnt/ssd/clawd/wiki/bt-research/bt-evolution-2026-06-16.md",
-			"/mnt/ssd/clawd/wiki/bt-research/bt-fusion-latest.md",
+		store, err := research.Open(btFusionKnowledgePath)
+		if err != nil {
+			bb.Outcome = "fusion_knowledge_store_failed"
+			bb.Result += "\n\n## Vault Research Delta\n\nKnowledge store unavailable: " + err.Error()
+			return -1
 		}
-		var snippets []string
-		for _, p := range paths {
-			if b, err := os.ReadFile(p); err == nil {
-				snippets = append(snippets, fmt.Sprintf("%s: %s", p, truncateFusion(string(b), 900)))
+		notes := listFusionVaultNotes()
+		var surfaced []string
+		newCount, knownCount, skipped := 0, 0, 0
+		for _, n := range notes {
+			b, err := os.ReadFile(n.path)
+			if err != nil {
+				continue
+			}
+			content := string(b)
+			if isFusionQuotaGarbage(content) {
+				skipped++
+				continue
+			}
+			if store.Record("vault:"+n.name, n.name, content) {
+				newCount++
+				if len(surfaced) < btFusionMaxNewNotes {
+					surfaced = append(surfaced, fmt.Sprintf("**%s**: %s", n.name, truncateFusion(strings.Join(strings.Fields(content), " "), 400)))
+				}
+				addFusionNewItems(bb, []string{"vault note " + n.name})
+			} else {
+				knownCount++
 			}
 		}
-		if len(snippets) == 0 {
-			snippets = append(snippets, "No local NotebookLM/vault BT research notes found; continue from built-in research findings.")
+		if err := store.Save(); err != nil {
+			bb.Outcome = "fusion_knowledge_store_failed"
+			bb.Result += "\n\n## Vault Research Delta\n\nFailed persisting knowledge store: " + err.Error()
+			return -1
 		}
-		setFusionState(bb, "notebooklm_context", strings.Join(snippets, "\n\n"))
-		bb.Result += "\n\n## NotebookLM/Vault Context\n\n" + strings.Join(snippets, "\n\n")
+		addFusionNewCount(bb, newCount)
+		summary := fmt.Sprintf("%d new vault note(s) since the last cycle; %d already recorded, %d skipped as quota-error garbage.", newCount, knownCount, skipped)
+		if len(surfaced) > 0 {
+			summary += "\n\n- " + strings.Join(surfaced, "\n- ")
+			if extra := newCount - len(surfaced); extra > 0 {
+				summary += fmt.Sprintf("\n- …plus %d more new note(s) recorded in the knowledge store.", extra)
+			}
+		}
+		setFusionState(bb, "notebooklm_context", summary)
+		bb.Result += "\n\n## Vault Research Delta\n\n" + summary
 		return 1
 	})
 
 	RegisterAction("SynthesizeFindings", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		synthesis := `Top concrete fusion targets for this Go BT platform:
-1. Make BT Fusion deterministic where possible; avoid generic LLM-only no-op actions.
-2. Keep A2A/scheduler daemon stable under --no-mcp so scheduled fusion can actually run.
-3. Add repository-specific fusion reports under the vault so future runs can compound research.
-4. Expand gardener pool to include new domain trees (bt_fusion, hermes_update, notebooklm monitors) after current 32-tree pool mismatch is fixed.
-5. Add checkpoint/evidence gates to generated domain trees so success requires build/test/log evidence.`
+		var synthesis string
+		if n := fusionNewCount(bb); n == 0 {
+			synthesis = fmt.Sprintf("No new research this cycle: every candidate finding and vault note is already recorded in the knowledge store (`%s`). The duplicate fusion report will be skipped.", btFusionKnowledgePath)
+		} else {
+			items, _ := bb.ChainState["bt_fusion_research_new_items"].(string)
+			synthesis = fmt.Sprintf("%d new knowledge entr%s this cycle to evaluate for fusion targets:\n%s", n, pluralYIes(n), items)
+		}
 		setFusionState(bb, "synthesis", synthesis)
 		bb.Result += "\n\n## Synthesis\n\n" + synthesis
+		return 1
+	})
+
+	// Routing: a cycle that produced zero new knowledge must not rewrite and
+	// re-broadcast the previous report — it reports the no-op briefly instead.
+	RegisterCondition("HasNewResearch", func(bb *Blackboard) bool { return fusionNewCount(bb) > 0 })
+	RegisterCondition("NoNewResearch", func(bb *Blackboard) bool { return fusionNewCount(bb) == 0 })
+
+	RegisterAction("ReportNoNewResearch", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		entries := "?"
+		if store, err := research.Open(btFusionKnowledgePath); err == nil {
+			entries = strconv.Itoa(store.Len())
+		}
+		bb.Result += fmt.Sprintf("\n\n## No New Research\n\nAll findings this cycle were already recorded in the research knowledge store (%s entries at `%s`). Skipped the duplicate fusion report and verification.", entries, btFusionKnowledgePath)
+		bb.Outcome = string(evolution.Success)
 		return 1
 	})
 
@@ -162,6 +249,86 @@ func setFusionState(bb *Blackboard, key, value string) {
 		bb.ChainState = map[string]any{}
 	}
 	bb.ChainState["bt_fusion_"+key] = value
+}
+
+// fusionNewCount reads this cycle's accumulated count of new knowledge
+// entries. Stored as a string: ChainState round-trips through JSON, which
+// would silently turn ints into float64.
+func fusionNewCount(bb *Blackboard) int {
+	v, _ := bb.ChainState["bt_fusion_research_new_count"].(string)
+	n, _ := strconv.Atoi(v)
+	return n
+}
+
+func addFusionNewCount(bb *Blackboard, delta int) {
+	setFusionState(bb, "research_new_count", strconv.Itoa(fusionNewCount(bb)+delta))
+}
+
+func addFusionNewItems(bb *Blackboard, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	existing, _ := bb.ChainState["bt_fusion_research_new_items"].(string)
+	for _, it := range items {
+		existing += "- " + fusionTitle(it) + "\n"
+	}
+	setFusionState(bb, "research_new_items", existing)
+}
+
+// fusionTitle derives a short stable title from a finding's leading words.
+func fusionTitle(finding string) string {
+	words := strings.Fields(finding)
+	if len(words) > 10 {
+		words = words[:10]
+	}
+	return strings.Join(words, " ")
+}
+
+type fusionVaultNote struct {
+	path string
+	name string
+	mod  time.Time
+}
+
+// listFusionVaultNotes returns the vault's markdown notes newest-first,
+// excluding bt_fusion's own report so it never feeds back into research.
+func listFusionVaultNotes() []fusionVaultNote {
+	ownReport := filepath.Base(btFusionReport)
+	var notes []fusionVaultNote
+	for _, dir := range btFusionVaultDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || e.Name() == ownReport {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			notes = append(notes, fusionVaultNote{path: filepath.Join(dir, e.Name()), name: e.Name(), mod: info.ModTime()})
+		}
+	}
+	sort.Slice(notes, func(i, j int) bool { return notes[i].mod.After(notes[j].mod) })
+	return notes
+}
+
+// isFusionQuotaGarbage detects vault syntheses that captured NotebookLM
+// quota-error output instead of research (the pre-bd8c5b6 failure mode).
+func isFusionQuotaGarbage(content string) bool {
+	lower := strings.ToLower(content)
+	return strings.Contains(lower, "resource_exhausted") ||
+		strings.Contains(lower, "error code 8") ||
+		strings.Contains(lower, "google rejected the query")
+}
+
+func pluralYIes(n int) string {
+	if n == 1 {
+		return "y"
+	}
+	return "ies"
 }
 
 func runFusionShell(command string) (string, int) {
