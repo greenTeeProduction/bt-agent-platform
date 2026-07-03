@@ -2461,3 +2461,82 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitBreaker
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the dedicated CIRCUITPOLICY *evaluation*
+// action — EvaluateScheduledGoapFusionCircuitBreaker — as a runnable Action node
+// ordered BEFORE the bounded loop runner it protects.
+//
+// EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
+// circuit-breaker evaluation the P0 NotebookLM research goal names: given the
+// loop's recent state-hash history (published on the blackboard under
+// "goap_fusion_state_hashes"), it HALTs (-1) when a state hash repeats within the
+// bounded goapFusionCircuitHistoryWindow — the "Activity-Progress Confusion"
+// cycle — and CONTINUEs (1) otherwise. As a preflight Sequence child ahead of the
+// loop runner it makes the circuit-breaker verdict an explicit, observable BT gate
+// that fails the preflight fast on a detected cycle, so the scheduled cycle only
+// gates on the loop runner after the dedicated breaker has passed. Every OTHER
+// action in this CIRCUITPOLICY apparatus — the config guard
+// (VerifyScheduledGoapFusionCircuitPolicy) and the loop runner
+// (RunScheduledGoapFusionLoop) — is already composed into GoapFusionPreflightNode(),
+// but EvaluateScheduledGoapFusionCircuitBreaker is registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts)
+// yet wired into no composed tree, so it can never run in a scheduled cycle — the
+// exact "registered but unwired" gap the whole preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// EvaluateScheduledGoapFusionCircuitBreaker as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits the
+// circuit-breaker evaluation (RED) and passes once it is composed ahead of the loop
+// runner (GREEN). The engine package cannot import internal/domains (import cycle),
+// so this runnable-composition contract is pinned here at the action's own package,
+// ready for the domains tree to embed as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitBreaker(t *testing.T) {
+	const (
+		guard      = "EvaluateScheduledGoapFusionCircuitBreaker"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q circuit-breaker evaluation as a runnable Action node; the preflight drives the loop runner without first making the deterministic CIRCUITPOLICY verdict an explicit, observable BT gate, so the dedicated breaker can never run in a scheduled cycle", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the circuit-breaker evaluation runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q circuit-breaker evaluation (index %d) to be composed BEFORE the %q loop runner (index %d), so the deterministic CIRCUITPOLICY verdict gates the scheduled cycle before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}

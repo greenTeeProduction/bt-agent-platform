@@ -1192,6 +1192,18 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 					},
 				},
 			},
+			// VerifyScheduledGoapFusionCircuitPolicy above is only a config guard —
+			// it proves goapFusionCircuitHistoryWindow is positive but never inspects
+			// the running state-hash history and never halts the loop. Compose the
+			// deterministic kernel-level circuit-breaker evaluation here, as the last
+			// gate before the loop runner, so the CIRCUITPOLICY verdict is an explicit,
+			// observable BT gate: it HALTs the preflight fast on a detected
+			// "Activity-Progress Confusion" cycle before RunScheduledGoapFusionLoop
+			// drives another research-to-implementation iteration.
+			{
+				Type: "Action",
+				Name: "EvaluateScheduledGoapFusionCircuitBreaker",
+			},
 			{
 				Type: "Action",
 				Name: "RunScheduledGoapFusionLoop",
