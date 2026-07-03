@@ -726,3 +726,54 @@ func TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the bounded loop runner —
+// RunScheduledGoapFusionLoop — as a runnable Action node, not only the
+// build-tree materializer guard.
+//
+// The materializer guard proves the on-disk tree is fresh, but the loop runner
+// is "the kernel the whole apparatus exists to protect": it consults the shared
+// circuit-breaker window and the runaway-loop backstop to decide whether the
+// scheduled cycle may drive another iteration or must HALT on
+// Activity-Progress Confusion. GoapFusionPreflightNode()'s own contract
+// (actions_superpowers.go) explicitly reserves room to "append the
+// circuit-breaker/loop-runner pair as additional preflight children"; until it
+// does, a scheduled cycle that embeds the preflight would materialize a fresh
+// tree yet never gate the run on the loop runner, so a non-progressing loop
+// could still iterate unchecked.
+//
+// This test asserts the preflight sequence references RunScheduledGoapFusionLoop
+// as a registered Action node. It fails while the builder composes only the
+// materializer guard (RED) and passes once the loop runner is appended as a
+// preflight child (GREEN). The engine package cannot import internal/domains
+// (import cycle), so this runnable-composition contract is pinned here at the
+// action's own package, ready for the domains tree to embed as its Phase-0
+// preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner(t *testing.T) {
+	const want = "RunScheduledGoapFusionLoop"
+
+	node := GoapFusionPreflightNode()
+
+	var references func(n evolution.SerializableNode) bool
+	references = func(n evolution.SerializableNode) bool {
+		if n.Type == "Action" && n.Name == want {
+			return true
+		}
+		for _, c := range n.Children {
+			if references(c) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !references(node) {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner as a runnable Action node; the preflight materializes the build tree but never gates the scheduled cycle on the bounded loop runner, so a non-progressing loop could iterate unchecked", want)
+	}
+
+	if GetAction(want) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
+	}
+}
