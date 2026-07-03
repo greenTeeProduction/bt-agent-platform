@@ -16,6 +16,12 @@ import (
 const btFusionRepo = "/home/nico/go-bt-evolve"
 const btFusionReport = "/mnt/ssd/clawd/wiki/bt-research/bt-fusion-latest.md"
 
+// fusionCodebaseFitCmd gathers codebase-fit evidence from git HEAD content
+// (`git grep … HEAD`), never the working tree: the main repo is bare and its
+// pre-conversion source files were removed 2026-07-03 — a filesystem grep of
+// internal/domains/trees.go fails every bt-fusion run.
+const fusionCodebaseFitCmd = `printf 'trees='; git grep -n '"bt_fusion"\|"hermes_update"\|"notebooklm_pipeline_monitor"' HEAD -- internal/domains/trees.go; printf '\nagents='; ls ~/.go-bt-evolve/agents/*fusion* ~/.go-bt-evolve/agents/*manager* 2>/dev/null; printf '\nservice='; systemctl --user show bt-agent.service -p ActiveState,SubState,Restart --no-pager 2>/dev/null`
+
 func init() {
 	registerBTFusionActions()
 }
@@ -71,8 +77,7 @@ func registerBTFusionActions() {
 
 	RegisterAction("CheckCodebaseFit", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		cmd := `printf 'trees='; grep -R '"bt_fusion"\|"hermes_update"\|"notebooklm_pipeline_monitor"' -n internal/domains/trees.go; printf '\nagents='; ls ~/.go-bt-evolve/agents/*fusion* ~/.go-bt-evolve/agents/*manager* 2>/dev/null; printf '\nservice='; systemctl --user show bt-agent.service -p ActiveState,SubState,Restart --no-pager 2>/dev/null`
-		out, code := runFusionShell(cmd)
+		out, code := runFusionShell(fusionCodebaseFitCmd)
 		setFusionState(bb, "codebase_fit", out)
 		bb.Result += fmt.Sprintf("\n\n## Codebase Fit Evidence (exit=%d)\n\n```\n%s\n```", code, truncateFusion(out, 2500))
 		if code != 0 {

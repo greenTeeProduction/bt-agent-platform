@@ -18,6 +18,33 @@ func init() {
 	registerNotebookLMActions()
 }
 
+// nlmAuthRun is the nlm invocation used by auth actions — a var so tests can
+// script check/login/re-check sequences without the real CLI.
+var nlmAuthRun = nlmRun
+
+// nlmAuthNeedsRefresh reports whether an auth-check output warrants an
+// `nlm login` attempt. "expired" matters: a stored Chrome profile often
+// re-authenticates non-interactively, and failing without trying left the
+// notebooklm-researcher dead-lettering every window (2026-07-03).
+func nlmAuthNeedsRefresh(out string) bool {
+	for _, marker := range []string{"stale", "not_configured", "expired", "failed", "error"} {
+		if strings.Contains(out, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// nlmAuthUnhealthy reports whether an auth-check output is a hard failure.
+func nlmAuthUnhealthy(out string) bool {
+	for _, marker := range []string{"expired", "failed", "error", "not_configured"} {
+		if strings.Contains(out, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func registerNotebookLMActions() {
 	// CheckNotebookLMAuth — runs nlm login --check and reports status.
 	RegisterAction("CheckNotebookLMAuth", func(ctx *btcore.BTContext[Blackboard]) int {
@@ -157,21 +184,29 @@ func registerNotebookLMActions() {
 		return 1
 	})
 
-	// CheckNotebookLMAuthAndRefresh — runs auth check, refreshes if stale.
+	// CheckNotebookLMAuthAndRefresh — runs auth check; on any unhealthy
+	// status (stale, not_configured, expired, failed) attempts `nlm login`
+	// and re-checks. The verdict comes from the RE-CHECK only — grepping the
+	// concatenated transcript let the original failure text poison a
+	// successful refresh.
 	RegisterAction("CheckNotebookLMAuthAndRefresh", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out := nlmRun(30*time.Second, "login", "--check")
-		if strings.Contains(out, "stale") || strings.Contains(out, "not_configured") {
-			refreshOut := nlmRun(120*time.Second, "login")
-			out = "Auth check: " + out + "\nRefresh: " + refreshOut
+		check := nlmAuthRun(30*time.Second, "login", "--check")
+		status := check
+		detail := check
+		if nlmAuthNeedsRefresh(check) {
+			refresh := nlmAuthRun(120*time.Second, "login")
+			recheck := nlmAuthRun(30*time.Second, "login", "--check")
+			detail = "Auth check: " + check + "\nRefresh: " + refresh + "\nRe-check: " + recheck
+			status = recheck
 		}
-		bb.Result = "## NotebookLM Auth\n\n```\n" + out + "\n```\n"
-		bb.ChainState["nlm_auth"] = out
-		bb.Outcome = "success"
-		if strings.Contains(out, "error") || strings.Contains(out, "failed") {
+		bb.Result = "## NotebookLM Auth\n\n```\n" + detail + "\n```\n"
+		bb.ChainState["nlm_auth"] = detail
+		if nlmAuthUnhealthy(status) {
 			bb.Outcome = "failure"
 			return -1
 		}
+		bb.Outcome = "success"
 		return 1
 	})
 }

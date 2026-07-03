@@ -386,3 +386,35 @@ func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
 	}
 }
+
+// TestGoapFusionTreeHasResearchRouter pins the same quota-resilience shape the
+// loop tree has: the hourly goap-fusion runner must route NotebookLM research
+// through a Selector with the Claude review fallback. As a bare Sequence child
+// the research action's quota fail-fast (-1) killed the whole tree — the :35
+// runner dead-lettered on every closed quota window (observed 2026-07-02/03).
+func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
+	tree := GoapFusionTree(true)
+	var router *evolution.SerializableNode
+	var walk func(n *evolution.SerializableNode)
+	walk = func(n *evolution.SerializableNode) {
+		if n.Name == "ResearchRouter" {
+			router = n
+			return
+		}
+		for i := range n.Children {
+			walk(&n.Children[i])
+		}
+	}
+	walk(tree)
+	if router == nil {
+		t.Fatal("GoapFusionTree has no ResearchRouter node")
+	}
+	if router.Type != "Selector" {
+		t.Fatalf("ResearchRouter type = %q, want Selector", router.Type)
+	}
+	if len(router.Children) != 2 ||
+		router.Children[0].Name != "RunGoapFusionNotebookLMResearch" ||
+		router.Children[1].Name != "RunClaudeCodeReviewResearch" {
+		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
+	}
+}

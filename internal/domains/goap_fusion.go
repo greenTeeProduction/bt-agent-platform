@@ -13,7 +13,15 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			cond("ValidateInput", "Task must be non-empty"),
 			cond("IsFusionTask", "Detect fusion/improve/expand/capability/research/evolve keywords"),
 		),
-		act("RunGoapFusionNotebookLMResearch", "Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
+		// NotebookLM first; when it is unavailable (quota exhausted, auth
+		// expired) the research action fails fast BY DESIGN so a Selector can
+		// route to the Claude review fallback — as a bare Sequence child that
+		// fail-fast killed the whole hourly runner on every closed quota
+		// window. Same shape as GoapFusionLoopTree's ResearchRouter.
+		sel("ResearchRouter",
+			act("RunGoapFusionNotebookLMResearch", "Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
+			act("RunClaudeCodeReviewResearch", "Fallback when NotebookLM is unavailable: Claude Code reviews recent daemon commits and emits GOAL/GAP/FILES/TESTS findings to the vault"),
+		),
 		act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
 		act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),
 		act("AnalyzeImprovementGaps", "Cross-reference research findings with codebase gaps"),
