@@ -1824,3 +1824,39 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSchemaValid
+// pins the validation contract the "goap-fusion-loop-runner" goal actually drives
+// toward: the Phase-0 preflight node GoapFusionPreflightNode() composes must be
+// schema-valid — every node type it composes must be a known node type — so the
+// production GoapFusionLoopTree() that embeds it (via PrependGoapFusionPreflight)
+// survives BuildAndValidate/ValidateTreeFull instead of breaking the moment it is
+// wired in.
+//
+// Every sibling test in this file only walks the composed tree and calls
+// GetAction — none ever validates the node's schema. That blind spot hides a live
+// defect: to make the two external NotebookLM guards non-fatal, the preflight now
+// wraps each in a Selector whose fallback child is an "AlwaysSucceed" node
+// (actions_superpowers.go). "AlwaysSucceed" is fully supported at runtime
+// (engine.buildNode returns a success leaf) and is already emitted by production
+// builders, yet it is absent from evolution.KnownNodeTypes — and both
+// evolution.SerializableNode.Validate and engine.ValidateTreeFull reject any node
+// whose Type is not in that map with `unknown node type "AlwaysSucceed"`. So the
+// structural contract tests stay green (they never validate) while a scheduled
+// cycle that passes the preflight through BuildAndValidate — the endpoint the
+// goap-fusion-loop-runner wiring reaches — would fail validation.
+//
+// This test asserts GoapFusionPreflightNode() reports zero schema-validation
+// errors. It fails today with `unknown node type "AlwaysSucceed"` (RED) and passes
+// once "AlwaysSucceed" is admitted as a known node type so the real schema is the
+// single source of truth (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this validation contract is pinned here at
+// the preflight builder's own package, ready for the domains tree to embed and
+// validate.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSchemaValid(t *testing.T) {
+	node := GoapFusionPreflightNode()
+
+	if errs := node.Validate(); len(errs) > 0 {
+		t.Fatalf("GoapFusionPreflightNode() is not schema-valid; every composed node type must be a known node type so the production tree that embeds it survives BuildAndValidate, but validation reported %d error(s):\n- %s", len(errs), strings.Join(errs, "\n- "))
+	}
+}

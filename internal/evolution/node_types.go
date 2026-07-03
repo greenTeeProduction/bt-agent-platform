@@ -75,6 +75,9 @@ var KnownNodeTypes = map[string]bool{
 	// Leaf nodes
 	"Action":    true,
 	"Condition": true,
+	// AlwaysSucceed — leaf that always returns success (engine.buildNode returns a
+	// success leaf); used to make optional guards non-fatal via Selector fallback.
+	"AlwaysSucceed": true,
 	// Chain nodes (langchaingo integration)
 	"ChainAction": true,
 	// Composition — resolved by blocks.Expand before BuildTree
