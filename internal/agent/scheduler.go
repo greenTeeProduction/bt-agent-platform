@@ -636,6 +636,10 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 				"duration":       duration.Truncate(time.Second).String(),
 				"failure_reason": failureReason,
 				"nodes":          nodesStr,
+				// Rendered verbatim by the bt-task-complete Telegram template
+				// as {data.summary} — the operator-facing "what did this run
+				// actually do" digest (headline, run/commit facts, step trail).
+				"summary": buildRunActivitySummary(output, failureReason, nodesStr),
 			},
 		})
 		whSpan.End()
