@@ -128,6 +128,15 @@ func registerBTFusionActions() {
 
 	RegisterAction("VerifyFusionBuild", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		// A bare main repo has no working tree to build: bt-fusion only wrote
+		// a vault report, on-disk source is gone, VCS stamping dies on git
+		// status — and `go build -o bt-agent` here would overwrite the LIVE
+		// daemon binary in place. Same delegation contract as VerifyGoapBuild.
+		if out, err := runGoapShell("git rev-parse --is-bare-repository"); err == nil && strings.TrimSpace(out) == "true" {
+			bb.Result += "\n\n## Verification Delegated\n\nMain repo is bare (no working tree to build); bt-fusion changed no repo source. Skipping stale-tree build."
+			setFusionState(bb, "verification", "delegated (bare main repo)")
+			return 1
+		}
 		testOut, testCode := runFusionShell("/usr/local/go/bin/go test ./internal/domains/ -run TestAllDomainTrees -count=1 -timeout 180s")
 		buildOut, buildCode := runFusionShell("/usr/local/go/bin/go build -o bt-agent ./cmd/bt-agent")
 		verification := fmt.Sprintf("go test exit=%d\n%s\n\ngo build exit=%d\n%s", testCode, testOut, buildCode, buildOut)
