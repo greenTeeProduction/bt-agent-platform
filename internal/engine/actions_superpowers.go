@@ -773,6 +773,39 @@ func goapFusionCircuitBreakerVerdict(hashes []string) (halt bool, window []strin
 	return tripped, window, repeated
 }
 
+// goapFusionCircuitPolicyVerdict is the single source of truth for the *entire*
+// CIRCUITPOLICY halt decision — folding BOTH halt conditions the P0 NotebookLM
+// research goal requires into one verdict so EvaluateScheduledGoapFusionCircuitBreaker
+// and RunScheduledGoapFusionLoop delegate their whole halt/continue decision here
+// instead of each re-implementing `streak >= goapFusionMaxNoopPatchStreak` inline.
+// It layers the consecutive-no-op-patch streak halt on top of the shared state-hash
+// circuit-breaker verdict:
+//
+//   - the repeated-state-hash cycle within the bounded window (via
+//     goapFusionCircuitBreakerVerdict) — the "Activity-Progress Confusion" cycle
+//     where the loop returned to a prior state without advancing the goal; and
+//   - a consecutive-no-op-patch streak at or over goapFusionMaxNoopPatchStreak —
+//     the no-op tail the state-hash scan alone cannot catch, where every published
+//     hash is distinct yet every proposed patch is a syntactically valid but empty
+//     no-op that never advances the goal.
+//
+// The state-hash cycle takes precedence: when it decides HALT the repeated hash is
+// reported with noopTripped=false; when the hashes are all distinct but the no-op
+// streak trips, HALT is decided with noopTripped=true and no repeated hash. A
+// future change to what counts as a trip — the window/dedup semantics, the `>=`
+// bound, or the halt decision itself — is made once here and reaches both callers
+// at once, closing the exact class of drift the extraction set out to eliminate.
+func goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool, window []string, repeated string, noopTripped bool) {
+	halt, window, repeated = goapFusionCircuitBreakerVerdict(hashes)
+	if halt {
+		return true, window, repeated, false
+	}
+	if noopStreak >= goapFusionMaxNoopPatchStreak {
+		return true, window, "", true
+	}
+	return false, window, "", false
+}
+
 // EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
 // CIRCUITPOLICY evaluation that enforces the P0 NotebookLM research goal:
 // detecting and halting state-transition cycles and repeated no-op patch
@@ -789,26 +822,23 @@ func init() {
 		bb := ctx.Blackboard
 
 		hashes := goapFusionStateHashes(bb)
+		streak := goapFusionNoopPatchStreak(bb)
 
-		// Delegate the entire CIRCUITPOLICY verdict — the bounded-window dedup scan
-		// AND the halt/continue decision — to the single shared helper both this
-		// breaker and RunScheduledGoapFusionLoop use, so the two can never drift on
-		// what counts as a trip.
-		halt, window, repeated := goapFusionCircuitBreakerVerdict(hashes)
+		// Delegate the *entire* CIRCUITPOLICY halt decision — the bounded-window dedup
+		// scan AND the consecutive-no-op-patch streak — to the single shared verdict
+		// both this breaker and RunScheduledGoapFusionLoop use, so the two can never
+		// drift on what counts as a trip. The no-op streak halt (a DISTINCT run of
+		// hashes where every proposed patch is a syntactically valid but empty no-op
+		// that never advances the goal — the "Activity-Progress Confusion" tail the
+		// bounded-window dedup never trips on) is now decided in the shared helper, not
+		// re-implemented inline here.
+		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdict(hashes, streak)
 		if halt {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", repeated, goapFusionCircuitHistoryWindow)
-			return -1
-		}
-
-		// Consecutive no-op-patch streak: the dedicated breaker must enforce the SAME
-		// halt policy the loop runner does from the single source of truth. A loop can
-		// publish an unbroken run of DISTINCT state hashes — so the bounded-window dedup
-		// above never trips — while every proposed patch is a no-op that never advances
-		// the goal. A bounded run of consecutive no-op patches must HALT the breaker too,
-		// or the dedicated gate and the loop runner drift on what counts as a trip and
-		// the "Activity-Progress Confusion" tail sails past this gate uncaught.
-		if streak := goapFusionNoopPatchStreak(bb); streak >= goapFusionMaxNoopPatchStreak {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so the bounded-window dedup never trips — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			if noopTripped {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so the bounded-window dedup never trips — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			} else {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", repeated, goapFusionCircuitHistoryWindow)
+			}
 			return -1
 		}
 
@@ -843,28 +873,25 @@ func init() {
 		bb := ctx.Blackboard
 
 		hashes := goapFusionStateHashes(bb)
+		streak := goapFusionNoopPatchStreak(bb)
 
-		// CIRCUITPOLICY: delegate the *entire* circuit-breaker verdict — both the
-		// bounded-window dedup scan and the halt/continue decision — to the same
-		// shared helper EvaluateScheduledGoapFusionCircuitBreaker uses, so the loop
-		// runner and the dedicated breaker enforce one identical halt DECISION from a
-		// single source of truth. The loop runner then layers only its own
-		// runaway-loop backstop below on top of this shared verdict.
-		halt, window, repeated := goapFusionCircuitBreakerVerdict(hashes)
+		// CIRCUITPOLICY: delegate the *entire* halt decision — the bounded-window dedup
+		// scan AND the consecutive-no-op-patch streak — to the same shared verdict
+		// EvaluateScheduledGoapFusionCircuitBreaker uses, so the loop runner and the
+		// dedicated breaker enforce one identical halt DECISION from a single source of
+		// truth. The no-op streak halt (a DISTINCT run of hashes where neither the
+		// repeated-hash breaker nor the runaway-loop backstop fires, yet every proposed
+		// patch is a syntactically valid but empty no-op — the "Activity-Progress
+		// Confusion" tail) is now decided in the shared helper, not re-implemented
+		// inline here. The loop runner then layers only its own runaway-loop backstop
+		// below on top of this shared verdict.
+		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdict(hashes, streak)
 		if halt {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", repeated, goapFusionCircuitHistoryWindow)
-			return -1
-		}
-
-		// Consecutive no-op-patch streak: the no-op-streak analogue of the
-		// repeated-state-hash breaker. A loop can publish an unbroken run of DISTINCT
-		// state hashes — so neither the repeated-hash breaker nor the runaway-loop
-		// backstop fires — while every proposed patch is a no-op that never advances
-		// the goal. A bounded run of consecutive no-op patches must still HALT the
-		// loop, breaking the "Activity-Progress Confusion" tail where the loop stays
-		// active producing syntactically valid but empty patches.
-		if streak := goapFusionNoopPatchStreak(bb); streak >= goapFusionMaxNoopPatchStreak {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so neither the repeated-hash circuit breaker nor the runaway-loop backstop fires — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			if noopTripped {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so neither the repeated-hash circuit breaker nor the runaway-loop backstop fires — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
+			} else {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", repeated, goapFusionCircuitHistoryWindow)
+			}
 			return -1
 		}
 

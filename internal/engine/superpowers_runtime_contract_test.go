@@ -740,6 +740,81 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircu
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicyVerdictFoldsNoopStreak
+// pins the LAST piece of single-source-of-truth the P0 NotebookLM research goal
+// requires: the *entire* CIRCUITPOLICY halt decision — the repeated-state-hash
+// cycle AND the consecutive-no-op-patch streak — must be decided in ONE shared
+// helper that both EvaluateScheduledGoapFusionCircuitBreaker and
+// RunScheduledGoapFusionLoop delegate to, not each re-implementing
+// `streak >= goapFusionMaxNoopPatchStreak` inline (actions_superpowers.go:810 in
+// the breaker, :866 in the loop runner). goapFusionCircuitBreakerVerdict already
+// centralizes the state-hash verdict precisely so the two callers "can never drift
+// on what counts as a trip," yet the no-op-streak halt is copy-pasted into both —
+// and its HALT messages have already diverged in wording. A future change to the
+// no-op semantics (`>=` vs `>`, the bound, the message) must currently be made in
+// two places, reintroducing the exact drift the surrounding comments claim to
+// eliminate.
+//
+// This test asserts a single shared verdict helper —
+// goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool,
+// window []string, repeated string, noopTripped bool) — exists and folds BOTH halt
+// conditions into one decision: it decides HALT on a repeated state hash within the
+// bounded window (reporting the repeated hash, noopTripped=false) and HALT on a
+// consecutive-no-op-patch streak at or over goapFusionMaxNoopPatchStreak even when
+// every state hash is distinct (noopTripped=true, no repeated hash), and CONTINUE
+// only when neither condition trips. It fails to compile until the folded verdict
+// helper is introduced (RED), and passes once both actions delegate their entire
+// CIRCUITPOLICY halt decision to it (GREEN). The public-action behavior of both
+// actions stays pinned by
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts,
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner, and
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches,
+// so after folding both continue to enforce identical semantics — now the entire
+// halt DECISION from a single source of truth.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicyVerdictFoldsNoopStreak(t *testing.T) {
+	// A repeated state hash within the bounded window with no no-op streak: the
+	// state-hash cycle alone decides HALT, reports the repeated hash, and marks the
+	// no-op condition as NOT the tripping cause.
+	halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdict([]string{"aaa", "bbb", "aaa"}, 0)
+	if !halt {
+		t.Fatalf("expected halt=true on a repeated state hash within the window, got false (window=%v)", window)
+	}
+	if repeated != "aaa" {
+		t.Fatalf("expected the repeated hash reported as %q, got %q", "aaa", repeated)
+	}
+	if noopTripped {
+		t.Fatalf("expected noopTripped=false when the halt is a state-hash cycle, got true")
+	}
+	if len(window) != 3 {
+		t.Fatalf("expected the returned window to hold all 3 hashes, got %d: %v", len(window), window)
+	}
+
+	// Distinct state hashes so the bounded-window dedup never trips, but a
+	// consecutive-no-op-patch streak at the bound: the folded no-op halt must decide
+	// HALT with noopTripped=true and no repeated hash — the "Activity-Progress
+	// Confusion" tail the state-hash scan alone cannot catch.
+	halt, _, repeated, noopTripped = goapFusionCircuitPolicyVerdict([]string{"aaa", "bbb", "ccc"}, goapFusionMaxNoopPatchStreak)
+	if !halt {
+		t.Fatalf("expected halt=true on a consecutive no-op-patch streak at the bound even with distinct hashes, got false")
+	}
+	if !noopTripped {
+		t.Fatalf("expected noopTripped=true when the halt is the consecutive no-op-patch streak, got false")
+	}
+	if repeated != "" {
+		t.Fatalf("expected no repeated hash reported for a no-op-streak halt, got %q", repeated)
+	}
+
+	// Distinct hashes and a streak BELOW the bound: neither condition trips, so the
+	// folded verdict must decide CONTINUE.
+	halt, _, _, noopTripped = goapFusionCircuitPolicyVerdict([]string{"aaa", "bbb", "ccc"}, goapFusionMaxNoopPatchStreak-1)
+	if halt {
+		t.Fatalf("expected halt=false on distinct hashes with a sub-bound no-op streak, got true")
+	}
+	if noopTripped {
+		t.Fatalf("expected noopTripped=false on a sub-bound no-op streak, got true")
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesRuntime
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the implementation-runtime guard —
