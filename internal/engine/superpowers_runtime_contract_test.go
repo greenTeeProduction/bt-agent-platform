@@ -1431,6 +1431,82 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSoftensRejectedContextLedger
+// pins the increment the "goap-fusion-loop-runner" goal actually requires to make
+// the preflight go live without regressing to a worse-than-no-op HALT: the fatal
+// VerifyScheduledGoapFusionRejectedContextLedger guard must be Selector-wrapped with
+// an AlwaysSucceed fallback, exactly mirroring the two NotebookLM guards at
+// actions_superpowers.go:1206-1233.
+//
+// The guard returns HALT (-1) when the rejected-context ledger is missing, unreadable,
+// or empty (actions_superpowers.go:642-654), and that ledger
+// (/mnt/ssd/clawd/wiki/bt-research/rejected-context-ledger.jsonl) is confirmed absent
+// on disk. The sibling test above (…ComposesRejectedContextLedger) only proves the
+// guard is composed ahead of the loop runner — but it is composed as a BARE Action
+// child of the hard preflight Sequence (actions_superpowers.go:1104-1107), so once
+// GoapFusionLoopTree() adopts WireGoapFusionLoopTree and the preflight goes live, the
+// guard's FAILURE propagates straight to the enclosing Sequence and HALTs the loop on
+// EVERY scheduled tick — a regression strictly worse than the current no-op.
+//
+// The NotebookLM guards already solved this exact problem: wrap the guard in a
+// Selector whose second child is an AlwaysSucceed node, so the guard still runs and
+// warns but its FAILURE is swallowed rather than propagated to the preflight Sequence.
+// This test asserts the rejected-context ledger guard is (1) wrapped in a Selector
+// rather than sitting bare in the Sequence and (2) that Selector carries an
+// AlwaysSucceed fallback ordered AFTER the guard. It fails today because the guard is a
+// bare Action child of the Sequence (RED) and passes once it is Selector-wrapped like
+// the NotebookLM guards (GREEN).
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSoftensRejectedContextLedger(t *testing.T) {
+	const guard = "VerifyScheduledGoapFusionRejectedContextLedger"
+
+	node := GoapFusionPreflightNode()
+
+	// Locate the guard's DIRECT parent so we can prove it is Selector-wrapped
+	// (non-fatal) rather than a bare Action child of the hard preflight Sequence.
+	var parentOf func(n, parent evolution.SerializableNode) (evolution.SerializableNode, bool)
+	parentOf = func(n, parent evolution.SerializableNode) (evolution.SerializableNode, bool) {
+		if n.Type == "Action" && n.Name == guard {
+			return parent, true
+		}
+		for _, c := range n.Children {
+			if p, ok := parentOf(c, n); ok {
+				return p, true
+			}
+		}
+		return evolution.SerializableNode{}, false
+	}
+
+	parent, found := parentOf(node, evolution.SerializableNode{})
+	if !found {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q guard at all; cannot assert it is softened", guard)
+	}
+
+	if parent.Type != "Selector" {
+		t.Fatalf("expected the fatal %q guard to be wrapped in a Selector (mirroring the NotebookLM guards at actions_superpowers.go:1206-1233) so a missing/empty rejected-context ledger does not HALT the newly-live preflight on every scheduled tick; its direct parent is a %q node instead, so the guard's FAILURE (-1) propagates to the hard preflight Sequence and halts the loop every tick", guard, parent.Type)
+	}
+
+	// The Selector must carry an AlwaysSucceed fallback ordered AFTER the guard, so
+	// the guard runs and warns but its FAILURE is swallowed rather than propagated.
+	guardIdx, fallbackIdx := -1, -1
+	for i, c := range parent.Children {
+		if c.Type == "Action" && c.Name == guard {
+			guardIdx = i
+		}
+		if c.Type == "AlwaysSucceed" {
+			fallbackIdx = i
+		}
+	}
+	if guardIdx < 0 {
+		t.Fatalf("the Selector wrapping %q no longer contains the guard as an Action child: %+v", guard, parent.Children)
+	}
+	if fallbackIdx < 0 {
+		t.Fatalf("expected an AlwaysSucceed fallback sibling in the Selector wrapping %q (mirroring the NotebookLM guards at actions_superpowers.go:1206-1233) so a missing ledger degrades to a warning instead of a HALT; got children %+v", guard, parent.Children)
+	}
+	if fallbackIdx <= guardIdx {
+		t.Fatalf("expected the AlwaysSucceed fallback (index %d) to be ordered AFTER the %q guard (index %d) in the Selector, so the guard is attempted first and only its FAILURE falls through to the always-succeeding fallback", fallbackIdx, guard, guardIdx)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesToolchain
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the Go-toolchain guard —

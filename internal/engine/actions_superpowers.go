@@ -1101,9 +1101,29 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionCircuitPolicy",
 			},
+			// VerifyScheduledGoapFusionRejectedContextLedger returns HALT (-1) when the
+			// rejected-context ledger is missing, unreadable, or empty — and that ledger
+			// is confirmed absent on disk. Once GoapFusionLoopTree() adopts
+			// WireGoapFusionLoopTree and this preflight goes live, a bare Action child
+			// here would propagate that FAILURE straight to the enclosing hard Sequence
+			// and HALT the loop on EVERY scheduled tick — a regression strictly worse
+			// than a no-op. The safety-drift replay is best-effort enrichment: wrap it in
+			// a Selector with an AlwaysSucceed fallback (mirroring the two NotebookLM
+			// guards below) so the guard still runs and warns but its FAILURE is swallowed
+			// rather than propagated to the preflight Sequence.
 			{
-				Type: "Action",
-				Name: "VerifyScheduledGoapFusionRejectedContextLedger",
+				Type: "Selector",
+				Name: "GoapFusionRejectedContextLedgerOptional",
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Action",
+						Name: "VerifyScheduledGoapFusionRejectedContextLedger",
+					},
+					{
+						Type: "AlwaysSucceed",
+						Name: "GoapFusionRejectedContextLedgerNonFatal",
+					},
+				},
 			},
 			{
 				Type: "Action",
