@@ -1318,6 +1318,48 @@ func PrependGoapFusionImplementationGate(implChildren []evolution.SerializableNo
 	return gated
 }
 
+// WireGoapFusionLoopTree is the whole-tree integration seam the
+// "goap-fusion-loop-runner" goal still lacks: a single entry point that returns a
+// fully-wired copy of the production GOAP fusion loop tree so the domains
+// GoapFusionLoopTree() can adopt BOTH the Phase-0 preflight AND the Claude
+// implementation circuit gate in one call, instead of applying the two list-level
+// primitives (PrependGoapFusionPreflight and PrependGoapFusionImplementationGate)
+// separately to two hand-isolated child lists — the manual, error-prone wiring the
+// recorded "registered but unwired" gap keeps re-opening.
+//
+// Given the production loop tree it (1) prepends GoapFusionPreflightNode() as the
+// tree's first child (via PrependGoapFusionPreflight) and (2) rewrites the
+// "ClaudeSuperpowersPath" implementation subtree's children via
+// PrependGoapFusionImplementationGate, so a detected Activity-Progress Confusion
+// cycle HALTs the path before RunSuperpowersClaudeImplementation shells out to
+// Claude Code.
+//
+// The engine package cannot import internal/domains (import cycle), but
+// domains -> engine is the safe direction, so this whole-tree wiring seam lives
+// here at the guards' own package. It rebuilds every node's child slice as it
+// descends, so it returns a freshly allocated tree and never mutates the caller's
+// input.
+func WireGoapFusionLoopTree(tree evolution.SerializableNode) evolution.SerializableNode {
+	var rewrite func(n evolution.SerializableNode) evolution.SerializableNode
+	rewrite = func(n evolution.SerializableNode) evolution.SerializableNode {
+		if len(n.Children) > 0 {
+			rewritten := make([]evolution.SerializableNode, len(n.Children))
+			for i, c := range n.Children {
+				rewritten[i] = rewrite(c)
+			}
+			n.Children = rewritten
+		}
+		if n.Name == "ClaudeSuperpowersPath" {
+			n.Children = PrependGoapFusionImplementationGate(n.Children)
+		}
+		return n
+	}
+
+	wired := rewrite(tree)
+	wired.Children = PrependGoapFusionPreflight(wired.Children)
+	return wired
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

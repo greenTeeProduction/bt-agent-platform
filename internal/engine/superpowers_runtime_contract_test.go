@@ -2894,3 +2894,173 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightDrives
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", cycle)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTree pins
+// the one integration seam the "goap-fusion-loop-runner" goal still lacks: a
+// single tree-level entry point that returns a fully-wired copy of the production
+// GOAP fusion loop tree, so the domains GoapFusionLoopTree() can adopt BOTH the
+// Phase-0 preflight AND the Claude-implementation circuit gate in one call.
+//
+// The apparatus is otherwise complete: GoapFusionPreflightNode() composes every
+// guard, the bounded loop runner, and the cycle driver; PrependGoapFusionPreflight
+// prepends that preflight as a loop's first child; and PrependGoapFusionImplementationGate
+// gates a Claude implementation child list with the CIRCUITPOLICY breaker + loop
+// runner. But those are TWO list-level primitives the caller must apply separately,
+// each to a different, hand-isolated child list — exactly the manual, error-prone
+// wiring the recorded "registered but unwired" gap ([[goap-fusion-preflight-unwired]])
+// keeps re-opening: every prior run grew the primitives without ever taking the one
+// step that makes a whole loop tree adopt them atomically. Nothing composes the two
+// into a single, schema-valid wired tree the domains package can embed without
+// duplicating the composition or navigating the nested implementation subtree by
+// hand.
+//
+// WireGoapFusionLoopTree closes that gap: given the production loop tree it (1)
+// prepends GoapFusionPreflightNode() as the tree's first child (via
+// PrependGoapFusionPreflight) and (2) rewrites the "ClaudeSuperpowersPath"
+// implementation subtree's children via PrependGoapFusionImplementationGate so a
+// detected Activity-Progress Confusion cycle HALTs the path before
+// RunSuperpowersClaudeImplementation shells out to Claude Code. It returns a fresh
+// tree and never mutates the caller's input.
+//
+// The engine package cannot import internal/domains (import cycle), but
+// domains -> engine is the safe direction, so this whole-tree wiring seam belongs
+// here at the guards' own package, ready for GoapFusionLoopTree() to adopt in one
+// call. It fails to compile until WireGoapFusionLoopTree is introduced (RED) and
+// passes once the seam returns the fully-wired tree (GREEN).
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTree(t *testing.T) {
+	const (
+		preflight      = "GoapFusionPreflight"
+		claudePath     = "ClaudeSuperpowersPath"
+		circuitBreaker = "EvaluateScheduledGoapFusionCircuitBreaker"
+		loopRunner     = "RunScheduledGoapFusionLoop"
+		planWriter     = "WriteSuperpowersImplementationPlan"
+		impl           = "RunSuperpowersClaudeImplementation"
+		setup          = "SetupFusionTools"
+	)
+
+	// A minimal mirror of the production GoapFusionLoop_Main tree: a setup action,
+	// then an ExecutionRouter Selector whose ClaudeSuperpowersPath sequence writes
+	// the plan and runs the Claude implementation behind a HumanApprovalGate.
+	tree := evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "GoapFusionLoop_Main",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: setup},
+			{
+				Type: "Selector",
+				Name: "ExecutionRouter",
+				Children: []evolution.SerializableNode{
+					{
+						Type: "Sequence",
+						Name: claudePath,
+						Children: []evolution.SerializableNode{
+							{Type: "Condition", Name: "HasNewGaps"},
+							{Type: "Action", Name: planWriter},
+							{
+								Type: "HumanApprovalGate",
+								Name: "ApproveGoapFusionApply",
+								Children: []evolution.SerializableNode{
+									{Type: "Action", Name: impl},
+									{Type: "Action", Name: "VerifyGoapBuild"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	wired := WireGoapFusionLoopTree(tree)
+
+	// (1) The Phase-0 preflight must be the tree's FIRST child, ahead of setup, so a
+	// scheduled cycle materializes a fresh tree and consults the bounded loop runner
+	// before it runs anything else.
+	if len(wired.Children) != len(tree.Children)+1 {
+		t.Fatalf("expected the Phase-0 preflight prepended (len %d), got %d: %+v", len(tree.Children)+1, len(wired.Children), wired.Children)
+	}
+	if wired.Children[0].Name != preflight {
+		t.Fatalf("expected the first wired child to be the %q Phase-0 preflight, got %q", preflight, wired.Children[0].Name)
+	}
+	if wired.Children[1].Name != setup {
+		t.Fatalf("expected the original %q setup child preserved immediately after the preflight, got %q", setup, wired.Children[1].Name)
+	}
+
+	// Locate the ClaudeSuperpowersPath subtree in the wired tree and flatten its
+	// Action nodes in traversal order.
+	var findPath func(n evolution.SerializableNode) (evolution.SerializableNode, bool)
+	findPath = func(n evolution.SerializableNode) (evolution.SerializableNode, bool) {
+		if n.Name == claudePath {
+			return n, true
+		}
+		for _, c := range n.Children {
+			if found, ok := findPath(c); ok {
+				return found, true
+			}
+		}
+		return evolution.SerializableNode{}, false
+	}
+	path, ok := findPath(wired)
+	if !ok {
+		t.Fatalf("WireGoapFusionLoopTree dropped the %q implementation subtree; the wiring must preserve the path it gates", claudePath)
+	}
+
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(path)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	cbIdx := indexOf(circuitBreaker)
+	loopIdx := indexOf(loopRunner)
+	planIdx := indexOf(planWriter)
+	implIdx := indexOf(impl)
+
+	// (2) The CIRCUITPOLICY gate must be prepended to the ClaudeSuperpowersPath
+	// implementation children, so the breaker + loop runner run before the plan
+	// writer and before Claude Code implements.
+	if cbIdx < 0 || loopIdx < 0 {
+		t.Fatalf("WireGoapFusionLoopTree did not gate the %q implementation path with the %q breaker and %q loop runner; a non-progressing loop could still shell out to Claude Code (order=%v)", claudePath, circuitBreaker, loopRunner, order)
+	}
+	if planIdx < 0 || implIdx < 0 {
+		t.Fatalf("WireGoapFusionLoopTree dropped the implementation nodes it must preserve (plan=%d impl=%d order=%v)", planIdx, implIdx, order)
+	}
+	if cbIdx >= loopIdx {
+		t.Fatalf("expected the %q breaker (index %d) to run BEFORE the %q loop runner (index %d), matching the gate ordering", circuitBreaker, cbIdx, loopRunner, loopIdx)
+	}
+	if loopIdx >= planIdx || loopIdx >= implIdx {
+		t.Fatalf("expected the CIRCUITPOLICY gate (breaker@%d, loop@%d) to run BEFORE the plan writer (index %d) and the Claude implementation (index %d), so a detected Activity-Progress Confusion cycle HALTs the path before Claude Code implements", cbIdx, loopIdx, planIdx, implIdx)
+	}
+
+	// (3) The wired tree must be schema-valid end-to-end so the production tree that
+	// embeds it survives BuildAndValidate.
+	if errs := wired.Validate(); len(errs) > 0 {
+		t.Fatalf("WireGoapFusionLoopTree produced a tree that is not schema-valid; every composed node type must be known so the production tree survives BuildAndValidate, but validation reported %d error(s):\n- %s", len(errs), strings.Join(errs, "\n- "))
+	}
+
+	// (4) The seam must not mutate the caller's input tree: the original first child
+	// is still the setup action and the original ClaudeSuperpowersPath still starts
+	// with its HasNewGaps condition (no gate prepended in place).
+	if tree.Children[0].Name != setup {
+		t.Fatalf("WireGoapFusionLoopTree mutated the caller's tree: first child is now %q, want %q", tree.Children[0].Name, setup)
+	}
+	origPath, ok := findPath(tree)
+	if !ok || len(origPath.Children) == 0 || origPath.Children[0].Name != "HasNewGaps" {
+		t.Fatalf("WireGoapFusionLoopTree mutated the caller's %q subtree: %+v", claudePath, origPath)
+	}
+}
