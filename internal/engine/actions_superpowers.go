@@ -493,6 +493,46 @@ func init() {
 	})
 }
 
+// VerifyScheduledGoapFusionGraphOutputWritable is the preflight guard for the
+// graphify report OUTPUT directory the unattended scheduled GOAP fusion cycle
+// regenerates its report into. The cycle's RunGraphifyUpdate step shells out to
+// `graphify update .`, which regenerates the graphify report
+// (goapFusionGraphReport) inside its output directory — the very report every
+// improvement gap is derived from. The existing VerifyScheduledGoapFusionGraphifyTool
+// guard only proves the `graphify` binary is resolvable on PATH, and
+// VerifyScheduledGoapFusionGraphReportPresent only proves the report already
+// holds content; neither confirms graphify can WRITE a fresh report. A scheduled
+// run could pass every current preflight yet still fail when that output
+// directory is missing or not writable, leaving RunGraphifyUpdate unable to
+// refresh the report so the cycle silently derives its gaps from a stale report
+// with no clear diagnosis. This guard closes that gap by requiring the graphify
+// report's output directory to be a writable directory before the automatic
+// research-to-implementation cycle proceeds — the graphify-output analogue of
+// the plans-, vault-, and syntheses-writable guards.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionGraphOutputWritable", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		graphOutputDir := filepath.Dir(goapFusionGraphReport)
+
+		info, err := os.Stat(graphOutputDir)
+		if err != nil || !info.IsDir() {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Output Writable Preflight Failed\n\nGraphify report output directory `%s` is not an accessible directory: %v", graphOutputDir, err)
+			return -1
+		}
+
+		probe := filepath.Join(graphOutputDir, ".goap-fusion-graph-output-write-probe")
+		if err := os.WriteFile(probe, []byte("probe"), 0o644); err != nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Output Writable Preflight Failed\n\nGraphify report output directory `%s` is not writable: %v; a scheduled run's RunGraphifyUpdate step could not refresh the report and would derive its gaps from a stale report.", graphOutputDir, err)
+			return -1
+		}
+		_ = os.Remove(probe)
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graph Output Writable Preflight Passed\n\nGraphify report output directory `%s` is a writable directory", graphOutputDir)
+		return 1
+	})
+}
+
 // VerifyScheduledGoapFusionNotebook is the preflight guard for the configured
 // NotebookLM notebook id the unattended scheduled GOAP fusion cycle queries
 // against. The VerifyScheduledGoapFusionNotebookLMTool guard only confirms the

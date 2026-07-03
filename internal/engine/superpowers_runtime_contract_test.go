@@ -2352,3 +2352,31 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphOutputWritable
+// asserts the presence of the preflight action that guards the graphify-report
+// OUTPUT directory the unattended scheduled GOAP fusion cycle regenerates its
+// report into. The existing writable guards cover the three directories the cycle
+// persists its own artifacts to — the plans directory
+// (VerifyScheduledGoapFusionPlansWritable), the vault directory
+// (VerifyScheduledGoapFusionVaultWritable), and the syntheses directory
+// (VerifyScheduledGoapFusionSynthesesWritable) — but nothing confirms the cycle
+// can persist the graphify report itself. The cycle's RunGraphifyUpdate step
+// shells out to `graphify update .`, which regenerates
+// `graphify-out/GRAPH_REPORT.md` (the directory of goapFusionGraphReport) — the
+// very report every improvement gap is derived from. The existing
+// VerifyScheduledGoapFusionGraphifyTool guard only proves the `graphify` binary is
+// resolvable on PATH, and VerifyScheduledGoapFusionGraphReportPresent only proves
+// the report already holds content; neither confirms graphify can WRITE a fresh
+// report. A scheduled run could pass every current preflight yet still fail when
+// that graphify-out directory is missing or not writable, leaving RunGraphifyUpdate
+// unable to refresh the report so the cycle silently derives its gaps from a stale
+// report with no clear diagnosis. This action closes that gap by requiring the
+// graphify report's output directory to be a writable directory before the
+// automatic research-to-implementation cycle proceeds — the graphify-output
+// analogue of the plans-, vault-, and syntheses-writable guards.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphOutputWritable(t *testing.T) {
+	if GetAction("VerifyScheduledGoapFusionGraphOutputWritable") == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGraphOutputWritable")
+	}
+}
