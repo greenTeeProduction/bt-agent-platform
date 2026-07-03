@@ -103,7 +103,7 @@ func buildGoalTaskSection(index int, goal string, files []string) string {
 	if len(pkgs) > 2 || len(files) > 6 {
 		risk = "high"
 	}
-	testCmd := fmt.Sprintf("/usr/local/go/bin/go test %s -count=1 -timeout 300s", strings.Join(pkgs, " "))
+	testCmd := fmt.Sprintf("/usr/local/go/bin/go test %s -short -count=1 -timeout 300s", strings.Join(pkgs, " "))
 
 	title := goal
 	if len(title) > 90 {
@@ -153,5 +153,5 @@ func changedPackagesTestCommand(changedFiles []string) string {
 	if len(pkgs) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("/usr/local/go/bin/go test %s -count=1 -timeout 300s", strings.Join(pkgs, " "))
+	return fmt.Sprintf("/usr/local/go/bin/go test %s -short -count=1 -timeout 300s", strings.Join(pkgs, " "))
 }

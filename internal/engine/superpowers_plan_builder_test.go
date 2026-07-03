@@ -106,6 +106,35 @@ func TestChangedPackagesTestCommandDerivesPackagesFromFiles(t *testing.T) {
 	}
 }
 
+// The generated go test commands must carry -short so goal-driven RED/GREEN
+// verification and the changed-packages check match the repo's make test
+// convention and skip LLM-gated / flaky full-package tests.
+func TestGoalDrivenPlanTestCommandsUseShort(t *testing.T) {
+	plan := buildGoalDrivenImplementationPlan(bigGoalTask)
+	tasks, err := ParseSuperpowersPlan(plan)
+	if err != nil {
+		t.Fatalf("parse: %v\n%s", err, plan)
+	}
+	for i, task := range tasks {
+		if len(task.Tests) == 0 {
+			t.Fatalf("task %d must have a test command", i+1)
+		}
+		if !strings.Contains(task.Tests[0], "-short") {
+			t.Fatalf("task %d test command must include -short, got %q", i+1, task.Tests[0])
+		}
+	}
+	if !strings.Contains(plan, "go test") || !strings.Contains(plan, "-short") {
+		t.Fatalf("generated plan must run go test with -short:\n%s", plan)
+	}
+}
+
+func TestChangedPackagesTestCommandUsesShort(t *testing.T) {
+	cmd := changedPackagesTestCommand([]string{"internal/engine/a.go"})
+	if !strings.Contains(cmd, "-short") {
+		t.Fatalf("changed-packages command must include -short, got %q", cmd)
+	}
+}
+
 func containsStr(list []string, want string) bool {
 	for _, v := range list {
 		if v == want {
