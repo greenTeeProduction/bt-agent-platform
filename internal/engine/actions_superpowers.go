@@ -942,7 +942,8 @@ func init() {
 // VerifyScheduledGoapFusionRejectedContextLedger safety-drift monotonicity guard,
 // then the VerifyScheduledGoapFusionRuntime guard, then the
 // VerifyScheduledGoapFusionToolchain Go-toolchain guard, then the
-// VerifyScheduledGoapFusionPlansWritable plan-output-location guard, all ahead of
+// VerifyScheduledGoapFusionPlansWritable plan-output-location guard, then the
+// VerifyScheduledGoapFusionGitTool git-binary guard, all ahead of
 // the bounded loop runner, so the scheduled cycle only drives another iteration
 // after the on-disk tree is proven fresh, the loop runner's CIRCUITPOLICY history
 // window is proven a positive, bounded value, the loop runner has consulted the
@@ -950,8 +951,9 @@ func init() {
 // ledger is proven present and readable so a high-fitness candidate cannot silently
 // re-admit a previously rejected unsafe context (the "Safety Drift" failure mode),
 // the Go toolchain the build+TDD step shells out to is proven an executable file,
-// and the plans directory the cycle writes its plan and failed patch into is proven
-// a writable directory.
+// the plans directory the cycle writes its plan and failed patch into is proven
+// a writable directory, and the `git` binary the implementation step commits and
+// publishes fixes with is proven resolvable on PATH.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
@@ -981,6 +983,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionPlansWritable",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionGitTool",
 			},
 			{
 				Type: "Action",

@@ -1005,6 +1005,87 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitTool
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the git-binary guard —
+// VerifyScheduledGoapFusionGitTool — as a runnable Action node ordered BEFORE
+// the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's
+// Superpowers implementation step shells out to `git` via runGoapShell — `git
+// checkout`, `git fetch origin`, `git pull origin master --ff-only`, `git
+// status`, `git stash`, `git diff`, `git reset --hard`, `git clean`, and `git
+// push origin master` — to synchronize, isolate, and publish every improvement.
+// VerifyScheduledGoapFusionGitTool is the guard whose own doc comment states a
+// scheduled run "could otherwise pass every tool guard (Claude Code, Go
+// toolchain, graphify, NotebookLM) yet still fail at the very first git sync
+// when `git` is not installed or not on PATH" — so it must prove the `git`
+// binary is resolvable on PATH before the loop runner drives a cycle whose
+// fixes it can never commit or publish. Yet GoapFusionPreflightNode() composes
+// only the build-tree materializer, the circuit-policy config guard, the
+// rejected-context ledger, the runtime guard, the toolchain guard, and the
+// plans-writable guard before the loop runner — never the git-tool guard — so a
+// scheduled cycle could gate on the loop runner and only then discover at the
+// first git operation that the `git` binary is absent, wasting the cycle with
+// no early diagnosis.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionGitTool as a registered Action node AND that it is
+// ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the git-tool guard (RED) and passes once the git-tool guard is inserted ahead
+// of the loop runner (GREEN). The engine package cannot import internal/domains
+// (import cycle), so this runnable-composition contract is pinned here at the
+// action's own package, ready for the domains tree to embed as its Phase-0
+// preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitTool(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionGitTool"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q git-binary guard as a runnable Action node; the preflight drives the loop runner without first proving the `git` binary is resolvable on PATH, so a scheduled cycle would only discover its git binary is missing at the first git sync of the implementation step", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the git-tool guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q git-binary guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the `git` binary the implementation step needs to commit and publish fixes is proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesRejectedContextLedger
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the safety-drift monotonicity guard —
