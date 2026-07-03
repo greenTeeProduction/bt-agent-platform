@@ -688,6 +688,33 @@ func init() {
 	})
 }
 
+// goapFusionCircuitBreakerWindow is the single shared CIRCUITPOLICY bounded-window
+// dedup that both EvaluateScheduledGoapFusionCircuitBreaker and
+// RunScheduledGoapFusionLoop delegate to, so the two actions can never drift into
+// enforcing different halt policies. It slices the recent state-hash history down
+// to the most recent goapFusionCircuitHistoryWindow entries (the PatchBoard 3-hash
+// window) and scans for the first state hash that repeats within that bounded
+// window — the "Activity-Progress Confusion" cycle where the loop returned to a
+// prior state without advancing the goal. It returns the bounded window it
+// inspected, the repeated hash (empty when none repeats), and whether the breaker
+// tripped. A future change to the window/dedup semantics made here reaches both
+// callers at once.
+func goapFusionCircuitBreakerWindow(hashes []string) (window []string, repeated string, tripped bool) {
+	window = hashes
+	if len(window) > goapFusionCircuitHistoryWindow {
+		window = window[len(window)-goapFusionCircuitHistoryWindow:]
+	}
+
+	seen := make(map[string]struct{}, len(window))
+	for _, h := range window {
+		if _, dup := seen[h]; dup {
+			return window, h, true
+		}
+		seen[h] = struct{}{}
+	}
+	return window, "", false
+}
+
 // EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
 // CIRCUITPOLICY evaluation that enforces the P0 NotebookLM research goal:
 // detecting and halting state-transition cycles and repeated no-op patch
@@ -706,19 +733,13 @@ func init() {
 		hashes := goapFusionStateHashes(bb)
 
 		// Inspect only the bounded, most-recent window — the PatchBoard 3-hash
-		// history the CIRCUITPOLICY monitors.
-		window := hashes
-		if len(window) > goapFusionCircuitHistoryWindow {
-			window = window[len(window)-goapFusionCircuitHistoryWindow:]
-		}
-
-		seen := make(map[string]struct{}, len(window))
-		for _, h := range window {
-			if _, dup := seen[h]; dup {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", h, goapFusionCircuitHistoryWindow)
-				return -1
-			}
-			seen[h] = struct{}{}
+		// history the CIRCUITPOLICY monitors — via the single shared helper both
+		// this breaker and RunScheduledGoapFusionLoop delegate to, so the two can
+		// never drift.
+		window, repeated, tripped := goapFusionCircuitBreakerWindow(hashes)
+		if tripped {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nRepeated state hash %q detected within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting to avoid wasting tokens on redundant no-op patches.", repeated, goapFusionCircuitHistoryWindow)
+			return -1
 		}
 
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: CONTINUE\n\nThe most recent %d state hash(es) are distinct and progress-making; no state-transition cycle or repeated no-op patch detected.", len(window))
@@ -755,18 +776,14 @@ func init() {
 
 		// CIRCUITPOLICY: inspect only the bounded, most-recent window — the
 		// PatchBoard 3-hash history the circuit breaker monitors — and HALT on a
-		// repeated state hash (the Activity-Progress Confusion cycle).
-		window := hashes
-		if len(window) > goapFusionCircuitHistoryWindow {
-			window = window[len(window)-goapFusionCircuitHistoryWindow:]
-		}
-		seen := make(map[string]struct{}, len(window))
-		for _, h := range window {
-			if _, dup := seen[h]; dup {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", h, goapFusionCircuitHistoryWindow)
-				return -1
-			}
-			seen[h] = struct{}{}
+		// repeated state hash (the Activity-Progress Confusion cycle). This
+		// delegates to the same shared helper EvaluateScheduledGoapFusionCircuitBreaker
+		// uses, so the loop runner and the dedicated breaker enforce one identical
+		// halt policy from a single source of truth.
+		window, repeated, tripped := goapFusionCircuitBreakerWindow(hashes)
+		if tripped {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nCircuit breaker tripped: repeated state hash %q within the bounded history window (size %d); the continuous loop returned to a prior state without advancing the goal — the \"Activity-Progress Confusion\" cycle. Halting instead of driving another redundant no-op cycle.", repeated, goapFusionCircuitHistoryWindow)
+			return -1
 		}
 
 		// Runaway-loop backstop: even when every state hash is distinct — so the

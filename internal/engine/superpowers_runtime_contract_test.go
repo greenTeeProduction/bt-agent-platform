@@ -561,3 +561,60 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *t
 		t.Fatalf("expected CONTINUE (1) on a short window of distinct state hashes, got %d", status)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircuitBreakerWindow
+// pins the drift-elimination the P0 NotebookLM research goal requires: the
+// bounded-window dedup that decides "did a state hash repeat within the most
+// recent goapFusionCircuitHistoryWindow hashes?" must live in ONE shared helper
+// that both EvaluateScheduledGoapFusionCircuitBreaker and RunScheduledGoapFusionLoop
+// call — not two independent verbatim copies (actions_superpowers.go:709-722 and
+// :759-770). Two copies of the exact same CIRCUITPOLICY semantics silently
+// drift: a future fix to the window logic applied to one action (e.g. widening
+// goapFusionCircuitHistoryWindow handling or scanning full history) would not
+// reach the other, and the loop runner — "the kernel the whole apparatus exists
+// to protect" — could then enforce a different halt policy than the dedicated
+// breaker.
+//
+// This test asserts the extracted helper exists and correctly implements the
+// bounded window + first-repeat dedup, so the two actions provably share it. It
+// fails to compile until the shared helper is introduced (RED), and passes once
+// the window/dedup is extracted into one function both actions delegate to
+// (GREEN). The public-action behavior of both actions is already pinned by
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts
+// and TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner, so
+// after extraction both continue to enforce identical semantics — now from a
+// single source of truth.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircuitBreakerWindow(t *testing.T) {
+	// A state hash that repeats within the bounded most-recent window is the
+	// "Activity-Progress Confusion" cycle: the shared helper must report the
+	// repeated hash and that the breaker is tripped.
+	window, repeated, tripped := goapFusionCircuitBreakerWindow([]string{"aaa", "bbb", "aaa"})
+	if !tripped {
+		t.Fatalf("expected tripped=true on a repeated state hash within the window, got false (window=%v)", window)
+	}
+	if repeated != "aaa" {
+		t.Fatalf("expected the repeated hash to be reported as %q, got %q", "aaa", repeated)
+	}
+	if len(window) != 3 {
+		t.Fatalf("expected the returned window to hold all 3 hashes (window size %d), got %d: %v", goapFusionCircuitHistoryWindow, len(window), window)
+	}
+
+	// A window of only distinct, progress-making hashes must not trip the shared
+	// dedup.
+	if _, _, tripped := goapFusionCircuitBreakerWindow([]string{"aaa", "bbb", "ccc"}); tripped {
+		t.Fatalf("expected tripped=false on a window of distinct state hashes, got true")
+	}
+
+	// The dedup is BOUNDED: only the most recent goapFusionCircuitHistoryWindow
+	// (3) hashes are inspected. Here the earlier "aaa" falls outside the last-3
+	// window ["bbb","ccc","aaa"], so the two "aaa" occurrences are not both in the
+	// window and the breaker must NOT trip. This is the exact window-slicing
+	// semantics the extraction must preserve for both actions.
+	boundedWindow, _, boundedTripped := goapFusionCircuitBreakerWindow([]string{"aaa", "bbb", "ccc", "aaa"})
+	if boundedTripped {
+		t.Fatalf("expected tripped=false when the repeat lies outside the bounded window, got true (window=%v)", boundedWindow)
+	}
+	if len(boundedWindow) != goapFusionCircuitHistoryWindow {
+		t.Fatalf("expected the bounded window to hold the most recent %d hashes, got %d: %v", goapFusionCircuitHistoryWindow, len(boundedWindow), boundedWindow)
+	}
+}
