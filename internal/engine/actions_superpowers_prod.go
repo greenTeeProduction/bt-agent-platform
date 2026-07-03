@@ -729,14 +729,25 @@ func registerSuperpowersProductionActions() {
 	RegisterAction("RunSuperpowersRuntimeFromExistingPlan", runSuperpowersRuntimeFromExistingPlanAction)
 	RegisterAction("RunSuperpowersClaudeImplementation", runSuperpowersRuntimeFromExistingPlanAction)
 
-	// RunScheduledGoapFusionCycle drives the research-to-implementation cycle
-	// end-to-end: the GOAP fusion stage reads vault research and the graphify
-	// report, identifies improvement gaps, prioritizes goals, and writes a
-	// Superpowers implementation plan; this action then implements that plan via
-	// the Superpowers runtime (Claude Code execution, TDD verification, apply, and
-	// finish reporting). It reuses the existing-plan runtime so the scheduled
-	// cycle shares the same durable, idempotent execution path.
-	RegisterAction("RunScheduledGoapFusionCycle", runSuperpowersRuntimeFromExistingPlanAction)
+	// RunScheduledGoapFusionCycle sits at the END of the Phase-0 preflight —
+	// BEFORE the main sequence's research/gap-analysis/plan steps have run.
+	// Its job is only to RESUME a plan saved by an earlier (e.g. rate-limited)
+	// cycle. Without a saved plan it must no-op succeed and let the main
+	// sequence drive research→plan→implement: registering it as a bare alias
+	// of the existing-plan runtime made every wired scheduled cycle die in
+	// ~120ms with "No existing plan path found" (2026-07-03 23:00/23:30).
+	RegisterAction("RunScheduledGoapFusionCycle", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		planPath, _ := bb.ChainState["goap_fusion_superpowers_plan_path"].(string)
+		if planPath == "" {
+			planPath, _ = bb.ChainState["plan_path"].(string)
+		}
+		if planPath == "" {
+			bb.Result = "## Scheduled GOAP Fusion Cycle\n\nPreflight passed; no saved plan to resume — the main cycle will research, plan, and implement."
+			return 1
+		}
+		return runSuperpowersRuntimeFromExistingPlanAction(ctx)
+	})
 
 	RegisterAction("ClassifyTaskKind", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
