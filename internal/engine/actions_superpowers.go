@@ -1028,6 +1028,16 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionSynthesesWritable",
 			},
+			// The finer-grained ResearchPresent (vault holds ≥1 file) and
+			// GraphReportPresent (report holds content) guards each refine this
+			// foundational existence guard, which only confirms the vault research
+			// directory and graphify report exist at all. Compose that foundational
+			// guard here — ahead of the content refinements — so a scheduled cycle
+			// proves its research inputs exist before it derives a plan from them.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionInputs",
+			},
 			// VaultWritable only proves the vault is a writable directory; a vault that
 			// exists but holds zero research files would still pass it, letting a
 			// scheduled cycle plan from an empty corpus. Prove the vault holds at least

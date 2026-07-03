@@ -2035,6 +2035,85 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesInputs
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the coarse research-inputs guard —
+// VerifyScheduledGoapFusionInputs — as a runnable Action node ordered BEFORE the
+// bounded loop runner it protects.
+//
+// VerifyScheduledGoapFusionInputs is the original, coarsest preflight guard: it
+// confirms the two research inputs the whole scheduled cycle reads from — the
+// vault research directory and the graphify report — actually exist before the
+// cycle's ReadVaultResearch step and gap analysis derive an implementation plan
+// from them, so a scheduled run fails fast with a clear "inputs missing"
+// diagnosis instead of silently producing a plan from missing context. It is the
+// foundational input guard the finer-grained VerifyScheduledGoapFusionResearchPresent
+// (vault holds ≥1 file) and VerifyScheduledGoapFusionGraphReportPresent (report
+// holds content) guards refine — their own doc comments each open by noting that
+// "VerifyScheduledGoapFusionInputs only confirms" existence, not content. Yet
+// GoapFusionPreflightNode() composes those refinements while never composing the
+// foundational existence guard itself: VerifyScheduledGoapFusionInputs is
+// registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionInputs) yet wired
+// into no composed tree, so it can never run in a scheduled cycle — the exact
+// "registered but unwired" gap the preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionInputs as a registered Action node AND that it is
+// ordered before RunScheduledGoapFusionLoop. It fails while the builder omits the
+// inputs guard (RED) and passes once the inputs guard is composed ahead of the
+// loop runner (GREEN). The engine package cannot import internal/domains (import
+// cycle), so this runnable-composition contract is pinned here at the action's
+// own package, ready for the domains tree to embed as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesInputs(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionInputs"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q research-inputs guard as a runnable Action node; the preflight drives the loop runner without first proving the vault research directory and graphify report exist, so a scheduled cycle would silently produce a plan from missing research context", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the inputs guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q research-inputs guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the vault research directory and graphify report the cycle reads from are proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphReportPresent
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the graphify-report-content guard —
