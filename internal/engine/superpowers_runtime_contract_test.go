@@ -2380,3 +2380,84 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphOutputWrit
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionGraphOutputWritable")
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphOutputWritable
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the graphify-report-OUTPUT-location guard —
+// VerifyScheduledGoapFusionGraphOutputWritable — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's
+// RunGraphifyUpdate step shells out to `graphify update .`, which regenerates the
+// graphify report inside its output directory (the directory of
+// goapFusionGraphReport) — the very report every improvement gap is derived from.
+// VerifyScheduledGoapFusionGraphOutputWritable is the guard whose own doc comment
+// states a scheduled run "could pass every current preflight yet still fail when
+// that output directory is missing or not writable, leaving RunGraphifyUpdate
+// unable to refresh the report so the cycle silently derives its gaps from a stale
+// report" — so it must prove the graphify output directory is a writable directory
+// before the loop runner drives a cycle whose refreshed report it can never
+// persist. Yet the guard is registered and unit-tested (the sibling
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphOutputWritable
+// only asserts GetAction != nil) but never composed into GoapFusionPreflightNode()
+// — every OTHER writable guard (plans, vault, syntheses) and content/tool guard is
+// already wired ahead of the loop runner, so this one guard alone can never run in
+// a scheduled cycle, exactly the "registered but never embedded" defect the whole
+// preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionGraphOutputWritable as a registered Action node AND that
+// it is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the graphify-output-writable guard (RED) and passes once that guard is inserted
+// ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is pinned
+// here at the action's own package, ready for the domains tree to embed as its
+// Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphOutputWritable(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionGraphOutputWritable"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q graphify-output-location guard as a runnable Action node; the preflight drives the loop runner without first proving the graphify report's output directory is writable, so a scheduled cycle would only discover at RunGraphifyUpdate that it cannot refresh the report and derive its gaps from a stale report", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the graphify-output-writable guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q graphify-output-location guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the output location RunGraphifyUpdate refreshes the report into is proven writable before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}

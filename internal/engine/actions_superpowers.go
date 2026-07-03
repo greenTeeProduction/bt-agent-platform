@@ -1145,6 +1145,20 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionGraphReportPresent",
 			},
+			// GraphReportPresent only proves the report currently holds content; it
+			// says nothing about whether the cycle's RunGraphifyUpdate step can refresh
+			// that report. Once RunScheduledGoapFusionLoop decides CONTINUE, the cycle
+			// regenerates the report inside its output directory — the very report every
+			// improvement gap is derived from — so a run could pass every content guard
+			// yet still fail at RunGraphifyUpdate when that output directory is missing
+			// or unwritable, leaving the cycle to derive its gaps from a stale report.
+			// Prove the graphify report's output directory is a writable directory
+			// before the loop runner drives another iteration — the graphify-output
+			// analogue of the PlansWritable/VaultWritable/SynthesesWritable guards.
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionGraphOutputWritable",
+			},
 			// The two NotebookLM guards are optional enrichment: an absent `nlm`
 			// binary or an unset notebook id must NOT abort the scheduled cycle,
 			// which still degrades cleanly to vault research. Each is Selector-wrapped
