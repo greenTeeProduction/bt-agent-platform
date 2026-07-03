@@ -134,6 +134,8 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 	if schedule == "" || schedule == "on_demand" {
 		for id, existing := range s.jobs {
 			if existing.AgentName == agentName {
+				slog.Warn("scheduler: deleting job (agent set to on_demand via Schedule)",
+					"job_id", id, "agent", agentName, "run_count", existing.RunCount)
 				delete(s.jobs, id)
 			}
 		}
@@ -304,9 +306,12 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.jobs[jobID]; !ok {
+	job, ok := s.jobs[jobID]
+	if !ok {
 		return fmt.Errorf("job %q not found", jobID)
 	}
+	slog.Warn("scheduler: deleting job (RemoveJob call)",
+		"job_id", jobID, "agent", job.AgentName, "run_count", job.RunCount)
 	delete(s.jobs, jobID)
 	s.saveStateLocked()
 	return nil
@@ -408,6 +413,9 @@ func (s *Scheduler) ReconcileWithRegistry() {
 	}
 
 	agents := s.reg.List()
+	if len(agents) == 0 {
+		slog.Warn("scheduler: reconcile sees EMPTY registry — every persisted job would be dropped")
+	}
 	defs := make(map[string]Definition, len(agents))
 	for _, inst := range agents {
 		defs[inst.Definition.Name] = inst.Definition
@@ -430,6 +438,8 @@ func (s *Scheduler) ReconcileWithRegistry() {
 		}
 		sched := def.Schedule
 		if sched == "on_demand" {
+			slog.Warn("scheduler: deleting job (registry YAML says on_demand)",
+				"job_id", id, "agent", job.AgentName, "run_count", job.RunCount)
 			delete(s.jobs, id)
 			continue
 		}
