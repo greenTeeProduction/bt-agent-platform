@@ -940,18 +940,23 @@ func init() {
 // preflight. It sequences the materializer guard — the concrete, observed
 // defect — then the VerifyScheduledGoapFusionCircuitPolicy config guard, then the
 // VerifyScheduledGoapFusionRejectedContextLedger safety-drift monotonicity guard,
-// all ahead of the bounded loop runner, so the scheduled cycle only drives another
-// iteration after the on-disk tree is proven fresh, the loop runner's
-// CIRCUITPOLICY history window is proven a positive, bounded value, the loop
-// runner has consulted the circuit-breaker window / runaway-loop backstop, and the
-// persistent rejected-context ledger is proven present and readable so a
-// high-fitness candidate cannot silently re-admit a previously rejected unsafe
-// context (the "Safety Drift" failure mode).
+// then the VerifyScheduledGoapFusionRuntime guard, then the
+// VerifyScheduledGoapFusionToolchain Go-toolchain guard, then the
+// VerifyScheduledGoapFusionPlansWritable plan-output-location guard, all ahead of
+// the bounded loop runner, so the scheduled cycle only drives another iteration
+// after the on-disk tree is proven fresh, the loop runner's CIRCUITPOLICY history
+// window is proven a positive, bounded value, the loop runner has consulted the
+// circuit-breaker window / runaway-loop backstop, the persistent rejected-context
+// ledger is proven present and readable so a high-fitness candidate cannot silently
+// re-admit a previously rejected unsafe context (the "Safety Drift" failure mode),
+// the Go toolchain the build+TDD step shells out to is proven an executable file,
+// and the plans directory the cycle writes its plan and failed patch into is proven
+// a writable directory.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
 		Name:        "GoapFusionPreflight",
-		Description: "Phase-0 preflight for the scheduled GOAP fusion loop; materializes the on-disk build tree to HEAD, proves the circuit policy and rejected-context ledger, verifies the implementation runtime (repository working directory and Claude Code binary), then gates the cycle on the bounded loop runner before it builds and TDD-verifies another iteration.",
+		Description: "Phase-0 preflight for the scheduled GOAP fusion loop; materializes the on-disk build tree to HEAD, proves the circuit policy and rejected-context ledger, verifies the implementation runtime (repository working directory and Claude Code binary), proves the Go toolchain the build+TDD step uses is executable and the plans directory the cycle writes into is writable, then gates the cycle on the bounded loop runner before it builds and TDD-verifies another iteration.",
 		Children: []evolution.SerializableNode{
 			{
 				Type: "Action",
@@ -968,6 +973,14 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionRuntime",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionToolchain",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionPlansWritable",
 			},
 			{
 				Type: "Action",

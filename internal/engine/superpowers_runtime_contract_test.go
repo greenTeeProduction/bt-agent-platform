@@ -1081,3 +1081,158 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesToolchain
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the Go-toolchain guard —
+// VerifyScheduledGoapFusionToolchain — as a runnable Action node ordered BEFORE
+// the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's build
+// and TDD verification step shells out to the hardcoded Go toolchain
+// (goapFusionGoBin) to compile and test every improvement.
+// VerifyScheduledGoapFusionToolchain is the guard whose own doc comment states a
+// scheduled run "could pass every other preflight yet still fail at verification
+// when that toolchain is missing or not executable" — so it must prove the Go
+// toolchain binary is an executable file before the loop runner drives a cycle
+// it can never build. Yet GoapFusionPreflightNode() composes only the build-tree
+// materializer, the circuit-policy config guard, the rejected-context ledger,
+// and the runtime guard before the loop runner — never the toolchain guard — so
+// a scheduled cycle could gate on the loop runner and only then discover at the
+// build+TDD step that the Go toolchain it needs is absent, wasting the cycle
+// with no early diagnosis.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionToolchain as a registered Action node AND that it is
+// ordered before RunScheduledGoapFusionLoop. It fails while the builder omits the
+// toolchain guard (RED) and passes once the toolchain guard is inserted ahead of
+// the loop runner (GREEN). The engine package cannot import internal/domains
+// (import cycle), so this runnable-composition contract is pinned here at the
+// action's own package, ready for the domains tree to embed as its Phase-0
+// preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesToolchain(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionToolchain"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q Go-toolchain guard as a runnable Action node; the preflight drives the loop runner without first proving the Go toolchain binary is an executable file, so a scheduled cycle would only discover its toolchain is missing at the build+TDD step", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the toolchain guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q Go-toolchain guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the toolchain the build+TDD step needs is proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesPlansWritable
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the plan-output-location guard —
+// VerifyScheduledGoapFusionPlansWritable — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle writes a
+// Superpowers implementation plan and, on an incomplete Claude run, saves the
+// failed patch into the plans directory (goapFusionPlansDir).
+// VerifyScheduledGoapFusionPlansWritable is the guard whose own doc comment
+// states a scheduled run "could pass every other preflight yet still fail when
+// that plans directory is missing or not writable, losing its plan and patch
+// with no clear diagnosis" — so it must prove the plans directory is a writable
+// directory before the loop runner drives a cycle whose output it can never
+// persist. Yet GoapFusionPreflightNode() composes only the build-tree
+// materializer, the circuit-policy config guard, the rejected-context ledger,
+// and the runtime guard before the loop runner — never the plans-writable guard
+// — so a scheduled cycle could gate on the loop runner and only then discover at
+// the plan/patch output step that its output location is unwritable, wasting the
+// cycle with no early diagnosis.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionPlansWritable as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the plans-writable guard (RED) and passes once the plans-writable guard is
+// inserted ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed
+// as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesPlansWritable(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionPlansWritable"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q plan-output-location guard as a runnable Action node; the preflight drives the loop runner without first proving the plans directory is a writable directory, so a scheduled cycle would only discover its output location is unwritable at the plan/patch output step", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the plans-writable guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q plan-output-location guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the output location the cycle persists its plan and patch to is proven writable before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
