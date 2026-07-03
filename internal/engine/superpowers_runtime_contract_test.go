@@ -1317,3 +1317,92 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitRemote
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the git-`origin`-remote guard —
+// VerifyScheduledGoapFusionGitRemote — as a runnable Action node ordered BEFORE
+// the bounded loop runner it protects, and immediately AFTER the git-binary
+// guard that is its own stated prerequisite.
+//
+// Once RunScheduledGoapFusionLoop decides CONTINUE, the scheduled cycle's
+// Superpowers implementation step synchronizes its worktree against origin
+// before letting Claude implement (`git fetch origin`, `git pull origin master
+// --ff-only`) and publishes the result afterwards (`git push origin master`).
+// The already-composed VerifyScheduledGoapFusionGitTool guard only proves the
+// `git` binary is resolvable on PATH; its own doc comment names
+// VerifyScheduledGoapFusionGitRemote as the successor guard that proves the
+// `origin` remote is actually configured. Without it a scheduled run could pass
+// the git-binary guard yet still fail at the fetch/pull sync
+// (goap_fusion_preflight_failed) — or silently degrade at push — when `origin`
+// is unconfigured or unreachable, wasting the cycle with no early diagnosis. Yet
+// GoapFusionPreflightNode() composes the git-binary guard and the loop runner but
+// never the git-remote guard, so a scheduled cycle could gate on the loop runner
+// and only then discover at the first origin sync that no remote is configured.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionGitRemote as a registered Action node, that it is
+// ordered before RunScheduledGoapFusionLoop, and that it follows the git-binary
+// guard it depends on. It fails while the builder omits the git-remote guard
+// (RED) and passes once the git-remote guard is inserted after the git-tool guard
+// and ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed
+// as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitRemote(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionGitRemote"
+		gitTool    = "VerifyScheduledGoapFusionGitTool"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects
+	// and follow the git-binary guard it depends on).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	gitToolIdx := indexOf(gitTool)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q git-`origin`-remote guard as a runnable Action node; the preflight drives the loop runner without first proving the `origin` remote is configured, so a scheduled cycle would only discover its remote is missing at the first origin fetch/pull sync of the implementation step", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the git-remote guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q git-`origin`-remote guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the `origin` remote the implementation step syncs and publishes against is proven configured before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+	if gitToolIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q git-binary guard; the git-remote guard's prerequisite must run before it", gitTool)
+	}
+	if gitToolIdx >= guardIdx {
+		t.Fatalf("expected the %q git-binary guard (index %d) to be composed BEFORE the %q git-remote guard (index %d), so a missing `git` binary is diagnosed as its real cause rather than surfacing as a misleading \"origin remote is not configured\" failure", gitTool, gitToolIdx, guard, guardIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}
