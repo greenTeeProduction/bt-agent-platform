@@ -1739,3 +1739,88 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsN
 		}
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphifyTool
+// pins the next increment the "goap-fusion-loop-runner" goal requires: the
+// Phase-0 preflight node must compose the graphify-tool guard —
+// VerifyScheduledGoapFusionGraphifyTool — as a runnable Action node ordered
+// BEFORE the bounded loop runner it protects.
+//
+// The scheduled cycle's whole purpose is to read the vault research and the
+// graphify report and derive its improvement gaps from them; the cycle's
+// RunGraphifyUpdate step shells out to the external `graphify` command to
+// regenerate that report before the gaps are derived.
+// VerifyScheduledGoapFusionGraphifyTool is the guard whose own doc comment
+// states a scheduled run "could pass every other preflight yet still fail when
+// the graphify tool is not installed or not on PATH, leaving the cycle's gap
+// analysis grounded in a stale report with no clear diagnosis" — so it must
+// prove the `graphify` tool is resolvable on PATH before the loop runner drives
+// a cycle whose report it can never refresh. Yet GoapFusionPreflightNode()
+// composes the build-tree materializer, the circuit-policy config guard, the
+// rejected-context ledger, the runtime, toolchain, plans-writable, git-tool,
+// git-remote, vault-writable, and the two NotebookLM guards before the loop
+// runner — never the graphify-tool guard — so a scheduled cycle could gate on
+// the loop runner and only then discover at the RunGraphifyUpdate step that the
+// `graphify` tool is absent, wasting the cycle and deriving its gaps from a
+// stale report with no early diagnosis. VerifyScheduledGoapFusionGraphifyTool is
+// registered and unit-tested
+// (TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGraphifyTool) yet
+// wired into no composed tree, so it can never run in a scheduled cycle — the
+// exact "registered but unwired" gap the preflight apparatus exists to close.
+//
+// This test asserts the preflight sequence references
+// VerifyScheduledGoapFusionGraphifyTool as a registered Action node AND that it
+// is ordered before RunScheduledGoapFusionLoop. It fails while the builder omits
+// the graphify-tool guard (RED) and passes once the graphify-tool guard is
+// composed ahead of the loop runner (GREEN). The engine package cannot import
+// internal/domains (import cycle), so this runnable-composition contract is
+// pinned here at the action's own package, ready for the domains tree to embed
+// as its Phase-0 preflight.
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGraphifyTool(t *testing.T) {
+	const (
+		guard      = "VerifyScheduledGoapFusionGraphifyTool"
+		loopRunner = "RunScheduledGoapFusionLoop"
+	)
+
+	node := GoapFusionPreflightNode()
+
+	// Flatten the composed Action nodes in traversal order so we can assert both
+	// presence and ordering (the guard must precede the loop runner it protects).
+	var order []string
+	var collect func(n evolution.SerializableNode)
+	collect = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			order = append(order, n.Name)
+		}
+		for _, c := range n.Children {
+			collect(c)
+		}
+	}
+	collect(node)
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	guardIdx := indexOf(guard)
+	loopIdx := indexOf(loopRunner)
+
+	if guardIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q graphify-tool guard as a runnable Action node; the preflight drives the loop runner without first proving the `graphify` tool is resolvable on PATH, so a scheduled cycle would only discover its graphify tool is missing at the RunGraphifyUpdate step and derive its gaps from a stale report", guard)
+	}
+	if loopIdx < 0 {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q loop runner; cannot assert the graphify-tool guard runs before it", loopRunner)
+	}
+	if guardIdx >= loopIdx {
+		t.Fatalf("expected the %q graphify-tool guard (index %d) to be composed BEFORE the %q loop runner (index %d), so the `graphify` tool the RunGraphifyUpdate step needs to refresh the report is proven present before the loop drives another iteration", guard, guardIdx, loopRunner, loopIdx)
+	}
+
+	if GetAction(guard) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", guard)
+	}
+}

@@ -959,8 +959,11 @@ func init() {
 // implementation step fetches/pulls and pushes against is proven configured, and
 // the vault directory the cycle persists its per-run analysis back into is proven
 // a writable directory so a cycle never discovers only at WriteFusionAnalysis that
-// its vault output location is unwritable and starves the next run's corpus, and
-// the `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
+// its vault output location is unwritable and starves the next run's corpus, the
+// `graphify` tool the cycle's RunGraphifyUpdate step shells out to is proven
+// resolvable on PATH so the cycle never gates on the loop runner only to discover
+// at RunGraphifyUpdate that graphify is missing and derive its gaps from a stale
+// report, and the `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
 // shells out to is proven an executable file so a cycle never gates on the loop
 // runner only to abort at the research step with a missing binary and degrade to
 // stale vault research, and — immediately after that binary guard — the
@@ -1008,6 +1011,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionVaultWritable",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionGraphifyTool",
 			},
 			// The two NotebookLM guards are optional enrichment: an absent `nlm`
 			// binary or an unset notebook id must NOT abort the scheduled cycle,
