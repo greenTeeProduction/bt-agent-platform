@@ -738,7 +738,9 @@ func registerSuperpowersProductionActions() {
 	// ~120ms with "No existing plan path found" (2026-07-03 23:00/23:30).
 	RegisterAction("RunScheduledGoapFusionCycle", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		planPath, _ := bb.ChainState["goap_fusion_superpowers_plan_path"].(string)
+		// Read the saved plan DURABLY: a fresh cron tick's ChainState is empty, so
+		// the only place a rate-limited carryover survives is the agent-scope store.
+		planPath, _ := loadSuperpowersPlanState(bb)
 		if planPath == "" {
 			planPath, _ = bb.ChainState["plan_path"].(string)
 		}
@@ -793,9 +795,31 @@ func registerSuperpowersProductionActions() {
 
 }
 
-func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) int {
+// markGoapFusionImplDegraded records a durable signal that the ClaudeSuperpowersPath
+// implementation attempt degraded, so the fallback-eligible NoNewGapsOrImplDegraded
+// guard lets ScheduledAnalysisPath catch the cycle and produce deterministic
+// analysis + build/graphify evidence instead of aborting the whole loop. The
+// reason is preserved so real (non-rate-limit) failures stay observable in the
+// fusion analysis note WriteFusionAnalysis writes.
+func markGoapFusionImplDegraded(bb *Blackboard, reason string) {
+	setGoapState(bb, "impl_degraded", "true")
+	setGoapState(bb, "impl_degraded_reason", truncateGoap(strings.TrimSpace(reason), 2000))
+}
+
+func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) (result int) {
 	bb := ctx.Blackboard
-	planPath, _ := bb.ChainState["goap_fusion_superpowers_plan_path"].(string)
+	// ANY failure of ClaudeSuperpowersPath — not just a Claude rate limit — must
+	// degrade the cycle to the deterministic ScheduledAnalysisPath rather than
+	// abort the loop. Every failure exit returns -1; stamp the durable
+	// impl-degraded signal here so we cannot forget it on any error path.
+	defer func() {
+		if result == -1 {
+			markGoapFusionImplDegraded(bb, bb.Result)
+		}
+	}()
+	// Read durably: a rate-limited carryover only survives in the agent-scope
+	// store because the next cron tick builds a fresh, empty ChainState.
+	planPath, _ := loadSuperpowersPlanState(bb)
 	if planPath == "" {
 		planPath, _ = bb.ChainState["plan_path"].(string)
 	}
@@ -886,6 +910,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	if err := cleanupAppliedSuperpowersWorktree(c, defaultSuperpowersCommandRunner, run); err != nil {
 		Info("superpowers worktree cleanup after apply failed (non-fatal)", "run", run.ID, "err", err.Error())
 	}
+	// The plan is applied to master; clear the durable plan state so the next
+	// scheduled cycle does not re-resume already completed work.
+	clearSuperpowersPlanState(bb)
 	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`\nApply status: `%s`\nCommit: `%s`", run.ID, finishPath, run.ApplyStatus, run.AppliedCommit)
 	return 1
 }

@@ -95,8 +95,8 @@ func TestGoapFusion_Structure(t *testing.T) {
 	if containsNodeName(*scheduled, "RunSuperpowersClaudeImplementation") {
 		t.Fatalf("scheduled/default GOAP path must not invoke Claude/Superpowers implementation")
 	}
-	if !containsNodeName(*scheduled, "NoNewGaps") {
-		t.Fatalf("scheduled/default analysis fallback must be guarded by NoNewGaps so implementation failures are not swallowed")
+	if !containsNodeName(*scheduled, "NoNewGapsOrImplDegraded") {
+		t.Fatalf("scheduled/default analysis fallback must be guarded by NoNewGapsOrImplDegraded so ANY ClaudeSuperpowersPath failure degrades to deterministic analysis instead of aborting the loop")
 	}
 	for _, name := range []string{"WriteFusionAnalysis", "VerifyGoapBuild", "RunGraphifyUpdate", "ReportFusionCycle"} {
 		if !containsNodeName(*scheduled, name) {

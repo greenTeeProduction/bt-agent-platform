@@ -91,6 +91,20 @@ func registerGoapFusionActions() {
 		v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string)
 		return v == "true"
 	})
+	// NoNewGapsOrImplDegraded is the fallback-eligible head guard for
+	// ScheduledAnalysisPath. It opens the deterministic analysis fallback in
+	// BOTH the pre-existing "goals unchanged" (NoNewGaps) case AND the new
+	// "implementation degraded" case, so that ANY failure of
+	// ClaudeSuperpowersPath — not just a Claude rate limit — degrades the cycle
+	// to deterministic analysis + build/graphify evidence instead of aborting
+	// the whole loop.
+	RegisterCondition("NoNewGapsOrImplDegraded", func(bb *Blackboard) bool {
+		if v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); v == "true" {
+			return true
+		}
+		v, _ := bb.ChainState["goap_fusion_impl_degraded"].(string)
+		return v == "true"
+	})
 
 	// RunGoapFusionNotebookLMResearch performs a GOAP-owned NotebookLM query so the
 	// scheduled fusion runner is not dependent on the separate notebooklm-researcher
@@ -269,10 +283,12 @@ func registerGoapFusionActions() {
 			gaps = append(gaps, "CHECK: AllDomainTrees coverage — verify all registered trees have smoke tests and descriptions")
 		}
 
-		// Check for testability gaps
-		if strings.Contains(graphReport, "test") && !strings.Contains(graphReport, "engine test") {
-			gaps = append(gaps, "CHECK: Engine tests executable — verify no import cycles block test compilation")
-		}
+		// NOTE: A prior "testability" heuristic here fabricated a bogus
+		// "Engine tests executable — verify no import cycles" CHECK gap whenever
+		// a graph report merely mentioned "test" (as nearly every report does).
+		// It had no real blocker behind it and flowed into PrioritizeGoapGoals as
+		// an un-implementable P0 "Unblock engine tests" goal that dead-lettered
+		// the loop. Removed: a false import-cycle blocker is never a real gap.
 
 		if len(gaps) == 0 {
 			gaps = append(gaps, "No clear structural gaps detected. Next: review individual tree quality and condition coverage.")
@@ -634,6 +650,58 @@ func saveGrillState(bb *Blackboard, round int, conversationID string) {
 		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
 		_ = bb.BB.Mgr.Set(scope, "goap_fusion_grill_round", strconv.Itoa(round), "grill-me round counter (1-3)", "text")
 		_ = bb.BB.Mgr.Set(scope, "goap_fusion_grill_conversation_id", conversationID, "grill-me NotebookLM conversation id", "text")
+	}
+}
+
+// Superpowers plan state must survive across scheduled runs the same way grill
+// state and the last-reviewed SHA do: each cron tick builds a fresh Blackboard
+// (RunOnce) whose ChainState dies with the run, so the 4a60278 preflight resume
+// branch can only re-open a rate-limited carryover if BOTH the plan path and the
+// active plan body live in the agent-scope blackboard, which persists to disk.
+// ChainState is the fallback when the scoped blackboard is disabled (unit paths,
+// scope-off deployments) so a single run still round-trips.
+func saveSuperpowersPlanState(bb *Blackboard, planPath, activePlan string) {
+	setGoapState(bb, "superpowers_plan_path", planPath)
+	setGoapState(bb, "superpowers_active_plan", activePlan)
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Set(scope, "goap_fusion_superpowers_plan_path", planPath,
+			"durable Superpowers plan path for preflight resume", "text")
+		_ = bb.BB.Mgr.Set(scope, "goap_fusion_superpowers_active_plan", activePlan,
+			"durable Superpowers active plan body for preflight resume", "text")
+	}
+}
+
+func loadSuperpowersPlanState(bb *Blackboard) (planPath, activePlan string) {
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_superpowers_plan_path"); err == nil {
+			planPath = strings.TrimSpace(e.Value)
+		}
+		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_superpowers_active_plan"); err == nil {
+			activePlan = e.Value
+		}
+		if planPath != "" || activePlan != "" {
+			return planPath, activePlan
+		}
+	}
+	planPath, _ = bb.ChainState["goap_fusion_superpowers_plan_path"].(string)
+	activePlan, _ = bb.ChainState["goap_fusion_superpowers_active_plan"].(string)
+	return strings.TrimSpace(planPath), activePlan
+}
+
+// clearSuperpowersPlanState wipes the durable plan state after a successful
+// apply so the next scheduled cycle does not re-resume an already completed plan
+// and loop forever re-applying finished work.
+func clearSuperpowersPlanState(bb *Blackboard) {
+	if bb.ChainState != nil {
+		delete(bb.ChainState, "goap_fusion_superpowers_plan_path")
+		delete(bb.ChainState, "goap_fusion_superpowers_active_plan")
+	}
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_superpowers_plan_path")
+		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_superpowers_active_plan")
 	}
 }
 

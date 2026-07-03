@@ -49,7 +49,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 				act("CleanupGraphifyOut", "Reset graphify-out to prevent perpetual staged changes"),
 			),
 			seq("ScheduledAnalysisPath",
-				cond("NoNewGaps", "Only use deterministic analysis fallback when goals are unchanged"),
+				cond("NoNewGapsOrImplDegraded", "Use deterministic analysis fallback when goals are unchanged OR the implementation path degraded (any ClaudeSuperpowersPath failure)"),
 				act("WriteFusionAnalysis", "Write deterministic fusion analysis to the vault"),
 				act("VerifyGoapBuild", "Run production-safe GOAP/Superpowers build and focused tests"),
 				act("RunGraphifyUpdate", "Refresh graphify-out after local verification"),

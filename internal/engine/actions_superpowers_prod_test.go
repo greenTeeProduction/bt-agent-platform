@@ -3,11 +3,13 @@ package engine
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -438,5 +440,173 @@ func TestParseNumberedAnswers_FewerAnswersThanQuestionsOK(t *testing.T) {
 	}
 	if _, ok := got[2]; ok {
 		t.Fatalf("parseNumberedAnswers should not fabricate an entry for A2: %v", got)
+	}
+}
+
+// TestNoNewGapsOrImplDegraded_IsFallbackEligibleGuard is the head of this
+// task's contract: ScheduledAnalysisPath must be guarded by a fallback-eligible
+// condition (NoNewGaps OR impl_degraded) instead of the bare NoNewGaps, so that
+// ANY failure of ClaudeSuperpowersPath — not just a Claude rate limit — can
+// degrade the cycle to deterministic analysis rather than abort the whole loop.
+//
+// The condition must be true in BOTH the pre-existing "goals unchanged" case
+// AND the new "implementation degraded" case, and false only when goals are
+// fresh and no degradation occurred (implementation path still owns the cycle).
+// Before the fix this condition does not exist at all.
+func TestNoNewGapsOrImplDegraded_IsFallbackEligibleGuard(t *testing.T) {
+	cond := GetCondition("NoNewGapsOrImplDegraded")
+	if cond == nil {
+		t.Fatal("NoNewGapsOrImplDegraded condition not registered: ScheduledAnalysisPath needs a fallback-eligible head guard (NoNewGaps OR impl_degraded)")
+	}
+
+	// New behavior: a durable impl-degraded signal alone (fresh goals, no
+	// rate-limit "goals unchanged" marker) must open the deterministic fallback.
+	bbDegraded := newTestBlackboard()
+	bbDegraded.ChainState["goap_fusion_impl_degraded"] = "true"
+	if !cond(bbDegraded) {
+		t.Fatalf("guard must be true when goap_fusion_impl_degraded is set: any ClaudeSuperpowersPath failure must be catchable by ScheduledAnalysisPath")
+	}
+
+	// Preserved behavior: the existing NoNewGaps (goals unchanged) case must
+	// still open the fallback.
+	bbUnchanged := newTestBlackboard()
+	bbUnchanged.ChainState["goap_fusion_goals_unchanged"] = "true"
+	if !cond(bbUnchanged) {
+		t.Fatalf("guard must remain true when goals are unchanged (must preserve the NoNewGaps fallback)")
+	}
+
+	// Fresh goals, nothing degraded: the implementation path owns the cycle and
+	// the deterministic fallback must NOT be entered.
+	bbFresh := newTestBlackboard()
+	if cond(bbFresh) {
+		t.Fatalf("guard must be false when goals are fresh and no degradation occurred; ClaudeSuperpowersPath must run, not the analysis fallback")
+	}
+}
+
+// TestRunSuperpowersRuntime_NonRateLimitFailureSetsImplDegraded proves the
+// durable-signal half of this task's contract: when ClaudeSuperpowersPath fails
+// for ANY reason other than a Claude rate limit,
+// runSuperpowersRuntimeFromExistingPlanAction must set a durable
+// goap_fusion_impl_degraded signal so the ExecutionRouter Selector can degrade
+// the cycle to deterministic ScheduledAnalysisPath instead of aborting the
+// whole loop. Before the fix only the rate-limit branch set a fall-through
+// signal (goap_fusion_goals_unchanged); every other failure returned -1 with no
+// signal at all, which dead-lettered the goap-fusion loop runner.
+func TestRunSuperpowersRuntime_NonRateLimitFailureSetsImplDegraded(t *testing.T) {
+	// Guard against any stray relative-path writes escaping into the repo.
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	// A RED verify that runs the task's test command and gets a PASSING result
+	// fails with "RED command unexpectedly passed" — a deterministic,
+	// non-rate-limit ClaudeSuperpowersPath failure (no "session limit"/"rate
+	// limit"/"quota exceeded" markers), exactly the catch-all case this task
+	// must degrade instead of abort.
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{
+		t:           t,
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+	defaultSuperpowersClaudeRunner = &scriptedClaudeRunner{}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(planPath, []byte(buildDeterministicImplementationPlan("improve the platform")), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	run := &SuperpowersRun{
+		ID:           "run-degrade",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(), // non-empty so no real worktree is created
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	bb := newTestBlackboard()
+	setSuperpowersRun(bb, run)
+	bb.ChainState["goap_fusion_superpowers_plan_path"] = planPath
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) on a non-rate-limit ClaudeSuperpowersPath failure, got %d: %s", result, bb.Result)
+	}
+	// This is NOT a rate limit, so the pre-existing goals_unchanged fall-through
+	// must not be relied on — the durable impl-degraded signal must be set so
+	// the fallback-eligible ScheduledAnalysisPath guard catches it.
+	if got, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); got != "true" {
+		t.Fatalf("goap_fusion_impl_degraded = %q, want \"true\": every ClaudeSuperpowersPath failure must set the durable degrade signal so the loop degrades to analysis instead of aborting", got)
+	}
+}
+
+// TestSuperpowersPlanState_PersistsAcrossRuns proves the core contract of this
+// task: the Superpowers plan path AND active plan body must survive across
+// scheduled runs. Each cron tick builds a FRESH Blackboard (RunOnce) whose
+// ChainState dies with the run, so writing the plan path only to ChainState —
+// as the code did before this task — means the 4a60278 preflight resume branch
+// re-plans from scratch every tick and can never resume a rate-limited
+// carryover. The durable state must live in the agent-scope blackboard (the
+// same mechanism as saveGrillState/loadGrillState and saveLastReviewedSHA), so
+// a later run reading with an empty ChainState still sees it.
+func TestSuperpowersPlanState_PersistsAcrossRuns(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	run1 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
+	run2 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-2", "", "goap-loop")}
+
+	planPath := "/tmp/docs/superpowers/plans/goap-fusion-20260704T010101-improve.md"
+	activePlan := "# Superpowers Implementation Plan\n\n### Task 1: durable resume\n"
+	saveSuperpowersPlanState(run1, planPath, activePlan)
+
+	// run2 has a completely fresh ChainState — the only way it can recover the
+	// plan is the durable agent-scope store.
+	gotPath, gotPlan := loadSuperpowersPlanState(run2)
+	if gotPath != planPath {
+		t.Fatalf("loadSuperpowersPlanState path = %q, want %q: plan path must persist across runs via the agent-scope store", gotPath, planPath)
+	}
+	if gotPlan != activePlan {
+		t.Fatalf("loadSuperpowersPlanState plan = %q, want %q: active plan body must persist across runs via the agent-scope store", gotPlan, activePlan)
+	}
+}
+
+// TestSuperpowersPlanState_ClearedAfterApply proves the second half of the
+// contract: once a plan has been applied successfully the durable plan state
+// must be CLEARED, so the next scheduled cycle does not re-resume an already
+// completed plan (which would loop forever re-applying finished work). After a
+// clear, a fresh run reading the durable store must see nothing.
+func TestSuperpowersPlanState_ClearedAfterApply(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	run1 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
+	run2 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-2", "", "goap-loop")}
+
+	saveSuperpowersPlanState(run1, "/tmp/plan.md", "# plan\n")
+	clearSuperpowersPlanState(run1)
+
+	gotPath, gotPlan := loadSuperpowersPlanState(run2)
+	if gotPath != "" || gotPlan != "" {
+		t.Fatalf("after clear, loadSuperpowersPlanState = (%q, %q), want empty: a successfully applied plan must not be resumable by the next cycle", gotPath, gotPlan)
+	}
+}
+
+// TestSuperpowersPlanState_ChainStateFallback proves the helper degrades to the
+// per-run ChainState when no agent-scope blackboard is configured, mirroring
+// the loadGrillState / loadLastReviewedSHA fallback so unit paths and
+// scope-disabled deployments still round-trip within a single run.
+func TestSuperpowersPlanState_ChainStateFallback(t *testing.T) {
+	bb := &Blackboard{}
+	saveSuperpowersPlanState(bb, "/tmp/fallback-plan.md", "# fallback\n")
+
+	gotPath, gotPlan := loadSuperpowersPlanState(bb)
+	if gotPath != "/tmp/fallback-plan.md" || gotPlan != "# fallback\n" {
+		t.Fatalf("ChainState fallback round-trip = (%q, %q), want (/tmp/fallback-plan.md, # fallback\\n)", gotPath, gotPlan)
+	}
+
+	if got, _ := loadSuperpowersPlanState(&Blackboard{}); got != "" {
+		t.Fatalf("empty blackboard must return empty plan path, got %q", got)
 	}
 }

@@ -31,13 +31,23 @@ func registerGoapFusionProductionAdditions() {
 		return 1
 	})
 
-	RegisterAction("WriteSuperpowersImplementationPlan", func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("WriteSuperpowersImplementationPlan", func(ctx *btcore.BTContext[Blackboard]) (result int) {
 		bb := ctx.Blackboard
-		if bb.ChainState != nil {
-			if existing, _ := bb.ChainState["goap_fusion_superpowers_plan_path"].(string); existing != "" {
-				bb.Result = fmt.Sprintf("## GOAP Superpowers Plan Reused\n\nPath: `%s`", existing)
-				return 1
+		// This action is the head of ClaudeSuperpowersPath. Any failure here
+		// (plan saturation, dir/file IO) must degrade the cycle to the
+		// deterministic ScheduledAnalysisPath rather than abort the loop, so
+		// stamp the durable impl-degraded signal on every failure exit.
+		defer func() {
+			if result == -1 {
+				markGoapFusionImplDegraded(bb, bb.Result)
 			}
+		}()
+		// Reuse a plan carried over from an earlier (e.g. rate-limited) cycle.
+		// Read durably so a fresh cron tick whose ChainState is empty still finds
+		// the saved plan in the agent-scope store instead of re-planning.
+		if existing, _ := loadSuperpowersPlanState(bb); existing != "" {
+			bb.Result = fmt.Sprintf("## GOAP Superpowers Plan Reused\n\nPath: `%s`", existing)
+			return 1
 		}
 		goals, _ := bb.ChainState["goap_fusion_goal_queue"].(string)
 		gaps, _ := bb.ChainState["goap_fusion_improvement_gaps"].(string)
@@ -82,10 +92,9 @@ func registerGoapFusionProductionAdditions() {
 			bb.Result = err.Error()
 			return -1
 		}
-		setGoapState(bb, "superpowers_plan_path", path)
-		setGoapState(bb, "superpowers_active_plan", plan)
-		bb.ChainState["goap_fusion_superpowers_plan_path"] = path
-		bb.ChainState["goap_fusion_active_plan"] = plan
+		// Persist durably (agent-scope + ChainState) so a later rate-limited
+		// cycle with a fresh ChainState can resume this exact plan.
+		saveSuperpowersPlanState(bb, path, plan)
 		bb.Plan = plan
 		bb.Result = fmt.Sprintf("## GOAP Superpowers Plan Written\n\nPath: `%s`\n\n### Approval summary\n- Task: %s\n- Top GOAP goals:\n%s\n- Gap analysis:\n%s\n\n### Plan excerpt\n```markdown\n%s\n```", path, bb.Task, truncateGoap(goals, 1200), truncateGoap(gaps, 1200), truncateGoap(plan, 3500))
 		return 1
@@ -114,6 +123,17 @@ func registerGoapFusionProductionAdditions() {
 		}
 
 		report := fmt.Sprintf("# GOAP Fusion Analysis — %s\n\n## Task\n%s\n\n## Goals\n%s\n\n## Gaps\n%s\n", ts, bb.Task, goals, gaps)
+		// When ScheduledAnalysisPath ran as a fallback because ClaudeSuperpowersPath
+		// degraded (any failure, not just a Claude rate limit), record the failure
+		// reason so real failures stay observable rather than silently succeeding
+		// as a clean deterministic cycle.
+		if v, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); v == "true" {
+			reason, _ := bb.ChainState["goap_fusion_impl_degraded_reason"].(string)
+			if strings.TrimSpace(reason) == "" {
+				reason = "implementation path degraded; cause not recorded"
+			}
+			report += fmt.Sprintf("\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n%s\n```\n", reason)
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			bb.Result = err.Error()
 			return -1
