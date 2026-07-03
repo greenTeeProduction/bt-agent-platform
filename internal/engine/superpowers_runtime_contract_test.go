@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -672,5 +673,56 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopSharesCircu
 	}
 	if len(boundedWindow) != goapFusionCircuitHistoryWindow {
 		t.Fatalf("expected the bounded window to hold the most recent %d hashes, got %d: %v", goapFusionCircuitHistoryWindow, len(boundedWindow), boundedWindow)
+	}
+}
+
+// TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer
+// pins the concrete, observed defect the P0 NotebookLM research goal names: the
+// VerifyScheduledGoapFusionBuildTreeMaterialized guard must not merely be
+// *registered and unit-tested* — it must be *composed into a runnable Phase-0
+// preflight node* the scheduled GOAP fusion loop can actually execute. Every
+// sibling test in this file only asserts GetAction(name) != nil, which proves
+// the guard is registered but never proves it is wired into any behavior tree.
+// The observed defect is exactly that: the Scheduled* guards appear only in
+// their own RegisterAction calls and in _test.go files, never in any composed
+// BT, so they can never run in a scheduled cycle — a bare-repo run silently
+// builds a stale tree because the materializer guard is never invoked.
+//
+// This test closes that gap at its source: the engine must expose a Phase-0
+// preflight node builder (GoapFusionPreflightNode) that composes the
+// materializer guard as an Action node, and that composed action name must
+// resolve to a registered, runnable action. It is the in-package analogue of
+// "compose the tree and assert the node runs" — the engine package cannot
+// import internal/domains (where GoapFusionLoopTree lives) without an import
+// cycle, so the runnable-composition contract is pinned here, at the guard's
+// own package, ready for the domains tree to embed as its Phase-0 preflight.
+//
+// It fails to compile until GoapFusionPreflightNode is introduced (RED) and
+// passes once the builder composes the materializer guard into a runnable node
+// (GREEN).
+func TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer(t *testing.T) {
+	const want = "VerifyScheduledGoapFusionBuildTreeMaterialized"
+
+	node := GoapFusionPreflightNode()
+
+	var references func(n evolution.SerializableNode) bool
+	references = func(n evolution.SerializableNode) bool {
+		if n.Type == "Action" && n.Name == want {
+			return true
+		}
+		for _, c := range n.Children {
+			if references(c) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !references(node) {
+		t.Fatalf("GoapFusionPreflightNode() does not compose the %q guard as a runnable Action node; the materializer guard is registered but never wired into any preflight, so it can never run in a scheduled cycle", want)
+	}
+
+	if GetAction(want) == nil {
+		t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
 	}
 }

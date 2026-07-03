@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -922,6 +923,35 @@ func init() {
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Passed\n\nThe on-disk build tree in `%s` is materialized to HEAD; no tracked file differs from the committed HEAD.", goapFusionRepo)
 		return 1
 	})
+}
+
+// GoapFusionPreflightNode composes the scheduled GOAP fusion loop's Phase-0
+// preflight as a runnable behavior-tree node. The Scheduled* guard actions are
+// registered and unit-tested, yet none were wired into any composed tree, so a
+// scheduled cycle could never execute them — most critically
+// VerifyScheduledGoapFusionBuildTreeMaterialized, whose absence lets a bare main
+// repo silently build a stale on-disk tree. This builder closes that gap: it
+// returns a Sequence that runs the materializer guard before the cycle proceeds,
+// so the guard actually executes in a scheduled run.
+//
+// The engine package cannot import internal/domains (where GoapFusionLoopTree
+// lives) without an import cycle, so this builder lives here at the guards' own
+// package and is meant to be embedded by the domains tree as its Phase-0
+// preflight. It starts with the single materializer guard — the concrete,
+// observed defect — leaving room to append the circuit-breaker/loop-runner pair
+// as additional preflight children.
+func GoapFusionPreflightNode() evolution.SerializableNode {
+	return evolution.SerializableNode{
+		Type:        "Sequence",
+		Name:        "GoapFusionPreflight",
+		Description: "Phase-0 preflight for the scheduled GOAP fusion loop; materializes the on-disk build tree to HEAD before the cycle builds and TDD-verifies it.",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionBuildTreeMaterialized",
+			},
+		},
+	}
 }
 
 func repoPathFromBlackboard(bb *Blackboard) string {
