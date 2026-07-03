@@ -959,6 +959,24 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 	}
 }
 
+// PrependGoapFusionPreflight is the integration seam the "goap-fusion-loop-runner"
+// goal requires: it takes the production GoapFusionLoop_Main sequence's child list
+// and returns a new list with GoapFusionPreflightNode() prepended as the first
+// child, so a scheduled cycle materializes a fresh on-disk build tree and consults
+// the bounded loop runner before it runs SetupFusionTools or anything else.
+//
+// The engine package cannot import internal/domains (import cycle), but
+// domains -> engine is the safe direction, so this seam lives here at the guards'
+// own package and GoapFusionLoopTree() embeds it without duplicating the Phase-0
+// composition. It returns a freshly allocated slice and never mutates the caller's
+// input.
+func PrependGoapFusionPreflight(loopChildren []evolution.SerializableNode) []evolution.SerializableNode {
+	prepended := make([]evolution.SerializableNode, 0, len(loopChildren)+1)
+	prepended = append(prepended, GoapFusionPreflightNode())
+	prepended = append(prepended, loopChildren...)
+	return prepended
+}
+
 func repoPathFromBlackboard(bb *Blackboard) string {
 	if run, ok := getSuperpowersRun(bb); ok {
 		return run.WorktreePathOrRepo()

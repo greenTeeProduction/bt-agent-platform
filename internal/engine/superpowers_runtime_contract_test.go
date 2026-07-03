@@ -727,6 +727,81 @@ func TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer
 	}
 }
 
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrependsToLoopSequence
+// pins the integration seam the "goap-fusion-loop-runner" goal actually requires:
+// every prior run grew the orphan preflight builder (materializer guard, then
+// loop runner, plus unit tests) without ever taking the one step that makes any
+// of it run — inserting the Phase-0 preflight as the FIRST child of the
+// production GoapFusionLoop_Main sequence, before SetupFusionTools. The
+// GoapFusionPreflightNode() builder composes the guards, but nothing lets the
+// loop sequence adopt it, so the materializer guard and bounded loop runner
+// execute nowhere in a scheduled cycle.
+//
+// The engine package cannot import internal/domains (import cycle), but
+// domains -> engine is the safe direction, so the seam belongs here at the
+// guards' own package: PrependGoapFusionPreflight takes the loop sequence's
+// child list and returns a new list with the Phase-0 preflight node prepended as
+// the first child, ready for GoapFusionLoopTree() to embed without duplicating
+// the composition. This test asserts that seam (1) prepends the preflight as the
+// first child, (2) that first child composes both the build-tree materializer
+// guard and the bounded loop runner as runnable Action nodes, (3) preserves the
+// original loop children in order after the preflight, and (4) does not mutate
+// the caller's slice.
+//
+// It fails to compile until PrependGoapFusionPreflight is introduced (RED) and
+// passes once the seam returns the preflight-prepended child list (GREEN).
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrependsToLoopSequence(t *testing.T) {
+	original := []evolution.SerializableNode{
+		{Type: "Action", Name: "SetupFusionTools"},
+		{Type: "Action", Name: "GrillMeNotebookLM"},
+	}
+
+	got := PrependGoapFusionPreflight(original)
+
+	if len(got) != len(original)+1 {
+		t.Fatalf("expected the Phase-0 preflight prepended (len %d), got %d: %+v", len(original)+1, len(got), got)
+	}
+
+	// The preflight must be the FIRST child — it runs before SetupFusionTools so a
+	// scheduled cycle materializes a fresh on-disk tree and consults the bounded
+	// loop runner before it does anything else.
+	first := got[0]
+
+	var references func(n evolution.SerializableNode, name string) bool
+	references = func(n evolution.SerializableNode, name string) bool {
+		if n.Type == "Action" && n.Name == name {
+			return true
+		}
+		for _, c := range n.Children {
+			if references(c, name) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []string{
+		"VerifyScheduledGoapFusionBuildTreeMaterialized",
+		"RunScheduledGoapFusionLoop",
+	} {
+		if !references(first, want) {
+			t.Fatalf("the prepended Phase-0 preflight does not compose %q as a runnable Action node; the loop sequence would run without the materializer guard / bounded loop runner", want)
+		}
+		if GetAction(want) == nil {
+			t.Fatalf("preflight composes Action %q but it is not a registered, runnable action", want)
+		}
+	}
+
+	// The original loop children must be preserved, in order, after the preflight.
+	if got[1].Name != original[0].Name || got[2].Name != original[1].Name {
+		t.Fatalf("original loop children not preserved in order after the preflight: %+v", got)
+	}
+
+	// The seam must not mutate the caller's slice.
+	if len(original) != 2 || original[0].Name != "SetupFusionTools" || original[1].Name != "GrillMeNotebookLM" {
+		t.Fatalf("PrependGoapFusionPreflight mutated the caller's slice: %+v", original)
+	}
+}
+
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner
 // pins the next increment the "goap-fusion-loop-runner" goal requires: the
 // Phase-0 preflight node must compose the bounded loop runner —
