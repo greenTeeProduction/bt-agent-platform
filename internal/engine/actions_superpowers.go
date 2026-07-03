@@ -1389,3 +1389,56 @@ func repoPathFromBlackboard(bb *Blackboard) string {
 	}
 	return superpowersRepoDir
 }
+
+// VerifyScheduledGoapFusionSandbox is the deterministic kernel-level preflight
+// that proves the single engine-side mechanism the whole "don't burn quotas
+// during structural evaluation" defense rests on is intact before the unattended
+// scheduled GOAP fusion cycle runs its benchmark-based structural validation.
+//
+// The scheduled cycle validates candidate mutations by ticking trees through the
+// benchmark harnesses, and commit 2bea250 set `Sandbox: true` on those harness
+// Blackboards so structural ticks are short-circuited before any real
+// `nlm`/`git`/`claude` action can dispatch (tree.go actionForName: when
+// bb.Sandbox is true it returns a `[sandbox] name` stub instead of the real
+// registered implementation). If a refactor ever dropped that `bb.Sandbox` guard,
+// every benchmark harness would silently dispatch real side-effecting actions
+// again — the exact 11-hour/quota-burning defect commit 2bea250 set out to
+// eliminate, now undetected.
+//
+// This guard closes that gap the same way its sibling input/runtime/tool guards
+// do: it dispatches a genuinely-registered real action through a sandboxed probe
+// Blackboard and proves the sandbox short-circuit returned the `[sandbox]` stub
+// rather than the real implementation. It returns PASS (1) when the sandbox
+// invariant holds and FAIL (-1) with a clear diagnosis if a real action would
+// dispatch under sandbox.
+func init() {
+	RegisterAction("VerifyScheduledGoapFusionSandbox", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+
+		// The probe target must itself be a genuinely-registered real action, so
+		// the sandbox short-circuit is proven to be blocking something real rather
+		// than falling through to the permissive unknown-action fallback.
+		const probeAction = "VerifyScheduledGoapFusionInputs"
+		if GetAction(probeAction) == nil {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Sandbox Preflight Failed\n\nSandbox invariant unverifiable: probe action `%s` is not registered, so the guard cannot prove the Sandbox short-circuit blocks a real registered action.", probeAction)
+			return -1
+		}
+
+		// Dispatch the real action through a sandboxed Blackboard. When the
+		// bb.Sandbox short-circuit is intact, actionForName returns the
+		// `[sandbox] name` stub — appending exactly that marker to Results and
+		// never executing the real implementation.
+		probe := &Blackboard{Sandbox: true}
+		status := probe.actionForName(probeAction)(btcore.NewBTContext(ctx, probe))
+
+		wantStub := "[sandbox] " + probeAction
+		gotStub := len(probe.Results) > 0 && probe.Results[len(probe.Results)-1] == wantStub
+		if status != 1 || !gotStub {
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Sandbox Preflight Failed\n\nSandbox invariant BROKEN: dispatching real action `%s` through a Sandbox Blackboard did not short-circuit to the %q stub (status=%d, results=%v). The bb.Sandbox guard in actionForName no longer blocks real dispatch, so every benchmark harness would spawn real `nlm`/`git`/`claude` actions during structural evaluation.", probeAction, wantStub, status, probe.Results)
+			return -1
+		}
+
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Sandbox Preflight Passed\n\nSandbox invariant holds: a Sandbox Blackboard short-circuits real action dispatch (`%s` returned the %q stub without executing its real implementation), so structural evaluation during the scheduled cycle can never spawn `nlm`/`git`/`claude` subprocesses.", probeAction, wantStub)
+		return 1
+	})
+}

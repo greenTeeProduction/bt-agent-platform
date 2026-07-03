@@ -3155,3 +3155,49 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTreeIs
 		t.Fatalf("WireGoapFusionLoopTree is not idempotent: wiring an already-wired tree differs from wiring once, so the seam double-prepends the preflight and/or the ClaudeSuperpowersPath CIRCUITPOLICY gate.\nonce:  %+v\ntwice: %+v", once, twice)
 	}
 }
+
+// TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSandbox pins the
+// engine-side completion of the P0 NotebookLM research goal: structural tree
+// evaluation must never spawn subprocesses / hit the network / burn external
+// quotas. The scheduled GOAP fusion cycle validates candidate mutations by
+// ticking trees through the benchmark harnesses, and commit 2bea250 set
+// `Sandbox: true` on the RunSuite Blackboard so those structural ticks are
+// short-circuited before any real `nlm`/`git`/`claude` action can dispatch
+// (tree.go actionForName: when bb.Sandbox is true it returns a `[sandbox] name`
+// stub instead of the real registered implementation). That sandbox short-circuit
+// is the single engine-side mechanism the whole "don't burn quotas during
+// structural evaluation" defense rests on — yet nothing in the scheduled cycle's
+// Phase-0 preflight proves the mechanism is intact before the cycle runs its
+// benchmark-based structural validation. If a refactor ever dropped the
+// `bb.Sandbox` guard in actionForName, every benchmark harness would silently
+// dispatch real side-effecting actions again — the exact 11-hour/quota-burning
+// defect commit 2bea250 set out to eliminate, now undetected.
+//
+// This action closes that gap the same way its sibling guards do: it is a
+// deterministic kernel-level preflight that proves, before the automatic
+// research-to-implementation cycle proceeds, that a sandboxed Blackboard blocks a
+// real registered action from executing — so structural evaluation during the
+// scheduled cycle can never spawn `nlm`/`git`/`claude` subprocesses. It returns
+// PASS (1) when the sandbox invariant holds and FAIL (-1) with a clear diagnosis
+// when a real action would dispatch under sandbox — the sandbox-invariant analogue
+// of the input, runtime, and tool guards.
+//
+// It fails today because VerifyScheduledGoapFusionSandbox is not registered (RED)
+// and passes once the guard is implemented and registered (GREEN).
+func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionSandbox(t *testing.T) {
+	action := GetAction("VerifyScheduledGoapFusionSandbox")
+	if action == nil {
+		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionSandbox")
+	}
+
+	// In this build the sandbox short-circuit in actionForName is intact, so a
+	// sandboxed Blackboard blocks real action dispatch and the guard must PASS (1)
+	// with a diagnosis naming the sandbox invariant it verified.
+	bb := &Blackboard{Task: "verify scheduled goap fusion sandbox"}
+	if status := action(btcore.NewBTContext(context.Background(), bb)); status != 1 {
+		t.Fatalf("expected PASS (1) while the sandbox invariant holds (a sandboxed Blackboard blocks real action dispatch), got %d: %s", status, bb.Result)
+	}
+	if !strings.Contains(bb.Result, "Sandbox") {
+		t.Fatalf("expected a sandbox-invariant diagnosis in Result, got %q", bb.Result)
+	}
+}
