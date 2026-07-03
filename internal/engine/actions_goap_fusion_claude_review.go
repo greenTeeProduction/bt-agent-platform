@@ -395,8 +395,14 @@ claude_code_review (fallback; NotebookLM unavailable)
 	setGoapState(bb, "notebooklm_research_path", path)
 	setGoapState(bb, "research_source", "claude_code_review")
 
-	if head, err := runGoapGit(deps.repoDir, 10*time.Second, "rev-parse", "HEAD"); err == nil && head != "" {
-		saveLastReviewedSHA(bb, head)
+	// Only advance the last-reviewed SHA when this cycle actually reviewed
+	// commits. A structure/failures cycle never looked at the commit range, so
+	// advancing here would make the next commit cycle skip commits this cycle
+	// never reviewed.
+	if rc.mode == "commits" {
+		if head, err := runGoapGit(deps.repoDir, 10*time.Second, "rev-parse", "HEAD"); err == nil && head != "" {
+			saveLastReviewedSHA(bb, head)
+		}
 	}
 
 	bb.Result = fmt.Sprintf("## Claude Code Review Fallback Complete\n\nReviewed: %s (%s)\n\nPath: `%s`\n\nGoals:\n- %s",

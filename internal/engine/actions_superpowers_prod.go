@@ -864,8 +864,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
 	// Research memory: record what this run landed so future research cycles
-	// do not re-propose it, and advance the active multi-cycle program when
-	// this run executed its milestone.
+	// do not re-propose it, and advance the active multi-cycle program only
+	// when this run's changed files or done tasks executed the milestone's
+	// file anchors — a drifted cycle must not check off work it never did.
 	recordImplementedGoals(run)
 	completeGoapProgramMilestone(bb, run)
 	// The run's work is applied to master; the worktree and its merged branch

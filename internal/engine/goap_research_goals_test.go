@@ -66,6 +66,34 @@ func TestAppendGoapResearchGoalsAccumulatesAcrossSources(t *testing.T) {
 	}
 }
 
+// A gap whose text spans multiple lines must not desync the parallel
+// goap_fusion_notebooklm_goals / goap_fusion_notebooklm_gaps ChainState
+// strings. Those two strings are persisted independently and re-split with
+// splitNonEmptyLines, then the gap-analysis consumer pairs goal[i] with
+// gap[i]. A 2-line gap on the first goal makes the gaps list longer than the
+// goals list, so every later goal steals a fragment of an earlier gap instead
+// of getting its own — index alignment silently breaks.
+func TestAppendGoapResearchGoalsKeepsGoalGapPairsAligned(t *testing.T) {
+	bb := &Blackboard{}
+	appendGoapResearchGoals(bb, []goapResearchGoal{
+		{Goal: "First goal touching internal/engine/a.go", Gap: "root cause line one\nspilled second line"},
+		{Goal: "Second goal touching internal/engine/b.go", Gap: "second goal's own gap"},
+	})
+
+	goals := goapResearchGoalLines(bb)
+	gaps := goapResearchGapLines(bb)
+	if len(goals) != len(gaps) {
+		t.Fatalf("goal/gap lists must stay the same length so index pairing is safe: %d goals, %d gaps\ngoals=%v\ngaps=%v",
+			len(goals), len(gaps), goals, gaps)
+	}
+	if len(goals) < 2 || !strings.Contains(goals[1], "Second goal") {
+		t.Fatalf("second goal mispositioned: %v", goals)
+	}
+	if gaps[1] != "second goal's own gap" {
+		t.Fatalf("gap[1] must stay bound to goal[1]; got %q (skewed by an earlier multi-line gap)", gaps[1])
+	}
+}
+
 func TestExtractGoapProgramParsesMilestones(t *testing.T) {
 	answer := `PROGRAM: Auction-based multi-agent task allocation
 MILESTONE1: Define auction message types in internal/a2a/messages.go
@@ -183,5 +211,87 @@ func TestCompleteGoapProgramMilestoneMarksDone(t *testing.T) {
 	}
 	if re.Programs[0].Milestones[1].Status != "pending" {
 		t.Fatal("later milestones must stay pending")
+	}
+}
+
+// A successful apply whose changed files never touch the milestone's file
+// anchors — and whose tasks never reached the anchored work — must NOT
+// complete the milestone. Otherwise a cycle that drifted onto unrelated goals
+// silently checks off milestone work it never did.
+func TestCompleteGoapProgramMilestoneSkipsRunThatMissedAnchors(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	p := ps.Add("Auction allocation", "test", []string{
+		"Wire bid evaluation in internal/engine/actions_a2a.go",
+		"m2",
+	})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{ChainState: map[string]any{
+		"goap_fusion_program_milestone": p.ID + ":0",
+	}}
+	run := &SuperpowersRun{
+		ID:           "run-drift",
+		ApplyStatus:  "applied",
+		ChangedFiles: []string{"internal/other/unrelated.go"},
+		Tasks: []SuperpowersTask{
+			{Title: "unrelated", Files: []string{"internal/other/unrelated.go"}, Status: "done"},
+		},
+	}
+	completeGoapProgramMilestone(bb, run)
+
+	re, _ := research.OpenPrograms(path)
+	if re.Programs[0].Milestones[0].Status != "pending" {
+		t.Fatalf("milestone must stay pending when the run touched no anchor files: %+v", re.Programs[0].Milestones[0])
+	}
+	if done, _ := bb.ChainState["goap_fusion_program_milestone_done"].(string); done != "" {
+		t.Fatalf("program_milestone_done must not be stamped for a run that missed the anchors, got %q", done)
+	}
+}
+
+// The milestone completes when the run demonstrably executed it — either its
+// changed files intersect the anchors, or a milestone-tagged task in the run
+// reached done on an anchor file.
+func TestCompleteGoapProgramMilestoneCompletesWhenRunExecutedAnchors(t *testing.T) {
+	anchor := "internal/engine/actions_a2a.go"
+	cases := []struct {
+		name string
+		run  *SuperpowersRun
+	}{
+		{
+			name: "via changed files",
+			run:  &SuperpowersRun{ID: "run-changed", ChangedFiles: []string{anchor}},
+		},
+		{
+			name: "via done task on anchor",
+			run: &SuperpowersRun{ID: "run-task", Tasks: []SuperpowersTask{
+				{Title: "bid eval", Files: []string{anchor}, Status: "done"},
+			}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := withGoapPrograms(t)
+			ps, _ := research.OpenPrograms(path)
+			p := ps.Add("Auction allocation", "test", []string{
+				"Wire bid evaluation in " + anchor,
+				"m2",
+			})
+			if err := ps.Save(); err != nil {
+				t.Fatal(err)
+			}
+
+			bb := &Blackboard{ChainState: map[string]any{
+				"goap_fusion_program_milestone": p.ID + ":0",
+			}}
+			completeGoapProgramMilestone(bb, tc.run)
+
+			re, _ := research.OpenPrograms(path)
+			if re.Programs[0].Milestones[0].Status != "done" || re.Programs[0].Milestones[0].CompletedRun != tc.run.ID {
+				t.Fatalf("milestone must complete when the run executed it: %+v", re.Programs[0].Milestones[0])
+			}
+		})
 	}
 }

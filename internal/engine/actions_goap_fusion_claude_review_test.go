@@ -295,6 +295,34 @@ FINDINGS: - a.go: exported var without doc comment`}
 	}
 }
 
+func TestRunClaudeCodeReviewResearch_StructureModeLeavesSHAUnchanged(t *testing.T) {
+	repo, first := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{output: `GOAL: Deepen the shallow engine module
+GAP: structure report shows god nodes in internal/engine
+FILES: internal/engine
+TESTS: /usr/local/go/bin/go test ./internal/engine -short
+FINDINGS: - architecture drift`}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	saveLastReviewedSHA(bb, first)
+	// Force a structure-mode cycle (round % 3 == 1): the review looked at the
+	// codebase structure, not commits, so it must NOT advance the last-reviewed
+	// SHA — otherwise the next commit cycle skips the commits this cycle never
+	// actually reviewed.
+	saveReviewModeRound(bb, 1)
+
+	deps := reviewTestDeps(t, repo, runner)
+	if got := runClaudeCodeReviewResearch(bb, deps); got != 1 {
+		t.Fatalf("status = %d, want 1; result: %s", got, bb.Result)
+	}
+
+	if got := loadLastReviewedSHA(bb); got != first {
+		head, _ := runGoapGit(repo, 10*time.Second, "rev-parse", "HEAD")
+		t.Fatalf("structure cycle must leave last-reviewed SHA unchanged: got %q, want %q (HEAD is %q)", got, first, head)
+	}
+}
+
 func TestRunClaudeCodeReviewResearch_RateLimited(t *testing.T) {
 	repo, _ := newReviewTestRepo(t)
 	runner := &fakeReviewClaudeRunner{

@@ -112,13 +112,18 @@ func appendGoapResearchGoals(bb *Blackboard, goals []goapResearchGoal) {
 		seen[research.Key(l)] = true
 	}
 	for _, g := range goals {
-		line := g.Line()
+		// Both lists are persisted as independent \n-joined strings and
+		// re-split line-by-line, then goal[i] is paired with gap[i]. A goal
+		// or gap that itself spans multiple lines would add extra entries to
+		// one list only and silently desync the pairing, so collapse each to
+		// a single physical line before storing.
+		line := collapseToSingleLine(g.Line())
 		if line == "" || seen[research.Key(line)] {
 			continue
 		}
 		seen[research.Key(line)] = true
 		goalLines = append(goalLines, line)
-		gap := strings.TrimSpace(g.Gap)
+		gap := collapseToSingleLine(g.Gap)
 		if gap == "" {
 			gap = "research-backed improvement"
 		}
@@ -164,6 +169,22 @@ func goapFusionNotebookLMGoalsFromGaps(gaps string) []string {
 		}
 	}
 	return out
+}
+
+// collapseToSingleLine flattens any embedded newlines (and surrounding
+// whitespace) into single spaces so a value stored in a \n-joined ChainState
+// list occupies exactly one physical line. This keeps the parallel
+// goap_fusion_notebooklm_goals / goap_fusion_notebooklm_gaps lists the same
+// length, so index-based goal/gap pairing stays aligned.
+func collapseToSingleLine(s string) string {
+	fields := strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' })
+	parts := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if t := strings.TrimSpace(f); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func splitNonEmptyLines(s string) []string {
@@ -278,9 +299,11 @@ func recordImplementedGoals(run *SuperpowersRun) {
 	_ = store.Save()
 }
 
-// completeGoapProgramMilestone marks the active program milestone done after
-// a run that executed it applied successfully. PrioritizeGoapGoals stamps
-// "programID:index" into ChainState when it queues a milestone.
+// completeGoapProgramMilestone marks the active program milestone done — but
+// only when the applied run demonstrably executed it. PrioritizeGoapGoals
+// stamps "programID:index" into ChainState when it queues a milestone;
+// completing on any successful apply would let a cycle that drifted onto
+// unrelated goals silently check off milestone work it never did.
 func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
 	ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
 	parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
@@ -295,10 +318,53 @@ func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
 	if err != nil {
 		return
 	}
+	// Locate the milestone so we can verify the run against its file anchors
+	// before checking it off.
+	var milestone *research.Milestone
+	for _, p := range ps.Programs {
+		if p.ID == parts[0] && idx >= 0 && idx < len(p.Milestones) {
+			milestone = &p.Milestones[idx]
+			break
+		}
+	}
+	if milestone == nil || !runExecutedMilestone(run, milestone.Goal) {
+		return
+	}
 	if ps.MarkDone(parts[0], idx, run.ID) {
 		_ = ps.Save()
 		setGoapState(bb, "program_milestone_done", ref)
 	}
+}
+
+// runExecutedMilestone reports whether the applied run actually did the
+// milestone's work: either its changed files intersect the milestone's file
+// anchors, or a done task in the run worked on an anchor file. A milestone
+// naming no Go-file anchors falls back to trusting the successful apply.
+func runExecutedMilestone(run *SuperpowersRun, milestoneGoal string) bool {
+	anchors := extractGoFilePaths(milestoneGoal)
+	if len(anchors) == 0 {
+		return true
+	}
+	anchorSet := map[string]bool{}
+	for _, a := range anchors {
+		anchorSet[a] = true
+	}
+	for _, f := range run.ChangedFiles {
+		if anchorSet[f] {
+			return true
+		}
+	}
+	for _, task := range run.Tasks {
+		if task.Status != "done" && task.Status != "completed" {
+			continue
+		}
+		for _, f := range task.Files {
+			if anchorSet[f] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // loadReviewModeRound / saveReviewModeRound persist the review-mode rotation
