@@ -963,7 +963,10 @@ func init() {
 // the `nlm` NotebookLM binary the cycle's RunGoapFusionNotebookLMResearch step
 // shells out to is proven an executable file so a cycle never gates on the loop
 // runner only to abort at the research step with a missing binary and degrade to
-// stale vault research.
+// stale vault research, and — immediately after that binary guard — the
+// VerifyScheduledGoapFusionNotebook notebook-id guard proves a NotebookLM notebook
+// id is actually configured so the research step never queries against no notebook
+// and silently degrades to stale vault research.
 func GoapFusionPreflightNode() evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "Sequence",
@@ -1009,6 +1012,10 @@ func GoapFusionPreflightNode() evolution.SerializableNode {
 			{
 				Type: "Action",
 				Name: "VerifyScheduledGoapFusionNotebookLMTool",
+			},
+			{
+				Type: "Action",
+				Name: "VerifyScheduledGoapFusionNotebook",
 			},
 			{
 				Type: "Action",
