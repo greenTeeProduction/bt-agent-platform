@@ -928,6 +928,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// scheduled cycle does not re-resume already completed work.
 	clearSuperpowersPlanState(bb)
 	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`\nApply status: `%s`\nCommit: `%s`", run.ID, finishPath, run.ApplyStatus, run.AppliedCommit)
+	if run.PartialFailure != "" {
+		bb.Result += "\n\nPARTIAL LANDING: completed tasks landed; " + run.PartialFailure
+	}
 	return 1
 }
 
@@ -996,6 +999,9 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 	fmt.Fprintf(&b, "- Worktree: `%s`\n", run.WorktreePath)
 	if run.ApplyStatus != "" {
 		fmt.Fprintf(&b, "- Apply status: `%s`\n", run.ApplyStatus)
+	}
+	if run.PartialFailure != "" {
+		fmt.Fprintf(&b, "- PARTIAL LANDING: %s\n", run.PartialFailure)
 	}
 	if run.PatchPath != "" {
 		fmt.Fprintf(&b, "- Patch: `%s`\n", run.PatchPath)

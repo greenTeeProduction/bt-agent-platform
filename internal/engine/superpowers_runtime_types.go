@@ -38,10 +38,13 @@ type SuperpowersRun struct {
 	Verification   []VerificationCheck `json:"verification"`
 	ChangedFiles   []string            `json:"changed_files"`
 	ApplyStatus    string              `json:"apply_status,omitempty"`
-	PatchPath      string              `json:"patch_path,omitempty"`
-	AppliedCommit  string              `json:"applied_commit,omitempty"`
-	StartedAt      time.Time           `json:"started_at"`
-	UpdatedAt      time.Time           `json:"updated_at"`
+	// PartialFailure records a failed task that was carried forward while the
+	// run's completed tasks landed (partial-landing mode).
+	PartialFailure string    `json:"partial_failure,omitempty"`
+	PatchPath      string    `json:"patch_path,omitempty"`
+	AppliedCommit  string    `json:"applied_commit,omitempty"`
+	StartedAt      time.Time `json:"started_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type SuperpowersTask struct {

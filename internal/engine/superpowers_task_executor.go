@@ -174,13 +174,74 @@ func (e SuperpowersTaskExecutor) ExecuteTask(ctx context.Context, run *Superpowe
 
 func ExecuteSuperpowersTaskBatchRuntime(ctx context.Context, run *SuperpowersRun) error {
 	executor := SuperpowersTaskExecutor{Runner: defaultSuperpowersCommandRunner, Claude: defaultSuperpowersClaudeRunner}
+	return executeSuperpowersTaskBatch(ctx, executor, run)
+}
+
+// executeSuperpowersTaskBatch runs the plan's tasks with PARTIAL-LANDING
+// semantics: each completed task is snapshot-committed in the run worktree;
+// when a later task fails, the failed task's edits are discarded
+// (reset --hard + clean), remaining tasks are skipped, and the snapshots are
+// mixed-reset back to the pre-batch base so the completed tasks' verified
+// work sits uncommitted in the worktree — exactly the shape the verify and
+// apply stages expect. The failed goal is NOT recorded as implemented, so
+// the next research cycle re-proposes it (carry-forward). All-or-nothing is
+// preserved when the FIRST task fails or when snapshots are unavailable
+// (dry-run, main-repo mode, or a snapshot command failure).
+//
+// Regression context: before this mode, one failed task discarded every
+// completed task's verified work — cycle 20260704T023012 lost tasks 1-2
+// because task 3 failed, then a later cycle had to redo them.
+func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskExecutor, run *SuperpowersRun) error {
+	if executor.Runner == nil {
+		executor.Runner = defaultSuperpowersCommandRunner
+	}
+	snapshots := run.Mode == SuperpowersModeApply && run.WorktreePath != "" && run.WorktreePath != run.RepoDir
+	base := ""
+	if snapshots {
+		res := executor.Runner.Run(ctx, run.WorktreePath, "git", "rev-parse", "HEAD")
+		if res.Err != nil {
+			snapshots = false
+		} else {
+			base = strings.TrimSpace(res.Output)
+		}
+	}
+	completed := 0
 	for i := range run.Tasks {
 		task, err := executor.ExecuteTask(ctx, run, run.Tasks[i])
 		run.Tasks[i] = task
 		_ = writeSuperpowersRunJSON(run)
 		if err != nil {
-			return err
+			if completed == 0 || !snapshots {
+				return err
+			}
+			// Partial landing: drop the failed task's edits (tracked and
+			// untracked), skip the rest, and unwrap the snapshots so the
+			// completed work is uncommitted again.
+			executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", "--hard", "HEAD")
+			executor.Runner.Run(ctx, run.WorktreePath, "git", "clean", "-fd")
+			executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
+			for j := i + 1; j < len(run.Tasks); j++ {
+				run.Tasks[j].Status = "skipped"
+			}
+			run.PartialFailure = fmt.Sprintf("task %d %q failed and was carried forward for a future cycle: %v", task.Index, task.Title, err)
+			_ = writeSuperpowersRunJSON(run)
+			return nil
 		}
+		if snapshots {
+			executor.Runner.Run(ctx, run.WorktreePath, "git", "add", "-A")
+			commit := executor.Runner.Run(ctx, run.WorktreePath, "git", "commit", "--no-verify", "-m", fmt.Sprintf("superpowers snapshot: task %d", task.Index))
+			if commit.Err != nil {
+				// Without a snapshot for this task, a later partial landing
+				// could not separate its work from a failed task's — degrade
+				// to all-or-nothing for the rest of the batch.
+				snapshots = false
+			}
+		}
+		completed++
+	}
+	if snapshots && completed > 0 {
+		// Unwrap all snapshots: worktree keeps every change, uncommitted.
+		executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
 	}
 	return nil
 }
