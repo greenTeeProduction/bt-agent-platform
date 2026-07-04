@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -65,11 +66,28 @@ func buildBaseHandler() slog.Handler {
 	}
 	rotWriter = rw
 
-	// Write to both rotating file and stderr
-	w := io.MultiWriter(rw, os.Stderr)
-	return slog.NewJSONHandler(w, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})
+	// Split levels: the rotating FILE keeps full DEBUG detail for forensics,
+	// while STDERR (the systemd journal) uses BT_LOG_LEVEL (default INFO) so
+	// the journal is readable — before this, DEBUG "llm health check OK" every
+	// 30s (2/min) buried every operationally useful line.
+	fileH := slog.NewJSONHandler(rw, &slog.HandlerOptions{Level: slog.LevelDebug})
+	stderrH := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: envLogLevel()})
+	return &fanoutHandler{children: []slog.Handler{fileH, stderrH}}
+}
+
+// envLogLevel reads BT_LOG_LEVEL (debug|info|warn|error), defaulting to INFO
+// for the journal/stderr sink.
+func envLogLevel() slog.Level {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("BT_LOG_LEVEL"))) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // SetAsDefault installs the engine logger as slog's process default and

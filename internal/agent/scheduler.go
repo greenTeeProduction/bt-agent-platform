@@ -589,12 +589,12 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	s.saveState()
 
 	// Record history
+	quality := historyQualityScore(inst, outcome, output)
+	errStr := ""
+	if runErr != nil {
+		errStr = runErr.Error()
+	}
 	if s.history != nil {
-		quality := historyQualityScore(inst, outcome, output)
-		errStr := ""
-		if runErr != nil {
-			errStr = runErr.Error()
-		}
 		_ = s.history.Record(RunRecord{
 			AgentName: job.AgentName,
 			Task:      runCtx.Task,
@@ -607,6 +607,26 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			EndedAt:   time.Now(),
 		})
 	}
+
+	// One structured INFO line per scheduled cycle — the operationally useful
+	// event that previously had to be reconstructed from run.json/history by
+	// hand. `journalctl … | grep "scheduler: cycle complete"` is now the
+	// cycle-outcome history, and the extracted facts (commit, apply status,
+	// milestone, seeding, brainstorm) surface what each cycle actually did.
+	logArgs := []any{
+		"agent", job.AgentName,
+		"outcome", outcome,
+		"duration", duration.Truncate(time.Second).String(),
+		"quality", quality,
+		"run_count", job.RunCount,
+	}
+	for k, v := range extractCycleFacts(output) {
+		logArgs = append(logArgs, k, v)
+	}
+	if errStr != "" {
+		logArgs = append(logArgs, "error", truncateForLog(errStr, 200))
+	}
+	slog.Info("scheduler: cycle complete", logArgs...)
 
 	// Publish event to AgentBus (→ Hermes webhook bridge)
 	if GlobalAgentBus != nil {
