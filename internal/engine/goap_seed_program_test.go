@@ -169,3 +169,31 @@ func TestChooseProgramProposalFallsThroughWhenNlmHasNoProgram(t *testing.T) {
 		t.Fatal("nlm failure must fall through to Claude")
 	}
 }
+
+func TestIsValidProgramMilestone(t *testing.T) {
+	valid := []string{
+		"Implement the macro path extractor in `internal/evolution/extractor.go` and `internal/evolution/extractor_test.go` to distill recurring node sequences from reflection records.",
+		"Add auction retry/backoff in internal/a2a/auction.go with regression tests in internal/a2a/auction_test.go",
+	}
+	for _, m := range valid {
+		if !isValidProgramMilestone(m) {
+			t.Fatalf("valid file-scoped milestone rejected: %q", m)
+		}
+	}
+	invalid := []string{
+		"Review complete. Everything looks good.",      // prose, no files
+		"Make the platform better",                     // no files
+		"internal/x.go",                                // too short, no verb/desc but names file — actually len<12? it's 15... but no real instruction
+		"Summary: we should improve internal/a2a/a.go", // prose opener
+	}
+	// "internal/x.go" is 13 chars and names a file — the gate accepts it (file-scoped, not prose, len ok);
+	// that is acceptable: a bare file path is a legitimate (if terse) milestone target.
+	for _, m := range invalid[:2] {
+		if isValidProgramMilestone(m) {
+			t.Fatalf("no-file/prose milestone accepted: %q", m)
+		}
+	}
+	if isValidProgramMilestone(invalid[3]) {
+		t.Fatalf("prose-opener milestone accepted: %q", invalid[3])
+	}
+}

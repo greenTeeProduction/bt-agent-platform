@@ -85,7 +85,7 @@ func init() {
 		}
 		var rejected []string
 		for _, m := range spec.Milestones {
-			if !isActionableGoapGoal(m) || len(extractGoFilePaths(m)) == 0 {
+			if !isValidProgramMilestone(m) {
 				rejected = append(rejected, m)
 			}
 		}
@@ -98,6 +98,25 @@ func init() {
 		bb.Result += programContinueNote()
 		return 1
 	})
+}
+
+// isValidProgramMilestone is the acceptance gate for a seeded program's
+// milestones — deliberately MORE tolerant than isActionableGoapGoal (which
+// is tuned for terse goal-queue LINES with a 400-char cap): a program
+// milestone is a richer proposal that legitimately runs longer and may open
+// with a noun phrase. It requires only that the milestone names at least one
+// Go file, does not open with a review/summary prose phrase, and is a
+// sensible length. Over-strict validation here rejected otherwise-valid
+// programs and left the self-seeder producing nothing (2026-07-04 16:xx).
+func isValidProgramMilestone(m string) bool {
+	m = strings.TrimSpace(m)
+	if len(m) < 12 || len(m) > 600 {
+		return false
+	}
+	if goapProseGoalRe.MatchString(m) {
+		return false
+	}
+	return len(extractGoFilePaths(m)) > 0
 }
 
 // buildSeedProgramPrompt frames the proposal request with what has already
