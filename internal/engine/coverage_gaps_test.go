@@ -164,3 +164,25 @@ func TestScoreChildren_BasicRanking(t *testing.T) {
 	}
 	_ = scored
 }
+
+func TestValidateOutputQualityRejectsRefusals(t *testing.T) {
+	refusals := []string{
+		"I'm sorry, but there is no previous task recorded in this conversation to correct. If you have a specific task you'd like me to work on, please provide it.",
+		"As an AI language model, I cannot access that.",
+		"I'd be happy to help — let me know what you need.",
+	}
+	for _, r := range refusals {
+		bb := &Blackboard{Result: r}
+		if validateOutputQuality(bb) {
+			t.Fatalf("refusal/apology must fail the quality gate: %q", r)
+		}
+		if bb.QualityScore > 0.2 {
+			t.Fatalf("refusal must score low, got %.2f for %q", bb.QualityScore, r)
+		}
+	}
+	// Genuine structured work still passes.
+	bb := &Blackboard{Result: "## Alert Routing\n\nroute: pagerduty\nstatus: delivered\n- alert forwarded to on-call"}
+	if !validateOutputQuality(bb) {
+		t.Fatalf("real structured output must still pass, score %.2f", bb.QualityScore)
+	}
+}

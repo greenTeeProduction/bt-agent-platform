@@ -756,3 +756,37 @@ func TestArc42DomainTreeConditionsHaveDescriptions(t *testing.T) {
 		walk(name, *tree)
 	}
 }
+
+// TestNoDomainTreeHasUnregisteredActions is the platform-wide generalization of
+// TestAuctionDemoTreeHasNoSilentNoOps: every Action node in every registered
+// domain tree must resolve to a real engine action. An unregistered name hits
+// the engine's permissive success fallback (tree.go: "unknown actions succeed
+// silently") — a node that reports success while doing nothing, the footgun
+// that hid two hollow stages in the original auction_demo tree. Conditions get
+// the same check (an unknown condition silently passes). Cheap, static, and it
+// closes the silent-no-op class for the whole fleet permanently.
+func TestNoDomainTreeHasUnregisteredActions(t *testing.T) {
+	var offenders []string
+	for name, tree := range AllDomainTrees() {
+		var walk func(n evolution.SerializableNode)
+		walk = func(n evolution.SerializableNode) {
+			switch n.Type {
+			case "Action":
+				if engine.GetAction(n.Name) == nil {
+					offenders = append(offenders, name+" → action "+n.Name)
+				}
+			case "Condition":
+				if engine.GetCondition(n.Name) == nil {
+					offenders = append(offenders, name+" → condition "+n.Name)
+				}
+			}
+			for _, c := range n.Children {
+				walk(c)
+			}
+		}
+		walk(*tree)
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("%d unregistered (silent-no-op) tree node(s):\n  %s", len(offenders), strings.Join(offenders, "\n  "))
+	}
+}

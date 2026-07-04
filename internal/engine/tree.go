@@ -348,6 +348,13 @@ func validateOutputQuality(b *Blackboard) bool {
 		"output quality failed", "i cannot", "i can't", "unable to", "error:", "failed to",
 		"i don't know", "i'm not sure", "not implemented", "incomplete", "step limit",
 		"could not be determined", "could not be verified", "not verified", "unverified",
+		// Refusal/apology/empty-turn patterns: an agent answering with an
+		// apology or a request for more input did no work and must not score
+		// as success (observed: alert-router runs whose entire output was
+		// "I'm sorry, but there is no previous task recorded…" scored 0.5).
+		"i'm sorry", "i am sorry", "no previous task", "please provide",
+		"if you have a specific task", "as an ai language model", "i'd be happy to",
+		"let me know what", "there is nothing to",
 	}
 	for _, p := range errorPatterns {
 		if strings.Contains(lowerResult, p) {

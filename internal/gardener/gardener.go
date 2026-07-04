@@ -199,6 +199,9 @@ type CycleMetrics struct {
 	DurationMs  int64   `json:"duration_ms"`
 	Rejections  int     `json:"rejections,omitempty"` // quality gate rejections this cycle
 	Rollbacks   int     `json:"rollbacks,omitempty"`  // quality gate rollbacks this cycle
+	// SkippedNoEvidence marks a tree that carried no reflection records, so
+	// the evidence gate skipped mutation (no run-derived fitness gradient).
+	SkippedNoEvidence bool `json:"skipped_no_evidence,omitempty"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -322,6 +325,12 @@ type Config struct {
 	CrisisDetector *evolution.CrisisDetector // crisis detection & diversity injection
 	SnapshotDir    string                    // directory for pre-mutation snapshots
 	ValidationGate ValidationGateConfig      // validation gate for decentralized coordination (Gap 5)
+	// EvolveWithoutReflections, when false (the default), skips mutation for
+	// trees that carry no reflection records: fitness has no run-derived
+	// gradient there, so mutating them only burns benchmark compute — 6,973
+	// cycles over 2 days improved 0/50 trees, 44 of which never run and hold
+	// no reflections. Set true to force blind evolution of every tree.
+	EvolveWithoutReflections bool
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -369,8 +378,23 @@ func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
 
 	allRecords, _ := g.cfg.RefStore.LoadAll()
 	records := evolution.FilterByTreeName(allRecords, entry.Name)
-	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
+
+	// Evidence gate: a tree with no reflection records has no run-derived
+	// fitness gradient, so mutation is a blind coin flip that only burns
+	// benchmark compute. Skip it (recording a zero-delta no-mutation metric)
+	// unless blind evolution is explicitly enabled.
+	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+		baseFitness := evaluator.EvaluateTree(tree, records)
+		return CycleMetrics{
+			TreeName: entry.Name, Improved: false,
+			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
+			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
+			SkippedNoEvidence: true,
+		}
+	}
+
+	baseFitness := evaluator.EvaluateTree(tree, records)
 	rejections := 0
 	rollbacks := 0
 

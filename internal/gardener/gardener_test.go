@@ -2,7 +2,10 @@ package gardener
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 func TestRegistry_Count(t *testing.T) {
@@ -86,5 +89,37 @@ func TestMetricsTracker_CyclesForTree(t *testing.T) {
 	}
 	if got := mt.CyclesForTree("tree_b"); got != 1 {
 		t.Errorf("CyclesForTree(tree_b) = %d, want 1", got)
+	}
+}
+
+func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
+	dir := t.TempDir()
+	store, err := evolution.NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := NewRegistry(dir)
+	reg.addBuiltin("lonely_tree", "no reflections", &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "DoThing"}},
+	})
+	mt, err := NewMetricsTracker(filepath.Join(dir, "m.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := NewGardener(Config{Registry: reg, RefStore: store, MetricsTracker: mt, MaxMutations: 3})
+
+	var entry TreeEntry
+	for _, e := range reg.List() {
+		if e.Name == "lonely_tree" {
+			entry = e
+		}
+	}
+	metrics := g.evolveTree(entry)
+	if !metrics.SkippedNoEvidence {
+		t.Fatalf("a tree with no reflection records must be skipped by the evidence gate: %+v", metrics)
+	}
+	if metrics.Mutations != 0 || metrics.Improved {
+		t.Fatalf("skipped tree must apply no mutations: %+v", metrics)
 	}
 }
