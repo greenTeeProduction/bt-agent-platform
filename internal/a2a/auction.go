@@ -1,8 +1,12 @@
 package a2a
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"sync"
 	"time"
 )
 
@@ -128,4 +132,86 @@ func betterBid(candidate, incumbent Bid) bool {
 		return candidate.Cost < incumbent.Cost
 	}
 	return candidate.Confidence > incumbent.Confidence
+}
+
+// BidCollector delivers a task announcement to a single candidate agent and
+// returns the candidate's raw text response. It is the one seam the auctioneer
+// needs from the A2A transport, and is satisfied by *BTAgentClient in
+// production and by a fake in tests. An empty response signals that the
+// candidate declined to bid.
+type BidCollector interface {
+	SendTask(ctx context.Context, agentURL, taskText string) (string, error)
+}
+
+// Auctioneer opens an auction by fanning a TaskAnnouncement out to candidate
+// agents over a BidCollector and gathering their bids. Unreachable, silent,
+// malformed, and foreign-task candidates are tolerated: a single bad candidate
+// never fails the auction, it is simply omitted from the returned bids.
+type Auctioneer struct {
+	transport BidCollector
+}
+
+// NewAuctioneer creates an Auctioneer that announces and collects bids over the
+// given transport.
+func NewAuctioneer(transport BidCollector) *Auctioneer {
+	return &Auctioneer{transport: transport}
+}
+
+// CollectBids validates the announcement, fans it out to every candidate
+// concurrently, and returns the valid bids sorted by bidder name.
+//
+// candidates maps a candidate's display name to its A2A base URL. The
+// announcement is delivered JSON-encoded as the task text. A candidate's
+// response is kept only when it is a well-formed Bid (Validate passes) for the
+// announced task; declines (empty response), transport errors, non-JSON
+// garbage, structurally invalid bids, and bids for a different task are all
+// dropped. An invalid announcement is rejected before any fan-out.
+func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, candidates map[string]string) ([]Bid, error) {
+	if err := ann.Validate(); err != nil {
+		return nil, fmt.Errorf("a2a: invalid announcement: %w", err)
+	}
+
+	payload, err := json.Marshal(ann)
+	if err != nil {
+		return nil, fmt.Errorf("a2a: marshal announcement: %w", err)
+	}
+	taskText := string(payload)
+
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		bids []Bid
+	)
+	for _, agentURL := range candidates {
+		wg.Add(1)
+		go func(agentURL string) {
+			defer wg.Done()
+
+			resp, err := a.transport.SendTask(ctx, agentURL, taskText)
+			if err != nil || resp == "" {
+				return // candidate unreachable or declined to bid
+			}
+
+			var bid Bid
+			if err := json.Unmarshal([]byte(resp), &bid); err != nil {
+				return // response was not a bid
+			}
+			if bid.TaskID != ann.TaskID {
+				return // bid for a different task
+			}
+			if err := bid.Validate(); err != nil {
+				return // structurally invalid bid
+			}
+
+			mu.Lock()
+			bids = append(bids, bid)
+			mu.Unlock()
+		}(agentURL)
+	}
+	wg.Wait()
+
+	sort.Slice(bids, func(i, j int) bool {
+		return bids[i].BidderName < bids[j].BidderName
+	})
+	return bids, nil
 }

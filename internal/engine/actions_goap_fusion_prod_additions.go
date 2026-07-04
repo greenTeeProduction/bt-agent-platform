@@ -11,6 +11,20 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
+// goapFusionBareDelegationMarker is VerifyGoapBuild's internal note when it
+// hands build/test verification to the apply-stage worktree on the bare main
+// repo. It is an implementation detail of VerifyGoapBuild's wording.
+//
+// goapFusionNormalizedDelegationLine is the explicit, self-describing token
+// ReportFusionCycle appends to the cycle report whenever the verify_result
+// carries the bare marker. GOAL1's evidence gate keys on THIS normalized token,
+// not on VerifyGoapBuild's raw wording — so a future reword of one does not
+// silently re-break the other.
+const (
+	goapFusionBareDelegationMarker     = "delegated to apply-stage worktree verification"
+	goapFusionNormalizedDelegationLine = "Build/tests: DELEGATED (bare main repo, verified in apply worktree)"
+)
+
 func init() {
 	registerGoapFusionProductionAdditions()
 }
@@ -196,14 +210,29 @@ func registerGoapFusionProductionAdditions() {
 			}
 			requiredEvidence := []string{
 				"Verification:",
-				"go build ./cmd/bt-agent ./cmd/bt-agent-cli: PASSED",
-				"focused go tests: PASSED",
 				"graphify update .: PASSED",
 			}
 			for _, evidence := range requiredEvidence {
 				if !strings.Contains(out, evidence) {
 					return fail("deterministic analysis output missing evidence: " + evidence)
 				}
+			}
+			// Build/test evidence is either/or: the two focused PASSED strings, or
+			// the bare-repo delegation marker VerifyGoapBuild emits when it hands
+			// build/test verification to the apply-stage worktree. Requiring the
+			// PASSED strings unconditionally dead-letters every ScheduledAnalysisPath
+			// cycle on the bare main repo.
+			buildTestPassed := strings.Contains(out, "go build ./cmd/bt-agent ./cmd/bt-agent-cli: PASSED") &&
+				strings.Contains(out, "focused go tests: PASSED")
+			// Accept EITHER VerifyGoapBuild's raw bare-repo note OR the normalized
+			// delegation token ReportFusionCycle appends. Keying on the normalized
+			// token decouples the gate from VerifyGoapBuild's exact wording: a reword
+			// of the internal note still passes as long as the normalized line is
+			// present.
+			delegated := strings.Contains(out, goapFusionBareDelegationMarker) ||
+				strings.Contains(out, goapFusionNormalizedDelegationLine)
+			if !buildTestPassed && !delegated {
+				return fail("deterministic analysis output missing build/test evidence: expected both PASSED strings or the apply-stage delegation marker")
 			}
 			return 1
 		}
@@ -217,6 +246,14 @@ func registerGoapFusionProductionAdditions() {
 		verify, _ := bb.ChainState["goap_fusion_verify_result"].(string)
 		graphify, _ := bb.ChainState["goap_fusion_graphify_update_result"].(string)
 		bb.Result = fmt.Sprintf("## GOAP Fusion Cycle Complete\n\nAnalysis: `%s`\n\nVerification:\n```\n%s\n%s\n```", path, verify, graphify)
+		// When VerifyGoapBuild delegated build/test verification to the apply-stage
+		// worktree (bare main repo), its raw note is a pass-through that only the
+		// gate's exact-string match understands. Append an explicit, self-describing
+		// delegation line so the report carries a stable, gate-parseable token that
+		// survives a reword of VerifyGoapBuild's internal note.
+		if strings.Contains(verify, goapFusionBareDelegationMarker) {
+			bb.Result += "\n\n" + goapFusionNormalizedDelegationLine
+		}
 		return 1
 	})
 

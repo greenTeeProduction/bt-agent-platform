@@ -15,6 +15,10 @@ type BTAgentClient struct {
 	Timeout time.Duration
 }
 
+// BTAgentClient is the production transport an Auctioneer fans announcements out
+// over; its SendTask satisfies BidCollector.
+var _ BidCollector = (*BTAgentClient)(nil)
+
 // NewBTAgentClient creates a new A2A client for BT-to-external delegation.
 func NewBTAgentClient() *BTAgentClient {
 	return &BTAgentClient{Timeout: 120 * time.Second}
