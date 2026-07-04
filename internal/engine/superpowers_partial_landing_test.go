@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,10 +15,12 @@ import (
 // invocation consumes the next scripted result (RED runs must fail, GREEN
 // runs pass or fail per script).
 type partialLandingRunner struct {
-	t           *testing.T
-	calls       []string
-	testResults []CommandResult
-	testCalls   int
+	t              *testing.T
+	calls          []string
+	testResults    []CommandResult
+	testCalls      int
+	failCommitTask int    // when >0, the snapshot commit for this task index fails
+	failCleanup    string // when non-empty, any git command whose args contain this substring fails
 }
 
 func (r *partialLandingRunner) Run(_ context.Context, dir string, name string, args ...string) CommandResult {
@@ -25,10 +28,17 @@ func (r *partialLandingRunner) Run(_ context.Context, dir string, name string, a
 	r.calls = append(r.calls, cmd)
 	res := CommandResult{Command: cmd, Dir: dir, Duration: time.Millisecond}
 	switch {
+	case name == "git" && r.failCleanup != "" && strings.Contains(strings.Join(args, " "), r.failCleanup):
+		res.Err = errors.New("cleanup command failed")
+		return res
 	case name == "git" && len(args) >= 2 && args[0] == "rev-parse" && args[1] == "HEAD":
 		res.Output = "basesha\n"
 	case name == "git" && len(args) >= 1 && args[0] == "status":
 		res.Output = ""
+	case name == "git" && len(args) >= 1 && args[0] == "commit" && r.failCommitTask > 0 &&
+		strings.Contains(cmd, fmt.Sprintf("superpowers snapshot: task %d", r.failCommitTask)):
+		res.Err = errors.New("commit failed")
+		return res
 	case name == "bash" && len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "go test"):
 		if r.testCalls >= len(r.testResults) {
 			r.t.Fatalf("unexpected test command %q", args[1])
@@ -109,6 +119,35 @@ func TestBatchPartialLandingKeepsCompletedTasks(t *testing.T) {
 	}
 }
 
+// If the partial-landing cleanup itself fails, the failed task's broken edits
+// could survive the mixed `git reset base` and land mixed into the completed
+// work as a bogus "successful" partial batch. The three recovery commands
+// (`git reset --hard HEAD`, `git clean -fd`, `git reset base`) must have their
+// results checked: if any fails, the batch must abort to all-or-nothing by
+// returning the original task error instead of reporting nil success.
+func TestBatchPartialLandingCleanupFailureAbortsAllOrNothing(t *testing.T) {
+	runner := &partialLandingRunner{t: t, failCleanup: "reset --hard HEAD", testResults: []CommandResult{
+		redFail(), greenPass(), // task 1: done, snapshot committed
+		redFail(), greenFail(), // task 2: GREEN verification fails -> triggers cleanup
+	}}
+	run := partialLandingRun(t, 3)
+	executor := SuperpowersTaskExecutor{Runner: runner, Claude: &scriptedClaudeRunner{}}
+
+	err := executeSuperpowersTaskBatch(context.Background(), executor, run)
+	if err == nil {
+		t.Fatal("cleanup failure must abort the batch (all-or-nothing), not report nil success")
+	}
+	// The original task-2 execution error must be surfaced, not swallowed.
+	if !strings.Contains(err.Error(), "task GREEN verification failed") {
+		t.Fatalf("aborted batch must return the original task error; got: %v", err)
+	}
+	// A failed cleanup means the worktree is NOT in the clean partial-landing
+	// shape, so no partial-success must be recorded.
+	if run.PartialFailure != "" {
+		t.Fatalf("failed cleanup must not record a partial-landing success: %q", run.PartialFailure)
+	}
+}
+
 // A first-task failure keeps the all-or-nothing contract: nothing landed,
 // the batch fails.
 func TestBatchFirstTaskFailureStaysAllOrNothing(t *testing.T) {
@@ -152,6 +191,39 @@ func TestBatchFullSuccessUnwrapsSnapshots(t *testing.T) {
 	}
 	if run.PartialFailure != "" {
 		t.Fatalf("full success must not record a partial failure: %q", run.PartialFailure)
+	}
+}
+
+// A mid-batch snapshot-commit failure degrades to all-or-nothing for the
+// REST of the batch, but the tasks that were ALREADY snapshot-committed
+// before the degrade must still be unwrapped. The final `git reset base`
+// must run whenever a snapshot commit was ever created (base != ""), not
+// only while the live `snapshots` flag is still true. Otherwise task 1's
+// verified work stays as a commit above base and the git-diff apply stage
+// silently drops it while the batch reports success.
+// Regression: memory superpowers-partial-landing-snapshot-degrade-loses-work.
+func TestBatchMidBatchSnapshotDegradeStillUnwraps(t *testing.T) {
+	runner := &partialLandingRunner{t: t, failCommitTask: 2, testResults: []CommandResult{
+		redFail(), greenPass(), // task 1: done, snapshot commit succeeds
+		redFail(), greenPass(), // task 2: done, but its snapshot commit FAILS -> degrade
+		redFail(), greenPass(), // task 3: done, snapshots already disabled
+	}}
+	run := partialLandingRun(t, 3)
+	executor := SuperpowersTaskExecutor{Runner: runner, Claude: &scriptedClaudeRunner{}}
+
+	if err := executeSuperpowersTaskBatch(context.Background(), executor, run); err != nil {
+		t.Fatalf("all tasks completed; batch must succeed: %v", err)
+	}
+	joined := runner.joined()
+	// Task 1 was committed above base before the degrade.
+	if !strings.Contains(joined, "git commit --no-verify -m superpowers snapshot: task 1") {
+		t.Fatalf("task 1 must be snapshot-committed before the degrade; calls:\n%s", joined)
+	}
+	// The batch must still unwrap so task 1's committed work returns to the
+	// working tree for the git-diff apply stage — this is the behavior the
+	// live-flag guard drops.
+	if !strings.Contains(joined, "git reset basesha") {
+		t.Fatalf("mid-batch degrade must still unwrap committed snapshots to base; calls:\n%s", joined)
 	}
 }
 

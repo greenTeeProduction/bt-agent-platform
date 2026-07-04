@@ -216,10 +216,23 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 			}
 			// Partial landing: drop the failed task's edits (tracked and
 			// untracked), skip the rest, and unwrap the snapshots so the
-			// completed work is uncommitted again.
-			executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", "--hard", "HEAD")
-			executor.Runner.Run(ctx, run.WorktreePath, "git", "clean", "-fd")
-			executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
+			// completed work is uncommitted again. Every recovery command's
+			// result is checked: if `git reset --hard HEAD` fails, the failed
+			// task's broken edits survive the subsequent mixed `git reset base`
+			// and land mixed into the completed work as a bogus "success". If
+			// any cleanup step fails, abort to all-or-nothing by returning the
+			// original task error — the worktree is not in the clean
+			// partial-landing shape, so no partial success may be reported.
+			cleanupSteps := [][]string{
+				{"reset", "--hard", "HEAD"},
+				{"clean", "-fd"},
+				{"reset", base},
+			}
+			for _, step := range cleanupSteps {
+				if res := executor.Runner.Run(ctx, run.WorktreePath, "git", step...); res.Err != nil {
+					return err
+				}
+			}
 			for j := i + 1; j < len(run.Tasks); j++ {
 				run.Tasks[j].Status = "skipped"
 			}
@@ -239,8 +252,12 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 		}
 		completed++
 	}
-	if snapshots && completed > 0 {
+	if base != "" {
 		// Unwrap all snapshots: worktree keeps every change, uncommitted.
+		// Keyed on whether a snapshot base was ever established (base != ""),
+		// NOT the live `snapshots` flag — a mid-batch snapshot-commit failure
+		// disables the flag but leaves earlier tasks committed above base, and
+		// those must still be unwrapped or the git-diff apply stage drops them.
 		executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
 	}
 	return nil
