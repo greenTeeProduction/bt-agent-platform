@@ -331,6 +331,10 @@ func main() {
 		// Inject tree resolver and pre-resolve trees for all agents
 		a2a_mod.SetTreeResolver(resolveTree)
 		a2a_mod.InitEngineDelegate()
+		// Supply the live candidate source to the auctioneer production wiring
+		// (engine.AuctionDelegateFn is installed at link time by internal/agentexec).
+		// Candidates are the same A2A cards this server serves.
+		a2a_mod.AuctionCardsFn = a2aSrv.AuctionCardSource()
 		a2aSrv.Executor.TreeMap = make(map[string]*evolution.SerializableNode)
 		for _, inst := range agentReg.List() {
 			if t := resolveTree(inst.Definition.Tree); t != nil {

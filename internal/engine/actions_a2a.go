@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -18,6 +19,28 @@ var AuctionDelegateFn func(task string, chainState map[string]any) (result strin
 
 func init() {
 	registerAuctionDelegateNode()
+	registerIsAuctionTaskCondition()
+}
+
+// auctionTaskKeywords are the task-text signals that route work into the
+// auction-based allocation flow (the auction_demo tree's PreGate).
+var auctionTaskKeywords = []string{"auction", "allocate", "bid", "award", "delegate"}
+
+// registerIsAuctionTaskCondition registers the IsAuctionTask behavior tree
+// condition. Without it the condition name is unknown to the engine and any tree
+// that gates on it (auction_demo) hard-fails ValidateTreeFull at build time and
+// dead-letters before reaching AuctionDelegate — so the condition must be a real
+// registered check, not an unregistered no-op.
+func registerIsAuctionTaskCondition() {
+	RegisterCondition("IsAuctionTask", func(b *Blackboard) bool {
+		task := strings.ToLower(b.Task)
+		for _, kw := range auctionTaskKeywords {
+			if strings.Contains(task, kw) {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // registerAuctionDelegateNode registers the AuctionDelegate behavior tree action.

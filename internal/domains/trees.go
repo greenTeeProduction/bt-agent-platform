@@ -658,23 +658,28 @@ func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 
 // AuctionDemoTree returns a domain tree that exercises auction-based A2A task
 // allocation end to end — milestone 5/5 of the "Auction-based A2A task
-// allocation for multi-agent coordination" program. The announce → bid → award
-// flow is driven by the engine's AuctionDelegate action: the production seam
-// that fans a TaskAnnouncement out to candidate agents, collects their Bids, and
-// dispatches the real task to the winning bidder (falling back to a delegate
-// tree via delegate_tree_id when no eligible bidder responds). The announce and
-// bid stages are modeled as preparatory actions so the tree reads as the full
-// announce-bid-award protocol; the surrounding PreGate/outcome scaffolding
-// matches the other curated domain trees so the demo is selectable via
-// switch_tree.
+// allocation for multi-agent coordination" program. The entire announce → bid →
+// award flow is driven by the engine's single AuctionDelegate action: the
+// production seam whose Auctioneer fans a TaskAnnouncement out to candidate
+// agents, collects their Bids, and dispatches the real task to the winning
+// bidder (falling back to a delegate tree via delegate_tree_id when no eligible
+// bidder responds) — see a2a.Auctioneer.RunAuction, which composes all three
+// stages internally.
+//
+// Earlier revisions modeled the announce and bid stages as separate AnnounceTask
+// and CollectBids Action nodes so the tree "read as" the full protocol, but those
+// names are not registered in the engine: at tick time they resolved to the
+// permissive success fallback, reporting success while surfacing no
+// announcement/bid evidence into the blackboard (a silent no-op caught by
+// TestAuctionDemoTreeHasNoSilentNoOps). Because RunAuction already performs the
+// announce and bid stages within AuctionDelegate, the honest tree collapses to
+// the single real seam rather than fronting it with hollow stages. The
+// surrounding PreGate/outcome scaffolding matches the other curated domain trees
+// so the demo is selectable via switch_tree.
 func AuctionDemoTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "AuctionDemo_Main", Children: []evolution.SerializableNode{
 		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsAuctionTask", "Detect auction/allocate/bid/award/delegate keywords")),
-		seq("AnnounceBidAward",
-			act("AnnounceTask", "Broadcast a TaskAnnouncement describing the task to candidate A2A agents"),
-			act("CollectBids", "Gather Bids from responding agents with capability/cost scores"),
-			act("AuctionDelegate", "Award the task to the winning bidder via the auction seam (announce→bid→award); fall back to a delegate tree when no eligible bidder responds"),
-		),
+		act("AuctionDelegate", "Run the full announce→bid→award auction: fan a TaskAnnouncement out to candidate A2A agents, collect their Bids, and award the task to the winning bidder — falling back to a delegate tree when no eligible bidder responds"),
 		act("ReflectOnOutcome", "Reflect on auction allocation quality"),
 		outcome(),
 	}}

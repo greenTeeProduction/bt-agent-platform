@@ -29,6 +29,11 @@ const (
 // eligible to win the announced task (wrong task, or below min confidence).
 var ErrNoEligibleBids = errors.New("a2a: no eligible bids for announced task")
 
+// defaultBidDeadline bounds each candidate's fan-out call when the announcement
+// carries no explicit Deadline, so an unbounded announcement can never let a
+// single hung candidate stall the auction forever.
+const defaultBidDeadline = 30 * time.Second
+
 // TaskAnnouncement is broadcast to candidate agents to open an auction for a
 // single unit of work.
 type TaskAnnouncement struct {
@@ -237,6 +242,10 @@ type AuctionResult struct {
 // the evaluator's error (ErrNoEligibleBids) is propagated and nothing is
 // dispatched.
 func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candidates map[string]string) (AuctionResult, error) {
+	if ann.Description == "" {
+		return AuctionResult{}, fmt.Errorf("a2a: announcement Description is required as the winner's task text")
+	}
+
 	bids, err := a.CollectBids(ctx, ann, candidates)
 	if err != nil {
 		return AuctionResult{}, err
@@ -258,6 +267,194 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 	}
 
 	return AuctionResult{Award: award, Result: result}, nil
+}
+
+// AuctionCardsFn is the production seam that yields the live A2A card registry
+// (agent name → card) production auctions draw their candidate set from. The
+// daemon installs it at startup from the registered agents' cards (see
+// Server.AuctionCardSource); until then it is nil and AuctionDelegate finds no
+// candidates, so the AuctionDelegate action falls back to its delegate tree.
+var AuctionCardsFn func() map[string]*a2a.AgentCard
+
+// newAuctionCollector builds the BidCollector transport an Auctioneer fans
+// announcements out over. It is a package var so tests can substitute a fake;
+// in production it is the real BTAgentClient A2A transport.
+var newAuctionCollector = func() BidCollector { return NewBTAgentClient() }
+
+// AuctionDelegate is the production engine.AuctionDelegateFn (installed by
+// internal/agentexec's init so every tree-running binary shares it). It builds
+// the candidate map (agent name → A2A URL) from the live card registry, runs an
+// Auctioneer over the real BTAgentClient transport, and returns the winning
+// agent's execution result.
+//
+// chainState overrides steer candidate selection without recompiling: an
+// "auction_candidates" map (name → URL) fully replaces the derived candidate
+// set, while "auction_required_tags", "auction_min_confidence", and
+// "auction_task_id" shape the announcement (and thus which registered agents are
+// eligible to bid).
+//
+// awarded is false — signalling the caller to fall back to a delegate tree —
+// when there are no candidates or no eligible bidder wins; any other
+// transport/auction failure is returned as err.
+func AuctionDelegate(task string, chainState map[string]any) (string, bool, error) {
+	ann := auctionAnnouncement(task, chainState)
+	candidates := auctionCandidates(ann, chainState)
+	if len(candidates) == 0 {
+		return "", false, nil // no candidates → fall back to delegate tree
+	}
+
+	res, err := NewAuctioneer(newAuctionCollector()).RunAuction(context.Background(), ann, candidates)
+	if err != nil {
+		if errors.Is(err, ErrNoEligibleBids) {
+			return "", false, nil // no eligible bidder → fall back to delegate tree
+		}
+		return "", false, err
+	}
+	return res.Result, true, nil
+}
+
+// auctionAnnouncement builds the TaskAnnouncement for a production auction from
+// the task text and optional chainState overrides. The task text becomes the
+// announcement Description (the real work dispatched to the winner), while the
+// TaskID, RequiredTags, and MinConfidence may be overridden via chainState.
+func auctionAnnouncement(task string, chainState map[string]any) TaskAnnouncement {
+	ann := TaskAnnouncement{TaskID: "auction", Description: task}
+	if id := stateString(chainState, "auction_task_id"); id != "" {
+		ann.TaskID = id
+	}
+	ann.RequiredTags = stateStrings(chainState, "auction_required_tags")
+	if mc, ok := stateFloat(chainState, "auction_min_confidence"); ok {
+		ann.MinConfidence = mc
+	}
+	return ann
+}
+
+// auctionCandidates resolves the candidate map (agent name → A2A URL) for an
+// auction. An explicit "auction_candidates" chainState override wins outright;
+// otherwise the map is derived from the live card registry, restricted to the
+// agents EligibleBidders reports can cover the announcement's RequiredTags.
+func auctionCandidates(ann TaskAnnouncement, chainState map[string]any) map[string]string {
+	if override := candidateOverride(chainState); override != nil {
+		return override
+	}
+	if AuctionCardsFn == nil {
+		return nil
+	}
+	cards := AuctionCardsFn()
+	if len(cards) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string)
+	for _, name := range EligibleBidders(cards, ann) {
+		if url := cardURL(cards[name]); url != "" {
+			out[name] = url
+		}
+	}
+	return out
+}
+
+// cardURL returns the first non-empty interface URL an agent card advertises, or
+// "" when the card exposes no reachable interface.
+func cardURL(card *a2a.AgentCard) string {
+	if card == nil {
+		return ""
+	}
+	for _, iface := range card.SupportedInterfaces {
+		if iface != nil && iface.URL != "" {
+			return iface.URL
+		}
+	}
+	return ""
+}
+
+// candidateOverride extracts an explicit "auction_candidates" chainState override
+// (agent name → A2A URL), tolerating both a typed map[string]string and the
+// map[string]any shape a JSON-decoded blackboard produces. It returns nil when
+// no usable override is present so the caller falls back to the derived set.
+func candidateOverride(chainState map[string]any) map[string]string {
+	raw, ok := chainState["auction_candidates"]
+	if !ok {
+		return nil
+	}
+	out := map[string]string{}
+	switch v := raw.(type) {
+	case map[string]string:
+		for name, url := range v {
+			if name != "" && url != "" {
+				out[name] = url
+			}
+		}
+	case map[string]any:
+		for name, u := range v {
+			if url, ok := u.(string); ok && name != "" && url != "" {
+				out[name] = url
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// stateString reads a string chainState value, returning "" when absent or of a
+// different type.
+func stateString(chainState map[string]any, key string) string {
+	if s, ok := chainState[key].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// stateStrings reads a string-slice chainState value, tolerating both []string
+// and the []any shape a JSON-decoded blackboard produces. It returns nil when
+// absent.
+func stateStrings(chainState map[string]any, key string) []string {
+	switch v := chainState[key].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// stateFloat reads a numeric chainState value, tolerating the several numeric
+// shapes a blackboard may carry (native floats/ints and json.Number). ok is
+// false when the key is absent or non-numeric.
+func stateFloat(chainState map[string]any, key string) (float64, bool) {
+	switch v := chainState[key].(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	}
+	return 0, false
+}
+
+// candidateContext derives the per-candidate fan-out context from the auction
+// context and the announcement's Deadline: it honors an explicit announcement
+// deadline when set, and otherwise applies defaultBidDeadline so an unbounded
+// announcement still cannot let a hung candidate block the auction.
+func candidateContext(ctx context.Context, ann TaskAnnouncement) (context.Context, context.CancelFunc) {
+	if !ann.Deadline.IsZero() {
+		return context.WithDeadline(ctx, ann.Deadline)
+	}
+	return context.WithTimeout(ctx, defaultBidDeadline)
 }
 
 // CollectBids validates the announcement, fans it out to every candidate
@@ -290,7 +487,13 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 		go func(name, agentURL string) {
 			defer wg.Done()
 
-			resp, err := a.transport.SendTask(ctx, agentURL, taskText)
+			// Bound this candidate's call by a deadline derived from the
+			// announcement (or a default when it carries none), so one hung
+			// candidate can never stall the whole fan-out.
+			bidCtx, cancel := candidateContext(ctx, ann)
+			defer cancel()
+
+			resp, err := a.transport.SendTask(bidCtx, agentURL, taskText)
 			if err != nil || resp == "" {
 				return // candidate unreachable or declined to bid
 			}

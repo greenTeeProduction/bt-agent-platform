@@ -1,6 +1,7 @@
 package domains
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -433,6 +434,98 @@ func TestAuctionDemoTree(t *testing.T) {
 	}
 	if strings.TrimSpace(Descriptions["auction_demo"]) == "" {
 		t.Error("auction_demo missing a Descriptions entry")
+	}
+}
+
+// TestAuctionDemoTreeHasNoSilentNoOps is the runtime (not merely structural)
+// honesty guard for the auction_demo tree — milestone 2/4 of the "Auction
+// subsystem production hardening" program. TestAuctionDemoTree above only checks
+// structure (BuildTree != nil, an AuctionDelegate node exists); it cannot catch
+// the real defect: AnnounceTask and CollectBids are Action nodes whose names are
+// NOT registered in the engine, so at tick time they resolve to the engine's
+// permissive success fallback (tree.go: "unknown actions succeed silently") — a
+// node that returns success without doing anything or surfacing any
+// announcement/bid evidence into the blackboard. The tree reads as a full
+// announce → bid → award protocol but two of its three stages are hollow.
+//
+// This test actually BUILDS and RUNS each protocol Action node in isolation and
+// fails if the node reports success while leaving the blackboard untouched (no
+// Result, Results, ChainState, or KgResults). It passes under either honest
+// remediation: registering real AnnounceTask/CollectBids engine actions that
+// surface evidence, or collapsing the tree to the single AuctionDelegate stage.
+func TestAuctionDemoTreeHasNoSilentNoOps(t *testing.T) {
+	tree := AuctionDemoTree()
+	if tree == nil {
+		t.Fatal("AuctionDemoTree returned nil")
+	}
+
+	// Shared scaffold control/outcome nodes carried by every curated domain
+	// tree. Their permissive success is intentional framework plumbing and out
+	// of scope for this per-tree honesty guard.
+	scaffold := map[string]bool{
+		"MarkSuccessful":     true,
+		"SelfCorrect":        true,
+		"EscalateToDeepSeek": true,
+		"ReflectOnOutcome":   true,
+		"UpdateBehaviorTree": true,
+	}
+
+	var actionNames []string
+	var walk func(n evolution.SerializableNode)
+	walk = func(n evolution.SerializableNode) {
+		if n.Type == "Action" {
+			actionNames = append(actionNames, n.Name)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(*tree)
+
+	if len(actionNames) == 0 {
+		t.Fatal("auction_demo tree has no Action nodes to check")
+	}
+
+	var dishonest []string
+	for _, name := range actionNames {
+		if scaffold[name] {
+			continue
+		}
+
+		// Build and RUN this single Action node the same way the engine would at
+		// tick time, then inspect the runtime result. An unknown action name is
+		// dishonest two ways: where the tree is validated it dead-letters with an
+		// "unknown action" error, and where validation is bypassed it resolves to
+		// the permissive success fallback (tree.go: "unknown actions succeed
+		// silently") — reporting success while surfacing no evidence.
+		node := &evolution.SerializableNode{Type: "Action", Name: name, Description: "runtime no-op probe"}
+		bb := &engine.Blackboard{
+			Task: "auction: allocate a task to the best bidder via announce-bid-award",
+		}
+		cmd := engine.BuildTree(node, bb)
+		if cmd == nil {
+			t.Fatalf("BuildTree returned nil for action %q", name)
+		}
+		engine.RunTask(bb, cmd)
+
+		lowerResult := strings.ToLower(bb.Result)
+		unknownToEngine := strings.Contains(lowerResult, "unknown action") ||
+			strings.Contains(lowerResult, "validation failed")
+
+		producedEvidence := bb.Result != "" || len(bb.Results) > 0 ||
+			len(bb.ChainState) > 0 || bb.KgResults != ""
+		silentSuccessNoOp := bb.Outcome == "success" && !producedEvidence
+
+		// A node that fails honestly with a real diagnostic (e.g. AuctionDelegate
+		// offline reporting "auction delegate not configured") is fine — it is a
+		// registered seam, not a hollow stage.
+		if unknownToEngine || silentSuccessNoOp {
+			dishonest = append(dishonest, fmt.Sprintf("%s (outcome=%s, result=%q)", name, bb.Outcome, bb.Result))
+		}
+	}
+
+	if len(dishonest) > 0 {
+		t.Errorf("auction_demo has dishonest Action node(s) unknown to the engine: %v. Each such node either dead-letters the whole tree at validation or silently no-ops via the permissive success fallback, surfacing no announcement/bid evidence. Register real evidence-producing engine actions (internal/engine/actions_a2a.go) or collapse the tree to the single AuctionDelegate stage.", dishonest)
 	}
 }
 

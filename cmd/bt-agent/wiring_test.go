@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
 // TestDaemonResolvesWiredGoapFusionLoopTree pins that THE DAEMON BINARY —
@@ -18,5 +20,19 @@ func TestDaemonResolvesWiredGoapFusionLoopTree(t *testing.T) {
 	}
 	if len(tree.Children) == 0 || tree.Children[0].Name != "GoapFusionPreflight" {
 		t.Fatalf("daemon must resolve the WIRED goap_fusion_loop tree (preflight first); first child = %q", tree.Children[0].Name)
+	}
+}
+
+// TestDaemonConfiguresAuctionDelegateHook pins that THE DAEMON BINARY installs
+// the auctioneer production wiring: engine.AuctionDelegateFn must be non-nil by
+// the time the binary's packages are linked. The hook arrives via the same
+// init-side-effect seam as the goap_fusion_loop wiring above
+// (internal/agentexec, linked through tools.go), so this test fails if the
+// auction wiring is ever dropped or never installed — instead of the
+// AuctionDelegate action silently reporting "auction delegate not configured
+// (set engine.AuctionDelegateFn)" at runtime.
+func TestDaemonConfiguresAuctionDelegateHook(t *testing.T) {
+	if engine.AuctionDelegateFn == nil {
+		t.Fatal("daemon must configure engine.AuctionDelegateFn at startup (auctioneer production wiring); hook is nil")
 	}
 }

@@ -287,6 +287,240 @@ func TestAuctioneer_RunAuction_DispatchesToWinnerAndReturnsResult(t *testing.T) 
 	}
 }
 
+// ---- production delegate: engine.AuctionDelegateFn wiring -------------------
+
+// withAuctionSeams temporarily installs a fake card source and collector for the
+// production AuctionDelegate, restoring both when the test ends.
+func withAuctionSeams(t *testing.T, cards map[string]*a2a.AgentCard, collector BidCollector) {
+	t.Helper()
+	origCards, origCollector := AuctionCardsFn, newAuctionCollector
+	AuctionCardsFn = func() map[string]*a2a.AgentCard { return cards }
+	newAuctionCollector = func() BidCollector { return collector }
+	t.Cleanup(func() {
+		AuctionCardsFn = origCards
+		newAuctionCollector = origCollector
+	})
+}
+
+// cardWithURL builds a minimal AgentCard advertising one skill (with the given
+// tags) reachable at url — the shape auctionCandidates derives its map from.
+func cardWithURL(name, url string, tags ...string) *a2a.AgentCard {
+	return &a2a.AgentCard{
+		Name:                name,
+		Skills:              []a2a.AgentSkill{{Tags: tags}},
+		SupportedInterfaces: []*a2a.AgentInterface{{URL: url}},
+	}
+}
+
+// AuctionDelegate must build its candidate map from the live card registry, run
+// the auction over the real-transport seam, and return the winner's result with
+// awarded=true.
+func TestAuctionDelegate_AwardsWinnerFromCardRegistry(t *testing.T) {
+	ft := newAuctionTransport()
+	ft.bids["http://cheap"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "cheap", Cost: 10, Confidence: 0.9})
+	ft.bids["http://pricey"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "pricey", Cost: 30, Confidence: 0.9})
+	ft.results["http://cheap"] = "done by cheap"
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"cheap":  cardWithURL("cheap", "http://cheap", "domain"),
+		"pricey": cardWithURL("pricey", "http://pricey", "domain"),
+	}, ft)
+
+	result, awarded, err := AuctionDelegate("do the work", nil)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored: %v", err)
+	}
+	if !awarded {
+		t.Fatal("expected awarded=true when an eligible bidder wins")
+	}
+	if result != "done by cheap" {
+		t.Errorf("result = %q, want the winner's execution result", result)
+	}
+	// The winner must be dispatched the real task text, not the announcement JSON.
+	if got := ft.dispatched["http://cheap"]; got != "do the work" {
+		t.Errorf("winner dispatched %q, want the real task text", got)
+	}
+}
+
+// An "auction_candidates" chainState override must fully replace the derived
+// candidate set, so the auction runs even with no live card registry.
+func TestAuctionDelegate_ChainStateCandidateOverride(t *testing.T) {
+	ft := newAuctionTransport()
+	ft.bids["http://override"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "override", Cost: 1, Confidence: 0.9})
+	ft.results["http://override"] = "override won"
+
+	withAuctionSeams(t, nil, ft) // no card registry: override is the only source
+
+	chainState := map[string]any{
+		"auction_candidates": map[string]string{"override": "http://override"},
+	}
+	result, awarded, err := AuctionDelegate("task", chainState)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored: %v", err)
+	}
+	if !awarded || result != "override won" {
+		t.Fatalf("override candidate did not win: awarded=%v result=%q", awarded, result)
+	}
+}
+
+// chainState "auction_required_tags" must narrow candidate selection to agents
+// whose cards cover those tags, excluding others from the auction entirely.
+func TestAuctionDelegate_RequiredTagsFilterCandidates(t *testing.T) {
+	ft := newAuctionTransport()
+	// Only the reviewer covers the "code" tag; the researcher must be excluded,
+	// so its bid (cheaper) must never be collected or win.
+	ft.bids["http://reviewer"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "reviewer", Cost: 20, Confidence: 0.9})
+	ft.bids["http://researcher"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "researcher", Cost: 1, Confidence: 0.9})
+	ft.results["http://reviewer"] = "reviewed"
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"reviewer":   cardWithURL("reviewer", "http://reviewer", "domain", "code", "review"),
+		"researcher": cardWithURL("researcher", "http://researcher", "research", "deep"),
+	}, ft)
+
+	chainState := map[string]any{"auction_required_tags": []string{"code"}}
+	result, awarded, err := AuctionDelegate("review this", chainState)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored: %v", err)
+	}
+	if !awarded || result != "reviewed" {
+		t.Fatalf("required-tag filter did not restrict to reviewer: awarded=%v result=%q", awarded, result)
+	}
+	if _, dispatched := ft.dispatched["http://researcher"]; dispatched {
+		t.Error("researcher was excluded by required tags but still received the task")
+	}
+}
+
+// With no candidate source and no override, AuctionDelegate reports awarded=false
+// (and no error) so the AuctionDelegate action falls back to its delegate tree.
+func TestAuctionDelegate_NoCandidatesFallsBack(t *testing.T) {
+	origCards := AuctionCardsFn
+	AuctionCardsFn = nil
+	t.Cleanup(func() { AuctionCardsFn = origCards })
+
+	result, awarded, err := AuctionDelegate("task", nil)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored: %v", err)
+	}
+	if awarded || result != "" {
+		t.Errorf("expected no award when no candidates exist, got awarded=%v result=%q", awarded, result)
+	}
+}
+
+// When candidates exist but no bid is eligible to win, AuctionDelegate must
+// swallow ErrNoEligibleBids into awarded=false (fall back), not surface an error.
+func TestAuctionDelegate_NoEligibleBidsFallsBack(t *testing.T) {
+	ft := newAuctionTransport()
+	// Bid sits below the announcement's min confidence, so nothing is eligible.
+	ft.bids["http://a"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "a", Cost: 5, Confidence: 0.4})
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"a": cardWithURL("a", "http://a", "domain"),
+	}, ft)
+
+	chainState := map[string]any{"auction_min_confidence": 0.9}
+	result, awarded, err := AuctionDelegate("task", chainState)
+	if err != nil {
+		t.Fatalf("AuctionDelegate should not error on no eligible bids: %v", err)
+	}
+	if awarded || result != "" {
+		t.Errorf("expected fall-back (awarded=false) when no bid is eligible, got awarded=%v result=%q", awarded, result)
+	}
+}
+
+// ---- milestone 3: consume the announcement deadline & guard empty task text --
+
+// deadlineProbeTransport records, per candidate URL, whether that candidate's
+// SendTask observed a context deadline and what that deadline was. It always
+// answers with the same canned bid so a test can assert CollectBids equips each
+// per-candidate fan-out call with a deadline derived from the announcement — the
+// mechanism that stops one hung candidate from stalling the whole auction.
+type deadlineProbeTransport struct {
+	mu       sync.Mutex
+	bid      string
+	hasDL    map[string]bool
+	deadline map[string]time.Time
+}
+
+func newDeadlineProbeTransport(bid string) *deadlineProbeTransport {
+	return &deadlineProbeTransport{
+		bid:      bid,
+		hasDL:    map[string]bool{},
+		deadline: map[string]time.Time{},
+	}
+}
+
+func (f *deadlineProbeTransport) SendTask(ctx context.Context, agentURL, _ string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	dl, ok := ctx.Deadline()
+	f.hasDL[agentURL] = ok
+	f.deadline[agentURL] = dl
+	return f.bid, nil
+}
+
+// CollectBids must derive a per-candidate context deadline from the
+// announcement's Deadline, so a candidate that hangs is bounded by the auction's
+// deadline rather than blocking the fan-out forever.
+func TestCollectBids_DerivesPerCandidateDeadlineFromAnnouncement(t *testing.T) {
+	deadline := time.Now().Add(time.Hour)
+	ft := newDeadlineProbeTransport(bidJSON(t, Bid{TaskID: "t1", Cost: 1, Confidence: 0.9}))
+	ann := TaskAnnouncement{TaskID: "t1", Description: "work", Deadline: deadline}
+
+	auc := NewAuctioneer(ft)
+	if _, err := auc.CollectBids(context.Background(), ann, map[string]string{"a": "http://a"}); err != nil {
+		t.Fatalf("CollectBids failed: %v", err)
+	}
+
+	if !ft.hasDL["http://a"] {
+		t.Fatal("expected the per-candidate context to carry a deadline derived from the announcement")
+	}
+	// The derived deadline must track the announcement's deadline (an hour out),
+	// not some unrelated default — allow only microsecond computation skew.
+	if diff := ft.deadline["http://a"].Sub(deadline); diff > time.Second || diff < -time.Second {
+		t.Errorf("derived deadline %v not within 1s of announcement deadline %v", ft.deadline["http://a"], deadline)
+	}
+}
+
+// When the announcement carries no deadline (zero value), CollectBids must still
+// apply a default per-candidate deadline so an unbounded announcement cannot let
+// a hung candidate stall the auction.
+func TestCollectBids_AppliesDefaultDeadlineWhenAnnouncementHasNone(t *testing.T) {
+	before := time.Now()
+	ft := newDeadlineProbeTransport(bidJSON(t, Bid{TaskID: "t1", Cost: 1, Confidence: 0.9}))
+	ann := TaskAnnouncement{TaskID: "t1", Description: "work"} // zero Deadline
+
+	auc := NewAuctioneer(ft)
+	if _, err := auc.CollectBids(context.Background(), ann, map[string]string{"a": "http://a"}); err != nil {
+		t.Fatalf("CollectBids failed: %v", err)
+	}
+
+	if !ft.hasDL["http://a"] {
+		t.Fatal("expected a default per-candidate deadline when the announcement has none")
+	}
+	if got := ft.deadline["http://a"]; !got.After(before) {
+		t.Errorf("default deadline %v is not in the future", got)
+	}
+}
+
+// RunAuction must reject an announcement whose Description is empty before it
+// would dispatch that empty text to the winning agent as the real task.
+func TestAuctioneer_RunAuction_RejectsEmptyDescription(t *testing.T) {
+	ft := newAuctionTransport()
+	ann := TaskAnnouncement{TaskID: "t1", Description: "", MinConfidence: 0.5}
+	ft.bids["http://a"] = bidJSON(t, Bid{TaskID: "t1", BidderName: "a", Cost: 1, Confidence: 0.9})
+	ft.results["http://a"] = "winner must not be dispatched an empty task"
+
+	auc := NewAuctioneer(ft)
+	_, err := auc.RunAuction(context.Background(), ann, map[string]string{"a": "http://a"})
+	if err == nil {
+		t.Fatal("expected RunAuction to reject an announcement with an empty Description")
+	}
+	if len(ft.dispatched) != 0 {
+		t.Errorf("no task should be dispatched for an empty Description, dispatched=%v", ft.dispatched)
+	}
+}
+
 func TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(t *testing.T) {
 	ft := newAuctionTransport()
 	ann := TaskAnnouncement{TaskID: "t1", Description: "review PR", MinConfidence: 0.9}

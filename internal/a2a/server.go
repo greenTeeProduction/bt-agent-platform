@@ -268,6 +268,15 @@ func NewServer(reg *agent.Registry, llmClient llm.LLM, port int, baseURL string)
 	}, nil
 }
 
+// AuctionCardSource returns a closure yielding this server's live card registry,
+// suitable for installing as a2a.AuctionCardsFn so production auctions draw their
+// candidates from the same cards the A2A server serves. Returning the closure
+// (rather than the map) lets callers wire the seam without importing the a2a-go
+// AgentCard type.
+func (s *Server) AuctionCardSource() func() map[string]*a2a.AgentCard {
+	return func() map[string]*a2a.AgentCard { return s.CardCache }
+}
+
 // Start begins listening on the configured port.
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
