@@ -55,13 +55,13 @@ func TestGoalLineEmbedsFilesForPlanBuilder(t *testing.T) {
 
 func TestAppendGoapResearchGoalsAccumulatesAcrossSources(t *testing.T) {
 	bb := &Blackboard{}
-	appendGoapResearchGoals(bb, []goapResearchGoal{{Goal: "grill goal", Gap: "g1"}})
-	appendGoapResearchGoals(bb, []goapResearchGoal{{Goal: "research goal", Gap: "g2"}, {Goal: "grill goal", Gap: "dup"}})
+	appendGoapResearchGoals(bb, []goapResearchGoal{{Goal: "Add grill coverage in internal/engine/a.go", Gap: "g1"}})
+	appendGoapResearchGoals(bb, []goapResearchGoal{{Goal: "Fix research routing in internal/engine/b.go", Gap: "g2"}, {Goal: "Add grill coverage in internal/engine/a.go", Gap: "dup"}})
 	lines := goapResearchGoalLines(bb)
 	if len(lines) != 2 {
 		t.Fatalf("goals must accumulate and dedupe across sources, got %v", lines)
 	}
-	if !strings.Contains(lines[0], "grill goal") || !strings.Contains(lines[1], "research goal") {
+	if !strings.Contains(lines[0], "grill coverage") || !strings.Contains(lines[1], "research routing") {
 		t.Fatalf("order must be preserved: %v", lines)
 	}
 }
@@ -293,5 +293,59 @@ func TestCompleteGoapProgramMilestoneCompletesWhenRunExecutedAnchors(t *testing.
 				t.Fatalf("milestone must complete when the run executed it: %+v", re.Programs[0].Milestones[0])
 			}
 		})
+	}
+}
+
+func TestIsActionableGoapGoalRejectsProse(t *testing.T) {
+	prose := []string{
+		"Review complete. Summary of what I found across the commits.",
+		"Here is my analysis of the recent changes.",
+		"Overall the code is in good shape with a few minor issues.",
+		"In summary, the pipeline works as intended.",
+		"The following findings were identified during review.",
+		"ok",
+	}
+	for _, p := range prose {
+		if isActionableGoapGoal(p) {
+			t.Fatalf("prose must not become a goal: %q", p)
+		}
+	}
+	actionable := []string{
+		"Add regression tests for the auction bid evaluator in internal/a2a/auction.go",
+		"Ensure all domain trees have smoke tests, descriptions, and condition coverage",
+		"fix the stale index handling in internal/engine/superpowers_worktree.go",
+		"Persist the CIRCUITPOLICY state-hash history across cron ticks (files: internal/engine/actions_superpowers.go)",
+	}
+	for _, a := range actionable {
+		if !isActionableGoapGoal(a) {
+			t.Fatalf("actionable goal wrongly rejected: %q", a)
+		}
+	}
+}
+
+func TestFallbackGoapGoalSkipsProseToActionableLine(t *testing.T) {
+	answer := `Review complete. Summary of what I found across the commits.
+
+The recent changes look solid overall.
+
+Fix the flaky retry timing in internal/reliability/errors.go and pin it with a regression test.`
+	got := fallbackGoapGoal(answer)
+	if !strings.Contains(got, "internal/reliability/errors.go") {
+		t.Fatalf("fallback must skip prose and pick the actionable line, got %q", got)
+	}
+	if fallbackGoapGoal("Review complete.\n\nEverything looks good.") != "" {
+		t.Fatal("all-prose answers must yield no goal at all")
+	}
+}
+
+func TestAppendGoapResearchGoalsDropsProseGoals(t *testing.T) {
+	bb := &Blackboard{}
+	appendGoapResearchGoals(bb, []goapResearchGoal{
+		{Goal: "Review complete. Summary of what I found.", Gap: "n/a"},
+		{Goal: "Add auction bidder evaluation in internal/a2a/auction.go", Gap: "milestone"},
+	})
+	lines := goapResearchGoalLines(bb)
+	if len(lines) != 1 || !strings.Contains(lines[0], "auction bidder") {
+		t.Fatalf("prose goals must be dropped at the accumulator: %v", lines)
 	}
 }

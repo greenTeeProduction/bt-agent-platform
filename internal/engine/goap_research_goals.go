@@ -121,6 +121,11 @@ func appendGoapResearchGoals(bb *Blackboard, goals []goapResearchGoal) {
 		if line == "" || seen[research.Key(line)] {
 			continue
 		}
+		// Prose that slipped through GOAL-block parsing must not reach the
+		// plan builder as a task.
+		if !isActionableGoapGoal(line) {
+			continue
+		}
 		seen[research.Key(line)] = true
 		goalLines = append(goalLines, line)
 		gap := collapseToSingleLine(g.Gap)
@@ -139,6 +144,62 @@ func appendGoapResearchGoals(bb *Blackboard, goals []goapResearchGoal) {
 			}
 		}
 	}
+}
+
+// goapProseGoalRe matches summary/prose openers that must never become
+// goals — run 20260704T080615 planned a task titled "Review complete.
+// Summary of what I found…" because the fallback grabbed the first prose
+// line of a review answer.
+var goapProseGoalRe = regexp.MustCompile(`(?i)^(review complete|summary|here is|here's|overall|in summary|analysis|the following|no issues|everything looks|i found|i reviewed|looking at)`)
+
+// goapImperativeVerbs are the verbs an actionable goal may open with when it
+// names no Go file path.
+var goapImperativeVerbs = map[string]bool{
+	"add": true, "implement": true, "fix": true, "make": true, "wire": true,
+	"extend": true, "refactor": true, "create": true, "move": true,
+	"replace": true, "guard": true, "persist": true, "clear": true,
+	"ensure": true, "define": true, "introduce": true, "harden": true,
+	"split": true, "extract": true, "update": true, "remove": true,
+	"stop": true, "prevent": true, "convert": true, "rename": true,
+	"cache": true, "record": true, "validate": true, "verify": true,
+	"scope": true, "unblock": true, "build": true, "prototype": true,
+	"expand": true, "reduce": true, "delete": true, "migrate": true,
+}
+
+// isActionableGoapGoal reports whether a candidate goal line is an
+// implementable instruction rather than review prose: it must not open with
+// a summary phrase, be a sensible length, and either name a Go file or open
+// with an imperative verb.
+func isActionableGoapGoal(goal string) bool {
+	g := strings.TrimSpace(goal)
+	if len(g) < 12 || len(g) > 400 {
+		return false
+	}
+	if goapProseGoalRe.MatchString(g) {
+		return false
+	}
+	if len(extractGoFilePaths(g)) > 0 {
+		return true
+	}
+	first := strings.ToLower(strings.Trim(strings.Fields(g)[0], ".,:;"))
+	return goapImperativeVerbs[first]
+}
+
+// fallbackGoapGoal scans a research answer for the first ACTIONABLE line —
+// the replacement for the old first-non-empty-line fallback, which turned
+// prose summaries into planned tasks. All-prose answers yield "" (the caller
+// then treats the research as having produced nothing).
+func fallbackGoapGoal(answer string) string {
+	for _, line := range strings.Split(answer, "\n") {
+		line = strings.TrimSpace(strings.Trim(line, "-*# "))
+		if line == "" || strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") {
+			continue
+		}
+		if isActionableGoapGoal(line) {
+			return line
+		}
+	}
+	return ""
 }
 
 // goapResearchGoalLines returns the accumulated goal lines for this cycle.

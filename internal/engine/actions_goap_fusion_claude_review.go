@@ -353,7 +353,7 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	program := extractGoapProgram(answer)
 	goals := extractGoapResearchGoals(answer)
 	if len(goals) == 0 && program == nil {
-		if first := firstNonEmptyGoapLine(answer); first != "" {
+		if first := fallbackGoapGoal(answer); first != "" {
 			goals = []goapResearchGoal{{Goal: first, Gap: "Claude Code review produced a recommendation; see raw findings."}}
 		}
 	}
