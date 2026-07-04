@@ -143,3 +143,29 @@ MILESTONE2: Wire checks into internal/domains/trees.go`)
 		t.Fatal("built-and-ticked subtree must actually seed the program store")
 	}
 }
+
+func TestChooseProgramProposalFallsThroughWhenNlmHasNoProgram(t *testing.T) {
+	claudeProgram := "PROGRAM: Claude program\nMILESTONE1: Add x in internal/a2a/a.go\nMILESTONE2: Wire y in internal/engine/b.go"
+
+	// nlm succeeded but returned prose with no PROGRAM block → must use Claude.
+	called := false
+	got := chooseProgramProposal(`{"answer":"Here are some thoughts, all is well."}`, func() string { called = true; return claudeProgram })
+	if !called || extractGoapProgram(got) == nil {
+		t.Fatalf("prose nlm answer must fall through to Claude; called=%v got=%q", called, got)
+	}
+
+	// nlm returned a real PROGRAM → Claude must NOT be called.
+	called = false
+	nlmProg := `{"answer":"PROGRAM: Nlm program\nMILESTONE1: Add z in internal/knowledge/g.go\nMILESTONE2: Wire w in internal/domains/t.go"}`
+	got = chooseProgramProposal(nlmProg, func() string { called = true; return "" })
+	if called || extractGoapProgram(got) == nil {
+		t.Fatalf("a usable nlm program must be accepted without Claude; called=%v", called)
+	}
+
+	// nlm failed → Claude.
+	called = false
+	chooseProgramProposal("Error: RESOURCE_EXHAUSTED", func() string { called = true; return claudeProgram })
+	if !called {
+		t.Fatal("nlm failure must fall through to Claude")
+	}
+}

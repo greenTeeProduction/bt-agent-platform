@@ -21,20 +21,39 @@ import (
 
 // seedProgramFetchFn obtains a program proposal for the given prompt. The
 // default asks NotebookLM (quota-cached and budgeted at the nlmRun choke
-// point) and falls back to Claude Code review-style prompting on failure.
-// Var for test override.
+// point) but ACCEPTS its answer only when it actually contains a parseable
+// PROGRAM block; otherwise it falls through to Claude, which follows the
+// exact PROGRAM/MILESTONEn format far more reliably. Var for test override.
+//
+// The earlier version returned the nlm answer whenever nlm merely SUCCEEDED,
+// so an up-but-unhelpful nlm (prose without a PROGRAM: line) yielded nil at
+// extractGoapProgram and never reached the Claude fallback — the self-seeder
+// produced nothing for hours while the loop starved on stale catalog goals.
 var seedProgramFetchFn = func(prompt string) string {
 	out := nlmRun(180*time.Second, "notebook", "query", defaultNotebook, prompt)
-	if !isGoapNotebookLMFailure(out) {
-		return extractNotebookLMAnswer(out)
+	return chooseProgramProposal(out, func() string {
+		cctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		res := defaultSuperpowersClaudeRunner.RunClaude(cctx, goapFusionRepo, prompt)
+		if res.Err != nil {
+			return ""
+		}
+		return res.Output
+	})
+}
+
+// chooseProgramProposal accepts the nlm answer only when it actually contains
+// a parseable PROGRAM block; otherwise it invokes claudeFn. This is the gate
+// whose absence starved the self-seeder: an up-but-unhelpful nlm answer used
+// to be returned as-is and never reached the Claude fallback.
+func chooseProgramProposal(nlmOut string, claudeFn func() string) string {
+	if !isGoapNotebookLMFailure(nlmOut) {
+		answer := extractNotebookLMAnswer(nlmOut)
+		if extractGoapProgram(answer) != nil {
+			return answer
+		}
 	}
-	cctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	res := defaultSuperpowersClaudeRunner.RunClaude(cctx, goapFusionRepo, prompt)
-	if res.Err != nil {
-		return ""
-	}
-	return res.Output
+	return claudeFn()
 }
 
 func init() {
