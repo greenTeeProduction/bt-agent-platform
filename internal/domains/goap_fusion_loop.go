@@ -41,6 +41,25 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			act("SetupFusionTools",
 				"Give loop actions access to vault, graphify, git, and NotebookLM runtime tools"),
 
+			// ── Phase 0.5: Self-seeding backlog ──
+			// Runs FIRST (before research/grill can fail) so the loop always
+			// has a program to work on. Placed after Phase 4 earlier, a cycle
+			// whose research phase hard-failed (Claude review returning prose
+			// the actionability filter rejects) aborted the Sequence before
+			// ever reaching seeding — the loop starved itself. Seeding here
+			// means: idle cycle → seed a program → Phase 4 queues its first
+			// milestone → Phase 5 executes it THIS cycle (no wasted cycle).
+			// Selector (not AlwaysSucceed-wrapper: that leaf eats children):
+			// the seed sequence runs, else falls through to a terminal
+			// AlwaysSucceed leaf, so a rejected/failed proposal is non-fatal.
+			sel("BacklogReplenish",
+				seq("SeedWhenIdle",
+					cond("NeedsFreshProgram", "No program has pending milestones"),
+					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
+				),
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "SeedSkipped"},
+			),
+
 			// ── Phase 1: Grill Me — Critical Review (multi-turn) ──
 			// Uses conversation_id to chain rounds across cron ticks.
 			// Round 1: "What is the BT framework missing? Be critical."
@@ -53,11 +72,19 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			// NotebookLM first; when it is unavailable (daily quota exhausted,
 			// auth expired, circuit open) Claude Code reviews the daemon's
 			// recent commits instead so the cycle still produces findings.
+			// Non-fatal: when BOTH nlm and Claude review produce nothing
+			// usable, the terminal AlwaysSucceed leaf keeps the cycle alive
+			// so it can still execute an active program milestone (whose
+			// goal does not depend on fresh research). Without it, a barren
+			// research phase aborted the whole cycle — the loop could not
+			// make progress on an already-queued program when research dried
+			// up (2026-07-04 16:xx: "Claude Review Fallback Failed").
 			sel("ResearchRouter",
 				act("RunGoapFusionNotebookLMResearch",
 					"Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
 				act("RunClaudeCodeReviewResearch",
 					"Fallback when NotebookLM is unavailable: Claude Code reviews recent daemon commits (or graphify hotspots) and emits GOAL/GAP/FILES/TESTS findings to the vault"),
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "ResearchOptional"},
 			),
 
 			// ── Phase 3: Read Context ──
@@ -71,28 +98,6 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 				"Cross-reference research findings with codebase gaps"),
 			act("PrioritizeGoapGoals",
 				"Build GOAP goal queue: highest-impact, lowest-risk improvements first, always prefer fresh NotebookLM recommendations"),
-
-			// ── Phase 4.5: Self-seeding backlog ──
-			// Runs BEFORE execution so a cycle that later fails on a stale
-			// goal has still queued a fresh program for the next cycle —
-			// placed after execution, first-task failures skipped seeding
-			// while the stale backlog kept causing exactly those failures
-			// (observed 13:00 2026-07-04). AlwaysSucceed: a rejected or
-			// failed proposal never fails the cycle.
-			// Selector fallback, NOT an AlwaysSucceed wrapper: this engine's
-			// AlwaysSucceed is a LEAF that ignores children, so wrapping the
-			// seeding sequence in it silently discarded it on every cycle
-			// (the 13:30 2026-07-04 run succeeded end-to-end without ever
-			// executing SeedNextProgram). The selector runs the sequence and
-			// falls through to the terminal AlwaysSucceed leaf when the
-			// condition or action fails, keeping seeding non-fatal.
-			sel("BacklogReplenish",
-				seq("SeedWhenIdle",
-					cond("NeedsFreshProgram", "No program has pending milestones"),
-					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
-				),
-				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "SeedSkipped"},
-			),
 
 			// ── Phase 5: Implement or Analyze ──
 			sel("ExecutionRouter",

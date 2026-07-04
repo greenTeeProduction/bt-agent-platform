@@ -598,10 +598,11 @@ func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 	if router.Type != "Selector" {
 		t.Fatalf("ResearchRouter type = %q, want Selector", router.Type)
 	}
-	if len(router.Children) != 2 ||
+	if len(router.Children) != 3 ||
 		router.Children[0].Name != "RunGoapFusionNotebookLMResearch" ||
-		router.Children[1].Name != "RunClaudeCodeReviewResearch" {
-		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
+		router.Children[1].Name != "RunClaudeCodeReviewResearch" ||
+		router.Children[2].Type != "AlwaysSucceed" {
+		t.Fatalf("ResearchRouter must be nlm → Claude review → terminal AlwaysSucceed (non-fatal), got: %+v", router.Children)
 	}
 }
 
@@ -788,5 +789,43 @@ func TestNoDomainTreeHasUnregisteredActions(t *testing.T) {
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("%d unregistered (silent-no-op) tree node(s):\n  %s", len(offenders), strings.Join(offenders, "\n  "))
+	}
+}
+
+// TestGoapFusionLoopSeedsBeforeResearch pins the tree ordering that keeps the
+// self-seeder reachable: BacklogReplenish must appear BEFORE ResearchRouter,
+// so a cycle whose research phase fails still seeds a program. And
+// ResearchRouter must carry a terminal AlwaysSucceed (ResearchOptional) so a
+// barren research phase does not abort the cycle before milestone execution.
+func TestGoapFusionLoopSeedsBeforeResearch(t *testing.T) {
+	tree := GoapFusionLoopTree()
+	// Index of first occurrence of each node name in a pre-order walk.
+	order := map[string]int{}
+	i := 0
+	var walk func(n evolution.SerializableNode)
+	walk = func(n evolution.SerializableNode) {
+		if _, seen := order[n.Name]; !seen && n.Name != "" {
+			order[n.Name] = i
+			i++
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(*tree)
+
+	seed, okS := order["BacklogReplenish"]
+	research, okR := order["ResearchRouter"]
+	if !okS || !okR {
+		t.Fatalf("missing nodes: BacklogReplenish=%v ResearchRouter=%v", okS, okR)
+	}
+	if seed >= research {
+		t.Fatalf("BacklogReplenish (%d) must come BEFORE ResearchRouter (%d) so seeding survives research failure", seed, research)
+	}
+	if _, ok := order["ResearchOptional"]; !ok {
+		t.Fatal("ResearchRouter must have a terminal AlwaysSucceed (ResearchOptional) so a barren research phase is non-fatal")
+	}
+	if _, ok := order["SeedNextProgram"]; !ok {
+		t.Fatal("SeedNextProgram must be present in the tree")
 	}
 }
