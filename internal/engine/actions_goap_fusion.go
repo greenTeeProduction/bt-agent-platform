@@ -783,6 +783,12 @@ GOAL2/GAP2/FILES2 and GOAL3/GAP3/FILES3: <optional further independent targets>
 TESTS: <specific Go tests/build commands to verify them>
 CITATIONS: <NotebookLM citation numbers or source ids>
 
+Prefer SUBSTANTIAL goals: a goal that adds a real capability (a new node
+type, a new coordination primitive, an evaluation metric, a persistence
+layer) is worth more than a one-line tweak. A downstream planner will
+decompose each substantial goal into several TDD tasks, so a goal spanning
+2-4 related files is ideal, not too large.
+
 If the single highest-impact change is too large even for one multi-task run, return INSTEAD a program:
 PROGRAM: <title of the multi-cycle change>
 MILESTONE1: <first self-contained milestone, naming the repo-relative Go files it touches>
@@ -790,7 +796,7 @@ MILESTONE2..MILESTONE5: <further milestones, each independently verifiable>
 
 Rules:
 - Prefer implementation work over documentation.
-- Each goal must be scoped to the named files/packages; multi-file and multi-package changes are welcome.
+- Each goal must be scoped to the named files/packages; multi-file and multi-package changes are welcome and preferred over trivial single-line edits.
 - Prefer one coherent larger change over several trivial ones.
 - Do not repeat these stale goals unless you have a new concrete variant: "Unblock engine tests" or "Ensure all domain trees have smoke tests".
 - If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`, task, graphReport, implementedGoalsPromptBlock())

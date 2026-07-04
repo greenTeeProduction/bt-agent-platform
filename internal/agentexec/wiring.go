@@ -22,4 +22,8 @@ import (
 func init() {
 	domains.GoapFusionLoopWireFn = engine.WireGoapFusionLoopTree
 	engine.AuctionDelegateFn = a2a.AuctionDelegate
+	// LLM plan-expansion (brainstorming): decompose substantial goals into
+	// deeper multi-task plans. Wired here (not in an engine init) so engine
+	// tests stay offline and deterministic.
+	engine.WireGoalPlanBrainstorm()
 }

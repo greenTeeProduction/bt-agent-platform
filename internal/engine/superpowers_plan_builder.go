@@ -32,11 +32,13 @@ var goalLineRe = regexp.MustCompile(`^\[(P\d)\]\s*(.+)$`)
 func buildGoalDrivenImplementationPlan(task string) string {
 	goals := extractPrioritizedGoals(task)
 	var sections []string
+	var fileScoped []string
 	for _, goal := range goals {
 		files := extractGoFilePaths(goal)
 		if len(files) == 0 {
 			continue
 		}
+		fileScoped = append(fileScoped, goal)
 		sections = append(sections, buildGoalTaskSection(len(sections)+1, goal, files))
 		if len(sections) == maxGoalDrivenTasks {
 			break
@@ -45,8 +47,24 @@ func buildGoalDrivenImplementationPlan(task string) string {
 	if len(sections) == 0 {
 		return buildDeterministicImplementationPlan(task)
 	}
-	return "# Superpowers Implementation Plan\n\n> Use RED/GREEN/REFACTOR. Preserve explicit feature paths; do not amputate functionality.\n\n" +
+	deterministic := "# Superpowers Implementation Plan\n\n> Use RED/GREEN/REFACTOR. Preserve explicit feature paths; do not amputate functionality.\n\n" +
 		strings.Join(sections, "\n")
+
+	// Brainstorm expansion: the deterministic builder makes exactly one task
+	// per goal, so a substantial goal that deserves several coherent tasks is
+	// clamped to one bounded RED→GREEN pass. When the plan does not already
+	// fill the task budget, ask an LLM to DECOMPOSE the goals into a deeper
+	// multi-task plan (the missing "brainstorming" the superpowers workflow
+	// never applied here). The expansion is used only if it round-trips
+	// through ParseSuperpowersPlan and yields MORE tasks than the mechanical
+	// plan — otherwise the deterministic plan stands. Fully offline by
+	// default (goalPlanBrainstormFn is nil until wired in production).
+	if goalPlanBrainstormFn != nil && len(sections) < maxGoalDrivenTasks && len(fileScoped) > 0 {
+		if expanded := brainstormExpandPlan(task, fileScoped, deterministic); expanded != "" {
+			return expanded
+		}
+	}
+	return deterministic
 }
 
 // extractPrioritizedGoals returns goal lines in priority order (P0 first).
@@ -184,4 +202,83 @@ func changedPackagesTestCommand(changedFiles []string) string {
 		return ""
 	}
 	return fmt.Sprintf("/usr/local/go/bin/go test %s -short -count=1 -timeout 300s", strings.Join(pkgs, " "))
+}
+
+// goalPlanBrainstormFn is the LLM plan-expansion seam: given the framing task,
+// the file-scoped goals, and the deterministic fallback plan, it returns a
+// richer multi-task plan in the same "### Task N:" format, or "" to decline.
+// nil by default (offline/tests); wired to a Claude-backed impl in production.
+var goalPlanBrainstormFn func(task string, goals []string, deterministicPlan string) string
+
+// brainstormExpandPlan runs the expansion and accepts it only if it parses and
+// produces strictly MORE tasks than the deterministic plan (bounded by
+// maxGoalDrivenTasks), so a worse or malformed brainstorm can never degrade a
+// working plan.
+func brainstormExpandPlan(task string, goals []string, deterministicPlan string) string {
+	detTasks, _ := ParseSuperpowersPlan(deterministicPlan)
+	out := goalPlanBrainstormFn(task, goals, deterministicPlan)
+	if strings.TrimSpace(out) == "" {
+		return ""
+	}
+	tasks, err := ParseSuperpowersPlan(out)
+	if err != nil || len(tasks) <= len(detTasks) {
+		return ""
+	}
+	if len(tasks) > maxGoalDrivenTasks {
+		return ""
+	}
+	// Every expanded task must still name Go files and be actionable — no
+	// regressing to vague prose tasks.
+	for _, t := range tasks {
+		if len(t.Files) == 0 {
+			return ""
+		}
+	}
+	return out
+}
+
+// buildGoalBrainstormPrompt frames the decomposition request.
+func buildGoalBrainstormPrompt(task string, goals []string, deterministicPlan string) string {
+	return fmt.Sprintf(`You are planning one autonomous coding cycle for the go-bt-evolve
+platform (Go, packages under internal/). Below are prioritized, file-scoped
+goals and a MINIMAL fallback plan of one task per goal.
+
+Goals:
+- %s
+
+Fallback plan (one task per goal):
+%s
+
+Produce a BETTER implementation plan that goes DEEPER: decompose the
+substantial goal(s) into a coherent sequence of up to %d self-contained
+TDD tasks that together build a complete, well-tested change — e.g. split a
+capability into "types + validation", "core logic", and "wiring + tests".
+Each task must be independently landable via RED→GREEN.
+
+Return ONLY the plan in EXACTLY this format (no prose before or after):
+### Task 1: <title>
+
+**Objective:** <complete change for this task>
+
+**Files:**
+- Modify: <repo-relative .go file>
+- Test: <repo-relative _test.go file>
+
+**Step 1: Write failing test (RED)**
+...
+**Step 2: Run RED**
+Run: /usr/local/go/bin/go test <packages> -short -count=1 -timeout 300s
+**Step 3: Implement the full change**
+...
+**Step 4: Run GREEN**
+Run: /usr/local/go/bin/go test <packages> -short -count=1 -timeout 300s
+
+**Risk:** <low|medium|high>
+
+### Task 2: ...
+
+Rules: every task MUST name at least one repo-relative .go file; produce
+MORE tasks than the fallback only when the goals genuinely warrant it, else
+return the fallback plan unchanged.`,
+		strings.Join(goals, "\n- "), truncateFusion(deterministicPlan, 2000), maxGoalDrivenTasks)
 }

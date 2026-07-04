@@ -36,3 +36,13 @@ func TestDaemonConfiguresAuctionDelegateHook(t *testing.T) {
 		t.Fatal("daemon must configure engine.AuctionDelegateFn at startup (auctioneer production wiring); hook is nil")
 	}
 }
+
+// TestDaemonConfiguresGoalPlanBrainstorm pins that the daemon binary installs
+// the LLM plan-expansion (brainstorming) seam via internal/agentexec, so
+// substantial goals get decomposed into deeper multi-task plans instead of
+// one bounded task per goal.
+func TestDaemonConfiguresGoalPlanBrainstorm(t *testing.T) {
+	if !engine.GoalPlanBrainstormWired() {
+		t.Fatal("daemon must wire engine.WireGoalPlanBrainstorm() at startup; plan-expansion seam is nil")
+	}
+}
