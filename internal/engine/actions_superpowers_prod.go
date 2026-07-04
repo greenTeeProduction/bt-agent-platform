@@ -894,6 +894,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		bb.Result = "## GOAP Superpowers Execution Failed\n\n" + errStr
 		return -1
 	}
+	// Keep the architecture documentation in the same commit as the change:
+	// best-effort arc42 sync in the run worktree before verification.
+	if _, note := syncArc42Docs(c, defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, run); note != "" {
+		run.Arc42Sync = note
+		_ = writeSuperpowersRunJSON(run)
+	}
 	if err := VerifySuperpowersRunRuntime(c, run); err != nil {
 		bb.Result = "## GOAP Superpowers Verification Failed\n\n" + err.Error()
 		return -1
@@ -1013,6 +1019,9 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 	}
 	if run.PartialFailure != "" {
 		fmt.Fprintf(&b, "- PARTIAL LANDING: %s\n", run.PartialFailure)
+	}
+	if run.Arc42Sync != "" {
+		fmt.Fprintf(&b, "- arc42 sync: %s\n", run.Arc42Sync)
 	}
 	if run.PatchPath != "" {
 		fmt.Fprintf(&b, "- Patch: `%s`\n", run.PatchPath)

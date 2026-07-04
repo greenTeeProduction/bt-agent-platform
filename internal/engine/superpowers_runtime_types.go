@@ -40,11 +40,13 @@ type SuperpowersRun struct {
 	ApplyStatus    string              `json:"apply_status,omitempty"`
 	// PartialFailure records a failed task that was carried forward while the
 	// run's completed tasks landed (partial-landing mode).
-	PartialFailure string    `json:"partial_failure,omitempty"`
-	PatchPath      string    `json:"patch_path,omitempty"`
-	AppliedCommit  string    `json:"applied_commit,omitempty"`
-	StartedAt      time.Time `json:"started_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	PartialFailure string `json:"partial_failure,omitempty"`
+	// Arc42Sync records what the documentation sync stage did for this run.
+	Arc42Sync     string    `json:"arc42_sync,omitempty"`
+	PatchPath     string    `json:"patch_path,omitempty"`
+	AppliedCommit string    `json:"applied_commit,omitempty"`
+	StartedAt     time.Time `json:"started_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type SuperpowersTask struct {

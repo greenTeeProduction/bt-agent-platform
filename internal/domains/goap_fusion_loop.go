@@ -91,7 +91,7 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 						},
 						Children: []evolution.SerializableNode{
 							act("RunSuperpowersClaudeImplementation",
-								"Execute plan through production Superpowers runtime and Claude Code"),
+								"Execute plan through production Superpowers runtime and Claude Code, then sync arc42 documentation into the same commit"),
 							act("VerifyGoapBuild",
 								"Run production-safe GOAP/Superpowers build and focused tests"),
 							act("ReportSuperpowersImplementation",
