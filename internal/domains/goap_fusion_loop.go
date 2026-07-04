@@ -72,6 +72,20 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			act("PrioritizeGoapGoals",
 				"Build GOAP goal queue: highest-impact, lowest-risk improvements first, always prefer fresh NotebookLM recommendations"),
 
+			// ── Phase 4.5: Self-seeding backlog ──
+			// Runs BEFORE execution so a cycle that later fails on a stale
+			// goal has still queued a fresh program for the next cycle —
+			// placed after execution, first-task failures skipped seeding
+			// while the stale backlog kept causing exactly those failures
+			// (observed 13:00 2026-07-04). AlwaysSucceed: a rejected or
+			// failed proposal never fails the cycle.
+			evolution.SerializableNode{Type: "AlwaysSucceed", Name: "BacklogReplenish", Children: []evolution.SerializableNode{
+				seq("SeedWhenIdle",
+					cond("NeedsFreshProgram", "No program has pending milestones"),
+					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
+				),
+			}},
+
 			// ── Phase 5: Implement or Analyze ──
 			sel("ExecutionRouter",
 				seq("ClaudeSuperpowersPath",
@@ -116,18 +130,6 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 						"Reset graphify-out to prevent perpetual staged changes"),
 				),
 			),
-
-			// ── Phase 5.5: Self-seeding backlog ──
-			// When every multi-cycle program is complete, propose and persist
-			// the next one so the loop never idles on a stale catalog.
-			// AlwaysSucceed: a failed or rejected proposal must not fail the
-			// cycle — seeding simply retries next cycle.
-			evolution.SerializableNode{Type: "AlwaysSucceed", Name: "BacklogReplenish", Children: []evolution.SerializableNode{
-				seq("SeedWhenIdle",
-					cond("NeedsFreshProgram", "No program has pending milestones"),
-					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
-				),
-			}},
 
 			// ── Phase 6: Verify & Report ──
 			act("VerifyGoapFusionEvidence",
