@@ -712,3 +712,47 @@ func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
 		walk(name, *tree)
 	}
 }
+
+// TestArc42DomainTreeConditionsHaveDescriptions closes the last condition-coverage
+// gap for the goal "all domain trees have smoke tests, descriptions, and condition
+// coverage". The arc42 generation trees are registered domain trees — they live in
+// AllDomainTrees() and are production-reachable via ResolveTreeID("domain:arc42:sectionN")
+// (bt-agent switch_tree, A2A, template validation) — yet TestAllDomainTreeConditions-
+// HaveDescriptions explicitly skips every "arc42:" tree on the theory that the gate
+// semantics "live in the section name". The arc42 trees themselves refute that theory:
+// the SAME gating Conditions are described in some sections and left blank in others —
+// GraphIsFresh carries "graphify has been run" in section1/section2 but is blank in
+// section3; Section1Done carries "section 1 must be complete" in section4 but is blank
+// in sections 5/10/11/12; Section4Done/Section5Done/assemble's AllSectionsDone are
+// described in some places and blank in others. That inconsistency is exactly the
+// unexplained-gate coverage gap this goal targets: the gardener and switch_tree surface
+// these per-node descriptions as the human-readable routing rationale, so a blank one
+// advertises an unexplained gate to operators. Every arc42 Condition node must carry a
+// non-empty Description, just like every other registered domain tree.
+func TestArc42DomainTreeConditionsHaveDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: Condition node %q has an empty Description (arc42 condition coverage gap)", treeName, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	arc42 := Arc42Trees()
+	if len(arc42) == 0 {
+		t.Fatal("Arc42Trees() returned no trees")
+	}
+	for name, tree := range arc42 {
+		if !strings.HasPrefix(name, "arc42:") {
+			t.Errorf("Arc42Trees() returned non-arc42 key %q", name)
+			continue
+		}
+		if tree == nil {
+			t.Errorf("arc42 tree %q is nil", name)
+			continue
+		}
+		walk(name, *tree)
+	}
+}

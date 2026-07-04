@@ -232,6 +232,45 @@ func TestDetectPath_SecurityKeywordFallback(t *testing.T) {
 	}
 }
 
+// TestDetectPath_DataPipelineKeywordFallback guards the same class of routing
+// inconsistency as TestDetectPath_SecurityKeywordFallback, for a different domain:
+// eval_suites.go declares an entire DataPipeline() suite (wired into AllSuites())
+// whose 9 tasks all name "DataPipelinePath" as their ExpectedPath, yet detectPath's
+// keyword fallback has NO branch that can ever emit "DataPipelinePath". When a tree
+// run leaves no bb.CurrentPath/VisitedPaths (the backward-compat scoring path), an
+// unmistakable ETL/data-engineering task — "design an ETL pipeline", "transform JSON
+// event streams into parquet", "build a data lake/mesh" — is silently misclassified:
+// the generic "pipeline" keyword sends it to DevOpsPath, "build" sends it to
+// BuildPath, and the rest fall through to GeneralPath. The fallback classifier thus
+// disagrees with the suite's own declared expectations for the whole data-pipeline
+// domain. A data-pipeline task must route to DataPipelinePath, while a generic CI/CD
+// "pipeline" task must remain DevOpsPath (pinned as a control so any fix keys on
+// data-specific signals and does not over-capture the DevOps domain).
+func TestDetectPath_DataPipelineKeywordFallback(t *testing.T) {
+	tests := []struct {
+		name, task, expected string
+	}{
+		// Must route to DataPipelinePath (currently misrouted — the defect under test).
+		{"etl pipeline", "design an ETL pipeline to ingest CSV logs with schema validation", "DataPipelinePath"},
+		{"streaming to parquet", "transform JSON event streams into parquet format for analytics", "DataPipelinePath"},
+		{"data lake", "build a data lake: raw/bronze/silver/gold layers, schema evolution, catalog integration, lineage tracking", "DataPipelinePath"},
+		{"data mesh", "build a data mesh: domain ownership, data products with SLAs, federated governance, cross-domain lineage", "DataPipelinePath"},
+
+		// Controls: generic CI/CD "pipeline" tasks must stay DevOpsPath so a fix keys
+		// on data-specific signals rather than the bare "pipeline" keyword.
+		{"ci pipeline stays devops", "configure the CI pipeline for Go lint, vet, and test", "DevOpsPath"},
+		{"deploy task stays devops", "deploy to staging environment and run smoke tests", "DevOpsPath"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bb := &engine.Blackboard{Task: tt.task}
+			if got := detectPath("result", bb); got != tt.expected {
+				t.Errorf("detectPath(task=%q) = %q, want %q", tt.task, got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestIsToolMatch_EmptyPath guards a correctness defect in isToolMatch: when the
 // detected path is empty, the bidirectional substring check strings.Contains(expected, path)
 // degenerates to strings.Contains(expected, "") which is ALWAYS true, so a turn that

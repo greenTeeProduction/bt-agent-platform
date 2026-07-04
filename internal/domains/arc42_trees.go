@@ -77,7 +77,7 @@ func section2Constraints() *evolution.SerializableNode {
 func section3ContextScope() *evolution.SerializableNode {
 	return tree(
 		seq("Sec3_Main",
-			seq("PreGate", cond("GraphIsFresh", "")),
+			seq("PreGate", cond("GraphIsFresh", "graphify has been run")),
 			sel("StrategyRouter",
 				seq("BusinessContext",
 					act("ListExternalAPIs", "scan for HTTP clients, MCP client code"),
@@ -114,8 +114,8 @@ func section5BuildingBlocks() *evolution.SerializableNode {
 	return tree(
 		seq("Sec5_Main",
 			seq("PreGate",
-				cond("Section1Done", ""),
-				cond("Section4Done", ""),
+				cond("Section1Done", "section 1 must be complete"),
+				cond("Section4Done", "section 4 must be complete"),
 			),
 			sel("StrategyRouter",
 				// Level 1: overall system decomposition
@@ -152,7 +152,7 @@ func section5BuildingBlocks() *evolution.SerializableNode {
 func section6RuntimeView() *evolution.SerializableNode {
 	return tree(
 		seq("Sec6_Main",
-			seq("PreGate", cond("Section5Done", "")),
+			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter",
 				seq("TaskExecution",
 					chain("llm_call:Generate arc42 Section 6 — Runtime View.\n\n6.1 Task Execution Scenario:\nSequence: MCP client (Hermes/Cursor) → bt-agent MCP → RunTask() → BuildTree() → tick loop → ChainAction → Ollama → result.\n\n6.2 Evolution Cycle:\nGardener cron → ev_evaluate → ev_order_mutations → apply top mutation → ev_evaluate → compare fitness → accept/rollback → git commit.\n\n6.3 Sprint Execution:\nDashboard POST /api/sprint → Create tasks → goroutine → RunSprint() → agent.RunAgent/RunOnce in-process → mark done → poll /api/sprint/status.\n\n6.4 Error Recovery:\nChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue if exhausted.\n\nFor each scenario, describe the step-by-step interaction between building blocks.", 2048),
@@ -168,7 +168,7 @@ func section6RuntimeView() *evolution.SerializableNode {
 func section7Deployment() *evolution.SerializableNode {
 	return tree(
 		seq("Sec7_Main",
-			seq("PreGate", cond("Section5Done", "")),
+			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter",
 				seq("Deployment",
 					act("DetectHardware", "read /proc/cpuinfo, /proc/meminfo, df -h"),
@@ -186,7 +186,7 @@ func section7Deployment() *evolution.SerializableNode {
 func section8Concepts() *evolution.SerializableNode {
 	return tree(
 		seq("Sec8_Main",
-			seq("PreGate", cond("Section5Done", "")),
+			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter",
 				seq("Concepts",
 					chain("llm_call:Generate arc42 Section 8 — Crosscutting Concepts.\n\nDocument 8 crosscutting concepts for go-bt-evolve:\n\n8.1 Behavior Tree Execution Model — All agents use Sequence/Selector/Action/Condition/ChainAction nodes. ADR-001.\n\n8.2 ChainAction Nodes — 10 chain types wrap LLM calls. Each reads config from node Name (chain_type:prompt) and Metadata. Template variables: {{.Task}}, {{.Plan}}, {{.Result}}.\n\n8.3 MCP Protocol Layer — All tools exposed via JSON-RPC 2.0 stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent). ADR-002.\n\n8.4 File-Based Persistence — JSON files with atomic writes (write .tmp → rename). ADR-003. Used for agents, scheduler, reflections, DLQ, tree store, TT.\n\n8.5 Evolution Pipeline — Common pattern: evaluate → order mutations → apply → re-evaluate → accept/rollback. 6 algorithms share this.\n\n8.6 Error Resiliency — SafeGo + CircuitBreaker (3-state) + RetryWithBackoff + DeadLetterQueue. Applied across all goroutines.\n\n8.7 Quality Gates — Output validation (min length, error patterns), max_tokens audit, HasClearTask PreGate. Mutation safety gates aspirational.\n\n8.8 Tool Protocol — ChainAction nodes use tool stubs (Name/Description/Call). Tools populated at PreGate via SetupDefaultTools/SetupDevTools/SetupResearchTools.\n\nFor each concept, describe: what, why, where (files), how it affects building blocks.", 3072),
@@ -202,7 +202,7 @@ func section8Concepts() *evolution.SerializableNode {
 func section9Decisions() *evolution.SerializableNode {
 	return tree(
 		seq("Sec9_Main",
-			seq("PreGate", cond("Section4Done", "")),
+			seq("PreGate", cond("Section4Done", "section 4 must be complete")),
 			sel("StrategyRouter",
 				seq("Decisions",
 					act("ReadADRs", "read all docs/adr/ADR-*.md files"),
@@ -219,7 +219,7 @@ func section9Decisions() *evolution.SerializableNode {
 func section10Quality() *evolution.SerializableNode {
 	return tree(
 		seq("Sec10_Main",
-			seq("PreGate", cond("Section1Done", "")),
+			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter",
 				seq("Quality",
 					act("ReadSection1", "read quality goals from section 1"),
@@ -236,7 +236,7 @@ func section10Quality() *evolution.SerializableNode {
 func section11Risks() *evolution.SerializableNode {
 	return tree(
 		seq("Sec11_Main",
-			seq("PreGate", cond("Section1Done", "")),
+			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter",
 				seq("Risks",
 					act("ReadGraphReport", "load graphify isolated nodes + god nodes"),
@@ -255,7 +255,7 @@ func section11Risks() *evolution.SerializableNode {
 func section12Glossary() *evolution.SerializableNode {
 	return tree(
 		seq("Sec12_Main",
-			seq("PreGate", cond("Section1Done", "")),
+			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter",
 				seq("Glossary",
 					act("ScanCodeComments", "grep package comments from internal/"),

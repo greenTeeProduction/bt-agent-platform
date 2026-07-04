@@ -43,6 +43,19 @@ func detectPath(_ string, bb *engine.Blackboard) string {
 	case containsStr(task, "dcf"), containsStr(task, "lbo"), containsStr(task, "valuation"), containsStr(task, "earnings"),
 		containsStr(task, "kyc"), containsStr(task, "financial"):
 		return "FinancePath"
+	// Data-engineering domain must be matched BEFORE the generic DevOps case below
+	// (which captures the bare "pipeline" keyword), otherwise unmistakable ETL /
+	// data-lake / data-mesh tasks silently fall through to DevOpsPath/BuildPath/
+	// GeneralPath and never reach DataPipelinePath — the ExpectedPath the eval suites
+	// declare for the whole DataPipeline() domain. Keywords are deliberately
+	// data-specific so a generic CI/CD "pipeline" or "deploy" task stays DevOpsPath.
+	case containsStr(task, "etl"), containsStr(task, "parquet"), containsStr(task, "data lake"),
+		containsStr(task, "data mesh"), containsStr(task, "data contract"), containsStr(task, "data quality"),
+		containsStr(task, "data product"), containsStr(task, "streaming ingest"),
+		containsStr(task, "schema validation"), containsStr(task, "schema evolution"),
+		containsStr(task, "exactly-once"), containsStr(task, "incremental load"),
+		containsStr(task, "lineage"):
+		return "DataPipelinePath"
 	case containsStr(task, "deploy"), containsStr(task, "pipeline"), containsStr(task, "docker"),
 		containsStr(task, "kubernetes"), containsStr(task, "devops"):
 		return "DevOpsPath"
