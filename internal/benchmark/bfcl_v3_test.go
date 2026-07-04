@@ -192,3 +192,39 @@ func minInt(a, b int) int {
 	}
 	return b
 }
+
+// TestIsToolMatch_EmptyPath guards a correctness defect in isToolMatch: when the
+// detected path is empty, the bidirectional substring check strings.Contains(expected, path)
+// degenerates to strings.Contains(expected, "") which is ALWAYS true, so a turn that
+// executed no path (and whose output does not mention the tool) is scored as a correct
+// match against any expected tool — silently inflating turn accuracy. An empty path must
+// never count as correctly invoking a named expected tool.
+func TestIsToolMatch_EmptyPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		output   string
+		path     string
+		expected string
+		want     bool
+	}{
+		// The defect: empty path + expected tool not present in output must NOT match.
+		{name: "empty path, empty output", output: "", path: "", expected: "BuildPath", want: false},
+		{name: "empty path, unrelated output", output: "did something unrelated", path: "", expected: "BuildPath", want: false},
+
+		// Control cases that must stay correct after any fix.
+		{name: "no expected tool, non-empty output", output: "some output", path: "", expected: "", want: true},
+		{name: "exact path match", output: "x", path: "BuildPath", expected: "BuildPath", want: true},
+		{name: "path is substring of expected", output: "x", path: "Build", expected: "BuildPath", want: true},
+		{name: "expected is substring of path", output: "x", path: "BuildPath", expected: "Build", want: true},
+		{name: "expected mentioned in output", output: "ran the BuildPath step", path: "GeneralPath", expected: "BuildPath", want: true},
+		{name: "genuine mismatch", output: "x", path: "GeneralPath", expected: "BuildPath", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isToolMatch(tt.output, tt.path, tt.expected)
+			if got != tt.want {
+				t.Errorf("isToolMatch(%q, %q, %q) = %v, want %v", tt.output, tt.path, tt.expected, got, tt.want)
+			}
+		})
+	}
+}

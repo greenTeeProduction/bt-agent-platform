@@ -673,7 +673,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.9 Research Memory and Quota Economy
 
-**What:** A content-hash-deduplicating knowledge store (`internal/research`) records research findings, NotebookLM answers, and implemented goals; a program store persists multi-cycle change programs. The nlm quota economy (per-day query cache + daily budgets at the `nlmRun` choke point) keeps the ~50/day NotebookLM quota spent on new questions only.
+**What:** A content-hash-deduplicating knowledge store (`internal/research`) records research findings, NotebookLM answers, and implemented goals; a program store persists multi-cycle change programs. The nlm quota economy (per-day query cache + daily budgets at the `nlmRun` choke point) keeps the ~50/day NotebookLM quota spent on new questions only. A goal-actionability filter in `goap_research_goals.go` keeps degenerate NotebookLM echoes out of the plan: prose lead-ins ("review complete", "in summary", …) and source-citation prose — a `NotebookLM research:` meta prefix, a `(Community NN)` cluster label, a bracketed reference range like `[1-4]`, or LaTeX math such as `$RFC 6902$` — are rejected *even when the deterministic file-scoper has already appended `(files: …)` paths*, so a paraphrased research-paper architecture (e.g. the recurring KernelNode/VALIDPATCH "PatchBoard" transition) can never launder itself into a task that fabricates scope for files that do not exist.
 
 **Why:** Scheduled research previously re-asked identical questions (147 identical grill transcripts), re-proposed already-landed goals, and lost results to per-day file overwrites. The plan quota was oversubscribed 3× on repeats.
 
@@ -699,13 +699,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.12 A2A Auction Task Allocation
 
-**What:** A contract-net allocation protocol over the A2A transport. `Auctioneer.RunAuction` composes announce → evaluate → dispatch end to end: it fans a `TaskAnnouncement` out to candidate agents via `CollectBids`, each candidate scores the announcement against its own agent card with `ScoreAnnouncement` and answers with a `Bid` (cost/confidence) or declines, a `ScoreEvaluator` awards the lowest-cost eligible bid, and the winner alone is dispatched the real task text — returning an `AuctionResult` (Award + execution result). On the responder side, `BTAgentExecutor.Execute` detects an incoming JSON announcement and replies with a bid artifact on a completed task instead of running the announcement JSON as literal task text, declining silently when ineligible.
+**What:** A contract-net allocation protocol over the A2A transport. `Auctioneer.RunAuction` composes announce → evaluate → dispatch end to end: it fans a `TaskAnnouncement` out to candidate agents via `CollectBids`, each candidate scores the announcement against its own agent card with `ScoreAnnouncement` and answers with a `Bid` (cost/confidence) or declines, a `ScoreEvaluator` awards the lowest-cost eligible bid, and the winner alone is dispatched the real task text — returning an `AuctionResult` (Award + execution result). On the responder side, `BTAgentExecutor.Execute` detects an incoming JSON announcement and replies with a bid artifact on a completed task instead of running the announcement JSON as literal task text, declining silently when ineligible. An engine-side `AuctionDelegate` behavior-tree action makes this auction reachable from within any tree: it reads `bb.Task` and delegates to an injected `AuctionDelegateFn(task, chainState) → (result, awarded, err)` hook — the same injection-hook pattern as `DelegateToA2AFn`/`DelegateToTreeFn`, used because `internal/a2a` imports `internal/engine` and the dependency cannot be reversed — falling back, when no eligible bidder is awarded, to running the task through a delegate tree named by `chain_state.delegate_tree_id` via `DelegateToTreeFn`.
 
 **Why:** The three stages (announce/collect, evaluate→Award, dispatch) existed but nothing wired announce→evaluate→dispatch together, so a picked Award was never acted on; and a real bt-agent server treated the announcement JSON as literal task text, so no production agent could ever return a well-formed Bid and the fan-out was inert. Scoring bids from an agent's own card — confidence as the fraction of card capabilities the task demands, cost as the count of irrelevant ones — lets a focused specialist win over a diluted generalist.
 
-**Where:** `internal/a2a/auction.go` (Auctioneer, RunAuction, AuctionResult, ScoreAnnouncement, ScoreEvaluator), `internal/a2a/server.go` (RespondToAnnouncement, parseAnnouncement, the bid-aware Execute branch), `internal/a2a/card.go` (EligibleBidders, treeTags).
+**Where:** `internal/a2a/auction.go` (Auctioneer, RunAuction, AuctionResult, ScoreAnnouncement, ScoreEvaluator), `internal/a2a/server.go` (RespondToAnnouncement, parseAnnouncement, the bid-aware Execute branch), `internal/a2a/card.go` (EligibleBidders, treeTags), `internal/engine/actions_a2a.go` (the `AuctionDelegate` action and `AuctionDelegateFn` injection seam).
 
-**Effect:** Multi-agent task allocation now closes end to end: an auctioneer can announce, collect real bids from live per-agent endpoints, award the best-fit agent, and dispatch it the work. Unreachable, silent, malformed, and foreign-task candidates are tolerated without failing the auction.
+**Effect:** Multi-agent task allocation now closes end to end: an auctioneer can announce, collect real bids from live per-agent endpoints, award the best-fit agent, and dispatch it the work. Unreachable, silent, malformed, and foreign-task candidates are tolerated without failing the auction. The engine `AuctionDelegate` node and its `AuctionDelegateFn` seam are registered and unit-tested but not yet injected in production — the a2a task bridge wires `DelegateToA2AFn`, not yet `AuctionDelegateFn` — so the node reports *auction delegate not configured* until that startup wiring lands; adopting the seam is the remaining milestone.
 
 ---
 
@@ -827,7 +827,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Context:** Multi-agent coordination needed to route a unit of work to the best-fit agent among several candidates rather than a hard-coded delegate. The A2A layer already held the pieces — announce/collect, bid evaluation → Award, and task dispatch — but nothing composed them, and per-agent servers ran announcement JSON as literal task text, so no live agent could return a well-formed bid.
 
-**Decision:** Adopt a contract-net protocol on the A2A transport. `Auctioneer.RunAuction` composes announce → evaluate → dispatch: candidates score a `TaskAnnouncement` against their own agent card (`ScoreAnnouncement`) and reply with a `Bid`; a `ScoreEvaluator` awards the lowest-cost eligible bid; the winner alone is dispatched the real task. Per-agent endpoints become bid-aware — `BTAgentExecutor.Execute` recognizes announcements and answers with a bid artifact instead of running the JSON as a task.
+**Decision:** Adopt a contract-net protocol on the A2A transport. `Auctioneer.RunAuction` composes announce → evaluate → dispatch: candidates score a `TaskAnnouncement` against their own agent card (`ScoreAnnouncement`) and reply with a `Bid`; a `ScoreEvaluator` awards the lowest-cost eligible bid; the winner alone is dispatched the real task. Per-agent endpoints become bid-aware — `BTAgentExecutor.Execute` recognizes announcements and answers with a bid artifact instead of running the JSON as a task. The auction is reachable from any behavior tree through an engine-side `AuctionDelegate` action that calls an injected `AuctionDelegateFn` hook (mirroring the `DelegateToA2AFn`/`DelegateToTreeFn` seams that keep `internal/engine` free of an `internal/a2a` import) and falls back to `DelegateToTreeFn` when no bidder wins.
 
 **Status:** Accepted (2026-07-04)
 
@@ -835,8 +835,10 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 - ✅ Task allocation closes end to end over the live A2A transport
 - ✅ Bidding is card-driven: focused specialists beat diluted generalists on cost/confidence
 - ✅ Bad candidates (unreachable, silent, malformed, foreign-task) are tolerated, never failing the auction
+- ✅ The auction is composable inside behavior trees (the `AuctionDelegate` node), with a DelegateToTree fallback when no bidder wins
 - ⚠️ Card-based scoring is a coarse capability proxy; no bid signing or trust verification yet
 - ⚠️ Adds a second interpretation of A2A task text (announcement vs. ordinary task) at the responder
+- ⚠️ The engine `AuctionDelegateFn` seam is registered and tested but not yet injected by the a2a task bridge, so the `AuctionDelegate` node reports *not configured* in production until that wiring lands
 
 ---
 

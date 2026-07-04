@@ -94,6 +94,37 @@ func TestAppendGoapResearchGoalsKeepsGoalGapPairsAligned(t *testing.T) {
 	}
 }
 
+// A NotebookLM research answer often echoes source-citation prose — a
+// "(Community NN)" cluster label, a bracketed reference range like "[1-4]",
+// LaTeX math delimiters ("$RFC 6902$"), and a "NotebookLM research:" meta
+// prefix — describing a speculative architecture rather than an engineering
+// instruction. Such a line is NOT an actionable goal even when the deterministic
+// file-scoper has appended "(files: …)" paths to it: the appended paths must not
+// launder research-paper prose into a planned task. This is the exact class of
+// degenerate goal (KernelNode/VALIDPATCH/"PatchBoard" transition of the
+// Blackboard) that repeatedly reaches the plan builder and fabricates scope for
+// files that do not exist (internal/engine/kernel.go, blackboard.go, types.go).
+func TestIsActionableGoapGoalRejectsResearchCitationProse(t *testing.T) {
+	degenerate := "NotebookLM research: Implement the `KernelNode` composite and `VALIDPATCH` kernel function in `internal/engine/kernel.go` to transition the Blackboard (Community 51) to a PatchBoard architecture using validated JSON Patch mutations ($RFC 6902$) and role-specific Write Contracts [1-4]. (files: internal/engine/blackboard.go, internal/engine/types.go, internal/engine/registry.go)"
+	if isActionableGoapGoal(degenerate) {
+		t.Errorf("NotebookLM citation prose must be rejected as non-actionable even with appended file paths:\n%q", degenerate)
+	}
+
+	// The pipeline must drop it too, so a citation-prose answer never queues a task.
+	bb := &Blackboard{}
+	appendGoapResearchGoals(bb, []goapResearchGoal{{Goal: degenerate, Gap: "research-backed improvement"}})
+	if lines := goapResearchGoalLines(bb); len(lines) != 0 {
+		t.Errorf("citation-prose goal must not be queued, got %v", lines)
+	}
+
+	// Guard against over-filtering: a genuine, file-scoped imperative goal that
+	// merely happens to mention a bracketed token must still pass.
+	legit := "Add -short to the generated RED/GREEN test commands in internal/engine/actions_goap_fusion.go"
+	if !isActionableGoapGoal(legit) {
+		t.Errorf("legitimate file-scoped imperative goal must remain actionable: %q", legit)
+	}
+}
+
 func TestExtractGoapProgramParsesMilestones(t *testing.T) {
 	answer := `PROGRAM: Auction-based multi-agent task allocation
 MILESTONE1: Define auction message types in internal/a2a/messages.go

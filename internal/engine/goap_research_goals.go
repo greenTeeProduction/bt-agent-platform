@@ -152,6 +152,17 @@ func appendGoapResearchGoals(bb *Blackboard, goals []goapResearchGoal) {
 // line of a review answer.
 var goapProseGoalRe = regexp.MustCompile(`(?i)^(review complete|summary|here is|here's|overall|in summary|analysis|the following|no issues|everything looks|i found|i reviewed|looking at)`)
 
+// goapCitationProseRe matches the source-citation prose a NotebookLM research
+// answer echoes — a "NotebookLM research:" meta prefix, a "(Community NN)"
+// cluster label, a bracketed reference range like "[1-4]", or LaTeX math
+// delimiters like "$RFC 6902$". Such a line paraphrases a speculative
+// architecture from a source paper rather than an engineering instruction, so
+// it must never become a planned goal even after the deterministic file-scoper
+// appends "(files: …)" paths — those paths otherwise launder research-paper
+// prose (e.g. the recurring KernelNode/VALIDPATCH/"PatchBoard" transition) into
+// a task that fabricates scope for files that do not exist.
+var goapCitationProseRe = regexp.MustCompile(`(?i)(^notebooklm research:|\(community\s+\d+\)|\[\s*\d+\s*[-–]\s*\d+\s*\]|\$[^$]*\d[^$]*\$)`)
+
 // goapImperativeVerbs are the verbs an actionable goal may open with when it
 // names no Go file path.
 var goapImperativeVerbs = map[string]bool{
@@ -176,6 +187,12 @@ func isActionableGoapGoal(goal string) bool {
 		return false
 	}
 	if goapProseGoalRe.MatchString(g) {
+		return false
+	}
+	// Citation-paper prose is rejected before the file-path shortcut below:
+	// the degenerate NotebookLM echoes name .go paths and would otherwise be
+	// waved through as actionable.
+	if goapCitationProseRe.MatchString(g) {
 		return false
 	}
 	if len(extractGoFilePaths(g)) > 0 {

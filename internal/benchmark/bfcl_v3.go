@@ -164,10 +164,12 @@ func isToolMatch(output, path, expected string) bool {
 	if strings.EqualFold(path, expected) {
 		return true
 	}
-	// Check if path contains expected or expected contains path
+	// Check if path contains expected or expected contains path. Guard on a
+	// non-empty path: strings.Contains(expected, "") is always true, so an empty
+	// path would otherwise falsely match any expected tool.
 	lowPath := strings.ToLower(path)
 	lowExp := strings.ToLower(expected)
-	if strings.Contains(lowPath, lowExp) || strings.Contains(lowExp, lowPath) {
+	if path != "" && (strings.Contains(lowPath, lowExp) || strings.Contains(lowExp, lowPath)) {
 		return true
 	}
 	// Check output for expected tool mention
