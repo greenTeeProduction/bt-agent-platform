@@ -59,6 +59,14 @@ func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts m
 					node.Name, guarded))
 		}
 	}
+	// Mirror ValidateTreeFull's leaf-with-children rule (shared leafNodeTypes
+	// map so the two validation paths cannot drift): engine.buildNode
+	// constructs these types as childless leaves, silently discarding any
+	// declared Children, so declaring children is a construction error.
+	if leafNodeTypes[node.Type] && len(node.Children) > 0 {
+		*msgs = append(*msgs,
+			fmt.Sprintf("%s: %s leaf must not declare children", node.Name, node.Type))
+	}
 	for i := range node.Children {
 		validateNode(&node.Children[i], msgs, nameCounts)
 	}

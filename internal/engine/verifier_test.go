@@ -178,6 +178,39 @@ func TestVerifierFull_KnownNodeTypes(t *testing.T) {
 	}
 }
 
+func TestVerifierFull_AlwaysSucceedRejectsChildren(t *testing.T) {
+	// AlwaysSucceed is a leaf type: engine.buildNode (tree.go:266) silently
+	// discards node.Children. ValidateTreeFull must flag a leaf type that
+	// declares children so the discard surfaces as a validation error.
+	withChildren := &evolution.SerializableNode{
+		Type: "AlwaysSucceed",
+		Name: "as",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "GeneratePlan"},
+		},
+	}
+	info := ValidateTreeFull(withChildren)
+	found := false
+	for _, e := range info.Errors {
+		if strings.Contains(e, "AlwaysSucceed") && strings.Contains(e, "children") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected a leaf-children error mentioning AlwaysSucceed and children, got: %v", info.Errors)
+	}
+
+	// A childless AlwaysSucceed must NOT trigger the leaf-children rule.
+	childless := &evolution.SerializableNode{Type: "AlwaysSucceed", Name: "asLeaf"}
+	info = ValidateTreeFull(childless)
+	for _, e := range info.Errors {
+		if strings.Contains(e, "must not declare children") {
+			t.Fatalf("childless AlwaysSucceed should not trigger leaf-children rule, got: %v", info.Errors)
+		}
+	}
+}
+
 func TestBuildTree_InvalidTreeReturnsFailureCommand(t *testing.T) {
 	bb := &Blackboard{}
 	cmd := BuildTree(&evolution.SerializableNode{Type: "Action", Name: "MissingAction"}, bb)

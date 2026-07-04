@@ -14,6 +14,15 @@ const (
 	DefaultMaxRetries  = 5
 )
 
+// leafNodeTypes are node types that engine.buildNode (tree.go) constructs as
+// childless leaves, silently discarding any declared Children. Declaring
+// children on one of these is a construction error the validator must surface.
+var leafNodeTypes = map[string]bool{
+	"Action":        true,
+	"Condition":     true,
+	"AlwaysSucceed": true,
+}
+
 // ValidateTreeFull performs a 5-stage validation on a SerializableNode tree.
 // It is deliberately backward-compatible: trees without typed edges are valid
 // if their legacy node/action/condition names are known to the runtime.
@@ -91,6 +100,10 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 		if node.MaxRetries <= 0 {
 			info.Errors = append(info.Errors, fmt.Sprintf("node %q: %s requires max_retries > 0", node.Name, node.Type))
 		}
+	}
+
+	if leafNodeTypes[node.Type] && len(node.Children) > 0 {
+		info.Errors = append(info.Errors, fmt.Sprintf("node %q: leaf type %q must not declare children (got %d)", node.Name, node.Type, len(node.Children)))
 	}
 
 	if sec := sideEffectClass(node); sec != "" && sec != "none" {
