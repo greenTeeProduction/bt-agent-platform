@@ -79,12 +79,20 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			// while the stale backlog kept causing exactly those failures
 			// (observed 13:00 2026-07-04). AlwaysSucceed: a rejected or
 			// failed proposal never fails the cycle.
-			evolution.SerializableNode{Type: "AlwaysSucceed", Name: "BacklogReplenish", Children: []evolution.SerializableNode{
+			// Selector fallback, NOT an AlwaysSucceed wrapper: this engine's
+			// AlwaysSucceed is a LEAF that ignores children, so wrapping the
+			// seeding sequence in it silently discarded it on every cycle
+			// (the 13:30 2026-07-04 run succeeded end-to-end without ever
+			// executing SeedNextProgram). The selector runs the sequence and
+			// falls through to the terminal AlwaysSucceed leaf when the
+			// condition or action fails, keeping seeding non-fatal.
+			sel("BacklogReplenish",
 				seq("SeedWhenIdle",
 					cond("NeedsFreshProgram", "No program has pending milestones"),
 					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
 				),
-			}},
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "SeedSkipped"},
+			),
 
 			// ── Phase 5: Implement or Analyze ──
 			sel("ExecutionRouter",

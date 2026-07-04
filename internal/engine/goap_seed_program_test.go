@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/research"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -106,5 +107,39 @@ func TestSeedNextProgramSkipsWhenProgramActive(t *testing.T) {
 	re, _ := research.OpenPrograms(path)
 	if len(re.Programs) != 1 {
 		t.Fatal("no pile-up: active program must suppress seeding")
+	}
+}
+
+// The seeding stage must execute when BUILT AS A TREE, not only when the
+// action is invoked directly: the first shipped version wrapped the sequence
+// in an AlwaysSucceed node, which this engine builds as a LEAF that ignores
+// children — the stage "succeeded" every cycle without ever running.
+func TestBacklogReplenishSubtreeActuallyExecutes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+	oldP := goapProgramsPath
+	goapProgramsPath = path
+	t.Cleanup(func() { goapProgramsPath = oldP })
+	withSeedFetch(t, `PROGRAM: Subtree proof
+MILESTONE1: Add coverage in internal/knowledge/graph.go
+MILESTONE2: Wire checks into internal/domains/trees.go`)
+
+	subtree := &evolution.SerializableNode{Type: "Selector", Name: "BacklogReplenish", Children: []evolution.SerializableNode{
+		{Type: "Sequence", Name: "SeedWhenIdle", Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "NeedsFreshProgram"},
+			{Type: "Action", Name: "SeedNextProgram"},
+		}},
+		{Type: "AlwaysSucceed", Name: "SeedSkipped"},
+	}}
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{}}
+	cmd := BuildTree(subtree, bb)
+	if cmd == nil {
+		t.Fatal("BuildTree returned nil")
+	}
+	if out := RunTask(bb, cmd); out == "" && bb.Outcome == "" {
+		t.Log("tick complete")
+	}
+	ps, _ := research.OpenPrograms(path)
+	if ps.Active() == nil {
+		t.Fatal("built-and-ticked subtree must actually seed the program store")
 	}
 }
