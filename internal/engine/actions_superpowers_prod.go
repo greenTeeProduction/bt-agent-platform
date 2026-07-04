@@ -906,6 +906,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	}
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
+	// Produce the durable consecutive no-op-patch streak the CIRCUITPOLICY loop
+	// runner reads via goapFusionNoopPatchStreak: a run that applied but changed
+	// no tracked files (empty ChangedFiles AND no commit) increments the streak;
+	// a genuine change resets it to 0. Without this the streak was never written
+	// and the no-op tail of Activity-Progress Confusion could not be detected.
+	recordGoapFusionPatchApply(bb, run)
 	// Research memory: record what this run landed so future research cycles
 	// do not re-propose it, and advance the active multi-cycle program only
 	// when this run's changed files or done tasks executed the milestone's

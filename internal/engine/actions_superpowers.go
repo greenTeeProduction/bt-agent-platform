@@ -9,12 +9,15 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -986,21 +989,49 @@ func init() {
 		sum := sha256.Sum256([]byte(queue))
 		hash := hex.EncodeToString(sum[:])
 
-		// Append onto any prior state-hash history published on earlier ticks so the
-		// bounded window accumulates across cycles rather than resetting each tick.
+		// Load durable history → append → save durable so the bounded window
+		// accumulates across cron ticks rather than resetting each tick. Each
+		// scheduled tick builds a fresh Blackboard (RunOnce) whose ChainState dies
+		// with the run, so a history that only lived in ChainState reset to empty
+		// every tick and the bounded window could never see a cross-tick repeat.
 		history := append(goapFusionStateHashes(bb), hash)
-		bb.ChainState["goap_fusion_state_hashes"] = history
+		saveGoapFusionStateHashes(bb, history)
+		stored := goapFusionStateHashes(bb)
 
-		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion State Hash Published\n\nDeterministic goal-queue state hash `%s` appended to the CIRCUITPOLICY history (window depth %d/%d). The circuit breaker and loop runner now have a real producer to detect the \"Activity-Progress Confusion\" cycle against.", hash, len(history), goapFusionCircuitHistoryWindow)
+		// Report the accumulated depth against the DURABLE cap the history is
+		// actually bounded by (goapFusionStateHashHistoryCap), not the 3-hash
+		// circuit window: the history now accumulates across cron ticks, so once
+		// more than goapFusionCircuitHistoryWindow hashes pile up the numerator would
+		// exceed the window and misreport a depth larger than its stated maximum.
+		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion State Hash Published\n\nDeterministic goal-queue state hash `%s` appended to the durable CIRCUITPOLICY history (durable depth %d/%d). The circuit breaker and loop runner now have a real producer that survives across cron ticks to detect the \"Activity-Progress Confusion\" cycle against.", hash, len(stored), goapFusionStateHashHistoryCap)
 		return 1
 	})
 }
 
-// goapFusionStateHashes extracts the continuous loop's recent state-hash history
-// from the blackboard chain state under "goap_fusion_state_hashes", tolerating
-// either a []string (the canonical publish form) or a []any of strings.
+// goapFusionStateHashHistoryCap bounds the durable CIRCUITPOLICY state-hash
+// history persisted to the agent-scope blackboard so it cannot grow without bound
+// on disk as cron ticks accumulate. It must retain at least
+// goapFusionMaxLoopIterations recent hashes (and therefore at least
+// goapFusionCircuitHistoryWindow) so the runaway-loop backstop and the
+// repeated-state window both still function after the cap engages.
+const goapFusionStateHashHistoryCap = goapFusionMaxLoopIterations
+
+// goapFusionStateHashes extracts the continuous loop's recent state-hash history,
+// reading the durable agent-scope blackboard value first so it survives across
+// cron ticks (each of which builds a fresh Blackboard whose ChainState dies with
+// the run), and falling back to bb.ChainState when the scoped blackboard is
+// disabled (unit paths, scope-off deployments) or nothing durable has been
+// published yet. The ChainState form tolerates either a []string (the canonical
+// publish form) or a []any of strings.
 func goapFusionStateHashes(bb *Blackboard) []string {
-	if bb == nil || bb.ChainState == nil {
+	if bb == nil {
+		return nil
+	}
+	// Durable agent-scope history first — it persists to disk across cron ticks.
+	if durable := loadGoapFusionStateHashes(bb); len(durable) > 0 {
+		return durable
+	}
+	if bb.ChainState == nil {
 		return nil
 	}
 	switch v := bb.ChainState["goap_fusion_state_hashes"].(type) {
@@ -1019,14 +1050,74 @@ func goapFusionStateHashes(bb *Blackboard) []string {
 	}
 }
 
+// saveGoapFusionStateHashes persists the CIRCUITPOLICY state-hash history to the
+// agent-scope blackboard as a JSON string (mirroring saveSuperpowersPlanState) so
+// it survives across scheduled cron ticks, and mirrors it into ChainState for the
+// scope-off fallback and same-run readers. The history is capped to
+// goapFusionStateHashHistoryCap so it cannot grow without bound on disk.
+func saveGoapFusionStateHashes(bb *Blackboard, hashes []string) {
+	if bb == nil {
+		return
+	}
+	if len(hashes) > goapFusionStateHashHistoryCap {
+		hashes = hashes[len(hashes)-goapFusionStateHashHistoryCap:]
+	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+	bb.ChainState["goap_fusion_state_hashes"] = hashes
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		if encoded, err := json.Marshal(hashes); err == nil {
+			scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+			_ = bb.BB.Mgr.Set(scope, "goap_fusion_state_hashes", string(encoded),
+				"durable CIRCUITPOLICY state-hash history for cross-tick cycle detection", "text")
+		}
+	}
+}
+
+// loadGoapFusionStateHashes loads the durable state-hash history from the
+// agent-scope blackboard (the JSON string saveGoapFusionStateHashes wrote). It
+// returns nil when the scoped blackboard is disabled or the durable value is
+// absent/unparseable, so callers fall back to the per-tick ChainState.
+func loadGoapFusionStateHashes(bb *Blackboard) []string {
+	if bb == nil || bb.BB == nil || bb.BB.AgentName == "" {
+		return nil
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+	e, err := bb.BB.Mgr.Get(scope, "goap_fusion_state_hashes")
+	if err != nil {
+		return nil
+	}
+	var hashes []string
+	if json.Unmarshal([]byte(e.Value), &hashes) != nil {
+		return nil
+	}
+	return hashes
+}
+
 // goapFusionNoopPatchStreak extracts the continuous loop's current run of
-// consecutive no-op patch proposals from the blackboard chain state under
-// "goap_fusion_noop_patch_streak", tolerating the numeric forms a blackboard may
-// carry (int, int64, or a JSON-decoded float64). It returns 0 when the key is
+// consecutive no-op patch proposals under "goap_fusion_noop_patch_streak". Each
+// cron tick builds a fresh Blackboard whose ChainState dies with the run, so the
+// durable count recordGoapFusionPatchApply persisted to the agent-scope
+// blackboard is preferred first (mirroring loadGoapFusionStateHashes /
+// loadSuperpowersPlanState); ChainState is the same-run fallback for unit paths
+// and scope-off deployments. It tolerates the numeric forms a blackboard may
+// carry (int, int64, or a JSON-decoded float64) and returns 0 when the key is
 // absent or of an unexpected type, so a loop that has never published the streak
 // is treated as making progress rather than halting.
 func goapFusionNoopPatchStreak(bb *Blackboard) int {
-	if bb == nil || bb.ChainState == nil {
+	if bb == nil {
+		return 0
+	}
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_noop_patch_streak"); err == nil {
+			if n, aerr := strconv.Atoi(strings.TrimSpace(e.Value)); aerr == nil {
+				return n
+			}
+		}
+	}
+	if bb.ChainState == nil {
 		return 0
 	}
 	switch v := bb.ChainState["goap_fusion_noop_patch_streak"].(type) {
@@ -1038,6 +1129,46 @@ func goapFusionNoopPatchStreak(bb *Blackboard) int {
 		return int(v)
 	default:
 		return 0
+	}
+}
+
+// recordGoapFusionPatchApply is the production producer for the consecutive
+// no-op-patch streak the CIRCUITPOLICY loop runner reads via
+// goapFusionNoopPatchStreak. When runSuperpowersRuntimeFromExistingPlanAction
+// applies a run whose result changed no tracked files (empty ChangedFiles AND no
+// AppliedCommit), it INCREMENTS the durable streak; an apply that genuinely
+// changed files (or recorded a commit) RESETS it to 0. Without this producer no
+// code ever wrote goap_fusion_noop_patch_streak, so goapFusionNoopPatchStreak saw
+// a permanent 0 in production and the no-op tail of Activity-Progress Confusion
+// could never be detected.
+func recordGoapFusionPatchApply(bb *Blackboard, run *SuperpowersRun) {
+	if bb == nil {
+		return
+	}
+	genuineChange := run != nil && (len(run.ChangedFiles) > 0 || strings.TrimSpace(run.AppliedCommit) != "")
+	next := 0
+	if !genuineChange {
+		next = goapFusionNoopPatchStreak(bb) + 1
+	}
+	saveGoapFusionNoopPatchStreak(bb, next)
+}
+
+// saveGoapFusionNoopPatchStreak persists the consecutive no-op-patch streak to
+// the agent-scope blackboard (mirroring saveGoapFusionStateHashes /
+// saveSuperpowersPlanState) so it survives across scheduled cron ticks, and
+// mirrors it into ChainState for the scope-off fallback and same-run readers.
+func saveGoapFusionNoopPatchStreak(bb *Blackboard, streak int) {
+	if bb == nil {
+		return
+	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+	bb.ChainState["goap_fusion_noop_patch_streak"] = streak
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Set(scope, "goap_fusion_noop_patch_streak", strconv.Itoa(streak),
+			"durable CIRCUITPOLICY consecutive no-op-patch streak for cross-tick Activity-Progress Confusion detection", "text")
 	}
 }
 

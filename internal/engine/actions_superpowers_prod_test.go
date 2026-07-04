@@ -759,6 +759,101 @@ func TestSuperpowersPlanState_ChainStateFallback(t *testing.T) {
 	}
 }
 
+// TestGoapFusionNoopPatchStreak_IncrementsOnNoopResetsOnChange proves the
+// producer half of this task's contract: the consecutive no-op-patch streak the
+// CIRCUITPOLICY loop runner reads via goapFusionNoopPatchStreak actually has a
+// production producer. When runSuperpowersRuntimeFromExistingPlanAction applies a
+// run that changed no tracked files (empty ChangedFiles AND no AppliedCommit),
+// recordGoapFusionPatchApply must INCREMENT the durable streak; an apply that
+// genuinely changed files (or recorded an AppliedCommit) must RESET it to 0.
+// Before this task no code ever wrote goap_fusion_noop_patch_streak, so
+// goapFusionNoopPatchStreak saw a permanent 0 in production and the no-op tail of
+// Activity-Progress Confusion could never be detected.
+func TestGoapFusionNoopPatchStreak_IncrementsOnNoopResetsOnChange(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-noop", "", "goap-loop"),
+	}
+
+	if got := goapFusionNoopPatchStreak(bb); got != 0 {
+		t.Fatalf("initial streak = %d, want 0", got)
+	}
+
+	// A no-op apply: no tracked files changed, no commit recorded.
+	recordGoapFusionPatchApply(bb, &SuperpowersRun{ID: "noop-1"})
+	if got := goapFusionNoopPatchStreak(bb); got != 1 {
+		t.Fatalf("after 1 no-op apply streak = %d, want 1", got)
+	}
+	recordGoapFusionPatchApply(bb, &SuperpowersRun{ID: "noop-2"})
+	if got := goapFusionNoopPatchStreak(bb); got != 2 {
+		t.Fatalf("after 2 consecutive no-op applies streak = %d, want 2", got)
+	}
+
+	// A genuine change (non-empty ChangedFiles) resets the streak to 0.
+	recordGoapFusionPatchApply(bb, &SuperpowersRun{ID: "real", ChangedFiles: []string{"internal/engine/foo.go"}})
+	if got := goapFusionNoopPatchStreak(bb); got != 0 {
+		t.Fatalf("after a genuine file-changing apply streak = %d, want 0 (reset)", got)
+	}
+
+	// An apply that recorded a commit is also a genuine change, even if this run
+	// object's ChangedFiles slice was not populated.
+	recordGoapFusionPatchApply(bb, &SuperpowersRun{ID: "noop-3"})
+	recordGoapFusionPatchApply(bb, &SuperpowersRun{ID: "committed", AppliedCommit: "abc1234"})
+	if got := goapFusionNoopPatchStreak(bb); got != 0 {
+		t.Fatalf("after an apply with a recorded AppliedCommit streak = %d, want 0 (reset)", got)
+	}
+}
+
+// TestGoapFusionNoopPatchStreak_DurableAcrossCronTicks proves the durability half
+// of this task's contract: each cron tick builds a fresh Blackboard (RunOnce)
+// whose ChainState dies with the run, so a streak that only lived in ChainState
+// would reset to 0 every tick and goapFusionNoopPatchStreak would never see a
+// real value in production. The producer must persist the streak to the
+// agent-scope blackboard (mirroring saveGoapFusionStateHashes / saveSuperpowersPlanState)
+// so a later tick reading with an empty ChainState still sees — and accumulates
+// onto — it.
+func TestGoapFusionNoopPatchStreak_DurableAcrossCronTicks(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+
+	tick1 := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-1", "", "goap-loop"),
+	}
+	recordGoapFusionPatchApply(tick1, &SuperpowersRun{ID: "noop-1"})
+
+	// A completely fresh Blackboard — the next cron tick — must load the durable
+	// streak from the agent-scope store, not start from 0.
+	tick2 := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-2", "", "goap-loop"),
+	}
+	if got := goapFusionNoopPatchStreak(tick2); got != 1 {
+		t.Fatalf("tick 2 loaded streak = %d, want 1 from the durable agent-scope store", got)
+	}
+
+	// Another no-op on tick 2 accumulates onto the durable streak across ticks.
+	recordGoapFusionPatchApply(tick2, &SuperpowersRun{ID: "noop-2"})
+	tick3 := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-3", "", "goap-loop"),
+	}
+	if got := goapFusionNoopPatchStreak(tick3); got != 2 {
+		t.Fatalf("tick 3 loaded streak = %d, want 2 accumulated across cron ticks", got)
+	}
+
+	// A genuine change on a later tick resets the durable streak so a fresh tick
+	// reads 0 — the reset must be durable too, not just per-tick.
+	recordGoapFusionPatchApply(tick3, &SuperpowersRun{ID: "real", ChangedFiles: []string{"internal/engine/foo.go"}})
+	tick4 := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-4", "", "goap-loop"),
+	}
+	if got := goapFusionNoopPatchStreak(tick4); got != 0 {
+		t.Fatalf("tick 4 loaded streak = %d, want 0 after a genuine change reset the durable streak", got)
+	}
+}
+
 // TestFusionAnalysis_RateLimitCarryoverNotConflatedAsDegradation proves this
 // task's contract: a Claude rate-limit carryover is an expected, healthy pause
 // (bb.Outcome == "goap_fusion_rate_limited"), NOT a real ClaudeSuperpowersPath
