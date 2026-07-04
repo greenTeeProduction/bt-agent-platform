@@ -274,7 +274,14 @@ func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner
 	if staged.Err == nil {
 		return false, nil
 	}
-	commit := runner.Run(ctx, dir, "git", "commit", "-m", fmt.Sprintf("superpowers: apply verified run %s", run.ID))
+	// When the run's verification already executed the hook-parity lint on
+	// the changed packages, tell the pre-commit hook to skip its duplicate
+	// golangci-lint pass (~2 min/cycle on this hardware).
+	commitCmd := fmt.Sprintf("git commit -m %q", fmt.Sprintf("superpowers: apply verified run %s", run.ID))
+	if runVerificationPassed(run, "changed-packages-lint") {
+		commitCmd = "BT_SUPERPOWERS_PREVERIFIED=1 " + commitCmd
+	}
+	commit := runShellCommand(ctx, runner, dir, commitCmd)
 	if commit.Err != nil {
 		// The landing commit is hook-gated (lint + short tests); its failure
 		// output is the only evidence of WHY a verified run did not land —
@@ -376,4 +383,15 @@ func writeApplyCommitEvidence(run *SuperpowersRun, label string, res CommandResu
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-commit.txt")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	_ = os.WriteFile(path, []byte(label+"\n\n"+formatCommandResult(res)), 0o644)
+}
+
+// runVerificationPassed reports whether a named verification check ran and
+// passed for this run.
+func runVerificationPassed(run *SuperpowersRun, name string) bool {
+	for _, v := range run.Verification {
+		if v.Name == name && v.Passed {
+			return true
+		}
+	}
+	return false
 }

@@ -215,7 +215,7 @@ func TestPrioritizeGoapGoalsQueuesActiveProgramMilestoneFirst(t *testing.T) {
 	if !strings.Contains(lines[0], "Program") || !strings.Contains(lines[0], "milestone 1/2") {
 		t.Fatalf("active program milestone must head the queue, got: %s", queue)
 	}
-	if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); !strings.HasSuffix(ref, ":0") {
+	if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); !strings.Contains(ref, ":0") {
 		t.Fatalf("program milestone ref must be stamped for completion, got %q", ref)
 	}
 	if !strings.Contains(queue, "some research goal") {
@@ -378,5 +378,82 @@ func TestAppendGoapResearchGoalsDropsProseGoals(t *testing.T) {
 	lines := goapResearchGoalLines(bb)
 	if len(lines) != 1 || !strings.Contains(lines[0], "auction bidder") {
 		t.Fatalf("prose goals must be dropped at the accumulator: %v", lines)
+	}
+}
+
+func TestPrioritizeGoapGoalsBatchesPendingMilestones(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Big program", "test", []string{
+		"Milestone A in internal/a2a/a.go",
+		"Milestone B in internal/a2a/b.go",
+		"Milestone C in internal/a2a/c.go",
+		"Milestone D in internal/a2a/d.go",
+	})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{
+		"goap_fusion_improvement_gaps": "",
+	}}
+	fn := GetAction("PrioritizeGoapGoals")
+	if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d; %s", got, bb.Result)
+	}
+	queue, _ := bb.ChainState["goap_fusion_goal_queue"].(string)
+	for _, want := range []string{"milestone 1/4", "milestone 2/4", "milestone 3/4"} {
+		if !strings.Contains(queue, want) {
+			t.Fatalf("queue must batch pending milestones up to task capacity, missing %s:\n%s", want, queue)
+		}
+	}
+	if strings.Contains(queue, "milestone 4/4") {
+		t.Fatalf("batch must cap at %d milestones:\n%s", maxGoalDrivenTasks, queue)
+	}
+	ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
+	if len(strings.Split(ref, ",")) != 3 {
+		t.Fatalf("all batched refs must be stamped for completion: %q", ref)
+	}
+}
+
+func TestCompleteGoapProgramMilestoneBatchCompletion(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	p := ps.Add("Big program", "test", []string{
+		"Milestone A in internal/a2a/a.go",
+		"Milestone B in internal/a2a/b.go",
+		"Milestone C in internal/a2a/c.go",
+	})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	bb := &Blackboard{ChainState: map[string]any{
+		"goap_fusion_program_milestone": p.ID + ":0," + p.ID + ":1," + p.ID + ":2",
+	}}
+	// The run only executed milestones A and B (anchor files changed);
+	// C's anchor is untouched and must stay pending.
+	run := &SuperpowersRun{ID: "run-batch", ChangedFiles: []string{"internal/a2a/a.go", "internal/a2a/b.go"}}
+	completeGoapProgramMilestone(bb, run)
+
+	re, _ := research.OpenPrograms(path)
+	got := []string{re.Programs[0].Milestones[0].Status, re.Programs[0].Milestones[1].Status, re.Programs[0].Milestones[2].Status}
+	if got[0] != "done" || got[1] != "done" || got[2] != "pending" {
+		t.Fatalf("anchor-verified batch completion wrong: %v", got)
+	}
+}
+
+func TestProgramContinueNote(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Big program", "test", []string{"Milestone A in internal/a2a/a.go"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if note := programContinueNote(); !strings.Contains(note, "PROGRAM-CONTINUE") {
+		t.Fatalf("pending milestones must emit the continue marker, got %q", note)
+	}
+	ps.MarkDone(ps.Programs[0].ID, 0, "run-x")
+	_ = ps.Save()
+	if note := programContinueNote(); note != "" {
+		t.Fatalf("completed programs must not emit the marker: %q", note)
 	}
 }

@@ -126,6 +126,12 @@ func TestNlmCacheExpiresAcrossPacificDays(t *testing.T) {
 
 func TestDeriveNotebookLMResearchQuery(t *testing.T) {
 	withNlmEconomy(t)
+	// Isolate from the live program store: an active real program would
+	// legitimately drive the derived query and break the topic assertions.
+	emptyPrograms := filepath.Join(t.TempDir(), "programs.json")
+	oldPrograms := goapProgramsPath
+	goapProgramsPath = emptyPrograms
+	t.Cleanup(func() { goapProgramsPath = oldPrograms })
 	boiler := "Production NotebookLM researcher — domain:notebooklm tree with deterministic nlm CLI stubs + anti-fabrication evidence gate. Research → import sources → query with citations → save to vault. Runs every 2 hours to keep research fresh."
 	got := deriveNotebookLMResearchQuery(boiler)
 	if strings.Contains(got, "domain:") || strings.Contains(got, "anti-fabrication") {

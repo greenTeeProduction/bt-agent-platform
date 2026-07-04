@@ -138,3 +138,26 @@ func TestAuthGuardianDegradesInsteadOfDeadLettering(t *testing.T) {
 		t.Fatalf("result must tell the user to run nlm login: %s", bb.Result)
 	}
 }
+
+func TestApplyCommitSkipsHookLintWhenPreverified(t *testing.T) {
+	run := bareTestRun(t)
+	run.Verification = []VerificationCheck{{Name: "changed-packages-lint", Passed: true}}
+	runner := &bareApplyScriptRunner{patch: "diff --git a/internal/engine/actions_superpowers.go b/x\n"}
+	if err := applySuperpowersRunToMainRepo(context.Background(), runner, run); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if !strings.Contains(runner.joined(), "BT_SUPERPOWERS_PREVERIFIED=1 git commit") {
+		t.Fatalf("lint-preverified runs must commit with the hook-skip flag; calls:\n%s", runner.joined())
+	}
+}
+
+func TestApplyCommitKeepsHookLintWithoutPreverification(t *testing.T) {
+	run := bareTestRun(t)
+	runner := &bareApplyScriptRunner{patch: "diff --git a/internal/engine/actions_superpowers.go b/x\n"}
+	if err := applySuperpowersRunToMainRepo(context.Background(), runner, run); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if strings.Contains(runner.joined(), "BT_SUPERPOWERS_PREVERIFIED") {
+		t.Fatalf("without a passed lint check the hook must run its own lint; calls:\n%s", runner.joined())
+	}
+}

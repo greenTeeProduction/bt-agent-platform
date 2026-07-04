@@ -403,35 +403,65 @@ func superpowersPlanAlreadyImplemented(activePlan string) bool {
 // completing on any successful apply would let a cycle that drifted onto
 // unrelated goals silently check off milestone work it never did.
 func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
-	ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
-	parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
-	if len(parts) != 2 {
-		return
-	}
-	idx, err := strconv.Atoi(parts[1])
-	if err != nil {
+	refBlob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
+	if strings.TrimSpace(refBlob) == "" {
 		return
 	}
 	ps, err := research.OpenPrograms(goapProgramsPath)
 	if err != nil {
 		return
 	}
-	// Locate the milestone so we can verify the run against its file anchors
-	// before checking it off.
-	var milestone *research.Milestone
-	for _, p := range ps.Programs {
-		if p.ID == parts[0] && idx >= 0 && idx < len(p.Milestones) {
-			milestone = &p.Milestones[idx]
-			break
+	var completed []string
+	// A batched cycle stamps several comma-joined refs; each milestone is
+	// verified against the run's file anchors independently before being
+	// checked off.
+	for _, ref := range strings.Split(refBlob, ",") {
+		parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		idx, err := strconv.Atoi(parts[1])
+		if err != nil {
+			continue
+		}
+		var milestone *research.Milestone
+		for _, p := range ps.Programs {
+			if p.ID == parts[0] && idx >= 0 && idx < len(p.Milestones) {
+				milestone = &p.Milestones[idx]
+				break
+			}
+		}
+		if milestone == nil || !runExecutedMilestone(run, milestone.Goal) {
+			continue
+		}
+		if ps.MarkDone(parts[0], idx, run.ID) {
+			completed = append(completed, strings.TrimSpace(ref))
 		}
 	}
-	if milestone == nil || !runExecutedMilestone(run, milestone.Goal) {
-		return
-	}
-	if ps.MarkDone(parts[0], idx, run.ID) {
+	if len(completed) > 0 {
 		_ = ps.Save()
-		setGoapState(bb, "program_milestone_done", ref)
+		setGoapState(bb, "program_milestone_done", strings.Join(completed, ","))
 	}
+}
+
+// programContinueNote returns the marker line the scheduler watches for:
+// when the active program still has pending milestones after a successful
+// apply, the next cycle should start immediately instead of idling until
+// the next cron slot.
+func programContinueNote() string {
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		return ""
+	}
+	p := ps.Active()
+	if p == nil {
+		return ""
+	}
+	idx, m := p.NextMilestone()
+	if m == nil {
+		return ""
+	}
+	return fmt.Sprintf("\n\nPROGRAM-CONTINUE: %q milestone %d/%d pending", p.Title, idx+1, len(p.Milestones))
 }
 
 // runExecutedMilestone reports whether the applied run actually did the

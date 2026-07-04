@@ -310,14 +310,26 @@ func registerGoapFusionActions() {
 		// P1: New capability (domain tree, condition node, action)
 		// P2: Quality improvement (coverage, refactoring)
 
-		// An active multi-cycle program's next milestone goes to the head of
-		// the queue: programs are how research proposes changes bigger than
-		// any single run, one file-scoped milestone per cycle.
+		// An active multi-cycle program's pending milestones go to the head
+		// of the queue — up to the plan builder's task capacity per cycle, so
+		// a program no longer costs one full cycle per milestone (the 5-
+		// milestone auction program took 5 cycles ≈ 5 hours at 1/cycle).
 		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
 			if p := ps.Active(); p != nil {
-				if idx, m := p.NextMilestone(); m != nil {
+				var refs []string
+				for idx := range p.Milestones {
+					m := &p.Milestones[idx]
+					if m.Status != "pending" {
+						continue
+					}
 					goals = append(goals, fmt.Sprintf("[P0] Program %q milestone %d/%d: %s", p.Title, idx+1, len(p.Milestones), m.Goal))
-					setGoapState(bb, "program_milestone", fmt.Sprintf("%s:%d", p.ID, idx))
+					refs = append(refs, fmt.Sprintf("%s:%d", p.ID, idx))
+					if len(refs) == maxGoalDrivenTasks {
+						break
+					}
+				}
+				if len(refs) > 0 {
+					setGoapState(bb, "program_milestone", strings.Join(refs, ","))
 				}
 			}
 		}

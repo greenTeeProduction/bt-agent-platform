@@ -59,7 +59,9 @@ GOLANGCI="$($GO env GOPATH)/bin/golangci-lint"
 if ! command -v "$GOLANGCI" &>/dev/null; then
     GOLANGCI="golangci-lint"
 fi
-if [ -n "$STAGED_GO_FILES" ]; then
+if [ "${BT_SUPERPOWERS_PREVERIFIED:-}" = "1" ]; then
+    echo "→ golangci-lint: skipped — run verification already passed the hook-parity changed-packages-lint check"
+elif [ -n "$STAGED_GO_FILES" ]; then
     if command -v "$GOLANGCI" &>/dev/null; then
         STAGED_PKG_DIRS=$(echo "$STAGED_GO_FILES" | xargs -n1 dirname | sort -u | sed 's|^|./|')
         echo "→ golangci-lint (staged packages)..."

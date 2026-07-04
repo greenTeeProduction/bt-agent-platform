@@ -579,6 +579,10 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	if err == nil {
 		job.NextRun = next
 	}
+	// Program throughput: a successful cycle whose multi-cycle program still
+	// has pending milestones requeues after a short cooldown instead of
+	// idling until the next cron slot (the run output carries the marker).
+	job.NextRun = fastRequeueAfterSuccess(outcome, output, job.NextRun, time.Now())
 	s.mu.Unlock()
 
 	// Persist updated job state
@@ -1017,4 +1021,20 @@ func (s *Scheduler) loadState() {
 	if crashedCount > 0 {
 		slog.Warn("scheduler: recovered in-flight jobs from crash", "count", crashedCount)
 	}
+}
+
+// fastRequeueAfterSuccess returns an accelerated next-run time when a
+// successful run's output carries the PROGRAM-CONTINUE marker (an active
+// multi-cycle program has pending milestones); otherwise the cron-derived
+// time is kept. The 2-minute cooldown lets the apply/push settle and keeps
+// a marker bug from producing a hot loop.
+func fastRequeueAfterSuccess(outcome, output string, cronNext, now time.Time) time.Time {
+	if outcome != "success" || !strings.Contains(output, "PROGRAM-CONTINUE") {
+		return cronNext
+	}
+	fast := now.Add(2 * time.Minute)
+	if fast.Before(cronNext) {
+		return fast
+	}
+	return cronNext
 }
