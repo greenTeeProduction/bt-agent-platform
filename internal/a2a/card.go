@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -58,6 +59,45 @@ func treeTags(treeID string) []string {
 		tags = append(tags, strings.Split(parts[1], "_")...)
 	}
 	return tags
+}
+
+// EligibleBidders returns the sorted names of agents whose cards satisfy an
+// announcement's RequiredTags — i.e. agents that may bid on the announced task.
+// An agent qualifies when the union of its skills' tags covers every required
+// tag. An announcement with no RequiredTags matches every agent. The result is
+// sorted so auctions are deterministic.
+func EligibleBidders(cards map[string]*a2a.AgentCard, ann TaskAnnouncement) []string {
+	var eligible []string
+	for name, card := range cards {
+		if card == nil {
+			continue
+		}
+		if cardCoversTags(card, ann.RequiredTags) {
+			eligible = append(eligible, name)
+		}
+	}
+	sort.Strings(eligible)
+	return eligible
+}
+
+// cardCoversTags reports whether the union of the card's skill tags contains
+// every required tag. No required tags trivially match.
+func cardCoversTags(card *a2a.AgentCard, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	have := make(map[string]struct{})
+	for _, skill := range card.Skills {
+		for _, tag := range skill.Tags {
+			have[tag] = struct{}{}
+		}
+	}
+	for _, tag := range required {
+		if _, ok := have[tag]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // BuildCardRegistry generates AgentCards for all agents in the registry.

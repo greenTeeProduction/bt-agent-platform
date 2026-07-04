@@ -17,6 +17,7 @@
 package knowledge
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -148,21 +149,51 @@ func (kg *KnowledgeGraph) Discover(task string) (treeID string, confidence float
 func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 	taskLower := strings.ToLower(task)
 
-	// Phase 1: exact keyword match
+	// Phase 1: keyword match — deterministic and rank-based. Go randomizes map
+	// iteration, so instead of returning the first arbitrary keyword hit at a
+	// flat 0.8, collect every hit and pick the longest/most-specific matched
+	// keyword. Ties on keyword length break by sorted tree ID, and the score
+	// accumulates across every matched keyword that lands on the winning tree.
+	type kwHit struct {
+		keyword string
+		treeID  string
+	}
+	var hits []kwHit
 	for keyword, matchedID := range kg.Synonyms {
 		if strings.Contains(taskLower, keyword) {
 			if _, ok := kg.Trees[matchedID]; ok {
-				return matchedID, 0.8
+				hits = append(hits, kwHit{keyword: keyword, treeID: matchedID})
 			}
 		}
 	}
+	if len(hits) > 0 {
+		sort.Slice(hits, func(i, j int) bool {
+			if li, lj := len(hits[i].keyword), len(hits[j].keyword); li != lj {
+				return li > lj // longest / most-specific keyword first
+			}
+			return hits[i].treeID < hits[j].treeID // tie-break by sorted tree ID
+		})
+		winner := hits[0].treeID
+		matched := 0
+		for _, h := range hits {
+			if h.treeID == winner {
+				matched++
+			}
+		}
+		conf := 0.8 + 0.1*float64(matched-1)
+		if conf > 1.0 {
+			conf = 1.0
+		}
+		return winner, conf
+	}
 
-	// Phase 2: capability overlap scoring
+	// Phase 2: capability overlap scoring. Break exact-score ties by sorted tree
+	// ID so map iteration order can never decide the winner.
 	best := ""
 	bestScore := 0.0
 	for id, tree := range kg.Trees {
 		score := kg.matchScore(taskLower, tree)
-		if score > bestScore {
+		if score > bestScore || (score == bestScore && score > 0 && id < best) {
 			bestScore = score
 			best = id
 		}

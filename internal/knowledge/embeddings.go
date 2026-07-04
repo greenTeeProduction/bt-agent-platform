@@ -123,7 +123,9 @@ func (kg *KnowledgeGraph) discoverWithEmbeddings(task string) (string, float64) 
 		sim := CosineSimilarity(taskEmb, tree.Embedding)
 		// Boost by fitness (0-100 scaled to 0-1)
 		sim = 0.7*sim + 0.3*(tree.Fitness/100.0)
-		if sim > bestScore {
+		// Break equal-similarity ties by sorted tree ID so map iteration order
+		// can never decide the winner.
+		if sim > bestScore || (sim == bestScore && best != "" && id < best) {
 			bestScore = sim
 			best = id
 		}

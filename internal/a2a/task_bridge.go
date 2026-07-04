@@ -37,6 +37,8 @@ func (b *TaskStateBridge) A2AToBT(state a2a.TaskState) string {
 		return "cancelled"
 	case a2a.TaskStateWorking:
 		return "running"
+	case a2a.TaskStateInputRequired:
+		return "input-required"
 	default:
 		return "unknown"
 	}

@@ -42,7 +42,7 @@ func TestTaskStateBridge_A2AToBT(t *testing.T) {
 		{a2a.TaskStateFailed, "failure"},
 		{a2a.TaskStateCanceled, "cancelled"},
 		{a2a.TaskStateWorking, "running"},
-		{a2a.TaskStateInputRequired, "unknown"},
+		{a2a.TaskStateInputRequired, "input-required"},
 		{a2a.TaskStateSubmitted, "unknown"},
 		{a2a.TaskState("UNKNOWN_STATE"), "unknown"},
 	}
