@@ -182,6 +182,43 @@ func TestAuctioneer_DropsInvalidAndForeignBids(t *testing.T) {
 	}
 }
 
+// ---- attribution: a bid belongs to the candidate the announcement reached ---
+
+// A candidate must not be able to mis-attribute its bid by self-reporting a
+// BidderName other than the identity it was actually announced to under.
+// CollectBids attributes each collected bid to the candidate it came from (the
+// candidates-map key), not the untrusted payload field, so the downstream Award
+// always resolves back to a real candidate URL. Otherwise a single candidate
+// that returns a valid-looking bid under an unknown name fails the whole
+// auction (RunAuction's winner lookup misses), violating the resilience
+// contract that one bad candidate is only omitted, never fatal.
+func TestAuctioneer_AttributesBidToAnnouncedCandidate(t *testing.T) {
+	ft := newFakeTransport()
+	ann := TaskAnnouncement{TaskID: "t1", MinConfidence: 0.5}
+	// The agent known as "alice" returns a bid claiming to be "ghost" — a name
+	// that is not among the candidates.
+	ft.responses["http://alice"] = bidJSON(t, Bid{TaskID: "t1", BidderName: "ghost", Cost: 10, Confidence: 0.8})
+
+	auc := NewAuctioneer(ft)
+	candidates := map[string]string{"alice": "http://alice"}
+
+	bids, err := auc.CollectBids(context.Background(), ann, candidates)
+	if err != nil {
+		t.Fatalf("CollectBids failed: %v", err)
+	}
+	if len(bids) != 1 {
+		t.Fatalf("collected %d bids, want 1: %+v", len(bids), bids)
+	}
+	if bids[0].BidderName != "alice" {
+		t.Errorf("bid attributed to %q, want announced candidate %q (self-reported name must not be trusted)", bids[0].BidderName, "alice")
+	}
+	// The attributed name must resolve back to a real candidate URL so a
+	// downstream RunAuction can dispatch to the winner instead of erroring.
+	if _, ok := candidates[bids[0].BidderName]; !ok {
+		t.Errorf("collected bid bidder %q does not resolve in candidates map %v", bids[0].BidderName, candidates)
+	}
+}
+
 // ---- guard: a malformed announcement is rejected before fan-out -------------
 
 func TestAuctioneer_RejectsInvalidAnnouncement(t *testing.T) {

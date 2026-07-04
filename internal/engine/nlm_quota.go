@@ -239,6 +239,18 @@ func nlmPostflight(args []string, out string) {
 	}
 }
 
+// isBoilerplateResearchTopic reports whether s reads as agent/implementation
+// boilerplate rather than a genuine research question: empty, over-long, or
+// carrying scaffolding markers ("domain:", schedule cadence, anti-fabrication
+// evidence-gate language). Applied to both the raw task and any milestone goal
+// so neither can seed a degenerate NotebookLM query.
+func isBoilerplateResearchTopic(s string) bool {
+	t := strings.TrimSpace(s)
+	return t == "" || len(t) > 220 ||
+		strings.Contains(t, "domain:") || strings.Contains(t, "Runs every") ||
+		strings.Contains(strings.ToLower(t), "anti-fabrication")
+}
+
 // deriveNotebookLMResearchQuery turns the scheduled researcher's task into a
 // genuine research question. Agent boilerplate (the agent's own description,
 // which the scheduler passes when no input is set) is replaced by, in order:
@@ -247,15 +259,17 @@ func nlmPostflight(args []string, out string) {
 // platform's actual needs.
 func deriveNotebookLMResearchQuery(task string) string {
 	t := strings.TrimSpace(task)
-	boilerplate := t == "" || len(t) > 220 ||
-		strings.Contains(t, "domain:") || strings.Contains(t, "Runs every") ||
-		strings.Contains(strings.ToLower(t), "anti-fabrication")
-	if !boilerplate {
+	if !isBoilerplateResearchTopic(t) {
 		return t
 	}
 	if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
 		if p := ps.Active(); p != nil {
-			if _, m := p.NextMilestone(); m != nil {
+			// Only let the next milestone drive research when the milestone
+			// itself reads as a research direction. Implementation tasks — code
+			// paths, "domain:<name>" scaffolding, self-referential agent
+			// boilerplate — make a degenerate NotebookLM query, so fall through
+			// to a genuine curated topic instead of echoing the task text.
+			if _, m := p.NextMilestone(); m != nil && !isBoilerplateResearchTopic(m.Goal) {
 				return fmt.Sprintf("State of the art and reference implementations for: %s (context: %s)", m.Goal, p.Title)
 			}
 		}

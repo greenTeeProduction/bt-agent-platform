@@ -285,9 +285,9 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 		wg   sync.WaitGroup
 		bids []Bid
 	)
-	for _, agentURL := range candidates {
+	for name, agentURL := range candidates {
 		wg.Add(1)
-		go func(agentURL string) {
+		go func(name, agentURL string) {
 			defer wg.Done()
 
 			resp, err := a.transport.SendTask(ctx, agentURL, taskText)
@@ -302,6 +302,12 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 			if bid.TaskID != ann.TaskID {
 				return // bid for a different task
 			}
+			// Attribute the bid to the identity the announcement was actually
+			// delivered under (the candidates-map key), not the untrusted
+			// self-reported BidderName. This keeps the downstream Award's winner
+			// lookup resolvable against the candidates map even when a candidate
+			// misreports its name.
+			bid.BidderName = name
 			if err := bid.Validate(); err != nil {
 				return // structurally invalid bid
 			}
@@ -309,7 +315,7 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 			mu.Lock()
 			bids = append(bids, bid)
 			mu.Unlock()
-		}(agentURL)
+		}(name, agentURL)
 	}
 	wg.Wait()
 
