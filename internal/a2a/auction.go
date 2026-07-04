@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
 // MessageKind discriminates the three auction message types exchanged during
@@ -134,6 +136,63 @@ func betterBid(candidate, incumbent Bid) bool {
 	return candidate.Confidence > incumbent.Confidence
 }
 
+// ScoreAnnouncement is the bidder-side inverse of EligibleBidders: an agent
+// scores an announced task against its own agent card and produces the bid it
+// would submit. It reports ok=false — no bid — when the card cannot cover the
+// announcement's RequiredTags, or when the resulting confidence falls below the
+// announcement's MinConfidence (a bid the auctioneer would reject anyway).
+//
+// Confidence measures focus: the fraction of the card's distinct capabilities
+// that the task actually demands, so a specialist whose every skill is wanted
+// bids at confidence 1, while a generalist carrying irrelevant skills is
+// diluted. Cost counts those irrelevant capabilities, so the more focused agent
+// bids cheaper. An announcement with no RequiredTags is open to everyone and is
+// treated as a perfect fit (confidence 1, cost 0).
+func ScoreAnnouncement(bidderName string, card *a2a.AgentCard, ann TaskAnnouncement) (Bid, bool) {
+	if card == nil || !cardCoversTags(card, ann.RequiredTags) {
+		return Bid{}, false
+	}
+
+	confidence, cost := 1.0, 0.0
+	if len(ann.RequiredTags) > 0 {
+		required := make(map[string]struct{}, len(ann.RequiredTags))
+		for _, tag := range ann.RequiredTags {
+			required[tag] = struct{}{}
+		}
+
+		have := make(map[string]struct{})
+		for _, skill := range card.Skills {
+			for _, tag := range skill.Tags {
+				have[tag] = struct{}{}
+			}
+		}
+
+		demanded := 0
+		for tag := range have {
+			if _, ok := required[tag]; ok {
+				demanded++
+			}
+		}
+		total := len(have)
+		if total == 0 {
+			return Bid{}, false
+		}
+		confidence = float64(demanded) / float64(total)
+		cost = float64(total - demanded)
+	}
+
+	if confidence < ann.MinConfidence {
+		return Bid{}, false
+	}
+
+	return Bid{
+		TaskID:     ann.TaskID,
+		BidderName: bidderName,
+		Cost:       cost,
+		Confidence: confidence,
+	}, true
+}
+
 // BidCollector delivers a task announcement to a single candidate agent and
 // returns the candidate's raw text response. It is the one seam the auctioneer
 // needs from the A2A transport, and is satisfied by *BTAgentClient in
@@ -155,6 +214,50 @@ type Auctioneer struct {
 // given transport.
 func NewAuctioneer(transport BidCollector) *Auctioneer {
 	return &Auctioneer{transport: transport}
+}
+
+// AuctionResult is the outcome of a completed auction: the Award naming the
+// winning bidder and the execution Result the winner returned after being
+// dispatched the real task text.
+type AuctionResult struct {
+	Award  Award
+	Result string
+}
+
+// RunAuction composes the three auction stages end to end: it fans the
+// announcement out via CollectBids, picks the winner with a ScoreEvaluator,
+// then dispatches the announcement's Description (the real task text) to the
+// winning agent's URL over the same transport and returns that execution result
+// alongside the Award.
+//
+// candidates maps a candidate's display name to its A2A base URL — the same map
+// handed to CollectBids. The winning agent is located by matching the Award's
+// WinnerName back to that map. Only the winner is dispatched the real task; the
+// losing candidates are never invoked again. When no bid is eligible to win,
+// the evaluator's error (ErrNoEligibleBids) is propagated and nothing is
+// dispatched.
+func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candidates map[string]string) (AuctionResult, error) {
+	bids, err := a.CollectBids(ctx, ann, candidates)
+	if err != nil {
+		return AuctionResult{}, err
+	}
+
+	award, err := ScoreEvaluator{}.Evaluate(ann, bids)
+	if err != nil {
+		return AuctionResult{}, err
+	}
+
+	winnerURL, ok := candidates[award.WinnerName]
+	if !ok {
+		return AuctionResult{}, fmt.Errorf("a2a: winning bidder %q has no candidate URL", award.WinnerName)
+	}
+
+	result, err := a.transport.SendTask(ctx, winnerURL, ann.Description)
+	if err != nil {
+		return AuctionResult{}, fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, err)
+	}
+
+	return AuctionResult{Award: award, Result: result}, nil
 }
 
 // CollectBids validates the announcement, fans it out to every candidate

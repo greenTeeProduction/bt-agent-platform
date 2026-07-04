@@ -74,6 +74,39 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 			return
 		}
 
+		// Bid-aware responder: when the incoming message is a JSON
+		// TaskAnnouncement, this endpoint is a candidate in an auction — not a
+		// task runner. Score the agent's eligibility from its card (tree tags)
+		// and answer with a Bid instead of executing the announcement JSON as
+		// literal task text against the behavior tree. An ineligible agent
+		// declines silently (a completed task with no artifact) so the
+		// auctioneer drops it rather than seeing a spurious failure.
+		if ann, isAnn := parseAnnouncement(taskText); isAnn {
+			if card, cardErr := ConvertToAgentCard(inst.Definition, ""); cardErr == nil {
+				if bid, bidOK := ScoreAnnouncement(agentName, card, ann); bidOK {
+					if payload, mErr := json.Marshal(bid); mErr == nil {
+						if !yield(a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(string(payload))), nil) {
+							return
+						}
+						if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
+							a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
+								fmt.Sprintf("bid submitted for task %s", ann.TaskID)))), nil) {
+							return
+						}
+						return
+					}
+				}
+			}
+			// Recognized announcement but ineligible (or card/bid encoding
+			// failed): decline without running the tree.
+			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
+				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
+					fmt.Sprintf("declined auction for task %s", ann.TaskID)))), nil) {
+				return
+			}
+			return
+		}
+
 		// Resolve tree
 		var tree *evolution.SerializableNode
 		if e.TreeMap != nil {
@@ -137,6 +170,59 @@ func (e *BTAgentExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorCont
 			return
 		}
 	}
+}
+
+// RespondToAnnouncement is the candidate endpoint's server-side bidder: it
+// parses an auctioneer's announcement out of the raw A2A task text, scores it
+// against the responding agent's card, and returns the JSON-encoded Bid the
+// agent submits. It reports ok=false — declining silently — when the task text
+// is not a valid announcement, or when ScoreAnnouncement decides the agent
+// should not bid (tags uncovered or confidence below the announced minimum).
+// This closes the auction loop: an Auctioneer's CollectBids can drive candidate
+// agents through this function and consume the bids it returns.
+func RespondToAnnouncement(bidderName string, card *a2a.AgentCard, taskText string) (string, bool) {
+	if taskText == "" {
+		return "", false
+	}
+
+	ann, ok := parseAnnouncement(taskText)
+	if !ok {
+		return "", false // task text was not a well-formed announcement
+	}
+
+	bid, ok := ScoreAnnouncement(bidderName, card, ann)
+	if !ok {
+		return "", false
+	}
+
+	payload, err := json.Marshal(bid)
+	if err != nil {
+		return "", false
+	}
+	return string(payload), true
+}
+
+// parseAnnouncement decodes taskText as a JSON TaskAnnouncement, reporting
+// ok=true only when it is well-formed: it unmarshals cleanly, carries the
+// task_announcement kind, and passes Validate(). Empty text, non-JSON garbage,
+// and JSON that is structurally not an announcement all report ok=false so the
+// caller can route the message to the ordinary task path instead of the auction
+// responder.
+func parseAnnouncement(taskText string) (TaskAnnouncement, bool) {
+	if taskText == "" {
+		return TaskAnnouncement{}, false
+	}
+	var ann TaskAnnouncement
+	if err := json.Unmarshal([]byte(taskText), &ann); err != nil {
+		return TaskAnnouncement{}, false // not JSON — an ordinary task
+	}
+	if ann.Kind() != KindAnnouncement {
+		return TaskAnnouncement{}, false
+	}
+	if err := ann.Validate(); err != nil {
+		return TaskAnnouncement{}, false // structurally not an announcement
+	}
+	return ann, true
 }
 
 // resolveTreeByID is injected from main.go via SetTreeResolver.

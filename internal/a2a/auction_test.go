@@ -1,7 +1,10 @@
 package a2a
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -199,5 +202,106 @@ func TestEligibleBidders_NoRequiredTagsMatchesAll(t *testing.T) {
 	// result must be deterministic (sorted) for stable auctions
 	if got[0] != "a" || got[1] != "b" {
 		t.Errorf("EligibleBidders = %v, want sorted [a b]", got)
+	}
+}
+
+// ---- control-plane: announce → evaluate → dispatch end to end ---------------
+
+// auctionTransport is a BidCollector that plays both auction roles for each
+// candidate URL. It answers the announcement fan-out (a JSON-encoded
+// TaskAnnouncement) with a canned bid, and answers the follow-up dispatch of the
+// real task text to the winner with a canned execution result. It tells the two
+// calls apart by whether the delivered text parses as a TaskAnnouncement, and
+// records exactly which URLs were dispatched the real task so a test can assert
+// the loser was never invoked.
+type auctionTransport struct {
+	mu         sync.Mutex
+	bids       map[string]string // agentURL -> bid JSON returned during collection
+	results    map[string]string // agentURL -> execution result returned on dispatch
+	dispatched map[string]string // agentURL -> task text delivered on dispatch
+}
+
+func newAuctionTransport() *auctionTransport {
+	return &auctionTransport{
+		bids:       map[string]string{},
+		results:    map[string]string{},
+		dispatched: map[string]string{},
+	}
+}
+
+func (f *auctionTransport) SendTask(_ context.Context, agentURL, taskText string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var probe TaskAnnouncement
+	if err := json.Unmarshal([]byte(taskText), &probe); err == nil && probe.TaskID != "" {
+		return f.bids[agentURL], nil // announcement fan-out: return this candidate's bid
+	}
+
+	// task dispatch to the winner: record it and return the execution result.
+	f.dispatched[agentURL] = taskText
+	return f.results[agentURL], nil
+}
+
+// RunAuction must compose the three existing stages: fan the announcement out
+// via CollectBids, pick the winner with a ScoreEvaluator, then dispatch the real
+// task text to the winning agent's URL and return that result alongside the
+// Award. Before this wiring existed a picked Award was never acted on.
+func TestAuctioneer_RunAuction_DispatchesToWinnerAndReturnsResult(t *testing.T) {
+	ft := newAuctionTransport()
+	ann := TaskAnnouncement{TaskID: "t1", Description: "review PR #42", MinConfidence: 0.5}
+
+	// Both candidates bid; 'cheap' wins on lowest cost above min confidence.
+	ft.bids["http://cheap"] = bidJSON(t, Bid{TaskID: "t1", BidderName: "cheap", Cost: 10, Confidence: 0.8})
+	ft.bids["http://pricey"] = bidJSON(t, Bid{TaskID: "t1", BidderName: "pricey", Cost: 30, Confidence: 0.9})
+	// Only the winner should be handed the real task and produce a result.
+	ft.results["http://cheap"] = "done: reviewed PR #42"
+	ft.results["http://pricey"] = "loser must not be dispatched"
+
+	auc := NewAuctioneer(ft)
+	candidates := map[string]string{"cheap": "http://cheap", "pricey": "http://pricey"}
+
+	res, err := auc.RunAuction(context.Background(), ann, candidates)
+	if err != nil {
+		t.Fatalf("RunAuction failed: %v", err)
+	}
+
+	// The award must name the lowest-cost eligible bidder.
+	if res.Award.WinnerName != "cheap" {
+		t.Errorf("award winner = %q, want cheap", res.Award.WinnerName)
+	}
+	if res.Award.TaskID != "t1" {
+		t.Errorf("award TaskID = %q, want t1", res.Award.TaskID)
+	}
+	// The winner's execution result must be returned to the caller.
+	if res.Result != "done: reviewed PR #42" {
+		t.Errorf("result = %q, want the winner's execution result", res.Result)
+	}
+	// The real task text (not the announcement JSON) must be dispatched to the
+	// winner, and only the winner.
+	if got := ft.dispatched["http://cheap"]; got != ann.Description {
+		t.Errorf("dispatched task text to winner = %q, want %q", got, ann.Description)
+	}
+	if _, dispatched := ft.dispatched["http://pricey"]; dispatched {
+		t.Error("loser was dispatched the task; only the winner should receive the real task text")
+	}
+}
+
+func TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(t *testing.T) {
+	ft := newAuctionTransport()
+	ann := TaskAnnouncement{TaskID: "t1", Description: "review PR", MinConfidence: 0.9}
+	// Sole bid is below the announcement's min confidence, so nothing is eligible.
+	ft.bids["http://a"] = bidJSON(t, Bid{TaskID: "t1", BidderName: "a", Cost: 5, Confidence: 0.4})
+
+	auc := NewAuctioneer(ft)
+	_, err := auc.RunAuction(context.Background(), ann, map[string]string{"a": "http://a"})
+	if err == nil {
+		t.Fatal("expected an error when no bid is eligible to win")
+	}
+	if !errors.Is(err, ErrNoEligibleBids) {
+		t.Errorf("error = %v, want ErrNoEligibleBids", err)
+	}
+	if len(ft.dispatched) != 0 {
+		t.Errorf("no task should be dispatched when no bid wins, dispatched=%v", ft.dispatched)
 	}
 }
