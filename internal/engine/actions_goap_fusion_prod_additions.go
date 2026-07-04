@@ -123,17 +123,7 @@ func registerGoapFusionProductionAdditions() {
 		}
 
 		report := fmt.Sprintf("# GOAP Fusion Analysis — %s\n\n## Task\n%s\n\n## Goals\n%s\n\n## Gaps\n%s\n", ts, bb.Task, goals, gaps)
-		// When ScheduledAnalysisPath ran as a fallback because ClaudeSuperpowersPath
-		// degraded (any failure, not just a Claude rate limit), record the failure
-		// reason so real failures stay observable rather than silently succeeding
-		// as a clean deterministic cycle.
-		if v, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); v == "true" {
-			reason, _ := bb.ChainState["goap_fusion_impl_degraded_reason"].(string)
-			if strings.TrimSpace(reason) == "" {
-				reason = "implementation path degraded; cause not recorded"
-			}
-			report += fmt.Sprintf("\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n%s\n```\n", reason)
-		}
+		report += goapFusionImplDegradedSection(bb)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			bb.Result = err.Error()
 			return -1
@@ -260,6 +250,29 @@ func registerGoapFusionProductionAdditions() {
 		}
 		return 1
 	})
+}
+
+// goapFusionImplDegradedSection builds the vault-note section describing an
+// impl-degraded cycle. Every -1 exit from ClaudeSuperpowersPath stamps
+// goap_fusion_impl_degraded="true" via the shared defer, INCLUDING an expected
+// Claude rate-limit carryover (bb.Outcome == "goap_fusion_rate_limited"). That
+// signal must stay set so the ExecutionRouter still lets ScheduledAnalysisPath
+// catch the cycle, but a healthy carryover must NOT be narrated as a real
+// ClaudeSuperpowersPath failure — that phantom-failure line pollutes the next
+// run's research corpus. So: report genuine degradations verbatim, but tag a
+// rate-limit carryover distinctly as the expected pause it is.
+func goapFusionImplDegradedSection(bb *Blackboard) string {
+	if v, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); v != "true" {
+		return ""
+	}
+	reason, _ := bb.ChainState["goap_fusion_impl_degraded_reason"].(string)
+	if strings.TrimSpace(reason) == "" {
+		reason = "implementation path degraded; cause not recorded"
+	}
+	if bb.Outcome == "goap_fusion_rate_limited" {
+		return fmt.Sprintf("\n## Implementation Deferred (Rate Limit Carryover)\nClaudeSuperpowersPath paused on a Claude rate limit; the saved plan carries over to the next cycle. This is an expected, healthy pause — not a degradation.\n\n```\n%s\n```\n", reason)
+	}
+	return fmt.Sprintf("\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n%s\n```\n", reason)
 }
 
 func goapBacktickValueAfter(s, prefix string) string {

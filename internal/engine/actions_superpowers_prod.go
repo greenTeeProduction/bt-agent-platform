@@ -815,6 +815,14 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	defer func() {
 		if result == -1 {
 			markGoapFusionImplDegraded(bb, bb.Result)
+			// Clear the durable plan on every non-rate-limit failure so the
+			// next scheduled cycle re-plans from scratch instead of re-resuming
+			// a doomed plan forever (and dropping any freshly-analyzed goals).
+			// The rate-limit branch sets bb.Outcome == goap_fusion_rate_limited
+			// and is the ONLY case whose carryover must survive to be resumed.
+			if bb.Outcome != "goap_fusion_rate_limited" {
+				clearSuperpowersPlanState(bb)
+			}
 		}
 	}()
 	// Read durably: a rate-limited carryover only survives in the agent-scope

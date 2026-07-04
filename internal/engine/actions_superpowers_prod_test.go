@@ -593,6 +593,154 @@ func TestSuperpowersPlanState_ClearedAfterApply(t *testing.T) {
 	}
 }
 
+// rateLimitedClaudeRunner makes every Claude call fail with a session/rate-limit
+// error so runSuperpowersRuntimeFromExistingPlanAction takes its rate-limit
+// carryover branch (isClaudeRateLimit → true, bb.Outcome = goap_fusion_rate_limited).
+type rateLimitedClaudeRunner struct{}
+
+func (rateLimitedClaudeRunner) RunClaude(_ context.Context, repoDir string, _ string) CommandResult {
+	return CommandResult{
+		Command:  "claude <prompt>",
+		Dir:      repoDir,
+		Output:   "Claude Code session limit reached.",
+		Err:      errors.New("session limit reached; resets at 3pm"),
+		Duration: time.Millisecond,
+	}
+}
+
+// TestRunSuperpowersRuntime_NonRateLimitFailureClearsDurablePlanState proves this
+// task's core contract: when ClaudeSuperpowersPath fails for ANY reason other than
+// a Claude rate limit, runSuperpowersRuntimeFromExistingPlanAction must CLEAR the
+// durable plan state so the next scheduled cycle re-plans from scratch instead of
+// re-resuming a doomed plan forever. Before the fix the durable plan state was
+// cleared ONLY on a successful apply; every non-rate-limit failure left it in
+// place, so the preflight resume branch re-resumed the same failing plan (and
+// dropped any freshly-analyzed goals) on every subsequent cron tick.
+func TestRunSuperpowersRuntime_NonRateLimitFailureClearsDurablePlanState(t *testing.T) {
+	// Guard against any stray relative-path writes escaping into the repo.
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	// A RED verify that runs the task's test command and gets a PASSING result
+	// fails with "RED command unexpectedly passed" — a deterministic,
+	// non-rate-limit ClaudeSuperpowersPath failure (no session/rate/quota
+	// markers), exactly the catch-all case this task must clear the plan for.
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{
+		t:           t,
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+	defaultSuperpowersClaudeRunner = &scriptedClaudeRunner{}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	activePlan := buildDeterministicImplementationPlan("improve the platform")
+	if err := os.WriteFile(planPath, []byte(activePlan), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	// Agent-scope blackboard so the durable plan store is exercised for real, the
+	// same way a rate-limited carryover would have left it before this cycle.
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-clear", "", "goap-loop"),
+	}
+	saveSuperpowersPlanState(bb, planPath, activePlan)
+
+	run := &SuperpowersRun{
+		ID:           "run-clear",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(), // non-empty so no real worktree is created
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	setSuperpowersRun(bb, run)
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) on a non-rate-limit ClaudeSuperpowersPath failure, got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome == "goap_fusion_rate_limited" {
+		t.Fatalf("test setup wrong: this failure must NOT be classified rate-limited, got outcome %q", bb.Outcome)
+	}
+
+	// The durable plan state must be CLEARED: a fresh run reading the agent-scope
+	// store must see nothing, so the next cycle re-plans instead of re-resuming a
+	// doomed plan.
+	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
+	gotPath, gotPlan := loadSuperpowersPlanState(fresh)
+	if gotPath != "" || gotPlan != "" {
+		t.Fatalf("after a non-rate-limit failure, durable plan state = (%q, %q), want empty: it must be cleared so the next cycle does not re-resume a doomed plan", gotPath, gotPlan)
+	}
+}
+
+// TestRunSuperpowersRuntime_RateLimitFailurePreservesDurablePlanState is the other
+// half of the contract: a Claude rate-limit failure must PRESERVE the durable plan
+// state so the next cycle can resume the carryover. The clear-on-failure behavior
+// added by this task must fire ONLY for non-rate-limit failures; the rate-limit
+// branch (bb.Outcome == goap_fusion_rate_limited) must never wipe the saved plan.
+func TestRunSuperpowersRuntime_RateLimitFailurePreservesDurablePlanState(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{t: t}
+	defaultSuperpowersClaudeRunner = rateLimitedClaudeRunner{}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	activePlan := buildDeterministicImplementationPlan("improve the platform")
+	if err := os.WriteFile(planPath, []byte(activePlan), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-carry", "", "goap-loop"),
+	}
+	saveSuperpowersPlanState(bb, planPath, activePlan)
+
+	run := &SuperpowersRun{
+		ID:           "run-carry",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(),
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	setSuperpowersRun(bb, run)
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) on a rate-limited ClaudeSuperpowersPath failure, got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		t.Fatalf("expected outcome goap_fusion_rate_limited, got %q (bb.Result=%s)", bb.Outcome, bb.Result)
+	}
+
+	// The durable plan state MUST survive so the next cycle resumes the carryover.
+	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
+	gotPath, gotPlan := loadSuperpowersPlanState(fresh)
+	if gotPath != planPath || gotPlan != activePlan {
+		t.Fatalf("after a rate-limit failure, durable plan state = (%q, %q), want (%q, %q): the rate-limit carryover must be preserved", gotPath, gotPlan, planPath, activePlan)
+	}
+}
+
 // TestSuperpowersPlanState_ChainStateFallback proves the helper degrades to the
 // per-run ChainState when no agent-scope blackboard is configured, mirroring
 // the loadGrillState / loadLastReviewedSHA fallback so unit paths and
@@ -608,5 +756,48 @@ func TestSuperpowersPlanState_ChainStateFallback(t *testing.T) {
 
 	if got, _ := loadSuperpowersPlanState(&Blackboard{}); got != "" {
 		t.Fatalf("empty blackboard must return empty plan path, got %q", got)
+	}
+}
+
+// TestFusionAnalysis_RateLimitCarryoverNotConflatedAsDegradation proves this
+// task's contract: a Claude rate-limit carryover is an expected, healthy pause
+// (bb.Outcome == "goap_fusion_rate_limited"), NOT a real ClaudeSuperpowersPath
+// degradation. The rate-limit branch of runSuperpowersRuntimeFromExistingPlanAction
+// returns -1, which trips the shared defer's markGoapFusionImplDegraded and sets
+// goap_fusion_impl_degraded="true". That signal must stay set — the ExecutionRouter
+// still needs it so the fallback-eligible NoNewGapsOrImplDegraded guard lets
+// ScheduledAnalysisPath catch the cycle. But WriteFusionAnalysis must NOT then
+// narrate that healthy carryover in the vault research note as
+// "ClaudeSuperpowersPath failed; degraded to deterministic analysis", which
+// pollutes the next run's research corpus with a phantom failure. The
+// impl-degraded section builder must suppress (or distinctly tag) the failure
+// narrative when bb.Outcome is a rate limit, while still reporting genuine
+// non-rate-limit degradations verbatim so real breakage stays observable.
+func TestFusionAnalysis_RateLimitCarryoverNotConflatedAsDegradation(t *testing.T) {
+	const conflation = "ClaudeSuperpowersPath failed; degraded to deterministic analysis"
+
+	// A genuine, non-rate-limit degradation must still narrate the failure so real
+	// breakage stays observable in the vault note.
+	realFailure := newTestBlackboard()
+	realFailure.ChainState["goap_fusion_impl_degraded"] = "true"
+	realFailure.ChainState["goap_fusion_impl_degraded_reason"] = "RED command unexpectedly passed"
+	if section := goapFusionImplDegradedSection(realFailure); !strings.Contains(section, conflation) {
+		t.Fatalf("a genuine non-rate-limit degradation must still narrate %q so real breakage stays observable; got:\n%s", conflation, section)
+	}
+
+	// A rate-limit carryover sets the SAME impl_degraded signal (the shared defer
+	// stamps it on every -1), but bb.Outcome marks it as an expected pause. The
+	// vault note must not conflate it with a real ClaudeSuperpowersPath failure.
+	rateLimited := newTestBlackboard()
+	rateLimited.ChainState["goap_fusion_impl_degraded"] = "true"
+	rateLimited.ChainState["goap_fusion_impl_degraded_reason"] = "session limit reached; resets at 3pm"
+	rateLimited.Outcome = "goap_fusion_rate_limited"
+	if section := goapFusionImplDegradedSection(rateLimited); strings.Contains(section, conflation) {
+		t.Fatalf("a rate-limit carryover (bb.Outcome=goap_fusion_rate_limited) must not be narrated as a ClaudeSuperpowersPath failure; got:\n%s", section)
+	}
+
+	// With no impl-degraded signal at all, there is no section to append.
+	if section := goapFusionImplDegradedSection(newTestBlackboard()); section != "" {
+		t.Fatalf("no impl-degraded signal must yield an empty section; got:\n%s", section)
 	}
 }

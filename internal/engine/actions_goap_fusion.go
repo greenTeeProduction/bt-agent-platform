@@ -326,7 +326,16 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 		}
 
-		if strings.Contains(gapsStr, "import cycle") || strings.Contains(gapsStr, "test compilation") {
+		// Only an *affirmative* build blocker becomes the P0 "Unblock engine
+		// tests" goal. A prior bare `Contains(gapsStr,"import cycle")` matcher
+		// fabricated it from ANY incidental mention — and this codebase discusses
+		// import-cycle avoidance everywhere ("engine cannot import domains —
+		// import cycle", "avoid an import cycle when guard builders move"), so a
+		// research gap noting a boundary design constraint spawned an
+		// un-implementable P0 goal for a blocker that does not exist (the engine
+		// package builds cleanly) and dead-lettered the loop. The discriminator
+		// requires blocker phrasing and rejects avoidance/negation notes.
+		if goapFusionHasEngineTestBlocker(gapsStr) {
 			goals = append(goals, "[P0] Unblock engine tests — fix import cycle or test blockers preventing test execution")
 		}
 
@@ -871,6 +880,36 @@ func extractGoapNotebookLMRecommendation(answer string) (goal, gap string) {
 		}
 	}
 	return goal, gap
+}
+
+// goapFusionHasEngineTestBlocker reports whether the gap text describes a
+// genuine build/test blocker (an import cycle that actually breaks compilation,
+// tests that fail to compile) rather than an incidental mention of the phrase
+// "import cycle" in a boundary design note. The bare-substring predecessor
+// fabricated an un-implementable P0 "Unblock engine tests" goal from avoidance
+// notes ("avoid an import cycle", "engine cannot import domains — import
+// cycle"), dead-lettering the loop. Matching is case-insensitive.
+func goapFusionHasEngineTestBlocker(gaps string) bool {
+	lower := strings.ToLower(gaps)
+	// Affirmative blocker phrasings: the cycle/blocker is stated as active.
+	blockerPhrases := []string{
+		"import cycle blocks",
+		"import cycle breaks",
+		"import cycles block test compilation",
+		"blocks test compilation",
+		"breaks test compilation",
+		"tests fail to compile",
+		"test compilation fails",
+		"fails to compile",
+		"cannot run tests",
+		"tests do not compile",
+	}
+	for _, p := range blockerPhrases {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func goapFusionNotebookLMGoalFromGaps(gaps string) string {
