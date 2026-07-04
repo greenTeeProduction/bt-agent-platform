@@ -264,6 +264,7 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 }
 
 func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error {
+	run.Phase = SuperpowersPhaseVerification
 	checks := []struct {
 		name string
 		cmd  string
@@ -279,6 +280,14 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 			name string
 			cmd  string
 		}{"changed-packages-tests", cmd})
+	}
+	// Lint parity with the hook-gated landing commit: catch lint failures
+	// here, with evidence, instead of at the final commit.
+	if cmd := changedPackagesLintCommand(run.ChangedFiles); cmd != "" {
+		checks = append(checks, struct {
+			name string
+			cmd  string
+		}{"changed-packages-lint", cmd})
 	}
 	for _, check := range checks {
 		res := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)

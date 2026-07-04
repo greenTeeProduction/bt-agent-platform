@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"os/exec"
 	"path"
 	"regexp"
 	"sort"
@@ -142,6 +143,35 @@ func goPackagesOf(files []string) []string {
 		}
 	}
 	return pkgs
+}
+
+// superpowersLintBin locates the hook's linter; empty disables the lint
+// verification check (test seam; resolved once at init).
+var superpowersLintBin = func() string {
+	if p, err := exec.LookPath("golangci-lint"); err == nil {
+		return p
+	}
+	return ""
+}()
+
+// changedPackagesLintCommand mirrors the pre-commit hook's golangci-lint
+// gate over the run's changed packages, so lint failures surface during
+// verification (with evidence) instead of only at the final hook-gated
+// landing commit as an opaque applied_uncommitted (run 20260704T050842:
+// tests and build passed, then the hook rejected a prealloc issue and the
+// whole verified run was wasted).
+func changedPackagesLintCommand(changedFiles []string) string {
+	if superpowersLintBin == "" {
+		return ""
+	}
+	pkgs := goPackagesOf(changedFiles)
+	if len(pkgs) == 0 {
+		return ""
+	}
+	for i, p := range pkgs {
+		pkgs[i] = p + "/..."
+	}
+	return fmt.Sprintf("PATH=/usr/local/go/bin:$PATH %s run %s", superpowersLintBin, strings.Join(pkgs, " "))
 }
 
 // changedPackagesTestCommand builds the verification command that scales

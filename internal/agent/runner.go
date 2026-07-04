@@ -281,10 +281,25 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 				return result, fmt.Errorf("agent outcome: %s: %w", result.Outcome, llmErr)
 			}
 		}
-		return result, fmt.Errorf("agent outcome: %s", result.Outcome)
+		return result, fmt.Errorf("agent outcome: %s: %s", result.Outcome, outcomeErrorDetail(result.Output))
 	}
 
 	return result, nil
+}
+
+// outcomeErrorDetail distills the run output's tail into the outcome error so
+// retry exhaustion and dead-letter records carry the actual failure instead
+// of "last: unknown" — the 2026-07-04 applied_uncommitted runs were
+// undiagnosable from the DLQ alone.
+func outcomeErrorDetail(output string) string {
+	out := strings.TrimSpace(output)
+	if out == "" {
+		return "no run output"
+	}
+	if len(out) > 400 {
+		out = "…" + out[len(out)-400:]
+	}
+	return strings.ReplaceAll(out, "\n", " | ")
 }
 
 // BoardManager returns the shared blackboard manager (lazy default).

@@ -740,12 +740,21 @@ func registerSuperpowersProductionActions() {
 		bb := ctx.Blackboard
 		// Read the saved plan DURABLY: a fresh cron tick's ChainState is empty, so
 		// the only place a rate-limited carryover survives is the agent-scope store.
-		planPath, _ := loadSuperpowersPlanState(bb)
+		planPath, activePlan := loadSuperpowersPlanState(bb)
 		if planPath == "" {
 			planPath, _ = bb.ChainState["plan_path"].(string)
 		}
 		if planPath == "" {
 			bb.Result = "## Scheduled GOAP Fusion Cycle\n\nPreflight passed; no saved plan to resume — the main cycle will research, plan, and implement."
+			return 1
+		}
+		// A saved plan whose every task objective is already recorded as
+		// implemented is a stale carryover (e.g. saved by a binary that
+		// predated clear-on-success). Resuming it re-implements landed work:
+		// the REDs pass unexpectedly, the run fails, the cycle burns.
+		if superpowersPlanAlreadyImplemented(activePlan) {
+			clearSuperpowersPlanState(bb)
+			bb.Result = "## Scheduled GOAP Fusion Cycle\n\nSaved plan's tasks are already implemented (knowledge store); cleared the stale carryover — the main cycle will research fresh goals."
 			return 1
 		}
 		return runSuperpowersRuntimeFromExistingPlanAction(ctx)
@@ -904,6 +913,8 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		bb.Outcome = "pending_patch"
 		return -1
 	}
+	run.Phase = SuperpowersPhaseFinish
+	_ = writeSuperpowersRunJSON(run)
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
 	// Produce the durable consecutive no-op-patch streak the CIRCUITPOLICY loop

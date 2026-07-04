@@ -299,6 +299,26 @@ func recordImplementedGoals(run *SuperpowersRun) {
 	_ = store.Save()
 }
 
+// superpowersPlanAlreadyImplemented reports whether every task objective in
+// the plan is already recorded as goap:implemented in the knowledge store —
+// the signature of a stale carryover plan that must not be resumed.
+func superpowersPlanAlreadyImplemented(activePlan string) bool {
+	tasks, err := ParseSuperpowersPlan(activePlan)
+	if err != nil || len(tasks) == 0 {
+		return false
+	}
+	store, err := research.Open(btFusionKnowledgePath)
+	if err != nil {
+		return false
+	}
+	for _, task := range tasks {
+		if !store.Known(task.Objective) {
+			return false
+		}
+	}
+	return true
+}
+
 // completeGoapProgramMilestone marks the active program milestone done — but
 // only when the applied run demonstrably executed it. PrioritizeGoapGoals
 // stamps "programID:index" into ChainState when it queues a milestone;

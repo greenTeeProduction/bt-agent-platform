@@ -249,6 +249,13 @@ verify the pattern against the code before proposing it.
 highest-impact structural improvements — architecture-level changes are in
 scope, not just local fixes.
 
+Priority guidance: prefer goals that expand PLATFORM capabilities —
+internal/gardener, internal/evolution, internal/a2a, internal/domains,
+internal/dashboard, internal/knowledge — over further changes to the
+self-improvement pipeline's own files (actions_goap_fusion*,
+actions_superpowers*, superpowers_*), which have received heavy recent
+attention. Only propose pipeline work for a defect you can demonstrate.
+
 %s`, rc.rangeDesc, rc.body)
 	}
 

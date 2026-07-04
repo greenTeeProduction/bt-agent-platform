@@ -76,12 +76,18 @@ func TestNlmAuthStillExpiredAfterRefreshFails(t *testing.T) {
 	}}
 	withFakeNlmAuth(t, f)
 
+	// Unrecovered auth needs the USER (interactive browser login): failing
+	// here only dead-letters the guardian every tick without changing
+	// anything, so it degrades with success and a loud instruction instead.
 	bb, code := runAuthAction(t)
-	if code != -1 {
-		t.Fatalf("unrecovered auth = %d, want -1", code)
+	if code != 1 {
+		t.Fatalf("unrecovered auth = %d, want 1 (degrade, not dead-letter)", code)
 	}
-	if bb.Outcome != "failure" {
-		t.Fatalf("Outcome = %q, want failure", bb.Outcome)
+	if bb.Outcome != "nlm_auth_needs_user" {
+		t.Fatalf("Outcome = %q, want nlm_auth_needs_user", bb.Outcome)
+	}
+	if !strings.Contains(bb.Result, "nlm login") {
+		t.Fatalf("result must instruct the user: %s", bb.Result)
 	}
 }
 

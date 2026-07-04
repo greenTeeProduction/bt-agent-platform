@@ -203,8 +203,14 @@ func registerNotebookLMActions() {
 		bb.Result = "## NotebookLM Auth\n\n```\n" + detail + "\n```\n"
 		bb.ChainState["nlm_auth"] = detail
 		if nlmAuthUnhealthy(status) {
-			bb.Outcome = "failure"
-			return -1
+			// Still unhealthy after the refresh attempt: nlm login needs an
+			// interactive browser only the user can drive. Failing here just
+			// dead-letters the guardian every schedule tick (3 retries each)
+			// without changing anything — degrade with a loud instruction
+			// instead so the report reaches the user without DLQ noise.
+			bb.Result += "\nDEGRADED: automated refresh cannot recover this session — run `nlm login` interactively."
+			bb.Outcome = "nlm_auth_needs_user"
+			return 1
 		}
 		bb.Outcome = "success"
 		return 1

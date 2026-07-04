@@ -267,6 +267,7 @@ func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner
 	add := runner.Run(ctx, dir, "git", "add", "-A", "--", ".", ":(exclude)docs/superpowers/runs/**", ":(exclude)docs/superpowers/plans/**")
 	if add.Err != nil {
 		run.ApplyStatus = "applied_uncommitted"
+		writeApplyCommitEvidence(run, "git add failed", add)
 		return false, fmt.Errorf("applied_uncommitted: git add failed: %v\n%s", add.Err, add.Output)
 	}
 	staged := runShellCommand(ctx, runner, dir, "git diff --cached --quiet -- . ':!docs/superpowers/runs/**' ':!docs/superpowers/plans/**'")
@@ -275,7 +276,11 @@ func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner
 	}
 	commit := runner.Run(ctx, dir, "git", "commit", "-m", fmt.Sprintf("superpowers: apply verified run %s", run.ID))
 	if commit.Err != nil {
+		// The landing commit is hook-gated (lint + short tests); its failure
+		// output is the only evidence of WHY a verified run did not land —
+		// persist it (run 20260704T050842 was undiagnosable without this).
 		run.ApplyStatus = "applied_uncommitted"
+		writeApplyCommitEvidence(run, "git commit failed (pre-commit hook?)", commit)
 		return false, fmt.Errorf("applied_uncommitted: git commit failed: %v\n%s", commit.Err, commit.Output)
 	}
 	return true, nil
@@ -360,4 +365,15 @@ func superpowersGeneratedCommitExclusions() []string {
 		out = append(out, ":(exclude)"+strings.TrimSuffix(prefix, "/")+"/**")
 	}
 	return out
+}
+
+// writeApplyCommitEvidence persists a failed stage/commit's full output as a
+// verification artifact so applied_uncommitted runs are diagnosable.
+func writeApplyCommitEvidence(run *SuperpowersRun, label string, res CommandResult) {
+	if run == nil || run.ArtifactDir == "" {
+		return
+	}
+	path := filepath.Join(run.ArtifactDir, "verification", "apply-commit.txt")
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	_ = os.WriteFile(path, []byte(label+"\n\n"+formatCommandResult(res)), 0o644)
 }
