@@ -117,6 +117,18 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 				),
 			),
 
+			// ── Phase 5.5: Self-seeding backlog ──
+			// When every multi-cycle program is complete, propose and persist
+			// the next one so the loop never idles on a stale catalog.
+			// AlwaysSucceed: a failed or rejected proposal must not fail the
+			// cycle — seeding simply retries next cycle.
+			evolution.SerializableNode{Type: "AlwaysSucceed", Name: "BacklogReplenish", Children: []evolution.SerializableNode{
+				seq("SeedWhenIdle",
+					cond("NeedsFreshProgram", "No program has pending milestones"),
+					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
+				),
+			}},
+
 			// ── Phase 6: Verify & Report ──
 			act("VerifyGoapFusionEvidence",
 				"Reject fabricated/self-corrected outputs and require concrete artifact evidence"),
