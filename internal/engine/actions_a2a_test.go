@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -19,6 +20,48 @@ import (
 func TestAuctionDelegate_Registered(t *testing.T) {
 	if _, ok := actionRegistry["AuctionDelegate"]; !ok {
 		t.Fatal("AuctionDelegate action not registered")
+	}
+}
+
+// TestAuctionDelegate_EmitsTracingSpan pins milestone 4/4 of the auction
+// hardening program: AuctionDelegate must be registered through
+// engine.RegisterAction so it gains the shared bt.action tracing decorator like
+// every other engine action, rather than being written straight into
+// actionRegistry (which bypasses both the span and the duplicate-registration
+// guard). When invoked through the registry seam it must emit exactly one
+// bt.action/AuctionDelegate span carrying the standard action attributes.
+func TestAuctionDelegate_EmitsTracingSpan(t *testing.T) {
+	rec := withRecordingGlobalTracer(t)
+
+	origAuction := AuctionDelegateFn
+	AuctionDelegateFn = func(_ string, _ map[string]any) (string, bool, error) {
+		return "winner completed the task", true, nil
+	}
+	defer func() { AuctionDelegateFn = origAuction }()
+
+	action := GetAction("AuctionDelegate")
+	if action == nil {
+		t.Fatal("AuctionDelegate action not registered")
+	}
+
+	bb := &Blackboard{Task: "allocate this unit of work", TraceContext: context.Background()}
+	if status := action(&btcore.BTContext[Blackboard]{Blackboard: bb}); status != 1 {
+		t.Fatalf("expected success (1), got %d", status)
+	}
+
+	spans := rec.Ended()
+	if len(spans) != 1 || spans[0].Name() != "bt.action/AuctionDelegate" {
+		t.Fatalf("expected one bt.action/AuctionDelegate span, got %v", spans)
+	}
+	attrs := map[string]string{}
+	for _, kv := range spans[0].Attributes() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	if attrs["bt.node.kind"] != "action" || attrs["bt.node.name"] != "AuctionDelegate" {
+		t.Fatalf("attrs = %v", attrs)
+	}
+	if attrs["bt.status"] != "success" {
+		t.Fatalf("bt.status = %q, want success", attrs["bt.status"])
 	}
 }
 

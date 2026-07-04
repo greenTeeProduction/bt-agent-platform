@@ -372,6 +372,53 @@ func TestAllDomainTreeConditionsHaveDescriptions(t *testing.T) {
 	}
 }
 
+// TestSmokeTestedDomainTreesHaveConditionDescriptions extends condition coverage
+// from the curated AllDomainTrees registry to the FULL set of domain trees that
+// carry an executable-structure smoke test (the fns map in
+// engine_domain_execution_test.go). The kanban_* and hermes_evolve trees are
+// exercised by that smoke test but are NOT registered in AllDomainTrees, so
+// TestAllDomainTreeConditionsHaveDescriptions never walks their Condition nodes —
+// leaving their routing gates (ValidateInput, WasSuccessful, IsKanbanTask, ...)
+// with blank Descriptions. The goal "all domain trees have smoke tests,
+// descriptions, and condition coverage" requires every smoke-tested tree's
+// Condition nodes to be described, exactly like the registered curated trees:
+// the gardener and the bt-agent switch_tree tool surface these per-node
+// descriptions as the human-readable routing rationale, and a blank one
+// advertises an unexplained gate to operators.
+func TestSmokeTestedDomainTreesHaveConditionDescriptions(t *testing.T) {
+	// Domain trees that have an executable-structure smoke test but are not part
+	// of the AllDomainTrees registry — mirrors the extra entries in the fns map
+	// of engine_domain_execution_test.go.
+	extraSmokeTrees := map[string]func() *evolution.SerializableNode{
+		"hermes_evolve":       HermesSelfEvolutionTree,
+		"kanban_task_creator": KanbanTaskCreatorTree,
+		"kanban_refiner":      KanbanRefinerTree,
+		"kanban_qa":           KanbanQATree,
+		"kanban_monitor":      KanbanBoardMonitorTree,
+		"kanban_workflow":     KanbanWorkflowTree,
+		"kanban_autopilot":    KanbanAutoPilotTree,
+	}
+
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, fn := range extraSmokeTrees {
+		tree := fn()
+		if tree == nil {
+			t.Errorf("smoke-tested tree %q returned nil", name)
+			continue
+		}
+		walk(name, *tree)
+	}
+}
+
 // TestDescriptionsHaveNoOrphans is the reverse guard to
 // TestAllDomainTreesHaveDescriptions: every entry in the Descriptions map must
 // correspond to a tree actually registered in AllDomainTrees. The gardener and

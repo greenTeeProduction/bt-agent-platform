@@ -44,8 +44,12 @@ func registerIsAuctionTaskCondition() {
 }
 
 // registerAuctionDelegateNode registers the AuctionDelegate behavior tree action.
+//
+// It goes through engine.RegisterAction (not a direct actionRegistry write) so
+// AuctionDelegate gains the shared bt.action tracing span and the
+// duplicate-registration guard like every other engine action.
 func registerAuctionDelegateNode() {
-	actionRegistry["AuctionDelegate"] = func(ctx *btcore.BTContext[Blackboard]) int {
+	RegisterAction("AuctionDelegate", func(ctx *btcore.BTContext[Blackboard]) int {
 		b := ctx.Blackboard
 
 		task := b.Task
@@ -98,5 +102,5 @@ func registerAuctionDelegateNode() {
 		b.Result = treeResult
 		b.Outcome = "success"
 		return 1
-	}
+	})
 }

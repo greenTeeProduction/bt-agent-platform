@@ -16,7 +16,7 @@ func KanbanTaskCreatorTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "TaskCreator_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 				{Type: "Action", Name: "SetupDefaultTools"},
 			}},
 			{
@@ -29,7 +29,7 @@ func KanbanTaskCreatorTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
 				{Type: "ChainAction", Name: "llm_call:Card creation failed. Check: is the board accessible? Is the column name correct? Is the card format valid?", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},
@@ -42,7 +42,7 @@ func KanbanRefinerTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "Refiner_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 				{Type: "Condition", Name: "IsKanbanTask", Description: "Has card ID or task reference"},
 			}},
 			{
@@ -55,7 +55,7 @@ func KanbanRefinerTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
 				{Type: "ChainAction", Name: "llm_call:Refinement failed. Possible issues: card not in TODO column, board permissions, invalid card format. Diagnose and retry.", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},
@@ -68,8 +68,8 @@ func KanbanQATree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "QA_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
-				{Type: "Condition", Name: "IsKanbanTask"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+				{Type: "Condition", Name: "IsKanbanTask", Description: "Has card ID or task reference"},
 			}},
 			{
 				Type: "ChainAction",
@@ -81,7 +81,7 @@ func KanbanQATree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
 				{Type: "ChainAction", Name: "llm_call:QA check failed to execute. Verify board access and card state. Retry with corrected approach.", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},
@@ -94,7 +94,7 @@ func KanbanBoardMonitorTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "BoardMonitor_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 				{Type: "Action", Name: "SetupDefaultTools"},
 			}},
 			{
@@ -157,7 +157,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "KanbanWorkflow_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 				{Type: "Action", Name: "SetupDefaultTools"},
 			}},
 			{
@@ -219,7 +219,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
 				{Type: "ChainAction", Name: "llm_call:Kanban operation failed. Verify board is accessible, check column names, validate card format.", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},
@@ -233,7 +233,7 @@ func KanbanAutoPilotTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "AutoPilot_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 				{Type: "Action", Name: "SetupDefaultTools"},
 			}},
 			{
@@ -252,7 +252,7 @@ func KanbanAutoPilotTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
 				{Type: "ChainAction", Name: "llm_call:Autopilot issue. Check board connectivity, agent availability, card state.", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},
