@@ -7,6 +7,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -191,6 +192,44 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// TestDetectPath_SecurityKeywordFallback guards a genuine routing inconsistency:
+// eval_suites.go declares SecurityPath as the ExpectedPath for security-audit
+// tasks (the Security() suite and the codeReviewPaths PossiblePaths reference it
+// 12 times), yet detectPath's keyword fallback has NO branch that can ever emit
+// "SecurityPath". When a tree run leaves no bb.CurrentPath/VisitedPaths (the
+// backward-compat scoring path), an unmistakably security-audit task —
+// "scan for SQL injection vulnerabilities", "check for hardcoded credentials",
+// "full penetration test" — is silently classified as GeneralPath (or, when it
+// happens to contain "audit", CodeReviewPath), never SecurityPath. That means the
+// fallback classifier disagrees with the suites' own declared expectations for an
+// entire domain, deflating security-suite scoring in offline/backward-compat runs.
+// A security-audit task must route to SecurityPath, while a generic "review this
+// code for security bugs" must remain CodeReviewPath (pinned as a control so any
+// fix does not over-capture the code-review domain).
+func TestDetectPath_SecurityKeywordFallback(t *testing.T) {
+	tests := []struct {
+		name, task, expected string
+	}{
+		// Must route to SecurityPath (currently misrouted — the defect under test).
+		{"sql injection", "scan for SQL injection vulnerabilities in the API handlers", "SecurityPath"},
+		{"hardcoded credentials", "check for hardcoded credentials and API keys in the codebase", "SecurityPath"},
+		{"penetration test", "full penetration test: recon, vulnerability scanning, privilege escalation, remediation with CVSS scores", "SecurityPath"},
+		{"threat model", "threat model the platform: trust boundaries, attack surfaces, STRIDE analysis", "SecurityPath"},
+
+		// Control: generic security-flavored code review must stay CodeReviewPath
+		// (matches the existing TestDetectPath_KeywordFallback expectation).
+		{"security bugs review stays code review", "review this code for security bugs", "CodeReviewPath"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bb := &engine.Blackboard{Task: tt.task}
+			if got := detectPath("result", bb); got != tt.expected {
+				t.Errorf("detectPath(task=%q) = %q, want %q", tt.task, got, tt.expected)
+			}
+		})
+	}
 }
 
 // TestIsToolMatch_EmptyPath guards a correctness defect in isToolMatch: when the

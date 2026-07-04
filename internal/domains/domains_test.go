@@ -636,3 +636,79 @@ func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
 	}
 }
+
+// resolverReachableExtraDomainTrees returns the domains-package trees that are
+// reachable in production through ResolveTreeID (tree_resolver.go — used by
+// bt-agent, A2A, and template validation) but are NOT already guarded by the
+// AllDomainTrees registry (TestAllDomainTrees / *HaveDescriptions) or the
+// executable-structure smoke registry (TestSmokeTestedDomainTreesHaveCondition-
+// Descriptions, which mirrors engine_domain_execution_test.go's fns map).
+//
+// hermes_obsidian is such a tree: ResolveTreeID("hermes_obsidian") returns
+// HermesObsidianOptimizerTree(), so operators can switch_tree onto it, yet it is
+// absent from every existing coverage guard — it has no smoke test and its
+// routing Conditions were never walked for descriptions. The kanban_* and
+// hermes_evolve / notebooklm* / stockfish* IDs are either already in the smoke
+// registries above or live in other packages (evolution.*), so they are excluded
+// here to keep this guard scoped to the domains package's own untested trees.
+func resolverReachableExtraDomainTrees() map[string]func() *evolution.SerializableNode {
+	return map[string]func() *evolution.SerializableNode{
+		"hermes_obsidian": HermesObsidianOptimizerTree,
+	}
+}
+
+// TestResolverReachableDomainTreesHaveSmokeStructure closes the "smoke tests"
+// half of the goal "all domain trees have smoke tests, descriptions, and
+// condition coverage" for the ResolveTreeID-reachable domains-package trees that
+// escaped both smoke registries: it builds each tree through the real engine and
+// fails if BuildTree panics or returns nil (structural smoke, like the arc42 and
+// runtime-state-dependent trees in TestAllDomainTrees). It also asserts the tree
+// is genuinely reachable via ResolveTreeID so a rename can't silently orphan it.
+func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
+	mock := benchmark.DefaultMock()
+	resolverID := map[string]string{
+		"hermes_obsidian": "hermes_obsidian",
+	}
+	for name, fn := range resolverReachableExtraDomainTrees() {
+		tree := fn()
+		if tree == nil || len(tree.Children) == 0 {
+			t.Errorf("resolver-reachable tree %q is nil or empty", name)
+			continue
+		}
+		bb := &engine.Blackboard{Task: "smoke: exercise " + name, LLM: mock}
+		if cmd := engine.BuildTree(tree, bb); cmd == nil {
+			t.Errorf("resolver-reachable tree %q: BuildTree returned nil", name)
+		}
+		if id, ok := resolverID[name]; ok && ResolveTreeID(id) == nil {
+			t.Errorf("resolver-reachable tree %q: ResolveTreeID(%q) returned nil", name, id)
+		}
+	}
+}
+
+// TestResolverReachableDomainTreesHaveConditionDescriptions extends condition
+// coverage — the third leg of the goal — from the two smoke registries to the
+// ResolveTreeID-reachable domains-package trees they miss. Every Condition node
+// in every such tree must carry a non-empty Description for the same reason the
+// registered and smoke-tested trees must: the gardener and the bt-agent
+// switch_tree tool surface these per-node descriptions as the human-readable
+// routing rationale, and a blank one advertises an unexplained gate to operators.
+func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, fn := range resolverReachableExtraDomainTrees() {
+		tree := fn()
+		if tree == nil {
+			t.Errorf("resolver-reachable tree %q returned nil", name)
+			continue
+		}
+		walk(name, *tree)
+	}
+}

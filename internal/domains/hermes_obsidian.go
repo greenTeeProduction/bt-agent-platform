@@ -25,7 +25,7 @@ func HermesObsidianOptimizerTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "HermesObsidian_Main",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput"},
+				{Type: "Condition", Name: "ValidateInput", Description: "Task is non-empty and the vault path is available before any pipeline runs"},
 				{Type: "Action", Name: "SetupDefaultTools"},
 			}},
 
@@ -35,7 +35,7 @@ func HermesObsidianOptimizerTree() *evolution.SerializableNode {
 				{
 					Type: "Sequence", Name: "SessionStartPath",
 					Children: []evolution.SerializableNode{
-						{Type: "Condition", Name: "IsSessionStart"},
+						{Type: "Condition", Name: "IsSessionStart", Description: "Task mentions session start, resume, load context, or handoff"},
 						{
 							Type:     "ChainAction",
 							Name:     "llm_call:Initialize session from Obsidian vault: 1) Read AGENTS.md for system rules. 2) Read today's memory/YYYY-MM-DD.md. 3) Read SESSION_HANDOFF.md for previous context. 4) Check HEARTBEAT.md for pending tasks. 5) Scan vault index for active projects. 6) Report: active projects, pending tasks, recent decisions. Always use concrete paths under /mnt/ssd/clawd/.",
@@ -48,7 +48,7 @@ func HermesObsidianOptimizerTree() *evolution.SerializableNode {
 				{
 					Type: "Sequence", Name: "IngestPath",
 					Children: []evolution.SerializableNode{
-						{Type: "Condition", Name: "HasNewContent"},
+						{Type: "Condition", Name: "HasNewContent", Description: "Task mentions ingest, capture, new source, transcript, or content to file"},
 						{
 							Type:     "ChainAction",
 							Name:     "llm_call:Ingest new content with quality flags: 1) Save immutable copy to raw/ with appropriate subfolder. 2) Flag input quality (good transcript, poor transcript, AI-generated). 3) Convert to plain text if needed. 4) Extract key information using structured template. 5) Synthesize to wiki/ with source attributions. 6) Cross-link to people, project, and meeting notes. 7) NEVER modify raw/ files. Every wiki update must include direct quotes from source.",
@@ -125,7 +125,7 @@ func HermesObsidianOptimizerTree() *evolution.SerializableNode {
 
 			{Type: "Action", Name: "ReflectOnOutcome"},
 			{Type: "Selector", Name: "OutcomeSelector", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful"},
+				{Type: "Condition", Name: "WasSuccessful", Description: "Vault operation completed without errors before reflecting on the outcome"},
 				{Type: "ChainAction", Name: "llm_call:Vault operation failed. Diagnose: file permissions, vault path, missing source material. Retry with corrected approach.", Metadata: map[string]any{"max_tokens": float64(4)}},
 			}},
 		},

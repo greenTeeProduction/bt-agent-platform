@@ -59,6 +59,19 @@ func detectPath(_ string, bb *engine.Blackboard) string {
 		return "WorkflowPath"
 	case containsStr(task, "crash"), containsStr(task, "incident"), containsStr(task, "outage"), containsStr(task, "postmortem"):
 		return "IncidentPath"
+	// Security-audit domain must be matched BEFORE the generic code-review case
+	// below (which captures bare "audit"/"security "), otherwise unmistakable
+	// security-audit tasks silently fall through to CodeReviewPath/GeneralPath and
+	// never reach SecurityPath — the ExpectedPath the eval suites declare for them.
+	// Keywords are deliberately specific so a generic "review this code for security
+	// bugs" stays CodeReviewPath.
+	case containsStr(task, "sql injection"), containsStr(task, "hardcoded credential"),
+		containsStr(task, "penetration test"), containsStr(task, "threat model"),
+		containsStr(task, "vulnerabilit"), containsStr(task, "owasp"), containsStr(task, "cvss"),
+		containsStr(task, "privilege escalation"), containsStr(task, "attack surface"),
+		containsStr(task, "stride"), containsStr(task, "ssrf"), containsStr(task, "security audit"),
+		containsStr(task, "security review"):
+		return "SecurityPath"
 	case containsStr(task, "review"), containsStr(task, "bug"), containsStr(task, "security "), containsStr(task, "audit"):
 		return "CodeReviewPath"
 	case containsStr(task, "build"), containsStr(task, "compile"), containsStr(task, "go test"):
