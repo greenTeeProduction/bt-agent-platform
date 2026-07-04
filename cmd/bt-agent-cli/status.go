@@ -12,6 +12,25 @@ import (
 	"github.com/nico/go-bt-evolve/internal/research"
 )
 
+// programStatusLines renders the active-program block: the program title plus a
+// milestone-progress line. When a milestone is still pending it points at that
+// milestone by its 1-based index ("next 2/3"); when every milestone is done
+// NextMilestone reports (-1, nil), so we omit the pointer entirely rather than
+// render the bogus "next 0/N" the old `idx+1` arithmetic produced.
+func programStatusLines(p *research.Program) string {
+	done := 0
+	for _, m := range p.Milestones {
+		if m.Status == "done" {
+			done++
+		}
+	}
+	total := len(p.Milestones)
+	if idx, next := p.NextMilestone(); next != nil {
+		return fmt.Sprintf("%q\n  milestones %d/%d done, next %d/%d\n", p.Title, done, total, idx+1, total)
+	}
+	return fmt.Sprintf("%q\n  milestones %d/%d done, all complete\n", p.Title, done, total)
+}
+
 // cmdStatus prints a one-screen operational snapshot of the self-improvement
 // loop: active program + milestone progress, recent cycle outcomes, the
 // dead-letter backlog, and NotebookLM quota usage — the dashboard that
@@ -29,14 +48,7 @@ func cmdStatus() {
 		if active == nil {
 			fmt.Println("none (loop on single-cycle goals / self-seeding)")
 		} else {
-			idx, _ := active.NextMilestone()
-			done := 0
-			for _, m := range active.Milestones {
-				if m.Status == "done" {
-					done++
-				}
-			}
-			fmt.Printf("%q\n  milestones %d/%d done, next %d/%d\n", active.Title, done, len(active.Milestones), idx+1, len(active.Milestones))
+			fmt.Print(programStatusLines(active))
 		}
 	}
 	fmt.Println()

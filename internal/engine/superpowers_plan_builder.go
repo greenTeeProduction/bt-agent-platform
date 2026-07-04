@@ -228,10 +228,26 @@ func brainstormExpandPlan(task string, goals []string, deterministicPlan string)
 		return ""
 	}
 	// Every expanded task must still name Go files and be actionable — no
-	// regressing to vague prose tasks.
+	// regressing to vague prose tasks. Beyond non-empty, every Files entry must
+	// match the repo-relative Go-path form (goFilePathRe): a doc/config file
+	// gives the executor no real Go target to edit and test against. And every
+	// go-test Run command must carry -short: a full-package run drags in
+	// LLM-gated and flaky tests, so a -short-less command yields false RED
+	// passes or aborted GREEN cycles. Any violation rejects the whole
+	// expansion, keeping the deterministic plan.
 	for _, t := range tasks {
 		if len(t.Files) == 0 {
 			return ""
+		}
+		for _, f := range t.Files {
+			if !goFilePathRe.MatchString(f) {
+				return ""
+			}
+		}
+		for _, cmd := range t.Tests {
+			if strings.Contains(cmd, "go test") && !strings.Contains(cmd, "-short") {
+				return ""
+			}
 		}
 	}
 	return out

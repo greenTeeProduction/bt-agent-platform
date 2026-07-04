@@ -261,7 +261,13 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 		return AuctionResult{}, fmt.Errorf("a2a: winning bidder %q has no candidate URL", award.WinnerName)
 	}
 
-	result, err := a.transport.SendTask(ctx, winnerURL, ann.Description)
+	// Bound the winner dispatch by a deadline derived from the announcement (or a
+	// default when it carries none), reusing the same helper the bid fan-out uses,
+	// so a winner that hangs cannot block indefinitely on the raw caller context.
+	dispatchCtx, cancel := candidateContext(ctx, ann)
+	defer cancel()
+
+	result, err := a.transport.SendTask(dispatchCtx, winnerURL, ann.Description)
 	if err != nil {
 		return AuctionResult{}, fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, err)
 	}

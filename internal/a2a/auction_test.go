@@ -521,6 +521,88 @@ func TestAuctioneer_RunAuction_RejectsEmptyDescription(t *testing.T) {
 	}
 }
 
+// ---- milestone 4: bound the winning-agent dispatch with a deadline ---------
+
+// dispatchDeadlineTransport plays both auction roles for a single candidate. It
+// answers the announcement fan-out (text that parses as a TaskAnnouncement) with
+// a canned bid so a winner is picked, and — for the follow-up winner dispatch of
+// the real task text — records whether SendTask observed a context deadline and
+// what that deadline was. It lets a test assert RunAuction bounds the winning
+// dispatch with a deadline instead of forwarding the raw caller context straight
+// through to SendTask.
+type dispatchDeadlineTransport struct {
+	mu            sync.Mutex
+	bid           string
+	dispatched    bool
+	dispatchHasDL bool
+	dispatchDL    time.Time
+}
+
+func (f *dispatchDeadlineTransport) SendTask(ctx context.Context, _, taskText string) (string, error) {
+	var probe TaskAnnouncement
+	if err := json.Unmarshal([]byte(taskText), &probe); err == nil && probe.TaskID != "" {
+		return f.bid, nil // announcement fan-out: return this candidate's bid
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dispatched = true
+	dl, ok := ctx.Deadline()
+	f.dispatchHasDL = ok
+	f.dispatchDL = dl
+	return "done", nil
+}
+
+// RunAuction must bound the winning-agent dispatch with a deadline derived from
+// the announcement's Deadline, so a winner that hangs is bounded by the auction's
+// deadline rather than blocking on the raw caller context indefinitely.
+func TestAuctioneer_RunAuction_BoundsWinnerDispatchWithAnnouncementDeadline(t *testing.T) {
+	deadline := time.Now().Add(time.Hour)
+	ft := &dispatchDeadlineTransport{bid: bidJSON(t, Bid{TaskID: "t1", Cost: 1, Confidence: 0.9})}
+	ann := TaskAnnouncement{TaskID: "t1", Description: "review PR #42", MinConfidence: 0.5, Deadline: deadline}
+
+	auc := NewAuctioneer(ft)
+	if _, err := auc.RunAuction(context.Background(), ann, map[string]string{"a": "http://a"}); err != nil {
+		t.Fatalf("RunAuction failed: %v", err)
+	}
+
+	if !ft.dispatched {
+		t.Fatal("winner was never dispatched")
+	}
+	if !ft.dispatchHasDL {
+		t.Fatal("expected the winner-dispatch context to carry a deadline, not the raw caller context")
+	}
+	// The derived deadline must track the announcement's deadline (an hour out),
+	// not some unrelated value — allow only sub-second computation skew.
+	if diff := ft.dispatchDL.Sub(deadline); diff > time.Second || diff < -time.Second {
+		t.Errorf("dispatch deadline %v not within 1s of announcement deadline %v", ft.dispatchDL, deadline)
+	}
+}
+
+// When the announcement carries no deadline (zero value), RunAuction must still
+// apply a default dispatch deadline so an unbounded announcement cannot let a
+// hung winner block the caller forever.
+func TestAuctioneer_RunAuction_AppliesDefaultDispatchDeadline(t *testing.T) {
+	before := time.Now()
+	ft := &dispatchDeadlineTransport{bid: bidJSON(t, Bid{TaskID: "t1", Cost: 1, Confidence: 0.9})}
+	ann := TaskAnnouncement{TaskID: "t1", Description: "work", MinConfidence: 0.5} // zero Deadline
+
+	auc := NewAuctioneer(ft)
+	if _, err := auc.RunAuction(context.Background(), ann, map[string]string{"a": "http://a"}); err != nil {
+		t.Fatalf("RunAuction failed: %v", err)
+	}
+
+	if !ft.dispatched {
+		t.Fatal("winner was never dispatched")
+	}
+	if !ft.dispatchHasDL {
+		t.Fatal("expected a default dispatch deadline when the announcement has none")
+	}
+	if !ft.dispatchDL.After(before) {
+		t.Errorf("default dispatch deadline %v is not in the future", ft.dispatchDL)
+	}
+}
+
 func TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(t *testing.T) {
 	ft := newAuctionTransport()
 	ann := TaskAnnouncement{TaskID: "t1", Description: "review PR", MinConfidence: 0.9}
