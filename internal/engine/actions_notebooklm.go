@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/research"
+
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -91,8 +93,12 @@ func registerNotebookLMActions() {
 		var report strings.Builder
 		report.WriteString("## NotebookLM Research\n\n")
 
-		// Extract research query from task
-		query := bb.Task
+		// Extract research query from task; agent boilerplate is replaced by
+		// a derived platform question (the scheduled researcher's task is its
+		// own description — it spent weeks web-researching the sentence
+		// "Production NotebookLM researcher — domain:notebooklm tree…" and
+		// importing the junk results as notebook sources).
+		query := deriveNotebookLMResearchQuery(bb.Task)
 		fmt.Fprintf(&report, "**Query:** %s\n\n", query)
 
 		// Step 1: Get current notebook state
@@ -138,14 +144,22 @@ func registerNotebookLMActions() {
 		afterOut := nlmRun(30*time.Second, "notebook", "get", nbID, "--json")
 		report.WriteString("### After\n```json\n" + afterOut + "\n```\n\n")
 
-		// Step 6: Save to vault
-		dateStr := time.Now().Format("2006-01-02")
+		// Step 6: Save to vault — timestamped: the old per-day filename made
+		// every run overwrite the previous run's results.
+		dateStr := time.Now().Format("2006-01-02T150405")
 		savePath := fmt.Sprintf("/mnt/ssd/clawd/wiki/bt-research/syntheses/nlm-research-%s.md", dateStr)
 		saveErr := writeString(savePath, report.String())
 		if saveErr != nil {
 			fmt.Fprintf(&report, "⚠ Save error: %v\n", saveErr)
 		} else {
 			fmt.Fprintf(&report, "✅ Saved to `%s`\n", savePath)
+		}
+
+		// Retain in the research knowledge store so the result survives even
+		// if the vault file is pruned, and so future cycles see it as known.
+		if store, serr := research.Open(btFusionKnowledgePath); serr == nil {
+			store.Record("nlm:research", query, report.String())
+			_ = store.Save()
 		}
 
 		bb.Result = report.String()

@@ -426,6 +426,16 @@ func nlmRun(timeout time.Duration, args ...string) string {
 	}
 	nlmCircuitMu.Unlock()
 
+	// Quota economy (see nlm_quota.go): serve repeated questions from the
+	// per-day cache and refuse metered calls over the local daily budget so
+	// the ~50/day plan quota is spent on NEW questions, not repeats.
+	if cached, deny, proceed := nlmPreflight(args); !proceed {
+		if deny != "" {
+			return deny
+		}
+		return cached
+	}
+
 	// Determine operation type for metrics
 	op := "unknown"
 	for _, a := range args {
@@ -515,6 +525,7 @@ func nlmRun(timeout time.Duration, args ...string) string {
 		if len(out) > 8192 {
 			out = out[:8192] + "\n... [truncated]"
 		}
+		nlmPostflight(args, out)
 		return out
 	}
 
