@@ -111,6 +111,7 @@ func tasksForTree() map[string]string {
 		"notebooklm_plan_implement": "plan and implement a new domain tree for NotebookLM workflow",
 		"bt_fusion":                 "fuse behavior tree candidates into a stronger production tree",
 		"superpowers_workflow":      "dry_run: fix a small bug via the full superpowers workflow",
+		"auction_demo":              "auction: allocate a task to the best bidder via announce-bid-award",
 		// Arc42 documentation trees
 		"arc42:section1":  "generate arc42 introduction and goals",
 		"arc42:section2":  "generate arc42 constraints section",
@@ -299,7 +300,10 @@ func TestAllDomainTrees(t *testing.T) {
 		// HumanApprovalGate nodes or runs real git commands) — structural smoke
 		// only, same as the others in this list. hermes_update shells out to
 		// the real hermes/git binaries, so it is structural-only too.
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" {
+		// auction_demo's award stage runs the AuctionDelegate seam, which needs
+		// a live A2A transport / AuctionDelegateFn hook (nil offline), so it is
+		// structural-only as well.
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {
@@ -339,6 +343,34 @@ func TestAllDomainTreesHaveDescriptions(t *testing.T) {
 	}
 }
 
+// TestAllDomainTreeConditionsHaveDescriptions guards condition coverage: every
+// Condition node in every registered curated (non-arc42) domain tree must carry
+// a non-empty Description. The bt-agent switch_tree tool and the gardener surface
+// these per-node descriptions as the human-readable routing rationale — a
+// keyword-routing Condition with a blank Description advertises an unexplained
+// gate to operators and hides what the branch actually keys on. arc42 trees are
+// generated per-section with positional gating conditions (Section1Done, etc.)
+// whose semantics live in the section name, so they are exempt, consistent with
+// the other curated-only guards in this file.
+func TestAllDomainTreeConditionsHaveDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, tree := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		walk(name, *tree)
+	}
+}
+
 // TestDescriptionsHaveNoOrphans is the reverse guard to
 // TestAllDomainTreesHaveDescriptions: every entry in the Descriptions map must
 // correspond to a tree actually registered in AllDomainTrees. The gardener and
@@ -355,6 +387,52 @@ func TestDescriptionsHaveNoOrphans(t *testing.T) {
 		if _, ok := all[name]; !ok {
 			t.Errorf("Descriptions has entry %q but no such tree is registered in AllDomainTrees", name)
 		}
+	}
+}
+
+// TestAuctionDemoTree is the structural smoke test for the auction_demo domain
+// tree — milestone 5/5 of the "Auction-based A2A task allocation" program. The
+// tree exercises the announce → bid → award flow end to end. Its award stage is
+// driven by the engine's AuctionDelegate action, the production seam that fans a
+// TaskAnnouncement out to candidate agents, collects their Bids, and dispatches
+// the real task to the winning bidder. Running the auction needs a live A2A
+// transport, so this test validates structure only: the tree builds without
+// panicking offline, embeds the AuctionDelegate seam, and is registered and
+// described like every other curated domain tree.
+func TestAuctionDemoTree(t *testing.T) {
+	tree := AuctionDemoTree()
+	if tree == nil {
+		t.Fatal("AuctionDemoTree returned nil")
+	}
+
+	// Structural smoke: BuildTree must not panic or return nil in offline mode.
+	mock := benchmark.DefaultMock()
+	bb := &engine.Blackboard{
+		Task: "auction: allocate a task to the best bidder via announce-bid-award",
+		LLM:  mock,
+	}
+	cmd := engine.BuildTree(tree, bb)
+	if cmd == nil {
+		t.Fatal("BuildTree(AuctionDemoTree) returned nil")
+	}
+
+	// The award stage runs through the AuctionDelegate engine action, which is
+	// the announce-bid-award seam. Without it the demo cannot exercise the flow.
+	if findNode(*tree, "AuctionDelegate") == nil {
+		t.Error("AuctionDemoTree must embed an AuctionDelegate node to run the announce-bid-award flow")
+	}
+	if engine.GetAction("AuctionDelegate") == nil {
+		t.Error("AuctionDelegate action not found in engine registry")
+	}
+
+	// The tree must be registered and discoverable like every other domain
+	// tree: present in AllDomainTrees under the auction_demo key with a
+	// non-empty Descriptions entry (surfaced by the gardener and switch_tree).
+	if _, ok := AllDomainTrees()["auction_demo"]; !ok {
+		t.Error("auction_demo not registered in AllDomainTrees")
+	}
+	if strings.TrimSpace(Descriptions["auction_demo"]) == "" {
+		t.Error("auction_demo missing a Descriptions entry")
 	}
 }
 

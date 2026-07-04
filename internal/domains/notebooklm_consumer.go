@@ -15,7 +15,7 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 			{
 				Type: "Sequence", Name: "PreGate",
 				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "ValidateInput"},
+					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 					{Type: "Action", Name: "SetupUniversalTools"},
 				},
 			},

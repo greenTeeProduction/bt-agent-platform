@@ -705,7 +705,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Where:** `internal/a2a/auction.go` (Auctioneer, RunAuction, AuctionResult, ScoreAnnouncement, ScoreEvaluator), `internal/a2a/server.go` (RespondToAnnouncement, parseAnnouncement, the bid-aware Execute branch), `internal/a2a/card.go` (EligibleBidders, treeTags), `internal/engine/actions_a2a.go` (the `AuctionDelegate` action and `AuctionDelegateFn` injection seam).
 
-**Effect:** Multi-agent task allocation now closes end to end: an auctioneer can announce, collect real bids from live per-agent endpoints, award the best-fit agent, and dispatch it the work. Unreachable, silent, malformed, foreign-task, and name-misreporting candidates are tolerated without failing the auction. The engine `AuctionDelegate` node and its `AuctionDelegateFn` seam are registered and unit-tested but not yet injected in production — the a2a task bridge wires `DelegateToA2AFn`, not yet `AuctionDelegateFn` — so the node reports *auction delegate not configured* until that startup wiring lands; adopting the seam is the remaining milestone.
+**Effect:** Multi-agent task allocation now closes end to end: an auctioneer can announce, collect real bids from live per-agent endpoints, award the best-fit agent, and dispatch it the work. Unreachable, silent, malformed, foreign-task, and name-misreporting candidates are tolerated without failing the auction. The engine `AuctionDelegate` node and its `AuctionDelegateFn` seam are registered and unit-tested but not yet injected in production — the a2a task bridge wires `DelegateToA2AFn`, not yet `AuctionDelegateFn` — so the node reports *auction delegate not configured* until that startup wiring lands; that production injection is the remaining milestone. A curated `auction_demo` domain tree (program milestone 5/5, `internal/domains/trees.go`) now composes the announce → collect-bids → award flow and embeds the `AuctionDelegate` node behind an `IsAuctionTask` gate, making the auction selectable via `switch_tree`; its smoke test is structural-only because the award stage still needs a live A2A transport / injected `AuctionDelegateFn`.
 
 ---
 
@@ -835,7 +835,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 - ✅ Task allocation closes end to end over the live A2A transport
 - ✅ Bidding is card-driven: focused specialists beat diluted generalists on cost/confidence
 - ✅ Bad candidates (unreachable, silent, malformed, foreign-task) are tolerated, never failing the auction
-- ✅ The auction is composable inside behavior trees (the `AuctionDelegate` node), with a DelegateToTree fallback when no bidder wins
+- ✅ The auction is composable inside behavior trees (the `AuctionDelegate` node), with a DelegateToTree fallback when no bidder wins — the curated `auction_demo` tree (milestone 5/5) demonstrates the announce→bid→award flow and is selectable via `switch_tree`
 - ⚠️ Card-based scoring is a coarse capability proxy; no bid signing or trust verification yet — though bid attribution is now anchored to the delivery identity (candidates-map key) rather than the self-reported `BidderName`, so a candidate cannot mis-attribute its bid to another name
 - ⚠️ Adds a second interpretation of A2A task text (announcement vs. ordinary task) at the responder
 - ⚠️ The engine `AuctionDelegateFn` seam is registered and tested but not yet injected by the a2a task bridge, so the `AuctionDelegate` node reports *not configured* in production until that wiring lands

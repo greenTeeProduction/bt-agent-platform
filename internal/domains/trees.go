@@ -654,6 +654,32 @@ func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 	return tree
 }
 
+// --- AuctionDemo Tree ---
+
+// AuctionDemoTree returns a domain tree that exercises auction-based A2A task
+// allocation end to end — milestone 5/5 of the "Auction-based A2A task
+// allocation for multi-agent coordination" program. The announce → bid → award
+// flow is driven by the engine's AuctionDelegate action: the production seam
+// that fans a TaskAnnouncement out to candidate agents, collects their Bids, and
+// dispatches the real task to the winning bidder (falling back to a delegate
+// tree via delegate_tree_id when no eligible bidder responds). The announce and
+// bid stages are modeled as preparatory actions so the tree reads as the full
+// announce-bid-award protocol; the surrounding PreGate/outcome scaffolding
+// matches the other curated domain trees so the demo is selectable via
+// switch_tree.
+func AuctionDemoTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{Type: "Sequence", Name: "AuctionDemo_Main", Children: []evolution.SerializableNode{
+		seq("PreGate", cond("ValidateInput", "Non-empty"), cond("IsAuctionTask", "Detect auction/allocate/bid/award/delegate keywords")),
+		seq("AnnounceBidAward",
+			act("AnnounceTask", "Broadcast a TaskAnnouncement describing the task to candidate A2A agents"),
+			act("CollectBids", "Gather Bids from responding agents with capability/cost scores"),
+			act("AuctionDelegate", "Award the task to the winning bidder via the auction seam (announce→bid→award); fall back to a delegate tree when no eligible bidder responds"),
+		),
+		act("ReflectOnOutcome", "Reflect on auction allocation quality"),
+		outcome(),
+	}}
+}
+
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
 	trees := map[string]*evolution.SerializableNode{
@@ -680,6 +706,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"notebooklm_plan_implement": evolution.NotebooklmPlanImplementTree(),
 		"superpowers_workflow":      SuperpowersWorkflowTree(),
 		"hermes_update":             HermesUpdateTree(),
+		"auction_demo":              AuctionDemoTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -713,4 +740,5 @@ var Descriptions = map[string]string{
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 	"superpowers_workflow":      "Production Superpowers workflow v2: skill routing, grill gate, TDD task loop with review cycles, debug branch, finish options",
 	"hermes_update":             "Zero-LLM daily Hermes Agent maintenance: version check, git fetch, run hermes update when behind, report",
+	"auction_demo":              "Auction-based A2A task allocation demo: announce a TaskAnnouncement → collect Bids → award to the winning bidder via the AuctionDelegate seam, falling back to a delegate tree when no eligible bidder responds",
 }
