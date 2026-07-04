@@ -161,3 +161,25 @@ func TestApplyCommitKeepsHookLintWithoutPreverification(t *testing.T) {
 		t.Fatalf("without a passed lint check the hook must run its own lint; calls:\n%s", runner.joined())
 	}
 }
+
+func TestReportSuperpowersImplementationCarriesContinueMarker(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+	oldP := goapProgramsPath
+	goapProgramsPath = path
+	t.Cleanup(func() { goapProgramsPath = oldP })
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Pending program", "test", []string{"Milestone in internal/a2a/a.go"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{}}
+	setSuperpowersRun(bb, &SuperpowersRun{ID: "run-1", ArtifactDir: t.TempDir(), ApplyStatus: "committed"})
+	fn := GetAction("ReportSuperpowersImplementation")
+	if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d: %s", got, bb.Result)
+	}
+	if !strings.Contains(bb.Result, "PROGRAM-CONTINUE") {
+		t.Fatalf("the cycle's final result rewrite must carry the continue marker:\n%s", bb.Result)
+	}
+}

@@ -277,6 +277,11 @@ func registerGoapFusionProductionAdditions() {
 			heading = "## Superpowers Implementation Complete"
 		}
 		bb.Result = fmt.Sprintf("%s\n\nRun: `%s`\nArtifacts: `%s`\nApply status: `%s`\nPatch: `%s`\nCommit: `%s`\nChanged files:\n```\n%s\n```", heading, run.ID, run.ArtifactDir, status, run.PatchPath, run.AppliedCommit, changed)
+		// This is the last full rewrite of bb.Result in the cycle: re-append
+		// the PROGRAM-CONTINUE marker or the scheduler never sees it and the
+		// fast requeue stays dormant (observed on run 20260704T110402 — the
+		// marker was appended upstream and erased here).
+		bb.Result += programContinueNote()
 		return 1
 	})
 
