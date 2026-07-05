@@ -6,7 +6,195 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
+
+// TestNewScheduler_RestoresAndConfiguresFeedback is the read/startup half of
+// feedback persistence: a fresh scheduler process must re-hydrate prior
+// Fitness/RunCount from a snapshot on disk AND arm the debounced writer so that
+// later feedback lands back on disk.
+//
+// It pre-registers a distinctly-named tree on GlobalGraph (LoadFeedback only
+// merges into already-registered trees), writes a feedback snapshot carrying a
+// known RunCount/Fitness for that tree, then constructs a scheduler with
+// SchedulerConfig{FeedbackPath: path}. After construction it asserts the tree's
+// runtime feedback was restored, then mutates it, forces a flush, and re-reads
+// the file into a fresh graph to prove persistence was armed.
+func TestNewScheduler_RestoresAndConfiguresFeedback(t *testing.T) {
+	const treeID = "tree:sched-feedback-restore-test"
+
+	// Register the tree with only baseline metadata so LoadFeedback has a target
+	// to merge into. Clean up global state after the test to avoid bleed.
+	knowledge.GlobalGraph.Register(&knowledge.TreeMeta{
+		ID:       treeID,
+		Name:     "Sched Feedback Restore Test",
+		Category: "test",
+		Fitness:  10.0,
+	})
+	t.Cleanup(func() {
+		knowledge.GlobalGraph.ConfigureFeedbackPersistence("", 0)
+		delete(knowledge.GlobalGraph.Trees, treeID)
+	})
+
+	// A feedback snapshot on disk carrying restored-from-a-prior-process values.
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	snapshot := `{
+  "trees": {
+    "` + treeID + `": {
+      "fitness": 73.5,
+      "run_count": 7,
+      "last_outcome": "success",
+      "last_duration": 0
+    }
+  },
+  "tool_edges": []
+}`
+	if err := os.WriteFile(path, []byte(snapshot), 0o644); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+
+	// Construct the scheduler with the feedback path — this is the code under test.
+	_ = NewScheduler(SchedulerConfig{
+		Registry:     reg,
+		FeedbackPath: path,
+	})
+
+	// The prior-process feedback must be re-hydrated into GlobalGraph.
+	restored := knowledge.GlobalGraph.Trees[treeID]
+	if restored == nil {
+		t.Fatalf("%s missing after NewScheduler", treeID)
+	}
+	if restored.RunCount != 7 {
+		t.Errorf("RunCount = %d, want 7 (restored from snapshot)", restored.RunCount)
+	}
+	if restored.Fitness != 73.5 {
+		t.Errorf("Fitness = %.2f, want 73.50 (restored from snapshot)", restored.Fitness)
+	}
+
+	// Persistence must be armed: a later mutation + forced flush has to land on
+	// disk. If NewScheduler did not call ConfigureFeedbackPersistence, the path
+	// is empty and FlushFeedback is a no-op, so the new value never persists.
+	restored.Fitness = 42.0
+	knowledge.GlobalGraph.MarkFeedbackDirty()
+	if err := knowledge.GlobalGraph.FlushFeedback(true); err != nil {
+		t.Fatalf("FlushFeedback: %v", err)
+	}
+
+	// Read the rewritten file into a fresh graph and confirm the mutation landed.
+	verify := knowledge.NewKnowledgeGraph()
+	verify.Register(&knowledge.TreeMeta{ID: treeID, Name: "Verify", Category: "test"})
+	if err := verify.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback (verify): %v", err)
+	}
+	if got := verify.Trees[treeID].Fitness; got != 42.0 {
+		t.Errorf("persisted Fitness = %.2f, want 42.00 — persistence was not armed", got)
+	}
+}
+
+// TestScheduler_PersistsFeedbackOnRunAndStop is the write/lifecycle half of
+// feedback persistence, paired with TestNewScheduler_RestoresAndConfiguresFeedback.
+// After a run records feedback into GlobalGraph, the scheduler must mark the graph
+// dirty and attempt a throttled flush; on Stop() it must force a flush so any
+// pending (throttled) feedback is durably written even inside the throttle window.
+//
+// It registers a distinctly-named tree on GlobalGraph and a tree-backed agent that
+// points at it, arms persistence with a huge flush interval (so the first flush
+// lands but a second, in-window flush is suppressed), then runs the agent twice and
+// stops the scheduler. It asserts:
+//   - after the first run the snapshot exists with RunCount == 1 (the run flushed),
+//   - the second in-window run leaves the graph dirty (throttled, not lost),
+//   - Stop() force-flushes so the file's decoded RunCount reaches 2.
+func TestScheduler_PersistsFeedbackOnRunAndStop(t *testing.T) {
+	const treeID = "tree:sched-feedback-write-test"
+
+	// Register the tree with baseline metadata (RunCount 0) so RecordRun has a
+	// target and SaveFeedback includes it. Clean up global state after the test.
+	knowledge.GlobalGraph.Register(&knowledge.TreeMeta{
+		ID:       treeID,
+		Name:     "Sched Feedback Write Test",
+		Category: "test",
+		Fitness:  10.0,
+	})
+	t.Cleanup(func() {
+		knowledge.GlobalGraph.ConfigureFeedbackPersistence("", 0)
+		delete(knowledge.GlobalGraph.Trees, treeID)
+	})
+
+	// A huge flush interval keeps every non-forced flush after the first inside the
+	// throttle window, which lets us distinguish "the run flushed" (first, window
+	// open at construction) from "Stop force-flushed the pending state" (second).
+	path := filepath.Join(t.TempDir(), "feedback.json")
+
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	_, _ = reg.Create(Definition{Name: "feedback-write-agent", Tree: treeID, Version: "1.0.0"})
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry:              reg,
+		FeedbackPath:          path,
+		FeedbackFlushInterval: time.Hour,
+	})
+
+	runner := func(ctx RunContext) (string, string, *RunResult, error) {
+		return "success", "ok: " + ctx.Task, nil, nil
+	}
+
+	// First run: RecordRun bumps RunCount to 1, then (once wired) MarkFeedbackDirty
+	// + FlushFeedback(false) lands the write because the throttle window is open.
+	if _, _, err := sched.RunNow("feedback-write-agent", "run one", runner, "30s"); err != nil {
+		t.Fatalf("RunNow (first): %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("snapshot missing after first run — RunNow did not flush feedback: %v", err)
+	}
+	if got := decodeRunCount(t, treeID, path); got != 1 {
+		t.Errorf("persisted RunCount after first run = %d, want 1", got)
+	}
+
+	// Second run within the throttle window: RecordRun bumps RunCount to 2 and marks
+	// the graph dirty, but the non-forced flush is suppressed. The pending state must
+	// NOT be lost — the dirty flag has to survive for Stop() to capture it.
+	if _, _, err := sched.RunNow("feedback-write-agent", "run two", runner, "30s"); err != nil {
+		t.Fatalf("RunNow (second): %v", err)
+	}
+
+	// The throttled write must not have touched disk yet: the run marked the graph
+	// dirty but the in-window flush was suppressed, leaving RunCount 1 on disk.
+	if got := decodeRunCount(t, treeID, path); got != 1 {
+		t.Errorf("persisted RunCount before Stop = %d, want 1 (second run must be throttled)", got)
+	}
+
+	// Stop() must force-flush the pending state so it lands even inside the window.
+	// FlushFeedback(true) is a no-op unless the graph is still dirty, so a RunCount
+	// of 2 here proves both that the throttled run kept the dirty flag AND that Stop
+	// forced the pending feedback to disk.
+	sched.Stop()
+
+	if got := decodeRunCount(t, treeID, path); got != 2 {
+		t.Errorf("persisted RunCount after Stop = %d, want 2 — Stop did not force-flush pending feedback (dirty flag lost or no forced flush)", got)
+	}
+}
+
+// decodeRunCount reads a feedback snapshot into a fresh graph carrying only static
+// metadata for treeID, then returns the restored RunCount for that tree.
+func decodeRunCount(t *testing.T, treeID, path string) int {
+	t.Helper()
+	g := knowledge.NewKnowledgeGraph()
+	g.Register(&knowledge.TreeMeta{ID: treeID, Name: "Decode", Category: "test"})
+	if err := g.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback(%s): %v", path, err)
+	}
+	tree := g.Trees[treeID]
+	if tree == nil {
+		t.Fatalf("%s missing after decode", treeID)
+	}
+	return tree.RunCount
+}
 
 func TestHistory_RecordAndList(t *testing.T) {
 	dir := t.TempDir()

@@ -78,6 +78,15 @@ type SchedulerConfig struct {
 	TickInterval time.Duration             // how often to check for due jobs (default: 1m)
 	JobStore     JobStore                  // optional: persists jobs across restarts (nil = in-memory only)
 	CBStore      *AgentCircuitBreakerStore // optional: per-agent circuit breakers (nil = disabled)
+
+	// FeedbackPath, when set, points at the on-disk knowledge-graph feedback
+	// snapshot. On startup the scheduler re-hydrates prior Fitness/RunCount/
+	// tool-edges from it into knowledge.GlobalGraph and arms the debounced writer
+	// so later feedback lands back on disk. Empty = feedback persistence disabled.
+	FeedbackPath string
+	// FeedbackFlushInterval is the minimum interval between throttled feedback
+	// writes. Defaults to 30s when zero (and FeedbackPath is set).
+	FeedbackFlushInterval time.Duration
 }
 
 // NewScheduler creates a new agent scheduler.
@@ -102,6 +111,19 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if cfg.JobStore != nil {
 		s.loadState()
 		s.ReconcileWithRegistry()
+	}
+	// Read/startup half of feedback persistence: re-hydrate prior feedback from
+	// disk (log, don't fail, on error — matches the missing-file-no-error
+	// contract), then arm the debounced writer for subsequent runs.
+	if cfg.FeedbackPath != "" {
+		interval := cfg.FeedbackFlushInterval
+		if interval == 0 {
+			interval = 30 * time.Second
+		}
+		if err := knowledge.GlobalGraph.LoadFeedback(cfg.FeedbackPath); err != nil {
+			slog.Warn("scheduler: restore feedback snapshot failed", "path", cfg.FeedbackPath, "err", err)
+		}
+		knowledge.GlobalGraph.ConfigureFeedbackPersistence(cfg.FeedbackPath, interval)
 	}
 	return s
 }
@@ -227,6 +249,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 			Outcome:  outcome,
 			Duration: duration,
 		})
+		s.persistRunFeedback()
 		// Record decision trace for failure explainability
 		runID := fmt.Sprintf("%s-%d", inst.Definition.Tree, start.UnixNano())
 		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
@@ -280,7 +303,23 @@ func (s *Scheduler) Start(runner AgentRunner) {
 
 // Stop stops the scheduler.
 func (s *Scheduler) Stop() {
+	// Force a final feedback flush so any pending (throttled) run feedback is
+	// durably written even inside the throttle window. No-op when persistence is
+	// not configured or nothing is dirty.
+	if err := knowledge.GlobalGraph.FlushFeedback(true); err != nil {
+		slog.Warn("scheduler: final feedback flush failed", "err", err)
+	}
 	close(s.stopCh)
+}
+
+// persistRunFeedback marks the knowledge graph dirty after a run recorded
+// feedback and attempts a throttled, best-effort flush. Bursty in-window calls
+// are suppressed by FlushFeedback and captured by the forced flush in Stop().
+func (s *Scheduler) persistRunFeedback() {
+	knowledge.GlobalGraph.MarkFeedbackDirty()
+	if err := knowledge.GlobalGraph.FlushFeedback(false); err != nil {
+		slog.Warn("scheduler: feedback flush failed", "err", err)
+	}
 }
 
 // ListJobs returns all scheduled jobs.
@@ -687,6 +726,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Outcome:  outcome,
 			Duration: duration,
 		})
+		s.persistRunFeedback()
 		// Record decision trace for failure explainability
 		runID := fmt.Sprintf("%s-sched-%d", inst.Definition.Tree, start.UnixNano())
 		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{

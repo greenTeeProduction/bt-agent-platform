@@ -43,6 +43,10 @@ func (kg *KnowledgeGraph) ConfigureFeedbackPersistence(path string, minInterval 
 	kg.mu.Lock()
 	kg.feedbackPersist.path = path
 	kg.feedbackPersist.minInterval = minInterval
+	// Reset the throttle clock so a freshly-armed writer's first flush always
+	// lands, even when re-arming a graph that already flushed under a prior
+	// configuration (e.g. the process-global GlobalGraph across constructions).
+	kg.feedbackPersist.lastFlush = time.Time{}
 	kg.mu.Unlock()
 }
 
