@@ -35,6 +35,29 @@ func resolveTree(id string) *evolution.SerializableNode {
 // location, keeping Fitness/RunCount/tool-edges durable across restarts.
 func feedbackSnapshotPath() string { return agent.FeedbackFile() }
 
+// buildSchedulerConfig assembles the SchedulerConfig the daemon hands to
+// agent.NewScheduler. It is factored out of main() so the production wiring —
+// durable FileJobStore, per-agent circuit breakers, and the FeedbackPath that
+// rehydrates knowledge-graph feedback (Fitness/RunCount/tool-edges) across
+// restarts — is asserted end-to-end by wiring_test.go instead of only living
+// inside main(), where it can silently regress.
+func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.History) agent.SchedulerConfig {
+	return agent.SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+		JobStore: agent.NewFileJobStore(agent.SchedulerJobsFile()),
+		CBStore: agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+			Threshold: cfg.CBThreshold,
+			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
+		}),
+		// Rehydrate knowledge-graph feedback (Fitness/RunCount/tool-edges) from
+		// the on-disk snapshot on startup and persist it back, closing the
+		// learn→discover→evolve loop across restarts. FeedbackFlushInterval is
+		// left zero — NewScheduler defaults it to 30s when FeedbackPath is set.
+		FeedbackPath: feedbackSnapshotPath(),
+	}
+}
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -147,20 +170,7 @@ func main() {
 	_ = os.MkdirAll(jobStoreDir, 0755)
 
 	// Persistent agent scheduler (with FileJobStore for durability across restarts)
-	globalSched := agent.NewScheduler(agent.SchedulerConfig{
-		Registry: agentReg,
-		History:  agentHist,
-		JobStore: agent.NewFileJobStore(agent.SchedulerJobsFile()),
-		CBStore: agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
-			Threshold: cfg.CBThreshold,
-			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
-		}),
-		// Rehydrate knowledge-graph feedback (Fitness/RunCount/tool-edges) from
-		// the on-disk snapshot on startup and persist it back, closing the
-		// learn→discover→evolve loop across restarts. FeedbackFlushInterval is
-		// left zero — NewScheduler defaults it to 30s when FeedbackPath is set.
-		FeedbackPath: feedbackSnapshotPath(),
-	})
+	globalSched := agent.NewScheduler(buildSchedulerConfig(cfg, agentReg, agentHist))
 
 	agentRunner := &agent.RunDeps{
 		Registry:    agentReg,

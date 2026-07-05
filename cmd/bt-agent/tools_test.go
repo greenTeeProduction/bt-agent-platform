@@ -2,10 +2,66 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 )
+
+// TestRegisterMCPToolsCommentMatchesActualToolCount guards the doc comment on
+// registerMCPTools against drift: the comment claims it "registers all N MCP
+// tools on the server", and N must equal the true number of tools the function
+// wires up. registerMCPTools registers tools both directly (server.RegisterTool
+// calls in tools.go) and via the registerBlackboardTools / registerBlockTools /
+// registerHITLTools helpers, so the count is summed across every non-test source
+// file in the package. When a tool is added or removed, this test fails until
+// the comment is corrected.
+func TestRegisterMCPToolsCommentMatchesActualToolCount(t *testing.T) {
+	// Count every server.RegisterTool( call across the package's non-test Go
+	// source. This mirrors exactly what registerMCPTools reaches, directly and
+	// through its helper registrars.
+	sources, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob package sources: %v", err)
+	}
+	actual := 0
+	for _, path := range sources {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		actual += strings.Count(string(data), "server.RegisterTool(")
+	}
+	if actual == 0 {
+		t.Fatal("found no server.RegisterTool( calls; test cannot verify the count")
+	}
+
+	// Extract the documented count from the registerMCPTools doc comment.
+	toolsSrc, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	m := regexp.MustCompile(`registers all (\d+) MCP tools`).FindSubmatch(toolsSrc)
+	if m == nil {
+		t.Fatal("could not find the 'registers all N MCP tools' comment in tools.go")
+	}
+	documented, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		t.Fatalf("parse documented count %q: %v", m[1], err)
+	}
+
+	if documented != actual {
+		t.Errorf("registerMCPTools comment says %d MCP tools but %d are actually registered; correct the comment",
+			documented, actual)
+	}
+}
 
 // TestBTEvolveQDRegisteredAndReturnsQDMetrics pins the bt_evolve_qd MAP-Elites
 // quality-diversity MCP tool: it must be registered by registerMCPTools, run a

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
@@ -52,6 +53,50 @@ func TestDaemonWiresFeedbackPersistencePath(t *testing.T) {
 	}
 	if want := agent.FeedbackFile(); got != want {
 		t.Fatalf("daemon feedback-snapshot path must equal agent.FeedbackFile(); got %q, want %q", got, want)
+	}
+}
+
+// TestDaemonSchedulerConfigWiresFeedbackPath pins the SchedulerConfig the daemon
+// actually hands to agent.NewScheduler — not just the feedbackSnapshotPath()
+// helper. The previous test (TestDaemonWiresFeedbackPersistencePath) only checks
+// that the helper equals agent.FeedbackFile(); it stays green even if someone
+// deletes the `FeedbackPath: feedbackSnapshotPath()` line from the scheduler
+// config, silently disabling persistence. This test closes that gap by asserting
+// the assembled config carries FeedbackPath (rehydration), the durable FileJobStore,
+// the circuit-breaker store, and the passed-in Registry/History end-to-end.
+func TestDaemonSchedulerConfigWiresFeedbackPath(t *testing.T) {
+	cfg, _ := config.Load()
+	if cfg == nil {
+		t.Fatal("config.Load returned nil config")
+	}
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	hist, err := agent.NewHistory(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewHistory: %v", err)
+	}
+
+	scfg := buildSchedulerConfig(cfg, reg, hist)
+
+	if want := agent.FeedbackFile(); scfg.FeedbackPath != want {
+		t.Fatalf("SchedulerConfig.FeedbackPath = %q, want %q (agent.FeedbackFile()); feedback persistence disabled", scfg.FeedbackPath, want)
+	}
+	if scfg.FeedbackPath != feedbackSnapshotPath() {
+		t.Fatalf("SchedulerConfig.FeedbackPath = %q, want feedbackSnapshotPath() %q", scfg.FeedbackPath, feedbackSnapshotPath())
+	}
+	if scfg.Registry != reg {
+		t.Fatal("SchedulerConfig.Registry not wired from argument")
+	}
+	if scfg.History != hist {
+		t.Fatal("SchedulerConfig.History not wired from argument")
+	}
+	if scfg.JobStore == nil {
+		t.Fatal("SchedulerConfig.JobStore must be set (durable FileJobStore)")
+	}
+	if scfg.CBStore == nil {
+		t.Fatal("SchedulerConfig.CBStore must be set (per-agent circuit breakers)")
 	}
 }
 

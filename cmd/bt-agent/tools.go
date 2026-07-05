@@ -64,7 +64,7 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 }
 
-// registerMCPTools registers all 37 MCP tools on the server.
+// registerMCPTools registers all 59 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────

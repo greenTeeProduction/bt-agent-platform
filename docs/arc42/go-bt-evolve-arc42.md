@@ -41,7 +41,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (41 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites and `bt_evolve_multiobjective` NSGA-II evolution tools), bt-evaluator (5 tools), bt-langagent (2 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (59 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites and `bt_evolve_multiobjective` NSGA-II evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
@@ -143,9 +143,9 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 36 tools: tree execution, agent management, knowledge graph, evolution |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 59 tools: tree execution, agent management, knowledge graph, evolution |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
-| bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 2 tools: evolved langchain agent execution |
+| bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 3 tools: evolved langchain agent execution |
 | bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |
 | Ollama | HTTP/1.1 | `localhost:11434` | OpenAI-compatible `/api/generate`, `/api/chat` |
 | DeepSeek API | HTTPS | `api.deepseek.com` | `/v1/chat/completions` |
@@ -202,7 +202,7 @@ All local services run on the Jetson ARM64 host. Only DeepSeek API is external. 
 | Q3: Reliability | Transient LLM errors self-heal | **Retry with Exponential Backoff** (ADR-007) | Full jitter retry: 1s→2s→4s→8s (base 500ms, max 30s). 3 retry classes: standard, LLM-specific, unknown. |
 | Q3: Reliability | Exhausted retries don't lose work | **Dead Letter Queue** (ADR-007) | Persistent JSON file at `~/.go-bt-evolve/dead_letter_queue.json`. Failed tasks preserved for manual inspection/replay. |
 | — | Task→tree mapping must be automatic | **Knowledge Graph + Factory** | Semantic discovery via embeddings. Tree breeding via crossover (PreGate from A × StrategyRouter from B). 7 categories with capability edges. |
-| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 43 total tools. Hermes gateway manages lifecycle. |
+| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 67 total tools. Hermes gateway manages lifecycle. |
 | — | Agent state must survive restarts | **File-Based Persistence** (ADR-003) | Atomic writes (write .tmp → rename). YAML for agent definitions, JSON for scheduler/history/reflections. Git-friendly. |
 | — | LLM must be integrated into BT nodes | **ChainAction Architecture** (ADR-006) | 10 chain types (llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action). Template variables: {{.Task}}, {{.Plan}}, {{.Result}}. |
 
@@ -615,13 +615,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.3 MCP Protocol Layer
 
-**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (36 tools), bt-evaluator (5 tools), bt-langagent (2 tools). ADR-002.
+**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (59 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
 
 **Why:** MCP provides a standardized interface between Hermes Agent and the Go BT platform. No custom protocols, no REST overhead. Stdio transport keeps it simple and gateway-managed.
 
 **Where:** `internal/mcp/` (server implementation), `cmd/bt-agent/tools.go` (tool registration), `cmd/bt-agent/main.go` (server setup).
 
-**Effect:** Hermes Agent sees 43 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
+**Effect:** Hermes Agent sees 67 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
 
 **In-process seam:** `engine.Server` also exposes `HasTool(name) bool` and `Invoke(name, args) (*ToolResult, bool)` (`internal/engine/mcp_server.go`) so a registered tool can be asserted and driven by name in-process — without standing up the stdio JSON-RPC loop. This is a test/in-process seam only: it reads the private handler registry directly and deliberately bypasses the auth, rate-limit, sanitization, and tracing wrapping applied on the `tools/call` path, so it must never become a production request route.
 
@@ -635,7 +635,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Effect:** State survives restarts. Git can version agent definitions. Manual inspection and repair is possible with any text editor.
 
-**Knowledge-graph feedback (wired via the scheduler lifecycle):** The knowledge graph's runtime feedback — the RecordRun-mutated fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges — is in-memory and would otherwise be lost on restart. `internal/knowledge/feedback_persist.go` adds a same-pattern (atomic write .tmp → rename) JSON snapshot: `SaveFeedback`/`LoadFeedback` serialize only the feedback subset (static tree metadata is excluded, and Load merges into already-registered trees rather than clobbering them), and a debounced `FlushFeedback(force)` — driven by `MarkFeedbackDirty` and a min-interval throttle — avoids rewriting the whole graph on every bursty RecordRun. The writer takes no `internal/agent` dependency. The `internal/agent` scheduler now drives that lifecycle end to end. `SchedulerConfig` carries an optional `FeedbackPath` (and `FeedbackFlushInterval`, defaulting to 30s when zero); when the path is set, `NewScheduler` re-hydrates prior feedback with `LoadFeedback` (logging, not failing, on error — matching the missing-file-no-error contract) and arms the debounced writer via `ConfigureFeedbackPersistence`. Both `RecordRun` call sites (`RunNow` and the scheduled `runJob`) then call `persistRunFeedback`, which marks the graph dirty and attempts a throttled best-effort `FlushFeedback(false)`; `Stop()` issues a forced `FlushFeedback(true)` so feedback pending inside the throttle window is durably written on shutdown. `ConfigureFeedbackPersistence` resets the throttle clock on each arming so a re-armed process-global `GlobalGraph` always flushes on its first dirty mark. Together this closes the learn→evolve loop across restarts: a fresh process reads back the accumulated Fitness/RunCount/tool-edges instead of resetting them. The production daemon supplies that path: `cmd/bt-agent/main.go` sets `SchedulerConfig.FeedbackPath` to `agent.FeedbackFile()` — `~/.go-bt-evolve/feedback.json`, the single canonical snapshot location, resolved through the package-level `feedbackSnapshotPath()` helper — so the seam is actually armed in the deployed `bt-agent.service` rather than left dormant (pinned by the `wiring_test.go` daemon seam checks).
+**Knowledge-graph feedback (wired via the scheduler lifecycle):** The knowledge graph's runtime feedback — the RecordRun-mutated fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges — is in-memory and would otherwise be lost on restart. `internal/knowledge/feedback_persist.go` adds a same-pattern (atomic write .tmp → rename) JSON snapshot: `SaveFeedback`/`LoadFeedback` serialize only the feedback subset (static tree metadata is excluded, and Load merges into already-registered trees rather than clobbering them), and a debounced `FlushFeedback(force)` — driven by `MarkFeedbackDirty` and a min-interval throttle — avoids rewriting the whole graph on every bursty RecordRun. The writer takes no `internal/agent` dependency. The `internal/agent` scheduler now drives that lifecycle end to end. `SchedulerConfig` carries an optional `FeedbackPath` (and `FeedbackFlushInterval`, defaulting to 30s when zero); when the path is set, `NewScheduler` re-hydrates prior feedback with `LoadFeedback` (logging, not failing, on error — matching the missing-file-no-error contract) and arms the debounced writer via `ConfigureFeedbackPersistence`. Both `RecordRun` call sites (`RunNow` and the scheduled `runJob`) then call `persistRunFeedback`, which marks the graph dirty and attempts a throttled best-effort `FlushFeedback(false)`; `Stop()` issues a forced `FlushFeedback(true)` so feedback pending inside the throttle window is durably written on shutdown. `ConfigureFeedbackPersistence` resets the throttle clock on each arming so a re-armed process-global `GlobalGraph` always flushes on its first dirty mark. Together this closes the learn→evolve loop across restarts: a fresh process reads back the accumulated Fitness/RunCount/tool-edges instead of resetting them. The production daemon supplies that path: `cmd/bt-agent/main.go` factors the whole `SchedulerConfig` assembly out of `main()` into a `buildSchedulerConfig(cfg, reg, hist)` helper, which sets `SchedulerConfig.FeedbackPath` to `agent.FeedbackFile()` — `~/.go-bt-evolve/feedback.json`, the single canonical snapshot location, resolved through the package-level `feedbackSnapshotPath()` helper — alongside the durable `FileJobStore` and per-agent circuit-breaker store. Extracting the helper lets `wiring_test.go` assert the assembled config end-to-end (`TestDaemonSchedulerConfigWiresFeedbackPath`) rather than only checking the `feedbackSnapshotPath()` helper in isolation, so a regression that drops the `FeedbackPath` line — silently disabling persistence — now fails a test instead of shipping dormant.
 
 ## 8.5 Evolution Pipeline
 
@@ -774,7 +774,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 - ✅ Git-friendly: Agent definitions are versionable YAML
 - ✅ Zero dependencies: No database driver or migration tooling
 - ✅ Debuggable: Any text editor can inspect state
-- ✅ Production wiring landed (2026-07-05): the daemon now persists knowledge-graph runtime feedback (Fitness/RunCount/tool-edges) to the canonical `~/.go-bt-evolve/feedback.json` (`agent.FeedbackFile()`) by setting `SchedulerConfig.FeedbackPath`, so the learn→evolve loop rehydrates instead of resetting on restart — pinned by `TestDaemonWiresFeedbackPersistencePath` (see §8.4)
+- ✅ Production wiring landed (2026-07-05): the daemon now persists knowledge-graph runtime feedback (Fitness/RunCount/tool-edges) to the canonical `~/.go-bt-evolve/feedback.json` (`agent.FeedbackFile()`) by setting `SchedulerConfig.FeedbackPath`, so the learn→evolve loop rehydrates instead of resetting on restart — the config assembly is factored into a `buildSchedulerConfig` helper and pinned end-to-end by `TestDaemonWiresFeedbackPersistencePath` and `TestDaemonSchedulerConfigWiresFeedbackPath` (see §8.4)
 - ⚠️ No query capability: List/filter operations are O(n) scans
 - ⚠️ Concurrent writes risk: Mitigated by per-agent file granularity and mutexes
 
@@ -1036,7 +1036,7 @@ go-bt-evolve
 | **Island Model** | An evolution algorithm where sub-populations evolve in isolation with periodic migration of top individuals. |
 | **Knowledge Graph** | In-memory graph of all 41+ trees with capabilities, keywords, embeddings, and cross-tree relationships. Powers discovery and auto-creation. Its runtime-feedback fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges can be snapshotted to / restored from an atomic JSON file via `feedback_persist.go` (`SaveFeedback`/`LoadFeedback`, debounced `FlushFeedback`) — now wired into the `internal/agent` scheduler lifecycle (`SchedulerConfig.FeedbackPath`: load on startup, throttled flush after each run, forced flush on Stop), so feedback survives restarts and the learn→evolve loop compounds. |
 | **MAP-Elites** | Multi-dimensional Archive of Phenotypic Elites. Maintains a grid of high-performing individuals across behavioral dimensions for quality diversity. |
-| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 43 total tools to Hermes Agent. |
+| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 67 total tools to Hermes Agent. |
 | **Mutation** | A structural change to a behavior tree. 10 operators: add_before, add_after, wrap_retry, prune, swap_children, rename_node, change_type, insert_fallback, clone_subtree, delete_subtree. |
 | **OutcomeSelector** | The final stage of the universal BT pattern. Checks WasSuccessful → if not, triggers SelfCorrect. |
 | **Pareto Front** | Set of non-dominated solutions in multi-objective optimization. Tracks trees that are not strictly worse than any other across all fitness dimensions. |
