@@ -697,7 +697,8 @@ func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 // here to keep this guard scoped to the domains package's own untested trees.
 func resolverReachableExtraDomainTrees() map[string]func() *evolution.SerializableNode {
 	return map[string]func() *evolution.SerializableNode{
-		"hermes_obsidian": HermesObsidianOptimizerTree,
+		"hermes_obsidian":      HermesObsidianOptimizerTree,
+		"superpowers_pipeline": SuperpowersPipelineTree,
 	}
 }
 
@@ -711,7 +712,8 @@ func resolverReachableExtraDomainTrees() map[string]func() *evolution.Serializab
 func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
 	mock := benchmark.DefaultMock()
 	resolverID := map[string]string{
-		"hermes_obsidian": "hermes_obsidian",
+		"hermes_obsidian":      "hermes_obsidian",
+		"superpowers_pipeline": "superpowers_pipeline",
 	}
 	for name, fn := range resolverReachableExtraDomainTrees() {
 		tree := fn()
@@ -754,6 +756,27 @@ func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
 			continue
 		}
 		walk(name, *tree)
+	}
+}
+
+// TestSuperpowersPipelineIsGuarded asserts that the production superpowers_pipeline
+// tree — now reachable via ResolveTreeID("superpowers_pipeline") (tree_resolver.go),
+// so operators can switch_tree onto it — is registered in the resolver-reachable
+// coverage registry. Membership there is what makes TestResolverReachableDomainTrees-
+// HaveSmokeStructure and TestResolverReachableDomainTreesHaveConditionDescriptions walk
+// the tree, permanently protecting it from blank-description / build-nil regressions the
+// same way hermes_obsidian is protected. The registry must both hold a non-nil builder
+// for the tree and expose it through ResolveTreeID so a rename cannot silently orphan it.
+func TestSuperpowersPipelineIsGuarded(t *testing.T) {
+	fn, ok := resolverReachableExtraDomainTrees()["superpowers_pipeline"]
+	if !ok || fn == nil {
+		t.Fatalf("superpowers_pipeline is not registered in resolverReachableExtraDomainTrees() — it escapes the smoke + condition-description coverage guards")
+	}
+	if tree := fn(); tree == nil || len(tree.Children) == 0 {
+		t.Fatalf("resolverReachableExtraDomainTrees()[\"superpowers_pipeline\"] built a nil or empty tree")
+	}
+	if ResolveTreeID("superpowers_pipeline") == nil {
+		t.Fatalf("ResolveTreeID(\"superpowers_pipeline\") returned nil — guarded tree is not resolver-reachable")
 	}
 }
 

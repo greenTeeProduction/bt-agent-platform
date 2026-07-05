@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,6 +35,22 @@ func findRepoTemplatesDir(t *testing.T) string {
 	}
 	t.Skip("agents/templates not found from test cwd")
 	return ""
+}
+
+// TestResolveTreeID_SuperpowersPipeline ensures the production Superpowers SDLC
+// tree is selectable via ResolveTreeID rather than falling through to DefaultTree.
+func TestResolveTreeID_SuperpowersPipeline(t *testing.T) {
+	tree := ResolveTreeID("superpowers_pipeline")
+	if tree == nil {
+		t.Fatal("ResolveTreeID(\"superpowers_pipeline\") returned nil")
+	}
+	if tree.Name != "SuperpowersPipeline_Main" {
+		t.Fatalf("expected root name %q, got %q (id fell through to DefaultTree)", "SuperpowersPipeline_Main", tree.Name)
+	}
+	bb := &engine.Blackboard{Task: "resolve superpowers pipeline"}
+	if cmd := engine.BuildTree(tree, bb); cmd == nil {
+		t.Fatal("engine.BuildTree returned nil for superpowers_pipeline tree")
+	}
 }
 
 // TestAllTemplatesResolveTree ensures shipped agent templates bind to resolvable trees.

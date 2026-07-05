@@ -57,6 +57,9 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 	if id == "hermes_obsidian" {
 		return HermesObsidianOptimizerTree()
 	}
+	if id == "superpowers_pipeline" {
+		return SuperpowersPipelineTree()
+	}
 	if id == "godev" {
 		return evolution.GoDeveloperTree()
 	}
