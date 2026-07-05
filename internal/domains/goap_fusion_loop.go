@@ -33,9 +33,10 @@ func GoapFusionLoopTree() *evolution.SerializableNode {
 
 func rawGoapFusionLoopTree() evolution.SerializableNode {
 	return evolution.SerializableNode{
-		Type:      "Sequence",
-		Name:      "GoapFusionLoop_Main",
-		TimeoutMs: 7200_000, // 2-hour ceiling: goal-driven plans run up to 3 RED→GREEN Claude tasks per cycle
+		Type:        "Sequence",
+		Name:        "GoapFusionLoop_Main",
+		Description: "One GOAP fusion loop cycle: seed backlog, grill and research NotebookLM, prioritize goals, implement via Superpowers or fall back to analysis, verify evidence",
+		TimeoutMs:   7200_000, // 2-hour ceiling: goal-driven plans run up to 3 RED→GREEN Claude tasks per cycle
 		Children: []evolution.SerializableNode{
 			// ── Phase 0: Setup ──
 			act("SetupFusionTools",
@@ -52,12 +53,13 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			// Selector (not AlwaysSucceed-wrapper: that leaf eats children):
 			// the seed sequence runs, else falls through to a terminal
 			// AlwaysSucceed leaf, so a rejected/failed proposal is non-fatal.
-			sel("BacklogReplenish",
-				seq("SeedWhenIdle",
+			sel("BacklogReplenish", "Seed the next multi-cycle program when no milestones are pending, else fall through to a non-fatal skip",
+				seq("SeedWhenIdle", "Seed the next multi-cycle program from research when no milestones are pending",
 					cond("NeedsFreshProgram", "No program has pending milestones"),
 					act("SeedNextProgram", "Ask research for the next multi-cycle program (PROGRAM/MILESTONEn), validate file-scoped milestones, persist to the program store"),
 				),
-				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "SeedSkipped"},
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "SeedSkipped",
+					Description: "Non-fatal skip: a rejected or failed seed proposal must not abort the cycle"},
 			),
 
 			// ── Phase 1: Grill Me — Critical Review (multi-turn) ──
@@ -79,12 +81,13 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			// research phase aborted the whole cycle — the loop could not
 			// make progress on an already-queued program when research dried
 			// up (2026-07-04 16:xx: "Claude Review Fallback Failed").
-			sel("ResearchRouter",
+			sel("ResearchRouter", "Route research to NotebookLM, then the Claude Code review fallback, then a non-fatal skip so barren research cannot abort the cycle",
 				act("RunGoapFusionNotebookLMResearch",
 					"Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
 				act("RunClaudeCodeReviewResearch",
 					"Fallback when NotebookLM is unavailable: Claude Code reviews recent daemon commits (or graphify hotspots) and emits GOAL/GAP/FILES/TESTS findings to the vault"),
-				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "ResearchOptional"},
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "ResearchOptional",
+					Description: "Non-fatal skip: barren research must not abort a cycle that can still execute a queued milestone"},
 			),
 
 			// ── Phase 3: Read Context ──
@@ -100,8 +103,8 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 				"Build GOAP goal queue: highest-impact, lowest-risk improvements first, always prefer fresh NotebookLM recommendations"),
 
 			// ── Phase 5: Implement or Analyze ──
-			sel("ExecutionRouter",
-				seq("ClaudeSuperpowersPath",
+			sel("ExecutionRouter", "Route new goals to the Superpowers/Claude implementation path, else the deterministic scheduled analysis fallback",
+				seq("ClaudeSuperpowersPath", "Implement new research-backed goals via the Superpowers/Claude runtime, verify, and report",
 					cond("HasNewGaps",
 						"Only proceed with implementation if goals differ from previous run"),
 					act("WriteSuperpowersImplementationPlan",
@@ -128,7 +131,7 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 					act("CleanupGraphifyOut",
 						"Reset graphify-out to prevent perpetual staged changes"),
 				),
-				seq("ScheduledAnalysisPath",
+				seq("ScheduledAnalysisPath", "Deterministic fallback: write fusion analysis, verify build, refresh graphify, and report the cycle",
 					cond("NoNewGapsOrImplDegraded",
 						"Use deterministic analysis fallback when goals are unchanged OR the implementation path degraded (any ClaudeSuperpowersPath failure)"),
 					act("WriteFusionAnalysis",

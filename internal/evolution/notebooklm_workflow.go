@@ -58,8 +58,9 @@ func NotebooklmPlanImplementTree() *SerializableNode {
 
 			// Step 6: Deploy — build binary and restart service
 			{
-				Type: "Sequence",
-				Name: "DeploySequence",
+				Type:        "Sequence",
+				Name:        "DeploySequence",
+				Description: "Build the deployment binary, then health-check and smoke-test the deploy",
 				Children: []SerializableNode{
 					{
 						Type:        "Action",
@@ -76,8 +77,9 @@ func NotebooklmPlanImplementTree() *SerializableNode {
 
 			// Outcome
 			{
-				Type: "Selector",
-				Name: "OutcomeSelector",
+				Type:        "Selector",
+				Name:        "OutcomeSelector",
+				Description: "Route the outcome: mark success, else report failure",
 				Children: []SerializableNode{
 					{Type: "Action", Name: "MarkSuccessful", Description: "Mark task as successful"},
 					{Type: "Action", Name: "DefaultFallback", Description: "Report failure"},

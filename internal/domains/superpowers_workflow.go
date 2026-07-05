@@ -58,8 +58,8 @@ func SuperpowersWorkflowTree() *evolution.SerializableNode {
 	}
 
 	// --- execution router under the plan-approval gate ---
-	executionRouter := sel("ExecutionRouter",
-		seq("ParallelPath",
+	executionRouter := sel("ExecutionRouter", "Route to parallel task dispatch when the plan declares independent tasks, else the sequential task loop",
+		seq("ParallelPath", "Dispatch independent plan tasks concurrently under the Claude concurrency guard",
 			cond("PlanHasIndependentTasks", "True when the plan declares independent, parallelizable tasks"),
 			evolution.SerializableNode{
 				Type:        "Parallel",
@@ -94,8 +94,8 @@ func SuperpowersWorkflowTree() *evolution.SerializableNode {
 	}
 
 	// --- verify or debug ---
-	verifyOrDebug := sel("VerifyOrDebug",
-		seq("VerifyPath",
+	verifyOrDebug := sel("VerifyOrDebug", "Verify the run, falling back to the systematic-debugging retry loop when verification fails",
+		seq("VerifyPath", "Run layered worktree verification and confirm it succeeded",
 			act("VerifySuperpowersRun", "Run layered worktree verification"),
 			cond("WasSuccessful", "True when the last verification succeeded"),
 		),

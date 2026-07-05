@@ -28,9 +28,10 @@ func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postcond
 	}
 
 	return &SerializableNode{
-		Type:       "CheckpointVerifier",
-		Name:       tree.Name + "_Verified",
-		MaxRetries: maxRetries,
+		Type:        "CheckpointVerifier",
+		Name:        tree.Name + "_Verified",
+		Description: "Checkpoint verifier: re-run " + tree.Name + " until the blackboard postconditions hold, up to the retry limit",
+		MaxRetries:  maxRetries,
 		Metadata: map[string]any{
 			"postconditions": pcMap,
 		},

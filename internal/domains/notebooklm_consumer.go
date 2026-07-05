@@ -9,19 +9,22 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 // file_write and can actually execute commands instead of describing them.
 func NotebookLMConsumerTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "NLMConsumer_Main",
+		Type:        "Sequence",
+		Name:        "NLMConsumer_Main",
+		Description: "Consume NotebookLM syntheses: validate and set up tools, run the consumer chain agent, and route the outcome",
 		Children: []evolution.SerializableNode{
 			{
 				Type: "Sequence", Name: "PreGate",
+				Description: "Validate the task and grant the chain agent real shell/file tools",
 				Children: []evolution.SerializableNode{
 					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
 					{Type: "Action", Name: "SetupUniversalTools", Description: "Grant the chain agent shell_exec, file_read and file_write so it executes commands instead of describing them"},
 				},
 			},
 			{
-				Type: "ChainAction",
-				Name: "agent:Task: {{.Task}}\n\nYou MUST actually execute these commands via shell_exec and file_read. Do NOT describe what you would do — DO it:\n\nSTEP 1 — Run: shell_exec \"ls -lt /mnt/ssd/clawd/wiki/bt-research/syntheses/notebooklm-*.md 2>/dev/null | head -5\"\nSTEP 2 — Run: shell_exec \"ls -lt /mnt/ssd/clawd/wiki/bt-research/plans/ 2>/dev/null | head -5\"\nSTEP 3 — Use file_read to read the newest synthesis file from step 1.\nSTEP 4 — Use shell_exec to count sources: shell_exec \"grep -c 'source_count' /mnt/ssd/clawd/wiki/bt-research/syntheses/notebooklm-*.md 2>/dev/null || echo 0\"\nSTEP 5 — Write a summary via file_write to /mnt/ssd/clawd/wiki/bt-research/nlm-consumer-summary.md with: date, newest synthesis file name, source trends, and whether new plans need creation.\nSTEP 6 — Final answer: the real output from steps 1-5 verbatim. Include the shell_exec and file_write results. NEVER fabricate.",
+				Type:        "ChainAction",
+				Name:        "agent:Task: {{.Task}}\n\nYou MUST actually execute these commands via shell_exec and file_read. Do NOT describe what you would do — DO it:\n\nSTEP 1 — Run: shell_exec \"ls -lt /mnt/ssd/clawd/wiki/bt-research/syntheses/notebooklm-*.md 2>/dev/null | head -5\"\nSTEP 2 — Run: shell_exec \"ls -lt /mnt/ssd/clawd/wiki/bt-research/plans/ 2>/dev/null | head -5\"\nSTEP 3 — Use file_read to read the newest synthesis file from step 1.\nSTEP 4 — Use shell_exec to count sources: shell_exec \"grep -c 'source_count' /mnt/ssd/clawd/wiki/bt-research/syntheses/notebooklm-*.md 2>/dev/null || echo 0\"\nSTEP 5 — Write a summary via file_write to /mnt/ssd/clawd/wiki/bt-research/nlm-consumer-summary.md with: date, newest synthesis file name, source trends, and whether new plans need creation.\nSTEP 6 — Final answer: the real output from steps 1-5 verbatim. Include the shell_exec and file_write results. NEVER fabricate.",
+				Description: "Consumer chain agent: read the newest synthesis, compute source trends, and write a real summary back to the vault",
 				Metadata: map[string]any{
 					"max_tokens": float64(20),
 					"system_msg": "You have shell_exec, file_read, file_write tools. Execute commands immediately — do not describe what to do. Report real tool output. NEVER simulate or fabricate results.",
@@ -30,11 +33,13 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Assess whether the consumer chain produced a real synthesis summary before deciding success"},
 			{
 				Type: "Selector", Name: "OutcomeSelector",
+				Description: "Route the outcome: mark success once a synthesis summary was written, else run the debug fallback agent",
 				Children: []evolution.SerializableNode{
 					{Type: "Action", Name: "MarkSuccessful", Description: "Record the consumer run as successful once a synthesis summary was written back to the vault"},
 					{
-						Type: "ChainAction",
-						Name: "agent:Consumer failed. Use shell_exec to check: ls -la /mnt/ssd/clawd/wiki/bt-research/syntheses/ and ls -la /mnt/ssd/clawd/wiki/bt-research/. Report the real output and fix suggestion.",
+						Type:        "ChainAction",
+						Name:        "agent:Consumer failed. Use shell_exec to check: ls -la /mnt/ssd/clawd/wiki/bt-research/syntheses/ and ls -la /mnt/ssd/clawd/wiki/bt-research/. Report the real output and fix suggestion.",
+						Description: "Debug fallback chain agent: inspect the research directories and report real output with a fix suggestion",
 						Metadata: map[string]any{
 							"max_tokens": float64(6),
 							"system_msg": "Debug with shell_exec. Report real command output.",

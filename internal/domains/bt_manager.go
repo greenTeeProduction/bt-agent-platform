@@ -14,19 +14,20 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 // is rule-based using reflection records and fitness metrics.
 func BTManagerTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "BTManager_Main",
+		Type:        "Sequence",
+		Name:        "BTManager_Main",
+		Description: "Post-execution meta-agent: validate reflection data, then repair degraded agents, bootstrap new ones, or report health",
 		Children: []evolution.SerializableNode{
 			// ── PreGate: ensure we have data to work with ──
-			seq("BTManager_PreGate",
+			seq("BTManager_PreGate", "Validate the task is non-empty and the reflection store is available",
 				cond("ValidateInput", "Task must be non-empty"),
 				cond("HasReflectionStore", "Reflection store must be available"),
 			),
 
 			// ── Strategy Router ──
-			sel("BTManager_StrategyRouter",
+			sel("BTManager_StrategyRouter", "Route to degraded-performance repair, new-agent bootstrap, or the healthy report path",
 				// Path 1: Degraded Performance — success rate below threshold
-				seq("DegradedPerformancePath",
+				seq("DegradedPerformancePath", "Diagnose a degraded agent's failure pattern, apply a targeted mutation, and log the intervention",
 					cond("IsDegradedAgent", "Success rate < 0.7 OR 3+ consecutive failures OR circuit breaker open"),
 					act("AnalyzeFailurePatterns", "Parse reflection records to identify dominant failure mode: timeout, LLM error, parse error, empty response, tool error"),
 					act("ApplyTargetedMutation", "Apply the right fix: increase retries for timeouts, add fallback for LLM errors, add precondition gate for parse errors, increase tool timeout for tool errors"),
@@ -34,7 +35,7 @@ func BTManagerTree() *evolution.SerializableNode {
 				),
 
 				// Path 2: New agent — fewer than 5 runs, needs bootstrapping
-				seq("NewAgentBootstrapPath",
+				seq("NewAgentBootstrapPath", "Bootstrap a new agent with conservative retry defaults after checking early run quality",
 					cond("IsNewAgent", "Agent has < 5 total runs"),
 					act("CheckInitialQuality", "Verify first runs have quality > 0.3"),
 					act("BootstrapRetryConfig", "Set conservative defaults: 3 retries, 60s timeout, fallback enabled"),
@@ -42,7 +43,7 @@ func BTManagerTree() *evolution.SerializableNode {
 				),
 
 				// Path 3: Everything OK — nothing to fix
-				seq("HealthyReportPath",
+				seq("HealthyReportPath", "Report the healthy fleet summary when no intervention is needed",
 					cond("IsHealthy", "Success rate ≥ 0.7 and no circuit breakers open"),
 					act("ReportHealth", "Report agent health summary: N agents OK, 0 interventions needed"),
 				),

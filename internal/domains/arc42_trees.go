@@ -27,21 +27,21 @@ func Arc42Trees() map[string]*evolution.SerializableNode {
 
 func section1IntroGoals() *evolution.SerializableNode {
 	return tree(
-		seq("Sec1_Main",
+		seq("Sec1_Main", "Generate arc42 section 1 (introduction and goals): gate, generate, validate, save",
 			// PreGate: check prerequisites
-			seq("PreGate",
+			seq("PreGate", "Check graphify freshness and register arc42 doc tools",
 				cond("GraphIsFresh", "graphify has been run"),
 				act("SetupDocTools", "populate bb.ChainTools with arc42 tools"),
 			),
 			// Strategy: generate content
-			sel("StrategyRouter",
-				seq("GenerateIntro",
+			sel("StrategyRouter", "Generate the intro section via LLM, falling back to the hardcoded template when the LLM is unavailable",
+				seq("GenerateIntro", "Read graph/git/ADR context and render the intro section via LLM",
 					act("ReadGraphReport", "load graphify-out/GRAPH_REPORT.md"),
 					act("ReadGitHistory", "git log --oneline -30"),
 					act("ReadADRs", "read docs/adr/INDEX.md"),
 					chain("llm_call:Generate arc42 Section 1 — Introduction and Goals for the go-bt-evolve platform.\n\n1.1 Requirements Overview: Summarize what the platform does — BT execution engine, 41 trees across 7 categories, MCP servers, dashboard at :9800.\n1.2 Quality Goals (top 3): correctness (trees route correctly), evolvability (Stockfish/Pareto/MAP-Elites), reliability (panic recovery, circuit breakers).\n1.3 Stakeholders table: Nico (architect), Hermes Agent (operator), Dashboard users, Cron watchers.\n\nContext from codebase:\nGraph: {{.CachedResult}}\nGit: {{.ChainState.git_history}}\nADRs: {{.ChainState.adrs}}\n\nFormat as arc42 markdown with proper headings.", 2048),
 				),
-				seq("UseFallback",
+				seq("UseFallback", "Fallback: render the section from hardcoded template data",
 					act("FallbackSection1", "use hardcoded template data if LLM unavailable"),
 				),
 			),
@@ -55,12 +55,12 @@ func section1IntroGoals() *evolution.SerializableNode {
 
 func section2Constraints() *evolution.SerializableNode {
 	return tree(
-		seq("Sec2_Main",
-			seq("PreGate",
+		seq("Sec2_Main", "Generate arc42 section 2 (architecture constraints): gate, generate, validate, save",
+			seq("PreGate", "Check graphify freshness before generation",
 				cond("GraphIsFresh", "graphify has been run"),
 			),
-			sel("StrategyRouter",
-				seq("GenerateConstraints",
+			sel("StrategyRouter", "Single generation path: derive constraints from go.mod, config, and hardware, then render via LLM",
+				seq("GenerateConstraints", "Read go.mod/config/hardware and render the constraints table via LLM",
 					act("ReadGoMod", "read go.mod for version constraints"),
 					act("ReadConfigFiles", "read config for LLM provider constraints"),
 					act("DetectHardware", "read /proc/cpuinfo, /proc/meminfo"),
@@ -76,10 +76,10 @@ func section2Constraints() *evolution.SerializableNode {
 
 func section3ContextScope() *evolution.SerializableNode {
 	return tree(
-		seq("Sec3_Main",
-			seq("PreGate", cond("GraphIsFresh", "graphify has been run")),
-			sel("StrategyRouter",
-				seq("BusinessContext",
+		seq("Sec3_Main", "Generate arc42 section 3 (context and scope): gate, generate, validate, save",
+			seq("PreGate", "Check graphify freshness before generation", cond("GraphIsFresh", "graphify has been run")),
+			sel("StrategyRouter", "Single generation path: scan external APIs and MCP tools, then render business/technical context via LLM",
+				seq("BusinessContext", "Scan external APIs and MCP tools, then render business/technical context via LLM",
 					act("ListExternalAPIs", "scan for HTTP clients, MCP client code"),
 					act("ListMCPTools", "count tools per MCP server"),
 					chain("llm_call:Generate arc42 Section 3 — Context and Scope.\n\n3.1 Business Context:\nList all communication partners as a table (Partner | Inputs | Outputs):\n- Hermes Agent → tasks, delegated work → results, reflections\n- BT Dashboard users → HTTP requests → HTML/JSON responses\n- Ollama qwen3.6:35b → prompts → completions\n- DeepSeek API → escalated prompts → completions\n- cron job system → scheduled triggers → health reports\n\n3.2 Technical Context:\nDocument interfaces:\n- bt-agent MCP: stdio JSON-RPC 2.0, 32+ tools\n- bt-evaluator MCP: stdio JSON-RPC 2.0\n- bt-langagent MCP: stdio JSON-RPC 2.0\n- bt-dashboard: HTTP :9800, REST API\n- Ollama: HTTP :11434, OpenAI-compatible\n- DeepSeek: HTTPS api.deepseek.com\n\nExternal APIs found: {{.CachedResult}}\nMCP tools: {{.ChainState.mcp_tools}}", 2048),
@@ -94,10 +94,10 @@ func section3ContextScope() *evolution.SerializableNode {
 
 func section4SolutionStrategy() *evolution.SerializableNode {
 	return tree(
-		seq("Sec4_Main",
-			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
-			sel("StrategyRouter",
-				seq("GenerateSolution",
+		seq("Sec4_Main", "Generate arc42 section 4 (solution strategy): gate, generate, validate, save",
+			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
+			sel("StrategyRouter", "Single generation path: read quality goals and ADRs, then render the solution strategy via LLM",
+				seq("GenerateSolution", "Read quality goals and ADRs, then render the solution strategy table via LLM",
 					act("ReadSection1", "read 01-introduction-goals.md for quality goals"),
 					act("ReadADRs", "read all ADRs for architectural decisions"),
 					chain("llm_call:Generate arc42 Section 4 — Solution Strategy.\n\nCreate a table: Quality Goal | Scenario | Solution Approach | Details.\n\nQuality goals from section 1:\n{{.CachedResult}}\n\nADRs:\n{{.ChainState.adrs}}\n\nKey solution approaches:\n1. Behavior Trees for execution (ADR-001) — Sequence/Selector/Action/Condition/ChainAction\n2. MCP for external interfaces (ADR-002) — JSON-RPC 2.0 over stdio\n3. File-based persistence (ADR-003) — atomic writes, git-friendly\n4. Stockfish evolution for mutation ordering — TT cache, killer moves, alpha-beta\n5. GOAP for planning — world state + actions + goals\n6. ChainAction nodes for LLM integration — 10 chain types\n7. Dashboard for introspection — 8 tabs, embed FS, REST API\n\nFormat as markdown table.", 2048),
@@ -112,33 +112,33 @@ func section4SolutionStrategy() *evolution.SerializableNode {
 
 func section5BuildingBlocks() *evolution.SerializableNode {
 	return tree(
-		seq("Sec5_Main",
-			seq("PreGate",
+		seq("Sec5_Main", "Generate arc42 section 5 (building block view): gate, generate levels 1-3, validate, save",
+			seq("PreGate", "Require sections 1 and 4 to be complete",
 				cond("Section1Done", "section 1 must be complete"),
 				cond("Section4Done", "section 4 must be complete"),
 			),
-			sel("StrategyRouter",
+			sel("StrategyRouter", "Route to the level 1 overall decomposition, level 2 engine/evolution/dashboard whiteboxes, or level 3 chain-type detail",
 				// Level 1: overall system decomposition
-				seq("Level1_Overall",
+				seq("Level1_Overall", "Render the level 1 overall system decomposition via LLM",
 					act("ListPackages", "find internal/ -maxdepth 1 -type d"),
 					act("ListBinaries", "find cmd/ -name main.go"),
 					chain("llm_call:Generate arc42 Section 5 — Building Block View.\n\n5.1 Whitebox Overall System:\nDecompose go-bt-evolve into layers:\n\nPackages: {{.ChainState.packages}}\nBinaries: {{.ChainState.binaries}}\n\nLayer model:\n1. Entrypoints (cmd/): bt-agent, bt-dashboard, bt-evaluator, bt-langagent, bt-gardener, bt-agent-cli, benchcmp\n2. Service Layer (internal/agent, internal/dashboard, internal/workflow, internal/thinktank, internal/startup)\n3. Core Engine (internal/engine): tree building, blackboard, chains (10 types), registry\n4. Evolution Engine (internal/evolution): Stockfish, Pareto, MAP-Elites, Island, Q-Learning, Expert Knowledge\n5. Knowledge Layer (internal/knowledge, internal/factory): graph, embeddings, tree discovery/creation\n6. Infrastructure (internal/security, internal/reliability, internal/metrics, internal/tracing, internal/config, internal/log, internal/mcp, internal/a2a, internal/reflection)\n\nProvide a responsibility table and an ASCII layer diagram.", 2048),
 				),
 				// Level 2: Engine whitebox
-				seq("Level2_Engine",
+				seq("Level2_Engine", "Render the level 2 engine whitebox via LLM",
 					act("ReadEngineCode", "read internal/engine/tree.go structure"),
 					chain("llm_call:Generate Level 2 whitebox for internal/engine:\n- BuildTree(): constructs go-bt Command from SerializableNode\n- RunTask(): executes tree tick loop with panic recovery\n- Blackboard: shared state (Task, Plan, Result, Outcome, ChainState, ChainTools)\n- Chains: 10 chain types (llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action)\n- Registry: actionForName/conditionForName — 50+ registered handlers\n- Tree validation, output quality, reflection recording\n\nCode: {{.CachedResult}}", 1024),
 				),
 				// Level 2: Evolution whitebox
-				seq("Level2_Evolution",
+				seq("Level2_Evolution", "Render the level 2 evolution whitebox via LLM",
 					chain("llm_call:Generate Level 2 whitebox for internal/evolution:\n- Stockfish: TranspositionTable + mutation ordering + alpha-beta\n- Pareto: MultiFitness, ParetoFront, ParetoPopulation\n- MAP-Elites: BehavioralDescriptor, MAPElitesGrid\n- Island Model: IslandModel with migration\n- Q-Learning: State→Action epsilon-greedy\n- Expert Knowledge: 6 design patterns, 5 anti-patterns\n- Mutate: 10 mutation operators (add_before, add_after, wrap_retry, prune, etc.)\n- Types: SerializableNode, Individual, Population", 1024),
 				),
 				// Level 2: Dashboard whitebox
-				seq("Level2_Dashboard",
+				seq("Level2_Dashboard", "Render the level 2 dashboard whitebox via LLM",
 					chain("llm_call:Generate Level 2 whitebox for bt-dashboard:\n- cmd/bt-dashboard/main.go: HTTP server on :9800, embed FS for static files\n- Tabs: Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, Workflows, MindMap\n- API endpoints: /api/summary, /api/tree, /api/agents, /api/pipelines, /api/tasks, /api/sprint, /api/openapi.json\n- internal/dashboard/: agents.go, executor.go, workflow_orchestrator.go, tasks.go, metrics.go\n- AgentExecutor: in-process RunOnce via agent.RunAgent; Hermes CLI fallback when runner unavailable", 1024),
 				),
 				// Level 3: Chain types detail
-				seq("Level3_Chains",
+				seq("Level3_Chains", "Render the level 3 chain-type detail via LLM",
 					chain("llm_call:Generate Level 3 detail for chain types:\n10 ChainAction types in internal/engine/chains.go:\n1. llm_call — single LLM invocation with {{.Task}} template\n2. agent — ReAct loop (Thought→Action→Observation→Final Answer)\n3. rag_query — retrieval-augmented QA using bb.KgResults\n4. tool_call — named tool invocation via LLM reasoning\n5. structured_output — JSON output with schema constraint\n6. refine — iterative self-improvement (2 passes)\n7. map_reduce — decompose → process → combine\n8. conversation — multi-turn with memory\n9. retrieval_qa — two-phase retrieve-then-answer\n10. tool_action — direct tool invocation\n\nEach ChainAction reads config from node Name (chain_type:prompt) and Metadata.", 1024),
 				),
 			),
@@ -151,10 +151,10 @@ func section5BuildingBlocks() *evolution.SerializableNode {
 
 func section6RuntimeView() *evolution.SerializableNode {
 	return tree(
-		seq("Sec6_Main",
-			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
-			sel("StrategyRouter",
-				seq("TaskExecution",
+		seq("Sec6_Main", "Generate arc42 section 6 (runtime view): gate, generate, validate, save",
+			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
+			sel("StrategyRouter", "Single generation path: render the four runtime scenarios via LLM",
+				seq("TaskExecution", "Render the four runtime scenarios via LLM",
 					chain("llm_call:Generate arc42 Section 6 — Runtime View.\n\n6.1 Task Execution Scenario:\nSequence: MCP client (Hermes/Cursor) → bt-agent MCP → RunTask() → BuildTree() → tick loop → ChainAction → Ollama → result.\n\n6.2 Evolution Cycle:\nGardener cron → ev_evaluate → ev_order_mutations → apply top mutation → ev_evaluate → compare fitness → accept/rollback → git commit.\n\n6.3 Sprint Execution:\nDashboard POST /api/sprint → Create tasks → goroutine → RunSprint() → agent.RunAgent/RunOnce in-process → mark done → poll /api/sprint/status.\n\n6.4 Error Recovery:\nChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue if exhausted.\n\nFor each scenario, describe the step-by-step interaction between building blocks.", 2048),
 				),
 			),
@@ -167,10 +167,10 @@ func section6RuntimeView() *evolution.SerializableNode {
 
 func section7Deployment() *evolution.SerializableNode {
 	return tree(
-		seq("Sec7_Main",
-			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
-			sel("StrategyRouter",
-				seq("Deployment",
+		seq("Sec7_Main", "Generate arc42 section 7 (deployment view): gate, generate, validate, save",
+			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
+			sel("StrategyRouter", "Single generation path: detect hardware and processes, then render the deployment view via LLM",
+				seq("Deployment", "Detect hardware and processes, then render the deployment view via LLM",
 					act("DetectHardware", "read /proc/cpuinfo, /proc/meminfo, df -h"),
 					act("DetectProcesses", "ps aux | grep bt-"),
 					chain("llm_call:Generate arc42 Section 7 — Deployment View.\n\n7.1 Infrastructure Level 1:\nHardware: {{.ChainState.hardware}}\nDescribe: Jetson ARM64 (12 cores, 61GB RAM, 57GB eMMC + 1.8TB NVMe)\nProcesses:\n- hermes-gateway → spawns [bt-agent, bt-evaluator, bt-langagent] via stdio MCP\n- bt-dashboard → systemd user service on :9800\n- Ollama → localhost:11434 (qwen3.6:35b)\n- External: api.deepseek.com\n\n7.2 Infrastructure Level 2:\n7.2.1 Process tree: gateway PID → 3 MCP children, dashboard independent\n7.2.2 Storage: ~/.go-bt-evolve/ (agents, logs, history, reflections, scheduler, DLQ), /mnt/ssd/hermes/ (cron outputs, analysis)\n7.2.3 Network: all localhost except DeepSeek API and Tailscale (100.123.73.66)\n\nProcesses: {{.ChainState.processes}}", 2048),
@@ -185,10 +185,10 @@ func section7Deployment() *evolution.SerializableNode {
 
 func section8Concepts() *evolution.SerializableNode {
 	return tree(
-		seq("Sec8_Main",
-			seq("PreGate", cond("Section5Done", "section 5 must be complete")),
-			sel("StrategyRouter",
-				seq("Concepts",
+		seq("Sec8_Main", "Generate arc42 section 8 (crosscutting concepts): gate, generate, validate, save",
+			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
+			sel("StrategyRouter", "Single generation path: render the eight crosscutting concepts via LLM",
+				seq("Concepts", "Render the eight crosscutting concepts via LLM",
 					chain("llm_call:Generate arc42 Section 8 — Crosscutting Concepts.\n\nDocument 8 crosscutting concepts for go-bt-evolve:\n\n8.1 Behavior Tree Execution Model — All agents use Sequence/Selector/Action/Condition/ChainAction nodes. ADR-001.\n\n8.2 ChainAction Nodes — 10 chain types wrap LLM calls. Each reads config from node Name (chain_type:prompt) and Metadata. Template variables: {{.Task}}, {{.Plan}}, {{.Result}}.\n\n8.3 MCP Protocol Layer — All tools exposed via JSON-RPC 2.0 stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent). ADR-002.\n\n8.4 File-Based Persistence — JSON files with atomic writes (write .tmp → rename). ADR-003. Used for agents, scheduler, reflections, DLQ, tree store, TT.\n\n8.5 Evolution Pipeline — Common pattern: evaluate → order mutations → apply → re-evaluate → accept/rollback. 6 algorithms share this.\n\n8.6 Error Resiliency — SafeGo + CircuitBreaker (3-state) + RetryWithBackoff + DeadLetterQueue. Applied across all goroutines.\n\n8.7 Quality Gates — Output validation (min length, error patterns), max_tokens audit, HasClearTask PreGate. Mutation safety gates aspirational.\n\n8.8 Tool Protocol — ChainAction nodes use tool stubs (Name/Description/Call). Tools populated at PreGate via SetupDefaultTools/SetupDevTools/SetupResearchTools.\n\nFor each concept, describe: what, why, where (files), how it affects building blocks.", 3072),
 				),
 			),
@@ -201,10 +201,10 @@ func section8Concepts() *evolution.SerializableNode {
 
 func section9Decisions() *evolution.SerializableNode {
 	return tree(
-		seq("Sec9_Main",
-			seq("PreGate", cond("Section4Done", "section 4 must be complete")),
-			sel("StrategyRouter",
-				seq("Decisions",
+		seq("Sec9_Main", "Generate arc42 section 9 (architecture decisions): gate, generate, validate, save",
+			seq("PreGate", "Require section 4 to be complete", cond("Section4Done", "section 4 must be complete")),
+			sel("StrategyRouter", "Single generation path: read ADRs and render them in Nygard format via LLM",
+				seq("Decisions", "Read all ADRs and render them in Nygard format via LLM",
 					act("ReadADRs", "read all docs/adr/ADR-*.md files"),
 					chain("llm_call:Generate arc42 Section 9 — Architecture Decisions.\n\nFormat the following ADRs using the Nygard format (Title, Context, Decision, Status, Consequences):\n\n{{.ChainState.adrs}}\n\nRefer to the actual ADR files at docs/adr/INDEX.md.", 2048),
 				),
@@ -218,10 +218,10 @@ func section9Decisions() *evolution.SerializableNode {
 
 func section10Quality() *evolution.SerializableNode {
 	return tree(
-		seq("Sec10_Main",
-			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
-			sel("StrategyRouter",
-				seq("Quality",
+		seq("Sec10_Main", "Generate arc42 section 10 (quality requirements): gate, generate, validate, save",
+			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
+			sel("StrategyRouter", "Single generation path: read section 1 quality goals and render the quality tree and scenarios via LLM",
+				seq("Quality", "Read section 1 quality goals and render the quality tree and scenarios via LLM",
 					act("ReadSection1", "read quality goals from section 1"),
 					chain("llm_call:Generate arc42 Section 10 — Quality Requirements.\n\n10.1 Quality Tree (Q42 hashtags):\n#reliable — 100% panic recovery (SafeGo), circuit breaker, RetryWithBackoff, DLQ\n#evolvable — 6 evolution algorithms, git-versioned trees, benchmark gating\n#secure — rate limiting, API key auth, IP filtering, audit logging, CSRF, security headers, key rotation\n#testable — 71 test files, 24 passing packages, 78% avg coverage, Test Watchdog cron\n#operable — slog structured logging, Prometheus metrics, health endpoint, trace reader\n#flexible — 41 trees across 7 categories, 21-path merged tree, 10 chain types\n\n10.2 Quality Scenarios (long form SEI/Bass+21):\nScenario 1: Agent crash → SafeGo recovers in <1s, DLQ persists task\nScenario 2: 100 evolutions → no fitness drop >20% (aspirational)\nScenario 3: /api/tree returns 41 trees in <500ms\nScenario 4: Test Watchdog detects new failure within 4h\nScenario 5: bt-agent handles 3 concurrent MCP calls\n\nQuality goals from section 1: {{.CachedResult}}", 2048),
 				),
@@ -235,10 +235,10 @@ func section10Quality() *evolution.SerializableNode {
 
 func section11Risks() *evolution.SerializableNode {
 	return tree(
-		seq("Sec11_Main",
-			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
-			sel("StrategyRouter",
-				seq("Risks",
+		seq("Sec11_Main", "Generate arc42 section 11 (risks and technical debt): gate, generate, validate, save",
+			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
+			sel("StrategyRouter", "Single generation path: gather graph, coverage, and error data, then render the risk table via LLM",
+				seq("Risks", "Gather graph, coverage, and error data, then render the risk table via LLM",
 					act("ReadGraphReport", "load graphify isolated nodes + god nodes"),
 					act("ReadTestCoverage", "go test -coverprofile"),
 					act("ReadErrorLogs", "read recent errors from hermes logs"),
@@ -254,10 +254,10 @@ func section11Risks() *evolution.SerializableNode {
 
 func section12Glossary() *evolution.SerializableNode {
 	return tree(
-		seq("Sec12_Main",
-			seq("PreGate", cond("Section1Done", "section 1 must be complete")),
-			sel("StrategyRouter",
-				seq("Glossary",
+		seq("Sec12_Main", "Generate arc42 section 12 (glossary): gate, generate, validate, save",
+			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
+			sel("StrategyRouter", "Single generation path: scan code comments, types, and ADR terms, then render the glossary table via LLM",
+				seq("Glossary", "Scan code comments, types, and ADR terms, then render the glossary table via LLM",
 					act("ScanCodeComments", "grep package comments from internal/"),
 					act("ScanTypes", "grep type.*struct from internal/"),
 					act("ReadADRs", "extract defined terms from ADRs"),
@@ -273,12 +273,12 @@ func section12Glossary() *evolution.SerializableNode {
 
 func assembleDoc() *evolution.SerializableNode {
 	return tree(
-		seq("Assemble_Main",
-			seq("PreGate",
+		seq("Assemble_Main", "Assemble the final arc42 document: gate on all sections, merge, save",
+			seq("PreGate", "Require all 12 sections to be complete",
 				cond("AllSectionsDone", "all 12 sections must be complete"),
 			),
-			sel("StrategyRouter",
-				seq("Assemble",
+			sel("StrategyRouter", "Single generation path: collect all sections and merge them into the final arc42 document via LLM",
+				seq("Assemble", "Collect all sections and merge them into the final arc42 document via LLM",
 					act("CollectAllSections", "read all 12 section markdown files"),
 					act("GenerateTOC", "extract headings for table of contents"),
 					chain("llm_call:Generate the final arc42 document by merging all 12 sections with proper frontmatter.\n\nSections:\n{{.CachedResult}}\n\nAdd:\n- YAML frontmatter with title, date, version, status\n- arc42 version reference\n- Table of Contents\n- All 12 sections in order\n- Document metadata footer\n\nOutput as a single markdown file.", 2048),

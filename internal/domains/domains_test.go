@@ -619,6 +619,66 @@ func TestAllDomainTreesHaveDescriptionsAndLeafCoverage(t *testing.T) {
 	}
 }
 
+// TestAllDomainTreeSelectorsHaveDescriptions closes the interior-node gap left
+// by TestAllDomainTreesHaveDescriptionsAndLeafCoverage, which only covers leaf
+// Condition/Action nodes: Selector nodes are the routing decision points the
+// gardener and the bt-agent switch_tree tool surface, yet the sel() helper
+// (trees.go) constructs them without a Description, so every
+// sel("StrategyRouter", ...) router is unexplained. The hand-built
+// agent_monitor StrategyRouter ("Route to health check, metrics collection, or
+// restart path") sets the precedent: every Selector in every curated
+// (non-arc42) registered domain tree must carry a non-empty Description.
+func TestAllDomainTreeSelectorsHaveDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if node.Type == "Selector" && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: Selector node %q has an empty Description (router coverage gap)", treeName, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, tree := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		walk(name, *tree)
+	}
+}
+
+// TestAllDomainTreeNodesHaveDescriptions is the consolidated full-node guard:
+// every node of every type — root, interior composites (Sequence, Selector,
+// Retry, ...), and leaves (Condition, Action, ChainAction, ...) — in every
+// curated (non-arc42) registered domain tree must carry a non-empty
+// Description, and every tree must keep its non-empty Descriptions entry.
+// The narrower sibling guards (leaf, Selector, condition) stay as targeted
+// regression anchors; this walk closes the remaining gap — the seq() helper
+// (trees.go) builds every Sequence stage (PreGate, BugDetection, BuildPath,
+// ...) without a Description — and prevents any future tree from regressing
+// on any node class.
+func TestAllDomainTreeNodesHaveDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: %s node %q has an empty Description (full-node coverage gap)", treeName, node.Type, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, tree := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		if desc, ok := Descriptions[name]; !ok || strings.TrimSpace(desc) == "" {
+			t.Errorf("tree %q: root %q has no non-empty Descriptions entry", name, tree.Name)
+		}
+		walk(name, *tree)
+	}
+}
+
 func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 	tree := GoapFusionLoopTree()
 
