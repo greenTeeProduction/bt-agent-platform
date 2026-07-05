@@ -119,6 +119,27 @@ func (s *Server) RegisterTool(name, description string, props map[string]Propert
 	s.handler[name] = handler
 }
 
+// HasTool reports whether a tool with the given name has been registered.
+// It exposes the private handler registry so tests (and other in-process
+// callers) can assert tool presence without driving the stdio JSON-RPC loop.
+func (s *Server) HasTool(name string) bool {
+	_, ok := s.handler[name]
+	return ok
+}
+
+// Invoke runs a registered tool's handler by name and returns its result along
+// with true. If no tool is registered under that name, it returns (nil, false).
+// This is a thin in-process seam over the handler registry; it bypasses the
+// security, rate-limit, and tracing wrapping applied by the tools/call path in
+// handleMessage and is intended for tests exercising tools by name.
+func (s *Server) Invoke(name string, args json.RawMessage) (*ToolResult, bool) {
+	handler, ok := s.handler[name]
+	if !ok {
+		return nil, false
+	}
+	return handler(args), true
+}
+
 // Run starts the MCP server loop, reading from stdin and writing to stdout.
 // Handlers run concurrently so slow operations (Ollama calls) don't block
 // other requests. A concurrency limiter prevents unbounded goroutine growth.

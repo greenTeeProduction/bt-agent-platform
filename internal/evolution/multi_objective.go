@@ -296,8 +296,9 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 					nextPop = append(nextPop, combined[idx])
 					nextVecs = append(nextVecs, combinedVecs[idx])
 				}
-				// Assign crowding distance for this front (needed for next gen)
-				nsga2.assignCrowdingDistance(front.Indices)
+				// Crowding distance is recalculated below by Evaluate against the
+				// rebuilt population; assigning it here would index the pre-update
+				// slices with combined-population indices (out of range).
 			} else {
 				// Front is too large: sort by crowding distance, take the best
 				remaining := popSize - len(nextPop)

@@ -64,7 +64,7 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 }
 
-// registerMCPTools registers all 36 MCP tools on the server.
+// registerMCPTools registers all 37 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -567,34 +567,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
 			pop := evolution.NewPopulation(params.Population, baseTree)
-			fitnessFn := func(t *evolution.SerializableNode) float64 {
-				// Structural quality: balance size, diversity, and anti-pattern avoidance
-				nodeCount := float64(evolution.CountNodes(t))
-				depth := float64(maxTreeDepth(t, 0))
-				diversity := treeDiversityScore(t)
-
-				// Base score: moderate node count (penalize both too small and too large)
-				baseScore := 0.0
-				if nodeCount >= 5 && nodeCount <= 80 {
-					baseScore = nodeCount * 2.0
-				} else if nodeCount < 5 {
-					baseScore = nodeCount * 1.0 // penalize too simple
-				} else {
-					baseScore = 80.0 + (nodeCount-80)*0.5 // diminishing returns on huge trees
-				}
-
-				// Depth bonus (deep trees are better for complex tasks, up to a point)
-				depthBonus := math.Min(depth*3.0, 30.0)
-
-				// Diversity bonus (more node types = more capability)
-				diversityBonus := diversity * 15.0
-
-				// Anti-pattern penalty
-				antiPatternPenalty := detectAntiPatternsInTree(t) * -10.0
-
-				return baseScore + depthBonus + diversityBonus + antiPatternPenalty
-			}
-			best := pop.Evolve(params.Generations, fitnessFn)
+			best := pop.Evolve(params.Generations, structuralFitnessFn)
 			data, _ := json.Marshal(map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "diversity": pop.Diversity(),
@@ -602,6 +575,109 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"regression_rate": fmt.Sprintf("%.1f%%", pop.RegressionRate()),
 				"total_mutations": pop.TotalMutations, "regressions": pop.Regressions,
 				"niche_diversity": fmt.Sprintf("%.2f", pop.NicheDiversity()),
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_qd", "Run MAP-Elites quality-diversity evolution: illuminate a behavior space and report diversity metrics",
+		map[string]engine.Property{
+			"tree":        {Type: "string", Description: "Base tree ID"},
+			"population":  {Type: "integer", Description: "Population size (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations (default: 10)"},
+			"domain":      {Type: "string", Description: "Domain label for specialist attribution (default: general)"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree        string `json:"tree"`
+				Population  int    `json:"population"`
+				Generations int    `json:"generations"`
+				Domain      string `json:"domain"`
+			}
+			_ = json.Unmarshal(args, &params)
+			if params.Population <= 0 {
+				params.Population = 20
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			if params.Domain == "" {
+				params.Domain = "general"
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Deterministic, LLM-free evolution reusing the shared structural
+			// fitness — avoids EvolveMAPElites, which invokes the LLM supervisor.
+			pop := evolution.NewPopulation(params.Population, baseTree)
+			pop.Evolve(params.Generations, structuralFitnessFn)
+			grid := evolution.NewMAPElitesGrid(params.Population / 2)
+			grid.InsertFromPopulation(pop, params.Domain)
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "domain": params.Domain, "generations": pop.Generation,
+				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
+				"elites": len(grid.Elites()), "specialist_distribution": grid.SpecialistDistribution(),
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_multiobjective", "Run NSGA-II multi-objective evolution over structural fitness dimensions and report the Pareto front",
+		map[string]engine.Property{
+			"tree":        {Type: "string", Description: "Base tree ID"},
+			"population":  {Type: "integer", Description: "Population size (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations (default: 10)"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree        string `json:"tree"`
+				Population  int    `json:"population"`
+				Generations int    `json:"generations"`
+			}
+			_ = json.Unmarshal(args, &params)
+			if params.Population <= 0 {
+				params.Population = 20
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Deterministic, LLM-free NSGA-II over the three fixed structural axes,
+			// reusing the shared StructuralMultiFitness (Quick-tier, no LLM calls).
+			dims := []evolution.FitnessDimension{
+				evolution.DimSuccessRate,
+				evolution.DimNodeEfficiency,
+				evolution.DimStability,
+			}
+			nsga := evolution.NewNSGAIIPopulation(params.Population, baseTree, dims)
+			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
+			// Per-dimension best scores across the final population.
+			dimNames := make([]string, len(dims))
+			dimBests := make(map[string]float64, len(dims))
+			for i, d := range dims {
+				dimNames[i] = string(d)
+				dimBests[string(d)] = 0
+			}
+			for _, fv := range nsga.FitnessVecs {
+				for _, d := range dims {
+					if s := fv.Get(d); s > dimBests[string(d)] {
+						dimBests[string(d)] = s
+					}
+				}
+			}
+			// Pareto front is front 0 from the final non-dominated sort.
+			frontSize := 0
+			if len(nsga.Fronts) > 0 {
+				frontSize = len(nsga.Fronts[0].Indices)
+			}
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "generations": nsga.Generation,
+				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
+				"dimension_bests": dimBests, "pareto_front_size": frontSize,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -1179,6 +1255,37 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	registerBlockTools(server, deps)
 	registerHITLTools(server, deps)
+}
+
+// structuralFitnessFn scores a tree's structural quality without invoking the
+// LLM: it balances node count, depth, and node-type diversity against known
+// anti-patterns. Shared by the deterministic bt_evolve_genetic and bt_evolve_qd
+// evolution paths so both stay -short-safe.
+func structuralFitnessFn(t *evolution.SerializableNode) float64 {
+	nodeCount := float64(evolution.CountNodes(t))
+	depth := float64(maxTreeDepth(t, 0))
+	diversity := treeDiversityScore(t)
+
+	// Base score: moderate node count (penalize both too small and too large)
+	baseScore := 0.0
+	if nodeCount >= 5 && nodeCount <= 80 {
+		baseScore = nodeCount * 2.0
+	} else if nodeCount < 5 {
+		baseScore = nodeCount * 1.0 // penalize too simple
+	} else {
+		baseScore = 80.0 + (nodeCount-80)*0.5 // diminishing returns on huge trees
+	}
+
+	// Depth bonus (deep trees are better for complex tasks, up to a point)
+	depthBonus := math.Min(depth*3.0, 30.0)
+
+	// Diversity bonus (more node types = more capability)
+	diversityBonus := diversity * 15.0
+
+	// Anti-pattern penalty
+	antiPatternPenalty := detectAntiPatternsInTree(t) * -10.0
+
+	return baseScore + depthBonus + diversityBonus + antiPatternPenalty
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

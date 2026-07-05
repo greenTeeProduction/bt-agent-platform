@@ -41,7 +41,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (39 tools), bt-evaluator (5 tools), bt-langagent (2 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (41 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites and `bt_evolve_multiobjective` NSGA-II evolution tools), bt-evaluator (5 tools), bt-langagent (2 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
@@ -623,6 +623,8 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Effect:** Hermes Agent sees 43 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
 
+**In-process seam:** `engine.Server` also exposes `HasTool(name) bool` and `Invoke(name, args) (*ToolResult, bool)` (`internal/engine/mcp_server.go`) so a registered tool can be asserted and driven by name in-process — without standing up the stdio JSON-RPC loop. This is a test/in-process seam only: it reads the private handler registry directly and deliberately bypasses the auth, rate-limit, sanitization, and tracing wrapping applied on the `tools/call` path, so it must never become a production request route.
+
 ## 8.4 File-Based Persistence
 
 **What:** All state stored as JSON/YAML files with atomic writes (write .tmp → rename). No SQL database. ADR-003.
@@ -855,6 +857,22 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 - ✅ Registry-seam hardening (2026-07-04, milestone 4/4): `AuctionDelegate` now registers through `engine.RegisterAction` rather than writing straight into `actionRegistry`, so it gains the shared `bt.action/AuctionDelegate` tracing span (§8.11) and the duplicate-registration guard like every other engine action — pinned by `TestAuctionDelegate_EmitsTracingSpan`
 - ⚠️ Card-based scoring is a coarse capability proxy; no bid signing or trust verification yet — though bid attribution is now anchored to the delivery identity (candidates-map key) rather than the self-reported `BidderName`, so a candidate cannot mis-attribute its bid to another name
 - ⚠️ Adds a second interpretation of A2A task text (announcement vs. ordinary task) at the responder
+
+---
+
+## ADR-009: Deterministic, LLM-Free Evolution MCP Tools
+
+**Context:** MAP-Elites quality-diversity and NSGA-II multi-objective optimization existed in `internal/evolution`, but neither had a standalone MCP entry point, and their full drivers (e.g. `EvolveMAPElites`) invoke the LLM supervisor — non-deterministic and unusable under `-short`. Separately, asserting or exercising a registered MCP tool by name required driving the stdio JSON-RPC loop, because `Server.tools`/`Server.handler` are private.
+
+**Decision:** Expose two deterministic, LLM-free tools from `cmd/bt-agent`: `bt_evolve_qd` (evolves a `Population` with the shared `structuralFitnessFn`, inserts into `NewMAPElitesGrid`, and reports `diversity_score`/`cell_count`/`elites`/`specialist_distribution`) and `bt_evolve_multiobjective` (runs `NSGAIIPopulation.Evolve` over the fixed `DimSuccessRate`/`DimNodeEfficiency`/`DimStability` axes using `StructuralMultiFitness`, reporting best `node_count`, per-dimension bests, and Pareto-front size). Both reuse the existing structural metrics rather than the LLM path, keeping them `-short`-safe. Add a matching in-process seam to the shared `engine.Server` — `HasTool(name)` and `Invoke(name, args)` — so tools can be asserted and driven by name without the stdio loop (§8.3).
+
+**Status:** Accepted (2026-07-05)
+
+**Consequences:**
+- ✅ MAP-Elites and NSGA-II are reachable as deterministic, `-short`-safe MCP tools that reuse one structural-fitness definition
+- ✅ `engine.Server` tools are now unit-testable by name via `HasTool`/`Invoke`
+- ✅ The first deterministic caller of `NSGAIIPopulation.Evolve` surfaced and fixed a crowding-distance index-out-of-range in `internal/evolution/multi_objective.go`: the stale `assignCrowdingDistance(front.Indices)` call (which indexed pre-update slices with combined-population indices) was removed — crowding distance is recomputed by `Evaluate` against the rebuilt population
+- ⚠️ `Invoke` deliberately skips auth/rate-limit/tracing, so it must stay a test/in-process seam, never a production request path
 
 ---
 
