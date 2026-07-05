@@ -45,6 +45,7 @@ type ConnPoolConfig struct {
 // can share a ConnPool to amortize TCP/TLS handshake costs.
 type ConnPool struct {
 	transport *http.Transport
+	shared    bool
 
 	mu          sync.Mutex
 	created     int64
@@ -112,7 +113,9 @@ func NewConnPool(cfg ConnPoolConfig) *ConnPool {
 // RemoteExecutors. Use this to pool connections across executors targeting
 // different endpoints on the same host (e.g., same dashboard, different paths).
 func NewSharedConnPool(cfg ConnPoolConfig) *ConnPool {
-	return NewConnPool(cfg)
+	cp := NewConnPool(cfg)
+	cp.shared = true
+	return cp
 }
 
 // HTTPClient returns an http.Client backed by this connection pool.
@@ -138,11 +141,12 @@ func (cp *ConnPool) Stats() ConnPoolStats {
 	return ConnPoolStats{
 		Idle:           idle,
 		InUse:          inUse,
-		MaxIdle:        100,
-		MaxIdlePerHost: 10,
-		MaxPerHost:     0,
+		MaxIdle:        cp.transport.MaxIdleConns,
+		MaxIdlePerHost: cp.transport.MaxIdleConnsPerHost,
+		MaxPerHost:     cp.transport.MaxConnsPerHost,
 		MaxObserved:    cp.maxObserved,
 		Created:        cp.created,
+		IsShared:       cp.shared,
 	}
 }
 

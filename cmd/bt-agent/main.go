@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	a2acard "github.com/a2aproject/a2a-go/v2/a2a"
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/audit"
@@ -56,6 +58,77 @@ func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.H
 		// left zero — NewScheduler defaults it to 30s when FeedbackPath is set.
 		FeedbackPath: feedbackSnapshotPath(),
 	}
+}
+
+// hostURLOf returns the "<scheme>://<host>" prefix of a raw URL, or "" when it
+// cannot be parsed. It reduces an A2A interface URL (which carries an
+// "/agents/<name>" path) to the peer node's execution base URL that a
+// RemoteExecutor targets.
+func hostURLOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// endpointsFromCards reduces the live A2A card registry to the set of remote
+// AgentEndpoints the horizontal-scaling router should distribute agent tasks
+// across. Each card advertises a JSON-RPC interface URL of the form
+// "<scheme>://<host>/agents/<name>"; the peer node's execution base URL is that
+// URL's scheme+host. Cards served by this very node (interface base == the
+// daemon's own selfBaseURL) are excluded so the router never routes tasks back
+// to itself, cards with no reachable interface are skipped, and peers are
+// de-duplicated by base URL so each node yields a single RemoteExecutor rather
+// than one per advertised agent. On a single-node deployment this yields no
+// peers, so NewRouterFromEndpoints falls back to the local in-process executor —
+// but the seam is live the moment peer cards join the registry.
+func endpointsFromCards(cards map[string]*a2acard.AgentCard, selfBaseURL string) []reliability.AgentEndpoint {
+	self := hostURLOf(selfBaseURL)
+	seen := map[string]bool{}
+	eps := make([]reliability.AgentEndpoint, 0, len(cards))
+	for _, card := range cards {
+		if card == nil {
+			continue
+		}
+		var ifaceURL string
+		for _, iface := range card.SupportedInterfaces {
+			if iface != nil && iface.URL != "" {
+				ifaceURL = iface.URL
+				break
+			}
+		}
+		base := hostURLOf(ifaceURL)
+		if base == "" || base == self || seen[base] {
+			continue
+		}
+		seen[base] = true
+		eps = append(eps, reliability.AgentEndpoint{Name: base, BaseURL: base})
+	}
+	return eps
+}
+
+// newLocalAgentExecutor builds the in-process executor the router falls back to
+// when no remote peer handles a task: it runs the named agent through the
+// daemon's own RunDeps and adapts the RunResult to a reliability.AgentResult.
+func newLocalAgentExecutor(nodeURL string, runner *agent.RunDeps) *reliability.LocalExecutor {
+	return reliability.NewLocalExecutor(nodeURL, func(agentName, task string) (*reliability.AgentResult, error) {
+		res, err := runner.RunOnce(context.Background(), agentName, task, agent.RunOptions{
+			InjectMemory:   true,
+			EnforceQuality: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &reliability.AgentResult{
+			Agent:        agentName,
+			Task:         task,
+			Output:       res.Output,
+			Duration:     res.Duration,
+			Success:      res.Outcome == "success",
+			QualityScore: res.Quality,
+		}, nil
+	})
 }
 
 func main() {
@@ -370,6 +443,19 @@ func main() {
 			}
 		}()
 		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
+
+		// ── Horizontal-scaling substrate ────────────────────────────────────
+		// Construct the AgentRouter from the live A2A card registry: reduce peer
+		// cards to remote endpoints (excluding this node), and inject the local
+		// in-process executor as the fallback. This is the first production
+		// binary to build the RemoteExecutor + AgentRouter substrate from real
+		// runtime state; a single-node registry yields no peers, so the router
+		// routes every task to the local executor until peers join.
+		localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner)
+		agentRouter := reliability.NewRouterFromEndpoints(localExec, endpointsFromCards(a2aSrv.CardCache, a2aBaseURL))
+		engine.Info("agent router constructed from A2A card registry",
+			"remote_peers", len(agentRouter.Executors()),
+			"router", agentRouter.String())
 	}
 
 	if noMCPMode() {

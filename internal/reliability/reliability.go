@@ -865,6 +865,46 @@ func NewAgentRouter(executors ...AgentExecutor) *AgentRouter {
 	return r
 }
 
+// AgentEndpoint describes a remote peer discovered from the live A2A card
+// registry: the peer's name and the base URL of its HTTP interface (plus an
+// optional API key). It is the reduced, transport-agnostic shape the daemon
+// hands to reliability so this package does not depend on the A2A card types.
+type AgentEndpoint struct {
+	Name    string
+	BaseURL string
+	APIKey  string
+}
+
+// NewRouterFromEndpoints constructs an AgentRouter that distributes agent tasks
+// across the given remote peers, with the supplied local in-process executor
+// installed as the fallback used when no remote peer is healthy.
+//
+// This is the production seam that adopts the RemoteExecutor + AgentRouter
+// horizontal-scaling substrate: the daemon reduces its live A2A card registry
+// to a set of AgentEndpoints and hands them here. Each endpoint with a non-empty
+// BaseURL becomes a RemoteExecutor; endpoints without a URL (peers that expose
+// no reachable interface) are skipped. An empty or nil endpoint list yields a
+// router with no remote executors that routes every task to the local executor,
+// so single-node deployments behave exactly as before adopting the substrate.
+func NewRouterFromEndpoints(local AgentExecutor, endpoints []AgentEndpoint) *AgentRouter {
+	remotes := make([]AgentExecutor, 0, len(endpoints))
+	for _, ep := range endpoints {
+		if ep.BaseURL == "" {
+			continue
+		}
+		remotes = append(remotes, NewRemoteExecutor(RemoteExecutorConfig{
+			Name:    ep.Name,
+			BaseURL: ep.BaseURL,
+			APIKey:  ep.APIKey,
+		}))
+	}
+	router := NewAgentRouter(remotes...)
+	// The passed-in local executor is always the fallback — never the first
+	// remote (which NewAgentRouter would otherwise adopt as local).
+	router.SetLocal(local)
+	return router
+}
+
 // Add adds an executor to the router. New executors start with zero failures
 // and are immediately eligible for routing.
 func (r *AgentRouter) Add(e AgentExecutor) {

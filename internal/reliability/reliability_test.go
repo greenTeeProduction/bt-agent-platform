@@ -1271,3 +1271,78 @@ func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
 			status[0].ConsecutiveFailures)
 	}
 }
+
+// ─── Router construction from the A2A card registry ──────────────────────────
+
+// TestNewRouterFromEndpoints_BuildsRemoteExecutorsWithLocalFallback pins the
+// horizontal-scaling seam: the daemon reduces its live A2A card registry to a
+// set of AgentEndpoints (peer name + interface base URL) and hands them to
+// reliability, which must construct an AgentRouter whose remote executors are
+// RemoteExecutors pointed at those peers, with the local in-process executor
+// installed as the fallback. Without this constructor the RemoteExecutor +
+// AgentRouter substrate stays wired by zero production binaries.
+func TestNewRouterFromEndpoints_BuildsRemoteExecutorsWithLocalFallback(t *testing.T) {
+	local := NewLocalExecutor("local-node", func(_, _ string) (*AgentResult, error) {
+		return &AgentResult{Success: true, Output: "local"}, nil
+	})
+	endpoints := []AgentEndpoint{
+		{Name: "peer-a", BaseURL: "http://10.0.0.1:9800"},
+		{Name: "peer-b", BaseURL: "http://10.0.0.2:9800", APIKey: "secret"},
+		{Name: "no-url", BaseURL: ""}, // endpoints without a URL must be skipped
+	}
+
+	router := NewRouterFromEndpoints(local, endpoints)
+	if router == nil {
+		t.Fatal("NewRouterFromEndpoints returned nil")
+	}
+
+	execs := router.Executors()
+	if len(execs) != 2 {
+		t.Fatalf("expected 2 remote executors (empty-URL endpoint skipped), got %d", len(execs))
+	}
+
+	ids := map[string]bool{}
+	for _, e := range execs {
+		if _, ok := e.(*RemoteExecutor); !ok {
+			t.Errorf("expected each executor to be *RemoteExecutor, got %T", e)
+		}
+		ids[e.String()] = true
+	}
+	if !ids["RemoteExecutor(peer-a @ http://10.0.0.1:9800)"] {
+		t.Errorf("missing RemoteExecutor for peer-a; got %v", ids)
+	}
+	if !ids["RemoteExecutor(peer-b @ http://10.0.0.2:9800)"] {
+		t.Errorf("missing RemoteExecutor for peer-b; got %v", ids)
+	}
+
+	// The passed-in local executor — NOT the first remote — must be the fallback.
+	if s := router.String(); !strings.Contains(s, "local=local-node") {
+		t.Errorf("expected local-node installed as fallback, got %q", s)
+	}
+}
+
+// TestNewRouterFromEndpoints_EmptyRoutesToLocal pins that a daemon with no
+// remote peers (an empty/nil A2A card registry beyond itself) still gets a
+// working router that routes every task to the local executor, so single-node
+// deployments behave exactly as before adopting the substrate.
+func TestNewRouterFromEndpoints_EmptyRoutesToLocal(t *testing.T) {
+	local := NewLocalExecutor("solo", func(agent, task string) (*AgentResult, error) {
+		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "local-only"}, nil
+	})
+
+	router := NewRouterFromEndpoints(local, nil)
+	if router == nil {
+		t.Fatal("NewRouterFromEndpoints returned nil")
+	}
+	if n := len(router.Executors()); n != 0 {
+		t.Fatalf("expected 0 remote executors for empty endpoints, got %d", n)
+	}
+
+	res, err := router.Execute("agent", "task")
+	if err != nil {
+		t.Fatalf("empty router must route to local without error, got %v", err)
+	}
+	if res.Output != "local-only" {
+		t.Errorf("expected local execution, got %q", res.Output)
+	}
+}

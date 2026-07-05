@@ -406,6 +406,43 @@ func TestConnPool_Stats_AfterRequests(t *testing.T) {
 	}
 }
 
+func TestConnPool_Stats_ReflectsCustomConfig(t *testing.T) {
+	// A real connection pool's Stats() must report the pool's actual
+	// configuration — not hardcoded defaults. The daemon relies on Stats()
+	// to observe how each pool is tuned; hardcoded values would misreport
+	// every non-default pool.
+	pool := NewConnPool(ConnPoolConfig{
+		MaxIdleConns:        50,
+		MaxIdleConnsPerHost: 5,
+		MaxConnsPerHost:     20,
+	})
+	stats := pool.Stats()
+	if stats.MaxIdle != 50 {
+		t.Errorf("Stats().MaxIdle: got %d, want 50 (configured MaxIdleConns)", stats.MaxIdle)
+	}
+	if stats.MaxIdlePerHost != 5 {
+		t.Errorf("Stats().MaxIdlePerHost: got %d, want 5 (configured MaxIdleConnsPerHost)", stats.MaxIdlePerHost)
+	}
+	if stats.MaxPerHost != 20 {
+		t.Errorf("Stats().MaxPerHost: got %d, want 20 (configured MaxConnsPerHost)", stats.MaxPerHost)
+	}
+}
+
+func TestConnPool_Stats_SharedFlag(t *testing.T) {
+	// NewSharedConnPool must mark its Stats() as shared so the daemon can
+	// distinguish a pool shared across executors from a private per-executor
+	// pool. The IsShared field exists and is JSON-serialized but is never set.
+	shared := NewSharedConnPool(ConnPoolConfig{})
+	if !shared.Stats().IsShared {
+		t.Error("NewSharedConnPool().Stats().IsShared: got false, want true")
+	}
+
+	private := NewConnPool(ConnPoolConfig{})
+	if private.Stats().IsShared {
+		t.Error("NewConnPool().Stats().IsShared: got true, want false")
+	}
+}
+
 // ─── Close / CloseIdleConnections ───────────────────────────────────────────
 
 func TestConnPool_CloseIdleConnections(_ *testing.T) {

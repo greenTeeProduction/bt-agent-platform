@@ -3,10 +3,87 @@ package main
 import (
 	"testing"
 
+	a2acard "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
+
+// cardAt builds a minimal AgentCard advertising a single JSON-RPC interface at
+// the given URL — mirroring the shape internal/a2a.ConvertToAgentCard produces.
+func cardAt(name, url string) *a2acard.AgentCard {
+	return &a2acard.AgentCard{
+		Name: name,
+		SupportedInterfaces: []*a2acard.AgentInterface{
+			a2acard.NewAgentInterface(url, a2acard.TransportProtocolJSONRPC),
+		},
+	}
+}
+
+// TestEndpointsFromCardsExcludesSelfAndDedupes pins the daemon's reduction of
+// the live A2A card registry to remote router endpoints: cards served by this
+// very node are dropped (no self-routing), a peer hosting many agent cards
+// collapses to a single endpoint (one RemoteExecutor per node), and cards with
+// no reachable interface are skipped. Without this the router would either route
+// tasks back to itself or spin up a RemoteExecutor per advertised agent.
+func TestEndpointsFromCardsExcludesSelfAndDedupes(t *testing.T) {
+	self := "http://localhost:8686"
+	cards := map[string]*a2acard.AgentCard{
+		"self-a":   cardAt("self-a", self+"/agents/self-a"),
+		"self-b":   cardAt("self-b", self+"/agents/self-b"),
+		"peer1-x":  cardAt("peer1-x", "http://10.0.0.1:8686/agents/peer1-x"),
+		"peer1-y":  cardAt("peer1-y", "http://10.0.0.1:8686/agents/peer1-y"),
+		"peer2":    cardAt("peer2", "http://10.0.0.2:8686/agents/peer2"),
+		"no-iface": {Name: "no-iface"},
+		"nil-card": nil,
+	}
+
+	eps := endpointsFromCards(cards, self)
+
+	if len(eps) != 2 {
+		t.Fatalf("expected 2 peer endpoints (self excluded, peer1 deduped, no-iface skipped), got %d: %+v", len(eps), eps)
+	}
+	bases := map[string]bool{}
+	for _, ep := range eps {
+		bases[ep.BaseURL] = true
+		if ep.BaseURL == self {
+			t.Errorf("self base URL must never be an endpoint: %+v", ep)
+		}
+	}
+	if !bases["http://10.0.0.1:8686"] || !bases["http://10.0.0.2:8686"] {
+		t.Errorf("expected peer1 + peer2 node base URLs, got %v", bases)
+	}
+}
+
+// TestEndpointsFromCardsSingleNodeYieldsNoPeers pins that a registry containing
+// only this node's own cards produces zero remote endpoints, so
+// NewRouterFromEndpoints falls back to the local in-process executor and
+// single-node deployments behave exactly as before adopting the substrate.
+func TestEndpointsFromCardsSingleNodeYieldsNoPeers(t *testing.T) {
+	self := "http://localhost:8686"
+	cards := map[string]*a2acard.AgentCard{
+		"a": cardAt("a", self+"/agents/a"),
+		"b": cardAt("b", self+"/agents/b"),
+	}
+
+	eps := endpointsFromCards(cards, self)
+	if len(eps) != 0 {
+		t.Fatalf("single-node registry must yield no peers, got %d: %+v", len(eps), eps)
+	}
+
+	local := reliability.NewLocalExecutor("solo", func(agentName, task string) (*reliability.AgentResult, error) {
+		return &reliability.AgentResult{Agent: agentName, Task: task, Success: true, Output: "local"}, nil
+	})
+	router := reliability.NewRouterFromEndpoints(local, eps)
+	if n := len(router.Executors()); n != 0 {
+		t.Fatalf("expected router with no remote executors, got %d", n)
+	}
+	res, err := router.Execute("agent", "task")
+	if err != nil || res.Output != "local" {
+		t.Fatalf("empty router must route to local; got res=%+v err=%v", res, err)
+	}
+}
 
 // TestDaemonResolvesWiredGoapFusionLoopTree pins that THE DAEMON BINARY —
 // whatever its import graph looks like in the future — resolves the
