@@ -845,8 +845,17 @@ func goapFusionCircuitBreakerVerdict(hashes []string) (halt bool, window []strin
 // bound, or the halt decision itself — is made once here and reaches both callers
 // at once, closing the exact class of drift the extraction set out to eliminate.
 func goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool, window []string, repeated string, noopTripped bool) {
+	return goapFusionCircuitPolicyVerdictWithBypass(hashes, noopStreak, false)
+}
+
+// goapFusionCircuitPolicyVerdictWithBypass is the verdict with an explicit
+// repeated-hash bypass: when bypassRepeatedHash is true the crude 3-window
+// repeated-STATE-HASH halt is suppressed, but the genuine no-op-PATCH streak
+// halt still fires. The runaway-loop backstop is applied separately by the
+// loop runner.
+func goapFusionCircuitPolicyVerdictWithBypass(hashes []string, noopStreak int, bypassRepeatedHash bool) (halt bool, window []string, repeated string, noopTripped bool) {
 	halt, window, repeated = goapFusionCircuitBreakerVerdict(hashes)
-	if halt {
+	if halt && !bypassRepeatedHash {
 		return true, window, repeated, false
 	}
 	if noopStreak >= goapFusionMaxNoopPatchStreak {
@@ -855,23 +864,21 @@ func goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool,
 	return false, window, "", false
 }
 
-// goapFusionActiveProgramMilestone reports whether a multi-cycle program with a
-// pending milestone is driving the cycle. When true, the state-hash circuit
-// breaker must NOT halt: a program milestone legitimately produces the same
-// goal-queue hash across the several cycles it takes to land, so the
-// "repeated state hash = Activity-Progress Confusion" heuristic is a false
-// positive here. Progress and runaway are bounded instead by the program's own
-// milestone-completion tracking, the 3-attempt plan-saturation guard, and the
-// loop runner's runaway backstop — not by the stagnation window. The window is
-// for the OPEN-ENDED catalog/research-goal case, where a repeated hash really
-// does mean the loop is stuck. Reads the durable program store (test seam
-// goapProgramsPath).
-func goapFusionActiveProgramMilestone() bool {
-	ps, err := research.OpenPrograms(goapProgramsPath)
-	if err != nil {
-		return false
-	}
-	return ps.Active() != nil
+// goapFusionRepeatedHashBypassed reports whether the crude 3-window
+// repeated-STATE-HASH halt must be suppressed this cycle. It is suppressed
+// whenever the program store is readable (normal operation), because a
+// repeated goal-queue hash is EXPECTED in both of the loop's normal states —
+// an active program milestone (deliberate multi-cycle work) and no active
+// program (the loop is about to SEED a fresh one in Phase 0.5). The breaker
+// runs in PREFLIGHT, before seeding, so a stale-history halt would block the
+// very seeding that escapes an idle/stale state (2026-07-05 07:00). Only the
+// GENUINE stagnation bounds — the consecutive no-op-PATCH streak and the
+// runaway-loop iteration backstop — remain in force; they are NOT bypassed.
+// An unreadable store falls through to the full breaker as a conservative
+// default.
+func goapFusionRepeatedHashBypassed() bool {
+	_, err := research.OpenPrograms(goapProgramsPath)
+	return err == nil
 }
 
 // EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
@@ -889,17 +896,9 @@ func init() {
 	RegisterAction("EvaluateScheduledGoapFusionCircuitBreaker", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 
-		// An active program milestone is deliberate multi-cycle work whose
-		// stable goal-queue hash is expected, not stagnation — bypass the
-		// state-hash breaker (bounded instead by milestone tracking +
-		// plan-saturation). See goapFusionActiveProgramMilestone.
-		if goapFusionActiveProgramMilestone() {
-			bb.Result = "## Scheduled GOAP Fusion Circuit Breaker: CONTINUE\n\nActive program milestone driving the cycle — state-hash stagnation check bypassed (bounded by program milestone tracking and plan-saturation)."
-			return 1
-		}
-
 		hashes := goapFusionStateHashes(bb)
 		streak := goapFusionNoopPatchStreak(bb)
+		bypass := goapFusionRepeatedHashBypassed()
 
 		// Delegate the *entire* CIRCUITPOLICY halt decision — the bounded-window dedup
 		// scan AND the consecutive-no-op-patch streak — to the single shared verdict
@@ -909,7 +908,7 @@ func init() {
 		// that never advances the goal — the "Activity-Progress Confusion" tail the
 		// bounded-window dedup never trips on) is now decided in the shared helper, not
 		// re-implemented inline here.
-		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdict(hashes, streak)
+		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdictWithBypass(hashes, streak, bypass)
 		if halt {
 			if noopTripped {
 				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Circuit Breaker: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so the bounded-window dedup never trips — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)
@@ -951,18 +950,7 @@ func init() {
 
 		hashes := goapFusionStateHashes(bb)
 		streak := goapFusionNoopPatchStreak(bb)
-
-		// Active program milestone: bypass the state-hash stagnation halts
-		// (the repeated hash is expected multi-cycle work, not stagnation),
-		// keeping only the runaway-loop backstop below as the ultimate bound.
-		if goapFusionActiveProgramMilestone() {
-			if len(hashes) >= goapFusionMaxLoopIterations {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nRunaway-loop backstop reached (%d/%d) even under an active program milestone — self-halting.", len(hashes), goapFusionMaxLoopIterations)
-				return -1
-			}
-			bb.Result = "## Scheduled GOAP Fusion Loop Runner: CONTINUE\n\nActive program milestone driving the cycle — state-hash stagnation halts bypassed; only the runaway backstop applies. Driving the next research-to-implementation cycle."
-			return 1
-		}
+		bypass := goapFusionRepeatedHashBypassed()
 
 		// CIRCUITPOLICY: delegate the *entire* halt decision — the bounded-window dedup
 		// scan AND the consecutive-no-op-patch streak — to the same shared verdict
@@ -974,7 +962,7 @@ func init() {
 		// Confusion" tail) is now decided in the shared helper, not re-implemented
 		// inline here. The loop runner then layers only its own runaway-loop backstop
 		// below on top of this shared verdict.
-		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdict(hashes, streak)
+		halt, window, repeated, noopTripped := goapFusionCircuitPolicyVerdictWithBypass(hashes, streak, bypass)
 		if halt {
 			if noopTripped {
 				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nConsecutive no-op-patch streak reached: %d consecutive no-op patch proposals meet or exceed the CIRCUITPOLICY bound (%d). Even with every state hash distinct — so neither the repeated-hash circuit breaker nor the runaway-loop backstop fires — the loop is proposing syntactically valid but empty patches that never advance the goal, the \"Activity-Progress Confusion\" tail. Halting instead of iterating on no-op patches indefinitely.", streak, goapFusionMaxNoopPatchStreak)

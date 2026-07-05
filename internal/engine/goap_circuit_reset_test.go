@@ -58,31 +58,44 @@ func TestCircuitBreakerWouldHaltStaleWindowWithoutReset(t *testing.T) {
 	}
 }
 
-func TestCircuitBreakerBypassedForActiveProgram(t *testing.T) {
+func TestRepeatedHashHaltBypassedInNormalOperation(t *testing.T) {
+	// Readable program store (active program OR idle-about-to-seed) → the
+	// crude repeated-hash halt is bypassed; a window of identical hashes
+	// CONTINUES so the cycle can do real work / reach seeding.
 	path := withGoapPrograms(t)
 	ps, _ := research.OpenPrograms(path)
-	ps.Add("Prog", "test", []string{"m1 in internal/a2a/a.go", "m2 in internal/engine/b.go"})
+	ps.Add("Prog", "test", []string{"m1 in internal/a2a/a.go"})
 	if err := ps.Save(); err != nil {
 		t.Fatal(err)
 	}
-
-	// A window of three identical hashes that WOULD trip the breaker.
 	bb := newLoopBB(t)
 	saveGoapFusionStateHashes(bb, []string{"d3b7", "d3b7", "d3b7"})
-
 	for _, action := range []string{"EvaluateScheduledGoapFusionCircuitBreaker", "RunScheduledGoapFusionLoop"} {
-		fn := GetAction(action)
-		if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
-			t.Fatalf("%s: active program must bypass the stagnation halt (CONTINUE=1), got %d: %s", action, got, bb.Result)
+		if got := GetAction(action)(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+			t.Fatalf("%s: repeated hash must be bypassed with a readable store (CONTINUE=1), got %d: %s", action, got, bb.Result)
 		}
 	}
 
-	// With NO active program, the same window must still HALT.
+	// Idle (no active program) but readable store → still bypassed (CONTINUE),
+	// so the cycle reaches Phase 0.5 seeding instead of HALTing on stale hashes.
 	ps.MarkDone(ps.Programs[0].ID, 0, "r")
-	ps.MarkDone(ps.Programs[0].ID, 1, "r")
 	_ = ps.Save()
-	fn := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
-	if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
-		t.Fatalf("no active program: repeated hash must still HALT, got %d", got)
+	if got := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("idle+readable store must bypass so the loop can seed, got %d", got)
+	}
+}
+
+// The no-op-patch streak — the GENUINE Activity-Progress-Confusion signal — must
+// still HALT even when the repeated-hash check is bypassed.
+func TestNoopPatchStreakStillHaltsUnderBypass(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Prog", "test", []string{"m1 in internal/a2a/a.go"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	halt, _, _, noop := goapFusionCircuitPolicyVerdictWithBypass([]string{"a", "b", "c"}, goapFusionMaxNoopPatchStreak, true)
+	if !halt || !noop {
+		t.Fatal("no-op-patch streak must HALT even under repeated-hash bypass")
 	}
 }

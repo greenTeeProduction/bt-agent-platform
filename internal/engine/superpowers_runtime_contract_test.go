@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -387,8 +388,18 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicy(t
 // open-ended (no active program) case.
 func withNoActiveProgram(t *testing.T) {
 	t.Helper()
+	// Point at a CORRUPT programs.json so research.OpenPrograms errors and the
+	// repeated-hash breaker is NOT bypassed (goapFusionRepeatedHashBypassed is
+	// false only when the store is unreadable). These contract tests verify the
+	// breaker's halt logic itself; in normal operation (readable store) the
+	// crude repeated-hash halt is bypassed and only the no-op-patch streak and
+	// runaway backstop halt.
+	corrupt := filepath.Join(t.TempDir(), "programs.json")
+	if err := os.WriteFile(corrupt, []byte("{ not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	old := goapProgramsPath
-	goapProgramsPath = filepath.Join(t.TempDir(), "programs.json")
+	goapProgramsPath = corrupt
 	t.Cleanup(func() { goapProgramsPath = old })
 }
 
