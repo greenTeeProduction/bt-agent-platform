@@ -197,3 +197,43 @@ func TestIsValidProgramMilestone(t *testing.T) {
 		t.Fatalf("prose-opener milestone accepted: %q", invalid[3])
 	}
 }
+
+func TestMilestoneTouchesExistingFile(t *testing.T) {
+	old := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(p string) bool { return p == "internal/engine/tree.go" }
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = old })
+
+	if !milestoneTouchesExistingFile("Extend routing in internal/engine/tree.go with tests in internal/engine/tree_test.go") {
+		t.Fatal("milestone modifying an existing file must be grounded")
+	}
+	if milestoneTouchesExistingFile("Build the MonotonicityAuditor in internal/evolution/auditor.go (does not exist)") {
+		t.Fatal("greenfield milestone naming only non-existent files must be ungrounded")
+	}
+	// A milestone naming only a new test file (no existing production target) is ungrounded.
+	if milestoneTouchesExistingFile("Add internal/engine/new_thing_test.go") {
+		t.Fatal("a test-only milestone with no existing production target is ungrounded")
+	}
+}
+
+func TestSeedNextProgramRejectsUngroundedProgram(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+	oldP := goapProgramsPath
+	goapProgramsPath = path
+	t.Cleanup(func() { goapProgramsPath = oldP })
+	oldEx := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(string) bool { return false } // nothing exists
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = oldEx })
+	withSeedFetch(t, `PROGRAM: Fabricated research subsystem
+MILESTONE1: Build the Auditor in internal/evolution/auditor.go
+MILESTONE2: Build the Distiller in internal/evolution/distiller.go`)
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	GetAction("SeedNextProgram")(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	ps, _ := research.OpenPrograms(path)
+	if len(ps.Programs) != 0 {
+		t.Fatal("an all-greenfield (ungrounded) program must not persist")
+	}
+	if !strings.Contains(bb.Result, "ungrounded") {
+		t.Fatalf("rejection must explain ungrounded: %s", bb.Result)
+	}
+}

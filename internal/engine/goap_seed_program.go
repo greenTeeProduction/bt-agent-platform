@@ -83,14 +83,16 @@ func init() {
 			bb.Result += "\n\n## Backlog Seeding Produced No Program\n\nResearch returned no PROGRAM/MILESTONE proposal this cycle; will retry next cycle."
 			return 1
 		}
-		var rejected []string
+		var rejected, ungrounded []string
 		for _, m := range spec.Milestones {
 			if !isValidProgramMilestone(m) {
 				rejected = append(rejected, m)
+			} else if !milestoneTouchesExistingFile(m) {
+				ungrounded = append(ungrounded, m)
 			}
 		}
-		if len(rejected) > 0 || len(spec.Milestones) < 2 {
-			bb.Result += fmt.Sprintf("\n\n## Backlog Seeding Rejected Proposal\n\nProgram %q has %d milestone(s); %d not actionable/file-scoped. Will retry next cycle.", spec.Title, len(spec.Milestones), len(rejected))
+		if len(rejected) > 0 || len(ungrounded) > 0 || len(spec.Milestones) < 2 {
+			bb.Result += fmt.Sprintf("\n\n## Backlog Seeding Rejected Proposal\n\nProgram %q: %d milestone(s), %d malformed, %d ungrounded (name no EXISTING production file — a greenfield research subsystem the RED→GREEN flow cannot bootstrap, which the implementation agent declines). Will retry next cycle for a proposal that MODIFIES existing code.", spec.Title, len(spec.Milestones), len(rejected), len(ungrounded))
 			return 1
 		}
 		persistGoapProgram(bb, spec, "auto-seed")
@@ -117,6 +119,36 @@ func isValidProgramMilestone(m string) bool {
 		return false
 	}
 	return len(extractGoFilePaths(m)) > 0
+}
+
+// goapFusionRepoFileExistsFn checks whether a repo-relative path exists at
+// HEAD of the (bare) main repo. Var for test override.
+var goapFusionRepoFileExistsFn = func(relPath string) bool {
+	out, err := runGoapShellTimeout(fmt.Sprintf("git cat-file -e HEAD:%s", relPath), 10*time.Second)
+	_ = out
+	return err == nil
+}
+
+// milestoneTouchesExistingFile reports whether the milestone names at least
+// one EXISTING non-test Go file — the modify target. This is the hard
+// grounding gate the seed PROMPT alone could not enforce: the research
+// notebook the seeder queries is a corpus of papers, so it keeps proposing
+// greenfield subsystems (new files that don't exist) which the TDD flow
+// cannot bootstrap (no failing-test anchor without first inventing the code)
+// and the implementation agent correctly declines. Requiring a real
+// production file to modify aligns seeded programs with what the loop can
+// actually build (2026-07-05: two fabricated research-echo programs seeded
+// back to back, every named file absent).
+func milestoneTouchesExistingFile(m string) bool {
+	for _, f := range extractGoFilePaths(m) {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		if goapFusionRepoFileExistsFn(f) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildSeedProgramPrompt frames the proposal request with what has already
