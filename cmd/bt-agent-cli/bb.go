@@ -39,13 +39,18 @@ Usage:
 }
 
 func bbManager() *blackboard.Manager {
+	return bbManagerAt(agent.BlackboardDir())
+}
+
+func bbManagerAt(dir string) *blackboard.Manager {
 	mgr := blackboard.DefaultManager()
-	_ = mgr.EnablePersistence(agent.BlackboardDir())
+	_ = mgr.EnablePersistence(dir)
 	return mgr
 }
 
 func parseBBScopeFlag(scope, id string) (blackboard.Scope, error) {
-	if strings.TrimSpace(id) == "" {
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return blackboard.Scope{}, fmt.Errorf("--id required")
 	}
 	switch strings.ToLower(strings.TrimSpace(scope)) {
