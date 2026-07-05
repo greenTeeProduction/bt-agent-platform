@@ -41,7 +41,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (59 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites and `bt_evolve_multiobjective` NSGA-II evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (60 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites, `bt_evolve_multiobjective` NSGA-II, and `bt_evolve_island` island-model evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
@@ -143,7 +143,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 59 tools: tree execution, agent management, knowledge graph, evolution |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 60 tools: tree execution, agent management, knowledge graph, evolution |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
 | bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 3 tools: evolved langchain agent execution |
 | bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |
@@ -202,7 +202,7 @@ All local services run on the Jetson ARM64 host. Only DeepSeek API is external. 
 | Q3: Reliability | Transient LLM errors self-heal | **Retry with Exponential Backoff** (ADR-007) | Full jitter retry: 1s→2s→4s→8s (base 500ms, max 30s). 3 retry classes: standard, LLM-specific, unknown. |
 | Q3: Reliability | Exhausted retries don't lose work | **Dead Letter Queue** (ADR-007) | Persistent JSON file at `~/.go-bt-evolve/dead_letter_queue.json`. Failed tasks preserved for manual inspection/replay. |
 | — | Task→tree mapping must be automatic | **Knowledge Graph + Factory** | Semantic discovery via embeddings. Tree breeding via crossover (PreGate from A × StrategyRouter from B). 7 categories with capability edges. |
-| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 67 total tools. Hermes gateway manages lifecycle. |
+| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 68 total tools. Hermes gateway manages lifecycle. |
 | — | Agent state must survive restarts | **File-Based Persistence** (ADR-003) | Atomic writes (write .tmp → rename). YAML for agent definitions, JSON for scheduler/history/reflections. Git-friendly. |
 | — | LLM must be integrated into BT nodes | **ChainAction Architecture** (ADR-006) | 10 chain types (llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action). Template variables: {{.Task}}, {{.Plan}}, {{.Result}}. |
 
@@ -291,7 +291,7 @@ internal/evolution/
 ├── stockfish.go         — TranspositionTable, mutation ordering, alpha-beta search
 ├── pareto.go            — MultiFitness, ParetoFront, ParetoPopulation
 ├── map_elites.go        — BehavioralDescriptor, MAPElitesGrid
-├── island_model.go      — IslandModel with periodic migration
+├── island.go            — IslandModel with periodic migration, cumulative TotalMigrations counter
 ├── q_learning.go        — State→Action epsilon-greedy policy
 ├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
 ├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
@@ -615,13 +615,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.3 MCP Protocol Layer
 
-**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (59 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
+**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (60 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
 
 **Why:** MCP provides a standardized interface between Hermes Agent and the Go BT platform. No custom protocols, no REST overhead. Stdio transport keeps it simple and gateway-managed.
 
 **Where:** `internal/mcp/` (server implementation), `cmd/bt-agent/tools.go` (tool registration), `cmd/bt-agent/main.go` (server setup).
 
-**Effect:** Hermes Agent sees 67 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
+**Effect:** Hermes Agent sees 68 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
 
 **In-process seam:** `engine.Server` also exposes `HasTool(name) bool` and `Invoke(name, args) (*ToolResult, bool)` (`internal/engine/mcp_server.go`) so a registered tool can be asserted and driven by name in-process — without standing up the stdio JSON-RPC loop. This is a test/in-process seam only: it reads the private handler registry directly and deliberately bypasses the auth, rate-limit, sanitization, and tracing wrapping applied on the `tools/call` path, so it must never become a production request route.
 
@@ -968,6 +968,22 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-015: Domain-Mapped Island-Model Evolution as a Deterministic MCP Tool
+
+**Context (2026-07-05):** `IslandModel` (`internal/evolution/island.go`) — the algorithm documented since ADR-005 as "maintaining genetic diversity across domains" — was constructed by zero production binaries, and its instrumentation could not support one: migration counts were discarded (`Migrate()` returned a per-call count nobody accumulated) and `EvolveAll` incremented `Generation` a second time whenever migration fired, skewing the `MigrationInterval` cadence and misreporting generation numbers.
+
+**Decision:** Fix the instrumentation and give the type its first production caller, extending the ADR-009 pattern. `IslandModel` gains a cumulative `TotalMigrations` counter (incremented by `Migrate()`, surfaced as `IslandStats.Migrations` and in `Summary()`), and `EvolveAll` advances `Generation` exactly once per call; migration selection is unchanged. `cmd/bt-agent` registers `bt_evolve_island` (tool 60), deterministic and LLM-free like `bt_evolve_qd`/`bt_evolve_multiobjective`: it seeds one `Population` per island from the resolved base tree, loops `EvolveAll` with the shared `structuralFitnessFn`, and reports `per_island_best`, `migrations`, `cross_diversity`, `generations`, and `islands`. An optional `domains` parameter (comma-separated registered domain-tree names) makes islands map to real domains — each name seeds its own island from `resolveTree("domain:"+name)`, keying `per_island_best` by domain name (the numeric `islands` param is then ignored); any unresolvable name aborts with `{"error":"unknown domain: <name>"}` before any evolution work.
+
+**Status:** Accepted (2026-07-05)
+
+**Consequences:**
+- ✅ The island model is reachable in production for the first time, in its documented cross-domain role rather than only as anonymous same-seed islands
+- ✅ Generation and migration reporting are now trustworthy: the `MigrationInterval` cadence holds exactly, and cumulative migrations survive across `EvolveAll` calls
+- ✅ Deterministic and `-short`-safe, consistent with the ADR-009 tool family (single shared structural fitness, no LLM path)
+- ⚠️ Structural fitness is the same for every island, so cross-island diversity comes only from independent mutation drift and migration — domain-specific fitness pressure remains future work
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1109,10 +1125,10 @@ go-bt-evolve
 | **Program / Milestone** | A research-proposed multi-cycle change (title + file-scoped milestones) persisted in `programs.json`; each cycle executes the next pending milestone at [P0] queue head and marks it done on a verified apply. |
 | **Quota Economy** | Per-Pacific-day NotebookLM answer cache + daily budgets (queries/research starts) enforced at the nlmRun choke point; over budget the ResearchRouter falls back to Claude review. |
 | **Superpowers Run** | One durable implementation run: typed state (run.json), plan, per-task RED/GREEN evidence, verification artifacts, finish report — under `docs/superpowers/runs/<id>/`. |
-| **Island Model** | An evolution algorithm where sub-populations evolve in isolation with periodic migration of top individuals. |
+| **Island Model** | An evolution algorithm where sub-populations evolve in isolation with periodic migration of top individuals. Reachable in production via the deterministic `bt_evolve_island` MCP tool; its optional `domains` parameter seeds one island per registered domain tree, matching the type's stated purpose of maintaining genetic diversity across domains. |
 | **Knowledge Graph** | In-memory graph of all 41+ trees with capabilities, keywords, embeddings, and cross-tree relationships. Powers discovery and auto-creation. Its runtime-feedback fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges can be snapshotted to / restored from an atomic JSON file via `feedback_persist.go` (`SaveFeedback`/`LoadFeedback`, debounced `FlushFeedback`) — now wired into the `internal/agent` scheduler lifecycle (`SchedulerConfig.FeedbackPath`: load on startup, throttled flush after each run, forced flush on Stop), so feedback survives restarts and the learn→evolve loop compounds. |
 | **MAP-Elites** | Multi-dimensional Archive of Phenotypic Elites. Maintains a grid of high-performing individuals across behavioral dimensions for quality diversity. |
-| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 67 total tools to Hermes Agent. |
+| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 68 total tools to Hermes Agent. |
 | **Mutation** | A structural change to a behavior tree. 10 operators: add_before, add_after, wrap_retry, prune, swap_children, rename_node, change_type, insert_fallback, clone_subtree, delete_subtree. |
 | **OutcomeSelector** | The final stage of the universal BT pattern. Checks WasSuccessful → if not, triggers SelfCorrect. |
 | **Pareto Front** | Set of non-dominated solutions in multi-objective optimization. Tracks trees that are not strictly worse than any other across all fitness dimensions. |

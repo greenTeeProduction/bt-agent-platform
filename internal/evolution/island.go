@@ -16,6 +16,7 @@ type IslandModel struct {
 	MigrationInterval int                    `json:"migration_interval"` // generations between migration
 	MigrationRate     float64                `json:"migration_rate"`     // fraction of population to migrate (0-1)
 	Generation        int                    `json:"generation"`
+	TotalMigrations   int                    `json:"total_migrations"` // cumulative individuals moved by Migrate
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -108,6 +109,7 @@ func (im *IslandModel) Migrate() int {
 		im.Islands[tgtDomain] = tgtPop
 	}
 
+	im.TotalMigrations += migrated
 	return migrated
 }
 
@@ -129,7 +131,6 @@ func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[
 		im.mu.Unlock() // Migrate handles its own locking
 		im.Migrate()
 		im.mu.Lock()
-		im.Generation++
 	}
 
 	return bestTrees
@@ -195,6 +196,7 @@ type IslandStats struct {
 	TotalPop       int                `json:"total_population"`
 	BestPerDomain  map[string]float64 `json:"best_per_domain"`
 	CrossDiversity float64            `json:"cross_diversity"`
+	Migrations     int                `json:"migrations"`
 }
 
 // Stats returns aggregate statistics for the island model.
@@ -205,6 +207,7 @@ func (im *IslandModel) Stats() IslandStats {
 	stats := IslandStats{
 		Domains:       len(im.Islands),
 		BestPerDomain: make(map[string]float64),
+		Migrations:    im.TotalMigrations,
 	}
 
 	for domain, pop := range im.Islands {
@@ -222,8 +225,8 @@ func (im *IslandModel) Stats() IslandStats {
 // Summary returns a human-readable island model summary.
 func (im *IslandModel) Summary() string {
 	stats := im.Stats()
-	s := fmt.Sprintf("IslandModel: %d domains, %d total pop, gen %d\n",
-		stats.Domains, stats.TotalPop, im.Generation)
+	s := fmt.Sprintf("IslandModel: %d domains, %d total pop, gen %d, migrations %d\n",
+		stats.Domains, stats.TotalPop, im.Generation, stats.Migrations)
 	for domain, best := range stats.BestPerDomain {
 		s += fmt.Sprintf("  %s: best=%.1f\n", domain, best)
 	}

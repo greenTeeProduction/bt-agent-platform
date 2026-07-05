@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -149,6 +150,57 @@ func TestIslandModel_EvolveAllEvaluatesPopulations(t *testing.T) {
 	}
 	if im.GetIsland("go").BestFitness != float64(len("much-longer-tree-name")) {
 		t.Fatalf("population best fitness was not updated")
+	}
+}
+
+func TestIslandModelTracksMigrations(t *testing.T) {
+	im := NewIslandModel(1, 0.5)
+	im.AddIsland("go", islandTestPopulation("go-short", "go-much-longer-name"))
+	im.AddIsland("ops", islandTestPopulation("ops-short", "ops-much-longer-name"))
+
+	const evolveCalls = 3
+	for i := 0; i < evolveCalls; i++ {
+		im.EvolveAll(func(tree *SerializableNode) float64 {
+			return float64(len(tree.Name))
+		})
+	}
+
+	// EvolveAll must advance Generation exactly once per call, even when
+	// migration fires (MigrationInterval=1 → every call migrates).
+	if im.Generation != evolveCalls {
+		t.Fatalf("generation = %d after %d EvolveAll calls, want %d", im.Generation, evolveCalls, evolveCalls)
+	}
+
+	stats := im.Stats()
+	if stats.Migrations <= 0 {
+		t.Fatalf("Stats().Migrations = %d after %d migrating generations, want > 0", stats.Migrations, evolveCalls)
+	}
+	if stats.Migrations != im.TotalMigrations {
+		t.Fatalf("Stats().Migrations = %d, want TotalMigrations %d", stats.Migrations, im.TotalMigrations)
+	}
+
+	// A direct Migrate() call must accumulate exactly its returned count.
+	before := stats.Migrations
+	moved := im.Migrate()
+	if moved <= 0 {
+		t.Fatal("expected direct Migrate() to move at least one individual")
+	}
+	if got := im.Stats().Migrations; got != before+moved {
+		t.Fatalf("Stats().Migrations = %d after Migrate() moved %d, want %d", got, moved, before+moved)
+	}
+
+	if summary := im.Summary(); !strings.Contains(summary, "migrations") {
+		t.Fatalf("summary %q missing migrations count", summary)
+	}
+}
+
+func TestIslandStatsJSONIncludesMigrations(t *testing.T) {
+	data, err := json.Marshal(IslandStats{})
+	if err != nil {
+		t.Fatalf("marshal IslandStats: %v", err)
+	}
+	if !strings.Contains(string(data), `"migrations"`) {
+		t.Fatalf("IslandStats JSON %s missing \"migrations\" key", data)
 	}
 }
 

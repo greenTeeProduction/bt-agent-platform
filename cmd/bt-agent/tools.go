@@ -64,7 +64,7 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 }
 
-// registerMCPTools registers all 59 MCP tools on the server.
+// registerMCPTools registers all 60 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -678,6 +678,90 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "generations": nsga.Generation,
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_island", "Run island-model evolution: isolated per-island populations with periodic migration, reporting per-island bests and cross-island diversity",
+		map[string]engine.Property{
+			"tree":               {Type: "string", Description: "Base tree ID"},
+			"islands":            {Type: "integer", Description: "Number of islands (default: 3)"},
+			"population":         {Type: "integer", Description: "Per-island population size (default: 10)"},
+			"generations":        {Type: "integer", Description: "Number of generations (default: 10)"},
+			"migration_interval": {Type: "integer", Description: "Generations between migrations (default: 2)"},
+			"migration_rate":     {Type: "number", Description: "Fraction of each island migrating (default: 0.1)"},
+			"domains":            {Type: "string", Description: "Comma-separated registered domain-tree names; each seeds its own island (overrides 'islands')"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree              string  `json:"tree"`
+				Islands           int     `json:"islands"`
+				Population        int     `json:"population"`
+				Generations       int     `json:"generations"`
+				MigrationInterval int     `json:"migration_interval"`
+				MigrationRate     float64 `json:"migration_rate"`
+				Domains           string  `json:"domains"`
+			}
+			_ = json.Unmarshal(args, &params)
+			if params.Islands <= 0 {
+				params.Islands = 3
+			}
+			if params.Population <= 0 {
+				params.Population = 10
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			if params.MigrationInterval <= 0 {
+				params.MigrationInterval = 2
+			}
+			if params.MigrationRate <= 0 {
+				params.MigrationRate = 0.1
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Deterministic, LLM-free island evolution reusing the shared
+			// structural fitness across every island. With 'domains', each
+			// named registered domain tree seeds its own island (the numeric
+			// 'islands' param is ignored); resolution failures abort before
+			// any evolution work so no partial result leaks out.
+			im := evolution.NewIslandModel(params.MigrationInterval, params.MigrationRate)
+			if params.Domains != "" {
+				var names []string
+				for _, raw := range strings.Split(params.Domains, ",") {
+					if name := strings.TrimSpace(raw); name != "" {
+						names = append(names, name)
+					}
+				}
+				seeds := make(map[string]*evolution.SerializableNode, len(names))
+				for _, name := range names {
+					domainTree := resolveTree("domain:" + name)
+					if domainTree == nil {
+						msg, _ := json.Marshal(map[string]string{"error": "unknown domain: " + name})
+						return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(msg)}}}
+					}
+					seeds[name] = domainTree
+				}
+				params.Islands = len(names)
+				for _, name := range names {
+					im.AddIsland(name, evolution.NewPopulation(params.Population, seeds[name]))
+				}
+			} else {
+				for i := 0; i < params.Islands; i++ {
+					im.AddIsland(fmt.Sprintf("island_%d", i), evolution.NewPopulation(params.Population, baseTree))
+				}
+			}
+			for g := 0; g < params.Generations; g++ {
+				im.EvolveAll(structuralFitnessFn)
+			}
+			stats := im.Stats()
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
+				"per_island_best": stats.BestPerDomain, "migrations": stats.Migrations,
+				"cross_diversity": stats.CrossDiversity,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})

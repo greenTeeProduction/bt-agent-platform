@@ -120,6 +120,146 @@ func TestBTEvolveQDRegisteredAndReturnsQDMetrics(t *testing.T) {
 	}
 }
 
+// TestBTEvolveIslandRegisteredAndReturnsIslandMetrics pins the bt_evolve_island
+// island-model MCP tool: it must be registered by registerMCPTools, run a
+// deterministic (LLM-free) evolution across N isolated island populations with
+// periodic migration, and report per_island_best (one entry per island),
+// migrations, cross_diversity, generations, and islands as JSON. An unknown
+// tree id must yield the shared {"error":"unknown tree"} shape rather than a
+// partial/panicking result.
+func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_evolve_island") {
+		t.Fatal("bt_evolve_island tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: a real resolvable base tree with a small island count,
+	// per-island population, and generation count (kept tiny so the
+	// deterministic structural evolution stays -short-safe).
+	const wantIslands = 2
+	args := json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
+	res, ok := server.Invoke("bt_evolve_island", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error for a resolvable tree: %v", out)
+	}
+	for _, key := range []string{"per_island_best", "migrations", "cross_diversity", "generations", "islands"} {
+		if _, present := out[key]; !present {
+			t.Errorf("bt_evolve_island result missing %q key; got keys %v", key, out)
+		}
+	}
+
+	// per_island_best must hold exactly one best-fitness entry per island.
+	perIsland, ok := out["per_island_best"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
+	}
+	if len(perIsland) != wantIslands {
+		t.Errorf("bt_evolve_island 'per_island_best' must hold exactly %d entries (one per island); got %d: %v", wantIslands, len(perIsland), perIsland)
+	}
+
+	// The island count must be echoed back.
+	if islands, isNum := out["islands"].(float64); !isNum || int(islands) != wantIslands {
+		t.Errorf("bt_evolve_island must echo 'islands' = %d; got %v", wantIslands, out["islands"])
+	}
+
+	// Unknown tree: a known prefix with an unresolvable suffix resolves to nil,
+	// which must surface the shared unknown-tree error shape.
+	unknown, ok := server.Invoke("bt_evolve_island", json.RawMessage(`{"tree":"domain:__no_such_tree__"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered on the error path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content for an unknown tree")
+	}
+	var errOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
+		t.Fatalf("bt_evolve_island unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut["error"] != "unknown tree" {
+		t.Fatalf("bt_evolve_island unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut)
+	}
+}
+
+// TestBTEvolveIslandDomainSeeding pins the domain-seeded island mode of
+// bt_evolve_island: an optional comma-separated 'domains' param maps each
+// named registered domain tree (resolved via resolveTree("domain:"+name)) to
+// its own island, so per_island_best is keyed by domain name instead of the
+// anonymous island_N labels, and the numeric 'islands' param is ignored. An
+// unresolvable domain name must fail fast with
+// {"error":"unknown domain: <name>"} and no partial evolution result.
+func TestBTEvolveIslandDomainSeeding(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	// Happy path: two registered domain trees seed two islands keyed by their
+	// domain names. The conflicting islands=5 must be ignored in favor of the
+	// domain list. Params stay tiny so the deterministic structural evolution
+	// remains -short-safe.
+	args := json.RawMessage(`{"tree":"godev","domains":"code_review,security_audit","islands":5,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
+	res, ok := server.Invoke("bt_evolve_island", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content for domain-seeded islands")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island domain-seeded result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error for registered domains: %v", out)
+	}
+
+	perIsland, isObj := out["per_island_best"].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
+	}
+	wantDomains := []string{"code_review", "security_audit"}
+	if len(perIsland) != len(wantDomains) {
+		t.Errorf("bt_evolve_island with domains %v must key 'per_island_best' by exactly those domains; got %d entries: %v", wantDomains, len(perIsland), perIsland)
+	}
+	for _, name := range wantDomains {
+		if _, present := perIsland[name]; !present {
+			t.Errorf("bt_evolve_island 'per_island_best' missing domain key %q; got keys %v", name, perIsland)
+		}
+	}
+
+	// Unknown domain: the whole invocation must fail fast with the
+	// domain-specific error shape and produce no partial evolution result.
+	unknown, ok := server.Invoke("bt_evolve_island", json.RawMessage(`{"tree":"godev","domains":"code_review,__no_such_domain__"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered on the unknown-domain path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content for an unknown domain")
+	}
+	var errOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
+		t.Fatalf("bt_evolve_island unknown-domain result is not valid JSON: %v", err)
+	}
+	if errOut["error"] != "unknown domain: __no_such_domain__" {
+		t.Fatalf("bt_evolve_island unknown domain should return {\"error\":\"unknown domain: __no_such_domain__\"}; got %v", errOut)
+	}
+	if _, partial := errOut["per_island_best"]; partial {
+		t.Fatalf("bt_evolve_island unknown-domain error must carry no partial result; got %v", errOut)
+	}
+}
+
 // TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics pins the
 // bt_evolve_multiobjective NSGA-II MCP tool: it must be registered by
 // registerMCPTools, run a deterministic (LLM-free) NSGA-II evolution over a
