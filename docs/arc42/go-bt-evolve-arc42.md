@@ -727,13 +727,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.14 Fleet-Wide Node Description Coverage
 
-**What:** A tree-authoring invariant over the curated fleet: every node of every type — root, interior composites (Sequence, Selector, decorators), and leaves (Condition, Action, ChainAction) — in every curated (non-`arc42:`) registered domain tree must carry a non-empty `Description`, and every tree a non-empty `Descriptions` entry. The `seq()`/`sel()` authoring helpers (`internal/domains/trees.go`) take a mandatory description parameter, so an undescribed composite cannot even be constructed through the helper API.
+**What:** A tree-authoring invariant over the curated fleet: every node of every type — root, interior composites (Sequence, Selector, decorators), and leaves (Condition, Action, ChainAction) — in every curated (non-`arc42:`) registered domain tree must carry a non-empty `Description`, and every tree a non-empty `Descriptions` entry. The invariant extends beyond the `AllDomainTrees` registry to the production-reachable non-registry trees — the smoke-tested extras (`hermes_evolve` and the six `kanban_*` trees) and the resolver-reachable extras (`hermes_obsidian`, `superpowers_pipeline`) — guarded per node only, since `TestDescriptionsHaveNoOrphans` deliberately forbids them a root `Descriptions` entry. The `seq()`/`sel()` authoring helpers (`internal/domains/trees.go`) take a mandatory description parameter, so an undescribed composite cannot even be constructed through the helper API.
 
 **Why:** Node descriptions are the human-readable rationale the gardener and the bt-agent `switch_tree` tool surface. Coverage grew incrementally — root `Descriptions` entries, then Conditions, then leaves — but interior composites stayed exempt: the helpers built every `StrategyRouter` Selector (the primary routing decision point) and every Sequence stage (`PreGate`, `BugDetection`, `BuildPath`, …) with a blank `Description`, so exactly the nodes that encode routing and stage semantics were the unexplained ones.
 
-**Where:** `internal/domains/trees.go` (`seq`/`sel` signatures and their curated call sites), described composite literals across the other registered-tree files in `internal/domains/` and the evolution-built subtrees (`internal/evolution/goap_trees.go`, `internal/evolution/notebooklm_workflow.go`); guards in `internal/domains/domains_test.go` — `TestAllDomainTreeSelectorsHaveDescriptions` (router anchor) and the consolidated `TestAllDomainTreeNodesHaveDescriptions`, which walks every node of every curated registered tree.
+**Where:** `internal/domains/trees.go` (`seq`/`sel` signatures and their curated call sites), described composite literals across the other registered-tree files in `internal/domains/` and the evolution-built subtrees (`internal/evolution/goap_trees.go`, `internal/evolution/notebooklm_workflow.go`); guards in `internal/domains/domains_test.go` — `TestAllDomainTreeSelectorsHaveDescriptions` (router anchor) and the consolidated `TestAllDomainTreeNodesHaveDescriptions`, which walks every node of every curated registered tree, and `TestNonRegistryDomainTreeNodesHaveDescriptions`, which applies the same full-node walk to the non-registry trees (`internal/domains/hermes_evolve.go`, `hermes_obsidian.go`, `kanban.go`).
 
-**Effect:** Every routing decision and execution stage in the curated fleet is self-documenting at the node level; the consolidated full-node guard prevents any future tree from regressing on any node class, while the narrower sibling guards (root, condition, leaf, selector) remain as targeted regression anchors.
+**Effect:** Every routing decision and execution stage in the curated fleet is self-documenting at the node level — including the production-reachable trees outside the registry, whose composites and Action/ChainAction leaves were previously exempt; the consolidated full-node guards prevent any future tree from regressing on any node class, while the narrower sibling guards (root, condition, leaf, selector) remain as targeted regression anchors.
 
 ---
 
@@ -959,12 +959,15 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Decision:** Make descriptions mandatory for all node classes. `seq()` and `sel()` now take a description parameter (undescribed composites cannot be built through the helper API); all curated call sites and remaining composite literals — including the evolution-built subtrees in `internal/evolution/goap_trees.go` and `notebooklm_workflow.go` — were described; and the consolidated `TestAllDomainTreeNodesHaveDescriptions` guard asserts every node of every type in every curated (non-arc42) registered tree, plus the root `Descriptions` entry, is non-empty. Narrower guards (leaf, condition, `TestAllDomainTreeSelectorsHaveDescriptions`) stay as targeted regression anchors. See §8.14.
 
+**Amended (2026-07-05):** The original guard was scoped to the `AllDomainTrees` registry, so the production-reachable non-registry trees — the smoke-tested `hermes_evolve` and six `kanban_*` trees, and the resolver-reachable `hermes_obsidian` and `superpowers_pipeline` — kept Condition-only coverage: their composites (`PreGate`, `OutcomeSelector`, pipeline routers) and Action/ChainAction leaves could still ship blank. Every node in those trees is now described (`internal/domains/hermes_evolve.go`, `hermes_obsidian.go`, `kanban.go`), and `TestNonRegistryDomainTreeNodesHaveDescriptions` extends the consolidated full-node walk to both non-registry sets — per node only, since `TestDescriptionsHaveNoOrphans` forbids non-registry root `Descriptions` entries.
+
 **Status:** Accepted (2026-07-05)
 
 **Consequences:**
-- ✅ Fleet-wide self-documentation: every routing decision and stage carries its rationale; no node class can regress on future trees
+- ✅ Fleet-wide self-documentation: every routing decision and stage carries its rationale; no node class can regress on future trees — in the registry or in the production-reachable extras
 - ✅ The helper signatures enforce the invariant at authoring time, not just at test time
-- ⚠️ Generated `arc42:` trees remain exempt; a curated tree built without the helpers relies on the consolidated guard alone
+- ⚠️ Generated `arc42:` trees remain exempt; a curated tree built without the helpers relies on the consolidated guards alone
+- ⚠️ The non-registry sets are enumerated by hand in the test (mirroring the smoke registry and `resolverReachableExtraDomainTrees()`); a new production-reachable tree outside `AllDomainTrees` must be added there to inherit full-node coverage
 
 ---
 

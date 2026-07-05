@@ -679,6 +679,59 @@ func TestAllDomainTreeNodesHaveDescriptions(t *testing.T) {
 	}
 }
 
+// TestNonRegistryDomainTreeNodesHaveDescriptions extends the consolidated
+// full-node description guard (TestAllDomainTreeNodesHaveDescriptions) to the
+// domains-package trees that are production-reachable but NOT in the
+// AllDomainTrees registry, so the curated walk never inspects them: the
+// smoke-tested extras (hermes_evolve + the six kanban_* trees, mirroring the
+// fns map in engine_domain_execution_test.go) and the ResolveTreeID-reachable
+// extras (resolverReachableExtraDomainTrees). Their Condition nodes are
+// already guarded, but their composites (PreGate, OutcomeSelector, routers)
+// and non-Condition leaves (Action, ChainAction) can still carry blank
+// Descriptions — an unexplained routing stage to the same gardener and
+// switch_tree operators the curated guard protects. These trees are
+// intentionally absent from the Descriptions map (TestDescriptionsHaveNoOrphans
+// forbids non-registry entries), so this guard checks per-node Descriptions
+// only.
+func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
+	// Mirrors the extra entries in the fns map of
+	// engine_domain_execution_test.go, like
+	// TestSmokeTestedDomainTreesHaveConditionDescriptions.
+	extraSmokeTrees := map[string]func() *evolution.SerializableNode{
+		"hermes_evolve":       HermesSelfEvolutionTree,
+		"kanban_task_creator": KanbanTaskCreatorTree,
+		"kanban_refiner":      KanbanRefinerTree,
+		"kanban_qa":           KanbanQATree,
+		"kanban_monitor":      KanbanBoardMonitorTree,
+		"kanban_workflow":     KanbanWorkflowTree,
+		"kanban_autopilot":    KanbanAutoPilotTree,
+	}
+
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: %s node %q has an empty Description (full-node coverage gap)", treeName, node.Type, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for _, trees := range []map[string]func() *evolution.SerializableNode{
+		extraSmokeTrees,
+		resolverReachableExtraDomainTrees(),
+	} {
+		for name, fn := range trees {
+			tree := fn()
+			if tree == nil {
+				t.Errorf("non-registry tree %q returned nil", name)
+				continue
+			}
+			walk(name, *tree)
+		}
+	}
+}
+
 func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 	tree := GoapFusionLoopTree()
 
