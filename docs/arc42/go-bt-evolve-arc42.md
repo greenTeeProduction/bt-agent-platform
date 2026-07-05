@@ -2,7 +2,7 @@
 title: "go-bt-evolve Architecture Documentation"
 subtitle: "arc42 Template — Behavior Tree Agent Platform"
 date: "2026-06-03"
-updated: "2026-07-04"
+updated: "2026-07-05"
 version: "1.1.0"
 status: "Generated; full refresh 2026-07-04 — kept current per landing run by the autonomous arc42 sync stage"
 arc42_version: "8.2"
@@ -543,6 +543,8 @@ systemd (system)
 ├── hitl/                    — Human-in-the-loop approval requests
 ├── audit/                   — Audit log
 ├── logs/                    — bt.log
+├── feedback.json            — Knowledge-graph runtime-feedback snapshot
+│                              (Fitness/RunCount/tool-edges); agent.FeedbackFile()
 ├── dead_letter_queue.json   — Failed task persistence
 └── vault/                   — Tree vault (checkpoint/restore)
 
@@ -631,7 +633,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Effect:** State survives restarts. Git can version agent definitions. Manual inspection and repair is possible with any text editor.
 
-**Knowledge-graph feedback (wired via the scheduler lifecycle):** The knowledge graph's runtime feedback — the RecordRun-mutated fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges — is in-memory and would otherwise be lost on restart. `internal/knowledge/feedback_persist.go` adds a same-pattern (atomic write .tmp → rename) JSON snapshot: `SaveFeedback`/`LoadFeedback` serialize only the feedback subset (static tree metadata is excluded, and Load merges into already-registered trees rather than clobbering them), and a debounced `FlushFeedback(force)` — driven by `MarkFeedbackDirty` and a min-interval throttle — avoids rewriting the whole graph on every bursty RecordRun. The writer takes no `internal/agent` dependency. The `internal/agent` scheduler now drives that lifecycle end to end. `SchedulerConfig` carries an optional `FeedbackPath` (and `FeedbackFlushInterval`, defaulting to 30s when zero); when the path is set, `NewScheduler` re-hydrates prior feedback with `LoadFeedback` (logging, not failing, on error — matching the missing-file-no-error contract) and arms the debounced writer via `ConfigureFeedbackPersistence`. Both `RecordRun` call sites (`RunNow` and the scheduled `runJob`) then call `persistRunFeedback`, which marks the graph dirty and attempts a throttled best-effort `FlushFeedback(false)`; `Stop()` issues a forced `FlushFeedback(true)` so feedback pending inside the throttle window is durably written on shutdown. `ConfigureFeedbackPersistence` resets the throttle clock on each arming so a re-armed process-global `GlobalGraph` always flushes on its first dirty mark. Together this closes the learn→evolve loop across restarts: a fresh process reads back the accumulated Fitness/RunCount/tool-edges instead of resetting them.
+**Knowledge-graph feedback (wired via the scheduler lifecycle):** The knowledge graph's runtime feedback — the RecordRun-mutated fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges — is in-memory and would otherwise be lost on restart. `internal/knowledge/feedback_persist.go` adds a same-pattern (atomic write .tmp → rename) JSON snapshot: `SaveFeedback`/`LoadFeedback` serialize only the feedback subset (static tree metadata is excluded, and Load merges into already-registered trees rather than clobbering them), and a debounced `FlushFeedback(force)` — driven by `MarkFeedbackDirty` and a min-interval throttle — avoids rewriting the whole graph on every bursty RecordRun. The writer takes no `internal/agent` dependency. The `internal/agent` scheduler now drives that lifecycle end to end. `SchedulerConfig` carries an optional `FeedbackPath` (and `FeedbackFlushInterval`, defaulting to 30s when zero); when the path is set, `NewScheduler` re-hydrates prior feedback with `LoadFeedback` (logging, not failing, on error — matching the missing-file-no-error contract) and arms the debounced writer via `ConfigureFeedbackPersistence`. Both `RecordRun` call sites (`RunNow` and the scheduled `runJob`) then call `persistRunFeedback`, which marks the graph dirty and attempts a throttled best-effort `FlushFeedback(false)`; `Stop()` issues a forced `FlushFeedback(true)` so feedback pending inside the throttle window is durably written on shutdown. `ConfigureFeedbackPersistence` resets the throttle clock on each arming so a re-armed process-global `GlobalGraph` always flushes on its first dirty mark. Together this closes the learn→evolve loop across restarts: a fresh process reads back the accumulated Fitness/RunCount/tool-edges instead of resetting them. The production daemon supplies that path: `cmd/bt-agent/main.go` sets `SchedulerConfig.FeedbackPath` to `agent.FeedbackFile()` — `~/.go-bt-evolve/feedback.json`, the single canonical snapshot location, resolved through the package-level `feedbackSnapshotPath()` helper — so the seam is actually armed in the deployed `bt-agent.service` rather than left dormant (pinned by the `wiring_test.go` daemon seam checks).
 
 ## 8.5 Evolution Pipeline
 
@@ -770,6 +772,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 - ✅ Git-friendly: Agent definitions are versionable YAML
 - ✅ Zero dependencies: No database driver or migration tooling
 - ✅ Debuggable: Any text editor can inspect state
+- ✅ Production wiring landed (2026-07-05): the daemon now persists knowledge-graph runtime feedback (Fitness/RunCount/tool-edges) to the canonical `~/.go-bt-evolve/feedback.json` (`agent.FeedbackFile()`) by setting `SchedulerConfig.FeedbackPath`, so the learn→evolve loop rehydrates instead of resetting on restart — pinned by `TestDaemonWiresFeedbackPersistencePath` (see §8.4)
 - ⚠️ No query capability: List/filter operations are O(n) scans
 - ⚠️ Concurrent writes risk: Mitigated by per-agent file granularity and mutexes
 

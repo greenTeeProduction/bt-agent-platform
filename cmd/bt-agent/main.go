@@ -29,6 +29,12 @@ func resolveTree(id string) *evolution.SerializableNode {
 	return domains.ResolveTreeID(id)
 }
 
+// feedbackSnapshotPath resolves the on-disk knowledge-graph feedback snapshot
+// path the scheduler loads on startup and persists to. It mirrors
+// agent.FeedbackFile() so the daemon and the scheduler agree on a single
+// location, keeping Fitness/RunCount/tool-edges durable across restarts.
+func feedbackSnapshotPath() string { return agent.FeedbackFile() }
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -149,6 +155,11 @@ func main() {
 			Threshold: cfg.CBThreshold,
 			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
 		}),
+		// Rehydrate knowledge-graph feedback (Fitness/RunCount/tool-edges) from
+		// the on-disk snapshot on startup and persist it back, closing the
+		// learn→discover→evolve loop across restarts. FeedbackFlushInterval is
+		// left zero — NewScheduler defaults it to 30s when FeedbackPath is set.
+		FeedbackPath: feedbackSnapshotPath(),
 	})
 
 	agentRunner := &agent.RunDeps{

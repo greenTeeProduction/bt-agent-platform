@@ -16,7 +16,7 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 				Type: "Sequence", Name: "PreGate",
 				Children: []evolution.SerializableNode{
 					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
-					{Type: "Action", Name: "SetupUniversalTools"},
+					{Type: "Action", Name: "SetupUniversalTools", Description: "Grant the chain agent shell_exec, file_read and file_write so it executes commands instead of describing them"},
 				},
 			},
 			{
@@ -27,11 +27,11 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 					"system_msg": "You have shell_exec, file_read, file_write tools. Execute commands immediately — do not describe what to do. Report real tool output. NEVER simulate or fabricate results.",
 				},
 			},
-			{Type: "Action", Name: "ReflectOnOutcome"},
+			{Type: "Action", Name: "ReflectOnOutcome", Description: "Assess whether the consumer chain produced a real synthesis summary before deciding success"},
 			{
 				Type: "Selector", Name: "OutcomeSelector",
 				Children: []evolution.SerializableNode{
-					{Type: "Action", Name: "MarkSuccessful"},
+					{Type: "Action", Name: "MarkSuccessful", Description: "Record the consumer run as successful once a synthesis summary was written back to the vault"},
 					{
 						Type: "ChainAction",
 						Name: "agent:Consumer failed. Use shell_exec to check: ls -la /mnt/ssd/clawd/wiki/bt-research/syntheses/ and ls -la /mnt/ssd/clawd/wiki/bt-research/. Report the real output and fix suggestion.",

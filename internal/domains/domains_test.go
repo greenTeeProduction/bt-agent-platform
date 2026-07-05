@@ -576,6 +576,49 @@ func TestAuctionDemoTreeHasNoSilentNoOps(t *testing.T) {
 	}
 }
 
+// TestAllDomainTreesHaveDescriptionsAndLeafCoverage is the consolidated
+// description-coverage guard for the goal "enforce descriptions + leaf-condition
+// coverage across all domain trees". It walks every curated (non-arc42) tree in
+// AllDomainTrees() and asserts two things:
+//
+//	(a) the root is described in the curated Descriptions map with a non-empty
+//	    value — the gardener and the bt-agent switch_tree tool surface that entry
+//	    verbatim, so a missing/blank one registers an unexplained builtin; and
+//	(b) every LEAF Condition/Action node (no Children) carries a non-empty
+//	    Description — those descriptions are the human-readable rationale for what
+//	    a routing gate keys on or what an action actually does, and a blank one
+//	    advertises an unexplained node to operators.
+//
+// arc42 trees are generated per-section and described via their section names,
+// so they are exempt here exactly like the other curated-only guards in this
+// file. The known gap (per prior audit) is the hand-built notebooklm_consumer
+// tree, whose leaf Action nodes (SetupUniversalTools, ReflectOnOutcome,
+// MarkSuccessful) were declared without a Description — unlike the trees built
+// via the act()/outcome() helpers, which always attach one.
+func TestAllDomainTreesHaveDescriptionsAndLeafCoverage(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		isLeaf := len(node.Children) == 0
+		if isLeaf && (node.Type == "Condition" || node.Type == "Action") &&
+			strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: leaf %s node %q has an empty Description (leaf coverage gap)", treeName, node.Type, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	for name, tree := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		if desc, ok := Descriptions[name]; !ok || strings.TrimSpace(desc) == "" {
+			t.Errorf("tree %q: root %q has no non-empty Descriptions entry", name, tree.Name)
+		}
+		walk(name, *tree)
+	}
+}
+
 func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 	tree := GoapFusionLoopTree()
 

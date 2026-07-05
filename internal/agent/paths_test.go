@@ -43,4 +43,10 @@ func TestPathHelpers(t *testing.T) {
 	if got, want := WorkflowsDir(), filepath.Join(HomeDir(), "agents", "workflows"); got != want {
 		t.Errorf("WorkflowsDir() = %q, want %q", got, want)
 	}
+	if got, want := FeedbackFile(), filepath.Join(HomeDir(), "feedback.json"); got != want {
+		t.Errorf("FeedbackFile() = %q, want %q", got, want)
+	}
+	if FeedbackFile() == "" {
+		t.Error("FeedbackFile() = empty, want non-empty path")
+	}
 }

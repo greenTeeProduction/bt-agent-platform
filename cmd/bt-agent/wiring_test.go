@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
@@ -34,6 +35,23 @@ func TestDaemonResolvesWiredGoapFusionLoopTree(t *testing.T) {
 func TestDaemonConfiguresAuctionDelegateHook(t *testing.T) {
 	if engine.AuctionDelegateFn == nil {
 		t.Fatal("daemon must configure engine.AuctionDelegateFn at startup (auctioneer production wiring); hook is nil")
+	}
+}
+
+// TestDaemonWiresFeedbackPersistencePath pins that THE DAEMON BINARY resolves the
+// same on-disk feedback-snapshot path the scheduler persists knowledge-graph
+// feedback to. The daemon must expose feedbackSnapshotPath() and set it as
+// SchedulerConfig.FeedbackPath so Fitness/RunCount/tool-edges rehydrate on
+// startup instead of resetting every restart; if the helper diverges from
+// agent.FeedbackFile() (the path the scheduler loads/persists), the learn→
+// discover→evolve loop silently resets across restarts again.
+func TestDaemonWiresFeedbackPersistencePath(t *testing.T) {
+	got := feedbackSnapshotPath()
+	if got == "" {
+		t.Fatal("daemon must resolve a non-empty feedback-snapshot path (feedbackSnapshotPath())")
+	}
+	if want := agent.FeedbackFile(); got != want {
+		t.Fatalf("daemon feedback-snapshot path must equal agent.FeedbackFile(); got %q, want %q", got, want)
 	}
 }
 

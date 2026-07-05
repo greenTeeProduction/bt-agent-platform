@@ -38,4 +38,5 @@ func SchedulerJobsFile() string {
 func CircuitBreakersFile() string {
 	return filepath.Join(HomeDir(), "circuit_breakers.json")
 }
-func LogsDir() string { return filepath.Join(HomeDir(), "logs") }
+func FeedbackFile() string { return filepath.Join(HomeDir(), "feedback.json") }
+func LogsDir() string      { return filepath.Join(HomeDir(), "logs") }
