@@ -326,17 +326,13 @@ func TestAllDomainTrees(t *testing.T) {
 	}
 }
 
-// TestAllDomainTreesHaveDescriptions guards that every curated (non-arc42)
-// registered tree carries a non-empty entry in the Descriptions map. The
+// TestAllDomainTreesHaveDescriptions guards that every registered tree —
+// arc42 included — carries a non-empty entry in the Descriptions map. The
 // gardener (gardener.go) and the bt-agent switch_tree tool surface these
-// descriptions verbatim, so a missing entry silently registers a blank
-// builtin. arc42 trees are generated dynamically and described per-section,
-// so they are exempt from this curated-map check.
+// descriptions verbatim for every AllDomainTrees() entry, so a missing entry
+// silently registers a blank builtin; arc42 trees are no longer exempt.
 func TestAllDomainTreesHaveDescriptions(t *testing.T) {
 	for name := range AllDomainTrees() {
-		if strings.HasPrefix(name, "arc42:") {
-			continue
-		}
 		desc, ok := Descriptions[name]
 		if !ok || strings.TrimSpace(desc) == "" {
 			t.Errorf("tree %q is registered in AllDomainTrees but has no Descriptions entry", name)
@@ -424,14 +420,11 @@ func TestSmokeTestedDomainTreesHaveConditionDescriptions(t *testing.T) {
 // correspond to a tree actually registered in AllDomainTrees. The gardener and
 // the bt-agent switch_tree tool surface these descriptions verbatim, so an
 // orphaned entry (left behind after a tree is renamed or removed) advertises a
-// builtin that can never be selected. arc42 trees are described per-section and
-// intentionally absent from the curated Descriptions map, so they are exempt.
+// builtin that can never be selected. arc42 trees carry curated entries like
+// every other registered tree, so they are covered too.
 func TestDescriptionsHaveNoOrphans(t *testing.T) {
 	all := AllDomainTrees()
 	for name := range Descriptions {
-		if strings.HasPrefix(name, "arc42:") {
-			continue
-		}
 		if _, ok := all[name]; !ok {
 			t.Errorf("Descriptions has entry %q but no such tree is registered in AllDomainTrees", name)
 		}
@@ -650,7 +643,7 @@ func TestAllDomainTreeSelectorsHaveDescriptions(t *testing.T) {
 // TestAllDomainTreeNodesHaveDescriptions is the consolidated full-node guard:
 // every node of every type — root, interior composites (Sequence, Selector,
 // Retry, ...), and leaves (Condition, Action, ChainAction, ...) — in every
-// curated (non-arc42) registered domain tree must carry a non-empty
+// registered domain tree, arc42 included, must carry a non-empty
 // Description, and every tree must keep its non-empty Descriptions entry.
 // The narrower sibling guards (leaf, Selector, condition) stay as targeted
 // regression anchors; this walk closes the remaining gap — the seq() helper
@@ -669,13 +662,40 @@ func TestAllDomainTreeNodesHaveDescriptions(t *testing.T) {
 	}
 
 	for name, tree := range AllDomainTrees() {
-		if strings.HasPrefix(name, "arc42:") {
-			continue
-		}
 		if desc, ok := Descriptions[name]; !ok || strings.TrimSpace(desc) == "" {
 			t.Errorf("tree %q: root %q has no non-empty Descriptions entry", name, tree.Name)
 		}
 		walk(name, *tree)
+	}
+}
+
+// TestArc42DomainTreeNodesHaveDescriptions closes the last registry gap the
+// consolidated guard (TestAllDomainTreeNodesHaveDescriptions) leaves open: it
+// skips every arc42:* tree because the chain() helper (arc42_trees.go) builds
+// ChainAction nodes with no Description, leaving blank-description LLM stages
+// across the 13 arc42 trees. This walk applies the same full-node rule to the
+// arc42:* prefix so every section-generation node explains itself.
+func TestArc42DomainTreeNodesHaveDescriptions(t *testing.T) {
+	var walk func(treeName string, node evolution.SerializableNode)
+	walk = func(treeName string, node evolution.SerializableNode) {
+		if strings.TrimSpace(node.Description) == "" {
+			t.Errorf("tree %q: %s node %q has an empty Description (full-node coverage gap)", treeName, node.Type, node.Name)
+		}
+		for _, child := range node.Children {
+			walk(treeName, child)
+		}
+	}
+
+	arc42Trees := 0
+	for name, tree := range AllDomainTrees() {
+		if !strings.HasPrefix(name, "arc42:") {
+			continue
+		}
+		arc42Trees++
+		walk(name, *tree)
+	}
+	if arc42Trees == 0 {
+		t.Fatal("no arc42:* trees found in AllDomainTrees(); guard has lost its subject")
 	}
 }
 
