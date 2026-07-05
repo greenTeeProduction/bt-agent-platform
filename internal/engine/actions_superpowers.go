@@ -975,8 +975,17 @@ func init() {
 		// Runaway-loop backstop: even when every state hash is distinct — so the
 		// circuit breaker's bounded window never sees a repeat — a bounded loop
 		// runner must refuse to iterate forever.
+		//
+		// The backstop is HALF-OPEN: tripping HALTs the current cycle but SELF-CLEARS
+		// the durable state-hash history so the NEXT cron tick starts from a fresh
+		// window. Without this the persisted history would stay at >= the backstop
+		// threshold across ticks and every subsequent tick would re-HALT on the same
+		// runaway backstop — a permanent wedge (the recurring goap-fusion-loop-runner
+		// dead-letter). Halting the runaway cycle is the point; freezing the runner
+		// forever is not.
 		if len(hashes) >= goapFusionMaxLoopIterations {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nRunaway-loop backstop reached: %d state hash(es) in the published history meet or exceed the finite backstop (%d). Even with every hash distinct the loop must self-halt rather than iterate unbounded — the \"iterate forever without advancing the goal\" tail of Activity-Progress Confusion.", len(hashes), goapFusionMaxLoopIterations)
+			ClearGoapFusionStateHashes(bb)
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nRunaway-loop backstop reached: %d state hash(es) in the published history meet or exceed the finite backstop (%d). Even with every hash distinct the loop must self-halt rather than iterate unbounded — the \"iterate forever without advancing the goal\" tail of Activity-Progress Confusion. The durable state-hash history has been cleared (half-open) so the next cron tick starts from a fresh window instead of re-HALTing forever.", len(hashes), goapFusionMaxLoopIterations)
 			return -1
 		}
 
@@ -1019,10 +1028,11 @@ func init() {
 		// milestone's repeated hashes would immediately trip the breaker on
 		// the new milestone's very first cycles (and a milestone that legitimately
 		// needs several cycles could never accumulate its own fresh window).
-		if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); ref != "" {
-			if last := loadLastHashedMilestone(bb); last != ref {
+		milestone, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
+		if milestone != "" {
+			if last := loadLastHashedMilestone(bb); last != milestone {
 				ClearGoapFusionStateHashes(bb)
-				saveLastHashedMilestone(bb, ref)
+				saveLastHashedMilestone(bb, milestone)
 			}
 		}
 
@@ -1030,6 +1040,22 @@ func init() {
 		// deterministically means identical goal queues collapse to the identical
 		// state hash the repeated-state breaker relies on.
 		queue, _ := bb.ChainState["goap_fusion_goal_queue"].(string)
+
+		// Idle-tick guard: when the loop has NOTHING to work on — no active program
+		// milestone AND an empty prioritized goal queue — do not publish a state
+		// hash at all. An idle loop re-derives the identical empty queue on every
+		// cron tick; appending that identical idle hash each tick would pile up
+		// goapFusionCircuitHistoryWindow repeats of the very same hash and falsely
+		// trip the repeated-state breaker even though the loop is merely waiting for
+		// work, not stuck in an "Activity-Progress Confusion" cycle. Cross-tick
+		// accumulation of a repeated hash is the intended cycle signal ONLY when
+		// there is real work (a populated queue or an active milestone), so an idle
+		// tick must leave the durable history untouched.
+		if strings.TrimSpace(queue) == "" && milestone == "" {
+			bb.Result = "## Scheduled GOAP Fusion State Hash Skipped (Idle)\n\nNo active program milestone and an empty prioritized goal queue — the loop is idle, so no state hash was published. Publishing the identical idle hash every tick would falsely trip the repeated-state circuit breaker; the durable CIRCUITPOLICY history is left unchanged until there is real work to detect a cycle against."
+			return 1
+		}
+
 		sum := sha256.Sum256([]byte(queue))
 		hash := hex.EncodeToString(sum[:])
 
@@ -1058,7 +1084,18 @@ func init() {
 // goapFusionMaxLoopIterations recent hashes (and therefore at least
 // goapFusionCircuitHistoryWindow) so the runaway-loop backstop and the
 // repeated-state window both still function after the cap engages.
-const goapFusionStateHashHistoryCap = goapFusionMaxLoopIterations
+//
+// It is deliberately STRICTLY greater than goapFusionMaxLoopIterations (the
+// runaway-loop backstop threshold), not equal to it. A cap equal to the
+// threshold would pin the persisted history at exactly the trip point: once a
+// runaway loop accumulates goapFusionMaxLoopIterations distinct hashes, every
+// subsequent tick appends one hash and the cap truncates it straight back down
+// to the threshold, so the loop runner re-HALTs on the runaway backstop forever
+// — a permanent wedge that dead-letters the goap-fusion-loop-runner. The extra
+// goapFusionCircuitHistoryWindow of headroom means the cap alone never holds the
+// history at the trip point; only genuine accumulation does, and that is
+// self-cleared by the half-open backstop in RunScheduledGoapFusionLoop.
+const goapFusionStateHashHistoryCap = goapFusionMaxLoopIterations + goapFusionCircuitHistoryWindow
 
 // goapFusionStateHashes extracts the continuous loop's recent state-hash history,
 // reading the durable agent-scope blackboard value first so it survives across

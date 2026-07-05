@@ -55,7 +55,11 @@ const (
 	// backstop bounds the total published state-hash history so the loop runner
 	// always self-halts after a finite number of cycles even when every hash is
 	// distinct — the "iterate forever without ever advancing the goal" tail of the
-	// Activity-Progress Confusion failure mode.
+	// Activity-Progress Confusion failure mode. The backstop is HALF-OPEN: when it
+	// trips, RunScheduledGoapFusionLoop clears the durable state-hash history so the
+	// next cron tick starts from a fresh window rather than re-HALTing forever, and
+	// goapFusionStateHashHistoryCap is held strictly above this threshold so the cap
+	// alone never pins the history at the trip point.
 	goapFusionMaxLoopIterations = 50
 
 	// goapFusionMaxNoopPatchStreak is the bounded run of consecutive no-op patch

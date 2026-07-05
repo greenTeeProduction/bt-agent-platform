@@ -168,3 +168,142 @@ func TestPublishGoapFusionStateHash_ResultReflectsDurableDepth(t *testing.T) {
 		t.Fatalf("bb.Result still reports the misleading circuit-window depth %q (numerator exceeds denominator):\n%s", misleading, last.Result)
 	}
 }
+
+// When the scheduled loop is IDLE — no active program milestone AND no
+// prioritized goals to work on — PublishGoapFusionStateHash must NOT accumulate a
+// fresh state hash every tick. An idle loop re-derives the identical empty goal
+// queue on each cron tick; appending that identical hash every tick piles up
+// goapFusionCircuitHistoryWindow repeats of the very same idle hash and falsely
+// trips the repeated-state circuit breaker even though the loop is merely waiting
+// for work, not stuck in an "Activity-Progress Confusion" cycle. Cross-tick
+// accumulation of a repeated hash is the intended signal ONLY when there is real
+// work (a populated goal queue / an active milestone); idle ticks must leave the
+// durable history unchanged rather than manufacturing a phantom repeated state.
+func TestPublishGoapFusionStateHash_IdleDoesNotAccumulate(t *testing.T) {
+	action := GetAction("PublishGoapFusionStateHash")
+	if action == nil {
+		t.Fatal("missing production action PublishGoapFusionStateHash")
+	}
+
+	mgr := blackboard.NewManager(nil)
+
+	// Simulate several idle cron ticks: no goap_fusion_program_milestone and an
+	// empty prioritized goal queue (nothing to work on). Each tick is a fresh
+	// Blackboard sharing the durable agent-scope store, exactly as RunOnce builds.
+	const idleTicks = goapFusionCircuitHistoryWindow + 2
+	var last *Blackboard
+	for i := 0; i < idleTicks; i++ {
+		bb := &Blackboard{
+			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
+			ChainState: map[string]any{
+				"goap_fusion_goal_queue": "",
+			},
+		}
+		if status := action(&btcore.BTContext[Blackboard]{Blackboard: bb}); status != 1 {
+			t.Fatalf("expected SUCCESS (1) on idle tick %d, got %d: %s", i, status, bb.Result)
+		}
+		last = bb
+	}
+
+	hist := goapFusionStateHashes(last)
+	if len(hist) > 1 {
+		t.Fatalf("expected idle cron ticks (no active program milestone, empty goal queue) NOT to accumulate identical idle hashes, but the durable history grew to %d entries: %v", len(hist), hist)
+	}
+}
+
+// The idle guard must NOT suppress genuine repeated-state detection. When the
+// loop has real work — a populated goal queue — re-deriving the identical queue
+// across cron ticks must still accumulate the repeated hash the circuit breaker
+// HALTs on. This pins the idle guard to the truly-idle case (empty queue, no
+// milestone) so it cannot regress the "Activity-Progress Confusion" cycle signal.
+func TestPublishGoapFusionStateHash_ActiveWorkStillAccumulates(t *testing.T) {
+	action := GetAction("PublishGoapFusionStateHash")
+	if action == nil {
+		t.Fatal("missing production action PublishGoapFusionStateHash")
+	}
+
+	mgr := blackboard.NewManager(nil)
+
+	var last *Blackboard
+	for i := 0; i < 2; i++ {
+		bb := &Blackboard{
+			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
+			ChainState: map[string]any{
+				"goap_fusion_goal_queue": "[P0] fix the loop runner\n[P2] add smoke tests",
+			},
+		}
+		if status := action(&btcore.BTContext[Blackboard]{Blackboard: bb}); status != 1 {
+			t.Fatalf("expected SUCCESS (1) on active-work tick %d, got %d: %s", i, status, bb.Result)
+		}
+		last = bb
+	}
+
+	hist := goapFusionStateHashes(last)
+	if len(hist) != 2 || hist[0] != hist[1] {
+		t.Fatalf("expected two identical hashes accumulated for a repeated populated goal queue (the intended cycle signal), got %v", hist)
+	}
+}
+
+// The durable state-hash history cap must be STRICTLY greater than the
+// runaway-loop backstop threshold. When the cap equals the threshold, once a
+// runaway loop accumulates goapFusionMaxLoopIterations distinct hashes across
+// cron ticks the persisted history is pinned at exactly the trip point: every
+// subsequent tick appends one hash, the cap truncates it straight back to the
+// threshold, and RunScheduledGoapFusionLoop re-HALTs on the runaway backstop
+// forever — a permanent wedge that dead-letters the goap-fusion-loop-runner. A
+// cap strictly above the threshold leaves headroom so the persisted history is
+// not held at the trip point by the cap alone.
+func TestGoapFusionStateHashHistoryCap_StrictlyExceedsBackstop(t *testing.T) {
+	if goapFusionStateHashHistoryCap <= goapFusionMaxLoopIterations {
+		t.Fatalf("durable history cap (%d) must be STRICTLY greater than the runaway-loop backstop threshold (%d): a cap equal to the threshold pins the persisted history at exactly the trip point, so every cron tick re-loads a >=threshold history and re-HALTs forever", goapFusionStateHashHistoryCap, goapFusionMaxLoopIterations)
+	}
+}
+
+// The runaway-loop backstop must be HALF-OPEN: when it trips (HALT) it must
+// self-clear the durable state-hash history so the NEXT cron tick starts from a
+// fresh window. Without this, the persisted history stays at >= the backstop
+// threshold across ticks, so RunScheduledGoapFusionLoop re-HALTs on the runaway
+// backstop every subsequent tick — a permanent wedge (the recurring
+// goap-fusion-loop-runner dead-letter). Tripping HALTs the current cycle but
+// must give the next cycle a clean slate to make genuine progress.
+func TestRunScheduledGoapFusionLoop_RunawayBackstopIsHalfOpen(t *testing.T) {
+	loop := GetAction("RunScheduledGoapFusionLoop")
+	if loop == nil {
+		t.Fatal("missing production action RunScheduledGoapFusionLoop")
+	}
+
+	bb := newLoopBB(t)
+
+	// Fill the durable history with goapFusionMaxLoopIterations DISTINCT hashes:
+	// the bounded window sees no repeat and there is no no-op streak, so it is
+	// the runaway-loop backstop — not the repeated-hash breaker — that trips.
+	hashes := make([]string, goapFusionMaxLoopIterations)
+	for i := range hashes {
+		hashes[i] = fmt.Sprintf("distinct-runaway-hash-%d", i)
+	}
+	saveGoapFusionStateHashes(bb, hashes)
+	if got := len(goapFusionStateHashes(bb)); got < goapFusionMaxLoopIterations {
+		t.Fatalf("setup: expected the durable history to hold at least the backstop threshold (%d), got %d", goapFusionMaxLoopIterations, got)
+	}
+
+	// First tick: the runaway-loop backstop trips → HALT.
+	if got := loop(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("expected the runaway-loop backstop to HALT (-1) at the finite backstop, got %d: %s", got, bb.Result)
+	}
+	if !strings.Contains(bb.Result, "Runaway-loop backstop") {
+		t.Fatalf("expected the HALT to be attributed to the runaway-loop backstop, got:\n%s", bb.Result)
+	}
+
+	// Half-open: on trip the backstop must SELF-CLEAR the durable history so the
+	// history no longer sits at the trip point.
+	if remaining := goapFusionStateHashes(bb); len(remaining) != 0 {
+		t.Fatalf("half-open backstop must clear the durable state-hash history on trip, got %d entries: %v", len(remaining), remaining)
+	}
+
+	// End-to-end: the very next tick (fresh window) must be able to CONTINUE
+	// rather than re-HALT on the same runaway backstop — proving the wedge is
+	// broken.
+	if got := loop(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("expected the next tick to CONTINUE (1) after the half-open clear, got %d: %s", got, bb.Result)
+	}
+}
