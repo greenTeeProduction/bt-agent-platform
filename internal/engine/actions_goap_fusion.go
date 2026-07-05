@@ -386,9 +386,17 @@ func registerGoapFusionActions() {
 		}
 
 		currentGoals := strings.Join(goals, "\n")
-		// Compare with previous run — skip if identical (no new gaps)
+		// Compare with previous run — skip to analysis if identical (no new
+		// gaps), UNLESS an active program milestone is driving the cycle. A
+		// multi-cycle program milestone produces the identical goal queue
+		// every cycle until it lands, so the "unchanged goals → just analyze"
+		// heuristic (meant for the catalog case where nothing new to build
+		// exists) would route it to analysis forever and never implement it —
+		// the same false-positive that HALTed the loop, one layer down
+		// (2026-07-05: milestone 2 analyzed, never built).
+		activeMilestone, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
 		latestPath := filepath.Join(goapFusionVaultDir, "goap-fusion-latest.md")
-		if b, err := os.ReadFile(latestPath); err == nil {
+		if b, err := os.ReadFile(latestPath); err == nil && strings.TrimSpace(activeMilestone) == "" {
 			prevGoals := extractGoapGoals(string(b))
 			if prevGoals == currentGoals && currentGoals != "" {
 				setGoapState(bb, "goal_queue", currentGoals)

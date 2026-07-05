@@ -457,3 +457,36 @@ func TestProgramContinueNote(t *testing.T) {
 		t.Fatalf("completed programs must not emit the marker: %q", note)
 	}
 }
+
+func TestActiveProgramMilestoneNeverRoutesToAnalysisOnUnchangedGoals(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Prog", "test", []string{
+		"Milestone one in internal/a2a/one.go",
+		"Milestone two in internal/engine/two.go",
+	})
+	// milestone 1 done → milestone 2 is the active pending one.
+	ps.MarkDone(ps.Programs[0].ID, 0, "run-prior")
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	fn := GetAction("PrioritizeGoapGoals")
+	// Run twice with an IDENTICAL gap set: milestone 2 produces the same goal
+	// queue both times. Without the guard, the second run would set
+	// goals_unchanged=true and route to analysis, never implementing it.
+	for i := 0; i < 2; i++ {
+		bb := &Blackboard{Task: "improve", ChainState: map[string]any{
+			"goap_fusion_improvement_gaps": "",
+		}}
+		if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+			t.Fatalf("run %d status=%d", i, got)
+		}
+		if uc, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); uc == "true" {
+			t.Fatalf("run %d: an active program milestone must never set goals_unchanged=true (would skip implementation)", i)
+		}
+		if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); ref == "" {
+			t.Fatalf("run %d: active milestone must be queued", i)
+		}
+	}
+}
