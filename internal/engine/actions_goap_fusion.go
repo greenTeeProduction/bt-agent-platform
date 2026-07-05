@@ -316,6 +316,19 @@ func registerGoapFusionActions() {
 		// milestone auction program took 5 cycles ≈ 5 hours at 1/cycle).
 		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
 			if p := ps.Active(); p != nil {
+				// Record an attempt on the head pending milestone; if it has
+				// now failed too many times it is marked blocked (and skipped
+				// below), so an unbuildable/fabricated milestone the agent
+				// keeps declining stops freezing the program forever.
+				if idx, m := p.NextMilestone(); m != nil {
+					ps.RecordAttemptAndMaybeBlock(p.ID, idx, goapProgramMaxMilestoneAttempts)
+					_ = ps.Save()
+					// Re-open so a just-blocked milestone is reflected in the
+					// queueing pass below (which re-reads ps.Active()).
+					ps, _ = research.OpenPrograms(goapProgramsPath)
+				}
+			}
+			if p := ps.Active(); p != nil {
 				var refs []string
 				for idx := range p.Milestones {
 					m := &p.Milestones[idx]

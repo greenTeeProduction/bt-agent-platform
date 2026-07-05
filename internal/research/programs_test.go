@@ -67,3 +67,37 @@ func TestAddDeduplicatesByTitle(t *testing.T) {
 		t.Fatalf("re-proposed program must not duplicate, got %d", len(ps.Programs))
 	}
 }
+
+func TestRecordAttemptAndMaybeBlock(t *testing.T) {
+	ps, _ := OpenPrograms(filepath.Join(t.TempDir(), "p.json"))
+	p := ps.Add("Prog", "test", []string{"m1 buildable", "m2 fabricated", "m3 buildable"})
+
+	// m1 completes normally.
+	ps.MarkDone(p.ID, 0, "run-1")
+
+	// m2 fails 3 times → blocked; NextMilestone then skips to m3.
+	for i := 1; i <= 3; i++ {
+		blocked := ps.RecordAttemptAndMaybeBlock(p.ID, 1, 3)
+		if i < 3 && blocked {
+			t.Fatalf("m2 blocked too early at attempt %d", i)
+		}
+		if i == 3 && !blocked {
+			t.Fatal("m2 must be blocked after 3 attempts")
+		}
+	}
+	idx, m := ps.Active().NextMilestone()
+	if idx != 2 || m == nil {
+		t.Fatalf("after m2 blocked, next pending must be m3 (idx 2), got %d", idx)
+	}
+	if ps.Programs[0].Milestones[1].Status != "blocked" {
+		t.Fatalf("m2 status = %q, want blocked", ps.Programs[0].Milestones[1].Status)
+	}
+
+	// Block m3 too → program has no pending milestone → not Active → reseed.
+	for i := 0; i < 3; i++ {
+		ps.RecordAttemptAndMaybeBlock(p.ID, 2, 3)
+	}
+	if ps.Active() != nil {
+		t.Fatal("a program with all milestones done-or-blocked must not be Active (frees the self-seeder)")
+	}
+}

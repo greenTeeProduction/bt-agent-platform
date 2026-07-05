@@ -15,9 +15,11 @@ import (
 
 type Milestone struct {
 	Goal         string    `json:"goal"`
-	Status       string    `json:"status"` // pending | done
+	Status       string    `json:"status"` // pending | done | blocked
+	Attempts     int       `json:"attempts,omitempty"`
 	CompletedRun string    `json:"completed_run,omitempty"`
 	CompletedAt  time.Time `json:"completed_at,omitempty"`
+	BlockedAt    time.Time `json:"blocked_at,omitempty"`
 }
 
 type Program struct {
@@ -30,6 +32,8 @@ type Program struct {
 }
 
 // NextMilestone returns the first pending milestone and its index, or (-1, nil).
+// Blocked milestones (abandoned after too many attempts) are skipped, so a
+// program with one unbuildable milestone advances past it instead of freezing.
 func (p *Program) NextMilestone() (int, *Milestone) {
 	for i := range p.Milestones {
 		if p.Milestones[i].Status == "pending" {
@@ -37,6 +41,36 @@ func (p *Program) NextMilestone() (int, *Milestone) {
 		}
 	}
 	return -1, nil
+}
+
+// RecordAttemptAndMaybeBlock increments the attempt count of the milestone at
+// idx and, when it reaches maxAttempts without landing, marks it "blocked" so
+// NextMilestone skips it — the loop moves on to the next milestone (or, if none
+// remain pending, the program is no longer Active and the self-seeder proposes
+// a fresh one). It reports whether the milestone is now blocked. This is how a
+// fabricated/unbuildable milestone (which the implementation agent correctly
+// declines every cycle) stops freezing the program (2026-07-05: a "TDAD
+// decorator node" research-echo milestone was declined 10 times).
+func (ps *ProgramStore) RecordAttemptAndMaybeBlock(programID string, idx, maxAttempts int) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID || idx < 0 || idx >= len(p.Milestones) {
+			continue
+		}
+		m := &p.Milestones[idx]
+		if m.Status != "pending" {
+			return m.Status == "blocked"
+		}
+		m.Attempts++
+		if m.Attempts >= maxAttempts {
+			m.Status = "blocked"
+			m.BlockedAt = time.Now().UTC()
+			p.Updated = time.Now().UTC()
+			return true
+		}
+		p.Updated = time.Now().UTC()
+		return false
+	}
+	return false
 }
 
 type ProgramStore struct {

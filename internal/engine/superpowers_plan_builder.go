@@ -13,6 +13,12 @@ import (
 // implementation tasks. Each task is a full RED→GREEN Claude execution, so
 // three tasks is already a substantially bigger cycle than the legacy
 // single-task template while staying inside the batch timeout.
+// goapProgramMaxMilestoneAttempts bounds how many cycles the loop attempts a
+// single program milestone before marking it blocked and moving on — the
+// escape hatch for a fabricated/unbuildable milestone the implementation
+// agent keeps declining (2026-07-05: a TDAD research-echo milestone declined 10x).
+const goapProgramMaxMilestoneAttempts = 3
+
 const maxGoalDrivenTasks = 3
 
 // goFilePathRe matches repo-relative Go file paths in goal text, with or

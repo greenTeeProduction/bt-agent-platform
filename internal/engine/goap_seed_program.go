@@ -140,7 +140,12 @@ Recently implemented goals (do NOT re-propose):
 Codebase context:
 %s
 
-Propose ONE new program that expands PLATFORM capabilities (prefer
+Propose ONE new program grounded in the ACTUAL codebase — every milestone
+must extend or fix code that ALREADY EXISTS (a real package, type, or gap
+you can point to in the context above), NOT invent a new subsystem from a
+research paper. Do not propose milestones whose named files or types do not
+yet exist as if they were a known gap; the implementation agent will decline
+fabricated scope. Prefer PLATFORM capabilities (prefer
 internal/gardener, internal/evolution, internal/a2a, internal/domains,
 internal/knowledge, internal/dashboard over the self-improvement pipeline's
 own files). Return EXACTLY:
