@@ -77,6 +77,10 @@ type KnowledgeGraph struct {
 	Trees    map[string]*TreeMeta `json:"trees"`
 	Edges    []Edge               `json:"edges"`
 	Synonyms map[string]string    `json:"synonyms"` // capability → tree mapping
+
+	// feedbackPersist holds debounced-persistence state, guarded by mu. It is
+	// unexported so it never lands in the serialized graph.
+	feedbackPersist feedbackPersistState
 }
 
 // Edge is a directed relationship between two trees.
