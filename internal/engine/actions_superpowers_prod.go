@@ -935,6 +935,10 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// file anchors — a drifted cycle must not check off work it never did.
 	recordImplementedGoals(run)
 	completeGoapProgramMilestone(bb, run)
+	// Real progress landed — reset the CIRCUITPOLICY state-hash window so the
+	// next milestone starts fresh instead of inheriting this milestone's
+	// repeated hashes and tripping the preflight breaker before it can run.
+	ClearGoapFusionStateHashes(bb)
 	// The run's work is applied to master; the worktree and its merged branch
 	// are done. Cleanup is best-effort — a failure here must not turn a
 	// successfully applied run into a reported failure.

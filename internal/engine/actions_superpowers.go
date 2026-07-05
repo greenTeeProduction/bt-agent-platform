@@ -982,6 +982,21 @@ func init() {
 			bb.ChainState = map[string]any{}
 		}
 
+		// Program-milestone transition reset: when the active program milestone
+		// driving this cycle differs from the one the last state hash was
+		// published under, wipe the window first. A multi-cycle program
+		// advances milestone-by-milestone; each new milestone is genuine
+		// progress and must start with a clean window, or a preceding
+		// milestone's repeated hashes would immediately trip the breaker on
+		// the new milestone's very first cycles (and a milestone that legitimately
+		// needs several cycles could never accumulate its own fresh window).
+		if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); ref != "" {
+			if last := loadLastHashedMilestone(bb); last != ref {
+				ClearGoapFusionStateHashes(bb)
+				saveLastHashedMilestone(bb, ref)
+			}
+		}
+
 		// The prioritized goal queue is the progress-relevant state; hashing it
 		// deterministically means identical goal queues collapse to the identical
 		// state hash the repeated-state breaker relies on.
@@ -1093,6 +1108,60 @@ func loadGoapFusionStateHashes(bb *Blackboard) []string {
 		return nil
 	}
 	return hashes
+}
+
+// loadLastHashedMilestone / saveLastHashedMilestone persist the program
+// milestone ref the state hash was last published under, so a milestone
+// transition can be detected across cron ticks and reset the window.
+func loadLastHashedMilestone(bb *Blackboard) string {
+	if bb != nil && bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_last_hashed_milestone"); err == nil {
+			return strings.TrimSpace(e.Value)
+		}
+	}
+	if bb != nil && bb.ChainState != nil {
+		s, _ := bb.ChainState["goap_fusion_last_hashed_milestone"].(string)
+		return s
+	}
+	return ""
+}
+
+func saveLastHashedMilestone(bb *Blackboard, ref string) {
+	if bb == nil {
+		return
+	}
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
+	}
+	bb.ChainState["goap_fusion_last_hashed_milestone"] = ref
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Set(scope, "goap_fusion_last_hashed_milestone", ref,
+			"program milestone ref the CIRCUITPOLICY state hash was last published under", "text")
+	}
+}
+
+// ClearGoapFusionStateHashes wipes the CIRCUITPOLICY state-hash history in both
+// ChainState and the durable agent-scope store. It is called on real progress
+// — a landed commit or a program-milestone transition — because the breaker's
+// contract is "returned to a prior state WITHOUT ADVANCING": once the loop has
+// advanced, the prior window is no longer evidence of stagnation. Without this,
+// a milestone that took several cycles to land left a window of repeated hashes
+// that made the preflight breaker HALT every subsequent cycle before the NEXT
+// milestone could even be attempted (2026-07-04 18:00→: milestone 1 landed,
+// then 21 straight HALT dead letters froze the program at 1/4).
+func ClearGoapFusionStateHashes(bb *Blackboard) {
+	if bb == nil {
+		return
+	}
+	if bb.ChainState != nil {
+		delete(bb.ChainState, "goap_fusion_state_hashes")
+	}
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_state_hashes")
+	}
 }
 
 // goapFusionNoopPatchStreak extracts the continuous loop's current run of
