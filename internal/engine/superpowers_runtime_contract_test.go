@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -379,7 +380,20 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitPolicy(t
 // state hash repeats within goapFusionCircuitHistoryWindow — the repeated-state
 // cycle the PatchBoard 3-hash window is designed to catch — and CONTINUE (1)
 // when the window shows only distinct, progress-making hashes.
+
+// withNoActiveProgram isolates goapProgramsPath at an empty temp store so the
+// CIRCUITPOLICY breaker's active-program bypass does not fire — these contract
+// tests exercise the stagnation-halt behavior, which only applies to the
+// open-ended (no active program) case.
+func withNoActiveProgram(t *testing.T) {
+	t.Helper()
+	old := goapProgramsPath
+	goapProgramsPath = filepath.Join(t.TempDir(), "programs.json")
+	t.Cleanup(func() { goapProgramsPath = old })
+}
+
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts(t *testing.T) {
+	withNoActiveProgram(t)
 	action := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
 	if action == nil {
 		t.Fatalf("missing production Superpowers action %q", "EvaluateScheduledGoapFusionCircuitBreaker")
@@ -510,6 +524,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 // circuit-breaker *evaluation* exist, but nothing wires them into the bounded
 // driver that the "loop runner" actually is.
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *testing.T) {
+	withNoActiveProgram(t)
 	action := GetAction("RunScheduledGoapFusionLoop")
 	if action == nil {
 		t.Fatalf("missing production Superpowers action %q", "RunScheduledGoapFusionLoop")
@@ -590,6 +605,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *t
 // consecutive-no-op-patch run (GREEN) — the no-op-streak analogue of the
 // repeated-state-hash circuit breaker.
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches(t *testing.T) {
+	withNoActiveProgram(t)
 	action := GetAction("RunScheduledGoapFusionLoop")
 	if action == nil {
 		t.Fatalf("missing production Superpowers action %q", "RunScheduledGoapFusionLoop")
@@ -2905,6 +2921,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 // counterpart of
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches.
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHaltsOnConsecutiveNoopPatches(t *testing.T) {
+	withNoActiveProgram(t)
 	action := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
 	if action == nil {
 		t.Fatalf("missing production Superpowers action %q", "EvaluateScheduledGoapFusionCircuitBreaker")
@@ -3556,6 +3573,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 // cycle), so this producer contract is pinned here at the action's own package,
 // ready for the domains tree to embed after the cycle prioritizes its goals.
 func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPublishesStateHash(t *testing.T) {
+	withNoActiveProgram(t)
 	const producer = "PublishGoapFusionStateHash"
 
 	action := GetAction(producer)

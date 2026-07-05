@@ -19,6 +19,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -854,6 +855,25 @@ func goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool,
 	return false, window, "", false
 }
 
+// goapFusionActiveProgramMilestone reports whether a multi-cycle program with a
+// pending milestone is driving the cycle. When true, the state-hash circuit
+// breaker must NOT halt: a program milestone legitimately produces the same
+// goal-queue hash across the several cycles it takes to land, so the
+// "repeated state hash = Activity-Progress Confusion" heuristic is a false
+// positive here. Progress and runaway are bounded instead by the program's own
+// milestone-completion tracking, the 3-attempt plan-saturation guard, and the
+// loop runner's runaway backstop — not by the stagnation window. The window is
+// for the OPEN-ENDED catalog/research-goal case, where a repeated hash really
+// does mean the loop is stuck. Reads the durable program store (test seam
+// goapProgramsPath).
+func goapFusionActiveProgramMilestone() bool {
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		return false
+	}
+	return ps.Active() != nil
+}
+
 // EvaluateScheduledGoapFusionCircuitBreaker is the deterministic kernel-level
 // CIRCUITPOLICY evaluation that enforces the P0 NotebookLM research goal:
 // detecting and halting state-transition cycles and repeated no-op patch
@@ -868,6 +888,15 @@ func goapFusionCircuitPolicyVerdict(hashes []string, noopStreak int) (halt bool,
 func init() {
 	RegisterAction("EvaluateScheduledGoapFusionCircuitBreaker", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+
+		// An active program milestone is deliberate multi-cycle work whose
+		// stable goal-queue hash is expected, not stagnation — bypass the
+		// state-hash breaker (bounded instead by milestone tracking +
+		// plan-saturation). See goapFusionActiveProgramMilestone.
+		if goapFusionActiveProgramMilestone() {
+			bb.Result = "## Scheduled GOAP Fusion Circuit Breaker: CONTINUE\n\nActive program milestone driving the cycle — state-hash stagnation check bypassed (bounded by program milestone tracking and plan-saturation)."
+			return 1
+		}
 
 		hashes := goapFusionStateHashes(bb)
 		streak := goapFusionNoopPatchStreak(bb)
@@ -922,6 +951,18 @@ func init() {
 
 		hashes := goapFusionStateHashes(bb)
 		streak := goapFusionNoopPatchStreak(bb)
+
+		// Active program milestone: bypass the state-hash stagnation halts
+		// (the repeated hash is expected multi-cycle work, not stagnation),
+		// keeping only the runaway-loop backstop below as the ultimate bound.
+		if goapFusionActiveProgramMilestone() {
+			if len(hashes) >= goapFusionMaxLoopIterations {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Loop Runner: HALT\n\nRunaway-loop backstop reached (%d/%d) even under an active program milestone — self-halting.", len(hashes), goapFusionMaxLoopIterations)
+				return -1
+			}
+			bb.Result = "## Scheduled GOAP Fusion Loop Runner: CONTINUE\n\nActive program milestone driving the cycle — state-hash stagnation halts bypassed; only the runaway backstop applies. Driving the next research-to-implementation cycle."
+			return 1
+		}
 
 		// CIRCUITPOLICY: delegate the *entire* halt decision — the bounded-window dedup
 		// scan AND the consecutive-no-op-patch streak — to the same shared verdict

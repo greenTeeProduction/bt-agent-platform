@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -54,5 +55,34 @@ func TestCircuitBreakerWouldHaltStaleWindowWithoutReset(t *testing.T) {
 	halt, _, _, _ := goapFusionCircuitPolicyVerdict([]string{"d3b7", "d3b7", "d3b7"}, 0)
 	if !halt {
 		t.Fatal("three identical hashes must still trip the breaker (reset, not weaken)")
+	}
+}
+
+func TestCircuitBreakerBypassedForActiveProgram(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Prog", "test", []string{"m1 in internal/a2a/a.go", "m2 in internal/engine/b.go"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// A window of three identical hashes that WOULD trip the breaker.
+	bb := newLoopBB(t)
+	saveGoapFusionStateHashes(bb, []string{"d3b7", "d3b7", "d3b7"})
+
+	for _, action := range []string{"EvaluateScheduledGoapFusionCircuitBreaker", "RunScheduledGoapFusionLoop"} {
+		fn := GetAction(action)
+		if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+			t.Fatalf("%s: active program must bypass the stagnation halt (CONTINUE=1), got %d: %s", action, got, bb.Result)
+		}
+	}
+
+	// With NO active program, the same window must still HALT.
+	ps.MarkDone(ps.Programs[0].ID, 0, "r")
+	ps.MarkDone(ps.Programs[0].ID, 1, "r")
+	_ = ps.Save()
+	fn := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")
+	if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("no active program: repeated hash must still HALT, got %d", got)
 	}
 }
