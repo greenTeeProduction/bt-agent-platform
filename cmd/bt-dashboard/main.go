@@ -48,6 +48,17 @@ var dlq *reliability.DeadLetterQueue
 var dashWorkerPool *reliability.WorkerPool
 var dashConcurrencyLimiter *reliability.ConcurrencyLimiter
 
+// dashTaskQueue is the pending-task backlog surfaced by /api/scalability.
+// It is fed by in-flight pipeline runs (pipeline_handlers.go) and drained as
+// each run completes, so the endpoint reports real queue depth instead of 0.
+var dashTaskQueue *reliability.TaskQueue
+
+// dashAgentRouter distributes agent execution across the horizontal-scaling
+// substrate. In single-node mode it holds one healthy in-process local
+// executor; RemoteExecutor peers join it when configured. The scalability
+// endpoint reports its executor count and health.
+var dashAgentRouter *reliability.AgentRouter
+
 // dashConfig holds the runtime configuration loaded at startup.
 var dashConfig *config.Config
 
@@ -114,9 +125,29 @@ func main() {
 	// Scalability components: worker pool and concurrency limiter for agent tasks
 	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
 	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions
+
+	// Horizontal-scaling substrate: task queue + agent router. The router starts
+	// with a single in-process local executor (RemoteExecutor peers join it when
+	// configured); the queue tracks pending pipeline work. Both are surfaced by
+	// /api/scalability instead of the former nil/0 placeholders.
+	dashTaskQueue = reliability.NewTaskQueue(getHomeDir() + "/.go-bt-evolve/task_queue.json")
+	dashAgentRouter = reliability.NewAgentRouter(reliability.NewLocalExecutor(
+		"dashboard-local",
+		func(agentName, task string) (*reliability.AgentResult, error) {
+			output, outcome, err := newAgentExecutor().RunTask(agentName, task, "")
+			return &reliability.AgentResult{
+				Agent:   agentName,
+				Task:    task,
+				Output:  output,
+				Success: outcome == "success" || outcome == "completed",
+			}, err
+		},
+	))
 	slog.Info("Scalability components initialized",
 		"worker_pool_size", 4,
-		"concurrency_limit", 2)
+		"concurrency_limit", 2,
+		"router_executors", len(dashAgentRouter.Executors()),
+		"queue_pending", dashTaskQueue.Len())
 
 	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
 	tracingShutdown := tracing.InitFromEnv("bt-dashboard")
@@ -1214,19 +1245,35 @@ func handleScalability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a snapshot from currently wired scalability components.
-	// WorkerPool and ConcurrencyLimiter are initialized at dashboard startup.
-	// Queue and AgentRouter are managed by bt-agent and remain nil here.
+	// Create a snapshot from the wired scalability components. WorkerPool,
+	// ConcurrencyLimiter, TaskQueue, and AgentRouter are all initialized at
+	// dashboard startup; read their live state instead of the former placeholders.
+	var (
+		queuePending, queueMax     int
+		routerTotal, routerHealthy int
+		routerFailures             int
+		heartbeat                  *reliability.HeartbeatStats
+	)
+	if dashTaskQueue != nil {
+		queuePending = dashTaskQueue.Len()
+	}
+	if dashAgentRouter != nil {
+		routerTotal = len(dashAgentRouter.Executors())
+		routerHealthy = len(dashAgentRouter.HealthyExecutors())
+		routerFailures = dashAgentRouter.ConsecutiveFailures()
+		heartbeat = dashAgentRouter.HeartbeatStats()
+	}
+
 	status := reliability.NewScalabilityStatus(
 		dashWorkerPool,         // worker pool (4 workers, active/queued counts from running tasks)
 		dashConcurrencyLimiter, // concurrency limiter (2 max concurrent LLM executions)
-		0,                      // queue pending
-		0,                      // queue max len
-		0,                      // router total
-		0,                      // router healthy
+		queuePending,           // queue pending (injected TaskQueue depth)
+		queueMax,               // queue max len (unbounded)
+		routerTotal,            // router total (injected AgentRouter executor count)
+		routerHealthy,          // router healthy
 		nil,                    // connection pool (managed by RemoteExecutor)
-		0,                      // router failures
-		nil,                    // heartbeat stats
+		routerFailures,         // router failures (executors with consecutive failures)
+		heartbeat,              // heartbeat stats (nil unless a tracker is configured)
 	)
 
 	w.Header().Set("Content-Type", "application/json")

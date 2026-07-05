@@ -177,9 +177,18 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	pipelineRuns[runID] = rec
 	pipelineRunsMu.Unlock()
 
+	// Enqueue the run onto the horizontal-scaling task queue so /api/scalability
+	// reports real pending depth; the run drains it on completion below.
+	if dashTaskQueue != nil {
+		dashTaskQueue.Enqueue(runID)
+	}
+
 	slog.Info("pipeline: starting execution", "run_id", runID, "pipeline", pipeline.Name)
 
 	go func() {
+		if dashTaskQueue != nil {
+			defer dashTaskQueue.Dequeue()
+		}
 		runner := newPipelineRunner(runID, "pipeline", pipeline.Name)
 		result, runErr := runner.Run(context.Background(), pipeline, req.Input)
 
