@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -116,6 +117,15 @@ func main() {
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
+
+	// Embed the VCS build identity: publish the bt_build_info gauge and log
+	// revision/commit-time/dirty so a running gardener's revision is comparable
+	// against repo HEAD (stale-daemon-binary drift detection).
+	buildID := dashboard.InstallBuildIdentity()
+	engine.Info("build identity",
+		"vcs_revision", buildID.Revision,
+		"vcs_time", buildID.CommitTime,
+		"vcs_dirty", buildID.Dirty)
 
 	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
 	tracingShutdown := tracing.InitFromEnv("bt-gardener")
