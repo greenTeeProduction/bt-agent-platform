@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,15 @@ func withFusionKnowledge(t *testing.T) string {
 	old := btFusionKnowledgePath
 	btFusionKnowledgePath = path
 	t.Cleanup(func() { btFusionKnowledgePath = old })
+	// Keep every SearchForBTPatterns test hermetic: without this stub, tests
+	// that resolve arc42 goals exec the live NotebookLM CLI (retries, circuit
+	// breaker, real quota). Tests needing custom behavior override it after
+	// calling this helper.
+	oldRun := nlmFusionResearchRun
+	nlmFusionResearchRun = func(time.Duration, ...string) string {
+		return `{"answer":"hermetic test stub: no live NotebookLM research performed"}`
+	}
+	t.Cleanup(func() { nlmFusionResearchRun = oldRun })
 	return path
 }
 
@@ -149,6 +160,37 @@ func TestReportNoNewResearchSucceedsWithoutReportWrite(t *testing.T) {
 	}
 	if !strings.Contains(bb.Result, "No New Research") {
 		t.Fatalf("result must state that nothing new was found, got: %s", bb.Result)
+	}
+}
+
+func TestWithFusionKnowledgeStubsLiveNotebookLMResearch(t *testing.T) {
+	// Regression: withFusionKnowledge redirected only the knowledge store, so
+	// every test that invoked SearchForBTPatterns without its own explicit
+	// stub exec'd the live NotebookLM CLI (retries, circuit breaker, real
+	// quota) whenever arc42 goals resolved. The shared helper must install a
+	// hermetic nlmFusionResearchRun stub returning a fixed JSON answer; tests
+	// needing custom behavior still override it afterwards.
+	live := reflect.ValueOf(nlmRun).Pointer()
+
+	t.Run("helper stubs the research runner", func(t *testing.T) {
+		withFusionKnowledge(t)
+		if reflect.ValueOf(nlmFusionResearchRun).Pointer() == live {
+			t.Fatal("withFusionKnowledge must stub nlmFusionResearchRun; SearchForBTPatterns tests would exec the live NotebookLM CLI")
+		}
+		out := nlmFusionResearchRun(time.Second, "notebook", "query", "--json", "--timeout", "180", defaultNotebook, "hermetic stub probe")
+		var payload struct {
+			Answer string `json:"answer"`
+		}
+		if err := json.Unmarshal([]byte(out), &payload); err != nil || strings.TrimSpace(payload.Answer) == "" {
+			t.Fatalf("stub must return a fixed JSON answer envelope, got: %q", out)
+		}
+		if isGoapNotebookLMFailure(out) {
+			t.Fatalf("stub output must not read as a NotebookLM failure: %q", out)
+		}
+	})
+
+	if reflect.ValueOf(nlmFusionResearchRun).Pointer() != live {
+		t.Fatal("withFusionKnowledge cleanup must restore the live nlmFusionResearchRun")
 	}
 }
 
