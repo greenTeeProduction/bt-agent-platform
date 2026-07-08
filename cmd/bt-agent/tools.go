@@ -602,13 +602,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		func(args json.RawMessage) *engine.ToolResult {
 			var params struct {
 				Tree        string `json:"tree"`
-				Population  int    `json:"population"`
+				Population  *int   `json:"population"`
 				Generations int    `json:"generations"`
 				Domain      string `json:"domain"`
 			}
 			_ = json.Unmarshal(args, &params)
-			if params.Population <= 0 {
-				params.Population = 20
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
 			}
 			if params.Generations <= 0 {
 				params.Generations = 10
@@ -622,9 +623,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			// Deterministic, LLM-free evolution reusing the shared structural
 			// fitness — avoids EvolveMAPElites, which invokes the LLM supervisor.
-			pop := evolution.NewPopulation(params.Population, baseTree)
+			pop := evolution.NewPopulation(population, baseTree)
 			pop.Evolve(params.Generations, structuralFitnessFn)
-			grid := evolution.NewMAPElitesGrid(params.Population / 2)
+			grid := evolution.NewMAPElitesGrid(population / 2)
 			grid.InsertFromPopulation(pop, params.Domain)
 			data, _ := json.Marshal(map[string]interface{}{
 				"tree": params.Tree, "domain": params.Domain, "generations": pop.Generation,
@@ -833,7 +834,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			var params struct {
 				Tree              string  `json:"tree"`
 				Islands           int     `json:"islands"`
-				Population        int     `json:"population"`
+				Population        *int    `json:"population"`
 				Generations       int     `json:"generations"`
 				MigrationInterval int     `json:"migration_interval"`
 				MigrationRate     float64 `json:"migration_rate"`
@@ -843,8 +844,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if params.Islands <= 0 {
 				params.Islands = 3
 			}
-			if params.Population <= 0 {
-				params.Population = 10
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
+			}
+			if params.Population == nil {
+				// The documented per-island default is 10, not the shared
+				// resolveEvolvePopulation default of 20.
+				population = 10
 			}
 			if params.Generations <= 0 {
 				params.Generations = 10
@@ -883,11 +890,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				params.Islands = len(names)
 				for _, name := range names {
-					im.AddIsland(name, evolution.NewPopulation(params.Population, seeds[name]))
+					im.AddIsland(name, evolution.NewPopulation(population, seeds[name]))
 				}
 			} else {
 				for i := 0; i < params.Islands; i++ {
-					im.AddIsland(fmt.Sprintf("island_%d", i), evolution.NewPopulation(params.Population, baseTree))
+					im.AddIsland(fmt.Sprintf("island_%d", i), evolution.NewPopulation(population, baseTree))
 				}
 			}
 			for g := 0; g < params.Generations; g++ {

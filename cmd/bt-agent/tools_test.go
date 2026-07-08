@@ -657,8 +657,9 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 
 // TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary pins the MCP-boundary
 // validation for degenerate evolve params (Q3 defense-in-depth on top of the
-// engine-side eliteCount clamp): bt_evolve_genetic, bt_evolve_multiobjective,
-// bt_evolve_bottlenecks, and bt_evolve_memetic must reject an explicitly supplied population < 2
+// engine-side eliteCount clamp): all six evolve tools — bt_evolve_genetic,
+// bt_evolve_multiobjective, bt_evolve_bottlenecks, bt_evolve_memetic,
+// bt_evolve_qd, and bt_evolve_island — must reject an explicitly supplied population < 2
 // with the structured {"error":"population must be at least 2"} shape before
 // any engine work runs — a one-individual "population" cannot evolve (elitism
 // and crossover both need two individuals) and historically panicked deep in
@@ -682,6 +683,8 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 		{"bt_evolve_multiobjective", `{"tree":"godev","population":%d,"generations":2}`, "pareto_front_size"},
 		{"bt_evolve_bottlenecks", `{"population":%d,"generations":2}`, "report"},
 		{"bt_evolve_memetic", `{"tree":"godev","population":%d,"generations":2,"strategy":"hill-climb"}`, "best_fitness"},
+		{"bt_evolve_qd", `{"tree":"godev","population":%d,"generations":2}`, "diversity_score"},
+		{"bt_evolve_island", `{"tree":"godev","population":%d,"generations":2}`, "per_island_best"},
 	}
 	for _, tc := range cases {
 		for _, pop := range []int{1, -3} {

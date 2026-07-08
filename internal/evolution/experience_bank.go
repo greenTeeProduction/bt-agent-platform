@@ -316,12 +316,47 @@ func (eb *ExperienceBank) Stats() map[string]interface{} {
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
 // addEntry adds an entry, enforces the capacity cap, and persists the bank.
+// Before the full-file rewrite in Persist, on-disk entries are merged back in
+// so a concurrent writer's adds (daemon + gardener share experience.json) are
+// never silently dropped.
 func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
 	eb.mu.Lock()
+	eb.mergeFromDiskLocked()
 	eb.Entries = append(eb.Entries, entry)
 	eb.enforceCapLocked()
 	eb.mu.Unlock()
 	return eb.Persist()
+}
+
+// mergeFromDiskLocked reloads the persisted file and merges its entries into
+// memory by ID: disk-only entries are adopted, and for IDs present in both the
+// higher TimesReused wins (reuse counts recorded by the other writer must
+// survive this writer's rewrite). A missing or corrupt file leaves the
+// in-memory state untouched. Caller must hold eb.mu.
+func (eb *ExperienceBank) mergeFromDiskLocked() {
+	data, err := os.ReadFile(eb.PersistPath)
+	if err != nil {
+		return
+	}
+	var wrapper struct {
+		Entries []ExperienceEntry `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		return
+	}
+	index := make(map[string]int, len(eb.Entries))
+	for i, e := range eb.Entries {
+		index[e.ID] = i
+	}
+	for _, d := range wrapper.Entries {
+		if i, ok := index[d.ID]; ok {
+			if d.TimesReused > eb.Entries[i].TimesReused {
+				eb.Entries[i].TimesReused = d.TimesReused
+			}
+			continue
+		}
+		eb.Entries = append(eb.Entries, d)
+	}
 }
 
 // enforceCapLocked evicts entries until the bank fits experienceBankCap.

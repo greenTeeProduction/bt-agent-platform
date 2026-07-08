@@ -779,6 +779,111 @@ func TestExperienceBank_CapEnforcedOnLoad(t *testing.T) {
 	}
 }
 
+// ─── Two-writer persistence safety (Q3 Reliability) ─────────────────────────
+//
+// The daemon and the gardener each hold their own ExperienceBank over the SAME
+// experience.json. Add's full-file rewrite must first reload and merge on-disk
+// entries by ID (preserving the higher TimesReused), so one writer's adds are
+// never silently dropped by the other's rewrite.
+
+func TestExperienceBank_TwoWriterInterleavedWritesPreserveAllEntries(t *testing.T) {
+	dir := t.TempDir()
+	daemon, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (daemon): %v", err)
+	}
+	gardener, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (gardener): %v", err)
+	}
+
+	// Interleave adds: neither bank ever reloads the other's in-memory state,
+	// exactly like two long-lived processes sharing the file.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const perWriter = 5
+	for i := 0; i < perWriter; i++ {
+		de := mkExperienceEntry(fmt.Sprintf("daemon_%02d", i), 0.6, base.Add(time.Duration(2*i)*time.Minute), 0)
+		if err := daemon.addEntry(de); err != nil {
+			t.Fatalf("daemon addEntry %d: %v", i, err)
+		}
+		ge := mkExperienceEntry(fmt.Sprintf("gardener_%02d", i), 0.6, base.Add(time.Duration(2*i+1)*time.Minute), 0)
+		if err := gardener.addEntry(ge); err != nil {
+			t.Fatalf("gardener addEntry %d: %v", i, err)
+		}
+	}
+
+	// A fresh load sees only what survived on disk.
+	reloaded, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (reload): %v", err)
+	}
+	if got, want := reloaded.Count(), 2*perWriter; got != want {
+		t.Errorf("interleaved two-writer adds dropped entries: %d on disk, want %d", got, want)
+	}
+	for i := 0; i < perWriter; i++ {
+		for _, id := range []string{fmt.Sprintf("daemon_%02d", i), fmt.Sprintf("gardener_%02d", i)} {
+			if !bankHasEntry(reloaded, id) {
+				t.Errorf("entry %s was silently dropped by the other writer's rewrite", id)
+			}
+		}
+	}
+}
+
+func TestExperienceBank_TwoWriterMergePreservesHigherTimesReused(t *testing.T) {
+	dir := t.TempDir()
+	daemon, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (daemon): %v", err)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	shared := mkExperienceEntry("shared", 0.7, base, 0)
+	if err := daemon.addEntry(shared); err != nil {
+		t.Fatalf("daemon addEntry (shared): %v", err)
+	}
+
+	// The gardener loads the shared entry and records reuse on disk.
+	gardener, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (gardener): %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := gardener.MarkReused([]string{"shared"}); err != nil {
+			t.Fatalf("gardener MarkReused %d: %v", i, err)
+		}
+	}
+
+	// The daemon still holds the stale in-memory copy (TimesReused=0). Its next
+	// Add rewrites the file and must merge by ID, keeping the higher on-disk
+	// TimesReused instead of clobbering it.
+	fresh := mkExperienceEntry("daemon_fresh", 0.6, base.Add(time.Minute), 0)
+	if err := daemon.addEntry(fresh); err != nil {
+		t.Fatalf("daemon addEntry (fresh): %v", err)
+	}
+
+	reloaded, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (reload): %v", err)
+	}
+	if !bankHasEntry(reloaded, "daemon_fresh") {
+		t.Error("daemon's new entry missing after merge-on-Add rewrite")
+	}
+	found := false
+	reloaded.mu.RLock()
+	for _, e := range reloaded.Entries {
+		if e.ID == "shared" {
+			found = true
+			if e.TimesReused != 3 {
+				t.Errorf("shared entry TimesReused = %d after daemon rewrite, want 3 (higher on-disk count must win the merge)", e.TimesReused)
+			}
+		}
+	}
+	reloaded.mu.RUnlock()
+	if !found {
+		t.Error("shared entry was silently dropped by daemon's rewrite")
+	}
+}
+
 // Benchmarks
 func BenchmarkAddFromMutation(b *testing.B) {
 	dir := b.TempDir()
