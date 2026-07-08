@@ -902,7 +902,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_evolve_bottlenecks", "Evolve every knowledge-graph bottleneck tree (RunCount >= 3, Fitness < 30) with experience-grounded evolution and report per-tree before/after fitness",
+	server.RegisterTool("bt_evolve_bottlenecks", "Evolve every knowledge-graph bottleneck tree (RunCount >= 3, Fitness < 30), routing trees with tunable parameters to CMA-ES tuning and the rest to experience-grounded genetic evolution, and report per-tree before/after fitness plus the algorithm that handled each tree",
 		map[string]engine.Property{
 			"population":  {Type: "integer", Description: "Population size per bottleneck (default: 20)"},
 			"generations": {Type: "integer", Description: "Number of generations per bottleneck (default: 10)"},
@@ -936,6 +936,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			report := []map[string]interface{}{}
 			skipped := []string{}
+			algorithms := map[string]int{}
 			for _, b := range bottlenecks {
 				baseTree := resolveTree(b.TreeID)
 				if baseTree == nil {
@@ -944,6 +945,21 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					skipped = append(skipped, b.TreeID)
 					continue
 				}
+				// Trees with tunable parameters get CMA-ES parameter tuning;
+				// parameterless trees fall back to structural genetic evolution.
+				if _, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
+					algorithms["cmaes"]++
+					report = append(report, map[string]interface{}{
+						"tree":           b.TreeID,
+						"before_fitness": b.SuccessRate,
+						"after_fitness":  bestFitness,
+						"runs":           b.Runs,
+						"tuned_params":   len(tunedParams),
+						"algorithm":      "cmaes",
+					})
+					continue
+				}
+				algorithms["genetic"]++
 				pop := evolution.NewPopulation(population, baseTree)
 				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				report = append(report, map[string]interface{}{
@@ -952,12 +968,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					"after_fitness":  pop.BestFitness,
 					"runs":           b.Runs,
 					"generations":    pop.Generation,
+					"algorithm":      "genetic",
 				})
 			}
 			data, _ := json.Marshal(map[string]interface{}{
 				"bottlenecks":             len(bottlenecks),
 				"report":                  report,
 				"skipped":                 skipped,
+				"algorithms":              algorithms,
 				"experience_bank_entries": bankEntries,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

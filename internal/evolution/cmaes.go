@@ -85,19 +85,39 @@ func ExtractParameters(tree *SerializableNode) []TunableParam {
 }
 
 func collectParams(node *SerializableNode, path string, params *[]TunableParam) {
+	// TimeoutMs: Metadata key or struct field, at most one param per node.
+	hasTimeoutMeta := false
 	if node.Metadata != nil {
-		// TimeoutMs
-		if _, ok := node.Metadata["timeout_ms"]; ok {
-			*params = append(*params, TunableParam{
-				Name:      node.Name + ".timeout_ms",
-				Lower:     100,
-				Upper:     60000,
-				InitValue: 30000,
-				NodePath:  path,
-				MetaKey:   "timeout_ms",
-			})
+		_, hasTimeoutMeta = node.Metadata["timeout_ms"]
+	}
+	if hasTimeoutMeta {
+		*params = append(*params, TunableParam{
+			Name:      node.Name + ".timeout_ms",
+			Lower:     100,
+			Upper:     60000,
+			InitValue: 30000,
+			NodePath:  path,
+			MetaKey:   "timeout_ms",
+		})
+	} else if node.TimeoutMs > 0 {
+		init := float64(node.TimeoutMs)
+		if init < 100 {
+			init = 100
 		}
-		// Threshold
+		if init > 60000 {
+			init = 60000
+		}
+		*params = append(*params, TunableParam{
+			Name:      node.Name + ".timeout_ms",
+			Lower:     100,
+			Upper:     60000,
+			InitValue: init,
+			NodePath:  path,
+			MetaKey:   "timeout_ms",
+		})
+	}
+	// Threshold
+	if node.Metadata != nil {
 		if _, ok := node.Metadata["threshold"]; ok {
 			*params = append(*params, TunableParam{
 				Name:      node.Name + ".threshold",
@@ -108,17 +128,17 @@ func collectParams(node *SerializableNode, path string, params *[]TunableParam) 
 				MetaKey:   "threshold",
 			})
 		}
-		// MaxRetries
-		if node.MaxRetries > 0 {
-			*params = append(*params, TunableParam{
-				Name:      node.Name + ".max_retries",
-				Lower:     0,
-				Upper:     10,
-				InitValue: float64(node.MaxRetries),
-				NodePath:  path,
-				MetaKey:   "max_retries",
-			})
-		}
+	}
+	// MaxRetries: struct field, independent of Metadata presence.
+	if node.MaxRetries > 0 {
+		*params = append(*params, TunableParam{
+			Name:      node.Name + ".max_retries",
+			Lower:     0,
+			Upper:     10,
+			InitValue: float64(node.MaxRetries),
+			NodePath:  path,
+			MetaKey:   "max_retries",
+		})
 	}
 
 	for i := range node.Children {
@@ -220,6 +240,50 @@ func parseInt(s string) (int, error) {
 		n = n*10 + int(c-'0')
 	}
 	return n, nil
+}
+
+// ─── Tree-Level Tuning ─────────────────────────────────────────────────────
+
+// TuneTreeParameters runs the full Extract→Optimize→Apply pipeline on a tree.
+// It extracts tunable parameters, optimizes them with CMA-ES against fitnessFn
+// (which scores a candidate tree, higher is better), and returns a tuned clone.
+// The input tree is never mutated. Returns ok=false without calling fitnessFn
+// when the tree is nil or has no tunable parameters. populationSize and
+// maxGenerations override the optimizer defaults when > 0.
+func TuneTreeParameters(
+	tree *SerializableNode,
+	populationSize, maxGenerations int,
+	fitnessFn func(*SerializableNode) float64,
+) (tuned *SerializableNode, params []TunableParam, bestFitness float64, ok bool) {
+	params = ExtractParameters(tree)
+	if len(params) == 0 {
+		return nil, nil, 0, false
+	}
+
+	cma := NewCMAESOptimizer()
+	if populationSize > 0 {
+		cma.PopulationSize = populationSize
+	}
+	if maxGenerations > 0 {
+		cma.MaxGenerations = maxGenerations
+	}
+
+	// Optimize hands the adapter normalized [0,1] solutions; denormalize to
+	// param bounds before ApplyParameters (which clamps to those bounds).
+	best := cma.Optimize(params, func(solution []float64) float64 {
+		denorm := make([]float64, len(solution))
+		for i, p := range params {
+			denorm[i] = p.Lower + solution[i]*(p.Upper-p.Lower)
+		}
+		scratch := cloneTree(tree)
+		ApplyParameters(scratch, params, denorm)
+		return fitnessFn(scratch)
+	})
+
+	tuned = cloneTree(tree)
+	ApplyParameters(tuned, params, best)
+	// Score the tuned tree itself so bestFitness reflects post-apply rounding.
+	return tuned, params, fitnessFn(tuned), true
 }
 
 // ─── Core CMA-ES ───────────────────────────────────────────────────────────

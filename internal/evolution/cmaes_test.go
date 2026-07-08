@@ -132,6 +132,84 @@ func TestExtractParameters(t *testing.T) {
 	}
 }
 
+func TestExtractParameters_StructFields(t *testing.T) {
+	// Nodes with TimeoutMs/MaxRetries set as struct fields (the form
+	// ApplyParameters writes back) but nil Metadata must still be tunable.
+	tree := &SerializableNode{
+		Name:       "root",
+		Type:       "Selector",
+		TimeoutMs:  5000,
+		MaxRetries: 3,
+		Children: []SerializableNode{
+			{
+				Name:      "child1",
+				Type:      "Action",
+				TimeoutMs: 8000,
+			},
+		},
+	}
+
+	params := ExtractParameters(tree)
+
+	find := func(nodePath, metaKey string) *TunableParam {
+		for i := range params {
+			if params[i].NodePath == nodePath && params[i].MetaKey == metaKey {
+				return &params[i]
+			}
+		}
+		return nil
+	}
+
+	rootTimeout := find("", "timeout_ms")
+	if rootTimeout == nil {
+		t.Fatalf("expected timeout_ms param for root (TimeoutMs field, nil Metadata); got params: %+v", params)
+	}
+	if rootTimeout.InitValue != 5000 {
+		t.Errorf("expected root timeout_ms InitValue=5000 (seeded from field), got %v", rootTimeout.InitValue)
+	}
+
+	rootRetries := find("", "max_retries")
+	if rootRetries == nil {
+		t.Fatalf("expected max_retries param for root (MaxRetries field, nil Metadata); got params: %+v", params)
+	}
+	if rootRetries.InitValue != 3 {
+		t.Errorf("expected root max_retries InitValue=3, got %v", rootRetries.InitValue)
+	}
+
+	childTimeout := find("children.0", "timeout_ms")
+	if childTimeout == nil {
+		t.Fatalf("expected timeout_ms param for child at children.0; got params: %+v", params)
+	}
+	if childTimeout.InitValue != 8000 {
+		t.Errorf("expected child timeout_ms InitValue=8000 (seeded from field), got %v", childTimeout.InitValue)
+	}
+}
+
+func TestExtractParameters_TimeoutDedupe(t *testing.T) {
+	// A node carrying both the Metadata key and the struct field must emit
+	// exactly one timeout_ms param, not two.
+	tree := &SerializableNode{
+		Name:      "root",
+		Type:      "Action",
+		TimeoutMs: 5000,
+		Metadata: map[string]any{
+			"timeout_ms": float64(5000),
+		},
+	}
+
+	params := ExtractParameters(tree)
+
+	count := 0
+	for _, p := range params {
+		if p.MetaKey == "timeout_ms" && p.NodePath == "" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 timeout_ms param for root, got %d (params: %+v)", count, params)
+	}
+}
+
 func TestApplyParameters(t *testing.T) {
 	tree := &SerializableNode{
 		Name: "root",
@@ -158,6 +236,91 @@ func TestApplyParameters(t *testing.T) {
 	if !ok || thresh != 0.8 {
 		t.Errorf("expected threshold=0.8, got %v (type %T)", tree.Metadata["threshold"], tree.Metadata["threshold"])
 	}
+}
+
+func TestTuneTreeParameters(t *testing.T) {
+	t.Run("nil tree returns ok=false", func(t *testing.T) {
+		tuned, params, _, ok := TuneTreeParameters(nil, 6, 5, func(*SerializableNode) float64 { return 0 })
+		if ok {
+			t.Error("expected ok=false for nil tree")
+		}
+		if tuned != nil {
+			t.Errorf("expected nil tuned tree, got %+v", tuned)
+		}
+		if len(params) != 0 {
+			t.Errorf("expected no params, got %+v", params)
+		}
+	})
+
+	t.Run("no tunable params returns ok=false", func(t *testing.T) {
+		tree := &SerializableNode{Name: "leaf", Type: "Action"}
+		called := false
+		tuned, params, _, ok := TuneTreeParameters(tree, 6, 5, func(*SerializableNode) float64 {
+			called = true
+			return 0
+		})
+		if ok {
+			t.Error("expected ok=false for tree without tunable params")
+		}
+		if tuned != nil {
+			t.Errorf("expected nil tuned tree, got %+v", tuned)
+		}
+		if len(params) != 0 {
+			t.Errorf("expected no params, got %+v", params)
+		}
+		if called {
+			t.Error("fitnessFn must not be called when there is nothing to tune")
+		}
+	})
+
+	t.Run("tunes timeout without mutating input", func(t *testing.T) {
+		tree := &SerializableNode{
+			Name:      "root",
+			Type:      "Action",
+			TimeoutMs: 5000,
+		}
+
+		// Deterministic structural fitness: reward proximity to a 30s timeout.
+		fitnessFn := func(n *SerializableNode) float64 {
+			return 100.0 - math.Abs(float64(n.TimeoutMs)-30000)/1000.0
+		}
+
+		tuned, params, bestFitness, ok := TuneTreeParameters(tree, 6, 5, fitnessFn)
+		if !ok {
+			t.Fatal("expected ok=true for tree with a tunable timeout")
+		}
+		if tuned == nil {
+			t.Fatal("expected non-nil tuned tree")
+		}
+		if tuned == tree {
+			t.Fatal("tuned tree must be a clone, not the input tree")
+		}
+		if len(params) != 1 {
+			t.Fatalf("expected 1 extracted param, got %d: %+v", len(params), params)
+		}
+		if params[0].MetaKey != "timeout_ms" {
+			t.Errorf("expected timeout_ms param, got %+v", params[0])
+		}
+
+		// Input tree must be untouched.
+		if tree.TimeoutMs != 5000 {
+			t.Errorf("input tree mutated: TimeoutMs=%d, want 5000", tree.TimeoutMs)
+		}
+		if len(tree.Children) != 0 || tree.Metadata != nil {
+			t.Errorf("input tree structure mutated: %+v", tree)
+		}
+
+		// Tuned value must lie within the extracted param bounds.
+		got := float64(tuned.TimeoutMs)
+		if got < params[0].Lower || got > params[0].Upper {
+			t.Errorf("tuned TimeoutMs=%v outside bounds [%v, %v]", got, params[0].Lower, params[0].Upper)
+		}
+
+		// bestFitness must describe the returned tuned tree.
+		if want := fitnessFn(tuned); math.Abs(bestFitness-want) > 1e-9 {
+			t.Errorf("bestFitness=%v, but fitnessFn(tuned)=%v", bestFitness, want)
+		}
+	})
 }
 
 func TestSampleStdNormal(t *testing.T) {

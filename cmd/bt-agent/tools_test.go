@@ -364,12 +364,27 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 // bottlenecks must yield an empty report rather than an error. A nil
 // experience bank (as in this test's bare mcpDeps) must degrade gracefully,
 // with the consulted bank surfaced via "experience_bank_entries".
+//
+// Algorithm selection: a bottleneck tree carrying tunable parameters
+// (domain:code_review has a Retry MaxRetries knob) must be routed to CMA-ES
+// parameter tuning via evolution.TuneTreeParameters — its report entry tagged
+// "algorithm":"cmaes" with a positive "tuned_params" count — while a tree with
+// no tunable parameters (domain:alert_router) must fall back to the genetic
+// EvolveWithExperience path, tagged "algorithm":"genetic". The top-level
+// "algorithms" tally must state which algorithm handled how many trees.
 func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) {
 	kg := knowledge.NewKnowledgeGraph()
-	// Underperforming tree that resolves to a real domain behavior tree.
+	// Underperforming tree that resolves to a real domain behavior tree with
+	// at least one tunable parameter (CMA-ES eligible).
 	kg.Register(&knowledge.TreeMeta{
 		ID: "domain:code_review", Name: "Code Review", Category: "domain",
 		Fitness: 12, RunCount: 5,
+	})
+	// Underperforming tree that resolves to a real domain behavior tree with
+	// zero tunable parameters: must fall back to the genetic path.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 8, RunCount: 3,
 	})
 	// Healthy tree: must never appear in the evolution report.
 	kg.Register(&knowledge.TreeMeta{
@@ -408,26 +423,39 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 		t.Fatalf("bt_evolve_bottlenecks unexpectedly returned an error for a graph with bottlenecks: %v", out)
 	}
 
-	// Both underperformers count as detected bottlenecks.
-	if n, isNum := out["bottlenecks"].(float64); !isNum || int(n) != 2 {
-		t.Errorf("bt_evolve_bottlenecks must report 'bottlenecks' = 2 (both RunCount>=3, Fitness<30 trees); got %v", out["bottlenecks"])
+	// All three underperformers count as detected bottlenecks.
+	if n, isNum := out["bottlenecks"].(float64); !isNum || int(n) != 3 {
+		t.Errorf("bt_evolve_bottlenecks must report 'bottlenecks' = 3 (all RunCount>=3, Fitness<30 trees); got %v", out["bottlenecks"])
 	}
 
-	// The per-tree report holds exactly the one resolvable bottleneck, with its
-	// KG fitness echoed as before_fitness and a computed after_fitness.
+	// The per-tree report holds exactly the two resolvable bottlenecks, with
+	// the KG fitness echoed as before_fitness and a computed after_fitness.
+	// Bottleneck ordering is not guaranteed, so entries are looked up by tree.
 	report, isList := out["report"].([]interface{})
 	if !isList {
 		t.Fatalf("bt_evolve_bottlenecks must return a 'report' JSON array; got %T (%v)", out["report"], out["report"])
 	}
-	if len(report) != 1 {
-		t.Fatalf("bt_evolve_bottlenecks 'report' must hold exactly the 1 resolvable bottleneck; got %d entries: %v", len(report), report)
+	if len(report) != 2 {
+		t.Fatalf("bt_evolve_bottlenecks 'report' must hold exactly the 2 resolvable bottlenecks; got %d entries: %v", len(report), report)
 	}
-	entry, isObj := report[0].(map[string]interface{})
-	if !isObj {
-		t.Fatalf("bt_evolve_bottlenecks report entries must be JSON objects; got %T (%v)", report[0], report[0])
+	byTree := map[string]map[string]interface{}{}
+	for _, e := range report {
+		m, isMap := e.(map[string]interface{})
+		if !isMap {
+			t.Fatalf("bt_evolve_bottlenecks report entries must be JSON objects; got %T (%v)", e, e)
+		}
+		tree, _ := m["tree"].(string)
+		byTree[tree] = m
 	}
-	if entry["tree"] != "domain:code_review" {
-		t.Errorf("bt_evolve_bottlenecks report entry must name 'tree' = %q; got %v", "domain:code_review", entry["tree"])
+	if _, evolved := byTree["domain:security_audit"]; evolved {
+		t.Errorf("bt_evolve_bottlenecks must not evolve the healthy tree domain:security_audit; report: %v", report)
+	}
+
+	// domain:code_review carries a tunable parameter, so it must be routed to
+	// CMA-ES parameter tuning and report which algorithm handled it.
+	entry := byTree["domain:code_review"]
+	if entry == nil {
+		t.Fatalf("bt_evolve_bottlenecks report must include an entry for domain:code_review; got %v", report)
 	}
 	if before, isNum := entry["before_fitness"].(float64); !isNum || before != 12 {
 		t.Errorf("bt_evolve_bottlenecks report entry must echo the KG fitness as 'before_fitness' = 12; got %v", entry["before_fitness"])
@@ -438,10 +466,39 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	if runs, isNum := entry["runs"].(float64); !isNum || int(runs) != 5 {
 		t.Errorf("bt_evolve_bottlenecks report entry must echo 'runs' = 5; got %v", entry["runs"])
 	}
-	for _, e := range report {
-		if m, isMap := e.(map[string]interface{}); isMap && m["tree"] == "domain:security_audit" {
-			t.Errorf("bt_evolve_bottlenecks must not evolve the healthy tree domain:security_audit; report: %v", report)
-		}
+	if entry["algorithm"] != "cmaes" {
+		t.Errorf("bt_evolve_bottlenecks must route the tunable-parameter tree domain:code_review to CMA-ES and tag its entry 'algorithm' = %q; got %v", "cmaes", entry["algorithm"])
+	}
+	if tuned, isNum := entry["tuned_params"].(float64); !isNum || int(tuned) <= 0 {
+		t.Errorf("bt_evolve_bottlenecks cmaes report entry must carry a positive 'tuned_params' count; got %v", entry["tuned_params"])
+	}
+
+	// domain:alert_router has no tunable parameters, so it must fall back to
+	// the genetic EvolveWithExperience path and say so.
+	genEntry := byTree["domain:alert_router"]
+	if genEntry == nil {
+		t.Fatalf("bt_evolve_bottlenecks report must include an entry for domain:alert_router; got %v", report)
+	}
+	if before, isNum := genEntry["before_fitness"].(float64); !isNum || before != 8 {
+		t.Errorf("bt_evolve_bottlenecks genetic report entry must echo the KG fitness as 'before_fitness' = 8; got %v", genEntry["before_fitness"])
+	}
+	if after, isNum := genEntry["after_fitness"].(float64); !isNum || after <= 0 {
+		t.Errorf("bt_evolve_bottlenecks genetic report entry must carry a positive evolved 'after_fitness'; got %v", genEntry["after_fitness"])
+	}
+	if genEntry["algorithm"] != "genetic" {
+		t.Errorf("bt_evolve_bottlenecks must fall back to the genetic path for the parameterless tree domain:alert_router and tag its entry 'algorithm' = %q; got %v", "genetic", genEntry["algorithm"])
+	}
+
+	// The top-level tally states which algorithm handled how many trees.
+	algorithms, isMap := out["algorithms"].(map[string]interface{})
+	if !isMap {
+		t.Fatalf("bt_evolve_bottlenecks must return a top-level 'algorithms' tally object; got %T (%v)", out["algorithms"], out["algorithms"])
+	}
+	if n, isNum := algorithms["cmaes"].(float64); !isNum || int(n) != 1 {
+		t.Errorf("bt_evolve_bottlenecks 'algorithms' tally must count 1 cmaes tree; got %v", algorithms["cmaes"])
+	}
+	if n, isNum := algorithms["genetic"].(float64); !isNum || int(n) != 1 {
+		t.Errorf("bt_evolve_bottlenecks 'algorithms' tally must count 1 genetic tree; got %v", algorithms["genetic"])
 	}
 
 	// The unresolvable bottleneck is surfaced under 'skipped', not silently
