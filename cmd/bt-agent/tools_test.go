@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -482,5 +483,91 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	}
 	if emptyReport, isList := emptyOut["report"].([]interface{}); !isList || len(emptyReport) != 0 {
 		t.Errorf("bt_evolve_bottlenecks must return an empty 'report' array for a healthy graph; got %v", emptyOut["report"])
+	}
+}
+
+// TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary pins the MCP-boundary
+// validation for degenerate evolve params (Q3 defense-in-depth on top of the
+// engine-side eliteCount clamp): bt_evolve_genetic, bt_evolve_multiobjective,
+// and bt_evolve_bottlenecks must reject an explicitly supplied population < 2
+// with the structured {"error":"population must be at least 2"} shape before
+// any engine work runs — a one-individual "population" cannot evolve (elitism
+// and crossover both need two individuals) and historically panicked deep in
+// the engine. The rejection must not leak a partial happy-path result, must
+// fire before dependency checks (bt_evolve_bottlenecks rejects population 1
+// even when the knowledge graph is unavailable), and must not break the
+// documented default: omitting population still falls back to 20 and succeeds.
+func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	cases := []struct {
+		tool string
+		// args carries a %d placeholder for the degenerate population value.
+		args string
+		// partialKey is a happy-path result key that must never accompany the
+		// structured error (proof the engine was not reached).
+		partialKey string
+	}{
+		{"bt_evolve_genetic", `{"tree":"godev","population":%d,"generations":2}`, "best_fitness"},
+		{"bt_evolve_multiobjective", `{"tree":"godev","population":%d,"generations":2}`, "pareto_front_size"},
+		{"bt_evolve_bottlenecks", `{"population":%d,"generations":2}`, "report"},
+	}
+	for _, tc := range cases {
+		for _, pop := range []int{1, -3} {
+			args := json.RawMessage(fmt.Sprintf(tc.args, pop))
+			res, ok := server.Invoke(tc.tool, args)
+			if !ok {
+				t.Fatalf("Invoke(%s) reported the tool as unregistered", tc.tool)
+			}
+			if res == nil || len(res.Content) == 0 {
+				t.Fatalf("%s returned no content for population=%d", tc.tool, pop)
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+				t.Fatalf("%s population=%d result is not valid JSON: %v (text=%q)", tc.tool, pop, err, res.Content[0].Text)
+			}
+			if out["error"] != "population must be at least 2" {
+				t.Errorf("%s must reject population=%d with {\"error\":\"population must be at least 2\"}; got %v", tc.tool, pop, out)
+			}
+			if _, partial := out[tc.partialKey]; partial {
+				t.Errorf("%s population=%d rejection must not carry a partial %q result; got %v", tc.tool, pop, tc.partialKey, out)
+			}
+		}
+	}
+
+	// Omitting population entirely must keep the documented default (20), not
+	// trip the degenerate-param rejection.
+	res, ok := server.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","generations":1}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_genetic) reported the tool as unregistered on the default-population path")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_genetic returned no content for an omitted population")
+	}
+	var defOut map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &defOut); err != nil {
+		t.Fatalf("bt_evolve_genetic omitted-population result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := defOut["error"]; isErr {
+		t.Fatalf("bt_evolve_genetic must not reject an omitted population (default 20); got %v", defOut)
+	}
+
+	// The boundary check must precede dependency checks: a degenerate
+	// population is rejected as such even while the knowledge graph is
+	// unavailable, but a valid invocation still surfaces the dependency error.
+	kgless, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered on the kg-less path")
+	}
+	if kgless == nil || len(kgless.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content without a knowledge graph")
+	}
+	var kglessOut map[string]interface{}
+	if err := json.Unmarshal([]byte(kgless.Content[0].Text), &kglessOut); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks kg-less result is not valid JSON: %v", err)
+	}
+	if kglessOut["error"] != "knowledge graph unavailable" {
+		t.Fatalf("bt_evolve_bottlenecks with a valid population and no knowledge graph must keep returning {\"error\":\"knowledge graph unavailable\"}; got %v", kglessOut)
 	}
 }

@@ -93,9 +93,13 @@ func Crossover(a, b *SerializableNode) *SerializableNode {
 
 // Evolve runs the genetic algorithm for N generations with quality gate.
 func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) float64) *SerializableNode {
+	if len(p.Individuals) == 0 {
+		return nil
+	}
 	p.Evaluate(fitnessFn)
 	p.PrevBestFitness = p.BestFitness
-	eliteCount := max(2, len(p.Individuals)/10)
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
@@ -198,7 +202,8 @@ func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*Seria
 
 	p.Evaluate(fitnessFn)
 	p.PrevBestFitness = p.BestFitness
-	eliteCount := max(2, len(p.Individuals)/10)
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	supervisor := NewLLMSupervisor()
 
 	// Warm-start: consult prior successes for this population's tree type and

@@ -553,12 +553,13 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		func(args json.RawMessage) *engine.ToolResult {
 			var params struct {
 				Tree        string `json:"tree"`
-				Population  int    `json:"population"`
+				Population  *int   `json:"population"`
 				Generations int    `json:"generations"`
 			}
 			_ = json.Unmarshal(args, &params)
-			if params.Population <= 0 {
-				params.Population = 20
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
 			}
 			if params.Generations <= 0 {
 				params.Generations = 10
@@ -567,7 +568,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if baseTree == nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
-			pop := evolution.NewPopulation(params.Population, baseTree)
+			pop := evolution.NewPopulation(population, baseTree)
 			// Warm-start from the daemon's persistent experience bank when one
 			// is wired; a nil bank degrades to plain Evolve inside
 			// EvolveWithExperience, keeping the result shape uniform.
@@ -643,12 +644,13 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		func(args json.RawMessage) *engine.ToolResult {
 			var params struct {
 				Tree        string `json:"tree"`
-				Population  int    `json:"population"`
+				Population  *int   `json:"population"`
 				Generations int    `json:"generations"`
 			}
 			_ = json.Unmarshal(args, &params)
-			if params.Population <= 0 {
-				params.Population = 20
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
 			}
 			if params.Generations <= 0 {
 				params.Generations = 10
@@ -664,7 +666,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				evolution.DimNodeEfficiency,
 				evolution.DimStability,
 			}
-			nsga := evolution.NewNSGAIIPopulation(params.Population, baseTree, dims)
+			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
 			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
@@ -785,12 +787,15 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		[]string{},
 		func(args json.RawMessage) *engine.ToolResult {
 			var params struct {
-				Population  int `json:"population"`
-				Generations int `json:"generations"`
+				Population  *int `json:"population"`
+				Generations int  `json:"generations"`
 			}
 			_ = json.Unmarshal(args, &params)
-			if params.Population <= 0 {
-				params.Population = 20
+			// Degenerate-param rejection precedes the dependency check so a bad
+			// population is reported as such even without a knowledge graph.
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
 			}
 			if params.Generations <= 0 {
 				params.Generations = 10
@@ -816,7 +821,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					skipped = append(skipped, b.TreeID)
 					continue
 				}
-				pop := evolution.NewPopulation(params.Population, baseTree)
+				pop := evolution.NewPopulation(population, baseTree)
 				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				report = append(report, map[string]interface{}{
 					"tree":           b.TreeID,
@@ -1408,6 +1413,23 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	registerBlockTools(server, deps)
 	registerHITLTools(server, deps)
+}
+
+// resolveEvolvePopulation validates an evolve tool's population parameter at
+// the MCP boundary, before any engine or dependency work runs. A nil value
+// (omitted parameter) keeps the documented default of 20; an explicitly
+// supplied value below 2 is rejected with a structured error, because elitism
+// and crossover both need two individuals — a smaller "population" cannot
+// evolve and historically panicked deep in the engine. A non-nil ToolResult
+// is the rejection to return verbatim.
+func resolveEvolvePopulation(population *int) (int, *engine.ToolResult) {
+	if population == nil {
+		return 20, nil
+	}
+	if *population < 2 {
+		return 0, &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"population must be at least 2"}`}}}
+	}
+	return *population, nil
 }
 
 // structuralFitnessFn scores a tree's structural quality without invoking the

@@ -187,15 +187,29 @@ func (s *Server) Run() error {
 		}
 
 		if msg.Method == "tools/call" {
+			// Extract the tool name up front so a panicking handler can be
+			// named in the recovery error response below.
+			var callParams struct {
+				Name string `json:"name"`
+			}
+			_ = json.Unmarshal(msg.Params, &callParams)
+
 			// Acquire semaphore slot; if full, reject with busy signal.
 			select {
 			case sem <- struct{}{}:
 				wg.Add(1)
-				go func(d []byte) {
+				go func(d []byte, id interface{}, tool string) {
 					defer wg.Done()
 					defer func() { <-sem }()
+					// A panicking tool handler must not take down the daemon:
+					// answer this call with an internal error and keep serving.
+					defer func() {
+						if r := recover(); r != nil {
+							s.writeError(id, -32603, fmt.Sprintf("Internal error: tool %q panicked: %v", tool, r))
+						}
+					}()
 					s.handleMessage(d)
-				}(data)
+				}(data, msg.ID, callParams.Name)
 			default:
 				s.writeError(msg.ID, -32000, "Server busy: max 3 concurrent tool calls. Retry in a few seconds.")
 			}

@@ -280,8 +280,13 @@ func (p *Population) MemeticEvolve(
 	searcher *LocalSearcher,
 	refineTopN int, // how many top individuals to refine per generation
 ) *SerializableNode {
+	if len(p.Individuals) == 0 {
+		return nil
+	}
 	p.Evaluate(fitnessFn)
-	eliteCount := max(2, len(p.Individuals)/10)
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy
+	// or the top-N refine loop.
+	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	if refineTopN <= 0 {
 		refineTopN = 1
 	}
