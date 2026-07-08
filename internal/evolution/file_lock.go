@@ -27,8 +27,10 @@ func acquireExperienceLock(persistPath string) (func(), error) {
 	var once sync.Once
 	release := func() {
 		once.Do(func() {
-			syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			f.Close()
+			// Best-effort unlock: closing the descriptor releases the
+			// flock regardless, so an unlock error is not actionable.
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
 		})
 	}
 	return release, nil
