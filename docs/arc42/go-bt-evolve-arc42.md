@@ -41,7 +41,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (61 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites, `bt_evolve_multiobjective` NSGA-II, `bt_evolve_island` island-model, and `bt_evolve_bottlenecks` experience-grounded bottleneck-evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (63 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites, `bt_evolve_multiobjective` NSGA-II, `bt_evolve_island` island-model, `bt_evolve_bottlenecks` experience-grounded bottleneck-evolution, `bt_evolve_memetic` GA-plus-local-search, and `bt_evolve_qlearning` Q-table-guided evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
@@ -143,7 +143,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 61 tools: tree execution, agent management, knowledge graph, evolution |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 63 tools: tree execution, agent management, knowledge graph, evolution |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
 | bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 3 tools: evolved langchain agent execution |
 | bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |
@@ -202,7 +202,7 @@ All local services run on the Jetson ARM64 host. Only DeepSeek API is external. 
 | Q3: Reliability | Transient LLM errors self-heal | **Retry with Exponential Backoff** (ADR-007) | Full jitter retry: 1s→2s→4s→8s (base 500ms, max 30s). 3 retry classes: standard, LLM-specific, unknown. |
 | Q3: Reliability | Exhausted retries don't lose work | **Dead Letter Queue** (ADR-007) | Persistent JSON file at `~/.go-bt-evolve/dead_letter_queue.json`. Failed tasks preserved for manual inspection/replay. |
 | — | Task→tree mapping must be automatic | **Knowledge Graph + Factory** | Semantic discovery via embeddings. Tree breeding via crossover (PreGate from A × StrategyRouter from B). 7 categories with capability edges. |
-| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 68 total tools. Hermes gateway manages lifecycle. |
+| — | External tools must be accessible | **MCP Protocol Layer** (ADR-002) | JSON-RPC 2.0 over stdio. 3 servers expose 71 total tools. Hermes gateway manages lifecycle. |
 | — | Agent state must survive restarts | **File-Based Persistence** (ADR-003) | Atomic writes (write .tmp → rename). YAML for agent definitions, JSON for scheduler/history/reflections. Git-friendly. |
 | — | LLM must be integrated into BT nodes | **ChainAction Architecture** (ADR-006) | 10 chain types (llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action). Template variables: {{.Task}}, {{.Plan}}, {{.Result}}. |
 
@@ -293,9 +293,10 @@ internal/evolution/
 ├── map_elites.go        — BehavioralDescriptor, MAPElitesGrid
 ├── island.go            — IslandModel with periodic migration, cumulative TotalMigrations counter
 ├── q_learning.go        — State→Action epsilon-greedy policy
+├── local_search.go      — LocalSearcher (hill-climb / simulated-annealing / tabu), Population.MemeticEvolve
 ├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
 ├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
-├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant)
+├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant) + EvolveQLearning (QTable-guided mutation-category selection)
 ├── experience_bank.go   — ExperienceBank: persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type, bounded at 500 entries with quality-aware eviction
 ├── vault_manager.go     — Tree vault with checkpoint/restore
 ├── types.go             — SerializableNode, Individual, Population, Fitness
@@ -621,13 +622,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.3 MCP Protocol Layer
 
-**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (61 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
+**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (63 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
 
 **Why:** MCP provides a standardized interface between Hermes Agent and the Go BT platform. No custom protocols, no REST overhead. Stdio transport keeps it simple and gateway-managed.
 
 **Where:** `internal/mcp/` (server implementation), `cmd/bt-agent/tools.go` (tool registration), `cmd/bt-agent/main.go` (server setup).
 
-**Effect:** Hermes Agent sees 69 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
+**Effect:** Hermes Agent sees 71 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
 
 **In-process seam:** `engine.Server` also exposes `HasTool(name) bool` and `Invoke(name, args) (*ToolResult, bool)` (`internal/engine/mcp_server.go`) so a registered tool can be asserted and driven by name in-process — without standing up the stdio JSON-RPC loop. This is a test/in-process seam only: it reads the private handler registry directly and deliberately bypasses the auth, rate-limit, sanitization, and tracing wrapping applied on the `tools/call` path, so it must never become a production request route.
 
@@ -656,6 +657,8 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 **Effect:** Evolution is auditable (git commits), reversible (rollback), and measurable (fitness delta tracking).
 
 **Experience-grounded memory (ADR-017):** The genetic path additionally learns across runs. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) warm-starts operator selection from the persistent `ExperienceBank` — the top-5 `RetrieveByTreeType` hints for the population's tree type bias 50% of mutations toward operators that previously improved fitness on similar trees — and records every fitness-improving mutation back via `AddFromMutation` (regressions are discarded, so the bank only accumulates successes). A nil bank degrades to plain `Evolve`. The daemon constructs one bank at startup (`~/.go-bt-evolve/experience/experience.json`, honoring `BT_AGENT_HOME`) and plumbs it through `mcpDeps` into `bt_evolve_genetic` and `bt_evolve_bottlenecks`, so mutation experience compounds across restarts the same way knowledge-graph feedback does (§8.4). The bank is bounded at 500 entries (`experienceBankCap`) with quality-aware eviction — lowest `QualityScore` first, oldest first among equal quality, entries with `TimesReused >= 3` evicted only after every less-proven entry is gone — enforced on every `Add` and, for oversized legacy files, on load in `NewExperienceBank` (ADR-018).
+
+**Within-run reinforcement (ADR-019):** Complementing the cross-run ExperienceBank, `Population.EvolveQLearning` (`internal/evolution/learning.go`) learns *within* a single evolution run: each offspring mutation's category is chosen epsilon-greedily from a caller-owned `QTable` keyed by the child's structural state, and the fitness delta is fed back via `Update` — regressions are discarded by the same quality-gate pattern but still recorded, so the table learns which categories to avoid per state. `Population.MemeticEvolve` (`internal/evolution/local_search.go`) instead refines offspring with a pluggable `LocalSearcher` (hill-climb, simulated annealing, or tabu). Both are reachable in production via the deterministic `bt_evolve_qlearning` and `bt_evolve_memetic` MCP tools.
 
 ## 8.6 Error Resiliency
 
@@ -1044,6 +1047,22 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-019: Production Entry Points for Memetic and Q-Learning Evolution
+
+**Context (2026-07-08):** Two more registered evolution capabilities had no production caller (Q2 Evolvability, "Give every registered evolution algorithm a production entry point" program, milestones 2–3): `Population.MemeticEvolve` with the `LocalSearcher` strategies in `internal/evolution/local_search.go`, and the `QTable` reinforcement loop (`GetState`/`SelectAction`/`Update`, `internal/evolution/learning.go`) — the latter reachable only through `ReinforcementLearner.Suggest`, which nothing drove across generations.
+
+**Decision:** Register two more ADR-009-family tools (deterministic, LLM-free, shared `structuralFitnessFn`, `-short`-safe) in `cmd/bt-agent/tools.go`. `bt_evolve_memetic` runs `MemeticEvolve` with a selectable `strategy` parameter mapping to `HillClimbSearch`/`SimulatedAnnealingSearch`/`TabuSearch`; an omitted strategy defaults to hill-climb, but an *unknown* value is rejected with `{"error":"unknown strategy: <value>"}` rather than silently defaulting, so caller typos surface. `bt_evolve_qlearning` drives a new `Population.EvolveQLearning`: each offspring mutation encodes the child via `QTable.GetState`, picks its mutation category epsilon-greedily via `SelectAction` (a pointer-typed `epsilon` distinguishes an explicit 0 — deterministic greedy — from an omitted default of 0.2), applies it through the `MCTSMutator` op materializer with a fitness-delta reward fed back through `Update` (regressions are discarded by the quality gate but still recorded, so the table learns to avoid them), and the tool reports the learned greedy policy via the new `QTable.LearnedActions` alongside `best_fitness`/`total_mutations`/`regressions`. Tree IDs are sanitized (`:` → `_`) before use as the QTable category so they cannot corrupt the `category:bucket:depth` state encoding. Pinned by `TestBTEvolveMemeticRegisteredAndValidatesStrategy` (per-strategy subtests plus the unknown-strategy rejection) and `TestBTEvolveQLearningRegisteredAndLearnsGreedily` (deterministic epsilon=0) in `cmd/bt-agent/tools_test.go`.
+
+**Status:** Accepted (2026-07-08)
+
+**Consequences:**
+- ✅ Memetic local search (all three strategies) and Q-learning-guided evolution are reachable in production; bt-agent grows from 61 to 63 tools
+- ✅ The QTable's learn-across-generations loop finally has a driver, and its learned policy is observable per call (`learned_actions`/`learned_states`)
+- ⚠️ The QTable is constructed per tool call — the learned policy is not persisted across invocations (unlike the ADR-017 ExperienceBank), so learning restarts from scratch each call
+- ⚠️ Of the registered algorithms, CMA-ES remains without a production entry point (later milestones of the same program)
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1190,13 +1209,14 @@ go-bt-evolve
 | **Island Model** | An evolution algorithm where sub-populations evolve in isolation with periodic migration of top individuals. Reachable in production via the deterministic `bt_evolve_island` MCP tool; its optional `domains` parameter seeds one island per registered domain tree, matching the type's stated purpose of maintaining genetic diversity across domains. |
 | **Knowledge Graph** | In-memory graph of all 41+ trees with capabilities, keywords, embeddings, and cross-tree relationships. Powers discovery and auto-creation. Its runtime-feedback fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges can be snapshotted to / restored from an atomic JSON file via `feedback_persist.go` (`SaveFeedback`/`LoadFeedback`, debounced `FlushFeedback`) — now wired into the `internal/agent` scheduler lifecycle (`SchedulerConfig.FeedbackPath`: load on startup, throttled flush after each run, forced flush on Stop), so feedback survives restarts and the learn→evolve loop compounds. |
 | **MAP-Elites** | Multi-dimensional Archive of Phenotypic Elites. Maintains a grid of high-performing individuals across behavioral dimensions for quality diversity. |
-| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 68 total tools to Hermes Agent. |
+| **MCP** | Model Context Protocol. JSON-RPC 2.0 over stdio. 3 servers (bt-agent, bt-evaluator, bt-langagent) expose 71 total tools to Hermes Agent. |
+| **Memetic Evolution** | Genetic algorithm hybridized with per-individual local search refinement (`Population.MemeticEvolve` + `LocalSearcher`, `internal/evolution/local_search.go`). Three strategies: hill-climb, simulated annealing (Metropolis acceptance), tabu search (genome-hash tabu list). Reachable in production via the deterministic `bt_evolve_memetic` MCP tool, which rejects unknown strategy values instead of silently defaulting (ADR-019). |
 | **Mutation** | A structural change to a behavior tree. 10 operators: add_before, add_after, wrap_retry, prune, swap_children, rename_node, change_type, insert_fallback, clone_subtree, delete_subtree. |
 | **OutcomeSelector** | The final stage of the universal BT pattern. Checks WasSuccessful → if not, triggers SelfCorrect. |
 | **Pareto Front** | Set of non-dominated solutions in multi-objective optimization. Tracks trees that are not strictly worse than any other across all fitness dimensions. |
 | **PlannerNode** | A behavior tree node that extends UtilitySelector with GOAP goal management. Selects actions based on world state and goal satisfaction. |
 | **PreGate** | The first stage of the universal BT pattern. Validates preconditions (input valid, tools available, graph fresh) before executing the strategy. |
-| **Q-Learning** | Reinforcement learning algorithm. State→Action mapping with epsilon-greedy exploration. Used for mutation strategy selection. |
+| **Q-Learning** | Reinforcement learning algorithm. State→Action mapping with epsilon-greedy exploration. Used for mutation strategy selection. Reachable in production via the deterministic `bt_evolve_qlearning` MCP tool, whose `Population.EvolveQLearning` drives per-generation mutation-category selection through `QTable.GetState`/`SelectAction`/`Update` and reports the learned greedy policy (`LearnedActions`) alongside the evolved winner (ADR-019). |
 | **RetryWithBackoff** | Exponential backoff with full jitter. 3 retry classes: standard (500ms base), LLM-specific (1s base), unknown (1s base). Max 3 retries. |
 | **RunTask** | Executes a behavior tree to completion. Tick loop (1000 max). Sets outcome (success/failure/partial). Validates output quality. |
 | **SafeGo** | Wrapper around `go func()` that recovers panics and records them. Applied to all goroutine spawns. |

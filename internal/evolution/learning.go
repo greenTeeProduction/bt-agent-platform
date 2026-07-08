@@ -463,6 +463,105 @@ func (rl *ReinforcementLearner) Suggest(tree *SerializableNode, category string)
 	return rl.QTable.SelectAction(state, rl.Epsilon)
 }
 
+// LearnedActions extracts the per-state best actions from the table — the
+// greedy policy learned so far. States without Q-values are omitted.
+func (qt *QTable) LearnedActions() map[string]string {
+	learned := make(map[string]string, len(qt.Values))
+	for state := range qt.Values {
+		if best := qt.BestAction(state); best != "" {
+			learned[state] = best
+		}
+	}
+	return learned
+}
+
+// EvolveQLearning runs the genetic algorithm like Evolve, but drives
+// mutation-category selection through the QTable's reinforcement loop: each
+// offspring mutation encodes the child via GetState, picks its mutation
+// category via epsilon-greedy SelectAction, and feeds the fitness delta back
+// through Update. With epsilon=0 selection is pure greedy once a state has
+// Q-values. The caller owns the QTable and reads the learned policy
+// afterwards via LearnedActions.
+func (p *Population) EvolveQLearning(generations int, fitnessFn func(*SerializableNode) float64, qt *QTable, category string, epsilon, learningRate float64) *SerializableNode {
+	if len(p.Individuals) == 0 || qt == nil {
+		return nil
+	}
+	p.Evaluate(fitnessFn)
+	p.PrevBestFitness = p.BestFitness
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
+	// The MCTS mutator only materializes category names into concrete ops
+	// (target selection + payload nodes); no tree search runs here.
+	mutator := NewMCTSMutator()
+
+	for gen := 0; gen < generations; gen++ {
+		p.Generation++
+		sort.Slice(p.Individuals, func(i, j int) bool {
+			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+		})
+
+		newPop := make([]Individual, len(p.Individuals))
+		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
+
+		for i := eliteCount; i < len(p.Individuals); i++ {
+			parents := p.Select()
+			child := Crossover(parents[0], parents[1])
+			newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator)}
+			newPop[i].Genome = hashTree(newPop[i].Tree)
+		}
+
+		p.Individuals = newPop
+		p.Evaluate(fitnessFn)
+		if p.BestFitness > p.PrevBestFitness {
+			p.PrevBestFitness = p.BestFitness
+		}
+	}
+	return p.BestTree
+}
+
+// qLearnMutate applies one Q-table-selected mutation to child and rewards the
+// (state, action) pair with the fitness delta. A mutation that fails to apply
+// earns reward 0; a regression is discarded (quality gate) but still recorded
+// so the table learns to avoid that category in that state.
+func (p *Population) qLearnMutate(
+	child *SerializableNode,
+	fitnessFn func(*SerializableNode) float64,
+	qt *QTable,
+	category string,
+	epsilon, learningRate float64,
+	mutator *MCTSMutator,
+) *SerializableNode {
+	before := fitnessFn(child)
+	state := qt.GetState(child, category)
+	action := qt.SelectAction(state, epsilon)
+
+	// The QTable vocabulary's "remove_node" maps to the mutation engine's
+	// "prune_node" op — the engine has no literal remove_node operation.
+	opName := action
+	if opName == "remove_node" {
+		opName = "prune_node"
+	}
+	mutated := cloneTree(child)
+	op := mutator.concreteMutationOp(opName, mutated)
+	applied := ApplyMutations(mutated, []MutationOp{op})
+	p.TotalMutations++
+
+	after := before
+	if applied > 0 {
+		after = fitnessFn(mutated)
+	}
+	qt.Update(state, action, after-before, learningRate)
+
+	if applied == 0 {
+		return child
+	}
+	if after < before {
+		p.Regressions++
+		return child
+	}
+	return mutated
+}
+
 // ─── Helpers ───
 
 func cloneTree(t *SerializableNode) *SerializableNode {

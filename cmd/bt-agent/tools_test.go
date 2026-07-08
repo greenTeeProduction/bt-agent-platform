@@ -486,10 +486,122 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	}
 }
 
+// TestBTEvolveMemeticRegisteredAndValidatesStrategy pins the bt_evolve_memetic
+// MCP tool (Q2 Evolvability milestone 2/5): it must be registered by
+// registerMCPTools and expose Population.MemeticEvolve with a selectable
+// LocalSearchStrategy. Each of the three implemented strategies — hill-climb,
+// simulated-annealing, and tabu — must run a deterministic (LLM-free) memetic
+// evolution and report best_fitness, generations, best_nodes, and the echoed
+// strategy as JSON. Omitting the strategy falls back to the documented default
+// (hill-climb) and echoes it. An unknown strategy value must be rejected with
+// the structured {"error":"unknown strategy: <value>"} shape — never silently
+// mapped to a default — and must not leak a partial happy-path result. An
+// unknown tree id keeps the shared {"error":"unknown tree"} shape.
+func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_evolve_memetic") {
+		t.Fatal("bt_evolve_memetic tool must be registered by registerMCPTools")
+	}
+
+	// Happy path per strategy: a real resolvable base tree with a small
+	// population/generations (kept tiny so the deterministic structural
+	// evolution stays -short-safe).
+	for _, strategy := range []string{"hill-climb", "simulated-annealing", "tabu"} {
+		t.Run(strategy, func(t *testing.T) {
+			args := json.RawMessage(fmt.Sprintf(
+				`{"tree":"godev","population":4,"generations":2,"strategy":%q}`, strategy))
+			res, ok := server.Invoke("bt_evolve_memetic", args)
+			if !ok {
+				t.Fatal("Invoke(bt_evolve_memetic) reported the tool as unregistered")
+			}
+			if res == nil || len(res.Content) == 0 {
+				t.Fatal("bt_evolve_memetic returned no content")
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+				t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+			}
+			if _, isErr := out["error"]; isErr {
+				t.Fatalf("bt_evolve_memetic unexpectedly returned an error for strategy %q: %v", strategy, out)
+			}
+			if out["strategy"] != strategy {
+				t.Errorf("bt_evolve_memetic must echo 'strategy' = %q; got %v", strategy, out["strategy"])
+			}
+			for _, key := range []string{"best_fitness", "generations", "best_nodes"} {
+				if _, present := out[key]; !present {
+					t.Errorf("bt_evolve_memetic result missing %q key; got keys %v", key, out)
+				}
+			}
+			if bf, isNum := out["best_fitness"].(float64); !isNum || bf <= 0 {
+				t.Errorf("bt_evolve_memetic must report a positive numeric 'best_fitness'; got %v", out["best_fitness"])
+			}
+		})
+	}
+
+	// Omitted strategy: falls back to the documented default and says so.
+	def, ok := server.Invoke("bt_evolve_memetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_memetic) reported the tool as unregistered on the default-strategy path")
+	}
+	if def == nil || len(def.Content) == 0 {
+		t.Fatal("bt_evolve_memetic returned no content for an omitted strategy")
+	}
+	var defOut map[string]interface{}
+	if err := json.Unmarshal([]byte(def.Content[0].Text), &defOut); err != nil {
+		t.Fatalf("bt_evolve_memetic omitted-strategy result is not valid JSON: %v (text=%q)", err, def.Content[0].Text)
+	}
+	if _, isErr := defOut["error"]; isErr {
+		t.Fatalf("bt_evolve_memetic must not reject an omitted strategy (default hill-climb); got %v", defOut)
+	}
+	if defOut["strategy"] != "hill-climb" {
+		t.Errorf("bt_evolve_memetic must echo the default 'strategy' = \"hill-climb\" when omitted; got %v", defOut["strategy"])
+	}
+
+	// Unknown strategy: must surface a structured MCP error naming the bad
+	// value — a silent default would mask caller typos — with no partial
+	// happy-path result (proof no evolution ran).
+	bad, ok := server.Invoke("bt_evolve_memetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2,"strategy":"quantum"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_memetic) reported the tool as unregistered on the unknown-strategy path")
+	}
+	if bad == nil || len(bad.Content) == 0 {
+		t.Fatal("bt_evolve_memetic returned no content for an unknown strategy")
+	}
+	var badOut map[string]interface{}
+	if err := json.Unmarshal([]byte(bad.Content[0].Text), &badOut); err != nil {
+		t.Fatalf("bt_evolve_memetic unknown-strategy result is not valid JSON: %v", err)
+	}
+	if badOut["error"] != "unknown strategy: quantum" {
+		t.Fatalf("bt_evolve_memetic unknown strategy should return {\"error\":\"unknown strategy: quantum\"}; got %v", badOut)
+	}
+	if _, partial := badOut["best_fitness"]; partial {
+		t.Errorf("bt_evolve_memetic unknown-strategy rejection must not carry a partial 'best_fitness' result; got %v", badOut)
+	}
+
+	// Unknown tree: a known prefix with an unresolvable suffix resolves to nil,
+	// which must surface the shared unknown-tree error shape.
+	unknown, ok := server.Invoke("bt_evolve_memetic", json.RawMessage(`{"tree":"domain:__no_such_tree__","strategy":"hill-climb"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_memetic) reported the tool as unregistered on the unknown-tree path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_memetic returned no content for an unknown tree")
+	}
+	var errOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
+		t.Fatalf("bt_evolve_memetic unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut["error"] != "unknown tree" {
+		t.Fatalf("bt_evolve_memetic unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut)
+	}
+}
+
 // TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary pins the MCP-boundary
 // validation for degenerate evolve params (Q3 defense-in-depth on top of the
 // engine-side eliteCount clamp): bt_evolve_genetic, bt_evolve_multiobjective,
-// and bt_evolve_bottlenecks must reject an explicitly supplied population < 2
+// bt_evolve_bottlenecks, and bt_evolve_memetic must reject an explicitly supplied population < 2
 // with the structured {"error":"population must be at least 2"} shape before
 // any engine work runs — a one-individual "population" cannot evolve (elitism
 // and crossover both need two individuals) and historically panicked deep in
@@ -512,6 +624,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 		{"bt_evolve_genetic", `{"tree":"godev","population":%d,"generations":2}`, "best_fitness"},
 		{"bt_evolve_multiobjective", `{"tree":"godev","population":%d,"generations":2}`, "pareto_front_size"},
 		{"bt_evolve_bottlenecks", `{"population":%d,"generations":2}`, "report"},
+		{"bt_evolve_memetic", `{"tree":"godev","population":%d,"generations":2,"strategy":"hill-climb"}`, "best_fitness"},
 	}
 	for _, tc := range cases {
 		for _, pop := range []int{1, -3} {
@@ -569,5 +682,97 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 	}
 	if kglessOut["error"] != "knowledge graph unavailable" {
 		t.Fatalf("bt_evolve_bottlenecks with a valid population and no knowledge graph must keep returning {\"error\":\"knowledge graph unavailable\"}; got %v", kglessOut)
+	}
+}
+
+// TestBTEvolveQLearningRegisteredAndLearnsGreedily pins the bt_evolve_qlearning
+// MCP tool (Q2 Evolvability milestone 3/5): it must be registered by
+// registerMCPTools and drive mutation-category selection across generations via
+// QTable.GetState/SelectAction/Update, reporting the learned per-state best
+// actions alongside the evolved winner. epsilon=0 makes the run deterministic
+// once a state has Q-values (pure greedy selection, no exploration), so the
+// learned_actions map must be non-empty and every learned action must be one of
+// the five known mutation categories. An unknown tree id must yield the shared
+// {"error":"unknown tree"} shape.
+func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_evolve_qlearning") {
+		t.Fatal("bt_evolve_qlearning tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: epsilon=0 for a deterministic greedy policy, small
+	// population/generations to stay -short-safe (LLM-free structural fitness).
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":3,"epsilon":0}`)
+	res, ok := server.Invoke("bt_evolve_qlearning", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qlearning) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_qlearning returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_qlearning unexpectedly returned an error for a resolvable tree: %v", out)
+	}
+
+	// The evolved winner must be reported alongside the learned policy.
+	if fitness, isNum := out["best_fitness"].(float64); !isNum || fitness <= 0 {
+		t.Errorf("bt_evolve_qlearning must report a positive numeric 'best_fitness'; got %v", out["best_fitness"])
+	}
+	if nodes, isNum := out["best_nodes"].(float64); !isNum || nodes <= 0 {
+		t.Errorf("bt_evolve_qlearning must report a positive numeric 'best_nodes' for the evolved winner; got %v", out["best_nodes"])
+	}
+	if eps, isNum := out["epsilon"].(float64); !isNum || eps != 0 {
+		t.Errorf("bt_evolve_qlearning must echo the requested 'epsilon' = 0; got %v", out["epsilon"])
+	}
+
+	// learned_actions is the per-state best-action map extracted from the
+	// QTable after the final generation. Running generations>=1 with Update
+	// applied each generation guarantees at least one learned state.
+	learned, isObj := out["learned_actions"].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_qlearning 'learned_actions' must be a JSON object mapping state -> best action; got %T (%v)", out["learned_actions"], out["learned_actions"])
+	}
+	if len(learned) == 0 {
+		t.Fatal("bt_evolve_qlearning 'learned_actions' must be non-empty after learning generations (QTable.Update was never applied)")
+	}
+	validActions := map[string]bool{
+		"add_before": true, "add_after": true, "add_fallback": true,
+		"replace_node": true, "remove_node": true,
+	}
+	for state, action := range learned {
+		// QTable.GetState encodes states as "<category>:<size-bucket>:<depth>".
+		if strings.Count(state, ":") != 2 {
+			t.Errorf("bt_evolve_qlearning learned state %q must use the QTable.GetState \"category:bucket:depth\" encoding", state)
+		}
+		actionStr, isStr := action.(string)
+		if !isStr || !validActions[actionStr] {
+			t.Errorf("bt_evolve_qlearning learned action for state %q must be one of the five mutation categories; got %v", state, action)
+		}
+	}
+
+	// Unknown tree: shared error shape, no partial result.
+	unknown, ok := server.Invoke("bt_evolve_qlearning", json.RawMessage(`{"tree":"domain:__no_such_tree__","epsilon":0}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qlearning) reported the tool as unregistered on the error path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_qlearning returned no content for an unknown tree")
+	}
+	var errOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
+		t.Fatalf("bt_evolve_qlearning unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut["error"] != "unknown tree" {
+		t.Fatalf("bt_evolve_qlearning unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut)
+	}
+	if _, partial := errOut["learned_actions"]; partial {
+		t.Errorf("bt_evolve_qlearning unknown-tree error must carry no partial 'learned_actions'; got %v", errOut)
 	}
 }

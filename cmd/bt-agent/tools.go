@@ -65,7 +65,7 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 }
 
-// registerMCPTools registers all 61 MCP tools on the server.
+// registerMCPTools registers all 63 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -691,6 +691,129 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "generations": nsga.Generation,
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_memetic", "Run memetic evolution (GA + local search refinement) with a selectable local search strategy: hill-climb (default), simulated-annealing, or tabu",
+		map[string]engine.Property{
+			"tree":        {Type: "string", Description: "Base tree ID"},
+			"population":  {Type: "integer", Description: "Population size (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations (default: 10)"},
+			"strategy":    {Type: "string", Description: "Local search strategy: hill-climb, simulated-annealing, or tabu (default: hill-climb)"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree        string `json:"tree"`
+				Population  *int   `json:"population"`
+				Generations int    `json:"generations"`
+				Strategy    string `json:"strategy"`
+			}
+			_ = json.Unmarshal(args, &params)
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			// An omitted strategy falls back to the documented default; an
+			// unknown value is rejected with a structured error naming it —
+			// silently defaulting would mask caller typos.
+			if params.Strategy == "" {
+				params.Strategy = "hill-climb"
+			}
+			var searchStrategy evolution.LocalSearchStrategy
+			switch params.Strategy {
+			case "hill-climb":
+				searchStrategy = evolution.HillClimbSearch
+			case "simulated-annealing":
+				searchStrategy = evolution.SimulatedAnnealingSearch
+			case "tabu":
+				searchStrategy = evolution.TabuSearch
+			default:
+				data, _ := json.Marshal(map[string]interface{}{
+					"error": "unknown strategy: " + params.Strategy,
+				})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Deterministic, LLM-free memetic evolution reusing the shared
+			// structural fitness so the tool stays -short-safe.
+			pop := evolution.NewPopulation(population, baseTree)
+			searcher := evolution.NewLocalSearcher(searchStrategy)
+			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "strategy": params.Strategy,
+				"generations": pop.Generation, "best_fitness": pop.BestFitness,
+				"best_nodes": evolution.CountNodes(best), "diversity": pop.Diversity(),
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_qlearning", "Run Q-learning-guided evolution: an epsilon-greedy QTable selects the mutation category per tree state each generation and learns from fitness deltas, reporting the learned per-state best actions alongside the evolved winner",
+		map[string]engine.Property{
+			"tree":          {Type: "string", Description: "Base tree ID"},
+			"population":    {Type: "integer", Description: "Population size (default: 20)"},
+			"generations":   {Type: "integer", Description: "Number of generations (default: 10)"},
+			"epsilon":       {Type: "number", Description: "Exploration rate 0-1 (default: 0.2); 0 = deterministic greedy selection"},
+			"learning_rate": {Type: "number", Description: "Q-value learning rate (default: 0.1)"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree         string   `json:"tree"`
+				Population   *int     `json:"population"`
+				Generations  int      `json:"generations"`
+				Epsilon      *float64 `json:"epsilon"`
+				LearningRate float64  `json:"learning_rate"`
+			}
+			_ = json.Unmarshal(args, &params)
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			// A pointer distinguishes an explicit epsilon=0 (deterministic
+			// greedy, echoed back) from an omitted one (exploration default).
+			epsilon := 0.2
+			if params.Epsilon != nil {
+				epsilon = *params.Epsilon
+			}
+			if epsilon < 0 {
+				epsilon = 0
+			} else if epsilon > 1 {
+				epsilon = 1
+			}
+			if params.LearningRate <= 0 {
+				params.LearningRate = 0.1
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// QTable.GetState prefixes states with the category, so a tree id
+			// like "domain:x" would break the "category:bucket:depth" encoding.
+			category := strings.ReplaceAll(params.Tree, ":", "_")
+			// Deterministic, LLM-free Q-learning evolution reusing the shared
+			// structural fitness so the tool stays -short-safe.
+			qt := evolution.NewQTable()
+			pop := evolution.NewPopulation(population, baseTree)
+			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate)
+			learned := qt.LearnedActions()
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "generations": pop.Generation,
+				"best_fitness": pop.BestFitness, "best_nodes": evolution.CountNodes(best),
+				"diversity": pop.Diversity(), "epsilon": epsilon,
+				"learning_rate":   params.LearningRate,
+				"learned_actions": learned, "learned_states": len(learned),
+				"total_mutations": pop.TotalMutations, "regressions": pop.Regressions,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
