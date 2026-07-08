@@ -181,10 +181,18 @@ const experienceHintBias = 0.5
 // query with the same topK — so callers can surface the hit count without
 // duplicating the tree-type extraction. A nil bank yields 0.
 func ExperienceRetrievalHits(bank *ExperienceBank, tree *SerializableNode) int {
+	return len(RetrieveExperienceHints(bank, tree, experienceHintTopK))
+}
+
+// RetrieveExperienceHints returns the top-K highest-quality experience entries
+// for the given tree's type — the same RetrieveByTreeType query the warm-start
+// uses — so callers outside the package can retrieve hints without duplicating
+// the tree-type extraction. A nil bank yields nil.
+func RetrieveExperienceHints(bank *ExperienceBank, tree *SerializableNode, topK int) []ExperienceEntry {
 	if bank == nil {
-		return 0
+		return nil
 	}
-	return len(bank.RetrieveByTreeType(extractTreeType(tree), experienceHintTopK))
+	return bank.RetrieveByTreeType(extractTreeType(tree), topK)
 }
 
 // EvolveWithExperience runs the genetic algorithm like Evolve, but closes the

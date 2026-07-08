@@ -3,12 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 )
+
+// experienceBankDir resolves the on-disk directory backing the gardener's
+// ExperienceBank. It deliberately matches bt-agent's experienceBankDir()
+// (agent.HomeDir()/"experience") so both binaries accumulate mutation
+// experience into one shared bank; agent.HomeDir() honors BT_AGENT_HOME,
+// which is the configurability seam for redirecting it.
+func experienceBankDir() string { return filepath.Join(agent.HomeDir(), "experience") }
 
 // buildGardenerConfig constructs the production gardener.Config, wiring all
 // safety components: Gate, SnapshotDir, CrisisDetector, and the SLO evidence
@@ -46,6 +55,11 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 	// consumed by running agents); evidenced trees keep threshold enforcement.
 	validationGate.AllowUnverified = true
 
+	expBank, err := evolution.NewExperienceBank(experienceBankDir())
+	if err != nil {
+		return gardener.Config{}, fmt.Errorf("open shared experience bank: %w", err)
+	}
+
 	return gardener.Config{
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
@@ -55,6 +69,11 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		MaxMutations:   2,
 		UseRealLLM:     false,
 		ValidationGate: validationGate,
+
+		// Shared with bt-agent's daemon bank (agent.HomeDir()/experience) so
+		// RunCycleV2 records accepted mutations into the same on-disk store
+		// bt_evolve_genetic warm-starts from.
+		ExperienceBank: expBank,
 
 		// Safety components — wired by A1 remediation
 		Gate:           evolution.NewQualityGate(snapDir),

@@ -482,6 +482,256 @@ func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 }
 
 // ============================================================================
+// ExperienceBank recording tests (evolve_v2.go)
+// ============================================================================
+
+// experienceRecordingGardener builds a gardener whose evolveTreeV2 run
+// deterministically accepts exactly one fitness-improving mutation
+// (gateDisabledTestTree + failure records produce the 0.92-score add_before
+// candidate; ValidationGate disabled so the mutation lands).
+func experienceRecordingGardener(t *testing.T, bank *evolution.ExperienceBank) (*Gardener, TreeEntry) {
+	t.Helper()
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+
+	metricsTracker, err := NewMetricsTracker(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	refStore, err := evolution.NewStore(refDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	tt, err := evaluator.NewTranspositionTable(refDir, 100)
+	if err != nil {
+		t.Fatalf("NewTranspositionTable: %v", err)
+	}
+
+	const treeName = "experience_recording"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	registry := &Registry{dir: refDir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "experience recording", Tree: tree, FilePath: refDir + "/tree-" + treeName + ".json", Active: true},
+	}
+	registry.mu.Unlock()
+
+	cfg := Config{
+		Registry:       registry,
+		MetricsTracker: metricsTracker,
+		RefStore:       refStore,
+		TT:             tt,
+		Gate:           evolution.NewQualityGate(snapDir),
+		SnapshotDir:    snapDir,
+		CrisisDetector: evolution.NewCrisisDetector(),
+		ValidationGate: ValidationGateConfig{Enabled: false},
+		MaxMutations:   1,
+		ExperienceBank: bank,
+	}
+	return NewGardener(cfg), registry.List()[0]
+}
+
+// TestEvolveTreeV2_RecordsAcceptedMutationExperience pins milestone 1 of the
+// experience-grounded gardener: every mutation accepted by evolveTreeV2 must be
+// recorded in the configured evolution.ExperienceBank with the mutation op,
+// target node, tree type, and the measured composite-fitness delta.
+func TestEvolveTreeV2_RecordsAcceptedMutationExperience(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	// Non-vacuity: this setup must accept an improving mutation, otherwise the
+	// recording assertions below prove nothing.
+	if m.Mutations < 1 {
+		t.Fatalf("setup produced no accepted mutations (metrics=%+v) — fix the seeding", m)
+	}
+	if m.Delta <= 0 {
+		t.Fatalf("setup produced no fitness improvement (delta=%.6f) — recording assertions would be vacuous", m.Delta)
+	}
+
+	if bank.Count() != m.Mutations {
+		t.Fatalf("ExperienceBank has %d entries, want %d (one per accepted mutation)", bank.Count(), m.Mutations)
+	}
+	e := bank.Entries[0]
+	if e.MutationOp == "" {
+		t.Error("recorded entry is missing MutationOp")
+	}
+	if e.TargetNode == "" {
+		t.Error("recorded entry is missing TargetNode")
+	}
+	if e.TreeType == "" {
+		t.Error("recorded entry is missing TreeType")
+	}
+	if e.FitnessDelta <= 0 {
+		t.Errorf("recorded FitnessDelta = %.6f, want > 0", e.FitnessDelta)
+	}
+	// With MaxMutations=1 the per-candidate delta (candidateFitness.Composite -
+	// currentFitness.Composite) equals the cycle delta.
+	if diff := e.FitnessDelta - m.Delta; diff > 0.0001 || diff < -0.0001 {
+		t.Errorf("recorded FitnessDelta = %.6f, want measured cycle delta %.6f", e.FitnessDelta, m.Delta)
+	}
+}
+
+// TestEvolveTreeV2_NilExperienceBankIsNoOp pins the degradation contract: a nil
+// bank must leave evolveTreeV2 behaving exactly as today — mutations still
+// accepted, no panic.
+func TestEvolveTreeV2_NilExperienceBankIsNoOp(t *testing.T) {
+	g, entry := experienceRecordingGardener(t, nil)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	if m.Mutations < 1 {
+		t.Fatalf("nil bank changed behavior: expected accepted mutations, got metrics=%+v", m)
+	}
+	if m.Delta <= 0 {
+		t.Fatalf("nil bank changed behavior: expected fitness improvement, got delta=%.6f", m.Delta)
+	}
+}
+
+// ============================================================================
+// Experience-biased candidate ordering tests (evolve_v2.go) — milestone 2
+// ============================================================================
+
+// seedExperience records one high-quality experience entry (delta 0.2 → quality
+// score 1.0 without an LLM) for the given op/target and returns its ID.
+func seedExperience(t *testing.T, bank *evolution.ExperienceBank, tree *evolution.SerializableNode, op, target string) string {
+	t.Helper()
+	if err := bank.AddFromMutation(tree, evolution.MutationOp{Operation: op, Target: target}, 0.0, 0.2, nil); err != nil {
+		t.Fatalf("AddFromMutation(%s/%s): %v", op, target, err)
+	}
+	return bank.Entries[len(bank.Entries)-1].ID
+}
+
+func experienceReuseCount(t *testing.T, bank *evolution.ExperienceBank, id string) int {
+	t.Helper()
+	for _, e := range bank.Entries {
+		if e.ID == id {
+			return e.TimesReused
+		}
+	}
+	t.Fatalf("seeded experience entry %s disappeared from the bank", id)
+	return 0
+}
+
+// TestBiasCandidatesWithExperience_SeededBankReordersCandidates pins milestone 2
+// of the experience-grounded gardener: candidate ordering from
+// evaluator.OrderMutations must be biased by ExperienceBank retrieval — a
+// candidate whose op/target matches a high-quality past entry for the same tree
+// type is boosted ahead of heuristically higher-scored non-matching candidates,
+// and the matched entry's TimesReused is bumped.
+func TestBiasCandidatesWithExperience_SeededBankReordersCandidates(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	tree := gateDisabledTestTree()
+
+	matchedID := seedExperience(t, bank, tree, "add_fallback", "Router")
+	unmatchedID := seedExperience(t, bank, tree, "prune_node", "UnrelatedNode")
+
+	candidates := []evaluator.MutationCandidate{
+		{Op: evolution.MutationOp{Operation: "increase_retries", Target: "ResearchAgent"}, Score: 0.55, Reason: "heuristic top"},
+		{Op: evolution.MutationOp{Operation: "add_fallback", Target: "Router"}, Score: 0.50, Reason: "matches seeded experience"},
+		{Op: evolution.MutationOp{Operation: "reorder_children", Target: "Root"}, Score: 0.48, Reason: "heuristic tail"},
+	}
+
+	got := biasCandidatesWithExperience(bank, tree, candidates)
+
+	if len(got) != len(candidates) {
+		t.Fatalf("biasing changed candidate count: got %d, want %d", len(got), len(candidates))
+	}
+	if got[0].Op.Operation != "add_fallback" || got[0].Op.Target != "Router" {
+		t.Fatalf("seeded bank did not boost matching candidate to the front: got %s/%s first",
+			got[0].Op.Operation, got[0].Op.Target)
+	}
+	if got[0].Score <= 0.50 {
+		t.Errorf("matching candidate score not boosted: got %.4f, want > 0.50", got[0].Score)
+	}
+
+	// Non-matching candidates keep their relative heuristic order.
+	idxRetries, idxReorder := -1, -1
+	for i, c := range got {
+		switch c.Op.Operation {
+		case "increase_retries":
+			idxRetries = i
+		case "reorder_children":
+			idxReorder = i
+		}
+	}
+	if idxRetries == -1 || idxReorder == -1 {
+		t.Fatalf("biasing dropped non-matching candidates: %+v", got)
+	}
+	if idxRetries > idxReorder {
+		t.Errorf("relative order of non-matching candidates not preserved: increase_retries at %d, reorder_children at %d", idxRetries, idxReorder)
+	}
+
+	if n := experienceReuseCount(t, bank, matchedID); n < 1 {
+		t.Errorf("matched experience entry TimesReused = %d, want >= 1", n)
+	}
+	if n := experienceReuseCount(t, bank, unmatchedID); n != 0 {
+		t.Errorf("unmatched experience entry TimesReused = %d, want 0", n)
+	}
+}
+
+// TestBiasCandidatesWithExperience_NilOrEmptyBankKeepsOrder pins the degradation
+// contract: without usable experience the heuristic ordering is untouched.
+func TestBiasCandidatesWithExperience_NilOrEmptyBankKeepsOrder(t *testing.T) {
+	tree := gateDisabledTestTree()
+	candidates := []evaluator.MutationCandidate{
+		{Op: evolution.MutationOp{Operation: "increase_retries", Target: "ResearchAgent"}, Score: 0.55},
+		{Op: evolution.MutationOp{Operation: "add_fallback", Target: "Router"}, Score: 0.50},
+	}
+
+	emptyBank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	for name, bank := range map[string]*evolution.ExperienceBank{"nil": nil, "empty": emptyBank} {
+		got := biasCandidatesWithExperience(bank, tree, candidates)
+		if len(got) != len(candidates) {
+			t.Fatalf("%s bank changed candidate count: got %d, want %d", name, len(got), len(candidates))
+		}
+		for i := range got {
+			if got[i].Op.Operation != candidates[i].Op.Operation || got[i].Score != candidates[i].Score {
+				t.Errorf("%s bank altered candidate %d: got %s/%.4f, want %s/%.4f",
+					name, i, got[i].Op.Operation, got[i].Score, candidates[i].Op.Operation, candidates[i].Score)
+			}
+		}
+	}
+}
+
+// TestEvolveTreeV2_MarksMatchingExperienceReused pins the wiring: evolveTreeV2
+// itself must run its OrderMutations candidates through the experience bias, so
+// a seeded entry matching the deterministic top candidate (add_before on
+// PreGate for the failure-heavy test tree) gets its TimesReused bumped during a
+// real evolution cycle.
+func TestEvolveTreeV2_MarksMatchingExperienceReused(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	seededID := seedExperience(t, bank, gateDisabledTestTree(), "add_before", "PreGate")
+
+	g, entry := experienceRecordingGardener(t, bank)
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	// Non-vacuity: the run must actually generate and accept candidates.
+	if m.Mutations < 1 {
+		t.Fatalf("setup produced no accepted mutations (metrics=%+v) — fix the seeding", m)
+	}
+	if n := experienceReuseCount(t, bank, seededID); n < 1 {
+		t.Fatalf("evolveTreeV2 did not mark the matching experience entry reused: TimesReused = %d, want >= 1", n)
+	}
+}
+
+// ============================================================================
 // hasChildNamed tests (gardener.go)
 // ============================================================================
 

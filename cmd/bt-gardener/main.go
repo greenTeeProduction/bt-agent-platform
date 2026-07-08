@@ -202,7 +202,10 @@ Question: {{.input}}`,
 	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
 
-	engine.Info("bt-gardener: initialized", "trees", registry.Count(), "max_mutations", cfg.MaxMutations)
+	engine.Info("bt-gardener: initialized",
+		"trees", registry.Count(),
+		"max_mutations", cfg.MaxMutations,
+		"experience_bank", cfg.ExperienceBank.PersistPath)
 	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, %s cycle, langchain analysis every 5th cycle\n", registry.Count(), cfg.Interval)
 	fmt.Fprintf(os.Stderr, "Metrics dir: %s\n", metricsDir)
 

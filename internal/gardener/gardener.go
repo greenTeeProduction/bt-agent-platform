@@ -331,6 +331,10 @@ type Config struct {
 	// cycles over 2 days improved 0/50 trees, 44 of which never run and hold
 	// no reflections. Set true to force blind evolution of every tree.
 	EvolveWithoutReflections bool
+	// ExperienceBank, when non-nil, records every accepted mutation so its
+	// context can be retrieved and reused across cycles and binaries. Nil
+	// degrades to the historical no-recording behavior.
+	ExperienceBank *evolution.ExperienceBank
 }
 
 // Gardener is the 24/7 tree evolution agent.

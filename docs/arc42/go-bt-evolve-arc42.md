@@ -297,7 +297,7 @@ internal/evolution/
 ├── cmaes.go             — CMAESOptimizer (λ,μ-CMA-ES over normalized [0,1] solutions), TunableParam extraction/apply (ExtractParameters reads TimeoutMs/MaxRetries struct fields and Metadata keys; ApplyParameters writes back with bounds clamping), TuneTreeParameters Extract→Optimize→Apply seam
 ├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
 ├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
-├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant) + EvolveQLearning (QTable-guided mutation-category selection)
+├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant) + EvolveQLearning (QTable-guided mutation-category selection), RetrieveExperienceHints (exported top-K bank retrieval reused by the gardener's candidate biasing)
 ├── experience_bank.go   — ExperienceBank: persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type, bounded at 500 entries with quality-aware eviction
 ├── vault_manager.go     — Tree vault with checkpoint/restore
 ├── types.go             — SerializableNode, Individual, Population, Fitness
@@ -405,6 +405,8 @@ Gardener                       bt-evaluator (MCP)            Evolution Engine   
 ```
 
 **Key:** 97.3% of mutations currently regress (no quality gates enforced — see Section 11 Risks). Per-tree fitness via `reflection.FilterByTreeName` + seed records.
+
+**Experience integration (ADR-021):** In the v2 cycle (`RunCycleV2`), the ranked-mutation step is experience-biased — `biasCandidatesWithExperience` boosts `OrderMutations` candidates whose op/target matches high-quality past `ExperienceBank` entries for the tree type — and every ACCEPT additionally records the mutation into the shared bank via `AddFromMutation` with its per-candidate fitness delta. A nil bank leaves both steps at the historical behavior.
 
 ## 6.3 Sprint Execution
 
@@ -547,7 +549,9 @@ systemd (system)
 │                              nlm-usage.json (quota economy)
 ├── experience/              — experience.json: ExperienceBank of successful
 │                              mutations (warm-starts bt_evolve_genetic /
-│                              bt_evolve_bottlenecks across restarts)
+│                              bt_evolve_bottlenecks across restarts; shared
+│                              with bt-gardener, whose cycles record into and
+│                              bias from the same file — ADR-021)
 ├── hitl/                    — Human-in-the-loop approval requests
 ├── audit/                   — Audit log
 ├── logs/                    — bt.log
@@ -658,6 +662,8 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 **Effect:** Evolution is auditable (git commits), reversible (rollback), and measurable (fitness delta tracking).
 
 **Experience-grounded memory (ADR-017):** The genetic path additionally learns across runs. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) warm-starts operator selection from the persistent `ExperienceBank` — the top-5 `RetrieveByTreeType` hints for the population's tree type bias 50% of mutations toward operators that previously improved fitness on similar trees — and records every fitness-improving mutation back via `AddFromMutation` (regressions are discarded, so the bank only accumulates successes). A nil bank degrades to plain `Evolve`. The daemon constructs one bank at startup (`~/.go-bt-evolve/experience/experience.json`, honoring `BT_AGENT_HOME`) and plumbs it through `mcpDeps` into `bt_evolve_genetic` and `bt_evolve_bottlenecks`, so mutation experience compounds across restarts the same way knowledge-graph feedback does (§8.4). The bank is bounded at 500 entries (`experienceBankCap`) with quality-aware eviction — lowest `QualityScore` first, oldest first among equal quality, entries with `TimesReused >= 3` evicted only after every less-proven entry is gone — enforced on every `Add` and, for oversized legacy files, on load in `NewExperienceBank` (ADR-018).
+
+**Gardener adoption (ADR-021):** The same bank now also feeds the 24/7 gardener cycle. `gardener.Config` carries an optional `*evolution.ExperienceBank`; when set, `evolveTreeV2` (`internal/gardener/evolve_v2.go`) records every *accepted* mutation via `AddFromMutation` with its per-candidate composite delta, and `biasCandidatesWithExperience` reorders the `evaluator.OrderMutations` heuristic ranking before candidates are tried — the top-5 `RetrieveExperienceHints` for the tree type (quality ≥ 0.5) boost matching op/target candidates by 0.15 × quality under a stable sort, and matched entries are `MarkReused`. `cmd/bt-gardener` constructs the bank at `agent.HomeDir()/experience` — deliberately the daemon's directory — so gardener and bt-agent accumulate mutation experience into one shared store. A nil bank degrades to the historical no-recording, heuristic-order-only behavior.
 
 **Within-run reinforcement (ADR-019):** Complementing the cross-run ExperienceBank, `Population.EvolveQLearning` (`internal/evolution/learning.go`) learns *within* a single evolution run: each offspring mutation's category is chosen epsilon-greedily from a caller-owned `QTable` keyed by the child's structural state, and the fitness delta is fed back via `Update` — regressions are discarded by the same quality-gate pattern but still recorded, so the table learns which categories to avoid per state. `Population.MemeticEvolve` (`internal/evolution/local_search.go`) instead refines offspring with a pluggable `LocalSearcher` (hill-climb, simulated annealing, or tabu). Both are reachable in production via the deterministic `bt_evolve_qlearning` and `bt_evolve_memetic` MCP tools.
 
@@ -1082,6 +1088,22 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-021: Gardener Cycles Record Into and Retrieve From the Shared ExperienceBank
+
+**Context (2026-07-08):** ADR-017 made mutation experience durable for the daemon's MCP evolution tools, but the platform's primary mutation producer — bt-gardener's `RunCycleV2` — was still experience-blind: accepted mutations (op, target, measured fitness delta) were discarded after each cycle, and candidate ordering relied solely on the `evaluator.OrderMutations` heuristic (Q2 Evolvability, "Make the gardener experience-grounded" program, milestones 1–3).
+
+**Decision:** Wire the gardener into the same bank on both sides of the loop. `gardener.Config` gains an optional `*evolution.ExperienceBank` (nil degrades to the historical no-op). On the *record* side, `evolveTreeV2` calls `AddFromMutation` for every accepted mutation with the per-candidate `candidateFitness.Composite − currentFitness.Composite` delta, captured before `currentFitness` advances so deltas are per-mutation, not cumulative; recording failures log a warning without aborting the cycle. On the *retrieve* side, `biasCandidatesWithExperience` (`internal/gardener/evolve_v2.go`) reorders the `OrderMutations` ranking via the new exported `evolution.RetrieveExperienceHints` (the same top-K `RetrieveByTreeType` query the ADR-017 warm-start uses): hints with `QualityScore ≥ 0.5` boost matching op/target candidates by `0.15 × quality` under a stable sort — non-matching candidates keep their relative heuristic order — and matched entries are `MarkReused`. `cmd/bt-gardener` constructs the bank at `agent.HomeDir()/experience`, deliberately identical to the daemon's `experienceBankDir()`, so both binaries compound into one store (`BT_AGENT_HOME` remains the redirection seam); unlike the daemon's warn-and-run-memoryless fallback, `buildGardenerConfig` fails fast if the bank cannot be opened. Pinned by `TestBuildGardenerConfig_ExperienceBankSharedWithDaemon` (`cmd/bt-gardener/config_test.go`) and fake/seeded-bank tests in `internal/gardener/evolve_v2_test.go` (`TestEvolveTreeV2_RecordsAcceptedMutationExperience`, `_NilExperienceBankIsNoOp`, `TestBiasCandidatesWithExperience_SeededBankReordersCandidates`, `_NilOrEmptyBankKeepsOrder`).
+
+**Status:** Accepted (2026-07-08)
+
+**Consequences:**
+- ✅ The learn side of the loop now includes its highest-volume producer: mutations the gardener accepts in 24/7 cycles bias later gardener cycles *and* the daemon's `bt_evolve_genetic`/`bt_evolve_bottlenecks` runs, and vice versa — cross-binary experience sharing through one file
+- ✅ Candidate ordering is no longer purely heuristic: operators proven on similar tree types are tried first, inside the existing quality-gate/rollback safety envelope
+- ⚠️ Biasing only reorders candidates `OrderMutations` already proposed — the bank cannot introduce a mutation the heuristic didn't generate
+- ⚠️ The two binaries write the same `experience.json` via read-at-construction + rewrite-on-Add; concurrent gardener and daemon processes can lose each other's recent entries between loads (single-writer-at-a-time assumption, not enforced)
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1213,10 +1235,10 @@ go-bt-evolve
 | **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. |
 | **DefaultTree** | The fallback behavior tree used when no specific tree matches. Extracted from a 750-line god node into 21 paths across 7 category files. |
 | **Evolution** | The process of systematically improving behavior trees through mutation, fitness evaluation, and selection. 6 algorithms available. |
-| **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017). Bounded at 500 entries: quality-aware eviction (lowest quality/oldest first, `TimesReused >= 3` protected) enforced on Add and on load (ADR-018). |
+| **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017) and shared with bt-gardener, whose v2 cycles record accepted mutations and bias candidate ordering from the same file (ADR-021). Bounded at 500 entries: quality-aware eviction (lowest quality/oldest first, `TimesReused >= 3` protected) enforced on Add and on load (ADR-018). |
 | **Expert Knowledge** | Curated design patterns (6) and anti-patterns (5) that guide tree evolution. Includes TreeArchetypes for each category. |
 | **Fitness Score** | Multi-dimensional evaluation of a behavior tree's performance. Dimensions include correctness, completeness, conciseness, actionability. |
-| **Gardener** | The evolution orchestrator (`cmd/bt-gardener`). Runs evolution cycles: evaluate → order mutations → apply → re-evaluate → accept/rollback. |
+| **Gardener** | The evolution orchestrator (`cmd/bt-gardener`). Runs evolution cycles: evaluate → order mutations (experience-biased, ADR-021) → apply → re-evaluate → accept (recorded to the shared Experience Bank) or rollback. |
 | **GOAP** | Goal-Oriented Action Planning. PlannerNode extends UtilitySelector with goal management, world state, and available actions. |
 | **GOAP Fusion Loop** | The scheduled self-improvement cycle (`domain:goap_fusion_loop`, cron 0,30): research → goals → plan → implement → verify → land, wired with Phase-0 preflight, circuit gates, and state-hash producers. |
 | **Grill** | Multi-turn critical NotebookLM review ("what is the framework missing?") rotating rounds 1-3 across cycles; answers feed the shared goal list. Round questions are served from the per-day query cache. |

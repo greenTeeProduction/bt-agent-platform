@@ -68,7 +68,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 
 	// ── Generate and filter mutations ──
-	candidates := evaluator.OrderMutations(tree, records, baseFitness)
+	candidates := biasCandidatesWithExperience(g.cfg.ExperienceBank, tree, evaluator.OrderMutations(tree, records, baseFitness))
 
 	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
@@ -149,6 +149,13 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
+			if g.cfg.ExperienceBank != nil {
+				// Record before advancing currentFitness so the delta is the
+				// per-candidate improvement, not cumulative across the cycle.
+				if err := g.cfg.ExperienceBank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil); err != nil {
+					slog.Warn("gardener/v2: recording mutation experience failed", "tree", entry.Name, "error", err)
+				}
+			}
 			currentFitness = candidateFitness
 		}
 	}
@@ -193,6 +200,77 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		Rejections: rejected,
 		Rollbacks:  rollbacks,
 	}
+}
+
+const (
+	// experienceBiasTopK bounds how many prior experiences candidate biasing
+	// retrieves per cycle.
+	experienceBiasTopK = 5
+
+	// experienceBiasMinQuality is the floor below which a past entry is not
+	// considered proven enough to bias heuristic ordering.
+	experienceBiasMinQuality = 0.5
+
+	// experienceBiasBoost scales the score bump a matching candidate receives,
+	// weighted by the matched entry's quality score.
+	experienceBiasBoost = 0.15
+)
+
+// biasCandidatesWithExperience reorders OrderMutations candidates using
+// ExperienceBank retrieval: a candidate whose op/target matches a high-quality
+// past entry for the same tree type gets its score boosted (proportional to the
+// entry's quality) and the matched entry is marked reused. Non-matching
+// candidates keep their relative heuristic order (stable sort). A nil or empty
+// bank — or one with no usable matches — leaves the ordering untouched.
+func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolution.SerializableNode, candidates []evaluator.MutationCandidate) []evaluator.MutationCandidate {
+	hints := evolution.RetrieveExperienceHints(bank, tree, experienceBiasTopK)
+	if len(hints) == 0 || len(candidates) == 0 {
+		return candidates
+	}
+
+	// Index hints by op/target, keeping the highest-quality entry per key.
+	type opTarget struct{ op, target string }
+	best := make(map[opTarget]evolution.ExperienceEntry, len(hints))
+	for _, h := range hints {
+		if h.QualityScore < experienceBiasMinQuality {
+			continue
+		}
+		key := opTarget{h.MutationOp, h.TargetNode}
+		if cur, ok := best[key]; !ok || h.QualityScore > cur.QualityScore {
+			best[key] = h
+		}
+	}
+	if len(best) == 0 {
+		return candidates
+	}
+
+	biased := make([]evaluator.MutationCandidate, len(candidates))
+	copy(biased, candidates)
+	reused := make(map[string]bool)
+	for i := range biased {
+		h, ok := best[opTarget{biased[i].Op.Operation, biased[i].Op.Target}]
+		if !ok {
+			continue
+		}
+		biased[i].Score += experienceBiasBoost * h.QualityScore
+		reused[h.ID] = true
+	}
+	if len(reused) == 0 {
+		return candidates
+	}
+
+	sort.SliceStable(biased, func(i, j int) bool {
+		return biased[i].Score > biased[j].Score
+	})
+
+	reusedIDs := make([]string, 0, len(reused))
+	for id := range reused {
+		reusedIDs = append(reusedIDs, id)
+	}
+	if err := bank.MarkReused(reusedIDs); err != nil {
+		slog.Warn("gardener/v2: marking experience entries reused failed", "error", err)
+	}
+	return biased
 }
 
 // RunCycleV2 executes one full evolution cycle using the v2 pipeline.
