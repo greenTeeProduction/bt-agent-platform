@@ -41,7 +41,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (60 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites, `bt_evolve_multiobjective` NSGA-II, and `bt_evolve_island` island-model evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (61 tools, incl. the deterministic `bt_evolve_qd` MAP-Elites, `bt_evolve_multiobjective` NSGA-II, `bt_evolve_island` island-model, and `bt_evolve_bottlenecks` experience-grounded bottleneck-evolution tools), bt-evaluator (5 tools), bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
@@ -143,7 +143,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 60 tools: tree execution, agent management, knowledge graph, evolution |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 61 tools: tree execution, agent management, knowledge graph, evolution |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
 | bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 3 tools: evolved langchain agent execution |
 | bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |
@@ -295,7 +295,8 @@ internal/evolution/
 ├── q_learning.go        — State→Action epsilon-greedy policy
 ├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
 ├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
-├── learning.go          — cloneTree (sole deep-copy implementation)
+├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant)
+├── experience_bank.go   — ExperienceBank: persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type
 ├── vault_manager.go     — Tree vault with checkpoint/restore
 ├── types.go             — SerializableNode, Individual, Population, Fitness
 └── fitness.go           — Per-tree fitness via reflection.FilterByTreeName
@@ -542,6 +543,9 @@ systemd (system)
 ├── research/                — knowledge.json (dedup store), programs.json
 │                              (multi-cycle programs), nlm-query-cache.json +
 │                              nlm-usage.json (quota economy)
+├── experience/              — experience.json: ExperienceBank of successful
+│                              mutations (warm-starts bt_evolve_genetic /
+│                              bt_evolve_bottlenecks across restarts)
 ├── hitl/                    — Human-in-the-loop approval requests
 ├── audit/                   — Audit log
 ├── logs/                    — bt.log
@@ -617,13 +621,13 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ## 8.3 MCP Protocol Layer
 
-**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (60 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
+**What:** All tools are exposed via JSON-RPC 2.0 over stdio. 3 MCP servers: bt-agent (61 tools), bt-evaluator (5 tools), bt-langagent (3 tools). ADR-002.
 
 **Why:** MCP provides a standardized interface between Hermes Agent and the Go BT platform. No custom protocols, no REST overhead. Stdio transport keeps it simple and gateway-managed.
 
 **Where:** `internal/mcp/` (server implementation), `cmd/bt-agent/tools.go` (tool registration), `cmd/bt-agent/main.go` (server setup).
 
-**Effect:** Hermes Agent sees 68 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
+**Effect:** Hermes Agent sees 69 MCP tools. Adding a tool is a single `server.RegisterTool()` call. Gateway handles lifecycle (spawn, restart, health check).
 
 **In-process seam:** `engine.Server` also exposes `HasTool(name) bool` and `Invoke(name, args) (*ToolResult, bool)` (`internal/engine/mcp_server.go`) so a registered tool can be asserted and driven by name in-process — without standing up the stdio JSON-RPC loop. This is a test/in-process seam only: it reads the private handler registry directly and deliberately bypasses the auth, rate-limit, sanitization, and tracing wrapping applied on the `tools/call` path, so it must never become a production request route.
 
@@ -650,6 +654,8 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 **Where:** `internal/evolution/` — each algorithm file, `internal/gardener/` (evolution_v2.go for cycle orchestration).
 
 **Effect:** Evolution is auditable (git commits), reversible (rollback), and measurable (fitness delta tracking).
+
+**Experience-grounded memory (ADR-017):** The genetic path additionally learns across runs. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) warm-starts operator selection from the persistent `ExperienceBank` — the top-5 `RetrieveByTreeType` hints for the population's tree type bias 50% of mutations toward operators that previously improved fitness on similar trees — and records every fitness-improving mutation back via `AddFromMutation` (regressions are discarded, so the bank only accumulates successes). A nil bank degrades to plain `Evolve`. The daemon constructs one bank at startup (`~/.go-bt-evolve/experience/experience.json`, honoring `BT_AGENT_HOME`) and plumbs it through `mcpDeps` into `bt_evolve_genetic` and `bt_evolve_bottlenecks`, so mutation experience compounds across restarts the same way knowledge-graph feedback does (§8.4).
 
 ## 8.6 Error Resiliency
 
@@ -1007,6 +1013,22 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-017: Experience-Grounded Evolution Closes the Learn→Discover→Evolve Loop
+
+**Context (2026-07-08):** `ExperienceBank` (`internal/evolution/experience_bank.go`) — fully built and tested, and whose package header promised an `EvolveWithExperience` warm-start path — had zero production callers, so mutation experience was discarded after every run. Independently, the knowledge graph's `ComputeAnalytics().Bottlenecks` list (trees with `RunCount >= 3 && Fitness < 30`) was emitted only as human-readable `SuggestedActions` strings that nothing consumed: the persisted KG feedback (§8.4) fed no evolution.
+
+**Decision:** Implement the promised path and wire it end to end. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) runs the genetic algorithm with operator selection warm-started from the bank's top-5 `RetrieveByTreeType` hints (a 0.5 bias toward hint operators, `MarkReused` bumping reuse stats) and records each fitness-improving mutation back via `AddFromMutation`, discarding regressions; a nil bank degrades to plain `Evolve`. `cmd/bt-agent/main.go` constructs one persistent bank at `~/.go-bt-evolve/experience/experience.json` (via `agent.HomeDir()`, so `BT_AGENT_HOME` redirection holds; construction failure logs a warning and runs memoryless) and plumbs it through `mcpDeps`. `bt_evolve_genetic` now routes through `EvolveWithExperience` and reports `experience_bank_entries` and `experience_retrieval_hits`; a new deterministic `bt_evolve_bottlenecks` tool (tool 61, ADR-009 family: `structuralFitnessFn`, LLM-free, `-short`-safe) iterates every KG bottleneck, evolves each resolvable tree with the same bank, and returns a per-tree before/after fitness report, skipping — not aborting on — KG entries without a real tree. Wiring is pinned by `cmd/bt-agent/wiring_test.go` (`TestDaemonWiresExperienceBankPath`, `TestDaemonPlumbsExperienceBankIntoMCPDeps`, `TestBTEvolveGeneticRoutesThroughExperienceBank`) and seeded-deterministic bank tests in `internal/evolution/experience_bank_test.go`.
+
+**Status:** Accepted (2026-07-08)
+
+**Consequences:**
+- ✅ Mutation experience is durable for the first time: successful operators discovered in one run bias later runs on similar tree types, across restarts
+- ✅ The learn→discover→evolve loop the persisted KG feedback (§8.4) was built for is closed — underperforming trees surfaced by runtime feedback now receive targeted, experience-grounded evolution via one tool call
+- ⚠️ The bottleneck report's `before_fitness` is the KG runtime success rate while `after_fitness` is structural fitness — two different metrics, so the per-tree delta is directional evidence, not a like-for-like comparison
+- ⚠️ Evolved bottleneck trees are reported, not auto-persisted — accepting an improved tree into the tree store remains a follow-up milestone of the Q2 program
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1137,6 +1159,7 @@ go-bt-evolve
 | **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. |
 | **DefaultTree** | The fallback behavior tree used when no specific tree matches. Extracted from a 750-line god node into 21 paths across 7 category files. |
 | **Evolution** | The process of systematically improving behavior trees through mutation, fitness evaluation, and selection. 6 algorithms available. |
+| **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017). |
 | **Expert Knowledge** | Curated design patterns (6) and anti-patterns (5) that guide tree evolution. Includes TreeArchetypes for each category. |
 | **Fitness Score** | Multi-dimensional evaluation of a behavior tree's performance. Dimensions include correctness, completeness, conciseness, actionability. |
 | **Gardener** | The evolution orchestrator (`cmd/bt-gardener`). Runs evolution cycles: evaluate → order mutations → apply → re-evaluate → accept/rollback. |

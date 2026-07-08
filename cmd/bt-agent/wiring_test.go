@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	a2acard "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -174,6 +178,135 @@ func TestDaemonSchedulerConfigWiresFeedbackPath(t *testing.T) {
 	}
 	if scfg.CBStore == nil {
 		t.Fatal("SchedulerConfig.CBStore must be set (per-agent circuit breakers)")
+	}
+}
+
+// TestDaemonWiresExperienceBankPath pins that THE DAEMON BINARY resolves an
+// on-disk experience-bank directory (experienceBankDir()) the same way it
+// resolves the knowledge-feedback snapshot path (feedbackSnapshotPath()): a
+// non-empty location rooted under agent.HomeDir(), so mutation experiences
+// recorded by bt_evolve_genetic survive restarts alongside the rest of the
+// platform state and honor BT_AGENT_HOME redirection in tests/deployments.
+// Without this helper the ExperienceBank stays orphaned in prod — built and
+// tested in internal/evolution but never handed a durable path by any binary.
+func TestDaemonWiresExperienceBankPath(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	dir := experienceBankDir()
+	if dir == "" {
+		t.Fatal("daemon must resolve a non-empty experience-bank directory (experienceBankDir())")
+	}
+	if home := agent.HomeDir(); !strings.HasPrefix(dir, home) {
+		t.Fatalf("experienceBankDir() = %q must live under agent.HomeDir() %q so it honors BT_AGENT_HOME and persists with platform state", dir, home)
+	}
+}
+
+// TestDaemonPlumbsExperienceBankIntoMCPDeps pins — at the source level, the
+// same way TestRegisterMCPToolsCommentMatchesActualToolCount audits tool
+// registrations — that main() actually constructs the persistent
+// ExperienceBank at experienceBankDir() and hands it to registerMCPTools via
+// the mcpDeps.expBank field. The behavioral test below can only prove the
+// tool uses a bank when given one; this closes the remaining gap where the
+// `expBank:` line is deleted from main() and evolution silently reverts to
+// the memoryless path while all tests stay green.
+func TestDaemonPlumbsExperienceBankIntoMCPDeps(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "experienceBankDir()") {
+		t.Error("main.go must construct the ExperienceBank at experienceBankDir(); no reference found")
+	}
+	if !strings.Contains(string(src), "expBank:") {
+		t.Error("main.go must plumb the ExperienceBank into registerMCPTools via mcpDeps{expBank: ...}; no `expBank:` field assignment found")
+	}
+}
+
+// TestBTEvolveGeneticRoutesThroughExperienceBank pins milestone 2/4 of the
+// experience-grounded evolution feedback loop (Q2 Evolvability) end-to-end:
+// bt_evolve_genetic must route evolution through Population.
+// EvolveWithExperience against the daemon's persistent ExperienceBank —
+// warm-starting from prior same-tree-type experiences — and report the bank's
+// entry count and the number of warm-start retrieval hits in its JSON result.
+// A deps bundle without a bank (every other test in this package passes
+// &mcpDeps{}) must degrade gracefully to plain Evolve while keeping the
+// result shape uniform (both counters present, zero).
+func TestBTEvolveGeneticRoutesThroughExperienceBank(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	bank, err := evolution.NewExperienceBank(experienceBankDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank(experienceBankDir()): %v", err)
+	}
+	// Seed one prior success for the same base tree the tool will evolve, so
+	// the warm-start retrieval (RetrieveByTreeType on the base tree's type)
+	// deterministically hits it.
+	baseTree := resolveTree("godev")
+	if baseTree == nil {
+		t.Fatal("godev tree did not resolve")
+	}
+	if err := bank.AddFromMutation(baseTree,
+		evolution.MutationOp{Operation: "add_before", Target: "seed"},
+		0.10, 0.40, nil); err != nil {
+		t.Fatalf("seed AddFromMutation: %v", err)
+	}
+	if bank.Count() != 1 {
+		t.Fatalf("seeded bank Count() = %d, want 1", bank.Count())
+	}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{expBank: bank})
+
+	res, ok := server.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_genetic) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_genetic returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_genetic unexpectedly returned an error: %v", out)
+	}
+
+	entries, present := out["experience_bank_entries"].(float64)
+	if !present {
+		t.Fatalf("bt_evolve_genetic result missing numeric \"experience_bank_entries\"; got keys %v", out)
+	}
+	if entries < 1 {
+		t.Errorf("experience_bank_entries = %v, want >= 1 (bank was seeded with one entry)", entries)
+	}
+	hits, present := out["experience_retrieval_hits"].(float64)
+	if !present {
+		t.Fatalf("bt_evolve_genetic result missing numeric \"experience_retrieval_hits\"; got keys %v", out)
+	}
+	if hits < 1 {
+		t.Errorf("experience_retrieval_hits = %v, want >= 1 (a same-tree-type experience was seeded; evolution did not consult the bank)", hits)
+	}
+
+	// Nil-bank degrade: the shared &mcpDeps{} shape used across this package
+	// must keep working, with both counters present and zero.
+	bare := engine.NewServer("bare")
+	registerMCPTools(bare, &mcpDeps{})
+	bres, ok := bare.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok || bres == nil || len(bres.Content) == 0 {
+		t.Fatal("bt_evolve_genetic must still run without an ExperienceBank (nil bank degrades to plain Evolve)")
+	}
+	var bout map[string]interface{}
+	if err := json.Unmarshal([]byte(bres.Content[0].Text), &bout); err != nil {
+		t.Fatalf("nil-bank bt_evolve_genetic result is not valid JSON: %v", err)
+	}
+	if _, isErr := bout["error"]; isErr {
+		t.Fatalf("nil-bank bt_evolve_genetic unexpectedly returned an error: %v", bout)
+	}
+	if v, present := bout["experience_bank_entries"].(float64); !present || v != 0 {
+		t.Errorf("nil-bank experience_bank_entries = %v (present=%v), want 0", bout["experience_bank_entries"], present)
+	}
+	if v, present := bout["experience_retrieval_hits"].(float64); !present || v != 0 {
+		t.Errorf("nil-bank experience_retrieval_hits = %v (present=%v), want 0", bout["experience_retrieval_hits"], present)
 	}
 }
 

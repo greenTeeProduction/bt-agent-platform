@@ -37,6 +37,12 @@ func resolveTree(id string) *evolution.SerializableNode {
 // location, keeping Fitness/RunCount/tool-edges durable across restarts.
 func feedbackSnapshotPath() string { return agent.FeedbackFile() }
 
+// experienceBankDir resolves the on-disk directory backing the daemon's
+// persistent ExperienceBank. Rooted under agent.HomeDir() — like the rest of
+// the platform state — so it honors BT_AGENT_HOME redirection and mutation
+// experiences recorded by bt_evolve_genetic survive restarts.
+func experienceBankDir() string { return filepath.Join(agent.HomeDir(), "experience") }
+
 // buildSchedulerConfig assembles the SchedulerConfig the daemon hands to
 // agent.NewScheduler. It is factored out of main() so the production wiring —
 // durable FileJobStore, per-agent circuit breakers, and the FeedbackPath that
@@ -359,12 +365,21 @@ func main() {
 	// Create a shared memory store for MCP tools (stores per-agent memory)
 	sharedMem, _ := agent.NewMemoryStore(agentLocalMem, "_global", 200)
 
+	// Persistent experience bank: warm-starts bt_evolve_genetic from prior
+	// successful mutations and records new ones across restarts. A nil bank
+	// (construction failure) degrades evolution to the memoryless path.
+	expBank, expBankErr := evolution.NewExperienceBank(experienceBankDir())
+	if expBankErr != nil {
+		engine.Warn("experience bank unavailable — evolution runs memoryless", "error", expBankErr)
+	}
+
 	// Register all MCP tools via the extracted handler function.
 	registerMCPTools(server, &mcpDeps{
 		bb:           bb,
 		bt:           &bt,
 		treeStore:    treeStore,
 		refStore:     refStore,
+		expBank:      expBank,
 		agentFactory: agentFactory,
 		kg:           kg,
 		llmClient:    llmClient,

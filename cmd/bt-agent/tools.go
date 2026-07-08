@@ -50,6 +50,7 @@ type mcpDeps struct {
 	bt           *btcore.Command[engine.Blackboard]
 	treeStore    *evolution.TreeStore
 	refStore     *evolution.Store
+	expBank      *evolution.ExperienceBank
 	agentFactory *factory.AgentFactory
 	kg           *knowledge.KnowledgeGraph
 	llmClient    llm.LLM
@@ -64,7 +65,7 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 }
 
-// registerMCPTools registers all 60 MCP tools on the server.
+// registerMCPTools registers all 61 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -567,14 +568,24 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
 			pop := evolution.NewPopulation(params.Population, baseTree)
-			best := pop.Evolve(params.Generations, structuralFitnessFn)
+			// Warm-start from the daemon's persistent experience bank when one
+			// is wired; a nil bank degrades to plain Evolve inside
+			// EvolveWithExperience, keeping the result shape uniform.
+			retrievalHits := evolution.ExperienceRetrievalHits(deps.expBank, baseTree)
+			best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+			bankEntries := 0
+			if deps.expBank != nil {
+				bankEntries = deps.expBank.Count()
+			}
 			data, _ := json.Marshal(map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "diversity": pop.Diversity(),
 				"convergence_rate": pop.ConvergenceRate(), "best_nodes": evolution.CountNodes(best),
 				"regression_rate": fmt.Sprintf("%.1f%%", pop.RegressionRate()),
 				"total_mutations": pop.TotalMutations, "regressions": pop.Regressions,
-				"niche_diversity": fmt.Sprintf("%.2f", pop.NicheDiversity()),
+				"niche_diversity":           fmt.Sprintf("%.2f", pop.NicheDiversity()),
+				"experience_bank_entries":   bankEntries,
+				"experience_retrieval_hits": retrievalHits,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -762,6 +773,64 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": stats.BestPerDomain, "migrations": stats.Migrations,
 				"cross_diversity": stats.CrossDiversity,
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_bottlenecks", "Evolve every knowledge-graph bottleneck tree (RunCount >= 3, Fitness < 30) with experience-grounded evolution and report per-tree before/after fitness",
+		map[string]engine.Property{
+			"population":  {Type: "integer", Description: "Population size per bottleneck (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations per bottleneck (default: 10)"},
+		},
+		[]string{},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Population  int `json:"population"`
+				Generations int `json:"generations"`
+			}
+			_ = json.Unmarshal(args, &params)
+			if params.Population <= 0 {
+				params.Population = 20
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			if deps.kg == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"knowledge graph unavailable"}`}}}
+			}
+			// Deterministic, LLM-free closure of the learn→discover→evolve loop:
+			// the same RunCount/Fitness criteria ComputeAnalytics surfaces as
+			// human-readable SuggestedActions drive structural evolution directly.
+			bottlenecks := deps.kg.ComputeAnalytics().Bottlenecks
+			bankEntries := 0
+			if deps.expBank != nil {
+				bankEntries = deps.expBank.Count()
+			}
+			report := []map[string]interface{}{}
+			skipped := []string{}
+			for _, b := range bottlenecks {
+				baseTree := resolveTree(b.TreeID)
+				if baseTree == nil {
+					// A KG entry without a real behavior tree must not abort the
+					// remaining bottlenecks.
+					skipped = append(skipped, b.TreeID)
+					continue
+				}
+				pop := evolution.NewPopulation(params.Population, baseTree)
+				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				report = append(report, map[string]interface{}{
+					"tree":           b.TreeID,
+					"before_fitness": b.SuccessRate,
+					"after_fitness":  pop.BestFitness,
+					"runs":           b.Runs,
+					"generations":    pop.Generation,
+				})
+			}
+			data, _ := json.Marshal(map[string]interface{}{
+				"bottlenecks":             len(bottlenecks),
+				"report":                  report,
+				"skipped":                 skipped,
+				"experience_bank_entries": bankEntries,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})

@@ -212,6 +212,26 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 	return matching[:topK]
 }
 
+// MarkReused increments TimesReused for the entries with the given IDs and
+// persists the bank, so reuse statistics survive restarts.
+func (eb *ExperienceBank) MarkReused(ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	idSet := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	eb.mu.Lock()
+	for i := range eb.Entries {
+		if idSet[eb.Entries[i].ID] {
+			eb.Entries[i].TimesReused++
+		}
+	}
+	eb.mu.Unlock()
+	return eb.Persist()
+}
+
 // TransferExperiences finds experiences from sourceTree that may apply to targetTree.
 // Returns entries sorted by quality score — cross-tree transfer relies on the LLM
 // or similarity matching to determine applicability.

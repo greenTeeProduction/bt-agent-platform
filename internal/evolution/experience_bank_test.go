@@ -455,6 +455,99 @@ func TestPersistDirCreated(t *testing.T) {
 	}
 }
 
+// ─── EvolveWithExperience warm-start (Q2 Evolvability) ─────────────────────
+//
+// The package header (experience_bank.go) promises Population.EvolveWithExperience
+// in learning.go: evolution that (a) warm-starts operator selection from
+// ExperienceBank.RetrieveByTreeType hints and (b) records fitness-improving
+// mutations back into the bank via AddFromMutation, closing the
+// learn→retrieve→mutate feedback loop.
+
+// growthFitness is monotone in node count and bounded in (0,1), so any mutation
+// that adds nodes strictly improves fitness — a seeded run is guaranteed to
+// encounter improving mutations for the bank to record.
+func growthFitness(tr *SerializableNode) float64 {
+	n := float64(CountNodes(tr))
+	return n / (n + 40.0)
+}
+
+func TestEvolveWithExperience_RecordsImprovingMutations(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	pop := NewPopulation(8, DefaultTree())
+	best := pop.EvolveWithExperience(3, growthFitness, eb)
+	if best == nil {
+		t.Fatal("EvolveWithExperience returned nil best tree")
+	}
+
+	if eb.Count() == 0 {
+		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation; bank is empty")
+	}
+	for i, e := range eb.Entries {
+		if e.FitnessDelta <= 0 {
+			t.Errorf("entry %d: recorded non-improving mutation (delta=%.4f)", i, e.FitnessDelta)
+		}
+	}
+	// AddFromMutation persists on every add — the bank must survive a restart.
+	if _, err := os.Stat(eb.PersistPath); err != nil {
+		t.Errorf("expected persisted experience file at %s: %v", eb.PersistPath, err)
+	}
+}
+
+func TestEvolveWithExperience_WarmStartConsultsBankHints(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	// Pre-seed high-quality experiences for the Default tree type so the
+	// warm-start path has hints to retrieve.
+	seedTree := DefaultTree()
+	seedOps := []MutationOp{
+		{Operation: "add_fallback", Target: "SetupTools"},
+		{Operation: "add_before", Target: "HasClearTask"},
+	}
+	for i, op := range seedOps {
+		if err := eb.AddFromMutation(seedTree, op, 0.30, 0.55+float64(i)*0.05, nil); err != nil {
+			t.Fatalf("seed AddFromMutation: %v", err)
+		}
+	}
+
+	pop := NewPopulation(8, DefaultTree())
+	pop.EvolveWithExperience(2, growthFitness, eb)
+
+	// Warm-start must consult RetrieveByTreeType for the population's tree type
+	// and mark the retrieved hints as reused.
+	reused := 0
+	for _, e := range eb.Entries {
+		if e.TreeType == "Default" && e.TimesReused > 0 {
+			reused++
+		}
+	}
+	if reused == 0 {
+		t.Fatal("expected warm-start to retrieve Default hints via RetrieveByTreeType and increment TimesReused; no entry was consulted")
+	}
+}
+
+func TestEvolveWithExperience_NilBankStillEvolves(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	pop := NewPopulation(6, DefaultTree())
+	best := pop.EvolveWithExperience(2, growthFitness, nil)
+	if best == nil {
+		t.Fatal("EvolveWithExperience with nil bank should degrade to plain evolution and return a best tree")
+	}
+	if pop.Generation != 2 {
+		t.Errorf("expected 2 generations to run, got %d", pop.Generation)
+	}
+}
+
 // Benchmarks
 func BenchmarkAddFromMutation(b *testing.B) {
 	dir := b.TempDir()

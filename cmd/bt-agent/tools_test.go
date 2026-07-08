@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // TestRegisterMCPToolsCommentMatchesActualToolCount guards the doc comment on
@@ -346,5 +347,140 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	}
 	if errOut2["error"] != "unknown tree" {
 		t.Fatalf("bt_evolve_multiobjective unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut2)
+	}
+}
+
+// TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport pins the
+// bt_evolve_bottlenecks MCP tool that closes the learn→discover→evolve loop:
+// it must be registered by registerMCPTools, consume the knowledge graph's
+// bottleneck list (trees with RunCount >= 3 and Fitness < 30 — the same
+// criteria ComputeAnalytics uses, today surfaced only as human-readable
+// SuggestedActions strings), run a deterministic (LLM-free) experience-grounded
+// evolution on each underperforming tree, and report per-tree before/after
+// fitness as JSON. Healthy trees must be left alone, a bottleneck whose KG id
+// does not resolve to a real behavior tree must be skipped (reported under
+// "skipped") without aborting the rest of the report, and a graph with no
+// bottlenecks must yield an empty report rather than an error. A nil
+// experience bank (as in this test's bare mcpDeps) must degrade gracefully,
+// with the consulted bank surfaced via "experience_bank_entries".
+func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) {
+	kg := knowledge.NewKnowledgeGraph()
+	// Underperforming tree that resolves to a real domain behavior tree.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 12, RunCount: 5,
+	})
+	// Healthy tree: must never appear in the evolution report.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:security_audit", Name: "Security Audit", Category: "domain",
+		Fitness: 85, RunCount: 10,
+	})
+	// Underperforming tree whose id resolves to no behavior tree (unknown
+	// domain suffix): must be skipped, not abort the whole invocation.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:__no_such_tree__", Name: "Ghost", Category: "domain",
+		Fitness: 5, RunCount: 4,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg})
+
+	if !server.HasTool("bt_evolve_bottlenecks") {
+		t.Fatal("bt_evolve_bottlenecks tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: tiny population/generations so the deterministic structural
+	// evolution stays -short-safe.
+	res, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_bottlenecks unexpectedly returned an error for a graph with bottlenecks: %v", out)
+	}
+
+	// Both underperformers count as detected bottlenecks.
+	if n, isNum := out["bottlenecks"].(float64); !isNum || int(n) != 2 {
+		t.Errorf("bt_evolve_bottlenecks must report 'bottlenecks' = 2 (both RunCount>=3, Fitness<30 trees); got %v", out["bottlenecks"])
+	}
+
+	// The per-tree report holds exactly the one resolvable bottleneck, with its
+	// KG fitness echoed as before_fitness and a computed after_fitness.
+	report, isList := out["report"].([]interface{})
+	if !isList {
+		t.Fatalf("bt_evolve_bottlenecks must return a 'report' JSON array; got %T (%v)", out["report"], out["report"])
+	}
+	if len(report) != 1 {
+		t.Fatalf("bt_evolve_bottlenecks 'report' must hold exactly the 1 resolvable bottleneck; got %d entries: %v", len(report), report)
+	}
+	entry, isObj := report[0].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_bottlenecks report entries must be JSON objects; got %T (%v)", report[0], report[0])
+	}
+	if entry["tree"] != "domain:code_review" {
+		t.Errorf("bt_evolve_bottlenecks report entry must name 'tree' = %q; got %v", "domain:code_review", entry["tree"])
+	}
+	if before, isNum := entry["before_fitness"].(float64); !isNum || before != 12 {
+		t.Errorf("bt_evolve_bottlenecks report entry must echo the KG fitness as 'before_fitness' = 12; got %v", entry["before_fitness"])
+	}
+	if after, isNum := entry["after_fitness"].(float64); !isNum || after <= 0 {
+		t.Errorf("bt_evolve_bottlenecks report entry must carry a positive evolved 'after_fitness'; got %v", entry["after_fitness"])
+	}
+	if runs, isNum := entry["runs"].(float64); !isNum || int(runs) != 5 {
+		t.Errorf("bt_evolve_bottlenecks report entry must echo 'runs' = 5; got %v", entry["runs"])
+	}
+	for _, e := range report {
+		if m, isMap := e.(map[string]interface{}); isMap && m["tree"] == "domain:security_audit" {
+			t.Errorf("bt_evolve_bottlenecks must not evolve the healthy tree domain:security_audit; report: %v", report)
+		}
+	}
+
+	// The unresolvable bottleneck is surfaced under 'skipped', not silently
+	// dropped and not fatal.
+	skipped, isList := out["skipped"].([]interface{})
+	if !isList || len(skipped) != 1 || skipped[0] != "domain:__no_such_tree__" {
+		t.Errorf("bt_evolve_bottlenecks must list the unresolvable bottleneck under 'skipped' = [\"domain:__no_such_tree__\"]; got %v", out["skipped"])
+	}
+
+	// Experience-grounded: the consulted bank is reported even when nil (0).
+	if _, present := out["experience_bank_entries"]; !present {
+		t.Errorf("bt_evolve_bottlenecks result missing 'experience_bank_entries' key; got keys %v", out)
+	}
+
+	// No bottlenecks: a healthy-only graph yields an empty report, not an error.
+	healthyOnly := knowledge.NewKnowledgeGraph()
+	healthyOnly.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 20,
+	})
+	server2 := engine.NewServer("test2")
+	registerMCPTools(server2, &mcpDeps{kg: healthyOnly})
+	empty, ok := server2.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered on the no-bottleneck path")
+	}
+	if empty == nil || len(empty.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content for a healthy graph")
+	}
+	var emptyOut map[string]interface{}
+	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks healthy-graph result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
+	}
+	if _, isErr := emptyOut["error"]; isErr {
+		t.Fatalf("bt_evolve_bottlenecks must not error on a graph without bottlenecks; got %v", emptyOut)
+	}
+	if n, isNum := emptyOut["bottlenecks"].(float64); !isNum || int(n) != 0 {
+		t.Errorf("bt_evolve_bottlenecks must report 'bottlenecks' = 0 for a healthy graph; got %v", emptyOut["bottlenecks"])
+	}
+	if emptyReport, isList := emptyOut["report"].([]interface{}); !isList || len(emptyReport) != 0 {
+		t.Errorf("bt_evolve_bottlenecks must return an empty 'report' array for a healthy graph; got %v", emptyOut["report"])
 	}
 }

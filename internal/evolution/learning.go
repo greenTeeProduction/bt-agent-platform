@@ -165,6 +165,125 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 	return p.BestTree
 }
 
+// experienceHintTopK bounds how many prior experiences the warm-start retrieves.
+const experienceHintTopK = 5
+
+// experienceHintBias is the probability that a mutation reuses a warm-start
+// hint operator instead of a uniformly random one.
+const experienceHintBias = 0.5
+
+// ExperienceRetrievalHits reports how many warm-start hints EvolveWithExperience
+// retrieves from the bank for the given base tree — the same RetrieveByTreeType
+// query with the same topK — so callers can surface the hit count without
+// duplicating the tree-type extraction. A nil bank yields 0.
+func ExperienceRetrievalHits(bank *ExperienceBank, tree *SerializableNode) int {
+	if bank == nil {
+		return 0
+	}
+	return len(bank.RetrieveByTreeType(extractTreeType(tree), experienceHintTopK))
+}
+
+// EvolveWithExperience runs the genetic algorithm like Evolve, but closes the
+// EvoRepair-style learn→retrieve→mutate loop against an ExperienceBank:
+// operator selection is warm-started from RetrieveByTreeType hints for the
+// population's tree type, and every fitness-improving mutation is recorded
+// back into the bank via AddFromMutation. A nil bank degrades to plain Evolve.
+func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*SerializableNode) float64, bank *ExperienceBank) *SerializableNode {
+	if bank == nil {
+		return p.Evolve(generations, fitnessFn)
+	}
+	if len(p.Individuals) == 0 {
+		return nil
+	}
+
+	p.Evaluate(fitnessFn)
+	p.PrevBestFitness = p.BestFitness
+	eliteCount := max(2, len(p.Individuals)/10)
+	supervisor := NewLLMSupervisor()
+
+	// Warm-start: consult prior successes for this population's tree type and
+	// bias operator selection toward them.
+	treeType := extractTreeType(p.Individuals[0].Tree)
+	hints := bank.RetrieveByTreeType(treeType, experienceHintTopK)
+	hintOps := make([]string, 0, len(hints))
+	hintIDs := make([]string, 0, len(hints))
+	for _, h := range hints {
+		hintOps = append(hintOps, h.MutationOp)
+		hintIDs = append(hintIDs, h.ID)
+	}
+	_ = bank.MarkReused(hintIDs)
+
+	mutator := NewMCTSMutator()
+	mutator.WarmStartHints = hintOps
+
+	for gen := 0; gen < generations; gen++ {
+		p.Generation++
+		guidance := supervisor.Guide(BuildPopulationState(p))
+		mutationRate := guidance.RecommendedRate
+
+		// Sort by fitness descending
+		sort.Slice(p.Individuals, func(i, j int) bool {
+			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+		})
+
+		// Keep elites
+		newPop := make([]Individual, len(p.Individuals))
+		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
+
+		// Fill rest with crossover + experience-guided mutation
+		for i := eliteCount; i < len(p.Individuals); i++ {
+			parents := p.Select()
+			child := Crossover(parents[0], parents[1])
+			if rand.Float64() < mutationRate {
+				child = p.mutateAndRecord(child, hintOps, fitnessFn, bank, mutator)
+				p.TotalMutations++
+			}
+			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
+		}
+
+		p.Individuals = newPop
+		p.Evaluate(fitnessFn)
+
+		if p.BestFitness > p.PrevBestFitness {
+			p.PrevBestFitness = p.BestFitness
+		}
+	}
+
+	return p.BestTree
+}
+
+// mutateAndRecord applies one experience-biased mutation to child. Improving
+// mutations are recorded in the bank; regressions are discarded so the
+// quality gate holds.
+func (p *Population) mutateAndRecord(
+	child *SerializableNode,
+	hintOps []string,
+	fitnessFn func(*SerializableNode) float64,
+	bank *ExperienceBank,
+	mutator *MCTSMutator,
+) *SerializableNode {
+	before := fitnessFn(child)
+
+	opName := AllMutationOps[rand.Intn(len(AllMutationOps))]
+	if len(hintOps) > 0 && rand.Float64() < experienceHintBias {
+		opName = hintOps[rand.Intn(len(hintOps))]
+	}
+
+	mutated := cloneTree(child)
+	op := mutator.concreteMutationOp(opName, mutated)
+	if ApplyMutations(mutated, []MutationOp{op}) == 0 {
+		return child
+	}
+
+	after := fitnessFn(mutated)
+	if after <= before {
+		p.Regressions++
+		return child
+	}
+	_ = bank.AddFromMutation(mutated, op, before, after, nil)
+	return mutated
+}
+
 // Diversity measures population uniqueness.
 func (p *Population) Diversity() float64 {
 	seen := make(map[string]bool)
