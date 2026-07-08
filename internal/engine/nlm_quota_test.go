@@ -83,9 +83,57 @@ func TestNlmResearchBudgetRefusesOverCap(t *testing.T) {
 	if proceed || deny == "" {
 		t.Fatal("second research start must be refused at cap 1")
 	}
-	// status/import of an in-flight research task are never budget-gated.
+	// status of an in-flight research task is never budget-gated.
 	if _, _, proceed := nlmPreflight([]string{"research", "status", "nb-1", "--task-id", "abc"}); !proceed {
 		t.Fatal("research status must not be budget-gated")
+	}
+}
+
+func TestNlmResearchImportBudgetRefusesOverCap(t *testing.T) {
+	// Regression: imports were deliberately never gated, so a wedged research
+	// task ("already in progress") re-imported the same 10 sources on every
+	// 2-hour researcher run — the notebook corpus grew 69 → 328 sources in
+	// three days, undoing a manual prune. Imports now consume a small daily
+	// budget of their own.
+	withNlmEconomy(t)
+	t.Setenv("BT_NLM_IMPORT_BUDGET", "2")
+	nlmPostflight([]string{"research", "import", "nb-1", "--task-id", "abc"}, "Imported 10 sources.")
+	nlmPostflight([]string{"research", "import", "nb-1", "--task-id", "abc"}, "Imported 10 sources.")
+	_, deny, proceed := nlmPreflight([]string{"research", "import", "nb-1", "--task-id", "abc"})
+	if proceed || deny == "" {
+		t.Fatalf("third import of the day must be refused at cap 2, got proceed=%v deny=%q", proceed, deny)
+	}
+	if !strings.Contains(deny, "import budget") {
+		t.Fatalf("refusal must say why: %q", deny)
+	}
+}
+
+func TestNlmPostflightDoesNotCountFailedImports(t *testing.T) {
+	withNlmEconomy(t)
+	t.Setenv("BT_NLM_IMPORT_BUDGET", "1")
+	nlmPostflight([]string{"research", "import", "nb-1", "--task-id", "abc"}, "Error: research task not completed")
+	if _, _, proceed := nlmPreflight([]string{"research", "import", "nb-1", "--task-id", "abc"}); !proceed {
+		t.Fatal("a failed import must not consume the import budget")
+	}
+}
+
+func TestDeriveNotebookLMResearchQueryUsesArc42Topics(t *testing.T) {
+	withNlmEconomy(t)
+	withArc42Doc(t, arc42GoalsTestDoc)
+	emptyPrograms := filepath.Join(t.TempDir(), "programs.json")
+	oldPrograms := goapProgramsPath
+	goapProgramsPath = emptyPrograms
+	t.Cleanup(func() { goapProgramsPath = oldPrograms })
+	boiler := "Production NotebookLM researcher — domain:notebooklm tree. Runs every 2 hours."
+	got := deriveNotebookLMResearchQuery(boiler)
+	found := false
+	for _, topic := range arc42ResearchTopics() {
+		if got == topic {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("idle-rotation research query must come from the arc42-anchored topics, got %q", got)
 	}
 }
 

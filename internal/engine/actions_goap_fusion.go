@@ -503,26 +503,7 @@ func registerGoapFusionActions() {
 		var query string
 		switch grillRound {
 		case 1:
-			query = fmt.Sprintf(`You are a critical reviewer / coach grilling the go-bt-evolve behavior tree agent platform team.
-
-		Current codebase structure (from graphify):
-		%s
-
-		Your job: Be brutally honest. What is this BT framework MISSING?
-
-		For EACH gap you identify, push hard:
-		- What specifically must be built?
-		- How do we measure success?
-		- What is the concrete implementation — exact tree types, nodes, metrics?
-		- What existing platform components can we leverage?
-		- What's the minimum viable fix vs the full solution?
-
-		Prioritize ruthlessly — which 2 gaps must be addressed first?
-
-		Rules:
-		- No vague advice. Demand exact tree types, node names, metric thresholds.
-		- Prefer implementation work over documentation.
-		- Return in format: GAP n: <gap> | FIX: <concrete fix> | FILES: <likely files> | TESTS: <test commands>`, graphSnippet)
+			query = buildGrillRound1Query(graphSnippet)
 		case 2:
 			query = `Push harder. Your previous answer identified gaps — now get CONCRETE.
 
@@ -996,4 +977,33 @@ func extractConversationID(out string) string {
 		return payload.ConversationID
 	}
 	return extractJSONStringField(out, "conversation_id")
+}
+
+// buildGrillRound1Query opens the grill conversation: a brutal gap review of
+// the platform, judged against the arc42 quality goals so "missing" means
+// "missing for what the platform is documented to be good at", not missing
+// relative to whatever the research corpus happens to discuss.
+func buildGrillRound1Query(graphSnippet string) string {
+	return fmt.Sprintf(`You are a critical reviewer / coach grilling the go-bt-evolve behavior tree agent platform team.
+
+		Current codebase structure (from graphify):
+		%s
+
+		%s
+		Your job: Be brutally honest. What is this BT framework MISSING to achieve the quality goals above?
+
+		For EACH gap you identify, push hard:
+		- Which quality goal does closing it advance?
+		- What specifically must be built?
+		- How do we measure success?
+		- What is the concrete implementation — exact tree types, nodes, metrics?
+		- What existing platform components can we leverage?
+		- What's the minimum viable fix vs the full solution?
+
+		Prioritize ruthlessly — which 2 gaps must be addressed first?
+
+		Rules:
+		- No vague advice. Demand exact tree types, node names, metric thresholds.
+		- Prefer implementation work over documentation.
+		- Return in format: GAP n: <gap> | GOAL: <arc42 quality goal advanced> | FIX: <concrete fix> | FILES: <likely files> | TESTS: <test commands>`, graphSnippet, arc42GoalsPromptBlock())
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -148,5 +149,54 @@ func TestReportNoNewResearchSucceedsWithoutReportWrite(t *testing.T) {
 	}
 	if !strings.Contains(bb.Result, "No New Research") {
 		t.Fatalf("result must state that nothing new was found, got: %s", bb.Result)
+	}
+}
+
+func TestSearchForBTPatternsQueriesArc42AnchoredResearch(t *testing.T) {
+	// Regression: SearchForBTPatterns was a static 5-item list — after the
+	// first cycle recorded them, 383 consecutive hourly runs re-encountered
+	// the same 5 patterns and produced zero new knowledge in ~16 days. The
+	// action now also asks NotebookLM one arc42-goal-anchored question per
+	// day (the nlm query cache dedupes repeats within a Pacific day) and
+	// records fresh bullet findings from the answer.
+	withFusionKnowledge(t)
+	withArc42Doc(t, arc42GoalsTestDoc)
+
+	var askedQuery string
+	oldRun := nlmFusionResearchRun
+	nlmFusionResearchRun = func(timeout time.Duration, args ...string) string {
+		if q, ok := nlmExtractQuery(args); ok {
+			askedQuery = q
+		}
+		return `{"answer":"- Use typed blackboard contracts to validate tree wiring at load time.\n- Gate mutations behind replayable benchmark suites."}`
+	}
+	t.Cleanup(func() { nlmFusionResearchRun = oldRun })
+
+	bb := &Blackboard{Task: "research bt patterns"}
+	if got := runFusionAction(t, "SearchForBTPatterns", bb); got != 1 {
+		t.Fatalf("expected success, got %d", got)
+	}
+	if askedQuery == "" {
+		t.Fatal("action must query NotebookLM for goal-anchored patterns")
+	}
+	if !strings.Contains(askedQuery, "arc42") {
+		t.Fatalf("research question must be arc42-goal-anchored: %q", askedQuery)
+	}
+	if !strings.Contains(bb.Result, "typed blackboard contracts") {
+		t.Fatalf("fresh findings from the answer must be reported: %s", bb.Result)
+	}
+}
+
+func TestSearchForBTPatternsSurvivesResearchFailure(t *testing.T) {
+	withFusionKnowledge(t)
+	withArc42Doc(t, arc42GoalsTestDoc)
+	oldRun := nlmFusionResearchRun
+	nlmFusionResearchRun = func(timeout time.Duration, args ...string) string {
+		return "Error: nlm daily query budget exhausted"
+	}
+	t.Cleanup(func() { nlmFusionResearchRun = oldRun })
+	bb := &Blackboard{Task: "research bt patterns"}
+	if got := runFusionAction(t, "SearchForBTPatterns", bb); got != 1 {
+		t.Fatalf("nlm failure must not fail the action (static findings remain), got %d", got)
 	}
 }

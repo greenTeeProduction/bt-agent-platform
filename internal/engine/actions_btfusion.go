@@ -41,6 +41,38 @@ func init() {
 	registerBTFusionActions()
 }
 
+// nlmFusionResearchRun is the nlm invocation used by bt_fusion pattern
+// research — a var so tests can stub the live NotebookLM call.
+var nlmFusionResearchRun = nlmRun
+
+// btFusionPatternQuestion derives the day's pattern-research question from
+// the arc42 quality goals, rotating one goal per day. Empty when the goals
+// are unavailable (the action then reports only its static seed findings).
+func btFusionPatternQuestion() string {
+	topics := arc42ResearchTopics()
+	if len(topics) == 0 {
+		return ""
+	}
+	return topics[time.Now().YearDay()%len(topics)]
+}
+
+// btFusionResearchFindings extracts bullet findings from a NotebookLM answer.
+func btFusionResearchFindings(answer string) []string {
+	var out []string
+	for _, line := range strings.Split(answer, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+			t = strings.TrimSpace(t[2:])
+		} else {
+			continue
+		}
+		if len(t) >= 20 && len(out) < 8 {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 func registerBTFusionActions() {
 	RegisterAction("SearchForBTPatterns", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -50,6 +82,17 @@ func registerBTFusionActions() {
 			"Telemetry-driven self-improvement: prioritize candidates from run history, trace latency, success rate, and failure modes.",
 			"Typed-edge validation: preserve guard/effect/recovery/approval semantics when generating new trees.",
 			"Checkpoint verification: generated trees should include deterministic postcondition checks before reporting success.",
+		}
+		// Goal-anchored live research: one arc42-derived question per day.
+		// The static seeds above went stale after the first cycle recorded
+		// them (383 consecutive "0 new findings" runs); the daily question
+		// keeps new knowledge flowing while the nlm query cache collapses
+		// this hourly action to at most one live call per day.
+		if question := btFusionPatternQuestion(); question != "" {
+			out := nlmFusionResearchRun(200*time.Second, "notebook", "query", "--json", "--timeout", "180", defaultNotebook, question)
+			if !isGoapNotebookLMFailure(out) {
+				findings = append(findings, btFusionResearchFindings(extractNotebookLMAnswer(out))...)
+			}
 		}
 		store, err := research.Open(btFusionKnowledgePath)
 		if err != nil {

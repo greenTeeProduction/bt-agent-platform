@@ -163,7 +163,7 @@ func buildSeedProgramPrompt(ps *research.ProgramStore) string {
 	return fmt.Sprintf(`You plan the next multi-cycle improvement program for the go-bt-evolve
 behavior-tree agent platform (Go, packages under internal/).
 
-Completed programs (do NOT repeat these):
+%sCompleted programs (do NOT repeat these):
 %s
 
 Recently implemented goals (do NOT re-propose):
@@ -187,6 +187,8 @@ MILESTONE2..MILESTONE5: <further steps, 3-5 total, each naming Go files>
 
 Rules: every milestone MUST name at least one repo-relative Go file path and
 open with an imperative verb; milestones must be landable one per task with
-tests; no documentation-only milestones.`,
-		strings.Join(past, "\n"), strings.Join(done, "\n- "), truncateGoap(string(graph), 2500))
+tests; no documentation-only milestones; the PROGRAM must advance at least
+one of the platform quality goals listed above and name it (e.g. Q2) in its
+title or first milestone.`,
+		arc42GoalsPromptBlock(), strings.Join(past, "\n"), strings.Join(done, "\n- "), truncateGoap(string(graph), 2500))
 }

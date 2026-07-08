@@ -38,10 +38,12 @@ var (
 	nlmUsagePath      = defaultNlmEconomyPath("nlm-usage.json")
 )
 
-// Default budgets; env-overridable (BT_NLM_QUERY_BUDGET / BT_NLM_RESEARCH_BUDGET).
+// Default budgets; env-overridable (BT_NLM_QUERY_BUDGET / BT_NLM_RESEARCH_BUDGET
+// / BT_NLM_IMPORT_BUDGET).
 const (
 	defaultNlmQueryBudget    = 30
 	defaultNlmResearchBudget = 2
+	defaultNlmImportBudget   = 2
 )
 
 func defaultNlmEconomyPath(name string) string {
@@ -77,6 +79,7 @@ type nlmUsage struct {
 	Day      string `json:"day"`
 	Queries  int    `json:"queries"`
 	Research int    `json:"research"`
+	Imports  int    `json:"imports"`
 }
 
 func loadNlmQueryCache() nlmQueryCache {
@@ -139,8 +142,11 @@ func saveNlmUsage(u nlmUsage) {
 
 func nlmBudgetFor(kind string) int {
 	env, def := "BT_NLM_QUERY_BUDGET", defaultNlmQueryBudget
-	if kind == "research" {
+	switch kind {
+	case "research":
 		env, def = "BT_NLM_RESEARCH_BUDGET", defaultNlmResearchBudget
+	case "import":
+		env, def = "BT_NLM_IMPORT_BUDGET", defaultNlmImportBudget
 	}
 	if raw := os.Getenv(env); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
@@ -179,6 +185,10 @@ func nlmIsResearchStart(args []string) bool {
 	return len(args) >= 2 && args[0] == "research" && args[1] == "start"
 }
 
+func nlmIsResearchImport(args []string) bool {
+	return len(args) >= 2 && args[0] == "research" && args[1] == "import"
+}
+
 // nlmPreflight decides how a metered nlm call proceeds:
 // cached answer (hit), budget refusal (deny non-empty), or live (proceed).
 func nlmPreflight(args []string) (cached string, deny string, proceed bool) {
@@ -198,6 +208,17 @@ func nlmPreflight(args []string) (cached string, deny string, proceed bool) {
 		u := loadNlmUsage()
 		if budget := nlmBudgetFor("research"); u.Research >= budget {
 			return "", fmt.Sprintf("Error: nlm daily research budget exhausted (local cap %d, used %d) — skipping web research; budget resets midnight Pacific", budget, u.Research), false
+		}
+	}
+	// Imports are budget-gated too: a wedged "already in progress" research
+	// task made every 2-hour researcher run re-import the same discovered
+	// sources, quadrupling the notebook corpus in three days. A small daily
+	// import cap bounds the damage of any repeat-import loop while leaving
+	// legitimate once-per-research imports untouched.
+	if nlmIsResearchImport(args) {
+		u := loadNlmUsage()
+		if budget := nlmBudgetFor("import"); u.Imports >= budget {
+			return "", fmt.Sprintf("Error: nlm daily import budget exhausted (local cap %d, used %d) — skipping source import; budget resets midnight Pacific", budget, u.Imports), false
 		}
 	}
 	return "", "", true
@@ -237,6 +258,11 @@ func nlmPostflight(args []string, out string) {
 		u.Research++
 		saveNlmUsage(u)
 	}
+	if nlmIsResearchImport(args) {
+		u := loadNlmUsage()
+		u.Imports++
+		saveNlmUsage(u)
+	}
 }
 
 // isBoilerplateResearchTopic reports whether s reads as agent/implementation
@@ -274,13 +300,19 @@ func deriveNotebookLMResearchQuery(task string) string {
 			}
 		}
 	}
-	topics := []string{
-		"auction-based and market-based task allocation protocols for multi-agent systems",
-		"behavior tree evolution and genetic programming for agent policies: recent methods",
-		"skill libraries and failure-to-skill pipelines for continual agent learning",
-		"LLM-driven code generation of executable behavior trees: validation and typing",
-		"self-improving agent loops: progress metrics, circuit breakers, and safety gates",
-		"multi-agent coordination benchmarks and evaluation for heterogeneous agent fleets",
+	// Idle rotation: prefer questions derived from the arc42 quality goals so
+	// unscoped research always serves the documented architecture goals; the
+	// static list survives only as a fallback when the doc is unavailable.
+	topics := arc42ResearchTopics()
+	if len(topics) == 0 {
+		topics = []string{
+			"auction-based and market-based task allocation protocols for multi-agent systems",
+			"behavior tree evolution and genetic programming for agent policies: recent methods",
+			"skill libraries and failure-to-skill pipelines for continual agent learning",
+			"LLM-driven code generation of executable behavior trees: validation and typing",
+			"self-improving agent loops: progress metrics, circuit breakers, and safety gates",
+			"multi-agent coordination benchmarks and evaluation for heterogeneous agent fleets",
+		}
 	}
 	return topics[time.Now().YearDay()%len(topics)]
 }
