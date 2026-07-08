@@ -98,10 +98,11 @@ func TestRegistryWithUsers_CollidingTreeIDsStayDistinct(t *testing.T) {
 }
 
 func TestRecordsForEntry_PersonalTreesUseStrictFiltering(t *testing.T) {
-	records := []evolution.Record{
-		{TaskID: "1", TreeName: "default", Outcome: evolution.Success},
-		{TaskID: "2", TreeName: "", Outcome: evolution.Success},
-	}
+	records := make([]evolution.Record, 0, 3)
+	records = append(records,
+		evolution.Record{TaskID: "1", TreeName: "default", Outcome: evolution.Success},
+		evolution.Record{TaskID: "2", TreeName: "", Outcome: evolution.Success},
+	)
 
 	// Shared entry keeps the backward-compat fallback (no match → all).
 	shared := recordsForEntry(records, TreeEntry{Name: "goal:x"})
