@@ -20,9 +20,14 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 			// route to the Claude review fallback — as a bare Sequence child that
 			// fail-fast killed the whole hourly runner on every closed quota
 			// window. Same shape as GoapFusionLoopTree's ResearchRouter.
-			sel("ResearchRouter", "Route research to NotebookLM, falling back to Claude Code commit review when NotebookLM is unavailable",
+			// Non-fatal: when BOTH nlm and Claude review fail (quota closed AND
+			// review rate-limited), the terminal AlwaysSucceed leaf degrades to
+			// the vault-context path instead of aborting the run.
+			sel("ResearchRouter", "Route research to NotebookLM, then the Claude Code review fallback, then a non-fatal skip so a doubly-unavailable research stage degrades to vault context instead of aborting the run",
 				act("RunGoapFusionNotebookLMResearch", "Query BT Platform Research notebook directly and save GOAP-owned findings to vault"),
 				act("RunClaudeCodeReviewResearch", "Fallback when NotebookLM is unavailable: Claude Code reviews recent daemon commits and emits GOAL/GAP/FILES/TESTS findings to the vault"),
+				evolution.SerializableNode{Type: "AlwaysSucceed", Name: "ResearchOptional",
+					Description: "Non-fatal skip: a doubly-unavailable research stage (NotebookLM quota closed AND Claude review rate-limited) must not abort the run — degrade to vault context"},
 			),
 			act("ReadVaultResearch", "Read all NotebookLM research syntheses and improvement plans from vault"),
 			act("ReadGraphifyReport", "Read graphify-out/GRAPH_REPORT.md for codebase structure, god nodes, communities"),

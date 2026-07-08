@@ -787,6 +787,11 @@ func TestGoapFusionLoopTree_ClaudeReviewFallback(t *testing.T) {
 // through a Selector with the Claude review fallback. As a bare Sequence child
 // the research action's quota fail-fast (-1) killed the whole tree — the :35
 // runner dead-lettered on every closed quota window (observed 2026-07-02/03).
+// The router must also end in a terminal AlwaysSucceed (ResearchOptional) leaf,
+// mirroring GoapFusionLoopTree: when NotebookLM quota is closed AND the Claude
+// review fallback is rate-limited (Claude weekly limit, observed 2026-07-07),
+// the doubly-unavailable research stage must degrade to the vault-context path
+// (ReadVaultResearch onward) instead of aborting the whole run.
 func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 	tree := GoapFusionTree(true)
 	var router *evolution.SerializableNode
@@ -807,10 +812,12 @@ func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 	if router.Type != "Selector" {
 		t.Fatalf("ResearchRouter type = %q, want Selector", router.Type)
 	}
-	if len(router.Children) != 2 ||
+	if len(router.Children) != 3 ||
 		router.Children[0].Name != "RunGoapFusionNotebookLMResearch" ||
-		router.Children[1].Name != "RunClaudeCodeReviewResearch" {
-		t.Fatalf("ResearchRouter children wrong: %+v", router.Children)
+		router.Children[1].Name != "RunClaudeCodeReviewResearch" ||
+		router.Children[2].Type != "AlwaysSucceed" ||
+		router.Children[2].Name != "ResearchOptional" {
+		t.Fatalf("ResearchRouter must be nlm → Claude review → terminal AlwaysSucceed ResearchOptional (non-fatal), got: %+v", router.Children)
 	}
 }
 

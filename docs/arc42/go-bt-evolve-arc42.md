@@ -448,7 +448,7 @@ Preflight ─▶ Research ─▶ Goals ─▶ Plan ─▶ Implement ─▶ Verif
 
 **Partial landing:** a later task's failure discards only that task's edits (per-task snapshot commits in the run worktree); the completed, verified work still lands and the failed goal is carried forward to the next cycle. All-or-nothing is preserved for first-task failures and outside worktree-apply mode.
 
-**Research economy:** NotebookLM answers are cached per Pacific day by question hash; daily budgets (30 queries / 2 web-research starts) refuse further metered calls with an error the ResearchRouter routes to the Claude review fallback (commits → structure → failures mode rotation, persisted round counter).
+**Research economy:** NotebookLM answers are cached per Pacific day by question hash; daily budgets (30 queries / 2 web-research starts) refuse further metered calls with an error the ResearchRouter routes to the Claude review fallback (commits → structure → failures mode rotation, persisted round counter). The router is itself non-fatal: in both fusion trees (`domain:goap_fusion` and `domain:goap_fusion_loop`) it ends in a terminal `AlwaysSucceed` "ResearchOptional" leaf, so a doubly-unavailable research stage — NotebookLM quota closed *and* the Claude review fallback rate-limited or barren — degrades to the vault-context read phase (ReadVaultResearch onward) instead of aborting the run.
 
 ## 6.5 Error Recovery
 
@@ -687,7 +687,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Where:** `internal/research/` (store.go, programs.go), `internal/engine/nlm_quota.go`, `internal/engine/goap_research_goals.go`; state under `~/.go-bt-evolve/research/`.
 
-**Effect:** Research compounds instead of repeating: every cycle sees what is already known and implemented; repeated questions are free; budget exhaustion degrades to the Claude review fallback instead of burning quota.
+**Effect:** Research compounds instead of repeating: every cycle sees what is already known and implemented; repeated questions are free; budget exhaustion degrades to the Claude review fallback instead of burning quota — and if that fallback is itself rate-limited or barren, the ResearchRouter's terminal non-fatal skip (present in both fusion trees, §6.4) degrades the run to vault context rather than aborting it.
 
 ## 8.10 Autonomous Landing Pipeline
 
@@ -1129,7 +1129,7 @@ go-bt-evolve
 | **Knowledge Store** | Content-hash-deduplicating research memory (`~/.go-bt-evolve/research/knowledge.json`): findings, vault notes, NotebookLM answers, and implemented goals; consulted before any research is reported. |
 | **Partial Landing** | Multi-task run semantics: per-task snapshot commits let a later task's failure discard only its own edits; completed verified work still lands and the failed goal carries forward. |
 | **Program / Milestone** | A research-proposed multi-cycle change (title + file-scoped milestones) persisted in `programs.json`; each cycle executes the next pending milestone at [P0] queue head and marks it done on a verified apply. |
-| **Quota Economy** | Per-Pacific-day NotebookLM answer cache + daily budgets (queries/research starts) enforced at the nlmRun choke point; over budget the ResearchRouter falls back to Claude review. |
+| **Quota Economy** | Per-Pacific-day NotebookLM answer cache + daily budgets (queries/research starts) enforced at the nlmRun choke point; over budget the ResearchRouter falls back to Claude review, and a doubly-unavailable stage (fallback rate-limited too) skips non-fatally to vault context. |
 | **Superpowers Run** | One durable implementation run: typed state (run.json), plan, per-task RED/GREEN evidence, verification artifacts, finish report — under `docs/superpowers/runs/<id>/`. |
 | **Island Model** | An evolution algorithm where sub-populations evolve in isolation with periodic migration of top individuals. Reachable in production via the deterministic `bt_evolve_island` MCP tool; its optional `domains` parameter seeds one island per registered domain tree, matching the type's stated purpose of maintaining genetic diversity across domains. |
 | **Knowledge Graph** | In-memory graph of all 41+ trees with capabilities, keywords, embeddings, and cross-tree relationships. Powers discovery and auto-creation. Its runtime-feedback fields (Fitness, RunCount, LastOutcome, LastDuration) and `uses_tool` edges can be snapshotted to / restored from an atomic JSON file via `feedback_persist.go` (`SaveFeedback`/`LoadFeedback`, debounced `FlushFeedback`) — now wired into the `internal/agent` scheduler lifecycle (`SchedulerConfig.FeedbackPath`: load on startup, throttled flush after each run, forced flush on Stop), so feedback survives restarts and the learn→evolve loop compounds. |
