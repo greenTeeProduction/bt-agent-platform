@@ -296,7 +296,7 @@ internal/evolution/
 ├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
 ├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
 ├── learning.go          — cloneTree (sole deep-copy implementation), Population.Evolve + EvolveWithExperience (bank-warm-started variant)
-├── experience_bank.go   — ExperienceBank: persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type
+├── experience_bank.go   — ExperienceBank: persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type, bounded at 500 entries with quality-aware eviction
 ├── vault_manager.go     — Tree vault with checkpoint/restore
 ├── types.go             — SerializableNode, Individual, Population, Fitness
 └── fitness.go           — Per-tree fitness via reflection.FilterByTreeName
@@ -655,7 +655,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Effect:** Evolution is auditable (git commits), reversible (rollback), and measurable (fitness delta tracking).
 
-**Experience-grounded memory (ADR-017):** The genetic path additionally learns across runs. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) warm-starts operator selection from the persistent `ExperienceBank` — the top-5 `RetrieveByTreeType` hints for the population's tree type bias 50% of mutations toward operators that previously improved fitness on similar trees — and records every fitness-improving mutation back via `AddFromMutation` (regressions are discarded, so the bank only accumulates successes). A nil bank degrades to plain `Evolve`. The daemon constructs one bank at startup (`~/.go-bt-evolve/experience/experience.json`, honoring `BT_AGENT_HOME`) and plumbs it through `mcpDeps` into `bt_evolve_genetic` and `bt_evolve_bottlenecks`, so mutation experience compounds across restarts the same way knowledge-graph feedback does (§8.4).
+**Experience-grounded memory (ADR-017):** The genetic path additionally learns across runs. `Population.EvolveWithExperience` (`internal/evolution/learning.go`) warm-starts operator selection from the persistent `ExperienceBank` — the top-5 `RetrieveByTreeType` hints for the population's tree type bias 50% of mutations toward operators that previously improved fitness on similar trees — and records every fitness-improving mutation back via `AddFromMutation` (regressions are discarded, so the bank only accumulates successes). A nil bank degrades to plain `Evolve`. The daemon constructs one bank at startup (`~/.go-bt-evolve/experience/experience.json`, honoring `BT_AGENT_HOME`) and plumbs it through `mcpDeps` into `bt_evolve_genetic` and `bt_evolve_bottlenecks`, so mutation experience compounds across restarts the same way knowledge-graph feedback does (§8.4). The bank is bounded at 500 entries (`experienceBankCap`) with quality-aware eviction — lowest `QualityScore` first, oldest first among equal quality, entries with `TimesReused >= 3` evicted only after every less-proven entry is gone — enforced on every `Add` and, for oversized legacy files, on load in `NewExperienceBank` (ADR-018).
 
 ## 8.6 Error Resiliency
 
@@ -1029,6 +1029,21 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-018: Bounded ExperienceBank with Quality-Aware Eviction
+
+**Context (2026-07-08):** Once ADR-017 wired the `ExperienceBank` into the daemon, it accumulated forever: `Add` only ever appended, and `Persist` rewrites the whole `experience.json` on every addition, so an unbounded bank meant unbounded per-Add I/O and an ever-growing O(n) `Retrieve` scan. With the bank now fed by every fitness-improving mutation across restarts, growth was structural, not hypothetical.
+
+**Decision:** Cap the bank at 500 entries (`experienceBankCap`, `internal/evolution/experience_bank.go`) with quality-aware eviction in `enforceCapLocked`: lowest `QualityScore` evicted first, oldest `CreatedAt` first among equal quality, and entries with `TimesReused >= experienceReuseProtection` (3) protected — they are evicted only after every less-proven entry is gone, so the cap still holds in a fully protected bank. The cap is enforced at both mutation points: `addEntry` (every `Add`) and `NewExperienceBank` on load, so oversized files written by earlier unbounded builds are trimmed on the first startup rather than only after the next Add. The ADR-003 atomic-write persistence format (`entries` wrapper, `.tmp` → rename) is unchanged; eviction is invisible to readers of the file format. Pinned by `TestExperienceBank_CapEnforcedOnAdd`, `_EvictsLowestQualityFirst`, `_EvictsOldestAmongEqualQuality`, `_ProtectsHighReuseEntries`, and `_CapEnforcedOnLoad`.
+
+**Status:** Accepted (2026-07-08)
+
+**Consequences:**
+- ✅ Per-Add persistence cost and retrieval scan time are bounded regardless of daemon uptime; legacy oversized files self-heal on load
+- ✅ Eviction prefers keeping what demonstrably pays off: high-quality and repeatedly reused experiences outlive low-quality one-offs
+- ⚠️ Eviction is permanent — a low-quality entry that would have become relevant to a future tree type is lost; the reuse-protection threshold (3) is a heuristic, not learned
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1159,7 +1174,7 @@ go-bt-evolve
 | **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. |
 | **DefaultTree** | The fallback behavior tree used when no specific tree matches. Extracted from a 750-line god node into 21 paths across 7 category files. |
 | **Evolution** | The process of systematically improving behavior trees through mutation, fitness evaluation, and selection. 6 algorithms available. |
-| **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017). |
+| **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017). Bounded at 500 entries: quality-aware eviction (lowest quality/oldest first, `TimesReused >= 3` protected) enforced on Add and on load (ADR-018). |
 | **Expert Knowledge** | Curated design patterns (6) and anti-patterns (5) that guide tree evolution. Includes TreeArchetypes for each category. |
 | **Fitness Score** | Multi-dimensional evaluation of a behavior tree's performance. Dimensions include correctness, completeness, conciseness, actionability. |
 | **Gardener** | The evolution orchestrator (`cmd/bt-gardener`). Runs evolution cycles: evaluate → order mutations → apply → re-evaluate → accept/rollback. |

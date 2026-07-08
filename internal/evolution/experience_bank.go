@@ -27,6 +27,17 @@ import (
 
 // ─── Experience Bank ────────────────────────────────────────────────────────
 
+const (
+	// experienceBankCap bounds the bank. Without it every Add grows the slice
+	// and rewrites the whole file forever (the bank is append-only otherwise).
+	experienceBankCap = 500
+
+	// experienceReuseProtection: entries reused at least this many times are
+	// evicted only after every less-proven entry is gone — reuse count is the
+	// strongest signal an experience keeps paying off.
+	experienceReuseProtection = 3
+)
+
 // ExperienceBank stores successful mutation experiences for cross-generation
 // and cross-tree reuse. Every mutation that improves fitness is recorded with
 // EvoRepair-style 5-dimension context and retrieved before subsequent mutations.
@@ -88,6 +99,9 @@ func NewExperienceBank(dir string) (*ExperienceBank, error) {
 		return eb, fmt.Errorf("unmarshal experience file (starting fresh): %w", err)
 	}
 	eb.Entries = wrapper.Entries
+	// Oversized legacy files (written by unbounded builds) are capped here so
+	// the bound holds from the first tick, not only after the next Add.
+	eb.enforceCapLocked()
 	return eb, nil
 }
 
@@ -301,12 +315,54 @@ func (eb *ExperienceBank) Stats() map[string]interface{} {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-// addEntry adds an entry and persists the bank.
+// addEntry adds an entry, enforces the capacity cap, and persists the bank.
 func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
 	eb.mu.Lock()
 	eb.Entries = append(eb.Entries, entry)
+	eb.enforceCapLocked()
 	eb.mu.Unlock()
 	return eb.Persist()
+}
+
+// enforceCapLocked evicts entries until the bank fits experienceBankCap.
+// Eviction order: lowest QualityScore first, oldest first among equal quality.
+// Entries with TimesReused >= experienceReuseProtection are protected — they
+// are only evicted once every unprotected entry is gone, so the cap still
+// holds even in a fully protected bank. Caller must hold eb.mu.
+func (eb *ExperienceBank) enforceCapLocked() {
+	excess := len(eb.Entries) - experienceBankCap
+	if excess <= 0 {
+		return
+	}
+
+	order := make([]int, len(eb.Entries))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		ea, ebEntry := eb.Entries[order[a]], eb.Entries[order[b]]
+		protA := ea.TimesReused >= experienceReuseProtection
+		protB := ebEntry.TimesReused >= experienceReuseProtection
+		if protA != protB {
+			return !protA // unprotected entries are evicted first
+		}
+		if ea.QualityScore != ebEntry.QualityScore {
+			return ea.QualityScore < ebEntry.QualityScore
+		}
+		return ea.CreatedAt.Before(ebEntry.CreatedAt)
+	})
+
+	evict := make(map[int]bool, excess)
+	for _, idx := range order[:excess] {
+		evict[idx] = true
+	}
+	kept := make([]ExperienceEntry, 0, experienceBankCap)
+	for i, e := range eb.Entries {
+		if !evict[i] {
+			kept = append(kept, e)
+		}
+	}
+	eb.Entries = kept
 }
 
 // enrichEntry uses the LLM to generate 5-dimension analysis and quality score.

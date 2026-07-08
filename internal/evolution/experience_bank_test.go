@@ -1,10 +1,13 @@
 package evolution
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewExperienceBank_Empty(t *testing.T) {
@@ -545,6 +548,234 @@ func TestEvolveWithExperience_NilBankStillEvolves(t *testing.T) {
 	}
 	if pop.Generation != 2 {
 		t.Errorf("expected 2 generations to run, got %d", pop.Generation)
+	}
+}
+
+// ─── Capacity cap + quality-aware eviction ──────────────────────────────────
+//
+// The bank must be bounded: a capacity cap in the 200–500 range, enforced on
+// the Add path and when loading from disk, with quality-aware eviction —
+// lowest QualityScore evicted first, oldest first among equal quality, and
+// entries with high TimesReused protected from eviction. The persisted
+// {"entries": [...]} format (ADR-003 atomic write) must stay unchanged.
+
+const (
+	// The cap itself is an implementation choice; the goal only promises it
+	// lands in this range. Overflow safely past the ceiling to force eviction.
+	experienceCapFloor   = 200
+	experienceCapCeiling = 500
+	experienceOverflow   = experienceCapCeiling + 20
+)
+
+// mkExperienceEntry builds a minimal valid entry with controlled quality,
+// age, and reuse count for eviction-order tests.
+func mkExperienceEntry(id string, quality float64, created time.Time, reused int) ExperienceEntry {
+	return ExperienceEntry{
+		ID:           id,
+		TreeType:     "Default",
+		MutationOp:   "add_before",
+		TargetNode:   "N",
+		Context:      "cap test",
+		Strategy:     "cap test",
+		Trajectory:   "cap test",
+		Summary:      "cap test",
+		Reflection:   "cap test",
+		FitnessDelta: 0.1,
+		QualityScore: quality,
+		CreatedAt:    created,
+		TimesReused:  reused,
+	}
+}
+
+func bankHasEntry(eb *ExperienceBank, id string) bool {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	for _, e := range eb.Entries {
+		if e.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func TestExperienceBank_CapEnforcedOnAdd(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < experienceOverflow; i++ {
+		e := mkExperienceEntry(fmt.Sprintf("cap_%04d", i), 0.5, base.Add(time.Duration(i)*time.Minute), 0)
+		if err := eb.addEntry(e); err != nil {
+			t.Fatalf("addEntry %d: %v", i, err)
+		}
+	}
+
+	got := eb.Count()
+	if got > experienceCapCeiling {
+		t.Fatalf("bank is unbounded: %d entries after %d adds, want <= %d (capacity cap)", got, experienceOverflow, experienceCapCeiling)
+	}
+	if got < experienceCapFloor {
+		t.Errorf("cap too aggressive: %d entries retained, want >= %d", got, experienceCapFloor)
+	}
+}
+
+func TestExperienceBank_EvictsLowestQualityFirst(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	// 10 low-quality entries (also the oldest, so quality-first and
+	// oldest-first eviction agree), then high-quality entries to overflow.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	eb.mu.Lock()
+	for i := 0; i < 10; i++ {
+		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("low_%04d", i), 0.05, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	for i := 10; i < experienceOverflow-1; i++ {
+		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("high_%04d", i), 0.9, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	eb.mu.Unlock()
+
+	// The overflowing Add must trigger eviction down to the cap.
+	last := mkExperienceEntry("high_last", 0.9, base.Add(time.Duration(experienceOverflow)*time.Minute), 0)
+	if err := eb.addEntry(last); err != nil {
+		t.Fatalf("addEntry (overflow): %v", err)
+	}
+
+	if got := eb.Count(); got > experienceCapCeiling {
+		t.Fatalf("bank is unbounded: %d entries, want <= %d", got, experienceCapCeiling)
+	}
+	for i := 0; i < 10; i++ {
+		id := fmt.Sprintf("low_%04d", i)
+		if bankHasEntry(eb, id) {
+			t.Errorf("low-quality entry %s survived eviction; lowest QualityScore must be evicted first", id)
+		}
+	}
+	if !bankHasEntry(eb, "high_last") {
+		t.Error("newest high-quality entry was evicted; eviction must prefer low-quality/old entries")
+	}
+}
+
+func TestExperienceBank_EvictsOldestAmongEqualQuality(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	eb.mu.Lock()
+	for i := 0; i < experienceOverflow-1; i++ {
+		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("eq_%04d", i), 0.5, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	eb.mu.Unlock()
+
+	newest := mkExperienceEntry("eq_newest", 0.5, base.Add(time.Duration(experienceOverflow)*time.Minute), 0)
+	if err := eb.addEntry(newest); err != nil {
+		t.Fatalf("addEntry (overflow): %v", err)
+	}
+
+	if got := eb.Count(); got > experienceCapCeiling {
+		t.Fatalf("bank is unbounded: %d entries, want <= %d", got, experienceCapCeiling)
+	}
+	if bankHasEntry(eb, "eq_0000") {
+		t.Error("oldest equal-quality entry survived; eviction must be oldest-first among equal QualityScore")
+	}
+	if !bankHasEntry(eb, "eq_newest") {
+		t.Error("newest equal-quality entry was evicted; eviction must be oldest-first among equal QualityScore")
+	}
+}
+
+func TestExperienceBank_ProtectsHighReuseEntries(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	// A veteran entry that is the oldest AND lowest quality — prime eviction
+	// candidate on every axis except reuse — must be protected by its high
+	// TimesReused count.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	veteran := mkExperienceEntry("veteran", 0.05, base, 50)
+	eb.mu.Lock()
+	eb.Entries = append(eb.Entries, veteran)
+	for i := 1; i < experienceOverflow-1; i++ {
+		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("fresh_%04d", i), 0.6, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	eb.mu.Unlock()
+
+	last := mkExperienceEntry("fresh_last", 0.6, base.Add(time.Duration(experienceOverflow)*time.Minute), 0)
+	if err := eb.addEntry(last); err != nil {
+		t.Fatalf("addEntry (overflow): %v", err)
+	}
+
+	if got := eb.Count(); got > experienceCapCeiling {
+		t.Fatalf("bank is unbounded: %d entries, want <= %d", got, experienceCapCeiling)
+	}
+	if !bankHasEntry(eb, "veteran") {
+		t.Error("high-TimesReused entry was evicted; frequently reused experiences must be protected from eviction")
+	}
+}
+
+func TestExperienceBank_CapEnforcedOnLoad(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write an oversized bank directly in the persisted ADR-003 wrapper format
+	// — as if produced by an older, unbounded build.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	entries := make([]ExperienceEntry, 0, experienceOverflow)
+	for i := 0; i < 10; i++ {
+		entries = append(entries, mkExperienceEntry(fmt.Sprintf("low_%04d", i), 0.05, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	for i := 10; i < experienceOverflow; i++ {
+		entries = append(entries, mkExperienceEntry(fmt.Sprintf("high_%04d", i), 0.9, base.Add(time.Duration(i)*time.Minute), 0))
+	}
+	data, err := json.MarshalIndent(struct {
+		Entries []ExperienceEntry `json:"entries"`
+	}{Entries: entries}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal oversized bank: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "experience.json"), data, 0644); err != nil {
+		t.Fatalf("write oversized bank: %v", err)
+	}
+
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank must load an oversized legacy file without error: %v", err)
+	}
+
+	got := eb.Count()
+	if got > experienceCapCeiling {
+		t.Fatalf("Load did not enforce the cap: %d entries, want <= %d", got, experienceCapCeiling)
+	}
+	if got < experienceCapFloor {
+		t.Errorf("Load cap too aggressive: %d entries retained, want >= %d", got, experienceCapFloor)
+	}
+	for i := 0; i < 10; i++ {
+		id := fmt.Sprintf("low_%04d", i)
+		if bankHasEntry(eb, id) {
+			t.Errorf("low-quality entry %s survived Load-time eviction", id)
+		}
+	}
+
+	// Format compatibility: a capped bank must persist and reload in the same
+	// wrapper format with a stable count.
+	if err := eb.Persist(); err != nil {
+		t.Fatalf("Persist after capped load: %v", err)
+	}
+	eb2, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (reload of capped bank): %v", err)
+	}
+	if eb2.Count() != got {
+		t.Errorf("capped bank did not round-trip: persisted %d entries, reloaded %d", got, eb2.Count())
 	}
 }
 
