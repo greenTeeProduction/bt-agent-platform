@@ -16,6 +16,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/audit"
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -142,6 +143,15 @@ func main() {
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
+
+	// Embed the VCS build identity: publish the bt_build_info gauge and log
+	// revision/commit-time/dirty so a running daemon's revision is comparable
+	// against repo HEAD (stale-daemon-binary drift detection).
+	buildID := dashboard.InstallBuildIdentity()
+	engine.Info("build identity",
+		"vcs_revision", buildID.Revision,
+		"vcs_time", buildID.CommitTime,
+		"vcs_dirty", buildID.Dirty)
 
 	// ── Configuration ─────────────────────────────────────────────────────
 	cfg, err := config.Load()

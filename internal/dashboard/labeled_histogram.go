@@ -52,4 +52,9 @@ func (lh *LabeledHistogram) Snapshot() map[string]HistogramSnap {
 type HistogramSnap struct {
 	Sum   float64
 	Count uint64
+	// Bounds are the upper bucket bounds; CumulativeCounts[i] is the number of
+	// observations <= Bounds[i] (Prometheus cumulative bucket semantics). The
+	// +Inf bucket equals Count.
+	Bounds           []float64
+	CumulativeCounts []uint64
 }

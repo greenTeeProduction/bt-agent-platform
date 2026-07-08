@@ -5,7 +5,10 @@ package dashboard
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,11 +49,19 @@ func NewHistogram(bounds []float64) *Histogram {
 	return &Histogram{bounds: bounds, counts: make([]uint64, len(bounds)+1)}
 }
 
-// SnapshotStats returns aggregate sum and count.
+// SnapshotStats returns aggregate sum, count, and cumulative per-bucket counts.
 func (h *Histogram) SnapshotStats() HistogramSnap {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return HistogramSnap{Sum: h.sum, Count: h.total}
+	bounds := make([]float64, len(h.bounds))
+	copy(bounds, h.bounds)
+	cumulative := make([]uint64, len(h.bounds))
+	var running uint64
+	for i := range h.bounds {
+		running += h.counts[i]
+		cumulative[i] = running
+	}
+	return HistogramSnap{Sum: h.sum, Count: h.total, Bounds: bounds, CumulativeCounts: cumulative}
 }
 
 func (h *Histogram) Observe(v float64) {
@@ -88,6 +99,10 @@ type AgentStats struct {
 
 var globalMetrics = &AgentMetrics{agents: make(map[string]*AgentStats)}
 
+// agentTaskDurationHist tracks per-agent task duration distributions so
+// latency-percentile alerts can be defined per agent.
+var agentTaskDurationHist = NewLabeledHistogram([]float64{1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 30000, 120000, 300000})
+
 // RecordTask records a task execution for an agent.
 func RecordTask(agentName string, success bool, durationMs uint64) {
 	globalMetrics.mu.Lock()
@@ -110,6 +125,7 @@ func RecordTask(agentName string, success bool, durationMs uint64) {
 	if !success {
 		globalMetrics.TotalErrors.Inc()
 	}
+	agentTaskDurationHist.Observe(float64(durationMs), map[string]string{"agent": agentName})
 }
 
 // GetAgentMetrics returns a copy of all agent metrics.
@@ -290,6 +306,95 @@ func indexOf(s string, c byte) int {
 	return -1
 }
 
+// ─── Build Identity ─────────────────────────────────────────────────────────
+
+// unknownBuildValue is the sentinel used when the binary carries no VCS build
+// stamping (-buildvcs=false, test binaries, tarball builds). It keeps the
+// startup log line and the bt_build_info gauge from ever exposing an empty
+// revision label, which Prometheus label matchers would silently match
+// everything on.
+const unknownBuildValue = "unknown"
+
+// BuildIdentity is the VCS identity a binary was built from, used to detect
+// stale-daemon-binary drift by comparing the running revision against repo
+// HEAD.
+type BuildIdentity struct {
+	Revision   string `json:"revision"`
+	CommitTime string `json:"commit_time"`
+	Dirty      bool   `json:"dirty"`
+}
+
+var (
+	buildIdentityMu  sync.RWMutex
+	currentBuildInfo *BuildIdentity
+)
+
+// BuildIdentityFromBuildInfo extracts the VCS identity from runtime/debug
+// build info. Missing settings and a nil build info degrade to the
+// unknownBuildValue sentinel rather than empty strings.
+func BuildIdentityFromBuildInfo(bi *debug.BuildInfo) BuildIdentity {
+	id := BuildIdentity{Revision: unknownBuildValue, CommitTime: unknownBuildValue}
+	if bi == nil {
+		return id
+	}
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if s.Value != "" {
+				id.Revision = s.Value
+			}
+		case "vcs.time":
+			if s.Value != "" {
+				id.CommitTime = s.Value
+			}
+		case "vcs.modified":
+			id.Dirty = s.Value == "true"
+		}
+	}
+	return id
+}
+
+// ReadBuildIdentity reads the running process's build identity. Fields are
+// never empty: unstamped builds yield the unknownBuildValue sentinel.
+func ReadBuildIdentity() BuildIdentity {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		bi = nil
+	}
+	return BuildIdentityFromBuildInfo(bi)
+}
+
+// SetBuildIdentity pins the identity exposed as the bt_build_info gauge.
+// Setting a new identity replaces the previous series — the exposition always
+// carries exactly one bt_build_info series, so a scrape comparing the running
+// revision against repo HEAD can never match a stale leftover.
+func SetBuildIdentity(id BuildIdentity) {
+	buildIdentityMu.Lock()
+	currentBuildInfo = &id
+	buildIdentityMu.Unlock()
+}
+
+// InstallBuildIdentity reads the process build identity, publishes it as the
+// bt_build_info gauge, and returns it for the caller's startup log line.
+func InstallBuildIdentity() BuildIdentity {
+	id := ReadBuildIdentity()
+	SetBuildIdentity(id)
+	return id
+}
+
+// exposedBuildIdentity returns the identity to render on /metrics: the pinned
+// one if set, otherwise the process self-identifies via ReadBuildIdentity so
+// the gauge is present without any main-package wiring.
+func exposedBuildIdentity() BuildIdentity {
+	buildIdentityMu.RLock()
+	id := currentBuildInfo
+	buildIdentityMu.RUnlock()
+	if id != nil {
+		return *id
+	}
+	return ReadBuildIdentity()
+}
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
@@ -398,9 +503,44 @@ func formatPromLabels(labels map[string]string) string {
 	return b.String()
 }
 
+// writeLabeledHistogram renders a LabeledHistogram as full Prometheus
+// histogram series: cumulative _bucket lines (including +Inf), _sum, _count.
+func writeLabeledHistogram(w io.Writer, name, help string, lh *LabeledHistogram) {
+	fmt.Fprintf(w, "# HELP %s %s\n", name, help)
+	fmt.Fprintf(w, "# TYPE %s histogram\n", name)
+	for key, snap := range lh.Snapshot() {
+		labels := parseLabelKey(key)
+		for i, bound := range snap.Bounds {
+			le := strconv.FormatFloat(bound, 'f', -1, 64)
+			fmt.Fprintf(w, "%s_bucket%s %d\n", name, formatPromLabels(withLeLabel(labels, le)), snap.CumulativeCounts[i])
+		}
+		fmt.Fprintf(w, "%s_bucket%s %d\n", name, formatPromLabels(withLeLabel(labels, "+Inf")), snap.Count)
+		fmt.Fprintf(w, "%s_sum%s %s\n", name, formatPromLabels(labels), strconv.FormatFloat(snap.Sum, 'f', -1, 64))
+		fmt.Fprintf(w, "%s_count%s %d\n", name, formatPromLabels(labels), snap.Count)
+	}
+	fmt.Fprintf(w, "\n")
+}
+
+// withLeLabel returns a copy of labels with the Prometheus "le" bound added.
+func withLeLabel(labels map[string]string, le string) map[string]string {
+	out := make(map[string]string, len(labels)+1)
+	for k, v := range labels {
+		out[k] = v
+	}
+	out["le"] = le
+	return out
+}
+
 func writePrometheusMetrics(w http.ResponseWriter) {
 	globalMetrics.mu.RLock()
 	defer globalMetrics.mu.RUnlock()
+
+	// Build identity — always exactly one series, so the running binary's
+	// revision is comparable against repo HEAD (stale-daemon-binary drift).
+	id := exposedBuildIdentity()
+	fmt.Fprintf(w, "# HELP bt_build_info Build identity of the serving binary (value is always 1; identity in labels).\n")
+	fmt.Fprintf(w, "# TYPE bt_build_info gauge\n")
+	fmt.Fprintf(w, "bt_build_info{dirty=\"%t\",revision=\"%s\"} 1\n\n", id.Dirty, id.Revision)
 
 	// HTTP metrics
 	fmt.Fprintf(w, "# HELP bt_http_requests_total Total HTTP requests served.\n")
@@ -430,6 +570,9 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 		fmt.Fprintf(w, "bt_block_ops_total%s %d\n", formatPromLabels(labels), val)
 	}
 	fmt.Fprintf(w, "\n")
+
+	writeLabeledHistogram(w, "bt_node_duration_ms", "Behavior tree node tick duration in milliseconds.", nodeDurationHist)
+	writeLabeledHistogram(w, "bt_block_duration_ms", "Block operation duration in milliseconds.", blockDurationHist)
 
 	fmt.Fprintf(w, "# HELP bt_block_fitness_score Block fitness score (0-100) per block and agent.\n")
 	fmt.Fprintf(w, "# TYPE bt_block_fitness_score gauge\n")
@@ -489,6 +632,8 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 		fmt.Fprintf(w, "bt_agent_duration_ms_total{%s} %d\n", label, s.TotalDurationMs)
 	}
 	fmt.Fprintln(w)
+
+	writeLabeledHistogram(w, "bt_agent_task_duration_ms", "Task duration per agent in milliseconds.", agentTaskDurationHist)
 
 	// Global metrics
 	fmt.Fprintf(w, "# HELP bt_total_requests Total task requests.\n")
