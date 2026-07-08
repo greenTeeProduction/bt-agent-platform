@@ -741,6 +741,243 @@ func TestRunSuperpowersRuntime_RateLimitFailurePreservesDurablePlanState(t *test
 	}
 }
 
+// TestRunSuperpowersRuntime_RateLimitRecordsBackoff proves the recording half
+// of the durable Claude backoff contract: when the Superpowers batch execution
+// hits a Claude rate limit, runSuperpowersRuntimeFromExistingPlanAction must
+// call saveClaudeBackoffState alongside the plan carryover, so the NEXT cron
+// tick can short-circuit at the entry guard instead of burning another
+// 45-minute doomed run against a quota known to be closed. Before the fix only
+// the Claude-review fallback recorded a backoff; the runtime's rate-limit
+// branch saved the plan but left the backoff store empty, so every subsequent
+// tick re-resumed the plan and hit the closed quota again (3×15-min retries
+// per tick).
+func TestRunSuperpowersRuntime_RateLimitRecordsBackoff(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{t: t}
+	defaultSuperpowersClaudeRunner = rateLimitedClaudeRunner{}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	activePlan := buildDeterministicImplementationPlan("improve the platform")
+	if err := os.WriteFile(planPath, []byte(activePlan), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-backoff-record", "", "goap-loop"),
+	}
+	saveSuperpowersPlanState(bb, planPath, activePlan)
+
+	run := &SuperpowersRun{
+		ID:           "run-backoff-record",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(),
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	setSuperpowersRun(bb, run)
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) on a rate-limited batch execution, got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		t.Fatalf("expected outcome goap_fusion_rate_limited, got %q (bb.Result=%s)", bb.Outcome, bb.Result)
+	}
+
+	// A fresh run (empty ChainState) must see the backoff via the agent-scope
+	// store, with a deadline in the future — that is what lets the next tick
+	// skip Claude entirely.
+	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
+	until, ok := loadClaudeBackoffState(fresh)
+	if !ok {
+		t.Fatal("loadClaudeBackoffState after a rate-limited batch = inactive, want a recorded deadline: the runtime's rate-limit branch must call saveClaudeBackoffState alongside the plan carryover")
+	}
+	if !until.After(time.Now()) {
+		t.Fatalf("recorded backoff deadline %v is not in the future: the window must cover upcoming ticks", until)
+	}
+
+	// The durable plan carryover must survive alongside the backoff.
+	gotPath, gotPlan := loadSuperpowersPlanState(fresh)
+	if gotPath != planPath || gotPlan != activePlan {
+		t.Fatalf("after a rate-limit failure, durable plan state = (%q, %q), want (%q, %q): the carryover must be preserved for the resume after the backoff expires", gotPath, gotPlan, planPath, activePlan)
+	}
+}
+
+// TestRunSuperpowersRuntime_ActiveBackoffShortCircuits proves the honoring half
+// of the contract: with a live backoff window persisted by an earlier
+// rate-limited tick and a saved plan carryover,
+// runSuperpowersRuntimeFromExistingPlanAction must return -1 with outcome
+// goap_fusion_rate_limited and goap_fusion_goals_unchanged set — BEFORE
+// creating a worktree or spending the 45-minute batch execution — so the
+// ExecutionRouter degrades to the deterministic ScheduledAnalysisPath in
+// milliseconds. The exit must reuse the exact rate-limited Result/Outcome shape
+// so the existing deferred clearSuperpowersPlanState guard preserves the plan
+// carryover for the tick after the window expires.
+func TestRunSuperpowersRuntime_ActiveBackoffShortCircuits(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	events := []string{}
+	runner := &scriptedSuperpowersRunner{
+		t:      t,
+		events: &events,
+		// One passing test result so that, should execution wrongly proceed
+		// past the guard, the batch fails deterministically ("RED unexpectedly
+		// passed") instead of tripping the runner's unexpected-command Fatalf.
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+	claude := &scriptedClaudeRunner{events: &events}
+	defaultSuperpowersCommandRunner = runner
+	defaultSuperpowersClaudeRunner = claude
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	activePlan := buildDeterministicImplementationPlan("improve the platform")
+	if err := os.WriteFile(planPath, []byte(activePlan), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-backoff-honor", "", "goap-loop"),
+	}
+	saveSuperpowersPlanState(bb, planPath, activePlan)
+	// A previous tick's rate-limited outcome left a live backoff window.
+	saveClaudeBackoffState(bb, time.Now().Add(time.Hour))
+
+	run := &SuperpowersRun{
+		ID:           "run-backoff-honor",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(),
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	setSuperpowersRun(bb, run)
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) so the Selector advances to ScheduledAnalysisPath, got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		t.Fatalf("expected outcome goap_fusion_rate_limited from the backoff entry guard, got %q (bb.Result=%s): an active backoff must short-circuit with the exact rate-limited shape so the plan carryover is preserved", bb.Outcome, bb.Result)
+	}
+	if got, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); got != "true" {
+		t.Fatalf("goap_fusion_goals_unchanged = %q, want \"true\": the guard must let the Selector fall through to ScheduledAnalysisPath", got)
+	}
+	if !strings.Contains(strings.ToLower(bb.Result), "backoff") {
+		t.Fatalf("bb.Result must narrate the active backoff and plan carryover, got:\n%s", bb.Result)
+	}
+	// The whole point of the guard: NO Claude invocation and NO worktree/batch
+	// commands while the quota is known to be closed.
+	if len(claude.prompts) != 0 {
+		t.Fatalf("Claude was invoked %d time(s) during an active backoff window; the guard must short-circuit before ExecuteSuperpowersTaskBatchRuntime", len(claude.prompts))
+	}
+	if len(events) != 0 {
+		t.Fatalf("commands ran during an active backoff window (%v); the guard must sit before worktree creation and the batch execution", events)
+	}
+
+	// The deferred non-rate-limit clear must NOT fire: the carryover survives
+	// for the tick after the window expires.
+	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
+	gotPath, gotPlan := loadSuperpowersPlanState(fresh)
+	if gotPath != planPath || gotPlan != activePlan {
+		t.Fatalf("after the backoff short-circuit, durable plan state = (%q, %q), want (%q, %q): the guard exit must preserve the carryover", gotPath, gotPlan, planPath, activePlan)
+	}
+}
+
+// TestRunSuperpowersRuntime_ExpiredBackoffExecutes proves the mechanism is
+// self-clearing rather than a permanent wedge (the runaway-backstop lesson): a
+// backoff deadline already in the past must NOT short-circuit — the runtime
+// proceeds into normal execution and the stale timestamp is cleared from the
+// durable store so it cannot confuse later ticks.
+func TestRunSuperpowersRuntime_ExpiredBackoffExecutes(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	// One passing test result → the batch fails deterministically with "RED
+	// unexpectedly passed" (a non-rate-limit failure). The point here is only
+	// that execution PROCEEDED despite the stale backoff.
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{
+		t:           t,
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+	claude := &scriptedClaudeRunner{}
+	defaultSuperpowersClaudeRunner = claude
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	activePlan := buildDeterministicImplementationPlan("improve the platform")
+	if err := os.WriteFile(planPath, []byte(activePlan), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		ChainState: map[string]any{},
+		BB:         blackboard.NewHandle(mgr, "run-backoff-expired", "", "goap-loop"),
+	}
+	saveSuperpowersPlanState(bb, planPath, activePlan)
+	// A stale window left by a rate-limited tick an hour ago — long expired.
+	saveClaudeBackoffState(bb, time.Now().Add(-time.Hour))
+
+	run := &SuperpowersRun{
+		ID:           "run-backoff-expired",
+		Task:         "improve the platform",
+		Mode:         SuperpowersModeApply,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(),
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	setSuperpowersRun(bb, run)
+
+	fn := GetAction("RunSuperpowersClaudeImplementation")
+	if fn == nil {
+		t.Fatal("RunSuperpowersClaudeImplementation not registered")
+	}
+	result := fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+	if result != -1 {
+		t.Fatalf("expected FAILURE (-1) from the deterministic batch failure, got %d: %s", result, bb.Result)
+	}
+	if bb.Outcome == "goap_fusion_rate_limited" {
+		t.Fatalf("an EXPIRED backoff must not short-circuit as rate-limited; got outcome %q (bb.Result=%s)", bb.Outcome, bb.Result)
+	}
+	if len(claude.prompts) == 0 {
+		t.Fatal("Claude was never invoked: an expired backoff must let normal execution proceed instead of skipping the tick")
+	}
+
+	// The stale timestamp must be gone from the durable store so later ticks
+	// never re-evaluate it.
+	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
+	if until, ok := loadClaudeBackoffState(fresh); ok {
+		t.Fatalf("stale backoff deadline %v still present after an expired-backoff run: the entry guard must clear expired state (half-open), not leave it to be re-parsed forever", until)
+	}
+}
+
 // TestSuperpowersPlanState_ChainStateFallback proves the helper degrades to the
 // per-run ChainState when no agent-scope blackboard is configured, mirroring
 // the loadGrillState / loadLastReviewedSHA fallback so unit paths and
