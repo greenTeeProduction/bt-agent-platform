@@ -370,6 +370,9 @@ func isKnownActionName(name string) bool {
 	if GetAction(name) != nil {
 		return true
 	}
+	if isCompiledGoapAction(name) {
+		return true
+	}
 	return builtinActionNames[name]
 }
 
@@ -378,6 +381,9 @@ func isKnownConditionName(name string) bool {
 		return false
 	}
 	if GetCondition(name) != nil {
+		return true
+	}
+	if isCompiledGoapCondition(name) {
 		return true
 	}
 	return builtinConditionNames[name]

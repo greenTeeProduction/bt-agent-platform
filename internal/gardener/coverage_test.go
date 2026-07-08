@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -66,130 +65,8 @@ func TestBaseNodeCount(t *testing.T) {
 	}
 }
 
-func TestHasNodeNamed(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{Name: "Child1"},
-			{Name: "Child2", Children: []evolution.SerializableNode{
-				{Name: "Grandchild"},
-			}},
-		},
-	}
-	if !hasNodeNamed(tree, "Root") {
-		t.Error("hasNodeNamed should find Root")
-	}
-	if !hasNodeNamed(tree, "Child1") {
-		t.Error("hasNodeNamed should find Child1")
-	}
-	if !hasNodeNamed(tree, "Grandchild") {
-		t.Error("hasNodeNamed should find Grandchild")
-	}
-	if hasNodeNamed(tree, "Nonexistent") {
-		t.Error("hasNodeNamed should not find Nonexistent")
-	}
-}
-
-func TestIsNodeWrapped(t *testing.T) {
-	// Node NOT wrapped — Retry wraps a different node
-	notWrapped := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Type: "Retry",
-				Name: "RetryWrap",
-				Children: []evolution.SerializableNode{
-					{Name: "SomeOtherNode"},
-				},
-			},
-		},
-	}
-	if isNodeWrapped(notWrapped, "TargetNode") {
-		t.Error("TargetNode should not be detected as wrapped")
-	}
-
-	// Node IS wrapped
-	wrapped := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Type: "Retry",
-				Name: "RetryWrap",
-				Children: []evolution.SerializableNode{
-					{Name: "TargetNode"},
-				},
-			},
-		},
-	}
-	if !isNodeWrapped(wrapped, "TargetNode") {
-		t.Error("TargetNode should be detected as wrapped")
-	}
-
-	// Nested wrapped
-	nested := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Name: "Middle",
-				Children: []evolution.SerializableNode{
-					{
-						Type: "Retry",
-						Name: "RetryWrap",
-						Children: []evolution.SerializableNode{
-							{Name: "DeepTarget"},
-						},
-					},
-				},
-			},
-		},
-	}
-	if !isNodeWrapped(nested, "DeepTarget") {
-		t.Error("DeepTarget should be detected as wrapped (nested)")
-	}
-}
-
-func TestGetRetryCount(t *testing.T) {
-	noRetry := &evolution.SerializableNode{Name: "Root"}
-	if got := getRetryCount(noRetry, "Any"); got != 0 {
-		t.Errorf("getRetryCount on tree with no retry = %d, want 0", got)
-	}
-
-	withRetry := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Type:       "Retry",
-				Name:       "MyRetry",
-				MaxRetries: 5,
-			},
-		},
-	}
-	if got := getRetryCount(withRetry, "MyRetry"); got != 5 {
-		t.Errorf("getRetryCount = %d, want 5", got)
-	}
-	if got := getRetryCount(withRetry, "Other"); got != 0 {
-		t.Errorf("getRetryCount for non-existent = %d, want 0", got)
-	}
-
-	nested := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Name: "Middle",
-				Children: []evolution.SerializableNode{
-					{
-						Type:       "Retry",
-						Name:       "NestedRetry",
-						MaxRetries: 10,
-					},
-				},
-			},
-		},
-	}
-	if got := getRetryCount(nested, "NestedRetry"); got != 10 {
-		t.Errorf("getRetryCount nested = %d, want 10", got)
-	}
-}
+// hasNodeNamed / isNodeWrapped / getRetryCount were retired with the v1
+// pipeline (ADR-010 Phase 6).
 
 // ============================================================================
 // Config and NewGardener tests
@@ -639,7 +516,7 @@ func TestMetricsTracker_TruncationAtMaxHistory(t *testing.T) {
 }
 
 // ============================================================================
-// RunCycle / evolveTree tests (mock LLM, no Ollama)
+// RunCycleV2 pipeline tests (mock LLM, no Ollama)
 // ============================================================================
 
 func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string) {
@@ -649,11 +526,6 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
-	}
-
-	tt, err := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
 	}
 
 	registry := NewRegistry(dir)
@@ -666,7 +538,6 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 		Registry:       registry,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		Interval:       60,
 		MaxMutations:   2,
 		UseRealLLM:     false, // use mock LLM
@@ -674,18 +545,15 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 	return NewGardener(cfg), registry, mt, dir
 }
 
-func TestRunCycle_NoActiveTrees(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping RunCycle benchmark validation path in short mode")
-	}
+func TestRunCycleV2_NoActiveTrees(t *testing.T) {
 	g, _, _, _ := setupGardener(t)
 
 	// Deactivate all trees using the proper registry API
 	g.cfg.Registry.DeactivateAll()
 
-	results, err := g.RunCycle()
+	results, err := g.RunCycleV2(EvolveV2Config{UseRealLLM: false})
 	if err != nil {
-		t.Errorf("RunCycle returned error: %v", err)
+		t.Errorf("RunCycleV2 returned error: %v", err)
 	}
 	// Should produce no results since all trees are inactive
 	if len(results) != 0 {
@@ -693,112 +561,15 @@ func TestRunCycle_NoActiveTrees(t *testing.T) {
 	}
 }
 
-func TestEvolveTree_NilTree(t *testing.T) {
-	// Create a gardener with a tree that has nil Tree in the entry.
+func TestEvolveTreeV2_WithRealTree(t *testing.T) {
+	// Test evolveTreeV2 with a real tree using mock LLM.
+	// This exercises the full v2 path: fitness eval, mutation ordering,
+	// clone-and-prescore, benchmark validation, etc.
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
-	// Create a custom registry with a nil-tree entry
-	customReg := &Registry{dir: dir}
-	customReg.mu.Lock()
-	customReg.entries = []TreeEntry{
-		{Name: "nil_tree", Description: "tree with nil", Tree: nil, FilePath: dir + "/nil.json", Active: true},
-	}
-	customReg.mu.Unlock()
-
-	cfg := Config{
-		Registry:       customReg,
-		MetricsTracker: mt,
-		RefStore:       refStore,
-		TT:             tt,
-		MaxMutations:   2,
-		UseRealLLM:     false,
-	}
-	g := NewGardener(cfg)
-
-	results, err := g.RunCycle()
-	if err != nil {
-		t.Errorf("RunCycle with nil tree: %v", err)
-	}
-	if len(results) == 0 {
-		t.Fatal("expected at least 1 result for nil tree entry")
-	}
-	r := results[0]
-	if r.TreeName != "nil_tree" {
-		t.Errorf("TreeName = %q, want 'nil_tree'", r.TreeName)
-	}
-	if r.Improved {
-		t.Error("nil tree should not be 'improved'")
-	}
-}
-
-func TestEvolveTree_BloatGuard(t *testing.T) {
-	// Create a tree with massive node count to trigger the bloat guard
-	// The bloat guard fires when nodesBefore > baseNodes * 20
-	// For "godev", baseNodes = 30, so we need > 600 nodes
-	dir := t.TempDir()
-	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
-	mt, _ := NewMetricsTracker(dir)
-
-	// Build a bloated tree with 601+ nodes
-	bloatedTree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "BigTree",
-	}
-	bloatedTree.Children = make([]evolution.SerializableNode, 0)
-	for i := 0; i < 700; i++ {
-		bloatedTree.Children = append(bloatedTree.Children, evolution.SerializableNode{
-			Type: "Action",
-			Name: "Dummy",
-		})
-	}
-
-	customReg := &Registry{dir: dir}
-	customReg.mu.Lock()
-	customReg.entries = []TreeEntry{
-		{Name: "godev", Description: "go dev tree", Tree: bloatedTree, FilePath: dir + "/tree-godev.json", Active: true},
-	}
-	customReg.mu.Unlock()
-
-	cfg := Config{
-		Registry:       customReg,
-		MetricsTracker: mt,
-		RefStore:       refStore,
-		TT:             tt,
-		MaxMutations:   2,
-		UseRealLLM:     false,
-	}
-	g := NewGardener(cfg)
-
-	results, err := g.RunCycle()
-	if err != nil {
-		t.Errorf("RunCycle with bloated tree: %v", err)
-	}
-	if len(results) == 0 {
-		t.Fatal("expected at least 1 result")
-	}
-	r := results[0]
-	if r.Improved {
-		t.Error("bloated tree should be stopped by bloat guard (not improved)")
-	}
-	// baseNodes for godev is 30, threshold is 30*20=600, we have 701 nodes
-	// (1 root + 700 children)
-	if r.NodesBefore <= 600 {
-		t.Errorf("bloated tree should have > 600 nodes, got %d", r.NodesBefore)
-	}
-}
-
-func TestEvolveTree_WithRealTree(t *testing.T) {
-	// Test evolveTree with a real tree using mock LLM
-	// This exercises the full evolution path: fitness eval, mutation ordering,
-	// benchmark validation, etc.
-	dir := t.TempDir()
-	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
-	mt, _ := NewMetricsTracker(dir)
+	seedFailureRecords(t, refStore, "godev")
 
 	// Minimal valid tree structure
 	simpleTree := &evolution.SerializableNode{
@@ -822,15 +593,14 @@ func TestEvolveTree_WithRealTree(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   2,
 		UseRealLLM:     false,
 	}
 	g := NewGardener(cfg)
 
-	results, err := g.RunCycle()
+	results, err := g.RunCycleV2(EvolveV2Config{UseRealLLM: false})
 	if err != nil {
-		t.Errorf("RunCycle with real tree: %v", err)
+		t.Errorf("RunCycleV2 with real tree: %v", err)
 	}
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 result")
@@ -838,10 +608,6 @@ func TestEvolveTree_WithRealTree(t *testing.T) {
 	r := results[0]
 	if r.TreeName != "godev" {
 		t.Errorf("TreeName = %q, want 'godev'", r.TreeName)
-	}
-	// Just verify the result structure is valid — mutations may or may not apply
-	if r.BaseFitness < 0 || r.NewFitness < 0 {
-		t.Log("fitness may be 0 with no reflection records, this is expected")
 	}
 	if r.NodesBefore <= 0 {
 		t.Errorf("NodesBefore should be > 0, got %d", r.NodesBefore)
@@ -852,98 +618,9 @@ func TestEvolveTree_WithRealTree(t *testing.T) {
 	}
 }
 
-func TestEvolveTree_MultipleTrees(t *testing.T) {
-	dir := t.TempDir()
-	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
-	mt, _ := NewMetricsTracker(dir)
-
-	simpleTree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "Tree",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "Step"},
-		},
-	}
-
-	customReg := &Registry{dir: dir}
-	customReg.mu.Lock()
-	customReg.entries = []TreeEntry{
-		{Name: "godev", Description: "go dev", Tree: simpleTree, FilePath: dir + "/tree-godev.json", Active: true},
-		{Name: "default", Description: "default", Tree: simpleTree, FilePath: dir + "/tree-default.json", Active: false}, // inactive
-		{Name: "custom", Description: "custom", Tree: simpleTree, FilePath: dir + "/tree-custom.json", Active: true},
-	}
-	customReg.mu.Unlock()
-
-	cfg := Config{
-		Registry:       customReg,
-		MetricsTracker: mt,
-		RefStore:       refStore,
-		TT:             tt,
-		MaxMutations:   1,
-		UseRealLLM:     false,
-	}
-	g := NewGardener(cfg)
-
-	results, err := g.RunCycle()
-	if err != nil {
-		t.Errorf("RunCycle: %v", err)
-	}
-	// Should process 2 active trees (godev and custom), skip default
-	if len(results) != 2 {
-		t.Errorf("expected 2 results (2 active trees), got %d: %+v", len(results), results)
-	}
-	// Entries should be sorted alphabetically: "custom" then "godev"
-	if results[0].TreeName != "custom" {
-		t.Errorf("first result should be 'custom', got %q", results[0].TreeName)
-	}
-	if results[1].TreeName != "godev" {
-		t.Errorf("second result should be 'godev', got %q", results[1].TreeName)
-	}
-}
-
-func TestRunCycle_MetricsSave(t *testing.T) {
-	dir := t.TempDir()
-	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
-	mt, _ := NewMetricsTracker(dir)
-
-	simpleTree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "Tree",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "Step"},
-		},
-	}
-
-	customReg := &Registry{dir: dir}
-	customReg.mu.Lock()
-	customReg.entries = []TreeEntry{
-		{Name: "default", Description: "default", Tree: simpleTree, FilePath: dir + "/tree-default.json", Active: true},
-	}
-	customReg.mu.Unlock()
-
-	cfg := Config{
-		Registry:       customReg,
-		MetricsTracker: mt,
-		RefStore:       refStore,
-		TT:             tt,
-		MaxMutations:   1,
-		UseRealLLM:     false,
-	}
-	g := NewGardener(cfg)
-
-	_, err := g.RunCycle()
-	if err != nil {
-		t.Fatalf("RunCycle: %v", err)
-	}
-
-	// Metrics should have been saved to disk after RunCycle
-	metricsPath := filepath.Join(dir, "gardener-metrics.json")
-	if _, err := os.Stat(metricsPath); os.IsNotExist(err) {
-		t.Error("gardener-metrics.json was not created after RunCycle")
-	}
-}
+// TestRunCycleV2_MultipleTrees and metrics-save coverage live in
+// evolve_v2_test.go; the v1 duplicates were removed with the v1 pipeline
+// (ADR-010 Phase 6).
 
 func TestNewMetricsTracker_InvalidDir(t *testing.T) {
 	// Create a file where a directory is expected

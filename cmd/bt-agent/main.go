@@ -23,6 +23,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/persona"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
@@ -373,8 +374,15 @@ func main() {
 		engine.Warn("experience bank unavailable — evolution runs memoryless", "error", expBankErr)
 	}
 
+	// Per-user personalization store (ADR-010 Phase 1). A nil store degrades
+	// the bt_persona_* tools and bt_run_task user hooks to no-ops.
+	personaStore, personaErr := persona.NewStore(agent.UsersDir())
+	if personaErr != nil {
+		engine.Warn("persona store unavailable — personalization disabled", "error", personaErr)
+	}
+
 	// Register all MCP tools via the extracted handler function.
-	registerMCPTools(server, &mcpDeps{
+	deps := &mcpDeps{
 		bb:           bb,
 		bt:           &bt,
 		treeStore:    treeStore,
@@ -391,7 +399,19 @@ func main() {
 		globalSched:  globalSched,
 		dlq:          dlq,
 		agentRunner:  agentRunner,
-	})
+		personaStore: personaStore,
+	}
+	registerMCPTools(server, deps)
+
+	// In-tree autopilot hook (ADR-010 Phase 4): trees embedding the
+	// ConsiderTreeCompile action feed the automation autopilot directly
+	// after a good run (injection-hook pattern, like DelegateToTreeFn).
+	engine.ConsiderAutomationFn = func(user string) {
+		if auto := considerAutomation(deps, user); auto["proposed"] == true {
+			engine.Info("autopilot: automation proposed (in-tree)", "user", user,
+				"tree", auto["tree_id"], "hitl", auto["hitl_id"])
+		}
+	}
 
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
 	server.SetRateLimit(2, 5)

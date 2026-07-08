@@ -82,6 +82,12 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return mcpErr(err)
 			}
+			// Automation proposals (ADR-010 Phase 4): approval activates the
+			// compiled automation as a scheduled agent.
+			if activation := finalizeAutomationApproval(deps, req, true); activation != nil {
+				data, _ := json.Marshal(map[string]any{"request": req, "automation": activation})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
 			data, _ := json.Marshal(req)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -108,6 +114,12 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			req, err := hitl.DefaultStore.Reject(params.RequestID, params.Reviewer, params.Reason)
 			if err != nil {
 				return mcpErr(err)
+			}
+			// Rejected automation proposals are remembered so the autopilot
+			// never re-proposes the same habit (anti-spam rail).
+			if activation := finalizeAutomationApproval(deps, req, false); activation != nil {
+				data, _ := json.Marshal(map[string]any{"request": req, "automation": activation})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
 			data, _ := json.Marshal(req)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

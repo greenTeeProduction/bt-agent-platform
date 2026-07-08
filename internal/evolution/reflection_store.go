@@ -33,7 +33,21 @@ type Record struct {
 	AdjustedBehavior string   `json:"adjusted_behavior"`
 	Outcome          Outcome  `json:"outcome"`
 	DurationMs       int64    `json:"duration_ms"`
+	// User attributes the record to a persona (ADR-010 Phase 5); empty for
+	// anonymous/system runs.
+	User string `json:"user,omitempty"`
+	// UserFeedback carries an explicit satisfaction signal from the user
+	// ("positive" or "negative", via bt_feedback). Records with feedback
+	// feed the user_satisfaction fitness dimension; empty means the record
+	// is a plain run reflection.
+	UserFeedback string `json:"user_feedback,omitempty"`
 }
+
+// Explicit user-feedback signals stored in Record.UserFeedback.
+const (
+	FeedbackPositive = "positive"
+	FeedbackNegative = "negative"
+)
 
 // FilterByTreeName returns records matching the given tree name.
 // An empty treeName matches records that have no TreeName set (backward compat).
@@ -50,6 +64,21 @@ func FilterByTreeName(records []Record, treeName string) []Record {
 	// If no records match, return all records (backward compat — before TreeName was populated)
 	if len(filtered) == 0 {
 		return records
+	}
+	return filtered
+}
+
+// FilterByTreeNameStrict returns only records whose TreeName matches exactly,
+// with no backward-compat fallback. Personal trees (ADR-010 Phase 5) must be
+// evaluated on their own evidence: inheriting the global record pool would
+// hide a missing history from the gardener's evidence gate and score the tree
+// on other trees' runs.
+func FilterByTreeNameStrict(records []Record, treeName string) []Record {
+	var filtered []Record
+	for _, r := range records {
+		if r.TreeName == treeName {
+			filtered = append(filtered, r)
+		}
 	}
 	return filtered
 }

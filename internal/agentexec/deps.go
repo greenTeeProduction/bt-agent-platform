@@ -2,8 +2,6 @@ package agentexec
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/blocks"
@@ -20,12 +18,10 @@ func NewRunDeps() (*agent.RunDeps, error) {
 		cfg = &config.Config{}
 	}
 
-	home, err := os.UserHomeDir()
+	refPath, err := ReflectionsPath()
 	if err != nil {
 		return nil, fmt.Errorf("home dir: %w", err)
 	}
-
-	refPath := filepath.Join(home, ".go-bt-reflections")
 	refStore, err := evolution.NewStore(refPath)
 	if err != nil {
 		return nil, fmt.Errorf("reflection store: %w", err)

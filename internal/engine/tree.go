@@ -290,6 +290,11 @@ func (bb *Blackboard) actionForName(name string) func(*btcore.BTContext[Blackboa
 	if fn := GetAction(name); fn != nil {
 		return fn
 	}
+	// Name-parameterized compiled-GOAP effect writes ("ApplyGoapEffects:k=v"),
+	// emitted by the plan→BT compiler (goap_compiled_nodes.go).
+	if fn := compiledGoapActionFor(name); fn != nil {
+		return tracedAction(name, fn)
+	}
 	// Fallback: unknown actions succeed silently (permissive, same as original default)
 	return func(ctx *btcore.BTContext[Blackboard]) int {
 		return 1
@@ -301,6 +306,11 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	// GetCondition returns nil for unknown names.
 	if fn := GetCondition(name); fn != nil {
 		return fn
+	}
+	// Name-parameterized compiled-GOAP guards ("GoapStateMatches:k=v"),
+	// emitted by the plan→BT compiler (goap_compiled_nodes.go).
+	if fn := compiledGoapConditionFor(name); fn != nil {
+		return tracedCondition(name, fn)
 	}
 	// Default: always-true condition (permissive routing)
 	return func(b *Blackboard) bool {

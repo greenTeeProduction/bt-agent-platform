@@ -1,9 +1,15 @@
 package agentexec
 
 import (
+	"os"
+	"path/filepath"
+	"sort"
+
 	"github.com/nico/go-bt-evolve/internal/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // init installs the engine's production wiring for the scheduled
@@ -26,4 +32,79 @@ func init() {
 	// deeper multi-task plans. Wired here (not in an engine init) so engine
 	// tests stay offline and deterministic.
 	engine.WireGoalPlanBrainstorm()
+	// Dynamic tree resolution (ADR-010 Phase 0): trees generated at runtime
+	// (bt_kg_auto_create, bt_factory_create) are persisted as tree-<id>.json
+	// in the reflections dir; this hook makes them resolvable by ID so the
+	// agent runner, A2A, and bt_run_task execute them instead of silently
+	// falling back to DefaultTree.
+	domains.DynamicResolveFn = ResolveGeneratedTree
+}
+
+// generatedTreeDir is the directory scanned for runtime-generated trees.
+// Overridable for tests; empty means "resolve the default at call time"
+// so init order and per-test home dirs don't bake in a stale path.
+var generatedTreeDir string
+
+// usersTreeRoot is the root of per-user workspaces scanned as a fallback
+// (users/<user>/trees, ADR-010 Phase 5). Overridable for tests; empty means
+// "resolve agent.UsersDir() at call time".
+var usersTreeRoot string
+
+// ReflectionsPath returns the shared persistence root used by the reflection
+// store, tree store, and blocks registry (~/.go-bt-reflections).
+func ReflectionsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".go-bt-reflections"), nil
+}
+
+// ResolveGeneratedTree loads a runtime-generated tree by ID: first from the
+// shared reflections dir, then from per-user personalization workspaces
+// (users/<user>/trees, ADR-010 Phase 5 — user-attributed compiles persist
+// there so the gardener evolves them per user). Returns nil when no such
+// tree has been persisted or the file is unreadable — resolution then falls
+// through to DefaultTree.
+func ResolveGeneratedTree(id string) *evolution.SerializableNode {
+	dir := generatedTreeDir
+	if dir == "" {
+		d, err := ReflectionsPath()
+		if err != nil {
+			return nil
+		}
+		dir = d
+	}
+	if tree, err := evolution.LoadNamedTree(dir, id); err == nil && tree != nil {
+		return tree
+	}
+	return resolveUserTree(id)
+}
+
+// resolveUserTree scans user workspaces for a personal tree with the given
+// ID. Users are visited in sorted order so a (rare) cross-user ID collision
+// resolves deterministically.
+func resolveUserTree(id string) *evolution.SerializableNode {
+	root := usersTreeRoot
+	if root == "" {
+		root = agent.UsersDir()
+	}
+	users, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(users))
+	for _, u := range users {
+		if u.IsDir() {
+			names = append(names, u.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, user := range names {
+		tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
+		if err == nil && tree != nil {
+			return tree
+		}
+	}
+	return nil
 }

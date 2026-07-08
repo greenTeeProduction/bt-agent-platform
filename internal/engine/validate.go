@@ -38,11 +38,11 @@ func ValidateTree(tree *evolution.SerializableNode) []string {
 func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts map[string]int) {
 	switch node.Type {
 	case "Action":
-		if actionRegistry[node.Name] == nil {
+		if actionRegistry[node.Name] == nil && !isCompiledGoapAction(node.Name) {
 			*msgs = append(*msgs, node.Name)
 		}
 	case "Condition":
-		if conditionRegistry[node.Name] == nil {
+		if conditionRegistry[node.Name] == nil && !isCompiledGoapCondition(node.Name) {
 			*msgs = append(*msgs, node.Name)
 		}
 	case "MemSelector", "PersistentMemSequence", "ForEachTask", "BanditSelector":

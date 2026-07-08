@@ -125,7 +125,6 @@ func TestDefaultEvolveV2Config(t *testing.T) {
 func TestRunCycleV2_Basic(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	simpleTree := &evolution.SerializableNode{
@@ -146,7 +145,6 @@ func TestRunCycleV2_Basic(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -178,7 +176,6 @@ func TestRunCycleV2_Basic(t *testing.T) {
 func TestRunCycleV2_MultipleTrees(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	simpleTree := &evolution.SerializableNode{
@@ -201,7 +198,6 @@ func TestRunCycleV2_MultipleTrees(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -227,7 +223,6 @@ func TestRunCycleV2_MultipleTrees(t *testing.T) {
 func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	customReg := &Registry{dir: dir}
@@ -239,7 +234,6 @@ func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -257,7 +251,6 @@ func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 func TestRunCycleV2_NilTree(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	customReg := &Registry{dir: dir}
@@ -271,7 +264,6 @@ func TestRunCycleV2_NilTree(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -296,7 +288,6 @@ func TestRunCycleV2_NilTree(t *testing.T) {
 func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	simpleTree := &evolution.SerializableNode{
@@ -317,7 +308,6 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -338,7 +328,6 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	// Build a massively bloated tree (> 600 nodes for godev)
@@ -363,7 +352,6 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   2,
 		UseRealLLM:     false,
 	}
@@ -381,7 +369,6 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	tree := &evolution.SerializableNode{
@@ -412,7 +399,7 @@ func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 	}
 	customReg.mu.Unlock()
 
-	cfg := Config{Registry: customReg, MetricsTracker: mt, RefStore: refStore, TT: tt, MaxMutations: 2, UseRealLLM: false}
+	cfg := Config{Registry: customReg, MetricsTracker: mt, RefStore: refStore, MaxMutations: 2, UseRealLLM: false}
 	g := NewGardener(cfg)
 	v2cfg := EvolveV2Config{
 		BlocksEnabled: false,
@@ -435,7 +422,6 @@ func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))
-	tt, _ := evaluator.NewTranspositionTable(filepath.Join(dir, "tt"), 10)
 	mt, _ := NewMetricsTracker(dir)
 
 	simpleTree := &evolution.SerializableNode{
@@ -456,7 +442,6 @@ func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 		Registry:       customReg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
-		TT:             tt,
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
@@ -502,11 +487,6 @@ func experienceRecordingGardener(t *testing.T, bank *evolution.ExperienceBank) (
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
-	tt, err := evaluator.NewTranspositionTable(refDir, 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
-	}
-
 	const treeName = "experience_recording"
 	tree := gateDisabledTestTree()
 	seedFailureRecords(t, refStore, treeName)
@@ -522,7 +502,6 @@ func experienceRecordingGardener(t *testing.T, bank *evolution.ExperienceBank) (
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Gate:           evolution.NewQualityGate(snapDir),
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),
@@ -731,81 +710,6 @@ func TestEvolveTreeV2_MarksMatchingExperienceReused(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// hasChildNamed tests (gardener.go)
-// ============================================================================
-
-func TestHasChildNamed_Found(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{Name: "Child1"},
-			{Name: "Child2", Children: []evolution.SerializableNode{
-				{Name: "Grandchild"},
-			}},
-		},
-	}
-	if !hasChildNamed(tree, "Root", "Child1") {
-		t.Error("hasChildNamed should find Child1 under Root")
-	}
-	if !hasChildNamed(tree, "Root", "Child2") {
-		t.Error("hasChildNamed should find Child2 under Root")
-	}
-	if !hasChildNamed(tree, "Child2", "Grandchild") {
-		t.Error("hasChildNamed should find Grandchild under Child2")
-	}
-}
-
-func TestHasChildNamed_NotFound(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{Name: "Child1"},
-		},
-	}
-	if hasChildNamed(tree, "Root", "Nonexistent") {
-		t.Error("hasChildNamed should not find Nonexistent")
-	}
-	if hasChildNamed(tree, "Root", "Child1") == false {
-		t.Error("hasChildNamed should find Child1")
-	}
-	// Non-existent parent
-	if hasChildNamed(tree, "MissingParent", "Anything") {
-		t.Error("hasChildNamed should not find anything under a non-existent parent")
-	}
-}
-
-func TestHasChildNamed_NoChildren(t *testing.T) {
-	tree := &evolution.SerializableNode{Name: "Leaf"}
-	if hasChildNamed(tree, "Leaf", "Anything") {
-		t.Error("hasChildNamed on leaf node should return false")
-	}
-}
-
-func TestHasChildNamed_DeepNested(t *testing.T) {
-	tree := &evolution.SerializableNode{
-		Name: "Root",
-		Children: []evolution.SerializableNode{
-			{
-				Name: "Middle",
-				Children: []evolution.SerializableNode{
-					{
-						Name: "Deep",
-						Children: []evolution.SerializableNode{
-							{Name: "Target"},
-						},
-					},
-				},
-			},
-		},
-	}
-	if !hasChildNamed(tree, "Deep", "Target") {
-		t.Error("hasChildNamed should find Target under Deep (nested)")
-	}
-	if !hasChildNamed(tree, "Middle", "Deep") {
-		t.Error("hasChildNamed should find Deep under Middle")
-	}
-	if hasChildNamed(tree, "Target", "Anything") {
-		t.Error("hasChildNamed on Target leaf should return false")
-	}
-}
+// hasChildNamed and the other v1 idempotency-guard helpers were retired with
+// the v1 pipeline (ADR-010 Phase 6); v2 relies on clone-and-prescore candidate
+// isolation instead.

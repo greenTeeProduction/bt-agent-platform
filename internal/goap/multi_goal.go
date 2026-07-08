@@ -14,17 +14,32 @@ type goalEntry struct {
 }
 
 // goalHeap implements container/heap.Interface for priority-ordered goals.
-// Higher priority goals sort first; ties are broken by insertion order.
+// Higher priority goals sort first; priority ties are broken by earlier
+// deadline (0 = no deadline, sorts last), then by insertion order.
 type goalHeap []*goalEntry
 
 func (h goalHeap) Len() int { return len(h) }
 
 func (h goalHeap) Less(i, j int) bool {
-	// Higher Priority first; break ties with insertion index
-	if h[i].goal.Priority != h[j].goal.Priority {
-		return h[i].goal.Priority > h[j].goal.Priority
+	return entryLess(h[i], h[j])
+}
+
+// entryLess is the single ordering rule for goal entries: Priority desc,
+// then Deadline asc with 0 (none) last, then insertion order.
+func entryLess(a, b *goalEntry) bool {
+	if a.goal.Priority != b.goal.Priority {
+		return a.goal.Priority > b.goal.Priority
 	}
-	return h[i].index < h[j].index
+	if a.goal.Deadline != b.goal.Deadline {
+		if a.goal.Deadline == 0 {
+			return false
+		}
+		if b.goal.Deadline == 0 {
+			return true
+		}
+		return a.goal.Deadline < b.goal.Deadline
+	}
+	return a.index < b.index
 }
 
 func (h goalHeap) Swap(i, j int) {
@@ -162,10 +177,7 @@ func (gq *GoalQueue) SelectGoal(state WorldState) *Goal {
 	sorted := make([]*goalEntry, len(gq.heap))
 	copy(sorted, gq.heap)
 	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].goal.Priority != sorted[j].goal.Priority {
-			return sorted[i].goal.Priority > sorted[j].goal.Priority
-		}
-		return sorted[i].index < sorted[j].index
+		return entryLess(sorted[i], sorted[j])
 	})
 
 	for _, entry := range sorted {

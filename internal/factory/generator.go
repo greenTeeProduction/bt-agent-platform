@@ -118,22 +118,22 @@ func (g *Generator) buildSerializable(spec *TreeSpec, name string) *evolution.Se
 		})
 	}
 
-	// 2. StrategyRouter: deterministic DecisionTree that routes on ChainState["route"].
-	// If no route is set, default to the first generated path.
+	// 2. StrategyRouter: model-routed DecisionTree. Nothing in a generated
+	// tree writes ChainState["route"], so routing on the raw key alone made
+	// every skill path unreachable (the router always took the default).
+	// With source "model" the engine's classifyTaskRoute resolves the branch
+	// label from the task via the configured LLM; when the LLM is unavailable
+	// or low-confidence, deterministic fallback routes to FallbackExecution —
+	// a real ChainAction agent path, so the tree still produces output.
 	strategyKids := g.buildStrategyPaths(spec)
-	defaultBranch := "fallback"
-	if len(strategyKids) > 0 {
-		if branch, ok := strategyKids[0].Metadata["branch"].(string); ok {
-			defaultBranch = branch
-		}
-	}
 	children = append(children,
 		evolution.SerializableNode{
 			Type: "DecisionTree",
 			Name: "StrategyRouter",
 			Metadata: map[string]any{
 				"key":     "route",
-				"default": defaultBranch,
+				"source":  "model",
+				"default": "fallback",
 			},
 			Children: strategyKids,
 		},

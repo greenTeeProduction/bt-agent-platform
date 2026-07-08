@@ -9,6 +9,17 @@ import (
 	"github.com/nico/go-bt-evolve/internal/thinktank"
 )
 
+// DynamicResolveFn resolves tree IDs that are not compiled in — trees generated
+// at runtime by the knowledge factory (bt_kg_auto_create, bt_factory_create) and
+// persisted as tree-<id>.json. It is consulted after every builtin mapping and
+// before the DefaultTree fallback, so compiled-in trees always win and a
+// generated tree is only used when nothing else matches.
+//
+// Installed by agentexec at link time (see internal/agentexec/wiring.go) —
+// domains itself cannot load the files because the store location is an
+// execution-layer concern. Nil means no dynamic resolution (ADR-010 Phase 0).
+var DynamicResolveFn func(id string) *evolution.SerializableNode
+
 // ResolveTreeID maps a tree identifier string to a serializable behavior tree.
 // Used by bt-agent, A2A, and template validation tests.
 func ResolveTreeID(id string) *evolution.SerializableNode {
@@ -66,14 +77,28 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 	if id == "fusion" || id == "fusion_deliberation" {
 		return evolution.FusionDeliberationTree()
 	}
+	// Category-prefixed IDs: builtin catalog first; on a miss, consult the
+	// dynamic resolver before preserving the branch's legacy miss behavior —
+	// factory-generated tree IDs use exactly these "<category>:<name>" shapes
+	// (ADR-010 Phase 0), so an early nil/default return here would make every
+	// generated tree unreachable.
 	if len(id) > 8 && id[:8] == "finance:" {
-		return evolution.AllFinanceTrees()[id[8:]]
+		if t := evolution.AllFinanceTrees()[id[8:]]; t != nil {
+			return t
+		}
+		return dynamicResolve(id)
 	}
 	if len(id) > 9 && id[:9] == "research:" {
-		return evolution.ResearchTrees()[id[9:]]
+		if t := evolution.ResearchTrees()[id[9:]]; t != nil {
+			return t
+		}
+		return dynamicResolve(id)
 	}
 	if len(id) > 7 && id[:7] == "domain:" {
-		return AllDomainTrees()[id[7:]]
+		if t := AllDomainTrees()[id[7:]]; t != nil {
+			return t
+		}
+		return dynamicResolve(id)
 	}
 	if len(id) > 8 && id[:8] == "startup:" {
 		role := id[8:]
@@ -81,7 +106,10 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 		if t, ok := trees[role]; ok {
 			return t
 		}
-		return startup.Roles()[role]
+		if t := startup.Roles()[role]; t != nil {
+			return t
+		}
+		return dynamicResolve(id)
 	}
 	if len(id) > 10 && id[:10] == "thinktank:" {
 		switch role := id[10:]; role {
@@ -92,6 +120,9 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 		case "report":
 			return thinktank.ReportGenerationTree()
 		default:
+			if t := dynamicResolve(id); t != nil {
+				return t
+			}
 			return thinktank.SynthesisTree()
 		}
 	}
@@ -121,5 +152,19 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 			}
 		}
 	}
+	// Runtime-generated trees (knowledge factory, plan→BT compiler): resolved
+	// last so a generated tree can never shadow a compiled-in ID.
+	if t := dynamicResolve(id); t != nil {
+		return t
+	}
 	return evolution.DefaultTree()
+}
+
+// dynamicResolve consults the injected DynamicResolveFn, tolerating the
+// unwired (nil) state so domains tests stay standalone.
+func dynamicResolve(id string) *evolution.SerializableNode {
+	if DynamicResolveFn == nil {
+		return nil
+	}
+	return DynamicResolveFn(id)
 }

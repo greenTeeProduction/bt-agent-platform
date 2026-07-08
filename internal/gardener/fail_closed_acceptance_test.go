@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -24,10 +23,6 @@ func runFailClosedArm(t *testing.T, vgCfg ValidationGateConfig) (CycleMetrics, b
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
-	tt, err := evaluator.NewTranspositionTable(refDir, 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
-	}
 
 	const treeName = "fail_closed_acceptance"
 	tree := gateDisabledTestTree()
@@ -45,7 +40,6 @@ func runFailClosedArm(t *testing.T, vgCfg ValidationGateConfig) (CycleMetrics, b
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Gate:           evolution.NewQualityGate(snapDir),
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),

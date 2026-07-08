@@ -7,6 +7,7 @@
 | Partner | Inputs | Outputs |
 |---|---|---|
 | Hermes Agent | Tasks, delegated work, agent management commands | Execution results, reflections, fitness scores, agent status |
+| End user / persona owner (roadmap, ADR-010) | Tasks, goals, feedback (👍/👎/corrections), HITL approvals | Personalized results, automation proposals, self-generated GOAP trees, scheduled agents |
 | BT Dashboard users | HTTP requests (navigation, API calls) | HTML pages, JSON responses, sprint status |
 | Ollama qwen3.6:35b | Prompts (via ChainAction nodes) | Completions (text/markdown/code) |
 | DeepSeek API | Escalated prompts, batch LLM work | Completions (5-10s latency) |
@@ -22,7 +23,7 @@
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 36 tools: tree execution, agent management, knowledge graph, evolution |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 73 tools: tree execution, agent management, knowledge graph, evolution, blocks, HITL, blackboard, persona, goals, plan→BT compiler, automation autopilot + user feedback (`bt_feedback`, ADR-010) |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
 | bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 2 tools: evolved langchain agent execution |
 | bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |

@@ -115,7 +115,7 @@ func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
 			entry = e
 		}
 	}
-	metrics := g.evolveTree(entry)
+	metrics := g.evolveTreeV2(entry, DefaultEvolveV2Config())
 	if !metrics.SkippedNoEvidence {
 		t.Fatalf("a tree with no reflection records must be skipped by the evidence gate: %+v", metrics)
 	}

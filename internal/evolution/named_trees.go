@@ -1,0 +1,115 @@
+package evolution
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// TreeFileName returns the canonical on-disk file name for a generated tree ID
+// (e.g. "core:automate_reports" → "tree-core_automate_reports.json").
+//
+// Tree IDs may contain characters that are invalid in file names (":" on
+// Windows, "/" everywhere), so the ID is sanitized to a stable, deterministic
+// name. The same transformation is applied on save and on load, which means
+// resolution never needs to reverse the mapping. The file name keeps the
+// "tree-" prefix so the gardener registry picks generated trees up for
+// evolution (it scans for tree-*.json).
+func TreeFileName(id string) string {
+	return "tree-" + sanitizeTreeID(id) + ".json"
+}
+
+// sanitizeTreeID maps a tree ID to a cross-platform-safe file name fragment.
+func sanitizeTreeID(id string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(id) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
+// SaveNamed persists a generated tree under its canonical per-ID file in the
+// store directory (ADR-010 Phase 0). Unlike Save, which owns the single
+// tree.json used for the agent's active self-mutating tree, SaveNamed writes
+// tree-<id>.json so generated trees are resolvable by ID and visible to the
+// gardener registry.
+func (ts *TreeStore) SaveNamed(id string, tree *SerializableNode) (string, error) {
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("save named tree: empty id")
+	}
+	if tree == nil {
+		return "", fmt.Errorf("save named tree %q: nil tree", id)
+	}
+	path := filepath.Join(ts.dir, TreeFileName(id))
+	if err := ts.SaveTo(tree, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// LoadNamed reads a generated tree by ID from the store directory.
+// Returns (nil, nil) when no tree with that ID has been persisted.
+func (ts *TreeStore) LoadNamed(id string) (*SerializableNode, error) {
+	return LoadNamedTree(ts.dir, id)
+}
+
+// SaveNamedTree persists a generated tree as tree-<id>.json in an arbitrary
+// directory (created if needed) with an atomic write. It is the store-free
+// counterpart of TreeStore.SaveNamed for per-user workspaces (ADR-010
+// Phase 5: users/<user>/trees/).
+func SaveNamedTree(dir, id string, tree *SerializableNode) (string, error) {
+	if strings.TrimSpace(id) == "" {
+		return "", fmt.Errorf("save named tree: empty id")
+	}
+	if dir == "" {
+		return "", fmt.Errorf("save named tree %q: empty dir", id)
+	}
+	if tree == nil {
+		return "", fmt.Errorf("save named tree %q: nil tree", id)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create tree dir %q: %w", dir, err)
+	}
+	path := filepath.Join(dir, TreeFileName(id))
+	data, err := json.MarshalIndent(tree, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal tree %q: %w", id, err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return "", fmt.Errorf("write tree %q: %w", id, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return "", fmt.Errorf("rename tree %q: %w", id, err)
+	}
+	return path, nil
+}
+
+// LoadNamedTree reads tree-<id>.json from dir. Returns (nil, nil) when the
+// file does not exist, so callers can distinguish "not generated" from a
+// genuinely broken file.
+func LoadNamedTree(dir, id string) (*SerializableNode, error) {
+	if strings.TrimSpace(id) == "" || dir == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(filepath.Join(dir, TreeFileName(id)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read named tree %q: %w", id, err)
+	}
+	var tree SerializableNode
+	if err := json.Unmarshal(data, &tree); err != nil {
+		return nil, fmt.Errorf("unmarshal named tree %q: %w", id, err)
+	}
+	return &tree, nil
+}

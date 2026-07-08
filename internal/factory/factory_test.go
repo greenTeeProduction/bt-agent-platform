@@ -175,6 +175,43 @@ func TestGenerator_FallbackExecutionUsesChainAction(t *testing.T) {
 	}
 }
 
+// TestGenerator_StrategyRouterIsModelRouted pins the ADR-010 Phase 0 routing
+// fix: nothing in a generated tree ever wrote ChainState["route"], so a
+// key-only DecisionTree always took the default branch and every skill path
+// was dead. The router must be model-routed (engine classifies the task into
+// a branch label) with the real FallbackExecution path as the default.
+func TestGenerator_StrategyRouterIsModelRouted(t *testing.T) {
+	gen := NewGenerator()
+	spec := &TreeSpec{
+		RootType: "Sequence",
+		RootName: "TestAgent",
+		StrategyPath: []TreeNode{
+			{Type: "Condition", Name: "IsQuery", Description: "Detect query"},
+			{Type: "Action", Name: "AnswerQuery", Description: "Respond"},
+		},
+	}
+
+	serTree := gen.buildSerializable(spec, "test-agent")
+	router := serTree.Children[0] // no PreChecks → router first
+	if router.Name != "StrategyRouter" || router.Type != "DecisionTree" {
+		t.Fatalf("expected DecisionTree StrategyRouter first, got %s %s", router.Type, router.Name)
+	}
+	if src, _ := router.Metadata["source"].(string); src != "model" {
+		t.Errorf(`StrategyRouter metadata source = %q, want "model" — skill paths are unreachable without model routing`, src)
+	}
+	if def, _ := router.Metadata["default"].(string); def != "fallback" {
+		t.Errorf(`StrategyRouter metadata default = %q, want "fallback"`, def)
+	}
+	// The default target must exist and be marked default.
+	last := router.Children[len(router.Children)-1]
+	if last.Name != "FallbackExecution" {
+		t.Fatalf("expected FallbackExecution as final path, got %q", last.Name)
+	}
+	if isDefault, _ := last.Metadata["default"].(bool); !isDefault {
+		t.Error("FallbackExecution must carry default:true metadata")
+	}
+}
+
 func TestGenerator_NoSelfCorrect_NoFallback(t *testing.T) {
 	gen := NewGenerator()
 	spec := &TreeSpec{

@@ -13,27 +13,24 @@
 //   - MetricsTracker — per-tree cycle counts, mutation history, fitness scores
 //   - Config — cycle interval, mutation cap, benchmark validation, real-LLM flag
 //
-// Evolution guarantees: idempotency guards (no duplicate nodes), retry cap (15),
-// node cap (20x original), neutral mutation acceptance (score >= 0 passes).
+// Evolution guarantees (RunCycleV2, the single pipeline since ADR-010
+// Phase 6): evidence gate (no mutation without reflection records), bloat cap
+// (20x original node count), clone-and-prescore candidate isolation, quality
+// and validation gates with snapshot rollback.
 package gardener
 
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
-	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
 // TreeEntry is a named tree in the registry with its evolution state.
@@ -43,18 +40,36 @@ type TreeEntry struct {
 	Tree        *evolution.SerializableNode `json:"-"`
 	FilePath    string                      `json:"file_path"`
 	Active      bool                        `json:"active"`
+	// User marks a personal tree loaded from a user workspace (ADR-010
+	// Phase 5). It is the workspace directory name (already sanitized by
+	// persona.SanitizeUserID); empty for shared/builtin trees. Personal
+	// trees are evaluated on strictly-matching reflections and evolve
+	// against the user's own experience bank.
+	User string `json:"user,omitempty"`
 }
 
 // Registry manages all known behavior trees.
 type Registry struct {
-	mu      sync.RWMutex
-	entries []TreeEntry
-	dir     string
+	mu        sync.RWMutex
+	entries   []TreeEntry
+	dir       string
+	usersRoot string
 }
 
 // NewRegistry creates a registry and loads all known trees.
 func NewRegistry(storageDir string) *Registry {
 	r := &Registry{dir: storageDir}
+	r.loadAll()
+	return r
+}
+
+// NewRegistryWithUsers creates a registry that additionally scans per-user
+// personalization workspaces (<usersRoot>/<user>/trees/tree-*.json, ADR-010
+// Phase 5) so personal trees join the 24/7 evolution loop. Snapshots and
+// rollback work per tree as usual; SaveTree writes back into the user's own
+// workspace.
+func NewRegistryWithUsers(storageDir, usersRoot string) *Registry {
+	r := &Registry{dir: storageDir, usersRoot: usersRoot}
 	r.loadAll()
 	return r
 }
@@ -127,6 +142,8 @@ func (r *Registry) loadAll() {
 			})
 		}
 	}
+
+	r.loadUserTreesLocked()
 }
 
 func (r *Registry) addBuiltin(name, desc string, tree *evolution.SerializableNode) {
@@ -317,7 +334,6 @@ type Config struct {
 	Registry       *Registry
 	MetricsTracker *MetricsTracker
 	RefStore       *evolution.Store
-	TT             *evaluator.TranspositionTable
 	Interval       time.Duration             // how often to wake up
 	MaxMutations   int                       // max mutations per cycle per tree
 	UseRealLLM     bool                      // use real Ollama for benchmark validation (slow but accurate)
@@ -335,11 +351,19 @@ type Config struct {
 	// context can be retrieved and reused across cycles and binaries. Nil
 	// degrades to the historical no-recording behavior.
 	ExperienceBank *evolution.ExperienceBank
+	// UserExperienceRoot, when set (usually agent.UsersDir()), gives personal
+	// trees per-user experience banks at <root>/<user>/experience (ADR-010
+	// Phase 5); empty means every tree shares ExperienceBank.
+	UserExperienceRoot string
 }
 
 // Gardener is the 24/7 tree evolution agent.
 type Gardener struct {
 	cfg Config
+
+	// Lazily opened per-user experience banks (see bankFor).
+	userBanksMu sync.Mutex
+	userBanks   map[string]*evolution.ExperienceBank
 }
 
 // NewGardener creates a tree gardener.
@@ -347,223 +371,13 @@ func NewGardener(cfg Config) *Gardener {
 	return &Gardener{cfg: cfg}
 }
 
-// RunCycle executes one full evolution cycle over all trees.
-func (g *Gardener) RunCycle() ([]CycleMetrics, error) {
-	entries := g.cfg.Registry.List()
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
-	})
+// The v1 RunCycle/evolveTree pipeline was retired in ADR-010 Phase 6.
+// RunCycleV2 (evolve_v2.go) is the single evolution pipeline; the v1 safety
+// rails it lacked — evidence gate, bloat cap, crisis detection — were ported
+// into evolveTreeV2.
 
-	results := make([]CycleMetrics, 0, 8)
-
-	for _, entry := range entries {
-		if !entry.Active {
-			continue
-		}
-
-		start := time.Now()
-		metrics := g.evolveTree(entry)
-		metrics.DurationMs = time.Since(start).Milliseconds()
-		results = append(results, metrics)
-
-		g.cfg.MetricsTracker.Record(metrics)
-	}
-
-	_ = g.cfg.MetricsTracker.Save()
-	return results, nil
-}
-
-// evolveTree runs one evolution pass on a single tree.
-func (g *Gardener) evolveTree(entry TreeEntry) CycleMetrics {
-	tree := entry.Tree
-	if tree == nil {
-		return CycleMetrics{TreeName: entry.Name, Improved: false}
-	}
-
-	allRecords, _ := g.cfg.RefStore.LoadAll()
-	records := evolution.FilterByTreeName(allRecords, entry.Name)
-	nodesBefore := evolution.CountNodes(tree)
-
-	// Evidence gate: a tree with no reflection records has no run-derived
-	// fitness gradient, so mutation is a blind coin flip that only burns
-	// benchmark compute. Skip it (recording a zero-delta no-mutation metric)
-	// unless blind evolution is explicitly enabled.
-	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
-		baseFitness := evaluator.EvaluateTree(tree, records)
-		return CycleMetrics{
-			TreeName: entry.Name, Improved: false,
-			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
-			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
-			SkippedNoEvidence: true,
-		}
-	}
-
-	baseFitness := evaluator.EvaluateTree(tree, records)
-	rejections := 0
-	rollbacks := 0
-
-	// Crisis detection: proactively check for diversity collapse or stagnation
-	// before mutations are applied (Stage 3.5 of the evolution cycle).
-	// Complements the reactive QualityGate below.
-	emergencyMutations := g.cfg.MaxMutations
-	crisisIntervened := false
-	if g.cfg.CrisisDetector != nil {
-		state := evolution.CrisisState{
-			TreeName:            entry.Name,
-			CurrentFitness:      baseFitness.Composite,
-			BehavioralDiversity: g.cfg.CrisisDetector.LastDiversity(),
-		}
-		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
-			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
-			_ = action // emergency mode flag; used for logging
-			// Force more aggressive mutation: allow up to 2x normal mutations
-			emergencyMutations = g.cfg.MaxMutations * 2
-			if emergencyMutations < 1 {
-				emergencyMutations = 1
-			}
-			crisisIntervened = true
-			fmt.Printf("[gardener] CRISIS: %s — %s (stagnation=%d epochs), boosting mutations %d→%d\n",
-				entry.Name, reason, action.StagnationEpochs, g.cfg.MaxMutations, emergencyMutations)
-		}
-	}
-
-	// Only cap at extreme bloat (20x original) — trees should be allowed to grow
-	baseNodes := baseNodeCount(entry.Name)
-	if nodesBefore > baseNodes*20 {
-		return CycleMetrics{
-			TreeName: entry.Name, Improved: false,
-			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
-			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
-		}
-	}
-
-	candidates := evaluator.OrderMutations(tree, records, baseFitness)
-
-	// Validate mutations via benchmark before applying
-	suite := benchmark.SuiteForTree(entry.Name)
-	var llm llm.LLM
-	if g.cfg.UseRealLLM {
-		llm = benchmark.DefaultLLM()
-	} else {
-		llm = benchmark.DefaultMock()
-	}
-
-	// Snapshot tree before mutations for potential rollback.
-	// Only snapshot if we have a quality gate and snapshot dir configured.
-	var snapshotTaken bool
-	if g.cfg.Gate != nil && g.cfg.SnapshotDir != "" {
-		if _, err := evolution.SnapshotTree(tree, entry.Name, g.cfg.SnapshotDir); err == nil {
-			snapshotTaken = true
-		}
-	}
-
-	applied := 0
-	for i := 0; i < len(candidates) && applied < emergencyMutations; i++ {
-		// Idempotency guards
-		if candidates[i].Op.Operation == "add_before" && hasNodeNamed(tree, "CheckConfidence") {
-			continue
-		}
-		if candidates[i].Op.Operation == "wrap_retry" && isNodeWrapped(tree, candidates[i].Op.Target) {
-			continue
-		}
-		if candidates[i].Op.Operation == "increase_retries" && getRetryCount(tree, candidates[i].Op.Target) >= 15 {
-			continue
-		}
-		if candidates[i].Op.Operation == "add_fallback" && hasChildNamed(tree, candidates[i].Op.Target, "DefaultFallback") {
-			continue
-		}
-
-		if candidates[i].Score < 0.2 {
-			break
-		}
-
-		// Only apply if benchmark says it helps (quick 2-task validation for speed)
-		score := benchmark.QuickValidate(tree, suite, llm, []evolution.MutationOp{candidates[i].Op})
-		if score < 0 {
-			continue // skip mutations that regress benchmark results
-		}
-
-		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
-			applied++
-		}
-	}
-
-	// Quality gate: validate that mutations didn't cause regression.
-	// Runs after all mutations are applied to check the combined effect.
-	if applied > 0 && g.cfg.Gate != nil {
-		if g.cfg.Gate.IsDisabledFor(entry.Name) {
-			// Fail closed: a disabled gate means evolution is paused for this
-			// tree until process restart — discard the mutations, do not apply
-			// them ungated.
-			slog.Warn("gardener: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
-				"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
-			rejections = applied
-			applied = 0
-			if snapshotTaken {
-				if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
-					*entry.Tree = *restored
-					tree = entry.Tree
-				}
-			}
-		} else {
-			postFitness := evaluator.EvaluateTree(tree, records)
-			result := g.cfg.Gate.ValidateFor(entry.Name, baseFitness.Composite, postFitness.Composite)
-
-			switch result {
-			case evolution.GateRejected:
-				// Revert all mutations — restore from snapshot
-				rejections = applied
-				applied = 0
-				if snapshotTaken {
-					if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
-						*entry.Tree = *restored
-						tree = entry.Tree
-					}
-				}
-			case evolution.GateRollback:
-				// Regression detected — rollback to pre-mutation snapshot
-				rollbacks = applied
-				applied = 0
-				if snapshotTaken {
-					if restored, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir); err == nil {
-						*entry.Tree = *restored
-						tree = entry.Tree
-					}
-				}
-			case evolution.GateAccepted:
-				// Passed — persist as normal
-			}
-		}
-	}
-
-	if applied > 0 {
-		// NOTE: no tree.json sync here — tree.json in the registry dir belongs
-		// to bt-agent's self-mutation TreeStore; overwriting it with arbitrary
-		// domain trees clobbered that store (each evolved tree replaced the
-		// agent's default tree in turn). Evolved state lives in tree-<name>.json.
-		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
-	}
-
-	// If crisis intervention was triggered and mutations were accepted,
-	// reset the stagnation counter so the next cycle is a clean slate.
-	if crisisIntervened && applied > 0 && g.cfg.CrisisDetector != nil {
-		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
-	}
-
-	newFitness := evaluator.EvaluateTree(tree, records)
-	nodesAfter := evolution.CountNodes(tree)
-	improved := newFitness.Composite > baseFitness.Composite
-
-	return CycleMetrics{
-		TreeName: entry.Name, Timestamp: time.Now().Unix(),
-		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
-		Delta:     newFitness.Composite - baseFitness.Composite,
-		Mutations: applied, NodesBefore: nodesBefore, NodesAfter: nodesAfter,
-		Improved:   improved,
-		Rejections: rejections, Rollbacks: rollbacks,
-	}
-}
-
+// baseNodeCount returns the expected baseline node count for a tree, used by
+// the bloat cap in evolveTreeV2.
 func baseNodeCount(name string) int {
 	switch {
 	case strings.HasPrefix(name, "domain_"):
@@ -585,65 +399,6 @@ func baseNodeCount(name string) int {
 	default:
 		return 25
 	}
-}
-
-func getRetryCount(tree *evolution.SerializableNode, name string) int {
-	var find func(n *evolution.SerializableNode) int
-	find = func(n *evolution.SerializableNode) int {
-		if n.Name == name && n.Type == "Retry" {
-			return n.MaxRetries
-		}
-		for i := range n.Children {
-			if r := find(&n.Children[i]); r > 0 {
-				return r
-			}
-		}
-		return 0
-	}
-	return find(tree)
-}
-
-func hasNodeNamed(tree *evolution.SerializableNode, name string) bool {
-	if tree.Name == name {
-		return true
-	}
-	for i := range tree.Children {
-		if hasNodeNamed(&tree.Children[i], name) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasChildNamed checks if a node with the given name has a direct child with childName.
-func hasChildNamed(tree *evolution.SerializableNode, parentName, childName string) bool {
-	if tree.Name == parentName {
-		for i := range tree.Children {
-			if tree.Children[i].Name == childName {
-				return true
-			}
-		}
-	}
-	for i := range tree.Children {
-		if hasChildNamed(&tree.Children[i], parentName, childName) {
-			return true
-		}
-	}
-	return false
-}
-
-func isNodeWrapped(tree *evolution.SerializableNode, name string) bool {
-	for i := range tree.Children {
-		if tree.Children[i].Type == "Retry" && len(tree.Children[i].Children) > 0 && tree.Children[i].Children[0].Name == name {
-			return true
-		}
-	}
-	for i := range tree.Children {
-		if isNodeWrapped(&tree.Children[i], name) {
-			return true
-		}
-	}
-	return false
 }
 
 func maxInt(a, b int) int {

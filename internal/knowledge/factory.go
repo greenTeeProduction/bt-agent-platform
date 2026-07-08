@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -27,6 +28,16 @@ type Factory struct {
 	Graph     *KnowledgeGraph
 	Expert    *evolution.ExpertKnowledge
 	Templates map[string]*TreeTemplate // category → representative template
+
+	// Resolve loads the actual SerializableNode structure of a KG-registered
+	// tree (compiled-in catalogs + persisted generated trees). Wired by the
+	// caller (cmd/bt-agent: domains.ResolveTreeID + dynamic resolver). Nil →
+	// structural crossover is skipped and breeding uses synthetic templates.
+	Resolve func(id string) *evolution.SerializableNode
+	// Validate gates structural-crossover children (wired to
+	// engine.ValidateTreeFull; knowledge cannot import engine). A child that
+	// fails validation is discarded in favor of the synthetic template path.
+	Validate func(tree *evolution.SerializableNode) error
 }
 
 // NewFactory creates a tree factory backed by the knowledge graph.
@@ -96,7 +107,14 @@ func (f *Factory) Breed(task, category string, parentIDs []string) *evolution.Se
 }
 
 // crossoverBreed combines PreGate from parent A with StrategyRouter from parent B.
+// Real structural crossover (actual parent subtrees) is attempted first; the
+// synthetic template path below is the fallback when parents have no stored
+// structure or the spliced child fails validation.
 func (f *Factory) crossoverBreed(category string, parentIDs []string, task string) *evolution.SerializableNode {
+	if tree := f.structuralCrossover(category, parentIDs, task); tree != nil {
+		return tree
+	}
+
 	// Get templates from parent trees
 	var templates []*TreeTemplate
 	for _, pid := range parentIDs {
@@ -151,6 +169,129 @@ func (f *Factory) crossoverBreed(category string, parentIDs []string, task strin
 	)
 
 	return tree
+}
+
+// structuralCrossover splices real parent subtrees: parent A's PreGate ×
+// parent B's StrategyRouter (ADR-010 Phase 3 — fixes R10 "shallow
+// crossover"). Returns nil when fewer than two parents resolve to actual
+// structures or when the spliced child fails validation, letting the caller
+// fall back to synthetic templates.
+func (f *Factory) structuralCrossover(category string, parentIDs []string, task string) *evolution.SerializableNode {
+	if f.Resolve == nil {
+		return nil
+	}
+
+	// Resolve up to two parents that are KG-registered AND have structure.
+	type parent struct {
+		id   string
+		tree *evolution.SerializableNode
+	}
+	var parents []parent
+	for _, pid := range parentIDs {
+		if len(parents) == 2 {
+			break
+		}
+		if _, registered := f.Graph.Trees[pid]; !registered {
+			continue
+		}
+		if tree := f.Resolve(pid); tree != nil && len(tree.Children) > 0 {
+			parents = append(parents, parent{id: pid, tree: tree})
+		}
+	}
+	if len(parents) < 2 {
+		return nil
+	}
+
+	preGate := extractSubtree(parents[0].tree, isPreGateNode)
+	router := extractSubtree(parents[1].tree, isStrategyRouterNode)
+	if preGate == nil && router == nil {
+		return nil // neither parent contributes real structure
+	}
+	if preGate == nil {
+		g := f.defaultPreGate()
+		preGate = &g
+	}
+	if router == nil {
+		r := f.defaultAgentPath(task)
+		router = &r
+	}
+
+	// Cache the extracted structure on the parents' templates so repeated
+	// breeding doesn't re-extract.
+	if tmpl, ok := f.Templates[parents[0].id]; ok && tmpl.PreGate == nil {
+		tmpl.PreGate = preGate
+	}
+	if tmpl, ok := f.Templates[parents[1].id]; ok && tmpl.StrategyRouter == nil {
+		tmpl.StrategyRouter = router
+	}
+
+	child := &evolution.SerializableNode{
+		Type: "Sequence",
+		Name: f.generateTreeName(category, task),
+		Metadata: map[string]any{
+			"generated_by": "structural_crossover",
+			"parent_a":     parents[0].id,
+			"parent_b":     parents[1].id,
+		},
+		Children: []evolution.SerializableNode{
+			*jsonCloneNode(preGate),
+			*jsonCloneNode(router),
+			{Type: "Action", Name: "ReflectOnOutcome"},
+			f.defaultOutcomeSelector(),
+		},
+	}
+
+	if f.Validate != nil {
+		if err := f.Validate(child); err != nil {
+			return nil // invalid splice → synthetic fallback
+		}
+	}
+	return child
+}
+
+// isPreGateNode matches a parent's input-gating subtree.
+func isPreGateNode(n *evolution.SerializableNode) bool {
+	return n.Name == "PreGate" || (n.Type == "Sequence" && strings.Contains(n.Name, "Gate"))
+}
+
+// isStrategyRouterNode matches a parent's routing subtree: the canonical
+// StrategyRouter name, or any multi-branch Selector/DecisionTree.
+func isStrategyRouterNode(n *evolution.SerializableNode) bool {
+	if n.Name == "StrategyRouter" {
+		return true
+	}
+	return (n.Type == "Selector" || n.Type == "DecisionTree") && len(n.Children) >= 2
+}
+
+// extractSubtree returns the first node (depth-first, root included)
+// matching the predicate, or nil.
+func extractSubtree(node *evolution.SerializableNode, match func(*evolution.SerializableNode) bool) *evolution.SerializableNode {
+	if node == nil {
+		return nil
+	}
+	if match(node) {
+		return node
+	}
+	for i := range node.Children {
+		if found := extractSubtree(&node.Children[i], match); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// jsonCloneNode deep-copies a subtree so a bred child never aliases its
+// parent's nodes (mutating the child must not corrupt the parent).
+func jsonCloneNode(node *evolution.SerializableNode) *evolution.SerializableNode {
+	data, err := json.Marshal(node)
+	if err != nil {
+		return node
+	}
+	var clone evolution.SerializableNode
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return node
+	}
+	return &clone
 }
 
 // breedFromArchetype creates a tree matching the category's reference architecture.
@@ -384,12 +525,17 @@ func (f *Factory) generateTreeName(category, task string) string {
 // AutoCreateTree is the legacy interface — discovers or creates a tree for a task.
 // Returns (nil, existingTreeID, nil) if found, or (newTree, newTreeID, nil) if created.
 func AutoCreateTree(kg *KnowledgeGraph, task string) (*evolution.SerializableNode, string, error) {
-	treeID, confidence := kg.Discover(task)
+	return AutoCreateTreeWith(NewFactory(kg), task)
+}
+
+// AutoCreateTreeWith discovers or creates a tree using a caller-configured
+// factory (Resolve/Validate hooks for real structural crossover).
+func AutoCreateTreeWith(f *Factory, task string) (*evolution.SerializableNode, string, error) {
+	treeID, confidence := f.Graph.Discover(task)
 	if confidence > 0.5 && treeID != "" {
 		return nil, treeID, nil // existing tree found
 	}
 
-	f := NewFactory(kg)
 	category := determineCategory(task)
 	tree, newID := f.CreateTree(task, category, nil)
 	return tree, newID, nil

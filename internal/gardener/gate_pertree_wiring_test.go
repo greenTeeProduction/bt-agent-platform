@@ -3,7 +3,6 @@ package gardener
 import (
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -19,10 +18,6 @@ func newWiringFixture(t *testing.T, treeName string) (Config, TreeEntry, *evolut
 	refStore, err := evolution.NewStore(refDir)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
-	}
-	tt, err := evaluator.NewTranspositionTable(refDir, 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
 	}
 
 	tree := gateDisabledTestTree()
@@ -52,7 +47,6 @@ func newWiringFixture(t *testing.T, treeName string) (Config, TreeEntry, *evolut
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Gate:           gate,
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),
@@ -62,18 +56,8 @@ func newWiringFixture(t *testing.T, treeName string) (Config, TreeEntry, *evolut
 	return cfg, registry.List()[0], gate
 }
 
-// evolveTree must honor a per-tree disable: mutations skipped for THIS tree
+// evolveTreeV2 must honor a per-tree disable: mutations skipped for THIS tree
 // even though the global kill switch is untouched.
-func TestEvolveTree_PerTreeDisabledFailsClosed(t *testing.T) {
-	cfg, entry, _ := newWiringFixture(t, "wiring_v1_tree")
-	g := NewGardener(cfg)
-
-	metrics := g.evolveTree(entry)
-	if metrics.Mutations != 0 {
-		t.Errorf("expected 0 mutations for per-tree-disabled tree, got %d", metrics.Mutations)
-	}
-}
-
 func TestEvolveTreeV2_PerTreeDisabledFailsClosed(t *testing.T) {
 	cfg, entry, _ := newWiringFixture(t, "wiring_v2_tree")
 	g := NewGardener(cfg)

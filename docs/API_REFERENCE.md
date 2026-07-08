@@ -954,14 +954,14 @@ func (e *Evaluator) Deepen(tree *SerializableNode, task string, depth int) (*Ser
 
 `github.com/nico/go-bt-evolve/internal/gardener`
 
-24/7 evolution daemon. Runs 25 trees on 5-minute cycles using Stockfish-style move ordering. Benchmark-validated mutations, MetricsTracker, idempotency guards, soft diversity preference.
+24/7 evolution daemon. Runs registered trees on 5-minute cycles using Stockfish-style move ordering. Single v2 pipeline (v1 retired in ADR-010 Phase 6): evidence gate, bloat cap, crisis detection, benchmark-validated mutations with clone-and-prescore isolation, MetricsTracker, quality/validation gates with snapshot rollback.
 
 ```go
 type Gardener struct { ... }
 type Config struct { UseRealLLM bool }
 type MetricsTracker struct { ... }
 func NewGardener(cfg Config) *Gardener
-func (g *Gardener) RunCycle() CycleResult
+func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error)
 func (m *MetricsTracker) Save() error
 func (m *MetricsTracker) CyclesForTree(name string) int
 ```

@@ -34,11 +34,18 @@ go-bt-evolve
 │   ├── Health endpoint: LLM availability check via bt_health
 │   ├── Trace reader: OpenTelemetry spans with console tracer
 │   └── Dashboard: 8-tab web UI on :9800
-└── #flexible
-    ├── 41 trees across 7 categories: domain, finance, research, startup, thinktank, evolution, core
-    ├── 21-path merged main tree
-    ├── 10 chain types: llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action
-    └── YAML-defined agents: Easy creation, templating, import/export
+├── #flexible
+│   ├── 41 trees across 7 categories: domain, finance, research, startup, thinktank, evolution, core
+│   ├── 21-path merged main tree
+│   ├── 10 chain types: llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action
+│   └── YAML-defined agents: Easy creation, templating, import/export
+└── #personalized (roadmap — ADR-010)
+    ├── Persona layer: per-user profile, interaction log, habit mining
+    ├── Goal factory: intent/pattern → grounded goap.Goal, persistent GoalQueue
+    ├── Tree factory v2: plan→BT compiler, real structural crossover
+    ├── Executable-by-construction: dynamic resolver + KG registration for every generated tree
+    ├── HITL automation proposals: approval before scheduling auto-created agents
+    └── Feedback-as-fitness: user_satisfaction dimension, per-user gardener + experience bank
 ```
 
 ## 10.2 Quality Scenarios
@@ -53,6 +60,11 @@ go-bt-evolve
 | QS6 | Ollama outage | LLM health check fails | All LLM-dependent tools return degraded error, non-LLM tools continue | Graceful degradation, no crashes |
 | QS7 | Disk full during persistence | writeFile fails with ENOSPC | Error logged, operation returns failure, no corruption (atomic write aborted) | No partial/corrupt files |
 | QS8 | Config validation | Invalid config.yaml on startup | Load fails with clear error message, defaults used as fallback | Config validation error reported |
+| QS9 | Generated tree executability (roadmap) | `bt_kg_auto_create` / plan→BT compile produces a tree | Tree is resolvable via `ResolveTreeID`, validates, and executes (not `DefaultTree` fallback) | ≥90% of auto-created trees run end-to-end |
+| QS10 | Habit detection (roadmap) | User issues a similar task for the 3rd time in 14 days | HabitMiner emits RecurringPattern; automation proposal appears in HITL queue next session | Proposal latency ≤1 session |
+| QS11 | Plan compilation quality (roadmap) | Goal Factory goal → A* plan → CompilePlanToTree | Compiled tree passes ValidateTreeFull + benchmark.QuickValidate on first compile | ≥80% first-compile pass rate |
+| QS12 | Personal tree evolution safety (roadmap) | 10 gardener cycles on a personal tree with user feedback | `user_satisfaction` fitness non-decreasing; regressions roll back from snapshots | Quality gate: ≤20% regression, floor 30 |
+| QS13 | Automation spam guard (roadmap) | Agent detects many candidate patterns | Only patterns ≥3 occurrences proposed; per-user cap on active auto-created agents; HITL default-on | 0 unapproved scheduled automations |
 
 ---
 

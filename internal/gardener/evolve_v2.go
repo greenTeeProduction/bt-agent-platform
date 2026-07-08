@@ -53,9 +53,34 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 
 	allRecords, _ := g.cfg.RefStore.LoadAll()
-	records := evolution.FilterByTreeName(allRecords, entry.Name)
+	records := recordsForEntry(allRecords, entry)
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
+
+	// Evidence gate (ported from the retired v1 pipeline, extended for
+	// personal trees in ADR-010 Phase 5): a tree with no reflection records
+	// has no run-derived fitness gradient, so mutation is a blind coin flip
+	// that only burns benchmark compute. Personal trees use strict filtering
+	// (recordsForEntry), so a freshly compiled tree relies on its seed
+	// reflection to pass this gate.
+	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+		return CycleMetrics{
+			TreeName: entry.Name, Improved: false,
+			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
+			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
+			SkippedNoEvidence: true,
+		}
+	}
+
+	// Bloat cap (ported from v1): only stop evolution at extreme growth
+	// (20x the tree's baseline) — trees should be allowed to grow.
+	if nodesBefore > baseNodeCount(entry.Name)*20 {
+		return CycleMetrics{
+			TreeName: entry.Name, Improved: false,
+			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
+			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
+		}
+	}
 
 	// ── Evaluation cascade — structural quick check first ──
 	quickScore := evaluator.StructuralQuickEval(tree)
@@ -67,8 +92,36 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 
+	// Crisis detection (Stage 3.5, ported from v1 so the production wiring in
+	// cmd/bt-gardener is live again): on diversity collapse or stagnation,
+	// boost the mutation budget for this cycle. Complements the reactive
+	// QualityGate below.
+	maxMutations := g.cfg.MaxMutations
+	crisisIntervened := false
+	if g.cfg.CrisisDetector != nil {
+		state := evolution.CrisisState{
+			TreeName:            entry.Name,
+			CurrentFitness:      baseFitness.Composite,
+			BehavioralDiversity: g.cfg.CrisisDetector.LastDiversity(),
+		}
+		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
+			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
+			maxMutations = g.cfg.MaxMutations * 2
+			if maxMutations < 1 {
+				maxMutations = 1
+			}
+			crisisIntervened = true
+			slog.Info("gardener/v2: crisis intervention — boosting mutation budget",
+				"tree", entry.Name, "reason", reason,
+				"stagnation_epochs", action.StagnationEpochs,
+				"budget", maxMutations)
+		}
+	}
+
 	// ── Generate and filter mutations ──
-	candidates := biasCandidatesWithExperience(g.cfg.ExperienceBank, tree, evaluator.OrderMutations(tree, records, baseFitness))
+	// Personal trees bias against (and record into) the owning user's bank.
+	bank := g.bankFor(entry)
+	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, baseFitness))
 
 	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
@@ -113,7 +166,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		slog.Warn("gardener/v2: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
 			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
 	}
-	for i := 0; !gateDisabled && i < len(candidates) && applied < g.cfg.MaxMutations; i++ {
+	for i := 0; !gateDisabled && i < len(candidates) && applied < maxMutations; i++ {
 		if candidates[i].Score < 0.45 {
 			break
 		}
@@ -149,10 +202,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
-			if g.cfg.ExperienceBank != nil {
+			if bank != nil {
 				// Record before advancing currentFitness so the delta is the
 				// per-candidate improvement, not cumulative across the cycle.
-				if err := g.cfg.ExperienceBank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil); err != nil {
+				if err := bank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil); err != nil {
 					slog.Warn("gardener/v2: recording mutation experience failed", "tree", entry.Name, "error", err)
 				}
 			}
@@ -189,6 +242,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 	if applied > 0 {
 		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+	}
+
+	// A successful crisis intervention resets the stagnation counter so the
+	// next cycle starts from a clean slate.
+	if crisisIntervened && applied > 0 && g.cfg.CrisisDetector != nil {
+		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
 	}
 
 	return CycleMetrics{

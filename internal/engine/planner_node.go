@@ -1,12 +1,8 @@
 package engine
 
 import (
-	"container/heap"
-	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/goap"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
@@ -170,7 +166,7 @@ func intSliceFromInterface(v interface{}) []int {
 }
 
 // ============================================================================
-// Standalone PlannerNode — A* GOAP planning
+// Standalone PlannerNode — delegates to the internal/goap A* planner
 // ============================================================================
 
 // GOAPAction represents a single action in the GOAP planning domain.
@@ -193,8 +189,11 @@ type GOAPGoal struct {
 type PlannerNode struct {
 	Goal     GOAPGoal
 	Actions  []GOAPAction
-	MaxDepth int    // max plan depth (default 5)
-	Mode     string // "greedy" or "search" (A*)
+	MaxDepth int // max plan depth (default 5)
+	// Mode is retained for API compatibility; both "greedy" and "search"
+	// now run the unified internal/goap A* planner (ADR-010 Phase 6), which
+	// finds a complete plan whenever the old greedy walk did.
+	Mode string
 }
 
 // Plan represents a computed action sequence.
@@ -205,174 +204,78 @@ type Plan struct {
 	Complete bool
 }
 
-// plannerState is an A* search state.
-type plannerState struct {
-	WorldState map[string]bool
-	Actions    []string
-	Cost       float64
-	Depth      int
-	Heuristic  float64
-	index      int // for heap
-}
+// plannerNodeMaxNodes bounds the A* search; matches goap.DefaultGOAPConfig.
+const plannerNodeMaxNodes = 10000
 
-type plannerHeap []*plannerState
-
-func (h plannerHeap) Len() int           { return len(h) }
-func (h plannerHeap) Less(i, j int) bool { return h[i].Cost+h[i].Heuristic < h[j].Cost+h[j].Heuristic }
-func (h plannerHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i]; h[i].index = i; h[j].index = j }
-func (h *plannerHeap) Push(x any) {
-	n := len(*h)
-	item := x.(*plannerState)
-	item.index = n
-	*h = append(*h, item)
-}
-func (h *plannerHeap) Pop() any {
-	old := *h
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil
-	item.index = -1
-	*h = old[:n-1]
-	return item
-}
-
-// Plan searches for an action sequence from the current world state to the goal.
+// Plan searches for an action sequence from the current world state to the
+// goal by delegating to internal/goap's A* planner — the platform's single
+// GOAP search implementation (ADR-010 Phase 6 removed the duplicate here).
+//
+// Semantics note: the engine's bool-typed domain historically treated a
+// missing key as false, while goap.WorldState.Satisfies requires the key to
+// be present. Every key referenced by the goal, an action, or the initial
+// state is therefore seeded to false before planning, which preserves the
+// historical behavior exactly.
 func (p *PlannerNode) Plan(worldState map[string]bool) Plan {
-	if p.MaxDepth == 0 {
-		p.MaxDepth = 5
+	maxDepth := p.MaxDepth
+	if maxDepth == 0 {
+		maxDepth = 5
 	}
-	if p.Mode == "" {
-		p.Mode = "search"
+
+	keys := make(map[string]struct{})
+	collect := func(m map[string]bool) {
+		for k := range m {
+			keys[k] = struct{}{}
+		}
 	}
-	if p.Mode == "greedy" {
-		return p.greedyPlan(worldState)
+	collect(p.Goal.Conditions)
+	collect(worldState)
+
+	actionFunc := make(map[string]string, len(p.Actions))
+	actions := make([]goap.Action, len(p.Actions))
+	for i, a := range p.Actions {
+		collect(a.Preconditions)
+		collect(a.Effects)
+		actions[i] = goap.Action{
+			Name:          a.Name,
+			Cost:          a.Cost,
+			Preconditions: boolConditions(a.Preconditions),
+			Effects:       boolConditions(a.Effects),
+		}
+		actionFunc[a.Name] = a.ActionFunc
 	}
-	return p.aStarPlan(worldState)
+
+	initial := make(goap.WorldState, len(keys))
+	for k := range keys {
+		initial[k] = false
+	}
+	for k, v := range worldState {
+		initial[k] = v
+	}
+
+	planner := goap.NewPlanner(actions, maxDepth, plannerNodeMaxNodes)
+	result := planner.Plan(initial, &goap.Goal{
+		Name:       p.Goal.Name,
+		Priority:   p.Goal.Priority,
+		Conditions: boolConditions(p.Goal.Conditions),
+	})
+	if result == nil {
+		return Plan{Complete: false}
+	}
+
+	plan := Plan{Cost: result.Cost, Depth: len(result.Steps), Complete: true}
+	for _, step := range result.Steps {
+		plan.Actions = append(plan.Actions, actionFunc[step.Name])
+	}
+	return plan
 }
 
-func (p *PlannerNode) goalSatisfied(state map[string]bool) bool {
-	for k, v := range p.Goal.Conditions {
-		if state[k] != v {
-			return false
-		}
+// boolConditions lifts the engine's bool-typed condition maps into
+// goap.WorldState.
+func boolConditions(m map[string]bool) goap.WorldState {
+	ws := make(goap.WorldState, len(m))
+	for k, v := range m {
+		ws[k] = v
 	}
-	return true
-}
-
-func (p *PlannerNode) applicableActions(state map[string]bool) []GOAPAction {
-	var applicable []GOAPAction
-	for _, a := range p.Actions {
-		ok := true
-		for k, v := range a.Preconditions {
-			if state[k] != v {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			applicable = append(applicable, a)
-		}
-	}
-	sort.Slice(applicable, func(i, j int) bool { return applicable[i].Cost < applicable[j].Cost })
-	return applicable
-}
-
-func (p *PlannerNode) applyAction(state map[string]bool, action GOAPAction) map[string]bool {
-	newState := make(map[string]bool, len(state)+len(action.Effects))
-	for k, v := range state {
-		newState[k] = v
-	}
-	for k, v := range action.Effects {
-		newState[k] = v
-	}
-	return newState
-}
-
-func (p *PlannerNode) heuristic(state map[string]bool) float64 {
-	unsatisfied := 0.0
-	for k, v := range p.Goal.Conditions {
-		if state[k] != v {
-			unsatisfied++
-		}
-	}
-	return unsatisfied
-}
-
-func (p *PlannerNode) greedyPlan(worldState map[string]bool) Plan {
-	state := p.copyState(worldState)
-	var actions []string
-	cost := 0.0
-	for depth := 0; depth < p.MaxDepth; depth++ {
-		if p.goalSatisfied(state) {
-			return Plan{Actions: actions, Cost: cost, Depth: depth, Complete: true}
-		}
-		applicable := p.applicableActions(state)
-		if len(applicable) == 0 {
-			break
-		}
-		best := applicable[0]
-		state = p.applyAction(state, best)
-		actions = append(actions, best.ActionFunc)
-		cost += best.Cost
-	}
-	return Plan{Actions: actions, Cost: cost, Depth: len(actions), Complete: p.goalSatisfied(state)}
-}
-
-func (p *PlannerNode) aStarPlan(worldState map[string]bool) Plan {
-	h := &plannerHeap{}
-	heap.Init(h)
-	start := &plannerState{
-		WorldState: p.copyState(worldState),
-		Cost:       0,
-		Depth:      0,
-		Heuristic:  p.heuristic(worldState),
-	}
-	heap.Push(h, start)
-	visited := make(map[string]bool)
-	for h.Len() > 0 {
-		current := heap.Pop(h).(*plannerState)
-		stateKey := p.stateKey(current.WorldState)
-		if visited[stateKey] {
-			continue
-		}
-		visited[stateKey] = true
-		if p.goalSatisfied(current.WorldState) {
-			return Plan{Actions: current.Actions, Cost: current.Cost, Depth: current.Depth, Complete: true}
-		}
-		if current.Depth >= p.MaxDepth {
-			continue
-		}
-		for _, action := range p.applicableActions(current.WorldState) {
-			newState := p.applyAction(current.WorldState, action)
-			newActions := make([]string, len(current.Actions)+1)
-			copy(newActions, current.Actions)
-			newActions[len(current.Actions)] = action.ActionFunc
-			next := &plannerState{
-				WorldState: newState,
-				Actions:    newActions,
-				Cost:       current.Cost + action.Cost,
-				Depth:      current.Depth + 1,
-				Heuristic:  p.heuristic(newState),
-			}
-			heap.Push(h, next)
-		}
-	}
-	return Plan{Complete: false}
-}
-
-func (p *PlannerNode) copyState(state map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(state))
-	for k, v := range state {
-		out[k] = v
-	}
-	return out
-}
-
-func (p *PlannerNode) stateKey(state map[string]bool) string {
-	keys := make([]string, 0, len(state))
-	for k, v := range state {
-		keys = append(keys, fmt.Sprintf("%s=%v", k, v))
-	}
-	sort.Strings(keys)
-	return strings.Join(keys, "|")
+	return ws
 }

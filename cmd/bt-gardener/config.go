@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 )
@@ -35,16 +34,14 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		return gardener.Config{}, fmt.Errorf("open reflection store: %w", err)
 	}
 
-	registry := gardener.NewRegistry(refDir)
+	// Personal trees (ADR-010 Phase 5) live in per-user workspaces under
+	// agent.UsersDir(); scanning them here puts them into the same 24/7
+	// evolution loop as shared trees, with per-user experience banks below.
+	registry := gardener.NewRegistryWithUsers(refDir, agent.UsersDir())
 
 	metricsTracker, err := gardener.NewMetricsTracker(metricsDir)
 	if err != nil {
 		return gardener.Config{}, fmt.Errorf("open metrics tracker: %w", err)
-	}
-
-	tt, err := evaluator.NewTranspositionTable(refDir, 2000)
-	if err != nil {
-		return gardener.Config{}, fmt.Errorf("open transposition table: %w", err)
 	}
 
 	validationGate := gardener.DefaultValidationGateConfig()
@@ -64,7 +61,6 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Interval:       5 * time.Minute,
 		MaxMutations:   2,
 		UseRealLLM:     false,
@@ -74,6 +70,9 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// RunCycleV2 records accepted mutations into the same on-disk store
 		// bt_evolve_genetic warm-starts from.
 		ExperienceBank: expBank,
+		// Personal trees record into (and bias against) the owning user's
+		// bank instead — users/<user>/experience (ADR-010 Phase 5).
+		UserExperienceRoot: agent.UsersDir(),
 
 		// Safety components — wired by A1 remediation
 		Gate:           evolution.NewQualityGate(snapDir),

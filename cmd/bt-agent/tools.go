@@ -19,6 +19,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/persona"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -42,6 +43,110 @@ func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResu
 	return nil
 }
 
+// persistGeneratedTree validates a runtime-generated tree and persists it as
+// tree-<id>.json so it becomes resolvable by ID (agentexec dynamic resolver)
+// and visible to the gardener registry (ADR-010 Phase 0). The outcome is
+// recorded in the tool result: an invalid tree stays KG-registered for
+// discovery but is never persisted, so it can never be executed.
+func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
+	result["persisted"] = false
+	if info := engine.ValidateTreeFull(tree); !info.Valid() {
+		result["validation_errors"] = info.Errors
+		return
+	}
+	if deps.treeStore == nil {
+		result["persist_error"] = "tree store not configured"
+		return
+	}
+	path, err := deps.treeStore.SaveNamed(treeID, tree)
+	if err != nil {
+		result["persist_error"] = err.Error()
+		return
+	}
+	result["persisted"] = true
+	result["file"] = path
+}
+
+// persistGeneratedTreeForUser persists a user-attributed generated tree into
+// the user's own workspace (users/<user>/trees, ADR-010 Phase 5) so the
+// gardener evolves it per user and the dynamic resolver's user-workspace
+// fallback finds it. Falls back to the shared store when no user or persona
+// store is available, so behavior degrades to Phase 0 rather than failing.
+func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
+	if strings.TrimSpace(user) == "" || deps.personaStore == nil {
+		persistGeneratedTree(deps, treeID, tree, result)
+		return
+	}
+	result["persisted"] = false
+	if info := engine.ValidateTreeFull(tree); !info.Valid() {
+		result["validation_errors"] = info.Errors
+		return
+	}
+	ws := deps.personaStore.Workspace(user)
+	path, err := evolution.SaveNamedTree(ws.TreesDir(), treeID, tree)
+	if err != nil {
+		result["persist_error"] = err.Error()
+		return
+	}
+	result["persisted"] = true
+	result["file"] = path
+	result["owner"] = user
+}
+
+// seedCompileReflection writes the compile-time plan validation as the tree's
+// first reflection record (ADR-010 Phase 5). Freshly compiled trees would
+// otherwise carry zero evidence and stay frozen behind the gardener's
+// evidence gate forever. The TaskID is derived from the tree ID, so
+// recompiling the same goal overwrites the seed instead of accumulating
+// synthetic evidence.
+func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSteps []string) {
+	if deps.refStore == nil {
+		return
+	}
+	rec := &evolution.Record{
+		TaskID:   "seed-" + goalTreeSlug(treeID),
+		Task:     "Compile-time validation for goal: " + goalName,
+		Plan:     strings.Join(planSteps, " → "),
+		TreeName: treeID,
+		User:     user,
+		WhatWentWell: []string{
+			"GOAP planner reached the goal state",
+			"compiled tree passed full engine validation",
+		},
+		WhatToImprove: []string{"gather real run evidence to replace this compile-time seed"},
+		Outcome:       evolution.Success,
+	}
+	if err := deps.refStore.Save(rec); err != nil {
+		engine.Warn("seed reflection not saved", "tree", treeID, "error", err)
+	}
+}
+
+// newTreeFactory builds a knowledge factory with real structural crossover
+// enabled (ADR-010 Phase 3): parents resolve to their actual tree structures
+// (compiled-in catalogs + persisted generated trees) and spliced children
+// are gated by full engine validation before they replace the synthetic
+// template path.
+func newTreeFactory(deps *mcpDeps) *knowledge.Factory {
+	f := knowledge.NewFactory(deps.kg)
+	f.Resolve = func(id string) *evolution.SerializableNode {
+		tree := resolveTree(id)
+		// domains.ResolveTreeID never returns nil — unknown IDs fall back to
+		// DefaultTree ("MainSequence"). For crossover that fallback is a miss:
+		// splicing the generic default would fake structure the parent lacks.
+		if tree == nil || tree.Name == "MainSequence" {
+			return nil
+		}
+		return tree
+	}
+	f.Validate = func(tree *evolution.SerializableNode) error {
+		if info := engine.ValidateTreeFull(tree); !info.Valid() {
+			return fmt.Errorf("tree validation failed: %s", strings.Join(info.Errors, "; "))
+		}
+		return nil
+	}
+	return f
+}
+
 // mcpDeps bundles all shared state needed by tool handlers.
 // This eliminates the 900-line closure chain from main() — every handler
 // accesses state through this struct instead of capturing locals.
@@ -63,15 +168,20 @@ type mcpDeps struct {
 	globalSched *agent.Scheduler
 	dlq         *reliability.DeadLetterQueue
 	agentRunner *agent.RunDeps
+	// Personalization (ADR-010 Phase 1)
+	personaStore *persona.Store
 }
 
-// registerMCPTools registers all 63 MCP tools on the server.
+// registerMCPTools registers all 73 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
 
 	server.RegisterTool("bt_run_task", "Execute a task through the behavior tree",
-		map[string]engine.Property{"task": {Type: "string", Description: "The task to execute"}},
+		map[string]engine.Property{
+			"task": {Type: "string", Description: "The task to execute"},
+			"user": {Type: "string", Description: "Optional user ID: injects the user's profile context and records the run in their interaction log for habit mining"},
+		},
 		[]string{"task"},
 		func(args json.RawMessage) *engine.ToolResult {
 			if degraded := checkLLMHealth(deps.llmHealth, "bt_run_task"); degraded != nil {
@@ -79,6 +189,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			var params struct {
 				Task string `json:"task"`
+				User string `json:"user"`
 			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				engine.Error("bt_run_task: invalid arguments", "error", err)
@@ -93,8 +204,19 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			deps.bb.Outcome = ""
 			deps.bb.KgResults = ""
 			deps.bb.CachedResult = ""
+			injectPersonaContext(deps, params.User)
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
+			recordPersonaInteraction(deps, params.User, params.Task, "", deps.bb.Outcome, duration.Milliseconds())
+			// Interaction-time autopilot (ADR-010 Phase 4): after a good
+			// user-attributed run, check whether a recurring habit should
+			// become an automation proposal. Best-effort by design.
+			if params.User != "" && deps.bb.Outcome != string(evolution.Failure) {
+				if auto := considerAutomation(deps, params.User); auto["proposed"] == true {
+					engine.Info("autopilot: automation proposed", "user", params.User,
+						"tree", auto["tree_id"], "hitl", auto["hitl_id"])
+				}
+			}
 			if deps.bb.Outcome == string(evolution.Failure) {
 				deps.bb.FailureCount = deps.refStore.CountFailures()
 				engine.Warn("bt_run_task: failed", "task", params.Task, "outcome", deps.bb.Outcome, "duration_ms", duration.Milliseconds())
@@ -469,7 +591,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
-			autoTree, treeID, err := knowledge.AutoCreateTree(deps.kg, params.Task)
+			autoTree, treeID, err := knowledge.AutoCreateTreeWith(newTreeFactory(deps), params.Task)
 			if err != nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
@@ -480,6 +602,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			result := map[string]interface{}{"action": action, "tree_id": treeID}
 			if autoTree != nil {
 				result["node_count"] = evolution.CountNodes(autoTree)
+				persistGeneratedTree(deps, treeID, autoTree, result)
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1031,7 +1154,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				ParentB string `json:"parent_b"`
 			}
 			_ = json.Unmarshal(args, &params)
-			f := knowledge.NewFactory(deps.kg)
+			f := newTreeFactory(deps)
 			var tree *evolution.SerializableNode
 			var treeID string
 			if params.ParentA != "" && params.ParentB != "" {
@@ -1047,7 +1170,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if idx := strings.Index(treeID, ":"); idx >= 0 {
 				cat = treeID[:idx]
 			}
-			data, _ := json.Marshal(map[string]interface{}{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat})
+			result := map[string]interface{}{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
+			persistGeneratedTree(deps, treeID, tree, result)
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -1561,6 +1686,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	registerBlockTools(server, deps)
 	registerHITLTools(server, deps)
+	registerPersonaTools(server, deps)
+	registerGoalTools(server, deps)
+	registerAutomationTools(server, deps)
+	registerFeedbackTools(server, deps)
 }
 
 // resolveEvolvePopulation validates an evolve tool's population parameter at

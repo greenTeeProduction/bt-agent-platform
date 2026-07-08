@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -24,10 +23,6 @@ func TestEvolveTreeV2_ValidationGateRejection_RestoresTree(t *testing.T) {
 	refStore, err := evolution.NewStore(refDir)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
-	}
-	tt, err := evaluator.NewTranspositionTable(refDir, 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
 	}
 
 	const treeName = "gate_rejection_rollback"
@@ -49,7 +44,6 @@ func TestEvolveTreeV2_ValidationGateRejection_RestoresTree(t *testing.T) {
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Gate:           evolution.NewQualityGate(snapDir),
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),
@@ -108,10 +102,6 @@ func TestEvolveTreeV2_QualityGateRejection_TreeUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
-	tt, err := evaluator.NewTranspositionTable(refDir, 100)
-	if err != nil {
-		t.Fatalf("NewTranspositionTable: %v", err)
-	}
 
 	const treeName = "quality_gate_per_candidate"
 	tree := gateDisabledTestTree()
@@ -141,7 +131,6 @@ func TestEvolveTreeV2_QualityGateRejection_TreeUnchanged(t *testing.T) {
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
 		RefStore:       refStore,
-		TT:             tt,
 		Gate:           gate,
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),

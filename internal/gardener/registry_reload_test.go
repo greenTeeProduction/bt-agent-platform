@@ -9,6 +9,23 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
+// treeHasNodeNamed reports whether any node in the tree carries the name
+// (test-local; the production helper was retired with the v1 pipeline).
+func treeHasNodeNamed(tree *evolution.SerializableNode, name string) bool {
+	if tree == nil {
+		return false
+	}
+	if tree.Name == name {
+		return true
+	}
+	for i := range tree.Children {
+		if treeHasNodeNamed(&tree.Children[i], name) {
+			return true
+		}
+	}
+	return false
+}
+
 // Evolution progress must survive restarts: a persisted tree-<name>.json for a
 // builtin name is the evolved state SaveTree wrote and takes precedence over
 // the compiled-in builtin definition on reload.
@@ -35,7 +52,7 @@ func TestRegistry_PersistedTreeOverridesBuiltin(t *testing.T) {
 			continue
 		}
 		found = true
-		if !hasNodeNamed(e.Tree, "EvolvedMarkerNode") {
+		if !treeHasNodeNamed(e.Tree, "EvolvedMarkerNode") {
 			t.Error("registry loaded builtin instead of persisted evolved tree for 'default'")
 		}
 	}

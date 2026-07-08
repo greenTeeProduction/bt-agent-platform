@@ -6,26 +6,50 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 
 - **BT Execution Engine** — Builds and executes behavior trees with Sequence, Selector, Action, Condition, ChainAction, UtilitySelector, PlannerNode, and event-driven node types.
 - **41 Trees across 7 Categories** — domain (code_review, devops_ci, agent_monitor, refactoring, security_audit, data_pipeline, meeting_notes, crash_investigator, game_ai, trading_signal), finance (10 trees), research (deep_research, quick_research), startup (8 roles), thinktank (synthesis, peer_review, report), evolution (stockfish, hermes_evolve), core.
-- **3 MCP Servers** — bt-agent (36 tools), bt-evaluator (5 tools), bt-langagent (2 tools), all via JSON-RPC 2.0 over stdio.
+- **3 MCP Servers** — bt-agent (73 tools, including the `bt_persona_*` personalization, `bt_goal_*` goal-factory/compiler, `bt_automation_propose` autopilot, and `bt_feedback` satisfaction tools), bt-evaluator (5 tools), bt-langagent (2 tools), all via JSON-RPC 2.0 over stdio.
 - **Dashboard** — HTTP server on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap).
 - **Evolution Engine** — Stockfish-adapted mutation ordering, Pareto multi-objective front, MAP-Elites quality diversity, Island Model with migration, Q-Learning epsilon-greedy.
 - **Agent Platform** — YAML-defined agents with registry, scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent) protocol, memory store, and webhook publishing.
 - **Knowledge Graph** — Semantic index of all trees with embeddings, capabilities, and cross-tree relationships for discovery and auto-creation.
-- **Factory** — Tree breeding via crossover from parent templates, archetype-based generation.
+- **Factory** — Two layers: `internal/factory` compiles SKILL.md files into executable trees; `knowledge.Factory` breeds trees from parent templates and archetypes.
 
-## 1.2 Quality Goals (Top 3)
+## 1.1a Target Vision — Personalized Self-Evolving Agents (Roadmap)
+
+The platform is evolving from a *pre-authored tree catalog with mutation-based
+evolution* into a system where a **personalized agent** grows alongside its user
+(see `docs/plans/2026-07-08-personalized-self-evolving-agents.md`):
+
+- **Persona layer** — per-user profile, preferences, interaction log, and habit
+  mining under `~/.go-bt-evolve/users/<user>/`.
+- **Goal Factory** — user intent and mined recurring patterns become first-class
+  GOAP goals in a persistent per-user goal queue.
+- **Tree Factory v2** — GOAP plans are compiled into persistent, validated,
+  evolvable behavior trees (plan→BT compiler); crossover uses real parent tree
+  structures.
+- **Automatic GOAP-BT creation** — while collaborating with the user, the agent
+  detects repeatedly successful plans and proposes compiled automations through
+  HITL approval, then schedules them as YAML agents.
+- **Self-evolution from user signal** — user feedback becomes a fitness dimension;
+  per-user gardener registries and experience banks evolve personal trees under
+  the existing quality-gate/rollback safety rails.
+
+Closing loop: `observe → goal → plan → tree → run → reflect → evolve`.
+
+## 1.2 Quality Goals (Top 4)
 
 | # | Quality Goal | Motivation |
 |---|---|---|
 | Q1 | **Correctness** | Trees must route correctly through PreGate→StrategyRouter→OutcomeSelector. All 175+ engine nodes must register and invoke properly. ChainAction nodes must produce valid LLM output. |
 | Q2 | **Evolvability** | The platform must improve over time. Six evolution algorithms (Stockfish, Pareto, MAP-Elites, Island, Q-Learning, Expert Knowledge) drive mutation and selection. Git-versioned trees enable rollback. Benchmarks gate acceptance. |
 | Q3 | **Reliability** | Panic recovery (SafeGo), circuit breakers (3-state), retry with exponential backoff (full jitter), dead letter queue, and output quality validation ensure the platform degrades gracefully rather than failing silently. |
+| Q4 | **Personalization & Self-Growth** | The agent must adapt to its user: observe interactions, derive goals, generate its own GOAP behavior trees, and improve them from user feedback. Every generated tree must be executable (resolver-visible), validated, and evolvable. New automations require HITL approval. |
 
 ## 1.3 Stakeholders
 
 | Stakeholder | Role | Interests |
 |---|---|---|
 | Nico | Platform Architect | Fast iteration, BT-first execution, reliable cron automation |
+| End User (persona owner) | Personalization Consumer | Agent that learns their habits, proposes automations, respects approval thresholds, improves from their feedback |
 | Hermes Agent | Primary Operator | MCP tools for task delegation, tree discovery, agent management |
 | Dashboard Users | Observability Consumers | Tree status, fitness scores, agent history, sprint progress |
 | Cron Watchers | Scheduled Automation | Reliable recurring execution with circuit breakers and DLQ |

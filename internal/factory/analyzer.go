@@ -10,17 +10,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
-// SkillSpec is the extracted essence of a skill, used to generate a behavior tree.
-type SkillSpec struct {
-	Name        string   `json:"name"`
-	Purpose     string   `json:"purpose"`
-	Checks      []string `json:"checks"`       // conditions / decision points
-	Actions     []string `json:"actions"`      // things the agent should do
-	Pitfalls    []string `json:"pitfalls"`     // things to avoid (guard conditions)
-	Fallbacks   []string `json:"fallbacks"`    // what to do on failure
-	RetryPolicy string   `json:"retry_policy"` // "none", "retry", "retry_with_escalation"
-}
-
 // TreeSpec is the LLM-generated behavior tree structure, directly serializable.
 type TreeSpec struct {
 	RootType     string     `json:"root_type"` // "Sequence" or "Selector"

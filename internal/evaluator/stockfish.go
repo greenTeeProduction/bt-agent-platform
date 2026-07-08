@@ -31,7 +31,11 @@ type FitnessScore struct {
 	Stability         float64 `json:"stability"`          // 1/variance of success rate (like king safety)
 	PathCoverage      float64 `json:"path_coverage"`      // fraction of strategy paths used (like development)
 	StructuralQuality float64 `json:"structural_quality"` // static safeguards/tooling quality, 0.0-1.0
-	Composite         float64 `json:"composite"`          // weighted sum, in centipawns-like scale
+	// UserSatisfaction is the fraction of positive explicit feedback signals
+	// (bt_feedback 👍/👎) among the tree's feedback-carrying records
+	// (ADR-010 Phase 5). -1 when no feedback exists.
+	UserSatisfaction float64 `json:"user_satisfaction"`
+	Composite        float64 `json:"composite"` // weighted sum, in centipawns-like scale
 }
 
 // EvaluateTree computes a multi-dimensional fitness score for a tree given its history.
@@ -41,6 +45,7 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 		return FitnessScore{
 			NodeCount:         evolution.CountNodes(tree),
 			StructuralQuality: estimateStructuralQuality(tree),
+			UserSatisfaction:  -1,
 			Composite:         0,
 		}
 	}
@@ -86,6 +91,15 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 		structuralQuality*8 +
 		(1.0-minFloat64(float64(evolution.CountNodes(tree))/100.0, 1.0))*2
 
+	// User satisfaction (ADR-010 Phase 5): explicit 👍/👎 signals recorded by
+	// bt_feedback. Only applied when feedback exists — the composite is then
+	// rescaled (90% base + 10% satisfaction) so the 0–100 scale is preserved
+	// and pre/post-mutation comparisons over the same records stay consistent.
+	userSatisfaction := estimateUserSatisfaction(records)
+	if userSatisfaction >= 0 {
+		composite = composite*0.9 + userSatisfaction*10
+	}
+
 	nodeCount := evolution.CountNodes(tree)
 
 	return FitnessScore{
@@ -95,8 +109,28 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 		Stability:         stability,
 		PathCoverage:      pathCoverage,
 		StructuralQuality: structuralQuality,
+		UserSatisfaction:  userSatisfaction,
 		Composite:         composite,
 	}
+}
+
+// estimateUserSatisfaction returns the fraction of positive signals among
+// records carrying explicit user feedback, or -1 when no record does.
+func estimateUserSatisfaction(records []evolution.Record) float64 {
+	positive, total := 0, 0
+	for _, r := range records {
+		switch r.UserFeedback {
+		case evolution.FeedbackPositive:
+			positive++
+			total++
+		case evolution.FeedbackNegative:
+			total++
+		}
+	}
+	if total == 0 {
+		return -1
+	}
+	return float64(positive) / float64(total)
 }
 
 func estimatePathCoverage(records []evolution.Record) float64 {
