@@ -844,6 +844,20 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		bb.Result = "## GOAP Superpowers Runtime Failed\n\nNo existing plan path found."
 		return -1
 	}
+	// Honor a durable rate-limit backoff BEFORE creating a worktree or spending
+	// the 45-minute batch attempt: a quota known to be closed makes the whole
+	// run doomed, so degrade to ScheduledAnalysisPath instantly with the exact
+	// rate-limited Result/Outcome shape — the deferred clearSuperpowersPlanState
+	// guard then preserves the plan carryover for the tick after the window
+	// expires. claudeBackoffActive self-clears an elapsed window (half-open),
+	// so a stale deadline can never wedge the loop into skipping Claude forever.
+	if claudeBackoffActive(bb, time.Now()) {
+		until, _ := loadClaudeBackoffState(bb)
+		bb.ChainState["goap_fusion_goals_unchanged"] = "true"
+		bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude rate-limit backoff active until %s; plan carried over to the next cycle.\n\nPlan: `%s`", until.UTC().Format(time.RFC3339), planPath)
+		bb.Outcome = "goap_fusion_rate_limited"
+		return -1
+	}
 	run, err := currentSuperpowersRun(bb)
 	if err != nil {
 		bb.Result = err.Error()
@@ -882,7 +896,10 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		if isClaudeRateLimit(errStr) {
 			// Claude rate-limited — save the plan for the next cycle and fall
 			// back gracefully. Set goals_unchanged so the Selector falls through
-			// to ScheduledAnalysisPath instead of dead-ending.
+			// to ScheduledAnalysisPath instead of dead-ending. Record the durable
+			// backoff deadline so the NEXT ticks short-circuit at the entry guard
+			// instead of re-resuming the plan against the closed quota.
+			saveClaudeBackoffState(bb, time.Now().Add(claudeBackoffWindow()))
 			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
 			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude Code session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", planPath, errStr)
 			bb.Outcome = "goap_fusion_rate_limited"

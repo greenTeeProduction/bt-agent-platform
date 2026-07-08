@@ -338,6 +338,89 @@ func TestRunClaudeCodeReviewResearch_RateLimited(t *testing.T) {
 	}
 }
 
+func TestRunClaudeCodeReviewResearch_RateLimitedRecordsBackoff(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{
+		output: "Claude AI usage limit reached|resets 3pm",
+		err:    fmt.Errorf("exit status 1"),
+	}
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != -1 {
+		t.Fatalf("status = %d, want -1", got)
+	}
+	if bb.Outcome != "goap_fusion_claude_review_rate_limited" {
+		t.Fatalf("outcome = %q, want goap_fusion_claude_review_rate_limited", bb.Outcome)
+	}
+
+	until, ok := loadClaudeBackoffState(bb)
+	if !ok {
+		t.Fatal("loadClaudeBackoffState after a rate-limited review = inactive, want a recorded deadline: the rate-limited outcome must call saveClaudeBackoffState so the NEXT tick short-circuits")
+	}
+	if !until.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("recorded backoff deadline %v is not meaningfully in the future: the window must actually close Claude attempts", until)
+	}
+}
+
+func TestRunClaudeCodeReviewResearch_ActiveBackoffSkipsClaude(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	// A parseable success output: if the action wrongly invokes Claude despite
+	// the active backoff, it returns 1 and the failure is unmistakable.
+	runner := &fakeReviewClaudeRunner{output: `GOAL: Should never be produced
+GAP: backoff was active
+FILES: a.go
+TESTS: /usr/local/go/bin/go test ./internal/engine -short
+FINDINGS: - none`}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	saveClaudeBackoffState(bb, until)
+	roundBefore := loadReviewModeRound(bb)
+
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != -1 {
+		t.Fatalf("status = %d, want -1 (fail fast so ResearchRouter falls through to ResearchOptional)", got)
+	}
+	if bb.Outcome != "goap_fusion_claude_review_rate_limited" {
+		t.Fatalf("outcome = %q, want goap_fusion_claude_review_rate_limited", bb.Outcome)
+	}
+	if len(runner.prompts) != 0 {
+		t.Fatalf("runner invoked %d time(s) during an active backoff, want 0: the entry guard must not spend a 15-minute Claude run against a quota known to be closed", len(runner.prompts))
+	}
+	if !strings.Contains(strings.ToLower(bb.Result), "backoff active until") {
+		t.Fatalf("Result must say the backoff is active and until when, got: %s", bb.Result)
+	}
+	if !strings.Contains(bb.Result, until.Format(time.RFC3339)) {
+		t.Fatalf("Result must name the backoff deadline %s, got: %s", until.Format(time.RFC3339), bb.Result)
+	}
+	if got := loadReviewModeRound(bb); got != roundBefore {
+		t.Fatalf("review mode round advanced %d -> %d on a skipped tick, want unchanged: a skip must not consume a review rotation slot", roundBefore, got)
+	}
+}
+
+func TestRunClaudeCodeReviewResearch_ExpiredBackoffDoesNotBlock(t *testing.T) {
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{output: `GOAL: Add regression test for var X initialization
+GAP: second commit added var X without any test coverage
+FILES: a.go, a_test.go
+TESTS: /usr/local/go/bin/go test ./... -run TestX
+FINDINGS: - none`}
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	// Elapsed window: must NOT block — the permanent-wedge failure mode this
+	// loop has already hit twice (circuit breaker, runaway backstop).
+	saveClaudeBackoffState(bb, time.Now().Add(-time.Hour))
+
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != 1 {
+		t.Fatalf("status = %d, want 1: an expired backoff must reopen Claude attempts; result: %s", got, bb.Result)
+	}
+	if len(runner.prompts) != 1 {
+		t.Fatalf("runner invoked %d time(s) after the backoff expired, want 1", len(runner.prompts))
+	}
+}
+
 func TestRunClaudeCodeReviewResearch_NoParseableGoalFails(t *testing.T) {
 	repo, _ := newReviewTestRepo(t)
 	runner := &fakeReviewClaudeRunner{output: ""}

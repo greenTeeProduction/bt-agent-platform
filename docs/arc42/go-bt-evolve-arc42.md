@@ -2,7 +2,7 @@
 title: "go-bt-evolve Architecture Documentation"
 subtitle: "arc42 Template — Behavior Tree Agent Platform"
 date: "2026-06-03"
-updated: "2026-07-05"
+updated: "2026-07-08"
 version: "1.1.0"
 status: "Generated; full refresh 2026-07-04 — kept current per landing run by the autonomous arc42 sync stage"
 arc42_version: "8.2"
@@ -90,7 +90,7 @@ go-bt-evolve is a Go behavior tree agent platform that provides:
 | 1000-tick safety limit | Runtime | Trees that don't reach a terminal state in 1000 ticks are terminated as partial |
 | Hermes gateway spawning | Deployment | bt-evaluator and bt-langagent are spawned by hermes-gateway as MCP child processes. The goap-fusion daemon is the independent systemd USER service `bt-agent.service` running `bt-agent --no-mcp` against the bare main repo |
 | NotebookLM quota (~50 metered calls/day) | External | Enforced locally by the nlm quota economy: per-Pacific-day query cache + daily budgets (30 queries, 2 web-research starts) at the nlmRun choke point; over budget → Claude review fallback |
-| Claude Code CLI | Dependency | The self-improvement loop implements plans via the `claude` CLI (restricted tool allowlists per phase); session rate limits park plans for a later resume |
+| Claude Code CLI | Dependency | The self-improvement loop implements plans via the `claude` CLI (restricted tool allowlists per phase); session rate limits park plans for a later resume and open a durable backoff window (`goap_fusion_claude_backoff_until`, default 6h via `BT_GOAP_CLAUDE_BACKOFF`) during which subsequent ticks skip Claude attempts in milliseconds |
 
 ## Organizational Constraints
 
@@ -448,6 +448,8 @@ Preflight ─▶ Research ─▶ Goals ─▶ Plan ─▶ Implement ─▶ Verif
 
 **Partial landing:** a later task's failure discards only that task's edits (per-task snapshot commits in the run worktree); the completed, verified work still lands and the failed goal is carried forward to the next cycle. All-or-nothing is preserved for first-task failures and outside worktree-apply mode.
 
+**Rate-limit backoff:** a Claude rate-limited outcome in any tick persists a backoff deadline (`goap_fusion_claude_backoff_until`, RFC3339 in the agent-scope blackboard with ChainState fallback — the same durable pattern as the saved plan) so the *next* ticks consume it instead of re-attempting against a quota known to be closed. Both Claude consumers honor it on entry: the plan-resume runtime (`runSuperpowersRuntimeFromExistingPlanAction`) degrades to ScheduledAnalysisPath instantly — before worktree creation and the 45-minute batch attempt — with the exact rate-limited Result/Outcome shape, so the plan carryover is preserved for the tick after the window expires; and the Claude review research fallback returns rate-limited in milliseconds without invoking Claude, letting the ResearchRouter fall through to its non-fatal skip. The window is env-configurable (`BT_GOAP_CLAUDE_BACKOFF`, default 6h) on the implementation path and a fixed 1h on the review path; an elapsed window self-clears (half-open, the ADR-010 lesson) and malformed state reads as inactive, so stale or corrupt backoff can never permanently block Claude attempts.
+
 **Research economy:** NotebookLM answers are cached per Pacific day by question hash; daily budgets (30 queries / 2 web-research starts) refuse further metered calls with an error the ResearchRouter routes to the Claude review fallback (commits → structure → failures mode rotation, persisted round counter). The router is itself non-fatal: in both fusion trees (`domain:goap_fusion` and `domain:goap_fusion_loop`) it ends in a terminal `AlwaysSucceed` "ResearchOptional" leaf, so a doubly-unavailable research stage — NotebookLM quota closed *and* the Claude review fallback rate-limited or barren — degrades to the vault-context read phase (ReadVaultResearch onward) instead of aborting the run.
 
 ## 6.5 Error Recovery
@@ -687,7 +689,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Where:** `internal/research/` (store.go, programs.go), `internal/engine/nlm_quota.go`, `internal/engine/goap_research_goals.go`; state under `~/.go-bt-evolve/research/`.
 
-**Effect:** Research compounds instead of repeating: every cycle sees what is already known and implemented; repeated questions are free; budget exhaustion degrades to the Claude review fallback instead of burning quota — and if that fallback is itself rate-limited or barren, the ResearchRouter's terminal non-fatal skip (present in both fusion trees, §6.4) degrades the run to vault context rather than aborting it.
+**Effect:** Research compounds instead of repeating: every cycle sees what is already known and implemented; repeated questions are free; budget exhaustion degrades to the Claude review fallback instead of burning quota — and if that fallback is itself rate-limited or barren, the ResearchRouter's terminal non-fatal skip (present in both fusion trees, §6.4) degrades the run to vault context rather than aborting it. A rate-limited fallback additionally records the durable Claude backoff deadline (§6.4), so subsequent ticks skip the fallback without spending its 15-minute run at all.
 
 ## 8.10 Autonomous Landing Pipeline
 
@@ -990,6 +992,21 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-016: Durable Claude Rate-Limit Backoff for the GOAP Fusion Loop
+
+**Context (2026-07-08):** Rate-limited Claude outcomes were recorded but consumed nowhere: `goap_fusion_claude_review_rate_limited` was set by the review fallback and read only by its own test, and the plan-resume runtime re-attempted its 45-minute batch every tick against a quota known to be closed — so a closed Claude session burned a 15-minute doomed review run plus a doomed resume attempt on every half-hourly cron tick until the quota reopened.
+
+**Decision:** Persist the rate-limit signal across ticks and make both Claude consumers honor it on entry. `saveClaudeBackoffState`/`loadClaudeBackoffState`/`claudeBackoffActive` (`internal/engine/actions_goap_fusion.go`) store an RFC3339 `goap_fusion_claude_backoff_until` deadline in the agent-scope blackboard (ChainState fallback), following the existing grill/plan durable-state pattern. `runClaudeCodeReviewResearch` short-circuits with the rate-limited outcome in milliseconds while the window is open and records a 1h backoff when `isClaudeRateLimit` fires; `runSuperpowersRuntimeFromExistingPlanAction` records the env-configurable window (`claudeBackoffWindow()`, `BT_GOAP_CLAUDE_BACKOFF`, default 6h) alongside the plan carryover and, on entry, degrades to ScheduledAnalysisPath before creating a worktree — emitting the exact `goap_fusion_rate_limited` shape whose deferred-clear guard preserves the carryover. Per ADR-010's non-wedging rule, an elapsed window self-clears (half-open) and a malformed timestamp reads as inactive, so stale or corrupt state can never permanently block Claude attempts.
+
+**Status:** Accepted (2026-07-08)
+
+**Consequences:**
+- ✅ A closed Claude quota costs the loop one detection instead of a 15–60-minute doomed attempt per consumer per tick; deterministic ScheduledAnalysisPath work continues meanwhile
+- ✅ The rate-limited plan carryover survives the backoff window and resumes on the first tick after expiry (pinned by tests on both consumers)
+- ⚠️ The "resets \<time\>" hint in the CLI output is not machine-parsed, so the window is a heuristic: too short re-probes a still-closed quota, too long idles a reopened one — the half-open expiry bounds the damage to one skipped-or-doomed tick either way
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1115,6 +1132,7 @@ go-bt-evolve
 | **ChainAction** | A behavior tree leaf node that wraps an LLM call. 10 chain types available. Reads config from node Name and Metadata. |
 | **Chain Type** | One of 10 LLM workflow patterns: llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action. |
 | **Circuit Breaker** | 3-state pattern (closed/open/half-open) that prevents cascading failures. Per-agent isolation via AgentCircuitBreakerStore. |
+| **Claude Backoff** | Durable rate-limit window for the GOAP fusion loop: a rate-limited Claude outcome persists an RFC3339 `goap_fusion_claude_backoff_until` deadline (agent-scope blackboard, ChainState fallback); while active, both Claude consumers skip in milliseconds — the plan-resume runtime degrades to ScheduledAnalysisPath preserving its carryover, the review fallback returns rate-limited without invoking Claude. Half-open: an elapsed or malformed deadline reads as inactive. `BT_GOAP_CLAUDE_BACKOFF` (default 6h) on the implementation path, fixed 1h on the review path. ADR-016. |
 | **Condition** | A leaf node that evaluates a boolean predicate. Used in PreGate and OutcomeSelector for branching decisions. |
 | **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. |
 | **DefaultTree** | The fallback behavior tree used when no specific tree matches. Extracted from a 750-line god node into 21 paths across 7 category files. |
