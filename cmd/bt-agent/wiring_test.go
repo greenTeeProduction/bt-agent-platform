@@ -319,3 +319,46 @@ func TestDaemonConfiguresGoalPlanBrainstorm(t *testing.T) {
 		t.Fatal("daemon must wire engine.WireGoalPlanBrainstorm() at startup; plan-expansion seam is nil")
 	}
 }
+
+// TestAttemptOutcomeErrorCarriesOutputTail pins the scheduler retry closure's
+// no-runErr failure path: when RunOnce returns a non-success outcome with a nil
+// runErr, the attempt error the retry policy sees (and that lands in the DLQ
+// Error field on exhaustion) must carry the run-output detail via
+// agent.OutcomeErrorDetail, not the bare "agent outcome: %s" string. Without
+// this, retry-exhaustion dead-letters record only the outcome word and lose the
+// output tail that says *why* the agent failed.
+func TestAttemptOutcomeErrorCarriesOutputTail(t *testing.T) {
+	// (a) non-empty output: both the outcome and the flattened output tail
+	// must appear, and the bare format must be gone.
+	got := attemptOutcomeError("failure", "step A ok\nstep B: exit 1").Error()
+	if !strings.Contains(got, "agent outcome: failure") {
+		t.Errorf("error must name the outcome; got %q", got)
+	}
+	if !strings.Contains(got, "step B: exit 1") {
+		t.Errorf("error must carry the output tail; got %q", got)
+	}
+	if !strings.Contains(got, "step A ok | step B: exit 1") {
+		t.Errorf("output newlines must be flattened with %q; got %q", " | ", got)
+	}
+	if got == "agent outcome: failure" {
+		t.Errorf("bare format must be gone; got exactly the pre-fix string %q", got)
+	}
+
+	// (b) empty output: OutcomeErrorDetail's no-output sentinel must surface.
+	gotEmpty := attemptOutcomeError("failure", "").Error()
+	if !strings.Contains(gotEmpty, "no run output") {
+		t.Errorf("empty output must yield the no-run-output sentinel; got %q", gotEmpty)
+	}
+
+	// (c) >400-byte output: only the tail is retained, so the error must end
+	// with the output's last line.
+	lastLine := "FINAL: retry exhausted here"
+	big := strings.Repeat("noise line filler xxxxxxxxxxxxxxxxxxxx\n", 20) + lastLine
+	if len(big) <= 400 {
+		t.Fatalf("test fixture must exceed 400 bytes to exercise tail retention; got %d", len(big))
+	}
+	gotBig := attemptOutcomeError("timeout", big).Error()
+	if !strings.HasSuffix(gotBig, lastLine) {
+		t.Errorf("error must end with the output's last line (tail retention); got %q", gotBig)
+	}
+}

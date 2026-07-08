@@ -139,6 +139,14 @@ func newLocalAgentExecutor(nodeURL string, runner *agent.RunDeps) *reliability.L
 	})
 }
 
+// attemptOutcomeError builds the per-attempt error the scheduler retry policy
+// sees when RunOnce returns a non-success outcome with a nil runErr. It folds
+// the run output tail in via agent.OutcomeErrorDetail so retry-exhaustion DLQ
+// entries record *why* the agent failed, not just the bare outcome word.
+func attemptOutcomeError(outcome, output string) error {
+	return fmt.Errorf("agent outcome: %s: %s", outcome, agent.OutcomeErrorDetail(output))
+}
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -328,7 +336,7 @@ func main() {
 			if runErr != nil {
 				return runErr
 			}
-			return fmt.Errorf("agent outcome: %s", outcome)
+			return attemptOutcomeError(outcome, output)
 		})
 
 		if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {

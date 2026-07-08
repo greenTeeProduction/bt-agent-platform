@@ -870,6 +870,7 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 **Consequences:**
 - ✅ Graceful degradation: Single failure doesn't cascade
 - ✅ Failed work preserved: DLQ enables manual inspection and replay
+- ✅ DLQ entries are self-diagnosable (2026-07-08): the scheduler retry closure's non-success branch (`cmd/bt-agent`) folds the run-output tail into the attempt error via the exported `agent.OutcomeErrorDetail` (a package-level `attemptOutcomeError` helper), matching what `RunOnce` already recorded internally — so a retry-exhausted `agent outcome: …` DLQ record carries the last ~400 bytes of run output (newlines flattened to `" | "`, `"no run output"` when empty) instead of a bare outcome word
 - ✅ Per-agent circuit breakers: One misbehaving agent doesn't block others
 - ⚠️ Retry delays add latency (1s→2s→4s→8s backoff)
 - ⚠️ DLQ grows unbounded without cleanup
