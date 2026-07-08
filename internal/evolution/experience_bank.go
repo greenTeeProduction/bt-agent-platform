@@ -227,7 +227,11 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 }
 
 // MarkReused increments TimesReused for the entries with the given IDs and
-// persists the bank, so reuse statistics survive restarts.
+// persists the bank, so reuse statistics survive restarts. Like addEntry it
+// is a full-file rewrite, so it merges on-disk entries first under the
+// sidecar file lock — otherwise a bank loaded at startup would blast its
+// stale memory over everything the other writer persisted since load. The
+// increments are applied AFTER the merge so they land on the merged view.
 func (eb *ExperienceBank) MarkReused(ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -236,14 +240,20 @@ func (eb *ExperienceBank) MarkReused(ids []string) error {
 	for _, id := range ids {
 		idSet[id] = true
 	}
+	release, lockErr := acquireExperienceLock(eb.PersistPath)
+	if lockErr == nil {
+		defer release()
+	}
 	eb.mu.Lock()
+	defer eb.mu.Unlock()
+	eb.mergeFromDiskLocked()
 	for i := range eb.Entries {
 		if idSet[eb.Entries[i].ID] {
 			eb.Entries[i].TimesReused++
 		}
 	}
-	eb.mu.Unlock()
-	return eb.Persist()
+	eb.enforceCapLocked()
+	return eb.persistLocked()
 }
 
 // TransferExperiences finds experiences from sourceTree that may apply to targetTree.
@@ -253,14 +263,33 @@ func (eb *ExperienceBank) TransferExperiences(_, targetTree string) []Experience
 	return eb.Retrieve(targetTree, 5)
 }
 
-// Persist writes the experience bank to disk atomically.
+// Persist writes the experience bank to disk atomically. It runs the same
+// lock→merge→write sequence as addEntry and MarkReused so no exported write
+// path can rewrite the file from stale memory and drop a concurrent writer's
+// entries. If the sidecar lock cannot be acquired, it falls back to the
+// unlocked (still merged) path rather than failing the persist.
 func (eb *ExperienceBank) Persist() error {
-	eb.mu.RLock()
+	release, lockErr := acquireExperienceLock(eb.PersistPath)
+	if lockErr == nil {
+		defer release()
+	}
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+	eb.mergeFromDiskLocked()
+	eb.enforceCapLocked()
+	return eb.persistLocked()
+}
+
+// persistLocked marshals the current entries and atomically replaces the
+// persisted file (write tmp + rename). Caller must hold eb.mu (read or
+// write). Callers that merge from disk first must also hold the sidecar
+// file lock across merge and rename, or a concurrent writer can rename its
+// own snapshot into place in between and have it silently overwritten.
+func (eb *ExperienceBank) persistLocked() error {
 	// Serialize only the entries (not the mutex or path fields)
 	data, err := json.MarshalIndent(struct {
 		Entries []ExperienceEntry `json:"entries"`
 	}{Entries: eb.Entries}, "", "  ")
-	eb.mu.RUnlock()
 	if err != nil {
 		return fmt.Errorf("marshal experience bank: %w", err)
 	}
@@ -316,16 +345,24 @@ func (eb *ExperienceBank) Stats() map[string]interface{} {
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
 // addEntry adds an entry, enforces the capacity cap, and persists the bank.
-// Before the full-file rewrite in Persist, on-disk entries are merged back in
-// so a concurrent writer's adds (daemon + gardener share experience.json) are
-// never silently dropped.
+// Before the full-file rewrite, on-disk entries are merged back in so a
+// concurrent writer's adds (daemon + gardener share experience.json) are
+// never silently dropped. The sidecar file lock is held from the merge
+// through the rename: without it a second process can rename its own
+// snapshot into place inside that window and have it overwritten. If the
+// lock cannot be acquired (e.g. read-only dir), fall back to the unlocked
+// path rather than dropping the entry.
 func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
+	release, lockErr := acquireExperienceLock(eb.PersistPath)
+	if lockErr == nil {
+		defer release()
+	}
 	eb.mu.Lock()
+	defer eb.mu.Unlock()
 	eb.mergeFromDiskLocked()
 	eb.Entries = append(eb.Entries, entry)
 	eb.enforceCapLocked()
-	eb.mu.Unlock()
-	return eb.Persist()
+	return eb.persistLocked()
 }
 
 // mergeFromDiskLocked reloads the persisted file and merges its entries into

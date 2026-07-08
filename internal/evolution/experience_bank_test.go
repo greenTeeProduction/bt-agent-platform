@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -881,6 +882,152 @@ func TestExperienceBank_TwoWriterMergePreservesHigherTimesReused(t *testing.T) {
 	reloaded.mu.RUnlock()
 	if !found {
 		t.Error("shared entry was silently dropped by daemon's rewrite")
+	}
+}
+
+// TestMarkReusedDoesNotDropConcurrentWriterEntries: MarkReused is a full-file
+// rewrite like addEntry, so it must run the same lock→merge→write sequence. A
+// gardener bank loaded at startup that later marks reuse would otherwise erase
+// every entry the daemon added since load AND clobber reuse counts the daemon
+// recorded on shared entries.
+func TestMarkReusedDoesNotDropConcurrentWriterEntries(t *testing.T) {
+	dir := t.TempDir()
+	daemon, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (daemon): %v", err)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, e := range []ExperienceEntry{
+		mkExperienceEntry("gardener_own", 0.6, base, 0),
+		mkExperienceEntry("shared", 0.7, base.Add(time.Minute), 0),
+	} {
+		if err := daemon.addEntry(e); err != nil {
+			t.Fatalf("daemon addEntry (%s): %v", e.ID, err)
+		}
+	}
+
+	// The gardener loads now — its memory holds gardener_own + shared only.
+	gardener, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (gardener): %v", err)
+	}
+
+	// After the gardener's load, the daemon adds a fresh entry and records
+	// reuse on the shared entry. Both land on disk but not in the gardener's
+	// memory. (The daemon's memory is complete, so its own rewrites are safe.)
+	if err := daemon.addEntry(mkExperienceEntry("daemon_since_load", 0.6, base.Add(2*time.Minute), 0)); err != nil {
+		t.Fatalf("daemon addEntry (daemon_since_load): %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := daemon.MarkReused([]string{"shared"}); err != nil {
+			t.Fatalf("daemon MarkReused %d: %v", i, err)
+		}
+	}
+
+	// The gardener marks reuse on its own entry. Its rewrite must merge from
+	// disk first, not blast the gardener's stale memory over the file.
+	if err := gardener.MarkReused([]string{"gardener_own"}); err != nil {
+		t.Fatalf("gardener MarkReused: %v", err)
+	}
+
+	reloaded, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (reload): %v", err)
+	}
+	if !bankHasEntry(reloaded, "daemon_since_load") {
+		t.Error("daemon_since_load was silently dropped by the gardener's MarkReused rewrite")
+	}
+	reused := map[string]int{}
+	reloaded.mu.RLock()
+	for _, e := range reloaded.Entries {
+		reused[e.ID] = e.TimesReused
+	}
+	reloaded.mu.RUnlock()
+	if got, ok := reused["gardener_own"]; !ok {
+		t.Error("gardener_own missing after MarkReused rewrite")
+	} else if got != 1 {
+		t.Errorf("gardener_own TimesReused = %d, want 1 (the reuse increment must be recorded)", got)
+	}
+	if got, ok := reused["shared"]; !ok {
+		t.Error("shared entry was silently dropped by the gardener's MarkReused rewrite")
+	} else if got != 5 {
+		t.Errorf("shared TimesReused = %d after gardener rewrite, want 5 (higher on-disk count must win the merge)", got)
+	}
+}
+
+// TestExperienceBank_ConcurrentWritersLoseNoEntries drives two banks over the
+// same experience.json from concurrent goroutines, like the daemon and the
+// gardener adding at the same moment. Each bank's in-process mutex does not
+// serialize the OTHER writer's merge→rename window: writer A can rename its
+// snapshot into place after writer B ran mergeFromDiskLocked but before B's
+// os.Rename, so B's rewrite silently erases A's entry. Closing the race
+// requires holding the sidecar file lock from mergeFromDiskLocked through the
+// rename. All IDs stay far under the cap, so eviction cannot explain absence.
+func TestExperienceBank_ConcurrentWritersLoseNoEntries(t *testing.T) {
+	dir := t.TempDir()
+	daemon, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (daemon): %v", err)
+	}
+	gardener, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (gardener): %v", err)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const perWriter = 50 // 100 total, well under experienceBankCap
+
+	writers := map[string]*ExperienceBank{"daemon": daemon, "gardener": gardener}
+	start := make(chan struct{})
+	errs := make(chan error, len(writers)*perWriter)
+	var wg sync.WaitGroup
+	for name, bank := range writers {
+		wg.Add(1)
+		go func(name string, bank *ExperienceBank) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < perWriter; i++ {
+				e := mkExperienceEntry(fmt.Sprintf("%s_%02d", name, i), 0.6, base.Add(time.Duration(i)*time.Minute), 0)
+				// A racing writer can also make the persist step itself fail
+				// (shared tmp file renamed away underneath us). Keep going —
+				// the reload below judges what actually survived on disk.
+				if err := bank.addEntry(e); err != nil {
+					errs <- fmt.Errorf("%s addEntry %d: %w", name, i, err)
+				}
+			}
+		}(name, bank)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent add failed (writers must not disturb each other's persist): %v", err)
+	}
+
+	// A fresh load sees only what survived on disk.
+	reloaded, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank (reload): %v", err)
+	}
+	var missing []string
+	for name := range writers {
+		for i := 0; i < perWriter; i++ {
+			id := fmt.Sprintf("%s_%02d", name, i)
+			if !bankHasEntry(reloaded, id) {
+				missing = append(missing, id)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		sample := missing
+		if len(sample) > 5 {
+			sample = sample[:5]
+		}
+		t.Errorf("concurrent two-writer adds lost %d of %d entries in the merge→rename window (e.g. %v); the sidecar lock must be held from merge through rename", len(missing), 2*perWriter, sample)
+	}
+	if got, want := reloaded.Count(), 2*perWriter; got != want {
+		t.Errorf("reloaded bank has %d entries, want %d", got, want)
 	}
 }
 
