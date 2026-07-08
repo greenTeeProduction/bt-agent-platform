@@ -756,6 +756,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"superpowers_workflow":      SuperpowersWorkflowTree(),
 		"hermes_update":             HermesUpdateTree(),
 		"auction_demo":              AuctionDemoTree(),
+		"arc42_seeder":              Arc42SeederTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -789,6 +790,7 @@ var Descriptions = map[string]string{
 	"notebooklm_plan_implement": "Research→Grill→Plan→Implement→Verify→Deploy pipeline: NotebookLM deep research, critical review, implementation plan generation, subagent delegation, test verification, and build/deploy",
 	"superpowers_workflow":      "Production Superpowers workflow v2: skill routing, grill gate, TDD task loop with review cycles, debug branch, finish options",
 	"hermes_update":             "Zero-LLM daily Hermes Agent maintenance: version check, git fetch, run hermes update when behind, report",
+	"arc42_seeder":              "Seed the next multi-cycle improvement program from the LIVE arc42 quality goals (reads docs/arc42 at runtime, never a copy): one goal targeted per run, grounded goal-named milestones, persisted to programs.json for the goap-fusion loop",
 	"auction_demo":              "Auction-based A2A task allocation demo: announce a TaskAnnouncement → collect Bids → award to the winning bidder via the AuctionDelegate seam, falling back to a delegate tree when no eligible bidder responds",
 	"arc42:section1":            "Generate arc42 section 1 (Introduction and Goals): requirements overview, quality goals, stakeholders — via LLM with template fallback",
 	"arc42:section2":            "Generate arc42 section 2 (Architecture Constraints): technical, organizational, and convention constraints as a table",

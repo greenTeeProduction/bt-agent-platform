@@ -106,6 +106,7 @@ func tasksForTree() map[string]string {
 		"goap_fusion":               "analyze research gaps and improve the BT platform trees",
 		"goap_fusion_loop":          "start the self-improving GOAP fusion loop cycle",
 		"hermes_update":             "check for hermes agent updates and apply them",
+		"arc42_seeder":              "seed next program from arc42 quality goals",
 		"bt_manager":                "analyze all agent failures and fix degraded ones",
 		"notebooklm":                "research latest BT framework developments using NotebookLM",
 		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
@@ -303,8 +304,10 @@ func TestAllDomainTrees(t *testing.T) {
 		// the real hermes/git binaries, so it is structural-only too.
 		// auction_demo's award stage runs the AuctionDelegate seam, which needs
 		// a live A2A transport / AuctionDelegateFn hook (nil offline), so it is
-		// structural-only as well.
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" {
+		// structural-only as well. arc42_seeder queries nlm/Claude for a program
+		// proposal, so it is structural-only too (its action logic is unit-tested
+		// in engine/arc42_seeder_test.go with stubbed fetch).
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" || name == "arc42_seeder" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {
