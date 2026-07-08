@@ -34,7 +34,12 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	if signal != evolution.FeedbackPositive && signal != evolution.FeedbackNegative {
 		return map[string]interface{}{"error": fmt.Sprintf("signal must be %q or %q", evolution.FeedbackPositive, evolution.FeedbackNegative)}
 	}
-	if strings.TrimSpace(user) == "" || strings.TrimSpace(treeID) == "" {
+	// Canonicalize once: the record, the slug, and the cumulative
+	// FilterByTreeNameStrict tally must all see the same identifier, or a
+	// trailing space creates records no later lookup ever matches.
+	user = strings.TrimSpace(user)
+	treeID = strings.TrimSpace(treeID)
+	if user == "" || treeID == "" {
 		return map[string]interface{}{"error": "user and tree are required"}
 	}
 	if deps.refStore == nil {

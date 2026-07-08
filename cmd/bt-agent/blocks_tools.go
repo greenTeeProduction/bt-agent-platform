@@ -77,46 +77,49 @@ func registerBlockTools(server *engine.Server, deps *mcpDeps) {
 				return mcpErr(err)
 			}
 			reg := blocks.DefaultRegistry
+			strategy, err := resolveStrategyTree(params.Strategy)
+			if err != nil {
+				return mcpErr(err)
+			}
 			var tree *evolution.SerializableNode
-			var err error
 			switch {
 			case params.Preset != "":
-				var strategy *evolution.SerializableNode
-				if params.Strategy != "" {
-					strategy = resolveTree(params.Strategy)
-				}
 				tree, err = blocks.ComposePresetWithTools(reg, params.Preset, params.ToolsProfile, params.Name, strategy)
 			case params.TaskTree:
-				var strategy *evolution.SerializableNode
-				if params.Strategy != "" {
-					strategy = resolveTree(params.Strategy)
-				}
 				tree, err = blocks.ComposeTaskTree(reg, params.Name, strategy)
 			default:
 				ids := strings.Split(params.BlockIDs, ",")
 				for i := range ids {
 					ids[i] = strings.TrimSpace(ids[i])
 				}
-				spec := blocks.ComposeSpec{Name: params.Name, Blocks: ids}
-				if params.Strategy != "" {
-					spec.Middle = resolveTree(params.Strategy)
-				}
+				spec := blocks.ComposeSpec{Name: params.Name, Blocks: ids, Middle: strategy}
 				tree, err = blocks.Compose(reg, spec, params.Inline)
 			}
 			if err != nil {
 				return mcpErr(err)
 			}
+			saved := false
 			if params.Save && deps.treeStore != nil {
-				_ = deps.treeStore.Save(tree)
+				if msgs := engine.ValidateTree(tree); len(msgs) > 0 {
+					return mcpErr(fmt.Errorf("composed tree failed validation: %s", strings.Join(msgs, "; ")))
+				}
+				if err := deps.treeStore.Save(tree); err != nil {
+					return mcpErr(fmt.Errorf("save composed tree: %w", err))
+				}
 				deps.bb.TreeStore = deps.treeStore
 				*deps.bt = engine.BuildTree(tree, deps.bb)
+				saved = true
 			}
-			data, _ := json.Marshal(map[string]any{
+			payload := map[string]any{
 				"composed": true,
 				"name":     tree.Name,
 				"refs":     blocks.HasSubTreeRefs(tree),
 				"tree":     tree,
-			})
+			}
+			if saved {
+				payload["saved"] = true
+			}
+			data, _ := json.Marshal(payload)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -236,6 +239,20 @@ func registerBlockTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
+}
+
+// resolveStrategyTree resolves an optional StrategyRouter tree id. An empty id
+// means no router was requested; a non-empty id that resolveTree cannot
+// resolve is an error so requested routing is never silently dropped.
+func resolveStrategyTree(id string) (*evolution.SerializableNode, error) {
+	if id == "" {
+		return nil, nil
+	}
+	tree := resolveTree(id)
+	if tree == nil {
+		return nil, fmt.Errorf("unknown strategy tree %q", id)
+	}
+	return tree, nil
 }
 
 func mcpErr(err error) *engine.ToolResult {

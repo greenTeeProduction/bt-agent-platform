@@ -188,3 +188,42 @@ func TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback(t *testing.T) {
 		t.Error("anonymous persist must not land in a user workspace")
 	}
 }
+
+// Regression: recordUserFeedback validates user/treeID with TrimSpace but
+// stored and filtered with the raw values, so a trailing-space tree id
+// created records that FilterByTreeNameStrict could never match again.
+func TestRecordUserFeedback_TrimsUserAndTreeID(t *testing.T) {
+	deps := newFeedbackDeps(t)
+
+	result := recordUserFeedback(deps, " nico ", "goal:demo ", "positive", "")
+	if result["recorded"] != true {
+		t.Fatalf("feedback not recorded: %v", result)
+	}
+
+	all, err := deps.refStore.LoadAll()
+	if err != nil {
+		t.Fatalf("load records: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(all))
+	}
+	if all[0].TreeName != "goal:demo" {
+		t.Errorf("TreeName = %q, want trimmed %q", all[0].TreeName, "goal:demo")
+	}
+	if all[0].User != "nico" {
+		t.Errorf("User = %q, want trimmed %q", all[0].User, "nico")
+	}
+
+	// Follow-up feedback on the canonical id must tally both signals; the
+	// untrimmed bug left the first record invisible to the strict filter.
+	result = recordUserFeedback(deps, "nico", "goal:demo", "negative", "")
+	if result["recorded"] != true {
+		t.Fatalf("follow-up feedback not recorded: %v", result)
+	}
+	if result["positives"] != 1 {
+		t.Errorf("positives = %v, want 1 (trailing-space record must count)", result["positives"])
+	}
+	if result["negatives"] != 1 {
+		t.Errorf("negatives = %v, want 1", result["negatives"])
+	}
+}

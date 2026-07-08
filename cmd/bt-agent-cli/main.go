@@ -263,8 +263,23 @@ func cmdRun(reg *agent.Registry) {
 	}
 }
 
+// requireNameArg extracts the agent-name positional argument (args[2]) for
+// subcommands like `test <name>`. Returning an error instead of exiting keeps
+// the guard testable; callers print it and exit 1.
+func requireNameArg(args []string) (string, error) {
+	if len(args) < 3 {
+		return "", fmt.Errorf("agent name required")
+	}
+	return args[2], nil
+}
+
 func cmdTest(reg *agent.Registry) {
-	name := os.Args[2]
+	name, err := requireNameArg(os.Args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		printUsage()
+		os.Exit(1)
+	}
 	inst, err := reg.Get(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -308,7 +323,12 @@ func cmdSchedule(reg *agent.Registry) {
 }
 
 func cmdLogs(reg *agent.Registry) {
-	name := os.Args[2]
+	name, err := requireNameArg(os.Args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		printUsage()
+		os.Exit(1)
+	}
 	inst, err := reg.Get(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -321,7 +341,12 @@ func cmdLogs(reg *agent.Registry) {
 }
 
 func cmdDelete(reg *agent.Registry) {
-	name := os.Args[2]
+	name, err := requireNameArg(os.Args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		printUsage()
+		os.Exit(1)
+	}
 	if err := agent.DeleteRegisteredAgent(reg, name); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
