@@ -189,6 +189,20 @@ func RetryWithBackoff(maxRetries int, base, maxDelay time.Duration, fn func() er
 
 // ─── Dead Letter Queue ──────────────────────────────────────────────────────
 
+// Graceful-degradation bounds for the dead letter queue. Under a sustained
+// failure storm an unbounded DLQ would grow without limit (memory + disk), and
+// a "poison pill" task that fails every replay would drive an infinite
+// auto-requeue loop. These constants cap both.
+const (
+	// MaxDeadLetterEntries caps how many entries the DLQ retains. When Push
+	// overflows this bound, the OLDEST entries are evicted first.
+	MaxDeadLetterEntries = 1000
+	// MaxReplayAttempts is the number of auto-requeues an entry may accrue
+	// before it is terminally flagged Abandoned and excluded from further
+	// requeue, breaking infinite replay loops on a poison pill.
+	MaxReplayAttempts = 5
+)
+
 // DeadLetterEntry represents a failed task stored for inspection.
 type DeadLetterEntry struct {
 	ID       string    `json:"id"`
@@ -199,6 +213,14 @@ type DeadLetterEntry struct {
 	FailedAt time.Time `json:"failed_at"`
 	Circuit  string    `json:"circuit,omitempty"`
 	Category string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
+	// RequeuedAt is stamped by Requeue when a process without a tree runner (the
+	// dashboard) flags this entry for retry. A non-zero value signals bt-agent's
+	// executor to pick the task up on its next scan instead of leaving it dead.
+	RequeuedAt time.Time `json:"requeued_at,omitempty"`
+	// Abandoned is set once an entry's replay Attempts exceed MaxReplayAttempts.
+	// An abandoned entry is retained for inspection but excluded from further
+	// auto-requeue so a poison pill cannot drive an infinite replay loop.
+	Abandoned bool `json:"abandoned,omitempty"`
 }
 
 // DeadLetterQueue stores failed tasks for manual inspection and replay.
@@ -227,6 +249,13 @@ func (dlq *DeadLetterQueue) Push(entry DeadLetterEntry) {
 		entry.Category = ClassifyError(fmt.Errorf("%s", entry.Error)).String()
 	}
 	dlq.entries = append(dlq.entries, entry)
+	// Graceful degradation: cap retained entries, evicting oldest-first so the
+	// DLQ never grows without bound under a failure storm.
+	if len(dlq.entries) > MaxDeadLetterEntries {
+		trimmed := make([]DeadLetterEntry, MaxDeadLetterEntries)
+		copy(trimmed, dlq.entries[len(dlq.entries)-MaxDeadLetterEntries:])
+		dlq.entries = trimmed
+	}
 	dlq.save()
 }
 
@@ -263,6 +292,55 @@ func (dlq *DeadLetterQueue) Replay(id string) (*DeadLetterEntry, bool) {
 		if e.ID == id {
 			dlq.entries = append(dlq.entries[:i], dlq.entries[i+1:]...)
 			dlq.save()
+			return &e, true
+		}
+	}
+	return nil, false
+}
+
+// Reload discards the in-memory view and re-reads the queue from its
+// persistence file. The dashboard runs in a separate process from bt-agent's
+// executor, so it must reload before mutating shared on-disk state — otherwise
+// a stale in-memory copy would clobber entries the executor added or updated
+// since the dashboard last read the file. No-op when persistence is disabled.
+func (dlq *DeadLetterQueue) Reload() {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	if dlq.path == "" {
+		return
+	}
+	dlq.entries = nil
+	dlq.load()
+}
+
+// Requeue flags the entry with the given id for retry by stamping RequeuedAt and
+// persisting, WITHOUT removing it from the queue. Unlike Replay (which removes
+// and returns an entry for an in-process runner), Requeue lets a process with no
+// tree runner — the dashboard — mark a dead-lettered task so bt-agent's executor
+// picks it up on its next scan, instead of silently dropping it cross-process.
+func (dlq *DeadLetterQueue) Requeue(id string) (*DeadLetterEntry, bool) {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+
+	for i := range dlq.entries {
+		if dlq.entries[i].ID == id {
+			// Poison-pill guard: an entry already abandoned, or one that has
+			// exhausted its replay budget, must never be auto-requeued again.
+			// Exhausting the budget terminally flags the entry Abandoned so it
+			// is retained for inspection but excluded from further requeue,
+			// breaking infinite replay loops.
+			if dlq.entries[i].Abandoned {
+				return nil, false
+			}
+			if dlq.entries[i].Attempts >= MaxReplayAttempts {
+				dlq.entries[i].Abandoned = true
+				dlq.save()
+				return nil, false
+			}
+			dlq.entries[i].Attempts++
+			dlq.entries[i].RequeuedAt = time.Now()
+			dlq.save()
+			e := dlq.entries[i]
 			return &e, true
 		}
 	}

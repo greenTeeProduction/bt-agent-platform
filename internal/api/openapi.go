@@ -1029,13 +1029,13 @@ func DashboardRoutes() []Route {
 			}, "count", "entries")).WithAuth().Build(),
 
 		NewRoute("/api/dlq/replay", POST).
-			Summary("Replay a dead letter entry").
-			Description("Removes a specific entry from the DLQ and returns it for re-execution.").
+			Summary("Requeue a dead letter entry").
+			Description("Flags a specific DLQ entry for retry (stamping requeued_at) without removing it, so bt-agent's executor picks it up on its next scan.").
 			Tags("Reliability").
 			OperationID("postDLQReplay").
 			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
-			JSONResponse(200, "Replayed entry", ObjectSchema(map[string]*Schema{
-				"status": StringSchema("'replayed' on success"),
+			JSONResponse(200, "Requeued entry", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("'requeued' on success"),
 				"entry": ObjectSchema(map[string]*Schema{
 					"id":        StringSchema("Entry identifier"),
 					"task":      StringSchema("Original task text"),

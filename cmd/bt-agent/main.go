@@ -147,6 +147,45 @@ func attemptOutcomeError(outcome, output string) error {
 	return fmt.Errorf("agent outcome: %s: %s", outcome, agent.OutcomeErrorDetail(output))
 }
 
+// schedulerRateLimitCarryover is the sentinel outcome an agent surfaces when a
+// scheduled run gracefully pauses on a Claude rate limit. The scheduler treats
+// it as terminal — an expected, healthy backoff, neither retried nor
+// dead-lettered — and records it as a *deferred* outcome rather than a success,
+// so a rate-limit pause never inflates the success-count/success-latency stats
+// the gardener's validation gate reads.
+const schedulerRateLimitCarryover = "goap_fusion_rate_limited"
+
+// recordSchedulerAttempt records one scheduler attempt against the agent's SLO
+// metrics and returns the error the retry policy should observe: nil stops the
+// loop (terminal), non-nil keeps retrying.
+//
+// Three dispositions:
+//   - success (outcome=="success", no runErr): RecordSuccess, terminal. A retry
+//     that finally succeeds (attempts>1) also RecordRecovery.
+//   - rate-limit carryover (outcome==schedulerRateLimitCarryover): RecordDeferred,
+//     terminal. The pause leaves the success/failure counters and latency totals
+//     untouched so success rate and success-latency are unaffected.
+//   - anything else: RecordFailure, retryable (returns runErr, or the wrapped
+//     outcome error when RunOnce reported a non-success outcome with no runErr).
+func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error, output string, attempts int, latency time.Duration) error {
+	if runErr == nil && outcome == "success" {
+		slo.RecordSuccess(latency)
+		if attempts > 1 {
+			slo.RecordRecovery(0)
+		}
+		return nil
+	}
+	if outcome == schedulerRateLimitCarryover {
+		slo.RecordDeferred()
+		return nil
+	}
+	slo.RecordFailure(latency)
+	if runErr != nil {
+		return runErr
+	}
+	return attemptOutcomeError(outcome, output)
+}
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -325,18 +364,7 @@ func main() {
 				output = attemptRes.Output
 				res = attemptRes
 			}
-			if runErr == nil && attemptRes != nil && attemptRes.Outcome == "success" {
-				slo.RecordSuccess(time.Since(attemptStart))
-				if attempts > 1 {
-					slo.RecordRecovery(0)
-				}
-				return nil
-			}
-			slo.RecordFailure(time.Since(attemptStart))
-			if runErr != nil {
-				return runErr
-			}
-			return attemptOutcomeError(outcome, output)
+			return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
 		})
 
 		if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {

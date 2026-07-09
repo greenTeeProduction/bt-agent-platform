@@ -65,3 +65,51 @@ func TestHandleScalability_ReflectsInjectedQueueAndRouter(t *testing.T) {
 		t.Errorf("Router.Healthy = %d, want 1 (single healthy local executor)", status.Router.Healthy)
 	}
 }
+
+// TestHandleDLQReplay_RequeuesInsteadOfDropping pins milestone 4/5 of the
+// drop-safe-DLQ program. The dashboard runs in a separate process from bt-agent
+// and has no tree runner of its own, so it cannot actually execute a replayed
+// task. The old handler called dlq.Replay(id), which REMOVES the entry from the
+// queue and persists the removal — a cross-process silent drop: bt-agent's
+// executor never sees the entry again and the task is lost.
+//
+// The fixed handler must instead reload the DLQ from disk and mark the entry for
+// retry (RequeuedAt) without removing it, so the entry survives on disk and
+// bt-agent's executor picks it up on its next scan.
+func TestHandleDLQReplay_RequeuesInsteadOfDropping(t *testing.T) {
+	origDLQ := dlq
+	t.Cleanup(func() { dlq = origDLQ })
+
+	dlqPath := filepath.Join(t.TempDir(), "dead_letter_queue.json")
+	dlq = reliability.NewDeadLetterQueue(dlqPath)
+	dlq.Push(reliability.DeadLetterEntry{
+		ID:    "dead-1",
+		Task:  "rebuild-index",
+		Agent: "indexer",
+		Error: "boom",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dlq/replay?id=dead-1", nil)
+	rr := httptest.NewRecorder()
+	handleDLQReplay(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	// Reload from disk to assert the cross-process contract: the entry must
+	// survive the replay rather than being silently dropped.
+	entries := reliability.NewDeadLetterQueue(dlqPath).List()
+	if len(entries) != 1 {
+		t.Fatalf("entries on disk after replay = %d, want 1 (dashboard silently dropped the entry)", len(entries))
+	}
+	if entries[0].ID != "dead-1" {
+		t.Fatalf("surviving entry ID = %q, want dead-1", entries[0].ID)
+	}
+
+	// The surviving entry must be flagged for retry so bt-agent's executor
+	// requeues it. A zero RequeuedAt means it was left untouched (never picked up).
+	if entries[0].RequeuedAt.IsZero() {
+		t.Errorf("RequeuedAt is zero; entry was not flagged for retry")
+	}
+}

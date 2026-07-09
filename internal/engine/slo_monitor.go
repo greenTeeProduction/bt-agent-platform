@@ -15,6 +15,14 @@ type SLOMetrics struct {
 	FailedCalls     int64
 	RecoveredCalls  int64
 
+	// DeferredCalls counts graceful, expected pauses (e.g. a Claude rate-limit
+	// carryover) that the scheduler treats as terminal but must NOT fold into
+	// success or failure. Deferrals deliberately leave TotalCalls,
+	// SuccessfulCalls, FailedCalls and the latency totals untouched so a backoff
+	// never inflates the success rate or success-latency the gardener's
+	// validation gate reads.
+	DeferredCalls int64
+
 	TotalLatencyMs int64
 	MaxLatencyMs   int64
 
@@ -85,6 +93,16 @@ func (m *SLOMetrics) RecordFailure(latency time.Duration) {
 	m.TotalLatencyMs += ms
 }
 
+// RecordDeferred records a graceful, terminal pause (e.g. a rate-limit
+// carryover). It increments only DeferredCalls: success/failure counters and
+// the latency totals stay untouched so the pause never skews success rate or
+// success-latency.
+func (m *SLOMetrics) RecordDeferred() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DeferredCalls++
+}
+
 func (m *SLOMetrics) RecordRecovery(latency time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,10 +114,10 @@ func (m *SLOMetrics) RecordRecovery(latency time.Duration) {
 func (m *SLOMetrics) Summary() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return fmt.Sprintf("[%s/%s] success=%.1f%% recovery=%.1f%% avg_latency=%.0fms calls=%d",
+	return fmt.Sprintf("[%s/%s] success=%.1f%% recovery=%.1f%% avg_latency=%.0fms calls=%d deferred=%d",
 		m.AgentName, m.TreeName,
 		m.successRateLocked()*100, m.recoveryRateLocked()*100,
-		m.avgLatencyMsLocked(), m.TotalCalls)
+		m.avgLatencyMsLocked(), m.TotalCalls, m.DeferredCalls)
 }
 
 // sloRegistry stores per-agent SLO metrics.

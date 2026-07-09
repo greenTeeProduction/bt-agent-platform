@@ -1039,7 +1039,13 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 	_ = encodeJSON(w, resp)
 }
 
-// handleDLQReplay removes an entry from the DLQ and returns it for re-execution.
+// handleDLQReplay flags a dead-lettered entry for retry so bt-agent's executor
+// requeues it. The dashboard runs in a separate process and has no tree runner,
+// so it cannot execute the task itself. Calling dlq.Replay here would REMOVE the
+// entry and persist the removal — a cross-process silent drop, since bt-agent
+// would never see it again. Instead we reload the queue from disk (to pick up any
+// concurrent changes from the executor) and mark the entry via Requeue, which
+// stamps RequeuedAt without removing it, leaving it on disk for the executor.
 func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -1054,7 +1060,11 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, ok := dlq.Replay(id)
+	// Reload from disk so we requeue against the executor's latest view rather
+	// than a stale in-memory copy that could clobber concurrent changes.
+	dlq.Reload()
+
+	entry, ok := dlq.Requeue(id)
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -1063,7 +1073,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]interface{}{
-		"status":  "replayed",
+		"status":  "requeued",
 		"entry":   entry,
 		"pending": dlq.Len(),
 	}

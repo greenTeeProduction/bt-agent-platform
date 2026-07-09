@@ -882,11 +882,11 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Consequences:**
 - ✅ Graceful degradation: Single failure doesn't cascade
-- ✅ Failed work preserved: DLQ enables manual inspection and replay
+- ✅ Failed work preserved: DLQ enables manual inspection and replay — and, cross-process, drop-safe requeue (2026-07-09, ADR-025): the dashboard flags an entry for the executor to retry instead of removing it
 - ✅ DLQ entries are self-diagnosable (2026-07-08): the scheduler retry closure's non-success branch (`cmd/bt-agent`) folds the run-output tail into the attempt error via the exported `agent.OutcomeErrorDetail` (a package-level `attemptOutcomeError` helper), matching what `RunOnce` already recorded internally — so a retry-exhausted `agent outcome: …` DLQ record carries the last ~400 bytes of run output (newlines flattened to `" | "`, `"no run output"` when empty) instead of a bare outcome word
 - ✅ Per-agent circuit breakers: One misbehaving agent doesn't block others
 - ⚠️ Retry delays add latency (1s→2s→4s→8s backoff)
-- ⚠️ DLQ grows unbounded without cleanup
+- ✅ DLQ bounded (2026-07-09, ADR-025): `DeadLetterQueue.Push` caps retained entries at `MaxDeadLetterEntries` (1000) with oldest-first eviction, and a poison-pill entry whose replay `Attempts` reach `MaxReplayAttempts` (5) is terminally flagged `Abandoned` and excluded from further auto-requeue — resolving the earlier unbounded-growth caveat
 
 ---
 
@@ -1174,6 +1174,24 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 ---
 
+## ADR-025: Drop-Safe, Bounded Dead-Letter Replay and an Honest Deferred SLO Outcome
+
+**Context (2026-07-09):** Q3 Reliability program "Make the dead-letter queue drop-safe and truly replayable." Three residual hazards remained after the executor gained a replay path. (1) The dashboard runs in a *separate process* from bt-agent's executor and has no tree runner, yet `handleDLQReplay` called `dlq.Replay`, which removes the entry and persists the removal — a cross-process silent drop, since the executor would never see the task again. (2) `DeadLetterQueue` was unbounded (ADR-007's open caveat): under a sustained failure storm it grew without limit in memory and on disk. (3) A "poison pill" task that failed every replay could be auto-requeued forever. Separately, the scheduler recorded a graceful Claude rate-limit carryover (the `goap_fusion_rate_limited` sentinel, §6.4/ADR-016) via `SLOMetrics.RecordSuccess`, so an expected backoff inflated the success count and success-latency totals the gardener's validation gate reads.
+
+**Decision:** Make dead-letter replay drop-safe across processes and bound it, and give the deferral its own SLO outcome. `DeadLetterEntry` gains a `RequeuedAt time.Time` field and the queue a `Reload()` (re-reads the file, discarding the stale in-memory view) plus a `Requeue(id)` method that stamps `RequeuedAt` and persists *without removing* the entry, so bt-agent's executor picks it up on its next scan. `handleDLQReplay` (`cmd/bt-dashboard/main.go`) now `Reload()`s then `Requeue()`s — returning `status: "requeued"` (OpenAPI updated in `internal/api/openapi.go`) instead of destructively replaying. Graceful-degradation guards land in `DeadLetterQueue` (`internal/reliability/reliability.go`): `Push` caps entries at `MaxDeadLetterEntries` (1000) with oldest-first eviction, and `Requeue` terminally flags an entry `Abandoned` once its replay `Attempts` reach `MaxReplayAttempts` (5), excluding it from further auto-requeue. On the metrics side, `SLOMetrics` gains a `DeferredCalls` counter and a `RecordDeferred()` method that increments *only* that counter (leaving `TotalCalls`/`SuccessfulCalls`/`FailedCalls` and the latency totals untouched, persisted via `SLOSnapshot.DeferredCalls`); the `cmd/bt-agent` scheduler retry closure — refactored into `recordSchedulerAttempt` — routes the `goap_fusion_rate_limited` carryover to `RecordDeferred` as a terminal, non-retried, non-dead-lettered disposition rather than `RecordSuccess`.
+
+**Status:** Accepted (2026-07-09)
+
+**Consequences:**
+- ✅ Dashboard-initiated replay is drop-safe cross-process: the entry survives on disk flagged for retry rather than being silently removed by a process that cannot run it; `Reload` before `Requeue` prevents a stale in-memory copy from clobbering the executor's concurrent changes
+- ✅ Resolves ADR-007's unbounded-DLQ caveat: the queue is capped with oldest-first eviction under a failure storm
+- ✅ Poison pills cannot drive an infinite replay loop: an entry is terminally `Abandoned` after `MaxReplayAttempts` and retained only for inspection
+- ✅ Rate-limit backoffs no longer skew reliability stats: a deferral is counted separately, so success rate and success-latency (which the gardener's validation gate reads) reflect only real outcomes
+- ⚠️ Requeue relies on the executor scanning `RequeuedAt`; an executor that never re-scans leaves flagged entries pending (visible in `dlq.Len()` but unretried)
+- Pinned by `cmd/bt-dashboard/main_test.go` (entry survives and is flagged), `internal/reliability/reliability_test.go` (eviction bound + poison-pill exclusion), and `cmd/bt-agent/main_test.go` (deferred recording leaves success/failure stats untouched)
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -1264,7 +1282,7 @@ go-bt-evolve
 | R9 | **MEDIUM** | **Notebook corpus pollution** — weeks of self-description web research imported junk sources into the 334-source literature notebook. | Research answers cite junk; grill quality degraded. | Prune junk sources (needs human judgment on which of the 334 are legitimate); researcher now derives real queries. |
 | R10 | **MEDIUM** | **Self-improvement navel-gazing** — with the literature source offline, all goals came from reviewing the loop's own commits; a full night landed only pipeline meta-improvements. | Platform capabilities stagnate while the pipeline polishes itself. | Structure-mode prompts steer to platform packages; seeded auction-allocation program; NotebookLM restored 2026-07-04. |
 | R11 | **LOW** | **Loop-authored dormant scaffolding** — code written by the loop but never production-executed can hide landmines that only arm when wired (preflight cycle driver failed on first real execution). | Fleet-wide fast failures after wiring changes. | Contract tests at the binary level (cmd/bt-agent wiring test); arm dormant nodes with a manual verification run. |
-| R12 | **LOW** | **Worktree/DLQ growth** — failed-run worktrees (24h grace) and the dead-letter queue accumulate. | Disk pressure on /tmp (1.9GB observed), noisy forensics. | Sweeper reaps >24h worktrees; DLQ cleanup remains open. |
+| R12 | **LOW** | **Worktree/DLQ growth** — failed-run worktrees (24h grace) and the dead-letter queue accumulate. | Disk pressure on /tmp (1.9GB observed), noisy forensics. | Sweeper reaps >24h worktrees; DLQ growth now bounded — capped at `MaxDeadLetterEntries` (1000) with oldest-first eviction plus poison-pill abandonment (ADR-025). |
 
 ### New Risks (2026-07-08)
 
@@ -1309,7 +1327,8 @@ go-bt-evolve
 | **Claude Backoff** | Durable rate-limit window for the GOAP fusion loop: a rate-limited Claude outcome persists an RFC3339 `goap_fusion_claude_backoff_until` deadline (agent-scope blackboard, ChainState fallback); while active, both Claude consumers skip in milliseconds — the plan-resume runtime degrades to ScheduledAnalysisPath preserving its carryover, the review fallback returns rate-limited without invoking Claude. Half-open: an elapsed or malformed deadline reads as inactive. `BT_GOAP_CLAUDE_BACKOFF` (default 6h) on the implementation path, fixed 1h on the review path. ADR-016. |
 | **CMA-ES** | Covariance Matrix Adaptation Evolution Strategy (`internal/evolution/cmaes.go`): continuous optimization of node-level numeric parameters (timeouts, retry counts, thresholds) rather than tree topology. `TuneTreeParameters` is the production seam — Extract→Optimize→Apply on clones, never mutating the input; reached via `bt_evolve_bottlenecks`, which routes parameterized trees to CMA-ES and parameterless ones to genetic evolution (ADR-020). |
 | **Condition** | A leaf node that evaluates a boolean predicate. Used in PreGate and OutcomeSelector for branching decisions. |
-| **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. |
+| **Dead Letter Queue (DLQ)** | Persistent JSON file (`dead_letter_queue.json`) that stores tasks whose retries have been exhausted. Bounded at `MaxDeadLetterEntries` (1000) with oldest-first eviction. The dashboard flags an entry for retry via `Requeue` (stamps `RequeuedAt`, keeps the entry on disk) rather than destructively replaying it cross-process; an entry whose replay `Attempts` reach `MaxReplayAttempts` (5) is terminally flagged `Abandoned` and excluded from further auto-requeue. ADR-025. |
+| **Deferred Outcome** | A graceful, expected scheduler pause (e.g. the `goap_fusion_rate_limited` Claude rate-limit carryover) recorded via `SLOMetrics.RecordDeferred` into a dedicated `DeferredCalls` counter. It is terminal — neither retried nor dead-lettered — and deliberately leaves the success/failure counters and latency totals untouched so a backoff never inflates the success rate or success-latency the gardener's validation gate reads. ADR-025. |
 | **DefaultTree** | The fallback behavior tree used when no specific tree matches. Extracted from a 750-line god node into 21 paths across 7 category files. |
 | **Evolution** | The process of systematically improving behavior trees through mutation, fitness evaluation, and selection. 6 algorithms available. |
 | **Experience Bank** | Persistent store of successful mutation experiences (`~/.go-bt-evolve/experience/experience.json`), EvoRepair-inspired. Warm-starts `EvolveWithExperience` operator selection via tree-type retrieval; only fitness-improving mutations are recorded. Wired into `bt_evolve_genetic` and `bt_evolve_bottlenecks` (ADR-017) and shared with bt-gardener, whose v2 cycles record accepted mutations and bias candidate ordering from the same file (ADR-021). Bounded at 500 entries: quality-aware eviction (lowest quality/oldest first, `TimesReused >= 3` protected) enforced on Add and on load (ADR-018). Safe for the two concurrent writers: every full-file write path (Add, MarkReused, Persist) re-merges on-disk entries by ID and holds an exclusive flock on the `experience.json.lock` sidecar across merge→rename (ADR-022, ADR-024). |

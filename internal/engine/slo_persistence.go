@@ -18,6 +18,7 @@ type SLOSnapshot struct {
 	SuccessfulCalls int64     `json:"successful_calls"`
 	FailedCalls     int64     `json:"failed_calls"`
 	RecoveredCalls  int64     `json:"recovered_calls"`
+	DeferredCalls   int64     `json:"deferred_calls"`
 	TotalLatencyMs  int64     `json:"total_latency_ms"`
 	MaxLatencyMs    int64     `json:"max_latency_ms"`
 	SavedAt         time.Time `json:"saved_at"`
@@ -50,6 +51,7 @@ func (m *SLOMetrics) Snapshot() SLOSnapshot {
 		SuccessfulCalls: m.SuccessfulCalls,
 		FailedCalls:     m.FailedCalls,
 		RecoveredCalls:  m.RecoveredCalls,
+		DeferredCalls:   m.DeferredCalls,
 		TotalLatencyMs:  m.TotalLatencyMs,
 		MaxLatencyMs:    m.MaxLatencyMs,
 		SavedAt:         time.Now(),

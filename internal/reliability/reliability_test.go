@@ -2,6 +2,7 @@ package reliability
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -177,6 +178,80 @@ func TestDeadLetterQueue_Persistence(t *testing.T) {
 	dlq2 := NewDeadLetterQueue(path)
 	if dlq2.Len() != 1 {
 		t.Errorf("expected 1 entry after reload, got %d", dlq2.Len())
+	}
+}
+
+// TestDeadLetterQueue_EvictionBound asserts the graceful-degradation cap: the
+// DLQ never grows past MaxDeadLetterEntries, and when it overflows the OLDEST
+// entries are evicted first (bounded memory / disk under a failure storm).
+func TestDeadLetterQueue_EvictionBound(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+
+	total := MaxDeadLetterEntries + 25
+	for i := 0; i < total; i++ {
+		dlq.Push(DeadLetterEntry{ID: fmt.Sprintf("e-%d", i), Task: "storm"})
+	}
+
+	if dlq.Len() != MaxDeadLetterEntries {
+		t.Fatalf("expected Len capped at %d, got %d", MaxDeadLetterEntries, dlq.Len())
+	}
+
+	ids := make(map[string]bool, MaxDeadLetterEntries)
+	for _, e := range dlq.List() {
+		ids[e.ID] = true
+	}
+
+	// Oldest-first eviction: the first-pushed entry is gone, the last survives.
+	if ids["e-0"] {
+		t.Errorf("oldest entry e-0 should have been evicted")
+	}
+	if newest := fmt.Sprintf("e-%d", total-1); !ids[newest] {
+		t.Errorf("newest entry %s should be retained", newest)
+	}
+	// The retained window is exactly the most recent MaxDeadLetterEntries IDs.
+	if firstKept := fmt.Sprintf("e-%d", total-MaxDeadLetterEntries); !ids[firstKept] {
+		t.Errorf("entry %s should be within the retained window", firstKept)
+	}
+	if justEvicted := fmt.Sprintf("e-%d", total-MaxDeadLetterEntries-1); ids[justEvicted] {
+		t.Errorf("entry %s should have been evicted (just outside the window)", justEvicted)
+	}
+}
+
+// TestDeadLetterQueue_PoisonPillExclusion asserts that an entry which keeps
+// failing replay is terminally flagged Abandoned once its Attempts exceed
+// MaxReplayAttempts, and is then excluded from further auto-requeue — the guard
+// that stops a poison pill from driving an infinite replay loop.
+func TestDeadLetterQueue_PoisonPillExclusion(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{ID: "poison", Task: "always fails"})
+
+	// Auto-requeue up to the threshold: each requeue counts one replay attempt.
+	for i := 0; i < MaxReplayAttempts; i++ {
+		if _, ok := dlq.Requeue("poison"); !ok {
+			t.Fatalf("requeue %d should succeed while under the attempt threshold", i+1)
+		}
+	}
+
+	// Exceeding the threshold must be refused and terminally abandon the entry.
+	if _, ok := dlq.Requeue("poison"); ok {
+		t.Fatal("requeue past the attempt threshold must be refused (poison-pill excluded)")
+	}
+
+	entries := dlq.List()
+	if len(entries) != 1 {
+		t.Fatalf("abandoned entry should remain for inspection, got %d entries", len(entries))
+	}
+	e := entries[0]
+	if !e.Abandoned {
+		t.Errorf("entry exceeding %d replay attempts must be flagged Abandoned", MaxReplayAttempts)
+	}
+	if e.Attempts < MaxReplayAttempts {
+		t.Errorf("expected Attempts >= %d, got %d", MaxReplayAttempts, e.Attempts)
+	}
+
+	// Terminal: subsequent requeues stay refused (no infinite replay loop).
+	if _, ok := dlq.Requeue("poison"); ok {
+		t.Error("an abandoned entry must never be auto-requeued again")
 	}
 }
 
