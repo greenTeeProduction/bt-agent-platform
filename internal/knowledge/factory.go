@@ -148,6 +148,12 @@ func (f *Factory) Breed(task, category string, parentIDs []string) *evolution.Se
 	if len(parentIDs) == 0 {
 		// Auto-select parents from the same category
 		parentIDs = f.selectParents(category, task)
+	} else {
+		// Caller-supplied parents: refresh their fitness from the live graph
+		// too, so any breeding path weights off current fitness (milestone 4/5).
+		for _, pid := range parentIDs {
+			f.refreshTemplateFitness(f.Templates[pid])
+		}
 	}
 	if len(parentIDs) < 2 {
 		return f.breedFromArchetype(category)
@@ -455,6 +461,12 @@ func (f *Factory) selectParents(category, _ string) []string {
 			candidates = append(candidates, id)
 		}
 	}
+	// Refresh each candidate's fitness from the live graph so selection reflects
+	// fitness updates applied after NewFactory snapshotted templates (milestone
+	// 4/5 of the selection-pressure program: breed off live, not stale, fitness).
+	for _, id := range candidates {
+		f.refreshTemplateFitness(f.Templates[id])
+	}
 	// Pick 2-3 parents, weighted by template fitness so high-fitness parents
 	// are drawn far more often than uniform shuffle would allow (milestone 1/5
 	// of the selection-pressure program: fitness-driven breeding).
@@ -463,6 +475,27 @@ func (f *Factory) selectParents(category, _ string) []string {
 		n = len(candidates)
 	}
 	return f.weightedSampleParents(candidates, n)
+}
+
+// refreshTemplateFitness re-reads a template's fitness and run count from the
+// live KnowledgeGraph, overwriting the snapshot cached when NewFactory extracted
+// templates. Called at breed time so a tree whose KG fitness changed after
+// factory construction is weighted by its current fitness, not the stale one
+// (milestone 4/5). Templates whose SourceID is no longer registered keep their
+// snapshot values.
+func (f *Factory) refreshTemplateFitness(tmpl *TreeTemplate) {
+	if tmpl == nil || f.Graph == nil {
+		return
+	}
+	meta, ok := f.Graph.Trees[tmpl.SourceID]
+	if !ok || meta == nil {
+		return
+	}
+	if tmpl.Metadata == nil {
+		tmpl.Metadata = make(map[string]any)
+	}
+	tmpl.Metadata["fitness"] = meta.Fitness
+	tmpl.Metadata["run_count"] = meta.RunCount
 }
 
 // weightedSampleParents draws n distinct parents via roulette-wheel sampling

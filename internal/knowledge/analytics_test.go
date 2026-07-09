@@ -171,6 +171,53 @@ func TestComputeAnalytics_Bottlenecks(t *testing.T) {
 	}
 }
 
+func TestComputeAnalytics_SelectionPressure(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// Proven but underbred: high fitness, low run count — the loop should surface
+	// this as a selection-pressure opportunity (a proven tree nobody is exercising).
+	kg.Register(&TreeMeta{ID: "proven_underused", Name: "Proven Underused", Category: "test", Fitness: 90.0, RunCount: 1})
+	// Proven AND well-exercised: high fitness but plenty of runs — not underbred.
+	kg.Register(&TreeMeta{ID: "proven_wellused", Name: "Proven Wellused", Category: "test", Fitness: 90.0, RunCount: 20})
+	// Underused but unproven: low fitness — not a selection-pressure signal.
+	kg.Register(&TreeMeta{ID: "weak_underused", Name: "Weak Underused", Category: "test", Fitness: 10.0, RunCount: 1})
+
+	a := kg.ComputeAnalytics()
+
+	// The proven-but-underbred tree must appear in the selection-pressure report.
+	found := false
+	for _, sp := range a.SelectionPressure {
+		if sp.TreeID == "proven_underused" {
+			found = true
+			if sp.Fitness != 90.0 {
+				t.Errorf("expected proven_underused fitness 90, got %v", sp.Fitness)
+			}
+			if sp.RunCount != 1 {
+				t.Errorf("expected proven_underused run count 1, got %d", sp.RunCount)
+			}
+		}
+		if sp.TreeID == "proven_wellused" {
+			t.Error("'proven_wellused' should NOT be selection pressure (already well-exercised)")
+		}
+		if sp.TreeID == "weak_underused" {
+			t.Error("'weak_underused' should NOT be selection pressure (fitness too low to be proven)")
+		}
+	}
+	if !found {
+		t.Errorf("expected 'proven_underused' in selection pressure, got: %+v", a.SelectionPressure)
+	}
+
+	// It must also surface as a suggested action so the loop actually sees it.
+	hasAction := false
+	for _, action := range a.SuggestedActions {
+		if strings.Contains(action, "proven_underused") {
+			hasAction = true
+		}
+	}
+	if !hasAction {
+		t.Errorf("expected suggested action for underbred proven tree, got: %v", a.SuggestedActions)
+	}
+}
+
 func TestComputeAnalytics_SuggestedActions(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	kg.Register(&TreeMeta{ID: "bottleneck", Name: "Bottleneck", Category: "test", RunCount: 5, Fitness: 15.0})

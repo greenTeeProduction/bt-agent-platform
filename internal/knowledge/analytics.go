@@ -8,12 +8,23 @@ import (
 
 // Analytics holds computed graph analytics.
 type Analytics struct {
-	Centrality       []CentralityEntry
-	ToolContention   []ContentionEntry
-	CoverageGaps     []string
-	Bottlenecks      []BottleneckEntry
-	SuggestedActions []string
+	Centrality        []CentralityEntry
+	ToolContention    []ContentionEntry
+	CoverageGaps      []string
+	Bottlenecks       []BottleneckEntry
+	SelectionPressure []SelectionPressureEntry
+	SuggestedActions  []string
 }
+
+// Selection-pressure thresholds: a proven tree that nobody is exercising.
+const (
+	// provenFitnessThreshold is the fitness at or above which a tree counts as
+	// "proven" — worth breeding from rather than leaving idle.
+	provenFitnessThreshold = 70.0
+	// underbredRunThreshold is the run count below which a proven tree counts as
+	// "underbred" — high fitness but starved of selection pressure.
+	underbredRunThreshold = 5
+)
 
 // CentralityEntry is a tree and how many others depend on it.
 type CentralityEntry struct {
@@ -33,6 +44,14 @@ type BottleneckEntry struct {
 	TreeID      string
 	SuccessRate float64
 	Runs        int
+}
+
+// SelectionPressureEntry is a proven tree (high fitness) that is underbred
+// (low run count) — a high-fitness asset the loop is failing to exercise.
+type SelectionPressureEntry struct {
+	TreeID   string
+	Fitness  float64
+	RunCount int
 }
 
 // ComputeAnalytics runs all analytics on the knowledge graph.
@@ -107,7 +126,23 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 		return a.Bottlenecks[i].SuccessRate < a.Bottlenecks[j].SuccessRate
 	})
 
-	// 5. Suggested actions
+	// 5. Selection pressure: proven trees (high fitness) that are underbred
+	// (low run count). These are winners the loop keeps on the shelf — surfacing
+	// them lets breeding and deterministic discovery become fitness-driven.
+	for id, tree := range kg.Trees {
+		if tree.Fitness >= provenFitnessThreshold && tree.RunCount < underbredRunThreshold {
+			a.SelectionPressure = append(a.SelectionPressure, SelectionPressureEntry{
+				TreeID:   id,
+				Fitness:  tree.Fitness,
+				RunCount: tree.RunCount,
+			})
+		}
+	}
+	sort.Slice(a.SelectionPressure, func(i, j int) bool {
+		return a.SelectionPressure[i].Fitness > a.SelectionPressure[j].Fitness
+	})
+
+	// 6. Suggested actions
 	for _, gap := range a.CoverageGaps {
 		a.SuggestedActions = append(a.SuggestedActions,
 			fmt.Sprintf("Register %s as a KG tree (skill exists)", gap))
@@ -125,6 +160,11 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 			action += fmt.Sprintf(" — last failure: %s (%s)", trace.Outcome, trace.Task)
 		}
 		a.SuggestedActions = append(a.SuggestedActions, action)
+	}
+	for _, sp := range a.SelectionPressure {
+		a.SuggestedActions = append(a.SuggestedActions,
+			fmt.Sprintf("Breed/exercise %s: proven (%.0f%% fitness) but underbred (%d runs) — apply selection pressure",
+				sp.TreeID, sp.Fitness, sp.RunCount))
 	}
 
 	return a
@@ -171,6 +211,14 @@ func (a Analytics) FormatAnalytics() string {
 		s.WriteString("Bottlenecks (low success rate):\n")
 		for _, b := range a.Bottlenecks {
 			fmt.Fprintf(&s, "  %-35s %.0f%% success (%d runs)\n", b.TreeID, b.SuccessRate, b.Runs)
+		}
+		s.WriteString("\n")
+	}
+
+	if len(a.SelectionPressure) > 0 {
+		s.WriteString("Selection Pressure (proven but underbred trees):\n")
+		for _, sp := range a.SelectionPressure {
+			fmt.Fprintf(&s, "  %-35s %.0f%% fitness, %d runs\n", sp.TreeID, sp.Fitness, sp.RunCount)
 		}
 		s.WriteString("\n")
 	}
