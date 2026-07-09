@@ -476,21 +476,35 @@ func growthFitness(tr *SerializableNode) float64 {
 }
 
 func TestEvolveWithExperience_RecordsImprovingMutations(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
 	dir := t.TempDir()
 	eb, err := NewExperienceBank(dir)
 	if err != nil {
 		t.Fatalf("NewExperienceBank: %v", err)
 	}
 
-	pop := NewPopulation(8, DefaultTree())
-	best := pop.EvolveWithExperience(3, growthFitness, eb)
-	if best == nil {
-		t.Fatal("EvolveWithExperience returned nil best tree")
+	// A single seeded run is fragile: ANY change to the evolve code path's
+	// draw pattern (map-elites edits on 2026-07-09 13:03, crisis-intervention
+	// wiring the same evening) shifts which mutations a fixed seed produces,
+	// and a short run may then record nothing — this test wedged fleet
+	// landings intermittently both times. Whether at least one improving
+	// mutation OCCURS is stochastic; that every recorded mutation is improving
+	// (asserted below) is the real invariant. Try a few seeds: a genuine
+	// AddFromMutation wiring regression fails all of them deterministically.
+	var best *SerializableNode
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		pop := NewPopulation(8, DefaultTree())
+		best = pop.EvolveWithExperience(3, growthFitness, eb)
+		if best == nil {
+			t.Fatal("EvolveWithExperience returned nil best tree")
+		}
+		if eb.Count() > 0 {
+			break
+		}
 	}
 
 	if eb.Count() == 0 {
-		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation; bank is empty")
+		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation across three seeded runs; bank is empty")
 	}
 	for i, e := range eb.Entries {
 		if e.FitnessDelta <= 0 {

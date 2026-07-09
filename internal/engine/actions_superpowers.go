@@ -1360,6 +1360,19 @@ func init() {
 				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; could not materialize its on-disk tree to HEAD via `%s`: %v\n\n%s", goapFusionRepo, checkout, coErr, strings.TrimSpace(co))
 				return -1
 			}
+			// checkout -f HEAD -- . rewrites files present in HEAD but neither
+			// removes on-disk files a commit deleted nor drops their stale index
+			// entries — a landing that deletes a tracked file (git rm) then wedges
+			// every cycle on a phantom diff (2026-07-10 bt-scalability-probe;
+			// predicted by the 2026-07-03 cicd-move incident). Sync the index to
+			// HEAD so the verification below sees only real drift; the deleted
+			// file may remain on disk as untracked, which the tracked-files
+			// contract deliberately ignores.
+			indexSync := fmt.Sprintf("git --git-dir=%s --work-tree=. read-tree HEAD", gd)
+			if so, syncErr := runGoapShell(indexSync); syncErr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materialized the on-disk tree but could not sync its index to HEAD via `%s`: %v\n\n%s", goapFusionRepo, indexSync, syncErr, strings.TrimSpace(so))
+				return -1
+			}
 			verify := fmt.Sprintf("git --git-dir=%s --work-tree=. diff --name-only HEAD --", gd)
 			diff, derr := runGoapShell(verify)
 			if derr != nil {

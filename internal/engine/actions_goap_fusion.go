@@ -19,12 +19,16 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
+// goapFusionRepo is the main repo the scheduled loop builds and applies to.
+// A var (not const) so preflight-guard tests can point it at an isolated
+// throwaway repo.
+var goapFusionRepo = "/home/nico/go-bt-evolve"
+
 const (
 	goapFusionVaultDir     = "/mnt/ssd/clawd/wiki/bt-research"
 	goapFusionSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
 	goapFusionPlansDir     = "/mnt/ssd/clawd/wiki/bt-research/plans"
 	goapFusionGraphReport  = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
-	goapFusionRepo         = "/home/nico/go-bt-evolve"
 	goapFusionClaudeBin    = "/home/nico/.local/bin/claude"
 	goapFusionGoBin        = "/usr/local/go/bin/go"
 	goapFusionGraphifyTool = "graphify"
