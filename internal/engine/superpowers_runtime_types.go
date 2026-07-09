@@ -42,7 +42,9 @@ type SuperpowersRun struct {
 	// run's completed tasks landed (partial-landing mode).
 	PartialFailure string `json:"partial_failure,omitempty"`
 	// Arc42Sync records what the documentation sync stage did for this run.
-	Arc42Sync     string    `json:"arc42_sync,omitempty"`
+	Arc42Sync string `json:"arc42_sync,omitempty"`
+	// DocDriftSync records what the doc-drift repair stage did for this run.
+	DocDriftSync  string    `json:"doc_drift_sync,omitempty"`
 	PatchPath     string    `json:"patch_path,omitempty"`
 	AppliedCommit string    `json:"applied_commit,omitempty"`
 	StartedAt     time.Time `json:"started_at"`

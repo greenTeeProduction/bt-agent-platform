@@ -263,12 +263,16 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 	return nil
 }
 
-func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error {
-	run.Phase = SuperpowersPhaseVerification
-	checks := []struct {
-		name string
-		cmd  string
-	}{
+// superpowersVerificationCheck is one named verification command; the run
+// fails on the first check whose command exits non-zero.
+type superpowersVerificationCheck struct {
+	name string
+	cmd  string
+}
+
+// buildSuperpowersVerificationChecks assembles the run's verification suite.
+func buildSuperpowersVerificationChecks(run *SuperpowersRun) []superpowersVerificationCheck {
+	checks := []superpowersVerificationCheck{
 		{"focused-tests", "/usr/local/go/bin/go test ./internal/domains ./internal/engine -count=1 -run 'TestSuperpowersPipeline_ProductionContract|TestSuperpowersRuntime_ActionsRegistered|TestGoapFusion_Structure|TestValidateOutputQuality' -timeout 180s"},
 		{"build", "/usr/local/go/bin/go build ./cmd/bt-agent ./cmd/bt-agent-cli"},
 	}
@@ -276,20 +280,26 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 	// runs touch more packages, and every touched package gets its full
 	// suite — not just the fixed contract set above.
 	if cmd := changedPackagesTestCommand(run.ChangedFiles); cmd != "" {
-		checks = append(checks, struct {
-			name string
-			cmd  string
-		}{"changed-packages-tests", cmd})
+		checks = append(checks, superpowersVerificationCheck{"changed-packages-tests", cmd})
 	}
 	// Lint parity with the hook-gated landing commit: catch lint failures
 	// here, with evidence, instead of at the final commit.
 	if cmd := changedPackagesLintCommand(run.ChangedFiles); cmd != "" {
-		checks = append(checks, struct {
-			name string
-			cmd  string
-		}{"changed-packages-lint", cmd})
+		checks = append(checks, superpowersVerificationCheck{"changed-packages-lint", cmd})
 	}
-	for _, check := range checks {
+	// Documentation parity: the trees own the docs. A run that leaves the
+	// drift-checked documentation inconsistent with the code FAILS here —
+	// syncDriftDocs (which runs before verification) is the writer that
+	// satisfies this gate; this check is what keeps it honest.
+	if _, err := os.Stat(filepath.Join(run.WorktreePathOrRepo(), docDriftScriptRelPath)); err == nil {
+		checks = append(checks, superpowersVerificationCheck{"doc-drift", "bash " + docDriftScriptRelPath})
+	}
+	return checks
+}
+
+func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error {
+	run.Phase = SuperpowersPhaseVerification
+	for _, check := range buildSuperpowersVerificationChecks(run) {
 		res := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)
 		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
 		run.Verification = append(run.Verification, vc)

@@ -917,6 +917,13 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		run.Arc42Sync = note
 		_ = writeSuperpowersRunJSON(run)
 	}
+	// Doc-drift repair before the hard doc-drift verification check: the
+	// trees write the documentation their changes require (and self-heal
+	// drift inherited from external landings) in the same commit.
+	if _, note := syncDriftDocs(c, defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, run); note != "" {
+		run.DocDriftSync = note
+		_ = writeSuperpowersRunJSON(run)
+	}
 	if err := VerifySuperpowersRunRuntime(c, run); err != nil {
 		bb.Result = "## GOAP Superpowers Verification Failed\n\n" + err.Error()
 		return -1
@@ -1044,6 +1051,9 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 	}
 	if run.Arc42Sync != "" {
 		fmt.Fprintf(&b, "- arc42 sync: %s\n", run.Arc42Sync)
+	}
+	if run.DocDriftSync != "" {
+		fmt.Fprintf(&b, "- doc-drift sync: %s\n", run.DocDriftSync)
 	}
 	if run.PatchPath != "" {
 		fmt.Fprintf(&b, "- Patch: `%s`\n", run.PatchPath)
