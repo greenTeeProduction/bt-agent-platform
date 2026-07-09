@@ -1,10 +1,13 @@
 package knowledge
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // =============================================================================
@@ -268,5 +271,112 @@ func TestExplainLastFailure_NoTrace(t *testing.T) {
 	report := kg.ExplainLastFailure("tree:unknown")
 	if !strings.Contains(report, "no failure traces found") {
 		t.Errorf("expected 'no failure traces found', got: %s", report)
+	}
+}
+
+// =============================================================================
+// MILESTONE 3 — bridge real Selector child outcomes into the durable
+// SelectorOptimizer store (from MILESTONE 1–2).
+// =============================================================================
+
+// TestRecordSelectorOutcomes_UpdatesPersistedPerChildCounts verifies that
+// walking a DecisionTrace through a two-child Selector records each child's
+// success/failure into the durable per-child store and that the counts survive
+// a reload from disk (a fresh optimizer sees them).
+func TestRecordSelectorOutcomes_UpdatesPersistedPerChildCounts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selector_stats.json")
+
+	// A Selector "sel" tries childA (fails), then childB (succeeds). The trace
+	// is a pre-order walk; each child step is attributed to its Selector via
+	// ParentName so the bridge can bucket outcomes per child.
+	trace := DecisionTrace{
+		RunID:  "sel-run-1",
+		TreeID: "tree:sel",
+		Task:   "pick a strategy",
+		Steps: []TraceStep{
+			{NodeName: "sel", NodeType: "Selector", Status: "success"},
+			{NodeName: "childA", NodeType: "Action", Status: "failure", ParentName: "sel", Error: "boom"},
+			{NodeName: "childB", NodeType: "Action", Status: "success", ParentName: "sel"},
+		},
+		Outcome:   "success",
+		StartedAt: time.Now().Add(-time.Second),
+		EndedAt:   time.Now(),
+	}
+
+	if err := RecordSelectorOutcomes(trace, path); err != nil {
+		t.Fatalf("RecordSelectorOutcomes returned error: %v", err)
+	}
+
+	// Reload from disk into a brand-new optimizer — proves durability.
+	reloaded := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	if err := reloaded.LoadSelectorStats(path); err != nil {
+		t.Fatalf("LoadSelectorStats: %v", err)
+	}
+
+	stats := reloaded.Stats["sel"]
+	if stats == nil {
+		t.Fatalf("expected persisted stats for selector 'sel', got none")
+	}
+	childA := stats.Children["childA"]
+	childB := stats.Children["childB"]
+	if childA == nil || childB == nil {
+		t.Fatalf("expected per-child stats for both children, got childA=%v childB=%v", childA, childB)
+	}
+	if childA.Failures != 1 {
+		t.Errorf("childA.Failures = %d, want 1", childA.Failures)
+	}
+	if childA.Successes != 0 {
+		t.Errorf("childA.Successes = %d, want 0", childA.Successes)
+	}
+	if childB.Successes != 1 {
+		t.Errorf("childB.Successes = %d, want 1", childB.Successes)
+	}
+	if childB.Failures != 0 {
+		t.Errorf("childB.Failures = %d, want 0", childB.Failures)
+	}
+}
+
+// TestRecordSelectorOutcomes_AccumulatesAcrossTraces verifies the bridge sums
+// per-child counts into the durable store across successive traces rather than
+// clobbering the earlier run.
+func TestRecordSelectorOutcomes_AccumulatesAcrossTraces(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selector_stats.json")
+
+	mk := func(childBStatus string) DecisionTrace {
+		return DecisionTrace{
+			RunID:  "acc",
+			TreeID: "tree:sel",
+			Steps: []TraceStep{
+				{NodeName: "sel", NodeType: "Selector", Status: "success"},
+				{NodeName: "childA", NodeType: "Action", Status: "failure", ParentName: "sel"},
+				{NodeName: "childB", NodeType: "Action", Status: childBStatus, ParentName: "sel"},
+			},
+			Outcome: "success",
+		}
+	}
+
+	if err := RecordSelectorOutcomes(mk("success"), path); err != nil {
+		t.Fatalf("first RecordSelectorOutcomes: %v", err)
+	}
+	if err := RecordSelectorOutcomes(mk("failure"), path); err != nil {
+		t.Fatalf("second RecordSelectorOutcomes: %v", err)
+	}
+
+	reloaded := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	if err := reloaded.LoadSelectorStats(path); err != nil {
+		t.Fatalf("LoadSelectorStats: %v", err)
+	}
+	stats := reloaded.Stats["sel"]
+	if stats == nil {
+		t.Fatalf("expected persisted stats for 'sel'")
+	}
+	if got := stats.Children["childA"].Failures; got != 2 {
+		t.Errorf("childA.Failures = %d, want 2 (accumulated)", got)
+	}
+	if got := stats.Children["childB"].Successes; got != 1 {
+		t.Errorf("childB.Successes = %d, want 1", got)
+	}
+	if got := stats.Children["childB"].Failures; got != 1 {
+		t.Errorf("childB.Failures = %d, want 1", got)
 	}
 }

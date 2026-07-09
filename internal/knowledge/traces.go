@@ -3,6 +3,8 @@ package knowledge
 import (
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // DecisionTrace captures the full execution path through a behavior tree.
@@ -25,6 +27,11 @@ type TraceStep struct {
 	LLMOutput  string `json:"llm_output,omitempty"`
 	LLMPrompt  string `json:"llm_prompt,omitempty"`
 	Error      string `json:"error,omitempty"`
+	// ParentName attributes a child step to its enclosing composite node (e.g.
+	// the Selector that tried this child). It lets the Selector-ordering bridge
+	// bucket each child outcome under the right Selector without reconstructing
+	// the tree topology. Empty for root or unattributed steps.
+	ParentName string `json:"parent_name,omitempty"`
 }
 
 // TraceStore holds a rolling buffer of recent traces.
@@ -80,6 +87,44 @@ func (ts *TraceStore) LastFailure(treeID string) *DecisionTrace {
 
 // GlobalTraceStore is the singleton trace store.
 var GlobalTraceStore = NewTraceStore(100)
+
+// RecordSelectorOutcomes bridges executed decision traces into the durable
+// Selector-ordering telemetry store (evolution.SelectorOptimizer, MILESTONE
+// 1–2). It walks the trace's pre-order step list, notes every Selector node,
+// and for each step attributed to a Selector via ParentName records that
+// child's success/failure outcome under its Selector. The accumulated per-child
+// counts are then persisted to path — SaveSelectorStats sums onto whatever is
+// already on disk, so counts from successive traces accumulate rather than
+// clobber earlier runs. A trace with no Selector-attributed child steps is a
+// no-op (no file write).
+func RecordSelectorOutcomes(trace DecisionTrace, path string) error {
+	selectors := make(map[string]bool)
+	for _, step := range trace.Steps {
+		if step.NodeType == "Selector" {
+			selectors[step.NodeName] = true
+		}
+	}
+	if len(selectors) == 0 {
+		return nil
+	}
+
+	opt := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	recorded := false
+	for _, step := range trace.Steps {
+		if step.ParentName == "" || !selectors[step.ParentName] {
+			continue
+		}
+		opt.Record(step.ParentName, evolution.NodeExecutionRecord{
+			NodeName: step.NodeName,
+			Outcome:  step.Status,
+		})
+		recorded = true
+	}
+	if !recorded {
+		return nil
+	}
+	return opt.SaveSelectorStats(path)
+}
 
 // ExplainLastFailure returns a human-readable explanation of why a tree last failed.
 func (kg *KnowledgeGraph) ExplainLastFailure(treeID string) string {

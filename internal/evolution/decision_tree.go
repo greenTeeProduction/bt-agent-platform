@@ -1,7 +1,10 @@
 package evolution
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strings"
 )
@@ -34,6 +37,99 @@ type DTAnalyzer struct {
 // NewDTAnalyzer creates a new decision tree analyzer.
 func NewDTAnalyzer() *DTAnalyzer {
 	return &DTAnalyzer{Stats: make(map[string]*DTSelectorStats)}
+}
+
+// dtStatsFile is the on-disk JSON shape for persisted selector statistics.
+type dtStatsFile struct {
+	Stats map[string]*DTSelectorStats `json:"stats"`
+}
+
+// Save persists the analyzer's selector statistics to path as JSON. The write
+// is atomic (tmp file + rename) and runs under the shared sidecar flock so a
+// concurrent Save/Load never observes a half-written file — the same
+// cross-process discipline the ExperienceBank uses. An analyzer with no
+// recorded telemetry writes an empty stats object rather than erroring.
+func (d *DTAnalyzer) Save(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	data, err := json.MarshalIndent(dtStatsFile{Stats: d.Stats}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal decision-tree stats: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("write tmp decision-tree stats: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename decision-tree stats: %w", err)
+	}
+	return nil
+}
+
+// Load merges persisted selector statistics from path into the in-memory
+// stats, summing HitCount/SuccessCount/TotalTasks so telemetry from
+// independent runs accumulates instead of clobbering one another. A missing
+// file is a silent no-op — a fresh deployment has nothing to load. The read
+// runs under the shared sidecar flock so it never observes a half-written Save.
+func (d *DTAnalyzer) Load(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read decision-tree stats: %w", err)
+	}
+	var disk dtStatsFile
+	if err := json.Unmarshal(data, &disk); err != nil {
+		return fmt.Errorf("unmarshal decision-tree stats: %w", err)
+	}
+	if d.Stats == nil {
+		d.Stats = make(map[string]*DTSelectorStats)
+	}
+	for name, ds := range disk.Stats {
+		if ds == nil {
+			continue
+		}
+		d.mergeSelectorStats(name, ds)
+	}
+	return nil
+}
+
+// mergeSelectorStats folds one persisted selector's counts into the in-memory
+// stats, summing selector- and path-level HitCount/SuccessCount/TotalTasks and
+// adopting the condition of any path first seen on disk.
+func (d *DTAnalyzer) mergeSelectorStats(name string, ds *DTSelectorStats) {
+	cur, ok := d.Stats[name]
+	if !ok || cur == nil {
+		cur = &DTSelectorStats{NodeName: name}
+		d.Stats[name] = cur
+	}
+	cur.TotalTasks += ds.TotalTasks
+	for _, dp := range ds.Paths {
+		merged := false
+		for i := range cur.Paths {
+			if cur.Paths[i].PathName == dp.PathName {
+				cur.Paths[i].HitCount += dp.HitCount
+				cur.Paths[i].SuccessCount += dp.SuccessCount
+				cur.Paths[i].TotalTasks += dp.TotalTasks
+				if cur.Paths[i].Condition == "" {
+					cur.Paths[i].Condition = dp.Condition
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			cur.Paths = append(cur.Paths, dp)
+		}
+	}
 }
 
 // RecordHit records that a Selector path was chosen and whether it succeeded.
@@ -205,6 +301,11 @@ func NewBTOptimizer() *BTOptimizer {
 //
 // Returns the number of changes made.
 func (o *BTOptimizer) OptimizeSelectors(tree *SerializableNode) int {
+	// No telemetry → no evidence to reorder on. Degrade to a no-op rather than
+	// shuffling paths on empty information-gain scores.
+	if o.Analyzer == nil || len(o.Analyzer.Stats) == 0 {
+		return 0
+	}
 	changes := 0
 	o.optimizeNode(tree, &changes)
 	return changes

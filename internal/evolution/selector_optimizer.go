@@ -1,8 +1,12 @@
 package evolution
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 	"sort"
+	"sync"
 )
 
 // ─── Selector Node Optimization ──────────────────────────────────────────
@@ -152,6 +156,11 @@ type SelectorOptimizer struct {
 	Stats      map[string]*SelectorStats // selector name → stats
 	Strategy   SelectorOrderingStrategy
 	MinSamples int // minimum samples before reordering (default: 10)
+
+	// mu guards Stats during the durable Save/Load merge so an in-memory
+	// merge from disk is atomic with respect to the eventual rewrite. The
+	// cross-process/cross-optimizer guard is the ADR-024 sidecar flock.
+	mu sync.Mutex
 }
 
 // NewSelectorOptimizer creates a new optimizer with the given strategy.
@@ -188,6 +197,115 @@ func (so *SelectorOptimizer) Record(parentName string, rec NodeExecutionRecord) 
 		cs.Running++
 	}
 	cs.TotalTicks++
+}
+
+// ─── Durable Telemetry (ADR-024 flock + atomic tmp+rename) ───────────────
+
+// selectorStatsFile is the on-disk envelope for persisted Selector telemetry.
+type selectorStatsFile struct {
+	Selectors map[string]*SelectorStats `json:"selectors"`
+}
+
+// SaveSelectorStats atomically persists per-Selector telemetry to path so it
+// survives process restarts. It follows the ExperienceBank pattern: under the
+// ADR-024 sidecar flock it first sums any counts already on disk into the
+// in-memory Stats (so telemetry from independent writers or earlier runs
+// accumulates rather than being clobbered), then rewrites the whole file via
+// tmp + rename. Holding the flock across merge and rename prevents a
+// concurrent writer from renaming its own snapshot into place inside the
+// window and having it silently overwritten.
+func (so *SelectorOptimizer) SaveSelectorStats(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	if err := so.mergeSelectorStatsFromDiskLocked(path); err != nil {
+		return err
+	}
+	return so.persistSelectorStatsLocked(path)
+}
+
+// LoadSelectorStats merges the persisted per-Selector telemetry at path into
+// the in-memory Stats, summing each child's success/failure/running counts so
+// a restarted optimizer resumes from the accumulated history. A missing file
+// is a no-op; a corrupt file is reported.
+func (so *SelectorOptimizer) LoadSelectorStats(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	return so.mergeSelectorStatsFromDiskLocked(path)
+}
+
+// mergeSelectorStatsFromDiskLocked reads the persisted file and sums its
+// per-child counts into the in-memory Stats. A missing file leaves state
+// untouched. Caller must hold so.mu (and, for a rewrite, the sidecar flock).
+func (so *SelectorOptimizer) mergeSelectorStatsFromDiskLocked(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read selector stats %s: %w", path, err)
+	}
+	var file selectorStatsFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return fmt.Errorf("unmarshal selector stats %s: %w", path, err)
+	}
+	if so.Stats == nil {
+		so.Stats = make(map[string]*SelectorStats)
+	}
+	for parent, ds := range file.Selectors {
+		if ds == nil {
+			continue
+		}
+		cur, ok := so.Stats[parent]
+		if !ok {
+			cur = &SelectorStats{ParentName: parent, Children: make(map[string]*ChildStats)}
+			so.Stats[parent] = cur
+		}
+		for name, dcs := range ds.Children {
+			if dcs == nil {
+				continue
+			}
+			ccs, ok := cur.Children[name]
+			if !ok {
+				ccs = &ChildStats{Name: name}
+				cur.Children[name] = ccs
+			}
+			ccs.Successes += dcs.Successes
+			ccs.Failures += dcs.Failures
+			ccs.Running += dcs.Running
+			ccs.TotalTicks += dcs.TotalTicks
+			if dcs.LastSuccessTick > ccs.LastSuccessTick {
+				ccs.LastSuccessTick = dcs.LastSuccessTick
+			}
+		}
+	}
+	return nil
+}
+
+// persistSelectorStatsLocked marshals the current Stats and atomically
+// replaces path (write tmp + rename). Caller must hold so.mu and, to be safe
+// against concurrent writers, the sidecar flock.
+func (so *SelectorOptimizer) persistSelectorStatsLocked(path string) error {
+	data, err := json.MarshalIndent(selectorStatsFile{Selectors: so.Stats}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal selector stats: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("write tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
 }
 
 // OrderChildren returns the recommended child ordering for a Selector,

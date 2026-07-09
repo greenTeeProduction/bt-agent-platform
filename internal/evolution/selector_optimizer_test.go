@@ -1,6 +1,8 @@
 package evolution
 
 import (
+	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -234,5 +236,91 @@ func TestSelectorOptimizer_ApplyOrdering(t *testing.T) {
 	}
 	if tree.Children[0].Name != "FastPath" {
 		t.Errorf("expected FastPath first after reorder, got %s", tree.Children[0].Name)
+	}
+}
+
+// ─── Durable selector telemetry (ADR-024 flock + atomic tmp+rename) ───────
+
+// TestSelectorOptimizer_SaveLoadRoundTrip verifies that recorded per-child
+// outcomes survive a Save → fresh-optimizer Load round-trip so Selector
+// telemetry persists across process restarts.
+func TestSelectorOptimizer_SaveLoadRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selector_stats.json")
+
+	so := NewSelectorOptimizer(OrderBySuccessRate)
+	for i := 0; i < 7; i++ {
+		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
+	}
+	for i := 0; i < 3; i++ {
+		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "failure"})
+	}
+	so.Record("Router", NodeExecutionRecord{NodeName: "SlowPath", Outcome: "running"})
+
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("SaveSelectorStats: %v", err)
+	}
+
+	// A fresh optimizer (simulating a restart) must recover the same counts.
+	loaded := NewSelectorOptimizer(OrderBySuccessRate)
+	if err := loaded.LoadSelectorStats(path); err != nil {
+		t.Fatalf("LoadSelectorStats: %v", err)
+	}
+
+	rs := loaded.Stats["Router"]
+	if rs == nil {
+		t.Fatalf("Router stats missing after load")
+	}
+	fast := rs.Children["FastPath"]
+	if fast == nil {
+		t.Fatalf("FastPath stats missing after load")
+	}
+	if fast.Successes != 7 || fast.Failures != 3 {
+		t.Errorf("FastPath want 7 successes / 3 failures, got %d / %d",
+			fast.Successes, fast.Failures)
+	}
+	slow := rs.Children["SlowPath"]
+	if slow == nil || slow.Running != 1 {
+		t.Errorf("SlowPath want 1 running, got %+v", slow)
+	}
+}
+
+// TestSelectorOptimizer_ConcurrentMergeSumsCounts verifies that many
+// independent optimizers persisting to the same file under the ADR-024
+// flock have their per-child counts summed, not clobbered — the durable
+// telemetry accumulates from every writer.
+func TestSelectorOptimizer_ConcurrentMergeSumsCounts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selector_stats.json")
+
+	const writers = 8
+	const perWriter = 5
+
+	var wg sync.WaitGroup
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Each writer is a fresh optimizer contributing only its own
+			// records; Save's flock+merge must sum them, not overwrite.
+			so := NewSelectorOptimizer(OrderBySuccessRate)
+			for i := 0; i < perWriter; i++ {
+				so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
+			}
+			if err := so.SaveSelectorStats(path); err != nil {
+				t.Errorf("concurrent SaveSelectorStats: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	final := NewSelectorOptimizer(OrderBySuccessRate)
+	if err := final.LoadSelectorStats(path); err != nil {
+		t.Fatalf("final LoadSelectorStats: %v", err)
+	}
+	rs := final.Stats["Router"]
+	if rs == nil || rs.Children["FastPath"] == nil {
+		t.Fatalf("FastPath stats missing after concurrent merge")
+	}
+	if got, want := rs.Children["FastPath"].Successes, writers*perWriter; got != want {
+		t.Errorf("concurrent-merge successes: want %d, got %d", want, got)
 	}
 }

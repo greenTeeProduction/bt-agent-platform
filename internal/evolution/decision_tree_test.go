@@ -1,8 +1,163 @@
 package evolution
 
 import (
+	"path/filepath"
 	"testing"
 )
+
+// pathStat returns the PathStats for pathName under selectorName, or nil.
+func pathStat(d *DTAnalyzer, selectorName, pathName string) *PathStats {
+	ss, ok := d.Stats[selectorName]
+	if !ok || ss == nil {
+		return nil
+	}
+	for i := range ss.Paths {
+		if ss.Paths[i].PathName == pathName {
+			return &ss.Paths[i]
+		}
+	}
+	return nil
+}
+
+// TestDTAnalyzer_SaveLoadRoundTrip verifies that persisted DTSelectorStats
+// survive a Save→Load into a fresh analyzer with identical counts.
+func TestDTAnalyzer_SaveLoadRoundTrip(t *testing.T) {
+	d := NewDTAnalyzer()
+	for i := 0; i < 6; i++ {
+		d.RecordHit("StrategyRouter", "PathA", "IsCodeReview", true)
+	}
+	for i := 0; i < 4; i++ {
+		d.RecordHit("StrategyRouter", "PathB", "IsBuildTask", false)
+	}
+
+	path := filepath.Join(t.TempDir(), "dt_stats.json")
+	if err := d.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewDTAnalyzer()
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	ss, ok := loaded.Stats["StrategyRouter"]
+	if !ok || ss == nil {
+		t.Fatal("StrategyRouter stats missing after round-trip")
+	}
+	if ss.TotalTasks != 10 {
+		t.Errorf("selector TotalTasks = %d, want 10", ss.TotalTasks)
+	}
+	pa := pathStat(loaded, "StrategyRouter", "PathA")
+	if pa == nil {
+		t.Fatal("PathA missing after round-trip")
+	}
+	if pa.HitCount != 6 || pa.SuccessCount != 6 {
+		t.Errorf("PathA HitCount/SuccessCount = %d/%d, want 6/6", pa.HitCount, pa.SuccessCount)
+	}
+	if pa.Condition != "IsCodeReview" {
+		t.Errorf("PathA Condition = %q, want IsCodeReview", pa.Condition)
+	}
+	pb := pathStat(loaded, "StrategyRouter", "PathB")
+	if pb == nil {
+		t.Fatal("PathB missing after round-trip")
+	}
+	if pb.HitCount != 4 || pb.SuccessCount != 0 {
+		t.Errorf("PathB HitCount/SuccessCount = %d/%d, want 4/0", pb.HitCount, pb.SuccessCount)
+	}
+}
+
+// TestDTAnalyzer_LoadMergeCounts verifies that Load sums HitCount,
+// SuccessCount, and TotalTasks into the in-memory stats instead of clobbering
+// them, so telemetry from independent runs accumulates.
+func TestDTAnalyzer_LoadMergeCounts(t *testing.T) {
+	first := NewDTAnalyzer()
+	for i := 0; i < 6; i++ {
+		first.RecordHit("SR", "PathA", "IsCodeReview", true)
+	}
+	path := filepath.Join(t.TempDir(), "dt_stats.json")
+	if err := first.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// A second analyzer with its own fresh telemetry for the same selector.
+	second := NewDTAnalyzer()
+	for i := 0; i < 3; i++ {
+		second.RecordHit("SR", "PathA", "IsCodeReview", true)
+	}
+	if err := second.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	ss := second.Stats["SR"]
+	if ss == nil {
+		t.Fatal("SR stats missing after merge")
+	}
+	if ss.TotalTasks != 9 {
+		t.Errorf("merged selector TotalTasks = %d, want 9 (6+3)", ss.TotalTasks)
+	}
+	pa := pathStat(second, "SR", "PathA")
+	if pa == nil {
+		t.Fatal("PathA missing after merge")
+	}
+	if pa.HitCount != 9 {
+		t.Errorf("merged PathA HitCount = %d, want 9 (6+3)", pa.HitCount)
+	}
+	if pa.SuccessCount != 9 {
+		t.Errorf("merged PathA SuccessCount = %d, want 9 (6+3)", pa.SuccessCount)
+	}
+}
+
+// TestDTAnalyzer_EmptyStatsNoOp verifies the empty-stats guards: Save/Load of
+// an analyzer with no telemetry round-trips cleanly, Load of a missing file is
+// a no-op, and BestSplitCondition/OptimizeSelectors degrade to no-ops rather
+// than panicking when no stats have been recorded.
+func TestDTAnalyzer_EmptyStatsNoOp(t *testing.T) {
+	empty := NewDTAnalyzer()
+
+	// Load of a non-existent file must be a silent no-op.
+	missing := filepath.Join(t.TempDir(), "does_not_exist.json")
+	if err := empty.Load(missing); err != nil {
+		t.Fatalf("Load of missing file should be a no-op, got %v", err)
+	}
+	if len(empty.Stats) != 0 {
+		t.Errorf("empty analyzer gained %d stats from a missing file", len(empty.Stats))
+	}
+
+	// Save of an empty analyzer must succeed and Load back to empty.
+	path := filepath.Join(t.TempDir(), "empty.json")
+	if err := empty.Save(path); err != nil {
+		t.Fatalf("Save of empty analyzer: %v", err)
+	}
+	reloaded := NewDTAnalyzer()
+	if err := reloaded.Load(path); err != nil {
+		t.Fatalf("Load of empty file: %v", err)
+	}
+	if len(reloaded.Stats) != 0 {
+		t.Errorf("empty file yielded %d stats, want 0", len(reloaded.Stats))
+	}
+
+	// BestSplitCondition against empty stats is a no-op.
+	if got := empty.BestSplitCondition("SR"); got != "" {
+		t.Errorf("BestSplitCondition on empty stats = %q, want empty", got)
+	}
+
+	// OptimizeSelectors against empty stats makes no changes and does not panic.
+	tree := &SerializableNode{
+		Type: "Selector", Name: "SR",
+		Children: []SerializableNode{
+			{Type: "Sequence", Name: "PathA", Children: []SerializableNode{
+				{Type: "Condition", Name: "IsCodeReview"},
+			}},
+			{Type: "Sequence", Name: "PathB", Children: []SerializableNode{
+				{Type: "Condition", Name: "IsBuildTask"},
+			}},
+		},
+	}
+	o := &BTOptimizer{Analyzer: empty}
+	if changes := o.OptimizeSelectors(tree); changes != 0 {
+		t.Errorf("OptimizeSelectors on empty stats made %d changes, want 0", changes)
+	}
+}
 
 func TestDTAnalyzer_Entropy(t *testing.T) {
 	d := NewDTAnalyzer()
