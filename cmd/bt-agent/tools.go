@@ -48,6 +48,23 @@ func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResu
 // and visible to the gardener registry (ADR-010 Phase 0). The outcome is
 // recorded in the tool result: an invalid tree stays KG-registered for
 // discovery but is never persisted, so it can never be executed.
+// recordEvolvedFitness writes a winning QD/island elite's structural fitness
+// back into the knowledge graph via the monotone, clamped "evolved" outcome so
+// fitness-aware discovery can surface archive-improved trees (milestone 4/5). A
+// missing graph or unregistered tree is a no-op — RecordRun ignores unknown
+// tree IDs — so this is safe to call unconditionally after evolution.
+func recordEvolvedFitness(deps *mcpDeps, treeID string, eliteFitness float64) {
+	if deps.kg == nil || treeID == "" {
+		return
+	}
+	deps.kg.RecordRun(knowledge.RunRecord{
+		TreeID:  treeID,
+		Task:    "quality-diversity archive elite",
+		Outcome: "evolved",
+		Quality: eliteFitness,
+	})
+}
+
 func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
 	result["persisted"] = false
 	if info := engine.ValidateTreeFull(tree); !info.Valid() {
@@ -750,6 +767,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			pop.Evolve(params.Generations, structuralFitnessFn)
 			grid := evolution.NewMAPElitesGrid(population / 2)
 			grid.InsertFromPopulation(pop, params.Domain)
+			// Write the best illuminated elite's structural fitness back into the
+			// knowledge graph so fitness-aware discovery can surface the
+			// archive-improved tree on the next run (milestone 4/5).
+			recordEvolvedFitness(deps, params.Tree, grid.Stats().BestFitness)
 			data, _ := json.Marshal(map[string]interface{}{
 				"tree": params.Tree, "domain": params.Domain, "generations": pop.Generation,
 				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
@@ -1024,6 +1045,16 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				im.EvolveAll(structuralFitnessFn)
 			}
 			stats := im.Stats()
+			// Write the strongest island's best elite fitness back into the
+			// knowledge graph so fitness-aware discovery can surface the
+			// archive-improved tree on the next run (milestone 4/5).
+			bestElite := 0.0
+			for _, best := range stats.BestPerDomain {
+				if best > bestElite {
+					bestElite = best
+				}
+			}
+			recordEvolvedFitness(deps, params.Tree, bestElite)
 			data, _ := json.Marshal(map[string]interface{}{
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": stats.BestPerDomain, "migrations": stats.Migrations,

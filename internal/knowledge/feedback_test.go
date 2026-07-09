@@ -218,6 +218,89 @@ func TestRecordRun_ChainSuccess(t *testing.T) {
 }
 
 // =============================================================================
+// Evolved fitness write-back (QD/island elites → KnowledgeGraph)
+// =============================================================================
+
+// An "evolved" outcome writes a winning QD/island elite's structural fitness
+// directly into the tree, bypassing the EMA so fitness-aware discovery can
+// surface archive-improved trees on the very next run.
+func TestRecordRun_Evolved_BumpsFitness(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:evolved",
+		Name:     "Evolved Elite",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	kg.RecordRun(RunRecord{
+		TreeID:  "tree:evolved",
+		Task:    "illuminate behavior space",
+		Outcome: "evolved",
+		Quality: 80.0,
+	})
+
+	tree := kg.Trees["tree:evolved"]
+	if tree.RunCount != 1 {
+		t.Errorf("expected RunCount=1, got %d", tree.RunCount)
+	}
+	if tree.LastOutcome != "evolved" {
+		t.Errorf("expected LastOutcome='evolved', got %q", tree.LastOutcome)
+	}
+	// Fitness is set to the elite's structural fitness (Quality), NOT the EMA
+	// value of 0.9*50 + 0.1*(0.5*100) = 50 that a "default" outcome would give.
+	if tree.Fitness != 80.0 {
+		t.Errorf("expected Fitness=80.0 (elite write-back, bypassing EMA), got %.2f", tree.Fitness)
+	}
+}
+
+// Write-back is monotone: a weaker elite never regresses a tree's fitness.
+func TestRecordRun_Evolved_Monotone(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:evolved-mono",
+		Name:     "Evolved Monotone",
+		Category: "test",
+		Fitness:  80.0,
+	})
+
+	kg.RecordRun(RunRecord{
+		TreeID:  "tree:evolved-mono",
+		Task:    "weaker elite",
+		Outcome: "evolved",
+		Quality: 60.0,
+	})
+
+	tree := kg.Trees["tree:evolved-mono"]
+	if tree.Fitness != 80.0 {
+		t.Errorf("expected Fitness to stay 80.0 (monotone write-back), got %.2f", tree.Fitness)
+	}
+}
+
+// Write-back is clamped into [0,100] regardless of the reported elite fitness.
+func TestRecordRun_Evolved_Clamped(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:evolved-clamp",
+		Name:     "Evolved Clamped",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	kg.RecordRun(RunRecord{
+		TreeID:  "tree:evolved-clamp",
+		Task:    "overflow elite",
+		Outcome: "evolved",
+		Quality: 150.0,
+	})
+
+	tree := kg.Trees["tree:evolved-clamp"]
+	if tree.Fitness != 100.0 {
+		t.Errorf("expected Fitness=100.0 (clamped to [0,100]), got %.2f", tree.Fitness)
+	}
+}
+
+// =============================================================================
 // outcomeScore edge cases
 // =============================================================================
 

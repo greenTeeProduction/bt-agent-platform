@@ -6,10 +6,10 @@ import "time"
 type RunRecord struct {
 	TreeID   string
 	Task     string
-	Outcome  string // "success", "failure", "chain_failed", "chain_panic"
+	Outcome  string // "success", "failure", "chain_failed", "chain_panic", "evolved"
 	Duration time.Duration
 	Tools    []string // tools used during execution
-	Quality  float64  // 0-100 quality score if applicable
+	Quality  float64  // 0-100 quality score; for "evolved", the elite's structural fitness
 }
 
 // RecordRun updates the knowledge graph with execution feedback.
@@ -25,9 +25,18 @@ func (kg *KnowledgeGraph) RecordRun(rec RunRecord) {
 	tree.LastOutcome = rec.Outcome
 	tree.LastDuration = rec.Duration
 
-	// Exponential moving average of success (0-100)
-	successScore := outcomeScore(rec.Outcome)
-	tree.Fitness = 0.9*tree.Fitness + 0.1*(successScore*100)
+	if rec.Outcome == "evolved" {
+		// A winning QD/island elite's structural fitness is written straight
+		// into the tree — bypassing the EMA so fitness-aware discovery can
+		// surface archive-improved trees on the very next run. The write-back
+		// is clamped to [0,100] and monotone: a weaker elite never regresses a
+		// tree that a stronger run already illuminated.
+		tree.Fitness = evolvedFitness(tree.Fitness, rec.Quality)
+	} else {
+		// Exponential moving average of success (0-100)
+		successScore := outcomeScore(rec.Outcome)
+		tree.Fitness = 0.9*tree.Fitness + 0.1*(successScore*100)
+	}
 
 	// Record tool usage as edges (Connect handles dedup)
 	for _, tool := range rec.Tools {
@@ -49,6 +58,21 @@ func (kg *KnowledgeGraph) connectLocked(from, to, relType string) {
 		Type:   relType,
 		Weight: 1.0,
 	})
+}
+
+// evolvedFitness clamps an elite's reported structural fitness into [0,100]
+// and returns it only when it improves on the tree's current fitness, keeping
+// the write-back monotone.
+func evolvedFitness(current, elite float64) float64 {
+	if elite < 0 {
+		elite = 0
+	} else if elite > 100 {
+		elite = 100
+	}
+	if elite < current {
+		return current
+	}
+	return elite
 }
 
 func outcomeScore(outcome string) float64 {
