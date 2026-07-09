@@ -94,10 +94,11 @@ func (f *Factory) extractTemplates() {
 			SourceID: id,
 			Category: meta.Category,
 			Metadata: map[string]any{
-				"node_count": meta.NodeCount,
-				"fitness":    meta.Fitness,
-				"run_count":  meta.RunCount,
-				"keywords":   meta.Keywords,
+				"node_count":         meta.NodeCount,
+				"fitness":            meta.Fitness,
+				"structural_fitness": meta.StructuralFitness,
+				"run_count":          meta.RunCount,
+				"keywords":           meta.Keywords,
 			},
 		}
 		f.Templates[id] = tmpl
@@ -112,6 +113,18 @@ func templateFitness(tmpl *TreeTemplate) float64 {
 		return 0
 	}
 	if f, ok := tmpl.Metadata["fitness"].(float64); ok {
+		return f
+	}
+	return 0
+}
+
+// templateStructuralFitness reads a template's evolved structural fitness,
+// tolerating the float64 form a JSON round-trip produces (0 when unset).
+func templateStructuralFitness(tmpl *TreeTemplate) float64 {
+	if tmpl == nil || tmpl.Metadata == nil {
+		return 0
+	}
+	if f, ok := tmpl.Metadata["structural_fitness"].(float64); ok {
 		return f
 	}
 	return 0
@@ -135,11 +148,13 @@ func templateRunCount(tmpl *TreeTemplate) int {
 	return 0
 }
 
-// templateSelectionWeight is the cold-start-discounted fitness used to weight
-// parent selection, so a lucky high-fitness/low-run template does not out-draw
-// a proven one. Shares the helper with stringMatch's discovery tie-break.
+// templateSelectionWeight is the cold-start-discounted, structural-blended
+// fitness used to weight parent selection, so a lucky high-fitness/low-run
+// template does not out-draw a proven one while an unproven-but-archive-improved
+// template can still be surfaced. Shares the blend with stringMatch's discovery
+// tie-break so breeding and discovery apply the same selection pressure.
 func templateSelectionWeight(tmpl *TreeTemplate) float64 {
-	return coldStartWeightedFitness(templateFitness(tmpl), templateRunCount(tmpl))
+	return blendedSelectionFitness(templateFitness(tmpl), templateStructuralFitness(tmpl), templateRunCount(tmpl))
 }
 
 // Breed creates a new tree by crossing over templates from 2-3 parent categories.
@@ -448,16 +463,26 @@ func (f *Factory) buildBasicAgentTree() *evolution.SerializableNode {
 // ─── Helpers ───
 
 func (f *Factory) selectParents(category, _ string) []string {
-	// Prefer parents from same category
+	// Prefer parents from same category. extractTemplates stores each template
+	// twice — under its SourceID and under a category alias key — both pointing at
+	// the same *TreeTemplate. Skip the alias keys (id != SourceID) so a single
+	// template cannot enter the candidate pool twice and be drawn as both parents
+	// of a crossover.
 	var candidates []string
 	for id, tmpl := range f.Templates {
+		if id != tmpl.SourceID {
+			continue // category-alias key aliasing another template
+		}
 		if tmpl.Category == category {
 			candidates = append(candidates, id)
 		}
 	}
 	// Fall back to any category
 	if len(candidates) < 2 {
-		for id := range f.Templates {
+		for id, tmpl := range f.Templates {
+			if id != tmpl.SourceID {
+				continue // category-alias key aliasing another template
+			}
 			candidates = append(candidates, id)
 		}
 	}
@@ -495,6 +520,7 @@ func (f *Factory) refreshTemplateFitness(tmpl *TreeTemplate) {
 		tmpl.Metadata = make(map[string]any)
 	}
 	tmpl.Metadata["fitness"] = meta.Fitness
+	tmpl.Metadata["structural_fitness"] = meta.StructuralFitness
 	tmpl.Metadata["run_count"] = meta.RunCount
 }
 

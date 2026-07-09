@@ -21,18 +21,26 @@ func (kg *KnowledgeGraph) RecordRun(rec RunRecord) {
 		return
 	}
 
-	tree.RunCount++
 	tree.LastOutcome = rec.Outcome
 	tree.LastDuration = rec.Duration
 
 	if rec.Outcome == "evolved" {
-		// A winning QD/island elite's structural fitness is written straight
-		// into the tree — bypassing the EMA so fitness-aware discovery can
-		// surface archive-improved trees on the very next run. The write-back
-		// is clamped to [0,100] and monotone: a weaker elite never regresses a
-		// tree that a stronger run already illuminated.
-		tree.Fitness = evolvedFitness(tree.Fitness, rec.Quality)
+		// An evolution pass is not a genuine execution: it must not inflate
+		// RunCount (which drives cold-start confidence weighting). It is counted
+		// separately in EvolvedCount instead.
+		tree.EvolvedCount++
+		// A winning QD/island elite's structural fitness is captured in its own
+		// StructuralFitness field, leaving Fitness a pure runtime-success EMA that
+		// only genuine executions maintain. Selection blends the two (gated by
+		// RunCount) so fitness-aware discovery can surface archive-improved trees
+		// on the very next run without an evolution pass ever overwriting what
+		// real executions measured. The write-back is clamped to [0,100] and
+		// monotone: a weaker elite never regresses a tree that a stronger run
+		// already illuminated.
+		tree.StructuralFitness = evolvedFitness(tree.StructuralFitness, rec.Quality)
 	} else {
+		// A genuine agent execution.
+		tree.RunCount++
 		// Exponential moving average of success (0-100)
 		successScore := outcomeScore(rec.Outcome)
 		tree.Fitness = 0.9*tree.Fitness + 0.1*(successScore*100)

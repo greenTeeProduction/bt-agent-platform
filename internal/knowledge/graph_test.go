@@ -3,6 +3,113 @@ package knowledge
 import "testing"
 
 // =============================================================================
+// Structural fitness split (evolved structural fitness must not overwrite the
+// runtime-success EMA)
+//
+// RecordRun's "evolved" branch writes a winning QD/island elite's *structural*
+// fitness back into the tree. Today it writes it straight into TreeMeta.Fitness,
+// which is ALSO the runtime-success EMA that genuine executions maintain. That
+// conflation lets a structurally-elite but runtime-failing tree keep a near-100
+// Fitness forever — a later genuine failure only nudges 0.9*95 + 0.1*30 = 88.5 —
+// so discovery and breeding keep surfacing it despite its runtime failures.
+//
+// The fix splits evolved structural fitness into its own TreeMeta.StructuralFitness
+// field, leaving Fitness as a pure runtime-success EMA, and has discovery/breeding
+// BLEND structural fitness gated by RunCount (it fills in when a tree is unproven
+// at runtime and yields to the runtime EMA once the tree is well-run). These tests
+// pin both halves and fail against the current single-field implementation.
+// =============================================================================
+
+// The "evolved" write-back must land in StructuralFitness and leave the
+// runtime-success EMA (Fitness) untouched, so an evolution pass can never
+// overwrite what genuine executions measured.
+func TestRecordRun_Evolved_WritesStructuralFitnessNotRuntimeEMA(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:split",
+		Name:     "Split",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	// One genuine success moves the runtime EMA to 0.9*50 + 0.1*100 = 55.0.
+	kg.RecordRun(RunRecord{TreeID: "tree:split", Task: "run", Outcome: "success"})
+
+	// A strong evolution pass (structural fitness 95, well above the 55 EMA).
+	kg.RecordRun(RunRecord{TreeID: "tree:split", Task: "evolve", Outcome: "evolved", Quality: 95.0})
+
+	tree := kg.Trees["tree:split"]
+	// Runtime EMA is preserved — the evolved pass must NOT overwrite it.
+	if tree.Fitness != 55.0 {
+		t.Errorf("evolved run overwrote the runtime-success EMA: expected Fitness=55.0 (untouched), got %.2f", tree.Fitness)
+	}
+	// Structural fitness is captured separately, clamped into [0,100].
+	if tree.StructuralFitness != 95.0 {
+		t.Errorf("expected StructuralFitness=95.0 (evolved write-back), got %.2f", tree.StructuralFitness)
+	}
+	// Evolution passes count separately and never inflate RunCount.
+	if tree.RunCount != 1 {
+		t.Errorf("expected RunCount=1 (genuine executions only), got %d", tree.RunCount)
+	}
+	if tree.EvolvedCount != 1 {
+		t.Errorf("expected EvolvedCount=1, got %d", tree.EvolvedCount)
+	}
+
+	// Structural write-back stays monotone on its own field: a weaker elite
+	// never regresses it, and it still leaves the runtime EMA alone.
+	kg.RecordRun(RunRecord{TreeID: "tree:split", Task: "evolve", Outcome: "evolved", Quality: 70.0})
+	if tree.StructuralFitness != 95.0 {
+		t.Errorf("expected StructuralFitness to stay 95.0 (monotone), got %.2f", tree.StructuralFitness)
+	}
+	if tree.Fitness != 55.0 {
+		t.Errorf("second evolved run disturbed the runtime EMA: expected Fitness=55.0, got %.2f", tree.Fitness)
+	}
+}
+
+// Discovery must BLEND StructuralFitness, gated by RunCount. With runtime Fitness
+// and RunCount held identical, the tree with the higher StructuralFitness must win
+// the keyword tie-break — even though it sorts LAST by ID. At RunCount=0 (unproven
+// at runtime) structural fitness is the signal that surfaces an archive-improved
+// tree; a pure-Fitness tie-break would fall through to the sorted-ID fallback and
+// pick the lower-ID tree instead.
+func TestStringMatch_BlendsStructuralFitness(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// Sorts FIRST by ID, no structural fitness — wins a pure-ID tie-break.
+	kg.Register(&TreeMeta{
+		ID:                "aaa:plain",
+		Name:              "Plain",
+		Category:          "test",
+		Keywords:          []string{"alpha"},
+		Fitness:           50.0,
+		RunCount:          0,
+		StructuralFitness: 0.0,
+	})
+	// Sorts LAST by ID, but structurally elite — must win once structural
+	// fitness is blended into the tie-break for this unproven tree.
+	kg.Register(&TreeMeta{
+		ID:                "zzz:elite",
+		Name:              "Elite",
+		Category:          "test",
+		Keywords:          []string{"gamma"},
+		Fitness:           50.0,
+		RunCount:          0,
+		StructuralFitness: 90.0,
+	})
+
+	// "alpha gamma workflow" matches both 5-char keywords equally, so the winner
+	// is decided entirely by the (runtime + structural) blended tie-break.
+	ids, _ := collectDiscoverIDs(kg, "alpha gamma workflow")
+
+	if len(ids) != 1 {
+		t.Fatalf("structural-blended keyword tie is non-deterministic: saw %d distinct trees over %d runs: %v",
+			len(ids), discoverRuns, ids)
+	}
+	if !ids["zzz:elite"] {
+		t.Errorf("expected the structurally-elite tree zzz:elite (StructuralFitness 90) to out-select aaa:plain (StructuralFitness 0) at equal runtime Fitness/RunCount, got %v", ids)
+	}
+}
+
+// =============================================================================
 // Cold-start confidence (selection-pressure program m3/5)
 //
 // Milestone 2/5 taught both the deterministic discovery fallback (stringMatch)

@@ -128,3 +128,47 @@ func TestFactory_SelectParentsFavorsHighFitness(t *testing.T) {
 		t.Fatalf("high-fitness draw rate %.3f is not meaningfully above the avg low-fitness rate %.3f (uniform selection ties them)", highRate, avgLowRate)
 	}
 }
+
+// TestFactory_SelectParentsExcludesCategoryAliasKeys asserts that a template
+// registered under BOTH its canonical SourceID key and NewFactory's synthesized
+// category-alias key cannot be drawn as both parents of a crossover.
+//
+// extractTemplates stores every template twice in f.Templates — once under its
+// SourceID and once under meta.Category — with both keys pointing at the SAME
+// *TreeTemplate. selectParents ranges over every map key, so the alias entry puts
+// the same underlying template into the candidate pool a second time, and
+// weightedSampleParents dedups only by string key. Without excluding alias keys,
+// two returned parents can resolve to a single SourceID: a self-crossover of a
+// template with itself.
+//
+// Two same-category trees (fitness 50 vs 10) yield map keys {idA, idB, category},
+// with the alias resolving to the higher-fitness idA. Because selectParents may
+// draw n=3 from that 3-key pool, the alias key and idA are returned together and
+// both resolve to idA. Every draw must instead map to distinct SourceIDs.
+func TestFactory_SelectParentsExcludesCategoryAliasKeys(t *testing.T) {
+	const category = "dup"
+	idA := "dup:a"
+	idB := "dup:b"
+
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: idA, Category: category, Fitness: 50.0})
+	kg.Register(&TreeMeta{ID: idB, Category: category, Fitness: 10.0})
+
+	f := NewFactory(kg)
+	f.SetSeed(1)
+
+	for i := 0; i < 2000; i++ {
+		parents := f.selectParents(category, "")
+		seen := make(map[string]int, len(parents))
+		for _, key := range parents {
+			tmpl := f.Templates[key]
+			if tmpl == nil {
+				t.Fatalf("iter %d: selectParents returned key %q with no backing template", i, key)
+			}
+			seen[tmpl.SourceID]++
+			if seen[tmpl.SourceID] > 1 {
+				t.Fatalf("iter %d: template %q drawn as more than one parent (parents=%v resolve to a duplicate SourceID); category-alias keys must be excluded from the candidate pool so a template cannot be both parents of a crossover", i, tmpl.SourceID, parents)
+			}
+		}
+	}
+}

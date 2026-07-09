@@ -222,9 +222,10 @@ func TestRecordRun_ChainSuccess(t *testing.T) {
 // =============================================================================
 
 // An "evolved" outcome writes a winning QD/island elite's structural fitness
-// directly into the tree, bypassing the EMA so fitness-aware discovery can
-// surface archive-improved trees on the very next run.
-func TestRecordRun_Evolved_BumpsFitness(t *testing.T) {
+// into the tree's dedicated StructuralFitness field — bypassing the EMA so
+// fitness-aware discovery can surface archive-improved trees on the very next
+// run — while leaving the runtime-success EMA (Fitness) untouched.
+func TestRecordRun_Evolved_BumpsStructuralFitness(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	kg.Register(&TreeMeta{
 		ID:       "tree:evolved",
@@ -241,20 +242,64 @@ func TestRecordRun_Evolved_BumpsFitness(t *testing.T) {
 	})
 
 	tree := kg.Trees["tree:evolved"]
-	if tree.RunCount != 1 {
-		t.Errorf("expected RunCount=1, got %d", tree.RunCount)
+	// An evolution pass is NOT a genuine execution: it must not inflate
+	// RunCount (which drives cold-start confidence weighting). It is counted
+	// separately in EvolvedCount instead.
+	if tree.RunCount != 0 {
+		t.Errorf("expected RunCount=0 (evolved is not a genuine execution), got %d", tree.RunCount)
+	}
+	if tree.EvolvedCount != 1 {
+		t.Errorf("expected EvolvedCount=1, got %d", tree.EvolvedCount)
 	}
 	if tree.LastOutcome != "evolved" {
 		t.Errorf("expected LastOutcome='evolved', got %q", tree.LastOutcome)
 	}
-	// Fitness is set to the elite's structural fitness (Quality), NOT the EMA
-	// value of 0.9*50 + 0.1*(0.5*100) = 50 that a "default" outcome would give.
-	if tree.Fitness != 80.0 {
-		t.Errorf("expected Fitness=80.0 (elite write-back, bypassing EMA), got %.2f", tree.Fitness)
+	// StructuralFitness captures the elite's structural fitness (Quality).
+	if tree.StructuralFitness != 80.0 {
+		t.Errorf("expected StructuralFitness=80.0 (elite write-back), got %.2f", tree.StructuralFitness)
+	}
+	// The runtime-success EMA is left exactly as registered — an evolution pass
+	// must never overwrite what genuine executions measured.
+	if tree.Fitness != 50.0 {
+		t.Errorf("expected Fitness=50.0 (runtime EMA untouched by evolved pass), got %.2f", tree.Fitness)
 	}
 }
 
-// Write-back is monotone: a weaker elite never regresses a tree's fitness.
+// RunCount must mean "genuine executions" only. Interleaved evolution passes
+// bump EvolvedCount and never RunCount, so cold-start confidence weighting is
+// not inflated by synthetic archive write-backs.
+func TestRecordRun_Evolved_DoesNotIncrementRunCount(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:counts",
+		Name:     "Counts",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	// Two genuine executions.
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "run", Outcome: "success"})
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "run", Outcome: "failure"})
+
+	// Three evolution passes interleaved.
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "evolve", Outcome: "evolved", Quality: 60.0})
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "evolve", Outcome: "evolved", Quality: 70.0})
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "evolve", Outcome: "evolved", Quality: 80.0})
+
+	// One more genuine execution.
+	kg.RecordRun(RunRecord{TreeID: "tree:counts", Task: "run", Outcome: "success"})
+
+	tree := kg.Trees["tree:counts"]
+	if tree.RunCount != 3 {
+		t.Errorf("expected RunCount=3 (genuine executions only), got %d", tree.RunCount)
+	}
+	if tree.EvolvedCount != 3 {
+		t.Errorf("expected EvolvedCount=3 (evolution passes only), got %d", tree.EvolvedCount)
+	}
+}
+
+// Structural write-back is monotone: after a strong elite lands, a weaker one
+// never regresses StructuralFitness — and the runtime EMA stays untouched.
 func TestRecordRun_Evolved_Monotone(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	kg.Register(&TreeMeta{
@@ -264,6 +309,14 @@ func TestRecordRun_Evolved_Monotone(t *testing.T) {
 		Fitness:  80.0,
 	})
 
+	// A strong elite illuminates the tree at structural fitness 80.
+	kg.RecordRun(RunRecord{
+		TreeID:  "tree:evolved-mono",
+		Task:    "strong elite",
+		Outcome: "evolved",
+		Quality: 80.0,
+	})
+	// A later weaker elite must not regress StructuralFitness.
 	kg.RecordRun(RunRecord{
 		TreeID:  "tree:evolved-mono",
 		Task:    "weaker elite",
@@ -272,12 +325,16 @@ func TestRecordRun_Evolved_Monotone(t *testing.T) {
 	})
 
 	tree := kg.Trees["tree:evolved-mono"]
+	if tree.StructuralFitness != 80.0 {
+		t.Errorf("expected StructuralFitness to stay 80.0 (monotone write-back), got %.2f", tree.StructuralFitness)
+	}
 	if tree.Fitness != 80.0 {
-		t.Errorf("expected Fitness to stay 80.0 (monotone write-back), got %.2f", tree.Fitness)
+		t.Errorf("expected Fitness to stay 80.0 (runtime EMA untouched), got %.2f", tree.Fitness)
 	}
 }
 
-// Write-back is clamped into [0,100] regardless of the reported elite fitness.
+// Structural write-back is clamped into [0,100] regardless of the reported
+// elite fitness, and never touches the runtime EMA.
 func TestRecordRun_Evolved_Clamped(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	kg.Register(&TreeMeta{
@@ -295,8 +352,11 @@ func TestRecordRun_Evolved_Clamped(t *testing.T) {
 	})
 
 	tree := kg.Trees["tree:evolved-clamp"]
-	if tree.Fitness != 100.0 {
-		t.Errorf("expected Fitness=100.0 (clamped to [0,100]), got %.2f", tree.Fitness)
+	if tree.StructuralFitness != 100.0 {
+		t.Errorf("expected StructuralFitness=100.0 (clamped to [0,100]), got %.2f", tree.StructuralFitness)
+	}
+	if tree.Fitness != 50.0 {
+		t.Errorf("expected Fitness=50.0 (runtime EMA untouched), got %.2f", tree.Fitness)
 	}
 }
 

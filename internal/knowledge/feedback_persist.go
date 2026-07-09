@@ -20,6 +20,7 @@ type feedbackSnapshot struct {
 type treeFeedback struct {
 	Fitness      float64       `json:"fitness"`
 	RunCount     int           `json:"run_count"`
+	EvolvedCount int           `json:"evolved_count"`
 	LastOutcome  string        `json:"last_outcome"`
 	LastDuration time.Duration `json:"last_duration"`
 }
@@ -91,7 +92,8 @@ func (kg *KnowledgeGraph) FlushFeedback(force bool) error {
 }
 
 // SaveFeedback serializes the runtime-feedback fields (Fitness, RunCount,
-// LastOutcome, LastDuration) and the uses_tool edges to a JSON file. Static tree
+// EvolvedCount, LastOutcome, LastDuration) and the uses_tool edges to a JSON
+// file. Static tree
 // metadata is not written. The write is atomic: it lands in a temp file that is
 // renamed into place, so a crash mid-write can never leave a truncated snapshot.
 func (kg *KnowledgeGraph) SaveFeedback(path string) error {
@@ -103,6 +105,7 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 		snap.Trees[id] = treeFeedback{
 			Fitness:      tree.Fitness,
 			RunCount:     tree.RunCount,
+			EvolvedCount: tree.EvolvedCount,
 			LastOutcome:  tree.LastOutcome,
 			LastDuration: tree.LastDuration,
 		}
@@ -162,6 +165,7 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 		}
 		tree.Fitness = fb.Fitness
 		tree.RunCount = fb.RunCount
+		tree.EvolvedCount = fb.EvolvedCount
 		tree.LastOutcome = fb.LastOutcome
 		tree.LastDuration = fb.LastDuration
 	}

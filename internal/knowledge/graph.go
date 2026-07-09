@@ -31,7 +31,16 @@ type TreeMeta struct {
 	Category    string  `json:"category"`    // finance, domain, research, startup, thinktank, evolution, core
 	Description string  `json:"description"` // what it does
 	NodeCount   int     `json:"node_count"`  // total nodes
-	Fitness     float64 `json:"fitness"`     // current fitness score (0-100)
+	Fitness     float64 `json:"fitness"`     // runtime-success EMA (0-100), maintained only by genuine executions
+
+	// StructuralFitness is the evolved structural quality of a winning QD/island
+	// elite, written back by evolution passes (RecordRun "evolved"). It is kept
+	// separate from Fitness so an evolution pass can never overwrite the
+	// runtime-success EMA that real executions measure. Selection blends the two,
+	// gated by RunCount, so an unproven tree surfaces on structural merit while a
+	// well-run tree is judged on its measured runtime success (see
+	// blendedSelectionFitness).
+	StructuralFitness float64 `json:"structural_fitness,omitempty"`
 
 	// Capabilities — what tasks this tree handles
 	Capabilities []Capability `json:"capabilities"`
@@ -49,7 +58,8 @@ type TreeMeta struct {
 	Tags []string `json:"tags,omitempty"`
 
 	// Runtime feedback (updated by RecordRun)
-	RunCount     int           `json:"run_count"`
+	RunCount     int           `json:"run_count"`     // genuine executions only (drives cold-start confidence weighting)
+	EvolvedCount int           `json:"evolved_count"` // synthetic archive write-backs (QD/island elites), counted separately from RunCount
 	LastOutcome  string        `json:"last_outcome"`
 	LastDuration time.Duration `json:"last_duration"`
 
@@ -179,10 +189,12 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 			// toward the fitter tree, mirroring the embedding path's
 			// 0.7*sim + 0.3*(fitness/100) selection pressure (see embeddings.go).
 			// Fitness is discounted by cold-start confidence so a single lucky
-			// run cannot dominate a tree proven across many runs.
+			// run cannot dominate a tree proven across many runs, and the tree's
+			// evolved structural fitness is blended in (gated by RunCount) so an
+			// unproven-but-archive-improved tree can still surface.
 			ti, tj := kg.Trees[hits[i].treeID], kg.Trees[hits[j].treeID]
-			if fi, fj := coldStartWeightedFitness(ti.Fitness, ti.RunCount),
-				coldStartWeightedFitness(tj.Fitness, tj.RunCount); fi != fj {
+			if fi, fj := blendedSelectionFitness(ti.Fitness, ti.StructuralFitness, ti.RunCount),
+				blendedSelectionFitness(tj.Fitness, tj.StructuralFitness, tj.RunCount); fi != fj {
 				return fi > fj // more-trustworthy fitter tree wins the tie
 			}
 			return hits[i].treeID < hits[j].treeID // final deterministic fallback
@@ -205,7 +217,8 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 	// fitness so the tie resolves toward the fitter tree — mirroring the embedding
 	// path's 0.7*sim + 0.3*(fitness/100) selection pressure (see embeddings.go).
 	// Fitness is discounted by cold-start confidence so a single lucky run cannot
-	// dominate a tree proven across many runs. Fitness only breaks ties (the raw
+	// dominate a tree proven across many runs, and the tree's evolved structural
+	// fitness is blended in (gated by RunCount). Fitness only breaks ties (the raw
 	// score still gates the 0.3 threshold and sets the returned confidence), and
 	// sorted tree ID remains the final deterministic fallback so map iteration
 	// order can never decide the winner.
@@ -217,7 +230,7 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 		if score <= 0 {
 			continue
 		}
-		wfit := coldStartWeightedFitness(tree.Fitness, tree.RunCount)
+		wfit := blendedSelectionFitness(tree.Fitness, tree.StructuralFitness, tree.RunCount)
 		if best == "" || score > bestScore {
 			best, bestScore, bestFitness = id, score, wfit
 			continue
@@ -263,6 +276,28 @@ func coldStartConfidence(runCount int) float64 {
 // both callers apply the same RunCount-aware selection pressure.
 func coldStartWeightedFitness(fitness float64, runCount int) float64 {
 	return fitness * coldStartConfidence(runCount)
+}
+
+// structuralGate is the weight given to a tree's evolved structural fitness in
+// selection. It is the complement of cold-start confidence: at RunCount 0 an
+// unproven tree leans almost entirely on its structural (archive-measured)
+// fitness, and the gate decays toward 0 as genuine runs accumulate and the
+// runtime-success EMA takes over. This is what keeps a structurally-elite but
+// runtime-failing tree from dominating forever — real runs steadily reclaim the
+// selection signal from the frozen structural score.
+func structuralGate(runCount int) float64 {
+	return 1 - coldStartConfidence(runCount)
+}
+
+// blendedSelectionFitness combines a tree's runtime-success EMA (discounted by
+// cold-start confidence) with its evolved structural fitness (gated by the
+// complementary weight), so selection blends the two rather than letting an
+// evolution pass overwrite the runtime EMA. Shared by stringMatch (discovery
+// tie-break) and templateSelectionWeight (breeding weight) so both callers apply
+// the same RunCount-aware structural blend. When a tree has no structural
+// fitness (the common case) this reduces exactly to coldStartWeightedFitness.
+func blendedSelectionFitness(fitness, structural float64, runCount int) float64 {
+	return coldStartWeightedFitness(fitness, runCount) + structuralGate(runCount)*structural
 }
 
 // matchScore computes how well a tree matches a task.
