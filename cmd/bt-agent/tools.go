@@ -12,6 +12,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/agentexec"
 	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -677,6 +678,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		map[string]engine.Property{}, nil,
 		func(args json.RawMessage) *engine.ToolResult {
 			a := deps.kg.ComputeAnalytics()
+			// Publish the analytics signals as Prometheus gauges so coverage,
+			// bottleneck, and selection-pressure drift is observable in
+			// Grafana, not only in the text report this tool returns.
+			dashboard.RecordKGAnalytics(len(a.CoverageGaps), len(a.Bottlenecks), len(a.SelectionPressure))
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: a.FormatAnalytics()}}}
 		})
 

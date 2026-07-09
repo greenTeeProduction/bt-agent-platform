@@ -203,6 +203,61 @@ func TestPrometheusBuildInfoGaugeRenderedAndReplaced(t *testing.T) {
 	}
 }
 
+// TestKGAnalyticsGaugesRenderedAndUpdated pins the analytics→observability link
+// (milestone 4/4): ComputeAnalytics signals must be visible in Prometheus, not
+// only in the text report bt_kg_analytics returns. RecordKGAnalytics publishes
+// the coverage-gap, bottleneck, and selection-pressure counts as three plain
+// gauges, and re-recording REPLACES the values (gauges track the latest
+// analytics run, never accumulate) so a scrape reflects the current graph
+// health rather than a running sum across scrapes.
+func TestKGAnalyticsGaugesRenderedAndUpdated(t *testing.T) {
+	RecordKGAnalytics(3, 5, 7)
+
+	body := scrapeMetrics(t)
+
+	for _, header := range []string{
+		"# TYPE bt_kg_coverage_gaps gauge\n",
+		"# TYPE bt_kg_bottlenecks gauge\n",
+		"# TYPE bt_kg_selection_pressure_trees gauge\n",
+	} {
+		if !strings.Contains(body, header) {
+			t.Errorf("missing TYPE header %q in /metrics exposition:\n%s", header, body)
+		}
+	}
+
+	for _, want := range []string{
+		"bt_kg_coverage_gaps 3",
+		"bt_kg_bottlenecks 5",
+		"bt_kg_selection_pressure_trees 7",
+	} {
+		if !strings.Contains(body, want+"\n") {
+			t.Errorf("missing line %q in /metrics exposition", want)
+		}
+	}
+
+	// A second analytics run must replace the gauge values, not accumulate.
+	RecordKGAnalytics(1, 0, 4)
+	body = scrapeMetrics(t)
+	for _, want := range []string{
+		"bt_kg_coverage_gaps 1",
+		"bt_kg_bottlenecks 0",
+		"bt_kg_selection_pressure_trees 4",
+	} {
+		if !strings.Contains(body, want+"\n") {
+			t.Errorf("missing updated line %q in /metrics exposition", want)
+		}
+	}
+	for _, stale := range []string{
+		"bt_kg_coverage_gaps 3\n",
+		"bt_kg_bottlenecks 5\n",
+		"bt_kg_selection_pressure_trees 7\n",
+	} {
+		if strings.Contains(body, stale) {
+			t.Errorf("stale gauge line %q still exposed after second RecordKGAnalytics", strings.TrimSuffix(stale, "\n"))
+		}
+	}
+}
+
 // TestReadBuildIdentityNeverEmpty pins that ReadBuildIdentity — the helper the
 // long-running binaries log at startup — never returns empty identity fields,
 // whatever the build environment stamped (test binaries typically carry no

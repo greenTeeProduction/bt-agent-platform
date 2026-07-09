@@ -128,6 +128,28 @@ func RecordTask(agentName string, success bool, durationMs uint64) {
 	agentTaskDurationHist.Observe(float64(durationMs), map[string]string{"agent": agentName})
 }
 
+// ─── Knowledge-Graph Analytics ──────────────────────────────────────────────
+
+// Knowledge-graph analytics gauges make ComputeAnalytics signals measurable in
+// Prometheus/Grafana instead of living only in the text report bt_kg_analytics
+// returns. They track the latest analytics run — RecordKGAnalytics REPLACES the
+// values, so a scrape reflects current graph health rather than a running sum.
+var (
+	kgCoverageGapsGauge           Gauge
+	kgBottlenecksGauge            Gauge
+	kgSelectionPressureTreesGauge Gauge
+)
+
+// RecordKGAnalytics publishes the coverage-gap, bottleneck, and
+// selection-pressure counts from a ComputeAnalytics run as plain gauges, so
+// analytics drift is visible on /metrics. Each call overwrites the previous
+// values (gauges track the latest run, never accumulate).
+func RecordKGAnalytics(coverageGaps, bottlenecks, selectionPressureTrees int) {
+	kgCoverageGapsGauge.Set(int64(coverageGaps))
+	kgBottlenecksGauge.Set(int64(bottlenecks))
+	kgSelectionPressureTreesGauge.Set(int64(selectionPressureTrees))
+}
+
 // GetAgentMetrics returns a copy of all agent metrics.
 func GetAgentMetrics() []AgentStats {
 	globalMetrics.mu.RLock()
@@ -541,6 +563,20 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 	fmt.Fprintf(w, "# HELP bt_build_info Build identity of the serving binary (value is always 1; identity in labels).\n")
 	fmt.Fprintf(w, "# TYPE bt_build_info gauge\n")
 	fmt.Fprintf(w, "bt_build_info{dirty=\"%t\",revision=\"%s\"} 1\n\n", id.Dirty, id.Revision)
+
+	// Knowledge-graph analytics — latest ComputeAnalytics run, so coverage,
+	// bottleneck, and selection-pressure drift is queryable in Prometheus.
+	fmt.Fprintf(w, "# HELP bt_kg_coverage_gaps Knowledge-graph coverage gaps (domains/tasks with no covering tree) from the latest analytics run.\n")
+	fmt.Fprintf(w, "# TYPE bt_kg_coverage_gaps gauge\n")
+	fmt.Fprintf(w, "bt_kg_coverage_gaps %d\n\n", kgCoverageGapsGauge.Value())
+
+	fmt.Fprintf(w, "# HELP bt_kg_bottlenecks Knowledge-graph bottleneck trees (low success rate) from the latest analytics run.\n")
+	fmt.Fprintf(w, "# TYPE bt_kg_bottlenecks gauge\n")
+	fmt.Fprintf(w, "bt_kg_bottlenecks %d\n\n", kgBottlenecksGauge.Value())
+
+	fmt.Fprintf(w, "# HELP bt_kg_selection_pressure_trees Proven-but-underbred trees under selection pressure from the latest analytics run.\n")
+	fmt.Fprintf(w, "# TYPE bt_kg_selection_pressure_trees gauge\n")
+	fmt.Fprintf(w, "bt_kg_selection_pressure_trees %d\n\n", kgSelectionPressureTreesGauge.Value())
 
 	// HTTP metrics
 	fmt.Fprintf(w, "# HELP bt_http_requests_total Total HTTP requests served.\n")
