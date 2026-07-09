@@ -126,3 +126,47 @@ func TestSchedulerAttempt_SuccessAndFailureUnchanged(t *testing.T) {
 		t.Errorf("failure accounting drifted: FailedCalls=%d DeferredCalls=%d", bad.FailedCalls, bad.DeferredCalls)
 	}
 }
+
+// TestDaemonWiresDLQReplayConsumer pins — source-level, the same way the
+// build-identity wiring tests do — that the daemon installs the drop-safe
+// replay executor and the background requeue scan (c8094002 ms2). Without
+// them, dashboard and MCP requeues flag entries that nothing re-executes.
+// The wiring must be daemon-gated (noMCPMode) so MCP-spawned sibling
+// instances sharing the same DLQ file cannot double-replay entries.
+func TestDaemonWiresDLQReplayConsumer(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	for _, needle := range []string{
+		"dlq.SetReplayExecutor(",
+		"dlq.RequeuedReady()",
+		"dlqReplayScanInterval",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("main.go must wire the DLQ replay consumer: missing %q", needle)
+		}
+	}
+}
+
+// A2A ":8686 bind: address already in use" is EXPECTED sibling contention —
+// every MCP/CLI-spawned bt-agent instance next to the daemon triggers it
+// (CLAUDE.md documents it as warned-and-ignored), yet it was logged at ERROR
+// ~38×/day. The serve-error path must classify the expected case as WARN and
+// keep everything else at ERROR.
+func TestA2AServeErrorDemotesPortContention(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	for _, needle := range []string{
+		"logA2AServeError(",
+		`"address already in use"`,
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("main.go must classify A2A serve errors (WARN for port contention): missing %q", needle)
+		}
+	}
+}

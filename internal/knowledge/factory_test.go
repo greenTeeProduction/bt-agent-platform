@@ -172,3 +172,27 @@ func TestFactory_SelectParentsExcludesCategoryAliasKeys(t *testing.T) {
 		}
 	}
 }
+
+// The any-category fallback (fewer than 2 same-category candidates) must not
+// re-append templates already in the pool: a duplicated id survives the
+// by-index weighted draw and can be returned as BOTH parents of a crossover.
+func TestFactory_SelectParentsFallbackHasNoDuplicates(t *testing.T) {
+	f := &Factory{Templates: map[string]*TreeTemplate{
+		"cat:a": {SourceID: "cat:a", Category: "cat", Metadata: map[string]any{"fitness": 100.0}},
+		"oth:b": {SourceID: "oth:b", Category: "oth", Metadata: map[string]any{"fitness": 1.0}},
+		"oth:c": {SourceID: "oth:c", Category: "oth", Metadata: map[string]any{"fitness": 1.0}},
+	}}
+	f.SetSeed(7)
+
+	for i := 0; i < 2000; i++ {
+		// Only one same-category candidate → the fallback pool is used.
+		parents := f.selectParents("cat", "")
+		seen := make(map[string]bool, len(parents))
+		for _, id := range parents {
+			if seen[id] {
+				t.Fatalf("iter %d: duplicate parent %q from the fallback pool (parents=%v)", i, id, parents)
+			}
+			seen[id] = true
+		}
+	}
+}

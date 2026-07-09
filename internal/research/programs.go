@@ -73,6 +73,43 @@ func (ps *ProgramStore) RecordAttemptAndMaybeBlock(programID string, idx, maxAtt
 	return false
 }
 
+// RefundAttempt un-records one attempt charged against the milestone at idx —
+// the complement of RecordAttemptAndMaybeBlock for cycles that died for
+// *infrastructure* reasons (Claude rate limit, commit gate wedged by an
+// external landing, apply/sync refusal) rather than an implementation failure.
+// Only genuine agent declines may consume the milestone-abandon budget; without
+// the refund, three cycles of external outage wrongly block a milestone
+// (2026-07-09 doc-drift wedge, 2026-07-08 rate-limit window).
+//
+// The refund decrements Attempts (never below zero — a refund without a
+// remaining charge is a no-op) and, when the milestone is blocked but the
+// refunded charge is what pushed it to maxAttempts, restores it to pending and
+// clears BlockedAt. A block accrued from more genuine attempts in earlier
+// cycles stays blocked. Done milestones are immutable. Reports whether
+// anything changed.
+func (ps *ProgramStore) RefundAttempt(programID string, idx, maxAttempts int) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if idx < 0 || idx >= len(p.Milestones) {
+			return false
+		}
+		m := &p.Milestones[idx]
+		if m.Status == "done" || m.Attempts <= 0 {
+			return false
+		}
+		m.Attempts--
+		if m.Status == "blocked" && m.Attempts < maxAttempts {
+			m.Status = "pending"
+			m.BlockedAt = time.Time{}
+		}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
 type ProgramStore struct {
 	path     string
 	Programs []*Program `json:"programs"`

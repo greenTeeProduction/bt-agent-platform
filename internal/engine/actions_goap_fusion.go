@@ -327,6 +327,11 @@ func registerGoapFusionActions() {
 				if idx, m := p.NextMilestone(); m != nil {
 					ps.RecordAttemptAndMaybeBlock(p.ID, idx, goapProgramMaxMilestoneAttempts)
 					_ = ps.Save()
+					// Stamp WHICH milestone was charged so an infrastructure
+					// failure later in this cycle can refund exactly this
+					// charge — the queued refs below are re-read after the
+					// store re-open and may start past a just-blocked one.
+					setGoapState(bb, "program_milestone_charged", fmt.Sprintf("%s:%d", p.ID, idx))
 					// Re-open so a just-blocked milestone is reflected in the
 					// queueing pass below (which re-reads ps.Active()).
 					ps, _ = research.OpenPrograms(goapProgramsPath)

@@ -38,6 +38,20 @@ func init() {
 	// agent runner, A2A, and bt_run_task execute them instead of silently
 	// falling back to DefaultTree.
 	domains.DynamicResolveFn = ResolveGeneratedTree
+	// Learned Selector reordering (opt-in, BT_SELECTOR_REORDER=1).
+	wireSelectorReorder()
+}
+
+// wireSelectorReorder wires learned Selector reordering at resolve time —
+// STRICTLY opt-in via BT_SELECTOR_REORDER=1. Success-rate ordering inverts
+// cost-first routers (e.g. the nlm-before-Claude quota economy in the goap
+// research trees), so it must never become an ambient default. When enabled,
+// every resolved tree reorders from its OWN per-tree telemetry file
+// (agent.SelectorStatsFile), which the agent runner populates on every run.
+func wireSelectorReorder() {
+	if os.Getenv("BT_SELECTOR_REORDER") == "1" {
+		domains.SelectorStatsPathFn = agent.SelectorStatsFile
+	}
 }
 
 // generatedTreeDir is the directory scanned for runtime-generated trees.

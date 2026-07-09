@@ -69,6 +69,19 @@ func NewExpertKnowledge() *ExpertKnowledge {
 	}
 }
 
+// SeedSpecialistRegistry returns a registry pre-loaded with the benchmark-
+// validated specialist archetypes, so production populations always carry
+// resurrection material. Without seeding, Population.Specialists stays nil
+// outside tests and the crisis-resurrection half of the proactive
+// crisis-intervention program is dead code.
+func SeedSpecialistRegistry() *SpecialistRegistry {
+	reg := NewSpecialistRegistry()
+	for _, ind := range NewExpertKnowledge().SeedSpecialists() {
+		reg.Observe(ind.Meta, ind.Tree, 0)
+	}
+	return reg
+}
+
 // SeedSpecialists builds population individuals carrying specialist provenance.
 //
 // Each seeded Individual pairs a benchmark-validated specialist tree with an

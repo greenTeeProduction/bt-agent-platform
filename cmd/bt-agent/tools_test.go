@@ -14,6 +14,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // TestRegisterMCPToolsCommentMatchesActualToolCount guards the doc comment on
@@ -1205,5 +1206,135 @@ func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
 	}
 	if errOut2["error"] != "unknown tree" {
 		t.Fatalf("bt_evolve_selectors unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut2)
+	}
+}
+
+// The DLQ's agent surface (c8094002 ms3): bt_dlq_list exposes retained entries
+// and bt_dlq_replay requeue-flags one entry for drop-safe re-execution. With
+// wait=true the replay runs synchronously through the configured executor so
+// the caller sees the outcome; without an executor (an MCP sibling instance)
+// the requeue flag alone is the deliverable — the daemon's scan consumes it.
+func TestBTDLQToolsListAndReplay(t *testing.T) {
+	prev := engine.TaskDLQ
+	t.Cleanup(func() { engine.TaskDLQ = prev })
+
+	dlq := reliability.NewDeadLetterQueue("")
+	dlq.Push(reliability.DeadLetterEntry{ID: "dead-1", Agent: "agent-a", Task: "rebuild index", Error: "boom"})
+	dlq.Push(reliability.DeadLetterEntry{ID: "dead-2", Agent: "agent-b", Task: "other work", Error: "kaput"})
+	executed := 0
+	dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
+		executed++
+		if e.ID != "dead-1" {
+			t.Errorf("executor received wrong entry: %s", e.ID)
+		}
+		return nil
+	})
+	engine.TaskDLQ = dlq
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	for _, tool := range []string{"bt_dlq_list", "bt_dlq_replay"} {
+		if !server.HasTool(tool) {
+			t.Fatalf("%s must be registered by registerMCPTools", tool)
+		}
+	}
+
+	res, ok := server.Invoke("bt_dlq_list", json.RawMessage(`{}`))
+	if !ok || res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_dlq_list returned no content")
+	}
+	var listOut map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &listOut); err != nil {
+		t.Fatalf("bt_dlq_list result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if n, isNum := listOut["count"].(float64); !isNum || int(n) != 2 {
+		t.Fatalf("bt_dlq_list count = %v, want 2", listOut["count"])
+	}
+	if entries, isList := listOut["entries"].([]interface{}); !isList || len(entries) != 2 {
+		t.Fatalf("bt_dlq_list entries = %v, want 2 entries", listOut["entries"])
+	}
+
+	// Synchronous replay of a live entry succeeds and removes it.
+	rep, ok := server.Invoke("bt_dlq_replay", json.RawMessage(`{"id":"dead-1","wait":true}`))
+	if !ok || rep == nil || len(rep.Content) == 0 {
+		t.Fatal("bt_dlq_replay returned no content")
+	}
+	var repOut map[string]interface{}
+	if err := json.Unmarshal([]byte(rep.Content[0].Text), &repOut); err != nil {
+		t.Fatalf("bt_dlq_replay result is not valid JSON: %v", err)
+	}
+	if repOut["replayed"] != true {
+		t.Fatalf("bt_dlq_replay must report replayed=true for a successful synchronous replay; got %v", repOut)
+	}
+	if executed != 1 {
+		t.Fatalf("executor invocations = %d, want 1", executed)
+	}
+	if dlq.Len() != 1 {
+		t.Fatalf("replayed entry must be removed; %d entries remain, want 1", dlq.Len())
+	}
+
+	// Unknown id: refused with a reason, nothing executed.
+	unknownRep, _ := server.Invoke("bt_dlq_replay", json.RawMessage(`{"id":"no-such","wait":true}`))
+	var unknownOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknownRep.Content[0].Text), &unknownOut); err != nil {
+		t.Fatalf("bt_dlq_replay unknown-id result is not valid JSON: %v", err)
+	}
+	if unknownOut["requeued"] != false {
+		t.Fatalf("unknown id must not be requeued; got %v", unknownOut)
+	}
+	if executed != 1 {
+		t.Fatalf("unknown id must not reach the executor; invocations = %d", executed)
+	}
+}
+
+// Production evolution passes must carry the specialist registry so crisis
+// resurrection (f5f47894 milestone 4) is live outside tests: a population
+// without Specialists silently skips archetype archival and resurrection.
+func TestNewProductionPopulationAttachesSpecialists(t *testing.T) {
+	pop := newProductionPopulation(4, evolution.DefaultTree())
+	if pop == nil {
+		t.Fatal("newProductionPopulation returned nil")
+	}
+	if pop.Specialists == nil || len(pop.Specialists.Archetypes) == 0 {
+		t.Fatal("production populations must attach a seeded SpecialistRegistry")
+	}
+}
+
+// Every population the MCP evolution tools build must go through the
+// production helper — a raw evolution.NewPopulation call site silently drops
+// the specialist wiring again.
+func TestToolsBuildPopulationsViaProductionHelper(t *testing.T) {
+	src, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	if n := strings.Count(string(src), "evolution.NewPopulation("); n != 1 {
+		t.Fatalf("evolution.NewPopulation appears %d times in tools.go; every call site must route through newProductionPopulation (exactly 1 occurrence, inside the helper)", n)
+	}
+}
+
+// Without a queue (engine.TaskDLQ nil — bare test binaries), the DLQ tools
+// degrade to an error shape instead of panicking.
+func TestBTDLQToolsWithoutQueue(t *testing.T) {
+	prev := engine.TaskDLQ
+	engine.TaskDLQ = nil
+	t.Cleanup(func() { engine.TaskDLQ = prev })
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	for _, tool := range []string{"bt_dlq_list", "bt_dlq_replay"} {
+		res, ok := server.Invoke(tool, json.RawMessage(`{"id":"x"}`))
+		if !ok || res == nil || len(res.Content) == 0 {
+			t.Fatalf("%s returned no content", tool)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("%s result is not valid JSON: %v", tool, err)
+		}
+		if _, hasErr := out["error"]; !hasErr {
+			t.Fatalf("%s without a queue must return an error shape; got %v", tool, out)
+		}
 	}
 }

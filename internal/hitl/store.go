@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -92,12 +93,35 @@ func (s *Store) load() error {
 	return nil
 }
 
+// hitlMaxStoredTerminal caps how many TERMINAL requests (skipped, expired,
+// approved, rejected) save() retains — newest by UpdatedAt win, and pending
+// requests are never dropped. The store previously kept every request forever
+// (1,514 requests / 9.4 MB on the production box by 2026-07-09, 99% of them
+// auto-skipped).
+const hitlMaxStoredTerminal = 1000
+
 func (s *Store) save() error {
 	list := make([]*Request, 0, len(s.records))
+	var terminal []*Request
 	for _, r := range s.records {
-		list = append(list, r)
+		if r.Status == StatusPending {
+			list = append(list, r)
+			continue
+		}
+		terminal = append(terminal, r)
 	}
-	data, err := json.MarshalIndent(list, "", "  ")
+	if len(terminal) > hitlMaxStoredTerminal {
+		sort.Slice(terminal, func(i, j int) bool {
+			return terminal[i].UpdatedAt.After(terminal[j].UpdatedAt)
+		})
+		for _, dropped := range terminal[hitlMaxStoredTerminal:] {
+			delete(s.records, dropped.ID)
+		}
+		terminal = terminal[:hitlMaxStoredTerminal]
+	}
+	list = append(list, terminal...)
+	// Compact JSON: the store is machine-read; indentation tripled its size.
+	data, err := json.Marshal(list)
 	if err != nil {
 		return err
 	}

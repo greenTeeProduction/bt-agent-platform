@@ -203,7 +203,18 @@ type mcpDeps struct {
 	personaStore *persona.Store
 }
 
-// registerMCPTools registers all 75 MCP tools on the server.
+// newProductionPopulation builds an evolution population for the MCP tools
+// with the specialist registry attached, so crisis resurrection is live in
+// every production evolution pass instead of reachable only from tests. All
+// tool call sites must construct populations through this helper (pinned by
+// TestToolsBuildPopulationsViaProductionHelper).
+func newProductionPopulation(size int, base *evolution.SerializableNode) *evolution.Population {
+	pop := evolution.NewPopulation(size, base)
+	pop.Specialists = evolution.SeedSpecialistRegistry()
+	return pop
+}
+
+// registerMCPTools registers all 77 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -726,7 +737,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if baseTree == nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
-			pop := evolution.NewPopulation(population, baseTree)
+			pop := newProductionPopulation(population, baseTree)
 			// Warm-start from the daemon's persistent experience bank when one
 			// is wired; a nil bank degrades to plain Evolve inside
 			// EvolveWithExperience, keeping the result shape uniform.
@@ -781,7 +792,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			// Deterministic, LLM-free evolution reusing the shared structural
 			// fitness — avoids EvolveMAPElites, which invokes the LLM supervisor.
-			pop := evolution.NewPopulation(population, baseTree)
+			pop := newProductionPopulation(population, baseTree)
 			pop.Evolve(params.Generations, structuralFitnessFn)
 			grid := evolution.NewMAPElitesGrid(population / 2)
 			grid.InsertFromPopulation(pop, params.Domain)
@@ -907,7 +918,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			// Deterministic, LLM-free memetic evolution reusing the shared
 			// structural fitness so the tool stays -short-safe.
-			pop := evolution.NewPopulation(population, baseTree)
+			pop := newProductionPopulation(population, baseTree)
 			searcher := evolution.NewLocalSearcher(searchStrategy)
 			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
 			data, _ := json.Marshal(map[string]interface{}{
@@ -967,7 +978,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// Deterministic, LLM-free Q-learning evolution reusing the shared
 			// structural fitness so the tool stays -short-safe.
 			qt := evolution.NewQTable()
-			pop := evolution.NewPopulation(population, baseTree)
+			pop := newProductionPopulation(population, baseTree)
 			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate)
 			learned := qt.LearnedActions()
 			data, _ := json.Marshal(map[string]interface{}{
@@ -1052,11 +1063,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				params.Islands = len(names)
 				for _, name := range names {
-					im.AddIsland(name, evolution.NewPopulation(population, seeds[name]))
+					im.AddIsland(name, newProductionPopulation(population, seeds[name]))
 				}
 			} else {
 				for i := 0; i < params.Islands; i++ {
-					im.AddIsland(fmt.Sprintf("island_%d", i), evolution.NewPopulation(population, baseTree))
+					im.AddIsland(fmt.Sprintf("island_%d", i), newProductionPopulation(population, baseTree))
 				}
 			}
 			for g := 0; g < params.Generations; g++ {
@@ -1201,7 +1212,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					continue
 				}
 				algorithms["genetic"]++
-				pop := evolution.NewPopulation(population, baseTree)
+				pop := newProductionPopulation(population, baseTree)
 				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				entry := map[string]interface{}{
 					"tree":           b.TreeID,
@@ -1268,7 +1279,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					skipped = append(skipped, sp.TreeID)
 					continue
 				}
-				pop := evolution.NewPopulation(population, baseTree)
+				pop := newProductionPopulation(population, baseTree)
 				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
 				report = append(report, map[string]interface{}{
@@ -1286,6 +1297,89 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"skipped":                 skipped,
 				"experience_bank_entries": bankEntries,
 			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	// ─── DEAD LETTER QUEUE (drop-safe replay, c8094002 ms3) ───────────────
+
+	server.RegisterTool("bt_dlq_list", "List retained dead-letter entries (failed agent runs kept for inspection and drop-safe replay): id, agent, task, error, category, attempts, requeue/abandon state",
+		map[string]engine.Property{
+			"limit": {Type: "integer", Description: "Maximum entries to return, newest last (default: 50)"},
+		},
+		[]string{},
+		func(args json.RawMessage) *engine.ToolResult {
+			if engine.TaskDLQ == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"dead letter queue unavailable in this instance"}`}}}
+			}
+			var params struct {
+				Limit int `json:"limit"`
+			}
+			_ = json.Unmarshal(args, &params)
+			if params.Limit <= 0 {
+				params.Limit = 50
+			}
+			entries := engine.TaskDLQ.List()
+			total := len(entries)
+			if len(entries) > params.Limit {
+				entries = entries[len(entries)-params.Limit:]
+			}
+			out := make([]map[string]interface{}, 0, len(entries))
+			for _, e := range entries {
+				item := map[string]interface{}{
+					"id":        e.ID,
+					"agent":     e.Agent,
+					"task":      truncateDLQField(e.Task, 140),
+					"error":     truncateDLQField(e.Error, 200),
+					"category":  e.Category,
+					"attempts":  e.Attempts,
+					"failed_at": e.FailedAt,
+					"abandoned": e.Abandoned,
+				}
+				if !e.RequeuedAt.IsZero() {
+					item["requeued_at"] = e.RequeuedAt
+				}
+				out = append(out, item)
+			}
+			data, _ := json.Marshal(map[string]interface{}{"count": total, "entries": out})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_dlq_replay", "Requeue a dead-letter entry for drop-safe re-execution — the entry is removed only after the replay succeeds. wait=true replays synchronously through this instance's executor and reports the outcome; otherwise the daemon's background scan consumes the requeue flag",
+		map[string]engine.Property{
+			"id":   {Type: "string", Description: "DLQ entry id"},
+			"wait": {Type: "boolean", Description: "Replay synchronously and report the outcome (default: false)"},
+		},
+		[]string{"id"},
+		func(args json.RawMessage) *engine.ToolResult {
+			if engine.TaskDLQ == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"dead letter queue unavailable in this instance"}`}}}
+			}
+			var params struct {
+				ID   string `json:"id"`
+				Wait bool   `json:"wait"`
+			}
+			_ = json.Unmarshal(args, &params)
+			result := map[string]interface{}{}
+			if _, ok := engine.TaskDLQ.Requeue(params.ID); !ok {
+				result["requeued"] = false
+				result["reason"] = "unknown id, abandoned entry, or replay attempts exhausted"
+				data, _ := json.Marshal(result)
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			result["requeued"] = true
+			if params.Wait {
+				if entry, ok := engine.TaskDLQ.Replay(params.ID); ok {
+					result["replayed"] = true
+					result["agent"] = entry.Agent
+				} else {
+					result["replayed"] = false
+					result["reason"] = "replay did not succeed (executor missing in this instance, or the task failed again); entry retained"
+				}
+			} else {
+				result["note"] = "the daemon's background scan will replay this entry"
+			}
+			result["remaining"] = engine.TaskDLQ.Len()
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

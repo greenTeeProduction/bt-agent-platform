@@ -228,6 +228,34 @@ type DeadLetterQueue struct {
 	mu      sync.Mutex
 	entries []DeadLetterEntry
 	path    string // persistence file
+
+	executor  ReplayExecutor  // re-executes replayed tasks (SetReplayExecutor)
+	replaying map[string]bool // ids currently being replayed (guards doubled replays)
+}
+
+// ReplayExecutor re-executes one dead-lettered task. A nil error means the
+// task succeeded and the entry may be removed; any error retains the entry.
+type ReplayExecutor func(entry DeadLetterEntry) error
+
+// SetReplayExecutor installs the function Replay uses to re-execute tasks.
+func (dlq *DeadLetterQueue) SetReplayExecutor(fn ReplayExecutor) {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	dlq.executor = fn
+}
+
+// RequeuedReady returns the ids of entries flagged for retry (RequeuedAt set)
+// that are not abandoned — the background scan's work list.
+func (dlq *DeadLetterQueue) RequeuedReady() []string {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	var ids []string
+	for _, e := range dlq.entries {
+		if !e.RequeuedAt.IsZero() && !e.Abandoned {
+			ids = append(ids, e.ID)
+		}
+	}
+	return ids
 }
 
 // NewDeadLetterQueue creates a dead letter queue with optional persistence.
@@ -283,17 +311,63 @@ func (dlq *DeadLetterQueue) List() []DeadLetterEntry {
 	return result
 }
 
-// Replay removes an entry from the DLQ and returns it for re-execution.
+// Replay re-executes the entry with the given id through the configured
+// executor and removes it ONLY on success — drop-safe (c8094002 ms1). The old
+// Replay removed the entry and returned it for the caller to run: any caller
+// without a tree runner, or one that crashed mid-replay, silently dropped the
+// task. Without an executor, on an abandoned entry, or when the executor
+// fails, the entry is retained. A failed replay clears RequeuedAt so the
+// background scan does not hot-loop the same failure (Requeue counts the
+// attempts that gate abandonment), and abandons the entry once its attempts
+// are exhausted. Concurrent replays of the same id are refused while one is in
+// flight; the executor runs without holding the queue lock (a replay is a full
+// agent run and may take minutes).
 func (dlq *DeadLetterQueue) Replay(id string) (*DeadLetterEntry, bool) {
 	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-
-	for i, e := range dlq.entries {
+	if dlq.executor == nil || dlq.replaying[id] {
+		dlq.mu.Unlock()
+		return nil, false
+	}
+	var entry DeadLetterEntry
+	found := false
+	for _, e := range dlq.entries {
 		if e.ID == id {
+			entry, found = e, true
+			break
+		}
+	}
+	if !found || entry.Abandoned {
+		dlq.mu.Unlock()
+		return nil, false
+	}
+	if dlq.replaying == nil {
+		dlq.replaying = make(map[string]bool)
+	}
+	dlq.replaying[id] = true
+	executor := dlq.executor
+	dlq.mu.Unlock()
+
+	err := executor(entry)
+
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	delete(dlq.replaying, id)
+	for i := range dlq.entries {
+		if dlq.entries[i].ID != id {
+			continue
+		}
+		if err == nil {
+			replayed := dlq.entries[i]
 			dlq.entries = append(dlq.entries[:i], dlq.entries[i+1:]...)
 			dlq.save()
-			return &e, true
+			return &replayed, true
 		}
+		dlq.entries[i].RequeuedAt = time.Time{}
+		if dlq.entries[i].Attempts >= MaxReplayAttempts {
+			dlq.entries[i].Abandoned = true
+		}
+		dlq.save()
+		return nil, false
 	}
 	return nil, false
 }

@@ -12,7 +12,16 @@
 # Returns: number of drift issues found (0 = clean)
 
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve ROOT from the *invoking* working tree, not the script's own location:
+# the shared pre-commit hook calls the MAIN repo's copy of this script, so a
+# dirname-based ROOT made cycle worktrees validate the MAIN repo's materialized
+# docs — drift they could never self-fix (2026-07-09 fleet commit-gate wedge).
+# Outside a git work tree (e.g. invoked from the bare repo dir) fall back to
+# the script-relative root.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$ROOT" ]; then
+    ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+fi
 ERRORS=0
 WARNINGS=0
 

@@ -140,20 +140,114 @@ func TestDeadLetterQueue_PushList(t *testing.T) {
 	}
 }
 
-func TestDeadLetterQueue_Replay(t *testing.T) {
+// ─── Drop-safe replay (c8094002 ms1) ────────────────────────────────────────
+// The old Replay removed the entry and returned it for the CALLER to execute —
+// any caller without a tree runner (or that crashed mid-replay) silently
+// dropped the task. Drop-safe Replay re-executes through a configured executor
+// and removes the entry ONLY after the executor succeeds.
+
+// Without an executor, Replay must refuse and retain — never hand out an entry
+// it has already deleted.
+func TestDeadLetterQueue_ReplayWithoutExecutorRefuses(t *testing.T) {
 	dlq := NewDeadLetterQueue("")
 	dlq.Push(DeadLetterEntry{ID: "a", Task: "task a"})
-	dlq.Push(DeadLetterEntry{ID: "b", Task: "task b"})
 
-	entry, ok := dlq.Replay("a")
-	if !ok {
-		t.Error("should find entry 'a'")
-	}
-	if entry.Task != "task a" {
-		t.Errorf("expected 'task a', got %q", entry.Task)
+	if _, ok := dlq.Replay("a"); ok {
+		t.Fatal("Replay without an executor must refuse")
 	}
 	if dlq.Len() != 1 {
-		t.Errorf("expected 1 remaining, got %d", dlq.Len())
+		t.Fatalf("entry must be retained, got %d entries", dlq.Len())
+	}
+}
+
+// A successful replay runs the executor with the entry and only then removes
+// it — and the removal is persisted, surviving a reload from disk.
+func TestDeadLetterQueue_ReplayRemovesOnlyOnSuccess(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+	dlq := NewDeadLetterQueue(path)
+	dlq.Push(DeadLetterEntry{ID: "a", Task: "task a", Agent: "agent-a"})
+	dlq.Push(DeadLetterEntry{ID: "b", Task: "task b"})
+
+	var executed DeadLetterEntry
+	dlq.SetReplayExecutor(func(e DeadLetterEntry) error {
+		executed = e
+		return nil
+	})
+
+	entry, ok := dlq.Replay("a")
+	if !ok || entry == nil || entry.ID != "a" {
+		t.Fatalf("successful replay must report the replayed entry, got %v/%v", entry, ok)
+	}
+	if executed.Task != "task a" || executed.Agent != "agent-a" {
+		t.Fatalf("executor must receive the dead-lettered task, got %+v", executed)
+	}
+	if dlq.Len() != 1 {
+		t.Fatalf("only the replayed entry may be removed, got %d entries", dlq.Len())
+	}
+	if got := NewDeadLetterQueue(path).Len(); got != 1 {
+		t.Fatalf("removal must be persisted: reloaded %d entries, want 1", got)
+	}
+}
+
+// A failed replay retains the entry (nothing is dropped) and clears the
+// requeue flag so the background scan does not hot-loop the same failure.
+func TestDeadLetterQueue_ReplayRetainsOnFailure(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{ID: "a", Task: "task a"})
+	if _, ok := dlq.Requeue("a"); !ok {
+		t.Fatal("setup: requeue must succeed")
+	}
+	dlq.SetReplayExecutor(func(DeadLetterEntry) error {
+		return errors.New("agent outcome: failure")
+	})
+
+	if _, ok := dlq.Replay("a"); ok {
+		t.Fatal("a failed replay must not report success")
+	}
+	entries := dlq.List()
+	if len(entries) != 1 {
+		t.Fatalf("failed replay must retain the entry, got %d", len(entries))
+	}
+	if !entries[0].RequeuedAt.IsZero() {
+		t.Fatal("failed replay must clear RequeuedAt so the scan loop does not hot-loop it")
+	}
+}
+
+// An abandoned entry must never reach the executor.
+func TestDeadLetterQueue_ReplayRefusesAbandoned(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{ID: "a", Task: "poison", Abandoned: true})
+
+	invoked := false
+	dlq.SetReplayExecutor(func(DeadLetterEntry) error {
+		invoked = true
+		return nil
+	})
+	if _, ok := dlq.Replay("a"); ok {
+		t.Fatal("an abandoned entry must never be replayed")
+	}
+	if invoked {
+		t.Fatal("executor must not be invoked for an abandoned entry")
+	}
+	if dlq.Len() != 1 {
+		t.Fatal("abandoned entry stays retained for inspection")
+	}
+}
+
+// RequeuedReady is the background scan's work list: requeued entries only,
+// abandoned ones excluded.
+func TestDeadLetterQueue_RequeuedReady(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{ID: "flagged", Task: "t"})
+	dlq.Push(DeadLetterEntry{ID: "idle", Task: "t"})
+	dlq.Push(DeadLetterEntry{ID: "dead", Task: "t", Abandoned: true, RequeuedAt: time.Now()})
+	if _, ok := dlq.Requeue("flagged"); !ok {
+		t.Fatal("setup: requeue must succeed")
+	}
+
+	ready := dlq.RequeuedReady()
+	if len(ready) != 1 || ready[0] != "flagged" {
+		t.Fatalf("RequeuedReady = %v, want [flagged] (idle not requeued, dead abandoned)", ready)
 	}
 }
 

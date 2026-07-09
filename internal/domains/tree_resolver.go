@@ -20,19 +20,27 @@ import (
 // execution-layer concern. Nil means no dynamic resolution (ADR-010 Phase 0).
 var DynamicResolveFn func(id string) *evolution.SerializableNode
 
-// SelectorStatsPath points at the durable Selector telemetry file
-// (selector_stats.json) written by SelectorOptimizer.SaveSelectorStats. When it
-// is non-empty, every tree returned by ResolveTreeID has its Selector children
-// reordered by learned success rate (evolution.SelectorOptimizer with
-// OrderBySuccessRate) before the tree is handed to the engine, so the
-// accumulated telemetry actually steers which child is tried first. Selectors
-// with fewer than the optimizer's MinSamples recorded outcomes keep their
-// authored order, and fallback/default-path children stay last.
+// SelectorStatsPath points at a shared durable Selector telemetry file
+// (SelectorOptimizer.SaveSelectorStats format). When non-empty, every tree
+// returned by ResolveTreeID has its Selector children reordered by learned
+// success rate before the tree is handed to the engine. Selectors with fewer
+// than the optimizer's MinSamples recorded outcomes keep their authored
+// order, and fallback/default-path children stay last.
 //
-// Installed by agentexec at link time (see internal/agentexec/wiring.go) —
-// domains itself does not own the telemetry store location. Empty means no
-// learned reordering, so domains tests stay standalone.
+// NOBODY wires this by default: learned reordering is a semantic change
+// (success-rate ordering inverts cost-first routers such as the
+// nlm-before-Claude quota economy), so it is strictly opt-in —
+// internal/agentexec wires the per-tree SelectorStatsPathFn only under
+// BT_SELECTOR_REORDER=1. Empty means no learned reordering, so domains tests
+// stay standalone.
 var SelectorStatsPath string
+
+// SelectorStatsPathFn resolves the durable Selector telemetry file for ONE
+// tree id and takes precedence over the shared SelectorStatsPath. Per-tree
+// files keep equal selector NAMES in unrelated trees from polluting each
+// other's learned ordering. Returning "" for an id disables reordering for
+// that tree. Wired (opt-in) by internal/agentexec.
+var SelectorStatsPathFn func(treeID string) string
 
 // ResolveTreeID maps a tree identifier string to a serializable behavior tree,
 // then applies any learned Selector ordering (SelectorStatsPath) so accumulated
@@ -41,21 +49,29 @@ var SelectorStatsPath string
 func ResolveTreeID(id string) *evolution.SerializableNode {
 	tree := resolveTreeID(id)
 	if tree != nil {
-		applyLearnedSelectorOrdering(tree)
+		applyLearnedSelectorOrdering(id, tree)
 	}
 	return tree
 }
 
-// applyLearnedSelectorOrdering seeds a SelectorOptimizer from the durable
-// telemetry at SelectorStatsPath and reorders the tree's Selector children in
+// applyLearnedSelectorOrdering seeds a SelectorOptimizer from the tree's
+// durable telemetry (per-tree SelectorStatsPathFn first, shared
+// SelectorStatsPath as fallback) and reorders the tree's Selector children in
 // place by learned success rate. A missing/empty path or a load error leaves
 // the authored order untouched, so cold or unwired deployments are unaffected.
-func applyLearnedSelectorOrdering(tree *evolution.SerializableNode) {
-	if SelectorStatsPath == "" {
+func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
+	path := ""
+	if SelectorStatsPathFn != nil {
+		path = SelectorStatsPathFn(id)
+	}
+	if path == "" {
+		path = SelectorStatsPath
+	}
+	if path == "" {
 		return
 	}
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
-	if err := so.LoadSelectorStats(SelectorStatsPath); err != nil {
+	if err := so.LoadSelectorStats(path); err != nil {
 		return
 	}
 	so.ApplyLearnedOrdering(tree)

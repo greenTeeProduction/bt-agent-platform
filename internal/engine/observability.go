@@ -49,6 +49,12 @@ func (o *observedCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
 	if RecordNodeTickFn != nil {
 		RecordNodeTickFn(o.nodeType, o.nodeName, o.parentName, o.blockID, status, durMs)
 	}
+	// Terminal child outcomes feed the per-run tick log; the agent runner
+	// merges Selector-attributed ticks into the durable selector telemetry at
+	// run end (learned Selector ordering's producer).
+	if code != 0 && o.parentName != "" && ctx.Blackboard != nil {
+		ctx.Blackboard.recordChildTick(o.parentName, o.nodeName, status)
+	}
 
 	span.SetAttribute("bt.status", status)
 	span.SetAttribute("bt.tick_code", fmt.Sprintf("%d", code))

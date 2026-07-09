@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
@@ -48,6 +49,58 @@ func (t toolStub) Name() string        { return t.name }
 func (t toolStub) Description() string { return t.desc }
 func (t toolStub) Call(_ string) string {
 	return fmt.Sprintf("STUB_ERROR: tool '%s' is a stub with no real implementation. Do not fabricate output — report that this tool is unavailable and proceed with available tools only.", t.name)
+}
+
+// ChildTick is one terminal (success/failure) child tick under a named parent
+// composite, recorded by the observability wrapper. The agent runner flushes
+// Selector-attributed ticks into the durable per-tree selector telemetry at
+// run end, which is what feeds learned Selector ordering.
+type ChildTick struct {
+	Parent string
+	Child  string
+	Status string
+}
+
+// maxChildTicks bounds the per-run tick record so a runaway re-ticking tree
+// cannot grow the run's memory without limit.
+const maxChildTicks = 1024
+
+// childTickLog is the shared, mutex-guarded tick record. It hangs off the
+// Blackboard as a POINTER so the shallow Blackboard copies some composites
+// make (reactive parallel) share the same log instead of tripping copylocks —
+// and their children's ticks still land in the run's record.
+type childTickLog struct {
+	mu    sync.Mutex
+	ticks []ChildTick
+}
+
+// recordChildTick appends one terminal child outcome, dropping ticks beyond
+// maxChildTicks. Guarded because Parallel composites tick children
+// concurrently. BuildTree pre-initializes the log; the lazy init here only
+// serves single-threaded direct callers (tests).
+func (bb *Blackboard) recordChildTick(parent, child, status string) {
+	if bb.childTicks == nil {
+		bb.childTicks = &childTickLog{}
+	}
+	l := bb.childTicks
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.ticks) >= maxChildTicks {
+		return
+	}
+	l.ticks = append(l.ticks, ChildTick{Parent: parent, Child: child, Status: status})
+}
+
+// ChildTicks returns a copy of the run's recorded terminal child ticks.
+func (bb *Blackboard) ChildTicks() []ChildTick {
+	if bb.childTicks == nil {
+		return nil
+	}
+	bb.childTicks.mu.Lock()
+	defer bb.childTicks.mu.Unlock()
+	out := make([]ChildTick, len(bb.childTicks.ticks))
+	copy(out, bb.childTicks.ticks)
+	return out
 }
 
 // Blackboard is the shared state passed through the behavior tree.
@@ -81,6 +134,13 @@ type Blackboard struct {
 	TokensUsed int
 	TickBudget int
 	TreeTicks  int
+
+	// childTicks records terminal child outcomes with their parent composite
+	// (appended by the observability wrapper, bounded by maxChildTicks; read
+	// via ChildTicks()). The agent runner filters these to Selector parents
+	// and merges them into the durable per-tree selector telemetry at run end.
+	// A pointer so shallow Blackboard copies share the same log (copylocks).
+	childTicks *childTickLog
 
 	// Sandbox disables real action side effects: when true, actionForName
 	// returns a simulated success for every action instead of dispatching to
@@ -125,6 +185,12 @@ func BuildTree(serTree *evolution.SerializableNode, bb *Blackboard) btcore.Comma
 // SubTreeRef nodes are expanded first when a tree expander is registered (internal/blocks).
 // Returns an error if validation fails; on success the tree is still built.
 func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btcore.Command[Blackboard], error) {
+	// Pre-initialize the shared tick log so shallow Blackboard copies made
+	// during execution (reactive parallel) share this run's log rather than
+	// lazily creating divergent ones.
+	if bb != nil && bb.childTicks == nil {
+		bb.childTicks = &childTickLog{}
+	}
 	expanded, err := prepareTreeForBuild(serTree)
 	if err != nil {
 		return nil, err
@@ -139,9 +205,18 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 	return buildNode(expanded, bb, ""), nil
 }
 
-// buildNode recursively builds a go-bt Command from a SerializableNode.
-// parentName tracks the parent node's name for path-tracking in StrategyRouters.
+// buildNode builds the node and wraps it with the per-node observability
+// command (tracing span, RecordNodeTickFn metrics hook, terminal child-tick
+// recording for selector telemetry). The wrapper existed but was never
+// applied — node metrics, node spans, and selector telemetry all silently
+// produced nothing until this wiring.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
+	return observeNode(node, parentName, buildNodeInner(node, bb, parentName))
+}
+
+// buildNodeInner recursively builds a go-bt Command from a SerializableNode.
+// parentName tracks the parent node's name for path-tracking in StrategyRouters.
+func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
 	// If this Sequence is inside a StrategyRouter, record its name as the active path
 	if parentName == "StrategyRouter" && node.Type == "Sequence" && node.Name != "" {
 		origChildren := node.Children

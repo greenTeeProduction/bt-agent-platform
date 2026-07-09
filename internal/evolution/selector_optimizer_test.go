@@ -324,3 +324,44 @@ func TestSelectorOptimizer_ConcurrentMergeSumsCounts(t *testing.T) {
 		t.Errorf("concurrent-merge successes: want %d, got %d", want, got)
 	}
 }
+
+// A long-lived optimizer that Saves more than once must not double-count:
+// Save merges only the UNSAVED delta onto disk, so repeated saves are
+// idempotent. The merge-the-whole-in-memory-state behavior re-added what was
+// already on disk on every save (5 → 10 → 20 …), silently corrupting the
+// telemetry any periodic saver produced.
+func TestSelectorOptimizer_RepeatedSaveIsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selector_stats.json")
+
+	so := NewSelectorOptimizer(OrderBySuccessRate)
+	for i := 0; i < 5; i++ {
+		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
+	}
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("second save (no new records): %v", err)
+	}
+
+	reloaded := NewSelectorOptimizer(OrderBySuccessRate)
+	if err := reloaded.LoadSelectorStats(path); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := reloaded.Stats["Router"].Children["FastPath"].Successes; got != 5 {
+		t.Fatalf("successes after double save = %d, want 5 (no double-count)", got)
+	}
+
+	// Records added after a save contribute exactly once more.
+	so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("third save: %v", err)
+	}
+	again := NewSelectorOptimizer(OrderBySuccessRate)
+	if err := again.LoadSelectorStats(path); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := again.Stats["Router"].Children["FastPath"].Successes; got != 6 {
+		t.Fatalf("successes after post-save record = %d, want 6", got)
+	}
+}

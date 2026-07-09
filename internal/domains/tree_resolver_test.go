@@ -120,3 +120,47 @@ func TestResolveTreeID_ColdSelectorKeepsAuthoredOrder(t *testing.T) {
 			got.Children[0].Name, got.Children[1].Name)
 	}
 }
+
+// TestResolveTreeID_PerTreeStatsFn pins the per-tree telemetry consumer: when
+// SelectorStatsPathFn is wired (agentexec, behind BT_SELECTOR_REORDER=1), each
+// resolved tree reorders from its OWN stats file. A single shared file would
+// let equal selector NAMES in unrelated trees pollute each other's learned
+// ordering — tree A's telemetry must reorder only tree A.
+func TestResolveTreeID_PerTreeStatsFn(t *testing.T) {
+	origFn := DynamicResolveFn
+	defer func() { DynamicResolveFn = origFn }()
+	origPathFn := SelectorStatsPathFn
+	defer func() { SelectorStatsPathFn = origPathFn }()
+	origPath := SelectorStatsPath
+	defer func() { SelectorStatsPath = origPath }()
+	SelectorStatsPath = ""
+
+	// Telemetry exists ONLY for core:a — same "TriageSel" selector name in
+	// both trees.
+	statsA := writeSelectorStats(t, map[string][2]int{
+		"FastPath": {9, 1},
+		"SlowPath": {2, 8},
+	})
+	SelectorStatsPathFn = func(treeID string) string {
+		if treeID == "core:a" {
+			return statsA
+		}
+		return ""
+	}
+
+	trees := map[string]*evolution.SerializableNode{
+		"core:a": triageSelectorTree(),
+		"core:b": triageSelectorTree(),
+	}
+	DynamicResolveFn = func(id string) *evolution.SerializableNode { return trees[id] }
+
+	a := ResolveTreeID("core:a")
+	if a == nil || a.Children[0].Name != "FastPath" {
+		t.Fatalf("core:a must reorder from its own telemetry; children[0] = %v", a)
+	}
+	b := ResolveTreeID("core:b")
+	if b == nil || b.Children[0].Name != "SlowPath" || b.Children[1].Name != "FastPath" {
+		t.Fatalf("core:b has no telemetry and must keep authored order; got [%s, %s]",
+			b.Children[0].Name, b.Children[1].Name)
+	}
+}

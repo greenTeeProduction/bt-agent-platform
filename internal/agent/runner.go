@@ -237,6 +237,10 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	result.EndedAt = time.Now()
 	result.Duration = result.EndedAt.Sub(start)
 
+	// Durable selector telemetry: merge this run's Selector-attributed child
+	// outcomes into the tree's stats file (learned Selector ordering's writer).
+	d.flushSelectorTelemetry(tree, result.TreeID, bb)
+
 	if opts.RecordHistory && d.History != nil {
 		errStr := ""
 		if !passed && opts.EnforceQuality && spec != nil {

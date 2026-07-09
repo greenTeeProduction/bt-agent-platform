@@ -477,8 +477,12 @@ func (f *Factory) selectParents(category, _ string) []string {
 			candidates = append(candidates, id)
 		}
 	}
-	// Fall back to any category
+	// Fall back to any category — REBUILD the pool instead of appending to it:
+	// re-appending the same-category ids duplicates them, and a duplicated id
+	// survives the by-index weighted draw as two "distinct" parents (a
+	// self-crossover).
 	if len(candidates) < 2 {
+		candidates = candidates[:0]
 		for id, tmpl := range f.Templates {
 			if id != tmpl.SourceID {
 				continue // category-alias key aliasing another template

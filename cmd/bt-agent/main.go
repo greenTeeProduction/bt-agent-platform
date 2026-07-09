@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -184,6 +185,33 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 		return runErr
 	}
 	return attemptOutcomeError(outcome, output)
+}
+
+// dlqReplayScanInterval is how often the daemon consumes requeued dead-letter
+// entries (dashboard/MCP "replay" flags) through the drop-safe replay executor.
+const dlqReplayScanInterval = 5 * time.Minute
+
+// truncateDLQField bounds a DLQ entry field for the bt_dlq_list report.
+func truncateDLQField(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+// logA2AServeError logs an A2A listener failure. "address already in use" is
+// EXPECTED sibling contention — every MCP/CLI-spawned bt-agent next to the
+// daemon triggers it (CLAUDE.md documents it as warned-and-ignored) — so it
+// logs at WARN; anything else is a genuine ERROR.
+func logA2AServeError(err error) {
+	if err == nil {
+		return
+	}
+	if strings.Contains(err.Error(), "address already in use") {
+		engine.Warn("a2a port busy — another bt-agent instance holds it (expected for MCP/CLI siblings)", "error", err)
+		return
+	}
+	engine.Error("a2a server failed", "error", err)
 }
 
 func main() {
@@ -402,6 +430,39 @@ func main() {
 		return outcome, output, res, err
 	})
 
+	// Drop-safe DLQ replay consumer (c8094002 ms2) — daemon only: MCP-spawned
+	// sibling instances share the same DLQ file and must not double-replay.
+	// Replays run the agent ONCE, without the scheduler's retry/DLQ wrapper,
+	// so a failed replay can never push a duplicate dead letter.
+	if noMCPMode() {
+		dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
+			rctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			res, runErr := agentRunner.RunOnce(rctx, e.Agent, e.Task, agent.RunOptions{
+				InjectMemory:   true,
+				EnforceQuality: true,
+			})
+			if runErr != nil {
+				return runErr
+			}
+			if res != nil && res.Outcome != "success" {
+				return fmt.Errorf("agent outcome: %s: %s", res.Outcome, agent.OutcomeErrorDetail(res.Output))
+			}
+			return nil
+		})
+		go func() {
+			ticker := time.NewTicker(dlqReplayScanInterval)
+			defer ticker.Stop()
+			for range ticker.C {
+				for _, id := range dlq.RequeuedReady() {
+					if entry, ok := dlq.Replay(id); ok {
+						engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
+					}
+				}
+			}
+		}()
+	}
+
 	// Auto-load agent schedules on startup
 	for _, inst := range agentReg.List() {
 		sched := inst.Definition.Schedule
@@ -528,7 +589,7 @@ func main() {
 		}
 		go func() {
 			if err := a2aSrv.Start(); err != nil {
-				engine.Error("a2a server failed", "error", err)
+				logA2AServeError(err)
 			}
 		}()
 		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))

@@ -824,6 +824,13 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	defer func() {
 		if result == -1 {
 			markGoapFusionImplDegraded(bb, bb.Result)
+			// Infrastructure failures (rate limit, wedged commit gate, apply/
+			// sync refusal, worktree failure) refund the milestone attempt
+			// charged at queue time — external outages must never consume the
+			// milestone-abandon budget (2026-07-09 doc-drift wedge lesson).
+			if isGoapInfraCycleFailure(bb.Outcome, bb.Result) {
+				refundGoapMilestoneAttemptForInfraFailure(bb)
+			}
 			// Clear the durable plan on every non-rate-limit failure so the
 			// next scheduled cycle re-plans from scratch instead of re-resuming
 			// a doomed plan forever (and dropping any freshly-analyzed goals).
