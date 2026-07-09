@@ -17,6 +17,7 @@
 | [`security`](#package-security) | 580+ | 92% | Rate limiter, sanitization, IP filter, audit, request IDs |
 | [`config`](#package-config) | 540+ | 94% | Env-based config, JSON file support, hot-reload watcher |
 | [`metrics`](#package-metrics) | 200+ | 92% | Prometheus Counter/Gauge/Histogram, middleware |
+| [`persona`](#package-persona) | 1,000+ | 80% | Per-user personalization: profiles, interaction log, habit mining, automations (ADR-010) |
 | [`tracing`](#package-tracing) | 250+ | 90% | OpenTelemetry-ready Tracer/Span, console exporter |
 | [`benchmark`](#package-benchmark) | 1,500+ | 85% | A/B test suite, ScoreMutation, BFCL/SWE-bench/τ-bench/ToolBench/BTPG |
 | [`api`](#package-api) | 800+ | 94% | OpenAPI 3.0 generator, JSON schema I/O, content types |
@@ -647,6 +648,36 @@ func (h *Histogram) Observe(val float64)
 func MetricsMiddleware(next http.Handler) http.Handler
 func MetricsJSON() []byte                                // Prometheus text format
 func RecordTask(agentName string, success bool, duration time.Duration, quality float64)
+```
+
+## Package: persona
+
+`github.com/nico/go-bt-evolve/internal/persona`
+
+Per-user personalization layer (ADR-010): isolated user workspaces with
+profiles, an append-only interaction log, habit mining over recurring task
+patterns, and gated automation records.
+
+```go
+type Store struct { ... }                                // user workspaces root
+func NewStore(usersRoot string) (*Store, error)
+
+type Workspace struct { ... }                            // one user's isolated dir
+type Profile struct { ... }                              // preferences + approval policy
+type ApprovalPolicy struct { ... }
+
+type Log struct { ... }                                  // append-only interaction log
+func NewLog(ws Workspace) (*Log, error)
+func (l *Log) Append(rec Interaction) error
+func (l *Log) All() ([]Interaction, error)
+func (l *Log) Since(cutoff time.Time) ([]Interaction, error)
+
+type HabitMiner struct { ... }                           // recurring-pattern mining
+func NewHabitMiner() *HabitMiner
+func (m *HabitMiner) Mine(interactions []Interaction, now time.Time) []RecurringPattern
+
+type AutomationStore struct { ... }                      // proposed/approved automations
+func NewAutomationStore(w Workspace) (*AutomationStore, error)
 ```
 
 ## Package: tracing
