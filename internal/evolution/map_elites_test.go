@@ -297,3 +297,108 @@ func TestMAPElitesGrid_EmptyElites(t *testing.T) {
 		t.Error("empty grid BestIndividual should be nil")
 	}
 }
+
+// diagonalSpecimen builds the i-th specimen for a deliberately sparse MAP-Elites
+// grid. Each specimen is a linear chain of depth 2*i (so its depth bucket is
+// 2*i) padded with root leaves until its node count lands in node bucket 10*i.
+// Six specimens (i in 0..5) therefore occupy six distinct cells spanning six
+// node buckets and six depth buckets in a single domain: 6 occupied out of a
+// 6*6 == 36 estimated grid, a DiversityScore of 0.167 that sits below the
+// CrisisDetector's 0.2 collapse threshold.
+func diagonalSpecimen(i int) *SerializableNode {
+	depth := 2 * i
+	root := &SerializableNode{Type: "Selector", Name: "spec"}
+	cur := root
+	for d := 0; d < depth; d++ {
+		cur.Children = append(cur.Children, SerializableNode{Type: "Sequence", Name: "chain"})
+		cur = &cur.Children[len(cur.Children)-1]
+	}
+	// Pad leaves at the root so node count == 1 + depth + pad == 10*i + 5,
+	// which buckets to 10*i.
+	pad := 8*i + 4
+	for p := 0; p < pad; p++ {
+		root.Children = append(root.Children, SerializableNode{Type: "Action", Name: "leaf"})
+	}
+	return root
+}
+
+// TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention verifies milestone
+// 5/5 of the proactive crisis-intervention program: the MAP-Elites illuminator
+// must wire the same DetectPopulation / emergency-rate / Resurrect handling that
+// Population.Evolve already has. Today EvolveMAPElites builds the population
+// state and calls supervisor.Guide but throws away every crisis signal, so a
+// collapsed grid silently converges instead of self-correcting.
+//
+// Setup: an initial population whose behavioral descriptors spread along a sparse
+// diagonal so the grid's DiversityScore collapses to 6/36 == 0.167 — below the
+// detector's 0.2 threshold, tripping diversity_collapse. A SpecialistRegistry is
+// pre-loaded with a validated, high-fitness "goap" archetype last seen at
+// generation 0, and the live population carries no goap provenance, so the niche
+// reads as long extinct. After one EvolveMAPElites generation the illuminator
+// must (a) run under the emergency mutation rate and (b) inject a
+// resurrected:true specialist back into the illuminated population.
+func TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention(t *testing.T) {
+	// Pre-archive a high-fitness specialist that is missing from the live
+	// population, last seen at generation 0.
+	registry := NewSpecialistRegistry()
+	archetype := &SerializableNode{
+		Type:     "Sequence",
+		Name:     "GoapSpecialist",
+		Children: []SerializableNode{{Type: "Action", Name: "PlanGoap"}},
+	}
+	registry.Observe(&EvolutionMetadata{
+		TreeID:  "goap-archetype",
+		Tags:    []string{"specialist:goap"},
+		Fitness: FitnessRecord{Score: 0.95, Validated: true},
+	}, archetype, 0)
+
+	const domain = "godev"
+	individuals := make([]Individual, 6)
+	for i := 0; i < 6; i++ {
+		tree := diagonalSpecimen(i)
+		individuals[i] = Individual{Tree: tree, Genome: hashTree(tree)}
+	}
+
+	mp := &MAPElitesPopulation{
+		Population: &Population{
+			Individuals: individuals,
+			// Far past the archetype's last-seen generation so any reasonable
+			// extinctAfter window has elapsed once Evolve bumps the counter.
+			Generation:  500,
+			Specialists: registry,
+		},
+		Grid:   NewMAPElitesGrid(3),
+		Domain: domain,
+	}
+
+	// Confirm the setup really presents a collapsed grid before evolving.
+	mp.Grid.InsertFromPopulation(mp.Population, domain)
+	if div := mp.Grid.DiversityScore(); div <= 0 || div >= 0.2 {
+		t.Fatalf("test setup: want collapsed grid diversity in (0, 0.2), got %.3f", div)
+	}
+
+	// Constant fitness keeps every individual "working" so quality_crash stays
+	// quiet and diversity_collapse is the isolated crisis signal.
+	mp.EvolveMAPElites(1, func(*SerializableNode) float64 { return 1.0 })
+
+	if mp.Crisis == nil {
+		t.Fatal("EvolveMAPElites did not lazily initialize the CrisisDetector")
+	}
+
+	emergency := NewCrisisDetector().GetEmergencyMutationRate()
+	if mp.LastMutationRate < emergency {
+		t.Errorf("collapsed-grid generation mutation rate = %.3f, want >= EmergencyRate %.3f",
+			mp.LastMutationRate, emergency)
+	}
+
+	var resurrected bool
+	for _, ind := range mp.Individuals {
+		if ind.Meta != nil && ind.Meta.IsResurrected() {
+			resurrected = true
+			break
+		}
+	}
+	if !resurrected {
+		t.Fatal("expected EvolveMAPElites to resurrect the extinct goap specialist into the illuminated population")
+	}
+}

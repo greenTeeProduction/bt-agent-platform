@@ -38,6 +38,14 @@ type Population struct {
 	// DetectPopulation surfaced across the most recent Evolve run, in
 	// first-seen order (e.g. "diversity_collapse", "regression_spiral").
 	CrisisReasons []string `json:"crisis_reasons,omitempty"`
+	// Specialists preserves the best validated archetype per specialist family
+	// across generations so a diversity-collapse or extinction can be reversed
+	// by resurrecting a lost niche instead of silently converging. Validated
+	// elites are Observe'd into it every generation, and when a crisis is
+	// detected any extinct high-fitness specialist is Resurrect'd back into the
+	// population in place of the weakest non-elite individual. Nil disables
+	// specialist archiving/resurrection. Not serialized.
+	Specialists *SpecialistRegistry `json:"-"`
 	// LastMutationRate records the mutation rate actually applied in the most
 	// recent generation of an Evolve run. It equals the supervisor's
 	// recommended rate for a healthy generation, or the CrisisDetector's
@@ -164,6 +172,16 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
 		})
 
+		// Archive validated specialist elites every generation so that if a
+		// niche later goes extinct — say during this same diversity collapse —
+		// the registry still holds its best-performing archetype to resurrect.
+		// Observe no-ops on individuals lacking validated specialist provenance.
+		if p.Specialists != nil {
+			for i := 0; i < eliteCount && i < len(p.Individuals); i++ {
+				p.Specialists.Observe(p.Individuals[i].Meta, p.Individuals[i].Tree, p.Generation)
+			}
+		}
+
 		// Record baseline fitness of each individual BEFORE mutation
 		baselineFitness := make([]float64, len(p.Individuals))
 		for i := range p.Individuals {
@@ -204,6 +222,16 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 
 		p.Individuals = newPop
 		p.Evaluate(fitnessFn)
+
+		// Crisis recovery: resurrect extinct specialists. When a death spiral is
+		// underway a lost high-fitness niche won't spontaneously reappear through
+		// crossover of a collapsed population, so pull each extinct archetype out
+		// of the registry and inject it in place of the weakest non-elite
+		// individual. This re-seeds diversity with proven genomes rather than
+		// letting the niche stay silently extinct.
+		if emergency && p.Specialists != nil {
+			p.resurrectExtinctSpecialists(eliteCount)
+		}
 
 		// Quality gate: count regressions and revert them
 		for i := eliteCount; i < len(p.Individuals); i++ {
@@ -257,6 +285,74 @@ func containsCrisisReason(reasons []string, want string) bool {
 		}
 	}
 	return false
+}
+
+const (
+	// specialistExtinctAfter is how many generations a specialist niche must be
+	// absent from the live population before its archetype counts as extinct and
+	// eligible for resurrection.
+	specialistExtinctAfter = 5
+	// specialistMinFitness is the minimum archived fitness worth resurrecting;
+	// low-value archetypes are left extinct rather than re-seeded.
+	specialistMinFitness = 0.5
+)
+
+// resurrectExtinctSpecialists replaces the weakest non-elite individuals with
+// resurrected archetypes for any specialist niche that has gone extinct. It is
+// the crisis-recovery half of the specialist loop: Observe archives elites each
+// generation, and when a crisis fires this pulls the lost niches back in.
+func (p *Population) resurrectExtinctSpecialists(eliteCount int) {
+	if p.Specialists == nil {
+		return
+	}
+	current := p.specialistNicheCounts()
+	extinct := p.Specialists.ExtinctSpecialists(current, p.Generation, specialistExtinctAfter, specialistMinFitness)
+	for _, archetype := range extinct {
+		ind, meta, ok := p.Specialists.Resurrect(archetype.Type, p.Generation)
+		if !ok {
+			continue
+		}
+		idx := p.weakestNonEliteIndex(eliteCount)
+		if idx < 0 {
+			break // no replaceable slot left this generation
+		}
+		ind.Meta = meta
+		p.Individuals[idx] = ind
+	}
+}
+
+// specialistNicheCounts tallies how many live individuals carry each specialist
+// niche, so ExtinctSpecialists can tell which archetypes are currently absent.
+func (p *Population) specialistNicheCounts() map[string]int {
+	counts := make(map[string]int)
+	for i := range p.Individuals {
+		meta := p.Individuals[i].Meta
+		if meta == nil {
+			continue
+		}
+		if t := firstSpecialistType(meta.Tags); t != "" {
+			counts[t]++
+		}
+	}
+	return counts
+}
+
+// weakestNonEliteIndex returns the index of the lowest-fitness non-elite
+// individual, skipping any already resurrected this generation so a second
+// extinct niche doesn't overwrite the first. Returns -1 if none is available.
+func (p *Population) weakestNonEliteIndex(eliteCount int) int {
+	idx := -1
+	var worst float64
+	for i := eliteCount; i < len(p.Individuals); i++ {
+		if m := p.Individuals[i].Meta; m != nil && m.IsResurrected() {
+			continue
+		}
+		if idx == -1 || p.Individuals[i].Fitness < worst {
+			worst = p.Individuals[i].Fitness
+			idx = i
+		}
+	}
+	return idx
 }
 
 // experienceHintTopK bounds how many prior experiences the warm-start retrieves.
