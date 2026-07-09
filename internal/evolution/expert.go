@@ -69,6 +69,87 @@ func NewExpertKnowledge() *ExpertKnowledge {
 	}
 }
 
+// SeedSpecialists builds population individuals carrying specialist provenance.
+//
+// Each seeded Individual pairs a benchmark-validated specialist tree with an
+// *EvolutionMetadata that records a "specialist:<type>" tag and validated
+// fitness — exactly the two properties SpecialistRegistry.Observe keys on. This
+// gives the registry a real population to observe (and later resurrect from)
+// instead of a seam reachable only from tests.
+func (ek *ExpertKnowledge) SeedSpecialists() []Individual {
+	seeds := []struct {
+		specialist string
+		fitness    float64
+		build      func() *SerializableNode
+	}{
+		{"goap", 0.90, func() *SerializableNode {
+			return NewTree("GoapSpecialist",
+				NewPreGate(NewCondition("IsPlanningTask", "Task needs goal-oriented action planning")),
+				NewStrategyRouter(NewStrategy("GoapPlanPath",
+					NewAction("BuildWorldState", "Derive world state from task"),
+					NewAction("PlanGoapActions", "Search action graph for a plan"),
+				)),
+				NewReflect(),
+				NewDefaultOutcomeSelector(2048),
+			)
+		}},
+		{"security", 0.88, func() *SerializableNode {
+			return NewTree("SecuritySpecialist",
+				NewPreGate(NewCondition("IsSecurityTask", "Task requires a security audit")),
+				NewStrategyRouter(NewStrategy("SecurityAuditPath",
+					NewAction("ScanForVulnerabilities", "Detect insecure patterns"),
+					NewAction("ReportFindings", "Summarize security findings"),
+				)),
+				NewReflect(),
+				NewDefaultOutcomeSelector(2048),
+			)
+		}},
+		{"code_reviewer", 0.87, func() *SerializableNode {
+			return NewTree("CodeReviewerSpecialist",
+				NewPreGate(NewCondition("IsCodeReview", "Task is a code review")),
+				NewStrategyRouter(NewStrategy("CodeReviewPath",
+					NewAction("ReviewGoCode", "Review diff for correctness"),
+					NewAction("SuggestFixes", "Propose actionable fixes"),
+				)),
+				NewReflect(),
+				NewDefaultOutcomeSelector(2048),
+			)
+		}},
+		{"planner", 0.85, func() *SerializableNode {
+			return NewTree("PlannerSpecialist",
+				NewPreGate(NewCondition("NeedsPlan", "Task must be decomposed into steps")),
+				NewStrategyRouter(NewStrategy("PlanningPath",
+					NewAction("DecomposeTask", "Break the task into milestones"),
+					NewAction("OrderSteps", "Order milestones by dependency"),
+				)),
+				NewReflect(),
+				NewDefaultOutcomeSelector(2048),
+			)
+		}},
+	}
+
+	individuals := make([]Individual, 0, len(seeds))
+	for _, s := range seeds {
+		tree := s.build()
+		genome := hashTree(tree)
+		meta := &EvolutionMetadata{
+			TreeID:   "specialist:" + s.specialist + ":seed",
+			Genotype: genome,
+			Fitness:  FitnessRecord{Score: s.fitness, Validated: true},
+			Phase:    "seed",
+			Tags:     []string{"specialist:" + s.specialist, "expert_seeded:true"},
+			Version:  1,
+		}
+		individuals = append(individuals, Individual{
+			Tree:    tree,
+			Fitness: s.fitness,
+			Genome:  genome,
+			Meta:    meta,
+		})
+	}
+	return individuals
+}
+
 // provenPatterns returns design patterns validated by benchmark AB testing.
 func provenPatterns() []DesignPattern {
 	return []DesignPattern{

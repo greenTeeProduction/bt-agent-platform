@@ -12,9 +12,10 @@ import (
 
 // Individual represents one tree in the population.
 type Individual struct {
-	Tree    *SerializableNode `json:"tree"`
-	Fitness float64           `json:"fitness"`
-	Genome  string            `json:"genome"` // SHA256 hash of serialized tree
+	Tree    *SerializableNode  `json:"tree"`
+	Fitness float64            `json:"fitness"`
+	Genome  string             `json:"genome"`         // SHA256 hash of serialized tree
+	Meta    *EvolutionMetadata `json:"meta,omitempty"` // specialist provenance for SpecialistRegistry.Observe
 }
 
 // Population is a generation of individuals.
@@ -27,6 +28,23 @@ type Population struct {
 	TotalMutations      int               `json:"total_mutations"`
 	Regressions         int               `json:"regressions"`
 	NicheDiversityScore float64           `json:"niche_diversity"`
+
+	// Crisis wires proactive population-level crisis detection into the GA
+	// loop. It is lazily initialized on first Evolve so death spirals
+	// (diversity collapse, regression spirals, quality crashes) are detected
+	// as they happen rather than silently converging. Not serialized.
+	Crisis *CrisisDetector `json:"-"`
+	// CrisisReasons accumulates the unique population-level crisis reasons
+	// DetectPopulation surfaced across the most recent Evolve run, in
+	// first-seen order (e.g. "diversity_collapse", "regression_spiral").
+	CrisisReasons []string `json:"crisis_reasons,omitempty"`
+	// LastMutationRate records the mutation rate actually applied in the most
+	// recent generation of an Evolve run. It equals the supervisor's
+	// recommended rate for a healthy generation, or the CrisisDetector's
+	// emergency rate when proactive crisis intervention overrode it. Not
+	// serialized; it exists so callers (and tests) can observe whether a
+	// generation ran under emergency control.
+	LastMutationRate float64 `json:"-"`
 }
 
 // NewPopulation creates an initial population by mutating a base tree.
@@ -104,8 +122,42 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
-		guidance := supervisor.Guide(BuildPopulationState(p))
+		state := BuildPopulationState(p)
+		guidance := supervisor.Guide(state)
 		mutationRate := guidance.RecommendedRate
+
+		// Proactive crisis intervention: reuse the same PopulationState built
+		// for the supervisor to detect population-level death spirals this
+		// generation. Reasons accumulate across generations so an early
+		// diversity collapse and a later regression spiral both survive.
+		if p.Crisis == nil {
+			p.Crisis = NewCrisisDetector()
+		}
+		crisis, reasons := p.Crisis.DetectPopulation(&state)
+		if len(reasons) > 0 {
+			p.recordCrisisReasons(reasons)
+		}
+
+		// Act on the crisis signal instead of throwing it away: when a
+		// population-level death spiral is detected — or the supervisor itself
+		// flags an intervention phase — override this generation's mutation
+		// rate with the detector's emergency rate so the GA breaks out of the
+		// spiral rather than silently converging.
+		emergency := crisis || guidance.Intervention
+		if emergency {
+			mutationRate = p.Crisis.GetEmergencyMutationRate()
+		}
+		p.LastMutationRate = mutationRate
+
+		// A streak-based spiral (regression_spiral / quality_crash) is what
+		// ResetPopulation exists to clear, so remember whether one surfaced
+		// this generation. The reset runs once the emergency generation
+		// completes (see end of loop), giving the recovered population a clean
+		// slate. A pure diversity_collapse leaves the streak counters alone so
+		// a still-regressing population's streak keeps accumulating toward the
+		// regression_spiral threshold instead of being reset out from under it.
+		resetStreaks := containsCrisisReason(reasons, "regression_spiral") ||
+			containsCrisisReason(reasons, "quality_crash")
 
 		// Sort by fitness descending
 		sort.Slice(p.Individuals, func(i, j int) bool {
@@ -164,9 +216,47 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 		if p.BestFitness > p.PrevBestFitness {
 			p.PrevBestFitness = p.BestFitness
 		}
+
+		// After an emergency generation that tripped a streak-based spiral ran
+		// under the elevated mutation rate, reset the population-level streak
+		// counters so the recovered population isn't immediately re-flagged by
+		// stale spiral history.
+		if resetStreaks {
+			p.Crisis.ResetPopulation()
+		}
 	}
 
 	return p.BestTree
+}
+
+// recordCrisisReasons merges newly detected population-level crisis reasons
+// into p.CrisisReasons, preserving first-seen order and skipping duplicates so
+// reasons surfaced in different generations (e.g. an early diversity collapse
+// and a later regression spiral) both persist to the end of the run.
+func (p *Population) recordCrisisReasons(reasons []string) {
+	for _, r := range reasons {
+		seen := false
+		for _, existing := range p.CrisisReasons {
+			if existing == r {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			p.CrisisReasons = append(p.CrisisReasons, r)
+		}
+	}
+}
+
+// containsCrisisReason reports whether the given crisis reason appears in the
+// slice DetectPopulation surfaced this generation.
+func containsCrisisReason(reasons []string, want string) bool {
+	for _, r := range reasons {
+		if r == want {
+			return true
+		}
+	}
+	return false
 }
 
 // experienceHintTopK bounds how many prior experiences the warm-start retrieves.

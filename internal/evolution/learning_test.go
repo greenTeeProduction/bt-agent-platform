@@ -1,0 +1,165 @@
+package evolution
+
+import (
+	"fmt"
+	"testing"
+)
+
+// TestPopulationEvolve_RecordsCrisisReasons verifies that Population.Evolve
+// wires proactive crisis intervention into the GA loop: it lazily initializes a
+// CrisisDetector, calls DetectPopulation each generation (reusing the same
+// PopulationState built for supervisor.Guide), and records the returned
+// population-level crisis reasons on Population.CrisisReasons.
+//
+// The population is deliberately unhealthy: 10 individuals share one genome so
+// Population.Diversity() collapses to 0.1 (below the 0.2 crisis threshold), and
+// a pre-seeded high regression rate trips the regression streak. Evolve should
+// therefore record both "diversity_collapse" and "regression_spiral".
+func TestPopulationEvolve_RecordsCrisisReasons(t *testing.T) {
+	base := DefaultTree()
+
+	const size = 10
+	pop := &Population{
+		Individuals: make([]Individual, size),
+		// Pre-seed a saturated regression rate. RegressionRate() is a percentage
+		// (100 here), well above the detector's 0.5 threshold, so three
+		// consecutive generations trip regression_spiral.
+		Regressions:    100,
+		TotalMutations: 100,
+	}
+	for i := 0; i < size; i++ {
+		// Identical genome across the population → Diversity() == 1/size == 0.1.
+		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
+	}
+
+	if d := pop.Diversity(); d <= 0 || d >= 0.2 {
+		t.Fatalf("test setup: want collapsed diversity in (0, 0.2), got %.3f", d)
+	}
+
+	// Constant fitness keeps every individual "working" (WorkingRatio == 1) so
+	// quality_crash stays quiet and the two target reasons are isolated.
+	pop.Evolve(4, func(*SerializableNode) float64 { return 1.0 })
+
+	if pop.Crisis == nil {
+		t.Fatal("Evolve did not lazily initialize Population.Crisis")
+	}
+	if !containsReason(pop.CrisisReasons, "diversity_collapse") {
+		t.Errorf("expected diversity_collapse recorded, got %v", pop.CrisisReasons)
+	}
+	if !containsReason(pop.CrisisReasons, "regression_spiral") {
+		t.Errorf("expected regression_spiral recorded, got %v", pop.CrisisReasons)
+	}
+}
+
+// TestPopulationEvolve_CrisisIntervention verifies milestone 2/5 of the
+// proactive crisis-intervention wiring: it is no longer enough to merely
+// *record* the crisis reasons — Evolve must ACT on the signal. When
+// DetectPopulation fires (or the supervisor flags an intervention phase),
+// Evolve overrides that generation's mutation rate with the CrisisDetector's
+// emergency rate and calls ResetPopulation once the emergency generation
+// completes, clearing the streak counters. A healthy generation keeps the
+// supervisor's recommended rate and leaves no crisis footprint.
+func TestPopulationEvolve_CrisisIntervention(t *testing.T) {
+	base := DefaultTree()
+	const size = 10
+
+	t.Run("crisis generation forces the emergency rate and clears streaks", func(t *testing.T) {
+		pop := &Population{
+			Individuals: make([]Individual, size),
+			// Saturated regression rate: RegressionRate() == 100% (well above
+			// the detector's 0.5 threshold) so the regression streak advances.
+			Regressions:    100,
+			TotalMutations: 100,
+		}
+		for i := 0; i < size; i++ {
+			// Identical genome → Diversity() == 0.1 < 0.2 → diversity_collapse.
+			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical"}
+		}
+		// Pre-seed the regression streak to 2 so this single generation's
+		// DetectPopulation lifts it to 3 (a spiral). Only ResetPopulation can
+		// bring it back to 0: the reactive DetectPopulation logic leaves it at
+		// 3 because the regression rate stays high, so a non-zero value proves
+		// ResetPopulation was never called.
+		pop.Crisis = NewCrisisDetector()
+		pop.Crisis.regressionStreak = 2
+		pop.Crisis.qualityCrash = 3
+
+		pop.Evolve(1, func(*SerializableNode) float64 { return 1.0 })
+
+		emergency := pop.Crisis.GetEmergencyMutationRate()
+		if pop.LastMutationRate < emergency {
+			t.Errorf("crisis generation mutation rate = %.3f, want >= EmergencyRate %.3f",
+				pop.LastMutationRate, emergency)
+		}
+		if pop.Crisis.regressionStreak != 0 {
+			t.Errorf("regressionStreak = %d after emergency generation, want 0 (ResetPopulation not called)",
+				pop.Crisis.regressionStreak)
+		}
+		if pop.Crisis.qualityCrash != 0 {
+			t.Errorf("qualityCrash = %d after emergency generation, want 0", pop.Crisis.qualityCrash)
+		}
+	})
+
+	t.Run("healthy generation is unaffected", func(t *testing.T) {
+		pop := &Population{Individuals: make([]Individual, size)}
+		for i := 0; i < size; i++ {
+			// Distinct genomes → Diversity() == 1.0: no collapse, no crisis.
+			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: fmt.Sprintf("genome-%d", i)}
+		}
+
+		// Healthy fitness keeps the supervisor out of any intervention phase, so
+		// the recommended (non-emergency) rate must survive untouched.
+		pop.Evolve(1, func(*SerializableNode) float64 { return 0.85 })
+
+		if pop.Crisis == nil {
+			t.Fatal("Evolve did not lazily initialize Population.Crisis")
+		}
+		emergency := pop.Crisis.GetEmergencyMutationRate()
+		if pop.LastMutationRate >= emergency {
+			t.Errorf("healthy generation mutation rate = %.3f, want < EmergencyRate %.3f (should keep the supervisor's recommended rate)",
+				pop.LastMutationRate, emergency)
+		}
+		if len(pop.CrisisReasons) != 0 {
+			t.Errorf("healthy generation recorded crisis reasons %v, want none", pop.CrisisReasons)
+		}
+	})
+}
+
+// TestExpertKnowledge_SeedSpecialistsCarryProvenance verifies milestone 3/5 of the
+// crisis-intervention program: population individuals must carry specialist
+// provenance so the SpecialistRegistry has a type to key on.
+//
+// The expert seeder builds trees tagged with specialist metadata. Each seeded
+// Individual must expose that metadata through the new Individual.Meta field
+// (*EvolutionMetadata), carrying a "specialist:<type>" tag and validated fitness.
+// SpecialistRegistry.Observe requires exactly those two properties, so a seeded
+// individual fed to Observe must actually register an archetype — otherwise the
+// registry seam stays reachable only from tests and never sees a real population.
+func TestExpertKnowledge_SeedSpecialistsCarryProvenance(t *testing.T) {
+	seeded := NewExpertKnowledge().SeedSpecialists()
+	if len(seeded) == 0 {
+		t.Fatal("expected expert seeder to produce at least one specialist individual")
+	}
+
+	registry := NewSpecialistRegistry()
+	for i, ind := range seeded {
+		if ind.Tree == nil {
+			t.Fatalf("seeded individual %d has no tree", i)
+		}
+		if ind.Meta == nil {
+			t.Fatalf("seeded individual %d carries no *EvolutionMetadata (Individual.Meta is nil)", i)
+		}
+		if firstSpecialistType(ind.Meta.Tags) == "" {
+			t.Fatalf("seeded individual %d meta has no specialist: tag, got tags %v", i, ind.Meta.Tags)
+		}
+		if !ind.Meta.Fitness.Validated {
+			t.Fatalf("seeded individual %d meta fitness is not validated", i)
+		}
+		// The point of the provenance: the registry can key on it.
+		registry.Observe(ind.Meta, ind.Tree, 0)
+	}
+
+	if len(registry.Archetypes) == 0 {
+		t.Fatal("expected SpecialistRegistry.Observe to record at least one archetype from the expert-seeded population")
+	}
+}
