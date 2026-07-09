@@ -376,6 +376,76 @@ func (so *SelectorOptimizer) ApplyOrdering(tree *SerializableNode, selectorName 
 	return reorderSelectorChildren(tree, selectorName, newOrder)
 }
 
+// ApplyLearnedOrdering walks tree and reorders the children of every Selector
+// node according to the learned strategy, while keeping fallback/default-path
+// children (including AlwaysSucceed) last so the Selector's short-circuit
+// semantics are preserved — the default path must never be promoted ahead of a
+// real path just because it "succeeds" every tick. Returns the number of
+// Selector nodes whose ordering actually changed.
+//
+// This is the production entry point used before an evolved tree is persisted:
+// seed the optimizer from durable telemetry (LoadSelectorStats), then apply the
+// learned ordering in place.
+func (so *SelectorOptimizer) ApplyLearnedOrdering(tree *SerializableNode) int {
+	if tree == nil {
+		return 0
+	}
+	changes := 0
+	so.applyLearnedNode(tree, &changes)
+	return changes
+}
+
+func (so *SelectorOptimizer) applyLearnedNode(node *SerializableNode, changes *int) {
+	if node.Type == "Selector" && len(node.Children) > 1 {
+		ranked := so.OrderChildren(node.Name)
+		if len(ranked) == len(node.Children) {
+			rank := make(map[string]int, len(ranked))
+			for i, name := range ranked {
+				rank[name] = i
+			}
+			idx := make([]int, len(node.Children))
+			for i := range idx {
+				idx[i] = i
+			}
+			sort.SliceStable(idx, func(a, b int) bool {
+				ca, cb := &node.Children[idx[a]], &node.Children[idx[b]]
+				da, db := isSelectorFallback(ca), isSelectorFallback(cb)
+				if da != db {
+					return !da // non-default paths first; fallbacks stay last
+				}
+				if da {
+					return false // both fallbacks: preserve relative order
+				}
+				return rank[ca.Name] < rank[cb.Name]
+			})
+			reordered := make([]SerializableNode, len(node.Children))
+			changed := false
+			for pos, oi := range idx {
+				reordered[pos] = node.Children[oi]
+				if oi != pos {
+					changed = true
+				}
+			}
+			if changed {
+				node.Children = reordered
+				*changes++
+			}
+		}
+	}
+	for i := range node.Children {
+		so.applyLearnedNode(&node.Children[i], changes)
+	}
+}
+
+// isSelectorFallback reports whether a Selector child is a fallback/default path
+// that must remain last. It honours the same default-path guard used by
+// BTOptimizer.optimizeNode (isDefaultPath) and additionally treats an
+// AlwaysSucceed leaf as a fallback, since such a node succeeds unconditionally
+// and would otherwise be promoted to the front by any success-rate ordering.
+func isSelectorFallback(child *SerializableNode) bool {
+	return child.Type == "AlwaysSucceed" || isDefaultPath(child)
+}
+
 // ─── Alpha-Beta Pruning for Selectors ────────────────────────────────────
 
 // ShouldPrune determines if a child can be skipped based on statistical

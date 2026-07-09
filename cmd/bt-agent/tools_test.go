@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
@@ -834,5 +836,166 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	}
 	if _, partial := errOut["learned_actions"]; partial {
 		t.Errorf("bt_evolve_qlearning unknown-tree error must carry no partial 'learned_actions'; got %v", errOut)
+	}
+}
+
+// injectSelectorProbeTree installs a DynamicResolveFn that resolves the
+// unqualified probe id "domain:selector_probe" to a fixed Selector-ordering
+// tree (Router selector over Cheap, Reliable, and an AlwaysSucceed Fallback),
+// mirroring the gardener's selectorOrderingTree fixture. Every other id resolves
+// to nil so the unknown-tree path and the qd/island tests' "domain:__no_such_tree__"
+// expectations are unaffected. The previous resolver is restored on cleanup so
+// this global does not leak into sibling tests (see the A2A tree-resolver global
+// leak lesson).
+func injectSelectorProbeTree(t *testing.T) {
+	t.Helper()
+	prev := domains.DynamicResolveFn
+	t.Cleanup(func() { domains.DynamicResolveFn = prev })
+	domains.DynamicResolveFn = func(id string) *evolution.SerializableNode {
+		if id != "domain:selector_probe" {
+			return nil
+		}
+		return &evolution.SerializableNode{
+			Type: "Sequence", Name: "Root",
+			Children: []evolution.SerializableNode{
+				{
+					Type: "Selector", Name: "Router",
+					Children: []evolution.SerializableNode{
+						{Type: "Sequence", Name: "Cheap"},
+						{Type: "Sequence", Name: "Reliable"},
+						{Type: "AlwaysSucceed", Name: "Fallback"},
+					},
+				},
+			},
+		}
+	}
+}
+
+// seedSelectorProbeStats writes durable Selector telemetry to path so that under
+// the "Router" selector the Reliable child (0.90 success) beats the Cheap child
+// (0.20 success); the AlwaysSucceed Fallback has a perfect success rate but must
+// stay last under the fallback/default-path guard. This is the on-disk format
+// SelectorOptimizer.SaveSelectorStats produces, which the tool must load.
+func seedSelectorProbeStats(t *testing.T, path string) {
+	t.Helper()
+	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	rec := func(child, outcome string, n int) {
+		for i := 0; i < n; i++ {
+			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
+		}
+	}
+	rec("Cheap", "success", 2)
+	rec("Cheap", "failure", 8) // 0.20 success rate
+	rec("Reliable", "success", 9)
+	rec("Reliable", "failure", 1)  // 0.90 success rate
+	rec("Fallback", "success", 10) // 1.00 — guard keeps it last anyway
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("SaveSelectorStats: %v", err)
+	}
+}
+
+// TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats pins the
+// bt_evolve_selectors MCP tool (Selector-ordering optimizer milestone 5/5): it
+// must be registered by registerMCPTools, load the durable Selector telemetry
+// from a supplied stats path, run the deterministic reordering pass over a named
+// tree, and report the per-Selector reorder count plus an entropy/information-gain
+// metric as JSON. The seeded telemetry makes the Reliable child out-rank the
+// Cheap child under the one "Router" Selector, so exactly one Selector must be
+// reordered. An empty/missing-stats input must be handled cleanly (zero reorders,
+// no error) rather than panicking, and an unknown tree id must yield the shared
+// {"error":"unknown tree"} shape.
+func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
+	injectSelectorProbeTree(t)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_evolve_selectors") {
+		t.Fatal("bt_evolve_selectors tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: a resolvable tree plus durable telemetry that flips one
+	// Selector's child ordering (Reliable ahead of Cheap, Fallback last).
+	statsPath := filepath.Join(t.TempDir(), "selector_stats.json")
+	seedSelectorProbeStats(t, statsPath)
+
+	args := json.RawMessage(fmt.Sprintf(`{"tree":"domain:selector_probe","stats_path":%q}`, statsPath))
+	res, ok := server.Invoke("bt_evolve_selectors", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selectors) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_selectors returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_selectors result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_selectors unexpectedly returned an error for a resolvable tree with telemetry: %v", out)
+	}
+
+	// The per-Selector reorder count must be reported, and the seeded telemetry
+	// reorders exactly one Selector ("Router").
+	reorders, isNum := out["reorders"].(float64)
+	if !isNum {
+		t.Fatalf("bt_evolve_selectors must report a numeric 'reorders' count; got %T (%v)", out["reorders"], out["reorders"])
+	}
+	if int(reorders) != 1 {
+		t.Errorf("bt_evolve_selectors must reorder exactly the one telemetry-flipped Selector; got reorders=%v", out["reorders"])
+	}
+
+	// An entropy / information-gain reduction metric must accompany the count.
+	ig, isNum := out["information_gain"].(float64)
+	if !isNum {
+		t.Fatalf("bt_evolve_selectors must report a numeric 'information_gain' metric; got %T (%v)", out["information_gain"], out["information_gain"])
+	}
+	if ig < 0 {
+		t.Errorf("bt_evolve_selectors 'information_gain' must be non-negative; got %v", ig)
+	}
+
+	// The reordered tree must be run through the persistence path so its outcome
+	// is reported (persisted true, or a persist/validation error under bare deps).
+	if _, present := out["persisted"]; !present {
+		t.Errorf("bt_evolve_selectors must report a 'persisted' outcome for the reordered tree; got keys %v", out)
+	}
+
+	// Empty/missing-stats boundary: a resolvable tree with no telemetry must be
+	// handled cleanly (zero reorders, no error) rather than panicking.
+	emptyStats := filepath.Join(t.TempDir(), "does_not_exist.json")
+	empty, ok := server.Invoke("bt_evolve_selectors", json.RawMessage(fmt.Sprintf(`{"tree":"domain:selector_probe","stats_path":%q}`, emptyStats)))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selectors) reported the tool as unregistered on the empty-stats path")
+	}
+	if empty == nil || len(empty.Content) == 0 {
+		t.Fatal("bt_evolve_selectors returned no content for empty stats")
+	}
+	var emptyOut map[string]interface{}
+	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
+		t.Fatalf("bt_evolve_selectors empty-stats result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
+	}
+	if _, isErr := emptyOut["error"]; isErr {
+		t.Fatalf("bt_evolve_selectors must not error on empty telemetry; got %v", emptyOut)
+	}
+	if n, isNum := emptyOut["reorders"].(float64); !isNum || int(n) != 0 {
+		t.Errorf("bt_evolve_selectors must report 'reorders' = 0 for empty telemetry; got %v", emptyOut["reorders"])
+	}
+
+	// Unknown tree: a known prefix with an unresolvable suffix resolves to nil,
+	// which must surface the shared unknown-tree error shape.
+	unknown, ok := server.Invoke("bt_evolve_selectors", json.RawMessage(`{"tree":"domain:__no_such_tree__"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selectors) reported the tool as unregistered on the error path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_selectors returned no content for an unknown tree")
+	}
+	var errOut2 map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut2); err != nil {
+		t.Fatalf("bt_evolve_selectors unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut2["error"] != "unknown tree" {
+		t.Fatalf("bt_evolve_selectors unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut2)
 	}
 }

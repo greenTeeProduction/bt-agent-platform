@@ -189,7 +189,7 @@ type mcpDeps struct {
 	personaStore *persona.Store
 }
 
-// registerMCPTools registers all 73 MCP tools on the server.
+// registerMCPTools registers all 74 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -1060,6 +1060,60 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"per_island_best": stats.BestPerDomain, "migrations": stats.Migrations,
 				"cross_diversity": stats.CrossDiversity,
 			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_selectors", "Apply the deterministic Selector-ordering optimizer to a named tree: load durable Selector telemetry, reorder each Selector's children by learned success rate (fallback/AlwaysSucceed children stay last), persist the reordered tree, and report the per-Selector reorder count and information-gain reduction",
+		map[string]engine.Property{
+			"tree":       {Type: "string", Description: "Base tree ID to reorder"},
+			"stats_path": {Type: "string", Description: "Path to durable Selector telemetry (SelectorOptimizer stats JSON); an empty or missing file yields zero reorders rather than an error"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree      string `json:"tree"`
+				StatsPath string `json:"stats_path"`
+			}
+			_ = json.Unmarshal(args, &params)
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Seed the optimizer from durable telemetry. A missing file leaves the
+			// optimizer empty (LoadSelectorStats returns nil for os.IsNotExist), so
+			// an un-seeded tree yields zero reorders and no error — the boundary the
+			// milestone requires to be handled cleanly rather than panicking. A
+			// corrupt file is surfaced non-fatally under stats_load_error so the
+			// empty-telemetry contract still holds.
+			so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+			result := map[string]interface{}{"tree": params.Tree}
+			if params.StatsPath != "" {
+				if err := so.LoadSelectorStats(params.StatsPath); err != nil {
+					result["stats_load_error"] = err.Error()
+				}
+			}
+			// Information-gain reduction: the sum over every telemetry-bearing
+			// Selector of its best child's expected entropy reduction (trying the
+			// most informative child first). Non-negative by construction, and zero
+			// when there is no telemetry.
+			infoGain := 0.0
+			for _, ss := range so.Stats {
+				best := 0.0
+				for _, cs := range ss.Children {
+					if ig := evolution.InformationGain(cs, ss); ig > best {
+						best = ig
+					}
+				}
+				infoGain += best
+			}
+			reorders := so.ApplyLearnedOrdering(baseTree)
+			result["reorders"] = reorders
+			result["information_gain"] = infoGain
+			// Run the reordered tree through the shared persistence path so its
+			// outcome (persisted true, or a validation/persist error under bare
+			// deps) is reported alongside the reorder count.
+			persistGeneratedTree(deps, params.Tree, baseTree, result)
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

@@ -355,6 +355,11 @@ type Config struct {
 	// trees per-user experience banks at <root>/<user>/experience (ADR-010
 	// Phase 5); empty means every tree shares ExperienceBank.
 	UserExperienceRoot string
+	// SelectorStatsPath, when set, is the durable Selector telemetry file
+	// (written by SelectorOptimizer.SaveSelectorStats) that seeds the
+	// learned-ordering pass in evolveTreeV2 when EvolveV2Config.SelectorOrdering
+	// is enabled. Empty disables the pass regardless of the flag.
+	SelectorStatsPath string
 }
 
 // Gardener is the 24/7 tree evolution agent.

@@ -20,9 +20,51 @@ import (
 // execution-layer concern. Nil means no dynamic resolution (ADR-010 Phase 0).
 var DynamicResolveFn func(id string) *evolution.SerializableNode
 
-// ResolveTreeID maps a tree identifier string to a serializable behavior tree.
+// SelectorStatsPath points at the durable Selector telemetry file
+// (selector_stats.json) written by SelectorOptimizer.SaveSelectorStats. When it
+// is non-empty, every tree returned by ResolveTreeID has its Selector children
+// reordered by learned success rate (evolution.SelectorOptimizer with
+// OrderBySuccessRate) before the tree is handed to the engine, so the
+// accumulated telemetry actually steers which child is tried first. Selectors
+// with fewer than the optimizer's MinSamples recorded outcomes keep their
+// authored order, and fallback/default-path children stay last.
+//
+// Installed by agentexec at link time (see internal/agentexec/wiring.go) —
+// domains itself does not own the telemetry store location. Empty means no
+// learned reordering, so domains tests stay standalone.
+var SelectorStatsPath string
+
+// ResolveTreeID maps a tree identifier string to a serializable behavior tree,
+// then applies any learned Selector ordering (SelectorStatsPath) so accumulated
+// telemetry reorders Selector children before the tree reaches the engine.
 // Used by bt-agent, A2A, and template validation tests.
 func ResolveTreeID(id string) *evolution.SerializableNode {
+	tree := resolveTreeID(id)
+	if tree != nil {
+		applyLearnedSelectorOrdering(tree)
+	}
+	return tree
+}
+
+// applyLearnedSelectorOrdering seeds a SelectorOptimizer from the durable
+// telemetry at SelectorStatsPath and reorders the tree's Selector children in
+// place by learned success rate. A missing/empty path or a load error leaves
+// the authored order untouched, so cold or unwired deployments are unaffected.
+func applyLearnedSelectorOrdering(tree *evolution.SerializableNode) {
+	if SelectorStatsPath == "" {
+		return
+	}
+	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	if err := so.LoadSelectorStats(SelectorStatsPath); err != nil {
+		return
+	}
+	so.ApplyLearnedOrdering(tree)
+}
+
+// resolveTreeID performs the raw ID→tree mapping without the learned-ordering
+// pass, so ResolveTreeID can funnel every resolved tree through a single
+// reorder step regardless of which branch produced it.
+func resolveTreeID(id string) *evolution.SerializableNode {
 	if id == "" {
 		return nil
 	}

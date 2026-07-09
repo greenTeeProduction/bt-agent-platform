@@ -31,6 +31,13 @@ type EvolveV2Config struct {
 
 	// Use real LLM or mock
 	UseRealLLM bool
+
+	// SelectorOrdering, when true, applies learned Selector child ordering from
+	// the durable telemetry at Config.SelectorStatsPath before an evolved tree
+	// is persisted (Selector-ordering optimizer milestone 4). Fallback and
+	// AlwaysSucceed children stay last, preserving short-circuit semantics.
+	// Off by default so the pass is a no-op until explicitly enabled.
+	SelectorOrdering bool
 }
 
 // DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
@@ -240,7 +247,13 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			applied = 0
 		}
 	}
-	if applied > 0 {
+	// ── Learned Selector ordering (milestone 4) — apply real-telemetry child
+	// ordering to the evolved tree just before it is persisted. Flag-gated and
+	// seeded from the durable stats; fallback/AlwaysSucceed children stay last
+	// so Selector short-circuit semantics are preserved. A reorder is itself a
+	// persistable change, so it forces a save even when no mutation applied.
+	reordered := g.applyLearnedSelectorOrdering(tree, cfg)
+	if applied > 0 || reordered > 0 {
 		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
 	}
 
@@ -259,6 +272,24 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		Rejections: rejected,
 		Rollbacks:  rollbacks,
 	}
+}
+
+// applyLearnedSelectorOrdering seeds a SelectorOptimizer from the durable
+// telemetry at Config.SelectorStatsPath and reorders every Selector's children
+// in tree by their learned success rate, keeping fallback/AlwaysSucceed children
+// last. It is a no-op (returns 0) unless the pass is enabled and a stats path is
+// configured. Returns the number of Selector nodes whose ordering changed.
+func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode, cfg EvolveV2Config) int {
+	if !cfg.SelectorOrdering || g.cfg.SelectorStatsPath == "" || tree == nil {
+		return 0
+	}
+	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	if err := so.LoadSelectorStats(g.cfg.SelectorStatsPath); err != nil {
+		slog.Warn("gardener/v2: loading selector stats failed, skipping ordering",
+			"path", g.cfg.SelectorStatsPath, "error", err)
+		return 0
+	}
+	return so.ApplyLearnedOrdering(tree)
 }
 
 const (

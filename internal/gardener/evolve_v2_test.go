@@ -3,6 +3,7 @@ package gardener
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -708,6 +709,148 @@ func TestEvolveTreeV2_MarksMatchingExperienceReused(t *testing.T) {
 	if n := experienceReuseCount(t, bank, seededID); n < 1 {
 		t.Fatalf("evolveTreeV2 did not mark the matching experience entry reused: TimesReused = %d, want >= 1", n)
 	}
+}
+
+// ============================================================================
+// Selector-ordering production entry point (evolve_v2.go) — milestone 4
+// ============================================================================
+
+// selectorOrderingTree builds a tree with a single Selector ("Router") whose
+// children start in the order [Cheap, Reliable, Fallback]. In the seeded
+// telemetry Reliable has a higher success rate than Cheap, so a telemetry-driven
+// reorder must promote Reliable ahead of Cheap. The AlwaysSucceed "Fallback"
+// child has a perfect success rate but must still stay last, preserving Selector
+// short-circuit semantics (the fallback/default-path guard).
+func selectorOrderingTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Selector", Name: "Router",
+				Children: []evolution.SerializableNode{
+					{Type: "Sequence", Name: "Cheap"},
+					{Type: "Sequence", Name: "Reliable"},
+					{Type: "AlwaysSucceed", Name: "Fallback"},
+				},
+			},
+		},
+	}
+}
+
+// seedSelectorStats writes durable Selector telemetry (the on-disk format
+// produced by knowledge.RecordSelectorOutcomes via SelectorOptimizer) to path so
+// that under "Router" the Reliable child (0.90) beats the Cheap child (0.20),
+// and the Fallback child has a perfect (1.00) success rate that the reorder must
+// NOT promote ahead of the real paths.
+func seedSelectorStats(t *testing.T, path string) {
+	t.Helper()
+	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	rec := func(child, outcome string, n int) {
+		for i := 0; i < n; i++ {
+			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
+		}
+	}
+	rec("Cheap", "success", 2)
+	rec("Cheap", "failure", 8) // 0.20 success rate
+	rec("Reliable", "success", 9)
+	rec("Reliable", "failure", 1)  // 0.90 success rate
+	rec("Fallback", "success", 10) // 1.00 success rate — guard keeps it last anyway
+	if err := so.SaveSelectorStats(path); err != nil {
+		t.Fatalf("SaveSelectorStats: %v", err)
+	}
+}
+
+// routerChildNames returns the ordered child names of the "Router" Selector.
+func routerChildNames(t *testing.T, tree *evolution.SerializableNode) []string {
+	t.Helper()
+	for i := range tree.Children {
+		if tree.Children[i].Name == "Router" {
+			names := make([]string, len(tree.Children[i].Children))
+			for j, c := range tree.Children[i].Children {
+				names[j] = c.Name
+			}
+			return names
+		}
+	}
+	t.Fatalf("Router selector not found in tree")
+	return nil
+}
+
+// TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist pins milestone 4
+// of the Selector-ordering optimizer: evolveTreeV2 must apply learned Selector
+// child ordering from the durable telemetry before an evolved tree is persisted.
+// The pass is flag-gated (EvolveV2Config.SelectorOrdering) and reads the durable
+// stats from Config.SelectorStatsPath. MaxMutations is 0 so the ONLY change to
+// the tree is the reorder itself — isolating the behavior under test.
+func TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist(t *testing.T) {
+	statsPath := filepath.Join(t.TempDir(), "selector_stats.json")
+	seedSelectorStats(t, statsPath)
+
+	newGardener := func(t *testing.T) (*Gardener, *evolution.SerializableNode, TreeEntry) {
+		t.Helper()
+		refStore, err := evolution.NewStore(filepath.Join(t.TempDir(), "reflections"))
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		mt, err := NewMetricsTracker(t.TempDir())
+		if err != nil {
+			t.Fatalf("NewMetricsTracker: %v", err)
+		}
+		treeDir := t.TempDir()
+		tree := selectorOrderingTree()
+		reg := &Registry{dir: treeDir}
+		reg.mu.Lock()
+		reg.entries = []TreeEntry{
+			{Name: "selector_tree", Description: "selector ordering", Tree: tree, FilePath: treeDir + "/tree-selector_tree.json", Active: true},
+		}
+		reg.mu.Unlock()
+		cfg := Config{
+			Registry:                 reg,
+			MetricsTracker:           mt,
+			RefStore:                 refStore,
+			MaxMutations:             0, // isolate the reorder — no structural mutations this cycle
+			EvolveWithoutReflections: true,
+			SelectorStatsPath:        statsPath,
+		}
+		return NewGardener(cfg), tree, reg.List()[0]
+	}
+
+	v2 := func(enabled bool) EvolveV2Config {
+		return EvolveV2Config{
+			CascadeCfg:       evaluator.CascadeConfig{QuickThreshold: 0},
+			BlocksEnabled:    false,
+			UseRealLLM:       false,
+			SelectorOrdering: enabled,
+		}
+	}
+
+	t.Run("enabled promotes higher-success child and keeps fallback last", func(t *testing.T) {
+		g, tree, entry := newGardener(t)
+
+		if got, want := routerChildNames(t, tree), []string{"Cheap", "Reliable", "Fallback"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("precondition: Router children = %v, want %v", got, want)
+		}
+
+		g.evolveTreeV2(entry, v2(true))
+
+		got := routerChildNames(t, tree)
+		want := []string{"Reliable", "Cheap", "Fallback"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("learned Selector ordering not applied before persist: Router children = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("disabled is a no-op", func(t *testing.T) {
+		g, tree, entry := newGardener(t)
+
+		g.evolveTreeV2(entry, v2(false))
+
+		got := routerChildNames(t, tree)
+		want := []string{"Cheap", "Reliable", "Fallback"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Selector ordering ran while disabled: Router children = %v, want %v", got, want)
+		}
+	})
 }
 
 // hasChildNamed and the other v1 idempotency-guard helpers were retired with
