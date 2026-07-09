@@ -1,6 +1,7 @@
 package gardener
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,6 +90,60 @@ func TestMetricsTracker_CyclesForTree(t *testing.T) {
 	}
 	if got := mt.CyclesForTree("tree_b"); got != 1 {
 		t.Errorf("CyclesForTree(tree_b) = %d, want 1", got)
+	}
+}
+
+// TestMetricsTracker_SaveAggregatesCrisisAndLastRun verifies milestone 2/5 of
+// the "evolution self-healing observable end-to-end" program: Save must write
+// gardener-metrics.json as an aggregate document that stamps a real last_run
+// unix timestamp and totals the crisis interventions recorded in the
+// CycleMetrics history, while the full history stays persisted and reloadable.
+func TestMetricsTracker_SaveAggregatesCrisisAndLastRun(t *testing.T) {
+	dir := t.TempDir()
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker failed: %v", err)
+	}
+
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 1, CrisisIntervention: true})
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 2})
+	mt.Record(CycleMetrics{TreeName: "tree_b", Cycle: 1, CrisisIntervention: true})
+
+	if err := mt.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "gardener-metrics.json"))
+	if err != nil {
+		t.Fatalf("reading gardener-metrics.json: %v", err)
+	}
+
+	var doc struct {
+		LastRun                  int64          `json:"last_run"`
+		TotalCrisisInterventions int            `json:"total_crisis_interventions"`
+		History                  []CycleMetrics `json:"history"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("gardener-metrics.json must be an aggregate object, not a bare history array: %v", err)
+	}
+	if doc.LastRun == 0 {
+		t.Error("last_run must be stamped with a non-zero unix timestamp")
+	}
+	if doc.TotalCrisisInterventions != 2 {
+		t.Errorf("total_crisis_interventions = %d, want 2 (one per recorded crisis cycle)", doc.TotalCrisisInterventions)
+	}
+	if len(doc.History) != 3 {
+		t.Errorf("history in gardener-metrics.json has %d cycles, want all 3 recorded", len(doc.History))
+	}
+
+	// The aggregate format must stay loadable: a fresh tracker on the same
+	// directory has to rehydrate the recorded history.
+	reloaded, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker (reload) failed: %v", err)
+	}
+	if got := reloaded.CyclesForTree("tree_a"); got != 2 {
+		t.Errorf("reloaded CyclesForTree(tree_a) = %d, want 2", got)
 	}
 }
 

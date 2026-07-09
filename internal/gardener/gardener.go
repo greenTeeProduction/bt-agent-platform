@@ -219,6 +219,9 @@ type CycleMetrics struct {
 	// SkippedNoEvidence marks a tree that carried no reflection records, so
 	// the evidence gate skipped mutation (no run-derived fitness gradient).
 	SkippedNoEvidence bool `json:"skipped_no_evidence,omitempty"`
+	// CrisisIntervention marks a cycle where the crisis detector intervened
+	// (emergency mutation-budget boost) for this tree.
+	CrisisIntervention bool `json:"crisis_intervention,omitempty"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -246,18 +249,44 @@ func (mt *MetricsTracker) Record(m CycleMetrics) {
 	}
 }
 
+// metricsDocument is the on-disk shape of gardener-metrics.json: the full
+// cycle history plus aggregates that dashboards can read without replaying it.
+type metricsDocument struct {
+	LastRun                  int64          `json:"last_run"`
+	TotalCrisisInterventions int            `json:"total_crisis_interventions"`
+	History                  []CycleMetrics `json:"history"`
+}
+
 // Save persists metrics to disk.
 func (mt *MetricsTracker) Save() error {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
-	data, _ := json.MarshalIndent(mt.history, "", "  ")
+	doc := metricsDocument{
+		LastRun: time.Now().Unix(),
+		History: mt.history,
+	}
+	for _, m := range mt.history {
+		if m.CrisisIntervention {
+			doc.TotalCrisisInterventions++
+		}
+	}
+	data, _ := json.MarshalIndent(doc, "", "  ")
 	tmp := mt.path + ".tmp"
 	_ = os.WriteFile(tmp, data, 0644)
 	return os.Rename(tmp, mt.path)
 }
 
 func (mt *MetricsTracker) load() {
-	data, _ := os.ReadFile(mt.path)
+	data, err := os.ReadFile(mt.path)
+	if err != nil {
+		return
+	}
+	var doc metricsDocument
+	if json.Unmarshal(data, &doc) == nil && doc.History != nil {
+		mt.history = doc.History
+		return
+	}
+	// Legacy format: a bare CycleMetrics array without aggregates.
 	_ = json.Unmarshal(data, &mt.history)
 }
 

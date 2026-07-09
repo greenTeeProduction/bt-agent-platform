@@ -229,3 +229,83 @@ func TestPopulationEvolve_ResurrectsExtinctSpecialist(t *testing.T) {
 		t.Fatal("expected Evolve to resurrect the extinct goap specialist and inject a resurrected:true-tagged individual into the population")
 	}
 }
+
+// TestPopulationHealthSnapshot_DiversityCollapseRun verifies milestone 4/5 of
+// the observability program ("Make evolution self-healing observable
+// end-to-end"): the GA's self-healing signals — crisis reasons, the mutation
+// rate actually applied, the generation counter, and how many specialists were
+// resurrected — must be exposed through a single Population.HealthSnapshot()
+// accessor so metrics/dashboard consumers can read population health without
+// reaching into Evolve internals.
+//
+// Setup mirrors TestPopulationEvolve_ResurrectsExtinctSpecialist: a
+// SpecialistRegistry holds a validated high-fitness goap archetype last seen at
+// generation 0, while the live population is 10 identical non-specialist
+// individuals at generation 500. One Evolve generation therefore trips
+// diversity_collapse, forces the emergency mutation rate, and resurrects the
+// extinct specialist — and the snapshot must surface all of it:
+// non-empty CrisisReasons, LastMutationRate at (or above) the emergency rate,
+// the post-run Generation, and a positive Resurrections count tracked where
+// p.Specialists.Resurrect succeeds.
+func TestPopulationHealthSnapshot_DiversityCollapseRun(t *testing.T) {
+	base := DefaultTree()
+
+	registry := NewSpecialistRegistry()
+	archetype := &SerializableNode{
+		Type:     "Sequence",
+		Name:     "GoapSpecialist",
+		Children: []SerializableNode{{Type: "Action", Name: "PlanGoap"}},
+	}
+	registry.Observe(&EvolutionMetadata{
+		TreeID:  "goap-archetype",
+		Tags:    []string{"specialist:goap"},
+		Fitness: FitnessRecord{Score: 0.95, Validated: true},
+	}, archetype, 0)
+
+	const size = 10
+	pop := &Population{
+		Individuals: make([]Individual, size),
+		// Old generation so the archetype (last seen at gen 0) reads as long
+		// extinct regardless of the extinctAfter window.
+		Generation:  500,
+		Specialists: registry,
+	}
+	for i := 0; i < size; i++ {
+		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
+		// (< 0.2 threshold) trips diversity_collapse; the goap niche is absent
+		// so the archetype qualifies as extinct.
+		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
+	}
+
+	if d := pop.Diversity(); d <= 0 || d >= 0.2 {
+		t.Fatalf("test setup: want collapsed diversity in (0, 0.2), got %.3f", d)
+	}
+
+	pop.Evolve(1, func(*SerializableNode) float64 { return 1.0 })
+
+	snap := pop.HealthSnapshot()
+
+	if len(snap.CrisisReasons) == 0 {
+		t.Error("HealthSnapshot().CrisisReasons is empty after a diversity-collapse run, want at least one reason")
+	}
+	if !containsReason(snap.CrisisReasons, "diversity_collapse") {
+		t.Errorf("HealthSnapshot().CrisisReasons = %v, want to contain diversity_collapse", snap.CrisisReasons)
+	}
+	if pop.Crisis == nil {
+		t.Fatal("Evolve did not lazily initialize Population.Crisis")
+	}
+	emergency := pop.Crisis.GetEmergencyMutationRate()
+	if snap.LastMutationRate < emergency {
+		t.Errorf("HealthSnapshot().LastMutationRate = %.3f, want >= EmergencyRate %.3f (crisis generation must run under emergency control)",
+			snap.LastMutationRate, emergency)
+	}
+	if snap.LastMutationRate != pop.LastMutationRate {
+		t.Errorf("HealthSnapshot().LastMutationRate = %.3f, want the applied rate %.3f", snap.LastMutationRate, pop.LastMutationRate)
+	}
+	if snap.Generation != pop.Generation {
+		t.Errorf("HealthSnapshot().Generation = %d, want post-run generation %d", snap.Generation, pop.Generation)
+	}
+	if snap.Resurrections <= 0 {
+		t.Errorf("HealthSnapshot().Resurrections = %d, want > 0 (the extinct goap specialist was resurrected this run)", snap.Resurrections)
+	}
+}

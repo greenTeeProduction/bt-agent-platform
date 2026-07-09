@@ -271,6 +271,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		Improved:   improved,
 		Rejections: rejected,
 		Rollbacks:  rollbacks,
+
+		CrisisIntervention: crisisIntervened,
 	}
 }
 

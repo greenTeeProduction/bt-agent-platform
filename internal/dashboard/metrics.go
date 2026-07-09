@@ -56,12 +56,13 @@ type TreeMetrics struct {
 
 // GardenerMetrics holds gardener stats from its metrics file.
 type GardenerMetrics struct {
-	Cycles       int                `json:"cycles"`
-	Trees        int                `json:"trees"`
-	Improvements int                `json:"improvements"`
-	BestFitness  float64            `json:"best_fitness"`
-	LastRun      string             `json:"last_run"`
-	SLOs         map[string]float64 `json:"slos,omitempty"`
+	Cycles              int                `json:"cycles"`
+	Trees               int                `json:"trees"`
+	Improvements        int                `json:"improvements"`
+	CrisisInterventions int                `json:"crisis_interventions"`
+	BestFitness         float64            `json:"best_fitness"`
+	LastRun             string             `json:"last_run"`
+	SLOs                map[string]float64 `json:"slos,omitempty"`
 }
 
 var (
@@ -211,9 +212,12 @@ func loadGardenerMetrics() *GardenerMetrics {
 		return nil
 	}
 	var raw struct {
-		Cycles      int     `json:"total_cycles"`
-		Trees       int     `json:"active_trees"`
-		BestFitness float64 `json:"best_fitness"`
+		Cycles              int     `json:"total_cycles"`
+		Trees               int     `json:"active_trees"`
+		Improvements        int     `json:"total_improvements"`
+		CrisisInterventions int     `json:"total_crisis_interventions"`
+		BestFitness         float64 `json:"best_fitness"`
+		LastRun             int64   `json:"last_run"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
@@ -222,12 +226,19 @@ func loadGardenerMetrics() *GardenerMetrics {
 		return nil
 	}
 
+	// Legacy documents predate the last_run unix timestamp.
+	lastRun := "recent"
+	if raw.LastRun > 0 {
+		lastRun = time.Unix(raw.LastRun, 0).UTC().Format(time.RFC3339)
+	}
+
 	gm := &GardenerMetrics{
-		Cycles:       raw.Cycles,
-		Trees:        raw.Trees,
-		Improvements: 0, // computed later
-		BestFitness:  raw.BestFitness,
-		LastRun:      "recent",
+		Cycles:              raw.Cycles,
+		Trees:               raw.Trees,
+		Improvements:        raw.Improvements,
+		CrisisInterventions: raw.CrisisInterventions,
+		BestFitness:         raw.BestFitness,
+		LastRun:             lastRun,
 	}
 
 	// Load SLO metrics if available

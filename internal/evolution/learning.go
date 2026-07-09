@@ -53,6 +53,46 @@ type Population struct {
 	// serialized; it exists so callers (and tests) can observe whether a
 	// generation ran under emergency control.
 	LastMutationRate float64 `json:"-"`
+	// Resurrections counts how many extinct specialists were successfully
+	// resurrected and injected back into the population across the Evolve runs
+	// of this Population — the crisis-recovery half of the specialist loop.
+	// Only actual injections count; a Resurrect that finds no replaceable slot
+	// does not.
+	Resurrections int `json:"resurrections,omitempty"`
+}
+
+// PopulationHealth is a read-only snapshot of the GA's self-healing signals —
+// what crises fired, the mutation rate actually applied, where the run stands,
+// and how many specialists were resurrected — so metrics and dashboard
+// consumers can observe population health without reaching into Evolve
+// internals.
+type PopulationHealth struct {
+	// CrisisReasons are the unique population-level crisis reasons surfaced
+	// across the most recent Evolve run, in first-seen order.
+	CrisisReasons []string `json:"crisis_reasons,omitempty"`
+	// LastMutationRate is the mutation rate actually applied in the most
+	// recent generation — the emergency rate if crisis intervention overrode
+	// the supervisor's recommendation.
+	LastMutationRate float64 `json:"last_mutation_rate"`
+	// Generation is the population's post-run generation counter.
+	Generation int `json:"generation"`
+	// Resurrections is how many extinct specialists were resurrected and
+	// injected back into the population.
+	Resurrections int `json:"resurrections"`
+}
+
+// HealthSnapshot exposes the population's self-healing state as a single
+// PopulationHealth value. The CrisisReasons slice is copied so consumers
+// cannot mutate the population's accumulated reasons.
+func (p *Population) HealthSnapshot() PopulationHealth {
+	reasons := make([]string, len(p.CrisisReasons))
+	copy(reasons, p.CrisisReasons)
+	return PopulationHealth{
+		CrisisReasons:    reasons,
+		LastMutationRate: p.LastMutationRate,
+		Generation:       p.Generation,
+		Resurrections:    p.Resurrections,
+	}
 }
 
 // NewPopulation creates an initial population by mutating a base tree.
@@ -318,6 +358,7 @@ func (p *Population) resurrectExtinctSpecialists(eliteCount int) {
 		}
 		ind.Meta = meta
 		p.Individuals[idx] = ind
+		p.Resurrections++
 	}
 }
 
