@@ -44,6 +44,13 @@ type BottleneckEntry struct {
 	TreeID      string
 	SuccessRate float64
 	Runs        int
+	// LastFailureTask and LastFailureOutcome carry the most recent failing
+	// trace's task and outcome as structured fields — not only concatenated into
+	// the human-readable SuggestedAction string — so bt_evolve_bottlenecks can
+	// seed its per-tree evolution context from the actual failing task rather
+	// than parse prose. Empty when the tree has no recorded failure.
+	LastFailureTask    string
+	LastFailureOutcome string
 }
 
 // SelectionPressureEntry is a proven tree (high fitness) that is underbred
@@ -99,27 +106,36 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 		return len(a.ToolContention[i].Trees) > len(a.ToolContention[j].Trees)
 	})
 
-	// 3. Coverage gaps: domain trees that might be missing
-	knownDomains := []string{
-		"domain:security_audit", "domain:crash_investigator",
-		"domain:data_pipeline", "domain:meeting_notes",
-		"domain:refactoring", "domain:devops_ci",
-		"domain:trading_signal", "domain:game_ai",
+	// 3. Coverage gaps: expected domain trees not registered in the graph. The
+	// expected set is injected via ExpectedDomains (populated by the daemon from
+	// the live domain registry) so this stays registry-accurate instead of tied
+	// to a stale hardcoded slice. Fall back to defaultExpectedDomains when unset.
+	expectedDomains := kg.ExpectedDomains
+	if len(expectedDomains) == 0 {
+		expectedDomains = defaultExpectedDomains
 	}
-	for _, id := range knownDomains {
+	for _, id := range expectedDomains {
 		if _, ok := kg.Trees[id]; !ok {
 			a.CoverageGaps = append(a.CoverageGaps, id)
 		}
 	}
 
-	// 4. Bottlenecks: trees with low success rate
+	// 4. Bottlenecks: trees with low success rate. Capture the most recent
+	// failing trace's task/outcome as structured fields so downstream evolution
+	// (bt_evolve_bottlenecks) can seed per-tree context from the actual failing
+	// task instead of re-parsing the human-readable SuggestedAction string.
 	for id, tree := range kg.Trees {
 		if tree.RunCount >= 3 && tree.Fitness < 30 {
-			a.Bottlenecks = append(a.Bottlenecks, BottleneckEntry{
+			entry := BottleneckEntry{
 				TreeID:      id,
 				SuccessRate: tree.Fitness,
 				Runs:        tree.RunCount,
-			})
+			}
+			if trace := GlobalTraceStore.LastFailure(id); trace != nil {
+				entry.LastFailureTask = trace.Task
+				entry.LastFailureOutcome = trace.Outcome
+			}
+			a.Bottlenecks = append(a.Bottlenecks, entry)
 		}
 	}
 	sort.Slice(a.Bottlenecks, func(i, j int) bool {
@@ -154,10 +170,9 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 		}
 	}
 	for _, b := range a.Bottlenecks {
-		trace := GlobalTraceStore.LastFailure(b.TreeID)
 		action := fmt.Sprintf("Investigate %s: %.0f%% success (%d runs)", b.TreeID, b.SuccessRate, b.Runs)
-		if trace != nil {
-			action += fmt.Sprintf(" — last failure: %s (%s)", trace.Outcome, trace.Task)
+		if b.LastFailureOutcome != "" {
+			action += fmt.Sprintf(" — last failure: %s (%s)", b.LastFailureOutcome, b.LastFailureTask)
 		}
 		a.SuggestedActions = append(a.SuggestedActions, action)
 	}

@@ -65,6 +65,19 @@ func recordEvolvedFitness(deps *mcpDeps, treeID string, eliteFitness float64) {
 	})
 }
 
+// addFailureContext threads a bottleneck's structured last-failure task/outcome
+// into its per-tree evolution report entry, making the re-evolution
+// failure-targeted: each evolved tree is annotated with the concrete failing
+// task that motivated it. Both empty (no recorded failure) is a no-op, so trees
+// without a trace get an unannotated entry rather than empty keys.
+func addFailureContext(entry map[string]interface{}, failureTask, failureOutcome string) {
+	if failureTask == "" && failureOutcome == "" {
+		return
+	}
+	entry["last_failure_task"] = failureTask
+	entry["last_failure_outcome"] = failureOutcome
+}
+
 func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
 	result["persisted"] = false
 	if info := engine.ValidateTreeFull(tree); !info.Valid() {
@@ -189,7 +202,7 @@ type mcpDeps struct {
 	personaStore *persona.Store
 }
 
-// registerMCPTools registers all 74 MCP tools on the server.
+// registerMCPTools registers all 75 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -1160,37 +1173,112 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					skipped = append(skipped, b.TreeID)
 					continue
 				}
+				// Failure-targeted re-evolution: read the structured failing
+				// task/outcome that ComputeAnalytics captured on the bottleneck
+				// and tie each per-tree evolution report to the concrete failure
+				// that motivated it, rather than re-parsing the human-readable
+				// SuggestedAction prose. Threaded into the report below via
+				// addFailureContext.
 				// Trees with tunable parameters get CMA-ES parameter tuning;
 				// parameterless trees fall back to structural genetic evolution.
 				if _, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
 					algorithms["cmaes"]++
-					report = append(report, map[string]interface{}{
+					entry := map[string]interface{}{
 						"tree":           b.TreeID,
 						"before_fitness": b.SuccessRate,
 						"after_fitness":  bestFitness,
 						"runs":           b.Runs,
 						"tuned_params":   len(tunedParams),
 						"algorithm":      "cmaes",
-					})
+					}
+					addFailureContext(entry, b.LastFailureTask, b.LastFailureOutcome)
+					report = append(report, entry)
 					continue
 				}
 				algorithms["genetic"]++
 				pop := evolution.NewPopulation(population, baseTree)
 				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
-				report = append(report, map[string]interface{}{
+				entry := map[string]interface{}{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,
 					"after_fitness":  pop.BestFitness,
 					"runs":           b.Runs,
 					"generations":    pop.Generation,
 					"algorithm":      "genetic",
-				})
+				}
+				addFailureContext(entry, b.LastFailureTask, b.LastFailureOutcome)
+				report = append(report, entry)
 			}
 			data, _ := json.Marshal(map[string]interface{}{
 				"bottlenecks":             len(bottlenecks),
 				"report":                  report,
 				"skipped":                 skipped,
 				"algorithms":              algorithms,
+				"experience_bank_entries": bankEntries,
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_selection_pressure", "Evolve every knowledge-graph tree under selection pressure (proven fitness >= 70 but underbred, RunCount < 5) via experience-grounded genetic evolution, writing each elite's fitness back through the evolved path and reporting per-tree before/after fitness",
+		map[string]engine.Property{
+			"population":  {Type: "integer", Description: "Population size per pressured tree (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations per pressured tree (default: 10)"},
+		},
+		[]string{},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Population  *int `json:"population"`
+				Generations int  `json:"generations"`
+			}
+			_ = json.Unmarshal(args, &params)
+			// Degenerate-param rejection precedes the dependency check so a bad
+			// population is reported as such even without a knowledge graph.
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			if deps.kg == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"knowledge graph unavailable"}`}}}
+			}
+			// Deterministic, LLM-free closure of the learn→discover→evolve loop:
+			// the same proven-but-underbred criteria ComputeAnalytics surfaces as
+			// human-readable SuggestedActions strings drive structural evolution
+			// directly, and each bred elite's fitness is written back through the
+			// evolved path so fitness-driven discovery can surface the winners.
+			pressure := deps.kg.ComputeAnalytics().SelectionPressure
+			bankEntries := 0
+			if deps.expBank != nil {
+				bankEntries = deps.expBank.Count()
+			}
+			report := []map[string]interface{}{}
+			skipped := []string{}
+			for _, sp := range pressure {
+				baseTree := resolveTree(sp.TreeID)
+				if baseTree == nil {
+					// A KG entry without a real behavior tree must not abort the
+					// remaining pressure entries.
+					skipped = append(skipped, sp.TreeID)
+					continue
+				}
+				pop := evolution.NewPopulation(population, baseTree)
+				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
+				report = append(report, map[string]interface{}{
+					"tree":           sp.TreeID,
+					"before_fitness": sp.Fitness,
+					"after_fitness":  pop.BestFitness,
+					"runs":           sp.RunCount,
+					"generations":    pop.Generation,
+					"algorithm":      "genetic",
+				})
+			}
+			data, _ := json.Marshal(map[string]interface{}{
+				"selection_pressure":      len(pressure),
+				"report":                  report,
+				"skipped":                 skipped,
 				"experience_bank_entries": bankEntries,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

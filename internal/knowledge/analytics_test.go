@@ -171,6 +171,41 @@ func TestComputeAnalytics_Bottlenecks(t *testing.T) {
 	}
 }
 
+func TestComputeAnalytics_CoverageGapsUseExpectedDomains(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// Inject the expected-domain set instead of relying on a hardcoded slice.
+	// This is the seam the daemon populates from domains.AllDomainTrees() keys,
+	// which avoids the analytics→domains import cycle.
+	kg.ExpectedDomains = []string{"domain:alpha", "domain:beta", "domain:gamma"}
+	// Register two of the three expected domains.
+	kg.Register(&TreeMeta{ID: "domain:alpha", Name: "Alpha", Category: "domain"})
+	kg.Register(&TreeMeta{ID: "domain:beta", Name: "Beta", Category: "domain"})
+
+	a := kg.ComputeAnalytics()
+
+	gaps := map[string]bool{}
+	for _, g := range a.CoverageGaps {
+		gaps[g] = true
+	}
+
+	// The unregistered-but-expected domain must surface as a gap.
+	if !gaps["domain:gamma"] {
+		t.Errorf("expected 'domain:gamma' to surface as a coverage gap, got: %v", a.CoverageGaps)
+	}
+	// Every registered domain must be covered (not reported as a gap).
+	if gaps["domain:alpha"] {
+		t.Errorf("registered 'domain:alpha' should not be a coverage gap, got: %v", a.CoverageGaps)
+	}
+	if gaps["domain:beta"] {
+		t.Errorf("registered 'domain:beta' should not be a coverage gap, got: %v", a.CoverageGaps)
+	}
+	// Gaps must be driven solely by the injected ExpectedDomains seam — the stale
+	// hardcoded 8-domain slice must no longer leak into the result.
+	if gaps["domain:security_audit"] {
+		t.Errorf("legacy hardcoded 'domain:security_audit' leaked into gaps; CoverageGaps is not registry-accurate: %v", a.CoverageGaps)
+	}
+}
+
 func TestComputeAnalytics_SelectionPressure(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	// Proven but underbred: high fitness, low run count — the loop should surface
@@ -260,6 +295,60 @@ func TestComputeAnalytics_BottleneckWithTrace(t *testing.T) {
 	if !hasTraceAction {
 		t.Errorf("expected trace info in bottleneck action, got: %v", a.SuggestedActions)
 	}
+}
+
+func TestComputeAnalytics_BottleneckCarriesStructuredFailure(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "struct_bn", Name: "Struct BN", Category: "test", RunCount: 5, Fitness: 12.0})
+
+	// The last failing trace's task/outcome must be exposed as structured fields
+	// on the BottleneckEntry — not only concatenated into the human-readable
+	// SuggestedAction string — so bt_evolve_bottlenecks can seed its per-tree
+	// evolution context from the actual failing task rather than parse prose.
+	GlobalTraceStore.Record(DecisionTrace{
+		RunID:   "struct-bn-trace",
+		TreeID:  "struct_bn",
+		Task:    "resolve the impossible dependency",
+		Outcome: "failure",
+		Steps:   []TraceStep{{NodeName: "step1", NodeType: "Action", Status: "failure", Error: "boom"}},
+	})
+
+	a := kg.ComputeAnalytics()
+
+	var entry *BottleneckEntry
+	for i := range a.Bottlenecks {
+		if a.Bottlenecks[i].TreeID == "struct_bn" {
+			entry = &a.Bottlenecks[i]
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("expected 'struct_bn' to be a bottleneck, got: %+v", a.Bottlenecks)
+	}
+	if entry.LastFailureTask != "resolve the impossible dependency" {
+		t.Errorf("expected LastFailureTask to carry the failing task, got %q", entry.LastFailureTask)
+	}
+	if entry.LastFailureOutcome != "failure" {
+		t.Errorf("expected LastFailureOutcome to carry the failing outcome, got %q", entry.LastFailureOutcome)
+	}
+}
+
+func TestComputeAnalytics_BottleneckWithoutTraceHasEmptyFailure(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "no_trace_bn", Name: "No Trace BN", Category: "test", RunCount: 4, Fitness: 8.0})
+
+	a := kg.ComputeAnalytics()
+
+	for _, b := range a.Bottlenecks {
+		if b.TreeID == "no_trace_bn" {
+			if b.LastFailureTask != "" || b.LastFailureOutcome != "" {
+				t.Errorf("bottleneck without a recorded failure should have empty failure fields, got task=%q outcome=%q",
+					b.LastFailureTask, b.LastFailureOutcome)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected 'no_trace_bn' to be a bottleneck, got: %+v", a.Bottlenecks)
 }
 
 func TestComputeAnalytics_HighContentionSuggestion(t *testing.T) {

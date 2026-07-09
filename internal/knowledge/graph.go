@@ -88,9 +88,27 @@ type KnowledgeGraph struct {
 	Edges    []Edge               `json:"edges"`
 	Synonyms map[string]string    `json:"synonyms"` // capability → tree mapping
 
+	// ExpectedDomains is the injectable set of domain tree IDs that CoverageGaps
+	// audits against. The daemon populates it at startup from
+	// domains.AllDomainTrees() keys (injection avoids the analytics→domains import
+	// cycle), keeping CoverageGaps registry-accurate rather than tied to a stale
+	// hardcoded slice. Defaults to defaultExpectedDomains when left unset.
+	ExpectedDomains []string `json:"expected_domains,omitempty"`
+
 	// feedbackPersist holds debounced-persistence state, guarded by mu. It is
 	// unexported so it never lands in the serialized graph.
 	feedbackPersist feedbackPersistState
+}
+
+// defaultExpectedDomains is the fallback expected-domain set used when the
+// daemon has not injected the live registry keys into ExpectedDomains. Kept as a
+// safety net so CoverageGaps still reports something meaningful outside the
+// daemon; production wiring overrides it from domains.AllDomainTrees().
+var defaultExpectedDomains = []string{
+	"domain:security_audit", "domain:crash_investigator",
+	"domain:data_pipeline", "domain:meeting_notes",
+	"domain:refactoring", "domain:devops_ci",
+	"domain:trading_signal", "domain:game_ai",
 }
 
 // Edge is a directed relationship between two trees.

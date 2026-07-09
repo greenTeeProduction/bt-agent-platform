@@ -275,6 +275,14 @@ func main() {
 	if kg == nil {
 		kg = knowledge.BuildKnowledgeGraph()
 	}
+	// Inject the live domain registry as the expected-domain set so CoverageGaps
+	// audits against the real registry (domain:<name> IDs) instead of a stale
+	// hardcoded slice. Injection here avoids an analytics→domains import cycle.
+	expectedDomains := make([]string, 0, len(domains.AllDomainTrees()))
+	for name := range domains.AllDomainTrees() {
+		expectedDomains = append(expectedDomains, "domain:"+name)
+	}
+	kg.ExpectedDomains = expectedDomains
 	go func() {
 		if err := kg.BuildIndex(); err != nil {
 			fmt.Fprintf(os.Stderr, "KG: embedding build skipped: %v\n", err)

@@ -545,6 +545,214 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	}
 }
 
+// TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees pins the
+// bt_evolve_selection_pressure MCP tool (analytics→action loop milestone 2/4,
+// Q2 Evolvability): it gives Analytics.SelectionPressure a production consumer.
+// The tool must be registered by registerMCPTools, read
+// deps.kg.ComputeAnalytics().SelectionPressure (proven trees: Fitness >= 70 and
+// RunCount < 5 — the same criteria ComputeAnalytics surfaces today only as
+// human-readable SuggestedActions strings), run a deterministic (LLM-free)
+// experience-grounded genetic evolution on each proven-but-underbred tree via
+// evolution.NewPopulation(...).EvolveWithExperience, and — mirroring
+// bt_evolve_bottlenecks — report per-tree before/after fitness as JSON.
+//
+// Proven-but-well-exercised trees (RunCount >= 5) must be left alone, and a
+// pressure entry whose KG id does not resolve to a real behavior tree must be
+// surfaced under "skipped" without aborting the rest of the report. Crucially,
+// each evolved elite's fitness must be written back through the existing
+// evolved-fitness path (recordEvolvedFitness → RecordRun "evolved"), landing in
+// TreeMeta.StructuralFitness (never the runtime-success EMA) and bumping
+// EvolvedCount — so fitness-driven discovery can later surface the bred winners.
+// A nil experience bank (this test's bare mcpDeps) must degrade gracefully, with
+// the consulted bank surfaced via "experience_bank_entries".
+func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *testing.T) {
+	kg := knowledge.NewKnowledgeGraph()
+	// Proven (Fitness >= 70) and underbred (RunCount < 5), resolves to a real
+	// domain behavior tree: must be evolved and get a fitness write-back.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 2,
+	})
+	// A second proven-but-underbred resolvable tree.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 78, RunCount: 4,
+	})
+	// Proven but WELL exercised (RunCount >= 5): the loop is already applying
+	// selection pressure, so this must never appear in the report.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:security_audit", Name: "Security Audit", Category: "domain",
+		Fitness: 85, RunCount: 10,
+	})
+	// Underbred but NOT proven (Fitness < 70): not selection pressure at all.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:data_pipeline", Name: "Data Pipeline", Category: "domain",
+		Fitness: 40, RunCount: 1,
+	})
+	// Proven and underbred but whose id resolves to no behavior tree: must be
+	// skipped, not abort the whole invocation.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:__no_such_tree__", Name: "Ghost", Category: "domain",
+		Fitness: 95, RunCount: 1,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg})
+
+	if !server.HasTool("bt_evolve_selection_pressure") {
+		t.Fatal("bt_evolve_selection_pressure tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: tiny population/generations so the deterministic structural
+	// evolution stays -short-safe.
+	res, ok := server.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_selection_pressure returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_selection_pressure unexpectedly returned an error for a graph with selection pressure: %v", out)
+	}
+
+	// code_review, alert_router and __no_such_tree__ all satisfy Fitness>=70 &&
+	// RunCount<5; security_audit (well-bred) and data_pipeline (not proven) do not.
+	if n, isNum := out["selection_pressure"].(float64); !isNum || int(n) != 3 {
+		t.Errorf("bt_evolve_selection_pressure must report 'selection_pressure' = 3 (proven+underbred trees); got %v", out["selection_pressure"])
+	}
+
+	// The per-tree report holds exactly the two resolvable pressure entries, with
+	// the KG fitness echoed as before_fitness and a computed after_fitness.
+	report, isList := out["report"].([]interface{})
+	if !isList {
+		t.Fatalf("bt_evolve_selection_pressure must return a 'report' JSON array; got %T (%v)", out["report"], out["report"])
+	}
+	if len(report) != 2 {
+		t.Fatalf("bt_evolve_selection_pressure 'report' must hold exactly the 2 resolvable pressure entries; got %d entries: %v", len(report), report)
+	}
+	byTree := map[string]map[string]interface{}{}
+	for _, e := range report {
+		m, isMap := e.(map[string]interface{})
+		if !isMap {
+			t.Fatalf("bt_evolve_selection_pressure report entries must be JSON objects; got %T (%v)", e, e)
+		}
+		tree, _ := m["tree"].(string)
+		byTree[tree] = m
+	}
+	if _, evolved := byTree["domain:security_audit"]; evolved {
+		t.Errorf("bt_evolve_selection_pressure must not evolve the well-bred tree domain:security_audit; report: %v", report)
+	}
+	if _, evolved := byTree["domain:data_pipeline"]; evolved {
+		t.Errorf("bt_evolve_selection_pressure must not evolve the unproven tree domain:data_pipeline; report: %v", report)
+	}
+
+	entry := byTree["domain:code_review"]
+	if entry == nil {
+		t.Fatalf("bt_evolve_selection_pressure report must include an entry for domain:code_review; got %v", report)
+	}
+	if before, isNum := entry["before_fitness"].(float64); !isNum || before != 90 {
+		t.Errorf("bt_evolve_selection_pressure report entry must echo the KG fitness as 'before_fitness' = 90; got %v", entry["before_fitness"])
+	}
+	if after, isNum := entry["after_fitness"].(float64); !isNum || after <= 0 {
+		t.Errorf("bt_evolve_selection_pressure report entry must carry a positive evolved 'after_fitness'; got %v", entry["after_fitness"])
+	}
+	if runs, isNum := entry["runs"].(float64); !isNum || int(runs) != 2 {
+		t.Errorf("bt_evolve_selection_pressure report entry must echo 'runs' = 2; got %v", entry["runs"])
+	}
+	if entry["algorithm"] != "genetic" {
+		t.Errorf("bt_evolve_selection_pressure must run experience-grounded genetic evolution and tag its entry 'algorithm' = %q; got %v", "genetic", entry["algorithm"])
+	}
+
+	// The unresolvable pressure entry is surfaced under 'skipped', not fatal.
+	skipped, isList := out["skipped"].([]interface{})
+	if !isList || len(skipped) != 1 || skipped[0] != "domain:__no_such_tree__" {
+		t.Errorf("bt_evolve_selection_pressure must list the unresolvable pressure entry under 'skipped' = [\"domain:__no_such_tree__\"]; got %v", out["skipped"])
+	}
+
+	// Experience-grounded: the consulted bank is reported even when nil (0).
+	if _, present := out["experience_bank_entries"]; !present {
+		t.Errorf("bt_evolve_selection_pressure result missing 'experience_bank_entries' key; got keys %v", out)
+	}
+
+	// Fitness write-back: each evolved elite's fitness must land in
+	// StructuralFitness (not the runtime EMA) via the "evolved" path, and bump
+	// EvolvedCount without disturbing RunCount.
+	cr := kg.Trees["domain:code_review"]
+	if cr == nil {
+		t.Fatal("domain:code_review vanished from the knowledge graph after evolution")
+	}
+	if cr.StructuralFitness <= 0 {
+		t.Errorf("bt_evolve_selection_pressure must write each elite's fitness back through the evolved path; expected domain:code_review.StructuralFitness > 0, got %.2f", cr.StructuralFitness)
+	}
+	if cr.EvolvedCount != 1 {
+		t.Errorf("bt_evolve_selection_pressure evolved write-back must bump EvolvedCount to 1 for domain:code_review; got %d", cr.EvolvedCount)
+	}
+	if cr.Fitness != 90 {
+		t.Errorf("bt_evolve_selection_pressure must not overwrite the runtime-success EMA (Fitness); expected 90, got %.2f", cr.Fitness)
+	}
+	if cr.RunCount != 2 {
+		t.Errorf("bt_evolve_selection_pressure evolved write-back must not increment RunCount; expected 2, got %d", cr.RunCount)
+	}
+
+	// No selection pressure: a graph of proven-but-well-bred trees yields an
+	// empty report, not an error.
+	noPressure := knowledge.NewKnowledgeGraph()
+	noPressure.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 20,
+	})
+	server2 := engine.NewServer("test2")
+	registerMCPTools(server2, &mcpDeps{kg: noPressure})
+	empty, ok := server2.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) reported the tool as unregistered on the no-pressure path")
+	}
+	if empty == nil || len(empty.Content) == 0 {
+		t.Fatal("bt_evolve_selection_pressure returned no content for a no-pressure graph")
+	}
+	var emptyOut map[string]interface{}
+	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure no-pressure result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
+	}
+	if _, isErr := emptyOut["error"]; isErr {
+		t.Fatalf("bt_evolve_selection_pressure must not error on a graph without selection pressure; got %v", emptyOut)
+	}
+	if n, isNum := emptyOut["selection_pressure"].(float64); !isNum || int(n) != 0 {
+		t.Errorf("bt_evolve_selection_pressure must report 'selection_pressure' = 0 for a no-pressure graph; got %v", emptyOut["selection_pressure"])
+	}
+	if emptyReport, isList := emptyOut["report"].([]interface{}); !isList || len(emptyReport) != 0 {
+		t.Errorf("bt_evolve_selection_pressure must return an empty 'report' array for a no-pressure graph; got %v", emptyOut["report"])
+	}
+
+	// Empty graph: no trees at all is a clean, empty result, not an error.
+	emptyGraph := knowledge.NewKnowledgeGraph()
+	server3 := engine.NewServer("test3")
+	registerMCPTools(server3, &mcpDeps{kg: emptyGraph})
+	blank, ok := server3.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) reported the tool as unregistered on the empty-graph path")
+	}
+	if blank == nil || len(blank.Content) == 0 {
+		t.Fatal("bt_evolve_selection_pressure returned no content for an empty graph")
+	}
+	var blankOut map[string]interface{}
+	if err := json.Unmarshal([]byte(blank.Content[0].Text), &blankOut); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure empty-graph result is not valid JSON: %v", err)
+	}
+	if _, isErr := blankOut["error"]; isErr {
+		t.Fatalf("bt_evolve_selection_pressure must not error on an empty graph; got %v", blankOut)
+	}
+	if n, isNum := blankOut["selection_pressure"].(float64); !isNum || int(n) != 0 {
+		t.Errorf("bt_evolve_selection_pressure must report 'selection_pressure' = 0 for an empty graph; got %v", blankOut["selection_pressure"])
+	}
+}
+
 // TestBTEvolveMemeticRegisteredAndValidatesStrategy pins the bt_evolve_memetic
 // MCP tool (Q2 Evolvability milestone 2/5): it must be registered by
 // registerMCPTools and expose Population.MemeticEvolve with a selectable
