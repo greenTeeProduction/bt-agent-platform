@@ -1,8 +1,11 @@
 package evolution
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 )
@@ -220,6 +223,121 @@ func (im *IslandModel) Stats() IslandStats {
 	im.mu.RLock()
 
 	return stats
+}
+
+// islandArchive is the durable JSON snapshot of an IslandModel — the model's
+// serializable fields under their existing keys, so archive consumers read
+// the same "islands"/"generation" shape the model itself marshals to.
+type islandArchive struct {
+	Islands         map[string]*Population `json:"islands"`
+	Generation      int                    `json:"generation"`
+	TotalMigrations int                    `json:"total_migrations"`
+}
+
+// Save persists the island model as JSON at path, creating missing parent
+// directories and writing atomically (temp file + rename) under the shared
+// advisory flock so concurrent writers cannot interleave partial archives
+// (ADR-024).
+func (im *IslandModel) Save(path string) error {
+	im.mu.RLock()
+	data, err := json.MarshalIndent(islandArchive{
+		Islands:         im.Islands,
+		Generation:      im.Generation,
+		TotalMigrations: im.TotalMigrations,
+	}, "", "  ")
+	im.mu.RUnlock()
+	if err != nil {
+		return fmt.Errorf("marshal island archive: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create island archive dir: %w", err)
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write island archive: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit island archive: %w", err)
+	}
+	return nil
+}
+
+// Load warm-starts the model from the archive at path by merging per-domain
+// subpopulations: disk-only domains are adopted wholesale, memory-only domains
+// survive untouched, and an overlapping domain unions its individuals deduped
+// by genome with the fitter copy winning. Progress counters (Generation,
+// TotalMigrations) resume from the persisted high-water mark. A missing
+// archive is a silent cold start; a corrupt archive is an error that leaves
+// the in-memory state untouched.
+func (im *IslandModel) Load(path string) error {
+	// Cold start before touching the flock sidecar: the archive directory may
+	// not exist yet, and acquiring the lock would fail trying to create it.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read island archive: %w", err)
+	}
+	var snap islandArchive
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("parse island archive %s: %w", path, err)
+	}
+
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	for domain, diskPop := range snap.Islands {
+		if diskPop == nil {
+			continue
+		}
+		if mem := im.Islands[domain]; mem != nil {
+			mergeIslandPopulation(mem, diskPop)
+			continue
+		}
+		im.Islands[domain] = diskPop
+	}
+	if snap.Generation > im.Generation {
+		im.Generation = snap.Generation
+	}
+	if snap.TotalMigrations > im.TotalMigrations {
+		im.TotalMigrations = snap.TotalMigrations
+	}
+	return nil
+}
+
+// mergeIslandPopulation unions the archived individuals into the in-memory
+// population, deduped by genome with the fitter copy winning.
+func mergeIslandPopulation(mem, disk *Population) {
+	byGenome := make(map[string]int, len(mem.Individuals))
+	for i, ind := range mem.Individuals {
+		byGenome[ind.Genome] = i
+	}
+	for _, ind := range disk.Individuals {
+		if i, seen := byGenome[ind.Genome]; seen {
+			if ind.Fitness > mem.Individuals[i].Fitness {
+				mem.Individuals[i] = ind
+			}
+			continue
+		}
+		byGenome[ind.Genome] = len(mem.Individuals)
+		mem.Individuals = append(mem.Individuals, ind)
+	}
+	if disk.BestFitness > mem.BestFitness {
+		mem.BestFitness = disk.BestFitness
+	}
 }
 
 // Summary returns a human-readable island model summary.

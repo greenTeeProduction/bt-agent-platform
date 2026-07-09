@@ -1,8 +1,11 @@
 package evolution
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 )
 
@@ -57,9 +60,10 @@ func Bucket(value, bucketSize int) int {
 type MAPElitesGrid struct {
 	Cells       map[string]*Individual `json:"cells"`
 	Dimensions  []FeatureDimension     `json:"dimensions"`
-	EliteSize   int                    `json:"elite_size"`   // max elites to return
-	NodeBucket  int                    `json:"node_bucket"`  // bucket size for node count (default: 10)
-	DepthBucket int                    `json:"depth_bucket"` // bucket size for depth (default: 2)
+	EliteSize   int                    `json:"elite_size"`    // max elites to return
+	NodeBucket  int                    `json:"node_bucket"`   // bucket size for node count (default: 10)
+	DepthBucket int                    `json:"depth_bucket"`  // bucket size for depth (default: 2)
+	Cap         int                    `json:"cap,omitempty"` // max occupied cells for Save/Load (0 = unbounded)
 }
 
 // NewMAPElitesGrid creates an empty MAP-Elites grid.
@@ -392,4 +396,114 @@ func (g *MAPElitesGrid) Stats() MAPElitesStats {
 	stats.DiversityScore = g.DiversityScore()
 
 	return stats
+}
+
+// mapElitesArchive is the durable JSON snapshot of a MAPElitesGrid — just the
+// occupied cells under the same "cells" key the grid itself marshals to, so
+// archive consumers read the shape they already know.
+type mapElitesArchive struct {
+	Cells map[string]*Individual `json:"cells"`
+}
+
+// cappedCells bounds a cell map to at most limit niches by evicting the
+// lowest-fitness cells first (ties broken by key for determinism). A limit of
+// zero or less means unbounded. The input map is never mutated; callers get
+// either the original map or a bounded copy.
+func cappedCells(cells map[string]*Individual, limit int) map[string]*Individual {
+	if limit <= 0 || len(cells) <= limit {
+		return cells
+	}
+	type niche struct {
+		key string
+		ind *Individual
+	}
+	niches := make([]niche, 0, len(cells))
+	for key, ind := range cells {
+		niches = append(niches, niche{key: key, ind: ind})
+	}
+	sort.Slice(niches, func(i, j int) bool {
+		if niches[i].ind.Fitness != niches[j].ind.Fitness {
+			return niches[i].ind.Fitness > niches[j].ind.Fitness
+		}
+		return niches[i].key < niches[j].key
+	})
+	bounded := make(map[string]*Individual, limit)
+	for _, n := range niches[:limit] {
+		bounded[n.key] = n.ind
+	}
+	return bounded
+}
+
+// Save persists the grid's occupied cells as JSON at path, creating missing
+// parent directories and writing atomically (temp file + rename) under the
+// shared advisory flock so concurrent writers cannot interleave partial
+// archives (ADR-024). When Cap is set, only the strongest Cap niches are
+// persisted — the weakest cells are evicted from the archive first. The
+// in-memory grid is left untouched.
+func (g *MAPElitesGrid) Save(path string) error {
+	data, err := json.MarshalIndent(mapElitesArchive{Cells: cappedCells(g.Cells, g.Cap)}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal map-elites archive: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create map-elites archive dir: %w", err)
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write map-elites archive: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit map-elites archive: %w", err)
+	}
+	return nil
+}
+
+// Load warm-starts the grid from the archive at path by merging niches:
+// disk-only niches are adopted wholesale, memory-only niches survive
+// untouched, and an overlapping niche key keeps the fitter copy. After the
+// merge the grid is bounded back to Cap by evicting the lowest-fitness cells
+// first, so a cross-domain merge can never exceed the cap. A missing archive
+// is a silent cold start; a corrupt archive is an error that leaves the
+// in-memory state untouched.
+func (g *MAPElitesGrid) Load(path string) error {
+	// Cold start before touching the flock sidecar: the archive directory may
+	// not exist yet, and acquiring the lock would fail trying to create it.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read map-elites archive: %w", err)
+	}
+	var snap mapElitesArchive
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("parse map-elites archive %s: %w", path, err)
+	}
+	if g.Cells == nil {
+		g.Cells = make(map[string]*Individual, len(snap.Cells))
+	}
+	for key, ind := range snap.Cells {
+		if ind == nil {
+			continue
+		}
+		if existing, ok := g.Cells[key]; ok && existing.Fitness >= ind.Fitness {
+			continue
+		}
+		g.Cells[key] = ind
+	}
+	g.Cells = cappedCells(g.Cells, g.Cap)
+	return nil
 }

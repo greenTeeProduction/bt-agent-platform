@@ -2,6 +2,8 @@ package evolution
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -201,6 +203,110 @@ func TestIslandStatsJSONIncludesMigrations(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"migrations"`) {
 		t.Fatalf("IslandStats JSON %s missing \"migrations\" key", data)
+	}
+}
+
+// TestIslandModel_SaveLoadMergesPerDomainSubpopulations pins the durable
+// island archive (milestone 3/5 of the durable quality-diversity program):
+// Save must persist the model to disk (creating missing parent directories),
+// and Load must warm-start a model from that archive by merging per-domain
+// subpopulations — disk-only domains are adopted wholesale, memory-only
+// domains survive untouched, and an overlapping domain unions its individuals
+// deduped by genome with the fitter copy winning. Progress counters
+// (Generation, TotalMigrations) resume from the persisted high-water mark, a
+// missing archive is a silent cold start rather than an error, and a corrupt
+// archive surfaces an error instead of silently wiping accumulated state.
+func TestIslandModel_SaveLoadMergesPerDomainSubpopulations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "island_archive.json")
+
+	// Cold start: a missing archive leaves the model unchanged and is not an error.
+	cold := NewIslandModel(3, 0.25)
+	if err := cold.Load(path); err != nil {
+		t.Fatalf("Load(missing archive) = %v, want nil cold start", err)
+	}
+	if len(cold.Islands) != 0 {
+		t.Fatalf("cold-start Load must leave the model empty; got %d islands", len(cold.Islands))
+	}
+
+	// Persist a model holding two domains and non-zero progress counters.
+	saved := NewIslandModel(3, 0.25)
+	goPop := islandTestPopulation("go-a", "go-b")
+	goPop.Individuals[0].Fitness = 80 // go-a: only on disk
+	goPop.Individuals[1].Fitness = 10 // go-b: disk copy is weaker than memory's
+	opsPop := islandTestPopulation("ops-a")
+	opsPop.Individuals[0].Fitness = 55
+	saved.AddIsland("go", goPop)
+	saved.AddIsland("ops", opsPop)
+	saved.Generation = 7
+	saved.TotalMigrations = 3
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Warm start into a model that already holds an overlapping domain ("go",
+	// sharing the go-b genome with the archive) and a disjoint one ("fin").
+	loaded := NewIslandModel(3, 0.25)
+	memGo := islandTestPopulation("go-b", "go-mem")
+	memGo.Individuals[0].Fitness = 90 // fitter in-memory copy of the shared go-b genome
+	memGo.Individuals[1].Fitness = 20
+	loaded.AddIsland("go", memGo)
+	loaded.AddIsland("fin", islandTestPopulation("fin-a"))
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(loaded.Islands) != 3 {
+		domains := make([]string, 0, len(loaded.Islands))
+		for d := range loaded.Islands {
+			domains = append(domains, d)
+		}
+		t.Fatalf("merged model has %d islands %v, want 3 (go, ops, fin)", len(domains), domains)
+	}
+	if ops := loaded.GetIsland("ops"); ops == nil || len(ops.Individuals) != 1 || ops.Individuals[0].Fitness != 55 {
+		t.Fatalf("disk-only ops island must be adopted wholesale; got %#v", ops)
+	}
+	if fin := loaded.GetIsland("fin"); fin == nil || len(fin.Individuals) != 1 {
+		t.Fatalf("memory-only fin island must survive Load; got %#v", fin)
+	}
+
+	merged := loaded.GetIsland("go")
+	if merged == nil {
+		t.Fatal("Load lost the overlapping go island")
+	}
+	byName := make(map[string]float64, len(merged.Individuals))
+	for _, ind := range merged.Individuals {
+		if ind.Tree == nil || ind.Genome == "" {
+			t.Fatalf("merged individual lost its tree or genome: %#v", ind)
+		}
+		if _, dup := byName[ind.Tree.Name]; dup {
+			t.Fatalf("individual %q duplicated after merge; want the union deduped by genome", ind.Tree.Name)
+		}
+		byName[ind.Tree.Name] = ind.Fitness
+	}
+	want := map[string]float64{"go-a": 80, "go-b": 90, "go-mem": 20}
+	if len(byName) != len(want) {
+		t.Fatalf("merged go island = %v, want exactly %v", byName, want)
+	}
+	for name, fitness := range want {
+		if got, present := byName[name]; !present || got != fitness {
+			t.Errorf("merged go island[%q] = %v (present=%v), want fitness %v", name, got, present, fitness)
+		}
+	}
+
+	if loaded.Generation != 7 {
+		t.Errorf("Generation = %d after Load, want persisted high-water mark 7", loaded.Generation)
+	}
+	if loaded.TotalMigrations != 3 {
+		t.Errorf("TotalMigrations = %d after Load, want persisted high-water mark 3", loaded.TotalMigrations)
+	}
+
+	// A corrupt archive must fail loudly, not zero out accumulated state.
+	corrupt := filepath.Join(t.TempDir(), "corrupt.json")
+	if err := os.WriteFile(corrupt, []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("write corrupt archive: %v", err)
+	}
+	if err := NewIslandModel(3, 0.25).Load(corrupt); err == nil {
+		t.Error("Load(corrupt archive) = nil, want error")
 	}
 }
 

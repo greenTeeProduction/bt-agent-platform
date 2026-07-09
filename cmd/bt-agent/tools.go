@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,6 +33,13 @@ import (
 // checkLLMHealth returns a ToolResult with a degradation error if the LLM is
 // unhealthy, or nil if the LLM is available. LLM-dependent tool handlers should
 // call this first to fail fast with a clear message instead of timing out.
+// islandArchivePath resolves the durable island-model archive bt_evolve_island
+// warm-starts from and persists to (milestone 3/5 of the durable
+// quality-diversity program). Rooted under agent.HomeDir() so it honors
+// BT_AGENT_HOME redirection and survives restarts with the rest of the
+// platform state.
+func islandArchivePath() string { return filepath.Join(agent.HomeDir(), "island_archive.json") }
+
 func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResult {
 	if health == nil {
 		return nil // no health monitor configured, proceed as normal
@@ -1045,6 +1054,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// 'islands' param is ignored); resolution failures abort before
 			// any evolution work so no partial result leaks out.
 			im := evolution.NewIslandModel(params.MigrationInterval, params.MigrationRate)
+			var seeded []string
 			if params.Domains != "" {
 				var names []string
 				for _, raw := range strings.Split(params.Domains, ",") {
@@ -1062,33 +1072,70 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					seeds[name] = domainTree
 				}
 				params.Islands = len(names)
+				seeded = names
 				for _, name := range names {
 					im.AddIsland(name, newProductionPopulation(population, seeds[name]))
 				}
 			} else {
 				for i := 0; i < params.Islands; i++ {
-					im.AddIsland(fmt.Sprintf("island_%d", i), newProductionPopulation(population, baseTree))
+					name := fmt.Sprintf("island_%d", i)
+					seeded = append(seeded, name)
+					im.AddIsland(name, newProductionPopulation(population, baseTree))
 				}
+			}
+			// Warm-start from the durable island archive so illuminated
+			// behavior accumulates across runs instead of restarting from
+			// scratch each call (milestone 3/5). Load merges the archive's
+			// per-domain subpopulations into the freshly seeded islands; a
+			// missing archive is a cold start, and a corrupt one degrades to
+			// a cold start surfaced non-fatally so the evolution still runs.
+			archivePath := islandArchivePath()
+			_, statErr := os.Stat(archivePath)
+			warmStarted := statErr == nil
+			archiveLoadErr := ""
+			if err := im.Load(archivePath); err != nil {
+				warmStarted = false
+				archiveLoadErr = err.Error()
 			}
 			for g := 0; g < params.Generations; g++ {
 				im.EvolveAll(structuralFitnessFn)
 			}
 			stats := im.Stats()
+			// Report per-island bests only for the islands this run seeded:
+			// archived domains from earlier runs keep accumulating in the
+			// model (and in the saved archive) but stay out of the result
+			// shape the caller asked for.
+			perIslandBest := make(map[string]float64, len(seeded))
+			for _, name := range seeded {
+				if best, present := stats.BestPerDomain[name]; present {
+					perIslandBest[name] = best
+				}
+			}
 			// Write the strongest island's best elite fitness back into the
 			// knowledge graph so fitness-aware discovery can surface the
 			// archive-improved tree on the next run (milestone 4/5).
 			bestElite := 0.0
-			for _, best := range stats.BestPerDomain {
+			for _, best := range perIslandBest {
 				if best > bestElite {
 					bestElite = best
 				}
 			}
 			recordEvolvedFitness(deps, params.Tree, bestElite)
-			data, _ := json.Marshal(map[string]interface{}{
+			result := map[string]interface{}{
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
-				"per_island_best": stats.BestPerDomain, "migrations": stats.Migrations,
-				"cross_diversity": stats.CrossDiversity,
-			})
+				"per_island_best": perIslandBest, "migrations": stats.Migrations,
+				"cross_diversity": stats.CrossDiversity, "warm_started": warmStarted,
+			}
+			if archiveLoadErr != "" {
+				result["archive_load_error"] = archiveLoadErr
+			}
+			// Persist the merged, evolved model so the next invocation
+			// resumes from this run's state. A save failure is surfaced
+			// non-fatally alongside the evolution result.
+			if err := im.Save(archivePath); err != nil {
+				result["archive_save_error"] = err.Error()
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

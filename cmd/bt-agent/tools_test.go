@@ -133,6 +133,11 @@ func TestBTEvolveQDRegisteredAndReturnsQDMetrics(t *testing.T) {
 // tree id must yield the shared {"error":"unknown tree"} shape rather than a
 // partial/panicking result.
 func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
+	// Isolate the durable island archive (milestone 3/5): without this the
+	// tool would warm-start from — and persist test state into — the real
+	// platform home.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
@@ -206,6 +211,11 @@ func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
 // unresolvable domain name must fail fast with
 // {"error":"unknown domain: <name>"} and no partial evolution result.
 func TestBTEvolveIslandDomainSeeding(t *testing.T) {
+	// Isolate the durable island archive (milestone 3/5): without this the
+	// tool would warm-start from — and persist test state into — the real
+	// platform home.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
@@ -262,6 +272,85 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 	}
 	if _, partial := errOut["per_island_best"]; partial {
 		t.Fatalf("bt_evolve_island unknown-domain error must carry no partial result; got %v", errOut)
+	}
+}
+
+// TestBTEvolveIslandAccumulatesDurableArchive pins milestone 3/5 of the
+// durable quality-diversity program: bt_evolve_island must persist its island
+// model to island_archive.json under BT_AGENT_HOME after every run and
+// warm-start from that archive on the next invocation, so illuminated behavior
+// accumulates across runs instead of restarting from scratch each call. The
+// result JSON must report the warm start honestly — "warm_started": false on a
+// cold home, true once an archive exists — and the archive's generation
+// counter must grow monotonically across invocations (proof the second run
+// resumed from the first run's state rather than overwriting it).
+func TestBTEvolveIslandAccumulatesDurableArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	// Identical args for both runs so warm-start island keys line up. Params
+	// stay tiny so the deterministic structural evolution remains -short-safe.
+	args := json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_island", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_island) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_island unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+	readArchive := func(label string) (generation float64, islands map[string]json.RawMessage) {
+		t.Helper()
+		archive := filepath.Join(home, "island_archive.json")
+		data, err := os.ReadFile(archive)
+		if err != nil {
+			t.Fatalf("bt_evolve_island must persist a durable island archive at %s after the %s run: %v", archive, label, err)
+		}
+		var snap struct {
+			Generation float64                    `json:"generation"`
+			Islands    map[string]json.RawMessage `json:"islands"`
+		}
+		if err := json.Unmarshal(data, &snap); err != nil {
+			t.Fatalf("island archive after the %s run is not valid JSON: %v", label, err)
+		}
+		return snap.Generation, snap.Islands
+	}
+
+	first := invoke("first")
+	if got, isBool := first["warm_started"].(bool); !isBool || got {
+		t.Errorf(`first run on a cold home must report "warm_started": false; got %v`, first["warm_started"])
+	}
+	gen1, islands1 := readArchive("first")
+	if gen1 < 2 {
+		t.Errorf("archive generation after the first 2-generation run = %v, want >= 2", gen1)
+	}
+	if len(islands1) != 2 {
+		t.Errorf("archive after the first run holds %d islands, want 2", len(islands1))
+	}
+
+	second := invoke("second")
+	if got, isBool := second["warm_started"].(bool); !isBool || !got {
+		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+	gen2, islands2 := readArchive("second")
+	if gen2 <= gen1 {
+		t.Errorf("archive generation must accumulate across runs; got %v after the second run, want > %v", gen2, gen1)
+	}
+	if len(islands2) != 2 {
+		t.Errorf("archive after the second run holds %d islands, want 2", len(islands2))
 	}
 }
 
