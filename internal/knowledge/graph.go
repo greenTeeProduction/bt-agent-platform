@@ -175,7 +175,17 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 			if li, lj := len(hits[i].keyword), len(hits[j].keyword); li != lj {
 				return li > lj // longest / most-specific keyword first
 			}
-			return hits[i].treeID < hits[j].treeID // tie-break by sorted tree ID
+			// Equal specificity: blend persisted fitness so the tie resolves
+			// toward the fitter tree, mirroring the embedding path's
+			// 0.7*sim + 0.3*(fitness/100) selection pressure (see embeddings.go).
+			// Fitness is discounted by cold-start confidence so a single lucky
+			// run cannot dominate a tree proven across many runs.
+			ti, tj := kg.Trees[hits[i].treeID], kg.Trees[hits[j].treeID]
+			if fi, fj := coldStartWeightedFitness(ti.Fitness, ti.RunCount),
+				coldStartWeightedFitness(tj.Fitness, tj.RunCount); fi != fj {
+				return fi > fj // more-trustworthy fitter tree wins the tie
+			}
+			return hits[i].treeID < hits[j].treeID // final deterministic fallback
 		})
 		winner := hits[0].treeID
 		matched := 0
@@ -191,15 +201,30 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 		return winner, conf
 	}
 
-	// Phase 2: capability overlap scoring. Break exact-score ties by sorted tree
-	// ID so map iteration order can never decide the winner.
+	// Phase 2: capability overlap scoring. On an exact-score tie, blend persisted
+	// fitness so the tie resolves toward the fitter tree — mirroring the embedding
+	// path's 0.7*sim + 0.3*(fitness/100) selection pressure (see embeddings.go).
+	// Fitness is discounted by cold-start confidence so a single lucky run cannot
+	// dominate a tree proven across many runs. Fitness only breaks ties (the raw
+	// score still gates the 0.3 threshold and sets the returned confidence), and
+	// sorted tree ID remains the final deterministic fallback so map iteration
+	// order can never decide the winner.
 	best := ""
 	bestScore := 0.0
+	bestFitness := 0.0
 	for id, tree := range kg.Trees {
 		score := kg.matchScore(taskLower, tree)
-		if score > bestScore || (score == bestScore && score > 0 && id < best) {
-			bestScore = score
-			best = id
+		if score <= 0 {
+			continue
+		}
+		wfit := coldStartWeightedFitness(tree.Fitness, tree.RunCount)
+		if best == "" || score > bestScore {
+			best, bestScore, bestFitness = id, score, wfit
+			continue
+		}
+		if score == bestScore &&
+			(wfit > bestFitness || (wfit == bestFitness && id < best)) {
+			best, bestScore, bestFitness = id, score, wfit
 		}
 	}
 
@@ -208,6 +233,36 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 	}
 
 	return "", 0.0
+}
+
+// coldStartPrior is the shrinkage constant in the cold-start confidence
+// multiplier: a tree needs roughly this many recorded runs before its fitness
+// is trusted at about half strength. Larger → more skeptical of lucky trees.
+const coldStartPrior = 10.0
+
+// coldStartConfidence returns a multiplier in (0,1) that grows with the number
+// of recorded runs, so a tree's fitness counts more the more times it has
+// actually run. A tree with a single lucky run is discounted hard; one proven
+// across many runs is trusted near-fully.
+//
+// The multiplier is (runCount+1)/(runCount+1+coldStartPrior). The +1 keeps it
+// strictly positive and — crucially — equal across trees with equal run counts,
+// so fitness still fully discriminates two equally-unproven trees (the m2/5
+// fitness tie-breaks). Only a genuine gap in run counts applies a discount.
+func coldStartConfidence(runCount int) float64 {
+	rc := float64(runCount)
+	if rc < 0 {
+		rc = 0
+	}
+	return (rc + 1) / (rc + 1 + coldStartPrior)
+}
+
+// coldStartWeightedFitness discounts a tree's fitness by its cold-start
+// confidence so a single lucky run cannot dominate selection. Shared by
+// stringMatch (discovery tie-break) and selectParents (breeding weight), so
+// both callers apply the same RunCount-aware selection pressure.
+func coldStartWeightedFitness(fitness float64, runCount int) float64 {
+	return fitness * coldStartConfidence(runCount)
 }
 
 // matchScore computes how well a tree matches a task.

@@ -271,6 +271,93 @@ func TestStringMatch_Phase2DeterministicTieBreak(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Fitness-driven deterministic discovery (selection-pressure program m2/5)
+//
+// The embedding path already blends persisted fitness into its ranking
+// (0.7*sim + 0.3*(fitness/100), see embeddings.go). The deterministic
+// stringMatch/matchScore fallback historically ignored fitness entirely, so a
+// keyword or capability-overlap tie fell back to sorted tree ID — routing tasks
+// to an arbitrary (often less-fit) tree even when a strictly fitter tree matched
+// just as well. These tests pin the invariant: when two trees match equally, the
+// fitter tree must win, even when its ID sorts LAST (so a pure sorted-ID
+// tie-break would pick the wrong one).
+// =============================================================================
+
+// Phase-1: two equally-specific keyword hits on two different trees. The fitter
+// tree must win the tie even though its ID sorts after the leaner one.
+func TestStringMatch_FitnessBreaksKeywordTie(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// "aaa:lean" sorts first and would win a pure sorted-ID tie-break, but it is
+	// the LESS fit tree. "zzz:fit" sorts last yet is far fitter and must win.
+	kg.Register(&TreeMeta{
+		ID:       "aaa:lean",
+		Name:     "Lean",
+		Category: "test",
+		Keywords: []string{"alpha"},
+		Fitness:  10,
+	})
+	kg.Register(&TreeMeta{
+		ID:       "zzz:fit",
+		Name:     "Fit",
+		Category: "test",
+		Keywords: []string{"gamma"},
+		Fitness:  90,
+	})
+
+	// "alpha gamma workflow" matches both 5-char keywords equally.
+	ids, _ := collectDiscoverIDs(kg, "alpha gamma workflow")
+
+	if len(ids) != 1 {
+		t.Fatalf("fitness-weighted keyword tie is non-deterministic: saw %d distinct trees over %d runs: %v",
+			len(ids), discoverRuns, ids)
+	}
+	if !ids["zzz:fit"] {
+		t.Errorf("expected the fitter tree zzz:fit (Fitness 90) to win the keyword tie over aaa:lean (Fitness 10), got %v", ids)
+	}
+}
+
+// Phase-2: two trees with identical capability-overlap scores. The fitter tree
+// must win the tie even though its ID sorts after the leaner one.
+func TestStringMatch_FitnessBreaksCapabilityTie(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// Both trees score 0.1 (category) + 3×0.1 (domain) = 0.4 for "planning
+	// session" and carry no Phase-1 keyword/action hits. "aaa:lean" sorts first
+	// but is the LESS fit tree; "zzz:fit" sorts last yet is far fitter.
+	kg.Register(&TreeMeta{
+		ID:       "aaa:lean",
+		Name:     "Lean",
+		Category: "planning",
+		Fitness:  10,
+		Capabilities: []Capability{
+			{Action: "dd", Domain: "planning", Strength: 1.0},
+			{Action: "ee", Domain: "planning", Strength: 1.0},
+			{Action: "ff", Domain: "planning", Strength: 1.0},
+		},
+	})
+	kg.Register(&TreeMeta{
+		ID:       "zzz:fit",
+		Name:     "Fit",
+		Category: "planning",
+		Fitness:  90,
+		Capabilities: []Capability{
+			{Action: "aa", Domain: "planning", Strength: 1.0},
+			{Action: "bb", Domain: "planning", Strength: 1.0},
+			{Action: "cc", Domain: "planning", Strength: 1.0},
+		},
+	})
+
+	ids, _ := collectDiscoverIDs(kg, "planning session")
+
+	if len(ids) != 1 {
+		t.Fatalf("fitness-weighted capability tie is non-deterministic: saw %d distinct trees over %d runs: %v",
+			len(ids), discoverRuns, ids)
+	}
+	if !ids["zzz:fit"] {
+		t.Errorf("expected the fitter tree zzz:fit (Fitness 90) to win the capability tie over aaa:lean (Fitness 10), got %v", ids)
+	}
+}
+
 // discoverWithEmbeddings must break equal-similarity ties by sorted tree ID
 // rather than keeping the strict-`>` map-random winner.
 func TestDiscoverWithEmbeddings_DeterministicTieBreak(t *testing.T) {

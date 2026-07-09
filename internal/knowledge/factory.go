@@ -38,6 +38,30 @@ type Factory struct {
 	// engine.ValidateTreeFull; knowledge cannot import engine). A child that
 	// fails validation is discarded in favor of the synthetic template path.
 	Validate func(tree *evolution.SerializableNode) error
+
+	// rng, when non-nil, drives parent selection so tests can seed a
+	// deterministic draw. Nil → the process-global math/rand source is used.
+	rng *rand.Rand
+}
+
+// SetSeed pins the factory's parent-selection RNG to a fixed seed, making
+// fitness-weighted parent draws reproducible in tests.
+func (f *Factory) SetSeed(seed int64) {
+	f.rng = rand.New(rand.NewSource(seed))
+}
+
+func (f *Factory) randIntn(n int) int {
+	if f.rng != nil {
+		return f.rng.Intn(n)
+	}
+	return rand.Intn(n)
+}
+
+func (f *Factory) randFloat64() float64 {
+	if f.rng != nil {
+		return f.rng.Float64()
+	}
+	return rand.Float64()
 }
 
 // NewFactory creates a tree factory backed by the knowledge graph.
@@ -72,6 +96,7 @@ func (f *Factory) extractTemplates() {
 			Metadata: map[string]any{
 				"node_count": meta.NodeCount,
 				"fitness":    meta.Fitness,
+				"run_count":  meta.RunCount,
 				"keywords":   meta.Keywords,
 			},
 		}
@@ -90,6 +115,31 @@ func templateFitness(tmpl *TreeTemplate) float64 {
 		return f
 	}
 	return 0
+}
+
+// templateRunCount reads a template's recorded run count, tolerating both the
+// int form set in-process (extractTemplates) and the float64 form a JSON
+// round-trip produces.
+func templateRunCount(tmpl *TreeTemplate) int {
+	if tmpl == nil || tmpl.Metadata == nil {
+		return 0
+	}
+	switch v := tmpl.Metadata["run_count"].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+	return 0
+}
+
+// templateSelectionWeight is the cold-start-discounted fitness used to weight
+// parent selection, so a lucky high-fitness/low-run template does not out-draw
+// a proven one. Shares the helper with stringMatch's discovery tie-break.
+func templateSelectionWeight(tmpl *TreeTemplate) float64 {
+	return coldStartWeightedFitness(templateFitness(tmpl), templateRunCount(tmpl))
 }
 
 // Breed creates a new tree by crossing over templates from 2-3 parent categories.
@@ -405,15 +455,54 @@ func (f *Factory) selectParents(category, _ string) []string {
 			candidates = append(candidates, id)
 		}
 	}
-	// Pick 2-3 random parents
-	n := 2 + rand.Intn(2)
+	// Pick 2-3 parents, weighted by template fitness so high-fitness parents
+	// are drawn far more often than uniform shuffle would allow (milestone 1/5
+	// of the selection-pressure program: fitness-driven breeding).
+	n := 2 + f.randIntn(2)
 	if n > len(candidates) {
 		n = len(candidates)
 	}
-	rand.Shuffle(len(candidates), func(i, j int) {
-		candidates[i], candidates[j] = candidates[j], candidates[i]
-	})
-	return candidates[:n]
+	return f.weightedSampleParents(candidates, n)
+}
+
+// weightedSampleParents draws n distinct parents via roulette-wheel sampling
+// over templateSelectionWeight — cold-start-discounted fitness, so a lucky
+// low-run template cannot out-draw a proven one (without replacement). Zero- or
+// negative-weight templates keep a small floor weight so they remain reachable
+// and an all-zero pool degrades gracefully to uniform selection.
+func (f *Factory) weightedSampleParents(candidates []string, n int) []string {
+	// weightFloor keeps unrated templates selectable without diluting the
+	// pressure a genuinely high-fitness parent exerts.
+	const weightFloor = 0.01
+
+	remaining := append([]string(nil), candidates...)
+	weights := make([]float64, len(remaining))
+	total := 0.0
+	for i, id := range remaining {
+		w := templateSelectionWeight(f.Templates[id])
+		if w < weightFloor {
+			w = weightFloor
+		}
+		weights[i] = w
+		total += w
+	}
+
+	selected := make([]string, 0, n)
+	for len(selected) < n && len(remaining) > 0 {
+		r := f.randFloat64() * total
+		idx := 0
+		for ; idx < len(remaining)-1; idx++ {
+			r -= weights[idx]
+			if r <= 0 {
+				break
+			}
+		}
+		selected = append(selected, remaining[idx])
+		total -= weights[idx]
+		remaining = append(remaining[:idx], remaining[idx+1:]...)
+		weights = append(weights[:idx], weights[idx+1:]...)
+	}
+	return selected
 }
 
 func (f *Factory) clonePreGate(tmpl *TreeTemplate) *evolution.SerializableNode {
