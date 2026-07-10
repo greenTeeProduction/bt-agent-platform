@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -1694,6 +1696,80 @@ func TestBTDLQToolsListAndReplay(t *testing.T) {
 	}
 	if executed != 1 {
 		t.Fatalf("unknown id must not reach the executor; invocations = %d", executed)
+	}
+}
+
+// bt_dlq_replay wait=true must surface the actual replay failure the queue
+// persists (DeadLetterEntry.LastReplayAt/LastReplayError, stamped by a failed
+// Replay) instead of only the canned reason string — otherwise the MCP caller
+// cannot distinguish "executor missing in this instance" from "the task
+// genuinely failed again", let alone see why it failed. The generic reason
+// alone remains correct only for the executor-missing case, where no attempt
+// was stamped.
+func TestDLQReplayWaitReportsFailureOutcome(t *testing.T) {
+	prev := engine.TaskDLQ
+	t.Cleanup(func() { engine.TaskDLQ = prev })
+
+	// Persisted queue: the failed-replay stamp round-trips through the file the
+	// handler Reload()s, exactly as in the daemon topology.
+	dlq := reliability.NewDeadLetterQueue(filepath.Join(t.TempDir(), "dlq.json"))
+	dlq.Push(reliability.DeadLetterEntry{ID: "dead-1", Agent: "agent-a", Task: "rebuild index", Error: "boom"})
+	dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
+		return errors.New("tree run failed: timeout")
+	})
+	engine.TaskDLQ = dlq
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	rep, ok := server.Invoke("bt_dlq_replay", json.RawMessage(`{"id":"dead-1","wait":true}`))
+	if !ok || rep == nil || len(rep.Content) == 0 {
+		t.Fatal("bt_dlq_replay returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(rep.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_dlq_replay result is not valid JSON: %v", err)
+	}
+	if out["replayed"] != false {
+		t.Fatalf("failed synchronous replay must report replayed=false; got %v", out)
+	}
+	if got, _ := out["last_replay_error"].(string); got != "tree run failed: timeout" {
+		t.Fatalf("bt_dlq_replay wait=true must surface the executor's error as last_replay_error; got %v (full result: %v)", out["last_replay_error"], out)
+	}
+	stamp, _ := out["last_replay_at"].(string)
+	if stamp == "" {
+		t.Fatalf("bt_dlq_replay wait=true must include last_replay_at for a stamped failure; got %v", out)
+	}
+	if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+		t.Fatalf("last_replay_at must be RFC3339, got %q: %v", stamp, err)
+	}
+
+	// Executor missing (an MCP sibling with no tree runner): Replay refuses
+	// before any attempt is stamped, so the generic reason stands and no
+	// last_replay_error key may leak from a previous life of the entry.
+	bare := reliability.NewDeadLetterQueue("")
+	bare.Push(reliability.DeadLetterEntry{ID: "dead-2", Agent: "agent-b", Task: "other work", Error: "kaput"})
+	engine.TaskDLQ = bare
+
+	rep2, ok := server.Invoke("bt_dlq_replay", json.RawMessage(`{"id":"dead-2","wait":true}`))
+	if !ok || rep2 == nil || len(rep2.Content) == 0 {
+		t.Fatal("bt_dlq_replay (no executor) returned no content")
+	}
+	var out2 map[string]interface{}
+	if err := json.Unmarshal([]byte(rep2.Content[0].Text), &out2); err != nil {
+		t.Fatalf("bt_dlq_replay (no executor) result is not valid JSON: %v", err)
+	}
+	if out2["replayed"] != false {
+		t.Fatalf("replay without an executor must report replayed=false; got %v", out2)
+	}
+	if reason, _ := out2["reason"].(string); reason == "" {
+		t.Fatalf("replay without an executor must keep the generic reason; got %v", out2)
+	}
+	if _, present := out2["last_replay_error"]; present {
+		t.Fatalf("no attempt was stamped, so last_replay_error must be absent; got %v", out2)
+	}
+	if _, present := out2["last_replay_at"]; present {
+		t.Fatalf("no attempt was stamped, so last_replay_at must be absent; got %v", out2)
 	}
 }
 

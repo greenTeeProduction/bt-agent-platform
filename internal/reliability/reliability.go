@@ -222,6 +222,11 @@ type DeadLetterEntry struct {
 	// An abandoned entry is retained for inspection but excluded from further
 	// auto-requeue so a poison pill cannot drive an infinite replay loop.
 	Abandoned bool `json:"abandoned,omitempty"`
+	// LastReplayAt and LastReplayError record the most recent failed replay so
+	// the outcome survives on disk for sibling processes; a successful replay
+	// removes the entry, so a set value always describes a failure.
+	LastReplayAt    time.Time `json:"last_replay_at,omitempty"`
+	LastReplayError string    `json:"last_replay_error,omitempty"`
 }
 
 // DeadLetterQueue stores failed tasks for manual inspection and replay.
@@ -364,6 +369,8 @@ func (dlq *DeadLetterQueue) Replay(id string) (*DeadLetterEntry, bool) {
 			return &replayed, true
 		}
 		dlq.entries[i].RequeuedAt = time.Time{}
+		dlq.entries[i].LastReplayAt = time.Now()
+		dlq.entries[i].LastReplayError = err.Error()
 		if dlq.entries[i].Attempts >= MaxReplayAttempts {
 			dlq.entries[i].Abandoned = true
 		}

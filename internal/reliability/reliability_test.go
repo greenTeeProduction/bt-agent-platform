@@ -213,6 +213,65 @@ func TestDeadLetterQueue_ReplayRetainsOnFailure(t *testing.T) {
 	}
 }
 
+// A failed replay must stamp its outcome on the retained entry — otherwise the
+// executor error is dropped entirely and sibling processes reading the shared
+// persistence file cannot tell a never-replayed entry from one that keeps
+// failing.
+func TestReplayFailureStampsOutcome(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+	dlq := NewDeadLetterQueue(path)
+	dlq.Push(DeadLetterEntry{ID: "a", Task: "task a"})
+	dlq.SetReplayExecutor(func(DeadLetterEntry) error {
+		return errors.New("agent exploded: step 3")
+	})
+
+	if entry, ok := dlq.Replay("a"); ok || entry != nil {
+		t.Fatalf("failed replay must report (nil, false), got %v/%v", entry, ok)
+	}
+
+	entries := dlq.List()
+	if len(entries) != 1 {
+		t.Fatalf("failed replay must retain the entry, got %d", len(entries))
+	}
+	if entries[0].LastReplayAt.IsZero() {
+		t.Fatal("failed replay must stamp LastReplayAt on the retained entry")
+	}
+	if entries[0].LastReplayError != "agent exploded: step 3" {
+		t.Fatalf("failed replay must record the executor error, got %q", entries[0].LastReplayError)
+	}
+
+	// The stamp must survive the save/load round-trip so sibling processes
+	// sharing the persistence file see the replay outcome.
+	reloaded := NewDeadLetterQueue(path).List()
+	if len(reloaded) != 1 {
+		t.Fatalf("reloaded queue must retain the entry, got %d", len(reloaded))
+	}
+	if reloaded[0].LastReplayAt.IsZero() {
+		t.Fatal("LastReplayAt must survive the persistence round-trip")
+	}
+	if reloaded[0].LastReplayError != "agent exploded: step 3" {
+		t.Fatalf("LastReplayError must survive the persistence round-trip, got %q", reloaded[0].LastReplayError)
+	}
+}
+
+// A successful replay removes the entry outright (drop-safe behavior
+// unchanged) — there is nothing left to stamp.
+func TestReplaySuccessLeavesNoStamp(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{ID: "a", Task: "task a"})
+	dlq.SetReplayExecutor(func(DeadLetterEntry) error {
+		return nil
+	})
+
+	entry, ok := dlq.Replay("a")
+	if !ok || entry == nil || entry.ID != "a" {
+		t.Fatalf("successful replay must report the replayed entry, got %v/%v", entry, ok)
+	}
+	if dlq.Len() != 0 {
+		t.Fatalf("successful replay must remove the entry, got %d entries", dlq.Len())
+	}
+}
+
 // An abandoned entry must never reach the executor.
 func TestDeadLetterQueue_ReplayRefusesAbandoned(t *testing.T) {
 	dlq := NewDeadLetterQueue("")

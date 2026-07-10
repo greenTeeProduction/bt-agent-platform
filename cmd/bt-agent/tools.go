@@ -1489,6 +1489,18 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				} else {
 					result["replayed"] = false
 					result["reason"] = "replay did not succeed (executor missing in this instance, or the task failed again); entry retained"
+					// A failed attempt stamps LastReplayError on the retained
+					// entry; surface it so the caller sees the actual failure
+					// instead of the ambiguous canned reason. No stamp means
+					// the executor was missing and no attempt ran.
+					for _, e := range engine.TaskDLQ.List() {
+						if e.ID == params.ID && e.LastReplayError != "" {
+							result["reason"] = "replay failed again; entry retained"
+							result["last_replay_error"] = e.LastReplayError
+							result["last_replay_at"] = e.LastReplayAt.Format(time.RFC3339)
+							break
+						}
+					}
 				}
 			} else {
 				result["note"] = "the daemon's background scan will replay this entry"
