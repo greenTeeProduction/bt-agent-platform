@@ -275,6 +275,236 @@ func TestDeadLetterQueue_Persistence(t *testing.T) {
 	}
 }
 
+// TestDeadLetterQueue_SaveMergesSiblingRequeueStamps is the two-queue
+// shared-file clobber regression for the production multi-process topology:
+// bt-agent's daemon and the dashboard each hold their own DeadLetterQueue over
+// the same persistence file. The dashboard stamps RequeuedAt via Requeue and
+// saves; the daemon — whose in-memory view predates that stamp — then saves
+// after its own mutation. Without cross-process merge-on-save the daemon's
+// stale view overwrites the file wholesale, erasing the requeue stamp, and the
+// executor's next scan never sees the flagged task: replay stays dead
+// cross-process. save() must merge the on-disk sibling state by entry ID with
+// monotonic Attempts/RequeuedAt before writing.
+func TestDeadLetterQueue_SaveMergesSiblingRequeueStamps(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+
+	// Daemon process: dead-letters a task and persists it.
+	daemon := NewDeadLetterQueue(path)
+	daemon.Push(DeadLetterEntry{ID: "stamped", Task: "retry me", Agent: "coder"})
+
+	// Dashboard process: loads the shared file and flags the entry for retry.
+	dashboard := NewDeadLetterQueue(path)
+	if _, ok := dashboard.Requeue("stamped"); !ok {
+		t.Fatal("setup: dashboard requeue must succeed")
+	}
+
+	// Daemon process: dead-letters another task. Its in-memory copy of
+	// "stamped" predates the dashboard's stamp, so a whole-file rewrite here
+	// clobbers RequeuedAt and resets Attempts.
+	daemon.Push(DeadLetterEntry{ID: "daemon-side", Task: "unrelated failure"})
+
+	// Executor scan: a fresh load of the shared file must still see the stamp.
+	scan := NewDeadLetterQueue(path)
+	entries := scan.List()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries in shared file, got %d: %+v", len(entries), entries)
+	}
+	byID := make(map[string]DeadLetterEntry, len(entries))
+	for _, e := range entries {
+		byID[e.ID] = e
+	}
+	if _, ok := byID["daemon-side"]; !ok {
+		t.Error("daemon's own new entry must survive the merged save")
+	}
+	stamped, ok := byID["stamped"]
+	if !ok {
+		t.Fatal("entry \"stamped\" missing from shared file")
+	}
+	if stamped.RequeuedAt.IsZero() {
+		t.Error("daemon save clobbered the dashboard's RequeuedAt stamp — save() must merge sibling state by entry ID before writing")
+	}
+	if stamped.Attempts != 1 {
+		t.Errorf("Attempts = %d, want 1 (monotonic: dashboard's counted attempt must survive the daemon's stale save)", stamped.Attempts)
+	}
+	if ready := scan.RequeuedReady(); len(ready) != 1 || ready[0] != "stamped" {
+		t.Errorf("executor scan RequeuedReady = %v, want [stamped] — clobbered stamp leaves the replay dead cross-process", ready)
+	}
+}
+
+// TestDeadLetterQueue_SaveMergesSiblingAbandoned asserts the Abandoned flag is
+// monotonic across processes: once a sibling terminally abandons a poison pill
+// (its replay budget is exhausted), the daemon's stale save must not resurrect
+// it into the auto-requeue pool, or the poison pill drives the very replay
+// loop the flag exists to break.
+func TestDeadLetterQueue_SaveMergesSiblingAbandoned(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+
+	daemon := NewDeadLetterQueue(path)
+	daemon.Push(DeadLetterEntry{ID: "poison", Task: "always fails", Attempts: MaxReplayAttempts})
+
+	// Sibling process: requeue attempt on the exhausted entry terminally
+	// abandons it and persists the flag.
+	sibling := NewDeadLetterQueue(path)
+	if _, ok := sibling.Requeue("poison"); ok {
+		t.Fatal("setup: requeue of exhausted entry must refuse and abandon")
+	}
+
+	// Daemon process: stale in-memory view (Abandoned=false) saves again.
+	daemon.Push(DeadLetterEntry{ID: "fresh", Task: "new failure"})
+
+	scan := NewDeadLetterQueue(path)
+	for _, e := range scan.List() {
+		if e.ID == "poison" && !e.Abandoned {
+			t.Error("daemon save cleared the sibling's Abandoned flag — Abandoned must be monotonic in the merge")
+		}
+	}
+	if ready := scan.RequeuedReady(); len(ready) != 0 {
+		t.Errorf("RequeuedReady = %v, want none (abandoned poison pill must stay excluded)", ready)
+	}
+}
+
+// TestDeadLetterQueue_CrossProcessRequeuePickup is the two-instance pickup
+// regression for the production multi-process topology: instance B (the
+// dashboard or an MCP sibling) Requeues an entry over the shared file, and
+// instance A (the daemon, whose in-memory view predates the stamp) must be
+// able to consume it via the fixed scan sequence Reload → RequeuedReady →
+// Replay. The stale-view control documents why every cross-process consume
+// site must Reload first: without it A's scan returns nothing and the requeue
+// is never replayed. The successful replay's removal must also survive
+// merge-on-save — a resurrected entry would replay again on every scan.
+func TestDeadLetterQueue_CrossProcessRequeuePickup(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+
+	// Instance A (daemon): dead-letters a task and installs the replay executor.
+	daemon := NewDeadLetterQueue(path)
+	daemon.Push(DeadLetterEntry{ID: "cross", Task: "flaky deploy", Agent: "coder"})
+	var replayed []DeadLetterEntry
+	daemon.SetReplayExecutor(func(e DeadLetterEntry) error {
+		replayed = append(replayed, e)
+		return nil
+	})
+
+	// Instance B (dashboard/MCP sibling): an independent queue over the same
+	// file flags the entry for retry. The stamp lands on disk only — never in
+	// A's memory.
+	sibling := NewDeadLetterQueue(path)
+	if _, ok := sibling.Requeue("cross"); !ok {
+		t.Fatal("setup: sibling requeue must succeed")
+	}
+
+	// Control: A's stale in-memory view predates the stamp, so a scan without
+	// Reload sees nothing — this is exactly the dead cross-process replay.
+	if ready := daemon.RequeuedReady(); len(ready) != 0 {
+		t.Fatalf("control: stale view sees %v before Reload; the cross-process gap this test pins no longer exists", ready)
+	}
+
+	// Instance A's scan tick as the daemon must run it: Reload, then consume.
+	daemon.Reload()
+	ready := daemon.RequeuedReady()
+	if len(ready) != 1 || ready[0] != "cross" {
+		t.Fatalf("after Reload, RequeuedReady = %v, want [cross] — sibling requeue stamp not picked up", ready)
+	}
+	for _, id := range ready {
+		if _, ok := daemon.Replay(id); !ok {
+			t.Fatalf("Replay(%q) refused a reloaded sibling requeue", id)
+		}
+	}
+	if len(replayed) != 1 || replayed[0].ID != "cross" || replayed[0].Agent != "coder" {
+		t.Errorf("executor ran %+v, want exactly the sibling-requeued entry (id=cross, agent=coder)", replayed)
+	}
+
+	// A fresh process load must not resurrect the consumed entry.
+	if got := NewDeadLetterQueue(path).Len(); got != 0 {
+		t.Errorf("shared file holds %d entries after successful replay, want 0 (merge-on-save resurrected the consumed entry)", got)
+	}
+}
+
+// TestDeadLetterQueue_SaveAtomicReplace asserts the ADR-003 persistence
+// behavior arc42 §8.4 claims for the DLQ: save() must write to a temp file and
+// rename it over the destination, never truncate-and-rewrite in place. An
+// in-place rewrite keeps the same inode, so a crash mid-write leaves a
+// truncated (corrupt) queue on disk; rename swaps a complete file in one
+// atomic step. os.SameFile detects the in-place rewrite.
+func TestDeadLetterQueue_SaveAtomicReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/dlq.json"
+
+	dlq := NewDeadLetterQueue(path)
+	dlq.Push(DeadLetterEntry{ID: "first", Task: "seed the file"})
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after first save: %v", err)
+	}
+
+	dlq.Push(DeadLetterEntry{ID: "second", Task: "rewrite the file"})
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after second save: %v", err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("save() rewrote the DLQ file in place; a crash mid-write can truncate the queue — must write a temp file and rename it over the destination")
+	}
+
+	// The atomic swap must not strand temp artifacts next to the queue.
+	files, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	for _, f := range files {
+		if f.Name() != "dlq.json" {
+			t.Errorf("save() left stray file %q beside the DLQ", f.Name())
+		}
+	}
+
+	// And the swapped-in file is a complete, loadable queue.
+	if got := NewDeadLetterQueue(path).Len(); got != 2 {
+		t.Errorf("expected 2 entries after reload, got %d", got)
+	}
+}
+
+// TestDeadLetterQueue_LoadQuarantinesCorruptFile asserts load() surfaces a
+// corrupt persistence file instead of discarding the json.Unmarshal error:
+// the unreadable payload must be quarantined to <path>.corrupt so the queue
+// can start empty WITHOUT its next save silently persisting the wipe over the
+// only copy of the dead-lettered tasks.
+func TestDeadLetterQueue_LoadQuarantinesCorruptFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/dlq.json"
+	garbage := "{this is not json"
+	if err := os.WriteFile(path, []byte(garbage), 0644); err != nil {
+		t.Fatalf("write corrupt file: %v", err)
+	}
+
+	dlq := NewDeadLetterQueue(path)
+	if dlq.Len() != 0 {
+		t.Fatalf("corrupt file must yield an empty queue, got %d entries", dlq.Len())
+	}
+
+	quarantined, err := os.ReadFile(path + ".corrupt")
+	if err != nil {
+		t.Fatalf("corrupt DLQ file must be quarantined to <path>.corrupt: %v", err)
+	}
+	if string(quarantined) != garbage {
+		t.Errorf("quarantined payload mismatch: got %q, want %q", quarantined, garbage)
+	}
+	if data, err := os.ReadFile(path); err == nil && string(data) == garbage {
+		t.Error("corrupt payload still sits at the primary path awaiting the next save to clobber it")
+	}
+
+	// The queue keeps working after quarantine, and saving must not touch the
+	// preserved evidence.
+	dlq.Push(DeadLetterEntry{ID: "after-corruption", Task: "fresh entry"})
+	if got := NewDeadLetterQueue(path).Len(); got != 1 {
+		t.Errorf("expected 1 entry after post-quarantine save, got %d", got)
+	}
+	quarantined, err = os.ReadFile(path + ".corrupt")
+	if err != nil || string(quarantined) != garbage {
+		t.Errorf("quarantine file must survive subsequent saves: err=%v content=%q", err, quarantined)
+	}
+}
+
 // TestDeadLetterQueue_EvictionBound asserts the graceful-degradation cap: the
 // DLQ never grows past MaxDeadLetterEntries, and when it overflows the OLDEST
 // entries are evicted first (bounded memory / disk under a failure storm).

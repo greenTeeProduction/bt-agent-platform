@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -436,13 +437,147 @@ func (dlq *DeadLetterQueue) Len() int {
 	return len(dlq.entries)
 }
 
+// acquireFileLock takes an exclusive advisory flock on the sidecar
+// `<path>.lock`, blocking until the lock is available, and unlinks the sidecar
+// on release so no stray artifact is left beside the queue file. flock
+// attaches to the open file description, so two separate opens of the same
+// sidecar exclude each other even within one process — the same shape as the
+// daemon/dashboard cross-process case. The lock is advisory and relies on
+// Linux flock semantics (the platform target). The returned release func is
+// safe to call more than once.
+//
+// This replicates the internal/evolution file-lock idiom locally: reliability
+// imports zero internal packages, so it cannot borrow that helper. The
+// unlink-on-release variant must re-verify the sidecar after acquisition: a
+// waiter can acquire the flock on an inode the previous holder already
+// unlinked, and that lock excludes nobody (a fresh open of the path creates a
+// new inode), so it retries on the live path instead.
+func acquireFileLock(path string) (func(), error) {
+	lockPath := path + ".lock"
+	for {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("open dlq lock %s: %w", lockPath, err)
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			f.Close()
+			return nil, fmt.Errorf("flock dlq lock %s: %w", lockPath, err)
+		}
+		held, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return nil, fmt.Errorf("stat dlq lock %s: %w", lockPath, err)
+		}
+		if current, err := os.Stat(lockPath); err != nil || !os.SameFile(held, current) {
+			_ = f.Close() // locked an orphaned inode; retry on the live path
+			continue
+		}
+		var once sync.Once
+		release := func() {
+			once.Do(func() {
+				// Unlink before close so no waiter still blocked on this
+				// inode can mistake it for the lock guarding the path.
+				_ = os.Remove(lockPath)
+				_ = f.Close() // closing the descriptor releases the flock
+			})
+		}
+		return release, nil
+	}
+}
+
+// mergeFromDisk folds sibling-process state from the shared persistence file
+// into the in-memory entries before a save. The daemon, the dashboard, and MCP
+// siblings each hold an independent DeadLetterQueue over the same file, so a
+// whole-file rewrite from a view that predates a sibling's Requeue would erase
+// its RequeuedAt stamp and the executor's next scan would never see the
+// flagged task — replay stays dead cross-process. Membership stays
+// memory-authoritative (Replay removes entries on success and Purge clears
+// wholesale; resurrecting disk-only entries would undo both), while per-entry
+// replay state merges monotonically:
+//
+//   - Requeue bumps Attempts every time it stamps RequeuedAt, so a strictly
+//     higher on-disk Attempts marks the disk entry as the newer write — adopt
+//     its Attempts and RequeuedAt together. At equal Attempts memory is at
+//     least as recent, which preserves Replay's deliberate clear of RequeuedAt
+//     after a failed replay (the scan hot-loop guard).
+//   - Abandoned is terminal (nothing ever clears it), so it merges as OR: a
+//     sibling's abandoned poison pill must not be resurrected into the
+//     auto-requeue pool by a stale save.
+//
+// Callers must hold dlq.mu and the cross-process file lock.
+func (dlq *DeadLetterQueue) mergeFromDisk() {
+	data, err := os.ReadFile(dlq.path)
+	if err != nil {
+		return // no sibling state yet (first save)
+	}
+	var disk []DeadLetterEntry
+	if err := json.Unmarshal(data, &disk); err != nil {
+		return // corrupt on-disk state; the load path quarantines it
+	}
+	byID := make(map[string]DeadLetterEntry, len(disk))
+	for _, e := range disk {
+		byID[e.ID] = e
+	}
+	for i := range dlq.entries {
+		d, ok := byID[dlq.entries[i].ID]
+		if !ok {
+			continue
+		}
+		if d.Attempts > dlq.entries[i].Attempts {
+			dlq.entries[i].Attempts = d.Attempts
+			dlq.entries[i].RequeuedAt = d.RequeuedAt
+		}
+		if d.Abandoned {
+			dlq.entries[i].Abandoned = true
+		}
+	}
+}
+
+// save persists the queue per ADR-003: write a complete temp file in the same
+// directory, then rename it over the destination. An in-place rewrite would let
+// a crash mid-write leave a truncated queue at dlq.path; rename swaps a fully
+// written file in one atomic step.
 func (dlq *DeadLetterQueue) save() {
 	if dlq.path == "" {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(dlq.path), 0755)
-	data, _ := json.Marshal(dlq.entries)
-	_ = os.WriteFile(dlq.path, data, 0644)
+	dir := filepath.Dir(dlq.path)
+	_ = os.MkdirAll(dir, 0755)
+	// Serialize the read-merge-write against sibling processes sharing this
+	// file, then fold their newer per-entry state into memory before writing
+	// (see mergeFromDisk). A lock failure degrades to the merged-but-
+	// unserialized write rather than dropping the save: an unserialized write
+	// can still lose a concurrent sibling stamp, but an unsaved queue loses
+	// this process's own entries for certain.
+	if release, err := acquireFileLock(dlq.path); err == nil {
+		defer release()
+	} else {
+		slog.Error("dlq: lock for merged save (writing unserialized)", "path", dlq.path, "error", err)
+	}
+	dlq.mergeFromDisk()
+	data, err := json.Marshal(dlq.entries)
+	if err != nil {
+		slog.Error("dlq: marshal queue for save", "path", dlq.path, "error", err)
+		return
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(dlq.path)+".tmp*")
+	if err != nil {
+		slog.Error("dlq: create temp save file", "path", dlq.path, "error", err)
+		return
+	}
+	if _, err = tmp.Write(data); err == nil {
+		err = tmp.Chmod(0644)
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), dlq.path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp.Name())
+		slog.Error("dlq: atomic save failed", "path", dlq.path, "error", err)
+	}
 }
 
 func (dlq *DeadLetterQueue) load() {
@@ -450,7 +585,19 @@ func (dlq *DeadLetterQueue) load() {
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(data, &dlq.entries)
+	if err := json.Unmarshal(data, &dlq.entries); err != nil {
+		// A corrupt persistence file must not silently become an empty queue:
+		// the next save would persist the wipe over the only copy of the
+		// dead-lettered tasks. Quarantine the payload beside the queue so the
+		// queue restarts empty while the evidence survives subsequent saves.
+		dlq.entries = nil
+		quarantine := dlq.path + ".corrupt"
+		if renameErr := os.Rename(dlq.path, quarantine); renameErr != nil {
+			slog.Error("dlq: quarantine corrupt queue file", "path", dlq.path, "error", renameErr)
+			return
+		}
+		slog.Error("dlq: corrupt queue file quarantined", "path", dlq.path, "quarantine", quarantine, "error", err)
+	}
 }
 
 // ─── Worker Pool ────────────────────────────────────────────────────────────

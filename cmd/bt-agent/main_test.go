@@ -150,6 +150,86 @@ func TestDaemonWiresDLQReplayConsumer(t *testing.T) {
 	}
 }
 
+// TestDLQCrossProcessConsumersReloadFirst pins — source-level, like
+// TestDaemonWiresDLQReplayConsumer above — that every cross-process DLQ
+// consume site reloads the queue from the shared file before reading or
+// requeuing. Each process (daemon, dashboard, MCP siblings) holds its own
+// in-memory DeadLetterQueue over one file, so a consume against a stale view
+// misses every stamp a sibling wrote since this process last read the file:
+// dashboard/MCP requeues are never replayed and stale listings misreport the
+// queue. Three sites are pinned:
+//
+//  1. the daemon's replay-scan tick (main.go) must call dlq.Reload() inside
+//     each tick, before dlq.RequeuedReady();
+//  2. the bt_dlq_replay tool (tools.go) must call engine.TaskDLQ.Reload()
+//     before engine.TaskDLQ.Requeue, or it requeues against — and merge-saves
+//     from — a view that predates sibling writes;
+//  3. the dashboard's handleDLQ list handler (../bt-dashboard/main.go, read
+//     cross-package the same way requireBuildIdentityWiring audits
+//     ../bt-gardener) must call dlq.Reload() before dlq.List(); today only
+//     handleDLQReplay reloads, so the DLQ panel shows the dashboard's stale
+//     boot-time view.
+func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
+	// Site 1: daemon replay-scan tick in main.go.
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	scanIdx := strings.Index(s, "time.NewTicker(dlqReplayScanInterval)")
+	if scanIdx < 0 {
+		t.Fatal("main.go must create the DLQ replay-scan ticker (pinned by TestDaemonWiresDLQReplayConsumer)")
+	}
+	scan := s[scanIdx:]
+	loopIdx := strings.Index(scan, "for range ticker.C")
+	readyIdx := strings.Index(scan, "dlq.RequeuedReady()")
+	if loopIdx < 0 || readyIdx < 0 {
+		t.Fatal("main.go replay scan lost its tick loop or RequeuedReady call")
+	}
+	if reloadIdx := strings.Index(scan, "dlq.Reload()"); reloadIdx < loopIdx || reloadIdx > readyIdx {
+		t.Error("main.go replay scan must call dlq.Reload() inside each tick before dlq.RequeuedReady() — a stale in-memory view never sees dashboard/MCP requeue stamps, so cross-process replay stays dead")
+	}
+
+	// Site 2: bt_dlq_replay tool in tools.go.
+	toolSrc, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	tool := string(toolSrc)
+	regIdx := strings.Index(tool, `"bt_dlq_replay"`)
+	if regIdx < 0 {
+		t.Fatal("tools.go must register the bt_dlq_replay tool")
+	}
+	handler := tool[regIdx:]
+	requeueIdx := strings.Index(handler, "engine.TaskDLQ.Requeue(")
+	if requeueIdx < 0 {
+		t.Fatal("bt_dlq_replay must requeue via engine.TaskDLQ.Requeue")
+	}
+	if reloadIdx := strings.Index(handler, "engine.TaskDLQ.Reload()"); reloadIdx < 0 || reloadIdx > requeueIdx {
+		t.Error("bt_dlq_replay must call engine.TaskDLQ.Reload() before engine.TaskDLQ.Requeue — requeuing against a stale view misses sibling stamps and merge-saves stale state over them")
+	}
+
+	// Site 3: dashboard handleDLQ list handler.
+	dashSrc, err := os.ReadFile("../bt-dashboard/main.go")
+	if err != nil {
+		t.Fatalf("read ../bt-dashboard/main.go: %v", err)
+	}
+	dash := string(dashSrc)
+	start := strings.Index(dash, "func handleDLQ(")
+	end := strings.Index(dash, "func handleDLQReplay(")
+	if start < 0 || end < start {
+		t.Fatal("dashboard main.go lost handleDLQ/handleDLQReplay")
+	}
+	list := dash[start:end]
+	listIdx := strings.Index(list, "dlq.List()")
+	if listIdx < 0 {
+		t.Fatal("dashboard handleDLQ must list entries via dlq.List()")
+	}
+	if reloadIdx := strings.Index(list, "dlq.Reload()"); reloadIdx < 0 || reloadIdx > listIdx {
+		t.Error("dashboard handleDLQ must call dlq.Reload() before dlq.List() — only handleDLQReplay reloads today, so the DLQ panel renders the dashboard's stale boot-time view of the shared file")
+	}
+}
+
 // A2A ":8686 bind: address already in use" is EXPECTED sibling contention —
 // every MCP/CLI-spawned bt-agent instance next to the daemon triggers it
 // (CLAUDE.md documents it as warned-and-ignored), yet it was logged at ERROR

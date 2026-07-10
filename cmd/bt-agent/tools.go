@@ -1471,6 +1471,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = json.Unmarshal(args, &params)
 			result := map[string]interface{}{}
+			// Requeue merge-saves from this instance's in-memory view; reload
+			// first so sibling stamps on the shared file aren't overwritten
+			// with stale state.
+			engine.TaskDLQ.Reload()
 			if _, ok := engine.TaskDLQ.Requeue(params.ID); !ok {
 				result["requeued"] = false
 				result["reason"] = "unknown id, abandoned entry, or replay attempts exhausted"

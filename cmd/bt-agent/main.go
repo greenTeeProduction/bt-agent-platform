@@ -454,6 +454,10 @@ func main() {
 			ticker := time.NewTicker(dlqReplayScanInterval)
 			defer ticker.Stop()
 			for range ticker.C {
+				// Each process holds its own in-memory queue over the shared
+				// file; dashboard/MCP requeue stamps land on disk only, so a
+				// scan against the stale view would never see them.
+				dlq.Reload()
 				for _, id := range dlq.RequeuedReady() {
 					if entry, ok := dlq.Replay(id); ok {
 						engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)

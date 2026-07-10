@@ -1030,6 +1030,9 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The executor process mutates the shared file as it replays; reload so
+	// the panel lists the current queue, not this process's boot-time view.
+	dlq.Reload()
 	entries := dlq.List()
 	resp := map[string]interface{}{
 		"count":   len(entries),

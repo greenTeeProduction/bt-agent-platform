@@ -14,6 +14,10 @@ import (
 // daemon/gardener cross-process case. The lock is advisory and relies on
 // Linux flock semantics (the platform target). The returned release func is
 // safe to call more than once.
+//
+// internal/reliability replicates this idiom locally (acquireFileLock) because
+// that package imports zero internal packages — keep semantic changes to the
+// locking protocol mirrored there.
 func acquireExperienceLock(persistPath string) (func(), error) {
 	lockPath := persistPath + ".lock"
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
