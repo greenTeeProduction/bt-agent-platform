@@ -364,6 +364,8 @@ func recordImplementedGoals(run *SuperpowersRun) {
 	if err != nil {
 		return
 	}
+	budget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
+	budgetChanged := false
 	for _, task := range run.Tasks {
 		if task.Status != "done" && task.Status != "completed" {
 			continue
@@ -373,8 +375,16 @@ func recordImplementedGoals(run *SuperpowersRun) {
 			title = title[:120]
 		}
 		store.Record("goap:implemented", title, task.Objective)
+		// The goal landed: clear its failure budget so a later re-proposal
+		// starts fresh instead of inheriting stale abandon state.
+		if budget != nil && budget.Clear(goapResearchGoalKey(task.Objective)) {
+			budgetChanged = true
+		}
 	}
 	_ = store.Save()
+	if budget != nil && budgetChanged {
+		_ = budget.Save()
+	}
 }
 
 // superpowersPlanAlreadyImplemented reports whether every task objective in

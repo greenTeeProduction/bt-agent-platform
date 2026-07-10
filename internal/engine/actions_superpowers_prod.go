@@ -830,6 +830,11 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			// milestone-abandon budget (2026-07-09 doc-drift wedge lesson).
 			if isGoapInfraCycleFailure(bb.Outcome, bb.Result) {
 				refundGoapMilestoneAttemptForInfraFailure(bb)
+			} else {
+				// A GENUINE implementation failure consumes one attempt of
+				// the head research goal's budget, so a goal the agent cannot
+				// land is abandoned instead of treadmilling.
+				chargeGoapResearchGoalFailure(bb)
 			}
 			// Clear the durable plan on every non-rate-limit failure so the
 			// next scheduled cycle re-plans from scratch instead of re-resuming

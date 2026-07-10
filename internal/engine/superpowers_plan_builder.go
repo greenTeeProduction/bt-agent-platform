@@ -45,7 +45,15 @@ func buildGoalDrivenImplementationPlan(task string) string {
 			continue
 		}
 		fileScoped = append(fileScoped, goal)
-		sections = append(sections, buildGoalTaskSection(len(sections)+1, goal, files))
+		// A goal whose previous attempt failed the commit gate carries the
+		// recorded failure into its task text (parse-safe single line), so
+		// the retry fixes what actually failed instead of resubmitting the
+		// same rejected code.
+		goalForSection := goal
+		if note := goapGoalFailureNote(goal); note != "" {
+			goalForSection = goal + " " + note
+		}
+		sections = append(sections, buildGoalTaskSection(len(sections)+1, goalForSection, files))
 		if len(sections) == maxGoalDrivenTasks {
 			break
 		}

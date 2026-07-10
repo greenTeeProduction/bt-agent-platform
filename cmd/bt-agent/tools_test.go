@@ -576,6 +576,104 @@ func TestBTEvolveIslandArchiveIsScopedPerBaseTree(t *testing.T) {
 	}
 }
 
+// TestBTEvolveIslandAdoptsLegacyGlobalArchiveOnce pins the one-time legacy
+// island-archive migration: per-tree archive scoping (33f8c13) silently
+// orphaned any pre-scoping GLOBAL island_archive.json — accumulated state
+// cold-started away and the stale file lingered under BT_AGENT_HOME forever.
+// When bt_evolve_island finds no per-tree archive but the legacy global file
+// exists, it must merge it via im.Load BEFORE evolving, then rename it aside
+// (.migrated) so it is consumed exactly once and can never re-pollute another
+// tree's archive. A later run (per-tree archive now present) must not adopt,
+// even if a global file reappears.
+func TestBTEvolveIslandAdoptsLegacyGlobalArchiveOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	writeLegacy := func() string {
+		t.Helper()
+		legacy := evolution.NewIslandModel(3, 0.25)
+		legacy.AddIsland("legacy_island", evolution.NewPopulation(2, evolution.DefaultTree()))
+		legacy.Generation = 9
+		path := filepath.Join(home, "island_archive.json")
+		if err := legacy.Save(path); err != nil {
+			t.Fatalf("write legacy archive: %v", err)
+		}
+		return path
+	}
+	legacyPath := writeLegacy()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+	args := json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":1,"migration_interval":1,"migration_rate":0.5}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_island", args)
+		if !ok || res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_island returned nothing on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_island %s result is not valid JSON: %v", label, err)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_island errored on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	first := invoke("first")
+	if first["legacy_archive_adopted"] != true {
+		t.Fatalf(`first run with a legacy global archive must report "legacy_archive_adopted": true; got %v`, first["legacy_archive_adopted"])
+	}
+	// Consumed exactly once: the original is renamed aside.
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy archive must be renamed away after adoption; stat err = %v", err)
+	}
+	if _, err := os.Stat(legacyPath + ".migrated"); err != nil {
+		t.Fatalf("adopted legacy archive must be kept aside as .migrated: %v", err)
+	}
+	// The adopted state is durable in the PER-TREE archive: its generation
+	// counter carries the legacy high-water mark forward and the legacy
+	// island's subpopulation survives.
+	perTree, err := os.ReadFile(filepath.Join(home, "island_archive-godev.json"))
+	if err != nil {
+		t.Fatalf("per-tree archive must exist after the run: %v", err)
+	}
+	var snap struct {
+		Generation float64                    `json:"generation"`
+		Islands    map[string]json.RawMessage `json:"islands"`
+	}
+	if err := json.Unmarshal(perTree, &snap); err != nil {
+		t.Fatalf("per-tree archive is not valid JSON: %v", err)
+	}
+	if snap.Generation < 9 {
+		t.Errorf("per-tree archive generation = %v, want >= the legacy high-water mark 9", snap.Generation)
+	}
+	if _, adopted := snap.Islands["legacy_island"]; !adopted {
+		t.Errorf("legacy island subpopulation missing from the per-tree archive; islands = %d", len(snap.Islands))
+	}
+
+	// Second run: no legacy file left → no adoption, normal warm start.
+	second := invoke("second")
+	if second["legacy_archive_adopted"] == true {
+		t.Fatal("adoption must be one-time; the second run must not re-adopt")
+	}
+	if second["warm_started"] != true {
+		t.Fatalf("second run must warm-start from the per-tree archive; got %v", second["warm_started"])
+	}
+
+	// A REAPPEARING global file must be ignored once this tree has its own
+	// archive — adoption only fills a missing per-tree archive.
+	writeLegacy()
+	third := invoke("third")
+	if third["legacy_archive_adopted"] == true {
+		t.Fatal("a tree with an existing per-tree archive must not adopt a reappearing global file")
+	}
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatalf("un-adopted global file must be left untouched: %v", err)
+	}
+}
+
 // TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics pins the
 // bt_evolve_multiobjective NSGA-II MCP tool: it must be registered by
 // registerMCPTools, run a deterministic (LLM-free) NSGA-II evolution over a

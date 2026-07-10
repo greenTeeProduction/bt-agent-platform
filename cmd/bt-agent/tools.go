@@ -1112,6 +1112,29 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// missing archive is a cold start, and a corrupt one degrades to
 			// a cold start surfaced non-fatally so the evolution still runs.
 			archivePath := islandArchivePath(params.Tree)
+			// One-time legacy adoption: pre-scoping runs accumulated a single
+			// GLOBAL island_archive.json that per-tree scoping (33f8c13)
+			// silently orphaned — its state cold-started away and the stale
+			// file lingered under BT_AGENT_HOME forever. When THIS tree has no
+			// archive yet but the legacy file exists, merge it in before
+			// evolving and rename it aside so it is consumed exactly once and
+			// can never re-pollute another tree's archive. Adoption failures
+			// degrade non-fatally: the run proceeds as a cold start and the
+			// cause is surfaced in the result.
+			legacyAdopted := false
+			legacyAdoptErr := ""
+			if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+				legacyPath := filepath.Join(agent.HomeDir(), "island_archive.json")
+				if _, legacyStatErr := os.Stat(legacyPath); legacyStatErr == nil {
+					if loadErr := im.Load(legacyPath); loadErr != nil {
+						legacyAdoptErr = loadErr.Error()
+					} else if mvErr := os.Rename(legacyPath, legacyPath+".migrated"); mvErr != nil {
+						legacyAdoptErr = mvErr.Error()
+					} else {
+						legacyAdopted = true
+					}
+				}
+			}
 			_, statErr := os.Stat(archivePath)
 			warmStarted := statErr == nil
 			archiveLoadErr := ""
@@ -1163,6 +1186,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
+			}
+			if legacyAdopted {
+				result["legacy_archive_adopted"] = true
+			}
+			if legacyAdoptErr != "" {
+				result["legacy_archive_error"] = legacyAdoptErr
 			}
 			// Persist the merged, evolved model so the next invocation
 			// resumes from this run's state. A save failure is surfaced

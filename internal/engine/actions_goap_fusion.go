@@ -360,8 +360,29 @@ func registerGoapFusionActions() {
 			}
 		}
 
+		// Research goals carry a durable failure budget: after
+		// goapGoalMaxAttempts genuine implementation failures a goal is
+		// abandoned here instead of treadmilling (11 blind retries on
+		// 2026-07-10). The head SURVIVING goal is stamped so a failed cycle
+		// charges exactly the goal it attempted.
+		goalBudget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
+		var abandonedGoals []string
+		researchGoalStamped := false
 		for _, nlmGoal := range goapFusionNotebookLMGoalsFromGaps(gapsStr) {
+			if goapAbandonedResearchGoal(goalBudget, nlmGoal) {
+				abandonedGoals = append(abandonedGoals, truncateGoap(nlmGoal, 90))
+				continue
+			}
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
+			if !researchGoalStamped {
+				setGoapState(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
+				researchGoalStamped = true
+			}
+		}
+		if len(abandonedGoals) > 0 {
+			setGoapState(bb, "research_goals_abandoned", strings.Join(abandonedGoals, " | "))
+			Info("goap fusion: research goals abandoned after repeated implementation failures",
+				"count", len(abandonedGoals))
 		}
 
 		// Only an *affirmative* build blocker becomes the P0 "Unblock engine

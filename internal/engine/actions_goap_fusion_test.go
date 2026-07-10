@@ -41,6 +41,7 @@ func TestAnalyzeImprovementGaps_NoFabricatedEngineTestBlocker(t *testing.T) {
 
 	// And it must not survive prioritization into a P0 "Unblock engine tests"
 	// goal fed to the un-implementable failure path.
+	isolateGoapProgramStore(t)
 	prioritize := GetAction("PrioritizeGoapGoals")
 	if prioritize == nil {
 		t.Fatal("action \"PrioritizeGoapGoals\" not registered")
@@ -65,6 +66,7 @@ func TestAnalyzeImprovementGaps_NoFabricatedEngineTestBlocker(t *testing.T) {
 // builds cleanly — and that goal dead-letters the loop.
 // Regression context: memory goap-fusion-engine-test-blocker-false-goal.
 func TestPrioritizeGoapGoals_NoImportCycleFalseGoalFromResearchGap(t *testing.T) {
+	isolateGoapProgramStore(t)
 	prioritize := GetAction("PrioritizeGoapGoals")
 	if prioritize == nil {
 		t.Fatal("action \"PrioritizeGoapGoals\" not registered")
@@ -95,6 +97,7 @@ func TestPrioritizeGoapGoals_NoImportCycleFalseGoalFromResearchGap(t *testing.T)
 // This locks the affirmative branch so a future refactor cannot silently drop
 // the capability while still passing the negative regression tests above.
 func TestPrioritizeGoapGoals_AffirmativeBlockerProducesEngineTestGoal(t *testing.T) {
+	isolateGoapProgramStore(t)
 	prioritize := GetAction("PrioritizeGoapGoals")
 	if prioritize == nil {
 		t.Fatal("action \"PrioritizeGoapGoals\" not registered")
