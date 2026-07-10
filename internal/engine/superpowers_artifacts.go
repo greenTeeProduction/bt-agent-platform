@@ -111,7 +111,15 @@ func safeSlug(s string) string {
 
 func currentSuperpowersRun(bb *Blackboard) (*SuperpowersRun, error) {
 	if run, ok := getSuperpowersRun(bb); ok {
-		return run, nil
+		// A run that reached finish is consumed: it applied and its worktree
+		// was cleaned. Reusing it sends the next implementation batch into a
+		// deleted directory (12:44:56 on 2026-07-10: a preflight-resumed run
+		// finished, then Phase 5 re-entered the runtime with the same run and
+		// died on "chdir …: no such file or directory"). Start fresh instead;
+		// finish/report actions read the old run via getSuperpowersRun.
+		if run.Phase != SuperpowersPhaseFinish {
+			return run, nil
+		}
 	}
 	if bb == nil {
 		return nil, fmt.Errorf("nil blackboard")

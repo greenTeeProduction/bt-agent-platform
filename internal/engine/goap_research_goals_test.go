@@ -282,6 +282,98 @@ func TestCompleteGoapProgramMilestoneSkipsRunThatMissedAnchors(t *testing.T) {
 	}
 }
 
+// A RESUMED plan (preflight RunScheduledGoapFusionCycle) applies milestone
+// work in a cycle whose fresh ChainState carries NO milestone stamp — the
+// stamp died with the planning cycle. Completion must fall back to anchor
+// evidence against pending milestones instead of silently no-opping: on
+// 2026-07-10 the 12:00 cycle landed milestones 1-3 (28bc7d0) and left all of
+// them pending, so the same cycle re-queued and re-implemented shipped work.
+func TestCompleteGoapProgramMilestoneResumedRunFallsBackToAnchorEvidence(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("DLQ cross-process replay", "auto-seed", []string{
+		"Make DLQ persistence atomic in internal/reliability/reliability.go",
+		"Wire replay scan in cmd/bt-agent/main.go",
+		"Untouched milestone in internal/other/elsewhere.go",
+	})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{ChainState: map[string]any{}} // resumed cycle: no stamp
+	run := &SuperpowersRun{
+		ID:           "run-resume",
+		ApplyStatus:  "committed",
+		ChangedFiles: []string{"internal/reliability/reliability.go", "cmd/bt-agent/main.go"},
+	}
+	completeGoapProgramMilestone(bb, run)
+
+	re, _ := research.OpenPrograms(path)
+	ms := re.Programs[0].Milestones
+	if ms[0].Status != "done" || ms[0].CompletedRun != "run-resume" {
+		t.Fatalf("anchored milestone 0 must complete on resume-path evidence: %+v", ms[0])
+	}
+	if ms[1].Status != "done" {
+		t.Fatalf("anchored milestone 1 must complete on resume-path evidence: %+v", ms[1])
+	}
+	if ms[2].Status != "pending" {
+		t.Fatalf("milestone with untouched anchors must stay pending: %+v", ms[2])
+	}
+	if done, _ := bb.ChainState["goap_fusion_program_milestone_done"].(string); done == "" {
+		t.Fatal("fallback completion must stamp program_milestone_done")
+	}
+}
+
+// The evidence fallback must be strictly positive: a pending milestone naming
+// NO Go-file anchors gets a free pass under the stamped path (trust the
+// queued apply) but must NOT be checked off by an unstamped resume apply —
+// there is no stamp tying it to the run.
+func TestCompleteGoapProgramMilestoneResumeFallbackSkipsAnchorlessMilestones(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, _ := research.OpenPrograms(path)
+	ps.Add("Vague program", "test", []string{"m1 with no file anchors", "m2 also anchorless"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	completeGoapProgramMilestone(bb, &SuperpowersRun{
+		ID: "run-x", ApplyStatus: "committed",
+		ChangedFiles: []string{"internal/engine/tree.go"},
+	})
+
+	re, _ := research.OpenPrograms(path)
+	for i, m := range re.Programs[0].Milestones {
+		if m.Status != "pending" {
+			t.Fatalf("anchorless milestone %d must stay pending in the fallback: %+v", i, m)
+		}
+	}
+}
+
+// A cached run that already reached finish (applied, worktree cleaned) is
+// consumed: reusing it sends the next implementation into a deleted worktree
+// ("red-phase claude failed: chdir ...: no such file or directory", 12:44:56
+// on 2026-07-10). currentSuperpowersRun must start a fresh run instead.
+func TestCurrentSuperpowersRunRefusesFinishedRun(t *testing.T) {
+	bb := &Blackboard{Task: "improve things", ChainState: map[string]any{}}
+	finished := &SuperpowersRun{
+		ID: "run-finished", Phase: SuperpowersPhaseFinish,
+		ApplyStatus: "committed", WorktreePath: "/tmp/worktrees/gone",
+	}
+	setSuperpowersRun(bb, finished)
+
+	run, err := currentSuperpowersRun(bb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.ID == "run-finished" {
+		t.Fatal("a finished run must not be reused for new implementation work")
+	}
+	if run.Phase != SuperpowersPhaseDesign || run.WorktreePath != "" {
+		t.Fatalf("replacement run must start fresh: %+v", run)
+	}
+}
+
 // The milestone completes when the run demonstrably executed it — either its
 // changed files intersect the anchors, or a milestone-tagged task in the run
 // reached done on an anchor file.

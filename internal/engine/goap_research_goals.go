@@ -413,39 +413,70 @@ func superpowersPlanAlreadyImplemented(activePlan string) bool {
 // completing on any successful apply would let a cycle that drifted onto
 // unrelated goals silently check off milestone work it never did.
 func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
-	refBlob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
-	if strings.TrimSpace(refBlob) == "" {
-		return
-	}
 	ps, err := research.OpenPrograms(goapProgramsPath)
 	if err != nil {
 		return
 	}
+	type milestoneRef struct {
+		programID string
+		idx       int
+		// anchorRequired marks fallback candidates: without a stamp tying the
+		// milestone to this run, completion needs positive file-anchor evidence
+		// (an anchor-less milestone would otherwise be checked off by ANY apply).
+		anchorRequired bool
+	}
+	var refs []milestoneRef
+	refBlob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
+	if strings.TrimSpace(refBlob) != "" {
+		// A batched cycle stamps several comma-joined refs; each milestone is
+		// verified against the run's file anchors independently before being
+		// checked off.
+		for _, ref := range strings.Split(refBlob, ",") {
+			parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			idx, err := strconv.Atoi(parts[1])
+			if err != nil {
+				continue
+			}
+			refs = append(refs, milestoneRef{programID: parts[0], idx: idx})
+		}
+	} else {
+		// No stamp: a preflight-RESUMED plan applies milestone work in a cycle
+		// whose fresh ChainState never saw PrioritizeGoapGoals — the stamp died
+		// with the planning cycle. Fall back to anchor evidence over pending
+		// milestones so shipped work is checked off instead of re-queued (the
+		// 12:00 cycle on 2026-07-10 landed milestones 1-3 as 28bc7d0, left all
+		// pending, and re-implemented them into a deleted worktree).
+		for _, p := range ps.Programs {
+			for i, m := range p.Milestones {
+				if m.Status == "pending" {
+					refs = append(refs, milestoneRef{programID: p.ID, idx: i, anchorRequired: true})
+				}
+			}
+		}
+	}
 	var completed []string
-	// A batched cycle stamps several comma-joined refs; each milestone is
-	// verified against the run's file anchors independently before being
-	// checked off.
-	for _, ref := range strings.Split(refBlob, ",") {
-		parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		idx, err := strconv.Atoi(parts[1])
-		if err != nil {
-			continue
-		}
+	for _, ref := range refs {
 		var milestone *research.Milestone
 		for _, p := range ps.Programs {
-			if p.ID == parts[0] && idx >= 0 && idx < len(p.Milestones) {
-				milestone = &p.Milestones[idx]
+			if p.ID == ref.programID && ref.idx >= 0 && ref.idx < len(p.Milestones) {
+				milestone = &p.Milestones[ref.idx]
 				break
 			}
 		}
-		if milestone == nil || !runExecutedMilestone(run, milestone.Goal) {
+		if milestone == nil {
 			continue
 		}
-		if ps.MarkDone(parts[0], idx, run.ID) {
-			completed = append(completed, strings.TrimSpace(ref))
+		if ref.anchorRequired && len(extractGoFilePaths(milestone.Goal)) == 0 {
+			continue
+		}
+		if !runExecutedMilestone(run, milestone.Goal) {
+			continue
+		}
+		if ps.MarkDone(ref.programID, ref.idx, run.ID) {
+			completed = append(completed, fmt.Sprintf("%s:%d", ref.programID, ref.idx))
 		}
 	}
 	if len(completed) > 0 {
