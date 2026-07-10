@@ -138,6 +138,7 @@ func registerGoapFusionProductionAdditions() {
 
 		report := fmt.Sprintf("# GOAP Fusion Analysis — %s\n\n## Task\n%s\n\n## Goals\n%s\n\n## Gaps\n%s\n", ts, bb.Task, goals, gaps)
 		report += goapFusionImplDegradedSection(bb)
+		report += goapFusionSeedSection(bb)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			bb.Result = err.Error()
 			return -1

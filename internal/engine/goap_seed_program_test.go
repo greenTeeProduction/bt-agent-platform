@@ -66,11 +66,23 @@ MILESTONE3: Expose graph staleness in internal/dashboard/agents.go`)
 	}
 }
 
-func TestSeedNextProgramRejectsUnscopedMilestones(t *testing.T) {
+// An unscoped (all-malformed) proposal must never persist AS ITSELF — but
+// since the 2026-07-10 continuous-seeding hardening it no longer leaves the
+// fleet idle either: after the feedback retry fails, the deterministic
+// coverage fallback seeds grounded Q1 work instead.
+func TestSeedNextProgramRejectsUnscopedMilestonesAndFallsBack(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "programs.json")
 	oldP := goapProgramsPath
 	goapProgramsPath = path
 	t.Cleanup(func() { goapProgramsPath = oldP })
+	oldEx := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(string) bool { return true }
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = oldEx })
+	oldList := goapFusionListRepoGoFilesFn
+	goapFusionListRepoGoFilesFn = func() []string {
+		return []string{"internal/u/naked_a.go", "internal/u/naked_b.go"}
+	}
+	t.Cleanup(func() { goapFusionListRepoGoFilesFn = oldList })
 	withSeedFetch(t, `PROGRAM: Vague ambitions
 MILESTONE1: Make everything better
 MILESTONE2: Improve quality across the board`)
@@ -81,11 +93,14 @@ MILESTONE2: Improve quality across the board`)
 		t.Fatalf("rejection must not fail the cycle, got %d", got)
 	}
 	ps, _ := research.OpenPrograms(path)
-	if len(ps.Programs) != 0 {
-		t.Fatal("unscoped proposals must not persist")
+	if len(ps.Programs) != 1 || ps.Programs[0].Source != "auto-seed:coverage" {
+		t.Fatalf("the unscoped proposal must not persist, but the coverage fallback must: %+v", ps.Programs)
 	}
-	if !strings.Contains(bb.Result, "Rejected Proposal") {
-		t.Fatalf("result must explain the rejection: %s", bb.Result)
+	if strings.Contains(ps.Programs[0].Title, "Vague ambitions") {
+		t.Fatal("the rejected proposal itself must never persist")
+	}
+	if !strings.Contains(bb.Result, "Deterministic Coverage Fallback") {
+		t.Fatalf("result must explain the rejection→fallback chain: %s", bb.Result)
 	}
 }
 

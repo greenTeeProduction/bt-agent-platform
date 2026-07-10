@@ -85,36 +85,25 @@ func init() {
 			return 1
 		}
 
-		answer := seedProgramFetchFn(buildArc42SeedPrompt(ps, goal))
-		spec := extractGoapProgram(answer)
-		if spec == nil {
-			bb.Outcome = "arc42_seeder_no_proposal"
-			bb.Result = fmt.Sprintf("## arc42 Program Seeding Produced No Program\n\nResearch returned no PROGRAM/MILESTONE proposal for quality goal %s %s this run; will retry on the next schedule.", goal.ID, goal.Name)
-			return 1
-		}
-
-		var rejected, ungrounded []string
-		for _, m := range spec.Milestones {
-			if !isValidProgramMilestone(m) {
-				rejected = append(rejected, m)
-			} else if !milestoneTouchesExistingFile(m) {
-				ungrounded = append(ungrounded, m)
+		att := fetchAcceptableGoapProgram(buildArc42SeedPrompt(ps, goal), func(spec *goapProgramSpec) string {
+			if programNamesGoal(spec, goal) {
+				return ""
 			}
-		}
-		if len(rejected) > 0 || len(ungrounded) > 0 || len(spec.Milestones) < 2 {
+			return fmt.Sprintf("does not name the targeted quality goal %s (%s) in its title or milestones — seeded work must stay traceable to the arc42 goals", goal.ID, goal.Name)
+		})
+		if att.Spec == nil {
 			bb.Outcome = "arc42_seeder_rejected_proposal"
-			bb.Result = fmt.Sprintf("## arc42 Program Seeding Rejected Proposal\n\nProgram %q for quality goal %s: %d milestone(s), %d malformed, %d ungrounded (must modify EXISTING production files). Will retry on the next schedule.", spec.Title, goal.ID, len(spec.Milestones), len(rejected), len(ungrounded))
-			return 1
-		}
-		if !programNamesGoal(spec, goal) {
-			bb.Outcome = "arc42_seeder_rejected_proposal"
-			bb.Result = fmt.Sprintf("## arc42 Program Seeding Rejected Proposal\n\nProgram %q does not name the targeted quality goal %s (%s) in its title or milestones — rejected so seeded work stays traceable to the arc42 goals. Will retry on the next schedule.", spec.Title, goal.ID, goal.Name)
+			bb.Result = fmt.Sprintf("## arc42 Program Seeding Rejected Proposal\n\nNo usable proposal for quality goal %s %s even after a feedback retry: %s. Will retry on the next schedule.", goal.ID, goal.Name, truncateGoap(strings.Join(att.Rejections, " | "), 400))
 			return 1
 		}
 
-		persistGoapProgram(bb, spec, "arc42-seeder:"+goal.ID)
+		persistGoapProgram(bb, att.Spec, "arc42-seeder:"+goal.ID)
 		bb.Outcome = "arc42_seeder_seeded"
-		bb.Result = fmt.Sprintf("## arc42 Program Seeded\n\nNew program %q (%d file-scoped milestones) queued for the goap-fusion loop, advancing arc42 quality goal %s %s.", spec.Title, len(spec.Milestones), goal.ID, goal.Name)
+		droppedNote := ""
+		if n := len(att.Dropped); n > 0 {
+			droppedNote = fmt.Sprintf("; tolerantly accepted, dropped %d invalid milestone(s)", n)
+		}
+		bb.Result = fmt.Sprintf("## arc42 Program Seeded\n\nNew program %q (%d file-scoped milestones%s) queued for the goap-fusion loop, advancing arc42 quality goal %s %s.", att.Spec.Title, len(att.Spec.Milestones), droppedNote, goal.ID, goal.Name)
 		bb.Result += programContinueNote()
 		return 1
 	})

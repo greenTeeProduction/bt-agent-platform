@@ -77,27 +77,43 @@ func init() {
 			return 1
 		}
 
-		answer := seedProgramFetchFn(buildSeedProgramPrompt(ps))
-		spec := extractGoapProgram(answer)
-		if spec == nil {
-			bb.Result += "\n\n## Backlog Seeding Produced No Program\n\nResearch returned no PROGRAM/MILESTONE proposal this cycle; will retry next cycle."
+		att := fetchAcceptableGoapProgram(buildSeedProgramPrompt(ps), nil)
+		if att.Spec != nil {
+			persistGoapProgram(bb, att.Spec, "auto-seed")
+			note := fmt.Sprintf("New program %q with %d file-scoped milestones queued for the next cycle.", att.Spec.Title, len(att.Spec.Milestones))
+			if n := len(att.Dropped); n > 0 {
+				note += fmt.Sprintf(" Tolerantly accepted: dropped %d invalid milestone(s): %s", n, truncateGoap(strings.Join(att.Dropped, " | "), 300))
+			}
+			bb.Result += "\n\n## Backlog Seeded\n\n" + note
+			setGoapState(bb, "seed_outcome", fmt.Sprintf("seeded program %q (%d milestones, %d dropped)", att.Spec.Title, len(att.Spec.Milestones), len(att.Dropped)))
+			bb.Result += programContinueNote()
 			return 1
 		}
-		var rejected, ungrounded []string
-		for _, m := range spec.Milestones {
-			if !isValidProgramMilestone(m) {
-				rejected = append(rejected, m)
-			} else if !milestoneTouchesExistingFile(m) {
-				ungrounded = append(ungrounded, m)
+
+		// Research produced nothing usable even after the feedback retry:
+		// fall back to the DETERMINISTIC coverage backlog so an idle fleet
+		// always gets grounded Q1 work. The fallback spec still passes the
+		// standard validation (grounding via the repo listing).
+		var existing []string
+		for _, p := range ps.Programs {
+			existing = append(existing, p.Title)
+			for _, m := range p.Milestones {
+				existing = append(existing, m.Goal)
 			}
 		}
-		if len(rejected) > 0 || len(ungrounded) > 0 || len(spec.Milestones) < 2 {
-			bb.Result += fmt.Sprintf("\n\n## Backlog Seeding Rejected Proposal\n\nProgram %q: %d milestone(s), %d malformed, %d ungrounded (name no EXISTING production file — a greenfield research subsystem the RED→GREEN flow cannot bootstrap, which the implementation agent declines). Will retry next cycle for a proposal that MODIFIES existing code.", spec.Title, len(spec.Milestones), len(rejected), len(ungrounded))
-			return 1
+		if fspec := buildUntestedFilesProgramSpec(existing, goapFusionListRepoGoFilesFn()); fspec != nil {
+			if fv := validateGoapProgramMilestones(fspec.Milestones); fv.acceptable() {
+				fspec.Milestones = fv.Valid
+				persistGoapProgram(bb, fspec, "auto-seed:coverage")
+				bb.Result += fmt.Sprintf("\n\n## Backlog Seeded (Deterministic Coverage Fallback)\n\nResearch produced no usable proposal (%s); seeded %q with %d grounded coverage milestones instead.", truncateGoap(strings.Join(att.Rejections, " | "), 300), fspec.Title, len(fspec.Milestones))
+				setGoapState(bb, "seed_outcome", fmt.Sprintf("research unusable; seeded deterministic coverage program %q (%d milestones)", fspec.Title, len(fspec.Milestones)))
+				bb.Result += programContinueNote()
+				return 1
+			}
 		}
-		persistGoapProgram(bb, spec, "auto-seed")
-		bb.Result += fmt.Sprintf("\n\n## Backlog Seeded\n\nNew program %q with %d file-scoped milestones queued for the next cycle.", spec.Title, len(spec.Milestones))
-		bb.Result += programContinueNote()
+
+		bb.Result += fmt.Sprintf("\n\n## Backlog Seeding Produced No Program\n\nResearch returned nothing usable after a feedback retry (%s), and the deterministic coverage backlog is exhausted or ungrounded. Will retry next cycle.", truncateGoap(strings.Join(att.Rejections, " | "), 300))
+		setGoapState(bb, "seed_outcome", "no program: research unusable and coverage backlog exhausted/ungrounded")
 		return 1
 	})
 }
