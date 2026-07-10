@@ -125,6 +125,12 @@ func registerGoapFusionProductionAdditions() {
 		// Fast path: goals unchanged — write minimal note with goals for future comparison
 		if v, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); v == "true" {
 			report := fmt.Sprintf("# GOAP Fusion — %s\n\n**No new gaps.** Goals unchanged from previous run.\n\n## Goals\n%s\n", ts, goals)
+			// goals_unchanged is also the impl-degraded fallback flag, so this
+			// path regularly ends cycles that seeded a program or degraded —
+			// both outcomes must survive into the note (the 11:34 verification
+			// cycle showed neither).
+			report += goapFusionImplDegradedSection(bb)
+			report += goapFusionSeedSection(bb)
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				bb.Result = err.Error()
 				return -1
@@ -247,6 +253,11 @@ func registerGoapFusionProductionAdditions() {
 		verify, _ := bb.ChainState["goap_fusion_verify_result"].(string)
 		graphify, _ := bb.ChainState["goap_fusion_graphify_update_result"].(string)
 		bb.Result = fmt.Sprintf("## GOAP Fusion Cycle Complete\n\nAnalysis: `%s`\n\nVerification:\n```\n%s\n%s\n```", path, verify, graphify)
+		// The final report is the only artifact that reaches runs/latest/output
+		// and the dashboard — carry the cycle's seeding and impl-degraded
+		// outcomes instead of leaving them stranded in ChainState.
+		bb.Result += goapFusionImplDegradedSection(bb)
+		bb.Result += goapFusionSeedSection(bb)
 		// When VerifyGoapBuild delegated build/test verification to the apply-stage
 		// worktree (bare main repo), its raw note is a pass-through that only the
 		// gate's exact-string match understands. Append an explicit, self-describing

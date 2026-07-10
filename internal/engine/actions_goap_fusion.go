@@ -24,8 +24,11 @@ import (
 // throwaway repo.
 var goapFusionRepo = "/home/nico/go-bt-evolve"
 
+// goapFusionVaultDir is a var (not const) so note-writing tests can point it
+// at an isolated temp dir instead of the live research vault.
+var goapFusionVaultDir = "/mnt/ssd/clawd/wiki/bt-research"
+
 const (
-	goapFusionVaultDir     = "/mnt/ssd/clawd/wiki/bt-research"
 	goapFusionSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
 	goapFusionPlansDir     = "/mnt/ssd/clawd/wiki/bt-research/plans"
 	goapFusionGraphReport  = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"

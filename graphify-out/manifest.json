@@ -1248,8 +1248,8 @@
     "hash": "6d87de71a616e0f16b2beef65c43759b"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/goap_seed_improvement_test.go": {
-    "mtime": 1783674335.9209917,
-    "hash": "a98a56c86e59e5cfd287d0d4b83a3c9e"
+    "mtime": 1783676542.0128489,
+    "hash": "88cca827d33bd1208ac7b3236f9fc54a"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/stress_test.go": {
     "mtime": 1783674122.0192347,
@@ -1376,8 +1376,8 @@
     "hash": "37bd64d109f08d7f6684b9dfb8c5c267"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/actions_goap_fusion.go": {
-    "mtime": 1783674121.9952345,
-    "hash": "40ae6896ce948cc3e0c6d544229d73e7"
+    "mtime": 1783676540.9368412,
+    "hash": "0452480266a65638572aaa296377f7b0"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/superpowers_findings_fix_test.go": {
     "mtime": 1783674122.0192347,
@@ -1416,8 +1416,8 @@
     "hash": "d6ddfa83dc92d416aba640c05692357c"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/goap_seed_improvement.go": {
-    "mtime": 1783674460.077967,
-    "hash": "f28e71e4c7282178a5bbe67aec45418b"
+    "mtime": 1783674728.1839976,
+    "hash": "1a673147f5723ded92efb4febfc158c5"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/superpowers_task_executor_test.go": {
     "mtime": 1783674122.0232348,
@@ -1664,8 +1664,8 @@
     "hash": "7feb0e43c6a230cb06af16cf2a63b9e2"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/actions_goap_fusion_prod_additions.go": {
-    "mtime": 1783674510.658357,
-    "hash": "954e74ab8b8908a709b11056be5e825d"
+    "mtime": 1783676577.6810975,
+    "hash": "4799cc7c2632e0d9d700a2562ca54eb6"
   },
   "/home/nico/go-bt-evolve-fixes/internal/engine/observability_test.go": {
     "mtime": 1783674122.0152347,
@@ -3052,11 +3052,11 @@
     "hash": "6c1e169d0c82310287be873fb75c8bf9"
   },
   "/home/nico/go-bt-evolve-fixes/testdata/arc42/09-test-scenarios.md": {
-    "mtime": 1783674598.7030277,
+    "mtime": 1783676662.4976885,
     "hash": "89c5936cafc8cdfb8a3af3a1cec6826c"
   },
   "/home/nico/go-bt-evolve-fixes/testdata/arc42/go-bt-evolve-arc42.md": {
-    "mtime": 1783674600.2590394,
+    "mtime": 1783676667.04972,
     "hash": "d2405c7b9123f05c6e9014d3083105d0"
   },
   "/home/nico/go-bt-evolve-fixes/cmd/bt-dashboard/static/index.html": {

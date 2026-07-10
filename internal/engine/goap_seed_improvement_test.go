@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -230,6 +231,64 @@ func TestGoapFusionSeedSection(t *testing.T) {
 	sec := goapFusionSeedSection(bb)
 	if !strings.Contains(sec, "Seeding") || !strings.Contains(sec, "coverage program") {
 		t.Fatalf("section must render the stamped outcome: %q", sec)
+	}
+}
+
+// ReportFusionCycle composes the run's final bb.Result — the only artifact
+// that reaches runs/latest/output and the dashboard. The 11:34 verification
+// cycle seeded a program AND degraded its implementation path, yet its final
+// report showed neither: both outcomes were stamped in ChainState and then
+// discarded. The final report must carry both sections.
+func TestReportFusionCycleIncludesSeedAndDegradedSections(t *testing.T) {
+	fn := GetAction("ReportFusionCycle")
+	if fn == nil {
+		t.Fatal("ReportFusionCycle not registered")
+	}
+	bb := &Blackboard{ChainState: map[string]any{}}
+	setGoapState(bb, "fusion_analysis_path", "/tmp/x.md")
+	setGoapState(bb, "verify_result", "ok")
+	setGoapState(bb, "seed_outcome", `seeded program "DLQ cross-process replay" (4 milestones)`)
+	setGoapState(bb, "impl_degraded", "true")
+	setGoapState(bb, "impl_degraded_reason", "worktree setup failed")
+	if code := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); code != 1 {
+		t.Fatalf("ReportFusionCycle = %d, want 1", code)
+	}
+	if !strings.Contains(bb.Result, "Backlog Seeding") || !strings.Contains(bb.Result, "DLQ cross-process replay") {
+		t.Fatalf("final report must carry the seed outcome:\n%s", bb.Result)
+	}
+	if !strings.Contains(bb.Result, "worktree setup failed") {
+		t.Fatalf("final report must carry the impl-degraded reason:\n%s", bb.Result)
+	}
+}
+
+// WriteFusionAnalysis's goals-unchanged fast path wrote a minimal note that
+// silently dropped the seed and impl-degraded sections — exactly the cycle
+// shape of the 11:34 verification run (seed + degraded implementation ends in
+// the fast path via the impl-degraded goals_unchanged fallback).
+func TestWriteFusionAnalysisFastPathIncludesSeedAndDegradedSections(t *testing.T) {
+	dir := t.TempDir()
+	old := goapFusionVaultDir
+	goapFusionVaultDir = dir
+	t.Cleanup(func() { goapFusionVaultDir = old })
+
+	fn := GetAction("WriteFusionAnalysis")
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{}}
+	setGoapState(bb, "goal_queue", "[P0] Program X milestone 1/4: fix internal/reliability/reliability.go")
+	setGoapState(bb, "goals_unchanged", "true")
+	setGoapState(bb, "seed_outcome", `seeded program "X" (4 milestones)`)
+	setGoapState(bb, "impl_degraded", "true")
+	setGoapState(bb, "impl_degraded_reason", "claude rate limited")
+	if code := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); code != 1 {
+		t.Fatalf("WriteFusionAnalysis = %d, want 1: %s", code, bb.Result)
+	}
+	note, err := os.ReadFile(filepath.Join(dir, "goap-fusion-latest.md"))
+	if err != nil {
+		t.Fatalf("fast path must still write the latest note: %v", err)
+	}
+	for _, want := range []string{"Backlog Seeding", `seeded program "X"`, "claude rate limited"} {
+		if !strings.Contains(string(note), want) {
+			t.Fatalf("fast-path note missing %q:\n%s", want, note)
+		}
 	}
 }
 
