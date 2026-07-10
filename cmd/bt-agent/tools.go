@@ -35,10 +35,32 @@ import (
 // call this first to fail fast with a clear message instead of timing out.
 // islandArchivePath resolves the durable island-model archive bt_evolve_island
 // warm-starts from and persists to (milestone 3/5 of the durable
-// quality-diversity program). Rooted under agent.HomeDir() so it honors
-// BT_AGENT_HOME redirection and survives restarts with the rest of the
-// platform state.
-func islandArchivePath() string { return filepath.Join(agent.HomeDir(), "island_archive.json") }
+// quality-diversity program), scoped per base tree (milestone 1/5 of the
+// production-safe island archive program) so runs on different base trees do
+// not warm-start-merge each other's genomes through a single shared file.
+// Rooted under agent.HomeDir() so it honors BT_AGENT_HOME redirection and
+// survives restarts with the rest of the platform state.
+func islandArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "island_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
+// sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
+// fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
+// of evolution.TreeFileName. That helper is deliberately not reused: its
+// tree-*.json naming would make the gardener registry adopt the archive as a
+// generated tree.
+func sanitizeArchiveTreeID(id string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(id) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
 
 func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResult {
 	if health == nil {
@@ -1089,7 +1111,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// per-domain subpopulations into the freshly seeded islands; a
 			// missing archive is a cold start, and a corrupt one degrades to
 			// a cold start surfaced non-fatally so the evolution still runs.
-			archivePath := islandArchivePath()
+			archivePath := islandArchivePath(params.Tree)
 			_, statErr := os.Stat(archivePath)
 			warmStarted := statErr == nil
 			archiveLoadErr := ""

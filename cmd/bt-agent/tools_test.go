@@ -314,10 +314,22 @@ func TestBTEvolveIslandAccumulatesDurableArchive(t *testing.T) {
 	}
 	readArchive := func(label string) (generation float64, islands map[string]json.RawMessage) {
 		t.Helper()
-		archive := filepath.Join(home, "island_archive.json")
-		data, err := os.ReadFile(archive)
+		// Locate the durable archive by pattern rather than exact filename so
+		// this accumulation pin holds across the per-base-tree archive scoping
+		// (milestone 1/5): with a single base tree there must be exactly one
+		// island_archive*.json file under BT_AGENT_HOME however the path embeds
+		// the tree ID. The .json suffix keeps the flock sidecar (.json.lock)
+		// out of the count.
+		matches, err := filepath.Glob(filepath.Join(home, "island_archive*.json"))
 		if err != nil {
-			t.Fatalf("bt_evolve_island must persist a durable island archive at %s after the %s run: %v", archive, label, err)
+			t.Fatalf("glob island archives after the %s run: %v", label, err)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("bt_evolve_island single-tree runs must persist exactly one durable island archive under BT_AGENT_HOME after the %s run; got %v", label, matches)
+		}
+		data, err := os.ReadFile(matches[0])
+		if err != nil {
+			t.Fatalf("bt_evolve_island must persist a durable island archive at %s after the %s run: %v", matches[0], label, err)
 		}
 		var snap struct {
 			Generation float64                    `json:"generation"`
@@ -351,6 +363,85 @@ func TestBTEvolveIslandAccumulatesDurableArchive(t *testing.T) {
 	}
 	if len(islands2) != 2 {
 		t.Errorf("archive after the second run holds %d islands, want 2", len(islands2))
+	}
+}
+
+// TestBTEvolveIslandArchiveIsScopedPerBaseTree pins milestone 1/5 of the
+// production-safe island archive program: the durable island archive must be
+// scoped per base tree rather than shared through a single global
+// island_archive.json. bt_evolve_island runs on two different base trees in
+// the same BT_AGENT_HOME must not warm-start-merge each other's genomes: the
+// second tree's first run has no archive of its own yet and must report
+// "warm_started": false even though the first tree already persisted one.
+// Within a single base tree the durable accumulation contract is unchanged —
+// a repeat run on either tree warm-starts from that tree's own archive — and
+// after both trees have run, two distinct archive files must exist.
+func TestBTEvolveIslandArchiveIsScopedPerBaseTree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	// Params stay tiny so the deterministic structural evolution remains
+	// -short-safe; both trees use identical settings so any warm-start
+	// difference can only come from archive scoping.
+	invoke := func(label, tree string) bool {
+		t.Helper()
+		args := json.RawMessage(fmt.Sprintf(
+			`{"tree":%q,"islands":2,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`, tree))
+		res, ok := server.Invoke("bt_evolve_island", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_island) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_island unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		warm, isBool := out["warm_started"].(bool)
+		if !isBool {
+			t.Fatalf(`bt_evolve_island %s-run result must report a boolean "warm_started"; got %v`, label, out["warm_started"])
+		}
+		return warm
+	}
+
+	// Cold home: the first base tree cold-starts its own archive.
+	if invoke("godev first", "godev") {
+		t.Errorf(`first run of base tree "godev" on a cold home must report "warm_started": false`)
+	}
+
+	// A different base tree in the same home must ALSO cold-start: it has no
+	// archive of its own. Warm-starting here means the run loaded — and will
+	// merge and re-persist — godev's genomes through a shared global archive,
+	// which is exactly the cross-tree pollution per-tree scoping eliminates.
+	if invoke("domain:code_review first", "domain:code_review") {
+		t.Errorf(`first run of base tree "domain:code_review" must not warm-start from another tree's archive; want "warm_started": false`)
+	}
+
+	// Per-tree scoping must preserve within-tree durable accumulation: repeat
+	// runs on each base tree warm-start from that tree's own archive.
+	if !invoke("godev second", "godev") {
+		t.Errorf(`second run of base tree "godev" must warm-start from its own archive; want "warm_started": true`)
+	}
+	if !invoke("domain:code_review second", "domain:code_review") {
+		t.Errorf(`second run of base tree "domain:code_review" must warm-start from its own archive; want "warm_started": true`)
+	}
+
+	// The two base trees must persist distinct durable archives under
+	// BT_AGENT_HOME — a single shared file cannot isolate them. The .json
+	// suffix keeps flock sidecars (.json.lock) out of the count.
+	matches, err := filepath.Glob(filepath.Join(home, "island_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob island archives: %v", err)
+	}
+	if len(matches) < 2 {
+		t.Errorf("two base trees must persist two distinct island archives under BT_AGENT_HOME; got %v", matches)
 	}
 }
 
