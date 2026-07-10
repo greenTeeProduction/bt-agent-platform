@@ -275,6 +275,137 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 	}
 }
 
+// TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain pins milestone 4/5
+// of the production-safe island archive program: correct evolved-fitness
+// attribution in domains mode. When each island is seeded from a registered
+// domain tree, the evolved quality was earned by those domain trees — so each
+// seeded domain island's own best elite fitness must be written back to its
+// domain:<name> knowledge-graph entry through the evolved path
+// (StructuralFitness + EvolvedCount, never the runtime-success EMA), and the
+// base tree must NOT be credited with the single cross-island best. Crediting
+// params.Tree for fitness that domain-seeded islands earned steers
+// fitness-aware discovery toward a tree whose genome the elites never came
+// from. Default (anonymous-islands) mode keeps the existing contract: the base
+// tree seeded every island, so it alone receives the cross-island best.
+func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
+	// Isolate the durable island archive so the run neither warm-starts from
+	// nor persists test state into the real platform home.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go Dev", Category: "domain"})
+	domainEntries := []struct {
+		island  string
+		kgID    string
+		fitness float64
+		runs    int
+	}{
+		{island: "code_review", kgID: "domain:code_review", fitness: 50, runs: 3},
+		{island: "security_audit", kgID: "domain:security_audit", fitness: 60, runs: 4},
+	}
+	for _, d := range domainEntries {
+		kg.Register(&knowledge.TreeMeta{
+			ID: d.kgID, Name: d.island, Category: "domain",
+			Fitness: d.fitness, RunCount: d.runs,
+		})
+	}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg})
+
+	// Params stay tiny so the deterministic structural evolution remains
+	// -short-safe.
+	args := json.RawMessage(`{"tree":"godev","domains":"code_review,security_audit","population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
+	res, ok := server.Invoke("bt_evolve_island", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content for domain-seeded islands")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island domain-seeded result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error for registered domains: %v", out)
+	}
+	perIsland, isObj := out["per_island_best"].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
+	}
+
+	for _, d := range domainEntries {
+		best, isNum := perIsland[d.island].(float64)
+		if !isNum || best <= 0 {
+			t.Fatalf("per_island_best[%q] must be a positive number for this attribution pin to be meaningful; got %v", d.island, perIsland[d.island])
+		}
+		// The evolved write-back clamps into [0,100]; the entries start with a
+		// zero StructuralFitness, so monotonicity cannot mask the credit.
+		want := best
+		if want > 100 {
+			want = 100
+		}
+		tree := kg.Trees[d.kgID]
+		if tree == nil {
+			t.Fatalf("%s vanished from the knowledge graph after evolution", d.kgID)
+		}
+		if tree.EvolvedCount != 1 {
+			t.Errorf("domains mode must write each seeded domain island's best back to its own KG entry exactly once; %s.EvolvedCount = %d, want 1", d.kgID, tree.EvolvedCount)
+		}
+		if diff := tree.StructuralFitness - want; diff < -1e-9 || diff > 1e-9 {
+			t.Errorf("%s.StructuralFitness = %v, want its own island's best %v — each domain must be credited with its own elite fitness, not the cross-island best (and not nothing)", d.kgID, tree.StructuralFitness, want)
+		}
+		// The evolved path must leave genuine-execution telemetry alone.
+		if tree.Fitness != d.fitness {
+			t.Errorf("evolved write-back must not overwrite the runtime-success EMA; %s.Fitness = %v, want %v", d.kgID, tree.Fitness, d.fitness)
+		}
+		if tree.RunCount != d.runs {
+			t.Errorf("evolved write-back must not increment RunCount; %s.RunCount = %d, want %d", d.kgID, tree.RunCount, d.runs)
+		}
+	}
+
+	// The "instead" half of the contract: in domains mode the base tree seeded
+	// nothing, so it must not be credited with the cross-island best.
+	base := kg.Trees["godev"]
+	if base == nil {
+		t.Fatal("godev vanished from the knowledge graph after evolution")
+	}
+	if base.EvolvedCount != 0 || base.StructuralFitness != 0 {
+		t.Errorf("domains mode must not credit the base tree with the cross-island best; godev EvolvedCount = %d (want 0), StructuralFitness = %v (want 0)", base.EvolvedCount, base.StructuralFitness)
+	}
+
+	// Default (anonymous-islands) mode is unchanged: the base tree seeded every
+	// island, so it alone keeps the cross-island-best write-back. A fresh home
+	// keeps this run's archive independent of the domains run above.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	defaultKG := knowledge.NewKnowledgeGraph()
+	defaultKG.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go Dev", Category: "domain"})
+	defaultServer := engine.NewServer("test-default")
+	registerMCPTools(defaultServer, &mcpDeps{kg: defaultKG})
+	defaultRes, ok := defaultServer.Invoke("bt_evolve_island", json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered on the default-mode run")
+	}
+	if defaultRes == nil || len(defaultRes.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content on the default-mode run")
+	}
+	var defaultOut map[string]interface{}
+	if err := json.Unmarshal([]byte(defaultRes.Content[0].Text), &defaultOut); err != nil {
+		t.Fatalf("bt_evolve_island default-mode result is not valid JSON: %v (text=%q)", err, defaultRes.Content[0].Text)
+	}
+	if _, isErr := defaultOut["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error on the default-mode run: %v", defaultOut)
+	}
+	defaultBase := defaultKG.Trees["godev"]
+	if defaultBase == nil {
+		t.Fatal("godev vanished from the knowledge graph after the default-mode run")
+	}
+	if defaultBase.EvolvedCount != 1 || defaultBase.StructuralFitness <= 0 {
+		t.Errorf("default (anonymous-islands) mode must keep crediting the base tree with the cross-island best; godev EvolvedCount = %d (want 1), StructuralFitness = %v (want > 0)", defaultBase.EvolvedCount, defaultBase.StructuralFitness)
+	}
+}
+
 // TestBTEvolveIslandAccumulatesDurableArchive pins milestone 3/5 of the
 // durable quality-diversity program: bt_evolve_island must persist its island
 // model to island_archive.json under BT_AGENT_HOME after every run and

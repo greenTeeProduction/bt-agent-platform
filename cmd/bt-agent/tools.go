@@ -1133,16 +1133,29 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					perIslandBest[name] = best
 				}
 			}
-			// Write the strongest island's best elite fitness back into the
-			// knowledge graph so fitness-aware discovery can surface the
-			// archive-improved tree on the next run (milestone 4/5).
-			bestElite := 0.0
-			for _, best := range perIslandBest {
-				if best > bestElite {
-					bestElite = best
+			// Write evolved fitness back into the knowledge graph so
+			// fitness-aware discovery can surface archive-improved trees on
+			// the next run (milestone 4/5). Attribution follows seeding: in
+			// domains mode each island's elites descend from its own domain
+			// tree's genome, so each domain:<name> entry is credited with its
+			// island's best; the base tree seeded nothing and gets no credit.
+			// In default mode the base tree seeded every island and alone
+			// receives the cross-island best.
+			if params.Domains != "" {
+				for _, name := range seeded {
+					if best, present := perIslandBest[name]; present {
+						recordEvolvedFitness(deps, "domain:"+name, best)
+					}
 				}
+			} else {
+				bestElite := 0.0
+				for _, best := range perIslandBest {
+					if best > bestElite {
+						bestElite = best
+					}
+				}
+				recordEvolvedFitness(deps, params.Tree, bestElite)
 			}
-			recordEvolvedFitness(deps, params.Tree, bestElite)
 			result := map[string]interface{}{
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": perIslandBest, "migrations": stats.Migrations,
