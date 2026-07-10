@@ -88,6 +88,32 @@ func TestSanitizeUserID(t *testing.T) {
 	}
 }
 
+func TestSanitizeUserID_AdversarialIDs(t *testing.T) {
+	// All-dot identifiers must be prefixed with "_": "." would resolve to the
+	// store root and ".." to its parent when joined as a workspace path segment.
+	adversarialIDs := map[string]string{
+		".":          "_.",
+		"..":         "_..",
+		"...":        "_...",
+		"  ..  ":     "_..",
+		"../secrets": ".._secrets",
+	}
+	for in, want := range adversarialIDs {
+		if got := SanitizeUserID(in); got != want {
+			t.Errorf("SanitizeUserID(%q) = %q, want %q", in, got, want)
+		}
+	}
+	for _, in := range []string{".", "..", "a/../..", "../../etc/passwd"} {
+		got := SanitizeUserID(in)
+		if got == "." || got == ".." {
+			t.Errorf("SanitizeUserID(%q) = %q still resolves as a traversal path segment", in, got)
+		}
+		if strings.ContainsAny(got, `/\`) {
+			t.Errorf("SanitizeUserID(%q) = %q contains a path separator", in, got)
+		}
+	}
+}
+
 func TestProfile_ContextBlock(t *testing.T) {
 	p := &Profile{
 		ID:             "nico",

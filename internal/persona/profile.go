@@ -236,5 +236,11 @@ func SanitizeUserID(user string) string {
 	if b.Len() == 0 {
 		return "_anonymous"
 	}
-	return b.String()
+	id := b.String()
+	if strings.Trim(id, ".") == "" {
+		// "." resolves to the store root and ".." to its parent when joined
+		// as a workspace path segment; prefix all-dot ids to keep them inert.
+		return "_" + id
+	}
+	return id
 }
