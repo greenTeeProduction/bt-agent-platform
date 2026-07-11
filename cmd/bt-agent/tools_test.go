@@ -1165,6 +1165,136 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	}
 }
 
+// TestEvolveToolsSurfacePopulationHealthSnapshot pins that the three production
+// evolve tools that run a genetic Population — bt_evolve_genetic,
+// bt_evolve_bottlenecks, and bt_evolve_selection_pressure — surface that
+// population's Population.HealthSnapshot() in their JSON responses. The GA's
+// self-healing signals (which population-level crises fired, how many extinct
+// specialists were resurrected, and the mutation rate the generation actually
+// applied — the emergency rate under crisis, otherwise the supervisor's
+// recommendation) are computed on every one of these production evolve calls and
+// then thrown away. Metrics and dashboard consumers cannot observe population
+// health without reaching into Evolve internals.
+//
+// Each response must expose a "health" object carrying the three fields
+// HealthSnapshot reports: "crisis_reasons" (a JSON array — empty, not omitted,
+// when the run stayed healthy, so a consumer can always parse it),
+// "resurrections" (a non-negative count), and "last_mutation_rate" (the positive
+// rate the run actually applied). bt_evolve_genetic evolves a single population
+// and surfaces its health at the top level; the per-tree bt_evolve_bottlenecks
+// and bt_evolve_selection_pressure surface it on each evolved tree's report
+// entry. Tiny population/generations keep the deterministic structural evolution
+// -short-safe.
+func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
+	// assertHealth verifies a report's "health" value is the JSON projection of
+	// Population.HealthSnapshot() with all three self-healing fields present. It
+	// uses Errorf (not Fatalf) so a single RED run reports every tool still
+	// missing the health projection rather than stopping at the first.
+	assertHealth := func(t *testing.T, tool string, health interface{}, present bool) {
+		t.Helper()
+		if !present {
+			t.Errorf("%s response must surface Population.HealthSnapshot() under a 'health' object; it is absent", tool)
+			return
+		}
+		h, isObj := health.(map[string]interface{})
+		if !isObj {
+			t.Errorf("%s 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", tool, health, health)
+			return
+		}
+		if reasons, hasReasons := h["crisis_reasons"]; !hasReasons {
+			t.Errorf("%s health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", tool, h)
+		} else if _, isList := reasons.([]interface{}); !isList {
+			t.Errorf("%s health 'crisis_reasons' must be a JSON array; got %T (%v)", tool, reasons, reasons)
+		}
+		if res, isNum := h["resurrections"].(float64); !isNum || res < 0 {
+			t.Errorf("%s health object must report a non-negative 'resurrections' count; got %v", tool, h["resurrections"])
+		}
+		if rate, isNum := h["last_mutation_rate"].(float64); !isNum || rate <= 0 {
+			t.Errorf("%s health 'last_mutation_rate' must be the positive rate the run actually applied; got %v", tool, h["last_mutation_rate"])
+		}
+	}
+
+	// bt_evolve_genetic: a single population, so health is surfaced at the top
+	// level of the response. No knowledge graph is needed — "godev" resolves to a
+	// built-in tree and a nil experience bank degrades gracefully.
+	genServer := engine.NewServer("health-genetic")
+	registerMCPTools(genServer, &mcpDeps{})
+	genRes, ok := genServer.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok || genRes == nil || len(genRes.Content) == 0 {
+		t.Fatal("Invoke(bt_evolve_genetic) returned no content")
+	}
+	var genOut map[string]interface{}
+	if err := json.Unmarshal([]byte(genRes.Content[0].Text), &genOut); err != nil {
+		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, genRes.Content[0].Text)
+	}
+	if _, isErr := genOut["error"]; isErr {
+		t.Fatalf("bt_evolve_genetic unexpectedly returned an error: %v", genOut)
+	}
+	genHealth, genPresent := genOut["health"]
+	assertHealth(t, "bt_evolve_genetic", genHealth, genPresent)
+
+	// bt_evolve_bottlenecks: per-tree health on each genetically evolved entry.
+	// A parameterless bottleneck (RunCount>=3, Fitness<30) routes to the genetic
+	// EvolveWithExperience path, which runs a full Population whose health must be
+	// reported on its entry.
+	bnKG := knowledge.NewKnowledgeGraph()
+	bnKG.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 8, RunCount: 3,
+	})
+	bnServer := engine.NewServer("health-bottlenecks")
+	registerMCPTools(bnServer, &mcpDeps{kg: bnKG})
+	bnRes, ok := bnServer.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok || bnRes == nil || len(bnRes.Content) == 0 {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) returned no content")
+	}
+	var bnOut map[string]interface{}
+	if err := json.Unmarshal([]byte(bnRes.Content[0].Text), &bnOut); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, bnRes.Content[0].Text)
+	}
+	bnReport, isList := bnOut["report"].([]interface{})
+	if !isList || len(bnReport) != 1 {
+		t.Fatalf("bt_evolve_bottlenecks must return a 'report' array holding the single genetic bottleneck; got %v", bnOut["report"])
+	}
+	bnEntry, isObj := bnReport[0].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_bottlenecks report entry must be a JSON object; got %T (%v)", bnReport[0], bnReport[0])
+	}
+	if bnEntry["algorithm"] != "genetic" {
+		t.Fatalf("bt_evolve_bottlenecks test fixture must route domain:alert_router to the genetic path; got algorithm %v", bnEntry["algorithm"])
+	}
+	bnHealth, bnPresent := bnEntry["health"]
+	assertHealth(t, "bt_evolve_bottlenecks", bnHealth, bnPresent)
+
+	// bt_evolve_selection_pressure: per-tree health on each bred entry (all
+	// entries run the genetic path).
+	spKG := knowledge.NewKnowledgeGraph()
+	spKG.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 2,
+	})
+	spServer := engine.NewServer("health-selection-pressure")
+	registerMCPTools(spServer, &mcpDeps{kg: spKG})
+	spRes, ok := spServer.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok || spRes == nil || len(spRes.Content) == 0 {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) returned no content")
+	}
+	var spOut map[string]interface{}
+	if err := json.Unmarshal([]byte(spRes.Content[0].Text), &spOut); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, spRes.Content[0].Text)
+	}
+	spReport, isList := spOut["report"].([]interface{})
+	if !isList || len(spReport) != 1 {
+		t.Fatalf("bt_evolve_selection_pressure must return a 'report' array holding the single bred tree; got %v", spOut["report"])
+	}
+	spEntry, isObj := spReport[0].(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_selection_pressure report entry must be a JSON object; got %T (%v)", spReport[0], spReport[0])
+	}
+	spHealth, spPresent := spEntry["health"]
+	assertHealth(t, "bt_evolve_selection_pressure", spHealth, spPresent)
+}
+
 // TestBTEvolveMemeticRegisteredAndValidatesStrategy pins the bt_evolve_memetic
 // MCP tool (Q2 Evolvability milestone 2/5): it must be registered by
 // registerMCPTools and expose Population.MemeticEvolve with a selectable

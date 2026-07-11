@@ -245,6 +245,27 @@ func newProductionPopulation(size int, base *evolution.SerializableNode) *evolut
 	return pop
 }
 
+// evolveHealthProjection renders a population's post-run self-healing state —
+// Population.HealthSnapshot() — as a JSON object for the evolve tool responses,
+// surfacing which crises fired, how many extinct specialists were resurrected,
+// and the mutation rate actually applied. Unlike marshalling PopulationHealth
+// directly (whose CrisisReasons field is omitempty and would serialize to null
+// or vanish when the run stayed healthy), crisis_reasons is always emitted as an
+// array so a consumer can parse it unconditionally.
+func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
+	snap := pop.HealthSnapshot()
+	reasons := snap.CrisisReasons
+	if reasons == nil {
+		reasons = []string{}
+	}
+	return map[string]interface{}{
+		"crisis_reasons":     reasons,
+		"resurrections":      snap.Resurrections,
+		"last_mutation_rate": snap.LastMutationRate,
+		"generation":         snap.Generation,
+	}
+}
+
 // registerMCPTools registers all 77 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
@@ -787,6 +808,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"niche_diversity":           fmt.Sprintf("%.2f", pop.NicheDiversity()),
 				"experience_bank_entries":   bankEntries,
 				"experience_retrieval_hits": retrievalHits,
+				"health":                    evolveHealthProjection(pop),
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -1332,6 +1354,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					"runs":           b.Runs,
 					"generations":    pop.Generation,
 					"algorithm":      "genetic",
+					"health":         evolveHealthProjection(pop),
 				}
 				addFailureContext(entry, b.LastFailureTask, b.LastFailureOutcome)
 				report = append(report, entry)
@@ -1400,6 +1423,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					"runs":           sp.RunCount,
 					"generations":    pop.Generation,
 					"algorithm":      "genetic",
+					"health":         evolveHealthProjection(pop),
 				})
 			}
 			data, _ := json.Marshal(map[string]interface{}{
