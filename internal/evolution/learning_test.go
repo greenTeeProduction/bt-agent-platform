@@ -309,3 +309,203 @@ func TestPopulationHealthSnapshot_DiversityCollapseRun(t *testing.T) {
 		t.Errorf("HealthSnapshot().Resurrections = %d, want > 0 (the extinct goap specialist was resurrected this run)", snap.Resurrections)
 	}
 }
+
+// TestSelfHealGeneration_ExtractsEvolveSelfHealingStep pins milestone 1/5 of the
+// self-healing-wiring program ("Close the self-healing wiring drift across every
+// production Evolve variant"): the per-generation self-healing step must be
+// extracted out of Population.Evolve into a reusable Population.selfHealGeneration
+// helper that wraps a variant-supplied reproduction callback. The helper owns the
+// five self-healing responsibilities the program cares about — crisis detection,
+// emergency mutation-rate override, specialist archiving (Observe),
+// extinct-specialist resurrection on emergency, and streak reset after a spiral —
+// while the reproduction closure it is handed performs the variant-specific
+// breeding at the effective (possibly emergency-elevated) mutation rate. Keeping
+// reproduction a callback is what makes the envelope reusable across Evolve,
+// EvolveWithExperience, and EvolveQLearning in the later milestones.
+//
+// These are characterization tests: each subtest reproduces the observable
+// self-healing behavior Evolve exhibits today (mirroring
+// TestPopulationEvolve_CrisisIntervention and
+// TestPopulationEvolve_ResurrectsExtinctSpecialist) so the extraction can be
+// verified byte-for-byte identical. selfHealGeneration does not exist yet, so this
+// test fails to compile until milestone 1 lands.
+//
+// Contract exercised: the caller owns p.Generation and computes eliteCount; the
+// helper is handed (eliteCount, supervisor, reproduce). It builds one
+// PopulationState, reuses it for both supervisor.Guide and
+// CrisisDetector.DetectPopulation, sets p.LastMutationRate, invokes reproduce with
+// that effective rate, resurrects extinct specialists when the generation ran
+// under emergency control, and resets the streak counters after a spiral.
+func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
+	base := DefaultTree()
+	const size = 10
+	// Same elite clamp Evolve computes once before its loop.
+	eliteCount := min(max(2, size/10), size)
+
+	t.Run("emergency generation forces the emergency rate, resurrects, and resets streaks", func(t *testing.T) {
+		// Archive a high-fitness goap specialist that is missing from the live
+		// population and last seen at generation 0.
+		registry := NewSpecialistRegistry()
+		archetype := &SerializableNode{
+			Type:     "Sequence",
+			Name:     "GoapSpecialist",
+			Children: []SerializableNode{{Type: "Action", Name: "PlanGoap"}},
+		}
+		registry.Observe(&EvolutionMetadata{
+			TreeID:  "goap-archetype",
+			Tags:    []string{"specialist:goap"},
+			Fitness: FitnessRecord{Score: 0.95, Validated: true},
+		}, archetype, 0)
+
+		pop := &Population{
+			Individuals: make([]Individual, size),
+			// Saturated regression rate → RegressionRate() == 100% (> 0.5) so the
+			// regression streak advances this generation.
+			Regressions:    100,
+			TotalMutations: 100,
+			// Old generation so the archetype (last seen at gen 0) reads as long
+			// extinct regardless of the detector's extinctAfter window.
+			Generation:  500,
+			Specialists: registry,
+		}
+		for i := 0; i < size; i++ {
+			// Identical, non-specialist genomes → Diversity() == 0.1 (< 0.2) trips
+			// diversity_collapse and leaves the goap niche absent (extinct).
+			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
+		}
+		// Mirror Evolve's pre-loop Evaluate: constant working fitness so the two
+		// target reasons stay isolated (quality_crash quiet).
+		for i := range pop.Individuals {
+			pop.Individuals[i].Fitness = 1.0
+		}
+		pop.BestFitness = 1.0
+		pop.PrevBestFitness = 1.0
+		// Pre-seed the regression streak to 2 so this single generation lifts it to
+		// 3 (a spiral). Only ResetPopulation can bring it back to 0 — the reactive
+		// DetectPopulation logic leaves it at 3 because the regression rate stays
+		// high, so a zero value proves ResetPopulation was called.
+		pop.Crisis = NewCrisisDetector()
+		pop.Crisis.regressionStreak = 2
+		pop.Crisis.qualityCrash = 3
+
+		var reproduceRate float64
+		reproduced := false
+		pop.selfHealGeneration(eliteCount, NewLLMSupervisor(), func(mutationRate float64) {
+			reproduced = true
+			reproduceRate = mutationRate
+		})
+
+		if !reproduced {
+			t.Fatal("selfHealGeneration never invoked the reproduction callback")
+		}
+		emergency := pop.Crisis.GetEmergencyMutationRate()
+		if reproduceRate < emergency {
+			t.Errorf("reproduction callback received rate %.3f, want >= EmergencyRate %.3f (emergency generation must reproduce under emergency control)",
+				reproduceRate, emergency)
+		}
+		if pop.LastMutationRate != reproduceRate {
+			t.Errorf("LastMutationRate = %.3f, want the rate handed to reproduce %.3f", pop.LastMutationRate, reproduceRate)
+		}
+		if !containsReason(pop.CrisisReasons, "diversity_collapse") {
+			t.Errorf("CrisisReasons = %v, want to contain diversity_collapse", pop.CrisisReasons)
+		}
+		if !containsReason(pop.CrisisReasons, "regression_spiral") {
+			t.Errorf("CrisisReasons = %v, want to contain regression_spiral", pop.CrisisReasons)
+		}
+		var resurrected bool
+		for _, ind := range pop.Individuals {
+			if ind.Meta != nil && ind.Meta.IsResurrected() {
+				resurrected = true
+				break
+			}
+		}
+		if !resurrected {
+			t.Error("expected the extinct goap specialist to be resurrected into the population")
+		}
+		if pop.Resurrections <= 0 {
+			t.Errorf("Resurrections = %d, want > 0", pop.Resurrections)
+		}
+		if pop.Crisis.regressionStreak != 0 {
+			t.Errorf("regressionStreak = %d after emergency generation, want 0 (ResetPopulation not called)",
+				pop.Crisis.regressionStreak)
+		}
+	})
+
+	t.Run("healthy generation keeps the supervisor's recommended rate", func(t *testing.T) {
+		pop := &Population{Individuals: make([]Individual, size)}
+		for i := 0; i < size; i++ {
+			// Distinct genomes → Diversity() == 1.0: no collapse, no crisis.
+			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: fmt.Sprintf("genome-%d", i)}
+		}
+		// Mirror Evolve's pre-loop Evaluate at a healthy fitness so the supervisor
+		// stays out of any intervention phase.
+		for i := range pop.Individuals {
+			pop.Individuals[i].Fitness = 0.85
+		}
+		pop.BestFitness = 0.85
+		pop.PrevBestFitness = 0.85
+
+		var reproduceRate float64
+		reproduced := false
+		pop.selfHealGeneration(eliteCount, NewLLMSupervisor(), func(mutationRate float64) {
+			reproduced = true
+			reproduceRate = mutationRate
+		})
+
+		if !reproduced {
+			t.Fatal("selfHealGeneration never invoked the reproduction callback")
+		}
+		if pop.Crisis == nil {
+			t.Fatal("selfHealGeneration did not lazily initialize Population.Crisis")
+		}
+		emergency := pop.Crisis.GetEmergencyMutationRate()
+		if reproduceRate >= emergency {
+			t.Errorf("healthy generation reproduce rate = %.3f, want < EmergencyRate %.3f (should keep the supervisor's recommended rate)",
+				reproduceRate, emergency)
+		}
+		if pop.LastMutationRate != reproduceRate {
+			t.Errorf("LastMutationRate = %.3f, want the rate handed to reproduce %.3f", pop.LastMutationRate, reproduceRate)
+		}
+		if len(pop.CrisisReasons) != 0 {
+			t.Errorf("healthy generation recorded crisis reasons %v, want none", pop.CrisisReasons)
+		}
+		if pop.Resurrections != 0 {
+			t.Errorf("healthy generation Resurrections = %d, want 0", pop.Resurrections)
+		}
+	})
+
+	t.Run("archives validated specialist elites via the registry", func(t *testing.T) {
+		registry := NewSpecialistRegistry()
+		pop := &Population{
+			Individuals: make([]Individual, size),
+			Specialists: registry,
+		}
+		for i := 0; i < size; i++ {
+			// Distinct genomes keep the generation healthy so Observe is isolated
+			// from crisis/resurrection side effects.
+			pop.Individuals[i] = Individual{Tree: cloneTree(base), Fitness: 0.5, Genome: fmt.Sprintf("genome-%d", i)}
+		}
+		// The two top-fitness individuals carry validated specialist provenance, so
+		// after the helper's fitness sort they occupy the elite window Observe
+		// archives every generation.
+		for i := 0; i < eliteCount; i++ {
+			pop.Individuals[i].Fitness = 1.0
+			pop.Individuals[i].Meta = &EvolutionMetadata{
+				TreeID:  fmt.Sprintf("planner-%d", i),
+				Tags:    []string{"specialist:planner"},
+				Fitness: FitnessRecord{Score: 1.0, Validated: true},
+			}
+		}
+		pop.BestFitness = 1.0
+		pop.PrevBestFitness = 1.0
+
+		pop.selfHealGeneration(eliteCount, NewLLMSupervisor(), func(float64) {})
+
+		if len(registry.Archetypes) == 0 {
+			t.Fatal("selfHealGeneration did not Observe any specialist elite into the registry")
+		}
+		if _, ok := registry.Archetypes["planner"]; !ok {
+			t.Errorf("registry archetypes = %v, want a planner archetype observed from the elites", registry.Archetypes)
+		}
+	})
+}

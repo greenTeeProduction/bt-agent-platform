@@ -170,108 +170,53 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
-		state := BuildPopulationState(p)
-		guidance := supervisor.Guide(state)
-		mutationRate := guidance.RecommendedRate
 
-		// Proactive crisis intervention: reuse the same PopulationState built
-		// for the supervisor to detect population-level death spirals this
-		// generation. Reasons accumulate across generations so an early
-		// diversity collapse and a later regression spiral both survive.
-		if p.Crisis == nil {
-			p.Crisis = NewCrisisDetector()
-		}
-		crisis, reasons := p.Crisis.DetectPopulation(&state)
-		if len(reasons) > 0 {
-			p.recordCrisisReasons(reasons)
-		}
+		// Record baseline fitness of each individual BEFORE mutation, and
+		// keep the newly bred population, so the quality gate below can
+		// compare post-reproduction fitness against it.
+		var baselineFitness []float64
 
-		// Act on the crisis signal instead of throwing it away: when a
-		// population-level death spiral is detected — or the supervisor itself
-		// flags an intervention phase — override this generation's mutation
-		// rate with the detector's emergency rate so the GA breaks out of the
-		// spiral rather than silently converging.
-		emergency := crisis || guidance.Intervention
-		if emergency {
-			mutationRate = p.Crisis.GetEmergencyMutationRate()
-		}
-		p.LastMutationRate = mutationRate
-
-		// A streak-based spiral (regression_spiral / quality_crash) is what
-		// ResetPopulation exists to clear, so remember whether one surfaced
-		// this generation. The reset runs once the emergency generation
-		// completes (see end of loop), giving the recovered population a clean
-		// slate. A pure diversity_collapse leaves the streak counters alone so
-		// a still-regressing population's streak keeps accumulating toward the
-		// regression_spiral threshold instead of being reset out from under it.
-		resetStreaks := containsCrisisReason(reasons, "regression_spiral") ||
-			containsCrisisReason(reasons, "quality_crash")
-
-		// Sort by fitness descending
-		sort.Slice(p.Individuals, func(i, j int) bool {
-			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
-		})
-
-		// Archive validated specialist elites every generation so that if a
-		// niche later goes extinct — say during this same diversity collapse —
-		// the registry still holds its best-performing archetype to resurrect.
-		// Observe no-ops on individuals lacking validated specialist provenance.
-		if p.Specialists != nil {
-			for i := 0; i < eliteCount && i < len(p.Individuals); i++ {
-				p.Specialists.Observe(p.Individuals[i].Meta, p.Individuals[i].Tree, p.Generation)
+		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			baselineFitness = make([]float64, len(p.Individuals))
+			for i := range p.Individuals {
+				baselineFitness[i] = p.Individuals[i].Fitness
 			}
-		}
 
-		// Record baseline fitness of each individual BEFORE mutation
-		baselineFitness := make([]float64, len(p.Individuals))
-		for i := range p.Individuals {
-			baselineFitness[i] = p.Individuals[i].Fitness
-		}
+			// Keep elites
+			newPop := make([]Individual, len(p.Individuals))
+			copy(newPop[:eliteCount], p.Individuals[:eliteCount])
 
-		// Keep elites
-		newPop := make([]Individual, len(p.Individuals))
-		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
+			// Create MCTS mutator if not already created (lazy init)
+			mctsMutator := NewMCTSMutator()
+			mctsMutator.Iterations = 5 // K=5 for speed; use 10 for deeper search
+			mctsMutator.FitnessEvaluator = fitnessFn
 
-		// Create MCTS mutator if not already created (lazy init)
-		mctsMutator := NewMCTSMutator()
-		mctsMutator.Iterations = 5 // K=5 for speed; use 10 for deeper search
-		mctsMutator.FitnessEvaluator = fitnessFn
-
-		// Fill rest with crossover + MCTS-guided mutation
-		for i := eliteCount; i < len(p.Individuals); i++ {
-			parents := p.Select()
-			child := Crossover(parents[0], parents[1])
-			// Mutate with MCTS-guided search instead of random mutation.
-			// The MCTS mutator pre-evaluates K=5 mutation variants and
-			// returns the best one, filtering out ~97% of regressions at
-			// the search level before they enter the population.
-			if rand.Float64() < mutationRate {
-				parentFitness := fitnessFn(child)
-				mutated := mctsMutator.Mutate(child, parentFitness)
-				if mutated != nil {
-					child = mutated
-				} else {
-					// Fallback: random mutation
-					ops := randomMutation(child)
-					ApplyMutations(child, ops)
+			// Fill rest with crossover + MCTS-guided mutation
+			for i := eliteCount; i < len(p.Individuals); i++ {
+				parents := p.Select()
+				child := Crossover(parents[0], parents[1])
+				// Mutate with MCTS-guided search instead of random mutation.
+				// The MCTS mutator pre-evaluates K=5 mutation variants and
+				// returns the best one, filtering out ~97% of regressions at
+				// the search level before they enter the population.
+				if rand.Float64() < mutationRate {
+					parentFitness := fitnessFn(child)
+					mutated := mctsMutator.Mutate(child, parentFitness)
+					if mutated != nil {
+						child = mutated
+					} else {
+						// Fallback: random mutation
+						ops := randomMutation(child)
+						ApplyMutations(child, ops)
+					}
+					p.TotalMutations++
 				}
-				p.TotalMutations++
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 			}
-			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
-		}
 
-		p.Individuals = newPop
-		p.Evaluate(fitnessFn)
-
-		// Crisis recovery: resurrect extinct specialists. When a death spiral is
-		// underway a lost high-fitness niche won't spontaneously reappear through
-		// crossover of a collapsed population, so pull each extinct archetype out
-		// of the registry and inject it in place of the weakest non-elite
-		// individual. This re-seeds diversity with proven genomes rather than
-		// letting the niche stay silently extinct.
-		if emergency && p.Specialists != nil {
-			p.resurrectExtinctSpecialists(eliteCount)
-		}
+			p.Individuals = newPop
+			p.Evaluate(fitnessFn)
+		})
 
 		// Quality gate: count regressions and revert them
 		for i := eliteCount; i < len(p.Individuals); i++ {
@@ -284,17 +229,90 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 		if p.BestFitness > p.PrevBestFitness {
 			p.PrevBestFitness = p.BestFitness
 		}
-
-		// After an emergency generation that tripped a streak-based spiral ran
-		// under the elevated mutation rate, reset the population-level streak
-		// counters so the recovered population isn't immediately re-flagged by
-		// stale spiral history.
-		if resetStreaks {
-			p.Crisis.ResetPopulation()
-		}
 	}
 
 	return p.BestTree
+}
+
+// selfHealGeneration runs the self-healing envelope shared by every Evolve
+// variant for a single generation: proactive crisis detection, emergency
+// mutation-rate override, specialist-elite archiving, extinct-specialist
+// resurrection on emergency, and crisis-streak reset after a spiral. The
+// caller owns p.Generation (increment it before calling) and eliteCount; the
+// variant-specific breeding happens inside reproduce, invoked once with the
+// effective (possibly emergency-elevated) mutation rate.
+func (p *Population) selfHealGeneration(eliteCount int, supervisor *LLMSupervisor, reproduce func(mutationRate float64)) {
+	state := BuildPopulationState(p)
+	guidance := supervisor.Guide(state)
+	mutationRate := guidance.RecommendedRate
+
+	// Proactive crisis intervention: reuse the same PopulationState built
+	// for the supervisor to detect population-level death spirals this
+	// generation. Reasons accumulate across generations so an early
+	// diversity collapse and a later regression spiral both survive.
+	if p.Crisis == nil {
+		p.Crisis = NewCrisisDetector()
+	}
+	crisis, reasons := p.Crisis.DetectPopulation(&state)
+	if len(reasons) > 0 {
+		p.recordCrisisReasons(reasons)
+	}
+
+	// Act on the crisis signal instead of throwing it away: when a
+	// population-level death spiral is detected — or the supervisor itself
+	// flags an intervention phase — override this generation's mutation
+	// rate with the detector's emergency rate so the GA breaks out of the
+	// spiral rather than silently converging.
+	emergency := crisis || guidance.Intervention
+	if emergency {
+		mutationRate = p.Crisis.GetEmergencyMutationRate()
+	}
+	p.LastMutationRate = mutationRate
+
+	// A streak-based spiral (regression_spiral / quality_crash) is what
+	// ResetPopulation exists to clear, so remember whether one surfaced
+	// this generation. The reset runs once the emergency generation
+	// completes, giving the recovered population a clean slate. A pure
+	// diversity_collapse leaves the streak counters alone so a
+	// still-regressing population's streak keeps accumulating toward the
+	// regression_spiral threshold instead of being reset out from under it.
+	resetStreaks := containsCrisisReason(reasons, "regression_spiral") ||
+		containsCrisisReason(reasons, "quality_crash")
+
+	// Sort by fitness descending
+	sort.Slice(p.Individuals, func(i, j int) bool {
+		return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+	})
+
+	// Archive validated specialist elites every generation so that if a
+	// niche later goes extinct — say during this same diversity collapse —
+	// the registry still holds its best-performing archetype to resurrect.
+	// Observe no-ops on individuals lacking validated specialist provenance.
+	if p.Specialists != nil {
+		for i := 0; i < eliteCount && i < len(p.Individuals); i++ {
+			p.Specialists.Observe(p.Individuals[i].Meta, p.Individuals[i].Tree, p.Generation)
+		}
+	}
+
+	reproduce(mutationRate)
+
+	// Crisis recovery: resurrect extinct specialists. When a death spiral is
+	// underway a lost high-fitness niche won't spontaneously reappear through
+	// crossover of a collapsed population, so pull each extinct archetype out
+	// of the registry and inject it in place of the weakest non-elite
+	// individual. This re-seeds diversity with proven genomes rather than
+	// letting the niche stay silently extinct.
+	if emergency && p.Specialists != nil {
+		p.resurrectExtinctSpecialists(eliteCount)
+	}
+
+	// After an emergency generation that tripped a streak-based spiral ran
+	// under the elevated mutation rate, reset the population-level streak
+	// counters so the recovered population isn't immediately re-flagged by
+	// stale spiral history.
+	if resetStreaks {
+		p.Crisis.ResetPopulation()
+	}
 }
 
 // recordCrisisReasons merges newly detected population-level crisis reasons
@@ -458,31 +476,26 @@ func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*Seria
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
-		guidance := supervisor.Guide(BuildPopulationState(p))
-		mutationRate := guidance.RecommendedRate
 
-		// Sort by fitness descending
-		sort.Slice(p.Individuals, func(i, j int) bool {
-			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
-		})
+		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			// Keep elites
+			newPop := make([]Individual, len(p.Individuals))
+			copy(newPop[:eliteCount], p.Individuals[:eliteCount])
 
-		// Keep elites
-		newPop := make([]Individual, len(p.Individuals))
-		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
-
-		// Fill rest with crossover + experience-guided mutation
-		for i := eliteCount; i < len(p.Individuals); i++ {
-			parents := p.Select()
-			child := Crossover(parents[0], parents[1])
-			if rand.Float64() < mutationRate {
-				child = p.mutateAndRecord(child, hintOps, fitnessFn, bank, mutator)
-				p.TotalMutations++
+			// Fill rest with crossover + experience-guided mutation
+			for i := eliteCount; i < len(p.Individuals); i++ {
+				parents := p.Select()
+				child := Crossover(parents[0], parents[1])
+				if rand.Float64() < mutationRate {
+					child = p.mutateAndRecord(child, hintOps, fitnessFn, bank, mutator)
+					p.TotalMutations++
+				}
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 			}
-			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
-		}
 
-		p.Individuals = newPop
-		p.Evaluate(fitnessFn)
+			p.Individuals = newPop
+			p.Evaluate(fitnessFn)
+		})
 
 		if p.BestFitness > p.PrevBestFitness {
 			p.PrevBestFitness = p.BestFitness

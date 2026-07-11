@@ -566,6 +566,86 @@ func TestEvolveWithExperience_NilBankStillEvolves(t *testing.T) {
 	}
 }
 
+// TestEvolveWithExperience_ResurrectsExtinctSpecialist verifies milestone 2/5
+// of the self-healing-wiring program: EvolveWithExperience must wrap its
+// experience-guided breeding in the same selfHealGeneration envelope Evolve
+// already uses (learning.go:179), so the seeded pop.Specialists registry
+// (newProductionPopulation, cmd/bt-agent/tools.go:244) is actually consulted
+// on the production experience-bank path — bt_evolve_genetic,
+// bt_evolve_bottlenecks, bt_evolve_selection_pressure — instead of sitting
+// inert. Today EvolveWithExperience never reads p.Specialists or p.Crisis at
+// all.
+//
+// Setup mirrors TestPopulationEvolve_ResurrectsExtinctSpecialist: a
+// SpecialistRegistry pre-loaded with a validated, high-fitness goap archetype
+// last seen at generation 0, and a live population of 10 identical,
+// non-specialist individuals — Diversity() collapses to 0.1 (below the 0.2
+// crisis threshold), and the goap niche is entirely absent, so it qualifies as
+// extinct. After one EvolveWithExperience generation (with a non-nil bank so
+// the experience-guided path runs instead of degrading to plain Evolve), the
+// population must contain a resurrected:true individual, CrisisReasons must
+// record diversity_collapse, and Resurrections must be positive.
+func TestEvolveWithExperience_ResurrectsExtinctSpecialist(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	base := DefaultTree()
+
+	registry := NewSpecialistRegistry()
+	archetype := &SerializableNode{
+		Type:     "Sequence",
+		Name:     "GoapSpecialist",
+		Children: []SerializableNode{{Type: "Action", Name: "PlanGoap"}},
+	}
+	registry.Observe(&EvolutionMetadata{
+		TreeID:  "goap-archetype",
+		Tags:    []string{"specialist:goap"},
+		Fitness: FitnessRecord{Score: 0.95, Validated: true},
+	}, archetype, 0)
+
+	const size = 10
+	pop := &Population{
+		Individuals: make([]Individual, size),
+		// Old generation so the archetype (last seen at gen 0) reads as long
+		// extinct regardless of the detector's chosen extinctAfter window.
+		Generation:  500,
+		Specialists: registry,
+	}
+	for i := 0; i < size; i++ {
+		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
+		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
+		// absent → the archetype qualifies as extinct.
+		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
+	}
+
+	if d := pop.Diversity(); d <= 0 || d >= 0.2 {
+		t.Fatalf("test setup: want collapsed diversity in (0, 0.2), got %.3f", d)
+	}
+
+	pop.EvolveWithExperience(1, func(*SerializableNode) float64 { return 1.0 }, eb)
+
+	if !containsReason(pop.CrisisReasons, "diversity_collapse") {
+		t.Errorf("CrisisReasons = %v, want to contain diversity_collapse", pop.CrisisReasons)
+	}
+
+	var resurrected bool
+	for _, ind := range pop.Individuals {
+		if ind.Meta != nil && ind.Meta.IsResurrected() {
+			resurrected = true
+			break
+		}
+	}
+	if !resurrected {
+		t.Fatal("expected EvolveWithExperience to resurrect the extinct goap specialist and inject a resurrected:true-tagged individual into the population")
+	}
+	if pop.Resurrections <= 0 {
+		t.Errorf("Resurrections = %d, want > 0", pop.Resurrections)
+	}
+}
+
 // ─── Capacity cap + quality-aware eviction ──────────────────────────────────
 //
 // The bank must be bounded: a capacity cap in the 200–500 range, enforced on
