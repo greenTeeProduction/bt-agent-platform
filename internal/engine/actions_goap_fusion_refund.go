@@ -25,6 +25,16 @@ var goapInfraResultMarkers = []string{
 	"pending_patch:",
 	"Superpowers Pending Patch",
 	"Superpowers Worktree Failed",
+	// A Claude usage/credit-limit exhaustion is an external outage, not an
+	// unbuildable milestone. The CLI exits non-zero with "reached your <model>
+	// limit ... Run /usage-credits", so classify it as infrastructure: the
+	// cycle then refunds the milestone attempt (and skips the research-goal
+	// charge) instead of burning the abandon budget. A fleet-wide model quota
+	// cap once wrongly blocked every seeded milestone ×3 for ~33h
+	// (2026-07-10 14:02 → 2026-07-12): the seeder kept walking the repo while
+	// the loop treadmilled, landing nothing.
+	"reached your ",
+	"/usage-credits",
 }
 
 // isGoapInfraCycleFailure reports whether a failed cycle died for

@@ -66,6 +66,8 @@ func TestIsGoapInfraCycleFailure(t *testing.T) {
 		{"worktree creation failure", "failure", "## GOAP Superpowers Worktree Failed\n\nfatal: could not create work tree", true},
 		{"agent declined milestone", "failure", "## GOAP Superpowers Execution Failed\n\nthe implementation agent declined the fabricated milestone", false},
 		{"verification failure is genuine", "failure", "## GOAP Superpowers Verification Failed\n\nchanged-packages-tests: FAIL", false},
+		{"claude usage limit is infra (quota outage carries over, not an unbuildable milestone)", "failure", "## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nYou've reached your Fable 5 limit. Run /usage-credits to continue or switch models with /model.", true},
+		{"claude usage limit is model-agnostic", "failure", "## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nClaude usage limit reached — run /usage-credits to continue.", true},
 		{"plain success", "success", "## GOAP Superpowers Runtime Complete", false},
 	}
 	for _, c := range cases {

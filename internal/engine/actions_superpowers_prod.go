@@ -811,8 +811,22 @@ func registerSuperpowersProductionActions() {
 // reason is preserved so real (non-rate-limit) failures stay observable in the
 // fusion analysis note WriteFusionAnalysis writes.
 func markGoapFusionImplDegraded(bb *Blackboard, reason string) {
+	trimmed := truncateGoap(strings.TrimSpace(reason), 2000)
 	setGoapState(bb, "impl_degraded", "true")
-	setGoapState(bb, "impl_degraded_reason", truncateGoap(strings.TrimSpace(reason), 2000))
+	setGoapState(bb, "impl_degraded_reason", trimmed)
+	// Observability: a genuine degradation — anything but the healthy Claude
+	// rate-limit carryover (goap_fusion_rate_limited), which is an expected
+	// pause resumed next cycle — means ClaudeSuperpowersPath failed and the
+	// cycle produced NO landed code before falling back to deterministic
+	// analysis. Surface it at WARN so a sustained LLM/model outage is visible
+	// in bt.log instead of hiding behind the fallback's outcome:success: the
+	// 2026-07-10→12 Fable-limit drought ran ~33h logging only
+	// "scheduler: cycle complete outcome:success quality:0.9".
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		Warn("goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis",
+			"outcome", bb.Outcome,
+			"reason", truncateGoap(trimmed, 300))
+	}
 }
 
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) (result int) {
