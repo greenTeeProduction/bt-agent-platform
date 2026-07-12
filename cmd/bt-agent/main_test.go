@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // requireBuildIdentityWiring asserts — at the source level, the same way
@@ -248,6 +249,101 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	}
 	if reloadIdx := strings.Index(listHandler, "engine.TaskDLQ.Reload()"); reloadIdx < 0 || reloadIdx > listCallIdx {
 		t.Error("bt_dlq_list must call engine.TaskDLQ.Reload() before engine.TaskDLQ.List() — today only bt_dlq_replay reloads, so this MCP-facing listing renders a stale view of the shared file")
+	}
+}
+
+// TestDLQReplayScanSurvivesPanicAcrossTicks pins milestone 5/5 of the Q3
+// Reliability program: the DLQ replay-scan ticker loop in main.go must
+// survive a panicking dlq.Replay call so a single poison-pill entry can't
+// silently end the scan goroutine and stop every future tick — mirroring the
+// per-tick reliability.Recover pattern internal/llm/health.go's ticker loop
+// already uses (health.go:202-217), plus a reliability.SafeGo wrapper on the
+// goroutine itself for the same reason recordSchedulerAttempt above was
+// pulled out of its closure: main() starts the full daemon and can't run in
+// a unit test, so the per-tick scan body must be its own testable function.
+// runDLQReplayScanOnce is that function — called by the wrapped ticker loop
+// on every tick, and driven directly here to simulate two ticks.
+func TestDLQReplayScanSurvivesPanicAcrossTicks(t *testing.T) {
+	dlq := reliability.NewDeadLetterQueue("")
+	dlq.Push(reliability.DeadLetterEntry{ID: "flaky", Task: "t", Agent: "a"})
+	dlq.Push(reliability.DeadLetterEntry{ID: "healthy", Task: "t", Agent: "a"})
+	if _, ok := dlq.Requeue("flaky"); !ok {
+		t.Fatal("setup: requeue must succeed")
+	}
+	if _, ok := dlq.Requeue("healthy"); !ok {
+		t.Fatal("setup: requeue must succeed")
+	}
+
+	dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
+		if e.ID == "flaky" {
+			panic("simulated replay panic")
+		}
+		return nil
+	})
+
+	runTick := func(tick int) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("tick %d: runDLQReplayScanOnce must recover its own panic instead of letting "+
+					"it escape (an escaped panic would kill the ticker goroutine and stop every future "+
+					"scan tick), got: %v", tick, r)
+			}
+		}()
+		runDLQReplayScanOnce(dlq)
+	}
+
+	// Tick 1: "flaky" panics mid-scan. The tick must absorb that panic rather
+	// than letting it propagate.
+	runTick(1)
+	// Tick 2 only runs at all if the scan loop survived tick 1's panic —
+	// exactly the property this test pins. "healthy" was never reached
+	// during tick 1 (it panicked on "flaky" first) so it is still requeued;
+	// tick 2 must now replay it successfully.
+	runTick(2)
+
+	for _, e := range dlq.List() {
+		if e.ID == "healthy" {
+			t.Fatal("tick 2 must have replayed and removed \"healthy\" — the scan loop did not survive tick 1's panic")
+		}
+	}
+}
+
+// TestDaemonDriftWatcherWiresBackoffAndInFlightGuard pins — source-level, the
+// same audit style as requireBuildIdentityWiring above — that the daemon's
+// deploy-drift watcher actually consults the two guardrails ADR-045 shipped
+// but left unwired (arc42 §Deploy Drift, 2026-07-12): agent.RebuildBackoff
+// (throttles retry-storming a broken HEAD) and Scheduler.AnyInFlight()
+// (never swap the live binary out from under a mid-execution job). Without
+// this wiring both guardrails are unit-tested but dead from the running
+// daemon's perspective.
+func TestDaemonDriftWatcherWiresBackoffAndInFlightGuard(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	for _, needle := range []string{
+		"Backoff:",
+		"InFlightFn:",
+		"globalSched.AnyInFlight",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("main.go's deploy-drift watcher must wire %q; not found", needle)
+		}
+	}
+}
+
+// TestGardenerDriftWatcherWiresRebuildBackoff pins the same RebuildBackoff
+// wiring for cmd/bt-gardener (audited from here, cross-package, the same way
+// TestGardenerLogsBuildIdentityAtStartup does — the gardener package has no
+// wiring test file of its own).
+func TestGardenerDriftWatcherWiresRebuildBackoff(t *testing.T) {
+	src, err := os.ReadFile("../bt-gardener/main.go")
+	if err != nil {
+		t.Fatalf("read ../bt-gardener/main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "Backoff:") {
+		t.Error("../bt-gardener/main.go's deploy-drift watcher must wire a RebuildBackoff (Backoff:); not found")
 	}
 }
 

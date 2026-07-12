@@ -315,11 +315,11 @@ func main() {
 		expectedDomains = append(expectedDomains, "domain:"+name)
 	}
 	kg.ExpectedDomains = expectedDomains
-	go func() {
+	reliability.SafeGo("kg-build-index", func() {
 		if err := kg.BuildIndex(); err != nil {
 			fmt.Fprintf(os.Stderr, "KG: embedding build skipped: %v\n", err)
 		}
-	}()
+	}, nil)
 
 	// ── Behavior Tree ──────────────────────────────────────────────────────
 	tree, err := treeStore.Load()
@@ -448,6 +448,8 @@ func main() {
 				AutoRebuild:     agent.AutoRebuildEnabled(),
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
+				Backoff:         agent.NewRebuildBackoff(),
+				InFlightFn:      globalSched.AnyInFlight,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}
@@ -472,21 +474,13 @@ func main() {
 			}
 			return nil
 		})
-		go func() {
+		reliability.SafeGo("dlq-replay-scan-ticker", func() {
 			ticker := time.NewTicker(dlqReplayScanInterval)
 			defer ticker.Stop()
 			for range ticker.C {
-				// Each process holds its own in-memory queue over the shared
-				// file; dashboard/MCP requeue stamps land on disk only, so a
-				// scan against the stale view would never see them.
-				dlq.Reload()
-				for _, id := range dlq.RequeuedReady() {
-					if entry, ok := dlq.Replay(id); ok {
-						engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
-					}
-				}
+				runDLQReplayScanOnce(dlq)
 			}
-		}()
+		}, nil)
 	}
 
 	// Auto-load agent schedules on startup
@@ -655,6 +649,28 @@ func main() {
 	engine.Info("bt-agent running in daemon mode (--no-mcp), scheduler + A2A active")
 	<-sigCh
 	engine.Info("bt-agent shutdown signal received")
+}
+
+// runDLQReplayScanOnce performs a single tick of the drop-safe DLQ replay
+// scan: reload the shared on-disk queue, then replay every ready entry.
+// Reload is required each tick because each process holds its own in-memory
+// queue over the shared file; dashboard/MCP requeue stamps land on disk
+// only, so a scan against the stale view would never see them.
+//
+// The whole tick body runs under reliability.Recover — mirroring the
+// per-tick pattern in internal/llm/health.go's ticker loop — so a single
+// panicking dlq.Replay (e.g. a poison-pill entry whose replay executor
+// panics) can't escape and unwind the caller's ticker goroutine, which
+// would silently end all future scan ticks.
+func runDLQReplayScanOnce(dlq *reliability.DeadLetterQueue) {
+	_ = reliability.Recover("dlq-replay-scan-tick", func() {
+		dlq.Reload()
+		for _, id := range dlq.RequeuedReady() {
+			if entry, ok := dlq.Replay(id); ok {
+				engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
+			}
+		}
+	})
 }
 
 func noMCPMode() bool {

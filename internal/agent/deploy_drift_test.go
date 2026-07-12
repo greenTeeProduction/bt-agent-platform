@@ -211,3 +211,54 @@ func TestDriftWatchOnce_RespectsBackoffGuard(t *testing.T) {
 		t.Fatalf("expected the second tick to be blocked by backoff (no new rebuild attempt), call count = %d", callCount)
 	}
 }
+
+// DriftWatchOnce must also respect an in-flight guard: Scheduler.AnyInFlight()
+// (program 94b0b31 milestone 5) exists exactly to stop a rebuild from
+// swapping the daemon's own binary out from under a mid-execution job, but
+// arc42 (§Deploy Drift, 2026-07-12) flags it as dead code — nothing in
+// DriftWatchOnce consults it yet. InFlightFn is the wiring seam a caller
+// plugs Scheduler.AnyInFlight into; when it reports true, a stale +
+// AutoRebuild-on tick must skip the rebuild attempt entirely, the same way a
+// backoff-blocked tick does — and a nil InFlightFn (the zero value) must not
+// change existing behavior.
+func TestDriftWatchOnce_SkipsRebuildWhileJobInFlight(t *testing.T) {
+	prevHead, prevRebuild := driftHeadFn, driftRebuildFn
+	t.Cleanup(func() { driftHeadFn, driftRebuildFn = prevHead, prevRebuild })
+
+	driftHeadFn = func(string) (string, error) { return "def", nil }
+	targets := []RebuildTarget{{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/bin/bt-agent"}}
+
+	called := false
+	driftRebuildFn = func(string, []RebuildTarget) error { called = true; return nil }
+
+	cfg := DriftWatchConfig{
+		RepoDir:         "/r",
+		RunningRevision: "abc",
+		AutoRebuild:     true,
+		Targets:         targets,
+		InFlightFn:      func() bool { return true },
+	}
+
+	res, err := DriftWatchOnce(cfg)
+	if err != nil {
+		t.Fatalf("in-flight skip must not surface an error, got %v", err)
+	}
+	if !res.Stale {
+		t.Fatalf("res.Stale = false, want true (HEAD did move)")
+	}
+	if res.Rebuilt {
+		t.Fatal("res.Rebuilt = true while a job was in-flight — must skip the rebuild, not just report it")
+	}
+	if called {
+		t.Fatal("driftRebuildFn was invoked while InFlightFn reported a job in-flight — a rebuild must never swap the binary out from under a running job")
+	}
+
+	// The guard must not swallow ordinary stale ticks: with InFlightFn absent
+	// (nil), the same stale config still rebuilds normally.
+	called = false
+	cfg.InFlightFn = nil
+	res, err = DriftWatchOnce(cfg)
+	if err != nil || !res.Rebuilt || !called {
+		t.Fatalf("nil InFlightFn must not block a rebuild: res=%+v err=%v called=%v", res, err, called)
+	}
+}

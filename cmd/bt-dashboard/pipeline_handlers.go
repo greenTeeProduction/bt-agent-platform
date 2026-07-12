@@ -19,6 +19,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 type pipelineRunRecord struct {
@@ -185,7 +186,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("pipeline: starting execution", "run_id", runID, "pipeline", pipeline.Name)
 
-	go func() {
+	reliability.SafeGo(fmt.Sprintf("pipeline-run[%s]", runID), func() {
 		if dashTaskQueue != nil {
 			defer dashTaskQueue.Dequeue()
 		}
@@ -203,7 +204,13 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 			slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
 		}
 		rec.Result = result
-	}()
+	}, func(panicVal any, panicCtx string) {
+		reliability.DefaultPanicHandler(panicVal, panicCtx)
+		pipelineRunsMu.Lock()
+		defer pipelineRunsMu.Unlock()
+		rec.Status = "failed"
+		rec.Error = fmt.Sprintf("panic: %v", panicVal)
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

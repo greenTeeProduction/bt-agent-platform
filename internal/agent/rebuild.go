@@ -156,6 +156,18 @@ type RebuildBackoff struct {
 	lastFail time.Time
 }
 
+// NewRebuildBackoff returns a RebuildBackoff with production defaults: up to
+// 5 consecutive attempts against the same stale HEAD, starting at a 1-minute
+// delay and capping at 30 minutes — throttling that stays inside a single
+// DefaultDriftCheckInterval watch cadence.
+func NewRebuildBackoff() *RebuildBackoff {
+	return &RebuildBackoff{
+		MaxAttempts: 5,
+		BaseDelay:   time.Minute,
+		MaxDelay:    30 * time.Minute,
+	}
+}
+
 func (g *RebuildBackoff) now() time.Time {
 	if g.nowFn != nil {
 		return g.nowFn()

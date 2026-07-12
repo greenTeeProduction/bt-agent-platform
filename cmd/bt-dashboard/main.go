@@ -132,6 +132,7 @@ func main() {
 			AutoRebuild:     agent.AutoRebuildEnabled(),
 			Targets:         agent.DashboardRebuildTargets(repoDir),
 			Binary:          "bt-dashboard",
+			Backoff:         agent.NewRebuildBackoff(),
 		}, agent.DefaultDriftCheckInterval)
 	}
 

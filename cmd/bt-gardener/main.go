@@ -138,6 +138,7 @@ func main() {
 			AutoRebuild:     agent.AutoRebuildEnabled(),
 			Targets:         agent.DefaultRebuildTargets(repoDir),
 			Binary:          "bt-gardener",
+			Backoff:         agent.NewRebuildBackoff(),
 		}, agent.DefaultDriftCheckInterval)
 	}
 

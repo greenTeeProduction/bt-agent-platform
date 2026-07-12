@@ -36,6 +36,21 @@ func TestDashboardDriftWatcherRebuildsItself(t *testing.T) {
 	}
 }
 
+// TestDashboardDriftWatcherWiresRebuildBackoff pins — the same audit style as
+// TestDashboardDriftWatcherRebuildsItself above — that bt-dashboard's
+// deploy-drift watcher sets a RebuildBackoff guard so a broken HEAD cannot
+// retry-storm `go build` every watcher tick (ADR-045 milestone 4, currently
+// unwired per arc42 §Deploy Drift, 2026-07-12).
+func TestDashboardDriftWatcherWiresRebuildBackoff(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "Backoff:") {
+		t.Error("main.go's deploy-drift watcher must wire a RebuildBackoff (Backoff:); not found")
+	}
+}
+
 // TestHandleScalability_ReflectsInjectedQueueAndRouter pins milestone 3/5 of the
 // horizontal-scaling adoption program: the /api/scalability endpoint must surface
 // the injected TaskQueue depth and AgentRouter executor health instead of the

@@ -70,6 +70,12 @@ type DriftWatchConfig struct {
 	// stale HEAD so a broken commit cannot retry-storm `go build` every watch
 	// interval. Nil disables throttling (every stale tick attempts a rebuild).
 	Backoff *RebuildBackoff
+	// InFlightFn, when set, is consulted before a rebuild: a true result skips
+	// the rebuild attempt entirely, the same way a backoff-blocked tick does.
+	// Plugged with Scheduler.AnyInFlight so an out-of-place rebuild never
+	// swaps the daemon's own binary out from under a mid-execution job. Nil
+	// disables the guard (every stale tick may rebuild).
+	InFlightFn func() bool
 }
 
 // DriftResult is the outcome of one DriftWatchOnce check.
@@ -99,6 +105,11 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	}
 	if cfg.Backoff != nil && !cfg.Backoff.Allow(head) {
 		slog.Warn("deploy drift: rebuild attempt blocked by backoff guard",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
+	}
+	if cfg.InFlightFn != nil && cfg.InFlightFn() {
+		slog.Warn("deploy drift: rebuild attempt skipped — a scheduled job is in-flight",
 			"binary", cfg.Binary, "head_revision", head)
 		return res, nil
 	}
