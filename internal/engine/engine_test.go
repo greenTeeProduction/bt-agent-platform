@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -87,9 +88,14 @@ func TestRunTask_EmptyInput_Fails(t *testing.T) {
 	if bb.Outcome != string(evolution.Failure) {
 		t.Errorf("expected failure for empty input, got %s", bb.Outcome)
 	}
-	// Result should be empty since the tree never reached ExecutePlan
-	if result != "" {
-		t.Errorf("expected empty result, got %q", result)
+	// The tree never reaches ExecutePlan, so bb.Result is never written by
+	// the tree itself — RunTask's backstop should fill it in with a
+	// diagnosable message instead of leaving it blank.
+	if result == "" {
+		t.Error("expected RunTask to backstop a diagnosable result, got empty string")
+	}
+	if bb.Outcome != "" && !strings.Contains(result, bb.Outcome) {
+		t.Errorf("expected backstop result to name the terminal outcome %q, got %q", bb.Outcome, result)
 	}
 }
 
@@ -326,8 +332,11 @@ func TestGoDevTree_NonGoTask_Rejected(t *testing.T) {
 	if bb.Outcome != string(evolution.Failure) {
 		t.Errorf("expected failure for non-Go task (PreGate IsGoRelated), got %s", bb.Outcome)
 	}
-	if result != "" {
-		t.Errorf("expected empty result for rejected task, got: %s", util.Truncate(result, 50))
+	// The tree never reaches ExecutePlan, so bb.Result is never written by
+	// the tree itself — RunTask's backstop should fill it in with a
+	// diagnosable message instead of leaving it blank.
+	if result == "" {
+		t.Error("expected RunTask to backstop a diagnosable result for rejected task, got empty string")
 	}
 }
 

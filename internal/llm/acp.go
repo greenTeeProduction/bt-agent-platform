@@ -27,8 +27,9 @@ type ACPConfig struct {
 // ACPClient implements LLM by delegating prompts to an ACP-compatible agent
 // process such as `hermes acp --accept-hooks`.
 type ACPClient struct {
-	cfg ACPConfig
-	seq atomic.Int64
+	cfg     ACPConfig
+	seq     atomic.Int64
+	breaker *reliability.CircuitBreaker
 }
 
 // NewACPClient creates an ACP-backed LLM client.
@@ -49,7 +50,10 @@ func NewACPClient(cfg ACPConfig) *ACPClient {
 			cfg.CWD = "."
 		}
 	}
-	return &ACPClient{cfg: cfg}
+	return &ACPClient{
+		cfg:     cfg,
+		breaker: reliability.NewCircuitBreaker("acp-subprocess:"+cfg.Command, 3, 60*time.Second),
+	}
 }
 
 // Generate implements LLM.Generate using a fresh ACP session per prompt.
@@ -65,6 +69,10 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 	if c.cfg.Command == "" {
 		return "", fmt.Errorf("acp command must not be empty")
 	}
+	if !c.breaker.Allow() {
+		return "", fmt.Errorf("acp circuit breaker open for command %q: too many recent subprocess failures, refusing to respawn", c.cfg.Command)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 
@@ -72,15 +80,18 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 	cmd.Dir = c.cfg.CWD
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		c.breaker.RecordFailure()
 		return "", fmt.Errorf("acp stdin: %w", err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		c.breaker.RecordFailure()
 		return "", fmt.Errorf("acp stdout: %w", err)
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
+		c.breaker.RecordFailure()
 		return "", fmt.Errorf("start acp command %q: %w", c.cfg.Command, err)
 	}
 	defer func() {
@@ -138,15 +149,18 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 		}},
 		"clientInfo": map[string]any{"name": "go-bt-evolve", "title": "Go BT Framework", "version": "0.0.0"},
 	}, nil); err != nil {
+		c.breaker.RecordFailure()
 		return "", err
 	}
 
 	session, err := request("session/new", map[string]any{"cwd": c.cfg.CWD, "mcpServers": []any{}}, nil)
 	if err != nil {
+		c.breaker.RecordFailure()
 		return "", err
 	}
 	sessionID, _ := session["sessionId"].(string)
 	if strings.TrimSpace(sessionID) == "" {
+		c.breaker.RecordFailure()
 		return "", fmt.Errorf("ACP session/new did not return sessionId")
 	}
 
@@ -156,8 +170,10 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 		"prompt":    []map[string]string{{"type": "text", "text": prompt}},
 	}, &textParts)
 	if err != nil {
+		c.breaker.RecordFailure()
 		return "", err
 	}
+	c.breaker.RecordSuccess()
 	return strings.TrimSpace(strings.Join(textParts, "")), nil
 }
 

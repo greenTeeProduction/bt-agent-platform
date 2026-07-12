@@ -521,6 +521,15 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 		bb.Outcome = string(evolution.Partial)
 	}
 
+	// Backstop: a leaf that terminates the tree without success and without
+	// ever writing to bb.Result leaves every downstream consumer (DLQ
+	// records, OutcomeErrorDetail, dashboards) undiagnosable about which
+	// task failed and how. Populate a message naming the task and terminal
+	// outcome instead of leaving it blank.
+	if bb.Outcome != string(evolution.Success) && bb.Result == "" {
+		bb.Result = fmt.Sprintf("task %q produced no output (terminal outcome: %s, code: %d)", bb.Task, bb.Outcome, code)
+	}
+
 	span.SetAttribute("outcome", bb.Outcome)
 	span.SetAttribute("duration_ms", fmt.Sprintf("%d", bb.DurationMs))
 

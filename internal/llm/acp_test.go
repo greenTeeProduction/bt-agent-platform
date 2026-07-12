@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -139,6 +140,59 @@ func TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr(t *testing.T) {
 	}
 }
 
+// TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures exercises
+// milestone 4/4 of the Q3 Reliability program: a reliability.CircuitBreaker on
+// ACPClient must trip after repeated subprocess failures and then short-circuit
+// further GenerateCtx calls with a fast error instead of respawning the
+// perpetually-failing subprocess on every call. Today (before the breaker is
+// wired around Start()/Wait()) ACPClient has no failure memory, so it relaunches
+// the crashing helper subprocess on every single call — this test fails because
+// the subprocess invocation count keeps pace with the call count and no error
+// ever mentions the circuit being open.
+func TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures(t *testing.T) {
+	countFile := filepath.Join(t.TempDir(), "acp-crash-count")
+	client := NewACPClient(ACPConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestACPHelperProcess", "--", "always-crash:" + countFile},
+		CWD:     t.TempDir(),
+		Timeout: 2 * time.Second,
+	})
+
+	const attempts = 10
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		_, lastErr = client.Generate("trigger failure")
+		if lastErr == nil {
+			t.Fatalf("attempt %d: expected error from always-crashing ACP subprocess, got nil", i)
+		}
+	}
+
+	invocations := countCrashInvocations(t, countFile)
+	if invocations >= attempts {
+		t.Fatalf("circuit breaker did not short-circuit: subprocess was launched %d times across %d "+
+			"GenerateCtx calls; expected repeated subprocess failures to trip the breaker and stop "+
+			"respawning the failing subprocess", invocations, attempts)
+	}
+	if !strings.Contains(strings.ToLower(lastErr.Error()), "circuit") {
+		t.Fatalf("expected the final error to indicate the circuit breaker is open, got: %v", lastErr)
+	}
+}
+
+// countCrashInvocations reports how many times the "always-crash" helper
+// subprocess mode actually ran, by counting the marker bytes it appends to
+// countFile on each launch before it exits.
+func countCrashInvocations(t *testing.T, countFile string) int {
+	t.Helper()
+	data, err := os.ReadFile(countFile)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		t.Fatalf("read crash invocation count file: %v", err)
+	}
+	return len(data)
+}
+
 // TestACPHelperProcess is not a real test. It is a helper subprocess used by
 // ACP client tests to emulate a newline-delimited JSON-RPC ACP server.
 func TestACPHelperProcess(_ *testing.T) {
@@ -146,6 +200,17 @@ func TestACPHelperProcess(_ *testing.T) {
 		return
 	}
 	mode := os.Args[len(os.Args)-1]
+	if strings.HasPrefix(mode, "always-crash:") {
+		// Simulates a subprocess that fails on every launch (e.g. a broken
+		// binary or crash-looping agent): record that we were invoked, then
+		// exit immediately without ever answering an ACP request.
+		countFile := strings.TrimPrefix(mode, "always-crash:")
+		if f, err := os.OpenFile(countFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			_, _ = f.WriteString("x")
+			_ = f.Close()
+		}
+		os.Exit(1)
+	}
 	r := bufio.NewScanner(os.Stdin)
 	w := bufio.NewWriter(os.Stdout)
 	for r.Scan() {

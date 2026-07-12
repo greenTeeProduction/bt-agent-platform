@@ -5,7 +5,62 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	btcore "github.com/rvitorper/go-bt/core"
 )
+
+// TestRunTask_BackstopsEmptyResultOnNonSuccess locks in the "no run output" /
+// "(last: unknown)" black hole fix: today, any leaf that terminates the tree
+// without success and without ever writing to bb.Result leaves RunTask's
+// return value (and bb.Result) blank. Every downstream consumer — DLQ
+// records, OutcomeErrorDetail, dashboards — is then left undiagnosable about
+// which task failed and how. RunTask must backstop bb.Result with a message
+// naming the task and the terminal outcome whenever the tree didn't succeed
+// and bb.Result is still empty.
+func TestRunTask_BackstopsEmptyResultOnNonSuccess(t *testing.T) {
+	cases := []struct {
+		name       string
+		actionName string
+		code       int // terminal code the stub action returns every tick
+	}{
+		// Immediate failure (-1): a leaf/condition that fails without ever
+		// narrating why — the common case for silent condition failures.
+		{"failure", "RunTaskBackstopFailureAction", -1},
+		// Perpetually "running" (0): the 1000-tick safety limit in RunTask
+		// trips and the terminal switch falls into its default (Partial)
+		// branch — also currently leaves bb.Result blank.
+		{"partial", "RunTaskBackstopPartialAction", 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			RegisterAction(tc.actionName, func(_ *btcore.BTContext[Blackboard]) int {
+				return tc.code
+			})
+
+			bb := &Blackboard{Task: "diagnose the " + tc.name + " case"}
+			tree := &evolution.SerializableNode{Type: "Action", Name: tc.actionName}
+			bt := BuildTree(tree, bb)
+
+			result := RunTask(bb, bt)
+
+			if bb.Outcome == string(evolution.Success) {
+				t.Fatalf("test stub must not report success, got outcome=%q", bb.Outcome)
+			}
+			if result == "" {
+				t.Fatal("RunTask must not return an empty result when the tree does not succeed")
+			}
+			if bb.Result == "" {
+				t.Fatal("RunTask must backstop bb.Result when it is left empty on a non-success terminal outcome")
+			}
+			if !strings.Contains(bb.Result, bb.Task) {
+				t.Errorf("backstop message should name the task for diagnosability, got: %q", bb.Result)
+			}
+			if !strings.Contains(bb.Result, bb.Outcome) {
+				t.Errorf("backstop message should name the terminal outcome for diagnosability, got: %q", bb.Result)
+			}
+		})
+	}
+}
 
 // TestValidateTree_LeafTypesRejectChildren locks in the generalized
 // leaf-with-children rule across BOTH validation entry points.
