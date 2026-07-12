@@ -3,6 +3,7 @@ package knowledge
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 // =============================================================================
@@ -85,5 +86,36 @@ func TestCosineSimilarity_BothZero(t *testing.T) {
 	sim := CosineSimilarity(a, b)
 	if sim != 0.0 {
 		t.Errorf("both zero-norm should return 0.0, got %.2f", sim)
+	}
+}
+
+// =============================================================================
+// BuildIndex (per-tree goroutine panic recovery)
+// =============================================================================
+
+// TestBuildIndex_PanicRecovered verifies that a panic in a per-tree embedding
+// goroutine (e.g. from a nil tree blowing up during capability-text assembly,
+// or from a panic inside the embedding client itself) is turned into an error
+// result on the goroutine's result channel instead of crashing the process or
+// deadlocking the synchronous receive loop that waits for one result per tree.
+func TestBuildIndex_PanicRecovered(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// A nil TreeMeta panics as soon as BuildIndex's goroutine dereferences it
+	// (t.Name, at the start of capability-text assembly) — simulating any panic
+	// raised while building the embedding for this tree.
+	kg.Trees["panicky"] = nil
+
+	done := make(chan error, 1)
+	go func() {
+		done <- kg.BuildIndex()
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected BuildIndex to return an error when a per-tree goroutine panics, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("BuildIndex hung after a per-tree goroutine panic instead of returning an error")
 	}
 }

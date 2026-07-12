@@ -503,6 +503,46 @@ func TestCollectBids_AppliesDefaultDeadlineWhenAnnouncementHasNone(t *testing.T)
 	}
 }
 
+// panicBidTransport is a BidCollector whose SendTask panics for a configured
+// set of candidate URLs (simulating a bug while unmarshaling or attributing an
+// untrusted candidate's bid response) and returns a canned, well-formed bid for
+// every other candidate.
+type panicBidTransport struct {
+	panicURLs map[string]bool
+	bid       string
+}
+
+func (f *panicBidTransport) SendTask(_ context.Context, agentURL, _ string) (string, error) {
+	if f.panicURLs[agentURL] {
+		panic("boom: candidate transport panicked while handling SendTask")
+	}
+	return f.bid, nil
+}
+
+// CollectBids must isolate each candidate's fan-out goroutine with panic
+// recovery so a panic while unmarshaling or attributing one untrusted
+// candidate's bid response cannot take down the whole auctioneer process —
+// the other, well-behaved candidates' bids must still come back.
+func TestCollectBids_SurvivesPanickingCandidate(t *testing.T) {
+	ft := &panicBidTransport{
+		panicURLs: map[string]bool{"http://evil": true},
+		bid:       bidJSON(t, Bid{TaskID: "t1", Cost: 1, Confidence: 0.9}),
+	}
+	ann := TaskAnnouncement{TaskID: "t1", Description: "work"}
+
+	auc := NewAuctioneer(ft)
+	bids, err := auc.CollectBids(context.Background(), ann, map[string]string{
+		"good": "http://good",
+		"evil": "http://evil",
+	})
+	if err != nil {
+		t.Fatalf("CollectBids failed: %v", err)
+	}
+	if len(bids) != 1 || bids[0].BidderName != "good" {
+		t.Fatalf("bids = %+v, want exactly the well-behaved candidate's bid", bids)
+	}
+}
+
 // RunAuction must reject an announcement whose Description is empty before it
 // would dispatch that empty text to the winning agent as the real task.
 func TestAuctioneer_RunAuction_RejectsEmptyDescription(t *testing.T) {

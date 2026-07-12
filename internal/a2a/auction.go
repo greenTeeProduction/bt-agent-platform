@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // MessageKind discriminates the three auction message types exchanged during
@@ -490,7 +491,8 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 	)
 	for name, agentURL := range candidates {
 		wg.Add(1)
-		go func(name, agentURL string) {
+		name, agentURL := name, agentURL
+		reliability.SafeGo(fmt.Sprintf("a2a.CollectBids[%s]", name), func() {
 			defer wg.Done()
 
 			// Bound this candidate's call by a deadline derived from the
@@ -524,7 +526,7 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 			mu.Lock()
 			bids = append(bids, bid)
 			mu.Unlock()
-		}(name, agentURL)
+		}, nil)
 	}
 	wg.Wait()
 

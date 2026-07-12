@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -93,6 +94,54 @@ func TestWorkflow_Parallel(t *testing.T) {
 	}
 	if result.Outcome != "success" {
 		t.Errorf("expected success, got %s", result.Outcome)
+	}
+}
+
+func TestWorkflow_ParallelSubStepPanicRecovered(t *testing.T) {
+	runner := &Runner{
+		RunAgent: func(ctx context.Context, agentName, _, _ string) (string, string, error) {
+			if agentName == "panicking-agent" {
+				panic("boom: simulated sub-step panic")
+			}
+			time.Sleep(5 * time.Millisecond)
+			return "success", fmt.Sprintf("%s done", agentName), nil
+		},
+	}
+
+	wf := Pipeline{
+		Name: "test-parallel-panic",
+		Steps: []Step{
+			{
+				ID:   "parallel-step",
+				Kind: StepParallel,
+				Steps: []Step{
+					{ID: "a", Kind: StepAgent, Agent: "agent-a", Input: "task a"},
+					{ID: "b", Kind: StepAgent, Agent: "panicking-agent", Input: "task b"},
+					{ID: "c", Kind: StepAgent, Agent: "agent-c", Input: "task c"},
+				},
+			},
+		},
+	}
+
+	result, err := runner.Run(context.Background(), wf, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Steps) != 1 {
+		t.Fatalf("expected 1 top-level step (the parallel step), got %d", len(result.Steps))
+	}
+
+	parallelResult := result.Steps[0]
+	if parallelResult.Outcome != "partial" {
+		t.Errorf("expected parallel step outcome 'partial' (one sub-step errored), got %s", parallelResult.Outcome)
+	}
+	// The panicking sub-step must not crash the process, and every sibling
+	// (including the panicking one) must still be represented in results.
+	if !strings.Contains(parallelResult.Output, "agent-a done") {
+		t.Errorf("expected sibling 'a' result present in output, got: %s", parallelResult.Output)
+	}
+	if !strings.Contains(parallelResult.Output, "agent-c done") {
+		t.Errorf("expected sibling 'c' result present in output, got: %s", parallelResult.Output)
 	}
 }
 

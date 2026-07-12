@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // Embedding is a vector representation of text.
@@ -71,20 +73,22 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 	}
 	ch := make(chan result, len(kg.Trees))
 
-	for _, tree := range kg.Trees {
-		go func(t *TreeMeta) {
-			text := t.Name + " " + t.Description
-			for _, cap := range t.Capabilities {
+	for id, tree := range kg.Trees {
+		reliability.SafeGo(fmt.Sprintf("knowledge.BuildIndex tree %s", id), func() {
+			text := tree.Name + " " + tree.Description
+			for _, cap := range tree.Capabilities {
 				text += " " + cap.Action + " in " + cap.Domain
 			}
 			emb, err := defaultEmbeddingClient.GetEmbedding(text)
 			kg.mu.Lock()
 			if err == nil {
-				t.Embedding = emb
+				tree.Embedding = emb
 			}
 			kg.mu.Unlock()
-			ch <- result{id: t.ID, emb: emb, err: err}
-		}(tree)
+			ch <- result{id: id, emb: emb, err: err}
+		}, func(panicVal any, context string) {
+			ch <- result{id: id, err: fmt.Errorf("panic in [%s]: %v", context, panicVal)}
+		})
 	}
 
 	var firstErr error

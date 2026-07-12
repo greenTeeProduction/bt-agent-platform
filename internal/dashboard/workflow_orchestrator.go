@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -281,22 +282,36 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 
 	for i, sub := range step.Steps {
 		wg.Add(1)
-		go func(idx int, s Step) {
-			defer wg.Done()
-			childState := state.cloneForParallel()
-			sr, err := r.executeStep(ctx, s, childState)
-			mu.Lock()
-			if err != nil {
-				if sr.Error == "" {
-					sr.Error = err.Error()
+		idx, s := i, sub
+		reliability.SafeGo(
+			fmt.Sprintf("workflow-parallel-step[%s]", s.ID),
+			func() {
+				defer wg.Done()
+				childState := state.cloneForParallel()
+				sr, err := r.executeStep(ctx, s, childState)
+				mu.Lock()
+				if err != nil {
+					if sr.Error == "" {
+						sr.Error = err.Error()
+					}
+					if sr.Outcome == "" {
+						sr.Outcome = "error"
+					}
 				}
-				if sr.Outcome == "" {
-					sr.Outcome = "error"
+				results[idx] = sr
+				mu.Unlock()
+			},
+			func(panicVal any, _ string) {
+				mu.Lock()
+				results[idx] = StepResult{
+					StepID:  s.ID,
+					Agent:   s.Agent,
+					Outcome: "error",
+					Error:   fmt.Sprintf("panic: %v", panicVal),
 				}
-			}
-			results[idx] = sr
-			mu.Unlock()
-		}(i, sub)
+				mu.Unlock()
+			},
+		)
 	}
 	wg.Wait()
 
