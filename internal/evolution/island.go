@@ -20,6 +20,8 @@ type IslandModel struct {
 	MigrationRate     float64                `json:"migration_rate"`     // fraction of population to migrate (0-1)
 	Generation        int                    `json:"generation"`
 	TotalMigrations   int                    `json:"total_migrations"` // cumulative individuals moved by Migrate
+	Cap               int                    `json:"cap"`              // max individuals per island after Load; 0 = unbounded
+	IslandCap         int                    `json:"island_cap"`       // max distinct island keys retained after Load; 0 = unbounded
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -320,16 +322,26 @@ func (im *IslandModel) Load(path string) error {
 
 	im.mu.Lock()
 	defer im.mu.Unlock()
+	seeded := make(map[string]bool, len(im.Islands))
+	for domain := range im.Islands {
+		seeded[domain] = true
+	}
+	var adopted []string
 	for domain, diskPop := range snap.Islands {
 		if diskPop == nil {
 			continue
 		}
 		if mem := im.Islands[domain]; mem != nil {
-			mergeIslandPopulation(mem, diskPop)
+			mergeIslandPopulation(mem, diskPop, im.Cap)
 			continue
 		}
+		enforceIslandCap(diskPop, im.Cap)
 		im.Islands[domain] = diskPop
+		if !seeded[domain] {
+			adopted = append(adopted, domain)
+		}
 	}
+	im.evictAdoptedIslandsBeyondCap(adopted)
 	if snap.Generation > im.Generation {
 		im.Generation = snap.Generation
 	}
@@ -339,9 +351,32 @@ func (im *IslandModel) Load(path string) error {
 	return nil
 }
 
+// evictAdoptedIslandsBeyondCap enforces IslandCap on the distinct island keys
+// held by im, evicting whole islands by lowest BestFitness until the count is
+// within IslandCap or no more adopted candidates remain. Only domains in
+// adopted are eviction candidates — islands the current run seeded before
+// Load are never evicted, regardless of their BestFitness. IslandCap <= 0
+// leaves the island count unbounded.
+func (im *IslandModel) evictAdoptedIslandsBeyondCap(adopted []string) {
+	if im.IslandCap <= 0 {
+		return
+	}
+	for len(im.Islands) > im.IslandCap && len(adopted) > 0 {
+		worst := 0
+		for i := 1; i < len(adopted); i++ {
+			if im.Islands[adopted[i]].BestFitness < im.Islands[adopted[worst]].BestFitness {
+				worst = i
+			}
+		}
+		delete(im.Islands, adopted[worst])
+		adopted = append(adopted[:worst], adopted[worst+1:]...)
+	}
+}
+
 // mergeIslandPopulation unions the archived individuals into the in-memory
-// population, deduped by genome with the fitter copy winning.
-func mergeIslandPopulation(mem, disk *Population) {
+// population, deduped by genome with the fitter copy winning, then enforces
+// islandCap (if non-zero) so the merged island never exceeds it.
+func mergeIslandPopulation(mem, disk *Population, islandCap int) {
 	byGenome := make(map[string]int, len(mem.Individuals))
 	for i, ind := range mem.Individuals {
 		byGenome[ind.Genome] = i
@@ -359,6 +394,19 @@ func mergeIslandPopulation(mem, disk *Population) {
 	if disk.BestFitness > mem.BestFitness {
 		mem.BestFitness = disk.BestFitness
 	}
+	enforceIslandCap(mem, islandCap)
+}
+
+// enforceIslandCap evicts the lowest-fitness individuals from pop so it holds
+// at most islandCap individuals; islandCap <= 0 leaves pop unbounded.
+func enforceIslandCap(pop *Population, islandCap int) {
+	if islandCap <= 0 || len(pop.Individuals) <= islandCap {
+		return
+	}
+	sort.Slice(pop.Individuals, func(i, j int) bool {
+		return pop.Individuals[i].Fitness > pop.Individuals[j].Fitness
+	})
+	pop.Individuals = pop.Individuals[:islandCap]
 }
 
 // Summary returns a human-readable island model summary.

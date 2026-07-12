@@ -1054,6 +1054,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			"migration_interval": {Type: "integer", Description: "Generations between migrations (default: 2)"},
 			"migration_rate":     {Type: "number", Description: "Fraction of each island migrating (default: 0.1)"},
 			"domains":            {Type: "string", Description: "Comma-separated registered domain-tree names; each seeds its own island (overrides 'islands')"},
+			"population_cap":     {Type: "integer", Description: "Max individuals retained per island after warm-start merge, bounding the durable archive (default: population*3)"},
+			"island_cap":         {Type: "integer", Description: "Max distinct islands retained after warm-start merge, bounding the durable archive (default: islands*3)"},
 		},
 		[]string{"tree"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -1065,6 +1067,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				MigrationInterval int     `json:"migration_interval"`
 				MigrationRate     float64 `json:"migration_rate"`
 				Domains           string  `json:"domains"`
+				PopulationCap     *int    `json:"population_cap"`
+				IslandCap         *int    `json:"island_cap"`
 			}
 			_ = json.Unmarshal(args, &params)
 			if params.Islands <= 0 {
@@ -1126,6 +1130,22 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					seeded = append(seeded, name)
 					im.AddIsland(name, newProductionPopulation(population, baseTree))
 				}
+			}
+			// Bound the durable archive against runaway growth (milestone 3/4):
+			// defaults derive from this run's own population/island counts so
+			// ordinary calls stay bounded without every caller having to pass
+			// explicit values, while staying generous enough that legitimate
+			// multi-run accumulation and legacy-archive adoption aren't
+			// clipped away. Both caps must be set before any im.Load call.
+			if params.PopulationCap != nil {
+				im.Cap = *params.PopulationCap
+			} else {
+				im.Cap = population * 3
+			}
+			if params.IslandCap != nil {
+				im.IslandCap = *params.IslandCap
+			} else {
+				im.IslandCap = len(seeded) * 3
 			}
 			// Warm-start from the durable island archive so illuminated
 			// behavior accumulates across runs instead of restarting from

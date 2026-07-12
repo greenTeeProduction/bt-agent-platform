@@ -310,6 +310,219 @@ func TestIslandModel_SaveLoadMergesPerDomainSubpopulations(t *testing.T) {
 	}
 }
 
+// TestIslandModel_LoadEnforcesCapWithLowestFitnessEviction pins milestone
+// 1/4 of the durable island-archive-bound program: a non-zero Cap must bound
+// every warm-started island to at most Cap individuals, evicting the
+// lowest-fitness survivors first when the disk/memory merge would otherwise
+// overflow it.
+func TestIslandModel_LoadEnforcesCapWithLowestFitnessEviction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capped_merge_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	goPop := islandTestPopulation("go-a", "go-b", "go-c")
+	goPop.Individuals[0].Fitness = 10
+	goPop.Individuals[1].Fitness = 90
+	goPop.Individuals[2].Fitness = 50
+	saved.AddIsland("go", goPop)
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.Cap = 2
+	memGo := islandTestPopulation("go-mem")
+	memGo.Individuals[0].Fitness = 5
+	loaded.AddIsland("go", memGo)
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	merged := loaded.GetIsland("go")
+	if merged == nil {
+		t.Fatal("Load lost the go island")
+	}
+	if len(merged.Individuals) != 2 {
+		t.Fatalf("merged island has %d individuals, want Cap=2", len(merged.Individuals))
+	}
+	byName := make(map[string]bool, len(merged.Individuals))
+	for _, ind := range merged.Individuals {
+		byName[ind.Tree.Name] = true
+	}
+	if !byName["go-b"] || !byName["go-c"] {
+		t.Fatalf("expected the two highest-fitness survivors go-b(90)/go-c(50); got %v", byName)
+	}
+	if byName["go-mem"] || byName["go-a"] {
+		t.Fatalf("expected lowest-fitness individuals go-mem(5)/go-a(10) evicted; got %v", byName)
+	}
+}
+
+// TestIslandModel_LoadCapsDiskOnlyIslandWholesaleAdoption pins that a
+// disk-only domain (adopted wholesale, never touching mergeIslandPopulation)
+// is still bounded by a non-zero Cap.
+func TestIslandModel_LoadCapsDiskOnlyIslandWholesaleAdoption(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capped_wholesale_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	opsPop := islandTestPopulation("ops-a", "ops-b", "ops-c")
+	opsPop.Individuals[0].Fitness = 1
+	opsPop.Individuals[1].Fitness = 100
+	opsPop.Individuals[2].Fitness = 3
+	saved.AddIsland("ops", opsPop)
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.Cap = 1
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	ops := loaded.GetIsland("ops")
+	if ops == nil || len(ops.Individuals) != 1 {
+		t.Fatalf("disk-only island not capped to 1: %#v", ops)
+	}
+	if ops.Individuals[0].Tree.Name != "ops-b" {
+		t.Fatalf("expected highest-fitness survivor ops-b(100), got %q", ops.Individuals[0].Tree.Name)
+	}
+}
+
+// TestIslandModel_LoadCapZeroPreservesUnboundedBehavior pins that the
+// default zero-value Cap keeps Load's merge unbounded — the pre-existing
+// behavior TestIslandModel_SaveLoadMergesPerDomainSubpopulations also
+// exercises, restated here explicitly against the new Cap field.
+func TestIslandModel_LoadCapZeroPreservesUnboundedBehavior(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "uncapped_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	saved.AddIsland("go", islandTestPopulation("go-a", "go-b", "go-c"))
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	if loaded.Cap != 0 {
+		t.Fatalf("Cap zero value = %d, want 0", loaded.Cap)
+	}
+	loaded.AddIsland("go", islandTestPopulation("go-mem"))
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := len(loaded.GetIsland("go").Individuals); got != 4 {
+		t.Fatalf("Cap=0 merged island has %d individuals, want unbounded 4", got)
+	}
+}
+
+// TestIslandModel_LoadEnforcesIslandCapByEvictingLowestBestFitnessAdoptedIslands
+// pins milestone 2/4 of the durable island-archive-bound program: a non-zero
+// IslandCap bounds the number of distinct island keys retained across merges.
+// When Load adopts archived domains the current run didn't seed, whole
+// islands beyond the cap are evicted by lowest BestFitness — the current
+// run's own seeded islands are never evicted, only islands newly adopted
+// from disk are eviction candidates.
+func TestIslandModel_LoadEnforcesIslandCapByEvictingLowestBestFitnessAdoptedIslands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "island_cap_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	goPop := islandTestPopulation("go-a")
+	goPop.BestFitness = 20
+	opsPop := islandTestPopulation("ops-a")
+	opsPop.BestFitness = 90
+	finPop := islandTestPopulation("fin-a")
+	finPop.BestFitness = 10
+	saved.AddIsland("go", goPop)
+	saved.AddIsland("ops", opsPop)
+	saved.AddIsland("fin", finPop)
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.IslandCap = 2
+	seededGo := islandTestPopulation("go-mem")
+	seededGo.BestFitness = 1 // lowest BestFitness, but seeded so must never be evicted
+	loaded.AddIsland("go", seededGo)
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := len(loaded.Islands); got != 2 {
+		domains := make([]string, 0, len(loaded.Islands))
+		for d := range loaded.Islands {
+			domains = append(domains, d)
+		}
+		t.Fatalf("island count = %d %v, want IslandCap=2", got, domains)
+	}
+	if loaded.GetIsland("go") == nil {
+		t.Fatal("seeded go island must never be evicted regardless of BestFitness")
+	}
+	if loaded.GetIsland("fin") != nil {
+		t.Fatalf("expected lowest-BestFitness adopted island fin(10) evicted, got %#v", loaded.GetIsland("fin"))
+	}
+	if loaded.GetIsland("ops") == nil {
+		t.Fatal("expected higher-BestFitness adopted island ops(90) retained")
+	}
+}
+
+// TestIslandModel_LoadIslandCapAppliesWhenNoIslandsSeeded pins that IslandCap
+// bounds a cold-start Load too: when the current run seeded nothing, all
+// disk domains are adopted candidates and the cap keeps only the
+// highest-BestFitness ones.
+func TestIslandModel_LoadIslandCapAppliesWhenNoIslandsSeeded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "island_cap_no_seed_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	for i, domain := range []string{"go", "ops", "fin"} {
+		pop := islandTestPopulation(domain + "-a")
+		pop.BestFitness = float64((i + 1) * 10) // go=10, ops=20, fin=30
+		saved.AddIsland(domain, pop)
+	}
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.IslandCap = 2
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := len(loaded.Islands); got != 2 {
+		t.Fatalf("island count = %d, want IslandCap=2", got)
+	}
+	if loaded.GetIsland("go") != nil {
+		t.Fatal("expected lowest-BestFitness island go(10) evicted")
+	}
+	if loaded.GetIsland("ops") == nil || loaded.GetIsland("fin") == nil {
+		t.Fatal("expected higher-BestFitness islands ops(20)/fin(30) retained")
+	}
+}
+
+// TestIslandModel_LoadIslandCapZeroPreservesUnboundedBehavior pins that the
+// default zero-value IslandCap keeps Load's island-key growth unbounded,
+// mirroring the existing per-individual Cap zero-value guarantee.
+func TestIslandModel_LoadIslandCapZeroPreservesUnboundedBehavior(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "island_cap_zero_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	saved.AddIsland("go", islandTestPopulation("go-a"))
+	saved.AddIsland("ops", islandTestPopulation("ops-a"))
+	saved.AddIsland("fin", islandTestPopulation("fin-a"))
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	if loaded.IslandCap != 0 {
+		t.Fatalf("IslandCap zero value = %d, want 0", loaded.IslandCap)
+	}
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := len(loaded.Islands); got != 3 {
+		t.Fatalf("IslandCap=0 merged model has %d islands, want unbounded 3", got)
+	}
+}
+
 func TestIslandModel_DiversityEdgeCases(t *testing.T) {
 	if got := NewIslandModel(1, 0.5).DiversityAcrossIslands(); got != 0 {
 		t.Fatalf("empty model diversity = %.3f, want 0", got)

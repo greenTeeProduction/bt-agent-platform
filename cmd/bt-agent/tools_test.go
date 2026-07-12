@@ -578,6 +578,142 @@ func TestBTEvolveIslandArchiveIsScopedPerBaseTree(t *testing.T) {
 	}
 }
 
+// TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls pins milestone 3/4 of
+// the "bound the durable island-model archive against runaway growth" program:
+// bt_evolve_island must accept "population_cap" and "island_cap" request
+// parameters and set them on the evolution.IslandModel (Cap and IslandCap)
+// before im.Load, so the caps evolution.IslandModel already enforces
+// (internal/evolution/island_model_test.go) actually take effect in
+// production. Without wiring, every repeated call against the same base tree
+// merges a freshly seeded population into whatever the archive already
+// holds, so both the per-island individual count and the distinct
+// island-key count grow without bound across calls.
+func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
+	readIslands := func(t *testing.T, home string) map[string]json.RawMessage {
+		t.Helper()
+		matches, err := filepath.Glob(filepath.Join(home, "island_archive*.json"))
+		if err != nil {
+			t.Fatalf("glob island archives: %v", err)
+		}
+		if len(matches) != 1 {
+			t.Fatalf("expected exactly one durable island archive under %s; got %v", home, matches)
+		}
+		data, err := os.ReadFile(matches[0])
+		if err != nil {
+			t.Fatalf("read island archive %s: %v", matches[0], err)
+		}
+		var snap struct {
+			Islands map[string]json.RawMessage `json:"islands"`
+		}
+		if err := json.Unmarshal(data, &snap); err != nil {
+			t.Fatalf("island archive %s is not valid JSON: %v", matches[0], err)
+		}
+		return snap.Islands
+	}
+	individualCount := func(t *testing.T, raw json.RawMessage) int {
+		t.Helper()
+		var pop struct {
+			Individuals []json.RawMessage `json:"individuals"`
+		}
+		if err := json.Unmarshal(raw, &pop); err != nil {
+			t.Fatalf("island population is not valid JSON: %v", err)
+		}
+		return len(pop.Individuals)
+	}
+	invoke := func(t *testing.T, server *engine.Server, label, args string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_island", json.RawMessage(args))
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_island) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_island unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	t.Run("population_cap bounds per-island individual count", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("BT_AGENT_HOME", home)
+
+		// Pre-seed the durable archive for base tree "godev" with a
+		// deliberately oversized "code_review" island (distinct Genome per
+		// individual, so none collide-dedup away in the merge) — a stand-in
+		// for what several prior uncapped calls would have accumulated.
+		// hashTree only hashes the root node's Name/Type/child-count, so
+		// letting real repeated invocations organically grow the archive is
+		// unreliable (most mutations land on non-root nodes and collide back
+		// to the same genome); seeding directly isolates the cap check from
+		// that unrelated coarseness.
+		const seedSize = 30
+		seed := evolution.NewIslandModel(1, 0.5)
+		seedPop := &evolution.Population{}
+		for i := 0; i < seedSize; i++ {
+			seedPop.Individuals = append(seedPop.Individuals, evolution.Individual{
+				Tree:    &evolution.SerializableNode{Type: "Action", Name: fmt.Sprintf("seed-%d", i)},
+				Genome:  fmt.Sprintf("seed-genome-%d", i),
+				Fitness: float64(i),
+			})
+		}
+		seedPop.BestFitness = float64(seedSize - 1)
+		seed.AddIsland("code_review", seedPop)
+		if err := seed.Save(islandArchivePath("godev")); err != nil {
+			t.Fatalf("seed island archive: %v", err)
+		}
+
+		server := engine.NewServer("test")
+		registerMCPTools(server, &mcpDeps{})
+
+		// Same single domain every call: without population_cap wired, each
+		// call's freshly seeded 4-individual population merges into whatever
+		// the archive already accumulated (starting from the oversized
+		// seed), growing without bound.
+		const populationCap = 6
+		args := fmt.Sprintf(`{"tree":"godev","domains":"code_review","population":4,"generations":1,"migration_interval":1,"migration_rate":0.5,"population_cap":%d}`, populationCap)
+		for i := 0; i < 3; i++ {
+			invoke(t, server, fmt.Sprintf("call %d", i+1), args)
+
+			islands := readIslands(t, home)
+			raw, present := islands["code_review"]
+			if !present {
+				t.Fatalf("archive after call %d is missing the 'code_review' island; got keys %v", i+1, islands)
+			}
+			if got := individualCount(t, raw); got > populationCap {
+				t.Errorf("after call %d on the same tree, the 'code_review' island holds %d individuals, want <= population_cap=%d — population_cap must be threaded onto IslandModel.Cap before im.Load so repeated merges stay bounded", i+1, got, populationCap)
+			}
+		}
+	})
+
+	t.Run("island_cap bounds distinct island-key count", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("BT_AGENT_HOME", home)
+		server := engine.NewServer("test")
+		registerMCPTools(server, &mcpDeps{})
+
+		// Each call introduces exactly one new domain never seeded before, so
+		// every previously archived island becomes an "adopted" (non-reseeded)
+		// candidate island_cap must evict down to the cap.
+		const islandCap = 2
+		newDomains := []string{"code_review", "devops_ci", "agent_monitor", "refactoring", "security_audit"}
+		for i, domain := range newDomains {
+			args := fmt.Sprintf(`{"tree":"godev","domains":%q,"population":4,"generations":1,"migration_interval":1,"migration_rate":0.5,"island_cap":%d}`, domain, islandCap)
+			invoke(t, server, fmt.Sprintf("call %d (%s)", i+1, domain), args)
+		}
+
+		islands := readIslands(t, home)
+		if got := len(islands); got > islandCap {
+			t.Errorf("after 5 repeated calls on the same tree, each introducing a new domain, the archive holds %d distinct islands, want <= island_cap=%d — island_cap must be threaded onto IslandModel.IslandCap before im.Load so previously archived, non-reseeded islands get evicted", got, islandCap)
+		}
+	})
+}
+
 // TestBTEvolveIslandAdoptsLegacyGlobalArchiveOnce pins the one-time legacy
 // island-archive migration: per-tree archive scoping (33f8c13) silently
 // orphaned any pre-scoping GLOBAL island_archive.json — accumulated state
