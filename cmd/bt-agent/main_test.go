@@ -157,7 +157,7 @@ func TestDaemonWiresDLQReplayConsumer(t *testing.T) {
 // in-memory DeadLetterQueue over one file, so a consume against a stale view
 // misses every stamp a sibling wrote since this process last read the file:
 // dashboard/MCP requeues are never replayed and stale listings misreport the
-// queue. Three sites are pinned:
+// queue. Four sites are pinned:
 //
 //  1. the daemon's replay-scan tick (main.go) must call dlq.Reload() inside
 //     each tick, before dlq.RequeuedReady();
@@ -169,6 +169,9 @@ func TestDaemonWiresDLQReplayConsumer(t *testing.T) {
 //     ../bt-gardener) must call dlq.Reload() before dlq.List(); today only
 //     handleDLQReplay reloads, so the DLQ panel shows the dashboard's stale
 //     boot-time view.
+//  4. the bt_dlq_list tool (tools.go) must call engine.TaskDLQ.Reload()
+//     before engine.TaskDLQ.List() — today only bt_dlq_replay reloads, so
+//     this MCP-facing listing renders a stale view of the shared file.
 func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	// Site 1: daemon replay-scan tick in main.go.
 	src, err := os.ReadFile("main.go")
@@ -227,6 +230,24 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	}
 	if reloadIdx := strings.Index(list, "dlq.Reload()"); reloadIdx < 0 || reloadIdx > listIdx {
 		t.Error("dashboard handleDLQ must call dlq.Reload() before dlq.List() — only handleDLQReplay reloads today, so the DLQ panel renders the dashboard's stale boot-time view of the shared file")
+	}
+
+	// Site 4: bt_dlq_list tool in tools.go.
+	listRegIdx := strings.Index(tool, `"bt_dlq_list"`)
+	if listRegIdx < 0 {
+		t.Fatal("tools.go must register the bt_dlq_list tool")
+	}
+	listReplayIdx := strings.Index(tool, `"bt_dlq_replay"`)
+	if listReplayIdx < 0 || listReplayIdx < listRegIdx {
+		t.Fatal("tools.go must register bt_dlq_list before bt_dlq_replay")
+	}
+	listHandler := tool[listRegIdx:listReplayIdx]
+	listCallIdx := strings.Index(listHandler, "engine.TaskDLQ.List()")
+	if listCallIdx < 0 {
+		t.Fatal("bt_dlq_list must list entries via engine.TaskDLQ.List()")
+	}
+	if reloadIdx := strings.Index(listHandler, "engine.TaskDLQ.Reload()"); reloadIdx < 0 || reloadIdx > listCallIdx {
+		t.Error("bt_dlq_list must call engine.TaskDLQ.Reload() before engine.TaskDLQ.List() — today only bt_dlq_replay reloads, so this MCP-facing listing renders a stale view of the shared file")
 	}
 }
 

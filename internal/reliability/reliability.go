@@ -241,8 +241,9 @@ type DeadLetterQueue struct {
 	entries []DeadLetterEntry
 	path    string // persistence file
 
-	executor  ReplayExecutor  // re-executes replayed tasks (SetReplayExecutor)
-	replaying map[string]bool // ids currently being replayed (guards doubled replays)
+	executor    ReplayExecutor  // re-executes replayed tasks (SetReplayExecutor)
+	replaying   map[string]bool // ids currently being replayed (guards doubled replays)
+	pushCounter uint64          // disambiguates entries pushed within the same nanosecond
 }
 
 // ReplayExecutor re-executes one dead-lettered task. A nil error means the
@@ -284,6 +285,13 @@ func (dlq *DeadLetterQueue) Push(entry DeadLetterEntry) {
 	dlq.mu.Lock()
 	defer dlq.mu.Unlock()
 	entry.FailedAt = time.Now()
+	// Callers such as pushToDLQAction never set ID, and mergeFromDisk's byID map
+	// collapses entries that share an ID — so an empty ID must get a default
+	// that cannot collide with another entry pushed in the same nanosecond.
+	if entry.ID == "" {
+		dlq.pushCounter++
+		entry.ID = fmt.Sprintf("%s-%d-%d", entry.Agent, time.Now().UnixNano(), dlq.pushCounter)
+	}
 	// Auto-classify error if category not already set.
 	if entry.Category == "" && entry.Error != "" {
 		entry.Category = ClassifyError(fmt.Errorf("%s", entry.Error)).String()

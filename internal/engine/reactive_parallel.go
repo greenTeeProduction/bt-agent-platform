@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"fmt"
 	"maps"
 	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
@@ -26,6 +28,20 @@ func forkBlackboard(bb *Blackboard) *Blackboard {
 		cp.VisitedPaths = append([]string(nil), bb.VisitedPaths...)
 	}
 	return &cp
+}
+
+// childPanicHandler returns a reliability.PanicHandler that logs the panic
+// via the default handler and surfaces the branch as a Failure result so a
+// panicking child cannot crash the process or wedge the caller waiting on
+// resultCh. It signals wg only after the Failure result has been sent, so a
+// concurrent wg.Wait()-triggered close(resultCh) can never race ahead of
+// this send (which would otherwise silently drop the Failure result).
+func childPanicHandler(resultCh chan<- int, wg *sync.WaitGroup) reliability.PanicHandler {
+	return func(panicVal any, panicCtx string) {
+		reliability.DefaultPanicHandler(panicVal, panicCtx)
+		resultCh <- -1
+		wg.Done()
+	}
 }
 
 // BuildReactiveParallel builds a go-bt Command for a ReactiveParallel node.
@@ -79,11 +95,11 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			// cancellation of action children.
 			for i, child := range children {
 				wg.Add(1)
-				go func(idx int, cmd btcore.Command[Blackboard], isMonitor bool) {
-					defer wg.Done()
+				idx, cmd, isMonitorChild := i, child, monitorIndices[i]
+				reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:monitor-child-%d", node.Name, idx), func() {
 					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
-					if isMonitor && result <= 0 {
+					if isMonitorChild && result <= 0 {
 						// Monitor failed/signalled — cancel actions
 						select {
 						case stopCh <- struct{}{}:
@@ -91,12 +107,13 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 						}
 					}
 					resultCh <- result
-				}(i, child, monitorIndices[i])
+					wg.Done()
+				}, childPanicHandler(resultCh, &wg))
 			}
-			go func() {
+			reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:monitor-closer", node.Name), func() {
 				wg.Wait()
 				close(resultCh)
-			}()
+			}, nil)
 
 			results := make([]int, n)
 			for i := range results {
@@ -125,12 +142,13 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			// Run all, return first terminal result, cancel rest
 			for i, child := range children {
 				wg.Add(1)
-				go func(idx int, cmd btcore.Command[Blackboard]) {
-					defer wg.Done()
+				idx, cmd := i, child
+				reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:race-child-%d", node.Name, idx), func() {
 					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					resultCh <- result
-				}(i, child)
+					wg.Done()
+				}, childPanicHandler(resultCh, &wg))
 			}
 			// Wait for first terminal result
 			var firstResult int
@@ -138,21 +156,27 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			if r != 0 {
 				firstResult = r
 				close(stopCh) // Cancel remaining goroutines
-				go func() { wg.Wait(); close(resultCh) }()
+				reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:race-closer", node.Name), func() {
+					wg.Wait()
+					close(resultCh)
+				}, nil)
 				return firstResult
 			}
 			// If first was Running, wait for next
 			firstResult = <-resultCh
 			close(stopCh)
-			go func() { wg.Wait(); close(resultCh) }()
+			reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:race-closer", node.Name), func() {
+				wg.Wait()
+				close(resultCh)
+			}, nil)
 			return firstResult
 
 		case "any":
 			// Success when any ONE succeeds. Cancel remaining.
 			for i, child := range children {
 				wg.Add(1)
-				go func(idx int, cmd btcore.Command[Blackboard]) {
-					defer wg.Done()
+				idx, cmd := i, child
+				reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:any-child-%d", node.Name, idx), func() {
 					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					// Send result before stop signal to avoid Go select
@@ -164,12 +188,13 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 						default:
 						}
 					}
-				}(i, child)
+					wg.Done()
+				}, childPanicHandler(resultCh, &wg))
 			}
-			go func() {
+			reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:any-closer", node.Name), func() {
 				wg.Wait()
 				close(resultCh)
-			}()
+			}, nil)
 
 			allFail := true
 			for r := range resultCh {
@@ -189,17 +214,18 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			// "all" mode: Success when ALL succeed, failure when ANY fails
 			for i, child := range children {
 				wg.Add(1)
-				go func(idx int, cmd btcore.Command[Blackboard]) {
-					defer wg.Done()
+				idx, cmd := i, child
+				reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:all-child-%d", node.Name, idx), func() {
 					localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 					result := cmd.Run(localCtx)
 					resultCh <- result
-				}(i, child)
+					wg.Done()
+				}, childPanicHandler(resultCh, &wg))
 			}
-			go func() {
+			reliability.SafeGo(fmt.Sprintf("reactive_parallel:%s:all-closer", node.Name), func() {
 				wg.Wait()
 				close(resultCh)
-			}()
+			}, nil)
 
 			var failureCount int
 			for r := range resultCh {
@@ -242,8 +268,8 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 	case ParallelMonitor:
 		for i, child := range children {
 			wg.Add(1)
-			go func(idx int, cmd btcore.Command[Blackboard], monitor bool) {
-				defer wg.Done()
+			idx, cmd, monitor := i, child, isMonitor[i]
+			reliability.SafeGo(fmt.Sprintf("runReactiveParallel:monitor-child-%d", idx), func() {
 				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				if monitor && result <= 0 && cancelOnMonitor {
@@ -253,9 +279,13 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 					}
 				}
 				resultCh <- result
-			}(i, child, isMonitor[i])
+				wg.Done()
+			}, childPanicHandler(resultCh, &wg))
 		}
-		go func() { wg.Wait(); close(resultCh) }()
+		reliability.SafeGo("runReactiveParallel:monitor-closer", func() {
+			wg.Wait()
+			close(resultCh)
+		}, nil)
 		results := make([]int, n)
 		idx := 0
 		for r := range resultCh {
@@ -279,31 +309,38 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 	case ParallelRace:
 		for i, child := range children {
 			wg.Add(1)
-			go func(idx int, cmd btcore.Command[Blackboard]) {
-				defer wg.Done()
+			idx, cmd := i, child
+			reliability.SafeGo(fmt.Sprintf("runReactiveParallel:race-child-%d", idx), func() {
 				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				resultCh <- result
-			}(i, child)
+				wg.Done()
+			}, childPanicHandler(resultCh, &wg))
 		}
 		var firstResult int
 		r := <-resultCh
 		if r != 0 {
 			firstResult = r
 			close(stopCh)
-			go func() { wg.Wait(); close(resultCh) }()
+			reliability.SafeGo("runReactiveParallel:race-closer", func() {
+				wg.Wait()
+				close(resultCh)
+			}, nil)
 			return firstResult
 		}
 		firstResult = <-resultCh
 		close(stopCh)
-		go func() { wg.Wait(); close(resultCh) }()
+		reliability.SafeGo("runReactiveParallel:race-closer", func() {
+			wg.Wait()
+			close(resultCh)
+		}, nil)
 		return firstResult
 
 	case ParallelAny:
 		for i, child := range children {
 			wg.Add(1)
-			go func(idx int, cmd btcore.Command[Blackboard]) {
-				defer wg.Done()
+			idx, cmd := i, child
+			reliability.SafeGo(fmt.Sprintf("runReactiveParallel:any-child-%d", idx), func() {
 				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				// Send result before stop signal to avoid Go select
@@ -315,9 +352,13 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 					default:
 					}
 				}
-			}(i, child)
+				wg.Done()
+			}, childPanicHandler(resultCh, &wg))
 		}
-		go func() { wg.Wait(); close(resultCh) }()
+		reliability.SafeGo("runReactiveParallel:any-closer", func() {
+			wg.Wait()
+			close(resultCh)
+		}, nil)
 		allFail := true
 		for r := range resultCh {
 			if r == 1 {
@@ -336,14 +377,18 @@ func runReactiveParallel(children []btcore.Command[Blackboard], mode ParallelMod
 		// ParallelAll
 		for i, child := range children {
 			wg.Add(1)
-			go func(idx int, cmd btcore.Command[Blackboard]) {
-				defer wg.Done()
+			idx, cmd := i, child
+			reliability.SafeGo(fmt.Sprintf("runReactiveParallel:all-child-%d", idx), func() {
 				localCtx := &btcore.BTContext[Blackboard]{Blackboard: forkBlackboard(bb)}
 				result := cmd.Run(localCtx)
 				resultCh <- result
-			}(i, child)
+				wg.Done()
+			}, childPanicHandler(resultCh, &wg))
 		}
-		go func() { wg.Wait(); close(resultCh) }()
+		reliability.SafeGo("runReactiveParallel:all-closer", func() {
+			wg.Wait()
+			close(resultCh)
+		}, nil)
 		failureCount := 0
 		for r := range resultCh {
 			if r == -1 || r == StatusAborted {

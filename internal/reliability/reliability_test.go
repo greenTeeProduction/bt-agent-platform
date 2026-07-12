@@ -140,6 +140,28 @@ func TestDeadLetterQueue_PushList(t *testing.T) {
 	}
 }
 
+// pushToDLQAction (internal/engine/ops_actions.go) never sets ID, and
+// mergeFromDisk's byID map collapses entries that share an ID — so every
+// caller that leaves ID empty must get a distinct default, or unrelated
+// hitl_exhausted entries cross-contaminate each other's Attempts/RequeuedAt/
+// Abandoned state.
+func TestDeadLetterQueue_PushDefaultsEmptyID(t *testing.T) {
+	dlq := NewDeadLetterQueue("")
+	dlq.Push(DeadLetterEntry{Task: "task a", Agent: "coder"})
+	dlq.Push(DeadLetterEntry{Task: "task b", Agent: "coder"})
+
+	entries := dlq.List()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].ID == "" || entries[1].ID == "" {
+		t.Fatalf("Push must default an empty ID, got IDs %q and %q", entries[0].ID, entries[1].ID)
+	}
+	if entries[0].ID == entries[1].ID {
+		t.Fatalf("two entries pushed with empty ID must not collide on the same default: both got %q", entries[0].ID)
+	}
+}
+
 // ─── Drop-safe replay (c8094002 ms1) ────────────────────────────────────────
 // The old Replay removed the entry and returned it for the CALLER to execute —
 // any caller without a tree runner (or that crashed mid-replay) silently

@@ -1597,6 +1597,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if params.Limit <= 0 {
 				params.Limit = 50
 			}
+			engine.TaskDLQ.Reload()
 			entries := engine.TaskDLQ.List()
 			total := len(entries)
 			if len(entries) > params.Limit {
