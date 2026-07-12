@@ -130,7 +130,7 @@ func main() {
 			RepoDir:         repoDir,
 			RunningRevision: dashboard.ReadBuildIdentity().Revision,
 			AutoRebuild:     agent.AutoRebuildEnabled(),
-			Targets:         agent.DefaultRebuildTargets(repoDir),
+			Targets:         agent.DashboardRebuildTargets(repoDir),
 			Binary:          "bt-dashboard",
 		}, agent.DefaultDriftCheckInterval)
 	}

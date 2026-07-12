@@ -342,6 +342,7 @@ func main() {
 	agentLocalMem := agent.MemoryDir()
 	dlq := reliability.NewDeadLetterQueue(agent.DLQFile())
 	engine.TaskDLQ = dlq
+	engine.BuildRevision = buildID.Revision
 
 	jobStoreDir := agent.JobsDir()
 	_ = os.MkdirAll(jobStoreDir, 0755)

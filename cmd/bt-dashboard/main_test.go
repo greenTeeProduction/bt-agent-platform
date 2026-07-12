@@ -4,11 +4,37 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
+
+// TestDashboardDriftWatcherRebuildsItself pins — at the source level, the
+// same audit style as cmd/bt-agent/main_test.go's requireBuildIdentityWiring
+// — that bt-dashboard's deploy-drift watcher can actually rebuild its own
+// binary, not just detect that it has drifted from repo HEAD.
+//
+// agent.DefaultRebuildTargets deliberately excludes bt-dashboard (its doc
+// comment: "bt-dashboard and the MCP bin/bt-agent are intentionally excluded
+// here — callers pass the set they own"), so passing it unmodified as
+// Targets means an AutoRebuild-enabled bt-dashboard WARNs on its own drift
+// but the rebuild it triggers only ever swaps bt-agent/bt-agent-cli/
+// bt-gardener — never itself. main.go must instead pass a target list that
+// includes bt-dashboard's own binary.
+func TestDashboardDriftWatcherRebuildsItself(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "agent.DashboardRebuildTargets(repoDir)") {
+		t.Errorf("main.go's deploy-drift watcher must pass agent.DashboardRebuildTargets(repoDir) as " +
+			"Targets so bt-dashboard rebuilds its own binary on drift; found agent.DefaultRebuildTargets " +
+			"(or equivalent) which intentionally excludes bt-dashboard")
+	}
+}
 
 // TestHandleScalability_ReflectsInjectedQueueAndRouter pins milestone 3/5 of the
 // horizontal-scaling adoption program: the /api/scalability endpoint must surface

@@ -66,6 +66,10 @@ type DriftWatchConfig struct {
 	Targets     []RebuildTarget
 	// Binary names the process for the log line (e.g. "bt-agent").
 	Binary string
+	// Backoff, when set, throttles repeated rebuild attempts against the same
+	// stale HEAD so a broken commit cannot retry-storm `go build` every watch
+	// interval. Nil disables throttling (every stale tick attempts a rebuild).
+	Backoff *RebuildBackoff
 }
 
 // DriftResult is the outcome of one DriftWatchOnce check.
@@ -93,8 +97,19 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	if !cfg.AutoRebuild {
 		return res, nil
 	}
+	if cfg.Backoff != nil && !cfg.Backoff.Allow(head) {
+		slog.Warn("deploy drift: rebuild attempt blocked by backoff guard",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
+	}
 	if err := driftRebuildFn(cfg.RepoDir, cfg.Targets); err != nil {
+		if cfg.Backoff != nil {
+			cfg.Backoff.RecordFailure(head)
+		}
 		return res, fmt.Errorf("deploy-drift rebuild: %w", err)
+	}
+	if cfg.Backoff != nil {
+		cfg.Backoff.RecordSuccess(head)
 	}
 	res.Rebuilt = true
 	slog.Warn("deploy drift: rebuilt binaries from repo HEAD — restart to adopt",

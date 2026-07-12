@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 // DriftStatus compares the running build revision against the repo HEAD.
@@ -89,4 +90,124 @@ func TestDriftWatchOnce(t *testing.T) {
 			t.Fatalf("rebuild failure: res=%+v err=%v, want error && Rebuilt=false", res, err)
 		}
 	})
+}
+
+// RebuildBackoff caps consecutive rebuild attempts against the same stale
+// HEAD, with exponential backoff between attempts, and permanently blocks
+// further attempts once MaxAttempts is reached — the guardrail (milestone 5,
+// program 94b0b31) that stops a broken commit from retry-storming a
+// `go build` every watcher interval. The guard resets the instant HEAD
+// advances, since a new commit deserves a fresh chance.
+func TestRebuildBackoff_BlocksAfterMaxAttempts(t *testing.T) {
+	fakeNow := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	guard := &RebuildBackoff{
+		MaxAttempts: 3,
+		BaseDelay:   time.Second,
+		MaxDelay:    time.Minute,
+	}
+	guard.nowFn = func() time.Time { return fakeNow }
+
+	if !guard.Allow("head1") {
+		t.Fatal("first attempt at a new head should be allowed")
+	}
+	guard.RecordFailure("head1")
+	guard.RecordFailure("head1")
+	guard.RecordFailure("head1")
+
+	// Even after the backoff delay elapses, MaxAttempts consecutive failures
+	// at the same head must permanently block further attempts.
+	fakeNow = fakeNow.Add(time.Hour)
+	if guard.Allow("head1") {
+		t.Fatal("after MaxAttempts consecutive failures, Allow should stay false regardless of elapsed time")
+	}
+
+	// A new HEAD (e.g. a fix landed) must reset the guard immediately.
+	if !guard.Allow("head2") {
+		t.Fatal("a new HEAD should reset the guard and be allowed immediately")
+	}
+}
+
+func TestRebuildBackoff_DelayGrowsBetweenAttempts(t *testing.T) {
+	fakeNow := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	guard := &RebuildBackoff{
+		MaxAttempts: 5,
+		BaseDelay:   time.Minute,
+		MaxDelay:    time.Hour,
+	}
+	guard.nowFn = func() time.Time { return fakeNow }
+
+	if !guard.Allow("head1") {
+		t.Fatal("first attempt should be allowed")
+	}
+	guard.RecordFailure("head1") // attempt 1: backoff ~= BaseDelay (1m)
+
+	fakeNow = fakeNow.Add(30 * time.Second)
+	if guard.Allow("head1") {
+		t.Fatal("attempt should be blocked during the first backoff window")
+	}
+	fakeNow = fakeNow.Add(time.Minute) // 90s past attempt 1, > 1m base delay
+	if !guard.Allow("head1") {
+		t.Fatal("attempt should be allowed once the first backoff window elapses")
+	}
+
+	guard.RecordFailure("head1") // attempt 2: backoff should now be longer (exponential)
+	fakeNow = fakeNow.Add(time.Minute + time.Second)
+	if guard.Allow("head1") {
+		t.Fatal("second-attempt backoff should be longer than the first — retry storm not throttled")
+	}
+}
+
+func TestRebuildBackoff_SuccessResetsAttempts(t *testing.T) {
+	fakeNow := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	guard := &RebuildBackoff{MaxAttempts: 2, BaseDelay: time.Minute, MaxDelay: time.Hour}
+	guard.nowFn = func() time.Time { return fakeNow }
+
+	guard.RecordFailure("head1")
+	guard.RecordSuccess("head1")
+
+	// A recorded success (a later, working rebuild at the same head) must
+	// clear the failure count — the next drift at this head starts fresh.
+	if !guard.Allow("head1") {
+		t.Fatal("Allow should be true immediately after a recorded success")
+	}
+}
+
+// DriftWatchOnce must consult the backoff guard before rebuilding, and must
+// never invoke the rebuild function while attempts are throttled — a broken
+// HEAD must not retry-storm `go build` every watcher tick.
+func TestDriftWatchOnce_RespectsBackoffGuard(t *testing.T) {
+	prevHead, prevRebuild := driftHeadFn, driftRebuildFn
+	t.Cleanup(func() { driftHeadFn, driftRebuildFn = prevHead, prevRebuild })
+
+	driftHeadFn = func(string) (string, error) { return "def", nil }
+	targets := []RebuildTarget{{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/bin/bt-agent"}}
+
+	guard := &RebuildBackoff{MaxAttempts: 1, BaseDelay: time.Hour, MaxDelay: time.Hour}
+	fakeNow := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	guard.nowFn = func() time.Time { return fakeNow }
+
+	callCount := 0
+	driftRebuildFn = func(string, []RebuildTarget) error {
+		callCount++
+		return errors.New("broken HEAD: compile error")
+	}
+
+	cfg := DriftWatchConfig{RepoDir: "/r", RunningRevision: "abc", AutoRebuild: true, Targets: targets, Backoff: guard}
+
+	// First tick: attempt allowed, fails, guard records the failure.
+	if _, err := DriftWatchOnce(cfg); err == nil {
+		t.Fatal("expected the rebuild failure to surface as an error")
+	}
+	if callCount != 1 {
+		t.Fatalf("expected exactly 1 rebuild attempt on the first tick, got %d", callCount)
+	}
+
+	// Second tick, same stale HEAD: MaxAttempts=1 already spent — must be
+	// blocked without invoking the rebuild function again.
+	if _, err := DriftWatchOnce(cfg); err != nil {
+		t.Fatalf("a backoff-blocked tick should not surface a rebuild error, got %v", err)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected the second tick to be blocked by backoff (no new rebuild attempt), call count = %d", callCount)
+	}
 }

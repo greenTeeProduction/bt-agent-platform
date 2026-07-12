@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 // Out-of-place binary rebuild (program 94b0b31 milestone 2). To adopt a
@@ -31,6 +33,21 @@ func DefaultRebuildTargets(repoDir string) []RebuildTarget {
 		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join(repoDir, "bt-agent-cli")},
 		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener")},
 	}
+}
+
+// DashboardRebuildTargets returns the rebuild targets for bt-dashboard's own
+// deploy-drift watcher: the daemon-owned defaults plus bt-dashboard itself,
+// which DefaultRebuildTargets deliberately excludes. Without this, an
+// AutoRebuild-enabled bt-dashboard detects its own drift but the rebuild it
+// triggers never swaps its own binary. OutPath is the repo root (matching
+// bt-agent/bt-agent-cli above, not bin/) since that is where the production
+// systemd unit's ExecStart actually runs bt-dashboard from.
+func DashboardRebuildTargets(repoDir string) []RebuildTarget {
+	return append(DefaultRebuildTargets(repoDir), RebuildTarget{
+		Name:    "bt-dashboard",
+		Pkg:     "./cmd/bt-dashboard",
+		OutPath: filepath.Join(repoDir, "bt-dashboard"),
+	})
 }
 
 var (
@@ -118,4 +135,85 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0o755)
+}
+
+// RebuildBackoff caps consecutive rebuild attempts against the same stale
+// repo HEAD, with exponential backoff between attempts, and permanently
+// blocks further attempts once MaxAttempts is reached — the guardrail
+// (program 94b0b31 milestone 5) that stops a broken commit from
+// retry-storming a `go build` every watcher interval. A HEAD change resets
+// the guard immediately, since a new commit deserves a fresh chance.
+type RebuildBackoff struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+
+	nowFn func() time.Time // test seam; defaults to time.Now
+
+	mu       sync.Mutex
+	head     string
+	attempts int
+	lastFail time.Time
+}
+
+func (g *RebuildBackoff) now() time.Time {
+	if g.nowFn != nil {
+		return g.nowFn()
+	}
+	return time.Now()
+}
+
+// Allow reports whether a rebuild attempt against head may proceed. A head
+// change resets the guard immediately; otherwise it enforces MaxAttempts and
+// an exponential backoff delay since the last recorded failure.
+func (g *RebuildBackoff) Allow(head string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if head != g.head {
+		g.head = head
+		g.attempts = 0
+		return true
+	}
+	if g.attempts == 0 {
+		return true
+	}
+	if g.attempts >= g.MaxAttempts {
+		return false
+	}
+	return g.now().Sub(g.lastFail) >= g.backoffDelayLocked()
+}
+
+// backoffDelayLocked returns the exponential backoff delay for the current
+// attempt count, capped at MaxDelay. Caller must hold g.mu.
+func (g *RebuildBackoff) backoffDelayLocked() time.Duration {
+	delay := g.BaseDelay << (g.attempts - 1)
+	if g.MaxDelay > 0 && delay > g.MaxDelay {
+		return g.MaxDelay
+	}
+	return delay
+}
+
+// RecordFailure records a failed rebuild attempt against head, advancing the
+// backoff clock. A head change resets the attempt count first.
+func (g *RebuildBackoff) RecordFailure(head string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if head != g.head {
+		g.head = head
+		g.attempts = 0
+	}
+	g.attempts++
+	g.lastFail = g.now()
+}
+
+// RecordSuccess clears the failure count for head — a later, working rebuild
+// means the next drift at this head starts fresh.
+func (g *RebuildBackoff) RecordSuccess(head string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.head = head
+	g.attempts = 0
 }

@@ -694,3 +694,63 @@ func TestScheduler_CrashRecovery_NoJobStore(t *testing.T) {
 		t.Error("in-memory jobs should not be in-flight")
 	}
 }
+
+// AnyInFlight lets a caller (the deploy-drift rebuild guardrail, program
+// 94b0b31 milestone 5) check whether it is safe to swap/restart the daemon's
+// own binary — swapping out from under a job that is mid-execution is the
+// hazard this exists to prevent. It must reflect the live in-flight state of
+// any scheduled job, not just the one most recently touched.
+func TestScheduler_AnyInFlight(t *testing.T) {
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	_, _ = reg.Create(Definition{Name: "inflight-agent-a", Tree: "domain:default", Version: "1.0.0"})
+	_, _ = reg.Create(Definition{Name: "inflight-agent-b", Tree: "domain:default", Version: "1.0.0"})
+
+	histDir := filepath.Join(dir, "history")
+	hist, _ := NewHistory(histDir)
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry: reg,
+		History:  hist,
+	})
+
+	jobA, err := sched.Schedule("inflight-agent-a", "every 1h", "30m", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobB, err := sched.Schedule("inflight-agent-b", "every 1h", "30m", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if sched.AnyInFlight() {
+		t.Fatal("AnyInFlight = true with no jobs running, want false")
+	}
+
+	// Only the second job goes in-flight — AnyInFlight must not depend on
+	// which job it is.
+	sched.mu.Lock()
+	jobB.InFlight = true
+	sched.mu.Unlock()
+
+	if !sched.AnyInFlight() {
+		t.Fatal("AnyInFlight = false with jobB in-flight, want true")
+	}
+
+	sched.mu.Lock()
+	jobB.InFlight = false
+	jobA.InFlight = true
+	sched.mu.Unlock()
+
+	if !sched.AnyInFlight() {
+		t.Fatal("AnyInFlight = false with jobA in-flight, want true")
+	}
+
+	sched.mu.Lock()
+	jobA.InFlight = false
+	sched.mu.Unlock()
+
+	if sched.AnyInFlight() {
+		t.Fatal("AnyInFlight = true after all jobs completed, want false")
+	}
+}

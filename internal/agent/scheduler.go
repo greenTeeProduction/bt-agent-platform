@@ -349,6 +349,22 @@ func (s *Scheduler) GetCBStore() *AgentCircuitBreakerStore {
 	return s.cbStore
 }
 
+// AnyInFlight reports whether any scheduled job is currently executing. The
+// deploy-drift rebuild guardrail (program 94b0b31 milestone 5) consults this
+// before swapping the daemon's own binary, since doing so out from under a
+// mid-run job is the hazard the out-of-place rebuild exists to avoid.
+func (s *Scheduler) AnyInFlight() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, j := range s.jobs {
+		if j.InFlight {
+			return true
+		}
+	}
+	return false
+}
+
 // RemoveJob removes a scheduled job.
 func (s *Scheduler) RemoveJob(jobID string) error {
 	s.mu.Lock()

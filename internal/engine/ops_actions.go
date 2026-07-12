@@ -15,6 +15,12 @@ import (
 // TaskDLQ is set from cmd/bt-agent for PushToDLQ actions.
 var TaskDLQ *reliability.DeadLetterQueue
 
+// BuildRevision is the running binary's VCS revision (dashboard.
+// InstallBuildIdentity), set from cmd/bt-agent so pushToDLQAction can stamp
+// it onto every DeadLetterEntry it creates — deploy-drift diagnosis (program
+// 94b0b31) needs it on every DLQ push site, not just the scheduler's.
+var BuildRevision string
+
 func init() {
 	registerOpsActions()
 }
@@ -116,11 +122,12 @@ func pushToDLQAction(ctx *btcore.BTContext[Blackboard]) int {
 		errMsg = "persistent failures — escalated to DLQ"
 	}
 	TaskDLQ.Push(reliability.DeadLetterEntry{
-		Task:     bb.Task,
-		Agent:    agent,
-		Error:    errMsg,
-		Attempts: bb.FailureCount,
-		Category: "hitl_exhausted",
+		Task:          bb.Task,
+		Agent:         agent,
+		Error:         errMsg,
+		Attempts:      bb.FailureCount,
+		Category:      "hitl_exhausted",
+		BuildRevision: BuildRevision,
 	})
 	bb.Result += "\n\nTask escalated to dead letter queue."
 	return 1
