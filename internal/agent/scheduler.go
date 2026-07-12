@@ -17,15 +17,16 @@ import (
 // Scheduler runs agents on cron-like schedules. Supports one-shot, recurring,
 // and long-running agents with checkpoint/resume capability.
 type Scheduler struct {
-	mu           sync.RWMutex
-	reg          *Registry
-	history      *History
-	jobs         map[string]*ScheduledJob
-	stopCh       chan struct{}
-	running      bool
-	tickInterval time.Duration
-	jobStore     JobStore                  // optional: persists job state across restarts
-	cbStore      *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
+	mu            sync.RWMutex
+	reg           *Registry
+	history       *History
+	jobs          map[string]*ScheduledJob
+	stopCh        chan struct{}
+	running       bool
+	tickInterval  time.Duration
+	jobStore      JobStore                  // optional: persists job state across restarts
+	cbStore       *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
+	buildRevision string                    // running binary's VCS revision (deploy-drift diagnosis)
 }
 
 // ScheduledJob represents a scheduled agent run.
@@ -87,6 +88,13 @@ type SchedulerConfig struct {
 	// FeedbackFlushInterval is the minimum interval between throttled feedback
 	// writes. Defaults to 30s when zero (and FeedbackPath is set).
 	FeedbackFlushInterval time.Duration
+
+	// BuildRevision is the running binary's VCS revision (dashboard.
+	// ReadBuildIdentity().Revision). It is stamped onto every AgentBus/webhook
+	// event and used by the cycle-complete deploy-drift check (program 94b0b31):
+	// when set, runJob compares it against the repo HEAD and WARNs if the
+	// running binary has fallen behind. Empty disables the drift check.
+	BuildRevision string
 }
 
 // NewScheduler creates a new agent scheduler.
@@ -96,13 +104,14 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		cfg.TickInterval = 1 * time.Minute
 	}
 	s := &Scheduler{
-		reg:          cfg.Registry,
-		history:      cfg.History,
-		jobs:         make(map[string]*ScheduledJob),
-		stopCh:       make(chan struct{}),
-		tickInterval: cfg.TickInterval,
-		jobStore:     cfg.JobStore,
-		cbStore:      cfg.CBStore,
+		reg:           cfg.Registry,
+		history:       cfg.History,
+		jobs:          make(map[string]*ScheduledJob),
+		stopCh:        make(chan struct{}),
+		tickInterval:  cfg.TickInterval,
+		jobStore:      cfg.JobStore,
+		cbStore:       cfg.CBStore,
+		buildRevision: cfg.BuildRevision,
 	}
 	// Restore persisted jobs, then reconcile them against the registry YAML.
 	// The registry definition is the source of truth: stale jobs for deleted
@@ -667,6 +676,20 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 	slog.Info("scheduler: cycle complete", logArgs...)
 
+	// Deploy-drift diagnosis (program 94b0b31): on every cycle — not just the
+	// slower background watcher (StartDriftWatcher) — compare the running
+	// binary's revision against repo HEAD so a stale daemon is visible without
+	// cross-referencing dlq entries. Skipped when BuildRevision is unset
+	// (detection is opt-in per SchedulerConfig.BuildRevision's doc).
+	if s.buildRevision != "" {
+		if repoDir, err := os.Getwd(); err == nil {
+			if head, stale, err := DriftStatus(repoDir, s.buildRevision); err == nil && stale {
+				slog.Warn("scheduler: deploy drift detected",
+					"head_revision", head, "running_revision", s.buildRevision)
+			}
+		}
+	}
+
 	// Publish event to AgentBus (→ Hermes webhook bridge)
 	if GlobalAgentBus != nil {
 		tree := ""
@@ -709,6 +732,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 				"duration":       duration.Truncate(time.Second).String(),
 				"failure_reason": failureReason,
 				"nodes":          nodesStr,
+				"build_revision": s.buildRevision,
 				// Rendered verbatim by the bt-task-complete Telegram template
 				// as {data.summary} — the operator-facing "what did this run
 				// actually do" digest (headline, run/commit facts, step trail).

@@ -52,7 +52,7 @@ func experienceBankDir() string { return filepath.Join(agent.HomeDir(), "experie
 // rehydrates knowledge-graph feedback (Fitness/RunCount/tool-edges) across
 // restarts — is asserted end-to-end by wiring_test.go instead of only living
 // inside main(), where it can silently regress.
-func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.History) agent.SchedulerConfig {
+func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.History, buildRevision string) agent.SchedulerConfig {
 	return agent.SchedulerConfig{
 		Registry: reg,
 		History:  hist,
@@ -66,6 +66,10 @@ func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.H
 		// learn→discover→evolve loop across restarts. FeedbackFlushInterval is
 		// left zero — NewScheduler defaults it to 30s when FeedbackPath is set.
 		FeedbackPath: feedbackSnapshotPath(),
+		// Deploy-drift diagnosis (program 94b0b31): lets runJob WARN when repo
+		// HEAD has moved past this running binary at cycle-complete, and stamps
+		// build_revision onto every AgentBus/webhook event.
+		BuildRevision: buildRevision,
 	}
 }
 
@@ -343,7 +347,7 @@ func main() {
 	_ = os.MkdirAll(jobStoreDir, 0755)
 
 	// Persistent agent scheduler (with FileJobStore for durability across restarts)
-	globalSched := agent.NewScheduler(buildSchedulerConfig(cfg, agentReg, agentHist))
+	globalSched := agent.NewScheduler(buildSchedulerConfig(cfg, agentReg, agentHist, buildID.Revision))
 
 	agentRunner := &agent.RunDeps{
 		Registry:    agentReg,

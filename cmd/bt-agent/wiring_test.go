@@ -159,7 +159,7 @@ func TestDaemonSchedulerConfigWiresFeedbackPath(t *testing.T) {
 		t.Fatalf("NewHistory: %v", err)
 	}
 
-	scfg := buildSchedulerConfig(cfg, reg, hist)
+	scfg := buildSchedulerConfig(cfg, reg, hist, "test-revision")
 
 	if want := agent.FeedbackFile(); scfg.FeedbackPath != want {
 		t.Fatalf("SchedulerConfig.FeedbackPath = %q, want %q (agent.FeedbackFile()); feedback persistence disabled", scfg.FeedbackPath, want)
@@ -178,6 +178,9 @@ func TestDaemonSchedulerConfigWiresFeedbackPath(t *testing.T) {
 	}
 	if scfg.CBStore == nil {
 		t.Fatal("SchedulerConfig.CBStore must be set (per-agent circuit breakers)")
+	}
+	if scfg.BuildRevision != "test-revision" {
+		t.Fatalf("SchedulerConfig.BuildRevision = %q, want %q (deploy-drift detection disabled)", scfg.BuildRevision, "test-revision")
 	}
 }
 
