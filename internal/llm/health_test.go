@@ -1,8 +1,12 @@
 package llm
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -232,3 +236,60 @@ func TestHealthMonitorStartDisabled(t *testing.T) {
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+// healthMonitorPanicSubprocessEnv triggers the subprocess body of
+// TestHealthMonitorStart_PanicRecovered. An unrecovered panic inside a
+// `go func(){}()` goroutine crashes the entire process — it cannot be caught
+// by the parent test's own recover() — so this test re-execs itself and
+// asserts the child survives instead of crashing. This mirrors the pattern
+// in internal/engine/reactive_parallel_test.go.
+const healthMonitorPanicSubprocessEnv = "BT_LLM_HEALTH_MONITOR_PANIC_SUBPROCESS"
+
+// TestHealthMonitorStart_PanicRecovered is the regression test for
+// HealthMonitor.Start()'s two background goroutines lacking panic recovery:
+// a panic inside a probe (e.g. from a malformed backend response) must be
+// logged and recovered instead of crashing the daemon that started the
+// monitor, and periodic probing must keep running afterward.
+func TestHealthMonitorStart_PanicRecovered(t *testing.T) {
+	if os.Getenv(healthMonitorPanicSubprocessEnv) == "1" {
+		var requests int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt64(&requests, 1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		// Construct a HealthMonitor with a nil state so every call to
+		// Probe() panics with a nil pointer dereference inside
+		// recordSuccess/recordFailure, simulating a panicking probe
+		// without needing an injectable seam.
+		m := &HealthMonitor{
+			serverURL: server.URL,
+			interval:  20 * time.Millisecond,
+			stopCh:    make(chan struct{}),
+		}
+		m.Start()
+
+		// Give the immediate probe and several ticker probes a chance to
+		// fire and panic. If the panics are recovered, the server keeps
+		// receiving requests; if not, the process crashes and none of
+		// this ever runs.
+		time.Sleep(150 * time.Millisecond)
+
+		if got := atomic.LoadInt64(&requests); got < 3 {
+			fmt.Fprintf(os.Stderr, "expected at least 3 probes despite panics (monitor "+
+				"should keep running), got %d\n", got)
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestHealthMonitorStart_PanicRecovered")
+	cmd.Env = append(os.Environ(), healthMonitorPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("HealthMonitor.Start: a panicking probe crashed the process (or the "+
+			"monitor stopped probing) instead of being recovered via reliability.SafeGo "+
+			"and continuing to run; exit error=%v output=%s", err, out)
+	}
+}

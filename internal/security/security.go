@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ─── Rate Limiter ───────────────────────────────────────────────────────────
@@ -330,10 +332,24 @@ func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Han
 
 			tw := &timeoutResponseWriter{ResponseWriter: w}
 			done := make(chan struct{})
-			go func() {
+			reliability.SafeGo("request-timeout-middleware", func() {
 				next.ServeHTTP(tw, r.WithContext(ctx))
 				close(done)
-			}()
+			}, func(panicVal any, panicCtx string) {
+				reliability.DefaultPanicHandler(panicVal, panicCtx)
+				tw.mu.Lock()
+				alreadyWrote := tw.wrote
+				tw.mu.Unlock()
+				if !alreadyWrote {
+					tw.Header().Set("Content-Type", "application/json")
+					tw.WriteHeader(http.StatusInternalServerError)
+					_ = json.NewEncoder(tw).Encode(map[string]string{
+						"error":   "internal_error",
+						"message": "Request handler encountered an unexpected error.",
+					})
+				}
+				close(done)
+			})
 
 			select {
 			case <-done:

@@ -110,7 +110,8 @@ func ProbeMultiNodeDashboard(ctx context.Context, cfg MultiNodeProbeConfig) (Mul
 	var wg sync.WaitGroup
 	wg.Add(len(report.Nodes))
 	for i := range report.Nodes {
-		go func(s *NodeProbeStatus) {
+		s := &report.Nodes[i]
+		SafeGo(fmt.Sprintf("scalability-probe-%s", s.Name), func() {
 			defer wg.Done()
 			probeNode(ctx, cfg, s)
 			mu.Lock()
@@ -121,7 +122,7 @@ func ProbeMultiNodeDashboard(ctx context.Context, cfg MultiNodeProbeConfig) (Mul
 				report.Passed = false
 			}
 			mu.Unlock()
-		}(&report.Nodes[i])
+		}, nil)
 	}
 	wg.Wait()
 	if report.HealthyNodes < cfg.RequiredHealthy {

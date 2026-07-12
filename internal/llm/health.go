@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // HealthStatus represents the current health state of the LLM provider.
@@ -193,22 +195,26 @@ func (m *HealthMonitor) Start() {
 	}
 
 	// Run an immediate probe on start.
-	go func() {
+	reliability.SafeGo("llm-health-monitor-initial-probe", func() {
 		m.Probe()
-	}()
+	}, nil)
 
-	go func() {
+	reliability.SafeGo("llm-health-monitor-ticker", func() {
 		ticker := time.NewTicker(m.interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				m.Probe()
+				// Recover per-tick so a single panicking probe doesn't
+				// unwind the whole ticker loop and stop future probes.
+				_ = reliability.Recover("llm-health-monitor-probe", func() {
+					m.Probe()
+				})
 			case <-m.stopCh:
 				return
 			}
 		}
-	}()
+	}, nil)
 
 	slog.Info("llm health monitor started",
 		"server", m.serverURL,

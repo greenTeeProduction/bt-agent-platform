@@ -308,6 +308,23 @@ func TestRequestTimeoutMiddleware_Timeout(t *testing.T) {
 	}
 }
 
+func TestRequestTimeoutMiddleware_PanicRecovered(t *testing.T) {
+	handler := RequestTimeoutMiddleware(2 * time.Second)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		panic("boom: downstream handler panicked")
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	// A panicking handler must not crash the process; the middleware should
+	// recover it and produce a non-crashing error response.
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("panicking handler should yield 500, got %d", rec.Code)
+	}
+}
+
 // ─── IP Filter Tests ──────────────────────────────────────────────────────
 
 func TestIPFilter_Allowlist(t *testing.T) {

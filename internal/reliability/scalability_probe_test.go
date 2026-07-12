@@ -3,8 +3,11 @@ package reliability
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +93,80 @@ func TestProbeMultiNodeDashboard_Validation(t *testing.T) {
 	}
 	if report, err := ProbeMultiNodeDashboard(context.Background(), MultiNodeProbeConfig{Nodes: []string{"http://one", "http://two"}, Execute: true}); err == nil || report.Passed {
 		t.Fatalf("expected execute validation failure, got report=%+v err=%v", report, err)
+	}
+}
+
+// badNodeHost is a reserved-TLD host (RFC 2606) used only as a lookup key by
+// panicOnHostRoundTripper; requests to it never touch the network because the
+// RoundTripper panics before any dial is attempted.
+const badNodeHost = "bad-node.invalid"
+
+// panicOnHostRoundTripper simulates a misbehaving peer node: any request
+// whose Host matches badNodeHost panics instead of returning a response,
+// while every other request is forwarded to base untouched.
+type panicOnHostRoundTripper struct {
+	base http.RoundTripper
+}
+
+func (rt panicOnHostRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == badNodeHost {
+		panic("scalability_probe_test: simulated peer probe panic")
+	}
+	return rt.base.RoundTrip(req)
+}
+
+// scalabilityProbePanicSubprocessEnv triggers the subprocess body of
+// TestProbeMultiNodeDashboard_PanickingPeerNodeDoesNotAbortOthers. An
+// unrecovered panic inside the `go func(s *NodeProbeStatus) {...}` fan-out
+// goroutine in ProbeMultiNodeDashboard crashes the entire process — it
+// cannot be caught by the parent test's own recover() — so this test
+// re-execs itself and asserts the child survives instead of crashing. This
+// mirrors the pattern in internal/engine/reactive_parallel_test.go and
+// internal/llm/health_test.go.
+const scalabilityProbePanicSubprocessEnv = "BT_SCALABILITY_PROBE_PANIC_SUBPROCESS"
+
+// TestProbeMultiNodeDashboard_PanickingPeerNodeDoesNotAbortOthers is the
+// regression test for the per-node probe fan-out goroutine in
+// ProbeMultiNodeDashboard (scalability_probe.go:113) lacking panic recovery:
+// a panic probing one misbehaving peer node must not abort the WaitGroup or
+// crash the process, and the other node's probe must still complete.
+func TestProbeMultiNodeDashboard_PanickingPeerNodeDoesNotAbortOthers(t *testing.T) {
+	if os.Getenv(scalabilityProbePanicSubprocessEnv) == "1" {
+		good := newScalabilityProbeServer(t, "good-node", true, true)
+		defer good.Close()
+
+		client := &http.Client{Transport: panicOnHostRoundTripper{base: http.DefaultTransport}}
+
+		report, err := ProbeMultiNodeDashboard(context.Background(), MultiNodeProbeConfig{
+			Nodes:  []string{good.URL, "http://" + badNodeHost},
+			Client: client,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unexpected validation error: %v\n", err)
+			os.Exit(3)
+		}
+		if len(report.Nodes) != 2 {
+			fmt.Fprintf(os.Stderr, "expected both nodes present in report, got %+v\n", report.Nodes)
+			os.Exit(3)
+		}
+		if report.HealthyNodes != 1 || !report.Nodes[0].Healthy || !report.Nodes[0].ScalabilityOK {
+			fmt.Fprintf(os.Stderr, "expected good node still probed successfully despite peer panic, got %+v\n", report)
+			os.Exit(3)
+		}
+		if report.Nodes[1].Healthy {
+			fmt.Fprintf(os.Stderr, "expected panicking node to not be marked healthy, got %+v\n", report.Nodes[1])
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestProbeMultiNodeDashboard_PanickingPeerNodeDoesNotAbortOthers")
+	cmd.Env = append(os.Environ(), scalabilityProbePanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ProbeMultiNodeDashboard: a panic probing one peer node crashed the process "+
+			"(or aborted the WaitGroup for the other node) instead of being recovered via "+
+			"reliability.SafeGo so the healthy peer's probe still completes; exit error=%v output=%s", err, out)
 	}
 }
 
