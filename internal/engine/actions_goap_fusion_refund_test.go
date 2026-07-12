@@ -79,6 +79,81 @@ func TestIsGoapInfraCycleFailure(t *testing.T) {
 	}
 }
 
+// A commit-gate rejection caused by the cycle's OWN staged code failing a
+// deterministic quality check (gofmt / go vet / golangci-lint / go mod tidy /
+// short tests) reproduces every cycle until the code is fixed, so it MUST charge
+// the milestone-abandon budget — NOT refund — even though the failing step
+// reports the generic applied_uncommitted / pending_patch result. On 2026-07-12
+// program 94b0b31's milestone treadmilled ~15 cycles over 12h (each cycle's
+// generated code tripped a different linter — redefines-builtin `min`, unchecked
+// errcheck, gocritic appendCombine) and refunded every time, landing nothing.
+// An OOM kill ("signal: killed", which prints no ✗ marker) or an external
+// doc-drift wedge stays infra (refund) — those do not reproduce from the code.
+func TestIsGoapInfraCycleFailure_OwnCodeGateFailureCharges(t *testing.T) {
+	cases := []struct {
+		name    string
+		outcome string
+		result  string
+		want    bool
+	}{
+		{
+			"golangci-lint redefines-builtin charges even with pending_patch outcome",
+			"pending_patch",
+			"## GOAP Superpowers Pending Patch\n\napplied_uncommitted: git commit failed: exit status 1\ncmd/bt-agent/main.go:84:2: redefines-builtin-id: redefinition of the built-in function min (revive)\n✗ golangci-lint found issues — the CI Lint job runs the same linters repo-wide.",
+			false,
+		},
+		{
+			"golangci-lint errcheck charges",
+			"failure",
+			"applied_uncommitted: git commit failed: exit status 1\ninternal/agent/rebuild.go:50:24: Error return value is not checked (errcheck)\n✗ golangci-lint found issues — the CI Lint job runs the same linters repo-wide.",
+			false,
+		},
+		{
+			"go vet failure charges",
+			"pending_patch",
+			"applied_uncommitted: git commit failed: exit status 1\n✗ go vet found issues. Fix before committing.",
+			false,
+		},
+		{
+			"gofmt failure charges",
+			"pending_patch",
+			"applied_uncommitted: git commit failed: exit status 1\n✗ The following staged files need formatting:\ncmd/bt-agent/main.go",
+			false,
+		},
+		{
+			"short-test failure charges",
+			"pending_patch",
+			"applied_uncommitted: git commit failed: exit status 1\n✗ Tests failed. Fix before committing.",
+			false,
+		},
+		{
+			"go mod tidy drift charges",
+			"pending_patch",
+			"applied_uncommitted: git commit failed: exit status 1\n✗ go.mod/go.sum out of sync — go mod tidy changed them; stage and retry.",
+			false,
+		},
+		{
+			"OOM kill mid-gate stays infra (no ✗ own-code marker)",
+			"pending_patch",
+			"## GOAP Superpowers Pending Patch\n\napplied_uncommitted: git commit failed: signal: killed\n→ golangci-lint (staged packages)...\n0 issues.\n  ✓ passed\n→ go test -short...",
+			true,
+		},
+		{
+			"external doc-drift wedge stays infra (self-heals; preserves 2026-07-09 protection)",
+			"pending_patch",
+			"applied_uncommitted: git commit failed: exit status 1\n✗ Documentation drift detected. Update docs to match codebase.",
+			true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isGoapInfraCycleFailure(c.outcome, c.result); got != c.want {
+				t.Fatalf("isGoapInfraCycleFailure(%q, ...) = %v, want %v", c.outcome, got, c.want)
+			}
+		})
+	}
+}
+
 // The refund targets the milestone PrioritizeGoapGoals charged this cycle (the
 // "program_milestone_charged" stamp), and is idempotent per cycle so a doubled
 // failure path can never refund twice.

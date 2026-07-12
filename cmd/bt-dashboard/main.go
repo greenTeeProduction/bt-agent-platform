@@ -122,6 +122,19 @@ func main() {
 	dlq = reliability.NewDeadLetterQueue(dlqPath)
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 
+	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
+	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
+	// into out-of-place rebuild+swap.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir:         repoDir,
+			RunningRevision: dashboard.ReadBuildIdentity().Revision,
+			AutoRebuild:     agent.AutoRebuildEnabled(),
+			Targets:         agent.DefaultRebuildTargets(repoDir),
+			Binary:          "bt-dashboard",
+		}, agent.DefaultDriftCheckInterval)
+	}
+
 	// Scalability components: worker pool and concurrency limiter for agent tasks
 	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
 	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions

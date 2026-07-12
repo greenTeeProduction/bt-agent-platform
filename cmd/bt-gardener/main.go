@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -126,6 +127,19 @@ func main() {
 		"vcs_revision", buildID.Revision,
 		"vcs_time", buildID.CommitTime,
 		"vcs_dirty", buildID.Dirty)
+
+	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
+	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
+	// into out-of-place rebuild+swap.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir:         repoDir,
+			RunningRevision: buildID.Revision,
+			AutoRebuild:     agent.AutoRebuildEnabled(),
+			Targets:         agent.DefaultRebuildTargets(repoDir),
+			Binary:          "bt-gardener",
+		}, agent.DefaultDriftCheckInterval)
+	}
 
 	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
 	tracingShutdown := tracing.InitFromEnv("bt-gardener")

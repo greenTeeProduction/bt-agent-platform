@@ -214,6 +214,12 @@ type DeadLetterEntry struct {
 	FailedAt time.Time `json:"failed_at"`
 	Circuit  string    `json:"circuit,omitempty"`
 	Category string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
+	// BuildRevision records the VCS revision of the process that produced this
+	// dead letter (dashboard.ReadBuildIdentity().Revision, stamped at the push
+	// site). Deploy-drift diagnosis (program 94b0b31) uses it to distinguish a
+	// failure on a stale binary from one on current code. Optional: unstamped
+	// builds and old entries omit it.
+	BuildRevision string `json:"build_revision,omitempty"`
 	// RequeuedAt is stamped by Requeue when a process without a tree runner (the
 	// dashboard) flags this entry for retry. A non-zero value signals bt-agent's
 	// executor to pick the task up on its next scan instead of leaving it dead.

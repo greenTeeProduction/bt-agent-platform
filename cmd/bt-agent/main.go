@@ -416,19 +416,36 @@ func main() {
 			dlqSpan.SetAttribute("agent", ctx.AgentName)
 			dlqSpan.RecordError(err)
 			dlq.Push(reliability.DeadLetterEntry{
-				ID:       fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
-				Task:     task,
-				Agent:    ctx.AgentName,
-				Error:    err.Error(),
-				Attempts: 3,
-				FailedAt: time.Now(),
-				Circuit:  "scheduler",
+				ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
+				Task:          task,
+				Agent:         ctx.AgentName,
+				Error:         err.Error(),
+				Attempts:      3,
+				FailedAt:      time.Now(),
+				Circuit:       "scheduler",
+				BuildRevision: buildID.Revision,
 			})
 			dlqSpan.End()
 		}
 
 		return outcome, output, res, err
 	})
+
+	// Deploy-drift watcher (program 94b0b31) — daemon only; MCP-spawned sibling
+	// instances (cycle sessions) must not run it. Detection-only by default:
+	// logs a WARN when the running binary falls behind repo HEAD.
+	// BT_AUTO_REBUILD_ON_DRIFT=1 opts into out-of-place rebuild+swap.
+	if noMCPMode() {
+		if repoDir, wdErr := os.Getwd(); wdErr == nil {
+			agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+				RepoDir:         repoDir,
+				RunningRevision: buildID.Revision,
+				AutoRebuild:     agent.AutoRebuildEnabled(),
+				Targets:         agent.DefaultRebuildTargets(repoDir),
+				Binary:          "bt-agent",
+			}, agent.DefaultDriftCheckInterval)
+		}
+	}
 
 	// Drop-safe DLQ replay consumer (c8094002 ms2) — daemon only: MCP-spawned
 	// sibling instances share the same DLQ file and must not double-replay.

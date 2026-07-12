@@ -37,9 +37,38 @@ var goapInfraResultMarkers = []string{
 	"/usage-credits",
 }
 
+// goapImplGateFailureMarkers identify a commit-gate rejection caused by the
+// cycle's OWN staged code failing a deterministic quality check — the exact ✗
+// lines the pre-commit hook (scripts/git-hooks/pre-commit) prints for gofmt, go
+// vet, golangci-lint, go mod tidy, and the short test suite. Unlike an external
+// wedge (stale materialized docs) or a resource kill (OOM "signal: killed",
+// which prints no ✗ marker), these reproduce every cycle until the code is
+// fixed, so they MUST charge the milestone-abandon budget even though the step
+// reports the generic applied_uncommitted / pending_patch result. Without this
+// precedence, program 94b0b31's milestone treadmilled ~15 cycles over 12h on
+// 2026-07-12 (each cycle's generated code tripped a different linter —
+// redefines-builtin `min`, unchecked errcheck, gocritic appendCombine) and
+// refunded every time, landing nothing while the fleet's whole goap path stalled.
+var goapImplGateFailureMarkers = []string{
+	"golangci-lint found issues", // "✗ golangci-lint found issues …" (covers revive/errcheck/gocritic/etc.)
+	"go vet found issues",        // "✗ go vet found issues. …"
+	"need formatting",            // "✗ The following staged files need formatting:"
+	"Tests failed. Fix before",   // "✗ Tests failed. Fix before committing."
+	"go.mod/go.sum out of sync",  // "✗ go.mod/go.sum out of sync …"
+}
+
 // isGoapInfraCycleFailure reports whether a failed cycle died for
 // infrastructure reasons rather than an implementation failure.
 func isGoapInfraCycleFailure(outcome, result string) bool {
+	// An own-code gate failure (lint/vet/fmt/test/mod-tidy) is a genuine
+	// implementation failure that reproduces every cycle — checked FIRST so it
+	// wins over the generic applied_uncommitted / pending_patch markers (both of
+	// which also appear in the same commit-gate output) and charges the budget.
+	for _, marker := range goapImplGateFailureMarkers {
+		if strings.Contains(result, marker) {
+			return false
+		}
+	}
 	switch outcome {
 	case "goap_fusion_rate_limited", "pending_patch":
 		return true
