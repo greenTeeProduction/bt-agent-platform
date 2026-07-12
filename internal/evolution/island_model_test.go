@@ -206,6 +206,23 @@ func TestIslandStatsJSONIncludesMigrations(t *testing.T) {
 	}
 }
 
+// TestIslandStatsJSONIncludesEvictionCounters pins milestone 4/4 of the
+// durable island-archive-bound program: IslandStats must carry cumulative
+// EvictedIndividuals/EvictedIslands counters, mirroring the existing
+// Migrations counter, so eviction activity triggered by Cap/IslandCap is
+// observable the same way migration activity already is.
+func TestIslandStatsJSONIncludesEvictionCounters(t *testing.T) {
+	data, err := json.Marshal(IslandStats{})
+	if err != nil {
+		t.Fatalf("marshal IslandStats: %v", err)
+	}
+	for _, key := range []string{`"evicted_individuals"`, `"evicted_islands"`} {
+		if !strings.Contains(string(data), key) {
+			t.Fatalf("IslandStats JSON %s missing %s key", data, key)
+		}
+	}
+}
+
 // TestIslandModel_SaveLoadMergesPerDomainSubpopulations pins the durable
 // island archive (milestone 3/5 of the durable quality-diversity program):
 // Save must persist the model to disk (creating missing parent directories),
@@ -520,6 +537,135 @@ func TestIslandModel_LoadIslandCapZeroPreservesUnboundedBehavior(t *testing.T) {
 	}
 	if got := len(loaded.Islands); got != 3 {
 		t.Fatalf("IslandCap=0 merged model has %d islands, want unbounded 3", got)
+	}
+}
+
+// TestIslandModel_LoadCapEvictionIncrementsEvictedIndividuals pins milestone
+// 4/4 of the durable island-archive-bound program: every individual
+// enforceIslandCap evicts — whether from a merged overlapping island or a
+// disk-only island adopted wholesale — must accumulate onto
+// IslandModel.EvictedIndividuals, mirroring how TotalMigrations accumulates
+// across calls.
+func TestIslandModel_LoadCapEvictionIncrementsEvictedIndividuals(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "eviction_counter_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	goPop := islandTestPopulation("go-a", "go-b", "go-c")
+	goPop.Individuals[0].Fitness = 10
+	goPop.Individuals[1].Fitness = 90
+	goPop.Individuals[2].Fitness = 50
+	saved.AddIsland("go", goPop)
+	opsPop := islandTestPopulation("ops-a", "ops-b", "ops-c", "ops-d")
+	opsPop.Individuals[0].Fitness = 1
+	opsPop.Individuals[1].Fitness = 100
+	opsPop.Individuals[2].Fitness = 3
+	opsPop.Individuals[3].Fitness = 2
+	saved.AddIsland("ops", opsPop)
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.Cap = 2
+	if loaded.EvictedIndividuals != 0 {
+		t.Fatalf("EvictedIndividuals zero value = %d, want 0", loaded.EvictedIndividuals)
+	}
+	memGo := islandTestPopulation("go-mem")
+	memGo.Individuals[0].Fitness = 5
+	loaded.AddIsland("go", memGo)
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// "go" merges 3 disk + 1 memory = 4 individuals capped to 2 (2 evicted);
+	// "ops" is disk-only, adopted wholesale, capped from 4 to 2 (2 evicted).
+	const wantEvicted = 4
+	if loaded.EvictedIndividuals != wantEvicted {
+		t.Fatalf("EvictedIndividuals = %d after Load, want %d (2 from merged 'go' + 2 from wholesale 'ops')", loaded.EvictedIndividuals, wantEvicted)
+	}
+	if got := loaded.Stats().EvictedIndividuals; got != wantEvicted {
+		t.Fatalf("Stats().EvictedIndividuals = %d, want %d matching IslandModel.EvictedIndividuals", got, wantEvicted)
+	}
+
+	// A second Load against an unrelated, already-capped archive must
+	// accumulate rather than reset the counter.
+	saved2 := NewIslandModel(3, 0.25)
+	finPop := islandTestPopulation("fin-a", "fin-b", "fin-c")
+	finPop.Individuals[0].Fitness = 1
+	finPop.Individuals[1].Fitness = 2
+	finPop.Individuals[2].Fitness = 3
+	saved2.AddIsland("fin", finPop)
+	path2 := filepath.Join(t.TempDir(), "eviction_counter_archive2.json")
+	if err := saved2.Save(path2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := loaded.Load(path2); err != nil {
+		t.Fatalf("second Load: %v", err)
+	}
+	if want := wantEvicted + 1; loaded.EvictedIndividuals != want {
+		t.Fatalf("EvictedIndividuals = %d after second Load, want cumulative %d (previous %d + 1 more evicted from 'fin')", loaded.EvictedIndividuals, want, wantEvicted)
+	}
+}
+
+// TestIslandModel_LoadIslandCapEvictionIncrementsEvictedIslands pins
+// milestone 4/4 of the durable island-archive-bound program: every whole
+// island evictAdoptedIslandsBeyondCap evicts must accumulate onto
+// IslandModel.EvictedIslands, mirroring how TotalMigrations accumulates
+// across calls.
+func TestIslandModel_LoadIslandCapEvictionIncrementsEvictedIslands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "island_eviction_counter_archive.json")
+
+	saved := NewIslandModel(3, 0.25)
+	goPop := islandTestPopulation("go-a")
+	goPop.BestFitness = 20
+	opsPop := islandTestPopulation("ops-a")
+	opsPop.BestFitness = 90
+	finPop := islandTestPopulation("fin-a")
+	finPop.BestFitness = 10
+	saved.AddIsland("go", goPop)
+	saved.AddIsland("ops", opsPop)
+	saved.AddIsland("fin", finPop)
+	if err := saved.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewIslandModel(3, 0.25)
+	loaded.IslandCap = 2
+	if loaded.EvictedIslands != 0 {
+		t.Fatalf("EvictedIslands zero value = %d, want 0", loaded.EvictedIslands)
+	}
+	seededGo := islandTestPopulation("go-mem")
+	seededGo.BestFitness = 1
+	loaded.AddIsland("go", seededGo)
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// 3 domains adopted candidates ("ops","fin" adopted, "go" seeded) capped
+	// to 2 distinct islands evicts exactly 1 (lowest-BestFitness "fin").
+	if loaded.EvictedIslands != 1 {
+		t.Fatalf("EvictedIslands = %d after Load, want 1 (evicted lowest-BestFitness 'fin')", loaded.EvictedIslands)
+	}
+	if got := loaded.Stats().EvictedIslands; got != 1 {
+		t.Fatalf("Stats().EvictedIslands = %d, want 1 matching IslandModel.EvictedIslands", got)
+	}
+}
+
+// TestIslandModel_SummaryReportsEvictionCounts pins that Summary() surfaces
+// the cumulative eviction counters alongside the existing migrations count,
+// so eviction activity is visible in the human-readable summary too.
+func TestIslandModel_SummaryReportsEvictionCounts(t *testing.T) {
+	im := NewIslandModel(3, 0.25)
+	im.AddIsland("go", islandTestPopulation("go-a"))
+	im.EvictedIndividuals = 5
+	im.EvictedIslands = 2
+
+	summary := im.Summary()
+	if !strings.Contains(summary, "evicted") {
+		t.Fatalf("summary %q missing eviction counts", summary)
+	}
+	if !strings.Contains(summary, "5") || !strings.Contains(summary, "2") {
+		t.Fatalf("summary %q missing eviction counter values (5 individuals, 2 islands)", summary)
 	}
 }
 

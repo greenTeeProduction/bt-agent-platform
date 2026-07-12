@@ -22,6 +22,13 @@ type IslandModel struct {
 	TotalMigrations   int                    `json:"total_migrations"` // cumulative individuals moved by Migrate
 	Cap               int                    `json:"cap"`              // max individuals per island after Load; 0 = unbounded
 	IslandCap         int                    `json:"island_cap"`       // max distinct island keys retained after Load; 0 = unbounded
+	// EvictedIndividuals is the cumulative count of individuals dropped by
+	// enforceIslandCap across every Load call, mirroring how TotalMigrations
+	// accumulates across Migrate calls.
+	EvictedIndividuals int `json:"evicted_individuals"`
+	// EvictedIslands is the cumulative count of whole islands dropped by
+	// evictAdoptedIslandsBeyondCap across every Load call.
+	EvictedIslands int `json:"evicted_islands"`
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -222,6 +229,11 @@ type IslandStats struct {
 	// model-level view of how many extinct specialists EvolveAll's
 	// self-healing step has resurrected fleet-wide.
 	Resurrections int `json:"resurrections"`
+	// EvictedIndividuals/EvictedIslands mirror IslandModel.EvictedIndividuals/
+	// EvictedIslands so eviction activity is visible via Stats() alongside
+	// Migrations.
+	EvictedIndividuals int `json:"evicted_individuals"`
+	EvictedIslands     int `json:"evicted_islands"`
 }
 
 // Stats returns aggregate statistics for the island model.
@@ -230,9 +242,11 @@ func (im *IslandModel) Stats() IslandStats {
 	defer im.mu.RUnlock()
 
 	stats := IslandStats{
-		Domains:       len(im.Islands),
-		BestPerDomain: make(map[string]float64),
-		Migrations:    im.TotalMigrations,
+		Domains:            len(im.Islands),
+		BestPerDomain:      make(map[string]float64),
+		Migrations:         im.TotalMigrations,
+		EvictedIndividuals: im.EvictedIndividuals,
+		EvictedIslands:     im.EvictedIslands,
 	}
 
 	for domain, pop := range im.Islands {
@@ -332,10 +346,10 @@ func (im *IslandModel) Load(path string) error {
 			continue
 		}
 		if mem := im.Islands[domain]; mem != nil {
-			mergeIslandPopulation(mem, diskPop, im.Cap)
+			im.EvictedIndividuals += mergeIslandPopulation(mem, diskPop, im.Cap)
 			continue
 		}
-		enforceIslandCap(diskPop, im.Cap)
+		im.EvictedIndividuals += enforceIslandCap(diskPop, im.Cap)
 		im.Islands[domain] = diskPop
 		if !seeded[domain] {
 			adopted = append(adopted, domain)
@@ -369,14 +383,16 @@ func (im *IslandModel) evictAdoptedIslandsBeyondCap(adopted []string) {
 			}
 		}
 		delete(im.Islands, adopted[worst])
+		im.EvictedIslands++
 		adopted = append(adopted[:worst], adopted[worst+1:]...)
 	}
 }
 
 // mergeIslandPopulation unions the archived individuals into the in-memory
 // population, deduped by genome with the fitter copy winning, then enforces
-// islandCap (if non-zero) so the merged island never exceeds it.
-func mergeIslandPopulation(mem, disk *Population, islandCap int) {
+// islandCap (if non-zero) so the merged island never exceeds it. It returns
+// the number of individuals enforceIslandCap evicted.
+func mergeIslandPopulation(mem, disk *Population, islandCap int) int {
 	byGenome := make(map[string]int, len(mem.Individuals))
 	for i, ind := range mem.Individuals {
 		byGenome[ind.Genome] = i
@@ -394,19 +410,22 @@ func mergeIslandPopulation(mem, disk *Population, islandCap int) {
 	if disk.BestFitness > mem.BestFitness {
 		mem.BestFitness = disk.BestFitness
 	}
-	enforceIslandCap(mem, islandCap)
+	return enforceIslandCap(mem, islandCap)
 }
 
 // enforceIslandCap evicts the lowest-fitness individuals from pop so it holds
-// at most islandCap individuals; islandCap <= 0 leaves pop unbounded.
-func enforceIslandCap(pop *Population, islandCap int) {
+// at most islandCap individuals; islandCap <= 0 leaves pop unbounded. It
+// returns the number of individuals evicted.
+func enforceIslandCap(pop *Population, islandCap int) int {
 	if islandCap <= 0 || len(pop.Individuals) <= islandCap {
-		return
+		return 0
 	}
 	sort.Slice(pop.Individuals, func(i, j int) bool {
 		return pop.Individuals[i].Fitness > pop.Individuals[j].Fitness
 	})
+	evicted := len(pop.Individuals) - islandCap
 	pop.Individuals = pop.Individuals[:islandCap]
+	return evicted
 }
 
 // Summary returns a human-readable island model summary.
@@ -418,5 +437,6 @@ func (im *IslandModel) Summary() string {
 		s += fmt.Sprintf("  %s: best=%.1f\n", domain, best)
 	}
 	s += fmt.Sprintf("  cross-diversity: %.2f\n", stats.CrossDiversity)
+	s += fmt.Sprintf("  evicted: %d individuals, %d islands\n", stats.EvictedIndividuals, stats.EvictedIslands)
 	return s
 }

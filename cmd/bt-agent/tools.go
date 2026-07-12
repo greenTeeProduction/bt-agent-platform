@@ -1225,6 +1225,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": perIslandBest, "migrations": stats.Migrations,
 				"cross_diversity": stats.CrossDiversity, "warm_started": warmStarted,
+				"evicted_individuals": stats.EvictedIndividuals, "evicted_islands": stats.EvictedIslands,
 			}
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr

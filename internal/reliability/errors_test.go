@@ -245,6 +245,23 @@ func TestClassifyError_RateLimited(t *testing.T) {
 	}
 }
 
+func TestClassifyError_ClaudeUsageLimit(t *testing.T) {
+	// Claude CLI exits non-zero with "reached your <model> limit ... Run
+	// /usage-credits" when the usage/credit limit is hit. This must classify
+	// as rate_limited (infra, retryable) not unknown — matching the patterns
+	// goapInfraResultMarkers uses to treat it as infrastructure in
+	// internal/engine/actions_goap_fusion_refund.go.
+	tests := []string{
+		"red-phase claude failed: exit status 1\nYou've reached your Fable 5 limit. Run /usage-credits to continue or switch models with /model.",
+		"Claude usage limit reached — run /usage-credits to continue.",
+	}
+	for _, msg := range tests {
+		if cat := ClassifyError(errors.New(msg)); cat != ErrCatRateLimited {
+			t.Errorf("ClassifyError(%q) = %s, want rate_limited", msg, cat)
+		}
+	}
+}
+
 func TestClassifyError_ProviderWrappedRateLimit(t *testing.T) {
 	// Provider wrappers contain LLM patterns ("api error") — the rate-limit
 	// check must win for these real-world strings.

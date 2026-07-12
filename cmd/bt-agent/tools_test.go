@@ -714,6 +714,66 @@ func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
 	})
 }
 
+// TestBTEvolveIslandSurfacesEvictionCounters pins milestone 4/4 of the
+// durable island-archive-bound program: bt_evolve_island's JSON result must
+// report cumulative "evicted_individuals" and "evicted_islands" counters
+// (evolution.IslandStats.EvictedIndividuals/EvictedIslands), mirroring the
+// existing "migrations" key, so eviction activity triggered by
+// population_cap/island_cap is observable without inspecting the archive
+// file directly.
+func TestBTEvolveIslandSurfacesEvictionCounters(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	// Pre-seed an oversized "code_review" island (distinct Genome per
+	// individual so none collide-dedup away in the merge) so the very first
+	// population_cap-bounded call must evict individuals.
+	const seedSize = 10
+	seed := evolution.NewIslandModel(1, 0.5)
+	seedPop := &evolution.Population{}
+	for i := 0; i < seedSize; i++ {
+		seedPop.Individuals = append(seedPop.Individuals, evolution.Individual{
+			Tree:    &evolution.SerializableNode{Type: "Action", Name: fmt.Sprintf("seed-%d", i)},
+			Genome:  fmt.Sprintf("seed-genome-%d", i),
+			Fitness: float64(i),
+		})
+	}
+	seedPop.BestFitness = float64(seedSize - 1)
+	seed.AddIsland("code_review", seedPop)
+	if err := seed.Save(islandArchivePath("godev")); err != nil {
+		t.Fatalf("seed island archive: %v", err)
+	}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	const populationCap = 4
+	args := fmt.Sprintf(`{"tree":"godev","domains":"code_review","population":4,"generations":1,"migration_interval":1,"migration_rate":0.5,"population_cap":%d}`, populationCap)
+	res, ok := server.Invoke("bt_evolve_island", json.RawMessage(args))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error: %v", out)
+	}
+	for _, key := range []string{"evicted_individuals", "evicted_islands"} {
+		if _, present := out[key]; !present {
+			t.Errorf("bt_evolve_island result missing %q key; got keys %v", key, out)
+		}
+	}
+	evicted, isNum := out["evicted_individuals"].(float64)
+	if !isNum || evicted <= 0 {
+		t.Errorf("bt_evolve_island 'evicted_individuals' = %v, want > 0 after a population_cap=%d call against an oversized %d-individual seeded island", out["evicted_individuals"], populationCap, seedSize)
+	}
+}
+
 // TestBTEvolveIslandAdoptsLegacyGlobalArchiveOnce pins the one-time legacy
 // island-archive migration: per-tree archive scoping (33f8c13) silently
 // orphaned any pre-scoping GLOBAL island_archive.json — accumulated state

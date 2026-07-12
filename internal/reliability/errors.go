@@ -338,6 +338,12 @@ func isRateLimitError(lower string) bool {
 		"request limit reached",
 		"requests per minute",
 		"tokens per minute",
+		// Claude CLI usage/credit-limit exhaustion: "You've reached your
+		// <model> limit. Run /usage-credits to continue" — matches the
+		// patterns goapInfraResultMarkers uses to treat this as
+		// infrastructure in internal/engine/actions_goap_fusion_refund.go.
+		"reached your ",
+		"/usage-credits",
 	}
 	for _, p := range rateLimitPatterns {
 		if strings.Contains(lower, p) {
