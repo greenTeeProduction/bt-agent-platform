@@ -265,46 +265,55 @@ func (pp *ParetoPopulation) SelectPareto() []*SerializableNode {
 }
 
 // EvolvePareto runs the genetic algorithm with Pareto multi-objective selection.
+// Each generation runs inside the same selfHealGeneration envelope Evolve and
+// EvolveWithExperience use, so the seeded Specialists registry is observed and
+// extinct specialists get resurrected on a population-level crisis — Evaluate
+// already scalarizes MultiFitness into Individual.Fitness via CompositeScore,
+// which is what the crisis detector reads.
 func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*SerializableNode) MultiFitness) *SerializableNode {
 	pp.Evaluate(fitnessFn)
-	eliteCount := max(2, len(pp.Individuals)/10)
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+	eliteCount := min(max(2, len(pp.Individuals)/10), len(pp.Individuals))
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		pp.Generation++
 
-		// Sort by composite score
-		sort.Slice(pp.Individuals, func(i, j int) bool {
-			return pp.Individuals[i].Fitness > pp.Individuals[j].Fitness
-		})
+		pp.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			// Sort by composite score
+			sort.Slice(pp.Individuals, func(i, j int) bool {
+				return pp.Individuals[i].Fitness > pp.Individuals[j].Fitness
+			})
 
-		newPop := make([]Individual, len(pp.Individuals))
+			newPop := make([]Individual, len(pp.Individuals))
 
-		// Keep Pareto front elites + top fitness
-		copied := 0
-		paretoElites := pp.Front.Best(eliteCount)
-		for i := 0; i < len(paretoElites) && copied < eliteCount; i++ {
-			newPop[copied] = *paretoElites[i].Individual
-			copied++
-		}
-		// Fill remaining elite slots with top fitness
-		for i := 0; copied < eliteCount && i < len(pp.Individuals); i++ {
-			newPop[copied] = pp.Individuals[i]
-			copied++
-		}
-
-		// Fill rest with crossover + mutation from Pareto-diverse parents
-		for i := eliteCount; i < len(pp.Individuals); i++ {
-			parents := pp.SelectPareto()
-			child := Crossover(parents[0], parents[1])
-			if rand.Float64() < 0.3 {
-				ops := randomMutation(child)
-				ApplyMutations(child, ops)
+			// Keep Pareto front elites + top fitness
+			copied := 0
+			paretoElites := pp.Front.Best(eliteCount)
+			for i := 0; i < len(paretoElites) && copied < eliteCount; i++ {
+				newPop[copied] = *paretoElites[i].Individual
+				copied++
 			}
-			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
-		}
+			// Fill remaining elite slots with top fitness
+			for i := 0; copied < eliteCount && i < len(pp.Individuals); i++ {
+				newPop[copied] = pp.Individuals[i]
+				copied++
+			}
 
-		pp.Individuals = newPop
-		pp.Evaluate(fitnessFn)
+			// Fill rest with crossover + mutation from Pareto-diverse parents
+			for i := eliteCount; i < len(pp.Individuals); i++ {
+				parents := pp.SelectPareto()
+				child := Crossover(parents[0], parents[1])
+				if rand.Float64() < mutationRate {
+					ops := randomMutation(child)
+					ApplyMutations(child, ops)
+				}
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
+			}
+
+			pp.Individuals = newPop
+			pp.Evaluate(fitnessFn)
+		})
 	}
 
 	return pp.BestTree

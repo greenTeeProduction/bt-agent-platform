@@ -116,16 +116,32 @@ func (im *IslandModel) Migrate() int {
 	return migrated
 }
 
-// EvolveAll runs one generation on all islands, with migration if due.
+// EvolveAll runs one generation on all islands, with migration if due. Each
+// island's generation runs inside the shared Population.selfHealGeneration
+// envelope rather than a bare Evaluate, so a collapsed island seeds its
+// Specialists registry, initializes its Crisis detector, and resurrects an
+// extinct specialist archetype before migration — the same self-healing path
+// a direct Population.Evolve call already gets. Islands added without a
+// pre-seeded Specialists registry (the AddIsland default) get one here so no
+// island can skip the self-healing step for lack of a registry to consult.
 func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[string]*SerializableNode {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 
 	im.Generation++
 	bestTrees := make(map[string]*SerializableNode)
+	supervisor := NewLLMSupervisor()
 
 	for domain, pop := range im.Islands {
-		pop.Evaluate(fitnessFn)
+		if pop.Specialists == nil {
+			pop.Specialists = NewSpecialistRegistry()
+		}
+		// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+		eliteCount := min(max(2, len(pop.Individuals)/10), len(pop.Individuals))
+		pop.Generation++
+		pop.selfHealGeneration(eliteCount, supervisor, func(float64) {
+			pop.Evaluate(fitnessFn)
+		})
 		bestTrees[domain] = pop.BestTree
 	}
 
@@ -200,6 +216,10 @@ type IslandStats struct {
 	BestPerDomain  map[string]float64 `json:"best_per_domain"`
 	CrossDiversity float64            `json:"cross_diversity"`
 	Migrations     int                `json:"migrations"`
+	// Resurrections sums Population.Resurrections across every island — the
+	// model-level view of how many extinct specialists EvolveAll's
+	// self-healing step has resurrected fleet-wide.
+	Resurrections int `json:"resurrections"`
 }
 
 // Stats returns aggregate statistics for the island model.
@@ -216,6 +236,7 @@ func (im *IslandModel) Stats() IslandStats {
 	for domain, pop := range im.Islands {
 		stats.TotalPop += len(pop.Individuals)
 		stats.BestPerDomain[domain] = pop.BestFitness
+		stats.Resurrections += pop.Resurrections
 	}
 
 	im.mu.RUnlock()

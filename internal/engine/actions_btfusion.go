@@ -37,6 +37,12 @@ var (
 // internal/domains/trees.go fails every bt-fusion run.
 const fusionCodebaseFitCmd = `printf 'trees='; git grep -n '"bt_fusion"\|"hermes_update"\|"notebooklm_pipeline_monitor"' HEAD -- internal/domains/trees.go; printf '\nagents='; ls ~/.go-bt-evolve/agents/*fusion* ~/.go-bt-evolve/agents/*manager* 2>/dev/null; printf '\nservice='; systemctl --user show bt-agent.service -p ActiveState,SubState,Restart --no-pager 2>/dev/null`
 
+// fusionCodebaseFitRun is the seam CheckCodebaseFit uses to run the
+// diagnostic-only probe — a package var so tests can force a nonzero exit
+// deterministically (the real command's exit code hinges on live daemon
+// state that already exits 0 in dev sandboxes).
+var fusionCodebaseFitRun = runFusionShell
+
 func init() {
 	registerBTFusionActions()
 }
@@ -207,12 +213,15 @@ func registerBTFusionActions() {
 
 	RegisterAction("CheckCodebaseFit", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out, code := runFusionShell(fusionCodebaseFitCmd)
+		out, code := fusionCodebaseFitRun(fusionCodebaseFitCmd)
 		setFusionState(bb, "codebase_fit", out)
 		bb.Result += fmt.Sprintf("\n\n## Codebase Fit Evidence (exit=%d)\n\n```\n%s\n```", code, truncateFusion(out, 2500))
+		// Diagnostic-only evidence gathering: the probe's exit code hinges on
+		// live external state (systemctl daemon status, agent YAML presence)
+		// this action doesn't control. A nonzero exit is logged but must not
+		// hard-fail the whole bt_fusion cycle.
 		if code != 0 {
-			bb.Outcome = "fusion_codebase_fit_failed"
-			return -1
+			Warn("bt fusion: codebase-fit probe exited nonzero (best-effort evidence, continuing)", "exit_code", code)
 		}
 		return 1
 	})
