@@ -53,6 +53,15 @@ func qtableArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "qtable_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// mapElitesArchivePath resolves the durable MAP-Elites archive bt_evolve_qd
+// warm-starts from and persists to (Q2 Evolvability, NotebookLM research),
+// scoped per base tree like islandArchivePath and qtableArchivePath so runs
+// on different base trees do not warm-start-merge each other's illuminated
+// niches through a single shared file.
+func mapElitesArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "map_elites_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
 // fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
 // of evolution.TreeFileName. That helper is deliberately not reused: its
@@ -136,6 +145,21 @@ func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.Serializ
 	}
 	result["persisted"] = true
 	result["file"] = path
+}
+
+// persistEvolvedWinner persists the winner tree a production genetic-evolution
+// pass produced under a derived "<baseTreeID>-evolved" id via the existing
+// persistGeneratedTree seam, then registers it in the knowledge graph
+// (inheriting the base tree's capabilities and connecting back via an
+// evolved_from edge) so fitness-aware discovery and the gardener can find the
+// bred winner on the next run instead of only its scalar fitness surviving.
+func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]interface{}) {
+	evolvedID := baseTreeID + "-evolved"
+	result["evolved_tree_id"] = evolvedID
+	persistGeneratedTree(deps, evolvedID, winner, result)
+	if deps.kg != nil {
+		deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness)
+	}
 }
 
 // persistGeneratedTreeForUser persists a user-attributed generated tree into
@@ -808,7 +832,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			result := map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "diversity": pop.Diversity(),
 				"convergence_rate": pop.ConvergenceRate(), "best_nodes": evolution.CountNodes(best),
@@ -818,16 +842,22 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"experience_bank_entries":   bankEntries,
 				"experience_retrieval_hits": retrievalHits,
 				"health":                    evolveHealthProjection(pop),
-			})
+			}
+			// Persist the winner instead of discarding it after computing its
+			// fitness (Q2 Evolvability): it becomes resolvable by id and
+			// discoverable via the knowledge graph, not just a scalar number.
+			persistEvolvedWinner(deps, params.Tree, best, pop.BestFitness, result)
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_evolve_qd", "Run MAP-Elites quality-diversity evolution: illuminate a behavior space and report diversity metrics",
+	server.RegisterTool("bt_evolve_qd", "Run MAP-Elites quality-diversity evolution: illuminate a behavior space and report diversity metrics, warm-starting from and persisting to a durable per-tree archive",
 		map[string]engine.Property{
 			"tree":        {Type: "string", Description: "Base tree ID"},
 			"population":  {Type: "integer", Description: "Population size (default: 20)"},
 			"generations": {Type: "integer", Description: "Number of generations (default: 10)"},
 			"domain":      {Type: "string", Description: "Domain label for specialist attribution (default: general)"},
+			"archive_cap": {Type: "integer", Description: "Max niches retained in the durable MAP-Elites archive (default: population*5)"},
 		},
 		[]string{"tree"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -836,6 +866,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Population  *int   `json:"population"`
 				Generations int    `json:"generations"`
 				Domain      string `json:"domain"`
+				ArchiveCap  *int   `json:"archive_cap"`
 			}
 			_ = json.Unmarshal(args, &params)
 			population, reject := resolveEvolvePopulation(params.Population)
@@ -857,16 +888,51 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			pop := newProductionPopulation(population, baseTree)
 			pop.Evolve(params.Generations, structuralFitnessFn)
 			grid := evolution.NewMAPElitesGrid(population / 2)
+			// Bound the durable archive against runaway growth, mirroring
+			// bt_evolve_qlearning's state_cap: the default derives from this
+			// run's own population so ordinary calls stay bounded without every
+			// caller having to pass an explicit value. Cap must be set before
+			// Load so enforceCap trims a merged, oversized archive.
+			if params.ArchiveCap != nil {
+				grid.Cap = *params.ArchiveCap
+			} else {
+				grid.Cap = population * 5
+			}
+			// Warm-start from the durable MAP-Elites archive so illuminated
+			// niches accumulate across runs instead of resetting to an empty
+			// grid every call (Q2 Evolvability). A missing archive is a cold
+			// start; a corrupt one degrades to a cold start surfaced
+			// non-fatally so the evolution still runs, mirroring
+			// bt_evolve_island and bt_evolve_qlearning.
+			archivePath := mapElitesArchivePath(params.Tree)
+			_, statErr := os.Stat(archivePath)
+			warmStarted := statErr == nil
+			archiveLoadErr := ""
+			if err := grid.Load(archivePath); err != nil {
+				warmStarted = false
+				archiveLoadErr = err.Error()
+			}
 			grid.InsertFromPopulation(pop, params.Domain)
 			// Write the best illuminated elite's structural fitness back into the
 			// knowledge graph so fitness-aware discovery can surface the
 			// archive-improved tree on the next run (milestone 4/5).
 			recordEvolvedFitness(deps, params.Tree, grid.Stats().BestFitness)
-			data, _ := json.Marshal(map[string]interface{}{
+			result := map[string]interface{}{
 				"tree": params.Tree, "domain": params.Domain, "generations": pop.Generation,
 				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
 				"elites": len(grid.Elites()), "specialist_distribution": grid.SpecialistDistribution(),
-			})
+				"warm_started": warmStarted,
+			}
+			if archiveLoadErr != "" {
+				result["archive_load_error"] = archiveLoadErr
+			}
+			// Persist the merged, illuminated grid so the next invocation
+			// resumes from this run's niches. A save failure is surfaced
+			// non-fatally alongside the evolution result.
+			if err := grid.Save(archivePath); err != nil {
+				result["archive_save_error"] = err.Error()
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -998,6 +1064,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			"generations":   {Type: "integer", Description: "Number of generations (default: 10)"},
 			"epsilon":       {Type: "number", Description: "Exploration rate 0-1 (default: 0.2); 0 = deterministic greedy selection"},
 			"learning_rate": {Type: "number", Description: "Q-value learning rate (default: 0.1)"},
+			"state_cap":     {Type: "integer", Description: "Max states retained in the durable QTable archive (default: population*10)"},
 		},
 		[]string{"tree"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -1007,6 +1074,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Generations  int      `json:"generations"`
 				Epsilon      *float64 `json:"epsilon"`
 				LearningRate float64  `json:"learning_rate"`
+				StateCap     *int     `json:"state_cap"`
 			}
 			_ = json.Unmarshal(args, &params)
 			population, reject := resolveEvolvePopulation(params.Population)
@@ -1040,6 +1108,16 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// Deterministic, LLM-free Q-learning evolution reusing the shared
 			// structural fitness so the tool stays -short-safe.
 			qt := evolution.NewQTable()
+			// Bound the durable archive against runaway growth (milestone 4/4),
+			// mirroring bt_evolve_island's population_cap: the default derives
+			// from this run's own population so ordinary calls stay bounded
+			// without every caller having to pass an explicit value. Cap must be
+			// set before Load so enforceCap trims a merged, oversized archive.
+			if params.StateCap != nil {
+				qt.Cap = *params.StateCap
+			} else {
+				qt.Cap = population * 10
+			}
 			// Warm-start from the durable QTable archive so learned Q-values
 			// accumulate across runs instead of resetting to an empty table
 			// every call (milestone 2/4). A missing archive is a cold start; a
@@ -1068,6 +1146,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"learned_states_before": learnedStatesBefore,
 				"learned_states_after":  len(learned),
 				"total_mutations":       pop.TotalMutations, "regressions": pop.Regressions,
+				"evicted_states": qt.EvictedStates,
 			}
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
@@ -1404,7 +1483,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				algorithms["genetic"]++
 				pop := newProductionPopulation(population, baseTree)
-				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				entry := map[string]interface{}{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,
@@ -1415,6 +1494,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					"health":         evolveHealthProjection(pop),
 				}
 				addFailureContext(entry, b.LastFailureTask, b.LastFailureOutcome)
+				// Persist the bred winner instead of discarding it after
+				// computing its fitness (Q2 Evolvability).
+				persistEvolvedWinner(deps, b.TreeID, best, pop.BestFitness, entry)
 				report = append(report, entry)
 			}
 			data, _ := json.Marshal(map[string]interface{}{
@@ -1472,9 +1554,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					continue
 				}
 				pop := newProductionPopulation(population, baseTree)
-				pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
-				report = append(report, map[string]interface{}{
+				entry := map[string]interface{}{
 					"tree":           sp.TreeID,
 					"before_fitness": sp.Fitness,
 					"after_fitness":  pop.BestFitness,
@@ -1482,7 +1564,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					"generations":    pop.Generation,
 					"algorithm":      "genetic",
 					"health":         evolveHealthProjection(pop),
-				})
+				}
+				// Persist the bred elite instead of discarding it after
+				// computing its fitness (Q2 Evolvability).
+				persistEvolvedWinner(deps, sp.TreeID, best, pop.BestFitness, entry)
+				report = append(report, entry)
 			}
 			data, _ := json.Marshal(map[string]interface{}{
 				"selection_pressure":      len(pressure),

@@ -161,6 +161,42 @@ func (kg *KnowledgeGraph) Connect(from, to, relType string) {
 	})
 }
 
+// RegisterEvolved registers (or updates) the winner tree a production
+// genetic-evolution tool bred under a derived "<baseID>-evolved" id,
+// inheriting the base tree's category/capabilities/keywords so discovery
+// treats it like any other tree, connecting it back to the base tree via an
+// "evolved_from" edge so DiscoverRelated surfaces it, and stamping its
+// structural fitness the same clamped, monotone way RecordRun's "evolved"
+// outcome does — without touching the base tree's own fitness. Safe to call
+// even when the base tree is unregistered; the evolved tree is still
+// created, just without inherited capabilities.
+func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount int, fitness float64) {
+	kg.mu.Lock()
+	defer kg.mu.Unlock()
+
+	meta, exists := kg.Trees[evolvedID]
+	if !exists {
+		meta = &TreeMeta{ID: evolvedID, Name: evolvedID, Category: "evolution"}
+		if base, ok := kg.Trees[baseID]; ok {
+			meta.Category = base.Category
+			meta.Capabilities = base.Capabilities
+			meta.Keywords = base.Keywords
+		}
+		kg.Trees[evolvedID] = meta
+		for _, kw := range meta.Keywords {
+			kg.Synonyms[strings.ToLower(kw)] = meta.ID
+		}
+		for _, cap := range meta.Capabilities {
+			kg.Synonyms[strings.ToLower(cap.Action)] = meta.ID
+		}
+	}
+	meta.NodeCount = nodeCount
+	meta.EvolvedCount++
+	meta.StructuralFitness = evolvedFitness(meta.StructuralFitness, fitness)
+
+	kg.connectLocked(baseID, evolvedID, "evolved_from")
+}
+
 // Discover finds the best tree for a given task description.
 // Returns the tree ID and a confidence score (0-1).
 func (kg *KnowledgeGraph) Discover(task string) (treeID string, confidence float64) {

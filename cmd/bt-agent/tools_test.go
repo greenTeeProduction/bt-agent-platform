@@ -127,6 +127,63 @@ func TestBTEvolveQDRegisteredAndReturnsQDMetrics(t *testing.T) {
 	}
 }
 
+// TestBTEvolveQDAccumulatesDurableArchive pins the missing durable-archive
+// wiring for the MAP-Elites illuminator (Q2 Evolvability, NotebookLM
+// research): bt_evolve_qd currently builds a fresh evolution.NewMAPElitesGrid
+// on every call and discards it, so illuminated niches never survive across
+// invocations even though MAPElitesGrid already implements Save/Load/Cap
+// (internal/evolution/map_elites.go). Mirroring bt_evolve_island and
+// bt_evolve_qlearning, the grid must warm-start from a durable per-tree
+// archive and persist back to it after every run. The result JSON must
+// report the warm start honestly — "warm_started": false on a cold home,
+// true once an archive exists — and a single archive file must exist under
+// BT_AGENT_HOME after the first run.
+func TestBTEvolveQDAccumulatesDurableArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_qd", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_qd) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_qd returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_qd %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_qd unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	first := invoke("first")
+	if got, isBool := first["warm_started"].(bool); !isBool || got {
+		t.Errorf(`first run on a cold home must report "warm_started": false; got %v`, first["warm_started"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "map_elites_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob map-elites archives after the first run: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("bt_evolve_qd single-tree runs must persist exactly one durable MAP-Elites archive under BT_AGENT_HOME after the first run; got %v", matches)
+	}
+
+	second := invoke("second")
+	if got, isBool := second["warm_started"].(bool); !isBool || !got {
+		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
 // TestBTEvolveIslandRegisteredAndReturnsIslandMetrics pins the bt_evolve_island
 // island-model MCP tool: it must be registered by registerMCPTools, run a
 // deterministic (LLM-free) evolution across N isolated island populations with
@@ -1361,6 +1418,204 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	}
 }
 
+// TestBTEvolveGeneticPersistsEvolvedWinnerTree pins the fix for the
+// evolved-winner-discarded gap (Q2 Evolvability, Q1 Correctness):
+// bt_evolve_genetic computes best := pop.EvolveWithExperience(...) only to
+// read CountNodes(best) for the report, then drops the winner tree entirely —
+// nothing about its actual structure survives the call. The tool must instead
+// persist the winner through the existing persistGeneratedTree seam under a
+// derived "<tree>-evolved" id (mirroring bt_evolve_selectors' "persisted"/
+// "file" result keys), report that id, and register it in the knowledge graph
+// so fitness-aware discovery and the gardener can find the bred winner on the
+// next run instead of only its scalar fitness.
+func TestBTEvolveGeneticPersistsEvolvedWinnerTree(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go Developer", Category: "core"})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_genetic) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_genetic returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+
+	const wantID = "godev-evolved"
+	evolvedID, _ := out["evolved_tree_id"].(string)
+	if evolvedID != wantID {
+		t.Fatalf("bt_evolve_genetic must report the persisted evolved winner's id as 'evolved_tree_id' = %q instead of discarding the winner after computing fitness; got %v (keys %v)", wantID, out["evolved_tree_id"], out)
+	}
+	if persisted, _ := out["persisted"].(bool); !persisted {
+		t.Errorf("bt_evolve_genetic must report persisted=true for the evolved winner when it validates and a tree store is configured; got %v", out["persisted"])
+	}
+	if file, _ := out["file"].(string); file == "" {
+		t.Errorf("bt_evolve_genetic must report the on-disk 'file' path the evolved winner was persisted to; got %v", out["file"])
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil {
+		t.Fatalf("bt_evolve_genetic must persist the evolved winner tree under %q so it survives restarts and is resolvable by id; treeStore has nothing there", wantID)
+	}
+
+	meta := kg.Trees[wantID]
+	if meta == nil {
+		t.Fatalf("bt_evolve_genetic must register the evolved winner tree %q in the knowledge graph so discovery can surface it", wantID)
+	}
+	if meta.StructuralFitness <= 0 {
+		t.Errorf("bt_evolve_genetic evolved winner %q must be registered with a positive StructuralFitness; got %v", wantID, meta.StructuralFitness)
+	}
+
+	related := kg.DiscoverRelated("godev")
+	found := false
+	for _, id := range related {
+		if id == wantID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bt_evolve_genetic must connect the evolved winner %q back to its base tree 'godev' via a KG relationship; DiscoverRelated(godev)=%v", wantID, related)
+	}
+}
+
+// TestBTEvolveBottlenecksPersistsEvolvedWinnerTree pins the same fix as
+// TestBTEvolveGeneticPersistsEvolvedWinnerTree for the genetic-fallback path
+// inside bt_evolve_bottlenecks: today pop.EvolveWithExperience(...)'s return
+// value is discarded outright (line is a bare statement), leaving only
+// pop.BestFitness in the report. domain:alert_router has no tunable
+// parameters, so it deterministically routes to the genetic path (mirroring
+// TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport's fixture).
+func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 8, RunCount: 3,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	report, isList := out["report"].([]interface{})
+	if !isList || len(report) != 1 {
+		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single genetic-path bottleneck; got %d: %v", len(report), out["report"])
+	}
+	entry, _ := report[0].(map[string]interface{})
+	if entry["algorithm"] != "genetic" {
+		t.Fatalf("fixture bottleneck must route to the genetic path; got algorithm=%v", entry["algorithm"])
+	}
+
+	const wantID = "domain:alert_router-evolved"
+	evolvedID, _ := entry["evolved_tree_id"].(string)
+	if evolvedID != wantID {
+		t.Fatalf("bt_evolve_bottlenecks genetic-path report entry must carry 'evolved_tree_id' = %q instead of discarding the bred winner after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
+	}
+	if persisted, _ := entry["persisted"].(bool); !persisted {
+		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the evolved winner; got %v", entry["persisted"])
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil {
+		t.Fatalf("bt_evolve_bottlenecks must persist the genetic-path evolved winner tree under %q instead of discarding it after computing fitness", wantID)
+	}
+
+	if meta := kg.Trees[wantID]; meta == nil {
+		t.Fatalf("bt_evolve_bottlenecks must register the evolved winner tree %q in the knowledge graph", wantID)
+	}
+}
+
+// TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree pins the same fix as
+// TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_selection_pressure:
+// today only pop.BestFitness survives via recordEvolvedFitness — the bred
+// elite tree that earned that fitness is discarded. Uses the same fixture as
+// TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees
+// (domain:code_review, proven+underbred).
+func TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 2,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_selection_pressure returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	report, isList := out["report"].([]interface{})
+	if !isList || len(report) != 1 {
+		t.Fatalf("expected exactly one bt_evolve_selection_pressure report entry for the single proven+underbred tree; got %d: %v", len(report), out["report"])
+	}
+	entry, _ := report[0].(map[string]interface{})
+
+	const wantID = "domain:code_review-evolved"
+	evolvedID, _ := entry["evolved_tree_id"].(string)
+	if evolvedID != wantID {
+		t.Fatalf("bt_evolve_selection_pressure report entry must carry 'evolved_tree_id' = %q instead of discarding the bred elite after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
+	}
+	if persisted, _ := entry["persisted"].(bool); !persisted {
+		t.Errorf("bt_evolve_selection_pressure report entry must report persisted=true for the evolved winner; got %v", entry["persisted"])
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil {
+		t.Fatalf("bt_evolve_selection_pressure must persist the bred elite tree under %q instead of discarding it after computing fitness", wantID)
+	}
+
+	if meta := kg.Trees[wantID]; meta == nil {
+		t.Fatalf("bt_evolve_selection_pressure must register the evolved winner tree %q in the knowledge graph", wantID)
+	}
+}
+
 // TestEvolveToolsSurfacePopulationHealthSnapshot pins that the three production
 // evolve tools that run a genetic Population — bt_evolve_genetic,
 // bt_evolve_bottlenecks, and bt_evolve_selection_pressure — surface that
@@ -1852,6 +2107,115 @@ func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 	if before2, isNum := second["learned_states_before"].(float64); !isNum || before2 != after1 {
 		t.Errorf("second run must resume the first run's learned Q-values: 'learned_states_before' = %v, want %v (the first run's 'learned_states_after')", second["learned_states_before"], after1)
 	}
+}
+
+// TestBTEvolveQLearningStateCapBoundsDurableArchive pins milestone 4/4 of the
+// durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
+// accept an optional "state_cap" request parameter and set it on
+// evolution.QTable.Cap before qt.Load, so the eviction QTable.Update already
+// enforces (internal/evolution/learning.go's enforceCap, pinned directly by
+// TestQTable_UpdateEvictsLeastRecentlyUpdatedStateOnCapOverflow) also
+// bounds the durable per-tree qtable archive in production. Without wiring,
+// qt.Cap stays at its zero value (unbounded) regardless of how large the
+// archive has grown across repeated warm-started calls. An omitted
+// "state_cap" must derive a default of population*10, mirroring
+// population_cap's population*3 default on bt_evolve_island (line ~1094).
+// The result JSON must also surface cumulative "evicted_states"
+// (evolution.QTable.EvictedStates), mirroring bt_evolve_island's
+// "evicted_individuals", so eviction activity is observable without
+// inspecting the archive file directly.
+func TestBTEvolveQLearningStateCapBoundsDurableArchive(t *testing.T) {
+	seedArchive := func(t *testing.T, path string, stateCount int) {
+		t.Helper()
+		values := make(map[string]map[string]float64, stateCount)
+		for i := 0; i < stateCount; i++ {
+			values[fmt.Sprintf("seed_state_%d", i)] = map[string]float64{"add_before": float64(i)}
+		}
+		data, err := json.Marshal(values)
+		if err != nil {
+			t.Fatalf("marshal seed qtable archive: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir seed qtable archive dir: %v", err)
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatalf("write seed qtable archive: %v", err)
+		}
+	}
+	readStateCount := func(t *testing.T, path string) int {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read qtable archive %s: %v", path, err)
+		}
+		var values map[string]map[string]float64
+		if err := json.Unmarshal(data, &values); err != nil {
+			t.Fatalf("qtable archive %s is not valid JSON: %v", path, err)
+		}
+		return len(values)
+	}
+	invoke := func(t *testing.T, server *engine.Server, args string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_qlearning", json.RawMessage(args))
+		if !ok {
+			t.Fatal("Invoke(bt_evolve_qlearning) reported the tool as unregistered")
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatal("bt_evolve_qlearning returned no content")
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_qlearning unexpectedly returned an error: %v", out)
+		}
+		return out
+	}
+
+	t.Run("default state_cap derives from population*10", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("BT_AGENT_HOME", home)
+		path := qtableArchivePath("godev")
+		const seedSize = 60 // exceeds the population=4 default cap of 40
+		seedArchive(t, path, seedSize)
+
+		server := engine.NewServer("test")
+		registerMCPTools(server, &mcpDeps{})
+
+		out := invoke(t, server, `{"tree":"godev","population":4,"generations":1,"epsilon":0}`)
+
+		const wantCap = 40 // population(4) * 10
+		if got := readStateCount(t, path); got > wantCap {
+			t.Errorf("after a run with no explicit state_cap against a %d-state seeded archive, the durable archive holds %d states, want <= %d (population*10 default) — state_cap must default to population*10 and be set on QTable.Cap before Load", seedSize, got, wantCap)
+		}
+		evicted, isNum := out["evicted_states"].(float64)
+		if !isNum || evicted <= 0 {
+			t.Errorf(`bt_evolve_qlearning 'evicted_states' = %v, want > 0 after a default-capped run against an oversized %d-state seeded archive`, out["evicted_states"], seedSize)
+		}
+	})
+
+	t.Run("explicit state_cap overrides the default", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("BT_AGENT_HOME", home)
+		path := qtableArchivePath("godev")
+		const seedSize = 20
+		seedArchive(t, path, seedSize)
+
+		server := engine.NewServer("test")
+		registerMCPTools(server, &mcpDeps{})
+
+		const stateCap = 5
+		out := invoke(t, server, fmt.Sprintf(`{"tree":"godev","population":4,"generations":1,"epsilon":0,"state_cap":%d}`, stateCap))
+
+		if got := readStateCount(t, path); got > stateCap {
+			t.Errorf("after a run with explicit state_cap=%d against a %d-state seeded archive, the durable archive holds %d states, want <= %d — state_cap must be threaded onto QTable.Cap before Load", stateCap, seedSize, got, stateCap)
+		}
+		evicted, isNum := out["evicted_states"].(float64)
+		if !isNum || evicted <= 0 {
+			t.Errorf(`bt_evolve_qlearning 'evicted_states' = %v, want > 0 after an explicit state_cap=%d call against an oversized %d-state seeded archive`, out["evicted_states"], stateCap, seedSize)
+		}
+	})
 }
 
 // injectSelectorProbeTree installs a DynamicResolveFn that resolves the
