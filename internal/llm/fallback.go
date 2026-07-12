@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // NamedLLM associates a provider/model label with an LLM implementation.
@@ -54,7 +56,14 @@ func (f *FallbackLLM) generate(call func(LLM) (string, error)) (string, error) {
 			errs = append(errs, fmt.Errorf("%s: nil model", model.Name))
 			continue
 		}
-		result, err := call(model.LLM)
+		var result string
+		var err error
+		if panicErr := reliability.Recover(model.Name, func() {
+			result, err = call(model.LLM)
+		}); panicErr != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", model.Name, panicErr))
+			continue
+		}
 		if err == nil {
 			return result, nil
 		}

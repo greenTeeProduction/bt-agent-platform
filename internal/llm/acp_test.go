@@ -91,6 +91,54 @@ func TestACPClientGenerateTalksToHermesACP(t *testing.T) {
 	}
 }
 
+// panicReader is an io.Reader whose Read always panics, simulating a bug
+// while parsing ACP subprocess stdout (e.g. a stdlib edge case or a future
+// code change) inside the scanJSONLines goroutine.
+type panicReader struct{}
+
+func (panicReader) Read([]byte) (int, error) {
+	panic("acp_test: stdout reader exploded while scanning")
+}
+
+// An unrecovered panic inside a `go func(...)` goroutine crashes the entire
+// process — it cannot be caught by the parent test's own recover(). This test
+// re-execs the test binary so a crash is contained in the child process.
+// Today (before reliability.SafeGo wraps the scanJSONLines goroutine launched
+// at acp.go line 94) the child process crashes with an unhandled panic
+// instead of exiting cleanly with the panic reported on scanErr.
+const acpScanPanicSubprocessEnv = "BT_ACP_SCAN_PANIC_SUBPROCESS"
+
+func TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr(t *testing.T) {
+	if os.Getenv(acpScanPanicSubprocessEnv) == "1" {
+		messages := make(chan map[string]any, 1)
+		scanErr := make(chan error, 1)
+		startScanJSONLines(panicReader{}, messages, scanErr)
+
+		select {
+		case err := <-scanErr:
+			if err == nil {
+				os.Exit(3)
+			}
+			fmt.Println("scanErr received:", err)
+			os.Exit(0)
+		case <-time.After(5 * time.Second):
+			fmt.Println("scanErr never received a value")
+			os.Exit(4)
+		}
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr")
+	cmd.Env = append(os.Environ(), acpScanPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("startScanJSONLines: a panicking stdout reader crashed the process instead of "+
+			"being recovered and reported on scanErr via reliability.SafeGo; exit error=%v output=%s", err, out)
+	}
+	if !strings.Contains(string(out), "scanErr received:") {
+		t.Fatalf("expected the recovered panic to be reported on scanErr, got output=%s", out)
+	}
+}
+
 // TestACPHelperProcess is not a real test. It is a helper subprocess used by
 // ACP client tests to emulate a newline-delimited JSON-RPC ACP server.
 func TestACPHelperProcess(_ *testing.T) {

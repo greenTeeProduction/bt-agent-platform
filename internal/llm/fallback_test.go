@@ -11,13 +11,17 @@ import (
 )
 
 type stubLLM struct {
-	name  string
-	err   error
-	calls int
+	name      string
+	err       error
+	panicWith any
+	calls     int
 }
 
 func (s *stubLLM) Generate(prompt string) (string, error) {
 	s.calls++
+	if s.panicWith != nil {
+		panic(s.panicWith)
+	}
 	if s.err != nil {
 		return "", s.err
 	}
@@ -53,6 +57,45 @@ func TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(t *testing.T) {
 	}
 	if primary.calls != 1 || fallback.calls != 1 {
 		t.Fatalf("expected both models to be tried once, primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
+
+func TestFallbackLLM_GenerateRecoversPanicAndTriesNextModel(t *testing.T) {
+	primary := &stubLLM{name: "primary", panicWith: "primary exploded"}
+	fallback := &stubLLM{name: "fallback"}
+	chain := NewFallbackLLM([]NamedLLM{
+		{Name: "ollama:qwen", LLM: primary},
+		{Name: "deepseek:deepseek-v4-flash", LLM: fallback},
+	})
+
+	got, err := chain.Generate("hello")
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	if got != "fallback:hello" {
+		t.Fatalf("expected fallback response, got %q", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected both models to be tried once, primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+}
+
+func TestFallbackLLM_GenerateAllPanicReturnsAggregatedError(t *testing.T) {
+	chain := NewFallbackLLM([]NamedLLM{
+		{Name: "primary", LLM: &stubLLM{name: "primary", panicWith: "primary exploded"}},
+		{Name: "fallback", LLM: &stubLLM{name: "fallback", panicWith: "fallback exploded"}},
+	})
+
+	_, err := chain.Generate("hello")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "primary") || !strings.Contains(msg, "primary exploded") {
+		t.Fatalf("expected primary panic in aggregated error, got %q", msg)
+	}
+	if !strings.Contains(msg, "fallback") || !strings.Contains(msg, "fallback exploded") {
+		t.Fatalf("expected fallback panic in aggregated error, got %q", msg)
 	}
 }
 

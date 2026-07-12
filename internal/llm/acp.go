@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ACPConfig holds Agent Client Protocol process settings.
@@ -91,7 +93,7 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 
 	messages := make(chan map[string]any, 16)
 	scanErr := make(chan error, 1)
-	go scanJSONLines(stdout, messages, scanErr)
+	startScanJSONLines(stdout, messages, scanErr)
 
 	request := func(method string, params map[string]any, textParts *[]string) (map[string]any, error) {
 		id := c.seq.Add(1)
@@ -203,6 +205,17 @@ func (c *ACPClient) Reflect(task, outcome, plan string) (wentWell string, toImpr
 		toImprove = "better error handling"
 	}
 	return
+}
+
+// startScanJSONLines launches scanJSONLines in a goroutine guarded by
+// reliability.SafeGo, so a panic while parsing ACP subprocess stdout is
+// recovered and reported on errc instead of crashing the whole process.
+func startScanJSONLines(r io.Reader, out chan<- map[string]any, errc chan<- error) {
+	reliability.SafeGo("acp-scan-json-lines", func() {
+		scanJSONLines(r, out, errc)
+	}, func(panicVal any, context string) {
+		errc <- fmt.Errorf("panic in %s: %v", context, panicVal)
+	})
 }
 
 func scanJSONLines(r io.Reader, out chan<- map[string]any, errc chan<- error) {

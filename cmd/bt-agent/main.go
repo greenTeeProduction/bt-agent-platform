@@ -359,82 +359,84 @@ func main() {
 		ResolveTree: resolveTree,
 	}
 
-	go globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
-		task := ctx.Task
-		if task == "" {
-			task = ctx.AgentName
-		}
-
-		treeName := ctx.AgentName
-		if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
-			treeName = inst.Definition.Tree
-		}
-
-		policy := reliability.RetryPolicy{
-			MaxRetries:   cfg.RetryMaxRetries,
-			Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
-			MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
-			LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
-			RetryUnknown: true, // retry unknown errors to match legacy behavior
-		}
-		switch cfg.RetryJitter {
-		case "no_jitter":
-			policy.Jitter = reliability.NoJitter
-		case "full_jitter":
-			policy.Jitter = reliability.FullJitterStrategy
-		case "equal_jitter":
-			policy.Jitter = reliability.EqualJitterStrategy
-		case "decorrelated_jitter":
-			policy.Jitter = reliability.DecorrelatedJitterStrategy
-		default:
-			policy.Jitter = reliability.FullJitterStrategy
-		}
-		// SLO evidence (B1): record per-attempt outcomes so the gardener's
-		// validation gate has real execution data to judge deployments by.
-		slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
-		attempts := 0
-		err = policy.ExecuteContext(ctx.Context, func() error {
-			attempts++
-			attemptStart := time.Now()
-			attemptRes, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
-				InjectMemory:   true,
-				EnforceQuality: true,
-			})
-			if attemptRes != nil {
-				outcome = attemptRes.Outcome
-				output = attemptRes.Output
-				res = attemptRes
+	reliability.SafeGo("scheduler-start", func() {
+		globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
+			task := ctx.Task
+			if task == "" {
+				task = ctx.AgentName
 			}
-			return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
+
+			treeName := ctx.AgentName
+			if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
+				treeName = inst.Definition.Tree
+			}
+
+			policy := reliability.RetryPolicy{
+				MaxRetries:   cfg.RetryMaxRetries,
+				Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
+				MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
+				LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
+				RetryUnknown: true, // retry unknown errors to match legacy behavior
+			}
+			switch cfg.RetryJitter {
+			case "no_jitter":
+				policy.Jitter = reliability.NoJitter
+			case "full_jitter":
+				policy.Jitter = reliability.FullJitterStrategy
+			case "equal_jitter":
+				policy.Jitter = reliability.EqualJitterStrategy
+			case "decorrelated_jitter":
+				policy.Jitter = reliability.DecorrelatedJitterStrategy
+			default:
+				policy.Jitter = reliability.FullJitterStrategy
+			}
+			// SLO evidence (B1): record per-attempt outcomes so the gardener's
+			// validation gate has real execution data to judge deployments by.
+			slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
+			attempts := 0
+			err = policy.ExecuteContext(ctx.Context, func() error {
+				attempts++
+				attemptStart := time.Now()
+				attemptRes, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
+					InjectMemory:   true,
+					EnforceQuality: true,
+				})
+				if attemptRes != nil {
+					outcome = attemptRes.Outcome
+					output = attemptRes.Output
+					res = attemptRes
+				}
+				return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
+			})
+
+			if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
+				engine.Error("failed to persist SLO evidence", "error", saveErr)
+			}
+
+			if err != nil {
+				dlqParent := ctx.Context
+				if res != nil && res.TraceID != "" {
+					dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
+				}
+				_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
+				dlqSpan.SetAttribute("agent", ctx.AgentName)
+				dlqSpan.RecordError(err)
+				dlq.Push(reliability.DeadLetterEntry{
+					ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
+					Task:          task,
+					Agent:         ctx.AgentName,
+					Error:         err.Error(),
+					Attempts:      3,
+					FailedAt:      time.Now(),
+					Circuit:       "scheduler",
+					BuildRevision: buildID.Revision,
+				})
+				dlqSpan.End()
+			}
+
+			return outcome, output, res, err
 		})
-
-		if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
-			engine.Error("failed to persist SLO evidence", "error", saveErr)
-		}
-
-		if err != nil {
-			dlqParent := ctx.Context
-			if res != nil && res.TraceID != "" {
-				dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
-			}
-			_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
-			dlqSpan.SetAttribute("agent", ctx.AgentName)
-			dlqSpan.RecordError(err)
-			dlq.Push(reliability.DeadLetterEntry{
-				ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
-				Task:          task,
-				Agent:         ctx.AgentName,
-				Error:         err.Error(),
-				Attempts:      3,
-				FailedAt:      time.Now(),
-				Circuit:       "scheduler",
-				BuildRevision: buildID.Revision,
-			})
-			dlqSpan.End()
-		}
-
-		return outcome, output, res, err
-	})
+	}, nil)
 
 	// Deploy-drift watcher (program 94b0b31) — daemon only; MCP-spawned sibling
 	// instances (cycle sessions) must not run it. Detection-only by default:
@@ -607,11 +609,11 @@ func main() {
 				engine.Info("tree resolution failed for agent", "agent", inst.Definition.Name, "tree", inst.Definition.Tree)
 			}
 		}
-		go func() {
+		reliability.SafeGo("a2a-server-start", func() {
 			if err := a2aSrv.Start(); err != nil {
 				logA2AServeError(err)
 			}
-		}()
+		}, nil)
 		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
 
 		// ── Horizontal-scaling substrate ────────────────────────────────────
