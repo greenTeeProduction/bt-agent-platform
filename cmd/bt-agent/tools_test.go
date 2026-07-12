@@ -1000,6 +1000,34 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 		t.Errorf("bt_evolve_multiobjective must report a 'pareto_front_size' >= 1; got %v", out["pareto_front_size"])
 	}
 
+	// bt_evolve_multiobjective is the last production Evolve variant with zero
+	// self-healing observability: unlike bt_evolve_genetic, bt_evolve_bottlenecks,
+	// and bt_evolve_selection_pressure (TestEvolveToolsSurfacePopulationHealthSnapshot),
+	// its response never surfaces Population.HealthSnapshot(). The response must
+	// expose a "health" object carrying the same three fields those sibling tools
+	// report via evolveHealthProjection: "crisis_reasons" (a JSON array, present
+	// even when empty), "resurrections" (a non-negative count), and
+	// "last_mutation_rate" (the positive rate the run actually applied).
+	health, healthPresent := out["health"]
+	if !healthPresent {
+		t.Fatal("bt_evolve_multiobjective response must surface Population.HealthSnapshot() under a 'health' object, matching the sibling evolve tools; it is absent")
+	}
+	healthObj, isObj := health.(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_multiobjective 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", health, health)
+	}
+	if reasons, hasReasons := healthObj["crisis_reasons"]; !hasReasons {
+		t.Errorf("bt_evolve_multiobjective health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", healthObj)
+	} else if _, isList := reasons.([]interface{}); !isList {
+		t.Errorf("bt_evolve_multiobjective health 'crisis_reasons' must be a JSON array; got %T (%v)", reasons, reasons)
+	}
+	if res, isNum := healthObj["resurrections"].(float64); !isNum || res < 0 {
+		t.Errorf("bt_evolve_multiobjective health object must report a non-negative 'resurrections' count; got %v", healthObj["resurrections"])
+	}
+	if rate, isNum := healthObj["last_mutation_rate"].(float64); !isNum || rate <= 0 {
+		t.Errorf("bt_evolve_multiobjective health 'last_mutation_rate' must be the positive rate the run actually applied; got %v", healthObj["last_mutation_rate"])
+	}
+
 	// Unknown tree: a known prefix with an unresolvable suffix resolves to nil,
 	// which must surface the shared unknown-tree error shape.
 	unknown, ok := server.Invoke("bt_evolve_multiobjective", json.RawMessage(`{"tree":"domain:__no_such_tree__"}`))
@@ -2555,6 +2583,26 @@ func TestToolsBuildPopulationsViaProductionHelper(t *testing.T) {
 	}
 	if n := strings.Count(string(src), "evolution.NewPopulation("); n != 1 {
 		t.Fatalf("evolution.NewPopulation appears %d times in tools.go; every call site must route through newProductionPopulation (exactly 1 occurrence, inside the helper)", n)
+	}
+}
+
+// evolution.NewNSGAIIPopulation seeds its own Specialists field, but only with
+// NewSpecialistRegistry() — an empty registry with no resurrection material —
+// unlike newProductionPopulation's evolution.SeedSpecialistRegistry(), which
+// pre-loads the benchmark-validated archetypes. The bt_evolve_multiobjective
+// handler must overwrite that empty registry with a seeded one so NSGA-II gets
+// the same crisis-resurrection material every other production Evolve variant
+// carries; a second evolution.SeedSpecialistRegistry() call site (the first is
+// inside newProductionPopulation) is the only way to check that from source,
+// since the handler builds its population inside a RegisterTool closure with
+// no exported hook to inspect afterward.
+func TestBTEvolveMultiObjectiveSeedsSpecialistRegistry(t *testing.T) {
+	src, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	if n := strings.Count(string(src), "evolution.SeedSpecialistRegistry()"); n != 2 {
+		t.Fatalf("evolution.SeedSpecialistRegistry() appears %d times in tools.go; want 2 (newProductionPopulation plus the bt_evolve_multiobjective NSGA-II population, overwriting NewNSGAIIPopulation's empty default registry)", n)
 	}
 }
 

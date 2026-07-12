@@ -175,6 +175,105 @@ func TestNSGAII_CrowdedComparison(t *testing.T) {
 	}
 }
 
+// TestNewNSGAIIPopulation_SeedsSpecialists pins milestone 1/2 of the
+// self-healing-wiring program ("Close the NSGA-II self-healing wiring gap,
+// the last production Evolve variant with zero specialist/crisis
+// observability"): NewNSGAIIPopulation must seed Population.Specialists the
+// same way IslandModel.EvolveAll's nil-guard does (island.go), so the
+// self-healing envelope has a registry to consult from the very first
+// generation instead of only after some other caller happens to set one.
+func TestNewNSGAIIPopulation_SeedsSpecialists(t *testing.T) {
+	baseTree := &SerializableNode{Name: "root", Type: "Selector"}
+	nsga2 := NewNSGAIIPopulation(5, baseTree, []FitnessDimension{DimSuccessRate})
+	if nsga2.Specialists == nil {
+		t.Fatal("NewNSGAIIPopulation did not seed Population.Specialists — the self-healing envelope has no registry to consult")
+	}
+}
+
+// TestNSGAIIPopulation_Evolve_ResurrectsExtinctSpecialist pins milestone 2/2
+// of the same program: NSGAIIPopulation.Evolve must wrap its offspring/
+// replacement step in the same Population.selfHealGeneration envelope
+// Evolve, EvolveWithExperience (learning.go), and EvolvePareto (pareto.go)
+// already use, so a seeded Specialists registry is actually consulted on the
+// NSGA-II path too. Today Evolve only calls nsga2.Evaluate() directly and
+// never touches p.Specialists or p.Crisis, so this test fails.
+//
+// Setup mirrors TestParetoPopulation_EvolvePareto_ResurrectsExtinctSpecialist:
+// a SpecialistRegistry pre-loaded with a validated, high-fitness goap
+// archetype last seen at generation 0, and a live population of 10
+// identical, non-specialist individuals — Diversity() collapses to 0.1
+// (below the 0.2 crisis threshold), and the goap niche is entirely absent,
+// so it qualifies as extinct. After one Evolve generation, the population
+// must contain a resurrected:true individual, CrisisReasons must record
+// diversity_collapse, and Resurrections must be positive.
+func TestNSGAIIPopulation_Evolve_ResurrectsExtinctSpecialist(t *testing.T) {
+	base := DefaultTree()
+
+	registry := NewSpecialistRegistry()
+	archetype := &SerializableNode{
+		Type:     "Sequence",
+		Name:     "GoapSpecialist",
+		Children: []SerializableNode{{Type: "Action", Name: "PlanGoap"}},
+	}
+	registry.Observe(&EvolutionMetadata{
+		TreeID:  "goap-archetype",
+		Tags:    []string{"specialist:goap"},
+		Fitness: FitnessRecord{Score: 0.95, Validated: true},
+	}, archetype, 0)
+
+	const size = 10
+	pop := &Population{
+		Individuals: make([]Individual, size),
+		// Old generation so the archetype (last seen at gen 0) reads as long
+		// extinct regardless of the detector's chosen extinctAfter window.
+		Generation:  500,
+		Specialists: registry,
+	}
+	for i := 0; i < size; i++ {
+		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
+		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
+		// absent → the archetype qualifies as extinct.
+		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
+	}
+
+	if d := pop.Diversity(); d <= 0 || d >= 0.2 {
+		t.Fatalf("test setup: want collapsed diversity in (0, 0.2), got %.3f", d)
+	}
+
+	nsga2 := &NSGAIIPopulation{
+		Population:   pop,
+		Dimensions:   []FitnessDimension{DimSuccessRate},
+		FitnessVecs:  make([]MultiFitness, size),
+		CrowdingDist: make([]float64, size),
+	}
+
+	fitnessFn := func(*SerializableNode) MultiFitness {
+		mf := NewMultiFitness()
+		mf.Set(DimSuccessRate, 100)
+		return mf
+	}
+
+	nsga2.Evolve(1, fitnessFn)
+
+	if !containsReason(nsga2.CrisisReasons, "diversity_collapse") {
+		t.Errorf("CrisisReasons = %v, want to contain diversity_collapse", nsga2.CrisisReasons)
+	}
+
+	var resurrected bool
+	for _, ind := range nsga2.Individuals {
+		if ind.Meta != nil && ind.Meta.IsResurrected() {
+			resurrected = true
+			break
+		}
+	}
+	if !resurrected {
+		t.Fatal("expected Evolve to resurrect the extinct goap specialist and inject a resurrected:true-tagged individual into the population")
+	}
+	if nsga2.Resurrections <= 0 {
+		t.Errorf("Resurrections = %d, want > 0", nsga2.Resurrections)
+	}
+}
+
 // Test that NSGAII_Evolve doesn't crash and returns a tree
 func TestNSGAII_Evolve_Basic(t *testing.T) {
 	baseTree := &SerializableNode{

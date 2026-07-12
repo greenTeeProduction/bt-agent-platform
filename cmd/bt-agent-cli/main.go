@@ -49,6 +49,8 @@ func main() {
 		cmdBB()
 	case "status":
 		cmdStatus()
+	case "impact":
+		cmdImpact()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -73,6 +75,7 @@ Usage:
   bt-agent-cli bb list --scope agent --id <name> [--prefix runs/]
   bt-agent-cli bb read --scope agent --id <name> --key runs/latest/output
   bt-agent-cli bb scopes --scope session
+  bt-agent-cli impact <source-file> [--root <dir>]
 
 Templates: code-reviewer, daily-researcher, system-monitor, meeting-summarizer, data-pipeline, notification-router`)
 }

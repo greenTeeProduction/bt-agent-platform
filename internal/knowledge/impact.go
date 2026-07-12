@@ -40,6 +40,18 @@ func (g *ImpactGraph) TestsFor(source string) []string {
 	return g.tests[source]
 }
 
+// ImpactedTests is the single build+query entry point CLI and MCP consumers
+// share: it builds the impact graph for the module rooted at root and
+// returns the tests impacted by a change to source, so a caller can gate a
+// commit on a scoped test list instead of always running the full suite.
+func ImpactedTests(root, source string) ([]string, error) {
+	graph, err := BuildImpactGraph(root)
+	if err != nil {
+		return nil, err
+	}
+	return graph.TestsFor(source), nil
+}
+
 // goFileInfo captures the parsed facts we need from a single .go file.
 type goFileInfo struct {
 	rel     string   // module-relative, slash-separated path

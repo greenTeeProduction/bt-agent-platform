@@ -46,10 +46,16 @@ type NSGAIIPopulation struct {
 	FitnessMultiFn func(*SerializableNode) MultiFitness `json:"-"`
 }
 
-// NewNSGAIIPopulation creates a population with NSGA-II support.
+// NewNSGAIIPopulation creates a population with NSGA-II support. Specialists
+// is seeded up front — mirroring the nil-guard IslandModel.EvolveAll applies
+// in island.go — so the self-healing envelope has a registry to consult from
+// the very first generation instead of only after some other caller happens
+// to set one.
 func NewNSGAIIPopulation(size int, baseTree *SerializableNode, dims []FitnessDimension) *NSGAIIPopulation {
+	pop := NewPopulation(size, baseTree)
+	pop.Specialists = NewSpecialistRegistry()
 	return &NSGAIIPopulation{
-		Population:   NewPopulation(size, baseTree),
+		Population:   pop,
 		Dimensions:   dims,
 		FitnessVecs:  make([]MultiFitness, size),
 		CrowdingDist: make([]float64, size),
@@ -238,93 +244,104 @@ func (nsga2 *NSGAIIPopulation) TournamentSelect(k int) []*SerializableNode {
 
 // Evolve runs NSGA-II evolution for the given number of generations.
 // Uses crowded tournament selection, simulated binary crossover (SBX),
-// and polynomial mutation.
+// and polynomial mutation. Each generation's offspring/replacement step runs
+// inside the same selfHealGeneration envelope Evolve, EvolveWithExperience
+// (learning.go), and EvolvePareto (pareto.go) already use, so the seeded
+// Specialists registry is observed and extinct specialists get resurrected on
+// a population-level crisis, matching every other production Evolve variant.
 func (nsga2 *NSGAIIPopulation) Evolve(
 	generations int,
 	fitnessFn func(*SerializableNode) MultiFitness,
 ) *SerializableNode {
 	nsga2.Evaluate(fitnessFn)
 	popSize := len(nsga2.Individuals)
+	// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
+	eliteCount := min(max(2, popSize/10), popSize)
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		nsga2.Generation++
 
-		// Create offspring population via crowded tournament selection
-		offspring := make([]Individual, popSize)
-		for i := 0; i < popSize; i++ {
-			parents := nsga2.TournamentSelect(3)
-			child := Crossover(parents[0], parents[1])
-			// Mutation
-			if rand.Float64() < 0.3 {
-				ops := randomMutation(child)
-				ApplyMutations(child, ops)
-			}
-			fv := fitnessFn(child)
-			offspring[i] = Individual{
-				Tree:    child,
-				Genome:  hashTree(child),
-				Fitness: fv.CompositeScore(nil),
-			}
-		}
+		nsga2.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			// selfHealGeneration just re-sorted Individuals by scalar Fitness,
+			// which desyncs the parallel FitnessVecs/Fronts/CrowdingDist
+			// slices from the new order — re-evaluate so tournament selection
+			// below reads consistent state.
+			nsga2.Evaluate(fitnessFn)
 
-		// Combine parent + offspring populations (R_t = P_t ∪ Q_t)
-		combined := make([]Individual, 2*popSize)
-		copy(combined[:popSize], nsga2.Individuals)
-		copy(combined[popSize:], offspring)
-
-		combinedVecs := make([]MultiFitness, 2*popSize)
-		for i := 0; i < popSize; i++ {
-			combinedVecs[i] = nsga2.FitnessVecs[i]
-		}
-		for i := 0; i < popSize; i++ {
-			combinedVecs[popSize+i] = fitnessFn(offspring[i].Tree)
-		}
-
-		// Non-dominated sort on combined population
-		sorter := NewNSGAIISorter(nsga2.Dimensions)
-		fronts := sorter.fastNonDominatedSort(combinedVecs)
-
-		// Build next generation: fill from best fronts
-		nextPop := make([]Individual, 0, popSize)
-		nextVecs := make([]MultiFitness, 0, popSize)
-		nextCrowding := make([]float64, 0, popSize)
-
-		for _, front := range fronts {
-			if len(nextPop)+len(front.Indices) <= popSize {
-				// Take entire front
-				for _, idx := range front.Indices {
-					nextPop = append(nextPop, combined[idx])
-					nextVecs = append(nextVecs, combinedVecs[idx])
+			// Create offspring population via crowded tournament selection
+			offspring := make([]Individual, popSize)
+			for i := 0; i < popSize; i++ {
+				parents := nsga2.TournamentSelect(3)
+				child := Crossover(parents[0], parents[1])
+				// Mutation
+				if rand.Float64() < mutationRate {
+					ops := randomMutation(child)
+					ApplyMutations(child, ops)
 				}
-				// Crowding distance is recalculated below by Evaluate against the
-				// rebuilt population; assigning it here would index the pre-update
-				// slices with combined-population indices (out of range).
-			} else {
-				// Front is too large: sort by crowding distance, take the best
-				remaining := popSize - len(nextPop)
-				indices := front.Indices
-				// Assign crowding distance to this front
-				cd := sorter.assignCrowdingDistance(indices, combinedVecs)
-				// Sort by crowding distance descending
-				sort.Slice(indices, func(a, b int) bool {
-					return cd[indices[a]] > cd[indices[b]]
-				})
-				for k := 0; k < remaining && k < len(indices); k++ {
-					idx := indices[k]
-					nextPop = append(nextPop, combined[idx])
-					nextVecs = append(nextVecs, combinedVecs[idx])
+				fv := fitnessFn(child)
+				offspring[i] = Individual{
+					Tree:    child,
+					Genome:  hashTree(child),
+					Fitness: fv.CompositeScore(nil),
 				}
-				break
 			}
-		}
 
-		// Update population
-		nsga2.Individuals = nextPop
-		nsga2.FitnessVecs = nextVecs
-		nsga2.CrowdingDist = nextCrowding // will be recalculated next Evaluate
+			// Combine parent + offspring populations (R_t = P_t ∪ Q_t)
+			combined := make([]Individual, 2*popSize)
+			copy(combined[:popSize], nsga2.Individuals)
+			copy(combined[popSize:], offspring)
 
-		// Re-evaluate (re-assigns fronts and crowding distances)
-		nsga2.Evaluate(fitnessFn)
+			combinedVecs := make([]MultiFitness, 2*popSize)
+			copy(combinedVecs[:popSize], nsga2.FitnessVecs)
+			for i := 0; i < popSize; i++ {
+				combinedVecs[popSize+i] = fitnessFn(offspring[i].Tree)
+			}
+
+			// Non-dominated sort on combined population
+			sorter := NewNSGAIISorter(nsga2.Dimensions)
+			fronts := sorter.fastNonDominatedSort(combinedVecs)
+
+			// Build next generation: fill from best fronts
+			nextPop := make([]Individual, 0, popSize)
+			nextVecs := make([]MultiFitness, 0, popSize)
+
+			for _, front := range fronts {
+				if len(nextPop)+len(front.Indices) <= popSize {
+					// Take entire front
+					for _, idx := range front.Indices {
+						nextPop = append(nextPop, combined[idx])
+						nextVecs = append(nextVecs, combinedVecs[idx])
+					}
+					// Crowding distance is recalculated below by Evaluate against the
+					// rebuilt population; assigning it here would index the pre-update
+					// slices with combined-population indices (out of range).
+				} else {
+					// Front is too large: sort by crowding distance, take the best
+					remaining := popSize - len(nextPop)
+					indices := front.Indices
+					// Assign crowding distance to this front
+					cd := sorter.assignCrowdingDistance(indices, combinedVecs)
+					// Sort by crowding distance descending
+					sort.Slice(indices, func(a, b int) bool {
+						return cd[indices[a]] > cd[indices[b]]
+					})
+					for k := 0; k < remaining && k < len(indices); k++ {
+						idx := indices[k]
+						nextPop = append(nextPop, combined[idx])
+						nextVecs = append(nextVecs, combinedVecs[idx])
+					}
+					break
+				}
+			}
+
+			// Update population
+			nsga2.Individuals = nextPop
+			nsga2.FitnessVecs = nextVecs
+
+			// Re-evaluate (re-assigns fronts and crowding distances)
+			nsga2.Evaluate(fitnessFn)
+		})
 	}
 
 	return nsga2.BestTree

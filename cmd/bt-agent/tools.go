@@ -299,7 +299,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
 	}
 }
 
-// registerMCPTools registers all 77 MCP tools on the server.
+// registerMCPTools registers all 78 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -969,6 +969,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				evolution.DimStability,
 			}
 			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
+			nsga.Specialists = evolution.SeedSpecialistRegistry()
 			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
@@ -993,6 +994,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "generations": nsga.Generation,
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
+				"health": evolveHealthProjection(nsga.Population),
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -2258,6 +2260,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	registerGoalTools(server, deps)
 	registerAutomationTools(server, deps)
 	registerFeedbackTools(server, deps)
+	registerImpactTools(server, deps)
 }
 
 // resolveEvolvePopulation validates an evolve tool's population parameter at

@@ -168,3 +168,39 @@ func TestBuildImpactGraph_UnknownSourceHasNoTests(t *testing.T) {
 		t.Errorf("unknown source file should have no impacted tests; got %v", got)
 	}
 }
+
+// ImpactedTests is the single build+query entry point CLI and MCP consumers
+// share, so a change to a file can gate a scoped test list instead of always
+// running the full suite (milestone: production consumer of the impact graph).
+func TestImpactedTests_BuildsGraphAndQueries(t *testing.T) {
+	root := writeImpactFixture(t)
+
+	got, err := ImpactedTests(root, "mathx/mathx.go")
+	if err != nil {
+		t.Fatalf("ImpactedTests: %v", err)
+	}
+	if !containsStr(got, "mathx/mathx_test.go") {
+		t.Errorf("ImpactedTests(mathx/mathx.go) missing proximity target; got %v", got)
+	}
+	if !containsStr(got, "calc/calc_test.go") {
+		t.Errorf("ImpactedTests(mathx/mathx.go) missing import target; got %v", got)
+	}
+}
+
+func TestImpactedTests_UnknownSourceHasNoTests(t *testing.T) {
+	root := writeImpactFixture(t)
+
+	got, err := ImpactedTests(root, "does/not/exist.go")
+	if err != nil {
+		t.Fatalf("ImpactedTests: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("unknown source file should have no impacted tests; got %v", got)
+	}
+}
+
+func TestImpactedTests_PropagatesBuildError(t *testing.T) {
+	if _, err := ImpactedTests(t.TempDir(), "whatever.go"); err == nil {
+		t.Error("expected an error when root has no go.mod")
+	}
+}
