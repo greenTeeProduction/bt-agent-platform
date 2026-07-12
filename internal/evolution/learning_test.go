@@ -2,6 +2,8 @@ package evolution
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -508,4 +510,174 @@ func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
 			t.Errorf("registry archetypes = %v, want a planner archetype observed from the elites", registry.Archetypes)
 		}
 	})
+}
+
+// ─── Durable QTable persistence (Q2 Evolvability milestone 1/4) ───────────
+
+// TestQTable_SaveLoadRoundTrip verifies that a Q-table's learned state
+// survives a Save → fresh-table Load round-trip, the same durable-archive
+// contract IslandModel.Save/Load already provides for island populations.
+func TestQTable_SaveLoadRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "qtable.json")
+
+	qt := NewQTable()
+	qt.Update("go:low:2", "add_before", 0.5, 0.1)
+	qt.Update("go:low:2", "add_after", -0.2, 0.1)
+	qt.Update("go:high:5", "prune_node", 0.9, 0.1)
+
+	if err := qt.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded := NewQTable()
+	if err := loaded.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := loaded.Values["go:low:2"]["add_before"]; got != qt.Values["go:low:2"]["add_before"] {
+		t.Errorf("loaded go:low:2/add_before = %v, want %v", got, qt.Values["go:low:2"]["add_before"])
+	}
+	if got := loaded.Values["go:low:2"]["add_after"]; got != qt.Values["go:low:2"]["add_after"] {
+		t.Errorf("loaded go:low:2/add_after = %v, want %v", got, qt.Values["go:low:2"]["add_after"])
+	}
+	if got := loaded.Values["go:high:5"]["prune_node"]; got != qt.Values["go:high:5"]["prune_node"] {
+		t.Errorf("loaded go:high:5/prune_node = %v, want %v", got, qt.Values["go:high:5"]["prune_node"])
+	}
+}
+
+// TestQTable_LoadMissingFileColdStart pins the cold-start contract: loading a
+// path that does not exist yet (and whose parent directory may not exist
+// either) is a silent no-op, not an error, matching IslandModel.Load.
+func TestQTable_LoadMissingFileColdStart(t *testing.T) {
+	qt := NewQTable()
+	qt.Update("seed:state", "seed:action", 1.0, 0.1)
+	want := qt.Values["seed:state"]["seed:action"]
+
+	absent := filepath.Join(t.TempDir(), "absent-dir", "qtable.json")
+	if err := qt.Load(absent); err != nil {
+		t.Fatalf("cold-start Load: %v", err)
+	}
+	if got := qt.Values["seed:state"]["seed:action"]; got != want {
+		t.Errorf("cold-start Load mutated in-memory state: seed:state/seed:action = %v, want unchanged %v", got, want)
+	}
+}
+
+// TestQTable_LoadCorruptArchiveReturnsErrorAndLeavesStateUntouched verifies
+// that a corrupt archive fails loudly and does not clobber the in-memory
+// table — the same guard IslandModel.Load enforces.
+func TestQTable_LoadCorruptArchiveReturnsErrorAndLeavesStateUntouched(t *testing.T) {
+	corrupt := filepath.Join(t.TempDir(), "corrupt.json")
+	if err := os.WriteFile(corrupt, []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("write corrupt archive: %v", err)
+	}
+
+	qt := NewQTable()
+	qt.Update("keep:state", "keep:action", 2.0, 0.1)
+	want := qt.Values["keep:state"]["keep:action"]
+
+	if err := qt.Load(corrupt); err == nil {
+		t.Error("Load(corrupt archive) = nil, want error")
+	}
+	if got := qt.Values["keep:state"]["keep:action"]; got != want {
+		t.Errorf("corrupt Load mutated in-memory state: keep:state/keep:action = %v, want unchanged %v", got, want)
+	}
+}
+
+// ─── QTable Cap eviction (Q2 Evolvability milestone 3/4) ──────────────────
+
+// TestQTable_UpdateEvictsLeastRecentlyUpdatedStateOnCapOverflow pins milestone
+// 3/4 of the durable QTable-archive-bound program: a non-zero Cap must bound
+// Values to at most Cap states, evicting the least-recently-updated state
+// first when Update would otherwise grow the table past it — mirroring
+// IslandModel.Cap/enforceIslandCap in island.go, and accumulating evictions
+// onto QTable.EvictedStates the same way IslandModel.EvictedIndividuals
+// accumulates across Load calls.
+func TestQTable_UpdateEvictsLeastRecentlyUpdatedStateOnCapOverflow(t *testing.T) {
+	qt := NewQTable()
+	qt.Cap = 2
+	if qt.EvictedStates != 0 {
+		t.Fatalf("EvictedStates zero value = %d, want 0", qt.EvictedStates)
+	}
+
+	qt.Update("s1", "a1", 1.0, 0.1)
+	qt.Update("s2", "a1", 1.0, 0.1)
+	if len(qt.Values) != 2 {
+		t.Fatalf("under cap: len(Values) = %d, want 2", len(qt.Values))
+	}
+
+	// Overflow: s1 is the least-recently-updated state and must be evicted.
+	qt.Update("s3", "a1", 1.0, 0.1)
+
+	if len(qt.Values) != 2 {
+		t.Fatalf("over cap: len(Values) = %d, want capped at 2", len(qt.Values))
+	}
+	if _, ok := qt.Values["s1"]; ok {
+		t.Error("expected least-recently-updated state s1 evicted")
+	}
+	if _, ok := qt.Values["s2"]; !ok {
+		t.Error("expected s2 retained")
+	}
+	if _, ok := qt.Values["s3"]; !ok {
+		t.Error("expected newly-added s3 retained")
+	}
+	if qt.EvictedStates != 1 {
+		t.Fatalf("EvictedStates = %d, want 1", qt.EvictedStates)
+	}
+
+	// A second overflow must accumulate the counter, not reset it.
+	qt.Update("s4", "a1", 1.0, 0.1)
+	if _, ok := qt.Values["s2"]; ok {
+		t.Error("expected s2 evicted on second overflow as the new least-recently-updated state")
+	}
+	if qt.EvictedStates != 2 {
+		t.Fatalf("EvictedStates = %d, want cumulative 2", qt.EvictedStates)
+	}
+}
+
+// TestQTable_UpdateRefreshesRecencyKeepingRepeatedlyUpdatedState pins that
+// re-Update-ing an existing state counts as touching it, so a state learned
+// from repeatedly outranks one merely added once and left stale — the same
+// recency semantics an LRU eviction policy requires.
+func TestQTable_UpdateRefreshesRecencyKeepingRepeatedlyUpdatedState(t *testing.T) {
+	qt := NewQTable()
+	qt.Cap = 2
+
+	qt.Update("s1", "a1", 1.0, 0.1)
+	qt.Update("s2", "a1", 1.0, 0.1)
+	qt.Update("s1", "a1", 1.0, 0.1) // touch s1 again; s2 becomes least-recently-updated
+	qt.Update("s3", "a1", 1.0, 0.1) // overflow: should evict s2, not s1
+
+	if _, ok := qt.Values["s1"]; !ok {
+		t.Error("expected s1 retained: it was refreshed after s2")
+	}
+	if _, ok := qt.Values["s2"]; ok {
+		t.Error("expected s2 evicted as the least-recently-updated state")
+	}
+	if _, ok := qt.Values["s3"]; !ok {
+		t.Error("expected newly-added s3 retained")
+	}
+	if qt.EvictedStates != 1 {
+		t.Fatalf("EvictedStates = %d, want 1", qt.EvictedStates)
+	}
+}
+
+// TestQTable_CapZeroPreservesUnboundedGrowth pins that the default zero-value
+// Cap leaves Update's growth unbounded, mirroring IslandModel's zero-cap
+// contract (TestIslandModel_LoadCapZeroPreservesUnboundedBehavior).
+func TestQTable_CapZeroPreservesUnboundedGrowth(t *testing.T) {
+	qt := NewQTable()
+	if qt.Cap != 0 {
+		t.Fatalf("Cap zero value = %d, want 0", qt.Cap)
+	}
+
+	for i := 0; i < 10; i++ {
+		qt.Update(fmt.Sprintf("s%d", i), "a1", 1.0, 0.1)
+	}
+
+	if len(qt.Values) != 10 {
+		t.Fatalf("Cap=0 table has %d states, want unbounded 10", len(qt.Values))
+	}
+	if qt.EvictedStates != 0 {
+		t.Fatalf("EvictedStates = %d, want 0 for unbounded table", qt.EvictedStates)
+	}
 }

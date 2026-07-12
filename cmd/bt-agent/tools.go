@@ -44,6 +44,15 @@ func islandArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "island_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// qtableArchivePath resolves the durable QTable archive bt_evolve_qlearning
+// warm-starts from and persists to (milestone 2/4 of the durable Q-learning
+// program, Q2 Evolvability), scoped per base tree like islandArchivePath so
+// runs on different base trees do not warm-start-merge each other's learned
+// Q-values through a single shared file.
+func qtableArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "qtable_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
 // fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
 // of evolution.TreeFileName. That helper is deliberately not reused: its
@@ -1031,17 +1040,45 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// Deterministic, LLM-free Q-learning evolution reusing the shared
 			// structural fitness so the tool stays -short-safe.
 			qt := evolution.NewQTable()
+			// Warm-start from the durable QTable archive so learned Q-values
+			// accumulate across runs instead of resetting to an empty table
+			// every call (milestone 2/4). A missing archive is a cold start; a
+			// corrupt one degrades to a cold start surfaced non-fatally so the
+			// evolution still runs, mirroring bt_evolve_island.
+			archivePath := qtableArchivePath(params.Tree)
+			_, statErr := os.Stat(archivePath)
+			warmStarted := statErr == nil
+			archiveLoadErr := ""
+			if err := qt.Load(archivePath); err != nil {
+				warmStarted = false
+				archiveLoadErr = err.Error()
+			}
+			learnedStatesBefore := len(qt.LearnedActions())
 			pop := newProductionPopulation(population, baseTree)
 			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate)
 			learned := qt.LearnedActions()
-			data, _ := json.Marshal(map[string]interface{}{
+			result := map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "best_nodes": evolution.CountNodes(best),
 				"diversity": pop.Diversity(), "epsilon": epsilon,
-				"learning_rate":   params.LearningRate,
-				"learned_actions": learned, "learned_states": len(learned),
-				"total_mutations": pop.TotalMutations, "regressions": pop.Regressions,
-			})
+				"learning_rate":         params.LearningRate,
+				"learned_actions":       learned,
+				"learned_states":        len(learned),
+				"warm_started":          warmStarted,
+				"learned_states_before": learnedStatesBefore,
+				"learned_states_after":  len(learned),
+				"total_mutations":       pop.TotalMutations, "regressions": pop.Regressions,
+			}
+			if archiveLoadErr != "" {
+				result["archive_load_error"] = archiveLoadErr
+			}
+			// Persist the merged, learned table so the next invocation resumes
+			// from this run's Q-values. A save failure is surfaced non-fatally
+			// alongside the evolution result.
+			if err := qt.Save(archivePath); err != nil {
+				result["archive_save_error"] = err.Error()
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

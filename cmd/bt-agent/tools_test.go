@@ -1785,6 +1785,75 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	}
 }
 
+// TestBTEvolveQLearningAccumulatesDurableArchive pins milestone 2/4 of the
+// durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
+// persist its QTable to a per-tree durable archive after every run and
+// warm-start from that archive on the next invocation, so learned Q-values
+// accumulate across runs instead of resetting to an empty table each call
+// (today qt := evolution.NewQTable() is discarded on every call). The result
+// JSON must report the warm start honestly — "warm_started": false on a cold
+// home, true once an archive exists — and "learned_states_before" /
+// "learned_states_after" must show the second run resuming from the first
+// run's learned state count rather than starting from zero.
+func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	// Identical args for both runs so warm-start states line up; epsilon=0
+	// keeps action selection deterministic (pure greedy) once Q-values exist,
+	// matching TestBTEvolveQLearningRegisteredAndLearnsGreedily.
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":3,"epsilon":0}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_qlearning", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_qlearning) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_qlearning returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_qlearning %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_qlearning unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	first := invoke("first")
+	if got, isBool := first["warm_started"].(bool); !isBool || got {
+		t.Errorf(`first run on a cold home must report "warm_started": false; got %v`, first["warm_started"])
+	}
+	if before, isNum := first["learned_states_before"].(float64); !isNum || before != 0 {
+		t.Errorf("first run's 'learned_states_before' must be 0 on a cold home; got %v", first["learned_states_before"])
+	}
+	after1, isNum := first["learned_states_after"].(float64)
+	if !isNum || after1 <= 0 {
+		t.Fatalf("first run's 'learned_states_after' must be positive after learning generations; got %v", first["learned_states_after"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "qtable_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob qtable archives after the first run: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("bt_evolve_qlearning single-tree runs must persist exactly one durable qtable archive under BT_AGENT_HOME after the first run; got %v", matches)
+	}
+
+	second := invoke("second")
+	if got, isBool := second["warm_started"].(bool); !isBool || !got {
+		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+	if before2, isNum := second["learned_states_before"].(float64); !isNum || before2 != after1 {
+		t.Errorf("second run must resume the first run's learned Q-values: 'learned_states_before' = %v, want %v (the first run's 'learned_states_after')", second["learned_states_before"], after1)
+	}
+}
+
 // injectSelectorProbeTree installs a DynamicResolveFn that resolves the
 // unqualified probe id "domain:selector_probe" to a fixed Selector-ordering
 // tree (Router selector over Cheap, Reliable, and an AlwaysSucceed Fallback),

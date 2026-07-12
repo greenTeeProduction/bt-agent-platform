@@ -3,7 +3,11 @@ package evolution
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 )
@@ -600,6 +604,16 @@ func (p *Population) NicheDiversity() float64 {
 // QTable maps state→action→value for reinforcement learning.
 type QTable struct {
 	Values map[string]map[string]float64 `json:"values"` // state → action → Q-value
+	// Cap bounds the number of distinct states Update retains; 0 = unbounded,
+	// mirroring IslandModel.Cap.
+	Cap int `json:"cap"`
+	// EvictedStates is the cumulative count of states dropped by Update's
+	// eviction across every call, mirroring IslandModel.EvictedIndividuals.
+	EvictedStates int `json:"evicted_states"`
+	// updateSeq and lastUpdated track per-state recency so Update can evict
+	// the least-recently-updated state first once Cap is exceeded.
+	updateSeq   uint64
+	lastUpdated map[string]uint64
 }
 
 // NewQTable creates an empty Q-table.
@@ -645,6 +659,101 @@ func (qt *QTable) Update(state, action string, reward, learningRate float64) {
 		qt.Values[state] = make(map[string]float64)
 	}
 	qt.Values[state][action] += learningRate * (reward - qt.Values[state][action])
+
+	if qt.lastUpdated == nil {
+		qt.lastUpdated = make(map[string]uint64)
+	}
+	qt.updateSeq++
+	qt.lastUpdated[state] = qt.updateSeq
+	qt.enforceCap()
+}
+
+// enforceCap evicts the least-recently-updated states from Values until at
+// most Cap states remain; Cap <= 0 leaves Values unbounded, mirroring
+// enforceIslandCap in island.go. Each eviction accumulates onto EvictedStates.
+func (qt *QTable) enforceCap() {
+	for qt.Cap > 0 && len(qt.Values) > qt.Cap {
+		var oldest string
+		var oldestSeq uint64
+		found := false
+		for state := range qt.Values {
+			seq := qt.lastUpdated[state]
+			if !found || seq < oldestSeq {
+				oldest, oldestSeq, found = state, seq, true
+			}
+		}
+		delete(qt.Values, oldest)
+		delete(qt.lastUpdated, oldest)
+		qt.EvictedStates++
+	}
+}
+
+// Save persists the Q-table as JSON at path, creating missing parent
+// directories and writing atomically (temp file + rename) under the shared
+// advisory flock so concurrent writers cannot interleave partial archives,
+// mirroring IslandModel.Save (ADR-024).
+func (qt *QTable) Save(path string) error {
+	data, err := json.MarshalIndent(qt.Values, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal qtable archive: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create qtable archive dir: %w", err)
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write qtable archive: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit qtable archive: %w", err)
+	}
+	return nil
+}
+
+// Load warm-starts the table by merging the archive at path into the
+// in-memory Values, state-by-action, so previously learned values not present
+// on disk survive. A missing archive is a silent cold start; a corrupt
+// archive is an error that leaves the in-memory state untouched, mirroring
+// IslandModel.Load.
+func (qt *QTable) Load(path string) error {
+	// Cold start before touching the flock sidecar: the archive directory may
+	// not exist yet, and acquiring the lock would fail trying to create it.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read qtable archive: %w", err)
+	}
+	var values map[string]map[string]float64
+	if err := json.Unmarshal(data, &values); err != nil {
+		return fmt.Errorf("parse qtable archive %s: %w", path, err)
+	}
+	if qt.Values == nil {
+		qt.Values = make(map[string]map[string]float64)
+	}
+	for state, actions := range values {
+		if qt.Values[state] == nil {
+			qt.Values[state] = make(map[string]float64)
+		}
+		for action, val := range actions {
+			qt.Values[state][action] = val
+		}
+	}
+	return nil
 }
 
 // BestAction returns the highest-value action for a state.
