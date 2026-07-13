@@ -63,6 +63,39 @@ func TestImpactTests_RejectsMissingSource(t *testing.T) {
 	}
 }
 
+// Regression: a changed-file path handed to the MCP tool is normally
+// absolute (or relative to the caller's cwd), not already module-relative
+// like the impact graph indexes it. impactTests must normalize it (via
+// knowledge.NormalizeImpactSource) before querying, matching the CLI
+// sibling (cmd/bt-agent-cli/impact.go's impactedTestsForSource).
+func TestImpactTests_NormalizesAbsoluteSourceUnderRoot(t *testing.T) {
+	root := writeImpactMCPFixture(t)
+	sourceAbs := filepath.Join(root, "pkg", "file.go")
+
+	result := impactTests(root, sourceAbs)
+	if result["error"] != nil {
+		t.Fatalf("unexpected error: %v", result["error"])
+	}
+	tests, _ := result["tests"].([]string)
+	if len(tests) != 1 || tests[0] != "pkg/file_test.go" {
+		t.Errorf("tests = %v, want [pkg/file_test.go]", result["tests"])
+	}
+}
+
+// Regression: a source path outside root must be an honest {"error": ...}
+// like the CLI's normalizeImpactSource rejection, not a silent tests:[]
+// that looks like "no tests are impacted".
+func TestImpactTests_RejectsSourceOutsideRoot(t *testing.T) {
+	root := writeImpactMCPFixture(t)
+	outside := t.TempDir()
+	source := filepath.Join(outside, "other.go")
+
+	result := impactTests(root, source)
+	if result["error"] == nil {
+		t.Errorf("impactTests(%q, %q): expected error for path outside root, got tests=%v", root, source, result["tests"])
+	}
+}
+
 func TestBTImpactTestsRegistered(t *testing.T) {
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})

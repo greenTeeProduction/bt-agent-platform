@@ -17,7 +17,11 @@ func impactTests(root, source string) map[string]interface{} {
 	if strings.TrimSpace(source) == "" {
 		return map[string]interface{}{"error": "source is required"}
 	}
-	tests, err := knowledge.ImpactedTests(root, source)
+	rel, err := knowledge.NormalizeImpactSource(root, source)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	tests, err := knowledge.ImpactedTests(root, rel)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
