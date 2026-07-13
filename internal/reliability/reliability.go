@@ -1059,9 +1059,17 @@ func (pq *PriorityQueue) load() {
 
 // AgentResult encapsulates the result of an agent execution.
 type AgentResult struct {
-	Agent        string        `json:"agent"`
-	Task         string        `json:"task"`
-	Output       string        `json:"output"`
+	Agent  string `json:"agent"`
+	Task   string `json:"task"`
+	Output string `json:"output"`
+	// Outcome carries the originating runner's raw outcome string (e.g.
+	// "success" or a sentinel like the scheduler's rate-limit carryover) when
+	// the executor backend has one to report, so callers that dispatch
+	// through an AgentExecutor/AgentRouter — not just agent.RunDeps.RunOnce
+	// directly — can still distinguish those dispositions instead of
+	// collapsing everything to the Success bool. Empty when the backend
+	// (e.g. a remote node that hasn't been updated to populate it) has none.
+	Outcome      string        `json:"outcome,omitempty"`
 	Duration     time.Duration `json:"duration"`
 	Success      bool          `json:"success"`
 	Error        string        `json:"error,omitempty"`
@@ -1207,22 +1215,34 @@ type AgentEndpoint struct {
 // router with no remote executors that routes every task to the local executor,
 // so single-node deployments behave exactly as before adopting the substrate.
 func NewRouterFromEndpoints(local AgentExecutor, endpoints []AgentEndpoint) *AgentRouter {
-	remotes := make([]AgentExecutor, 0, len(endpoints))
+	router := NewAgentRouter()
+	// The passed-in local executor is always the fallback — set it before
+	// adding remotes so Add's "adopt first executor as local" fallback never
+	// overrides it.
+	router.SetLocal(local)
+	router.AddEndpoints(endpoints)
+	return router
+}
+
+// AddEndpoints reduces the given remote peer endpoints to RemoteExecutors and
+// adds them to the router, using the same BaseURL-required filtering as
+// NewRouterFromEndpoints (endpoints with no reachable interface are
+// skipped). This lets a router built before peer discovery has run — e.g. a
+// daemon's scheduler/replay closures that must capture the router variable
+// ahead of A2A server startup — adopt newly-discovered peers in place once
+// the live card registry is available, without reconstructing the router or
+// disturbing its already-configured local fallback.
+func (r *AgentRouter) AddEndpoints(endpoints []AgentEndpoint) {
 	for _, ep := range endpoints {
 		if ep.BaseURL == "" {
 			continue
 		}
-		remotes = append(remotes, NewRemoteExecutor(RemoteExecutorConfig{
+		r.Add(NewRemoteExecutor(RemoteExecutorConfig{
 			Name:    ep.Name,
 			BaseURL: ep.BaseURL,
 			APIKey:  ep.APIKey,
 		}))
 	}
-	router := NewAgentRouter(remotes...)
-	// The passed-in local executor is always the fallback — never the first
-	// remote (which NewAgentRouter would otherwise adopt as local).
-	router.SetLocal(local)
-	return router
 }
 
 // Add adds an executor to the router. New executors start with zero failures

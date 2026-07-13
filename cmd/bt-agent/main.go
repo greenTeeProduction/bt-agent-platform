@@ -149,8 +149,46 @@ func newLocalAgentExecutor(nodeURL string, runner *agent.RunDeps) *reliability.L
 			Duration:     res.Duration,
 			Success:      res.Outcome == "success",
 			QualityScore: res.Quality,
+			// Outcome preserves RunOnce's raw disposition (e.g. the
+			// scheduler's rate-limit-carryover sentinel) across the
+			// AgentExecutor boundary, so callers dispatching through
+			// agentRouter.Execute can still distinguish it instead of
+			// collapsing every non-"success" run to a bare failure.
+			Outcome: res.Outcome,
 		}, nil
 	})
+}
+
+// routedRunResult adapts a reliability.AgentResult — the AgentExecutor/
+// AgentRouter contract's thinner result shape — back into an agent.RunResult
+// so scheduler and DLQ-replay callers built around agentRunner.RunOnce's
+// richer result keep working unchanged whether a task executed locally or
+// dispatched to a remote peer. Falls back to deriving outcome from Success
+// when the executor backend left Outcome unset (e.g. a remote node that
+// hasn't been updated to populate it). TraceID/SpanID never round-trip
+// through this boundary, so DLQ trace-parent linking degrades to the
+// caller's own context for router-dispatched runs — a tracing-correlation
+// loss only, not an outcome one.
+func routedRunResult(agentName, task string, ar *reliability.AgentResult) *agent.RunResult {
+	if ar == nil {
+		return nil
+	}
+	outcome := ar.Outcome
+	if outcome == "" {
+		if ar.Success {
+			outcome = "success"
+		} else {
+			outcome = "failed"
+		}
+	}
+	return &agent.RunResult{
+		AgentName: agentName,
+		Task:      task,
+		Outcome:   outcome,
+		Output:    ar.Output,
+		Quality:   ar.QualityScore,
+		Duration:  ar.Duration,
+	}
 }
 
 // attemptOutcomeError builds the per-attempt error the scheduler retry policy
@@ -379,6 +417,27 @@ func main() {
 		ResolveTreeForUser: resolveTreeForUser,
 	}
 
+	// ── Horizontal-scaling substrate ────────────────────────────────────────
+	// Resolve the A2A base URL up front (env-overridable, same value the A2A
+	// server below binds to) and construct the AgentRouter here, before the
+	// scheduler and DLQ replay closures that must dispatch through it — both
+	// capture agentRouter by reference, so it must exist at this point in
+	// source even though it initially has no remote peers. Peers discovered
+	// from the live A2A card registry are folded in via AddEndpoints once the
+	// A2A server has started further down; until then (and on any run where
+	// a2aErr != nil) the router simply routes every task to the local
+	// executor, matching pre-substrate behavior exactly.
+	a2aPort := 8686
+	if p := os.Getenv("BT_A2A_PORT"); p != "" {
+		_, _ = fmt.Sscanf(p, "%d", &a2aPort)
+	}
+	a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
+	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
+		a2aBaseURL = u
+	}
+	localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner)
+	agentRouter := reliability.NewRouterFromEndpoints(localExec, nil)
+
 	reliability.SafeGo("scheduler-start", func() {
 		globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
 			task := ctx.Task
@@ -417,10 +476,12 @@ func main() {
 			err = policy.ExecuteContext(ctx.Context, func() error {
 				attempts++
 				attemptStart := time.Now()
-				attemptRes, runErr := agentRunner.RunOnce(ctx.Context, ctx.AgentName, task, agent.RunOptions{
-					InjectMemory:   true,
-					EnforceQuality: true,
-				})
+				// Dispatch through agentRouter instead of calling
+				// agentRunner.RunOnce directly, so a scheduled run can reach a
+				// remote peer once one joins the registry (single-node
+				// deployments fall through to the local executor unchanged).
+				routedRes, runErr := agentRouter.Execute(ctx.AgentName, task)
+				attemptRes := routedRunResult(ctx.AgentName, task, routedRes)
 				if attemptRes != nil {
 					outcome = attemptRes.Outcome
 					output = attemptRes.Output
@@ -483,15 +544,17 @@ func main() {
 	// so a failed replay can never push a duplicate dead letter.
 	if noMCPMode() {
 		dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
-			rctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer cancel()
-			res, runErr := agentRunner.RunOnce(rctx, e.Agent, e.Task, agent.RunOptions{
-				InjectMemory:   true,
-				EnforceQuality: true,
-			})
+			// Dispatch through agentRouter instead of calling
+			// agentRunner.RunOnce directly, so a replayed dead letter can
+			// reach a remote peer once one joins the registry. The
+			// AgentExecutor contract carries no context, so the previous
+			// 30-minute deadline no longer applies to routed replays — an
+			// inherent limit of the router seam, not of this call site.
+			routedRes, runErr := agentRouter.Execute(e.Agent, e.Task)
 			if runErr != nil {
 				return runErr
 			}
+			res := routedRunResult(e.Agent, e.Task, routedRes)
 			if res != nil && res.Outcome != "success" {
 				return fmt.Errorf("agent outcome: %s: %s", res.Outcome, agent.OutcomeErrorDetail(res.Output))
 			}
@@ -591,15 +654,8 @@ func main() {
 	}()
 
 	// ── A2A Server ──────────────────────────────────────────────────────────
-	a2aPort := 8686
-	if p := os.Getenv("BT_A2A_PORT"); p != "" {
-		_, _ = fmt.Sscanf(p, "%d", &a2aPort)
-	}
-	a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
-	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
-		a2aBaseURL = u
-	}
-
+	// a2aPort/a2aBaseURL were resolved earlier, alongside the AgentRouter
+	// construction that needs them ahead of the scheduler/DLQ closures.
 	a2aSrv, a2aErr := a2a_mod.NewServer(agentReg, llmClient, a2aPort, a2aBaseURL)
 	if a2aErr != nil {
 		engine.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
@@ -638,14 +694,14 @@ func main() {
 		engine.Info("a2a server started", "port", a2aPort, "agents", len(a2aSrv.CardCache))
 
 		// ── Horizontal-scaling substrate ────────────────────────────────────
-		// Construct the AgentRouter from the live A2A card registry: reduce peer
-		// cards to remote endpoints (excluding this node), and inject the local
-		// in-process executor as the fallback. This is the first production
-		// binary to build the RemoteExecutor + AgentRouter substrate from real
-		// runtime state; a single-node registry yields no peers, so the router
-		// routes every task to the local executor until peers join.
-		localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner)
-		agentRouter := reliability.NewRouterFromEndpoints(localExec, endpointsFromCards(a2aSrv.CardCache, a2aBaseURL))
+		// Fold remote peers from the live A2A card registry into the
+		// AgentRouter constructed earlier (before the scheduler/DLQ replay
+		// closures that dispatch through it): reduce peer cards to remote
+		// endpoints (excluding this node) and add them alongside the local
+		// in-process fallback already installed. A single-node registry
+		// yields no peers, so the router keeps routing every task to the
+		// local executor until peers join.
+		agentRouter.AddEndpoints(endpointsFromCards(a2aSrv.CardCache, a2aBaseURL))
 		engine.Info("agent router constructed from A2A card registry",
 			"remote_peers", len(agentRouter.Executors()),
 			"router", agentRouter.String())

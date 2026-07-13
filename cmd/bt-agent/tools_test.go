@@ -334,6 +334,77 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 	}
 }
 
+// TestBTEvolveIslandWiresExperienceBankIntoMigration pins the NotebookLM
+// research gap: bt_evolve_island constructs its IslandModel via
+// evolution.NewIslandModel but never assigns the model's Bank field from
+// deps.expBank, even though IslandModel.Migrate already consults Bank (when
+// set) to call ExperienceBank.SeedDomain and carry experience entries across
+// migrating domains. Without the assignment, migration between islands never
+// touches the bank, no matter how many entries it holds. This test seeds the
+// bank with one entry tagged for the "code_review" domain, runs bt_evolve_island
+// in two-domain mode with migration_interval=1 (so Migrate fires deterministically
+// on generation 1, migrating individuals in both directions between the only two
+// islands), and asserts SeedDomain's effect is observable: a new entry re-tagged
+// for the "security_audit" domain must appear in the bank.
+func TestBTEvolveIslandWiresExperienceBankIntoMigration(t *testing.T) {
+	// Isolate the durable island archive (milestone 3/5): without this the
+	// tool would warm-start from — and persist test state into — the real
+	// platform home.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	// Seed directly (bypassing AddFromMutation's name-derived TreeType) so the
+	// entry is unambiguously tagged for the "code_review" domain island.
+	bank.Entries = append(bank.Entries, evolution.ExperienceEntry{
+		ID:           "seed_code_review",
+		TreeType:     "code_review",
+		QualityScore: 1.0,
+		FitnessDelta: 0.2,
+	})
+	if bank.Count() != 1 {
+		t.Fatalf("seeded bank Count() = %d, want 1", bank.Count())
+	}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{expBank: bank})
+
+	args := json.RawMessage(`{"tree":"godev","domains":"code_review,security_audit","population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
+	res, ok := server.Invoke("bt_evolve_island", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error: %v", out)
+	}
+	if migrations, _ := out["migrations"].(float64); migrations <= 0 {
+		t.Fatalf("bt_evolve_island must report migrations > 0 with migration_interval=1 and two islands; got %v", out["migrations"])
+	}
+
+	found := false
+	for _, e := range bank.Entries {
+		if strings.EqualFold(e.TreeType, "security_audit") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("after migration, the bank must contain an entry re-tagged for \"security_audit\" (via IslandModel.Bank.SeedDomain during Migrate); bank has %d entries and none are tagged security_audit: %+v", bank.Count(), bank.Entries)
+	}
+	if bank.Count() < 2 {
+		t.Errorf("bt_evolve_island's IslandModel must be wired with deps.expBank so migration seeds cross-domain experiences; bank.Count() = %d, want >= 2 (original seed + migrated copy)", bank.Count())
+	}
+}
+
 // TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain pins milestone 4/5
 // of the production-safe island archive program: correct evolved-fitness
 // attribution in domains mode. When each island is seeded from a registered

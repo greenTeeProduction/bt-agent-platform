@@ -1274,6 +1274,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// 'islands' param is ignored); resolution failures abort before
 			// any evolution work so no partial result leaks out.
 			im := evolution.NewIslandModel(params.MigrationInterval, params.MigrationRate)
+			im.Bank = deps.expBank
 			var seeded []string
 			if params.Domains != "" {
 				var names []string

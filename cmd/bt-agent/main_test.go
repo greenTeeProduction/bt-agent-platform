@@ -387,6 +387,52 @@ func TestDaemonWrapsSchedulerAndA2AStartWithSafeGo(t *testing.T) {
 	}
 }
 
+// TestSchedulerAndDLQReplayDispatchThroughAgentRouter pins the NotebookLM
+// research finding that the AgentRouter built from the live A2A card
+// registry ("Horizontal-scaling substrate", main.go) is a dead seam: it is
+// constructed and logged ("agent router constructed from A2A card
+// registry"), then dropped. Neither the scheduler's AgentRunner closure
+// (globalSched.Start) nor the DLQ replay executor (dlq.SetReplayExecutor)
+// ever reference it — both call agentRunner.RunOnce directly — so scheduled
+// and DLQ-replay-driven agent runs can never reach a remote peer even once
+// one joins the registry. Both dispatch paths must route through
+// agentRouter.Execute so horizontal scaling is actually reachable in
+// production, not just from a single-node registry that always resolves to
+// the local executor.
+func TestSchedulerAndDLQReplayDispatchThroughAgentRouter(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+
+	schedStartIdx := strings.Index(s, "globalSched.Start(func(ctx agent.RunContext)")
+	if schedStartIdx < 0 {
+		t.Fatal("main.go lost the globalSched.Start scheduler callback")
+	}
+	replayIdx := strings.Index(s, "dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {")
+	if replayIdx < 0 {
+		t.Fatal("main.go lost the DLQ replay executor")
+	}
+	tickerIdx := strings.Index(s, `reliability.SafeGo("dlq-replay-scan-ticker"`)
+	if tickerIdx < 0 {
+		t.Fatal("main.go lost the dlq-replay-scan-ticker wiring")
+	}
+	if !strings.Contains(s, "reliability.NewRouterFromEndpoints(") {
+		t.Fatal("main.go lost the agentRouter construction from the A2A card registry")
+	}
+
+	schedBody := s[schedStartIdx:replayIdx]
+	if !strings.Contains(schedBody, "agentRouter.Execute(") {
+		t.Error("the scheduler's AgentRunner closure (globalSched.Start) must dispatch scheduled runs via agentRouter.Execute(...) instead of always calling agentRunner.RunOnce directly, so scheduled runs can reach remote peers")
+	}
+
+	replayBody := s[replayIdx:tickerIdx]
+	if !strings.Contains(replayBody, "agentRouter.Execute(") {
+		t.Error("the DLQ replay executor (dlq.SetReplayExecutor) must dispatch replays via agentRouter.Execute(...) instead of always calling agentRunner.RunOnce directly, so replayed dead letters can reach remote peers")
+	}
+}
+
 // A2A ":8686 bind: address already in use" is EXPECTED sibling contention —
 // every MCP/CLI-spawned bt-agent instance next to the daemon triggers it
 // (CLAUDE.md documents it as warned-and-ignored), yet it was logged at ERROR
