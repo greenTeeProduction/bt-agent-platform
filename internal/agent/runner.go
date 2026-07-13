@@ -16,6 +16,10 @@ import (
 // TreeResolver maps a tree ID string to a serializable behavior tree.
 type TreeResolver func(treeID string) *evolution.SerializableNode
 
+// UserTreeResolver maps a tree ID string to a serializable behavior tree,
+// scoped to one requesting user's own workspace.
+type UserTreeResolver func(user, treeID string) *evolution.SerializableNode
+
 // RunDeps holds shared dependencies for agent execution.
 type RunDeps struct {
 	Registry    *Registry
@@ -24,7 +28,17 @@ type RunDeps struct {
 	RefStore    *evolution.Store
 	TreeStore   *evolution.TreeStore
 	ResolveTree TreeResolver
-	Blackboards *blackboard.Manager
+	// ResolveTreeForUser scopes tree resolution to one requesting user's own
+	// workspace (ADR-067 follow-up milestone). Scheduled personal automations
+	// register under a deterministic slug tree ID (goal:automate_<slug>) that
+	// carries no user identity of its own, so the unscoped ResolveTree could
+	// otherwise hand one user's compiled automation tree to another user's
+	// identically-slugged agent. RunOnce consults this resolver instead of
+	// ResolveTree whenever the resolved agent's Definition.Metadata["user"] is
+	// non-empty. Nil means no per-user resolution is wired, in which case
+	// ResolveTree is used regardless of ownership.
+	ResolveTreeForUser UserTreeResolver
+	Blackboards        *blackboard.Manager
 }
 
 // RunOptions configures a single agent run.
@@ -107,9 +121,16 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 		fullTask = BuildTaskFromInputs(def, fullTask, vals)
 	}
-	tree := d.ResolveTree(treeID)
+	resolve := d.ResolveTree
+	if def != nil && def.Metadata["user"] != "" && d.ResolveTreeForUser != nil {
+		owner := def.Metadata["user"]
+		resolve = func(id string) *evolution.SerializableNode {
+			return d.ResolveTreeForUser(owner, id)
+		}
+	}
+	tree := resolve(treeID)
 	if tree == nil {
-		tree = d.ResolveTree(agentName)
+		tree = resolve(agentName)
 		if tree != nil {
 			result.TreeID = agentName
 		}

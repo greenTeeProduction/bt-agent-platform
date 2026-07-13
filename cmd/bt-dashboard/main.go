@@ -605,9 +605,16 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]string{"status": "approved", "id": taskID}
 	if hitl.DefaultStore != nil {
+		resolvedFrom := "pending"
+		if pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID); ok && pending.Status == hitl.StatusEscalated {
+			resolvedFrom = "escalated"
+		}
 		if req, err := hitl.DefaultStore.ApproveByTaskID(taskID, "dashboard", "task approved via dashboard"); err == nil {
 			resp["hitl_request_id"] = req.ID
 			resp["hitl_status"] = string(req.Status)
+			resp["hitl_resolved_from"] = resolvedFrom
+		} else {
+			resp["hitl_note"] = err.Error()
 		}
 	}
 	if err := encodeJSON(w, resp); err != nil {
@@ -624,9 +631,16 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]string{"status": "rejected", "id": taskID}
 	if hitl.DefaultStore != nil {
+		resolvedFrom := "pending"
+		if pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID); ok && pending.Status == hitl.StatusEscalated {
+			resolvedFrom = "escalated"
+		}
 		if req, err := hitl.DefaultStore.RejectByTaskID(taskID, "dashboard", "task rejected via dashboard"); err == nil {
 			resp["hitl_request_id"] = req.ID
 			resp["hitl_status"] = string(req.Status)
+			resp["hitl_resolved_from"] = resolvedFrom
+		} else {
+			resp["hitl_note"] = err.Error()
 		}
 	}
 	if err := encodeJSON(w, resp); err != nil {

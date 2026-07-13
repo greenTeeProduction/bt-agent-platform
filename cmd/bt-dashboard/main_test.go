@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/dashboard"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -152,5 +154,116 @@ func TestHandleDLQReplay_RequeuesInsteadOfDropping(t *testing.T) {
 	// requeues it. A zero RequeuedAt means it was left untouched (never picked up).
 	if entries[0].RequeuedAt.IsZero() {
 		t.Errorf("RequeuedAt is zero; entry was not flagged for retry")
+	}
+}
+
+// TestHandleTaskApproveReject_EscalatedVsPending pins milestone 4/4 of the
+// stop-HITL-escalation-from-silently-auto-approving program. handleTaskApprove
+// and handleTaskReject call hitl.DefaultStore.ApproveByTaskID/RejectByTaskID,
+// which already resolve both StatusPending and StatusEscalated requests (see
+// internal/hitl/store_extensions.go), but the HTTP response never tells the
+// caller which case it was: a request that had been escalated to a human
+// operator resolves silently the same way a routine pending approval does,
+// and a task with no matching HITL request at all gets no signal either — the
+// hitl.DefaultStore error is swallowed outright. The response must surface
+// "hitl_resolved_from" (escalated vs pending) on success and "hitl_note" (the
+// underlying "no pending request for task" message) when no request is found.
+func TestHandleTaskApproveReject_EscalatedVsPending(t *testing.T) {
+	origTaskStore := taskStore
+	origHitl := hitl.DefaultStore
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		hitl.DefaultStore = origHitl
+	})
+
+	tests := []struct {
+		name             string
+		action           string // "approve" or "reject"
+		startEscalated   bool
+		noHitlRequest    bool
+		wantTaskStatus   string
+		wantResolvedFrom string
+		wantNoteContains string
+	}{
+		{name: "approve pending request", action: "approve", startEscalated: false, wantTaskStatus: "approved", wantResolvedFrom: "pending"},
+		{name: "approve escalated request", action: "approve", startEscalated: true, wantTaskStatus: "approved", wantResolvedFrom: "escalated"},
+		{name: "reject pending request", action: "reject", startEscalated: false, wantTaskStatus: "rejected", wantResolvedFrom: "pending"},
+		{name: "reject escalated request", action: "reject", startEscalated: true, wantTaskStatus: "rejected", wantResolvedFrom: "escalated"},
+		{name: "approve task with no hitl request", action: "approve", noHitlRequest: true, wantTaskStatus: "approved", wantNoteContains: "no pending request for task"},
+		{name: "reject task with no hitl request", action: "reject", noHitlRequest: true, wantTaskStatus: "rejected", wantNoteContains: "no pending request for task"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+			store, err := hitl.InitStore(filepath.Join(dir, "hitl"))
+			if err != nil {
+				t.Fatalf("InitStore: %v", err)
+			}
+
+			taskID := "task-" + strings.ReplaceAll(tc.name, " ", "-")
+			if err := taskStore.Create(dashboard.Task{ID: taskID, Title: "t"}); err != nil {
+				t.Fatalf("taskStore.Create: %v", err)
+			}
+
+			var wantReqID string
+			if !tc.noHitlRequest {
+				req := hitl.NewRequest("N", "HumanApprovalGate", "body", "", "", "p", map[string]any{"task_id": taskID})
+				if err := store.Create(req); err != nil {
+					t.Fatalf("hitl store.Create: %v", err)
+				}
+				wantReqID = req.ID
+				if tc.startEscalated {
+					if _, err := store.Escalate(req.ID, "ops", "needs review"); err != nil {
+						t.Fatalf("Escalate: %v", err)
+					}
+				}
+			}
+
+			var rr *httptest.ResponseRecorder
+			switch tc.action {
+			case "approve":
+				httpReq := httptest.NewRequest(http.MethodPost, "/api/task/approve?id="+taskID, nil)
+				rr = httptest.NewRecorder()
+				handleTaskApprove(rr, httpReq)
+			case "reject":
+				httpReq := httptest.NewRequest(http.MethodPost, "/api/task/reject?id="+taskID, nil)
+				rr = httptest.NewRecorder()
+				handleTaskReject(rr, httpReq)
+			default:
+				t.Fatalf("unknown action %q", tc.action)
+			}
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+			}
+
+			var resp map[string]string
+			if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+			}
+
+			if resp["status"] != tc.wantTaskStatus {
+				t.Errorf("status = %q, want %q; full resp=%v", resp["status"], tc.wantTaskStatus, resp)
+			}
+
+			if tc.noHitlRequest {
+				if !strings.Contains(resp["hitl_note"], tc.wantNoteContains) {
+					t.Errorf("hitl_note = %q, want it to contain %q; full resp=%v", resp["hitl_note"], tc.wantNoteContains, resp)
+				}
+				if resp["hitl_request_id"] != "" {
+					t.Errorf("hitl_request_id = %q, want empty since no request existed", resp["hitl_request_id"])
+				}
+				return
+			}
+
+			if resp["hitl_request_id"] != wantReqID {
+				t.Errorf("hitl_request_id = %q, want %q", resp["hitl_request_id"], wantReqID)
+			}
+			if resp["hitl_resolved_from"] != tc.wantResolvedFrom {
+				t.Errorf("hitl_resolved_from = %q, want %q (must distinguish an escalated request from a routine pending one); full resp=%v", resp["hitl_resolved_from"], tc.wantResolvedFrom, resp)
+			}
+		})
 	}
 }

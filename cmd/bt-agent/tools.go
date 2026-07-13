@@ -1926,6 +1926,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]string{"error": "task_id or request_id required"})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
+			resolvedFrom := "pending"
+			if pending, ok := hitl.DefaultStore.FindPendingByTaskID(params.TaskID); ok && pending.Status == hitl.StatusEscalated {
+				resolvedFrom = "escalated"
+			}
 			var req *hitl.Request
 			var err error
 			if reject {
@@ -1937,7 +1941,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			data, _ := json.Marshal(req)
+			data, _ := json.Marshal(struct {
+				*hitl.Request
+				ResolvedFrom string `json:"resolved_from"`
+			}{req, resolvedFrom})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

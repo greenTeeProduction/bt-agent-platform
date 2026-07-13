@@ -4,12 +4,67 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
 )
+
+// ---- test isolation: never touch the real ~/.go-bt-evolve -----------------
+
+// TestMain isolates BT_AGENT_HOME to a throwaway temp directory for every test
+// in this package, so persistent-auctioneer tests (e.g.
+// TestAuctionDelegate_AwardsWinnerFromCardRegistry) that drive AuctionDelegate
+// through a real NewPersistentAuctioneer never flush winner circuit breaker
+// state into the developer's real ~/.go-bt-evolve/circuit_breakers.json.
+func TestMain(m *testing.M) {
+	origHome, hadHome := os.LookupEnv("BT_AGENT_HOME")
+	dir, err := os.MkdirTemp("", "a2a-test-home-")
+	if err != nil {
+		panic("a2a TestMain: MkdirTemp: " + err.Error())
+	}
+	os.Setenv("BT_AGENT_HOME", dir)
+
+	code := m.Run()
+
+	os.RemoveAll(dir)
+	if hadHome {
+		os.Setenv("BT_AGENT_HOME", origHome)
+	} else {
+		os.Unsetenv("BT_AGENT_HOME")
+	}
+	os.Exit(code)
+}
+
+// TestAuctionPersistentTestsIsolateHomeDir guards against real ~/.go-bt-evolve
+// pollution: several tests in this file (e.g.
+// TestAuctionDelegate_AwardsWinnerFromCardRegistry) drive AuctionDelegate,
+// which always builds a NewPersistentAuctioneer and flushes winner circuit
+// breaker state to agent.CircuitBreakersFile(). Without isolating
+// BT_AGENT_HOME for the whole package (e.g. via a package TestMain), those
+// flushes land in the developer's real home directory — confirmed on this
+// machine, whose real circuit_breakers.json carries leaked
+// "a2a.auction.winner.cheap"/"override"/"reviewer" entries from prior test
+// runs — instead of a throwaway test directory.
+func TestAuctionPersistentTestsIsolateHomeDir(t *testing.T) {
+	realHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir: %v", err)
+	}
+	realDataDir := filepath.Join(realHome, ".go-bt-evolve")
+
+	got := agent.CircuitBreakersFile()
+	if strings.HasPrefix(got, realDataDir) {
+		t.Fatalf("agent.CircuitBreakersFile() = %q resolves under the real home directory %q; "+
+			"this package's tests must isolate BT_AGENT_HOME (e.g. via a package TestMain) so "+
+			"persistent-auctioneer tests never write real winner circuit-breaker state", got, realDataDir)
+	}
+}
 
 // ---- message-type contract ------------------------------------------------
 

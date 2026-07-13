@@ -34,6 +34,15 @@ func resolveTree(id string) *evolution.SerializableNode {
 	return domains.ResolveTreeID(id)
 }
 
+// resolveTreeForUser scopes tree resolution to one requesting user's own
+// workspace, so a scheduled personal automation's deterministic slug tree ID
+// (goal:automate_<slug>) can never resolve to a different user's compiled
+// tree just because it was compiled first. Wired into agent.RunDeps so
+// agent.RunOnce consults it whenever the run's Definition has a known owner.
+func resolveTreeForUser(user, id string) *evolution.SerializableNode {
+	return domains.ResolveTreeIDForUser(user, id)
+}
+
 // feedbackSnapshotPath resolves the on-disk knowledge-graph feedback snapshot
 // path the scheduler loads on startup and persists to. It mirrors
 // agent.FeedbackFile() so the daemon and the scheduler agree on a single
@@ -361,12 +370,13 @@ func main() {
 	globalSched := agent.NewScheduler(buildSchedulerConfig(cfg, agentReg, agentHist, buildID.Revision))
 
 	agentRunner := &agent.RunDeps{
-		Registry:    agentReg,
-		History:     agentHist,
-		LLM:         llmClient,
-		RefStore:    refStore,
-		TreeStore:   treeStore,
-		ResolveTree: resolveTree,
+		Registry:           agentReg,
+		History:            agentHist,
+		LLM:                llmClient,
+		RefStore:           refStore,
+		TreeStore:          treeStore,
+		ResolveTree:        resolveTree,
+		ResolveTreeForUser: resolveTreeForUser,
 	}
 
 	reliability.SafeGo("scheduler-start", func() {

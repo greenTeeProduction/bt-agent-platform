@@ -56,5 +56,8 @@ func NewRunDeps() (*agent.RunDeps, error) {
 		ResolveTree: func(id string) *evolution.SerializableNode {
 			return domains.ResolveTreeID(id)
 		},
+		ResolveTreeForUser: func(user, id string) *evolution.SerializableNode {
+			return domains.ResolveTreeIDForUser(user, id)
+		},
 	}, nil
 }
