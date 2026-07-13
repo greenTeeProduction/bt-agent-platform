@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 )
 
 // ---- bidder-side evaluation: an agent scores an announced task from its own
@@ -363,5 +366,55 @@ func TestExecute_NonAnnouncementStillRunsTree(t *testing.T) {
 	}
 	if got := terminalState(events); got != a2a.TaskStateFailed {
 		t.Errorf("terminal state = %q, want failed (ordinary task routed to the tree path)", got)
+	}
+}
+
+// ---- outcome handling must route through TaskStateBridge, not a binary
+// success/fail check ------------------------------------------------------
+//
+// Execute today only special-cases bb.Outcome == "success"; every other
+// outcome — including "pending_approval", a real non-terminal HITL wait —
+// falls into the generic failure branch and is reported TaskStateFailed.
+// That is wrong: a task awaiting human approval has not failed, and A2A
+// already has a state for exactly this (TaskStateInputRequired). Execute
+// must consult TaskStateBridge.BTToA2A(bb.Outcome) instead of the binary
+// check so pending_approval (and any future non-success/non-failure
+// outcome the bridge knows how to map) surfaces correctly to the caller.
+
+func TestExecute_PendingApprovalRoutesThroughBridge(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := hitl.InitStore(filepath.Join(dir, "hitl")); err != nil {
+		t.Fatalf("InitStore: %v", err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour})
+	defer hitl.SetPolicy(hitl.DefaultPolicy())
+
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "gatekept", Tree: "gatekept", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	tree := &evolution.SerializableNode{
+		Type:     "HumanApprovalGate",
+		Name:     "Gate",
+		Metadata: map[string]any{"prompt": "confirm risky action"},
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "MarkSuccessful"},
+		},
+	}
+	exec := &BTAgentExecutor{
+		Reg:     reg,
+		TreeMap: map[string]*evolution.SerializableNode{"gatekept": tree},
+	}
+
+	events := drainExecute(t, exec, "gatekept", "please do the risky thing")
+
+	if got := terminalState(events); got != a2a.TaskStateInputRequired {
+		t.Errorf("terminal state = %q, want input-required — pending_approval must route through "+
+			"TaskStateBridge instead of the binary success/fail check; events=%s", got, eventKinds(events))
 	}
 }

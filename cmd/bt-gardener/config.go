@@ -80,3 +80,18 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		CrisisDetector: evolution.NewCrisisDetector(),
 	}, nil
 }
+
+// wireSelectorOrdering enables the milestone-4 learned-Selector-ordering pass
+// (internal/gardener/evolve_v2.go) for production: it points cfg at a durable
+// stats file under metricsDir and flips EvolveV2Config.SelectorOrdering on.
+// Both DefaultEvolveV2Config() and buildGardenerConfig() leave this off by
+// design (opt-in, see evolve_v2.go), so without this call the pass only ever
+// ran inside evolve_v2_test.go — never in the daemon or the langchain
+// gardener_run_cycle tool.
+func wireSelectorOrdering(cfg gardener.Config, metricsDir string) (gardener.Config, gardener.EvolveV2Config) {
+	cfg.SelectorStatsPath = filepath.Join(metricsDir, "selector-stats.json")
+
+	v2Cfg := gardener.DefaultEvolveV2Config()
+	v2Cfg.SelectorOrdering = true
+	return cfg, v2Cfg
+}

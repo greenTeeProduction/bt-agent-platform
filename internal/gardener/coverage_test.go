@@ -221,7 +221,7 @@ func TestRegistry_PersistedTreeLoading(t *testing.T) {
 
 	found := false
 	for _, e := range entries {
-		if e.Name == "tree-custom_tree" {
+		if e.Name == "custom_tree" {
 			found = true
 			if e.Description != "Persisted tree" {
 				t.Errorf("persisted tree description = %q, want 'Persisted tree'", e.Description)
@@ -230,7 +230,7 @@ func TestRegistry_PersistedTreeLoading(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("persisted tree 'tree-custom_tree' not found in registry")
+		t.Error("persisted tree 'custom_tree' not found in registry")
 	}
 }
 

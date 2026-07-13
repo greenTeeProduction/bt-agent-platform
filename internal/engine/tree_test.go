@@ -62,6 +62,39 @@ func TestRunTask_BackstopsEmptyResultOnNonSuccess(t *testing.T) {
 	}
 }
 
+// TestRunTask_PreservesPendingApprovalOutcome locks in pending_approval as a
+// real, non-terminal outcome. Today RunTask's tick loop treats every code==0
+// return identically: it keeps ticking up to the 1000-tick safety limit and
+// then the terminal switch's default branch stamps bb.Outcome = "partial",
+// clobbering whatever the tree already recorded. A HITL gate that sets
+// bb.Outcome = "pending_approval" and returns 0 (RUNNING, awaiting a human)
+// must survive RunTask instead of being silently downgraded to "partial" —
+// and RunTask must recognize it immediately rather than busy-spinning the
+// tree 1000 times waiting for a human who cannot respond within a single
+// synchronous call.
+func TestRunTask_PreservesPendingApprovalOutcome(t *testing.T) {
+	var calls int
+	RegisterAction("RunTaskPendingApprovalAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		calls++
+		ctx.Blackboard.Outcome = "pending_approval"
+		ctx.Blackboard.Result = "Awaiting human approval (id=req-1): confirm"
+		return 0
+	})
+
+	bb := &Blackboard{Task: "needs a human"}
+	tree := &evolution.SerializableNode{Type: "Action", Name: "RunTaskPendingApprovalAction"}
+	bt := BuildTree(tree, bb)
+
+	RunTask(bb, bt)
+
+	if bb.Outcome != "pending_approval" {
+		t.Fatalf("RunTask must preserve pending_approval as a non-terminal outcome, got %q", bb.Outcome)
+	}
+	if calls > 1 {
+		t.Fatalf("RunTask must stop ticking once pending_approval is reached instead of spinning to the tick limit, got %d ticks", calls)
+	}
+}
+
 // TestValidateTree_LeafTypesRejectChildren locks in the generalized
 // leaf-with-children rule across BOTH validation entry points.
 //

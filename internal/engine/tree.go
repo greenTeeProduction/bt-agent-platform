@@ -516,19 +516,25 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	code := tree.Run(btCtx)
 
 	// Multi-tick loop: Repeat and other decorators return 0 (Running) between
-	// ticks. Keep ticking until a terminal status is reached.
+	// ticks. Keep ticking until a terminal status is reached. A HITL gate
+	// awaiting an external human (bb.Outcome == "pending_approval") is also
+	// Running, but nothing inside this synchronous loop can change that
+	// status — re-ticking would just burn maxTicks iterations for no effect —
+	// so stop immediately and let RunTask return that outcome to the caller.
 	const maxTicks = 1000
-	for tick := 1; code == 0 && tick < maxTicks; tick++ {
+	for tick := 1; code == 0 && bb.Outcome != "pending_approval" && tick < maxTicks; tick++ {
 		code = tree.Run(btCtx)
 	}
 
 	bb.DurationMs = time.Since(start).Milliseconds()
 
-	switch code {
-	case 1:
+	switch {
+	case code == 1:
 		bb.Outcome = string(evolution.Success)
-	case -1:
+	case code == -1:
 		bb.Outcome = string(evolution.Failure)
+	case bb.Outcome == "pending_approval":
+		// Non-terminal HITL outcome — preserve it rather than collapsing to Partial.
 	default:
 		bb.Outcome = string(evolution.Partial)
 	}

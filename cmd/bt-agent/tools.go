@@ -153,13 +153,23 @@ func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.Serializ
 // (inheriting the base tree's capabilities and connecting back via an
 // evolved_from edge) so fitness-aware discovery and the gardener can find the
 // bred winner on the next run instead of only its scalar fitness surviving.
+//
+// The knowledge graph is consulted first: RegisterEvolved only accepts the
+// bookkeeping write-back when the new winner's fitness actually beats what is
+// already stored for evolvedID, and reports that back. When it does not, the
+// file write is skipped too — a later, weaker genetic-evolution pass must not
+// clobber a stronger winner already persisted on disk.
 func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]interface{}) {
 	evolvedID := baseTreeID + "-evolved"
 	result["evolved_tree_id"] = evolvedID
-	persistGeneratedTree(deps, evolvedID, winner, result)
 	if deps.kg != nil {
-		deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness)
+		if improved := deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness); !improved {
+			result["persisted"] = false
+			result["skip_reason"] = "fitness does not improve on stored evolved winner"
+			return
+		}
 	}
+	persistGeneratedTree(deps, evolvedID, winner, result)
 }
 
 // persistGeneratedTreeForUser persists a user-attributed generated tree into

@@ -140,7 +140,9 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		result := engine.RunTask(bb, bt)
 		elapsed := time.Since(startTime)
 
-		if bb.Outcome == "success" {
+		bridge := &TaskStateBridge{}
+		switch state := bridge.BTToA2A(bb.Outcome); state {
+		case a2a.TaskStateCompleted:
 			if !yield(a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(result)), nil) {
 				return
 			}
@@ -149,12 +151,21 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 					fmt.Sprintf("BT tree %s completed in %v", inst.Definition.Tree, elapsed.Round(time.Millisecond))))), nil) {
 				return
 			}
-		} else {
+		case a2a.TaskStateInputRequired:
+			msg := result
+			if msg == "" {
+				msg = fmt.Sprintf("BT tree %s awaiting input: %s (elapsed %v)", inst.Definition.Tree, bb.Outcome, elapsed.Round(time.Millisecond))
+			}
+			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateInputRequired,
+				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(msg))), nil) {
+				return
+			}
+		default:
 			errMsg := fmt.Sprintf("BT tree %s failed: %s (elapsed %v)", inst.Definition.Tree, bb.Outcome, elapsed.Round(time.Millisecond))
 			if result != "" {
 				errMsg = result
 			}
-			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateFailed,
+			if !yield(a2a.NewStatusUpdateEvent(execCtx, state,
 				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(errMsg))), nil) {
 				return
 			}

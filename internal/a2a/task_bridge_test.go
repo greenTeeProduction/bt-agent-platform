@@ -17,6 +17,10 @@ func TestTaskStateBridge_BTToA2A(t *testing.T) {
 		{"failure", a2a.TaskStateFailed},
 		{"running", a2a.TaskStateWorking},
 		{"input-required", a2a.TaskStateInputRequired},
+		// pending_approval is a real, non-terminal HITL outcome (see
+		// engine/hitl_gate.go) — it must map to InputRequired like
+		// "input-required" does, not fall through to the Failed default.
+		{"pending_approval", a2a.TaskStateInputRequired},
 		{"unknown_outcome", a2a.TaskStateFailed},
 		{"", a2a.TaskStateFailed},
 		{"partial", a2a.TaskStateFailed},

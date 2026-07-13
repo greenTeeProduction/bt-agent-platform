@@ -1820,6 +1820,64 @@ func TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree(t *testing.T) {
 	}
 }
 
+// TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove pins the
+// gate this goal adds: persistEvolvedWinner (and the RegisterEvolved
+// bookkeeping it drives) must only overwrite the persisted "<base>-evolved"
+// tree file and its knowledge-graph metadata when the new winner's fitness
+// actually beats what's already stored for that id. Today the file write via
+// persistGeneratedTree is unconditional, so a later, weaker genetic-evolution
+// pass silently clobbers a stronger winner already on disk — and
+// RegisterEvolved's NodeCount write-back follows the clobbered structure even
+// though its StructuralFitness field is already (correctly) monotone.
+func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	deps := &mcpDeps{treeStore: treeStore, kg: kg}
+
+	strong := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
+	weak := &evolution.SerializableNode{
+		Type: "Sequence", Name: "weak-root",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "AddMonitoring"}},
+	}
+	const wantID = "godev-evolved"
+
+	first := map[string]interface{}{}
+	persistEvolvedWinner(deps, "godev", strong, 90, first)
+	if persisted, _ := first["persisted"].(bool); !persisted {
+		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
+	}
+
+	second := map[string]interface{}{}
+	persistEvolvedWinner(deps, "godev", weak, 50, second)
+
+	if persisted, _ := second["persisted"].(bool); persisted {
+		t.Errorf("persistEvolvedWinner must not report persisted=true when the new winner's fitness (50) does not beat the stored fitness (90); result=%v", second)
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil || loaded.Name != "AddCitations" {
+		t.Errorf("a weaker later winner must not overwrite the stronger tree already persisted at %q; got %+v", wantID, loaded)
+	}
+
+	meta := kg.Trees[wantID]
+	if meta == nil {
+		t.Fatalf("expected evolved tree %q to be registered in the knowledge graph", wantID)
+	}
+	if meta.NodeCount != evolution.CountNodes(strong) {
+		t.Errorf("RegisterEvolved must not overwrite NodeCount with a non-improving winner's structure; got %d, want %d (the stronger winner's node count)", meta.NodeCount, evolution.CountNodes(strong))
+	}
+	if meta.StructuralFitness != 90 {
+		t.Errorf("StructuralFitness must stay at the stronger winner's 90 after a weaker winner is rejected; got %v", meta.StructuralFitness)
+	}
+}
+
 // TestEvolveToolsSurfacePopulationHealthSnapshot pins that the three production
 // evolve tools that run a genetic Population — bt_evolve_genetic,
 // bt_evolve_bottlenecks, and bt_evolve_selection_pressure — surface that

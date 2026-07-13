@@ -21,6 +21,8 @@ func (b *TaskStateBridge) BTToA2A(outcome string) a2a.TaskState {
 		return a2a.TaskStateWorking
 	case "input-required":
 		return a2a.TaskStateInputRequired
+	case "pending_approval":
+		return a2a.TaskStateInputRequired
 	default:
 		return a2a.TaskStateFailed
 	}

@@ -132,7 +132,12 @@ func (r *Registry) loadAll() {
 			}
 		}
 		if !already {
-			treeName := name[:len(name)-5] // strip .json
+			// Strip both the "tree-" prefix and ".json" suffix so a persisted
+			// tree that doesn't shadow a builtin still registers under the
+			// bare name addBuiltin would have used (e.g. "tree-foo.json" ->
+			// "foo", not "tree-foo") — SaveTree round-trips FilePath using
+			// that same bare-name convention.
+			treeName := strings.TrimSuffix(strings.TrimPrefix(name, "tree-"), ".json")
 			r.entries = append(r.entries, TreeEntry{
 				Name:        treeName,
 				Description: "Persisted tree",

@@ -170,7 +170,16 @@ func (kg *KnowledgeGraph) Connect(from, to, relType string) {
 // outcome does — without touching the base tree's own fitness. Safe to call
 // even when the base tree is unregistered; the evolved tree is still
 // created, just without inherited capabilities.
-func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount int, fitness float64) {
+//
+// The bookkeeping write-back (NodeCount, EvolvedCount, StructuralFitness) is
+// gated on the new fitness actually beating the fitness already stored for
+// evolvedID — a weaker later winner leaves the stronger elite's metadata
+// untouched. RegisterEvolved reports whether it updated the bookkeeping so
+// callers can skip persisting the corresponding tree file when it did not.
+// The "evolved_from" edge is still connected either way since the
+// relationship between base and evolved tree holds regardless of which
+// winner is currently stored.
+func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount int, fitness float64) bool {
 	kg.mu.Lock()
 	defer kg.mu.Unlock()
 
@@ -190,11 +199,17 @@ func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount in
 			kg.Synonyms[strings.ToLower(cap.Action)] = meta.ID
 		}
 	}
+
+	kg.connectLocked(baseID, evolvedID, "evolved_from")
+
+	if exists && fitness <= meta.StructuralFitness {
+		return false
+	}
+
 	meta.NodeCount = nodeCount
 	meta.EvolvedCount++
 	meta.StructuralFitness = evolvedFitness(meta.StructuralFitness, fitness)
-
-	kg.connectLocked(baseID, evolvedID, "evolved_from")
+	return true
 }
 
 // Discover finds the best tree for a given task description.

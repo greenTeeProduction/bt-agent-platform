@@ -46,6 +46,16 @@ func (t *GardenerStatusTool) Call(_ context.Context, _ string) (string, error) {
 
 type GardenerRunCycleTool struct {
 	gardener *gardener.Gardener
+	v2Cfg    gardener.EvolveV2Config
+}
+
+// newGardenerRunCycleTool builds the gardener_run_cycle langchain tool bound
+// to the daemon's wired EvolveV2Config (see wireSelectorOrdering), instead of
+// constructing a fresh gardener.DefaultEvolveV2Config() per call — the
+// default leaves SelectorOrdering off, which silently disabled the
+// milestone-4 learned-ordering pass for every MCP-triggered cycle.
+func newGardenerRunCycleTool(g *gardener.Gardener, v2Cfg gardener.EvolveV2Config) *GardenerRunCycleTool {
+	return &GardenerRunCycleTool{gardener: g, v2Cfg: v2Cfg}
 }
 
 func (t *GardenerRunCycleTool) Name() string { return "gardener_run_cycle" }
@@ -53,8 +63,7 @@ func (t *GardenerRunCycleTool) Description() string {
 	return "Run one evolution cycle over ALL behavior trees. Returns per-tree fitness deltas."
 }
 func (t *GardenerRunCycleTool) Call(_ context.Context, _ string) (string, error) {
-	cfg := gardener.DefaultEvolveV2Config()
-	results, err := t.gardener.RunCycleV2(cfg)
+	results, err := t.gardener.RunCycleV2(t.v2Cfg)
 	if err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 	}
@@ -182,7 +191,9 @@ func main() {
 	metricsTracker := cfg.MetricsTracker
 
 	// ── V2 Evolution Config ──
-	v2Cfg := gardener.DefaultEvolveV2Config()
+	// wireSelectorOrdering enables the milestone-4 learned-Selector-ordering
+	// pass — DefaultEvolveV2Config() leaves it off by design (opt-in).
+	cfg, v2Cfg := wireSelectorOrdering(cfg, metricsDir)
 	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 
 	g := gardener.NewGardener(cfg)
@@ -201,7 +212,7 @@ func main() {
 	// Langchain tools
 	agentTools := []tools.Tool{
 		&GardenerStatusTool{registry: registry, metrics: metricsTracker},
-		&GardenerRunCycleTool{gardener: g},
+		newGardenerRunCycleTool(g, v2Cfg),
 		&GardenerRecommendTool{registry: registry, refStore: refStore},
 	}
 
