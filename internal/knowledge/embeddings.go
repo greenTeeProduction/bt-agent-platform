@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
@@ -24,16 +25,30 @@ var defaultEmbeddingClient = &EmbeddingClient{
 	Model:   "nomic-embed-text",
 }
 
+// embeddingHTTPClient bounds every Ollama embedding request so an
+// unresponsive backend fails fast instead of hanging the caller forever
+// (http.DefaultClient, used by http.Post, has no timeout).
+var embeddingHTTPClient = &http.Client{Timeout: 2 * time.Second}
+
+// embeddingBreaker short-circuits Ollama embedding calls after repeated
+// failures so a dead backend isn't retried (and re-timed-out) on every call.
+var embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, 60*time.Second)
+
 // GetEmbedding returns the embedding vector for a text.
 func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
+	if !embeddingBreaker.Allow() {
+		return nil, fmt.Errorf("ollama embedding: circuit breaker open")
+	}
+
 	payload := map[string]interface{}{
 		"model":  ec.Model,
 		"prompt": text,
 	}
 	body, _ := json.Marshal(payload)
 
-	resp, err := http.Post(ec.BaseURL+"/api/embeddings", "application/json", bytes.NewReader(body))
+	resp, err := embeddingHTTPClient.Post(ec.BaseURL+"/api/embeddings", "application/json", bytes.NewReader(body))
 	if err != nil {
+		embeddingBreaker.RecordFailure()
 		return nil, fmt.Errorf("ollama embedding: %w", err)
 	}
 	defer resp.Body.Close()
@@ -42,8 +57,10 @@ func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 		Embedding []float64 `json:"embedding"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		embeddingBreaker.RecordFailure()
 		return nil, fmt.Errorf("decode embedding: %w", err)
 	}
+	embeddingBreaker.RecordSuccess()
 	return Embedding(result.Embedding), nil
 }
 
