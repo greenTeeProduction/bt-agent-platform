@@ -246,7 +246,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 
 	// Record history
 	if s.history != nil {
-		quality := historyQualityScore(inst, outcome, output)
+		quality := recordedQuality(inst, outcome, output, res)
 		_ = s.history.Record(RunRecord{
 			AgentName: agentName,
 			Task:      task,
@@ -667,7 +667,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	s.saveState()
 
 	// Record history
-	quality := historyQualityScore(inst, outcome, output)
+	quality := recordedQuality(inst, outcome, output, runRes)
 	errStr := ""
 	if runErr != nil {
 		errStr = runErr.Error()
@@ -835,6 +835,21 @@ func historyQualityScore(inst *Instance, outcome, output string) float64 {
 		}
 	}
 	return quality
+}
+
+// recordedQuality is the quality persisted for a scheduled run. RunOnce's
+// RunResult already carries applyOutcomeRefinement's score — the authoritative
+// committed=0.9 and the refined no_change=0.5 / degraded=0.3 signals — so prefer
+// it for healthy outcomes instead of recomputing the text-shape estimate, which
+// discards those signals (committed runs otherwise land as 0.75/0.9/1.0 by
+// output length, and no_change/degraded as 0.0). Non-healthy outcomes
+// (failure/timeout/partial) keep the historyQualityScore 0.0 convention, and a
+// nil RunResult (e.g. a panicked run) falls back to the estimate.
+func recordedQuality(inst *Instance, outcome, output string, res *RunResult) float64 {
+	if res != nil && isHealthyOutcome(outcome) {
+		return res.Quality
+	}
+	return historyQualityScore(inst, outcome, output)
 }
 
 // estimateQuality is a fast quality heuristic for output text.
