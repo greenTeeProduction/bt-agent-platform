@@ -95,7 +95,7 @@ Action Input: {"key":"work/history","value":"subtask-2 done"}`,
 			`Thought: review accumulated history
 Action: bb_read
 Action Input: work/history`,
-			"Final Answer: history recorded.",
+			"Final Answer: history recorded successfully across both subtasks.",
 		},
 	}
 

@@ -223,7 +223,7 @@ func TestChainAction_Refine(t *testing.T) {
 
 func TestChainAction_ToolCall(t *testing.T) {
 	mock := &chainMockLLM{responses: map[string]string{
-		"generate": "TOOL: calculator",
+		"generate": "TOOL: calculator - selecting the calculator tool to compute the result",
 	}}
 	bb := &Blackboard{
 		Task: "calculate something",
@@ -327,7 +327,7 @@ func TestChainAction_ParseConfig(t *testing.T) {
 func TestChainAction_DemoTree(t *testing.T) {
 	mock := &chainMockLLM{
 		responses: map[string]string{
-			"generate": "Analysis complete.",
+			"generate": "Analysis complete: the pipeline produced a detailed, substantive result.",
 		},
 	}
 	bb := &Blackboard{
@@ -733,7 +733,7 @@ func (m *errorMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "
 func TestChainAction_ToolCall_ChainToolsOnly(t *testing.T) {
 	// cfg.Tools is empty/nil, but bb.ChainTools has tools
 	mock := &chainMockLLM{responses: map[string]string{
-		"generate": "Using web_search tool",
+		"generate": "Using web_search tool to look up the requested information",
 	}}
 	bb := &Blackboard{
 		Task: "search for something",
@@ -803,7 +803,7 @@ func TestChainAction_ToolCall_LLMError(t *testing.T) {
 
 func TestChainAction_RAGQuery_NoKGResults(t *testing.T) {
 	mock := &chainMockLLM{responses: map[string]string{
-		"generate": "Answer from cached context.",
+		"generate": "Answer from cached context: the answer is 42, based on the fallback.",
 	}}
 	bb := &Blackboard{
 		Task:         "test question",
@@ -877,7 +877,7 @@ type noopMemory struct{}
 
 func TestChainAction_Conversation_NoMemory(t *testing.T) {
 	mock := &chainMockLLM{responses: map[string]string{
-		"generate": "Hello! How can I help?",
+		"generate": "Hello! How can I help you with your task today?",
 	}}
 	bb := &Blackboard{
 		Task:        "greet",
@@ -1645,7 +1645,7 @@ func TestToolStub_CallReturnsError(t *testing.T) {
 func TestChainAction_StructuredOutput_NoSchema(t *testing.T) {
 	// execStructuredOutput: no json_schema in params → empty schemaDesc path
 	mock := &chainMockLLM{responses: map[string]string{
-		"generate": `{"summary": "All good"}`,
+		"generate": `{"summary": "All results were verified and look good", "confidence": 0.9}`,
 	}}
 	bb := &Blackboard{
 		Task: "summarize results",
@@ -1873,7 +1873,7 @@ func TestChainAction_MapReduce_SubErrors(t *testing.T) {
 	callCount := 0
 	mock := &countedErrorMockLLM{
 		responses: map[string]string{
-			"generate": "1. Sub1\n2. Sub2\n3. Sub3",
+			"generate": "1. Analyze first data component\n2. Analyze second data component\n3. Analyze third data component",
 		},
 		failOnCall: 99, // never fail
 		count:      &callCount,
@@ -2192,7 +2192,7 @@ func TestChainAction_Agent_MaxIterBoundaries(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := &chainMockLLM{responses: map[string]string{
-				"generate": "Final Answer: Complete analysis result",
+				"generate": "Final Answer: Complete analysis result with detailed findings",
 			}}
 			bb := &Blackboard{
 				Task:       "analyze something",

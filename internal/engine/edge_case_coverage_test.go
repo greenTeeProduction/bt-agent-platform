@@ -235,7 +235,7 @@ func TestRunTask_MultiTickRepeat(t *testing.T) {
 	tree := btdec.NewRepeat(
 		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 			// This action records that it was called
-			ctx.Blackboard.Result = "action executed"
+			ctx.Blackboard.Result = "action executed successfully across all repeat ticks"
 			return 1
 		}),
 		3,
@@ -245,7 +245,7 @@ func TestRunTask_MultiTickRepeat(t *testing.T) {
 	if bb.Outcome != "success" {
 		t.Errorf("expected Outcome 'success' after multi-tick, got %q", bb.Outcome)
 	}
-	if bb.Result != "action executed" {
+	if bb.Result != "action executed successfully across all repeat ticks" {
 		t.Errorf("expected action to execute, got %q", bb.Result)
 	}
 }

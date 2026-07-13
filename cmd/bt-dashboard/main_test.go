@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -585,6 +588,113 @@ func TestCurrentWorkflow_GuardedByMutex(t *testing.T) {
 	}
 }
 
+// TestHandleWorkflowApproveReject_UpdatesTaskStore pins the reconciliation
+// between the two disconnected approval surfaces handleAnalyze created.
+//
+// handleAnalyze (main.go) derives WorkflowTasks via dashboard.NewWorkflow +
+// RecommendationsToTasks, then persists each one into taskStore as a plain
+// dashboard.Task whose ID is composed as wf.ID + "-" + wt.ID (see
+// TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses above). But
+// handleWorkflowApprove/handleWorkflowReject only call
+// Workflow.ApproveTask/RejectTask on the in-memory currentWorkflow — they
+// never touch taskStore. Meanwhile handleSprintExecute dispatches exclusively
+// from taskStore.Approved(), which filters on dashboard.Task.Status ==
+// "approved". So approving a task through /api/workflow/approve updates
+// currentWorkflow.Tasks[i] but leaves the corresponding taskStore record
+// stuck at Status "pending" forever — handleSprintExecute can never see it,
+// and the "approval" silently does nothing. This test proves the fix:
+// handleWorkflowApprove/handleWorkflowReject must also update the taskStore
+// record sharing the composed ID, so taskStore.Approved() reflects the
+// decision made through the workflow surface.
+func TestHandleWorkflowApproveReject_UpdatesTaskStore(t *testing.T) {
+	origTaskStore := taskStore
+	origWorkflow := currentWorkflow
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		currentWorkflow = origWorkflow
+	})
+
+	dir := t.TempDir()
+	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+
+	wf := dashboard.NewWorkflow("test-wf", nil, nil)
+	wf.ID = "wf-recon-test"
+	wf.Tasks = []dashboard.WorkflowTask{
+		{ID: "task-a", Status: dashboard.StatusPending, Priority: dashboard.PriorityHigh},
+		{ID: "task-b", Status: dashboard.StatusPending, Priority: dashboard.PriorityMedium},
+	}
+	currentWorkflow = wf
+
+	// Seed taskStore exactly the way handleAnalyze does: composed ID
+	// wf.ID + "-" + wt.ID, starting at Status "pending".
+	taskAID := wf.ID + "-task-a"
+	taskBID := wf.ID + "-task-b"
+	if err := taskStore.Create(dashboard.Task{ID: taskAID, Title: "Task A", Priority: "high"}); err != nil {
+		t.Fatalf("seed task-a: %v", err)
+	}
+	if err := taskStore.Create(dashboard.Task{ID: taskBID, Title: "Task B", Priority: "medium"}); err != nil {
+		t.Fatalf("seed task-b: %v", err)
+	}
+
+	// Approve task-a through the workflow surface.
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/workflow/approve?id=task-a", nil)
+	approveRR := httptest.NewRecorder()
+	handleWorkflowApprove(approveRR, approveReq)
+	if approveRR.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200; body=%s", approveRR.Code, approveRR.Body.String())
+	}
+
+	storedA, ok := taskStore.Get(taskAID)
+	if !ok {
+		t.Fatalf("taskStore lost record %q after /api/workflow/approve", taskAID)
+	}
+	if storedA.Status != "approved" {
+		t.Errorf("taskStore record %q Status = %q after /api/workflow/approve, want %q; "+
+			"handleWorkflowApprove must also update the taskStore record that "+
+			"handleSprintExecute dispatches from, not just currentWorkflow.Tasks",
+			taskAID, storedA.Status, "approved")
+	}
+	if !storedA.Approval.IsApproved {
+		t.Errorf("taskStore record %q Approval.IsApproved = false after /api/workflow/approve, want true", taskAID)
+	}
+
+	// Reject task-b through the workflow surface.
+	rejectReq := httptest.NewRequest(http.MethodPost, "/api/workflow/reject?id=task-b&reason=not+now", nil)
+	rejectRR := httptest.NewRecorder()
+	handleWorkflowReject(rejectRR, rejectReq)
+	if rejectRR.Code != http.StatusOK {
+		t.Fatalf("reject status = %d, want 200; body=%s", rejectRR.Code, rejectRR.Body.String())
+	}
+
+	storedB, ok := taskStore.Get(taskBID)
+	if !ok {
+		t.Fatalf("taskStore lost record %q after /api/workflow/reject", taskBID)
+	}
+	if storedB.Status != "rejected" {
+		t.Errorf("taskStore record %q Status = %q after /api/workflow/reject, want %q; "+
+			"handleWorkflowReject must also update the taskStore record that "+
+			"handleSprintExecute dispatches from, not just currentWorkflow.Tasks",
+			taskBID, storedB.Status, "rejected")
+	}
+
+	// The whole point: handleSprintExecute reads taskStore.Approved(), so the
+	// approved task must actually surface there once the workflow-level
+	// approval lands.
+	approved := taskStore.Approved()
+	found := false
+	for _, tk := range approved {
+		if tk.ID == taskAID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("taskStore.Approved() does not contain %q after /api/workflow/approve; "+
+			"handleSprintExecute dispatches exclusively from taskStore.Approved(), so a "+
+			"workflow-level approval that never reaches taskStore is invisible to it", taskAID)
+	}
+}
+
 // TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses pins the fix for guaranteed
 // task-ID collisions in handleAnalyze's Workflow-derived task IDs.
 //
@@ -696,5 +806,63 @@ func TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses(t *testing.T) {
 			"wf.ID collides (e.g. a per-workflow random/monotonic component folded into each "+
 			"WorkflowTask's ID in RecommendationsToTasks), not derive uniqueness solely from wf.ID + a "+
 			"purely positional WorkflowTask.ID", collisions)
+	}
+}
+
+// TestHandleAgentExecute_SetsQualityScoreFromRunResult pins the NotebookLM
+// research gap: handleAgentExecute (POST /api/agents/execute) is the HTTP
+// counterpart reliability.RemoteExecutor calls into for horizontal scaling
+// (see internal/reliability/remote_executor_test.go, which decodes the JSON
+// response straight into a reliability.AgentResult and asserts QualityScore).
+// The handler builds its reliability.AgentResult from
+// AgentExecutor.RunTask's (output, outcome, err) triple, which drops the
+// agent.RunResult.Quality the underlying RunOnce already computed — so every
+// remote-routed successful run reports QualityScore 0.0 regardless of actual
+// quality. cmd/bt-agent/main.go's local AgentExecutor.Execute (the in-process
+// analogue) does this correctly: QualityScore: res.Quality straight from
+// RunOnce's result. handleAgentExecute must do the same.
+func TestHandleAgentExecute_SetsQualityScoreFromRunResult(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	prevRunner, prevPool, prevLimiter := dashAgentRunner, dashWorkerPool, dashConcurrencyLimiter
+	t.Cleanup(func() {
+		dashAgentRunner = prevRunner
+		dashWorkerPool = prevPool
+		dashConcurrencyLimiter = prevLimiter
+	})
+	// Force the synchronous fallback path in handleAgentExecute so the test
+	// doesn't race a worker-pool goroutine.
+	dashWorkerPool = nil
+	dashConcurrencyLimiter = nil
+
+	// A bare AlwaysSucceed tree with no QualitySpec drives RunOnce's quality
+	// estimate deterministically: ValidateQualitySpec(nil, "") falls through
+	// to estimateQuality(""), which returns 0.2 for output shorter than 10
+	// chars (internal/agent/scheduler.go's estimateQuality) — never 0.0.
+	dashAgentRunner = &agent.RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode {
+			return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+		},
+	}
+
+	body, _ := json.Marshal(map[string]string{
+		"agent": "quality-echo-agent",
+		"task":  "run the thing",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/agents/execute", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handleAgentExecute(rr, req)
+
+	var res reliability.AgentResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode /api/agents/execute response: %v; body=%s", err, rr.Body.String())
+	}
+	if !res.Success {
+		t.Fatalf("expected a successful run from an AlwaysSucceed tree, got %+v (body=%s)", res, rr.Body.String())
+	}
+	if res.QualityScore <= 0 {
+		t.Fatalf("handleAgentExecute must set AgentResult.QualityScore from the run's real quality "+
+			"estimate (RemoteExecutor decodes this field for horizontal-scaling quality tracking); "+
+			"got QualityScore=%v, want > 0 (response=%+v)", res.QualityScore, res)
 	}
 }

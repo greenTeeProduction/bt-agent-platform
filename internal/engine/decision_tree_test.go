@@ -8,8 +8,8 @@ import (
 )
 
 func TestDecisionTreeRoutesByChainStateMatch(t *testing.T) {
-	registerDecisionTreeAction(t, "DecisionTreeTestCodePath", "code path selected")
-	registerDecisionTreeAction(t, "DecisionTreeTestResearchPath", "research path selected")
+	registerDecisionTreeAction(t, "DecisionTreeTestCodePath", "code path selected as the routing destination")
+	registerDecisionTreeAction(t, "DecisionTreeTestResearchPath", "research path selected as the routing destination")
 
 	bb := &Blackboard{ChainState: map[string]any{"route": "code"}}
 	tree := &evolution.SerializableNode{
@@ -27,7 +27,7 @@ func TestDecisionTreeRoutesByChainStateMatch(t *testing.T) {
 	bt := BuildTree(tree, bb)
 	result := RunTask(bb, bt)
 
-	if result != "code path selected" {
+	if result != "code path selected as the routing destination" {
 		t.Fatalf("expected code branch result, got %q", result)
 	}
 	if bb.Outcome != "success" {

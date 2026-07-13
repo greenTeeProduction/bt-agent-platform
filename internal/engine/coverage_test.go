@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ─── Output Quality Validation ───
@@ -187,6 +188,61 @@ func TestOutcome_EmptyTaskFails(t *testing.T) {
 	outcome := RunTask(bb, bt)
 	if outcome == string(evolution.Success) {
 		t.Error("empty task should not succeed")
+	}
+}
+
+// ─── Terminal Backstop Outcome Flip ───
+//
+// RunTask calls validateOutputQuality(bb) as a terminal backstop (tree.go)
+// but historically discarded the result — trees that report Success without
+// ever routing through the shared outcome() sub-tree (e.g. compiled GOAP
+// fusion trees) could terminate with garbage/truncated output and still be
+// recorded as a genuine Success. The backstop must flip bb.Outcome to
+// Failure in that case, except for recognized zero-LLM/structured-output
+// trees (the isStructured detection already inside validateOutputQuality)
+// and Sandbox structural-evaluation runs, whose action stubs intentionally
+// write short non-content placeholders ("[sandbox] <name>") that quality
+// heuristics have nothing valid to judge.
+
+func TestRunTask_TerminalBackstopFlipsOutcome(t *testing.T) {
+	RegisterAction("CoverageBackstopFlipAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = "bad"
+		return 1
+	})
+	bb := &Blackboard{Task: "terminal backstop flip"}
+	tree := BuildTree(&evolution.SerializableNode{Type: "Action", Name: "CoverageBackstopFlipAction"}, bb)
+	RunTask(bb, tree)
+	if bb.Outcome != string(evolution.Failure) {
+		t.Errorf("terminal backstop should flip low-quality Success to Failure for a non-structured result, got outcome=%q result=%q", bb.Outcome, bb.Result)
+	}
+}
+
+func TestRunTask_TerminalBackstopSkipsStructuredOutput(t *testing.T) {
+	RegisterAction("CoverageBackstopStructuredAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = "## X"
+		return 1
+	})
+	bb := &Blackboard{Task: "terminal backstop structured"}
+	tree := BuildTree(&evolution.SerializableNode{Type: "Action", Name: "CoverageBackstopStructuredAction"}, bb)
+	RunTask(bb, tree)
+	if bb.Outcome != string(evolution.Success) {
+		t.Errorf("terminal backstop should not flip recognized structured/zero-LLM output even when it fails quality, got outcome=%q result=%q", bb.Outcome, bb.Result)
+	}
+}
+
+func TestRunTask_TerminalBackstopSkipsSandboxMode(t *testing.T) {
+	// Registered so BuildTree's validation recognizes the name; Sandbox mode
+	// (checked first in actionForName) intercepts before this runs, so the
+	// real body is never invoked.
+	RegisterAction("CoverageBackstopSandboxAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = "this should never run under Sandbox mode"
+		return 1
+	})
+	bb := &Blackboard{Task: "terminal backstop sandbox", Sandbox: true}
+	tree := BuildTree(&evolution.SerializableNode{Type: "Action", Name: "CoverageBackstopSandboxAction"}, bb)
+	RunTask(bb, tree)
+	if bb.Outcome != string(evolution.Success) {
+		t.Errorf("terminal backstop should not flip sandboxed structural-evaluation runs, got outcome=%q result=%q", bb.Outcome, bb.Result)
 	}
 }
 

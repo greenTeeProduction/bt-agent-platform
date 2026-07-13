@@ -405,6 +405,29 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	}
 }
 
+// resolvedResult returns b.Result, falling back to the most recent entry in
+// b.Results when b.Result is empty (e.g. a Sequence of actions that only
+// append to Results without ever setting the final result field). Shared by
+// validateOutputQuality and RunTask's terminal backstop so both judge the
+// same resolved string.
+func resolvedResult(b *Blackboard) string {
+	if b.Result != "" || len(b.Results) == 0 {
+		return b.Result
+	}
+	return b.Results[len(b.Results)-1]
+}
+
+// isStructuredOutput reports whether result looks like short-but-valid
+// zero-LLM structured output (e.g. alert_router, agent_monitor routing/status
+// text) rather than truncated or garbage output.
+func isStructuredOutput(result string) bool {
+	lowerResult := strings.ToLower(result)
+	return strings.HasPrefix(strings.TrimSpace(result), "## ") ||
+		strings.Contains(lowerResult, "route:") ||
+		strings.Contains(lowerResult, "status:") ||
+		strings.Contains(lowerResult, "delivered")
+}
+
 // RunTask executes a task through the behavior tree to completion.
 // Multi-tick decorators (Repeat) return 0 (Running) between ticks, so we loop
 // until the tree reaches a terminal state (1=Success or -1=Failure).
@@ -413,20 +436,13 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 // This prevents agents reporting "success" with truncated/garbage output
 // (e.g., max_tokens=10 producing a few words).
 func validateOutputQuality(b *Blackboard) bool {
-	result := b.Result
-	if b.Result == "" && len(b.Results) > 0 {
-		// Use accumulated results if Result is empty
-		result = b.Results[len(b.Results)-1]
-	}
+	result := resolvedResult(b)
 
 	// 0. Structured zero-LLM output detection — short but valid structured output
 	// from trees like alert_router, agent_monitor that produce markdown-formatted
 	// routing/status results without LLM calls.
 	lowerResult := strings.ToLower(result)
-	isStructured := strings.HasPrefix(strings.TrimSpace(result), "## ") ||
-		strings.Contains(lowerResult, "route:") ||
-		strings.Contains(lowerResult, "status:") ||
-		strings.Contains(lowerResult, "delivered")
+	isStructured := isStructuredOutput(result)
 	minLen := 30
 	if isStructured {
 		minLen = 15 // structured zero-LLM output is intentionally compact
@@ -554,7 +570,24 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	// Always validate output quality — some trees (agent_monitor, alert_router)
 	// don't include ReflectOnOutcome which is where quality scoring normally runs.
 	// Without this, zero-LLM trees report quality=0 even with valid structured output.
-	validateOutputQuality(bb)
+	//
+	// Terminal backstop: trees that terminate without ever routing through
+	// outcome() (e.g. compiled GOAP fusion trees — a bare leaf reporting code
+	// 1) never get their garbage output caught by OutcomeSelector's quality
+	// gate. Flip the outcome here too, unless the result is a recognized
+	// zero-LLM structured result (same exemption validateOutputQuality
+	// applies), this is a Sandbox structural-evaluation run (whose action
+	// stubs intentionally write short non-content placeholders — "[sandbox]
+	// <name>" — that quality heuristics have nothing valid to judge), or the
+	// tree produced no output at all: a deliberate no-op success marker (the
+	// "AlwaysSucceed" node used by guard/preflight composition) has nothing
+	// to judge either, unlike a leaf that wrote actual truncated/garbage
+	// content.
+	qualityOK := validateOutputQuality(bb)
+	resolved := resolvedResult(bb)
+	if !bb.Sandbox && !qualityOK && bb.Outcome == string(evolution.Success) && resolved != "" && !isStructuredOutput(resolved) {
+		bb.Outcome = string(evolution.Failure)
+	}
 
 	return bb.Result
 }

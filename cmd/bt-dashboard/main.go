@@ -710,6 +710,11 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
+	// handleAnalyze persists each WorkflowTask into taskStore under the
+	// composed ID wf.ID+"-"+wt.ID, and handleSprintExecute dispatches
+	// exclusively from taskStore.Approved() — so the workflow-level approval
+	// must also land on that record, or the sprint runner never sees it.
+	_ = taskStore.Approve(wf.ID+"-"+taskID, "dashboard")
 	_ = encodeJSON(w, map[string]string{"status": "approved", "id": taskID})
 }
 
@@ -732,6 +737,8 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
+	// Mirror the taskStore record too — see handleWorkflowApprove.
+	_ = taskStore.Reject(wf.ID+"-"+taskID, "dashboard", reason)
 	_ = encodeJSON(w, map[string]string{"status": "rejected", "id": taskID})
 }
 
@@ -1512,51 +1519,48 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 			defer releaseLimiter()
 			start := time.Now()
 			executor := newAgentExecutor()
-			output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
+			runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
 			elapsed := time.Since(start)
-
-			res := reliability.AgentResult{
-				Agent:    req.Agent,
-				Task:     req.Task,
-				Output:   output,
-				Duration: elapsed,
-				Success:  outcome == "success" || outcome == "completed",
-			}
-			if outcome == "failed" || outcome == "timeout" {
-				res.Success = false
-			}
-			if err != nil {
-				res.Error = err.Error()
-			}
-			result <- res
+			result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
 		})
 	} else {
 		// Fallback: execute synchronously (no worker pool configured)
 		start := time.Now()
 		executor := newAgentExecutor()
-		output, outcome, err := executor.RunTask(req.Agent, req.Task, treeID)
+		runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
 		elapsed := time.Since(start)
 		releaseLimiter()
-
-		res := reliability.AgentResult{
-			Agent:    req.Agent,
-			Task:     req.Task,
-			Output:   output,
-			Duration: elapsed,
-			Success:  outcome == "success" || outcome == "completed",
-		}
-		if outcome == "failed" || outcome == "timeout" {
-			res.Success = false
-		}
-		if err != nil {
-			res.Error = err.Error()
-		}
-		result <- res
+		result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
 	}
 
 	res := <-result
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, res)
+}
+
+// agentExecuteResult adapts an agent.RunResult from AgentExecutor.RunTaskResult
+// into the reliability.AgentResult wire shape RemoteExecutor decodes, carrying
+// over the real Quality estimate RunOnce already computed (mirrors
+// cmd/bt-agent/main.go's newLocalAgentExecutor, the in-process analogue).
+func agentExecuteResult(agentName, task string, runRes *agent.RunResult, elapsed time.Duration, err error) reliability.AgentResult {
+	res := reliability.AgentResult{
+		Agent:    agentName,
+		Task:     task,
+		Duration: elapsed,
+	}
+	if runRes != nil {
+		res.Output = runRes.Output
+		res.QualityScore = runRes.Quality
+		outcome := runRes.Outcome
+		res.Success = outcome == "success" || outcome == "completed"
+		if outcome == "failed" || outcome == "timeout" {
+			res.Success = false
+		}
+	}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	return res
 }
 
 // handleAgentsList returns all registered BT agents with their live status and circuit breaker info.
