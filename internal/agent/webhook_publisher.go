@@ -26,6 +26,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // WebhookSecrets maps webhook subscription names to their HMAC secrets.
@@ -73,7 +75,7 @@ func NewWebhookPublisher(baseURL string, secrets WebhookSecrets) *WebhookPublish
 // Runs in a goroutine until Close() is called.
 func (p *WebhookPublisher) Attach(bus *AgentBus) {
 	p.eventCh = bus.Subscribe("") // subscribe to ALL events
-	go p.loop()
+	reliability.SafeGo("webhook-publisher-loop", p.loop, nil)
 }
 
 // Close stops the publisher goroutine.
@@ -90,7 +92,13 @@ func (p *WebhookPublisher) loop() {
 			if !ok {
 				return
 			}
-			p.handleEvent(event)
+			// Recover per-event so a single panicking handler (e.g. a
+			// malformed event.Data payload that panics during
+			// json.Marshal) doesn't unwind the whole loop and stop
+			// forwarding subsequent events.
+			_ = reliability.Recover("webhook-publisher-handle-event", func() {
+				p.handleEvent(event)
+			})
 		}
 	}
 }

@@ -3,6 +3,8 @@ package security
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -428,6 +430,52 @@ func TestSessionStore_BackgroundCleanup(t *testing.T) {
 	// Background cleanup should have removed them
 	if ss.Count() != 0 {
 		t.Errorf("expected 0 sessions after background cleanup, got %d", ss.Count())
+	}
+}
+
+// ─── panic recovery regression ───
+
+// sessionCleanupPanicSubprocessEnv gates the child-process body of
+// TestSessionCleanup_PanicRecovered. An unrecovered panic inside the
+// `go ss.cleanupLoop()` goroutine started by NewSessionStore crashes the
+// entire process — it cannot be caught by the parent test's own recover() —
+// so this test re-execs itself and asserts the child survives instead of
+// crashing. This mirrors TestRateLimiterCleanup_PanicRecovered in
+// internal/security/security_test.go.
+const sessionCleanupPanicSubprocessEnv = "BT_SESSION_CLEANUP_PANIC_SUBPROCESS"
+
+// TestSessionCleanup_PanicRecovered is the regression test for SessionStore's
+// background cleanupLoop goroutine lacking panic recovery. A panic inside
+// CleanupExpired (e.g. triggered by a corrupted session entry) must be
+// recovered and logged instead of crashing the bt-dashboard process that
+// created the session store, and the loop must keep running afterward.
+func TestSessionCleanup_PanicRecovered(t *testing.T) {
+	if os.Getenv(sessionCleanupPanicSubprocessEnv) == "1" {
+		ss := NewSessionStore(SessionStoreConfig{
+			DefaultTTL:      1 * time.Hour,
+			CleanupInterval: 20 * time.Millisecond,
+		})
+
+		// Insert a nil session entry under the same lock CleanupExpired
+		// uses — ranging over ss.sessions and dereferencing s.ExpiresAt
+		// panics on a nil *Session, simulating a corrupted session entry.
+		ss.mu.Lock()
+		ss.sessions["poison"] = nil
+		ss.mu.Unlock()
+
+		// Give the ticker several intervals to fire. If the panic is
+		// recovered, the process is still alive here; if not, it has
+		// already crashed and none of this ever runs.
+		time.Sleep(150 * time.Millisecond)
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestSessionCleanup_PanicRecovered")
+	cmd.Env = append(os.Environ(), sessionCleanupPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("SessionStore cleanup: a panicking cleanup tick crashed the process "+
+			"instead of being recovered via reliability.SafeGo; exit error=%v output=%s", err, out)
 	}
 }
 

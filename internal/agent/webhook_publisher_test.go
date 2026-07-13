@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -229,4 +233,81 @@ func TestWebhookPublisher_LoopStopsOnChannelClose(_ *testing.T) {
 
 	// After close, loop should exit gracefully
 	// (no panic, no goroutine leak)
+}
+
+// ─── panic recovery regression ───
+
+// webhookPublisherPanicSubprocessEnv gates the child-process body of
+// TestWebhookPublisherLoop_PanicRecovered. An unrecovered panic inside the
+// `go p.loop()` goroutine started by Attach() crashes the entire process —
+// it cannot be caught by the parent test's own recover() — so this test
+// re-execs itself and asserts the child survives instead of crashing. This
+// mirrors TestHealthMonitorStart_PanicRecovered in internal/llm/health_test.go.
+const webhookPublisherPanicSubprocessEnv = "BT_WEBHOOK_PUBLISHER_PANIC_SUBPROCESS"
+
+// panickyPayload simulates a malformed event.Data payload from an AgentBus
+// producer: its MarshalJSON always panics, which propagates uncaught through
+// json.Marshal (confirmed: encoding/json only recovers panics it wraps in
+// its own internal jsonError sentinel; a plain panic value re-panics).
+type panickyPayload struct{}
+
+func (panickyPayload) MarshalJSON() ([]byte, error) {
+	panic("boom: malformed event payload")
+}
+
+// TestWebhookPublisherLoop_PanicRecovered is the regression test for
+// WebhookPublisher.Attach()'s background loop lacking panic recovery: a
+// panic inside handleEvent (e.g. triggered by json.Marshal on a malformed
+// event.Data payload forwarded from an AgentBus producer) must be recovered
+// and logged instead of crashing the bt-agent daemon that attached the
+// publisher, and the loop must keep forwarding subsequent events afterward.
+func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
+	if os.Getenv(webhookPublisherPanicSubprocessEnv) == "1" {
+		var requests int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt64(&requests, 1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		bus := InitAgentBus(100)
+		pub := NewWebhookPublisher(server.URL, DefaultWebhookSecrets())
+		pub.Attach(bus)
+		defer pub.Close()
+
+		// Publish events whose Data panics during json.Marshal, interleaved
+		// with normal events. If the panics are recovered, the normal
+		// events still reach the server; if not, the process crashes and
+		// none of this ever runs.
+		for i := 0; i < 3; i++ {
+			bus.Publish(AgentEvent{
+				Type:   "task_complete",
+				Source: "test",
+				Data:   panickyPayload{},
+			})
+			bus.Publish(AgentEvent{
+				Type:   "task_complete",
+				Source: "test",
+				Data:   "ok",
+			})
+		}
+
+		time.Sleep(150 * time.Millisecond)
+
+		if got := atomic.LoadInt64(&requests); got < 3 {
+			fmt.Fprintf(os.Stderr, "expected at least 3 successful posts despite panicking "+
+				"payloads (publisher loop should keep running), got %d\n", got)
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestWebhookPublisherLoop_PanicRecovered")
+	cmd.Env = append(os.Environ(), webhookPublisherPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("WebhookPublisher loop: a panicking event handler crashed the process (or "+
+			"the loop stopped forwarding events) instead of being recovered via "+
+			"reliability.SafeGo and continuing to run; exit error=%v output=%s", err, out)
+	}
 }

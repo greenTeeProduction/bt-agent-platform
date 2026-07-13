@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -322,6 +324,48 @@ func TestRequestTimeoutMiddleware_PanicRecovered(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("panicking handler should yield 500, got %d", rec.Code)
+	}
+}
+
+// rateLimiterCleanupPanicSubprocessEnv gates the child-process body of
+// TestRateLimiterCleanup_PanicRecovered. An unrecovered panic inside the
+// `go rl.cleanup()` goroutine started by NewRateLimiter crashes the entire
+// process — it cannot be caught by the parent test's own recover() — so this
+// test re-execs itself and asserts the child survives instead of crashing.
+// This mirrors TestWebhookPublisherLoop_PanicRecovered in
+// internal/agent/webhook_publisher_test.go.
+const rateLimiterCleanupPanicSubprocessEnv = "BT_RATE_LIMITER_CLEANUP_PANIC_SUBPROCESS"
+
+// TestRateLimiterCleanup_PanicRecovered is the regression test for
+// RateLimiter's background cleanup goroutine lacking panic recovery — distinct
+// from TestRequestTimeoutMiddleware_PanicRecovered above, which only covers
+// the middleware panic path. A panic inside cleanup() (e.g. triggered by a
+// corrupted bucket entry) must be recovered and logged instead of crashing
+// the dashboard process that created the rate limiter.
+func TestRateLimiterCleanup_PanicRecovered(t *testing.T) {
+	if os.Getenv(rateLimiterCleanupPanicSubprocessEnv) == "1" {
+		rl := NewRateLimiterWithCleanupInterval(10, 10, 20*time.Millisecond)
+
+		// Insert a nil bucket entry under the same lock cleanup() uses —
+		// ranging over rl.buckets and dereferencing b.lastTime panics on a
+		// nil *tokenBucket, simulating a corrupted bucket entry.
+		rl.mu.Lock()
+		rl.buckets["poison"] = nil
+		rl.mu.Unlock()
+
+		// Give the ticker several intervals to fire. If the panic is
+		// recovered, the process is still alive here; if not, it has
+		// already crashed and none of this ever runs.
+		time.Sleep(150 * time.Millisecond)
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestRateLimiterCleanup_PanicRecovered")
+	cmd.Env = append(os.Environ(), rateLimiterCleanupPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("RateLimiter cleanup: a panicking cleanup tick crashed the process "+
+			"instead of being recovered via reliability.SafeGo; exit error=%v output=%s", err, out)
 	}
 }
 

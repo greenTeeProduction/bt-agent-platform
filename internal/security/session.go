@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // Session represents an authenticated user session.
@@ -99,7 +101,7 @@ func NewSessionStore(cfg SessionStoreConfig) *SessionStore {
 		done:         make(chan struct{}),
 	}
 	ss.cleanupTicker = time.NewTicker(cfg.CleanupInterval)
-	go ss.cleanupLoop()
+	reliability.SafeGo("session-store-cleanup", ss.cleanupLoop, nil)
 	return ss
 }
 

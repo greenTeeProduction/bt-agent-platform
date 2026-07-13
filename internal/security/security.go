@@ -37,13 +37,20 @@ type tokenBucket struct {
 
 // NewRateLimiter creates a rate limiter. rate=tokens/sec, burst=max burst.
 func NewRateLimiter(rate float64, burst int) *RateLimiter {
+	return NewRateLimiterWithCleanupInterval(rate, burst, 10*time.Minute)
+}
+
+// NewRateLimiterWithCleanupInterval creates a rate limiter with a custom
+// bucket-cleanup interval. Exposed primarily for tests that need a fast
+// cleanup cadence; production code should use NewRateLimiter.
+func NewRateLimiterWithCleanupInterval(rate float64, burst int, cleanupInterval time.Duration) *RateLimiter {
 	rl := &RateLimiter{
 		buckets:         make(map[string]*tokenBucket),
 		rate:            rate,
 		burst:           burst,
-		cleanupInterval: 10 * time.Minute,
+		cleanupInterval: cleanupInterval,
 	}
-	go rl.cleanup()
+	reliability.SafeGo("rate-limiter-cleanup", rl.cleanup, nil)
 	return rl
 }
 
