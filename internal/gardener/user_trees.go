@@ -84,11 +84,32 @@ func (r *Registry) loadUserTreesLocked() {
 // Personal trees use strict tree-name matching: the backward-compat fallback
 // in FilterByTreeName (no match → all records) would score a personal tree on
 // the global pool and blind the evidence gate to its missing history.
+//
+// Matching keys off the tree's real ID (entry.Tree.Name), not the registry's
+// display Name: a colliding entry gets a disambiguating "<user>_" prefix on
+// Name (see loadUserTreesLocked) but its underlying tree — and every
+// reflection Record recorded against it — still carries the bare ID, so
+// keying on Name would leave the renamed entry evidence-starved. Once
+// matched by tree ID, records are further filtered down to the owning user
+// (Record.User) so two users' trees sharing the same real ID never bleed
+// evidence into each other; records with no User (pre-Phase-5 or seed
+// reflections) still count for any owner, preserving backward compat.
 func recordsForEntry(allRecords []evolution.Record, entry TreeEntry) []evolution.Record {
-	if entry.User != "" {
-		return evolution.FilterByTreeNameStrict(allRecords, entry.Name)
+	if entry.User == "" {
+		return evolution.FilterByTreeName(allRecords, entry.Name)
 	}
-	return evolution.FilterByTreeName(allRecords, entry.Name)
+	treeID := entry.Name
+	if entry.Tree != nil && strings.TrimSpace(entry.Tree.Name) != "" {
+		treeID = entry.Tree.Name
+	}
+	matched := evolution.FilterByTreeNameStrict(allRecords, treeID)
+	filtered := make([]evolution.Record, 0, len(matched))
+	for _, r := range matched {
+		if r.User == "" || r.User == entry.User {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }
 
 // bankFor resolves the experience bank for a tree: the shared bank for
@@ -111,7 +132,9 @@ func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
 	}
 	bank, err := evolution.NewExperienceBank(filepath.Join(g.cfg.UserExperienceRoot, entry.User, "experience"))
 	if err != nil {
-		g.userBanks[entry.User] = g.cfg.ExperienceBank
+		// Do not cache: the open error may be transient (e.g. a path
+		// temporarily blocked), and caching the shared bank here would
+		// permanently strand the user on it even after the error clears.
 		return g.cfg.ExperienceBank
 	}
 	g.userBanks[entry.User] = bank

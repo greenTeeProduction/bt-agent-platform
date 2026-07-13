@@ -1,6 +1,7 @@
 package gardener
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -194,6 +195,77 @@ func TestBankFor_PersonalTreesGetPerUserBank(t *testing.T) {
 	}
 	if other := g.bankFor(TreeEntry{Name: "goal:x", User: "alice"}); other == userBank {
 		t.Error("different users must not share a personal bank")
+	}
+}
+
+// TestRecordsForEntry_CollidingUsersFilterByRecordUser reproduces the
+// cross-user evidence bug: two users own trees with the same real tree ID
+// ("goal:x"). The registry disambiguates the second-loaded entry's display
+// Name (e.g. "bob_goal:x") but the underlying Tree.Name — the real tree ID —
+// is untouched. Reflection scoring must (1) match renamed entries on their
+// real tree ID, not the disambiguated display name, and (2) filter matched
+// records down to the owning user so a plain-named entry never scores on
+// another user's records.
+func TestRecordsForEntry_CollidingUsersFilterByRecordUser(t *testing.T) {
+	records := []evolution.Record{
+		{TaskID: "a1", TreeName: "goal:x", User: "alice", Outcome: evolution.Success},
+		{TaskID: "b1", TreeName: "goal:x", User: "bob", Outcome: evolution.Success},
+	}
+
+	// Plain-named entry (alice's, loaded first — kept the bare tree ID).
+	aliceEntry := TreeEntry{
+		Name: "goal:x", User: "alice",
+		Tree: &evolution.SerializableNode{Name: "goal:x"},
+	}
+	aliceRecords := recordsForEntry(records, aliceEntry)
+	if len(aliceRecords) != 1 || aliceRecords[0].TaskID != "a1" {
+		t.Errorf("alice's plain-named entry records = %+v, want only her own record a1 (not bob's)", aliceRecords)
+	}
+
+	// Renamed entry (bob's, loaded second after a collision) — display Name
+	// carries the "bob_" prefix but Tree.Name still holds the real tree ID.
+	bobEntry := TreeEntry{
+		Name: "bob_goal:x", User: "bob",
+		Tree: &evolution.SerializableNode{Name: "goal:x"},
+	}
+	bobRecords := recordsForEntry(records, bobEntry)
+	if len(bobRecords) != 1 || bobRecords[0].TaskID != "b1" {
+		t.Errorf("bob's renamed entry records = %+v, want only his own record b1 matched via the real tree ID", bobRecords)
+	}
+}
+
+func TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank(t *testing.T) {
+	sharedBank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("shared bank: %v", err)
+	}
+	usersRoot := t.TempDir()
+	userDir := filepath.Join(usersRoot, "nico")
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		t.Fatalf("mkdir user dir: %v", err)
+	}
+	// Block the per-user experience directory with a regular file so
+	// NewExperienceBank's os.MkdirAll fails — a transient, recoverable error.
+	blockedPath := filepath.Join(userDir, "experience")
+	if err := os.WriteFile(blockedPath, []byte("block"), 0644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	g := NewGardener(Config{ExperienceBank: sharedBank, UserExperienceRoot: usersRoot})
+
+	got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"})
+	if got != sharedBank {
+		t.Fatalf("expected fallback to shared bank while the per-user path is blocked")
+	}
+
+	// Clear the transient failure — the user's own bank can now open.
+	if err := os.Remove(blockedPath); err != nil {
+		t.Fatalf("remove blocking file: %v", err)
+	}
+
+	got2 := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"})
+	if got2 == sharedBank {
+		t.Error("bankFor must not permanently cache the shared bank after a transient open error; it should retry opening the user's own bank on the next call")
 	}
 }
 
