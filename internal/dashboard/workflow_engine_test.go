@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -947,15 +948,18 @@ func TestRecommendationsToTasks_IDs(t *testing.T) {
 	wf := NewWorkflow("test", tt, nil)
 	wf.RecommendationsToTasks()
 
-	expectedIDs := []string{
-		"rec-001",
-		"agree-001", "agree-002",
-		"disagree-001", "disagree-002", "disagree-003",
-		"dissent-001", "dissent-002", "dissent-003", "dissent-004",
+	// IDs carry a per-call random nonce suffix (see newTaskNonce) so that
+	// two Workflow instances never mint colliding WorkflowTask IDs; only
+	// the positional prefix is stable.
+	expectedPrefixes := []string{
+		"rec-001-",
+		"agree-001-", "agree-002-",
+		"disagree-001-", "disagree-002-", "disagree-003-",
+		"dissent-001-", "dissent-002-", "dissent-003-", "dissent-004-",
 	}
-	for i, exp := range expectedIDs {
-		if wf.Tasks[i].ID != exp {
-			t.Errorf("task %d ID: expected %q, got %q", i, exp, wf.Tasks[i].ID)
+	for i, prefix := range expectedPrefixes {
+		if !strings.HasPrefix(wf.Tasks[i].ID, prefix) {
+			t.Errorf("task %d ID: expected prefix %q, got %q", i, prefix, wf.Tasks[i].ID)
 		}
 	}
 }
@@ -983,6 +987,55 @@ func TestRecommendationsToTasks_EffortEstimates(t *testing.T) {
 		if wf.Tasks[i].SprintTarget != expectedSprints[i] {
 			t.Errorf("task %d sprint: expected %d, got %d", i, expectedSprints[i], wf.Tasks[i].SprintTarget)
 		}
+	}
+}
+
+// ─── Concurrency guard: Workflow.Tasks vs an internal mutex ───
+
+// TestWorkflow_ApproveTask_SynchronizesOnMutex pins the "guard Workflow.Tasks
+// against concurrent HTTP access" requirement. cmd/bt-dashboard/main.go now
+// retains a single *Workflow across requests in the package-level
+// currentWorkflow var (see TestHandleWorkflowApprovalEndpoints in
+// cmd/bt-dashboard/main_test.go), so concurrent HTTP handlers
+// (handleWorkflowApprove/handleWorkflowReject/handleWorkflowPending, plus a
+// fresh handleAnalyze re-deriving tasks) can call ApproveTask, RejectTask,
+// PendingApprovals, and Prioritize on the very same Workflow value at the
+// same time. Workflow.Tasks is a plain, unguarded slice mutated in place by
+// every one of those methods — a textbook concurrent read/write hazard with
+// no protection today.
+//
+// The fix must add an internal mutex to Workflow (mirroring TaskStore's own
+// `mu sync.Mutex` field in tasks.go) and have every Tasks-touching method
+// lock it. This test proves the guard actually serializes access: while an
+// external goroutine holds wf.mu, a concurrent ApproveTask call must block
+// instead of running straight through untouched.
+func TestWorkflow_ApproveTask_SynchronizesOnMutex(t *testing.T) {
+	wf := NewWorkflow("test", nil, nil)
+	wf.Tasks = []WorkflowTask{{ID: "task-1", Status: StatusPending}}
+
+	wf.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		wf.ApproveTask("task-1", "alice")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("ApproveTask returned while an external goroutine held wf.mu — " +
+			"ApproveTask does not synchronize on Workflow's internal mutex, so " +
+			"concurrent HTTP handlers can race on Workflow.Tasks")
+	case <-time.After(100 * time.Millisecond):
+		// Expected: ApproveTask blocks waiting for wf.mu to be released.
+	}
+
+	wf.mu.Unlock()
+
+	select {
+	case <-done:
+		// Expected: ApproveTask completes once the external lock is released.
+	case <-time.After(time.Second):
+		t.Fatal("ApproveTask never completed after wf.mu was released")
 	}
 }
 

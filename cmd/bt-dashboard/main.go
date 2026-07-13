@@ -89,7 +89,14 @@ var companyState *startup.CompanyState
 // currentWorkflow holds the most recently derived thinktank→task Workflow so
 // its own PendingApprovals/ApproveTask/RejectTask gate is reachable over HTTP
 // instead of only existing inside handleAnalyze's local scope.
+//
+// currentWorkflowMu guards every read and write of the currentWorkflow
+// pointer itself (handleAnalyze reassigns it on each new analysis while
+// handleWorkflowPending/Approve/Reject read it concurrently from other
+// requests). It does not need to be held while calling methods on the
+// *Workflow value — Workflow has its own internal mutex guarding Tasks.
 var currentWorkflow *dashboard.Workflow
+var currentWorkflowMu sync.RWMutex
 
 func getHomeDir() string {
 	home, err := os.UserHomeDir()
@@ -544,7 +551,9 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
 	wf.RecommendationsToTasks()
 	wf.Prioritize()
+	currentWorkflowMu.Lock()
 	currentWorkflow = wf
+	currentWorkflowMu.Unlock()
 	for _, wt := range wf.Tasks {
 		task := dashboard.Task{
 			ID:          wf.ID + "-" + wt.ID,
@@ -676,21 +685,27 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 // handleWorkflowPending surfaces the current Workflow's PendingApprovals —
 // every WorkflowTask still awaiting an explicit human/HITL decision.
 func handleWorkflowPending(w http.ResponseWriter, _ *http.Request) {
-	if currentWorkflow == nil {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
 		_ = encodeJSON(w, []dashboard.WorkflowTask{})
 		return
 	}
-	_ = encodeJSON(w, currentWorkflow.PendingApprovals())
+	_ = encodeJSON(w, wf.PendingApprovals())
 }
 
 func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
-	if currentWorkflow == nil {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
-	if task := currentWorkflow.ApproveTask(taskID, "dashboard"); task == nil {
+	if task := wf.ApproveTask(taskID, "dashboard"); task == nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
@@ -704,12 +719,15 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = "task rejected via dashboard"
 	}
-	if currentWorkflow == nil {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
-	if task := currentWorkflow.RejectTask(taskID, "dashboard", reason); task == nil {
+	if task := wf.RejectTask(taskID, "dashboard", reason); task == nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return

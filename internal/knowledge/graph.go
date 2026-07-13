@@ -161,6 +161,23 @@ func (kg *KnowledgeGraph) Connect(from, to, relType string) {
 	})
 }
 
+// EvolvedFitnessImproves reports whether fitness would beat the fitness
+// already stored for evolvedID, without mutating the graph. Callers gate an
+// expensive disk write on this before attempting it, then call
+// RegisterEvolved to commit the bookkeeping only once that write has
+// actually succeeded — keeping the knowledge-graph metadata and the tree
+// file on disk from ever diverging. An unregistered evolvedID always
+// improves, matching RegisterEvolved's own first-registration behavior.
+func (kg *KnowledgeGraph) EvolvedFitnessImproves(evolvedID string, fitness float64) bool {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+	meta, exists := kg.Trees[evolvedID]
+	if !exists {
+		return true
+	}
+	return fitness > meta.StructuralFitness
+}
+
 // RegisterEvolved registers (or updates) the winner tree a production
 // genetic-evolution tool bred under a derived "<baseID>-evolved" id,
 // inheriting the base tree's category/capabilities/keywords so discovery

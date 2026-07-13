@@ -1878,6 +1878,66 @@ func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing
 	}
 }
 
+// TestPersistEvolvedWinner_AtomicWithFailedDiskWrite pins that persistEvolvedWinner's
+// knowledge-graph bookkeeping (RegisterEvolved) and its disk write
+// (persistGeneratedTree) succeed or fail together. Today RegisterEvolved
+// commits the higher fitness, bumped EvolvedCount, and the new NodeCount to
+// the knowledge graph unconditionally before persistGeneratedTree even
+// attempts engine.ValidateTreeFull — so when the winner tree fails
+// validation and the disk write never happens, the knowledge graph is left
+// claiming a better winner exists at evolvedID than what is actually
+// persisted on disk. A later, genuinely weaker winner would then be silently
+// rejected by RegisterEvolved's fitness gate because it can never beat the
+// phantom fitness recorded for a tree that was never written.
+func TestPersistEvolvedWinner_AtomicWithFailedDiskWrite(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	deps := &mcpDeps{treeStore: treeStore, kg: kg}
+
+	strong := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
+	const wantID = "godev-evolved"
+
+	first := map[string]interface{}{}
+	persistEvolvedWinner(deps, "godev", strong, 90, first)
+	if persisted, _ := first["persisted"].(bool); !persisted {
+		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
+	}
+
+	invalid := &evolution.SerializableNode{Type: "TotallyBogusNodeType", Name: "invalid-winner"}
+	second := map[string]interface{}{}
+	persistEvolvedWinner(deps, "godev", invalid, 95, second)
+
+	if persisted, _ := second["persisted"].(bool); persisted {
+		t.Fatalf("persistEvolvedWinner must not report persisted=true when the winner tree fails validation; result=%v", second)
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil || loaded.Name != "AddCitations" {
+		t.Fatalf("a winner that fails validation must not disturb the tree already persisted at %q; got %+v", wantID, loaded)
+	}
+
+	meta := kg.Trees[wantID]
+	if meta == nil {
+		t.Fatalf("expected evolved tree %q to still be registered in the knowledge graph", wantID)
+	}
+	if meta.StructuralFitness != 90 {
+		t.Errorf("knowledge-graph bookkeeping must not record fitness 95 for a winner that was never written to disk; StructuralFitness got %v, want 90 (matching what is actually persisted)", meta.StructuralFitness)
+	}
+	if meta.NodeCount != evolution.CountNodes(strong) {
+		t.Errorf("knowledge-graph bookkeeping must not record the failed winner's node count when its disk write never happened; NodeCount got %d, want %d (matching what is actually persisted)", meta.NodeCount, evolution.CountNodes(strong))
+	}
+	if meta.EvolvedCount != 1 {
+		t.Errorf("EvolvedCount must not increment for a winner that failed to persist; got %d, want 1", meta.EvolvedCount)
+	}
+}
+
 // TestEvolveToolsSurfacePopulationHealthSnapshot pins that the three production
 // evolve tools that run a genetic Population — bt_evolve_genetic,
 // bt_evolve_bottlenecks, and bt_evolve_selection_pressure — surface that

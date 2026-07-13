@@ -2,17 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/thinktank"
 )
 
 // TestDashboardDriftWatcherRebuildsItself pins — at the source level, the
@@ -528,5 +531,170 @@ func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 	}
 	if len(pending2) != 0 {
 		t.Errorf("pending count after approve+reject = %d, want 0", len(pending2))
+	}
+}
+
+// TestCurrentWorkflow_GuardedByMutex pins the "guard the package-level
+// currentWorkflow against concurrent HTTP access" requirement. currentWorkflow
+// (main.go) is read by handleWorkflowPending/handleWorkflowApprove/
+// handleWorkflowReject and reassigned by handleAnalyze on every new analysis,
+// with zero synchronization today — concurrent requests can race on the bare
+// pointer read/write.
+//
+// The fix must add a package-level mutex (currentWorkflowMu) guarding every
+// read and write of currentWorkflow, mirroring the sprintState embedded-mutex
+// convention already used elsewhere in this file. This test proves the guard
+// actually serializes access: while an external goroutine holds
+// currentWorkflowMu for writing, a concurrent handleWorkflowPending call (which
+// must take a read lock before touching currentWorkflow) has to block instead
+// of running straight through.
+func TestCurrentWorkflow_GuardedByMutex(t *testing.T) {
+	origWorkflow := currentWorkflow
+	t.Cleanup(func() { currentWorkflow = origWorkflow })
+
+	wf := dashboard.NewWorkflow("test-wf", nil, nil)
+	wf.Tasks = []dashboard.WorkflowTask{{ID: "task-a", Status: dashboard.StatusPending}}
+	currentWorkflow = wf
+
+	currentWorkflowMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/api/workflow/pending", nil)
+		rr := httptest.NewRecorder()
+		handleWorkflowPending(rr, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("handleWorkflowPending returned while an external goroutine held " +
+			"currentWorkflowMu for writing — handleWorkflowPending does not " +
+			"synchronize on currentWorkflowMu, so concurrent HTTP handlers can " +
+			"race on the currentWorkflow pointer")
+	case <-time.After(100 * time.Millisecond):
+		// Expected: handleWorkflowPending blocks waiting for currentWorkflowMu.
+	}
+
+	currentWorkflowMu.Unlock()
+
+	select {
+	case <-done:
+		// Expected: handleWorkflowPending completes once the external lock is released.
+	case <-time.After(time.Second):
+		t.Fatal("handleWorkflowPending never completed after currentWorkflowMu was released")
+	}
+}
+
+// TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses pins the fix for guaranteed
+// task-ID collisions in handleAnalyze's Workflow-derived task IDs.
+//
+// handleAnalyze composes each persisted dashboard.Task's ID as
+// wf.ID + "-" + wt.ID. dashboard.NewWorkflow mints wf.ID as
+// fmt.Sprintf("wf-%d", time.Now().Unix()) — second-granularity — and
+// Workflow.RecommendationsToTasks mints every wt.ID from a purely positional
+// scheme ("rec-001", "agree-001", ...) that depends only on slice position,
+// never on wf.ID, wall-clock time, or any other per-workflow entropy
+// (internal/dashboard/workflow_engine.go). So whenever two
+// /api/thinktank/analyze requests land within the same wall-clock second —
+// routine for rapid or automated callers, and the norm rather than the
+// exception under any real traffic — the two Workflows share an identical
+// wf.ID, and because RecommendationsToTasks always assigns the very same
+// positional WorkflowTask IDs regardless of which Workflow instance calls
+// it, the final composed dashboard.Task IDs for the two analyses collide
+// exactly. dashboard.TaskStore's Get/UpdateStatus/Approve/Reject
+// (internal/dashboard/tasks.go) linear-scan for the first ID match, so the
+// second analysis's tasks silently become unreachable/misattributed the
+// moment this happens.
+//
+// A real same-second collision can't be reliably forced from a black-box
+// test without racing the wall clock, so — mirroring
+// TestHandleAnalyze_TaskIDsKeyedOnInsightIndex's approach above for a sibling
+// timestamp-collision bug — this test reproduces the guaranteed scenario
+// deterministically: it runs one real analysis via handleAnalyze, then
+// derives a second Workflow's tasks the same way handleAnalyze does but with
+// its ID forced to match the first (exactly what NewWorkflow's
+// time.Now().Unix()-keyed scheme guarantees whenever two analyses land in
+// the same second), and asserts the resulting task IDs must still be
+// unique — which requires task-ID minting to carry real entropy of its own
+// instead of leaning entirely on wf.ID for uniqueness.
+func TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses(t *testing.T) {
+	origTaskStore := taskStore
+	origLLM := sharedLLM
+	origWorkflow := currentWorkflow
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		sharedLLM = origLLM
+		currentWorkflow = origWorkflow
+	})
+
+	dir := t.TempDir()
+	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+	sharedLLM = engine.NewMockLLM()
+
+	httpReq := httptest.NewRequest(http.MethodGet, "/api/thinktank/analyze?topic=Should+we+ship+feature+X", nil)
+	rr := httptest.NewRecorder()
+	handleAnalyze(rr, httpReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first analyze status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if currentWorkflow == nil {
+		t.Fatal("handleAnalyze did not set currentWorkflow")
+	}
+	firstTasks := taskStore.List()
+	if len(firstTasks) == 0 {
+		t.Fatal("first analysis persisted 0 tasks; cannot exercise the collision")
+	}
+
+	// Build a second analysis's Workflow from different synthesis content,
+	// but force its ID to match the first — reproducing exactly what
+	// NewWorkflow hands back when invoked within the same wall-clock second
+	// as the first call above.
+	tt2 := &thinktank.ThinkTank{
+		Name: "Council",
+		Synthesis: &thinktank.Synthesis{
+			Recommendation:       "A different recommendation from the second analysis",
+			PointsOfAgreement:    []string{"A different point of agreement"},
+			PointsOfDisagreement: []string{"A different point of disagreement"},
+			DissentingNotes:      []string{"A different dissenting note"},
+		},
+	}
+	wf2 := dashboard.NewWorkflow("Council", tt2, companyState)
+	wf2.ID = currentWorkflow.ID
+	wf2.RecommendationsToTasks()
+	wf2.Prioritize()
+	for _, wt := range wf2.Tasks {
+		task := dashboard.Task{
+			ID:          wf2.ID + "-" + wt.ID,
+			Title:       wt.Title,
+			Description: wt.Description,
+			Priority:    wt.Priority.String(),
+			Assignee:    wt.AssigneeRole,
+			Source:      "thinktank",
+			SourceID:    wt.Source,
+			Sprint:      wt.SprintTarget,
+			StoryPoints: wt.EstimatedEffort,
+			Approval:    wt.Approval,
+		}
+		if err := taskStore.Create(task); err != nil {
+			t.Fatalf("persist second analysis task: %v", err)
+		}
+	}
+
+	seen := make(map[string]int)
+	for _, tk := range taskStore.List() {
+		seen[tk.ID]++
+	}
+	var collisions []string
+	for id, count := range seen {
+		if count > 1 {
+			collisions = append(collisions, fmt.Sprintf("%s(x%d)", id, count))
+		}
+	}
+	if len(collisions) > 0 {
+		t.Errorf("two analyses landing in the same wall-clock second produced colliding task IDs: %v; "+
+			"handleAnalyze/NewWorkflow must mint task IDs that stay unique across analyses even when "+
+			"wf.ID collides (e.g. a per-workflow random/monotonic component folded into each "+
+			"WorkflowTask's ID in RecommendationsToTasks), not derive uniqueness solely from wf.ID + a "+
+			"purely positional WorkflowTask.ID", collisions)
 	}
 }

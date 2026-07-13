@@ -154,22 +154,29 @@ func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.Serializ
 // evolved_from edge) so fitness-aware discovery and the gardener can find the
 // bred winner on the next run instead of only its scalar fitness surviving.
 //
-// The knowledge graph is consulted first: RegisterEvolved only accepts the
-// bookkeeping write-back when the new winner's fitness actually beats what is
-// already stored for evolvedID, and reports that back. When it does not, the
-// file write is skipped too — a later, weaker genetic-evolution pass must not
-// clobber a stronger winner already persisted on disk.
+// The knowledge graph is consulted first — via the non-mutating
+// EvolvedFitnessImproves peek — so a later, weaker genetic-evolution pass
+// never even attempts to overwrite a stronger winner already persisted on
+// disk. The bookkeeping commit (RegisterEvolved) only runs after
+// persistGeneratedTree actually reports persisted=true, so a winner that
+// fails validation or fails to write never leaves the knowledge graph
+// claiming a fitness, node count, or evolved count that disk does not back —
+// the two stay atomic: either both update or neither does.
 func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]interface{}) {
 	evolvedID := baseTreeID + "-evolved"
 	result["evolved_tree_id"] = evolvedID
-	if deps.kg != nil {
-		if improved := deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness); !improved {
-			result["persisted"] = false
-			result["skip_reason"] = "fitness does not improve on stored evolved winner"
-			return
-		}
+	if deps.kg != nil && !deps.kg.EvolvedFitnessImproves(evolvedID, fitness) {
+		result["persisted"] = false
+		result["skip_reason"] = "fitness does not improve on stored evolved winner"
+		return
 	}
 	persistGeneratedTree(deps, evolvedID, winner, result)
+	if persisted, _ := result["persisted"].(bool); !persisted {
+		return
+	}
+	if deps.kg != nil {
+		deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness)
+	}
 }
 
 // persistGeneratedTreeForUser persists a user-attributed generated tree into

@@ -1,8 +1,11 @@
 package dashboard
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/startup"
@@ -13,6 +16,10 @@ import (
 // Workflow connects thinktank analysis to company execution.
 // Thinktank produces recommendations → Workflow creates tasks → Company executes sprints.
 type Workflow struct {
+	// mu guards Tasks (and the other fields below it mutated alongside Tasks)
+	// against concurrent HTTP handlers acting on the same *Workflow — see
+	// cmd/bt-dashboard's package-level currentWorkflow.
+	mu        sync.Mutex
 	ID        string                `json:"id"`
 	Name      string                `json:"name"`
 	ThinkTank *thinktank.ThinkTank  `json:"thinktank"`
@@ -107,15 +114,23 @@ type Approval struct {
 
 // RecommendationsToTasks converts thinktank recommendations into company tasks.
 func (w *Workflow) RecommendationsToTasks() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.ThinkTank.Synthesis == nil {
 		return
 	}
 
 	s := w.ThinkTank.Synthesis
+	// nonce carries real per-call entropy so WorkflowTask IDs stay unique
+	// across separate Workflow instances even when their positional index
+	// matches and their parent Workflow.ID collides (NewWorkflow mints IDs
+	// at second granularity, so two analyses in the same wall-clock second
+	// would otherwise produce identical composed task IDs downstream).
+	nonce := newTaskNonce()
 
 	// Main recommendation becomes a critical CEO task
 	w.Tasks = append(w.Tasks, WorkflowTask{
-		ID:              "rec-001",
+		ID:              "rec-001-" + nonce,
 		Title:           "Implement: " + util.Truncate(s.Recommendation, 80),
 		Description:     s.Recommendation,
 		Source:          "thinktank:synthesis:recommendation",
@@ -130,7 +145,7 @@ func (w *Workflow) RecommendationsToTasks() {
 	// Points of agreement → PM tasks
 	for i, point := range s.PointsOfAgreement {
 		w.Tasks = append(w.Tasks, WorkflowTask{
-			ID:              fmt.Sprintf("agree-%03d", i+1),
+			ID:              fmt.Sprintf("agree-%03d-%s", i+1, nonce),
 			Title:           "Align on: " + util.Truncate(point, 70),
 			Description:     point,
 			Source:          "thinktank:synthesis:agreement",
@@ -146,7 +161,7 @@ func (w *Workflow) RecommendationsToTasks() {
 	// Points of disagreement → CTO investigation tasks
 	for i, point := range s.PointsOfDisagreement {
 		w.Tasks = append(w.Tasks, WorkflowTask{
-			ID:              fmt.Sprintf("disagree-%03d", i+1),
+			ID:              fmt.Sprintf("disagree-%03d-%s", i+1, nonce),
 			Title:           "Investigate: " + util.Truncate(point, 70),
 			Description:     point,
 			Source:          "thinktank:synthesis:disagreement",
@@ -162,7 +177,7 @@ func (w *Workflow) RecommendationsToTasks() {
 	// Dissenting notes → engineer spike tasks
 	for i, note := range s.DissentingNotes {
 		w.Tasks = append(w.Tasks, WorkflowTask{
-			ID:              fmt.Sprintf("dissent-%03d", i+1),
+			ID:              fmt.Sprintf("dissent-%03d-%s", i+1, nonce),
 			Title:           "Spike: " + util.Truncate(note, 70),
 			Description:     note,
 			Source:          "thinktank:synthesis:dissenting",
@@ -176,10 +191,22 @@ func (w *Workflow) RecommendationsToTasks() {
 	}
 }
 
+// newTaskNonce returns a short random hex string used to disambiguate
+// WorkflowTask IDs minted by separate RecommendationsToTasks calls.
+func newTaskNonce() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
 // ─── WorkflowTask Management ───
 
 // ApproveTask marks a task as approved and ready for execution.
 func (w *Workflow) ApproveTask(taskID, approver string) *WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	for i := range w.Tasks {
 		if w.Tasks[i].ID == taskID {
 			now := time.Now()
@@ -198,6 +225,8 @@ func (w *Workflow) ApproveTask(taskID, approver string) *WorkflowTask {
 
 // RejectTask marks a task as rejected with a reason.
 func (w *Workflow) RejectTask(taskID, rejector, reason string) *WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	for i := range w.Tasks {
 		if w.Tasks[i].ID == taskID {
 			now := time.Now()
@@ -217,12 +246,16 @@ func (w *Workflow) RejectTask(taskID, rejector, reason string) *WorkflowTask {
 
 // Prioritize reorders tasks by priority and sprint target.
 func (w *Workflow) Prioritize() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	// Stable sort by priority (critical first) then sprint
 	sortTasks(w.Tasks)
 }
 
 // GetApprovedTasks returns tasks ready for execution.
 func (w *Workflow) GetApprovedTasks() []WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	var approved []WorkflowTask
 	for _, t := range w.Tasks {
 		if t.Status == StatusApproved || t.Status == StatusInProgress {
@@ -234,6 +267,8 @@ func (w *Workflow) GetApprovedTasks() []WorkflowTask {
 
 // GetTasksByRole returns tasks assigned to a specific role.
 func (w *Workflow) GetTasksByRole(role string) []WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	var result []WorkflowTask
 	for _, t := range w.Tasks {
 		if t.AssigneeRole == role {
@@ -245,6 +280,15 @@ func (w *Workflow) GetTasksByRole(role string) []WorkflowTask {
 
 // GetTasksBySprint returns tasks for a specific sprint.
 func (w *Workflow) GetTasksBySprint(sprint int) []WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.getTasksBySprintLocked(sprint)
+}
+
+// getTasksBySprintLocked is GetTasksBySprint's body, callable by methods that
+// already hold w.mu (e.g. ExecuteSprint) without deadlocking on a
+// non-reentrant sync.Mutex.
+func (w *Workflow) getTasksBySprintLocked(sprint int) []WorkflowTask {
 	var result []WorkflowTask
 	for _, t := range w.Tasks {
 		if t.SprintTarget == sprint {
@@ -256,6 +300,8 @@ func (w *Workflow) GetTasksBySprint(sprint int) []WorkflowTask {
 
 // PendingApprovals returns tasks awaiting approval.
 func (w *Workflow) PendingApprovals() []WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	var pending []WorkflowTask
 	for _, t := range w.Tasks {
 		if t.Status == StatusPending {
@@ -271,8 +317,11 @@ func (w *Workflow) PendingApprovals() []WorkflowTask {
 func (w *Workflow) ExecuteSprint(sprintNum int, orch interface {
 	RunSprint() *startup.SprintResult
 }) *startup.SprintResult {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	// Set sprint goal from approved tasks
-	tasks := w.GetTasksBySprint(sprintNum)
+	tasks := w.getTasksBySprintLocked(sprintNum)
 	approved := 0
 	for _, t := range tasks {
 		if t.Status == StatusApproved {
