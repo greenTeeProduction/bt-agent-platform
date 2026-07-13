@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
@@ -25,6 +26,9 @@ type Task struct {
 	CompletedAt string `json:"completed_at,omitempty"`
 	Output      string `json:"output,omitempty"`
 	Outcome     string `json:"outcome,omitempty"`
+	// Approval is the audit trail for approve/reject decisions, mirroring
+	// the Approval struct on WorkflowTask in workflow_engine.go.
+	Approval Approval `json:"approval,omitempty"`
 }
 
 // TaskStore persists tasks to a JSON file.
@@ -112,6 +116,45 @@ func (s *TaskStore) UpdateStatus(id, status string) error {
 	return fmt.Errorf("task %s not found", id)
 }
 
+// Approve marks a task as approved and records who approved it and when.
+func (s *TaskStore) Approve(id, approver string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == id {
+			now := time.Now()
+			s.Tasks[i].Status = "approved"
+			s.Tasks[i].Approval = Approval{
+				ApprovedBy: approver,
+				ApprovedAt: &now,
+				IsApproved: true,
+			}
+			return s.saveLocked()
+		}
+	}
+	return fmt.Errorf("task %s not found", id)
+}
+
+// Reject marks a task as rejected and records who rejected it, when, and why.
+func (s *TaskStore) Reject(id, rejector, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == id {
+			now := time.Now()
+			s.Tasks[i].Status = "rejected"
+			s.Tasks[i].Approval = Approval{
+				ApprovedBy: rejector,
+				RejectedAt: &now,
+				Reason:     reason,
+				IsApproved: false,
+			}
+			return s.saveLocked()
+		}
+	}
+	return fmt.Errorf("task %s not found", id)
+}
+
 func (s *TaskStore) SetOutput(id, output, outcome string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -125,7 +168,28 @@ func (s *TaskStore) SetOutput(id, output, outcome string) error {
 	return fmt.Errorf("task %s not found", id)
 }
 
-// Approved returns tasks with status "approved".
+// priorityRank maps a Task's string Priority to the same ordinal used by
+// WorkflowPriority in workflow_engine.go (critical first), so Approved()
+// dispatches in the same order as Workflow.Prioritize's sortTasks.
+func priorityRank(priority string) int {
+	switch priority {
+	case "critical":
+		return int(PriorityCritical)
+	case "high":
+		return int(PriorityHigh)
+	case "medium":
+		return int(PriorityMedium)
+	case "low":
+		return int(PriorityLow)
+	default:
+		return int(PriorityBacklog)
+	}
+}
+
+// Approved returns tasks with status "approved", ordered by priority
+// (critical first) then sprint — mirroring workflow_engine.go's
+// sortTasks/Prioritize — so callers like handleSprintExecute dispatch
+// high-urgency work first regardless of task creation order.
 func (s *TaskStore) Approved() []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,5 +199,12 @@ func (s *TaskStore) Approved() []Task {
 			out = append(out, t)
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, rj := priorityRank(out[i].Priority), priorityRank(out[j].Priority)
+		if ri != rj {
+			return ri < rj
+		}
+		return out[i].Sprint < out[j].Sprint
+	})
 	return out
 }

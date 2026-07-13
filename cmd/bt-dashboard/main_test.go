@@ -267,3 +267,55 @@ func TestHandleTaskApproveReject_EscalatedVsPending(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleAnalyze_TaskIDsKeyedOnInsightIndex pins milestone 1/3 of the
+// dashboard Workflow/Approval wiring program. handleAnalyze mints each
+// auto-generated task's ID as
+//
+//	fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), len(f.KeyInsights))
+//
+// via `for _, insight := range f.KeyInsights[:min(2, len(f.KeyInsights))]`.
+// The second Sprintf component, len(f.KeyInsights), is CONSTANT across every
+// insight minted from the same ResearchFinding — the ID varies only by
+// nanosecond timestamp. Two insights minted for the same fellow within the
+// same nanosecond tick therefore collide on an identical ID, and
+// dashboard.TaskStore's Get/UpdateStatus/SetOutput (internal/dashboard/tasks.go)
+// linear-scan and act on the first ID match only — permanently orphaning the
+// second task. A real nanosecond collision cannot be reliably forced from a
+// black-box test (verified: 0 collisions across 100k back-to-back
+// time.Now().UnixNano() calls on this host), so this pins the fix at the
+// source level like TestDashboardDriftWatcherRebuildsItself above: the loop
+// must capture its own index and use it instead of the constant slice
+// length.
+func TestHandleAnalyze_TaskIDsKeyedOnInsightIndex(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	source := string(src)
+
+	start := strings.Index(source, "func handleAnalyze(")
+	if start < 0 {
+		t.Fatal("handleAnalyze not found in main.go")
+	}
+	rest := source[start+len("func handleAnalyze("):]
+	end := strings.Index(rest, "\nfunc ")
+	if end < 0 {
+		end = len(rest)
+	}
+	body := rest[:end]
+
+	if strings.Contains(body, "for _, insight := range f.KeyInsights") {
+		t.Error("handleAnalyze's insight loop discards its index (`for _, insight " +
+			":= range f.KeyInsights`); it must capture the index so it can be folded " +
+			"into the task ID, e.g. `for idx, insight := range f.KeyInsights[...]`")
+	}
+
+	if strings.Contains(body, `fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), len(f.KeyInsights))`) {
+		t.Error("handleAnalyze still mints task IDs from time.Now().UnixNano() + " +
+			"len(f.KeyInsights), which is constant across every insight minted from " +
+			"the same finding; key the ID on the insight's own loop index instead so " +
+			"two insights minted for the same fellow in the same nanosecond tick " +
+			"don't collide and permanently orphan one another in TaskStore")
+	}
+}

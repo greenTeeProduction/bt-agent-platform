@@ -520,13 +520,13 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 		// Create tasks from high-confidence insights
 		if f.ConfidenceScore >= 0.6 && len(f.KeyInsights) > 0 {
-			for _, insight := range f.KeyInsights[:min(2, len(f.KeyInsights))] {
+			for idx, insight := range f.KeyInsights[:min(2, len(f.KeyInsights))] {
 				priority := "medium"
 				if f.ConfidenceScore >= 0.8 {
 					priority = "high"
 				}
 				task := dashboard.Task{
-					ID:          fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), len(f.KeyInsights)),
+					ID:          fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), idx),
 					Title:       f.FellowName + ": " + insight,
 					Description: strings.Join(f.KeyInsights, "\n"),
 					Priority:    priority,
@@ -598,7 +598,7 @@ func handleTasks(w http.ResponseWriter, _ *http.Request) {
 
 func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
-	if err := taskStore.UpdateStatus(taskID, "approved"); err != nil {
+	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
@@ -624,7 +624,11 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 
 func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
-	if err := taskStore.UpdateStatus(taskID, "rejected"); err != nil {
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "task rejected via dashboard"
+	}
+	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
@@ -648,6 +652,9 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
+	// Approved() returns tasks ordered by priority then sprint, so the
+	// sequential dispatch loop below already runs critical/high-priority
+	// tasks before lower-priority ones regardless of creation order.
 	approved := taskStore.Approved()
 	if len(approved) == 0 {
 		_ = encodeJSON(w, map[string]string{"status": "no_approved_tasks"})
