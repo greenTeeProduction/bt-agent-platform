@@ -1,6 +1,8 @@
 package reliability
 
 import (
+	"os"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
@@ -440,5 +442,83 @@ func TestNodeHeartbeat_NewNodeHeartbeatWithCleanupInterval(t *testing.T) {
 	total, _, _ := hb.Stats()
 	if total != 0 {
 		t.Fatalf("expected cleanup with custom interval, got %d nodes", total)
+	}
+}
+
+// ─── panic recovery regression ───
+
+// nodeHeartbeatCleanupPanicSubprocessEnv gates the child-process body of
+// TestNodeHeartbeatCleanup_PanicRecovered. An unrecovered panic inside the
+// `go hb.cleanupLoop()` goroutine started by NewNodeHeartbeat crashes the
+// entire process — it cannot be caught by the parent test's own recover() —
+// so this test re-execs itself and asserts the child survives instead of
+// crashing. This mirrors TestSessionCleanup_PanicRecovered in
+// internal/security/session_test.go.
+const nodeHeartbeatCleanupPanicSubprocessEnv = "BT_NODE_HEARTBEAT_CLEANUP_PANIC_SUBPROCESS"
+
+// TestNodeHeartbeatCleanup_PanicRecovered is the regression test for the
+// `go hb.cleanupLoop()` spawn in NewNodeHeartbeat lacking panic recovery. A
+// panic inside cleanup() (e.g. triggered by a corrupted node entry) must be
+// recovered and logged instead of crashing the AgentRouter process that
+// created the heartbeat tracker, and cleanup must keep running afterward.
+func TestNodeHeartbeatCleanup_PanicRecovered(t *testing.T) {
+	if os.Getenv(nodeHeartbeatCleanupPanicSubprocessEnv) == "1" {
+		hb := NewNodeHeartbeat(1 * time.Second)
+
+		// Insert a nil node entry under the same lock cleanup() uses —
+		// ranging over hb.nodes and dereferencing entry.lastSeen panics on a
+		// nil *heartbeatEntry, simulating a corrupted node entry.
+		hb.mu.Lock()
+		hb.nodes["poison"] = nil
+		hb.mu.Unlock()
+
+		// cleanupInterval is clamped to at least 1s for this TTL, so give
+		// the ticker enough time to fire. If the panic is recovered, the
+		// process is still alive here; if not, it has already crashed and
+		// none of this ever runs.
+		time.Sleep(1200 * time.Millisecond)
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestNodeHeartbeatCleanup_PanicRecovered")
+	cmd.Env = append(os.Environ(), nodeHeartbeatCleanupPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("NodeHeartbeat cleanup: a panicking cleanup tick crashed the process "+
+			"instead of being recovered via reliability.SafeGo; exit error=%v output=%s", err, out)
+	}
+}
+
+// nodeHeartbeatWithIntervalCleanupPanicSubprocessEnv gates the child-process
+// body of TestNodeHeartbeatWithCleanupIntervalCleanup_PanicRecovered — the
+// second, independent `go hb.cleanupLoop()` spawn in
+// NewNodeHeartbeatWithCleanupInterval.
+const nodeHeartbeatWithIntervalCleanupPanicSubprocessEnv = "BT_NODE_HEARTBEAT_WITH_INTERVAL_CLEANUP_PANIC_SUBPROCESS"
+
+// TestNodeHeartbeatWithCleanupIntervalCleanup_PanicRecovered is the
+// regression test for the `go hb.cleanupLoop()` spawn in
+// NewNodeHeartbeatWithCleanupInterval lacking panic recovery. Distinct from
+// TestNodeHeartbeatCleanup_PanicRecovered above, which only covers the
+// NewNodeHeartbeat spawn — both constructors start their own goroutine and
+// both must be wrapped independently.
+func TestNodeHeartbeatWithCleanupIntervalCleanup_PanicRecovered(t *testing.T) {
+	if os.Getenv(nodeHeartbeatWithIntervalCleanupPanicSubprocessEnv) == "1" {
+		hb := NewNodeHeartbeatWithCleanupInterval(1*time.Second, 20*time.Millisecond)
+
+		hb.mu.Lock()
+		hb.nodes["poison"] = nil
+		hb.mu.Unlock()
+
+		// Give the fast ticker several intervals to fire.
+		time.Sleep(150 * time.Millisecond)
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestNodeHeartbeatWithCleanupIntervalCleanup_PanicRecovered")
+	cmd.Env = append(os.Environ(), nodeHeartbeatWithIntervalCleanupPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("NodeHeartbeat (custom interval) cleanup: a panicking cleanup tick crashed the process "+
+			"instead of being recovered via reliability.SafeGo; exit error=%v output=%s", err, out)
 	}
 }

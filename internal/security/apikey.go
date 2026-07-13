@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // APIKeyInfo is the public-facing representation of an API key.
@@ -296,9 +298,11 @@ func NewKeyRotationScheduler(kr *KeyRing, interval, rotateWindow time.Duration, 
 	}
 }
 
-// Start begins the rotation loop in a background goroutine.
+// Start begins the rotation loop in a background goroutine. The loop is
+// panic-protected: a panic inside a caller-supplied onRotate callback (see
+// rotate) cannot take down the goroutine or the process.
 func (krs *KeyRotationScheduler) Start() {
-	go krs.loop()
+	reliability.SafeGo("key-rotation-scheduler", krs.loop, nil)
 }
 
 // Stop gracefully shuts down the rotation scheduler.
@@ -339,7 +343,9 @@ func (krs *KeyRotationScheduler) rotate() int {
 		}
 		_ = krs.keyRing.ExpireKey(oldHash, krs.rotateWindow)
 		if krs.onRotate != nil {
-			krs.onRotate(oldHash, newKey)
+			_ = reliability.Recover("key-rotation-onRotate", func() {
+				krs.onRotate(oldHash, newKey)
+			})
 		}
 		rotated++
 	}

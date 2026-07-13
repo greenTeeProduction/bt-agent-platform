@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -594,6 +595,78 @@ func TestConfigWatcher_LastMod(t *testing.T) {
 	}
 	if !newMod.After(mod) && !newMod.Equal(mod) {
 		t.Errorf("LastMod() after change = %v, expected > %v", newMod, mod)
+	}
+}
+
+// ─── panic recovery regression ───
+
+// configWatcherLoopPanicSubprocessEnv gates the child-process body of
+// TestConfigWatcherLoop_PanicRecovered. An unrecovered panic inside the
+// `go w.loop()` goroutine started by Start crashes the entire process — it
+// cannot be caught by the parent test's own recover() — so this test
+// re-execs itself and asserts the child survives instead of crashing. This
+// mirrors TestSessionCleanup_PanicRecovered in
+// internal/security/session_test.go.
+//
+// Deliberately NOT prefixed "BT_": TestMain (testmain_test.go) strips every
+// ambient BT_* var before the suite runs (including in this re-exec'd
+// child), which would erase the gate and turn the child into an infinite
+// self-exec chain instead of running the subprocess body.
+const configWatcherLoopPanicSubprocessEnv = "CONFIG_WATCHER_LOOP_PANIC_SUBPROCESS_GATE"
+
+// TestConfigWatcherLoop_PanicRecovered is the regression test for
+// ConfigWatcher's background loop goroutine lacking panic recovery. OnChange
+// callbacks run synchronously in the watcher goroutine (see the doc comment
+// on OnChange), so a panicking callback — simulating a bug in application
+// reload logic — must be recovered and logged instead of crashing the
+// daemon process that started the watcher, and polling must keep running
+// afterward.
+func TestConfigWatcherLoop_PanicRecovered(t *testing.T) {
+	if os.Getenv(configWatcherLoopPanicSubprocessEnv) == "1" {
+		dir, err := os.MkdirTemp("", "bt-config-watcher-panic")
+		if err != nil {
+			panic(err)
+		}
+		path := filepath.Join(dir, "config.json")
+		data, err := json.Marshal(map[string]any{"dashboard_port": 8000})
+		if err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			panic(err)
+		}
+
+		w := NewConfigWatcher(path, 20*time.Millisecond)
+		w.OnChange(func(_ *Config) {
+			panic("boom: corrupted reload callback")
+		})
+		w.Start()
+
+		time.Sleep(50 * time.Millisecond)
+
+		// Trigger a reload so the panicking callback fires.
+		data2, err := json.Marshal(map[string]any{"dashboard_port": 9000})
+		if err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(path, data2, 0644); err != nil {
+			panic(err)
+		}
+
+		// Give the poller several intervals to pick up the change and fire
+		// the panicking callback. If the panic is recovered, the process is
+		// still alive here; if not, it has already crashed and none of this
+		// ever runs.
+		time.Sleep(300 * time.Millisecond)
+		os.Exit(0)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestConfigWatcherLoop_PanicRecovered")
+	cmd.Env = append(os.Environ(), configWatcherLoopPanicSubprocessEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ConfigWatcher loop: a panicking OnChange callback crashed the process "+
+			"instead of being recovered via reliability.SafeGo; exit error=%v output=%s", err, out)
 	}
 }
 

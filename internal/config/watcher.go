@@ -12,6 +12,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ChangeCallback is called when the config file changes and the new
@@ -117,7 +119,7 @@ func (w *ConfigWatcher) Start() {
 	}
 	w.mu.Unlock()
 
-	go w.loop()
+	reliability.SafeGo("config-watcher-loop", w.loop, nil)
 }
 
 // Stop stops the background polling goroutine. Safe to call multiple times.

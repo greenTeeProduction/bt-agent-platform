@@ -591,3 +591,58 @@ func TestKeyRotationScheduler_StartStopSafe(_ *testing.T) {
 	krs.Stop() // should not hang or panic
 	// Second Stop is NOT safe (closes already-closed channel — use once)
 }
+
+// TestKeyRotationScheduler_StartSurvivesOnRotatePanic verifies that a panic
+// raised inside a caller-supplied onRotate callback does not take down the
+// whole process. Start()'s background loop must recover such panics (e.g.
+// via reliability.SafeGo) so later rotations still run. Without that
+// recovery, this panic is unrecovered inside the "go krs.loop()" goroutine
+// and crashes the entire test binary.
+func TestKeyRotationScheduler_StartSurvivesOnRotatePanic(t *testing.T) {
+	kr := NewKeyRing()
+
+	_, err := kr.GenerateKey("panic-key", 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	var mu sync.Mutex
+	calls := 0
+	onRotate := func(_, _ string) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		panic("onRotate exploded")
+	}
+
+	krs := NewKeyRotationScheduler(kr, 20*time.Millisecond, 1*time.Hour, "panic-rotated", onRotate)
+	krs.Start()
+	defer krs.Stop()
+
+	// Give the background loop time to fire onRotate (and panic) at least once.
+	time.Sleep(150 * time.Millisecond)
+
+	mu.Lock()
+	got := calls
+	mu.Unlock()
+
+	if got == 0 {
+		t.Fatal("expected onRotate to have been invoked at least once")
+	}
+
+	// Reaching this point at all proves the panic was recovered rather than
+	// crashing the test process. As a further liveness check, generate a
+	// fresh expiring key and confirm a subsequent RotateNow still works —
+	// i.e. the scheduler's internal state wasn't corrupted by the panic.
+	_, err = kr.GenerateKey("post-panic-key", 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	rotated := krs.RotateNow()
+	if rotated == 0 {
+		t.Error("expected RotateNow to still rotate keys after a recovered onRotate panic")
+	}
+}

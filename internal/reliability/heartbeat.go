@@ -53,7 +53,7 @@ func NewNodeHeartbeat(ttl time.Duration) *NodeHeartbeat {
 		stopCh:          make(chan struct{}),
 		cleanupInterval: cleanupInterval,
 	}
-	go hb.cleanupLoop()
+	SafeGo("node-heartbeat-cleanup-loop", hb.cleanupLoop, nil)
 	return hb
 }
 
@@ -66,7 +66,7 @@ func NewNodeHeartbeatWithCleanupInterval(ttl, cleanupInterval time.Duration) *No
 		stopCh:          make(chan struct{}),
 		cleanupInterval: cleanupInterval,
 	}
-	go hb.cleanupLoop()
+	SafeGo("node-heartbeat-cleanup-loop", hb.cleanupLoop, nil)
 	return hb
 }
 
