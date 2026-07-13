@@ -343,14 +343,9 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 	w.RecommendationsToTasks()
 	w.Prioritize()
 
-	// Phase 3: Auto-approve high-priority tasks
-	for i := range w.Tasks {
-		if w.Tasks[i].Priority <= PriorityHigh {
-			w.ApproveTask(w.Tasks[i].ID, "system")
-		}
-	}
-
-	// Phase 4: Execute sprints
+	// Phase 3: Execute sprints. No task is auto-approved here — every
+	// WorkflowTask requires an explicit human/HITL decision via
+	// ApproveTask/RejectTask before ExecuteSprint will move it forward.
 	w.Status = "executing"
 	w.Company.CurrentSprint = 1
 	if len(w.Tasks) > 0 {

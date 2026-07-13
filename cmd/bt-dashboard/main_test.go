@@ -441,3 +441,92 @@ func TestHandleAnalyze_SurfacesOrchestratorError(t *testing.T) {
 			"and surface a failure response instead of silently treating a failed analysis as a success")
 	}
 }
+
+// TestHandleWorkflowApprovalEndpoints pins milestone 4/4 of the Q1 Correctness
+// dashboard Workflow/Approval wiring program. internal/dashboard/workflow_engine.go's
+// Workflow.PendingApprovals/ApproveTask/RejectTask are fully tested in
+// workflow_engine_test.go but have zero callers outside that file (confirmed via
+// git grep for ".ApproveTask(" / ".RejectTask(" / ".PendingApprovals("): handleAnalyze
+// builds a *dashboard.Workflow locally, copies its derived WorkflowTasks into
+// taskStore as plain dashboard.Task values, and lets the Workflow itself fall out of
+// scope, so nothing in cmd/bt-dashboard/main.go can ever call these three methods.
+//
+// This pins the dashboard-level contract the fix must satisfy: handleAnalyze retains
+// the *dashboard.Workflow it builds in the package-level `currentWorkflow` var (mirroring
+// how taskStore/companyState are already held as package vars), and three new handlers —
+// handleWorkflowPending/handleWorkflowApprove/handleWorkflowReject, registered alongside
+// the existing /api/tasks/approve and /api/tasks/reject routes per main.go's mux setup —
+// operate on it directly, proving the Workflow-level approval gate is reachable over HTTP
+// instead of existing only in unit tests.
+func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
+	origWorkflow := currentWorkflow
+	t.Cleanup(func() { currentWorkflow = origWorkflow })
+
+	wf := dashboard.NewWorkflow("test-wf", nil, nil)
+	wf.Tasks = []dashboard.WorkflowTask{
+		{ID: "task-a", Status: dashboard.StatusPending, Priority: dashboard.PriorityHigh},
+		{ID: "task-b", Status: dashboard.StatusPending, Priority: dashboard.PriorityMedium},
+	}
+	currentWorkflow = wf
+
+	// /api/workflow/pending must surface every WorkflowTask still awaiting a
+	// decision, via Workflow.PendingApprovals — not an empty/hardcoded list.
+	pendingReq := httptest.NewRequest(http.MethodGet, "/api/workflow/pending", nil)
+	pendingRR := httptest.NewRecorder()
+	handleWorkflowPending(pendingRR, pendingReq)
+	if pendingRR.Code != http.StatusOK {
+		t.Fatalf("pending status = %d, want 200; body=%s", pendingRR.Code, pendingRR.Body.String())
+	}
+	var pending []dashboard.WorkflowTask
+	if err := json.Unmarshal(pendingRR.Body.Bytes(), &pending); err != nil {
+		t.Fatalf("decode pending response: %v; body=%s", err, pendingRR.Body.String())
+	}
+	if len(pending) != 2 {
+		t.Fatalf("pending count = %d, want 2 (both seeded tasks, since neither has been decided yet)", len(pending))
+	}
+
+	// /api/workflow/approve must call Workflow.ApproveTask on the retained Workflow.
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/workflow/approve?id=task-a", nil)
+	approveRR := httptest.NewRecorder()
+	handleWorkflowApprove(approveRR, approveReq)
+	if approveRR.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200; body=%s", approveRR.Code, approveRR.Body.String())
+	}
+	if !currentWorkflow.Tasks[0].Approval.IsApproved {
+		t.Errorf("task-a Approval.IsApproved = false after /api/workflow/approve; handler must call Workflow.ApproveTask")
+	}
+	if currentWorkflow.Tasks[0].Status != dashboard.StatusApproved {
+		t.Errorf("task-a Status = %s after /api/workflow/approve, want %s",
+			currentWorkflow.Tasks[0].Status.String(), dashboard.StatusApproved.String())
+	}
+
+	// /api/workflow/reject must call Workflow.RejectTask on the retained Workflow.
+	rejectReq := httptest.NewRequest(http.MethodPost, "/api/workflow/reject?id=task-b&reason=not+now", nil)
+	rejectRR := httptest.NewRecorder()
+	handleWorkflowReject(rejectRR, rejectReq)
+	if rejectRR.Code != http.StatusOK {
+		t.Fatalf("reject status = %d, want 200; body=%s", rejectRR.Code, rejectRR.Body.String())
+	}
+	if currentWorkflow.Tasks[1].Approval.IsApproved {
+		t.Errorf("task-b Approval.IsApproved = true after /api/workflow/reject; handler must call Workflow.RejectTask")
+	}
+	if currentWorkflow.Tasks[1].Status != dashboard.StatusRejected {
+		t.Errorf("task-b Status = %s after /api/workflow/reject, want %s",
+			currentWorkflow.Tasks[1].Status.String(), dashboard.StatusRejected.String())
+	}
+	if currentWorkflow.Tasks[1].Approval.Reason != "not now" {
+		t.Errorf("task-b Approval.Reason = %q, want %q", currentWorkflow.Tasks[1].Approval.Reason, "not now")
+	}
+
+	// Both tasks now decided — pending must reflect that instead of staying stale.
+	pendingReq2 := httptest.NewRequest(http.MethodGet, "/api/workflow/pending", nil)
+	pendingRR2 := httptest.NewRecorder()
+	handleWorkflowPending(pendingRR2, pendingReq2)
+	var pending2 []dashboard.WorkflowTask
+	if err := json.Unmarshal(pendingRR2.Body.Bytes(), &pending2); err != nil {
+		t.Fatalf("decode second pending response: %v; body=%s", err, pendingRR2.Body.String())
+	}
+	if len(pending2) != 0 {
+		t.Errorf("pending count after approve+reject = %d, want 0", len(pending2))
+	}
+}

@@ -540,12 +540,27 @@ func TestRunFullPipeline(t *testing.T) {
 		t.Error("expected tasks to be created")
 	}
 
-	// High priority tasks should be auto-approved, then completed by sprint execution
+	// RunFullPipeline must NOT self-approve any task, regardless of priority.
+	// Every WorkflowTask requires an explicit human/HITL decision via
+	// ApproveTask/RejectTask (routed through a real dashboard endpoint) —
+	// the pipeline silently auto-approving Priority<=PriorityHigh tasks as
+	// "system" defeats its own approval gate.
 	for _, task := range wf.Tasks {
-		if task.Priority <= PriorityHigh && task.Status != StatusCompleted {
-			t.Errorf("task %s (priority %s) should be completed after pipeline, got %s",
-				task.ID, task.Priority.String(), task.Status.String())
+		if task.Approval.IsApproved {
+			t.Errorf("task %s (priority %s) was auto-approved by RunFullPipeline (approved_by=%q); "+
+				"pipeline must not self-approve any task",
+				task.ID, task.Priority.String(), task.Approval.ApprovedBy)
 		}
+		if task.Status == StatusCompleted || task.Status == StatusInProgress || task.Status == StatusApproved {
+			t.Errorf("task %s (priority %s) has status %s after RunFullPipeline with no explicit approval; "+
+				"expected it to remain %s",
+				task.ID, task.Priority.String(), task.Status.String(), StatusPending.String())
+		}
+	}
+
+	// PendingApprovals must surface every task since none were auto-approved.
+	if got, want := len(wf.PendingApprovals()), len(wf.Tasks); got != want {
+		t.Errorf("PendingApprovals() = %d, want %d (all tasks, since RunFullPipeline must not auto-approve)", got, want)
 	}
 
 	// Company sprint should be set

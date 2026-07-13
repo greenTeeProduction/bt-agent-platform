@@ -86,6 +86,11 @@ var taskStore *dashboard.TaskStore
 // companyState holds the startup simulation state.
 var companyState *startup.CompanyState
 
+// currentWorkflow holds the most recently derived thinktank→task Workflow so
+// its own PendingApprovals/ApproveTask/RejectTask gate is reachable over HTTP
+// instead of only existing inside handleAnalyze's local scope.
+var currentWorkflow *dashboard.Workflow
+
 func getHomeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -294,6 +299,9 @@ func main() {
 	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
 	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
 	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
+	mux.HandleFunc("/api/workflow/pending", sessionAuth(handleWorkflowPending))
+	mux.HandleFunc("/api/workflow/approve", sessionAuth(handleWorkflowApprove))
+	mux.HandleFunc("/api/workflow/reject", sessionAuth(handleWorkflowReject))
 	mux.HandleFunc("/api/hitl/pending", sessionAuth(dashboard.HandleHITLPending))
 	mux.HandleFunc("/api/hitl/", sessionAuth(dashboard.HandleHITL))
 	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
@@ -536,6 +544,7 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
 	wf.RecommendationsToTasks()
 	wf.Prioritize()
+	currentWorkflow = wf
 	for _, wt := range wf.Tasks {
 		task := dashboard.Task{
 			ID:          wf.ID + "-" + wt.ID,
@@ -663,6 +672,51 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// handleWorkflowPending surfaces the current Workflow's PendingApprovals —
+// every WorkflowTask still awaiting an explicit human/HITL decision.
+func handleWorkflowPending(w http.ResponseWriter, _ *http.Request) {
+	if currentWorkflow == nil {
+		_ = encodeJSON(w, []dashboard.WorkflowTask{})
+		return
+	}
+	_ = encodeJSON(w, currentWorkflow.PendingApprovals())
+}
+
+func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	if currentWorkflow == nil {
+		w.WriteHeader(404)
+		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
+		return
+	}
+	if task := currentWorkflow.ApproveTask(taskID, "dashboard"); task == nil {
+		w.WriteHeader(404)
+		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
+		return
+	}
+	_ = encodeJSON(w, map[string]string{"status": "approved", "id": taskID})
+}
+
+func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "task rejected via dashboard"
+	}
+	if currentWorkflow == nil {
+		w.WriteHeader(404)
+		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
+		return
+	}
+	if task := currentWorkflow.RejectTask(taskID, "dashboard", reason); task == nil {
+		w.WriteHeader(404)
+		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
+		return
+	}
+	_ = encodeJSON(w, map[string]string{"status": "rejected", "id": taskID})
+}
+
 func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	// Approved() returns tasks ordered by priority then sprint, so the
 	// sequential dispatch loop below already runs critical/high-priority
