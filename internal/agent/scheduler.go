@@ -899,7 +899,12 @@ func estimateQuality(output string) float64 {
 func applyJobSchedule(job *ScheduledJob, sched string) {
 	prev := job.Schedule
 	job.Schedule = sched
-	if sched != prev {
+	// A zero NextRun is loadState's crash-recovery "run immediately" marker. A
+	// schedule change (or format normalization) during ReconcileWithRegistry
+	// must not push a recovered-crashed job to its next cron slot — that would
+	// defeat the immediate re-run after restart. Only a job with a real future
+	// NextRun is rescheduled on a schedule change.
+	if sched != prev && !job.NextRun.IsZero() {
 		if next, err := parseSchedule(sched); err == nil {
 			job.NextRun = next
 		}
