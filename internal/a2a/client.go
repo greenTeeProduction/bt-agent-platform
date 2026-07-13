@@ -53,7 +53,18 @@ func (c *BTAgentClient) SendTask(ctx context.Context, agentURL, taskText string)
 		return "", fmt.Errorf("send message: %w", err)
 	}
 
-	// Extract text from response. SendMessageResult is either *Message or *Task.
+	return interpretSendResult(resp)
+}
+
+// interpretSendResult extracts the honest outcome of a SendMessage call: it
+// returns the agent's text response only when the delegated work actually
+// produced one, and a non-nil error in every other case — a task that did not
+// complete (failed, canceled, rejected, or any other non-completed state) or a
+// message that carries no content is never laundered into a success string
+// describing the failure, since callers (including the auction winner
+// dispatch in auction.go) rely on a non-nil error to detect and react to a
+// failed delegation.
+func interpretSendResult(resp a2a.SendMessageResult) (string, error) {
 	switch r := resp.(type) {
 	case *a2a.Message:
 		for _, part := range r.Parts {
@@ -61,20 +72,21 @@ func (c *BTAgentClient) SendTask(ctx context.Context, agentURL, taskText string)
 				return t, nil
 			}
 		}
-		return "A2A agent returned empty message", nil
+		return "", fmt.Errorf("a2a: agent message carried no text content")
 	case *a2a.Task:
-		if r.Status.State == a2a.TaskStateCompleted {
-			for _, artifact := range r.Artifacts {
-				for _, part := range artifact.Parts {
-					if t := part.Text(); t != "" {
-						return t, nil
-					}
+		if r.Status.State != a2a.TaskStateCompleted {
+			return "", fmt.Errorf("a2a: task %s did not complete: state=%s status=%s", r.ID, r.Status.State, safetyGetMessageText(r.Status.Message))
+		}
+		for _, artifact := range r.Artifacts {
+			for _, part := range artifact.Parts {
+				if t := part.Text(); t != "" {
+					return t, nil
 				}
 			}
 		}
-		return fmt.Sprintf("Task %s: state=%s status=%s", r.ID, r.Status.State, safetyGetMessageText(r.Status.Message)), nil
+		return "", fmt.Errorf("a2a: task %s completed with no artifact text", r.ID)
 	default:
-		return "A2A agent returned unrecognized response type", nil
+		return "", fmt.Errorf("a2a: agent returned unrecognized response type %T", resp)
 	}
 }
 

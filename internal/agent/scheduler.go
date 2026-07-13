@@ -122,6 +122,13 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		s.loadState()
 		s.ReconcileWithRegistry()
 	}
+	// Restore persisted circuit breaker state so a restart doesn't forget that
+	// an agent was open (missing file is not an error — first-boot case).
+	if s.cbStore != nil {
+		if err := s.cbStore.Load(CircuitBreakersFile()); err != nil {
+			slog.Warn("scheduler: restore circuit breaker state failed", "path", CircuitBreakersFile(), "err", err)
+		}
+	}
 	// Read/startup half of feedback persistence: re-hydrate prior feedback from
 	// disk (log, don't fail, on error — matches the missing-file-no-error
 	// contract), then arm the debounced writer for subsequent runs.
@@ -795,6 +802,11 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	// A run is considered successful if outcome is "success" and no error occurred.
 	isSuccess := outcome == "success" && runErr == nil
 	reportAgentOutcome(s.cbStore, job.AgentName, isSuccess)
+	if s.cbStore != nil {
+		if err := s.cbStore.Save(CircuitBreakersFile()); err != nil {
+			slog.Warn("scheduler: persist circuit breaker state failed", "path", CircuitBreakersFile(), "err", err)
+		}
+	}
 }
 
 // stepsFromChildTicks converts a run's terminal child ticks (engine.Blackboard.

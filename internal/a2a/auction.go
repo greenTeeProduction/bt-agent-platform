@@ -214,12 +214,54 @@ type BidCollector interface {
 // never fails the auction, it is simply omitted from the returned bids.
 type Auctioneer struct {
 	transport BidCollector
+
+	breakersMu sync.Mutex
+	breakers   map[string]*reliability.CircuitBreaker // winner name -> breaker
 }
 
 // NewAuctioneer creates an Auctioneer that announces and collects bids over the
 // given transport.
 func NewAuctioneer(transport BidCollector) *Auctioneer {
 	return &Auctioneer{transport: transport}
+}
+
+// winnerDispatchRetries/winnerDispatchBaseDelay/winnerDispatchMaxDelay bound
+// how hard RunAuction retries a transient winner-dispatch failure before
+// giving up on that auction. Non-retryable categories (validation, auth) fail
+// immediately regardless of these bounds, so a winner that is simply wrong
+// (not merely unreachable) never pays the retry latency.
+const (
+	winnerDispatchRetries   = 3
+	winnerDispatchBaseDelay = 50 * time.Millisecond
+	winnerDispatchMaxDelay  = 500 * time.Millisecond
+)
+
+// winnerCircuitBreakerThreshold/Cooldown bound how many consecutive
+// dispatch failures a single winner may accrue across auctions before
+// RunAuction stops dispatching to it at all — the fix for "fires once with no
+// fallback": a persistently failing winner must eventually be circuit-broken
+// rather than hammered on every subsequent auction.
+const (
+	winnerCircuitBreakerThreshold = 3
+	winnerCircuitBreakerCooldown  = 30 * time.Second
+)
+
+// winnerBreaker returns the circuit breaker tracking dispatch failures for the
+// named winner, creating it on first use. Breakers are keyed by winner name
+// and persist for the lifetime of the Auctioneer, so failures accumulate
+// across separate RunAuction calls.
+func (a *Auctioneer) winnerBreaker(name string) *reliability.CircuitBreaker {
+	a.breakersMu.Lock()
+	defer a.breakersMu.Unlock()
+	if a.breakers == nil {
+		a.breakers = make(map[string]*reliability.CircuitBreaker)
+	}
+	cb, ok := a.breakers[name]
+	if !ok {
+		cb = reliability.NewCircuitBreaker("a2a.auction.winner."+name, winnerCircuitBreakerThreshold, winnerCircuitBreakerCooldown)
+		a.breakers[name] = cb
+	}
+	return cb
 }
 
 // AuctionResult is the outcome of a completed auction: the Award naming the
@@ -262,16 +304,42 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 		return AuctionResult{}, fmt.Errorf("a2a: winning bidder %q has no candidate URL", award.WinnerName)
 	}
 
+	breaker := a.winnerBreaker(award.WinnerName)
+	if !breaker.Allow() {
+		return AuctionResult{}, fmt.Errorf("a2a: winner %q circuit breaker open, refusing dispatch", award.WinnerName)
+	}
+
 	// Bound the winner dispatch by a deadline derived from the announcement (or a
 	// default when it carries none), reusing the same helper the bid fan-out uses,
 	// so a winner that hangs cannot block indefinitely on the raw caller context.
 	dispatchCtx, cancel := candidateContext(ctx, ann)
 	defer cancel()
 
-	result, err := a.transport.SendTask(dispatchCtx, winnerURL, ann.Description)
-	if err != nil {
-		return AuctionResult{}, fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, err)
+	// Retry transient (network/timeout) dispatch failures a few times before
+	// giving up; non-retryable categories (validation, auth) fail on the first
+	// attempt. Either way, every failure feeds the winner's circuit breaker so
+	// a persistently failing winner is eventually skipped outright instead of
+	// being dispatched to on every subsequent auction.
+	policy := &reliability.RetryPolicy{
+		MaxRetries: winnerDispatchRetries,
+		Base:       winnerDispatchBaseDelay,
+		MaxDelay:   winnerDispatchMaxDelay,
+		Jitter:     reliability.NoJitter,
 	}
+	var result string
+	dispatchErr := policy.ExecuteContext(dispatchCtx, func() error {
+		res, sendErr := a.transport.SendTask(dispatchCtx, winnerURL, ann.Description)
+		if sendErr != nil {
+			return sendErr
+		}
+		result = res
+		return nil
+	})
+	if dispatchErr != nil {
+		breaker.RecordFailureWithCategory(dispatchErr)
+		return AuctionResult{}, fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, dispatchErr)
+	}
+	breaker.RecordSuccess()
 
 	return AuctionResult{Award: award, Result: result}, nil
 }

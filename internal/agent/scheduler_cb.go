@@ -7,8 +7,11 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -248,6 +251,100 @@ type CircuitSummary struct {
 	SuccessCount int           `json:"success_count"`
 	Threshold    int           `json:"threshold"`
 	Cooldown     time.Duration `json:"cooldown"`
+}
+
+// circuitBreakerFileEntry mirrors internal/dashboard/agents.go's
+// CircuitBreakerEntry JSON shape (status, failures, last_failure) so Save/Load
+// round-trip through the same file the dashboard's cb_status column reads.
+type circuitBreakerFileEntry struct {
+	Status      string `json:"status"`
+	Failures    int    `json:"failures"`
+	LastFailure string `json:"last_failure"`
+}
+
+// circuitBreakersFile is the on-disk wrapper Save writes and Load reads,
+// matching internal/dashboard/agents.go's CircuitBreakers struct.
+type circuitBreakersFile struct {
+	Breakers map[string]circuitBreakerFileEntry `json:"breakers"`
+}
+
+// Save persists every tracked circuit breaker's state to path as JSON in the
+// {"breakers": {name: {status, failures, last_failure}}} shape the dashboard's
+// loadCircuitBreakers (internal/dashboard/agents.go) already decodes.
+func (s *AgentCircuitBreakerStore) Save(path string) error {
+	s.mu.RLock()
+	out := circuitBreakersFile{Breakers: make(map[string]circuitBreakerFileEntry, len(s.agents))}
+	for name, cb := range s.agents {
+		cb.mu.Lock()
+		entry := circuitBreakerFileEntry{
+			Status:   cb.state.String(),
+			Failures: cb.failureCount,
+		}
+		if !cb.lastFailureTime.IsZero() {
+			entry.LastFailure = cb.lastFailureTime.Format(time.RFC3339)
+		}
+		cb.mu.Unlock()
+		out.Breakers[name] = entry
+	}
+	s.mu.RUnlock()
+
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal circuit breaker state: %w", err)
+	}
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create circuit breaker state dir: %w", err)
+		}
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("write circuit breaker state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename circuit breaker state: %w", err)
+	}
+	return nil
+}
+
+// Load restores circuit breaker state previously written by Save. A missing
+// file is not an error — it's the expected first-boot state before any
+// breaker has ever tripped.
+func (s *AgentCircuitBreakerStore) Load(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read circuit breaker state: %w", err)
+	}
+	var in circuitBreakersFile
+	if err := json.Unmarshal(data, &in); err != nil {
+		return fmt.Errorf("parse circuit breaker state: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for name, entry := range in.Breakers {
+		cb := NewAgentCircuitBreaker(name, s.options.Threshold, s.options.Cooldown)
+		cb.failureCount = entry.Failures
+		switch entry.Status {
+		case "open":
+			cb.state = CircuitOpen
+		case "half_open":
+			cb.state = CircuitHalfOpen
+		default:
+			cb.state = CircuitClosed
+		}
+		if entry.LastFailure != "" {
+			if t, err := time.Parse(time.RFC3339, entry.LastFailure); err == nil {
+				cb.lastFailureTime = t
+			}
+		}
+		cb.lastStateChange = time.Now()
+		s.agents[name] = cb
+	}
+	return nil
 }
 
 // validateAgentRun checks if an agent run is allowed by the circuit breaker.

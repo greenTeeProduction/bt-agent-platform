@@ -681,3 +681,74 @@ func TestIslandModel_DiversityEdgeCases(t *testing.T) {
 		t.Fatalf("empty-island diversity = %.3f, want 0", got)
 	}
 }
+
+// TestExperienceBank_TransferExperiencesIsSourceTreeAware pins milestone 4/4
+// of the "Close the experience-grounded evolution feedback loop" program:
+// TransferExperiences(sourceTree, targetTree) must return only experiences
+// recorded against sourceTree. The current stub ignores its source argument
+// entirely (`Retrieve(targetTree, 5)`), so a high-quality entry belonging to
+// an unrelated tree type leaks into the "transfer" result.
+func TestExperienceBank_TransferExperiencesIsSourceTreeAware(t *testing.T) {
+	dir := t.TempDir()
+	bank, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	bank.Entries = []ExperienceEntry{
+		{ID: "go-1", TreeType: "go", MutationOp: "add_before", QualityScore: 0.5, Summary: "go summary add_before"},
+		{ID: "ops-1", TreeType: "ops", MutationOp: "wrap_retry", QualityScore: 0.99, Summary: "ops summary wrap_retry"},
+	}
+
+	results := bank.TransferExperiences("go", "ops")
+	if len(results) == 0 {
+		t.Fatal("expected transfer to return the source domain's experiences")
+	}
+	for _, e := range results {
+		if e.TreeType != "go" {
+			t.Fatalf("TransferExperiences(\"go\", \"ops\") returned entry from tree type %q, want only entries from source tree \"go\"; got %+v", e.TreeType, results)
+		}
+	}
+}
+
+// TestIslandModel_MigrateSeedsTargetDomainExperience pins the island-side
+// half of milestone 4/4: Migrate must invoke ExperienceBank.TransferExperiences
+// for every domain pair it actually migrates between, seeding the
+// *destination* domain's own experience pool from the source's so a later
+// RetrieveByTreeType(dest, ...) surfaces experiences learned on the sibling
+// domain — closing the loop so one domain's learning seeds evolution on
+// another. IslandModel currently has no Bank field and Migrate never
+// consults an experience bank at all.
+func TestIslandModel_MigrateSeedsTargetDomainExperience(t *testing.T) {
+	dir := t.TempDir()
+	bank, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	bank.Entries = []ExperienceEntry{
+		{ID: "go-1", TreeType: "go", MutationOp: "add_before", QualityScore: 0.9, Summary: "go summary"},
+		{ID: "go-2", TreeType: "go", MutationOp: "wrap_retry", QualityScore: 0.8, Summary: "go summary 2"},
+	}
+
+	im := NewIslandModel(1, 0.5)
+	im.Bank = bank
+	goPop := islandTestPopulation("go-elite", "go-mid")
+	for i := range goPop.Individuals {
+		goPop.Individuals[i].Fitness = float64(100 - i*10)
+	}
+	im.AddIsland("go", goPop)
+	im.AddIsland("ops", islandTestPopulation("ops-elite", "ops-mid"))
+
+	if migrated := im.Migrate(); migrated == 0 {
+		t.Fatal("expected migration to move at least one individual")
+	}
+
+	seeded := bank.RetrieveByTreeType("ops", 5)
+	if len(seeded) == 0 {
+		t.Fatal("Migrate did not seed the target domain's experience pool from the source domain")
+	}
+	for _, e := range seeded {
+		if e.TreeType != "ops" {
+			t.Errorf("seeded entry %+v has TreeType %q, want re-tagged for destination domain \"ops\"", e, e.TreeType)
+		}
+	}
+}

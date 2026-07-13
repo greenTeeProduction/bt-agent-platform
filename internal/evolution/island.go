@@ -29,6 +29,11 @@ type IslandModel struct {
 	// EvictedIslands is the cumulative count of whole islands dropped by
 	// evictAdoptedIslandsBeyondCap across every Load call.
 	EvictedIslands int `json:"evicted_islands"`
+	// Bank, when set, is consulted by Migrate to seed each migration target
+	// domain's experience pool from the source domain's — closing the
+	// experience-grounded feedback loop across sibling domain trees. Nil
+	// leaves migration experience-agnostic (the pre-existing behavior).
+	Bank *ExperienceBank `json:"-"`
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -106,6 +111,7 @@ func (im *IslandModel) Migrate() int {
 
 		// Migrate top individuals from source to replace worst in target
 		migrateCount := max(1, int(float64(len(tgtPop.Individuals))*im.MigrationRate))
+		pairMigrated := 0
 		for i := 0; i < migrateCount && i < len(srcSorted) && i < len(tgtSorted); i++ {
 			// Copy the source elite to target's worst slot
 			tgtSorted[i] = Individual{
@@ -113,12 +119,20 @@ func (im *IslandModel) Migrate() int {
 				Fitness: srcSorted[i].Fitness,
 				Genome:  hashTree(srcSorted[i].Tree),
 			}
-			migrated++
+			pairMigrated++
 		}
+		migrated += pairMigrated
 
 		// Update target population
 		tgtPop.Individuals = tgtSorted
 		im.Islands[tgtDomain] = tgtPop
+
+		// Seed the target domain's own experience pool from the source's —
+		// individuals moved between domains, so experiences that made them
+		// fit should follow and inform the target's future mutations too.
+		if im.Bank != nil && pairMigrated > 0 {
+			im.Bank.SeedDomain(srcDomain, tgtDomain)
+		}
 	}
 
 	im.TotalMigrations += migrated

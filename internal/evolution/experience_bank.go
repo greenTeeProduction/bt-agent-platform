@@ -256,11 +256,34 @@ func (eb *ExperienceBank) MarkReused(ids []string) error {
 	return eb.persistLocked()
 }
 
-// TransferExperiences finds experiences from sourceTree that may apply to targetTree.
-// Returns entries sorted by quality score — cross-tree transfer relies on the LLM
-// or similarity matching to determine applicability.
-func (eb *ExperienceBank) TransferExperiences(_, targetTree string) []ExperienceEntry {
-	return eb.Retrieve(targetTree, 5)
+// TransferExperiences finds experiences recorded against sourceTree that may
+// apply to targetTree. Returns up to 5 entries sorted by quality score,
+// filtered to sourceTree's own provenance — a caller seeding targetTree's
+// pool (see IslandModel.Migrate) is responsible for re-tagging copies with
+// the destination tree type.
+func (eb *ExperienceBank) TransferExperiences(sourceTree, _ string) []ExperienceEntry {
+	return eb.RetrieveByTreeType(sourceTree, 5)
+}
+
+// SeedDomain copies up to 5 top experiences transferred from sourceTree into
+// targetTree's own experience pool, re-tagged with the target tree type so a
+// later RetrieveByTreeType(targetTree, ...) surfaces them as native
+// contributions — this is what closes the cross-domain feedback loop.
+// sourceTree's own entries are left untouched; each copy gets a fresh ID so
+// it never collides with (or is deduped against) the original. Returns the
+// number of experiences successfully seeded.
+func (eb *ExperienceBank) SeedDomain(sourceTree, targetTree string) int {
+	seeded := 0
+	for _, e := range eb.TransferExperiences(sourceTree, targetTree) {
+		e.ID = fmt.Sprintf("transfer_%s_to_%s_%s_%d", sourceTree, targetTree, e.ID, time.Now().UnixNano())
+		e.TreeType = targetTree
+		e.TimesReused = 0
+		e.CreatedAt = time.Now()
+		if err := eb.addEntry(e); err == nil {
+			seeded++
+		}
+	}
+	return seeded
 }
 
 // Persist writes the experience bank to disk atomically. It runs the same

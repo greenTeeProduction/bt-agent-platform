@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -359,5 +362,151 @@ func TestReportAgentOutcome_OpensOnThreshold(t *testing.T) {
 	cb := store.Get("agent")
 	if cb.State() != CircuitOpen {
 		t.Errorf("2 failures with threshold=2 should open circuit, got %v", cb.State())
+	}
+}
+
+// ── AgentCircuitBreakerStore persistence Tests ──────────────────────────────
+//
+// The dashboard (internal/dashboard/agents.go's loadCircuitBreakers) already
+// reads agent.CircuitBreakersFile() and renders it as the "cb_status" column,
+// but nothing on the write side ever produces that file — Store.Save/Load do
+// not exist yet and the scheduler never calls them. These tests pin the
+// missing persistence contract: Save must write JSON in the
+// {"breakers": {name: {status, failures, last_failure}}} shape the dashboard
+// decodes, and Load must restore state written by Save.
+
+// circuitBreakersFileForTest mirrors internal/dashboard/agents.go's
+// CircuitBreakers/CircuitBreakerEntry JSON shape without importing the
+// dashboard package (which itself imports internal/agent).
+type circuitBreakersFileForTest struct {
+	Breakers map[string]struct {
+		Status      string `json:"status"`
+		Failures    int    `json:"failures"`
+		LastFailure string `json:"last_failure"`
+	} `json:"breakers"`
+}
+
+func TestAgentCircuitBreakerStore_Save_WritesDashboardShape(t *testing.T) {
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1})
+	store.RecordFailure("agent-a") // threshold=1 -> opens
+	store.RecordSuccess("agent-b")
+
+	path := filepath.Join(t.TempDir(), "circuit_breakers.json")
+	if err := store.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Save did not create %s: %v", path, err)
+	}
+	var decoded circuitBreakersFileForTest
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Save output is not valid dashboard-shaped JSON: %v\n%s", err, data)
+	}
+
+	a, ok := decoded.Breakers["agent-a"]
+	if !ok {
+		t.Fatal("agent-a missing from saved breakers")
+	}
+	if a.Status != "open" {
+		t.Errorf("agent-a status = %q, want %q", a.Status, "open")
+	}
+	if a.Failures != 1 {
+		t.Errorf("agent-a failures = %d, want 1", a.Failures)
+	}
+
+	b, ok := decoded.Breakers["agent-b"]
+	if !ok {
+		t.Fatal("agent-b missing from saved breakers")
+	}
+	if b.Status != "closed" {
+		t.Errorf("agent-b status = %q, want %q", b.Status, "closed")
+	}
+}
+
+func TestAgentCircuitBreakerStore_SaveThenLoad_RestoresState(t *testing.T) {
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1})
+	store.RecordFailure("agent-a")
+
+	path := filepath.Join(t.TempDir(), "circuit_breakers.json")
+	if err := store.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	restored := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1})
+	if err := restored.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cb := restored.Get("agent-a")
+	if cb.State() != CircuitOpen {
+		t.Errorf("restored agent-a state = %v, want open", cb.State())
+	}
+	if cb.FailureCount() != 1 {
+		t.Errorf("restored agent-a failure count = %d, want 1", cb.FailureCount())
+	}
+}
+
+func TestAgentCircuitBreakerStore_Load_MissingFileIsNotError(t *testing.T) {
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{})
+	path := filepath.Join(t.TempDir(), "does-not-exist.json")
+	if err := store.Load(path); err != nil {
+		t.Errorf("Load of missing file should not error, got %v", err)
+	}
+}
+
+// TestScheduler_PersistsCircuitBreakerOnFailure exercises the real scheduler
+// run loop (runJob -> reportAgentOutcome) end to end: a failing agent must
+// leave circuit_breakers.json on disk at agent.CircuitBreakersFile() with the
+// agent recorded as open, so the dashboard's already-built cb_status column
+// reflects real state instead of reading a file nothing ever wrote.
+func TestScheduler_PersistsCircuitBreakerOnFailure(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	dir := t.TempDir()
+	reg, _ := NewRegistry(dir)
+	_, _ = reg.Create(Definition{Name: "flaky-agent", Tree: "domain:default", Version: "1.0.0"})
+
+	cbStore := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1})
+	sched := NewScheduler(SchedulerConfig{
+		Registry:     reg,
+		CBStore:      cbStore,
+		TickInterval: 100 * time.Millisecond,
+	})
+
+	failingRunner := func(_ RunContext) (string, string, *RunResult, error) {
+		return "failure", "boom", nil, os.ErrInvalid
+	}
+
+	job, err := sched.Schedule("flaky-agent", "every 1h", "30m", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job.NextRun = time.Time{} // force immediate
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sched.Start(failingRunner)
+	}()
+	time.Sleep(500 * time.Millisecond)
+	sched.Stop()
+	<-done
+
+	cbPath := CircuitBreakersFile()
+	data, err := os.ReadFile(cbPath)
+	if err != nil {
+		t.Fatalf("circuit breaker state was never persisted to %s: %v", cbPath, err)
+	}
+	var decoded circuitBreakersFileForTest
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("persisted circuit breaker file is not valid dashboard-shaped JSON: %v\n%s", err, data)
+	}
+	entry, ok := decoded.Breakers["flaky-agent"]
+	if !ok {
+		t.Fatalf("flaky-agent missing from persisted circuit breaker state: %+v", decoded.Breakers)
+	}
+	if entry.Status != "open" {
+		t.Errorf("flaky-agent persisted status = %q, want %q", entry.Status, "open")
 	}
 }
