@@ -5,43 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
-// normalizeImpactSource converts a changed-file path (typically absolute, or
-// relative to the caller's cwd) into the module-relative, slash-separated
-// form the impact graph indexes, rejecting paths outside root.
-func normalizeImpactSource(root, source string) (string, error) {
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-
-	absSource := source
-	if !filepath.IsAbs(absSource) {
-		absSource = filepath.Join(absRoot, source)
-	}
-	absSource, err = filepath.Abs(absSource)
-	if err != nil {
-		return "", err
-	}
-
-	rel, err := filepath.Rel(absRoot, absSource)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("source %q is outside root %q", source, root)
-	}
-	return filepath.ToSlash(rel), nil
-}
-
 // impactedTestsForSource normalizes source relative to root and returns the
 // tests the impact graph reports as affected by a change to it.
 func impactedTestsForSource(root, source string) ([]string, error) {
-	rel, err := normalizeImpactSource(root, source)
+	rel, err := knowledge.NormalizeImpactSource(root, source)
 	if err != nil {
 		return nil, err
 	}

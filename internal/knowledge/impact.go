@@ -19,6 +19,7 @@ package knowledge
 // map iteration order.
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
@@ -50,6 +51,34 @@ func ImpactedTests(root, source string) ([]string, error) {
 		return nil, err
 	}
 	return graph.TestsFor(source), nil
+}
+
+// NormalizeImpactSource converts a changed-file path (absolute, or relative
+// to root) into the module-relative, slash-separated form the impact graph
+// indexes, rejecting paths outside root.
+func NormalizeImpactSource(root, source string) (string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+
+	absSource := source
+	if !filepath.IsAbs(absSource) {
+		absSource = filepath.Join(absRoot, source)
+	}
+	absSource, err = filepath.Abs(absSource)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := filepath.Rel(absRoot, absSource)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("source %q is outside root %q", source, root)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // goFileInfo captures the parsed facts we need from a single .go file.

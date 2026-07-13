@@ -1731,6 +1731,7 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ Both consumers share one build+query seam (`knowledge.ImpactedTests`), so a future change to graph-construction or query semantics lands once rather than needing synchronized edits in the CLI and MCP handlers
 - ⚠️ Neither the CLI subcommand nor the MCP tool is wired into `make check-quick` or the git pre-commit hook yet, so no commit actually gates on a change-scoped test list today — both are opt-in tools an operator or a future automation must choose to invoke
 - ⚠️ `BuildImpactGraph` rebuilds the whole module's import graph on every call — acceptable for an interactive CLI invocation or an occasional MCP call, but a commit-gate integration invoking it on every commit would want the graph cached or built incrementally rather than from scratch each time
+- ⚠️ `normalizeImpactSource` (the abs-path/module-relative/outside-root-rejection logic) was private to `cmd/bt-agent-cli/impact.go`, so `bt_impact_tests` had no seam to reuse it and instead documented `source` as "already module-relative" — an MCP caller passing an absolute path got a silent empty test list rather than a normalized lookup or a rejection. ADR-070 (milestone 1/3) promotes it to `knowledge.NormalizeImpactSource`; the MCP tool itself does not call it yet.
 
 ---
 
@@ -2010,6 +2011,22 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ The scoping decision is made once, from data already in scope at `RunOnce` time (`Definition.Metadata["user"]`, set by `cmd/bt-agent`'s `activateAutomation`) — no new parameter threading through `RunAgent`/MCP tool signatures was needed.
 - ✅ Unowned agents (no `Metadata["user"]`) and any `RunDeps` that leaves `ResolveTreeForUser` nil are unaffected — the unscoped `ResolveTree` path is exercised exactly as before.
 - Pinned by `TestRunOnce_UsesUserScopedResolverWhenAgentHasOwner` (`internal/agent/runner_test.go`), which fails the test if the unscoped `ResolveTree` is consulted at all for an owned agent, and asserts the scoped resolver receives the correct user and tree ID.
+
+---
+
+## ADR-070: `NormalizeImpactSource` Exported from `internal/knowledge`, Closing Half of the CLI/MCP Normalization Split (Q1 Correctness Program, Milestone 1/3)
+
+**Context (2026-07-13):** Program "Q1 Correctness — make `bt_impact_tests` honestly normalize and reject source paths like its CLI sibling," milestone 1/3. ADR-052 wired two consumers onto `knowledge.ImpactedTests`, but only the CLI subcommand got path normalization: `cmd/bt-agent-cli/impact.go`'s unexported `normalizeImpactSource` converted an absolute or cwd-relative path into the module-relative form the impact graph indexes and rejected anything outside `root`, while `cmd/bt-agent`'s `bt_impact_tests` MCP tool documented `source` as "already module-relative" and passed it straight to `knowledge.ImpactedTests` with no such conversion. Since `ImpactGraph.TestsFor` simply returns an empty slice for a key it doesn't recognize, an MCP caller that supplied an absolute path (or one relative to a different working directory) got a silent empty test list indistinguishable from "no tests are impacted," rather than either a correct lookup or an explicit error — and because the normalization logic lived only in the CLI package, `impact_tools.go` had no seam to reuse it.
+
+**Decision:** Move `normalizeImpactSource`'s logic into `internal/knowledge/impact.go` as an exported `NormalizeImpactSource(root, source string) (string, error)`, alongside `ImpactedTests`, unchanged in behavior — abs-path resolution, module-relative conversion via `filepath.Rel`, and outside-root rejection. `cmd/bt-agent-cli/impact.go`'s `impactedTestsForSource` now calls `knowledge.NormalizeImpactSource` instead of a local copy, which is deleted. This milestone is a pure extract-and-export: `cmd/bt-agent/impact_tools.go`'s `impactTests` handler is untouched and still calls `knowledge.ImpactedTests` directly without normalizing `source` first, so the MCP tool's silent-empty-list gap for absolute-path input is not yet closed — that is milestones 2–3. Pinned by `TestNormalizeImpactSource_AbsoluteUnderRoot`/`TestNormalizeImpactSource_RejectsOutsideRoot` (`internal/knowledge/impact_test.go`, covering an absolute path under root, a plain relative path, and a path outside root), with the CLI package's own tests re-pointed at the shared function.
+
+**Status:** Accepted (2026-07-13) — milestone 1/3; milestones 2–3 (wiring `bt_impact_tests` to call `NormalizeImpactSource` and deciding how it should report an outside-root or malformed path) remain open.
+
+**Consequences:**
+- ✅ The abs-path/module-relative/outside-root-rejection logic now has one home, `knowledge.NormalizeImpactSource`, instead of being reachable only from the CLI package — `cmd/bt-agent`'s MCP handler can now adopt it without duplicating the logic.
+- ✅ `cmd/bt-agent-cli`'s observable behavior is unchanged — the same two cases (absolute-under-root, outside-root) are covered, now exercised through the shared package function instead of a local copy.
+- ⚠️ `bt_impact_tests` still does not call `NormalizeImpactSource` — an MCP caller passing an absolute or differently-rooted path still gets a silent empty test list rather than a normalized lookup or an explicit rejection, the exact gap ADR-052 left open. Deferred to milestones 2–3 of this program.
+- Pinned by `TestNormalizeImpactSource_AbsoluteUnderRoot`/`TestNormalizeImpactSource_RejectsOutsideRoot` (`internal/knowledge/impact_test.go`).
 
 ---
 

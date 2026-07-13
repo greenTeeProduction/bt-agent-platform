@@ -204,3 +204,39 @@ func TestImpactedTests_PropagatesBuildError(t *testing.T) {
 		t.Error("expected an error when root has no go.mod")
 	}
 }
+
+// NormalizeImpactSource converts a changed-file path (absolute, or relative
+// to root) into the module-relative, slash-separated form the impact graph
+// indexes, rejecting paths outside root. It is the exported counterpart of
+// cmd/bt-agent-cli/impact.go's unexported normalizeImpactSource, so MCP
+// consumers can share the same honest normalization the CLI already has.
+func TestNormalizeImpactSource_AbsoluteUnderRoot(t *testing.T) {
+	root := t.TempDir()
+
+	abs := filepath.Join(root, "mathx", "mathx.go")
+	got, err := NormalizeImpactSource(root, abs)
+	if err != nil {
+		t.Fatalf("NormalizeImpactSource(absolute): %v", err)
+	}
+	if want := "mathx/mathx.go"; got != want {
+		t.Errorf("NormalizeImpactSource(absolute) = %q, want %q", got, want)
+	}
+
+	got, err = NormalizeImpactSource(root, "mathx/mathx.go")
+	if err != nil {
+		t.Fatalf("NormalizeImpactSource(relative): %v", err)
+	}
+	if want := "mathx/mathx.go"; got != want {
+		t.Errorf("NormalizeImpactSource(relative) = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeImpactSource_RejectsOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	source := filepath.Join(outside, "other.go")
+	if _, err := NormalizeImpactSource(root, source); err == nil {
+		t.Errorf("NormalizeImpactSource(%q, %q): expected error for path outside root, got nil", root, source)
+	}
+}

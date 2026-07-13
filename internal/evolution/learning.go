@@ -133,9 +133,13 @@ func (p *Population) Evaluate(fitnessFn func(*SerializableNode) float64) {
 func (p *Population) Select() []*SerializableNode {
 	parents := make([]*SerializableNode, 2)
 	for j := 0; j < 2; j++ {
-		best := -1
-		bestFit := -1.0
-		for k := 0; k < 3; k++ {
+		// Seed best/bestFit from the first draw instead of a sentinel like
+		// -1.0: fitness functions (e.g. structuralFitnessFn's unbounded
+		// anti-pattern penalty) can legitimately return values <= -1.0, which
+		// would otherwise leave best unset and index Individuals[-1].
+		best := rand.Intn(len(p.Individuals))
+		bestFit := p.Individuals[best].Fitness
+		for k := 1; k < 3; k++ {
 			idx := rand.Intn(len(p.Individuals))
 			if p.Individuals[idx].Fitness > bestFit {
 				bestFit = p.Individuals[idx].Fitness

@@ -35,29 +35,8 @@ func writeImpactCLIFixture(t *testing.T) (root, sourceAbs string) {
 
 // Regression: a changed-file path handed to the CLI is normally absolute (or
 // relative to the caller's cwd), not already module-relative like the impact
-// graph indexes it. normalizeImpactSource must convert it before querying.
-func TestNormalizeImpactSource_AbsoluteUnderRoot(t *testing.T) {
-	root := t.TempDir()
-	abs := filepath.Join(root, "pkg", "file.go")
-
-	rel, err := normalizeImpactSource(root, abs)
-	if err != nil {
-		t.Fatalf("normalizeImpactSource: %v", err)
-	}
-	if rel != "pkg/file.go" {
-		t.Errorf("rel = %q, want %q", rel, "pkg/file.go")
-	}
-}
-
-func TestNormalizeImpactSource_RejectsOutsideRoot(t *testing.T) {
-	root := t.TempDir()
-	outside := t.TempDir()
-
-	if _, err := normalizeImpactSource(root, filepath.Join(outside, "x.go")); err == nil {
-		t.Error("expected an error for a source path outside root")
-	}
-}
-
+// graph indexes it. impactedTestsForSource must normalize it (via
+// knowledge.NormalizeImpactSource) before querying.
 func TestImpactedTestsForSource_AbsoluteSourceUnderRoot(t *testing.T) {
 	root, sourceAbs := writeImpactCLIFixture(t)
 
