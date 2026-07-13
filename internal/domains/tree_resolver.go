@@ -20,6 +20,16 @@ import (
 // execution-layer concern. Nil means no dynamic resolution (ADR-010 Phase 0).
 var DynamicResolveFn func(id string) *evolution.SerializableNode
 
+// DynamicResolveForUserFn is the user-scoped counterpart to DynamicResolveFn
+// (ADR-010 personalization hardening, Q1 Correctness): resolves a
+// runtime-generated tree ID against ONE requesting user's own workspace, so a
+// deterministic slug ID (goal:automate_<slug>) can never resolve to a
+// different user's tree just because it was compiled first. Installed by
+// agentexec at link time alongside DynamicResolveFn. Nil means no per-user
+// dynamic resolution is wired, matching DynamicResolveFn's nil-tolerant
+// convention.
+var DynamicResolveForUserFn func(user, id string) *evolution.SerializableNode
+
 // SelectorStatsPath points at a shared durable Selector telemetry file
 // (SelectorOptimizer.SaveSelectorStats format). When non-empty, every tree
 // returned by ResolveTreeID has its Selector children reordered by learned
@@ -54,6 +64,26 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 	return tree
 }
 
+// ResolveTreeIDForUser is the user-scoped counterpart to ResolveTreeID
+// (ADR-010 personalization hardening, Q1 Correctness): when user is
+// non-empty, runtime-generated tree lookups are scoped to that user's own
+// workspace via DynamicResolveForUserFn instead of the unscoped
+// DynamicResolveFn, so a deterministic slug ID (goal:automate_<slug>) always
+// resolves to the requesting user's own compiled tree. An empty user falls
+// back to the unscoped ResolveTreeID.
+func ResolveTreeIDForUser(user, id string) *evolution.SerializableNode {
+	if user == "" {
+		return ResolveTreeID(id)
+	}
+	tree := resolveTreeIDWithResolver(id, func(id string) *evolution.SerializableNode {
+		return dynamicResolveForUser(user, id)
+	})
+	if tree != nil {
+		applyLearnedSelectorOrdering(id, tree)
+	}
+	return tree
+}
+
 // applyLearnedSelectorOrdering seeds a SelectorOptimizer from the tree's
 // durable telemetry (per-tree SelectorStatsPathFn first, shared
 // SelectorStatsPath as fallback) and reorders the tree's Selector children in
@@ -79,8 +109,19 @@ func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
 
 // resolveTreeID performs the raw ID→tree mapping without the learned-ordering
 // pass, so ResolveTreeID can funnel every resolved tree through a single
-// reorder step regardless of which branch produced it.
+// reorder step regardless of which branch produced it. It consults the
+// unscoped dynamicResolve for runtime-generated trees; ResolveTreeIDForUser
+// shares the exact same branching logic via resolveTreeIDWithResolver, only
+// swapping in a user-scoped resolver.
 func resolveTreeID(id string) *evolution.SerializableNode {
+	return resolveTreeIDWithResolver(id, dynamicResolve)
+}
+
+// resolveTreeIDWithResolver is resolveTreeID parameterized over the
+// runtime-generated-tree resolver, so the unscoped and per-user resolution
+// paths (ResolveTreeID vs ResolveTreeIDForUser) share one branching
+// implementation instead of drifting out of sync.
+func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.SerializableNode) *evolution.SerializableNode {
 	if id == "" {
 		return nil
 	}
@@ -144,19 +185,19 @@ func resolveTreeID(id string) *evolution.SerializableNode {
 		if t := evolution.AllFinanceTrees()[id[8:]]; t != nil {
 			return t
 		}
-		return dynamicResolve(id)
+		return resolve(id)
 	}
 	if len(id) > 9 && id[:9] == "research:" {
 		if t := evolution.ResearchTrees()[id[9:]]; t != nil {
 			return t
 		}
-		return dynamicResolve(id)
+		return resolve(id)
 	}
 	if len(id) > 7 && id[:7] == "domain:" {
 		if t := AllDomainTrees()[id[7:]]; t != nil {
 			return t
 		}
-		return dynamicResolve(id)
+		return resolve(id)
 	}
 	if len(id) > 8 && id[:8] == "startup:" {
 		role := id[8:]
@@ -167,7 +208,7 @@ func resolveTreeID(id string) *evolution.SerializableNode {
 		if t := startup.Roles()[role]; t != nil {
 			return t
 		}
-		return dynamicResolve(id)
+		return resolve(id)
 	}
 	if len(id) > 10 && id[:10] == "thinktank:" {
 		switch role := id[10:]; role {
@@ -178,7 +219,7 @@ func resolveTreeID(id string) *evolution.SerializableNode {
 		case "report":
 			return thinktank.ReportGenerationTree()
 		default:
-			if t := dynamicResolve(id); t != nil {
+			if t := resolve(id); t != nil {
 				return t
 			}
 			return thinktank.SynthesisTree()
@@ -212,7 +253,7 @@ func resolveTreeID(id string) *evolution.SerializableNode {
 	}
 	// Runtime-generated trees (knowledge factory, plan→BT compiler): resolved
 	// last so a generated tree can never shadow a compiled-in ID.
-	if t := dynamicResolve(id); t != nil {
+	if t := resolve(id); t != nil {
 		return t
 	}
 	return evolution.DefaultTree()
@@ -225,4 +266,13 @@ func dynamicResolve(id string) *evolution.SerializableNode {
 		return nil
 	}
 	return DynamicResolveFn(id)
+}
+
+// dynamicResolveForUser consults the injected DynamicResolveForUserFn,
+// tolerating the unwired (nil) state so domains tests stay standalone.
+func dynamicResolveForUser(user, id string) *evolution.SerializableNode {
+	if DynamicResolveForUserFn == nil {
+		return nil
+	}
+	return DynamicResolveForUserFn(user, id)
 }

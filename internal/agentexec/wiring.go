@@ -38,6 +38,11 @@ func init() {
 	// agent runner, A2A, and bt_run_task execute them instead of silently
 	// falling back to DefaultTree.
 	domains.DynamicResolveFn = ResolveGeneratedTree
+	// Per-user dynamic tree resolution (ADR-010 personalization hardening,
+	// Q1 Correctness): scopes runtime-generated tree lookups to the
+	// requesting user so a deterministic slug ID (goal:automate_<slug>) can
+	// never resolve to a different user's tree.
+	domains.DynamicResolveForUserFn = ResolveGeneratedTreeForUser
 	// Learned Selector reordering (opt-in, BT_SELECTOR_REORDER=1).
 	wireSelectorReorder()
 }
@@ -98,6 +103,12 @@ func ResolveGeneratedTree(id string) *evolution.SerializableNode {
 // resolveUserTree scans user workspaces for a personal tree with the given
 // ID. Users are visited in sorted order so a (rare) cross-user ID collision
 // resolves deterministically.
+//
+// This is the legacy unscoped lookup path: it is what makes a deterministic
+// slug ID (goal:automate_<slug>) resolve to the first user that happens to
+// sort first, running one user's personalized tree under a different user's
+// request. ResolveGeneratedTreeForUser is the fix — always prefer it when the
+// requesting user is known.
 func resolveUserTree(id string) *evolution.SerializableNode {
 	root := usersTreeRoot
 	if root == "" {
@@ -119,6 +130,38 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 		if err == nil && tree != nil {
 			return tree
 		}
+	}
+	return nil
+}
+
+// ResolveGeneratedTreeForUser is the user-scoped counterpart to
+// ResolveGeneratedTree (ADR-010 personalization hardening, Q1 Correctness):
+// the shared reflections dir is still consulted first (trees not yet
+// user-attributed), but the per-user fallback loads ONLY the requesting
+// user's own workspace — never the sorted scan across every user that
+// resolveUserTree performs, which lets a deterministic slug ID
+// (goal:automate_<slug>) collide across users and hand one user's tree to
+// another. Returns nil when no such tree has been persisted for this user or
+// the file is unreadable — resolution then falls through to DefaultTree.
+func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
+	dir := generatedTreeDir
+	if dir == "" {
+		d, err := ReflectionsPath()
+		if err != nil {
+			return nil
+		}
+		dir = d
+	}
+	if tree, err := evolution.LoadNamedTree(dir, id); err == nil && tree != nil {
+		return tree
+	}
+	root := usersTreeRoot
+	if root == "" {
+		root = agent.UsersDir()
+	}
+	tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
+	if err == nil && tree != nil {
+		return tree
 	}
 	return nil
 }
