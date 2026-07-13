@@ -46,14 +46,19 @@ func WorkflowApprovalWait(ctx context.Context, step Step, state *wfState) (Appro
 		}
 	}
 
-	_, err := store.WaitForRequest(waitCtx, req.ID, 500*time.Millisecond)
+	resolved, err := store.WaitForRequest(waitCtx, req.ID, 500*time.Millisecond)
 	if err != nil {
 		if err == context.DeadlineExceeded || waitCtx.Err() == context.DeadlineExceeded {
 			return result, context.DeadlineExceeded
 		}
 		return result, err
 	}
-	result.Approved = true
+	switch resolved.Status {
+	case hitl.StatusApproved, hitl.StatusSkipped:
+		result.Approved = true
+	case hitl.StatusEscalated:
+		result.Escalated = true
+	}
 	return result, nil
 }
 

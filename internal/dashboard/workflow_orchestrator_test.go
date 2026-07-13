@@ -283,3 +283,55 @@ func TestWorkflow_OnFailureRetry(t *testing.T) {
 		t.Errorf("expected success after retry, got %s", result.Steps[0].Outcome)
 	}
 }
+
+// TestWorkflow_ApprovalEscalatedIsDistinctAndHalts guards against an HITL
+// escalation being conflated with either a genuine approval or a plain
+// rejection. An escalated approval must get its own "escalated" outcome
+// (not "success"/"approved", not silently reused as "rejected") and must
+// still halt the pipeline so no side-effecting step downstream of the gate
+// runs on an un-reviewed escalation.
+func TestWorkflow_ApprovalEscalatedIsDistinctAndHalts(t *testing.T) {
+	neverReached := false
+	runner := &Runner{
+		RunAgent: func(ctx context.Context, agentName, _, _ string) (string, string, error) {
+			if agentName == "never-reached" {
+				neverReached = true
+			}
+			return "success", "ok", nil
+		},
+		WaitApproval: func(ctx context.Context, step Step, state *wfState) (ApprovalWaitResult, error) {
+			return ApprovalWaitResult{Escalated: true, TaskID: "wf:test-escalate:approve:1", RequestID: "hitl-escalated"}, nil
+		},
+	}
+
+	wf := Pipeline{
+		Name: "test-escalate",
+		Steps: []Step{
+			{ID: "approve", Kind: StepApproval, Input: "confirm"},
+			{ID: "side-effect", Kind: StepAgent, Agent: "never-reached", Input: "task"},
+		},
+	}
+
+	result, err := runner.Run(context.Background(), wf, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Steps[0].Outcome != "escalated" {
+		t.Errorf("expected approval step outcome %q, got %q", "escalated", result.Steps[0].Outcome)
+	}
+	if result.Steps[0].Output == "approved" {
+		t.Errorf("escalated approval must not report Output %q", "approved")
+	}
+	if result.Steps[0].Error == "" {
+		t.Errorf("expected a non-empty error on an escalated approval step")
+	}
+	if result.Outcome != "failure" {
+		t.Errorf("expected pipeline outcome %q on escalation, got %q", "failure", result.Outcome)
+	}
+	if len(result.Steps) != 1 {
+		t.Errorf("expected pipeline to halt after the escalated approval step, got %d steps", len(result.Steps))
+	}
+	if neverReached {
+		t.Errorf("side-effecting step must not run after an escalated approval")
+	}
+}

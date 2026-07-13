@@ -81,6 +81,7 @@ type Runner struct {
 // ApprovalWaitResult carries HITL identifiers for workflow approval steps.
 type ApprovalWaitResult struct {
 	Approved  bool
+	Escalated bool
 	TaskID    string
 	RequestID string
 }
@@ -131,8 +132,8 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 		// Update state for next step
 		state.input = sr.Output
 
-		// Handle failure (including timeout and rejected approval)
-		if sr.Outcome == "failure" || sr.Outcome == "timeout" || sr.Outcome == "rejected" {
+		// Handle failure (including timeout, rejected, and escalated approval)
+		if sr.Outcome == "failure" || sr.Outcome == "timeout" || sr.Outcome == "rejected" || sr.Outcome == "escalated" {
 			switch step.OnFailure {
 			case "skip":
 				continue
@@ -243,6 +244,12 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 			sr.HitlTaskID = res.TaskID
 			sr.HitlRequestID = res.RequestID
 			sr.Duration = time.Since(start)
+			if res.Escalated {
+				sr.Outcome = "escalated"
+				sr.Output = "approval escalated"
+				sr.Error = "approval escalated for human review"
+				return sr, fmt.Errorf("approval escalated")
+			}
 			if err != nil {
 				sr.Error = err.Error()
 				if errors.Is(err, context.DeadlineExceeded) {

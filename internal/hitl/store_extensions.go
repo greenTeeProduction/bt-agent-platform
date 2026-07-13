@@ -22,7 +22,8 @@ func (r *Request) SetTaskID(taskID string) {
 	r.TaskID = taskID
 }
 
-// FindPendingByTaskID returns the newest pending request for a task id.
+// FindPendingByTaskID returns the newest pending or escalated request for a
+// task id, so ApproveByTaskID/RejectByTaskID can resolve an escalation.
 func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
 	if s == nil || strings.TrimSpace(taskID) == "" {
 		return nil, false
@@ -32,7 +33,7 @@ func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
 	now := time.Now()
 	var best *Request
 	for _, r := range s.records {
-		if r.Status != StatusPending {
+		if r.Status != StatusPending && r.Status != StatusEscalated {
 			continue
 		}
 		if !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
