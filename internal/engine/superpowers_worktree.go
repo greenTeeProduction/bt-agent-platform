@@ -226,6 +226,40 @@ func sweepStaleSuperpowersWorktrees(ctx context.Context, runner CommandRunner, r
 	return removed
 }
 
+// reapOrphanedSuperpowersBranches deletes superpowers/* branches that have no
+// registered worktree. This is the leak sweepStaleSuperpowersWorktrees cannot
+// reach: that sweep only deletes a branch while reaping its still-present
+// worktree dir, so once the dir is gone (landed-run cleanup, an earlier sweep,
+// or an OS /tmp wipe) the branch is orphaned forever and accumulates unbounded.
+// `git branch -d` deletes only branches merged into HEAD (master in the bare
+// repo), so an unmerged orphan holding un-landed work survives for manual
+// triage; a branch still attached to a worktree is skipped. Best-effort by
+// design: returns the reaped branch names and never fails the calling run.
+func reapOrphanedSuperpowersBranches(ctx context.Context, runner CommandRunner, repoDir string) []string {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	held := map[string]bool{}
+	for _, b := range superpowersWorktreeBranches(ctx, runner, repoDir) {
+		held[b] = true
+	}
+	list := runner.Run(ctx, repoDir, "git", "branch", "--list", "superpowers/*", "--format=%(refname:short)")
+	if list.Err != nil {
+		return nil
+	}
+	var reaped []string
+	for _, line := range strings.Split(list.Output, "\n") {
+		branch := strings.TrimSpace(line)
+		if branch == "" || held[branch] {
+			continue
+		}
+		if res := runner.Run(ctx, repoDir, "git", "branch", "-d", branch); res.Err == nil {
+			reaped = append(reaped, branch)
+		}
+	}
+	return reaped
+}
+
 // superpowersWorktreeBranches maps registered worktree paths to their branch
 // names via `git worktree list --porcelain`.
 func superpowersWorktreeBranches(ctx context.Context, runner CommandRunner, repoDir string) map[string]string {

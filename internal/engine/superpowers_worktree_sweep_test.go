@@ -16,6 +16,7 @@ import (
 type sweepRunner struct {
 	calls        []string
 	worktreeList string
+	branchList   string
 	failOn       string
 }
 
@@ -30,6 +31,9 @@ func (r *sweepRunner) Run(_ context.Context, dir string, name string, args ...st
 	}
 	if name == "git" && len(args) >= 2 && args[0] == "worktree" && args[1] == "list" {
 		res.Output = r.worktreeList
+	}
+	if name == "git" && len(args) >= 2 && args[0] == "branch" && args[1] == "--list" {
+		res.Output = r.branchList
 	}
 	return res
 }
@@ -130,6 +134,42 @@ func TestCleanupAppliedSuperpowersWorktreeRemovesWorktreeAndMergedBranch(t *test
 	}
 	if !strings.Contains(joined, "git branch -d superpowers/run-1") {
 		t.Fatalf("expected merged-branch delete; calls:\n%s", joined)
+	}
+}
+
+// TestReapOrphanedSuperpowersBranches: a branch attached to a worktree is kept,
+// a merged orphan (no worktree) is deleted, and an unmerged orphan (git branch
+// -d fails) survives for triage.
+func TestReapOrphanedSuperpowersBranches(t *testing.T) {
+	runner := &sweepRunner{
+		worktreeList: strings.Join([]string{
+			"worktree /tmp/repo",
+			"branch refs/heads/master",
+			"",
+			"worktree /tmp/worktrees/superpowers-live",
+			"branch refs/heads/superpowers/live-1",
+			"",
+		}, "\n"),
+		branchList: strings.Join([]string{
+			"superpowers/live-1",          // has a worktree -> must be kept
+			"superpowers/orphan-merged",   // no worktree, merged -> delete
+			"superpowers/orphan-stranded", // no worktree, unmerged -> -d fails -> keep
+		}, "\n"),
+		// git branch -d on the stranded branch fails (simulates unmerged).
+		failOn: "branch -d superpowers/orphan-stranded",
+	}
+
+	reaped := reapOrphanedSuperpowersBranches(context.Background(), runner, "/tmp/repo")
+
+	if len(reaped) != 1 || reaped[0] != "superpowers/orphan-merged" {
+		t.Fatalf("expected only the merged orphan reaped, got %v", reaped)
+	}
+	joined := runner.joined()
+	if !strings.Contains(joined, "git branch -d superpowers/orphan-merged") {
+		t.Fatalf("expected delete of merged orphan; calls:\n%s", joined)
+	}
+	if strings.Contains(joined, "git branch -d superpowers/live-1") {
+		t.Fatalf("must not delete a branch that still has a worktree; calls:\n%s", joined)
 	}
 }
 
