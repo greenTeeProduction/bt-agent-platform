@@ -47,8 +47,11 @@ func TestLoadBFCLSuiteAndEvaluate(t *testing.T) {
 		t.Fatalf("unexpected suite: name=%q entries=%d", suite.Name, len(suite.Entries))
 	}
 
+	// MarkSuccessful's leaf action produces no real output, so routing
+	// (CorrectRoutes/Accuracy) is correct but the quality gate now fails
+	// the run (SuccessRate 0) instead of masking it as a false success.
 	metrics := suite.Evaluate(benchmarkSuccessTree(), DefaultMock())
-	if metrics.TotalEntries != 2 || metrics.CorrectRoutes != 2 || metrics.Accuracy != 1 || metrics.SuccessRate != 1 {
+	if metrics.TotalEntries != 2 || metrics.CorrectRoutes != 2 || metrics.Accuracy != 1 || metrics.SuccessRate != 0 {
 		t.Fatalf("unexpected metrics: %+v", metrics)
 	}
 	if metrics.Results[0].ActualPath != "BuildPath" || !metrics.Results[1].Correct {

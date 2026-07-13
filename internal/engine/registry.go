@@ -256,7 +256,23 @@ func init() {
 		return 1
 	})
 	RegisterAction("UseCachedResult", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
-	RegisterAction("EscalateToDeepSeek", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
+	RegisterAction("EscalateToDeepSeek", func(ctx *btcore.BTContext[Blackboard]) int {
+		bb := ctx.Blackboard
+		if bb.LLM != nil {
+			prevResult := bb.Result
+			if prevResult == "" && len(bb.Results) > 0 {
+				prevResult = bb.Results[len(bb.Results)-1]
+			}
+			prompt := fmt.Sprintf("Escalating unresolved task for deeper analysis. Task: %s\n\nPlan so far: %s\n\nPrevious output: %s\n\nProvide a thorough, corrected resolution:", bb.Task, bb.Plan, prevResult)
+			result, err := bb.LLM.Generate(prompt)
+			if err == nil {
+				bb.Result = result
+				bb.Outcome = string(evolution.Success)
+				return 1
+			}
+		}
+		return -1
+	})
 	RegisterAction("SelfCorrect", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.LLM != nil {
@@ -276,6 +292,9 @@ func init() {
 		return -1
 	})
 	RegisterAction("MarkSuccessful", func(ctx *btcore.BTContext[Blackboard]) int {
+		if !validateOutputQuality(ctx.Blackboard) {
+			return -1
+		}
 		ctx.Blackboard.Outcome = string(evolution.Success)
 		return 1
 	})

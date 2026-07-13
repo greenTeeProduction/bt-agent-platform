@@ -517,6 +517,7 @@ func TestBuildUtilitySelector_NoChildren(t *testing.T) {
 func TestBuildUtilitySelector_WithMetadataCriteria(t *testing.T) {
 	bb := &Blackboard{
 		LLM:        &MockLLM{},
+		Result:     "## Result\n\nSubstantive, well-formed output for the test.",
 		ChainState: map[string]any{"task_priority": 0.95},
 	}
 	node := &evolution.SerializableNode{
@@ -568,7 +569,7 @@ func TestBuildUtilitySelector_FailFast_BestFails(t *testing.T) {
 }
 
 func TestBuildUtilitySelector_FailFastFalse_BestFailsThenNextSucceeds(t *testing.T) {
-	bb := &Blackboard{LLM: &MockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}, Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	node := &evolution.SerializableNode{
 		Type: "UtilitySelector", Name: "tryNext",
 		Metadata: map[string]any{"fail_fast": false},
@@ -638,7 +639,7 @@ func TestBuildUtilitySelector_FailFastFalse_FirstSucceeds(t *testing.T) {
 // ─── BuildReactiveParallel ───
 
 func TestBuildReactiveParallel_AllModeSuccess(t *testing.T) {
-	bb := &Blackboard{LLM: &MockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}, Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{"mode": "all"},
@@ -677,7 +678,7 @@ func TestBuildReactiveParallel_AbortOnEventDelegates(t *testing.T) {
 }
 
 func TestBuildReactiveParallel_AnyMode(t *testing.T) {
-	bb := &Blackboard{LLM: &MockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}, Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{"mode": "any"},
@@ -697,7 +698,7 @@ func TestBuildReactiveParallel_AnyMode(t *testing.T) {
 }
 
 func TestBuildReactiveParallel_MonitorMode(t *testing.T) {
-	bb := &Blackboard{LLM: &MockLLM{}}
+	bb := &Blackboard{LLM: &MockLLM{}, Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	node := &evolution.SerializableNode{
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{

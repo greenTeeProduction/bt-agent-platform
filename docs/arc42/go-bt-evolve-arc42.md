@@ -2,7 +2,7 @@
 title: "go-bt-evolve Architecture Documentation"
 subtitle: "arc42 Template — Behavior Tree Agent Platform"
 date: "2026-06-03"
-updated: "2026-07-12"
+updated: "2026-07-13"
 version: "1.1.0"
 status: "Generated; full refresh 2026-07-04 — kept current per landing run by the autonomous arc42 sync stage"
 arc42_version: "8.2"
@@ -374,8 +374,9 @@ Hermes Agent                    bt-agent (MCP)                 Engine           
     │                               │                            │   │  │                  │◀─result───
     │                               │                            │   │  └─FallbackPath     │
     │                               │                            │   │ OutcomeSelector     │
-    │                               │                            │   │  ├─WasSuccessful     │
-    │                               │                            │   │  └─SelfCorrect       │
+    │                               │                            │   │  ├─MarkSuccessful (quality-gated)│
+    │                               │                            │   │  ├─SelfCorrect (retry x3)│
+    │                               │                            │   │  └─EscalateToDeepSeek│
     │                               │                            │   └─bb.Outcome=success  │
     │                               │                            │──validateOutputQuality─▶│
     │                               │◀────result, outcome────────│                         │
@@ -673,6 +674,8 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Non-terminal HITL outcome (2026-07-13, ADR-077):** `RunTask`'s tick loop and terminal `switch` recognize `bb.Outcome == "pending_approval"` (set by a `HumanApprovalGate`, `internal/engine/hitl_gate.go`) as a third case alongside success/failure: the loop stops ticking immediately instead of spinning to the 1000-tick `maxTicks` limit, and the outcome is preserved rather than collapsing to `"partial"`.
 
+**OutcomeSelector fallthrough made real (2026-07-13, ADR-084):** `MarkSuccessful` (`internal/engine/registry.go`) previously always returned `1`, so `OutcomeSelector`'s first child never failed and its `SelfCorrect`/`EscalateToDeepSeek` siblings were unreachable in production despite being fully implemented (`SelfCorrect`) or stubbed (`EscalateToDeepSeek`, which itself always returned `1` with no LLM call). `MarkSuccessful` now gates on the same `validateOutputQuality` check already used by the `ValidateOutput` condition (§8.7), returning `-1` on garbage/short output so the Selector actually falls through; `EscalateToDeepSeek` now mirrors `SelfCorrect`'s pattern — a real LLM call with an escalation-framed prompt, `bb.Result` written on success, `-1` on failure or no configured LLM. The `OutcomeSelector`'s three-child self-correction/escalation path is live for the first time.
+
 ## 8.2 ChainAction Nodes
 
 **What:** LLM calls wrapped as behavior tree leaf nodes. 10 chain types (`llm_call`, `agent`, `rag_query`, `tool_call`, `structured_output`, `refine`, `map_reduce`, `conversation`, `retrieval_qa`, `tool_action`). ADR-006.
@@ -779,9 +782,9 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Why:** LLMs sometimes produce truncated/garbage output (e.g., max_tokens=10 producing a few words). Without validation, agents report "success" with useless output.
 
-**Where:** `internal/engine/tree.go:validateOutputQuality()`. Applied after every RunTask() and in ReflectOnOutcome action.
+**Where:** `internal/engine/tree.go:validateOutputQuality()`. Applied after every RunTask() and in ReflectOnOutcome action; since 2026-07-13 (ADR-084) also gates `registry.go`'s `MarkSuccessful` action directly, so the `OutcomeSelector`'s own success/retry/escalate routing (§8.1) depends on the same check rather than only post-hoc scoring.
 
-**Effect:** Structured zero-LLM output (alert_router, agent_monitor) scores correctly. Garbage output is flagged. Quality scores feed into fitness evaluation.
+**Effect:** Structured zero-LLM output (alert_router, agent_monitor) scores correctly. Garbage output is flagged. Quality scores feed into fitness evaluation. Garbage/short output at the `OutcomeSelector` now triggers `SelfCorrect` and, if that also fails, a real `EscalateToDeepSeek` LLM call, instead of being marked successful outright.
 
 ## 8.8 Tool Protocol
 
@@ -2257,6 +2260,21 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+## ADR-084: `MarkSuccessful` and `EscalateToDeepSeek` Make the `OutcomeSelector`'s Self-Correction and Escalation Paths Real (Q1 Correctness / Q3 Reliability Program, Milestones 1–2/4)
+
+**Context (2026-07-13):** The universal `PreGate→StrategyRouter→OutcomeSelector` pattern (§8.1) routes every task's outcome through a three-child `Selector`: `MarkSuccessful` → `SelfCorrect` (retried up to 3x) → `EscalateToDeepSeek`. `MarkSuccessful` (`internal/engine/registry.go`) unconditionally returned `1`, so the Selector's first child never failed — `SelfCorrect` and `EscalateToDeepSeek` were unreachable from any tree built on this pattern regardless of output quality. Compounding this, `EscalateToDeepSeek` was itself a no-op stub (`func(_ *btcore.BTContext[Blackboard]) int { return 1 }`) that made no LLM call and wrote no result, so even a tree that reached it would falsely report success.
+
+**Decision:** `MarkSuccessful` now gates its `return 1` behind `validateOutputQuality(ctx.Blackboard)` — the same quality check already registered as the `ValidateOutput` condition (`internal/engine/conditions_core.go`) and used elsewhere for post-hoc scoring (§8.7) — returning `-1` when the blackboard's result is empty, too short, or otherwise fails the check, so the parent `Selector` actually falls through. `EscalateToDeepSeek` is rewritten to mirror the adjacent `SelfCorrect` action: it invokes `bb.LLM.Generate` with an escalation-framed prompt (task, plan-so-far, and previous output), writes the result to `bb.Result` and sets `bb.Outcome` to success only when the call succeeds, and returns `-1` on a `nil` LLM or a `Generate` error instead of always claiming success.
+
+**Status:** Accepted (2026-07-13) — milestones 1–2 of a 4-milestone program; milestones 3–4 (broader escalation-path coverage/telemetry) are not part of this change.
+
+**Consequences:**
+- ✅ Garbage or truncated output (e.g., a `max_tokens`-starved chain) at the end of the primary strategy path no longer gets marked successful outright — it now retries via `SelfCorrect` and, if that also fails, actually escalates to an external LLM instead of silently succeeding. Pinned by new `internal/engine/registry_test.go` cases: `MarkSuccessful` returns `-1` for short/garbage blackboard output and `1` for valid output; `EscalateToDeepSeek` covers both the successful-escalation path (asserting `bb.Result` is written and `bb.Outcome` is success) and the no-LLM-available path (asserting `-1`).
+- ✅ No tree topology changes — every tree already built with the `outcome()`/`NewDefaultOutcomeSelector` helper (`internal/domains/trees.go`, `internal/evolution/tree_builders.go`) gets the corrected routing automatically, since both actions are registered once in `registry.go`'s global `init()`.
+- ⚠️ `EscalateToDeepSeek`'s name is now slightly misleading: like `SelfCorrect`, it calls whatever `bb.LLM` is configured (fallback chain included), not specifically a DeepSeek endpoint — this matches `SelfCorrect`'s existing behavior and the pre-existing naming convention, not a new gap introduced here.
+
+---
+
 *Generated by bt-agent arc42 pipeline — section9Decisions tree*
 
 
@@ -2337,7 +2355,7 @@ go-bt-evolve
 | R4 | **MEDIUM** | **Package Sprawl** — 36 packages for ~136 source files (3.8 files per package). Many packages are thin wrappers (2-3 files). | Import complexity, circular dependency risk, harder to understand boundaries. | Consolidate to ~22 packages. Merge thin packages into domain-coherent groups. |
 | R5 | **MEDIUM** | **Dashboard Untested** — 910-line `cmd/bt-dashboard/main.go` with 0 dedicated tests. Pipeline handlers, task CRUD, and agent management have no test coverage. | Dashboard bugs go undetected until manual testing. Sprint failures are silent. | Add handler tests for all API endpoints. Add integration tests for sprint execution. |
 | R6 | **MEDIUM** | **MCP + A2A Duplication** — Two separate server implementations (MCP stdio vs A2A HTTP) with overlapping auth, rate limiting, and tool registration. | Duplicated security logic, inconsistent behavior between protocols. | Extract shared server base. Unify auth, rate limiting, and middleware. |
-| R7 | **LOW** | **DeepSeek API Dependency** — Escalation path depends on external API (api.deepseek.com). Outage or rate limiting blocks batch LLM work. | Batch processing delayed. Local Ollama is always available as fallback. | Monitor API health. Keep Ollama as always-available fallback. Consider additional providers. |
+| R7 | **LOW** | **DeepSeek API Dependency** — Escalation path depends on external API (api.deepseek.com). Outage or rate limiting blocks batch LLM work. **Note (2026-07-13, ADR-084):** `EscalateToDeepSeek` previously made no LLM call at all (a stub returning success unconditionally); it now performs a real call through whichever provider `bb.LLM`/`LLMProvider` config selects (deepseek/ollama/openrouter/acp), so this risk is now materialized rather than aspirational, and only actually hits `api.deepseek.com` when DeepSeek is the configured provider. | Batch processing delayed. Local Ollama is always available as fallback. | Monitor API health. Keep Ollama as always-available fallback. Consider additional providers. |
 | R8 | **LOW** | **Evolution Engine Sprawl** — 13 graphify communities for evolution code. Overlapping strategies between Stockfish and Pareto causing redundant optimization. | Harder to reason about which algorithm applies when. Maintenance burden. | Strategy interface consolidation. Unify common pipeline stages across algorithms. |
 
 ### New Risks (2026-07-04)
@@ -2420,7 +2438,7 @@ go-bt-evolve
 | **Memetic Evolution** | Genetic algorithm hybridized with per-individual local search refinement (`Population.MemeticEvolve` + `LocalSearcher`, `internal/evolution/local_search.go`). Three strategies: hill-climb, simulated annealing (Metropolis acceptance), tabu search (genome-hash tabu list). Reachable in production via the deterministic `bt_evolve_memetic` MCP tool, which rejects unknown strategy values instead of silently defaulting (ADR-019). |
 | **Mutation** | A structural change to a behavior tree. 10 operators: add_before, add_after, wrap_retry, prune, swap_children, rename_node, change_type, insert_fallback, clone_subtree, delete_subtree. |
 | **NSGA-II** | Non-dominated Sorting Genetic Algorithm II (`NSGAIIPopulation`, `internal/evolution/multi_objective.go`): fast non-dominated sorting + crowding distance over fixed `DimSuccessRate`/`DimNodeEfficiency`/`DimStability` objectives, embedding `*Population` for crowded-tournament selection, SBX crossover, and polynomial mutation. Reachable in production via the deterministic `bt_evolve_multiobjective` MCP tool, which reports best node count, per-dimension bests, and Pareto-front size (ADR-009). Since ADR-051, `NewNSGAIIPopulation` seeds a nil-safe `Specialists` registry and `Evolve` runs each generation through the shared `Population.selfHealGeneration` envelope (re-running `Evaluate` first so `FitnessVecs`/`Fronts`/`CrowdingDist` stay in sync with the self-healing step's re-sort), and `bt_evolve_multiobjective` overwrites the default empty registry with a `SeedSpecialistRegistry`-loaded one and surfaces `Population.HealthSnapshot()` under `health` — the last `bt_evolve_*` GA/multi-objective/island tool to gain crisis detection and specialist resurrection. |
-| **OutcomeSelector** | The final stage of the universal BT pattern. Checks WasSuccessful → if not, triggers SelfCorrect. |
+| **OutcomeSelector** | The final stage of the universal BT pattern: `MarkSuccessful` → `SelfCorrect` (retry, up to 3x) → `EscalateToDeepSeek`. Since 2026-07-13 (ADR-084), `MarkSuccessful` gates on `validateOutputQuality` (§8.7) rather than always succeeding, and `EscalateToDeepSeek` performs a real LLM escalation call instead of an always-succeeding stub — so the fallthrough to `SelfCorrect` and `EscalateToDeepSeek` is now reachable in production. |
 | **Pareto Front** | Set of non-dominated solutions in multi-objective optimization. Tracks trees that are not strictly worse than any other across all fitness dimensions. `ParetoPopulation.EvolvePareto` (`pareto.go`) breeds candidates via `SelectPareto`-driven crossover across the front and, since ADR-038 milestone 4, wraps each generation in the shared `selfHealGeneration` self-healing envelope. Reachable in production since ADR-057 via the deterministic `bt_evolve_pareto` MCP tool, which builds the population through `newProductionPopulation` (seeding `Specialists` the same way its sibling evolve tools do, rather than via `NewParetoPopulation`), evolves over the fixed `DimSuccessRate`/`DimPathCoverage`/`DimStability`/`DimNodeEfficiency`/`DimExecutionSpeed` axes via `StructuralMultiFitness`, and reports `ParetoFront.Stats()` verbatim (`front_size`/`diversity_score`/`best_per_dim`) alongside `health` — a distinct response shape from `bt_evolve_multiobjective`, which drives the separate `NSGAIIPopulation`'s full non-dominated sort instead. |
 | **PlannerNode** | A behavior tree node that extends UtilitySelector with GOAP goal management. Selects actions based on world state and goal satisfaction. |
 | **PreGate** | The first stage of the universal BT pattern. Validates preconditions (input valid, tools available, graph fresh) before executing the strategy. |

@@ -69,7 +69,7 @@ func TestBuildBudget_MaxTicks(t *testing.T) {
 			{Type: "Action", Name: "MarkSuccessful"},
 		},
 	}
-	bb := &Blackboard{ChainState: make(map[string]any)}
+	bb := &Blackboard{Result: "## Result\n\nSubstantive, well-formed output for the test.", ChainState: make(map[string]any)}
 	cmd := BuildBudget(tree, bb)
 	ctx := btcore.NewBTContext(t.Context(), bb)
 	if c := cmd.Run(ctx); c != 1 {
@@ -93,7 +93,7 @@ func TestBuildRateLimit_ThrottlesSecondTick(t *testing.T) {
 			{Type: "Action", Name: "MarkSuccessful"},
 		},
 	}
-	bb := &Blackboard{ChainState: make(map[string]any)}
+	bb := &Blackboard{Result: "## Result\n\nSubstantive, well-formed output for the test.", ChainState: make(map[string]any)}
 	cmd := BuildRateLimit(tree, bb)
 	ctx := btcore.NewBTContext(t.Context(), bb)
 	if c := cmd.Run(ctx); c != 1 {
@@ -138,7 +138,7 @@ func TestBuildInverter(t *testing.T) {
 		Type:     "Inverter",
 		Children: []evolution.SerializableNode{{Type: "Action", Name: "MarkSuccessful"}},
 	}
-	bb := &Blackboard{}
+	bb := &Blackboard{Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	cmd := BuildInverter(tree, bb)
 	if code := cmd.Run(btcore.NewBTContext(t.Context(), bb)); code != -1 {
 		t.Fatalf("inverter should flip success to failure, got %d", code)
@@ -175,7 +175,7 @@ func TestTypedEdges_GuardSkipsChild(t *testing.T) {
 			},
 		},
 	}
-	bb := &Blackboard{ChainState: map[string]any{"allow_step": false}}
+	bb := &Blackboard{Result: "## Result\n\nSubstantive, well-formed output for the test.", ChainState: map[string]any{"allow_step": false}}
 	cmd, err := BuildAndValidate(tree, bb)
 	if err != nil {
 		t.Fatal(err)

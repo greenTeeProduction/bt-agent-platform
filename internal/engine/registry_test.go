@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -1182,5 +1183,111 @@ func TestContainsAnyLower_Negative(t *testing.T) {
 	}
 	if containsAnyLower("short", "longer_word") {
 		t.Error("should NOT match when keyword longer than string")
+	}
+}
+
+// ============================================================================
+// MarkSuccessful must gate on output quality, not report success unconditionally
+// (Q1 Correctness / Q3 Reliability: OutcomeSelector self-correction milestone 1/4)
+// ============================================================================
+
+func TestMarkSuccessful_GarbageOutput_ReturnsFailure(t *testing.T) {
+	fn := GetAction("MarkSuccessful")
+	if fn == nil {
+		t.Fatal("GetAction(MarkSuccessful) should return a function")
+	}
+	bb := &Blackboard{Task: "do something", Result: "no"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	got := fn(ctx)
+
+	if got != -1 {
+		t.Errorf("MarkSuccessful with garbage/short output = %d, want -1 (failure, so the parent Selector falls through)", got)
+	}
+	if bb.Outcome == string(evolution.Success) {
+		t.Errorf("MarkSuccessful should not record Outcome=success for garbage output, got %q", bb.Outcome)
+	}
+}
+
+func TestMarkSuccessful_ValidOutput_ReturnsSuccess(t *testing.T) {
+	fn := GetAction("MarkSuccessful")
+	if fn == nil {
+		t.Fatal("GetAction(MarkSuccessful) should return a function")
+	}
+	bb := &Blackboard{
+		Task:   "do something",
+		Result: "## Report\n\nThis is a well-formed, substantive result with real content and structure.",
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	got := fn(ctx)
+
+	if got != 1 {
+		t.Errorf("MarkSuccessful with valid output = %d, want 1 (success)", got)
+	}
+	if bb.Outcome != string(evolution.Success) {
+		t.Errorf("MarkSuccessful should record Outcome=success for valid output, got %q", bb.Outcome)
+	}
+}
+
+// ============================================================================
+// EscalateToDeepSeek must actually invoke the blackboard's configured LLM and
+// report real success/failure, not the old stub that always returned 1
+// without calling an LLM or writing bb.Result.
+// (Q1 Correctness / Q3 Reliability: OutcomeSelector escalation milestone 2/4)
+// ============================================================================
+
+func TestEscalateToDeepSeekAction_WithMockLLM_WritesResult(t *testing.T) {
+	fn := GetAction("EscalateToDeepSeek")
+	if fn == nil {
+		t.Fatal("GetAction(EscalateToDeepSeek) should return a function")
+	}
+	bb := &Blackboard{
+		Task: "critical issue needing escalation",
+		Plan: "initial plan that failed",
+		LLM:  &MockLLM{GenerateResp: "## Escalated Resolution\n\nDetailed answer from the escalation LLM with sufficient length."},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	got := fn(ctx)
+
+	if got != 1 {
+		t.Errorf("EscalateToDeepSeek with mock LLM = %d, want 1 (success)", got)
+	}
+	if bb.Result == "" {
+		t.Error("EscalateToDeepSeek should write bb.Result from the LLM response, but it is empty")
+	}
+}
+
+func TestEscalateToDeepSeekAction_NoLLM_ReturnsFailure(t *testing.T) {
+	fn := GetAction("EscalateToDeepSeek")
+	if fn == nil {
+		t.Fatal("GetAction(EscalateToDeepSeek) should return a function")
+	}
+	bb := &Blackboard{Task: "critical issue needing escalation"}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	got := fn(ctx)
+
+	if got != -1 {
+		t.Errorf("EscalateToDeepSeek with no LLM available = %d, want -1 (failure, not a fake success)", got)
+	}
+}
+
+func TestEscalateToDeepSeekAction_LLMError_ReturnsFailure(t *testing.T) {
+	fn := GetAction("EscalateToDeepSeek")
+	if fn == nil {
+		t.Fatal("GetAction(EscalateToDeepSeek) should return a function")
+	}
+	bb := &Blackboard{
+		Task: "critical issue needing escalation",
+		LLM:  &MockLLM{GenerateErr: errors.New("escalation provider unavailable")},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+
+	got := fn(ctx)
+
+	if got != -1 {
+		t.Errorf("EscalateToDeepSeek with failing LLM call = %d, want -1 (failure)", got)
 	}
 }

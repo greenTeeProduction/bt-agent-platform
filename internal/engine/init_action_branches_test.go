@@ -378,7 +378,7 @@ func TestInitAction_MarkSuccessful(t *testing.T) {
 	if fn == nil {
 		t.Fatal("MarkSuccessful not registered")
 	}
-	bb := &Blackboard{}
+	bb := &Blackboard{Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	if got := fn(ctx); got != 1 {
 		t.Errorf("MarkSuccessful: expected 1, got %d", got)
@@ -389,6 +389,8 @@ func TestInitAction_MarkSuccessful(t *testing.T) {
 }
 
 // TestInitAction_EscalateToDeepSeek covers EscalateToDeepSeek registered action.
+// With no LLM configured, escalation cannot happen and must report failure
+// rather than the old stub's unconditional success.
 func TestInitAction_EscalateToDeepSeek(t *testing.T) {
 	fn := GetAction("EscalateToDeepSeek")
 	if fn == nil {
@@ -396,8 +398,8 @@ func TestInitAction_EscalateToDeepSeek(t *testing.T) {
 	}
 	bb := &Blackboard{}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
-	if got := fn(ctx); got != 1 {
-		t.Errorf("EscalateToDeepSeek: expected 1, got %d", got)
+	if got := fn(ctx); got != -1 {
+		t.Errorf("EscalateToDeepSeek with no LLM: expected -1, got %d", got)
 	}
 }
 

@@ -928,11 +928,11 @@ func TestActionForName_EscalateToDeepSeek(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1, got %d", result)
+	// With no LLM configured, escalation cannot happen — it must report
+	// failure (-1), not the old stub's unconditional success.
+	if result != -1 {
+		t.Errorf("expected -1 with no LLM configured, got %d", result)
 	}
-	// The registry version of EscalateToDeepSeek returns 1 and does nothing to bb.Result
-	// This tests that the action is resolved and calls without panic
 }
 
 func TestActionForName_SetupDefaultTools(t *testing.T) {
@@ -1022,7 +1022,7 @@ func TestActionForName_InitTranspositionTable(t *testing.T) {
 }
 
 func TestActionForName_MarkSuccessful(t *testing.T) {
-	bb := &Blackboard{Task: "test", Outcome: string(evolution.Failure)}
+	bb := &Blackboard{Task: "test", Outcome: string(evolution.Failure), Result: "## Result\n\nSubstantive, well-formed output for the test."}
 	fn := bb.actionForName("MarkSuccessful")
 	if fn == nil {
 		t.Fatal("expected non-nil function for MarkSuccessful")

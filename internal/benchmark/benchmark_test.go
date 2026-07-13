@@ -626,8 +626,8 @@ func TestLoadSWEVerifiedAndEvaluate(t *testing.T) {
 	if metrics.Resolved != 0 || metrics.ResolveRate != 0 {
 		t.Fatalf("MarkSuccessful without output should not be considered resolved: %+v", metrics)
 	}
-	if metrics.Results[0].Outcome != "success" {
-		t.Fatalf("expected successful BT outcome, got %+v", metrics.Results[0])
+	if metrics.Results[0].Outcome != "failure" {
+		t.Fatalf("MarkSuccessful without output should fail the quality gate, got %+v", metrics.Results[0])
 	}
 }
 

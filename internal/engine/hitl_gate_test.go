@@ -35,7 +35,7 @@ func TestHumanApprovalGate_AutoApprove(t *testing.T) {
 			},
 		},
 	}
-	bb := &Blackboard{Task: "test task", ChainState: make(map[string]any)}
+	bb := &Blackboard{Task: "test task", Result: "## Result\n\nSubstantive, well-formed output for the test.", ChainState: make(map[string]any)}
 	cmd, err := BuildAndValidate(tree, bb)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestHumanApprovalGate_PostPhase(t *testing.T) {
 			},
 		},
 	}
-	bb := &Blackboard{Task: "post task", Result: "draft output", ChainState: make(map[string]any)}
+	bb := &Blackboard{Task: "post task", Result: "## Draft\n\nSubstantive draft output for review.", ChainState: make(map[string]any)}
 	cmd, err := BuildAndValidate(tree, bb)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestHumanApprovalGate_PostPhase(t *testing.T) {
 	if !ok || req.Phase != "post" {
 		t.Fatalf("expected post phase request, got %+v ok=%v", req, ok)
 	}
-	if req.Proposed != "draft output" {
+	if req.Proposed != "## Draft\n\nSubstantive draft output for review." {
 		t.Fatalf("expected proposed from result, got %q", req.Proposed)
 	}
 	if _, err := store.Approve(reqID, "tester", "ok"); err != nil {
