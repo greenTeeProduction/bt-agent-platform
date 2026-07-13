@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
@@ -232,7 +233,8 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	}
 
 	start := time.Now()
-	outcome, output, _, err = runner(runCtx)
+	var res *RunResult
+	outcome, output, res, err = runner(runCtx)
 	duration := time.Since(start)
 
 	// Record history
@@ -261,10 +263,15 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 		s.persistRunFeedback()
 		// Record decision trace for failure explainability
 		runID := fmt.Sprintf("%s-%d", inst.Definition.Tree, start.UnixNano())
+		var steps []knowledge.TraceStep
+		if res != nil {
+			steps = stepsFromChildTicks(res.ChildTicks)
+		}
 		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
 			RunID:     runID,
 			TreeID:    inst.Definition.Tree,
 			Task:      task,
+			Steps:     steps,
 			Outcome:   outcome,
 			StartedAt: start,
 			EndedAt:   time.Now(),
@@ -769,10 +776,15 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		s.persistRunFeedback()
 		// Record decision trace for failure explainability
 		runID := fmt.Sprintf("%s-sched-%d", inst.Definition.Tree, start.UnixNano())
+		var steps []knowledge.TraceStep
+		if runRes != nil {
+			steps = stepsFromChildTicks(runRes.ChildTicks)
+		}
 		knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
 			RunID:     runID,
 			TreeID:    inst.Definition.Tree,
 			Task:      runCtx.Task,
+			Steps:     steps,
 			Outcome:   outcome,
 			StartedAt: start,
 			EndedAt:   time.Now(),
@@ -783,6 +795,18 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	// A run is considered successful if outcome is "success" and no error occurred.
 	isSuccess := outcome == "success" && runErr == nil
 	reportAgentOutcome(s.cbStore, job.AgentName, isSuccess)
+}
+
+// stepsFromChildTicks converts a run's terminal child ticks (engine.Blackboard.
+// ChildTicks(), surfaced on RunResult) into knowledge.TraceSteps so the two
+// production DecisionTrace sites below give ExplainLastFailure a real path
+// instead of an empty one.
+func stepsFromChildTicks(ticks []engine.ChildTick) []knowledge.TraceStep {
+	converted := make([]knowledge.ChildTick, len(ticks))
+	for i, t := range ticks {
+		converted[i] = knowledge.ChildTick{Parent: t.Parent, Child: t.Child, Status: t.Status}
+	}
+	return knowledge.StepsFromChildTicks(converted)
 }
 
 // historyQualityScore combines heuristic and YAML QualitySpec scoring for history records.

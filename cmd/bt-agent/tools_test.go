@@ -1046,6 +1046,111 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	}
 }
 
+// TestBTEvolveParetoRegisteredAndReturnsParetoMetrics pins the bt_evolve_pareto
+// MCP tool: it must be registered by registerMCPTools and give
+// evolution.ParetoPopulation.EvolvePareto (internal/evolution/pareto.go) a
+// production entry point, mirroring the existing deterministic
+// bt_evolve_qd/bt_evolve_island/bt_evolve_multiobjective tools in this file.
+// Unlike bt_evolve_multiobjective (which drives NSGAIIPopulation.Evolve —
+// full non-dominated sorting with crowding distance — and reports
+// "dimension_bests"/"pareto_front_size"), this tool drives
+// ParetoPopulation.EvolvePareto — front-elitism selection via SelectPareto —
+// and must report ParetoFront.Stats() verbatim: "front_size",
+// "diversity_score", and "best_per_dim". An unknown tree id must yield the
+// shared {"error":"unknown tree"} shape rather than a partial/panicking
+// result. Because EvolvePareto already wraps each generation in the same
+// selfHealGeneration envelope Evolve and EvolveWithExperience use (see the
+// doc comment on EvolvePareto), the response must also surface
+// Population.HealthSnapshot() under a "health" object from the start,
+// matching the sibling evolve tools.
+func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_evolve_pareto") {
+		t.Fatal("bt_evolve_pareto tool must be registered by registerMCPTools")
+	}
+
+	// Happy path: a real resolvable base tree with a small population/generations
+	// (kept tiny so the deterministic Pareto evolution stays -short-safe).
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	res, ok := server.Invoke("bt_evolve_pareto", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_pareto) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_pareto returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_pareto unexpectedly returned an error for a resolvable tree: %v", out)
+	}
+
+	// The best tree must have a non-zero node count.
+	nodeCount, ok := out["node_count"].(float64)
+	if !ok || nodeCount <= 0 {
+		t.Errorf("bt_evolve_pareto must report a non-zero 'node_count'; got %v", out["node_count"])
+	}
+
+	// ParetoFront.Stats() must be reported verbatim: front_size (>=1),
+	// diversity_score (present), and best_per_dim (a non-empty object).
+	frontSize, ok := out["front_size"].(float64)
+	if !ok || frontSize < 1 {
+		t.Errorf("bt_evolve_pareto must report a 'front_size' >= 1; got %v", out["front_size"])
+	}
+	if _, present := out["diversity_score"]; !present {
+		t.Errorf("bt_evolve_pareto result missing 'diversity_score' key; got keys %v", out)
+	}
+	bestPerDim, ok := out["best_per_dim"].(map[string]interface{})
+	if !ok || len(bestPerDim) == 0 {
+		t.Errorf("bt_evolve_pareto must report a non-empty 'best_per_dim' object; got %v", out["best_per_dim"])
+	}
+
+	// EvolvePareto already runs inside selfHealGeneration, so health must be
+	// surfaced from the start (unlike bt_evolve_multiobjective, which needed a
+	// dedicated milestone to add it).
+	health, healthPresent := out["health"]
+	if !healthPresent {
+		t.Fatal("bt_evolve_pareto response must surface Population.HealthSnapshot() under a 'health' object, matching the sibling evolve tools; it is absent")
+	}
+	healthObj, isObj := health.(map[string]interface{})
+	if !isObj {
+		t.Fatalf("bt_evolve_pareto 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", health, health)
+	}
+	if reasons, hasReasons := healthObj["crisis_reasons"]; !hasReasons {
+		t.Errorf("bt_evolve_pareto health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", healthObj)
+	} else if _, isList := reasons.([]interface{}); !isList {
+		t.Errorf("bt_evolve_pareto health 'crisis_reasons' must be a JSON array; got %T (%v)", reasons, reasons)
+	}
+	if res, isNum := healthObj["resurrections"].(float64); !isNum || res < 0 {
+		t.Errorf("bt_evolve_pareto health object must report a non-negative 'resurrections' count; got %v", healthObj["resurrections"])
+	}
+	if rate, isNum := healthObj["last_mutation_rate"].(float64); !isNum || rate <= 0 {
+		t.Errorf("bt_evolve_pareto health 'last_mutation_rate' must be the positive rate the run actually applied; got %v", healthObj["last_mutation_rate"])
+	}
+
+	// Unknown tree: a known prefix with an unresolvable suffix resolves to nil,
+	// which must surface the shared unknown-tree error shape.
+	unknown, ok := server.Invoke("bt_evolve_pareto", json.RawMessage(`{"tree":"domain:__no_such_tree__"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_pareto) reported the tool as unregistered on the error path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_evolve_pareto returned no content for an unknown tree")
+	}
+	var errOut2 map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut2); err != nil {
+		t.Fatalf("bt_evolve_pareto unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut2["error"] != "unknown tree" {
+		t.Fatalf("bt_evolve_pareto unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut2)
+	}
+}
+
 // TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport pins the
 // bt_evolve_bottlenecks MCP tool that closes the learn→discover→evolve loop:
 // it must be registered by registerMCPTools, consume the knowledge graph's

@@ -42,21 +42,22 @@ type RunOptions struct {
 
 // RunResult is the outcome of RunOnce.
 type RunResult struct {
-	AgentName      string   `json:"agent_name"`
-	TreeID         string   `json:"tree_id"`
-	Task           string   `json:"task"`
-	Outcome        string   `json:"outcome"`
-	Output         string   `json:"output"`
-	Quality        float64  `json:"quality"`
-	QualityPassed  bool     `json:"quality_passed"`
-	QualityReasons []string `json:"quality_reasons,omitempty"`
-	OutputPassed   bool     `json:"output_passed"`
-	OutputReasons  []string `json:"output_reasons,omitempty"`
-	RunID          string   `json:"run_id,omitempty"`
-	SessionID      string   `json:"session_id,omitempty"`
-	NodePaths      []string `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
-	TraceID        string   `json:"trace_id,omitempty"`
-	SpanID         string   `json:"span_id,omitempty"`
+	AgentName      string             `json:"agent_name"`
+	TreeID         string             `json:"tree_id"`
+	Task           string             `json:"task"`
+	Outcome        string             `json:"outcome"`
+	Output         string             `json:"output"`
+	Quality        float64            `json:"quality"`
+	QualityPassed  bool               `json:"quality_passed"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+	OutputPassed   bool               `json:"output_passed"`
+	OutputReasons  []string           `json:"output_reasons,omitempty"`
+	RunID          string             `json:"run_id,omitempty"`
+	SessionID      string             `json:"session_id,omitempty"`
+	NodePaths      []string           `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
+	ChildTicks     []engine.ChildTick `json:"-"`                    // terminal child ticks (from bb.ChildTicks()), feeds knowledge.StepsFromChildTicks
+	TraceID        string             `json:"trace_id,omitempty"`
+	SpanID         string             `json:"span_id,omitempty"`
 	Duration       time.Duration
 	StartedAt      time.Time
 	EndedAt        time.Time
@@ -203,6 +204,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	result.Output = bb.Result
 	result.Outcome = bb.Outcome
 	result.NodePaths = bb.VisitedPaths
+	result.ChildTicks = bb.ChildTicks()
 	if result.Outcome == "" {
 		result.Outcome = "failure"
 	}

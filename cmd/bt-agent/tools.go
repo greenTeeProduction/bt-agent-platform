@@ -299,7 +299,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
 	}
 }
 
-// registerMCPTools registers all 78 MCP tools on the server.
+// registerMCPTools registers all 79 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -995,6 +995,60 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
 				"health": evolveHealthProjection(nsga.Population),
+			})
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_evolve_pareto", "Run Pareto front-elitism multi-objective evolution over structural fitness dimensions and report front diversity metrics",
+		map[string]engine.Property{
+			"tree":        {Type: "string", Description: "Base tree ID"},
+			"population":  {Type: "integer", Description: "Population size (default: 20)"},
+			"generations": {Type: "integer", Description: "Number of generations (default: 10)"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree        string `json:"tree"`
+				Population  *int   `json:"population"`
+				Generations int    `json:"generations"`
+			}
+			_ = json.Unmarshal(args, &params)
+			population, reject := resolveEvolvePopulation(params.Population)
+			if reject != nil {
+				return reject
+			}
+			if params.Generations <= 0 {
+				params.Generations = 10
+			}
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// Deterministic, LLM-free Pareto front-elitism evolution over the
+			// full structural fitness vector. The population is built through
+			// newProductionPopulation (not evolution.NewParetoPopulation) so its
+			// seeded specialist registry backs crisis resurrection on this path
+			// too, mirroring bt_evolve_multiobjective.
+			dims := []evolution.FitnessDimension{
+				evolution.DimSuccessRate,
+				evolution.DimPathCoverage,
+				evolution.DimStability,
+				evolution.DimNodeEfficiency,
+				evolution.DimExecutionSpeed,
+			}
+			pp := &evolution.ParetoPopulation{
+				Population: newProductionPopulation(population, baseTree),
+				Front:      evolution.NewParetoFront(dims),
+			}
+			best := pp.EvolvePareto(params.Generations, evolution.StructuralMultiFitness)
+			stats := pp.Front.Stats()
+			data, _ := json.Marshal(map[string]interface{}{
+				"tree": params.Tree, "generations": pp.Generation,
+				"node_count":      evolution.CountNodes(best),
+				"front_size":      stats.FrontSize,
+				"diversity_score": stats.DiversityScore,
+				"best_per_dim":    stats.BestPerDim,
+				"health":          evolveHealthProjection(pp.Population),
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})

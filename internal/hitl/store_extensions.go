@@ -73,7 +73,7 @@ func (s *Store) WaitForRequest(ctx context.Context, id string, pollEvery time.Du
 			return nil, err
 		}
 		switch st {
-		case StatusApproved, StatusSkipped:
+		case StatusApproved, StatusSkipped, StatusEscalated:
 			req, ok := s.Get(id)
 			if !ok {
 				return nil, fmt.Errorf("hitl: request %q not found", id)

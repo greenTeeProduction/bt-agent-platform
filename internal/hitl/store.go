@@ -201,8 +201,8 @@ func (s *Store) Approve(id, reviewer, comment string) (*Request, error) {
 	if !ok {
 		return nil, fmt.Errorf("hitl: request %q not found", id)
 	}
-	if r.Status != StatusPending {
-		return nil, fmt.Errorf("hitl: request %q is %s, not pending", id, r.Status)
+	if r.Status != StatusPending && r.Status != StatusEscalated {
+		return nil, fmt.Errorf("hitl: request %q is %s, not pending or escalated", id, r.Status)
 	}
 	now := time.Now()
 	r.Status = StatusApproved
@@ -225,8 +225,8 @@ func (s *Store) Reject(id, reviewer, reason string) (*Request, error) {
 	if !ok {
 		return nil, fmt.Errorf("hitl: request %q not found", id)
 	}
-	if r.Status != StatusPending {
-		return nil, fmt.Errorf("hitl: request %q is %s, not pending", id, r.Status)
+	if r.Status != StatusPending && r.Status != StatusEscalated {
+		return nil, fmt.Errorf("hitl: request %q is %s, not pending or escalated", id, r.Status)
 	}
 	now := time.Now()
 	r.Status = StatusRejected

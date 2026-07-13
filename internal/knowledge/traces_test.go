@@ -275,6 +275,92 @@ func TestExplainLastFailure_NoTrace(t *testing.T) {
 }
 
 // =============================================================================
+// StepsFromChildTicks — bridges engine.Blackboard's terminal child ticks
+// (bb.ChildTicks(), mirrored locally as ChildTick) into DecisionTrace.Steps,
+// so the scheduler's two production trace sites (internal/agent/scheduler.go)
+// can populate a real path and ExplainLastFailure has something to render.
+// =============================================================================
+
+func TestStepsFromChildTicks_ConvertsEachTickToAStep(t *testing.T) {
+	ticks := []ChildTick{
+		{Parent: "root", Child: "childA", Status: "failure"},
+		{Parent: "root", Child: "childB", Status: "success"},
+	}
+
+	steps := StepsFromChildTicks(ticks)
+
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d: %+v", len(steps), steps)
+	}
+	if steps[0].NodeName != "childA" || steps[0].ParentName != "root" || steps[0].Status != "failure" {
+		t.Errorf("step 0 = %+v, want NodeName=childA ParentName=root Status=failure", steps[0])
+	}
+	if steps[1].NodeName != "childB" || steps[1].ParentName != "root" || steps[1].Status != "success" {
+		t.Errorf("step 1 = %+v, want NodeName=childB ParentName=root Status=success", steps[1])
+	}
+}
+
+func TestStepsFromChildTicks_SkipsEmptyChildName(t *testing.T) {
+	ticks := []ChildTick{
+		{Parent: "root", Child: "", Status: "success"},
+		{Parent: "root", Child: "real", Status: "failure"},
+	}
+
+	steps := StepsFromChildTicks(ticks)
+
+	if len(steps) != 1 {
+		t.Fatalf("expected 1 step after skipping empty Child, got %d: %+v", len(steps), steps)
+	}
+	if steps[0].NodeName != "real" {
+		t.Errorf("expected surviving step NodeName=real, got %q", steps[0].NodeName)
+	}
+}
+
+func TestStepsFromChildTicks_EmptyInput(t *testing.T) {
+	if steps := StepsFromChildTicks(nil); len(steps) != 0 {
+		t.Errorf("expected 0 steps for nil input, got %d", len(steps))
+	}
+	if steps := StepsFromChildTicks([]ChildTick{}); len(steps) != 0 {
+		t.Errorf("expected 0 steps for empty input, got %d", len(steps))
+	}
+}
+
+// TestExplainLastFailure_RendersPathFromChildTicks proves the end-to-end
+// goal: converting a run's terminal child ticks into TraceSteps via
+// StepsFromChildTicks gives ExplainLastFailure a real, non-empty path
+// instead of a bare "Path:" header.
+func TestExplainLastFailure_RendersPathFromChildTicks(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:childticks", Name: "Child Ticks", Category: "test"})
+
+	ticks := []ChildTick{
+		{Parent: "root", Child: "stepOne", Status: "success"},
+		{Parent: "root", Child: "stepTwo", Status: "failure"},
+	}
+
+	GlobalTraceStore.Record(DecisionTrace{
+		RunID:     "childticks-1",
+		TreeID:    "tree:childticks",
+		Task:      "do the thing",
+		Steps:     StepsFromChildTicks(ticks),
+		Outcome:   "failure",
+		StartedAt: time.Now().Add(-time.Second),
+		EndedAt:   time.Now(),
+	})
+
+	report := kg.ExplainLastFailure("tree:childticks")
+	if !strings.Contains(report, "stepOne") {
+		t.Errorf("report should render stepOne from the child ticks, got: %s", report)
+	}
+	if !strings.Contains(report, "stepTwo") {
+		t.Errorf("report should render stepTwo from the child ticks, got: %s", report)
+	}
+	if strings.Contains(report, "Path:\n") && !strings.Contains(report, "Path:\n  ") {
+		t.Errorf("report Path section should not be empty, got: %s", report)
+	}
+}
+
+// =============================================================================
 // MILESTONE 3 — bridge real Selector child outcomes into the durable
 // SelectorOptimizer store (from MILESTONE 1–2).
 // =============================================================================

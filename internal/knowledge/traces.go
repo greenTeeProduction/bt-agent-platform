@@ -34,6 +34,34 @@ type TraceStep struct {
 	ParentName string `json:"parent_name,omitempty"`
 }
 
+// ChildTick mirrors engine.Blackboard's terminal child-tick record (Parent,
+// Child, Status) without importing internal/engine, so this package stays
+// free of a dependency on the engine's node-execution machinery.
+type ChildTick struct {
+	Parent string
+	Child  string
+	Status string
+}
+
+// StepsFromChildTicks converts a run's terminal child ticks (from
+// engine.Blackboard.ChildTicks()) into TraceSteps, giving DecisionTrace.Steps
+// a real execution path to render. Ticks with an empty Child are skipped —
+// they carry no node identity worth showing.
+func StepsFromChildTicks(ticks []ChildTick) []TraceStep {
+	steps := make([]TraceStep, 0, len(ticks))
+	for _, tick := range ticks {
+		if tick.Child == "" {
+			continue
+		}
+		steps = append(steps, TraceStep{
+			NodeName:   tick.Child,
+			ParentName: tick.Parent,
+			Status:     tick.Status,
+		})
+	}
+	return steps
+}
+
 // TraceStore holds a rolling buffer of recent traces.
 type TraceStore struct {
 	mu      sync.RWMutex

@@ -35,3 +35,47 @@ func TestApproveByTaskID_and_Escalate(t *testing.T) {
 		t.Fatalf("expected 1 escalated")
 	}
 }
+
+func TestApprove_FromEscalated(t *testing.T) {
+	dir := t.TempDir()
+	store, err := InitStore(filepath.Join(dir, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := NewRequest("G3", "HumanApprovalGate", "b3", "", "", "p3", nil)
+	if err := store.Create(req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Escalate(req.ID, "ops", "needs review"); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := store.Approve(req.ID, "u", "resolved")
+	if err != nil {
+		t.Fatalf("Approve from escalated should succeed: %v", err)
+	}
+	if approved.Status != StatusApproved {
+		t.Fatalf("expected approved, got %s", approved.Status)
+	}
+}
+
+func TestReject_FromEscalated(t *testing.T) {
+	dir := t.TempDir()
+	store, err := InitStore(filepath.Join(dir, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := NewRequest("G4", "HumanApprovalGate", "b4", "", "", "p4", nil)
+	if err := store.Create(req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Escalate(req.ID, "ops", "needs review"); err != nil {
+		t.Fatal(err)
+	}
+	rejected, err := store.Reject(req.ID, "u", "denied")
+	if err != nil {
+		t.Fatalf("Reject from escalated should succeed: %v", err)
+	}
+	if rejected.Status != StatusRejected {
+		t.Fatalf("expected rejected, got %s", rejected.Status)
+	}
+}
