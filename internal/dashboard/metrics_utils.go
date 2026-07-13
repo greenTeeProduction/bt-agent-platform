@@ -351,27 +351,42 @@ var (
 	currentBuildInfo *BuildIdentity
 )
 
+// stampedRevision is the VCS revision injected at build time via
+//
+//	-ldflags "-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=<sha>"
+//
+// It is the fallback for binaries built from the bare main repo, where
+// `go build` cannot resolve VCS info and would otherwise leave the running
+// revision "unknown" — which makes DriftStatus permanently inert. Empty for
+// developer/test builds; those keep the buildinfo-or-unknown behavior.
+var stampedRevision string
+
 // BuildIdentityFromBuildInfo extracts the VCS identity from runtime/debug
 // build info. Missing settings and a nil build info degrade to the
-// unknownBuildValue sentinel rather than empty strings.
+// unknownBuildValue sentinel rather than empty strings, unless an ldflags stamp
+// (stampedRevision) supplies the revision the bare-repo build could not.
 func BuildIdentityFromBuildInfo(bi *debug.BuildInfo) BuildIdentity {
 	id := BuildIdentity{Revision: unknownBuildValue, CommitTime: unknownBuildValue}
-	if bi == nil {
-		return id
-	}
-	for _, s := range bi.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			if s.Value != "" {
-				id.Revision = s.Value
+	if bi != nil {
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if s.Value != "" {
+					id.Revision = s.Value
+				}
+			case "vcs.time":
+				if s.Value != "" {
+					id.CommitTime = s.Value
+				}
+			case "vcs.modified":
+				id.Dirty = s.Value == "true"
 			}
-		case "vcs.time":
-			if s.Value != "" {
-				id.CommitTime = s.Value
-			}
-		case "vcs.modified":
-			id.Dirty = s.Value == "true"
 		}
+	}
+	// Bare-repo builds carry no vcs.revision; the ldflags stamp is the only
+	// revision they have. Real buildinfo always wins when present.
+	if id.Revision == unknownBuildValue && stampedRevision != "" {
+		id.Revision = stampedRevision
 	}
 	return id
 }

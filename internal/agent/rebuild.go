@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -105,14 +106,41 @@ func defaultRebuildMaterialize(repoDir string) (string, func(), error) {
 	return scratch, cleanup, nil
 }
 
-// defaultRebuildBuild runs `go build -o <newPath> <pkg>` inside workDir.
+// defaultRebuildBuild runs `go build -o <newPath> <pkg>` inside workDir, VCS-
+// stamping the binary with workDir's HEAD so a binary rebuilt from the bare main
+// repo (which go build cannot stamp on its own) stays comparable against repo
+// HEAD by DriftStatus — otherwise the auto-rebuilt daemon would itself be blind
+// to the next drift.
 func defaultRebuildBuild(workDir, pkg, newPath string) error {
-	build := exec.Command(resolveGoBinary(), "build", "-o", newPath, pkg)
+	args := []string{"build"}
+	if ld := buildStampLdflags(workDir); ld != "" {
+		args = append(args, "-ldflags", ld)
+	}
+	args = append(args, "-o", newPath, pkg)
+	build := exec.Command(resolveGoBinary(), args...)
 	build.Dir = workDir
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("go build %s: %w\n%s", pkg, err, out)
 	}
 	return nil
+}
+
+// buildStampLdflags returns the -X ldflags value that stamps a built binary with
+// workDir's HEAD revision (see dashboard.stampedRevision). It scrubs the git
+// plumbing env so a hook/worktree context cannot redirect rev-parse. Empty when
+// HEAD cannot be resolved (developer builds keep buildinfo-or-unknown behavior).
+func buildStampLdflags(workDir string) string {
+	cmd := exec.Command("git", "-C", workDir, "rev-parse", "HEAD")
+	cmd.Env = scrubGitEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	rev := strings.TrimSpace(string(out))
+	if rev == "" {
+		return ""
+	}
+	return "-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=" + rev
 }
 
 // resolveGoBinary prefers the pinned toolchain (not on the daemon's PATH) and

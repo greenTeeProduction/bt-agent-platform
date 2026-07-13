@@ -120,15 +120,27 @@ type Blackboard struct {
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
-	ChainMemory   any            // langchaingo memory (ConversationBuffer, etc.)
-	ChainTools    []any          // langchaingo tools available to chains
-	ChainState    map[string]any // arbitrary chain execution state
-	Results       []string       // accumulated results from all chain actions
-	QualityScore  float64        // 0.0-1.0 output quality score
-	CurrentPath   string         // currently executing strategy path (set by tree traversal)
-	VisitedPaths  []string       // all strategy paths visited during execution
-	EventBus      *EventBus      // inter-node event bus (Plan #3: AbortOnEvent, ReactiveParallel)
-	TreeTimeoutMs int64          // custom tree timeout in ms (0 = use default 120s)
+	ChainMemory  any            // langchaingo memory (ConversationBuffer, etc.)
+	ChainTools   []any          // langchaingo tools available to chains
+	ChainState   map[string]any // arbitrary chain execution state
+	Results      []string       // accumulated results from all chain actions
+	QualityScore float64        // 0.0-1.0 output quality score
+	// OutcomeRefinement lets a domain's terminal action refine the recorded
+	// run outcome beyond the tree's success/failure/partial code (which tree.Run
+	// sets from the root node's return status and would otherwise flatten a
+	// healthy-but-no-code cycle into a plain "success"). The agent runner applies
+	// it only when the tree outcome is "success", so it can name a healthy
+	// terminal state ("no_change", "degraded") without turning it into a failure.
+	OutcomeRefinement string
+	// QualityAuthoritative makes QualityScore the recorded quality verbatim
+	// instead of max(estimateQuality, QualityScore). A terminal action sets it
+	// when it knows the true quality (e.g. a no-code cycle must score below the
+	// text-shape estimate, which the max() rule would otherwise inflate).
+	QualityAuthoritative bool
+	CurrentPath          string    // currently executing strategy path (set by tree traversal)
+	VisitedPaths         []string  // all strategy paths visited during execution
+	EventBus             *EventBus // inter-node event bus (Plan #3: AbortOnEvent, ReactiveParallel)
+	TreeTimeoutMs        int64     // custom tree timeout in ms (0 = use default 120s)
 
 	// Budget tracking (Budget decorator / agent limits)
 	TokensUsed int

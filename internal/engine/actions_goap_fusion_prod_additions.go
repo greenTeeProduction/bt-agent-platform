@@ -210,6 +210,11 @@ func registerGoapFusionProductionAdditions() {
 			if _, err := os.Stat(filepath.Join(artifactPath, "finish.md")); err != nil {
 				return fail(fmt.Sprintf("Superpowers artifact `%s` missing finish.md: %v", artifactPath, err))
 			}
+			// A committed implementation is the only run that actually landed
+			// code — score it authoritatively high and leave the outcome as the
+			// tree's "success". (Honest-signal change, 2026-07-13.)
+			bb.QualityScore = 0.9
+			bb.QualityAuthoritative = true
 			return 1
 		}
 
@@ -247,6 +252,19 @@ func registerGoapFusionProductionAdditions() {
 			if !buildTestPassed && !delegated {
 				return fail("deterministic analysis output missing build/test evidence: expected both PASSED strings or the apply-stage delegation marker")
 			}
+			// An analysis-only cycle landed no code. Distinguish a healthy
+			// no-code run ("no_change") from a Claude-path failure that fell back
+			// to deterministic analysis ("degraded") so the recorded outcome and
+			// quality stop overstating a full success. (Honest-signal, 2026-07-13.)
+			if strings.Contains(lower, "implementation degraded (fallback)") ||
+				strings.Contains(lower, "degraded to deterministic") {
+				bb.OutcomeRefinement = "degraded"
+				bb.QualityScore = 0.3
+			} else {
+				bb.OutcomeRefinement = "no_change"
+				bb.QualityScore = 0.5
+			}
+			bb.QualityAuthoritative = true
 			return 1
 		}
 

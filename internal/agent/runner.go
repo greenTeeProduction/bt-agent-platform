@@ -214,9 +214,11 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		spec = def.Quality
 	}
 	score, passed, reasons := ValidateQualitySpec(spec, result.Output)
-	if bb.QualityScore > score {
-		score = bb.QualityScore
-	}
+	// Domain terminal actions may refine a "success" outcome into a healthy
+	// no-code state (no_change/degraded) and assert an authoritative quality the
+	// max()-with-estimate rule must not inflate. Absent those signals this is the
+	// original max(estimate, bb.QualityScore) with the outcome untouched.
+	result.Outcome, score = applyOutcomeRefinement(result.Outcome, score, bb.QualityScore, bb.QualityAuthoritative, bb.OutcomeRefinement)
 	result.Quality = score
 	result.QualityPassed = passed
 	result.QualityReasons = reasons
@@ -275,6 +277,14 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		d.promoteRunToAgentScope(agentName, bb, task, result.Output)
 	}
 
+	// no_change / degraded are healthy no-code terminal states (Item 1,
+	// 2026-07-13): recorded honestly in history above, but they are not errors —
+	// the scheduler must not retry or dead-letter them, and they are not
+	// exemplary enough to promote. Return before the error path below.
+	if isHealthyOutcome(result.Outcome) && result.Outcome != "success" {
+		return result, nil
+	}
+
 	if result.Outcome != "success" {
 		if opts.EnforceQuality && !outputPassed && len(outputReasons) > 0 {
 			return result, fmt.Errorf("output contract failed: %s", strings.Join(outputReasons, "; "))
@@ -291,6 +301,36 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	return result, nil
+}
+
+// applyOutcomeRefinement folds the blackboard's honest-signal fields into the
+// recorded (outcome, quality). A refinement string renames a "success" tree
+// outcome into a healthy no-code state (no_change/degraded) so history stops
+// counting analysis-only cycles as full successes. An authoritative quality is
+// used verbatim; otherwise the original max(estimate, bbScore) rule stands.
+func applyOutcomeRefinement(outcome string, estimate, bbScore float64, authoritative bool, refinement string) (string, float64) {
+	quality := estimate
+	if authoritative {
+		quality = bbScore
+	} else if bbScore > quality {
+		quality = bbScore
+	}
+	if outcome == "success" && refinement != "" {
+		outcome = refinement
+	}
+	return outcome, quality
+}
+
+// isHealthyOutcome reports whether an outcome is a healthy terminal state that
+// the scheduler must neither retry nor dead-letter. no_change (analysis-only,
+// nothing to change) and degraded (Claude path fell back to deterministic
+// analysis) join success as non-error outcomes.
+func isHealthyOutcome(outcome string) bool {
+	switch outcome {
+	case "success", "no_change", "degraded":
+		return true
+	}
+	return false
 }
 
 // OutcomeErrorDetail distills the run output's tail into the outcome error so

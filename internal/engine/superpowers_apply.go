@@ -106,7 +106,7 @@ func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, 
 		_ = writeSuperpowersRunJSON(run)
 		return err
 	}
-	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, run, run.WorktreePath)
+	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, defaultSuperpowersClaudeRunner, run, run.WorktreePath)
 	if err != nil {
 		_ = writeSuperpowersRunJSON(run)
 		return err
@@ -263,8 +263,8 @@ func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, ru
 // stageAndCommitSuperpowersRunInDir stages and commits the run's changes in
 // dir with the standard artifact-path exclusions. It reports whether a commit
 // was created; "nothing staged" is (false, nil), not an error.
-func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner, run *SuperpowersRun, dir string) (bool, error) {
-	add := runner.Run(ctx, dir, "git", "add", "-A", "--", ".", ":(exclude)docs/superpowers/runs/**", ":(exclude)docs/superpowers/plans/**")
+func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, dir string) (bool, error) {
+	add := runner.Run(ctx, dir, "git", gitStageArgs()...)
 	if add.Err != nil {
 		run.ApplyStatus = "applied_uncommitted"
 		writeApplyCommitEvidence(run, "git add failed", add)
@@ -282,19 +282,26 @@ func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner
 		commitCmd = "BT_SUPERPOWERS_PREVERIFIED=1 " + commitCmd
 	}
 	commit := runShellCommand(ctx, runner, dir, commitCmd)
-	if commit.Err != nil {
-		// The landing commit is hook-gated (lint + short tests); its failure
-		// output is the only evidence of WHY a verified run did not land —
-		// persist it (run 20260704T050842 was undiagnosable without this).
+	if commit.Err == nil {
+		return true, nil
+	}
+	// The landing commit is hook-gated (gofmt/vet/golangci-lint/mod tidy/
+	// doc-drift/short tests). Rather than abandon a verified run as
+	// applied_uncommitted on the first rejection — the top refund-treadmill
+	// cause — attempt a bounded auto-fix loop (deterministic reformats + a
+	// Claude repair pass for residual test/vet/lint/doc failures). The failure
+	// output is persisted as evidence either way (run 20260704T050842 was
+	// undiagnosable without it).
+	if commitFixMaxAttempts() == 0 {
 		run.ApplyStatus = "applied_uncommitted"
-		writeApplyCommitEvidence(run, "git commit failed (pre-commit hook?)", commit)
+		writeApplyCommitEvidence(run, "git commit failed (pre-commit hook?); auto-fix disabled", commit)
 		return false, fmt.Errorf("applied_uncommitted: git commit failed: %v\n%s", commit.Err, commit.Output)
 	}
-	return true, nil
+	return commitWithAutoFix(ctx, runner, claude, run, dir, commitCmd, commit)
 }
 
 func commitAppliedSuperpowersRun(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
-	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, run, run.RepoDir)
+	committed, err := stageAndCommitSuperpowersRunInDir(ctx, runner, defaultSuperpowersClaudeRunner, run, run.RepoDir)
 	if err != nil {
 		return err
 	}

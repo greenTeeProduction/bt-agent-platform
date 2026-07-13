@@ -128,8 +128,16 @@ run_build() {
   step "build binaries"
   mkdir -p "${BIN_DIR}"
   local bin
+  # VCS-stamp the binaries with the built revision. The main repo is bare, so
+  # `go build` cannot resolve VCS info on its own; without this stamp the
+  # deployed daemon's revision is "unknown" and DriftStatus is permanently inert.
+  local stamp_rev stamp_ldflags=""
+  stamp_rev="$(git rev-parse HEAD 2>/dev/null || echo "")"
+  if [[ -n "${stamp_rev}" ]]; then
+    stamp_ldflags="-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=${stamp_rev}"
+  fi
   for bin in ${BINARIES}; do
-    "${GO}" build -o "${BIN_DIR}/${bin}" "./cmd/${bin}/"
+    "${GO}" build -ldflags "${stamp_ldflags}" -o "${BIN_DIR}/${bin}" "./cmd/${bin}/"
   done
   ok "build"
 
