@@ -222,6 +222,12 @@ type CycleMetrics struct {
 	// CrisisIntervention marks a cycle where the crisis detector intervened
 	// (emergency mutation-budget boost) for this tree.
 	CrisisIntervention bool `json:"crisis_intervention,omitempty"`
+	// CrisisIntervened mirrors CrisisIntervention for external observability
+	// consumers (metrics/dashboard, Q3 Reliability milestone 1).
+	CrisisIntervened bool `json:"crisis_intervened,omitempty"`
+	// MutationBudget is the per-cycle mutation budget actually used, boosted
+	// above the configured MaxMutations when CrisisIntervened is true.
+	MutationBudget int `json:"mutation_budget,omitempty"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -254,6 +260,10 @@ func (mt *MetricsTracker) Record(m CycleMetrics) {
 type metricsDocument struct {
 	LastRun                  int64          `json:"last_run"`
 	TotalCrisisInterventions int            `json:"total_crisis_interventions"`
+	TotalCycles              int            `json:"total_cycles"`
+	ActiveTrees              int            `json:"active_trees"`
+	BestFitness              float64        `json:"best_fitness"`
+	TotalImprovements        int            `json:"total_improvements"`
 	History                  []CycleMetrics `json:"history"`
 }
 
@@ -265,11 +275,21 @@ func (mt *MetricsTracker) Save() error {
 		LastRun: time.Now().Unix(),
 		History: mt.history,
 	}
+	trees := make(map[string]bool)
 	for _, m := range mt.history {
 		if m.CrisisIntervention {
 			doc.TotalCrisisInterventions++
 		}
+		doc.TotalCycles++
+		trees[m.TreeName] = true
+		if m.Improved {
+			doc.TotalImprovements++
+		}
+		if m.NewFitness > doc.BestFitness {
+			doc.BestFitness = m.NewFitness
+		}
 	}
+	doc.ActiveTrees = len(trees)
 	data, _ := json.MarshalIndent(doc, "", "  ")
 	tmp := mt.path + ".tmp"
 	_ = os.WriteFile(tmp, data, 0644)

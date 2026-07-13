@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"sort"
 	"sync"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
 )
 
 // fakeTransport is an in-memory BidCollector: it records the announcement text
@@ -434,5 +436,78 @@ func TestAuctioneer_RunAuction_CircuitBreaksWinnerAfterRepeatedFailures(t *testi
 	// no fallback": a known-bad winner must not be hammered forever.
 	if callsAfter[attempts-1] != callsAfter[attempts-2] {
 		t.Errorf("winner dispatch call count kept growing across repeated failures (%v); expected it to plateau once the circuit breaker opens", callsAfter)
+	}
+}
+
+// ---- production entrypoint: the winner circuit breaker must survive across
+// separate AuctionDelegate calls (engine ticks) and be durably persisted so it
+// also survives a process restart -------------------------------------------
+//
+// TestAuctioneer_RunAuction_CircuitBreaksWinnerAfterRepeatedFailures above
+// proves the breaker works when a single Auctioneer is reused across calls.
+// In production, though, engine.AuctionDelegateFn is a2a.AuctionDelegate,
+// which today builds a brand-new Auctioneer (and therefore a brand-new, empty
+// breaker map) on every single invocation — every engine tick starts the
+// winner's failure count back at zero, so the breaker guarding the real
+// production path can never actually open. This test drives the same
+// permanently-failing winner through the real production entrypoint
+// (AuctionDelegate, exactly as engine.AuctionDelegateFn calls it) across
+// repeated "ticks" and requires the dispatch-call count to plateau — the
+// production-path equivalent of the Auctioneer-level test above — and
+// requires the tripped breaker to be durably persisted to
+// agent.CircuitBreakersFile(), the same file the scheduler's agent circuit
+// breakers already survive restarts through, so a daemon restart does not
+// reset a known-bad winner back to a clean slate either.
+func TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	ft := &flakyDispatchTransport{
+		bid:       bidJSON(t, Bid{TaskID: "auction", Cost: 1, Confidence: 0.9}),
+		err:       errors.New("invalid request: malformed dispatch payload"), // non-retryable, keeps each call fast
+		failUntil: 0,
+	}
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"bad-winner": cardWithURL("bad-winner", "http://bad-winner", "domain"),
+	}, ft)
+
+	const ticks = 8
+	callsAfter := make([]int, ticks)
+	for i := 0; i < ticks; i++ {
+		_, awarded, err := AuctionDelegate("do the work", nil)
+		if err == nil && awarded {
+			t.Fatalf("tick %d: AuctionDelegate unexpectedly succeeded against a permanently failing winner", i)
+		}
+		callsAfter[i] = ft.calls()
+	}
+
+	// Once the circuit breaker opens for this winner, later ticks must stop
+	// invoking the transport at all, exactly like the single-Auctioneer case —
+	// this is the behavior that breaks today because AuctionDelegate discards
+	// its Auctioneer (and its breaker state) after every call.
+	if callsAfter[ticks-1] != callsAfter[ticks-2] {
+		t.Errorf("winner dispatch call count kept growing across engine ticks (%v); expected it to plateau once the circuit breaker opens across AuctionDelegate calls", callsAfter)
+	}
+
+	// The tripped breaker must also be durably persisted, so a process restart
+	// (which discards all in-memory state) does not forget a known-bad winner.
+	data, err := os.ReadFile(agent.CircuitBreakersFile())
+	if err != nil {
+		t.Fatalf("winner circuit breaker state was never persisted to %s: %v", agent.CircuitBreakersFile(), err)
+	}
+	var decoded struct {
+		Breakers map[string]struct {
+			Status   string `json:"status"`
+			Failures int    `json:"failures"`
+		} `json:"breakers"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("persisted circuit breaker file is not valid JSON: %v\n%s", err, data)
+	}
+	entry, ok := decoded.Breakers["a2a.auction.winner.bad-winner"]
+	if !ok {
+		t.Fatalf("bad-winner breaker missing from persisted circuit breaker state: %+v", decoded.Breakers)
+	}
+	if entry.Status != "open" {
+		t.Errorf("persisted bad-winner breaker status = %q, want %q", entry.Status, "open")
 	}
 }

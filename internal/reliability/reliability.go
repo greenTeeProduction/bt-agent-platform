@@ -1629,3 +1629,18 @@ func (cb *CircuitBreaker) SuccessCount() int {
 	defer cb.mu.Unlock()
 	return cb.successCount
 }
+
+// FailureCount returns the current consecutive failure count.
+func (cb *CircuitBreaker) FailureCount() int {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.failureCount
+}
+
+// LastFailureTime returns the timestamp of the most recently recorded
+// failure, or the zero Time if no failure has been recorded yet.
+func (cb *CircuitBreaker) LastFailureTime() time.Time {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.lastFailureTime
+}

@@ -853,6 +853,108 @@ func TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist(t *testing.T) 
 	})
 }
 
+// ============================================================================
+// CrisisIntervened / MutationBudget metrics (evolve_v2.go) — Q3 Reliability
+// milestone 1: crisis intervention and the boosted mutation budget must be
+// surfaced on the CycleMetrics returned by evolveTreeV2, not just logged.
+// ============================================================================
+
+// crisisMetricsGardener builds a gardener + single-tree entry with a fresh
+// CrisisDetector and no reflection records (EvolveWithoutReflections bypasses
+// the evidence gate so evolveTreeV2 reaches crisis detection). With zero
+// records, evaluator.EvaluateTree always returns Composite 0, so fitness is
+// perfectly flat across repeated cycles — deterministically driving the
+// detector's stagnation counter without relying on mutation outcomes.
+func crisisMetricsGardener(t *testing.T, treeName string, maxMutations int) (*Gardener, TreeEntry, Config) {
+	t.Helper()
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: treeName, Description: "crisis metrics", Tree: tree, FilePath: dir + "/tree-" + treeName + ".json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	cfg := Config{
+		Registry:                 reg,
+		MetricsTracker:           mt,
+		RefStore:                 refStore,
+		MaxMutations:             maxMutations,
+		UseRealLLM:               false,
+		CrisisDetector:           evolution.NewCrisisDetector(),
+		EvolveWithoutReflections: true,
+	}
+	return NewGardener(cfg), reg.List()[0], cfg
+}
+
+// crisisV2Config mirrors the low-threshold cascade config used elsewhere in
+// this file so the structural quick-check never blocks the crisis path.
+func crisisV2Config() EvolveV2Config {
+	return EvolveV2Config{
+		CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled: false,
+		UseRealLLM:    false,
+	}
+}
+
+// TestEvolveTreeV2_CrisisIntervention_SetsMetrics pins Q3 Reliability
+// milestone 1: once CrisisDetector.Detect reports stagnation (the detector's
+// default StagnationLimit is 5, so the counter must exceed it — the 7th
+// non-improving cycle, since Detect's first call only seeds the baseline),
+// the CycleMetrics returned by evolveTreeV2 for that cycle must report
+// CrisisIntervened == true and a MutationBudget boosted above the configured
+// MaxMutations (0 boosted to the floor of 1, per evolveTreeV2's `<1` guard).
+func TestEvolveTreeV2_CrisisIntervention_SetsMetrics(t *testing.T) {
+	g, entry, cfg := crisisMetricsGardener(t, "crisis_tree", 0)
+	v2cfg := crisisV2Config()
+
+	var last CycleMetrics
+	for i := 0; i < 7; i++ {
+		last = g.evolveTreeV2(entry, v2cfg)
+	}
+
+	if !last.CrisisIntervened {
+		t.Fatalf("expected CrisisIntervened == true after sustained stagnation, got false (metrics=%+v)", last)
+	}
+	if last.MutationBudget <= cfg.MaxMutations {
+		t.Errorf("expected MutationBudget boosted above configured MaxMutations (%d) during crisis, got %d", cfg.MaxMutations, last.MutationBudget)
+	}
+}
+
+// TestEvolveTreeV2_CalmCycle_NoCrisisMetrics pins the counterpart: a fresh
+// (first) cycle with no stagnation or diversity collapse must report
+// CrisisIntervened == false and MutationBudget equal to the configured
+// MaxMutations, unmodified.
+func TestEvolveTreeV2_CalmCycle_NoCrisisMetrics(t *testing.T) {
+	g, entry, cfg := crisisMetricsGardener(t, "calm_tree", 1)
+	v2cfg := crisisV2Config()
+
+	m := g.evolveTreeV2(entry, v2cfg)
+
+	if m.CrisisIntervened {
+		t.Fatalf("expected CrisisIntervened == false on a calm cycle, got true (metrics=%+v)", m)
+	}
+	if m.MutationBudget != cfg.MaxMutations {
+		t.Errorf("expected MutationBudget == configured MaxMutations (%d) absent crisis, got %d", cfg.MaxMutations, m.MutationBudget)
+	}
+}
+
 // hasChildNamed and the other v1 idempotency-guard helpers were retired with
 // the v1 pipeline (ADR-010 Phase 6); v2 relies on clone-and-prescore candidate
 // isolation instead.

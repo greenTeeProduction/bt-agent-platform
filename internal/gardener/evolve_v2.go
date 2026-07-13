@@ -273,6 +273,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		Rollbacks:  rollbacks,
 
 		CrisisIntervention: crisisIntervened,
+		CrisisIntervened:   crisisIntervened,
+		MutationBudget:     maxMutations,
 	}
 }
 

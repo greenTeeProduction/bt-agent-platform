@@ -147,6 +147,57 @@ func TestMetricsTracker_SaveAggregatesCrisisAndLastRun(t *testing.T) {
 	}
 }
 
+// TestMetricsTracker_SaveIncludesDashboardAggregateFields verifies milestone
+// 5/5 of the "evolution self-healing observable end-to-end" program:
+// gardener-metrics.json must carry the same total_cycles/active_trees/
+// best_fitness/total_improvements aggregates that Summary() already computes
+// in-memory, because dashboard.loadGardenerMetrics parses exactly those keys
+// and unconditionally returns nil (blank panel) when total_cycles is absent
+// or zero.
+func TestMetricsTracker_SaveIncludesDashboardAggregateFields(t *testing.T) {
+	dir := t.TempDir()
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker failed: %v", err)
+	}
+
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 1, NewFitness: 0.5, Improved: true, Delta: 0.5})
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 2, NewFitness: 0.8, Improved: true, Delta: 0.3})
+	mt.Record(CycleMetrics{TreeName: "tree_b", Cycle: 1, NewFitness: 0.2})
+
+	if err := mt.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "gardener-metrics.json"))
+	if err != nil {
+		t.Fatalf("reading gardener-metrics.json: %v", err)
+	}
+
+	var doc struct {
+		TotalCycles       int     `json:"total_cycles"`
+		ActiveTrees       int     `json:"active_trees"`
+		BestFitness       float64 `json:"best_fitness"`
+		TotalImprovements int     `json:"total_improvements"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("gardener-metrics.json must decode: %v", err)
+	}
+
+	if doc.TotalCycles != 3 {
+		t.Errorf("total_cycles = %d, want 3 (dashboard.loadGardenerMetrics treats 0 as absent and returns nil)", doc.TotalCycles)
+	}
+	if doc.ActiveTrees != 2 {
+		t.Errorf("active_trees = %d, want 2 (tree_a, tree_b)", doc.ActiveTrees)
+	}
+	if doc.BestFitness != 0.8 {
+		t.Errorf("best_fitness = %v, want 0.8 (max NewFitness across all recorded cycles)", doc.BestFitness)
+	}
+	if doc.TotalImprovements != 2 {
+		t.Errorf("total_improvements = %d, want 2 (cycles with Improved=true)", doc.TotalImprovements)
+	}
+}
+
 func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
 	dir := t.TempDir()
 	store, err := evolution.NewStore(dir)
