@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/engine"
 )
 
 // AgentExecutor runs tasks in-process when Runner is set, else falls back to Hermes CLI.
@@ -122,10 +124,37 @@ var TaskAgentMap = map[string]string{
 	"Sales":     "hermes-researcher",
 }
 
+// auctionKeywordPattern matches any of engine.AuctionTaskKeywords as a whole
+// word, so e.g. a task mentioning "auctions" in passing (plural, or otherwise
+// not the bare keyword) doesn't falsely trigger auction routing the way a
+// plain substring check would.
+var auctionKeywordPattern = regexp.MustCompile(
+	`\b(` + strings.Join(quoteKeywords(engine.AuctionTaskKeywords), "|") + `)\b`,
+)
+
+func quoteKeywords(keywords []string) []string {
+	quoted := make([]string, len(keywords))
+	for i, kw := range keywords {
+		quoted[i] = regexp.QuoteMeta(kw)
+	}
+	return quoted
+}
+
+// isAuctionShapedTask reports whether lower (already-lowercased task text)
+// signals auction/delegation intent, using the same keyword set as the
+// auction_demo tree's IsAuctionTask condition (engine.AuctionTaskKeywords).
+// Matching is whole-word so incidental mentions (e.g. "unrelated to
+// auctions") don't falsely trigger routing.
+func isAuctionShapedTask(lower string) bool {
+	return auctionKeywordPattern.MatchString(lower)
+}
+
 // PickTreeForTask selects the best BT tree for a task based on its content.
 func PickTreeForTask(task Task) string {
 	lower := strings.ToLower(task.Title + " " + task.Description)
 	switch {
+	case isAuctionShapedTask(lower):
+		return "auction_demo"
 	case strings.Contains(lower, "bug") || strings.Contains(lower, "review") || strings.Contains(lower, "code"):
 		return "domain:code_review"
 	case strings.Contains(lower, "build") || strings.Contains(lower, "deploy") || strings.Contains(lower, "ci"):

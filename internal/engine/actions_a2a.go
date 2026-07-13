@@ -22,9 +22,11 @@ func init() {
 	registerIsAuctionTaskCondition()
 }
 
-// auctionTaskKeywords are the task-text signals that route work into the
-// auction-based allocation flow (the auction_demo tree's PreGate).
-var auctionTaskKeywords = []string{"auction", "allocate", "bid", "award", "delegate"}
+// AuctionTaskKeywords are the task-text signals that route work into the
+// auction-based allocation flow (the auction_demo tree's PreGate). Exported so
+// callers outside the engine package (e.g. dashboard.PickTreeForTask) can
+// mirror the same routing decision that IsAuctionTask makes.
+var AuctionTaskKeywords = []string{"auction", "allocate", "bid", "award", "delegate"}
 
 // registerIsAuctionTaskCondition registers the IsAuctionTask behavior tree
 // condition. Without it the condition name is unknown to the engine and any tree
@@ -34,7 +36,7 @@ var auctionTaskKeywords = []string{"auction", "allocate", "bid", "award", "deleg
 func registerIsAuctionTaskCondition() {
 	RegisterCondition("IsAuctionTask", func(b *Blackboard) bool {
 		task := strings.ToLower(b.Task)
-		for _, kw := range auctionTaskKeywords {
+		for _, kw := range AuctionTaskKeywords {
 			if strings.Contains(task, kw) {
 				return true
 			}
