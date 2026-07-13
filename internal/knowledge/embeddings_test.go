@@ -207,6 +207,51 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 	}
 }
 
+// =============================================================================
+// Retry (jittered backoff on transient failures)
+// =============================================================================
+
+// TestGetEmbedding_RetriesOnceOnTransientFailureThenSucceeds verifies that a
+// transient, connection-level failure (e.g. Ollama mid-restart) is retried
+// with reliability.DefaultRetryPolicy()'s full-jitter backoff instead of
+// failing the call immediately — a client that fails once then succeeds
+// should return a valid embedding after exactly one retry.
+func TestGetEmbedding_RetriesOnceOnTransientFailureThenSucceeds(t *testing.T) {
+	withFreshEmbeddingBreaker(t, 3, time.Minute)
+
+	var attempts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&attempts, 1) == 1 {
+			// Simulate a transient network failure (e.g. Ollama mid-restart)
+			// by hijacking and closing the connection with no response, which
+			// surfaces to the client as a network-classified error.
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					conn.Close()
+					return
+				}
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"embedding":[0.1,0.2,0.3]}`))
+	}))
+	defer srv.Close()
+
+	ec := &EmbeddingClient{BaseURL: srv.URL, Model: "test-model"}
+
+	emb, err := ec.GetEmbedding("test text")
+	if err != nil {
+		t.Fatalf("expected GetEmbedding to succeed after one jittered retry on a transient failure, got error: %v", err)
+	}
+	if len(emb) != 3 {
+		t.Fatalf("expected a 3-dim embedding after retry, got %v", emb)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Errorf("expected exactly 2 attempts (1 transient failure + 1 successful retry), got %d", got)
+	}
+}
+
 // TestDiscoverWithEmbeddings_FallsBackWhenBreakerOpen verifies that once the
 // breaker has tripped, discoverWithEmbeddings still returns a clean fallback
 // (empty id, zero score) instead of hanging or panicking.

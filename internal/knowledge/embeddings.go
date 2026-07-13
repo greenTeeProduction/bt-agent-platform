@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -35,6 +36,15 @@ var embeddingHTTPClient = &http.Client{Timeout: 2 * time.Second}
 var embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, 60*time.Second)
 
 // GetEmbedding returns the embedding vector for a text.
+//
+// The HTTP call is wrapped in reliability.DefaultRetryPolicy()'s full-jitter
+// backoff so a transient failure (e.g. Ollama mid-restart, a dropped
+// connection) gets one or more jittered retries instead of failing the
+// caller immediately. The whole attempt+retry sequence shares a single
+// context bounded by embeddingHTTPClient.Timeout: a backend that never
+// responds at all exhausts that budget on the first attempt, and the retry
+// loop's own deadline check then aborts immediately rather than blocking
+// through additional multi-second attempts.
 func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 	if !embeddingBreaker.Allow() {
 		return nil, fmt.Errorf("ollama embedding: circuit breaker open")
@@ -46,22 +56,39 @@ func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 	}
 	body, _ := json.Marshal(payload)
 
-	resp, err := embeddingHTTPClient.Post(ec.BaseURL+"/api/embeddings", "application/json", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), embeddingHTTPClient.Timeout)
+	defer cancel()
+
+	var embedding Embedding
+	policy := reliability.DefaultRetryPolicy()
+	err := policy.ExecuteContext(ctx, func() error {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, ec.BaseURL+"/api/embeddings", bytes.NewReader(body))
+		if reqErr != nil {
+			return fmt.Errorf("ollama embedding: %w", reqErr)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, doErr := embeddingHTTPClient.Do(req)
+		if doErr != nil {
+			return fmt.Errorf("ollama embedding: %w", doErr)
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			Embedding []float64 `json:"embedding"`
+		}
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&result); decodeErr != nil {
+			return fmt.Errorf("decode embedding: %w", decodeErr)
+		}
+		embedding = Embedding(result.Embedding)
+		return nil
+	})
 	if err != nil {
 		embeddingBreaker.RecordFailure()
-		return nil, fmt.Errorf("ollama embedding: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Embedding []float64 `json:"embedding"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		embeddingBreaker.RecordFailure()
-		return nil, fmt.Errorf("decode embedding: %w", err)
+		return nil, err
 	}
 	embeddingBreaker.RecordSuccess()
-	return Embedding(result.Embedding), nil
+	return embedding, nil
 }
 
 // CosineSimilarity returns the cosine similarity between two embeddings.
@@ -129,11 +156,18 @@ func (kg *KnowledgeGraph) hasEmbeddings() bool {
 }
 
 // discoverWithEmbeddings finds the best tree using embedding similarity.
+//
+// The Ollama round-trip in GetEmbedding runs without holding kg.mu, so a
+// slow/hung backend cannot starve concurrent writers; the lock is only
+// taken afterward, around the in-memory similarity scan.
 func (kg *KnowledgeGraph) discoverWithEmbeddings(task string) (string, float64) {
 	taskEmb, err := defaultEmbeddingClient.GetEmbedding(task)
 	if err != nil {
 		return "", 0
 	}
+
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
 
 	best := ""
 	bestScore := -1.0

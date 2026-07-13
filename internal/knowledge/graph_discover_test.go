@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // =============================================================================
@@ -386,5 +387,61 @@ func TestDiscoverWithEmbeddings_DeterministicTieBreak(t *testing.T) {
 	}
 	if !ids["aaa:emb"] {
 		t.Errorf("expected embedding tie broken by sorted tree ID → aaa:emb, got %v", ids)
+	}
+}
+
+// =============================================================================
+// Discover / RLock must not be held across the embedding network round-trip
+// =============================================================================
+
+// TestDiscover_RegisterNotStarvedBySlowEmbeddingCall verifies that a
+// slow/hung Ollama embedding backend cannot starve a concurrent Register
+// call. Discover() must release kg.mu.RLock() before discoverWithEmbeddings
+// makes its network round-trip; otherwise the read lock is held for the
+// entire round-trip (bounded only by embeddingHTTPClient's 2s timeout),
+// blocking Register's kg.mu.Lock() for that whole window.
+func TestDiscover_RegisterNotStarvedBySlowEmbeddingCall(t *testing.T) {
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block // never respond until the test unblocks it
+	}))
+	// srv.Close() blocks until in-flight handlers return, so unblock the
+	// handler (close(block)) before closing the server, not after.
+	defer srv.Close()
+	defer close(block)
+
+	orig := defaultEmbeddingClient
+	defer func() { defaultEmbeddingClient = orig }()
+	defaultEmbeddingClient = &EmbeddingClient{BaseURL: srv.URL, Model: "test"}
+
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:a", Name: "A", Category: "test", Embedding: Embedding{1, 0, 0}})
+
+	discoverDone := make(chan struct{})
+	go func() {
+		kg.Discover("some task")
+		close(discoverDone)
+	}()
+
+	// Give Discover a moment to enter discoverWithEmbeddings and start the
+	// (blocked) HTTP round-trip before racing the writer against it.
+	time.Sleep(50 * time.Millisecond)
+
+	registerDone := make(chan struct{})
+	go func() {
+		kg.Register(&TreeMeta{ID: "tree:b", Name: "B", Category: "test"})
+		close(registerDone)
+	}()
+
+	select {
+	case <-registerDone:
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("Register did not complete while a slow embedding call was in flight from Discover — Discover is holding kg.mu.RLock() across the network round-trip")
+	}
+
+	select {
+	case <-discoverDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Discover did not complete after its embedding call timed out")
 	}
 }

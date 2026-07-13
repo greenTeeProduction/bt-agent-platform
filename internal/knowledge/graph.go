@@ -199,11 +199,19 @@ func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount in
 
 // Discover finds the best tree for a given task description.
 // Returns the tree ID and a confidence score (0-1).
+//
+// The read lock is not held across discoverWithEmbeddings' network
+// round-trip to Ollama: a slow or hung embedding backend must not starve
+// concurrent Register/Connect/RegisterEvolved writers, which need the write
+// lock. discoverWithEmbeddings and stringMatch each take their own RLock
+// only around the map access they need.
 func (kg *KnowledgeGraph) Discover(task string) (treeID string, confidence float64) {
 	kg.mu.RLock()
-	defer kg.mu.RUnlock()
+	hasEmb := kg.hasEmbeddings()
+	kg.mu.RUnlock()
+
 	// Phase 1: embedding similarity (if embeddings are available)
-	if kg.hasEmbeddings() {
+	if hasEmb {
 		if id, conf := kg.discoverWithEmbeddings(task); id != "" {
 			return id, conf
 		}
@@ -215,6 +223,9 @@ func (kg *KnowledgeGraph) Discover(task string) (treeID string, confidence float
 
 // stringMatch is the keyword-based matching (original implementation).
 func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+
 	taskLower := strings.ToLower(task)
 
 	// Phase 1: keyword match — deterministic and rank-based. Go randomizes map
