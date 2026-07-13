@@ -32,9 +32,15 @@ func init() {
 func registerGoapFusionProductionAdditions() {
 	RegisterAction("RunGraphifyUpdate", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		bin, err := resolveGraphifyBin()
+		if err != nil {
+			setGoapState(bb, "graphify_update_result", "FAILED:\n"+err.Error())
+			bb.Result = fmt.Sprintf("## Graphify Update Failed\n\n%v", err)
+			return -1
+		}
 		c, cancel := superpowersCommandTimeout()
 		defer cancel()
-		res := runShellCommand(c, defaultSuperpowersCommandRunner, goapFusionRepo, "graphify update .")
+		res := runShellCommand(c, defaultSuperpowersCommandRunner, goapFusionRepo, bin+" update .")
 		if res.Err != nil {
 			setGoapState(bb, "graphify_update_result", "FAILED:\n"+truncateGoap(res.Output, 2000))
 			bb.Result = fmt.Sprintf("## Graphify Update Failed\n\n%s", truncateGoap(res.Output, 2000))

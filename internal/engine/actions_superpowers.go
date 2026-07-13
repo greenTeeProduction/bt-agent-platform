@@ -463,9 +463,9 @@ func init() {
 	RegisterAction("VerifyScheduledGoapFusionGraphifyTool", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 
-		path, err := exec.LookPath(goapFusionGraphifyTool)
+		path, err := resolveGraphifyBin()
 		if err != nil {
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graphify Tool Preflight Failed\n\nGraphify tool %q is not resolvable on PATH: %v; a scheduled run would derive its improvement gaps from a stale report.", goapFusionGraphifyTool, err)
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Graphify Tool Preflight Failed\n\n%v; a scheduled run would derive its improvement gaps from a stale report.", err)
 			return -1
 		}
 
