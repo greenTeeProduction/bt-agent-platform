@@ -221,6 +221,16 @@ func logA2AServeError(err error) {
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
+
+	// `bt-agent --version` prints the build identity and exits 0 without
+	// starting the daemon. Used by the deploy-drift restart handoff to
+	// smoke-test a freshly rebuilt binary before adopting it.
+	if versionRequested() {
+		id := dashboard.ReadBuildIdentity()
+		fmt.Printf("bt-agent revision=%s vcs_time=%s dirty=%v\n", id.Revision, id.CommitTime, id.Dirty)
+		return
+	}
+
 	engine.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
 
 	// Embed the VCS build identity: publish the bt_build_info gauge and log
@@ -448,6 +458,7 @@ func main() {
 				RepoDir:         repoDir,
 				RunningRevision: buildID.Revision,
 				AutoRebuild:     agent.AutoRebuildEnabled(),
+				AutoRestart:     agent.AutoRestartEnabled(),
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),
@@ -678,6 +689,15 @@ func runDLQReplayScanOnce(dlq *reliability.DeadLetterQueue) {
 func noMCPMode() bool {
 	for _, arg := range os.Args[1:] {
 		if arg == "--no-mcp" || arg == "no-mcp" {
+			return true
+		}
+	}
+	return false
+}
+
+func versionRequested() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "version" {
 			return true
 		}
 	}

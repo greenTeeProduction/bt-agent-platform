@@ -25,6 +25,63 @@ var driftHeadFn = defaultDriftHead
 // RebuildBinaries) so DriftWatchOnce can be tested without a toolchain.
 var driftRebuildFn = RebuildBinaries
 
+// driftRestartFn restarts the daemon to adopt a rebuilt binary; driftSmokeTestFn
+// validates the rebuilt binary first; restorePreviousBinaryFn rolls the swap
+// back on a failed smoke test. Package vars so the restart handoff is testable
+// without a real systemd unit or a real binary.
+var (
+	driftRestartFn          = defaultDriftRestart
+	driftSmokeTestFn        = defaultDriftSmokeTest
+	restorePreviousBinaryFn = restorePreviousBinary
+)
+
+// defaultDriftRestart asks systemd to restart the daemon's own unit. --no-block
+// returns immediately so this process is not killed synchronously by the restart
+// it requests; systemd then stops and starts the unit on the new binary.
+func defaultDriftRestart(binary string) error {
+	cmd := exec.Command("systemctl", "--user", "restart", "--no-block", binary+".service")
+	cmd.Env = os.Environ()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl --user restart --no-block %s.service: %w\n%s", binary, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// defaultDriftSmokeTest runs the rebuilt binary with --version and requires a
+// clean exit — a cheap guard that catches a binary broken enough to fail its
+// own startup before it is adopted as the live daemon.
+func defaultDriftSmokeTest(binPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, "--version")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s --version: %w\n%s", binPath, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// restorePreviousBinary copies <binPath>.previous back over binPath — the
+// rollback for a rebuilt binary that failed its smoke test, so a later restart
+// cannot adopt the broken build.
+func restorePreviousBinary(binPath string) error {
+	prev := binPath + ".previous"
+	data, err := os.ReadFile(prev)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(binPath, data, 0o755)
+}
+
+// AutoRestartEnabled reports whether BT_AUTO_RESTART_ON_DRIFT opts into adopting
+// a rebuilt binary by restarting the daemon. Default (unset) rebuilds only.
+func AutoRestartEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("BT_AUTO_RESTART_ON_DRIFT"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // defaultDriftHead shells `git -C <repoDir> rev-parse HEAD`. It scrubs the
 // inherited git plumbing env (GIT_DIR/GIT_WORK_TREE/…) so a hook or worktree
 // context cannot redirect rev-parse at the wrong repository — the same class of
@@ -76,13 +133,33 @@ type DriftWatchConfig struct {
 	// swaps the daemon's own binary out from under a mid-execution job. Nil
 	// disables the guard (every stale tick may rebuild).
 	InFlightFn func() bool
+	// AutoRestart gates adopting the rebuilt binary by restarting the daemon.
+	// It only applies AFTER a successful AutoRebuild (a rebuild without a
+	// restart leaves the running process on the old code). Opt-in via
+	// BT_AUTO_RESTART_ON_DRIFT=1: before restarting, the freshly-built self
+	// binary is smoke-tested, and a failing smoke test rolls the swap back
+	// (<bin>.previous) and skips the restart. Default (false) keeps the
+	// pre-2026-07-13 behavior: rebuild then log "restart to adopt".
+	AutoRestart bool
+}
+
+// selfBinaryPath returns the OutPath of the target whose Name matches Binary —
+// the daemon's own binary, the one to smoke-test and (via restart) adopt.
+func (c DriftWatchConfig) selfBinaryPath() string {
+	for _, t := range c.Targets {
+		if t.Name == c.Binary {
+			return t.OutPath
+		}
+	}
+	return ""
 }
 
 // DriftResult is the outcome of one DriftWatchOnce check.
 type DriftResult struct {
-	Head    string
-	Stale   bool
-	Rebuilt bool
+	Head      string
+	Stale     bool
+	Rebuilt   bool
+	Restarted bool
 }
 
 // DriftWatchOnce performs one drift check: it WARNs on drift and, only when
@@ -123,8 +200,29 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 		cfg.Backoff.RecordSuccess(head)
 	}
 	res.Rebuilt = true
-	slog.Warn("deploy drift: rebuilt binaries from repo HEAD — restart to adopt",
+	if !cfg.AutoRestart {
+		slog.Warn("deploy drift: rebuilt binaries from repo HEAD — restart to adopt",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
+	}
+	// Adopt the rebuilt binary by restarting the daemon. RebuildBinaries has
+	// already renamed <bin>.new over the live path (keeping <bin>.previous), so
+	// the self binary path now points at the new build — smoke-test it before
+	// committing to a restart that could otherwise crash-loop the service.
+	if binPath := cfg.selfBinaryPath(); binPath != "" {
+		if err := driftSmokeTestFn(binPath); err != nil {
+			restoreErr := restorePreviousBinaryFn(binPath)
+			slog.Error("deploy drift: rebuilt binary failed smoke test — rolled back, NOT restarting",
+				"binary", cfg.Binary, "head_revision", head, "err", err, "rollback_err", restoreErr)
+			return res, fmt.Errorf("deploy-drift smoke test failed for %s: %w", binPath, err)
+		}
+	}
+	slog.Warn("deploy drift: restarting to adopt rebuilt binary",
 		"binary", cfg.Binary, "head_revision", head)
+	if err := driftRestartFn(cfg.Binary); err != nil {
+		return res, fmt.Errorf("deploy-drift restart: %w", err)
+	}
+	res.Restarted = true
 	return res, nil
 }
 
