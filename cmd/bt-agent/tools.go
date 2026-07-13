@@ -627,7 +627,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			tt := thinktank.NewThinkTank(params.Name, params.Topic)
 			orch := &thinktank.ThinkTankOrchestrator{Tank: tt, LLM: deps.llmClient}
-			_ = orch.RunFullAnalysis(params.Topic)
+			if err := orch.RunFullAnalysis(params.Topic); err != nil {
+				data, _ := json.Marshal(map[string]interface{}{"error": "think tank analysis failed: " + err.Error(), "topic": params.Topic})
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
 			var scenarios []map[string]interface{}
 			if tt.FinalReport != nil {
 				for _, s := range tt.FinalReport.Scenarios {

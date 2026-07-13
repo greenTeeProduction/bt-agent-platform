@@ -559,6 +559,30 @@ func TestRunFullPipeline(t *testing.T) {
 	}
 }
 
+func TestRunFullPipeline_NilSynthesis_NoPanic(t *testing.T) {
+	tt := &thinktank.ThinkTank{Synthesis: nil}
+	company := &startup.CompanyState{Name: "TestCo"}
+	ttOrch := &mockTTOrch{}
+	compOrch := &mockOrch{}
+
+	wf := NewWorkflow("test-pipeline", tt, company)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RunFullPipeline panicked with nil synthesis (zero tasks): %v", r)
+		}
+	}()
+
+	wf.RunFullPipeline(ttOrch, compOrch)
+
+	if len(wf.Tasks) != 0 {
+		t.Errorf("expected 0 tasks with nil synthesis, got %d", len(wf.Tasks))
+	}
+	if wf.Status != "completed" {
+		t.Errorf("expected status 'completed', got %q", wf.Status)
+	}
+}
+
 // ─── sortTasks helper ───
 
 func TestSortTasks(t *testing.T) {

@@ -353,7 +353,9 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 	// Phase 4: Execute sprints
 	w.Status = "executing"
 	w.Company.CurrentSprint = 1
-	w.Company.SprintGoal = w.Tasks[0].Title
+	if len(w.Tasks) > 0 {
+		w.Company.SprintGoal = w.Tasks[0].Title
+	}
 	w.ExecuteSprint(1, compOrch)
 	w.ExecuteSprint(2, compOrch)
 

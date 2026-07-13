@@ -508,39 +508,51 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 	tt := thinktank.NewThinkTank("Council", topic)
 	orch := thinktank.NewOrchestrator(tt, c)
-	_ = orch.RunResearchRound()
+	if err := orch.RunResearchRound(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "research round failed: " + err.Error()})
+		return
+	}
+	if err := orch.RunDebate(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "debate failed: " + err.Error()})
+		return
+	}
+	if err := orch.RunSynthesis(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "synthesis failed: " + err.Error()})
+		return
+	}
 
-	// Auto-generate tasks from findings
 	ff := make([]map[string]interface{}, 0, 8)
 	for _, f := range tt.ResearchFindings {
 		ff = append(ff, map[string]interface{}{
 			"fellow": f.FellowName, "role": f.Role,
 			"insights": f.KeyInsights, "confidence": f.ConfidenceScore,
 		})
-
-		// Create tasks from high-confidence insights
-		if f.ConfidenceScore >= 0.6 && len(f.KeyInsights) > 0 {
-			for idx, insight := range f.KeyInsights[:min(2, len(f.KeyInsights))] {
-				priority := "medium"
-				if f.ConfidenceScore >= 0.8 {
-					priority = "high"
-				}
-				task := dashboard.Task{
-					ID:          fmt.Sprintf("tt-%d-%d", time.Now().UnixNano(), idx),
-					Title:       f.FellowName + ": " + insight,
-					Description: strings.Join(f.KeyInsights, "\n"),
-					Priority:    priority,
-					Assignee:    f.FellowName,
-					Source:      "thinktank",
-					SourceID:    f.FellowName,
-					Sprint:      companyState.CurrentSprint,
-					StoryPoints: int(f.ConfidenceScore * 10),
-				}
-				task.TreeID = dashboard.PickTreeForTask(task)
-				_ = taskStore.Create(task)
-			}
-		}
 	}
+
+	// Derive tasks from the synthesized recommendation via the Workflow
+	// engine, so tasks get real role assignment (AssigneeRole), sprint
+	// targeting (SprintTarget), and Approval state instead of being
+	// auto-created straight from raw findings.
+	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
+	wf.RecommendationsToTasks()
+	wf.Prioritize()
+	for _, wt := range wf.Tasks {
+		task := dashboard.Task{
+			ID:          wf.ID + "-" + wt.ID,
+			Title:       wt.Title,
+			Description: wt.Description,
+			Priority:    wt.Priority.String(),
+			Assignee:    wt.AssigneeRole,
+			Source:      "thinktank",
+			SourceID:    wt.Source,
+			Sprint:      wt.SprintTarget,
+			StoryPoints: wt.EstimatedEffort,
+			Approval:    wt.Approval,
+		}
+		task.TreeID = dashboard.PickTreeForTask(task)
+		_ = taskStore.Create(task)
+	}
+
 	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "findings": ff})
 }
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {

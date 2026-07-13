@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/dashboard"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
@@ -317,5 +318,126 @@ func TestHandleAnalyze_TaskIDsKeyedOnInsightIndex(t *testing.T) {
 			"the same finding; key the ID on the insight's own loop index instead so " +
 			"two insights minted for the same fellow in the same nanosecond tick " +
 			"don't collide and permanently orphan one another in TaskStore")
+	}
+}
+
+// TestHandleAnalyze_UsesWorkflowForTaskDerivation pins milestone 2/4 of the
+// dashboard Workflow/Approval wiring program. handleAnalyze's hand-rolled
+// loop over tt.ResearchFindings assigns every generated task straight to a
+// fellow's name (e.g. "Victoria Bull") and stamps every task with
+// companyState.CurrentSprint (12 in startup.NewDefaultCompany's defaults),
+// with no synthesis step and no approval workflow.
+//
+// dashboard.NewWorkflow + RecommendationsToTasks derives tasks from the
+// ThinkTank's Synthesis instead: the main recommendation becomes a
+// critical, "ceo"-assigned, sprint-1 task (WorkflowTask.AssigneeRole="ceo",
+// SprintTarget=1) — independent of any fellow name and of the company's
+// current sprint. That requires handleAnalyze to run the synthesis phase,
+// build a *dashboard.Workflow, call RecommendationsToTasks + Prioritize,
+// and persist the resulting WorkflowTasks (carrying
+// AssigneeRole/SprintTarget/Approval) into taskStore instead of building
+// dashboard.Task values directly from tt.ResearchFindings.
+func TestHandleAnalyze_UsesWorkflowForTaskDerivation(t *testing.T) {
+	origTaskStore := taskStore
+	origLLM := sharedLLM
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		sharedLLM = origLLM
+	})
+
+	dir := t.TempDir()
+	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+	sharedLLM = engine.NewMockLLM()
+
+	httpReq := httptest.NewRequest(http.MethodGet, "/api/thinktank/analyze?topic=Should+we+ship+feature+X", nil)
+	rr := httptest.NewRecorder()
+	handleAnalyze(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	tasks := taskStore.List()
+
+	var recTask *dashboard.Task
+	for i := range tasks {
+		if tasks[i].Assignee == "ceo" {
+			recTask = &tasks[i]
+			break
+		}
+	}
+	if recTask == nil {
+		assignees := make([]string, 0, len(tasks))
+		for _, tk := range tasks {
+			assignees = append(assignees, tk.Assignee)
+		}
+		t.Fatalf("no task assigned to workflow role %q found among %d tasks (assignees: %v); "+
+			"handleAnalyze must derive tasks via dashboard.NewWorkflow + RecommendationsToTasks, "+
+			"whose main-recommendation task carries AssigneeRole=%q — not a fellow name",
+			"ceo", len(tasks), assignees, "ceo")
+		return
+	}
+
+	if recTask.Sprint != 1 {
+		t.Errorf("recommendation task Sprint = %d, want 1 (from WorkflowTask.SprintTarget); "+
+			"got companyState.CurrentSprint (%d) instead, meaning tasks are still being stamped "+
+			"with the company's current sprint rather than the workflow-derived sprint target",
+			recTask.Sprint, companyState.CurrentSprint)
+	}
+
+	if recTask.Priority != "critical" {
+		t.Errorf("recommendation task Priority = %q, want %q (from WorkflowPriority.String() "+
+			"via RecommendationsToTasks)", recTask.Priority, "critical")
+	}
+}
+
+// TestHandleAnalyze_SurfacesOrchestratorError pins milestone 3/4 of the Q1
+// Correctness program: handleAnalyze discards every phase orchestrator error
+// (`_ = orch.RunResearchRound()`, `_ = orch.RunDebate()`,
+// `_ = orch.RunSynthesis()`) and always proceeds to derive tasks and respond
+// as if the analysis succeeded — even when a phase genuinely failed. None of
+// orch.Tank/orch.LLM can be forced nil through handleAnalyze's own guards
+// (topic sourced from *thinktank.ThinkTank, which thinktank.NewThinkTank
+// always populates with fellows, and c is nil-checked before the
+// orchestrator is even constructed), so the only way to pin this at HEAD is
+// a source-level audit — the same style already used by
+// TestDashboardDriftWatcherRebuildsItself and
+// TestHandleAnalyze_TaskIDsKeyedOnInsightIndex in this file. handleAnalyze
+// must check each phase's returned error and, on failure, respond with an
+// explicit non-empty "error" field instead of continuing on to
+// dashboard.NewWorkflow/RecommendationsToTasks with empty findings.
+func TestHandleAnalyze_SurfacesOrchestratorError(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	source := string(src)
+
+	start := strings.Index(source, "func handleAnalyze(")
+	if start < 0 {
+		t.Fatal("handleAnalyze not found in main.go")
+	}
+	rest := source[start+len("func handleAnalyze("):]
+	end := strings.Index(rest, "\nfunc ")
+	if end < 0 {
+		end = len(rest)
+	}
+	body := rest[:end]
+
+	for _, discard := range []string{
+		"_ = orch.RunResearchRound()",
+		"_ = orch.RunDebate()",
+		"_ = orch.RunSynthesis()",
+	} {
+		if strings.Contains(body, discard) {
+			t.Errorf("handleAnalyze still discards the orchestrator's returned error via %q; "+
+				"it must check the error and, on failure, respond with an explicit \"error\" field "+
+				"instead of proceeding to derive tasks from empty findings", discard)
+		}
+	}
+
+	if !strings.Contains(body, "err != nil") {
+		t.Error("handleAnalyze must check the orchestrator phase calls' returned error (err != nil) " +
+			"and surface a failure response instead of silently treating a failed analysis as a success")
 	}
 }

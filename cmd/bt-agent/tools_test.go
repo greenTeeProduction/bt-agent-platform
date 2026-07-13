@@ -2864,3 +2864,42 @@ func TestBTDLQToolsWithoutQueue(t *testing.T) {
 		}
 	}
 }
+
+// TestBTThinkTankAnalyzeSurfacesOrchestratorError pins milestone 3/4 of the
+// Q1 Correctness program: bt_thinktank_analyze discards
+// orch.RunFullAnalysis's returned error (`_ = orch.RunFullAnalysis(params.Topic)`)
+// and always reports the (empty) findings as if analysis succeeded. With no
+// llmClient wired (mcpDeps{} zero value — deps.llmClient is a nil llm.LLM),
+// thinktank.ThinkTankOrchestrator.RunResearchRound returns a genuine
+// "LLM is nil" error on its very first phase, which RunFullAnalysis wraps and
+// returns. The handler must check that error and surface it via an explicit
+// "error" field instead of silently returning zeroed-out findings/fellows
+// counts as a 200-shaped success.
+func TestBTThinkTankAnalyzeSurfacesOrchestratorError(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_thinktank_analyze") {
+		t.Fatal("bt_thinktank_analyze tool must be registered by registerMCPTools")
+	}
+
+	args := json.RawMessage(`{"topic":"Should we ship feature X"}`)
+	res, ok := server.Invoke("bt_thinktank_analyze", args)
+	if !ok {
+		t.Fatal("Invoke(bt_thinktank_analyze) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_thinktank_analyze returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_thinktank_analyze result is not valid JSON: %v", err)
+	}
+
+	errVal, hasErr := out["error"]
+	if !hasErr || errVal == "" {
+		t.Fatalf("bt_thinktank_analyze with a failing orchestrator (no llmClient) must surface an "+
+			"explicit non-empty \"error\" field instead of a false-success response; got %v", out)
+	}
+}
