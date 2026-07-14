@@ -1117,6 +1117,67 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	}
 }
 
+// TestBTEvolveMultiObjectiveAccumulatesDurableArchive pins the missing
+// durable-archive wiring for NSGA-II evolution (Q2 Evolvability milestone
+// 4/5): evolution.NSGAIIPopulation already implements Save/Load (milestone
+// 3/5, internal/evolution/multi_objective.go), wrapping its final
+// non-dominated front (Fronts[0]) in a ParetoFront and delegating to its
+// merge/cap-eviction persistence, but bt_evolve_multiobjective's handler
+// (cmd/bt-agent/tools.go) never calls them, so NSGA-II's Pareto-optimal front
+// resets on every invocation instead of accumulating across runs like its
+// bt_evolve_pareto sibling (TestBTEvolveParetoAccumulatesDurableArchive).
+// Mirroring that test and bt_evolve_qd, the result JSON must report the warm
+// start honestly — "warm_started": false on a cold home, true once an
+// archive exists — sharing the same durable-archive result fields
+// (warm_started/archive_load_error/archive_save_error) the other four
+// algorithms already report, and a single archive file must exist under
+// BT_AGENT_HOME after the first run.
+func TestBTEvolveMultiObjectiveAccumulatesDurableArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_multiobjective", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_multiobjective) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_multiobjective returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_multiobjective %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_multiobjective unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	first := invoke("first")
+	if got, isBool := first["warm_started"].(bool); !isBool || got {
+		t.Errorf(`first run on a cold home must report "warm_started": false; got %v`, first["warm_started"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "*nsga*archive*.json"))
+	if err != nil {
+		t.Fatalf("glob NSGA-II archives after the first run: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("bt_evolve_multiobjective single-tree runs must persist exactly one durable NSGA-II archive under BT_AGENT_HOME after the first run; got %v", matches)
+	}
+
+	second := invoke("second")
+	if got, isBool := second["warm_started"].(bool); !isBool || !got {
+		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
 // TestBTEvolveParetoRegisteredAndReturnsParetoMetrics pins the bt_evolve_pareto
 // MCP tool: it must be registered by registerMCPTools and give
 // evolution.ParetoPopulation.EvolvePareto (internal/evolution/pareto.go) a

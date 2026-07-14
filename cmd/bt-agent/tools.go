@@ -72,6 +72,16 @@ func paretoFrontArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "pareto_front_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// nsgaArchivePath resolves the durable NSGA-II Pareto front archive
+// bt_evolve_multiobjective warm-starts from and persists to (Q2
+// Evolvability, milestone 4/5 of the durable cross-run archive program),
+// scoped per base tree like the other archive helpers so runs on different
+// base trees do not warm-start-merge each other's Pareto-optimal
+// individuals through a single shared file.
+func nsgaArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "nsga_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
 // fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
 // of evolution.TreeFileName. That helper is deliberately not reused: its
@@ -1000,6 +1010,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
 			nsga.Specialists = evolution.SeedSpecialistRegistry()
+			nsga.Cap = population * 5
 			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
@@ -1020,12 +1031,37 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if len(nsga.Fronts) > 0 {
 				frontSize = len(nsga.Fronts[0].Indices)
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			// Warm-start a durable NSGA-II archive from front 0 so the
+			// Pareto-optimal front accumulates across runs instead of
+			// resetting on every call (Q2 Evolvability), mirroring
+			// bt_evolve_pareto. NSGAIIPopulation.Load/Save already implement
+			// the merge/cap-eviction persistence (milestone 3/5); this just
+			// adopts them.
+			archivePath := nsgaArchivePath(params.Tree)
+			_, statErr := os.Stat(archivePath)
+			warmStarted := statErr == nil
+			archiveLoadErr := ""
+			if err := nsga.Load(archivePath); err != nil {
+				warmStarted = false
+				archiveLoadErr = err.Error()
+			}
+			result := map[string]interface{}{
 				"tree": params.Tree, "generations": nsga.Generation,
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
-				"health": evolveHealthProjection(nsga.Population),
-			})
+				"health":       evolveHealthProjection(nsga.Population),
+				"warm_started": warmStarted,
+			}
+			if archiveLoadErr != "" {
+				result["archive_load_error"] = archiveLoadErr
+			}
+			// Persist front 0 so the next invocation resumes from this run's
+			// Pareto-optimal individuals. A save failure is surfaced
+			// non-fatally alongside the evolution result.
+			if err := nsga.Save(archivePath); err != nil {
+				result["archive_save_error"] = err.Error()
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
