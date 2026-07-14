@@ -319,8 +319,9 @@ func defaultGoapReviewDeps() goapReviewDeps {
 }
 
 // goapClaudeBackoffWindow is how long a rate-limited review closes Claude
-// attempts. The "resets <time>" hint in the CLI output is not machine-parsed;
-// one hour skips at least the next doomed tick while the half-open expiry in
+// attempts when the CLI output carries no parseable reset hint (a
+// "resets <time>"/epoch hint takes precedence — see claudeBackoffDeadline).
+// One hour skips at least the next doomed tick while the half-open expiry in
 // claudeBackoffActive guarantees the window can never wedge permanently.
 const goapClaudeBackoffWindow = time.Hour
 
@@ -366,9 +367,10 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	}
 	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
 		if isClaudeRateLimit(combined) {
-			// Record the backoff so the NEXT tick short-circuits at the entry
-			// guard instead of burning another 15-minute doomed run.
-			saveClaudeBackoffState(bb, now().Add(goapClaudeBackoffWindow))
+			// Record the backoff — the CLI-reported reset when the output names
+			// one, the hour window otherwise — so the NEXT tick short-circuits
+			// at the entry guard instead of burning another 15-minute doomed run.
+			saveClaudeBackoffState(bb, claudeBackoffDeadline(combined, now(), goapClaudeBackoffWindow))
 			bb.Result = fmt.Sprintf("## Claude Review Fallback Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
 			bb.Outcome = "goap_fusion_claude_review_rate_limited"
 			return -1

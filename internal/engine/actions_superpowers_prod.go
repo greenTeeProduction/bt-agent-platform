@@ -929,9 +929,11 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			// Claude rate-limited — save the plan for the next cycle and fall
 			// back gracefully. Set goals_unchanged so the Selector falls through
 			// to ScheduledAnalysisPath instead of dead-ending. Record the durable
-			// backoff deadline so the NEXT ticks short-circuit at the entry guard
-			// instead of re-resuming the plan against the closed quota.
-			saveClaudeBackoffState(bb, time.Now().Add(claudeBackoffWindow()))
+			// backoff deadline — the CLI-reported reset when the output names
+			// one, the fixed window otherwise — so the NEXT ticks short-circuit
+			// at the entry guard instead of re-resuming the plan against the
+			// closed quota.
+			saveClaudeBackoffState(bb, claudeBackoffDeadline(errStr, time.Now(), claudeBackoffWindow()))
 			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
 			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude Code session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", planPath, errStr)
 			bb.Outcome = "goap_fusion_rate_limited"

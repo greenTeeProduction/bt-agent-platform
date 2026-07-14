@@ -324,6 +324,7 @@ FINDINGS: - architecture drift`}
 }
 
 func TestRunClaudeCodeReviewResearch_RateLimited(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	repo, _ := newReviewTestRepo(t)
 	runner := &fakeReviewClaudeRunner{
 		output: "Claude AI usage limit reached|resets 3pm",
@@ -339,6 +340,7 @@ func TestRunClaudeCodeReviewResearch_RateLimited(t *testing.T) {
 }
 
 func TestRunClaudeCodeReviewResearch_RateLimitedRecordsBackoff(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	repo, _ := newReviewTestRepo(t)
 	runner := &fakeReviewClaudeRunner{
 		output: "Claude AI usage limit reached|resets 3pm",
@@ -363,7 +365,40 @@ func TestRunClaudeCodeReviewResearch_RateLimitedRecordsBackoff(t *testing.T) {
 	}
 }
 
+// TestRunClaudeCodeReviewResearch_RateLimitBackoffHonorsResetHint pins the
+// deadline SHAPE: the CLI names its own reset ("resets 3pm"), so the stamp
+// must be that reset plus the boundary margin — not now+goapClaudeBackoffWindow.
+// The fixed 1h window kept re-arming hour-long oversleeps all of 2026-07-14
+// while the quota actually reset earlier.
+func TestRunClaudeCodeReviewResearch_RateLimitBackoffHonorsResetHint(t *testing.T) {
+	isolateClaudeBackoffStore(t)
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{
+		output: "Claude AI usage limit reached|resets 3pm",
+		err:    fmt.Errorf("exit status 1"),
+	}
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+
+	fixedNow := time.Date(2026, 7, 15, 10, 0, 0, 0, time.Local)
+	deps := reviewTestDeps(t, repo, runner)
+	deps.now = func() time.Time { return fixedNow }
+
+	if got := runClaudeCodeReviewResearch(bb, deps); got != -1 {
+		t.Fatalf("status = %d, want -1", got)
+	}
+	until, ok := loadClaudeBackoffState(bb)
+	if !ok {
+		t.Fatal("no backoff recorded after a rate-limited review")
+	}
+	want := time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local).Add(claudeResetMargin)
+	if !until.Equal(want) {
+		t.Fatalf("backoff deadline = %v, want CLI-reported reset+margin %v (not now+%v): the stamp must honor the reset hint", until, want, goapClaudeBackoffWindow)
+	}
+}
+
 func TestRunClaudeCodeReviewResearch_ActiveBackoffSkipsClaude(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	repo, _ := newReviewTestRepo(t)
 	// A parseable success output: if the action wrongly invokes Claude despite
 	// the active backoff, it returns 1 and the failure is unmistakable.
@@ -400,6 +435,7 @@ FINDINGS: - none`}
 }
 
 func TestRunClaudeCodeReviewResearch_ExpiredBackoffDoesNotBlock(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	repo, _ := newReviewTestRepo(t)
 	runner := &fakeReviewClaudeRunner{output: `GOAL: Add regression test for var X initialization
 GAP: second commit added var X without any test coverage

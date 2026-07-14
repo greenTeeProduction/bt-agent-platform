@@ -153,6 +153,7 @@ func TestChargeGoapResearchGoalFailure_ChargesOncePerCycle(t *testing.T) {
 // Wiring: a genuine (non-infra) -1 exit from the scheduled runtime charges the
 // stamped goal; an infra exit (rate-limit backoff) does NOT.
 func TestScheduledRuntime_ChargesGoalOnGenuineFailureOnly(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	seedGoalBudget(t)
 	key := goapResearchGoalKey("head research goal (files: a.go)")
 

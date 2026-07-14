@@ -135,6 +135,7 @@ func TestPrioritizeGoapGoals_AffirmativeBlockerProducesEngineTestGoal(t *testing
 // which runs with a completely fresh Blackboard (RunOnce kills ChainState).
 // Only the agent-scope store survives, exactly like grill and plan state.
 func TestClaudeBackoffState_PersistsAcrossRuns(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	mgr := blackboard.NewManager(nil)
 	run1 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
 	run2 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-2", "", "goap-loop")}
@@ -160,6 +161,7 @@ func TestClaudeBackoffState_PersistsAcrossRuns(t *testing.T) {
 // disabled (unit paths, scope-off deployments) the state must still round-trip
 // within a run via ChainState, mirroring loadGrillState/loadSuperpowersPlanState.
 func TestClaudeBackoffState_ChainStateFallback(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	bb := &Blackboard{}
 
 	until := time.Date(2026, 7, 8, 18, 30, 0, 0, time.UTC)
@@ -179,6 +181,7 @@ func TestClaudeBackoffState_ChainStateFallback(t *testing.T) {
 // runaway-backstop fix, an expired window must SELF-CLEAR so stale state can
 // never wedge the loop into a permanent skip.
 func TestClaudeBackoffActive_WindowExpiry(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	mgr := blackboard.NewManager(nil)
 	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
 
@@ -202,6 +205,7 @@ func TestClaudeBackoffActive_WindowExpiry(t *testing.T) {
 // TestClaudeBackoffState_ClearCounterpart: clearClaudeBackoffState wipes both
 // the agent-scope entry and the ChainState fallback, like clearSuperpowersPlanState.
 func TestClaudeBackoffState_ClearCounterpart(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	mgr := blackboard.NewManager(nil)
 	run1 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
 	run2 := &Blackboard{BB: blackboard.NewHandle(mgr, "run-2", "", "goap-loop")}
@@ -218,6 +222,7 @@ func TestClaudeBackoffState_ClearCounterpart(t *testing.T) {
 // state must both read as "no backoff" — a malformed timestamp must never
 // wedge the loop into skipping Claude forever (nor panic).
 func TestClaudeBackoffState_MissingOrMalformedIsInactive(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
 
 	// Missing entirely.

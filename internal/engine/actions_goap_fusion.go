@@ -765,78 +765,8 @@ func clearSuperpowersPlanState(bb *Blackboard) {
 	}
 }
 
-// Claude rate-limit backoff state must survive across scheduled runs the same
-// way grill and plan state do: a rate-limited outcome in one cron tick should
-// stop the NEXT ticks from burning 15-minute Claude retry budgets against a
-// quota that is known to be closed. The deadline is stored as RFC3339 text in
-// the agent-scope blackboard (primary, persists to disk) with ChainState as
-// the fallback when the scoped blackboard is disabled.
-func saveClaudeBackoffState(bb *Blackboard, until time.Time) {
-	stamp := until.UTC().Format(time.RFC3339)
-	setGoapState(bb, "claude_backoff_until", stamp)
-	if bb.BB != nil && bb.BB.AgentName != "" {
-		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		_ = bb.BB.Mgr.Set(scope, "goap_fusion_claude_backoff_until", stamp,
-			"durable Claude rate-limit backoff deadline (RFC3339)", "text")
-	}
-}
-
-// loadClaudeBackoffState returns the persisted backoff deadline. A missing or
-// malformed timestamp reads as inactive — corrupt state must never wedge the
-// loop into skipping Claude forever.
-func loadClaudeBackoffState(bb *Blackboard) (time.Time, bool) {
-	if bb.BB != nil && bb.BB.AgentName != "" {
-		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_claude_backoff_until"); err == nil {
-			if until, perr := time.Parse(time.RFC3339, strings.TrimSpace(e.Value)); perr == nil {
-				return until, true
-			}
-			return time.Time{}, false
-		}
-	}
-	if s, ok := bb.ChainState["goap_fusion_claude_backoff_until"].(string); ok {
-		if until, perr := time.Parse(time.RFC3339, strings.TrimSpace(s)); perr == nil {
-			return until, true
-		}
-	}
-	return time.Time{}, false
-}
-
-// claudeBackoffActive reports whether now is still inside the persisted
-// backoff window. An elapsed window self-clears (half-open, mirroring the
-// runaway-backstop lesson) so stale state cannot permanently block attempts.
-func claudeBackoffActive(bb *Blackboard, now time.Time) bool {
-	until, ok := loadClaudeBackoffState(bb)
-	if !ok {
-		return false
-	}
-	if now.Before(until) {
-		return true
-	}
-	clearClaudeBackoffState(bb)
-	return false
-}
-
-// clearClaudeBackoffState wipes both the agent-scope entry and the ChainState
-// fallback, like clearSuperpowersPlanState.
-func clearClaudeBackoffState(bb *Blackboard) {
-	if bb.ChainState != nil {
-		delete(bb.ChainState, "goap_fusion_claude_backoff_until")
-	}
-	if bb.BB != nil && bb.BB.AgentName != "" {
-		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_claude_backoff_until")
-	}
-}
-
-// claudeBackoffWindow is the duration a rate-limited outcome closes Claude
-// attempts for: BT_GOAP_CLAUDE_BACKOFF when parsable, 6h otherwise.
-func claudeBackoffWindow() time.Duration {
-	if d, err := time.ParseDuration(getenvDefault("BT_GOAP_CLAUDE_BACKOFF", "6h")); err == nil && d > 0 {
-		return d
-	}
-	return 6 * time.Hour
-}
+// Claude rate-limit backoff state (save/load/active/clear, reset-hint
+// parsing, and the fleet-wide store) lives in goap_claude_backoff.go.
 
 func runGoapShell(command string) (string, error) {
 	return runGoapShellTimeout(command, 120*time.Second)

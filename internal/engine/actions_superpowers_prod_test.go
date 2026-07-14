@@ -688,6 +688,7 @@ func TestRunSuperpowersRuntime_NonRateLimitFailureClearsDurablePlanState(t *test
 // added by this task must fire ONLY for non-rate-limit failures; the rate-limit
 // branch (bb.Outcome == goap_fusion_rate_limited) must never wipe the saved plan.
 func TestRunSuperpowersRuntime_RateLimitFailurePreservesDurablePlanState(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	t.Chdir(t.TempDir())
 
 	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
@@ -752,6 +753,7 @@ func TestRunSuperpowersRuntime_RateLimitFailurePreservesDurablePlanState(t *test
 // tick re-resumed the plan and hit the closed quota again (3×15-min retries
 // per tick).
 func TestRunSuperpowersRuntime_RateLimitRecordsBackoff(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	t.Chdir(t.TempDir())
 
 	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
@@ -808,6 +810,18 @@ func TestRunSuperpowersRuntime_RateLimitRecordsBackoff(t *testing.T) {
 	if !until.After(time.Now()) {
 		t.Fatalf("recorded backoff deadline %v is not in the future: the window must cover upcoming ticks", until)
 	}
+	// Deadline shape: the fake's error says "resets at 3pm", so the stamp must
+	// be that CLI-reported reset plus the boundary margin — not
+	// now+claudeBackoffWindow(). The fixed 6h window is what kept the
+	// loop-runner asleep ~3h past the real reset on 2026-07-14/15. Both the
+	// same-day and rolled-over reset are accepted so a run straddling 3pm (or
+	// midnight) cannot flake the gate.
+	nowRef := time.Now()
+	wantSame := time.Date(nowRef.Year(), nowRef.Month(), nowRef.Day(), 15, 0, 0, 0, time.Local).Add(claudeResetMargin)
+	wantNext := wantSame.Add(24 * time.Hour)
+	if !until.Equal(wantSame) && !until.Equal(wantNext) {
+		t.Fatalf("recorded backoff deadline = %v, want CLI-reported reset+margin (%v or %v): the runtime rate-limit branch must honor the reset hint over the fixed window", until, wantSame, wantNext)
+	}
 
 	// The durable plan carryover must survive alongside the backoff.
 	gotPath, gotPlan := loadSuperpowersPlanState(fresh)
@@ -827,6 +841,7 @@ func TestRunSuperpowersRuntime_RateLimitRecordsBackoff(t *testing.T) {
 // so the existing deferred clearSuperpowersPlanState guard preserves the plan
 // carryover for the tick after the window expires.
 func TestRunSuperpowersRuntime_ActiveBackoffShortCircuits(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	t.Chdir(t.TempDir())
 
 	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
@@ -913,6 +928,7 @@ func TestRunSuperpowersRuntime_ActiveBackoffShortCircuits(t *testing.T) {
 // proceeds into normal execution and the stale timestamp is cleared from the
 // durable store so it cannot confuse later ticks.
 func TestRunSuperpowersRuntime_ExpiredBackoffExecutes(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	t.Chdir(t.TempDir())
 
 	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner

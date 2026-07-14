@@ -250,6 +250,7 @@ func TestPrioritizeGoapGoals_StampsChargedMilestone(t *testing.T) {
 // earlier in the same cycle — external quota windows cannot consume the
 // milestone-abandon budget.
 func TestScheduledRuntime_RefundsChargeOnRateLimitBackoff(t *testing.T) {
+	isolateClaudeBackoffStore(t)
 	id := seedRefundProgram(t, 1, "pending")
 
 	bb := &Blackboard{ChainState: map[string]any{
