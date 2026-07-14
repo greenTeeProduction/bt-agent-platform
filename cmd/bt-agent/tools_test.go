@@ -1222,6 +1222,62 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	}
 }
 
+// TestBTEvolveParetoAccumulatesDurableArchive pins the missing durable-archive
+// wiring for Pareto front-elitism evolution (Q2 Evolvability milestone 2/5):
+// bt_evolve_pareto currently builds a fresh evolution.ParetoFront on every
+// call and discards it, so the Pareto-optimal front never survives across
+// invocations even though ParetoFront already implements Save/Load/Cap
+// (internal/evolution/pareto.go). Mirroring bt_evolve_qd, the front must
+// warm-start from a durable per-tree archive and persist back to it after
+// every run. The result JSON must report the warm start honestly —
+// "warm_started": false on a cold home, true once an archive exists — and a
+// single archive file must exist under BT_AGENT_HOME after the first run.
+func TestBTEvolveParetoAccumulatesDurableArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	invoke := func(label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke("bt_evolve_pareto", args)
+		if !ok {
+			t.Fatalf("Invoke(bt_evolve_pareto) reported the tool as unregistered on the %s run", label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("bt_evolve_pareto returned no content on the %s run", label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("bt_evolve_pareto %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("bt_evolve_pareto unexpectedly returned an error on the %s run: %v", label, out)
+		}
+		return out
+	}
+
+	first := invoke("first")
+	if got, isBool := first["warm_started"].(bool); !isBool || got {
+		t.Errorf(`first run on a cold home must report "warm_started": false; got %v`, first["warm_started"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "pareto_front_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob pareto front archives after the first run: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("bt_evolve_pareto single-tree runs must persist exactly one durable Pareto front archive under BT_AGENT_HOME after the first run; got %v", matches)
+	}
+
+	second := invoke("second")
+	if got, isBool := second["warm_started"].(bool); !isBool || !got {
+		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
 // TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport pins the
 // bt_evolve_bottlenecks MCP tool that closes the learn→discover→evolve loop:
 // it must be registered by registerMCPTools, consume the knowledge graph's

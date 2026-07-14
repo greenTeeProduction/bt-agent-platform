@@ -1,8 +1,11 @@
 package evolution
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -104,6 +107,7 @@ func (mf MultiFitness) String() string {
 type ParetoFront struct {
 	Individuals []*MultiIndividual `json:"individuals"`
 	Dimensions  []FitnessDimension `json:"dimensions"`
+	Cap         int                `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
 }
 
 // MultiIndividual extends Individual with multi-objective fitness.
@@ -162,6 +166,99 @@ func (pf *ParetoFront) AddFromPopulation(pop *Population, fitnessFn func(*Serial
 
 // Size returns the number of individuals on the Pareto front.
 func (pf *ParetoFront) Size() int { return len(pf.Individuals) }
+
+// paretoArchive is the durable JSON snapshot of a ParetoFront — just the
+// front members, so archive consumers read the shape they already know.
+type paretoArchive struct {
+	Individuals []*MultiIndividual `json:"individuals"`
+}
+
+// cappedIndividuals bounds a slice of individuals to at most limit entries by
+// evicting the lowest-fitness individuals first (ties broken by Genome for
+// determinism). A limit of zero or less means unbounded. The input slice is
+// never mutated; callers get either the original slice or a bounded copy.
+func cappedIndividuals(individuals []*MultiIndividual, limit int) []*MultiIndividual {
+	if limit <= 0 || len(individuals) <= limit {
+		return individuals
+	}
+	sorted := make([]*MultiIndividual, len(individuals))
+	copy(sorted, individuals)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Fitness != sorted[j].Fitness {
+			return sorted[i].Fitness > sorted[j].Fitness
+		}
+		return sorted[i].Genome < sorted[j].Genome
+	})
+	return sorted[:limit]
+}
+
+// Save persists the front's individuals as JSON at path, creating missing
+// parent directories and writing atomically (temp file + rename) under the
+// shared advisory flock so concurrent writers cannot interleave partial
+// archives (ADR-024). When Cap is set, only the Cap strongest individuals
+// (by composite Fitness) are persisted — the weakest are evicted from the
+// archive first. The in-memory front is left untouched.
+func (pf *ParetoFront) Save(path string) error {
+	data, err := json.MarshalIndent(paretoArchive{Individuals: cappedIndividuals(pf.Individuals, pf.Cap)}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal pareto archive: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create pareto archive dir: %w", err)
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write pareto archive: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit pareto archive: %w", err)
+	}
+	return nil
+}
+
+// Load warm-starts the front from the archive at path by merging disk
+// individuals into memory via the existing dominance-based Add: a disk
+// individual is dropped if anything already in memory dominates it, and it
+// evicts any memory individual it dominates in turn. After the merge the
+// front is bounded back to Cap by evicting the lowest-fitness individuals
+// first. A missing archive is a silent cold start; a corrupt archive is an
+// error that leaves the in-memory state untouched.
+func (pf *ParetoFront) Load(path string) error {
+	// Cold start before touching the flock sidecar: the archive directory may
+	// not exist yet, and acquiring the lock would fail trying to create it.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read pareto archive: %w", err)
+	}
+	var snap paretoArchive
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("parse pareto archive %s: %w", path, err)
+	}
+	for _, ind := range snap.Individuals {
+		if ind == nil {
+			continue
+		}
+		pf.Add(ind)
+	}
+	pf.Individuals = cappedIndividuals(pf.Individuals, pf.Cap)
+	return nil
+}
 
 // Best returns all Pareto-optimal individuals sorted by composite score.
 func (pf *ParetoFront) Best(n int) []*MultiIndividual {

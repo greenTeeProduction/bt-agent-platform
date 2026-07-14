@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"path/filepath"
 	"strconv"
 	"testing"
 )
@@ -312,6 +313,113 @@ func TestParetoPopulation_EvolvePareto_ResurrectsExtinctSpecialist(t *testing.T)
 	}
 	if pp.Resurrections <= 0 {
 		t.Errorf("Resurrections = %d, want > 0", pp.Resurrections)
+	}
+}
+
+// TestParetoFront_Load_MissingFileColdStart pins the cold-start contract the
+// cross-run merge flow relies on: loading a path that does not exist yet
+// (parent directory included) is a silent no-op, not an error, and the
+// in-memory front is left untouched — mirrors
+// TestMAPElitesGridLoad_MissingFileColdStart in map_elites_persist_test.go.
+func TestParetoFront_Load_MissingFileColdStart(t *testing.T) {
+	pf := NewParetoFront([]FitnessDimension{DimSuccessRate, DimPathCoverage})
+	path := filepath.Join(t.TempDir(), "absent", "pareto.json")
+	if err := pf.Load(path); err != nil {
+		t.Fatalf("cold-start Load: %v", err)
+	}
+	if pf.Size() != 0 {
+		t.Fatalf("cold-start front size = %d, want 0", pf.Size())
+	}
+}
+
+// TestParetoFront_Save_EvictsLowestFitnessFirst pins the eviction order on
+// the write path: front members are mutually non-dominated by construction,
+// so Cap eviction must fall back to Individual.Fitness (the composite score)
+// to decide which individuals to drop, keeping only the Cap strongest.
+func TestParetoFront_Save_EvictsLowestFitnessFirst(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pareto.json")
+
+	dims := []FitnessDimension{DimSuccessRate, DimPathCoverage}
+	pf := NewParetoFront(dims)
+	pf.Cap = 2
+
+	addTradeoff := func(name string, fitness, sr, pc float64) {
+		tree := makeTestTree(name, 1, 2)
+		ind := &Individual{Tree: tree, Fitness: fitness, Genome: hashTree(tree)}
+		fv := NewMultiFitness()
+		fv.Set(DimSuccessRate, sr)
+		fv.Set(DimPathCoverage, pc)
+		if !pf.Add(&MultiIndividual{Individual: ind, FitnessVec: fv}) {
+			t.Fatalf("%s should be added (non-dominated trade-off)", name)
+		}
+	}
+	// Trade-off along success_rate vs path_coverage keeps all three mutually
+	// non-dominated, so Size() == 3 before any capping happens.
+	addTradeoff("low", 10, 20, 90)
+	addTradeoff("mid", 20, 50, 50)
+	addTradeoff("high", 30, 90, 20)
+	if pf.Size() != 3 {
+		t.Fatalf("front size = %d, want 3 before save", pf.Size())
+	}
+
+	if err := pf.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reload := NewParetoFront(dims)
+	if err := reload.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := reload.Size(); got != 2 {
+		t.Fatalf("persisted front size = %d, want cap 2", got)
+	}
+	for _, ind := range reload.Individuals {
+		if ind.Fitness == 10 {
+			t.Fatalf("lowest-fitness individual (10) should have been evicted from the persisted archive")
+		}
+	}
+}
+
+// TestParetoFront_Load_MergeKeepsFitterCopy exercises the merge-on-load
+// semantics: unlike MAPElitesGrid (keyed by niche), ParetoFront has no niche
+// key, so Load must merge disk individuals into memory via the existing
+// dominance-based Add — an in-memory individual that dominates a persisted
+// one must survive, and the dominated disk copy must be dropped.
+func TestParetoFront_Load_MergeKeepsFitterCopy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pareto.json")
+	dims := []FitnessDimension{DimSuccessRate, DimPathCoverage}
+
+	// Run 1 persists a weak individual.
+	run1 := NewParetoFront(dims)
+	weakTree := makeTestTree("shared", 1, 2)
+	weakInd := &Individual{Tree: weakTree, Fitness: 10, Genome: hashTree(weakTree)}
+	weakFV := NewMultiFitness()
+	weakFV.Set(DimSuccessRate, 30)
+	weakFV.Set(DimPathCoverage, 30)
+	run1.Add(&MultiIndividual{Individual: weakInd, FitnessVec: weakFV})
+	if err := run1.Save(path); err != nil {
+		t.Fatalf("run1 Save: %v", err)
+	}
+
+	// Run 2 already holds an individual that strictly dominates the one on
+	// disk (better on every dimension).
+	run2 := NewParetoFront(dims)
+	strongTree := makeTestTree("shared-strong", 1, 2)
+	strongInd := &Individual{Tree: strongTree, Fitness: 50, Genome: hashTree(strongTree)}
+	strongFV := NewMultiFitness()
+	strongFV.Set(DimSuccessRate, 80)
+	strongFV.Set(DimPathCoverage, 80)
+	run2.Add(&MultiIndividual{Individual: strongInd, FitnessVec: strongFV})
+
+	if err := run2.Load(path); err != nil {
+		t.Fatalf("run2 Load: %v", err)
+	}
+
+	if got := run2.Size(); got != 1 {
+		t.Fatalf("merged front size = %d, want 1 (dominated disk copy dropped)", got)
+	}
+	if run2.Individuals[0].Fitness != 50 {
+		t.Fatalf("merged front kept fitness %.0f, want the fitter in-memory copy (50)", run2.Individuals[0].Fitness)
 	}
 }
 

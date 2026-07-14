@@ -44,6 +44,8 @@ type NSGAIIPopulation struct {
 	Fronts         []NSGAIIFront                        `json:"-"`             // non-dominated fronts
 	CrowdingDist   []float64                            `json:"crowding_dist"` // per-individual crowding distance
 	FitnessMultiFn func(*SerializableNode) MultiFitness `json:"-"`
+	Cap            int                                  `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
+	Archive        *ParetoFront                         `json:"-"`             // durable cross-run archive of front 0, populated by Load
 }
 
 // NewNSGAIIPopulation creates a population with NSGA-II support. Specialists
@@ -60,6 +62,55 @@ func NewNSGAIIPopulation(size int, baseTree *SerializableNode, dims []FitnessDim
 		FitnessVecs:  make([]MultiFitness, size),
 		CrowdingDist: make([]float64, size),
 	}
+}
+
+// frontZeroIndividuals wraps the current Pareto-optimal front (Fronts[0]) as
+// MultiIndividuals so it can be handed to a ParetoFront for persistence —
+// front 0 members are mutually non-dominated by construction, same as
+// ParetoFront.Individuals, so the existing dominance-based Save/Load logic
+// applies unchanged. Returns nil if no non-dominated sort has run yet.
+func (nsga2 *NSGAIIPopulation) frontZeroIndividuals() []*MultiIndividual {
+	if len(nsga2.Fronts) == 0 {
+		return nil
+	}
+	front0 := nsga2.Fronts[0].Indices
+	individuals := make([]*MultiIndividual, 0, len(front0))
+	for _, idx := range front0 {
+		individuals = append(individuals, &MultiIndividual{
+			Individual: &nsga2.Individuals[idx],
+			FitnessVec: nsga2.FitnessVecs[idx],
+		})
+	}
+	return individuals
+}
+
+// Save persists the current Pareto-optimal front (Fronts[0]) as a durable
+// cross-run archive at path, evicting the weakest individuals first when Cap
+// is set — mirrors ParetoFront.Save (pareto.go), which this delegates to.
+func (nsga2 *NSGAIIPopulation) Save(path string) error {
+	archive := &ParetoFront{
+		Individuals: nsga2.frontZeroIndividuals(),
+		Dimensions:  nsga2.Dimensions,
+		Cap:         nsga2.Cap,
+	}
+	return archive.Save(path)
+}
+
+// Load warm-starts Archive from the archive at path, merging disk
+// individuals into the current front 0 via dominance — mirrors
+// ParetoFront.Load (pareto.go), which this delegates to. A missing archive is
+// a silent cold start that leaves Archive populated from front 0 alone.
+func (nsga2 *NSGAIIPopulation) Load(path string) error {
+	archive := &ParetoFront{
+		Individuals: nsga2.frontZeroIndividuals(),
+		Dimensions:  nsga2.Dimensions,
+		Cap:         nsga2.Cap,
+	}
+	if err := archive.Load(path); err != nil {
+		return err
+	}
+	nsga2.Archive = archive
+	return nil
 }
 
 // Evaluate scores all individuals using the multi-fitness function and runs

@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"math"
+	"path/filepath"
 	"testing"
 )
 
@@ -296,4 +297,122 @@ func TestNSGAII_Evolve_Basic(t *testing.T) {
 		t.Error("expected result tree to have a name")
 	}
 	t.Logf("NSGA-II evolve result: %s (fitness=%.2f)", result.Name, nsga2.BestFitness)
+}
+
+// TestNSGAIIPopulation_Load_MissingFileColdStart pins the cold-start contract
+// milestone 3/5 of the Q2 Evolvability program requires: loading a path that
+// does not exist yet (parent directory included) is a silent no-op, not an
+// error — mirrors TestParetoFront_Load_MissingFileColdStart (milestone 1/5,
+// pareto.go), which NSGAIIPopulation's final front (Fronts[0]) must match so
+// all five evolution algorithms share the same durable cross-run archive
+// contract. NSGAIIPopulation has no Save/Load/Archive today, so this fails to
+// compile.
+func TestNSGAIIPopulation_Load_MissingFileColdStart(t *testing.T) {
+	baseTree := &SerializableNode{Name: "root", Type: "Selector"}
+	nsga2 := NewNSGAIIPopulation(3, baseTree, []FitnessDimension{DimSuccessRate, DimPathCoverage})
+	path := filepath.Join(t.TempDir(), "absent", "nsga2.json")
+	if err := nsga2.Load(path); err != nil {
+		t.Fatalf("cold-start Load: %v", err)
+	}
+	if nsga2.Archive == nil || nsga2.Archive.Size() != 0 {
+		t.Fatalf("cold-start archive = %v, want empty non-nil archive", nsga2.Archive)
+	}
+}
+
+// TestNSGAIIPopulation_Save_EvictsLowestFitnessFirst pins the write-path
+// eviction order for milestone 3/5: front-0 members are mutually
+// non-dominated by construction (same as ParetoFront), so Cap eviction must
+// fall back to Individual.Fitness (the composite score) to decide which
+// individuals to drop, keeping only the Cap strongest — mirrors
+// TestParetoFront_Save_EvictsLowestFitnessFirst.
+func TestNSGAIIPopulation_Save_EvictsLowestFitnessFirst(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nsga2.json")
+	dims := []FitnessDimension{DimSuccessRate, DimPathCoverage}
+	baseTree := &SerializableNode{Name: "root", Type: "Selector"}
+
+	nsga2 := NewNSGAIIPopulation(3, baseTree, dims)
+	nsga2.Cap = 2
+
+	setTradeoff := func(i int, name string, fitness, sr, pc float64) {
+		tree := makeTestTree(name, 1, 2)
+		nsga2.Individuals[i] = Individual{Tree: tree, Fitness: fitness, Genome: hashTree(tree)}
+		fv := NewMultiFitness()
+		fv.Set(DimSuccessRate, sr)
+		fv.Set(DimPathCoverage, pc)
+		nsga2.FitnessVecs[i] = fv
+	}
+	// Trade-off along success_rate vs path_coverage keeps all three mutually
+	// non-dominated, so front 0 holds all 3 before any capping happens.
+	setTradeoff(0, "low", 10, 20, 90)
+	setTradeoff(1, "mid", 20, 50, 50)
+	setTradeoff(2, "high", 30, 90, 20)
+	nsga2.Fronts = nsga2.fastNonDominatedSort(nsga2.FitnessVecs)
+	if len(nsga2.Fronts) == 0 || len(nsga2.Fronts[0].Indices) != 3 {
+		t.Fatalf("test setup: want all 3 individuals in front 0, got fronts=%+v", nsga2.Fronts)
+	}
+
+	if err := nsga2.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reload := NewNSGAIIPopulation(1, baseTree, dims)
+	reload.Cap = 2
+	if err := reload.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if reload.Archive == nil || reload.Archive.Size() != 2 {
+		t.Fatalf("persisted archive = %v, want cap 2", reload.Archive)
+	}
+	for _, ind := range reload.Archive.Individuals {
+		if ind.Fitness == 10 {
+			t.Fatalf("lowest-fitness individual (10) should have been evicted from the persisted archive")
+		}
+	}
+}
+
+// TestNSGAIIPopulation_Load_MergeKeepsFitterCopy exercises the merge-on-load
+// semantics milestone 3/5 requires: like ParetoFront, NSGAIIPopulation's
+// archive has no niche key, so Load must merge disk individuals into memory
+// via dominance — an in-memory individual that dominates a persisted one must
+// survive, and the dominated disk copy must be dropped. Mirrors
+// TestParetoFront_Load_MergeKeepsFitterCopy.
+func TestNSGAIIPopulation_Load_MergeKeepsFitterCopy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nsga2.json")
+	dims := []FitnessDimension{DimSuccessRate, DimPathCoverage}
+	baseTree := &SerializableNode{Name: "root", Type: "Selector"}
+
+	// Run 1 persists a weak individual.
+	run1 := NewNSGAIIPopulation(1, baseTree, dims)
+	weakTree := makeTestTree("shared", 1, 2)
+	run1.Individuals[0] = Individual{Tree: weakTree, Fitness: 10, Genome: hashTree(weakTree)}
+	weakFV := NewMultiFitness()
+	weakFV.Set(DimSuccessRate, 30)
+	weakFV.Set(DimPathCoverage, 30)
+	run1.FitnessVecs[0] = weakFV
+	run1.Fronts = run1.fastNonDominatedSort(run1.FitnessVecs)
+	if err := run1.Save(path); err != nil {
+		t.Fatalf("run1 Save: %v", err)
+	}
+
+	// Run 2 already holds an individual that strictly dominates the one on
+	// disk (better on every dimension).
+	run2 := NewNSGAIIPopulation(1, baseTree, dims)
+	strongTree := makeTestTree("shared-strong", 1, 2)
+	run2.Individuals[0] = Individual{Tree: strongTree, Fitness: 50, Genome: hashTree(strongTree)}
+	strongFV := NewMultiFitness()
+	strongFV.Set(DimSuccessRate, 80)
+	strongFV.Set(DimPathCoverage, 80)
+	run2.FitnessVecs[0] = strongFV
+	run2.Fronts = run2.fastNonDominatedSort(run2.FitnessVecs)
+
+	if err := run2.Load(path); err != nil {
+		t.Fatalf("run2 Load: %v", err)
+	}
+
+	if got := run2.Archive.Size(); got != 1 {
+		t.Fatalf("merged archive size = %d, want 1 (dominated disk copy dropped)", got)
+	}
+	if run2.Archive.Individuals[0].Fitness != 50 {
+		t.Fatalf("merged archive kept fitness %.0f, want the fitter in-memory copy (50)", run2.Archive.Individuals[0].Fitness)
+	}
 }

@@ -62,6 +62,16 @@ func mapElitesArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "map_elites_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// paretoFrontArchivePath resolves the durable Pareto front archive
+// bt_evolve_pareto warm-starts from and persists to (Q2 Evolvability,
+// milestone 2/5 of the durable cross-run archive program), scoped per base
+// tree like the other archive helpers so runs on different base trees do not
+// warm-start-merge each other's Pareto-optimal individuals through a single
+// shared file.
+func paretoFrontArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "pareto_front_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
 // fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
 // of evolution.TreeFileName. That helper is deliberately not reused: its
@@ -1061,15 +1071,45 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Front:      evolution.NewParetoFront(dims),
 			}
 			best := pp.EvolvePareto(params.Generations, evolution.StructuralMultiFitness)
-			stats := pp.Front.Stats()
-			data, _ := json.Marshal(map[string]interface{}{
+			// Warm-start a durable Pareto front archive from the evolved
+			// population so Pareto-optimal individuals accumulate across runs
+			// instead of resetting on every call (Q2 Evolvability). This is a
+			// ParetoFront separate from pp.Front: EvolvePareto's internal
+			// Evaluate rebuilds pp.Front from scratch every generation, so the
+			// durable archive instead merges in once, after evolution,
+			// against the final population — mirroring how bt_evolve_qd's
+			// grid is loaded and then filled via InsertFromPopulation.
+			archive := evolution.NewParetoFront(dims)
+			archive.Cap = population * 5
+			archivePath := paretoFrontArchivePath(params.Tree)
+			_, statErr := os.Stat(archivePath)
+			warmStarted := statErr == nil
+			archiveLoadErr := ""
+			if err := archive.Load(archivePath); err != nil {
+				warmStarted = false
+				archiveLoadErr = err.Error()
+			}
+			archive.AddFromPopulation(pp.Population, evolution.StructuralMultiFitness)
+			stats := archive.Stats()
+			result := map[string]interface{}{
 				"tree": params.Tree, "generations": pp.Generation,
 				"node_count":      evolution.CountNodes(best),
 				"front_size":      stats.FrontSize,
 				"diversity_score": stats.DiversityScore,
 				"best_per_dim":    stats.BestPerDim,
 				"health":          evolveHealthProjection(pp.Population),
-			})
+				"warm_started":    warmStarted,
+			}
+			if archiveLoadErr != "" {
+				result["archive_load_error"] = archiveLoadErr
+			}
+			// Persist the merged front so the next invocation resumes from
+			// this run's Pareto-optimal individuals. A save failure is
+			// surfaced non-fatally alongside the evolution result.
+			if err := archive.Save(archivePath); err != nil {
+				result["archive_save_error"] = err.Error()
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
