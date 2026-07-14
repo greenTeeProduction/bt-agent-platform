@@ -323,16 +323,21 @@ func goalTreeSlug(name string) string {
 		fields = fields[:5]
 	}
 	var b strings.Builder
-	for i, f := range fields {
-		if i > 0 {
-			b.WriteByte('_')
-		}
+	for _, f := range fields {
+		var part strings.Builder
 		for _, r := range f {
 			switch {
 			case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
-				b.WriteRune(r)
+				part.WriteRune(r)
 			}
 		}
+		if part.Len() == 0 {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('_')
+		}
+		b.WriteString(part.String())
 	}
 	if b.Len() == 0 {
 		return "goal"

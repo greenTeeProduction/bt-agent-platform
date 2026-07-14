@@ -23,6 +23,7 @@ func newScopedStore(limits Limits) *scopedStore {
 }
 
 func (s *scopedStore) get(key string) (Entry, bool) {
+	key = normalizeKey(key)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	e, ok := s.entries[key]
