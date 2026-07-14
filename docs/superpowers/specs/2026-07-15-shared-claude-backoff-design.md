@@ -92,6 +92,7 @@ Both save sites adopt it:
 | `resets 3am` (now 04:00) | tomorrow 03:02 local |
 | `…reached\|<epoch +3h>` | epoch + 2m |
 | `…reached\|<epoch +48h>` | now + 24h (cap) |
+| `weekly limit · resets Jul 7` (real DLQ shape) | now + fallback window — the date form is intentionally unparsed; the 24h cap would dominate a multi-day sleep anyway |
 | no parseable hint | now + fallback window (unchanged) |
 
 ## Testing

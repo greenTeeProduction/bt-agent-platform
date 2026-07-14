@@ -59,6 +59,7 @@ func TestParseClaudeRateLimitReset(t *testing.T) {
 		{"resets 12pm is noon", "resets 12pm", time.Date(2026, 7, 15, 12, 0, 0, 0, time.Local), true},
 		{"resets 12am is midnight", "resets 12am", time.Date(2026, 7, 16, 0, 0, 0, 0, time.Local), true},
 		{"bare hour rejected", "resets 3", time.Time{}, false},
+		{"weekly date form falls back (real DLQ shape)", "You've hit your weekly limit · resets Jul 7", time.Time{}, false},
 		{"past epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(-time.Hour).Unix()), time.Time{}, false},
 		{"absurd epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(30*24*time.Hour).Unix()), time.Time{}, false},
 		{"no hint", "green-phase claude failed: exit status 1", time.Time{}, false},
