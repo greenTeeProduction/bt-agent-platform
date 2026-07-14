@@ -324,6 +324,10 @@ func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, _ *http.Request) {
 		card.Skills = append(card.Skills, c.Skills...)
 	}
 
+	if sig, err := SignAgentCard(card); err == nil {
+		card.Signatures = append(card.Signatures, a2a.AgentCardSignature{Signature: sig})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(card)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
 )
 
@@ -692,6 +693,117 @@ func TestHandleWorkflowApproveReject_UpdatesTaskStore(t *testing.T) {
 		t.Errorf("taskStore.Approved() does not contain %q after /api/workflow/approve; "+
 			"handleSprintExecute dispatches exclusively from taskStore.Approved(), so a "+
 			"workflow-level approval that never reaches taskStore is invisible to it", taskAID)
+	}
+}
+
+// TestHandleSprintExecute_UpdatesCurrentWorkflow pins the NotebookLM research
+// gap: dual task-state representation in the sprint-execution path.
+// handleSprintExecute (main.go) dispatches every taskStore.Approved() task
+// and, as each finishes, calls taskStore.UpdateStatus/SetOutput exclusively —
+// it never reads or writes the package-level currentWorkflow at all.
+// TestHandleWorkflowApproveReject_UpdatesTaskStore above already pins the
+// opposite direction (workflow-level approve/reject must also reach
+// taskStore); this test pins the missing reverse direction: once a sprint
+// actually runs and completes a task, the corresponding
+// currentWorkflow.Tasks[i].Status and currentWorkflow.Company.CurrentSprint
+// must advance too, or every dashboard surface reading currentWorkflow
+// (handleWorkflowPending/PendingApprovals, the sprint-goal UI, ExecuteSprint's
+// own Company.CurrentSprint convention in workflow_engine.go) is permanently
+// stuck showing the task as still merely "approved" even after it has
+// actually finished executing.
+func TestHandleSprintExecute_UpdatesCurrentWorkflow(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	origTaskStore := taskStore
+	origWorkflow := currentWorkflow
+	prevRunner := dashAgentRunner
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		currentWorkflowMu.Lock()
+		currentWorkflow = origWorkflow
+		currentWorkflowMu.Unlock()
+		dashAgentRunner = prevRunner
+	})
+
+	// Force RunTask to succeed deterministically without a real BT agent
+	// process: an AlwaysSucceed tree with no QualitySpec, the same technique
+	// TestHandleAgentExecute_SetsQualityScoreFromRunResult above uses.
+	dashAgentRunner = &agent.RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode {
+			return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+		},
+	}
+
+	dir := t.TempDir()
+	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+
+	company := startup.NewDefaultCompany()
+	company.CurrentSprint = 1
+	wf := dashboard.NewWorkflow("test-wf", nil, company)
+	wf.ID = "wf-sprint-test"
+	wf.Tasks = []dashboard.WorkflowTask{
+		{ID: "task-a", Status: dashboard.StatusApproved, Priority: dashboard.PriorityHigh, SprintTarget: 2},
+	}
+	currentWorkflowMu.Lock()
+	currentWorkflow = wf
+	currentWorkflowMu.Unlock()
+
+	// Seed taskStore exactly the way handleAnalyze does: composed ID
+	// wf.ID + "-" + wt.ID, then approve it so taskStore.Approved() dispatches
+	// it — mirroring TestHandleWorkflowApproveReject_UpdatesTaskStore's setup.
+	taskID := wf.ID + "-task-a"
+	if err := taskStore.Create(dashboard.Task{
+		ID: taskID, Title: "Task A", Priority: "high", Sprint: 2, Assignee: "engineer",
+	}); err != nil {
+		t.Fatalf("seed task-a: %v", err)
+	}
+	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
+		t.Fatalf("approve task-a: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sprint/execute", nil)
+	rr := httptest.NewRecorder()
+	handleSprintExecute(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("sprint execute status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		sprintState.Lock()
+		running := sprintState.Running
+		sprintState.Unlock()
+		if !running {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("sprint never finished running within 5s")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	storedA, ok := taskStore.Get(taskID)
+	if !ok {
+		t.Fatalf("taskStore lost record %q after sprint execution", taskID)
+	}
+	if storedA.Status != "completed" {
+		t.Fatalf("taskStore record %q Status = %q after sprint execution, want %q (sprint didn't run as expected, "+
+			"can't test the currentWorkflow reconciliation)", taskID, storedA.Status, "completed")
+	}
+
+	currentWorkflowMu.RLock()
+	gotStatus := currentWorkflow.Tasks[0].Status
+	gotSprint := currentWorkflow.Company.CurrentSprint
+	currentWorkflowMu.RUnlock()
+
+	if gotStatus != dashboard.StatusCompleted {
+		t.Errorf("currentWorkflow.Tasks[0].Status = %v after handleSprintExecute completed the task, want %v; "+
+			"handleSprintExecute must also update the currentWorkflow.WorkflowTask sharing the composed ID, "+
+			"not just taskStore", gotStatus, dashboard.StatusCompleted)
+	}
+	if gotSprint != 2 {
+		t.Errorf("currentWorkflow.Company.CurrentSprint = %d after executing a SprintTarget=2 task, want 2; "+
+			"handleSprintExecute never advances Company.CurrentSprint, only taskStore", gotSprint)
 	}
 }
 

@@ -36,6 +36,12 @@ func ConvertToAgentCard(def agent.Definition, baseURL string) (*a2a.AgentCard, e
 		},
 	}
 
+	sig, err := SignAgentCard(card)
+	if err != nil {
+		return nil, err
+	}
+	card.Signatures = append(card.Signatures, a2a.AgentCardSignature{Signature: sig})
+
 	return card, nil
 }
 

@@ -78,6 +78,12 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		Gate:           evolution.NewQualityGate(snapDir),
 		SnapshotDir:    snapDir,
 		CrisisDetector: evolution.NewCrisisDetector(),
+
+		// MetaValidator catches structurally broken mutations (empty
+		// selectors, unbounded retries, expert antipatterns) that the
+		// fitness/quality/SLO gates above never inspect. Production-safe
+		// defaults (see evolution.NewMetaValidator).
+		MetaValidator: evolution.NewMetaValidator(evolution.MetaValidatorConfig{}),
 	}, nil
 }
 

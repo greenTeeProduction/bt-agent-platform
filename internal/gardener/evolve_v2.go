@@ -207,6 +207,18 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			}
 		}
 
+		// Meta-validation — the fitness/quality/SLO gates above only look at
+		// composite scores, so a structurally broken candidate (empty
+		// selector, unbounded retry, expert antipattern) can still clear them.
+		// Consult the structural safety layer last, right before commit.
+		if g.cfg.MetaValidator != nil {
+			metaReport := g.cfg.MetaValidator.ValidateMutation(tree, candidateTree, currentFitness.Composite, candidateFitness.Composite)
+			if metaReport.Decision == evolution.MetaReject {
+				rejected++
+				continue
+			}
+		}
+
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
 			if bank != nil {

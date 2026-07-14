@@ -1,9 +1,13 @@
 package a2a
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
 )
 
 func TestSignAgentCard(t *testing.T) {
@@ -133,5 +137,124 @@ func TestSignAgentCard_NilCard(t *testing.T) {
 	_, err := SignAgentCard(nil)
 	if err != nil {
 		t.Fatalf("SignAgentCard(nil) should not error, got: %v", err)
+	}
+}
+
+// ---- wiring: card-serving path (card.go) ------------------------------------
+
+// ConvertToAgentCard is the single origin point every served/cached AgentCard
+// passes through (BuildCardRegistry, and the server's per-bid card build). It
+// must attach a signature so downstream consumers can detect tampering.
+func TestConvertToAgentCard_AttachesSignature(t *testing.T) {
+	def := agent.Definition{
+		Name:        "signed-agent",
+		Description: "agent whose card should carry a signature",
+		Version:     "1.0.0",
+		Tree:        "domain:code_review",
+	}
+
+	card, err := ConvertToAgentCard(def, "http://localhost:8686")
+	if err != nil {
+		t.Fatalf("ConvertToAgentCard failed: %v", err)
+	}
+
+	if len(card.Signatures) == 0 {
+		t.Fatal("expected ConvertToAgentCard to attach a signature to the card")
+	}
+
+	sig := card.Signatures[len(card.Signatures)-1].Signature
+	card.Signatures = card.Signatures[:len(card.Signatures)-1]
+	valid, err := VerifyAgentCard(card, sig)
+	if err != nil {
+		t.Fatalf("VerifyAgentCard failed: %v", err)
+	}
+	if !valid {
+		t.Error("attached signature does not verify against the card's content")
+	}
+}
+
+// ---- wiring: card-consuming path (auction.go) -------------------------------
+
+// auctionCandidates is production's real trust boundary: it turns the live
+// card registry into dispatchable candidate URLs for AuctionDelegate. A card
+// whose attached signature no longer matches its content (tampered after
+// signing, or forged) must never become a dispatchable candidate — but a card
+// that was never signed at all must still be trusted, since signing is
+// opt-in and existing candidate cards carry none.
+func TestAuctionCandidates_RejectsTamperedCardSignature(t *testing.T) {
+	valid := cardWithURL("valid", "http://valid", "domain")
+	sig, err := SignAgentCard(valid)
+	if err != nil {
+		t.Fatalf("SignAgentCard failed: %v", err)
+	}
+	valid.Signatures = []a2a.AgentCardSignature{{Signature: sig}}
+
+	tampered := cardWithURL("tampered", "http://tampered", "domain")
+	sig2, err := SignAgentCard(tampered)
+	if err != nil {
+		t.Fatalf("SignAgentCard failed: %v", err)
+	}
+	tampered.Signatures = []a2a.AgentCardSignature{{Signature: sig2}}
+	tampered.Name = "tampered-modified" // mutated after signing: signature no longer matches
+
+	unsigned := cardWithURL("unsigned", "http://unsigned", "domain")
+
+	origCards := AuctionCardsFn
+	AuctionCardsFn = func() map[string]*a2a.AgentCard {
+		return map[string]*a2a.AgentCard{
+			"valid":    valid,
+			"tampered": tampered,
+			"unsigned": unsigned,
+		}
+	}
+	t.Cleanup(func() { AuctionCardsFn = origCards })
+
+	got := auctionCandidates(TaskAnnouncement{TaskID: "t1"}, nil)
+
+	if _, ok := got["tampered"]; ok {
+		t.Error("expected candidate with a tampered card signature to be excluded")
+	}
+	if _, ok := got["valid"]; !ok {
+		t.Error("expected candidate with a valid card signature to be included")
+	}
+	if _, ok := got["unsigned"]; !ok {
+		t.Error("expected candidate with no card signature at all to remain trusted (opt-in signing)")
+	}
+}
+
+// ---- wiring: card HTTP-serving path (server.go) -----------------------------
+
+// The global agent card served at /.well-known/agent-card.json is assembled
+// ad hoc in handleGlobalAgentCard rather than via ConvertToAgentCard, so it
+// needs its own signing step before being written to the response.
+func TestHandleGlobalAgentCard_ResponseIsSigned(t *testing.T) {
+	s := &Server{
+		BaseURL: "http://localhost:8686",
+		CardCache: map[string]*a2a.AgentCard{
+			"agent-a": cardWithURL("agent-a", "http://agent-a", "domain"),
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil)
+	rec := httptest.NewRecorder()
+	s.handleGlobalAgentCard(rec, req)
+
+	var card a2a.AgentCard
+	if err := json.Unmarshal(rec.Body.Bytes(), &card); err != nil {
+		t.Fatalf("failed to decode served agent card: %v", err)
+	}
+
+	if len(card.Signatures) == 0 {
+		t.Fatal("expected served global agent card to carry a signature")
+	}
+
+	sig := card.Signatures[len(card.Signatures)-1].Signature
+	card.Signatures = card.Signatures[:len(card.Signatures)-1]
+	valid, err := VerifyAgentCard(&card, sig)
+	if err != nil {
+		t.Fatalf("VerifyAgentCard failed: %v", err)
+	}
+	if !valid {
+		t.Error("served global agent card signature does not verify against its content")
 	}
 }

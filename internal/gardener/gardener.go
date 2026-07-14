@@ -414,6 +414,14 @@ type Config struct {
 	// learned-ordering pass in evolveTreeV2 when EvolveV2Config.SelectorOrdering
 	// is enabled. Empty disables the pass regardless of the flag.
 	SelectorStatsPath string
+	// MetaValidator, when non-nil, is consulted inside evolveTreeV2's
+	// per-candidate acceptance loop after the fitness/quality/SLO gates have
+	// already accepted a candidate: a MetaReject decision rejects the
+	// candidate regardless of how well it scored on fitness alone, catching
+	// structurally broken mutations (empty selectors, unbounded retries,
+	// expert-antipattern hits) those gates never inspect. Nil disables the
+	// check, preserving the historical fitness-only acceptance behavior.
+	MetaValidator *evolution.MetaValidator
 }
 
 // Gardener is the 24/7 tree evolution agent.

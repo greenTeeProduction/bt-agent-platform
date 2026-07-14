@@ -244,6 +244,33 @@ func (w *Workflow) RejectTask(taskID, rejector, reason string) *WorkflowTask {
 	return nil
 }
 
+// SetTaskStatus updates the status of the WorkflowTask matching taskID and,
+// when the task is being marked completed, advances Company.CurrentSprint to
+// keep pace with the task's SprintTarget — mirroring ExecuteSprint's own
+// convention. This lets callers that dispatch tasks individually (e.g.
+// handleSprintExecute's per-task loop, rather than a batched ExecuteSprint
+// call) reconcile currentWorkflow with taskStore as each task finishes.
+func (w *Workflow) SetTaskStatus(taskID string, status WorkflowTaskStatus) *WorkflowTask {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i := range w.Tasks {
+		if w.Tasks[i].ID != taskID {
+			continue
+		}
+		w.Tasks[i].Status = status
+		if status == StatusCompleted {
+			now := time.Now()
+			w.Tasks[i].CompletedAt = &now
+			if w.Tasks[i].SprintTarget > w.Company.CurrentSprint {
+				w.Company.CurrentSprint = w.Tasks[i].SprintTarget
+			}
+		}
+		w.UpdatedAt = time.Now()
+		return &w.Tasks[i]
+	}
+	return nil
+}
+
 // Prioritize reorders tasks by priority and sprint target.
 func (w *Workflow) Prioritize() {
 	w.mu.Lock()

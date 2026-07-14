@@ -742,6 +742,27 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 	_ = encodeJSON(w, map[string]string{"status": "rejected", "id": taskID})
 }
 
+// syncWorkflowTaskStatus reconciles currentWorkflow's WorkflowTask (and, via
+// Workflow.SetTaskStatus, Company.CurrentSprint on completion) with a
+// taskStore status change made by handleSprintExecute's per-task dispatch
+// loop. taskStore records composed IDs (wf.ID+"-"+wt.ID, the same convention
+// handleAnalyze uses to persist tasks and handleWorkflowApprove/Reject use to
+// mirror approvals — see those handlers), so only tasks carrying the active
+// workflow's ID prefix are eligible for reconciliation.
+func syncWorkflowTaskStatus(taskID string, status dashboard.WorkflowTaskStatus) {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		return
+	}
+	prefix := wf.ID + "-"
+	if !strings.HasPrefix(taskID, prefix) {
+		return
+	}
+	wf.SetTaskStatus(strings.TrimPrefix(taskID, prefix), status)
+}
+
 func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	// Approved() returns tasks ordered by priority then sprint, so the
 	// sequential dispatch loop below already runs critical/high-priority
@@ -790,6 +811,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 
 			// Mark as in_progress
 			_ = taskStore.UpdateStatus(task.ID, "in_progress")
+			syncWorkflowTaskStatus(task.ID, dashboard.StatusInProgress)
 
 			// Pick tree if not set
 			treeID := task.TreeID
@@ -811,12 +833,15 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 			if err != nil && outcome == "timeout" {
 				_ = taskStore.UpdateStatus(task.ID, "failed")
 				_ = taskStore.SetOutput(task.ID, "timeout: "+err.Error(), "timeout")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
 			} else if outcome == "failed" || err != nil {
 				_ = taskStore.UpdateStatus(task.ID, "failed")
 				_ = taskStore.SetOutput(task.ID, output, "failed")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
 			} else {
 				_ = taskStore.UpdateStatus(task.ID, "completed")
 				_ = taskStore.SetOutput(task.ID, output, outcome)
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusCompleted)
 			}
 		}
 

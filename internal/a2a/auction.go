@@ -606,10 +606,16 @@ func auctionCandidates(ann TaskAnnouncement, chainState map[string]any) map[stri
 	if len(cards) == 0 {
 		return nil
 	}
+	trusted := make(map[string]*a2a.AgentCard, len(cards))
+	for name, card := range cards {
+		if cardSignatureValid(card) {
+			trusted[name] = card
+		}
+	}
 
 	out := make(map[string]string)
-	for _, name := range EligibleBidders(cards, ann) {
-		if url := cardURL(cards[name]); url != "" {
+	for _, name := range EligibleBidders(trusted, ann) {
+		if url := cardURL(trusted[name]); url != "" {
 			out[name] = url
 		}
 	}

@@ -958,3 +958,79 @@ func TestEvolveTreeV2_CalmCycle_NoCrisisMetrics(t *testing.T) {
 // hasChildNamed and the other v1 idempotency-guard helpers were retired with
 // the v1 pipeline (ADR-010 Phase 6); v2 relies on clone-and-prescore candidate
 // isolation instead.
+
+// ============================================================================
+// MetaValidator wiring tests (NotebookLM research goal)
+// ============================================================================
+
+// metaValidatorWiringGardener builds a Gardener around gateDisabledTestTree(),
+// which reliably produces one high-scoring, fitness-improving candidate (the
+// 0.92-score add_before/HasClearTask mutation) with the QualityGate and
+// ValidationGate both configured to accept it — isolating whatever
+// MetaValidator decides as the only variable.
+func metaValidatorWiringGardener(t *testing.T, metaValidator *evolution.MetaValidator) (*Gardener, TreeEntry) {
+	t.Helper()
+	dir := t.TempDir()
+	snapDir := t.TempDir()
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	const treeName = "meta_validator_wiring"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "meta validator wiring", Tree: tree, FilePath: dir + "/tree-" + treeName + ".json", Active: true},
+	}
+	registry.mu.Unlock()
+
+	cfg := Config{
+		Registry:       registry,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		Gate:           evolution.NewQualityGate(snapDir),
+		SnapshotDir:    snapDir,
+		ValidationGate: ValidationGateConfig{Enabled: false},
+		MaxMutations:   1,
+		MetaValidator:  metaValidator,
+	}
+	return NewGardener(cfg), registry.List()[0]
+}
+
+// TestEvolveTreeV2_MetaValidatorRejectsStructurallyBrokenMutation pins the
+// NotebookLM research goal: evolution.MetaValidator must be consulted inside
+// the live per-candidate acceptance loop in evolveTreeV2, so a structurally
+// broken candidate is rejected even when the fitness/SLO gates (QualityGate,
+// ValidationGate) already accepted it.
+func TestEvolveTreeV2_MetaValidatorRejectsStructurallyBrokenMutation(t *testing.T) {
+	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
+
+	t.Run("AcceptsWithoutMetaValidator", func(t *testing.T) {
+		g, entry := metaValidatorWiringGardener(t, nil)
+		m := g.evolveTreeV2(entry, v2cfg)
+		if m.Mutations != 1 {
+			t.Fatalf("precondition failed: expected fitness/SLO gates alone to accept the candidate (Mutations=1), got %d — fixture no longer produces an acceptable candidate", m.Mutations)
+		}
+	})
+
+	t.Run("RejectsWithMetaValidator", func(t *testing.T) {
+		// MinScore: 1.0 means ANY structural issue or warning forces MetaReject —
+		// standing in for "structurally broken" without depending on exactly
+		// which check a given candidate trips.
+		strict := evolution.NewMetaValidator(evolution.MetaValidatorConfig{MinScore: 1.0})
+		g, entry := metaValidatorWiringGardener(t, strict)
+		m := g.evolveTreeV2(entry, v2cfg)
+		if m.Mutations != 0 {
+			t.Errorf("expected MetaValidator to reject the candidate despite fitness/SLO gates accepting it, got %d mutations applied", m.Mutations)
+		}
+	})
+}
