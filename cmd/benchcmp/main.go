@@ -39,31 +39,38 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(3)
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// run executes the benchcmp CLI against the given args and I/O streams,
+// returning the process exit code. Kept separate from main so tests can
+// drive it without touching os.Args/os.Exit/os.Stdin/os.Stdout/os.Stderr.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) < 1 {
+		printUsage(stderr)
+		return 3
 	}
 
-	cmd := os.Args[1]
+	cmd := args[0]
 
 	switch cmd {
 	case "baseline":
-		baselineCmd(os.Args[2:])
+		return baselineCmd(args[1:], stdin, stdout, stderr)
 	case "check":
-		checkCmd(os.Args[2:])
+		return checkCmd(args[1:], stdin, stdout, stderr)
 	case "show":
-		showCmd()
+		return showCmd(stdout, stderr)
 	case "reset":
-		resetCmd()
+		return resetCmd(stdout, stderr)
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
-		printUsage()
-		os.Exit(3)
+		fmt.Fprintf(stderr, "Unknown command: %s\n\n", cmd)
+		printUsage(stderr)
+		return 3
 	}
 }
 
-func printUsage() {
-	fmt.Fprint(os.Stderr, `benchcmp — Go benchmark regression detector
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `benchcmp — Go benchmark regression detector
 
 Usage:
   benchcmp baseline [--save]     Save current bench output as new baseline
@@ -94,49 +101,56 @@ func baselinePath() string {
 	return filepath.Join(dir, "baseline.json")
 }
 
-func baselineCmd(args []string) {
-	fs := flag.NewFlagSet("baseline", flag.ExitOnError)
+func baselineCmd(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("baseline", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	save := fs.Bool("save", false, "save stdin as new baseline")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return 3
+	}
 
 	store := benchmark.NewBaselineStore(baselinePath())
 	if *save {
-		data, err := io.ReadAll(os.Stdin)
+		data, err := io.ReadAll(stdin)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			os.Exit(3)
+			fmt.Fprintf(stderr, "Error reading stdin: %v\n", err)
+			return 3
 		}
 		results := benchmark.ParseBenchOutput(string(data))
 		if len(results) == 0 {
-			fmt.Fprintln(os.Stderr, "No benchmark results found in input.")
-			os.Exit(3)
+			fmt.Fprintln(stderr, "No benchmark results found in input.")
+			return 3
 		}
 		if err := store.UpdateBaseline(results); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving baseline: %v\n", err)
-			os.Exit(3)
+			fmt.Fprintf(stderr, "Error saving baseline: %v\n", err)
+			return 3
 		}
-		fmt.Printf("Baseline saved: %d benchmarks\n", len(results))
+		fmt.Fprintf(stdout, "Baseline saved: %d benchmarks\n", len(results))
 	} else {
 		// Load stdin and show parsed results (dry-run mode)
-		data, err := io.ReadAll(os.Stdin)
+		data, err := io.ReadAll(stdin)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			os.Exit(3)
+			fmt.Fprintf(stderr, "Error reading stdin: %v\n", err)
+			return 3
 		}
 		results := benchmark.ParseBenchOutput(string(data))
 		for _, r := range results {
-			fmt.Printf("%-50s %8.0f ns/op %8.0f B/op %5d allocs\n", r.Name, r.NsPerOp, r.BPerOp, r.Allocs)
+			fmt.Fprintf(stdout, "%-50s %8.0f ns/op %8.0f B/op %5d allocs\n", r.Name, r.NsPerOp, r.BPerOp, r.Allocs)
 		}
-		fmt.Printf("\n%d benchmarks parsed. Use --save to store as baseline.\n", len(results))
+		fmt.Fprintf(stdout, "\n%d benchmarks parsed. Use --save to store as baseline.\n", len(results))
 	}
+	return 0
 }
 
-func checkCmd(args []string) {
-	fs := flag.NewFlagSet("check", flag.ExitOnError)
+func checkCmd(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	warning := fs.Float64("warning", 10.0, "warning threshold percentage")
 	critical := fs.Float64("critical", 25.0, "critical threshold percentage")
 	minNs := fs.Float64("min-ns", 100.0, "minimum ns/op to consider")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return 3
+	}
 
 	config := benchmark.RegressionConfig{
 		WarningThreshold:  *warning,
@@ -146,63 +160,66 @@ func checkCmd(args []string) {
 
 	store := benchmark.NewBaselineStore(baselinePath())
 	if err := store.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading baseline: %v\n", err)
-		os.Exit(3)
+		fmt.Fprintf(stderr, "Error loading baseline: %v\n", err)
+		return 3
 	}
 	if len(store.Baseline) == 0 {
-		fmt.Fprintln(os.Stderr, "No baseline found. Run 'benchcmp baseline --save' first.")
-		os.Exit(3)
+		fmt.Fprintln(stderr, "No baseline found. Run 'benchcmp baseline --save' first.")
+		return 3
 	}
 
-	data, err := io.ReadAll(os.Stdin)
+	data, err := io.ReadAll(stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-		os.Exit(3)
+		fmt.Fprintf(stderr, "Error reading stdin: %v\n", err)
+		return 3
 	}
 
 	current := benchmark.ParseBenchOutput(string(data))
 	if len(current) == 0 {
-		fmt.Fprintln(os.Stderr, "No benchmark results found in input.")
-		os.Exit(3)
+		fmt.Fprintln(stderr, "No benchmark results found in input.")
+		return 3
 	}
 
 	comp := benchmark.NewComparator(store, config)
 	results := comp.Compare(current)
 	report := benchmark.FormatReport(results)
-	fmt.Print(report)
+	fmt.Fprint(stdout, report)
 
 	if benchmark.HasRegressions(results) {
-		os.Exit(2)
+		return 2
 	} else if benchmark.HasWarnings(results) {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
-func showCmd() {
+func showCmd(stdout, stderr io.Writer) int {
 	store := benchmark.NewBaselineStore(baselinePath())
 	if err := store.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading baseline: %v\n", err)
-		os.Exit(3)
+		fmt.Fprintf(stderr, "Error loading baseline: %v\n", err)
+		return 3
 	}
 	if len(store.Baseline) == 0 {
-		fmt.Println("No baseline saved yet.")
-		os.Exit(0)
+		fmt.Fprintln(stdout, "No baseline saved yet.")
+		return 0
 	}
-	fmt.Printf("Baseline: %s (%d benchmarks)\n\n", baselinePath(), len(store.Baseline))
+	fmt.Fprintf(stdout, "Baseline: %s (%d benchmarks)\n\n", baselinePath(), len(store.Baseline))
 	for name, b := range store.Baseline {
-		fmt.Printf("%-50s %8.0f ns/op\n", name, b.NsPerOp)
+		fmt.Fprintf(stdout, "%-50s %8.0f ns/op\n", name, b.NsPerOp)
 	}
+	return 0
 }
 
-func resetCmd() {
+func resetCmd(stdout, stderr io.Writer) int {
 	path := baselinePath()
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("No baseline to reset.")
-			return
+			fmt.Fprintln(stdout, "No baseline to reset.")
+			return 0
 		}
-		fmt.Fprintf(os.Stderr, "Error removing baseline: %v\n", err)
-		os.Exit(3)
+		fmt.Fprintf(stderr, "Error removing baseline: %v\n", err)
+		return 3
 	}
-	fmt.Println("Baseline reset.")
+	fmt.Fprintln(stdout, "Baseline reset.")
+	return 0
 }
