@@ -30,9 +30,12 @@ func isGoapNotebookLMQuotaError(out string) bool {
 		return false
 	}
 	lower := strings.ToLower(out)
+	// Only gRPC code 8 / RESOURCE_EXHAUSTED is a daily-quota signal. nlm
+	// prefixes EVERY rejected RPC with "Google rejected the query" — including
+	// code 3 INVALID_ARGUMENT — so matching that phrase stamped the 24h quota
+	// cache from non-quota failures and blacked out research for a full day.
 	return strings.Contains(lower, "resource_exhausted") ||
-		strings.Contains(lower, "error code 8") ||
-		strings.Contains(lower, "google rejected the query")
+		strings.Contains(lower, "error code 8")
 }
 
 // nextNlmQuotaReset returns when the NotebookLM daily quota next resets:

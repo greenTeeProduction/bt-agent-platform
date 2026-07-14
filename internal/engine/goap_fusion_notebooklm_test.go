@@ -3,6 +3,10 @@ package engine
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/blackboard"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 func TestGoapFusionNotebookLMRecommendationExtraction(t *testing.T) {
@@ -63,5 +67,40 @@ func TestGoapFusionNotebookLMFailureDetection(t *testing.T) {
 func TestGoapFusionNotebookLMActionRegistered(t *testing.T) {
 	if GetAction("RunGoapFusionNotebookLMResearch") == nil {
 		t.Fatal("RunGoapFusionNotebookLMResearch action is not registered")
+	}
+}
+
+// A rejected-but-not-exhausted RPC (code 3 INVALID_ARGUMENT) must fail the
+// cycle WITHOUT stamping the day-long quota cache, and the report must not
+// blame auth — nlm's own error text already suggests re-authenticating, and
+// the 2026-07-08→13 treadmill was misdiagnosed as "auth problems" for a week
+// because both messages pointed away from the real error.
+func TestRunGoapFusionNotebookLMResearch_InvalidArgumentIsNotQuotaOrAuth(t *testing.T) {
+	invalidArgument := "Error: Google rejected the query (error code 3: INVALID_ARGUMENT). This may \nindicate account-level restrictions on programmatic access. Try \nre-authenticating with 'nlm login' or using a different account."
+	orig := nlmRun
+	nlmRun = func(timeout time.Duration, args ...string) string { return invalidArgument }
+	t.Cleanup(func() { nlmRun = orig })
+
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+
+	research := GetAction("RunGoapFusionNotebookLMResearch")
+	if research == nil {
+		t.Fatal("RunGoapFusionNotebookLMResearch action is not registered")
+	}
+	if got := research(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("status = %d, want -1 (fail fast to selector fallback)", got)
+	}
+	if bb.Outcome != "goap_fusion_notebooklm_failed" {
+		t.Fatalf("outcome = %q, want goap_fusion_notebooklm_failed", bb.Outcome)
+	}
+	if nlmQuotaExhausted(bb) {
+		t.Fatal("INVALID_ARGUMENT stamped the quota cache — one bad RPC would black out research until midnight Pacific")
+	}
+	if strings.Contains(bb.Result, "auth is unavailable") {
+		t.Fatalf("report blames auth for a non-auth failure: %q", bb.Result)
+	}
+	if !strings.Contains(bb.Result, "INVALID_ARGUMENT") {
+		t.Fatalf("report must carry the raw nlm error: %q", bb.Result)
 	}
 }

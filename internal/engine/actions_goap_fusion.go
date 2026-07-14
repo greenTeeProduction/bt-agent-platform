@@ -139,7 +139,7 @@ func registerGoapFusionActions() {
 				saveNlmQuotaExhausted(bb, time.Now())
 			}
 			setGoapState(bb, "notebooklm_skip_reason", truncateGoap(out, 2000))
-			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nNotebookLM query failed or auth is unavailable; refusing to proceed from stale vault research.\n\n```\n%s\n```", truncateGoap(out, 2000))
+			bb.Result = fmt.Sprintf("## GOAP NotebookLM Research Failed\n\nNotebookLM query failed; refusing to proceed from stale vault research. The raw nlm output below is the actual cause — do not assume auth.\n\n```\n%s\n```", truncateGoap(out, 2000))
 			bb.Outcome = "goap_fusion_notebooklm_failed"
 			return -1
 		}

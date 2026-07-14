@@ -399,7 +399,8 @@ const nlmBin = "/home/nico/.local/bin/nlm"
 const defaultNotebook = "463ca402-e972-470b-889c-b735e37c6746"
 
 // nlmRun runs an nlm command with the given arguments, with retry and circuit breaker.
-func nlmRun(timeout time.Duration, args ...string) string {
+// A var so tests can fake nlm output (same seam pattern as nlmAuthRun).
+var nlmRun = func(timeout time.Duration, args ...string) string {
 	const maxRetries = 3
 	const baseDelay = 2 * time.Second
 	const maxDelay = 30 * time.Second

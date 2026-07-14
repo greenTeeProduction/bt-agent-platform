@@ -29,6 +29,10 @@ func TestIsGoapNotebookLMQuotaError(t *testing.T) {
 		// non-quota failures
 		"Error: Query failed: Authentication expired. Run 'nlm login' in your terminal",
 		`{"error": "NotebookLM circuit breaker open", "retry_after": "5m0s"}`,
+		// a rejected-but-not-exhausted RPC must not stamp the day-long quota
+		// cache: this INVALID_ARGUMENT rejection (observed 2026-07-08→13)
+		// re-poisoned the cache every morning for a week
+		"Error: Google rejected the query (error code 3: INVALID_ARGUMENT). This may \nindicate account-level restrictions on programmatic access. Try \nre-authenticating with 'nlm login' or using a different account.",
 		// a clean successful answer is not a quota error (note: answers that
 		// MENTION resource_exhausted are already failures per
 		// isGoapNotebookLMFailure — the fix-bd8c5b6 defense against quota text
