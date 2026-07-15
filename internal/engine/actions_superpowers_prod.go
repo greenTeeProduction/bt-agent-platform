@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -212,9 +213,19 @@ func registerSuperpowersProductionActions() {
 				return -1
 			}
 			bb.ChainState["grill_open_critical"] = 0
+			bb.ChainState["review_verdict"] = "approved"
 			bb.Result = "## Grill Design (dry run)\n\nExternal calls skipped; marked OPEN-dry-run."
 			return 1
 		}
+
+		// Round bound: run.GrillRound is authoritative across restarts.
+		const grillMaxRounds = 10
+		if run.GrillRound >= grillMaxRounds {
+			bb.Outcome = "grill_round_bound"
+			bb.Result = fmt.Sprintf("## Grill Design Halted\n\nRound bound reached (%d).", grillMaxRounds)
+			return -1
+		}
+		round := run.GrillRound + 1
 
 		grillPrompt := fmt.Sprintf(`Interview this design relentlessly (grill-me). Walk every design-tree branch. Output ONLY lines "Q [critical|normal] <branch>: <question>". Max 12 questions. Mark [critical] only where a wrong answer breaks correctness, data, or security.
 
@@ -240,20 +251,54 @@ func registerSuperpowersProductionActions() {
 			return -1
 		}
 
-		res := resolveGrillQuestions(ctx, qs, grillAnswerers{
+		res := resolveGrillQuestions(context.Background(), qs, grillAnswerers{
 			NotebookLM: grillNotebookLMAnswerer,
 			Web:        nil, // no batched-question web-research action exists to wire
 		})
 
-		if err := os.WriteFile(run.DesignPath, []byte(designContent+res.Markdown), 0o644); err != nil {
+		// Round-tagged, append-only Q&A appendix.
+		section := grillRoundHeading(round) + strings.TrimPrefix(res.Markdown, "\n## Grill Q&A\n\n")
+		if err := os.WriteFile(run.DesignPath, []byte(designContent+section), 0o644); err != nil {
 			bb.Result = "## Grill Design Failed\n\n" + err.Error()
 			return -1
 		}
-		bb.ChainState["grill_open_critical"] = res.OpenCritical
-		bb.Result = fmt.Sprintf("## Grill Design Complete\n\nQuestions: %d\nOpen critical: %d", len(qs), res.OpenCritical)
-		if res.OpenCritical > 0 {
+
+		// No-progress breaker: same open-critical set AND same body hash as
+		// the previous round, twice in a row => reviewer failure => SplitPath.
+		body, _ := splitDesignDocument(designContent)
+		hash := designBodyHash(body)
+		stale := hash == run.DesignBodyHash && slices.Equal(res.OpenCriticalBranches, run.OpenCriticalBranches)
+		if stale {
+			run.NoProgressRounds++
+		} else {
+			run.NoProgressRounds = 0
+		}
+		run.GrillRound = round
+		run.DesignBodyHash = hash
+		run.OpenCriticalBranches = res.OpenCriticalBranches
+		if run.NoProgressRounds >= 2 {
+			run.NoProgressTripped = true
+			_ = writeSuperpowersRunJSON(run)
+			setSuperpowersRun(bb, run)
+			bb.Outcome = "grill_no_progress"
+			bb.Result = fmt.Sprintf("## Grill Design Halted\n\nNo progress for 2 consecutive rounds (round %d, %d open criticals).", round, res.OpenCritical)
 			return -1
 		}
+		if err := writeSuperpowersRunJSON(run); err != nil {
+			bb.Result = err.Error()
+			return -1
+		}
+		setSuperpowersRun(bb, run)
+
+		bb.ChainState["grill_open_critical"] = res.OpenCritical
+		if res.OpenCritical == 0 {
+			bb.ChainState["review_verdict"] = "approved"
+			bb.Result = fmt.Sprintf("## Grill Design Approved\n\nRound %d: %d questions, 0 open criticals.", round, len(qs))
+			return 1
+		}
+		bb.ChainState["review_verdict"] = "needs_work"
+		bb.ChainState["review_feedback"] = fmt.Sprintf("Grill round %d results:\n%s", round, openCriticalDigest(qs, res.Answers))
+		bb.Result = fmt.Sprintf("## Grill Design Needs Work\n\nRound %d: %d questions, %d open criticals.", round, len(qs), res.OpenCritical)
 		return 1
 	})
 

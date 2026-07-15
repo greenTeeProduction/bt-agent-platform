@@ -71,15 +71,23 @@ func TestGrillDesign_FailsOnOpenCriticalWhenAllAnswerersDown(t *testing.T) {
 	}
 }
 
-// TestGrillDesignArtifactAction_OpenCriticalFailsWithBothAnswerersDown drives
-// the registered GrillDesignArtifact action end to end with a fake Claude
-// runner and a NotebookLM answerer stubbed to errAnswererUnavailable (the
-// Web answerer is nil in production — no compatible batched-question
+// TestGrillDesignArtifactAction_OpenCriticalNeedsWorkWithBothAnswerersDown
+// drives the registered GrillDesignArtifact action end to end with a fake
+// Claude runner and a NotebookLM answerer stubbed to errAnswererUnavailable
+// (the Web answerer is nil in production — no compatible batched-question
 // web-research action exists, see actions_superpowers_prod.go). It never
 // touches the real nlm or claude binaries: defaultSuperpowersClaudeRunner and
 // grillNotebookLMAnswerer are the same swappable package vars the sibling
 // RED/GREEN/REVIEW phase actions use for this exact reason.
-func TestGrillDesignArtifactAction_OpenCriticalFailsWithBothAnswerersDown(t *testing.T) {
+//
+// Under the reviewer protocol (spec
+// 2026-07-15-brainstorm-grill-loop-design.md), GrillDesignArtifact is the
+// ReviewCycle loop's reviewer: an open critical question is "needs_work", not
+// a tree-halting FAILURE — the action still returns SUCCESS (1) so the loop
+// can iterate, with review_verdict/review_feedback in ChainState driving the
+// next round. Only Claude errors, unparseable output, the round bound, or the
+// no-progress breaker return -1.
+func TestGrillDesignArtifactAction_OpenCriticalNeedsWorkWithBothAnswerersDown(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	prevClaude := defaultSuperpowersClaudeRunner
@@ -116,8 +124,11 @@ func TestGrillDesignArtifactAction_OpenCriticalFailsWithBothAnswerersDown(t *tes
 	}
 
 	result := act(&btcore.BTContext[Blackboard]{Blackboard: bb})
-	if result != -1 {
-		t.Fatalf("result = %d, want -1 (FAILURE) with an open critical question", result)
+	if result != 1 {
+		t.Fatalf("result = %d, want 1 (needs_work is a reviewer SUCCESS) with an open critical question", result)
+	}
+	if v, _ := bb.ChainState["review_verdict"].(string); v != "needs_work" {
+		t.Fatalf("ChainState[review_verdict] = %q, want needs_work", v)
 	}
 
 	openCritical, ok := bb.ChainState["grill_open_critical"].(int)

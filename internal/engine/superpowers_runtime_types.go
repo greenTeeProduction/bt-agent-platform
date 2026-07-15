@@ -49,6 +49,16 @@ type SuperpowersRun struct {
 	AppliedCommit string    `json:"applied_commit,omitempty"`
 	StartedAt     time.Time `json:"started_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+
+	// Grill-loop bookkeeping (spec 2026-07-15-brainstorm-grill-loop-design.md)
+	GrillRound           int      `json:"grill_round,omitempty"`
+	DesignRevision       int      `json:"design_revision,omitempty"`
+	OpenCriticalBranches []string `json:"open_critical_branches,omitempty"`
+	DesignBodyHash       string   `json:"design_body_hash,omitempty"`
+	NoProgressRounds     int      `json:"no_progress_rounds,omitempty"`
+	NoProgressTripped    bool     `json:"no_progress_tripped,omitempty"`
+	FollowupPath         string   `json:"followup_path,omitempty"`
+	FollowupProgramID    string   `json:"followup_program_id,omitempty"`
 }
 
 type SuperpowersTask struct {
