@@ -399,6 +399,11 @@ func (bb *Blackboard) conditionForName(name string) func(*Blackboard) bool {
 	if fn := compiledGoapConditionFor(name); fn != nil {
 		return tracedCondition(name, fn)
 	}
+	// Name-parameterized error-handler guards ("LastErrorCategoryIs:<cat>",
+	// "LastErrorNodeIs:<node>") used by Claude-proposed recovery nodes.
+	if fn := errorHandlerConditionFor(name); fn != nil {
+		return tracedCondition(name, fn)
+	}
 	// Default: always-true condition (permissive routing)
 	return func(b *Blackboard) bool {
 		return true
