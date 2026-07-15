@@ -336,3 +336,65 @@ func TestResolveGrillQuestions_MultiBatchSevenQuestionsSplitsFiveAndTwo(t *testi
 		}
 	}
 }
+
+func TestResolveGrillQuestions_RecordsOpenCriticalBranches(t *testing.T) {
+	qs := []grillQuestion{
+		{Critical: true, Branch: "persistence", Text: "what fsyncs?"},
+		{Critical: false, Branch: "ux", Text: "colors?"},
+		{Critical: true, Branch: "auth", Text: "who signs?"},
+	}
+	// answerer resolves only index 2 (auth); persistence stays OPEN
+	res := resolveGrillQuestions(context.Background(), qs, grillAnswerers{
+		NotebookLM: func(_ context.Context, batch []grillQuestion) (map[int]string, error) {
+			out := map[int]string{}
+			for i, q := range batch {
+				if q.Branch == "auth" {
+					out[i] = "the gateway signs"
+				}
+			}
+			return out, nil
+		},
+	})
+	if res.OpenCritical != 1 {
+		t.Fatalf("OpenCritical = %d, want 1", res.OpenCritical)
+	}
+	if len(res.OpenCriticalBranches) != 1 || res.OpenCriticalBranches[0] != "persistence" {
+		t.Fatalf("OpenCriticalBranches = %v, want [persistence]", res.OpenCriticalBranches)
+	}
+}
+
+func TestSplitDesignDocument(t *testing.T) {
+	body := "# Design\n\n## Goal\nX\n"
+	appendix := "\n## Grill Q&A — round 1\n\n**Q (critical, a):** q?\n\n**A:** OPEN\n"
+	gotBody, gotAppendix := splitDesignDocument(body + appendix)
+	if strings.TrimSpace(gotBody) != strings.TrimSpace(body) {
+		t.Fatalf("body = %q", gotBody)
+	}
+	if !strings.Contains(gotAppendix, "round 1") {
+		t.Fatalf("appendix = %q", gotAppendix)
+	}
+	b2, a2 := splitDesignDocument(body)
+	if a2 != "" || strings.TrimSpace(b2) != strings.TrimSpace(body) {
+		t.Fatalf("no-appendix split wrong: body=%q appendix=%q", b2, a2)
+	}
+}
+
+func TestDesignBodyHash_StableAndTrimmed(t *testing.T) {
+	if designBodyHash("x\n") != designBodyHash("x") {
+		t.Fatal("hash must trim")
+	}
+	if designBodyHash("x") == designBodyHash("y") {
+		t.Fatal("hash must differ")
+	}
+}
+
+func TestOpenCriticalDigest(t *testing.T) {
+	qs := []grillQuestion{
+		{Critical: true, Branch: "p", Text: "q1?"},
+		{Critical: false, Branch: "u", Text: "q2?"},
+	}
+	d := openCriticalDigest(qs, map[int]string{1: "answered"})
+	if !strings.Contains(d, "OPEN CRITICAL [p]: q1?") || !strings.Contains(d, "ANSWERED [u]: q2? — answered") {
+		t.Fatalf("digest = %q", d)
+	}
+}

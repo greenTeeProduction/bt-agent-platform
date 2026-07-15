@@ -7,6 +7,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,8 +26,10 @@ type grillAnswerers struct {
 }
 
 type grillResult struct {
-	Markdown     string
-	OpenCritical int
+	Markdown             string
+	OpenCritical         int
+	OpenCriticalBranches []string
+	Answers              map[int]string
 }
 
 var errAnswererUnavailable = errors.New("answerer unavailable")
@@ -92,6 +96,7 @@ func resolveGrillQuestions(ctx context.Context, qs []grillQuestion, a grillAnswe
 	var b strings.Builder
 	b.WriteString("\n## Grill Q&A\n\n")
 	open := 0
+	var openBranches []string
 	for i, q := range qs {
 		sev := "normal"
 		if q.Critical {
@@ -103,8 +108,46 @@ func resolveGrillQuestions(ctx context.Context, qs []grillQuestion, a grillAnswe
 			fmt.Fprintf(&b, "**Q (%s, %s):** %s\n\n**A:** OPEN — no answerer available\n\n", sev, q.Branch, q.Text)
 			if q.Critical {
 				open++
+				openBranches = append(openBranches, q.Branch)
 			}
 		}
 	}
-	return grillResult{Markdown: b.String(), OpenCritical: open}
+	return grillResult{Markdown: b.String(), OpenCritical: open, OpenCriticalBranches: openBranches, Answers: answers}
+}
+
+const grillAppendixMarker = "\n## Grill Q&A"
+
+// splitDesignDocument separates the design body from the append-only Grill
+// Q&A appendix (everything from the first Grill Q&A heading onward).
+func splitDesignDocument(content string) (string, string) {
+	if idx := strings.Index(content, grillAppendixMarker); idx >= 0 {
+		return content[:idx], content[idx:]
+	}
+	return content, ""
+}
+
+func designBodyHash(body string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(body)))
+	return hex.EncodeToString(sum[:])
+}
+
+func grillRoundHeading(round int) string {
+	return fmt.Sprintf("\n## Grill Q&A — round %d\n\n", round)
+}
+
+// openCriticalDigest renders the round outcome for review_feedback: what got
+// answered (the reviser folds it in) and which criticals are still open (the
+// reviser must answer them from the codebase or redesign them away).
+func openCriticalDigest(qs []grillQuestion, answers map[int]string) string {
+	var b strings.Builder
+	for i, q := range qs {
+		if ans, ok := answers[i]; ok {
+			fmt.Fprintf(&b, "ANSWERED [%s]: %s — %s\n", q.Branch, q.Text, ans)
+		} else if q.Critical {
+			fmt.Fprintf(&b, "OPEN CRITICAL [%s]: %s\n", q.Branch, q.Text)
+		} else {
+			fmt.Fprintf(&b, "OPEN [%s]: %s\n", q.Branch, q.Text)
+		}
+	}
+	return b.String()
 }
