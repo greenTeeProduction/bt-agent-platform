@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -156,7 +157,7 @@ func TestMCTSMutator_Mutate_NoEvaluator(t *testing.T) {
 	tree := testBaseTree()
 	originalNodeCount := CountNodes(tree)
 
-	result := m.Mutate(tree, 0)
+	result, _ := m.Mutate(tree, 0)
 
 	if result == nil {
 		t.Fatal("Mutate returned nil")
@@ -178,7 +179,7 @@ func TestMCTSMutator_Mutate_WithEvaluator(t *testing.T) {
 	tree := testBaseTree()
 	parentFitness := mockFitnessEvaluator(tree)
 
-	result := m.Mutate(tree, parentFitness)
+	result, _ := m.Mutate(tree, parentFitness)
 
 	if result == nil {
 		t.Fatal("Mutate returned nil")
@@ -208,7 +209,7 @@ func TestMCTSMutator_Mutate_ImprovesFitness(t *testing.T) {
 	}
 	parentFitness := mockFitnessEvaluator(tree)
 
-	result := m.Mutate(tree, parentFitness)
+	result, _ := m.Mutate(tree, parentFitness)
 
 	if result == nil {
 		t.Fatal("Mutate returned nil")
@@ -222,6 +223,58 @@ func TestMCTSMutator_Mutate_ImprovesFitness(t *testing.T) {
 
 	t.Logf("Parent fitness: %.2f, Result fitness: %.2f, Parent nodes: %d, Result nodes: %d",
 		parentFitness, resultFitness, CountNodes(tree), CountNodes(result))
+}
+
+// hasNodeWithPrefix reports whether any node in the tree has a Name with the given prefix.
+func hasNodeWithPrefix(node *SerializableNode, prefix string) bool {
+	if node == nil {
+		return false
+	}
+	if strings.HasPrefix(node.Name, prefix) {
+		return true
+	}
+	for i := range node.Children {
+		if hasNodeWithPrefix(&node.Children[i], prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestMCTSMutator_Mutate_ReturnsWinningMutationOp pins the winning mutation's
+// op name to the structural marker it actually left on the returned tree.
+// concreteMutationOp tags every add_before/add_after candidate node with
+// "MCTS_<op>_<n>", so rigging the evaluator to favor the add_before marker
+// forces that variant to win regardless of iteration order — since
+// randomNodeName (via collectNodeNames) only ever offers "Action1" or "Cond1"
+// as a target on testBaseTree, add_before is guaranteed to apply cleanly
+// whenever the search tries it, and Iterations == len(AllMutationOps)
+// guarantees every op — including add_before — gets tried exactly once as a
+// direct child of root before the loop ends.
+func TestMCTSMutator_Mutate_ReturnsWinningMutationOp(t *testing.T) {
+	m := NewMCTSMutator()
+	m.Iterations = len(AllMutationOps)
+	m.SetFitnessEvaluator(func(tree *SerializableNode) float64 {
+		if hasNodeWithPrefix(tree, "MCTS_add_before_") {
+			return 1000.0
+		}
+		return mockFitnessEvaluator(tree)
+	})
+
+	tree := testBaseTree()
+	parentFitness := mockFitnessEvaluator(tree)
+
+	result, opName := m.Mutate(tree, parentFitness)
+
+	if result == nil {
+		t.Fatal("Mutate returned nil tree")
+	}
+	if opName != "add_before" {
+		t.Fatalf("expected winning op %q, got %q", "add_before", opName)
+	}
+	if !hasNodeWithPrefix(result, "MCTS_add_before_") {
+		t.Errorf("returned op %q does not match the mutation actually applied — result tree is missing the MCTS_add_before_ marker node", opName)
+	}
 }
 
 func TestMCTSMutator_SelectNode(t *testing.T) {
@@ -396,7 +449,7 @@ func TestMCTSMutator_BuildMutationOps(t *testing.T) {
 
 func TestMCTSMutator_Mutate_NilParent(t *testing.T) {
 	m := NewMCTSMutator()
-	result := m.Mutate(nil, 0)
+	result, _ := m.Mutate(nil, 0)
 	if result != nil {
 		t.Log("Mutate returned a tree for nil parent (cloneTree handles nil)")
 	}
@@ -409,7 +462,7 @@ func TestMCTSMutator_Mutate_SingleNode(t *testing.T) {
 	tree := &SerializableNode{Type: "Action", Name: "Singleton"}
 	parentFitness := mockFitnessEvaluator(tree)
 
-	result := m.Mutate(tree, parentFitness)
+	result, _ := m.Mutate(tree, parentFitness)
 	if result == nil {
 		t.Fatal("Mutate returned nil for single node tree")
 	}
@@ -445,7 +498,7 @@ func TestMCTSMutation_FitnessGap(t *testing.T) {
 	tree := testBaseTree()
 	parentFitness := mockFitnessEvaluator(tree)
 
-	mctsResult := m.Mutate(tree, parentFitness)
+	mctsResult, _ := m.Mutate(tree, parentFitness)
 	mctsFitness := mockFitnessEvaluator(mctsResult)
 
 	// Single random mutation

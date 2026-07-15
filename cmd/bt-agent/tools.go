@@ -962,9 +962,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
 			// Deterministic, LLM-free evolution reusing the shared structural
-			// fitness — avoids EvolveMAPElites, which invokes the LLM supervisor.
+			// fitness via MAPElitesPopulation.EvolveMAPElites, whose mutation
+			// step Observes every genuinely-improving mutation into
+			// ExpertKnowledge (map_elites.go:347) — the same local,
+			// network-free LLMSupervisor every other Evolve variant already
+			// uses.
 			pop := newProductionPopulation(population, baseTree)
-			pop.Evolve(params.Generations, structuralFitnessFn)
 			grid := evolution.NewMAPElitesGrid(population / 2)
 			// Bound the durable archive against runaway growth, mirroring
 			// bt_evolve_qlearning's state_cap: the default derives from this
@@ -978,9 +981,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			// Warm-start from the durable MAP-Elites archive so illuminated
 			// niches accumulate across runs instead of resetting to an empty
-			// grid every call (Q2 Evolvability). A missing archive is a cold
-			// start; a corrupt one degrades to a cold start surfaced
-			// non-fatally so the evolution still runs, mirroring
+			// grid every call (Q2 Evolvability), and so EvolveMAPElites's
+			// elite-parent pool (mp.Grid.Elites()) draws on real diverse
+			// parents from generation 1 instead of starting cold. A missing
+			// archive is a cold start; a corrupt one degrades to a cold start
+			// surfaced non-fatally so the evolution still runs, mirroring
 			// bt_evolve_island and bt_evolve_qlearning.
 			archivePath := mapElitesArchivePath(params.Tree)
 			_, statErr := os.Stat(archivePath)
@@ -990,13 +995,32 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
-			grid.InsertFromPopulation(pop, params.Domain)
+			mp := &evolution.MAPElitesPopulation{Population: pop, Grid: grid, Domain: params.Domain}
+			// Warm-start the ExpertKnowledge learned-pattern archive so
+			// genuinely fitness-improving mutations observed across this and
+			// prior runs accumulate in the same per-tree archive
+			// bt_evolve_expert reads (Q2 Evolvability), mirroring
+			// bt_evolve_pareto's ek.Load/Observe/Save sequence. Wiring
+			// mp.ExpertKnowledge before evolving makes EvolveMAPElites's
+			// mutation step observe every genuinely-improving mutation
+			// directly (map_elites.go:347), the same ek plumbing
+			// EvolvePareto/NSGA-II Evolve/EvolveQLearning/EvolveAll already
+			// have. A load error is surfaced non-fatally.
+			ek := evolution.NewExpertKnowledge()
+			expertPath := expertArchivePath(params.Tree)
+			expertLoadErr := ""
+			if err := ek.Load(expertPath); err != nil {
+				expertLoadErr = err.Error()
+			}
+			mp.ExpertKnowledge = ek
+			mp.EvolveMAPElites(params.Generations, structuralFitnessFn)
+			grid.InsertFromPopulation(mp.Population, params.Domain)
 			// Write the best illuminated elite's structural fitness back into the
 			// knowledge graph so fitness-aware discovery can surface the
 			// archive-improved tree on the next run (milestone 4/5).
 			recordEvolvedFitness(deps, params.Tree, grid.Stats().BestFitness)
 			result := map[string]interface{}{
-				"tree": params.Tree, "domain": params.Domain, "generations": pop.Generation,
+				"tree": params.Tree, "domain": params.Domain, "generations": mp.Generation,
 				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
 				"elites": len(grid.Elites()), "specialist_distribution": grid.SpecialistDistribution(),
 				"warm_started": warmStarted,
@@ -1004,11 +1028,22 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
 			// Persist the merged, illuminated grid so the next invocation
 			// resumes from this run's niches. A save failure is surfaced
 			// non-fatally alongside the evolution result.
 			if err := grid.Save(archivePath); err != nil {
 				result["archive_save_error"] = err.Error()
+			}
+			// Persist the ExpertKnowledge archive EvolveMAPElites observed
+			// genuinely-improving mutations into during the run above,
+			// mirroring bt_evolve_pareto's ek.Save. Like bt_evolve_pareto,
+			// this tool has no benchmark gate, so the save below always runs
+			// alongside the unconditional grid.Save.
+			if err := ek.Save(expertPath); err != nil {
+				result["expert_archive_save_error"] = err.Error()
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

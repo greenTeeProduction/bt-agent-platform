@@ -209,7 +209,7 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 				// the search level before they enter the population.
 				if rand.Float64() < mutationRate {
 					parentFitness := fitnessFn(child)
-					mutated := mctsMutator.Mutate(child, parentFitness)
+					mutated, _ := mctsMutator.Mutate(child, parentFitness)
 					if mutated != nil {
 						child = mutated
 					} else {

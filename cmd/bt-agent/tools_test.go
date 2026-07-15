@@ -3107,6 +3107,50 @@ func TestBTEvolveParetoFeedsExpertKnowledgeArchive(t *testing.T) {
 	assertExpertArchiveFedFromRun(t, server, "godev", "bt_evolve_pareto")
 }
 
+// TestBTEvolveQdFeedsExpertKnowledgeArchive pins milestone 2/2 of the program
+// "Q2 Evolvability — Wire bt_evolve_qd's MAP-Elites illumination into the
+// shared ExpertKnowledge learned-pattern archive": the handler must warm-start
+// the shared expertArchivePath archive, Observe the illuminated grid's
+// genuinely fitness-improving mutations, and persist the merged archive back
+// — mirroring bt_evolve_pareto's unconditional (non-benchmark-gated)
+// ek.Load/Observe/Save sequence. Milestone 1 (map_elites.go) already added
+// MAPElitesPopulation.ExpertKnowledge and the Observe call at
+// map_elites.go:347 inside EvolveMAPElites's mutation step, but tools.go's
+// bt_evolve_qd handler (tools.go:941-1015) still evolves a bare
+// *evolution.Population via the generic pop.Evolve and builds a MAP-Elites
+// grid only after the fact via InsertFromPopulation — it never constructs an
+// ExpertKnowledge, never touches MAPElitesPopulation.ExpertKnowledge, and
+// never calls EvolveMAPElites, so no mutation is ever Observed. Today
+// bt_evolve_expert warm-starting from the same per-tree archive afterwards
+// must see an empty catalog. Like bt_evolve_pareto, bt_evolve_qd has no
+// benchmark gate to mock around, so no benchmarkRunSuiteFn stub is needed
+// here.
+func TestBTEvolveQdFeedsExpertKnowledgeArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":20,"generations":20}`)
+	res, ok := server.Invoke("bt_evolve_qd", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qd) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_qd returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_qd result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_qd unexpectedly returned an error: %v", out)
+	}
+
+	assertExpertArchiveFedFromRun(t, server, "godev", "bt_evolve_qd")
+}
+
 // TestBTEvolveQLearningStateCapBoundsDurableArchive pins milestone 4/4 of the
 // durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
 // accept an optional "state_cap" request parameter and set it on

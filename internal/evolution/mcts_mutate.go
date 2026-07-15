@@ -152,12 +152,14 @@ func (m *MCTSMutator) WithConfig(iterations int, explorationConst float64, maxDe
 
 // ─── Core Algorithm ─────────────────────────────────────────────────────────
 
-// Mutate runs the MCTS-guided mutation search and returns the best variant found.
+// Mutate runs the MCTS-guided mutation search and returns the best variant found,
+// along with the name of the winning MutationOp (e.g. "add_before"). The op name
+// is "" when no mutation was applied (e.g. validation rejected the mutated tree).
 // Uses the parent tree as the root state and searches for promising mutations
 // across K iterations. Returns the parent tree (unmutated) if no improvement found.
-func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) *SerializableNode {
+func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) (*SerializableNode, string) {
 	if parent == nil {
-		return nil
+		return nil, ""
 	}
 
 	m.mu.Lock()
@@ -169,7 +171,7 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) *S
 		clone := cloneTree(parent)
 		ops := randomMutation(clone)
 		ApplyMutations(clone, ops)
-		return m.validateOrFallback(clone, parent)
+		return m.validateOrFallback(clone, parent, firstOpName(ops))
 	}
 
 	// 1. CREATE root node
@@ -213,21 +215,32 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) *S
 		clone := cloneTree(parent)
 		ops := randomMutation(clone)
 		ApplyMutations(clone, ops)
-		return m.validateOrFallback(clone, parent)
+		return m.validateOrFallback(clone, parent, firstOpName(ops))
 	}
 
-	return m.validateOrFallback(cloneTree(bestNode.Tree), parent)
+	return m.validateOrFallback(cloneTree(bestNode.Tree), parent, bestNode.MutationOp)
 }
 
 // validateOrFallback validates the tree after mutation. If validation fails,
 // it returns a clean clone of the parent instead — rejecting invalid mutations.
-func (m *MCTSMutator) validateOrFallback(mutated, parent *SerializableNode) *SerializableNode {
+// opName is only returned alongside a mutation that survived validation; a
+// rejected mutation reports "" since no mutation actually took effect.
+func (m *MCTSMutator) validateOrFallback(mutated, parent *SerializableNode, opName string) (*SerializableNode, string) {
 	errors := mutated.Validate()
 	if len(errors) > 0 {
 		// Reject invalid mutation — return clean parent clone
-		return cloneTree(parent)
+		return cloneTree(parent), ""
 	}
-	return mutated
+	return mutated, opName
+}
+
+// firstOpName returns the Operation name of the first mutation in ops, or ""
+// if ops is empty.
+func firstOpName(ops []MutationOp) string {
+	if len(ops) == 0 {
+		return ""
+	}
+	return ops[0].Operation
 }
 
 // selectNode traverses from root using UCB1 until reaching an expandable leaf.
