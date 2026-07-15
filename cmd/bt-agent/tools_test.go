@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -1132,9 +1134,23 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 // (warm_started/archive_load_error/archive_save_error) the other four
 // algorithms already report, and a single archive file must exist under
 // BT_AGENT_HOME after the first run.
+//
+// This is orthogonal to the benchmark-suite gate
+// (TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner): NSGA-II
+// mutation uses unseeded math/rand, so the evolved winner occasionally
+// regresses against the base tree on the real suite and the gate correctly
+// skips the save — which would make this test flaky if left alone. Pin
+// benchmarkRunSuiteFn to a constant non-regressing result so archive
+// accumulation is exercised deterministically regardless of gate outcome.
 func TestBTEvolveMultiObjectiveAccumulatesDurableArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
@@ -1175,6 +1191,75 @@ func TestBTEvolveMultiObjectiveAccumulatesDurableArchive(t *testing.T) {
 	second := invoke("second")
 	if got, isBool := second["warm_started"].(bool); !isBool || !got {
 		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
+// TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner pins the
+// missing benchmark-suite gate on bt_evolve_multiobjective's durable-archive
+// save (Q2 Evolvability, "gate the standalone evolution-algorithm tools'
+// durable-archive winners through the benchmark suite, not structural fitness
+// alone"). The handler picks the NSGA-II front's lead individual using only
+// evolution.StructuralMultiFitness — success_rate/node_efficiency/stability
+// computed from structural heuristics, never an actual tree execution — and
+// unconditionally persists it via nsga.Save(archivePath). A mutation can look
+// structurally elite while actually performing worse than the untouched base
+// tree against the tree's real internal/benchmark suite (deterministic,
+// sandboxed, mock-LLM RunSuite — no real LLM calls, so this stays -short-safe).
+// benchmarkGateEvolvedWinner must run both the base tree and the winner
+// through that suite and reject the save on regression, surfacing
+// "benchmark_gate_rejected": true instead of silently archiving a worse tree.
+//
+// benchmarkRunSuiteFn is a package-level indirection over benchmark.RunSuite
+// (mirroring the DelegateToA2AFn/AuctionDelegateFn test-seam pattern already
+// used in this package) so this test can force a regression deterministically
+// without depending on NSGA-II's unseeded math/rand mutation, which makes the
+// evolved winner's actual structure unpredictable across runs.
+func TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls == 1 {
+			// First call gates the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Every subsequent call gates the evolved winner: total regression.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	res, ok := server.Invoke("bt_evolve_multiobjective", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_multiobjective) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_multiobjective returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_multiobjective result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_multiobjective unexpectedly returned an error: %v", out)
+	}
+
+	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
+		t.Fatalf(`bt_evolve_multiobjective must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "*nsga*archive*.json"))
+	if err != nil {
+		t.Fatalf("glob NSGA-II archives: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("bt_evolve_multiobjective must skip persisting the durable NSGA-II archive when the benchmark gate rejects the winner; found %v", matches)
 	}
 }
 

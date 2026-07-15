@@ -13,6 +13,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/agentexec"
+	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/domains"
@@ -108,6 +109,33 @@ func sanitizeArchiveTreeID(id string) string {
 		}
 	}
 	return b.String()
+}
+
+// benchmarkRunSuiteFn is a package-level indirection over benchmark.RunSuite,
+// mirroring the DelegateToA2AFn/AuctionDelegateFn test-seam pattern already
+// used in this package. NSGA-II (and the other evolution algorithms this
+// gate will be reused for) mutate via unseeded math/rand, so an evolved
+// winner's actual structure — and therefore its real benchmark outcome — is
+// not reproducible across test runs; only a seam lets a test force a
+// regression deterministically.
+var benchmarkRunSuiteFn = benchmark.RunSuite
+
+// benchmarkGateEvolvedWinner runs both the base tree and an evolved winner
+// through treeID's real internal/benchmark suite (Sandbox mode with a mock
+// LLM — deterministic, no real LLM calls, -short-safe) and reports whether
+// the winner regressed on SuccessRate. The evolve tools' structural fitness
+// (evolution.StructuralMultiFitness and friends) scores mutations from
+// structural heuristics alone and can rate one as elite while it actually
+// performs worse than the untouched base tree, so callers must skip
+// persisting a regressed winner to a durable cross-run archive (Q2
+// Evolvability: gate durable-archive winners through the benchmark suite,
+// not structural fitness alone).
+func benchmarkGateEvolvedWinner(treeID string, base, winner *evolution.SerializableNode) (rejected bool, baseRate, winnerRate float64) {
+	suite := benchmark.SuiteForTree(treeID)
+	mock := &llm.MockLLM{}
+	baseMetrics := benchmarkRunSuiteFn(base, suite, mock)
+	winnerMetrics := benchmarkRunSuiteFn(winner, suite, mock)
+	return winnerMetrics.SuccessRate < baseMetrics.SuccessRate, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
 }
 
 func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResult {
@@ -1065,11 +1093,22 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
-			// Persist front 0 so the next invocation resumes from this run's
-			// Pareto-optimal individuals. A save failure is surfaced
-			// non-fatally alongside the evolution result.
-			if err := nsga.Save(archivePath); err != nil {
-				result["archive_save_error"] = err.Error()
+			// Gate the front's lead individual through the tree's real
+			// benchmark suite before trusting it enough to persist — structural
+			// fitness alone can rate a mutation as elite while it actually
+			// regresses (Q2 Evolvability). A rejected winner skips the save
+			// entirely so the durable archive never accumulates a worse tree.
+			gateRejected, baseRate, winnerRate := benchmarkGateEvolvedWinner(params.Tree, baseTree, best)
+			result["benchmark_gate_rejected"] = gateRejected
+			result["benchmark_base_success_rate"] = baseRate
+			result["benchmark_winner_success_rate"] = winnerRate
+			if !gateRejected {
+				// Persist front 0 so the next invocation resumes from this run's
+				// Pareto-optimal individuals. A save failure is surfaced
+				// non-fatally alongside the evolution result.
+				if err := nsga.Save(archivePath); err != nil {
+					result["archive_save_error"] = err.Error()
+				}
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
