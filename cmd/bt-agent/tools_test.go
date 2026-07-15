@@ -3021,6 +3021,73 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 	assertHealth(t, "bt_evolve_selection_pressure", spHealth, spPresent)
 }
 
+// TestBTEvolveQLearningAndMemeticSurfacePopulationHealthSnapshot pins Q2
+// Evolvability milestone 3/3 of the "Close the self-healing envelope gap
+// across the remaining GA variants" program: bt_evolve_qlearning and
+// bt_evolve_memetic are the last two production evolve tools whose responses
+// never surface Population.HealthSnapshot() via evolveHealthProjection, unlike
+// bt_evolve_genetic/bt_evolve_multiobjective/bt_evolve_pareto. Each response
+// must expose a "health" object carrying the same three fields:
+// "crisis_reasons" (a JSON array, present even when empty), "resurrections"
+// (a non-negative count), and "last_mutation_rate" (the positive rate the run
+// actually applied).
+func TestBTEvolveQLearningAndMemeticSurfacePopulationHealthSnapshot(t *testing.T) {
+	assertHealth := func(t *testing.T, tool string, health interface{}, present bool) {
+		t.Helper()
+		if !present {
+			t.Errorf("%s response must surface Population.HealthSnapshot() under a 'health' object; it is absent", tool)
+			return
+		}
+		h, isObj := health.(map[string]interface{})
+		if !isObj {
+			t.Errorf("%s 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", tool, health, health)
+			return
+		}
+		if reasons, hasReasons := h["crisis_reasons"]; !hasReasons {
+			t.Errorf("%s health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", tool, h)
+		} else if _, isList := reasons.([]interface{}); !isList {
+			t.Errorf("%s health 'crisis_reasons' must be a JSON array; got %T (%v)", tool, reasons, reasons)
+		}
+		if res, isNum := h["resurrections"].(float64); !isNum || res < 0 {
+			t.Errorf("%s health object must report a non-negative 'resurrections' count; got %v", tool, h["resurrections"])
+		}
+		if rate, isNum := h["last_mutation_rate"].(float64); !isNum || rate <= 0 {
+			t.Errorf("%s health 'last_mutation_rate' must be the positive rate the run actually applied; got %v", tool, h["last_mutation_rate"])
+		}
+	}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	qlRes, ok := server.Invoke("bt_evolve_qlearning", json.RawMessage(`{"tree":"godev","population":4,"generations":3,"epsilon":0}`))
+	if !ok || qlRes == nil || len(qlRes.Content) == 0 {
+		t.Fatal("Invoke(bt_evolve_qlearning) returned no content")
+	}
+	var qlOut map[string]interface{}
+	if err := json.Unmarshal([]byte(qlRes.Content[0].Text), &qlOut); err != nil {
+		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, qlRes.Content[0].Text)
+	}
+	if _, isErr := qlOut["error"]; isErr {
+		t.Fatalf("bt_evolve_qlearning unexpectedly returned an error: %v", qlOut)
+	}
+	qlHealth, qlPresent := qlOut["health"]
+	assertHealth(t, "bt_evolve_qlearning", qlHealth, qlPresent)
+
+	memRes, ok := server.Invoke("bt_evolve_memetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2,"strategy":"hill-climb"}`))
+	if !ok || memRes == nil || len(memRes.Content) == 0 {
+		t.Fatal("Invoke(bt_evolve_memetic) returned no content")
+	}
+	var memOut map[string]interface{}
+	if err := json.Unmarshal([]byte(memRes.Content[0].Text), &memOut); err != nil {
+		t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, memRes.Content[0].Text)
+	}
+	if _, isErr := memOut["error"]; isErr {
+		t.Fatalf("bt_evolve_memetic unexpectedly returned an error: %v", memOut)
+	}
+	memHealth, memPresent := memOut["health"]
+	assertHealth(t, "bt_evolve_memetic", memHealth, memPresent)
+}
+
 // TestBTEvolveMemeticRegisteredAndValidatesStrategy pins the bt_evolve_memetic
 // MCP tool (Q2 Evolvability milestone 2/5): it must be registered by
 // registerMCPTools and expose Population.MemeticEvolve with a selectable

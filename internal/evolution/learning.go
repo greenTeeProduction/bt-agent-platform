@@ -877,25 +877,32 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 	// The MCTS mutator only materializes category names into concrete ops
 	// (target selection + payload nodes); no tree search runs here.
 	mutator := NewMCTSMutator()
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
-		sort.Slice(p.Individuals, func(i, j int) bool {
-			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+
+		// Run the same selfHealGeneration envelope Evolve, EvolveWithExperience,
+		// MemeticEvolve, NSGA-II Evolve, and EvolvePareto use, so crisis
+		// detection, LastMutationRate, and specialist archiving/resurrection
+		// aren't silently skipped for Q-learning-guided evolution. The
+		// per-offspring mutation stays Q-table-selected regardless of the
+		// emitted mutationRate — that rate still drives crisis response and
+		// health reporting even though it doesn't gate qLearnMutate.
+		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			newPop := make([]Individual, len(p.Individuals))
+			copy(newPop[:eliteCount], p.Individuals[:eliteCount])
+
+			for i := eliteCount; i < len(p.Individuals); i++ {
+				parents := p.Select()
+				child := Crossover(parents[0], parents[1])
+				newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator, ek)}
+				newPop[i].Genome = hashTree(newPop[i].Tree)
+			}
+
+			p.Individuals = newPop
+			p.Evaluate(fitnessFn)
 		})
-
-		newPop := make([]Individual, len(p.Individuals))
-		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
-
-		for i := eliteCount; i < len(p.Individuals); i++ {
-			parents := p.Select()
-			child := Crossover(parents[0], parents[1])
-			newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator, ek)}
-			newPop[i].Genome = hashTree(newPop[i].Tree)
-		}
-
-		p.Individuals = newPop
-		p.Evaluate(fitnessFn)
 		if p.BestFitness > p.PrevBestFitness {
 			p.PrevBestFitness = p.BestFitness
 		}

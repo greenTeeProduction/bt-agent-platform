@@ -258,6 +258,12 @@ func (mp *MAPElitesPopulation) SelectElites() []*SerializableNode {
 
 // EvolveMAPElites runs the genetic algorithm with MAP-Elites diversity preservation.
 // Each generation selects from diverse niches instead of pure fitness ranking.
+// Crisis detection, emergency mutation-rate override, specialist archiving,
+// and extinct-specialist resurrection all run inside the same
+// Population.selfHealGeneration envelope every other production Evolve
+// variant uses (learning.go, pareto.go, multi_objective.go, island.go), so a
+// population-wide diversity collapse is caught even when every individual
+// shares the same behavioral descriptor and the grid itself looks diverse.
 func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*SerializableNode) float64) *SerializableNode {
 	mp.Evaluate(fitnessFn)
 	eliteCount := max(2, len(mp.Individuals)/10)
@@ -265,109 +271,51 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 
 	for gen := 0; gen < generations; gen++ {
 		mp.Generation++
-		state := BuildPopulationStateWithGrid(mp.Population, mp.Grid, mp.Domain)
-		guidance := supervisor.Guide(state)
-		mutationRate := guidance.RecommendedRate
 
-		// Proactive crisis intervention for the illuminator (milestone 5/5).
-		// The MAP-Elites path already built the grid-aware PopulationState and
-		// called Guide, but previously threw away every crisis signal — so a
-		// collapsed grid silently converged instead of self-correcting. Reuse
-		// that same state to detect population-level death spirals (chiefly the
-		// behavioral diversity_collapse of the illuminated niches) each
-		// generation, accumulating reasons across the run.
-		if mp.Crisis == nil {
-			mp.Crisis = NewCrisisDetector()
-		}
-		crisis, reasons := mp.Crisis.DetectPopulation(&state)
-		if len(reasons) > 0 {
-			mp.recordCrisisReasons(reasons)
-		}
-
-		// Act on the crisis signal: when the grid collapses — or the supervisor
-		// flags an intervention phase — override this generation's mutation rate
-		// with the detector's emergency rate so illumination breaks out of the
-		// collapse rather than reinforcing it.
-		emergency := crisis || guidance.Intervention
-		if emergency {
-			mutationRate = mp.Crisis.GetEmergencyMutationRate()
-		}
-		mp.LastMutationRate = mutationRate
-
-		// Streak-based spirals are what ResetPopulation clears; a pure
-		// diversity_collapse leaves the streak counters alone (see Evolve).
-		resetStreaks := containsCrisisReason(reasons, "regression_spiral") ||
-			containsCrisisReason(reasons, "quality_crash")
-
-		// Get diverse elite parents from MAP-Elites grid
+		// Capture the MAP-Elites grid's niche winners before the shared
+		// self-healing envelope runs — it only touches Population fields, not
+		// the grid — so the diversity-preserving newPop assembly below still
+		// has this generation's niche winners available.
 		mapElites := mp.Grid.Elites()
 
-		// Sort regular population by fitness for fallback
-		sort.Slice(mp.Individuals, func(i, j int) bool {
-			return mp.Individuals[i].Fitness > mp.Individuals[j].Fitness
+		mp.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			// Keep elites from MAP-Elites grid (diverse) + top fitness (quality)
+			newPop := make([]Individual, len(mp.Individuals))
+			copied := 0
+
+			// 1. First, preserve MAP-Elites niche winners (diversity)
+			for i := 0; i < len(mapElites) && copied < eliteCount; i++ {
+				newPop[copied] = *mapElites[i]
+				copied++
+			}
+
+			// 2. Fill remaining elite slots with top fitness (quality)
+			for i := 0; copied < eliteCount && i < len(mp.Individuals); i++ {
+				newPop[copied] = mp.Individuals[i]
+				copied++
+			}
+
+			// 3. Fill rest with crossover + mutation from diverse parents
+			for i := eliteCount; i < len(mp.Individuals); i++ {
+				parents := mp.SelectElites()
+				child := Crossover(parents[0], parents[1])
+				if rand.Float64() < mutationRate {
+					ops := randomMutation(child)
+					if len(ops) > 0 {
+						ops[0] = materializeMutationOp(ops[0])
+					}
+					before := fitnessFn(child)
+					if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
+						after := fitnessFn(child)
+						mp.ExpertKnowledge.Observe(ops[0].Operation, "map_elites", after-before)
+					}
+				}
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
+			}
+
+			mp.Individuals = newPop
+			mp.Evaluate(fitnessFn)
 		})
-
-		// Archive validated specialist elites every generation so a niche lost
-		// during this collapse still has an archetype to resurrect. Observe
-		// no-ops on individuals lacking validated specialist provenance.
-		if mp.Specialists != nil {
-			for i := 0; i < eliteCount && i < len(mp.Individuals); i++ {
-				mp.Specialists.Observe(mp.Individuals[i].Meta, mp.Individuals[i].Tree, mp.Generation)
-			}
-		}
-
-		// Keep elites from MAP-Elites grid (diverse) + top fitness (quality)
-		newPop := make([]Individual, len(mp.Individuals))
-		copied := 0
-
-		// 1. First, preserve MAP-Elites niche winners (diversity)
-		for i := 0; i < len(mapElites) && copied < eliteCount; i++ {
-			newPop[copied] = *mapElites[i]
-			copied++
-		}
-
-		// 2. Fill remaining elite slots with top fitness (quality)
-		for i := 0; copied < eliteCount && i < len(mp.Individuals); i++ {
-			newPop[copied] = mp.Individuals[i]
-			copied++
-		}
-
-		// 3. Fill rest with crossover + mutation from diverse parents
-		for i := eliteCount; i < len(mp.Individuals); i++ {
-			parents := mp.SelectElites()
-			child := Crossover(parents[0], parents[1])
-			if rand.Float64() < mutationRate {
-				ops := randomMutation(child)
-				if len(ops) > 0 {
-					ops[0] = materializeMutationOp(ops[0])
-				}
-				before := fitnessFn(child)
-				if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
-					after := fitnessFn(child)
-					mp.ExpertKnowledge.Observe(ops[0].Operation, "map_elites", after-before)
-				}
-			}
-			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
-		}
-
-		mp.Individuals = newPop
-		mp.Evaluate(fitnessFn)
-
-		// Crisis recovery: resurrect extinct specialists into the illuminated
-		// population when a collapse is underway. A lost high-fitness niche won't
-		// spontaneously reappear from crossover of a collapsed grid, so pull each
-		// extinct archetype out of the registry and inject it in place of the
-		// weakest non-elite individual, re-seeding diversity with proven genomes.
-		if emergency && mp.Specialists != nil {
-			mp.resurrectExtinctSpecialists(eliteCount)
-		}
-
-		// After an emergency generation that tripped a streak-based spiral, clear
-		// the population-level streak counters so the recovered population isn't
-		// immediately re-flagged by stale spiral history.
-		if resetStreaks {
-			mp.Crisis.ResetPopulation()
-		}
 	}
 
 	return mp.BestTree

@@ -298,48 +298,37 @@ func TestMAPElitesGrid_EmptyElites(t *testing.T) {
 	}
 }
 
-// diagonalSpecimen builds the i-th specimen for a deliberately sparse MAP-Elites
-// grid. Each specimen is a linear chain of depth 2*i (so its depth bucket is
-// 2*i) padded with root leaves until its node count lands in node bucket 10*i.
-// Six specimens (i in 0..5) therefore occupy six distinct cells spanning six
-// node buckets and six depth buckets in a single domain: 6 occupied out of a
-// 6*6 == 36 estimated grid, a DiversityScore of 0.167 that sits below the
-// CrisisDetector's 0.2 collapse threshold.
-func diagonalSpecimen(i int) *SerializableNode {
-	depth := 2 * i
-	root := &SerializableNode{Type: "Selector", Name: "spec"}
-	cur := root
-	for d := 0; d < depth; d++ {
-		cur.Children = append(cur.Children, SerializableNode{Type: "Sequence", Name: "chain"})
-		cur = &cur.Children[len(cur.Children)-1]
-	}
-	// Pad leaves at the root so node count == 1 + depth + pad == 10*i + 5,
-	// which buckets to 10*i.
-	pad := 8*i + 4
-	for p := 0; p < pad; p++ {
-		root.Children = append(root.Children, SerializableNode{Type: "Action", Name: "leaf"})
-	}
-	return root
-}
-
-// TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention verifies milestone
-// 5/5 of the proactive crisis-intervention program: the MAP-Elites illuminator
-// must wire the same DetectPopulation / emergency-rate / Resurrect handling that
-// Population.Evolve already has. Today EvolveMAPElites builds the population
-// state and calls supervisor.Guide but throws away every crisis signal, so a
-// collapsed grid silently converges instead of self-correcting.
+// TestMAPElitesPopulation_EvolveMAPElites_ResurrectsExtinctSpecialist verifies
+// milestone 2/3 of the "Close the self-healing envelope gap across the
+// remaining GA variants" program: EvolveMAPElites must delegate crisis
+// detection, emergency mutation-rate override, specialist archiving, and
+// extinct-specialist resurrection to the shared Population.selfHealGeneration
+// envelope via its embedded *Population — exactly like MemeticEvolve, Evolve,
+// EvolveWithExperience, EvolveQLearning, NSGAIIPopulation.Evolve, and
+// EvolvePareto already do — instead of hand-inlining its own
+// mp.Crisis/recordCrisisReasons/resurrectExtinctSpecialists/
+// GetEmergencyMutationRate copy driven by a MAP-Elites-grid-aware
+// PopulationState.
 //
-// Setup: an initial population whose behavioral descriptors spread along a sparse
-// diagonal so the grid's DiversityScore collapses to 6/36 == 0.167 — below the
-// detector's 0.2 threshold, tripping diversity_collapse. A SpecialistRegistry is
-// pre-loaded with a validated, high-fitness "goap" archetype last seen at
-// generation 0, and the live population carries no goap provenance, so the niche
-// reads as long extinct. After one EvolveMAPElites generation the illuminator
-// must (a) run under the emergency mutation rate and (b) inject a
-// resurrected:true specialist back into the illuminated population.
-func TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention(t *testing.T) {
-	// Pre-archive a high-fitness specialist that is missing from the live
-	// population, last seen at generation 0.
+// Setup mirrors TestMemeticEvolve_ResurrectsExtinctSpecialist: a
+// SpecialistRegistry pre-loaded with a validated, high-fitness "goap"
+// archetype last seen at generation 0, and a live population of identical,
+// non-specialist individuals. Because every individual shares the same
+// genome AND the same behavioral descriptor, they collapse into a single
+// occupied MAP-Elites cell — under the grid-aware PopulationState the
+// hand-inlined code builds today, MAPElitesGrid.DiversityScore() reads 1.0
+// (a single occupied cell against an estimated total of 1), so no crisis
+// ever fires and the extinct goap niche is never resurrected. Only the
+// shared envelope's plain population-level Diversity() (distinct genomes /
+// population size == 1/size == 0.1, below the 0.2 threshold) correctly
+// detects this as a diversity collapse. This isolates the exact behavior the
+// consolidation is supposed to fix: identical resurrection behavior to every
+// other selfHealGeneration-wrapped GA variant, not a grid-only signal that
+// misses population-wide collapse.
+func TestMAPElitesPopulation_EvolveMAPElites_ResurrectsExtinctSpecialist(t *testing.T) {
+	base := DefaultTree()
+
+	// Archive a high-fitness specialist that is missing from the live population.
 	registry := NewSpecialistRegistry()
 	archetype := &SerializableNode{
 		Type:     "Sequence",
@@ -352,11 +341,16 @@ func TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention(t *testing.T) {
 		Fitness: FitnessRecord{Score: 0.95, Validated: true},
 	}, archetype, 0)
 
+	const size = 10
 	const domain = "godev"
-	individuals := make([]Individual, 6)
-	for i := 0; i < 6; i++ {
-		tree := diagonalSpecimen(i)
-		individuals[i] = Individual{Tree: tree, Genome: hashTree(tree)}
+	individuals := make([]Individual, size)
+	for i := 0; i < size; i++ {
+		// Identical, non-specialist genomes → Population.Diversity() ==
+		// 1/size == 0.1 (< 0.2 threshold) trips diversity_collapse under the
+		// shared envelope, while the single shared behavioral descriptor
+		// collapses the grid to one cell (DiversityScore == 1.0), which
+		// would NOT trip the old grid-aware detection.
+		individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
 	}
 
 	mp := &MAPElitesPopulation{
@@ -371,23 +365,21 @@ func TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention(t *testing.T) {
 		Domain: domain,
 	}
 
-	// Confirm the setup really presents a collapsed grid before evolving.
+	if d := mp.Diversity(); d <= 0 || d >= 0.2 {
+		t.Fatalf("test setup: want collapsed population diversity in (0, 0.2), got %.3f", d)
+	}
 	mp.Grid.InsertFromPopulation(mp.Population, domain)
-	if div := mp.Grid.DiversityScore(); div <= 0 || div >= 0.2 {
-		t.Fatalf("test setup: want collapsed grid diversity in (0, 0.2), got %.3f", div)
+	if div := mp.Grid.DiversityScore(); div != 1.0 {
+		t.Fatalf("test setup: want a single-cell grid diversity of 1.0 (no grid-level collapse signal), got %.3f", div)
 	}
 
 	// Constant fitness keeps every individual "working" so quality_crash stays
 	// quiet and diversity_collapse is the isolated crisis signal.
 	mp.EvolveMAPElites(1, func(*SerializableNode) float64 { return 1.0 })
 
-	if mp.Crisis == nil {
-		t.Fatal("EvolveMAPElites did not lazily initialize the CrisisDetector")
-	}
-
 	emergency := NewCrisisDetector().GetEmergencyMutationRate()
 	if mp.LastMutationRate < emergency {
-		t.Errorf("collapsed-grid generation mutation rate = %.3f, want >= EmergencyRate %.3f",
+		t.Errorf("collapsed-diversity generation mutation rate = %.3f, want >= EmergencyRate %.3f",
 			mp.LastMutationRate, emergency)
 	}
 
@@ -399,6 +391,6 @@ func TestMAPElitesPopulation_EvolveMAPElitesCrisisIntervention(t *testing.T) {
 		}
 	}
 	if !resurrected {
-		t.Fatal("expected EvolveMAPElites to resurrect the extinct goap specialist into the illuminated population")
+		t.Fatal("expected EvolveMAPElites to resurrect the extinct goap specialist via the shared selfHealGeneration envelope")
 	}
 }

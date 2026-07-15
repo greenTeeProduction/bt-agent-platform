@@ -1477,6 +1477,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"tree": params.Tree, "strategy": params.Strategy,
 				"generations": pop.Generation, "best_fitness": pop.BestFitness,
 				"best_nodes": evolution.CountNodes(best), "diversity": pop.Diversity(),
+				"health": evolveHealthProjection(pop),
 			}
 			// Persist the refined winner instead of discarding it after
 			// computing its fitness, exactly like every other production
@@ -1601,6 +1602,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"learned_states_after":  len(learned),
 				"total_mutations":       pop.TotalMutations, "regressions": pop.Regressions,
 				"evicted_states": qt.EvictedStates,
+				"health":         evolveHealthProjection(pop),
 			}
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr

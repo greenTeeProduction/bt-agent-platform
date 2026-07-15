@@ -274,6 +274,12 @@ func (ls *LocalSearcher) isTabu(genome string, tabuList []tabuEntry) bool {
 // MemeticEvolve runs the full memetic algorithm: GA + local search.
 // After each generation of the genetic algorithm, the best individual(s)
 // undergo local search refinement before being fed back into the population.
+// The crossover/mutation replacement step runs inside the same
+// selfHealGeneration envelope Evolve, EvolveWithExperience, EvolveQLearning,
+// NSGAIIPopulation.Evolve, and EvolvePareto use, so the seeded Specialists
+// registry is observed and extinct specialists get resurrected on a
+// population-level crisis; the local-search refinement step above stays
+// untouched by that envelope.
 func (p *Population) MemeticEvolve(
 	generations int,
 	fitnessFn func(*SerializableNode) float64,
@@ -290,6 +296,7 @@ func (p *Population) MemeticEvolve(
 	if refineTopN <= 0 {
 		refineTopN = 1
 	}
+	supervisor := NewLLMSupervisor()
 
 	for gen := 0; gen < generations; gen++ {
 		p.Generation++
@@ -313,23 +320,25 @@ func (p *Population) MemeticEvolve(
 			}
 		}
 
-		// Keep elites
-		newPop := make([]Individual, len(p.Individuals))
-		copy(newPop[:eliteCount], p.Individuals[:eliteCount])
+		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			// Keep elites
+			newPop := make([]Individual, len(p.Individuals))
+			copy(newPop[:eliteCount], p.Individuals[:eliteCount])
 
-		// Fill rest with crossover + mutation
-		for i := eliteCount; i < len(p.Individuals); i++ {
-			parents := p.Select()
-			child := Crossover(parents[0], parents[1])
-			if rand.Float64() < 0.3 {
-				ops := randomMutation(child)
-				ApplyMutations(child, ops)
+			// Fill rest with crossover + mutation
+			for i := eliteCount; i < len(p.Individuals); i++ {
+				parents := p.Select()
+				child := Crossover(parents[0], parents[1])
+				if rand.Float64() < mutationRate {
+					ops := randomMutation(child)
+					ApplyMutations(child, ops)
+				}
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 			}
-			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
-		}
 
-		p.Individuals = newPop
-		p.Evaluate(fitnessFn)
+			p.Individuals = newPop
+			p.Evaluate(fitnessFn)
+		})
 
 		// Update best tree
 		for i := range p.Individuals {
