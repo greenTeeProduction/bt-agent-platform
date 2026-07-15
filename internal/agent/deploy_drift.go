@@ -141,6 +141,12 @@ type DriftWatchConfig struct {
 	// (<bin>.previous) and skips the restart. Default (false) keeps the
 	// pre-2026-07-13 behavior: rebuild then log "restart to adopt".
 	AutoRestart bool
+	// Kick, when set, lets a producer (the scheduler's OnCycleIdle hook)
+	// trigger an immediate drift check outside the fixed interval. Without it
+	// the watcher starves on busy daemons: every fixed tick lands inside an
+	// in-flight cycle and an armed auto-redeploy never fires (observed
+	// 2026-07-15: drift detected all day, zero rebuilds).
+	Kick <-chan struct{}
 }
 
 // selfBinaryPath returns the OutPath of the target whose Name matches Binary —
@@ -217,6 +223,15 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			return res, fmt.Errorf("deploy-drift smoke test failed for %s: %w", binPath, err)
 		}
 	}
+	// A rebuild takes minutes; a scheduled job may have started in that window.
+	// Re-check before restarting — killing a mid-execution cycle is worse than
+	// deferring adoption (the rebuilt binary stays swapped in for the next
+	// idle check).
+	if cfg.InFlightFn != nil && cfg.InFlightFn() {
+		slog.Warn("deploy drift: restart deferred — a job started during the rebuild",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
+	}
 	slog.Warn("deploy drift: restarting to adopt rebuilt binary",
 		"binary", cfg.Binary, "head_revision", head)
 	if err := driftRestartFn(cfg.Binary); err != nil {
@@ -233,7 +248,9 @@ const DefaultDriftCheckInterval = 20 * time.Minute
 // done, with a small per-process start offset so the daemons don't all check at
 // the same instant. Detection-only unless cfg.AutoRebuild is set. Check errors
 // are logged, never fatal; a panic in the loop is recovered.
-func StartDriftWatcher(ctx context.Context, cfg DriftWatchConfig, interval time.Duration) {
+// The returned stop func cancels the loop and blocks until it has exited —
+// daemons may discard it; tests use it to join the goroutine.
+func StartDriftWatcher(ctx context.Context, cfg DriftWatchConfig, interval time.Duration) (stop func()) {
 	if interval <= 0 {
 		interval = DefaultDriftCheckInterval
 	}
@@ -241,7 +258,10 @@ func StartDriftWatcher(ctx context.Context, cfg DriftWatchConfig, interval time.
 	if offset >= interval {
 		offset = 0
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("deploy drift: watcher panicked (recovered)", "binary", cfg.Binary, "panic", r)
@@ -258,9 +278,27 @@ func StartDriftWatcher(ctx context.Context, cfg DriftWatchConfig, interval time.
 					slog.Warn("deploy drift: check failed", "binary", cfg.Binary, "err", err)
 				}
 				timer.Reset(interval)
+			case <-cfg.Kick:
+				// Scheduler-signaled idle window: check now instead of waiting
+				// out the interval. The timer is reset so a kick also defers
+				// the next fixed check.
+				if _, err := DriftWatchOnce(cfg); err != nil {
+					slog.Warn("deploy drift: kicked check failed", "binary", cfg.Binary, "err", err)
+				}
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(interval)
 			}
 		}
 	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // AutoRebuildEnabled reports whether BT_AUTO_REBUILD_ON_DRIFT opts into the

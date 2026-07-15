@@ -159,7 +159,7 @@ func TestDaemonSchedulerConfigWiresFeedbackPath(t *testing.T) {
 		t.Fatalf("NewHistory: %v", err)
 	}
 
-	scfg := buildSchedulerConfig(cfg, reg, hist, "test-revision")
+	scfg := buildSchedulerConfig(cfg, reg, hist, "test-revision", true)
 
 	if want := agent.FeedbackFile(); scfg.FeedbackPath != want {
 		t.Fatalf("SchedulerConfig.FeedbackPath = %q, want %q (agent.FeedbackFile()); feedback persistence disabled", scfg.FeedbackPath, want)

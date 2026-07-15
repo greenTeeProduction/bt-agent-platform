@@ -872,6 +872,12 @@ func isGoapNotebookLMFailure(out string) bool {
 		"resource_exhausted",
 		"google rejected the query",
 		"api error (code",
+		// Local daily-budget denial (nlm_quota.go): deliberately NOT
+		// error-prefixed (an expected skip, and "Error:" tripped the generic
+		// output-quality gate when embedded in reports), but a budget-denied
+		// query still produced no answer — the goap research path must route
+		// to its Claude fallback exactly as before.
+		"budget exhausted",
 	}
 	for _, marker := range failureMarkers {
 		if strings.Contains(lower, marker) {

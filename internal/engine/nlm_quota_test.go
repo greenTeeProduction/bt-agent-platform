@@ -65,8 +65,11 @@ func TestNlmQueryBudgetRefusesOverCap(t *testing.T) {
 	if proceed || deny == "" {
 		t.Fatalf("over-budget query must be refused, got proceed=%v", proceed)
 	}
-	if !strings.HasPrefix(deny, "Error:") || !isGoapNotebookLMFailure(deny) {
-		t.Fatalf("denial must classify as an nlm failure for fallbacks: %q", deny)
+	// The denial is deliberately NOT error-prefixed (2026-07-15: "Error:"
+	// tripped the generic output-quality gate when embedded in reports) but
+	// must still classify as an nlm miss so research paths fall back.
+	if strings.HasPrefix(deny, "Error:") || !isGoapNotebookLMFailure(deny) {
+		t.Fatalf("denial must be a non-error-prefixed nlm failure for fallbacks: %q", deny)
 	}
 	// The already-cached q1 must still be served despite the exhausted budget.
 	cached, _, proceed := nlmPreflight([]string{"notebook", "query", "nb-1", "q1"})

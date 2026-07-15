@@ -61,11 +61,19 @@ func experienceBankDir() string { return filepath.Join(agent.HomeDir(), "experie
 // rehydrates knowledge-graph feedback (Fitness/RunCount/tool-edges) across
 // restarts — is asserted end-to-end by wiring_test.go instead of only living
 // inside main(), where it can silently regress.
-func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.History, buildRevision string) agent.SchedulerConfig {
+// persistJobs selects job-table write access: the daemon (noMCPMode) owns the
+// durable FileJobStore; MCP/CLI sibling instances get a read-only view so
+// their scheduler state can never clobber the daemon's table — sibling saves
+// were the attributed 2026-07-15 job-table wiper.
+func buildSchedulerConfig(cfg *config.Config, reg *agent.Registry, hist *agent.History, buildRevision string, persistJobs bool) agent.SchedulerConfig {
+	var jobStore agent.JobStore = agent.NewFileJobStore(agent.SchedulerJobsFile())
+	if !persistJobs {
+		jobStore = agent.NewReadOnlyJobStore(jobStore)
+	}
 	return agent.SchedulerConfig{
 		Registry: reg,
 		History:  hist,
-		JobStore: agent.NewFileJobStore(agent.SchedulerJobsFile()),
+		JobStore: jobStore,
 		CBStore: agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
 			Threshold: cfg.CBThreshold,
 			Cooldown:  time.Duration(cfg.CBCooldownSecs) * time.Second,
@@ -228,6 +236,15 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 		return nil
 	}
 	if outcome == schedulerRateLimitCarryover {
+		slo.RecordDeferred()
+		return nil
+	}
+	// Healthy no-code outcomes (no_change: analysis-only; degraded:
+	// deterministic fallback) are terminal by design — RunOnce returns them
+	// with a nil error. Retrying them burned a full Claude cycle per attempt
+	// and dead-lettered honest runs (2026-07-15). Like the rate-limit
+	// carryover they are deferred: neither success nor failure in SLO stats.
+	if runErr == nil && agent.IsHealthyOutcome(outcome) && outcome != "success" {
 		slo.RecordDeferred()
 		return nil
 	}
@@ -398,7 +415,12 @@ func main() {
 	bt := engine.BuildTree(tree, bb)
 
 	// ── Agent Platform ─────────────────────────────────────────────────────
-	agentReg, _ := agent.NewRegistry(agent.RegistryDir())
+	agentReg, regErr := agent.NewRegistry(agent.RegistryDir())
+	if regErr != nil {
+		// A failed/partial registry is why empty-registry reconciles happen;
+		// keep going (the daemon can still serve MCP/A2A) but say so loudly.
+		engine.Error("agent registry construction failed — scheduling and agent runs will be degraded", "dir", agent.RegistryDir(), "error", regErr)
+	}
 	agentHist, _ := agent.NewHistory(agent.HistoryDir())
 	agentLocalMem := agent.MemoryDir()
 	dlq := reliability.NewDeadLetterQueue(agent.DLQFile())
@@ -408,8 +430,19 @@ func main() {
 	jobStoreDir := agent.JobsDir()
 	_ = os.MkdirAll(jobStoreDir, 0755)
 
-	// Persistent agent scheduler (with FileJobStore for durability across restarts)
-	globalSched := agent.NewScheduler(buildSchedulerConfig(cfg, agentReg, agentHist, buildID.Revision))
+	// Persistent agent scheduler (with FileJobStore for durability across
+	// restarts; read-only for MCP/CLI siblings — see buildSchedulerConfig).
+	// driftKick lets a completed cycle poke the drift watcher during the idle
+	// window instead of hoping a fixed 20-min tick lands between cycles.
+	driftKick := make(chan struct{}, 1)
+	scfg := buildSchedulerConfig(cfg, agentReg, agentHist, buildID.Revision, noMCPMode())
+	scfg.OnCycleIdle = func() {
+		select {
+		case driftKick <- struct{}{}:
+		default:
+		}
+	}
+	globalSched := agent.NewScheduler(scfg)
 
 	agentRunner := &agent.RunDeps{
 		Registry:           agentReg,
@@ -442,86 +475,94 @@ func main() {
 	localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner)
 	agentRouter := reliability.NewRouterFromEndpoints(localExec, nil)
 
-	reliability.SafeGo("scheduler-start", func() {
-		globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
-			task := ctx.Task
-			if task == "" {
-				task = ctx.AgentName
-			}
-
-			treeName := ctx.AgentName
-			if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
-				treeName = inst.Definition.Tree
-			}
-
-			policy := reliability.RetryPolicy{
-				MaxRetries:   cfg.RetryMaxRetries,
-				Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
-				MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
-				LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
-				RetryUnknown: true, // retry unknown errors to match legacy behavior
-			}
-			switch cfg.RetryJitter {
-			case "no_jitter":
-				policy.Jitter = reliability.NoJitter
-			case "full_jitter":
-				policy.Jitter = reliability.FullJitterStrategy
-			case "equal_jitter":
-				policy.Jitter = reliability.EqualJitterStrategy
-			case "decorrelated_jitter":
-				policy.Jitter = reliability.DecorrelatedJitterStrategy
-			default:
-				policy.Jitter = reliability.FullJitterStrategy
-			}
-			// SLO evidence (B1): record per-attempt outcomes so the gardener's
-			// validation gate has real execution data to judge deployments by.
-			slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
-			attempts := 0
-			err = policy.ExecuteContext(ctx.Context, func() error {
-				attempts++
-				attemptStart := time.Now()
-				// Dispatch through agentRouter instead of calling
-				// agentRunner.RunOnce directly, so a scheduled run can reach a
-				// remote peer once one joins the registry (single-node
-				// deployments fall through to the local executor unchanged).
-				routedRes, runErr := agentRouter.Execute(ctx.AgentName, task)
-				attemptRes := routedRunResult(ctx.AgentName, task, routedRes)
-				if attemptRes != nil {
-					outcome = attemptRes.Outcome
-					output = attemptRes.Output
-					res = attemptRes
+	// Sibling gate (2026-07-15): only the daemon (noMCPMode) runs the cron
+	// loop. MCP/CLI sibling instances previously started a full scheduler too —
+	// firing phantom duplicate cycles, marking the daemon's in-flight jobs
+	// "crashed", and clobbering the shared job table. Siblings keep the
+	// scheduler OBJECT (read-only job view for MCP schedule tools) but never
+	// tick it.
+	if noMCPMode() {
+		reliability.SafeGo("scheduler-start", func() {
+			globalSched.Start(func(ctx agent.RunContext) (outcome, output string, res *agent.RunResult, err error) {
+				task := ctx.Task
+				if task == "" {
+					task = ctx.AgentName
 				}
-				return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
-			})
 
-			if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
-				engine.Error("failed to persist SLO evidence", "error", saveErr)
-			}
-
-			if err != nil {
-				dlqParent := ctx.Context
-				if res != nil && res.TraceID != "" {
-					dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
+				treeName := ctx.AgentName
+				if inst, getErr := agentReg.Get(ctx.AgentName); getErr == nil {
+					treeName = inst.Definition.Tree
 				}
-				_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
-				dlqSpan.SetAttribute("agent", ctx.AgentName)
-				dlqSpan.RecordError(err)
-				dlq.Push(reliability.DeadLetterEntry{
-					ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
-					Task:          task,
-					Agent:         ctx.AgentName,
-					Error:         err.Error(),
-					Attempts:      3,
-					FailedAt:      time.Now(),
-					Circuit:       "scheduler",
-					BuildRevision: buildID.Revision,
+
+				policy := reliability.RetryPolicy{
+					MaxRetries:   cfg.RetryMaxRetries,
+					Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
+					MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
+					LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
+					RetryUnknown: true, // retry unknown errors to match legacy behavior
+				}
+				switch cfg.RetryJitter {
+				case "no_jitter":
+					policy.Jitter = reliability.NoJitter
+				case "full_jitter":
+					policy.Jitter = reliability.FullJitterStrategy
+				case "equal_jitter":
+					policy.Jitter = reliability.EqualJitterStrategy
+				case "decorrelated_jitter":
+					policy.Jitter = reliability.DecorrelatedJitterStrategy
+				default:
+					policy.Jitter = reliability.FullJitterStrategy
+				}
+				// SLO evidence (B1): record per-attempt outcomes so the gardener's
+				// validation gate has real execution data to judge deployments by.
+				slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
+				attempts := 0
+				err = policy.ExecuteContext(ctx.Context, func() error {
+					attempts++
+					attemptStart := time.Now()
+					// Dispatch through agentRouter instead of calling
+					// agentRunner.RunOnce directly, so a scheduled run can reach a
+					// remote peer once one joins the registry (single-node
+					// deployments fall through to the local executor unchanged).
+					routedRes, runErr := agentRouter.Execute(ctx.AgentName, task)
+					attemptRes := routedRunResult(ctx.AgentName, task, routedRes)
+					if attemptRes != nil {
+						outcome = attemptRes.Outcome
+						output = attemptRes.Output
+						res = attemptRes
+					}
+					return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
 				})
-				dlqSpan.End()
-			}
 
-			return outcome, output, res, err
-		})
-	}, nil)
+				if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
+					engine.Error("failed to persist SLO evidence", "error", saveErr)
+				}
+
+				if err != nil {
+					dlqParent := ctx.Context
+					if res != nil && res.TraceID != "" {
+						dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
+					}
+					_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
+					dlqSpan.SetAttribute("agent", ctx.AgentName)
+					dlqSpan.RecordError(err)
+					dlq.Push(reliability.DeadLetterEntry{
+						ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
+						Task:          task,
+						Agent:         ctx.AgentName,
+						Error:         err.Error(),
+						Attempts:      3,
+						FailedAt:      time.Now(),
+						Circuit:       "scheduler",
+						BuildRevision: buildID.Revision,
+					})
+					dlqSpan.End()
+				}
+
+				return outcome, output, res, err
+			})
+		}, nil)
+	}
 
 	// Deploy-drift watcher (program 94b0b31) — daemon only; MCP-spawned sibling
 	// instances (cycle sessions) must not run it. Detection-only by default:
@@ -538,6 +579,10 @@ func main() {
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),
 				InFlightFn:      globalSched.AnyInFlight,
+				// Idle-window kick from the scheduler: check right after a
+				// cycle completes instead of starving on fixed ticks that
+				// always land inside back-to-back cycles (2026-07-15).
+				Kick: driftKick,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}
@@ -573,14 +618,19 @@ func main() {
 		}, nil)
 	}
 
-	// Auto-load agent schedules on startup
-	for _, inst := range agentReg.List() {
-		sched := inst.Definition.Schedule
-		if sched != "" && sched != "on_demand" {
-			if _, err := globalSched.Schedule(inst.Definition.Name, sched, "2h", 3); err != nil {
-				engine.Info("auto-schedule failed", "agent", inst.Definition.Name, "error", err)
-			} else {
-				engine.Info("auto-scheduled agent", "agent", inst.Definition.Name, "schedule", sched)
+	// Auto-load agent schedules on startup — daemon only. Sibling instances
+	// must not re-Schedule() shared jobs (noMCPMode() gate, 2026-07-15): their
+	// calls rewrote NextRun and registry YAML from a process that never runs
+	// the jobs.
+	if noMCPMode() {
+		for _, inst := range agentReg.List() {
+			sched := inst.Definition.Schedule
+			if sched != "" && sched != "on_demand" {
+				if _, err := globalSched.Schedule(inst.Definition.Name, sched, "2h", 3); err != nil {
+					engine.Info("auto-schedule failed", "agent", inst.Definition.Name, "error", err)
+				} else {
+					engine.Info("auto-scheduled agent", "agent", inst.Definition.Name, "schedule", sched)
+				}
 			}
 		}
 	}

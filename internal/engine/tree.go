@@ -441,7 +441,6 @@ func validateOutputQuality(b *Blackboard) bool {
 	// 0. Structured zero-LLM output detection — short but valid structured output
 	// from trees like alert_router, agent_monitor that produce markdown-formatted
 	// routing/status results without LLM calls.
-	lowerResult := strings.ToLower(result)
 	isStructured := isStructuredOutput(result)
 	minLen := 30
 	if isStructured {
@@ -450,7 +449,7 @@ func validateOutputQuality(b *Blackboard) bool {
 
 	// 1. Minimum length check
 	if len(result) < minLen {
-		b.QualityScore = 0.0
+		setHeuristicQuality(b, 0.0)
 		return false
 	}
 
@@ -469,9 +468,14 @@ func validateOutputQuality(b *Blackboard) bool {
 		"if you have a specific task", "as an ai language model", "i'd be happy to",
 		"let me know what", "there is nothing to",
 	}
+	// Scan outside fenced code blocks only: reports legitimately embed CLI
+	// transcripts (nlm output, git output) whose error words describe the
+	// tool's state, not the run's. The 2026-07-15 researcher treadmill was a
+	// budget-skip line inside a fence failing 17KB of genuine research.
+	scanned := strings.ToLower(stripFencedBlocks(result))
 	for _, p := range errorPatterns {
-		if strings.Contains(lowerResult, p) {
-			b.QualityScore = 0.1
+		if strings.Contains(scanned, p) {
+			setHeuristicQuality(b, 0.1)
 			return false
 		}
 	}
@@ -497,8 +501,40 @@ func validateOutputQuality(b *Blackboard) bool {
 	if score > 1.0 {
 		score = 1.0
 	}
-	b.QualityScore = score
+	setHeuristicQuality(b, score)
 	return score >= 0.5
+}
+
+// setHeuristicQuality records the text-shape heuristic score UNLESS a domain
+// classifier already asserted an authoritative one (bb.QualityAuthoritative).
+// validateOutputQuality runs after tree completion, so an unconditional write
+// here silently clobbered authoritative scores — 2026-07-15's degraded goap
+// cycles recorded 0.8999999999999999 (the heuristic sum) instead of their
+// classifier-stamped 0.3.
+func setHeuristicQuality(b *Blackboard, score float64) {
+	if b.QualityAuthoritative {
+		return
+	}
+	b.QualityScore = score
+}
+
+// stripFencedBlocks removes ``` fenced regions from s so error-pattern scans
+// only see the report's own prose, not embedded tool transcripts.
+func stripFencedBlocks(s string) string {
+	var out strings.Builder
+	inFence := false
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		out.WriteString(line)
+		out.WriteString("\n")
+	}
+	return out.String()
 }
 
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {

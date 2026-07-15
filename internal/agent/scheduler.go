@@ -28,6 +28,7 @@ type Scheduler struct {
 	jobStore      JobStore                  // optional: persists job state across restarts
 	cbStore       *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
 	buildRevision string                    // running binary's VCS revision (deploy-drift diagnosis)
+	onCycleIdle   func()                    // optional: fired after a cycle completes with no job in flight
 }
 
 // ScheduledJob represents a scheduled agent run.
@@ -96,6 +97,14 @@ type SchedulerConfig struct {
 	// when set, runJob compares it against the repo HEAD and WARNs if the
 	// running binary has fallen behind. Empty disables the drift check.
 	BuildRevision string
+
+	// OnCycleIdle, when set, is invoked (non-blocking contract: keep it cheap
+	// or hand off to a channel) after a scheduled cycle completes while no
+	// other job is in flight — the idle window in which a deploy-drift
+	// rebuild/restart is safe. Wired by the daemon to the drift watcher's Kick
+	// so adoption no longer depends on a fixed tick landing in a gap between
+	// back-to-back cycles.
+	OnCycleIdle func()
 }
 
 // NewScheduler creates a new agent scheduler.
@@ -113,6 +122,7 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		jobStore:      cfg.JobStore,
 		cbStore:       cfg.CBStore,
 		buildRevision: cfg.BuildRevision,
+		onCycleIdle:   cfg.OnCycleIdle,
 	}
 	// Restore persisted jobs, then reconcile them against the registry YAML.
 	// The registry definition is the source of truth: stale jobs for deleted
@@ -199,8 +209,25 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		}
 	}
 	if keep != nil {
+		// Catch-up preservation (2026-07-15): when the schedule string is
+		// unchanged, keep a zero NextRun (loadState's crash-recovery "run
+		// immediately" marker) and keep a past-due NextRun (a slot missed while
+		// the daemon was down or the queue was busy) so the first tick fires the
+		// missed run. Unconditionally overwriting NextRun here is how the
+		// startup auto-schedule loop silently dropped hermes-daily-updater's
+		// 06:00 slot for a full day and defeated crash recovery.
+		sameSchedule := keep.Schedule == schedule
+		missedSlot := !keep.NextRun.IsZero() && keep.NextRun.Before(time.Now())
+		switch {
+		case sameSchedule && keep.NextRun.IsZero():
+			// preserve immediate-run marker
+		case sameSchedule && missedSlot:
+			slog.Info("scheduler: preserving missed slot for catch-up",
+				"agent", agentName, "missed_next_run", keep.NextRun)
+		default:
+			keep.NextRun = nextRun
+		}
 		keep.Schedule = schedule
-		keep.NextRun = nextRun
 		keep.Timeout = timeout
 		keep.MaxRetries = maxRetries
 		keep.Active = true
@@ -492,7 +519,13 @@ func (s *Scheduler) ReconcileWithRegistry() {
 
 	agents := s.reg.List()
 	if len(agents) == 0 {
-		slog.Warn("scheduler: reconcile sees EMPTY registry — every persisted job would be dropped")
+		// An empty registry at reconcile time is far more likely a failed or
+		// partial registry construction (main() tolerates NewRegistry errors)
+		// than a genuine zero-agent deployment. Proceeding would drop every
+		// persisted job and its run history. Abort: stale-job cleanup can wait
+		// until the registry is actually readable.
+		slog.Warn("scheduler: reconcile sees EMPTY registry — keeping persisted jobs untouched")
+		return
 	}
 	defs := make(map[string]Definition, len(agents))
 	for _, inst := range agents {
@@ -798,15 +831,31 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		})
 	}
 
-	// Report outcome to circuit breaker store.
-	// A run is considered successful if outcome is "success" and no error occurred.
-	isSuccess := outcome == "success" && runErr == nil
-	reportAgentOutcome(s.cbStore, job.AgentName, isSuccess)
+	// Report outcome to circuit breaker store. Healthy no-code outcomes
+	// (no_change, degraded) count as breaker success: a stretch of
+	// analysis-only cycles must not open an agent's breaker with nothing
+	// actually broken.
+	reportAgentOutcome(s.cbStore, job.AgentName, cycleBreakerSuccess(outcome, runErr))
 	if s.cbStore != nil {
 		if err := s.cbStore.Save(CircuitBreakersFile()); err != nil {
 			slog.Warn("scheduler: persist circuit breaker state failed", "path", CircuitBreakersFile(), "err", err)
 		}
 	}
+
+	// Idle window: nothing else is mid-execution right now, so a deploy-drift
+	// rebuild/restart is safe. Let the watcher check immediately instead of
+	// waiting for a fixed tick that back-to-back cycles starve forever.
+	if s.onCycleIdle != nil && !s.AnyInFlight() {
+		s.onCycleIdle()
+	}
+}
+
+// cycleBreakerSuccess reports whether a completed cycle counts as a success
+// for the agent's circuit breaker. Healthy terminal outcomes — success,
+// no_change (analysis-only), degraded (deterministic fallback) — keep the
+// breaker closed; genuine failures and errored runs count against it.
+func cycleBreakerSuccess(outcome string, runErr error) bool {
+	return runErr == nil && isHealthyOutcome(outcome)
 }
 
 // stepsFromChildTicks converts a run's terminal child ticks (engine.Blackboard.

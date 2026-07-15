@@ -342,6 +342,10 @@ func applyOutcomeRefinement(outcome string, estimate, bbScore float64, authorita
 	return outcome, quality
 }
 
+// IsHealthyOutcome is the exported form of isHealthyOutcome for callers
+// outside the package (cmd/bt-agent's scheduler attempt recording).
+func IsHealthyOutcome(outcome string) bool { return isHealthyOutcome(outcome) }
+
 // isHealthyOutcome reports whether an outcome is a healthy terminal state that
 // the scheduler must neither retry nor dead-letter. no_change (analysis-only,
 // nothing to change) and degraded (Claude path fell back to deterministic

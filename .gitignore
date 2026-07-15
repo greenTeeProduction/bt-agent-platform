@@ -36,3 +36,8 @@ docs/superpowers/plans/goap-fusion-*.md
 # Temp files
 .tmp
 bt-scalability-probe
+
+# Compiled binaries must never be committed (2026-07-15: a cycle re-committed
+# a rebuilt 19.8MB benchcmp; TestNoCommittedRootBinaries enforces this)
+/benchcmp
+/bt-ci-doctor

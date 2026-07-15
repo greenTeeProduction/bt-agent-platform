@@ -200,14 +200,14 @@ func nlmPreflight(args []string) (cached string, deny string, proceed bool) {
 		}
 		u := loadNlmUsage()
 		if budget := nlmBudgetFor("query"); u.Queries >= budget {
-			return "", fmt.Sprintf("Error: nlm daily query budget exhausted (local cap %d, used %d) — falling back; budget resets midnight Pacific", budget, u.Queries), false
+			return "", fmt.Sprintf("Skipped: nlm daily query budget exhausted (local cap %d, used %d) — falling back; budget resets midnight Pacific", budget, u.Queries), false
 		}
 		return "", "", true
 	}
 	if nlmIsResearchStart(args) {
 		u := loadNlmUsage()
 		if budget := nlmBudgetFor("research"); u.Research >= budget {
-			return "", fmt.Sprintf("Error: nlm daily research budget exhausted (local cap %d, used %d) — skipping web research; budget resets midnight Pacific", budget, u.Research), false
+			return "", fmt.Sprintf("Skipped: nlm daily research budget exhausted (local cap %d, used %d) — skipping web research; budget resets midnight Pacific", budget, u.Research), false
 		}
 	}
 	// Imports are budget-gated too: a wedged "already in progress" research
@@ -218,7 +218,7 @@ func nlmPreflight(args []string) (cached string, deny string, proceed bool) {
 	if nlmIsResearchImport(args) {
 		u := loadNlmUsage()
 		if budget := nlmBudgetFor("import"); u.Imports >= budget {
-			return "", fmt.Sprintf("Error: nlm daily import budget exhausted (local cap %d, used %d) — skipping source import; budget resets midnight Pacific", budget, u.Imports), false
+			return "", fmt.Sprintf("Skipped: nlm daily import budget exhausted (local cap %d, used %d) — skipping source import; budget resets midnight Pacific", budget, u.Imports), false
 		}
 	}
 	return "", "", true

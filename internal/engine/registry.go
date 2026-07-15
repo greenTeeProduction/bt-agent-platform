@@ -303,8 +303,24 @@ func init() {
 	RegisterAction("SaveNotebookLMState", saveNotebookLMStateAction)
 	RegisterAction("NotebookLMMetricsReport", nlmMetricsReportAction)
 	RegisterAction("DefaultFallback", func(ctx *btcore.BTContext[Blackboard]) int {
-		ctx.Blackboard.Result = fmt.Sprintf("## Fallback Executed\n\n**Task**: %s\n**Status**: Processed via generic fallback path.", ctx.Blackboard.Task)
-		ctx.Blackboard.Outcome = string(evolution.Success)
+		bb := ctx.Blackboard
+		note := fmt.Sprintf("## Fallback Executed\n\n**Task**: %s\n**Status**: Processed via generic fallback path.", bb.Task)
+		// Never destroy work the tree already produced: the pre-fallback result
+		// is kept and the note appended (2026-07-15: the researcher's genuine
+		// 17KB reports were overwritten by this boilerplate for ~23h, and the
+		// boilerplate then outscored the reports it destroyed).
+		if strings.TrimSpace(bb.Result) != "" {
+			bb.Result = bb.Result + "\n\n---\n\n" + note
+		} else {
+			bb.Result = note
+		}
+		// A fallback run is a degraded run, and its quality is asserted
+		// authoritatively so the text-shape heuristic cannot score the
+		// boilerplate as a 0.9 success.
+		bb.Outcome = string(evolution.Success)
+		bb.OutcomeRefinement = "degraded"
+		bb.QualityScore = 0.3
+		bb.QualityAuthoritative = true
 		return 1
 	})
 	RegisterAction("HealthCheckAgent", func(ctx *btcore.BTContext[Blackboard]) int {
