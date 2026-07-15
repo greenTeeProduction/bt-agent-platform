@@ -37,7 +37,7 @@ repository: "https://github.com/greenTeeProduction/bt-agent-platform"
 
 go-bt-evolve is a Go behavior tree agent platform that provides:
 
-- **BT Execution Engine** — Builds and executes behavior trees with 34 node types: composites (Sequence, Selector, Parallel, ReactiveParallel, MemSequence, MemSelector, PersistentMemSequence, UtilitySelector, BanditSelector, DecisionTree), leaves (Action, Condition, ChainAction, CachedCondition), decorators (Retry, Timeout, Repeater, Inverter, Succeeder, AlwaysSucceed, Runner, CircuitBreaker, RateLimit, Budget, SemaphoreGuard, Monitor, AbortOnEvent, QualityGate, CheckpointVerifier, ReviewCycle, ForEachTask, HumanApprovalGate, SubTreeRef), and planning (PlannerNode).
+- **BT Execution Engine** — Builds and executes behavior trees with 35 node types: composites (Sequence, Selector, Parallel, ReactiveParallel, MemSequence, MemSelector, PersistentMemSequence, UtilitySelector, BanditSelector, DecisionTree), leaves (Action, Condition, ChainAction, CachedCondition), decorators (Retry, Timeout, Repeater, Inverter, Succeeder, AlwaysSucceed, Runner, CircuitBreaker, RateLimit, Budget, SemaphoreGuard, Monitor, AbortOnEvent, QualityGate, CheckpointVerifier, ReviewCycle, ForEachTask, HumanApprovalGate, SubTreeRef, ClaudeErrorHandler), and planning (PlannerNode).
 - **55+ Trees across 8 Categories** — domain (23 trees incl. the goap_fusion / goap_fusion_loop self-improvement runners, bt_fusion research indexer, notebooklm pipeline trees, superpowers_workflow, hermes_update), finance (23), research (deep/quick), startup roles, thinktank (synthesis, peer_review, report), evolution, composed blocks, core.
 - **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon researches (NotebookLM literature + Claude code review with commits/structure/failures mode rotation), derives up to three file-scoped goals or multi-cycle programs, writes goal-driven multi-task plans, implements them via Claude Code RED→GREEN in isolated worktrees, verifies (tests, build, changed-package suites, lint parity), lands hook-gated commits on the bare master, pushes, and syncs this arc42 document — unattended.
 - **Research Memory** — a content-hash-deduplicating knowledge store (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM answer, and implemented goal; a program store (`programs.json`) persists multi-cycle change programs executed one milestone per cycle.
@@ -1004,9 +1004,21 @@ All services bind to localhost except the dashboard (accessible via Tailscale). 
 
 **Effect:** A composition either does exactly what was asked or fails loudly with an actionable message, and the live tree can no longer be replaced by a composition the engine's own validator would refuse. The same fail-loud sweep hardened the operator CLI: `requireNameArg` (`cmd/bt-agent-cli/main.go`, pinned by `TestRequireNameArg`) guards the `test`/`logs`/`delete` subcommands' positional agent-name read, printing `Error: agent name required` plus usage and exiting 1 where the unguarded `os.Args[2]` read previously panicked with index-out-of-range.
 
+## 8.16 Self-Extending Claude Error Recovery
+
+**What:** `ClaudeErrorHandler` — a self-extending recovery decorator wrapped around every domain-tree root. On subtree failure it first ticks previously generated recovery nodes guard-first (a matching guard condition selects the extension, so no LLM call is made when a known fix already applies); only when no extension resolves the failure does it make at most one read-only Claude Code call per error signature per cooldown (default 6h), asking Claude to propose a recovery node composed from the registered action/condition vocabulary. A validated proposal persists under `~/.go-bt-evolve/error_handler/` and is re-grafted as a child of the handler on every subsequent tree build (trees are rebuilt from the compiled catalog each scheduled run, so persistence — not in-memory state — is what makes a learned fix stick), then ticked immediately for the run that triggered it.
+
+**Why:** The platform's other error-handling primitives (§8.6 SafeGo/CircuitBreaker/DLQ, §6.5) protect the process and preserve failed work, but neither one learns a fix for a specific, recurring subtree failure — every occurrence of the same error signature re-fails the same way until a human intervenes. `ClaudeErrorHandler` closes that gap for the domain-tree fleet: the first occurrence of a novel failure pays for one bounded, read-only Claude call; every subsequent occurrence of the same signature is handled deterministically by the persisted, validated node the call produced, with no further LLM cost or latency.
+
+**Guardrails:** strict vocabulary validation (the proposal must resolve entirely to registered action/condition names, `internal/engine/registry.go`); a 5-extension cap per handler (`internal/engine/error_handler_claude.go`), after which Claude is no longer consulted and failures pass through unchanged; auto-disable of an individual extension after 3 consecutive failures (`errorHandlerDisableAfter`, `internal/engine/error_handler_store.go`); and a `BT_CLAUDE_ERROR_HANDLER=off` kill switch (`internal/engine/error_handler_claude.go`) that makes the decorator a transparent passthrough. The decorator is also a no-op passthrough under gardener sandbox scoring (`bb.Sandbox`), since structural fitness evaluation must never call Claude or touch the store.
+
+**Where:** `internal/engine/error_handler_node.go` (`BuildClaudeErrorHandler`, wired into `buildNode` at `internal/engine/tree.go:348`), `internal/engine/error_handler_store.go` (persisted extension ledger, consecutive-failure disable), `internal/engine/error_handler_claude.go` (cooldown, extension cap, kill switch, strict-vocabulary Claude proposal call); every `AllDomainTrees()` root is wrapped via `wrapWithErrorHandler` (`internal/domains/trees.go`). Pinned by `TestClaudeErrorHandler_ProposalGraftedAndTicked`, `TestClaudeErrorHandler_GraftedExtensionHandlesNextRunWithoutClaude`, `TestClaudeErrorHandler_UnresolvableStampsCooldownAndPassesFailureThrough`, `TestClaudeErrorHandler_KillSwitch`, and `TestClaudeErrorHandler_CapReachedSkipsClaude` (`internal/engine/error_handler_node_test.go`), and `TestErrorHandlerStore_ConsecutiveFailuresDisable` (`internal/engine/error_handler_store_test.go`).
+
+**Effect:** A recurring subtree failure is fixed once and handled deterministically thereafter, without unbounded LLM spend, an unbounded extension surface, or a single misbehaving extension silently wedging a handler — and the whole mechanism disappears cleanly under sandbox scoring or the kill switch.
+
 ---
 
-*Generated by bt-agent arc42 pipeline — section8Concepts tree; extended 2026-07-08*
+*Generated by bt-agent arc42 pipeline — section8Concepts tree; extended 2026-07-08, 2026-07-16*
 
 
 ---
@@ -3196,6 +3208,6 @@ go-bt-evolve
 ---
 
 *Generated by bt-agent arc42 pipeline — assembleDoc tree*
-*Platform: go-bt-evolve | 55+ trees, 8 categories, 34 node types, 30 internal packages, 3 MCP servers*
+*Platform: go-bt-evolve | 55+ trees, 8 categories, 35 node types, 30 internal packages, 3 MCP servers*
 *Full refresh: 2026-07-04 — kept current per landing run by the arc42 sync stage*
 *Repository: https://github.com/greenTeeProduction/bt-agent-platform*
