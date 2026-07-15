@@ -169,12 +169,9 @@ func registerSuperpowersProductionActions() {
 			bb.Result = "## Design Validation Failed\n\n" + err.Error()
 			return -1
 		}
-		content := string(data)
-		for _, heading := range []string{"## Goal", "## Architecture", "## Acceptance Criteria", "## Test Strategy", "## Risks"} {
-			if !strings.Contains(content, heading) {
-				bb.Result = fmt.Sprintf("## Design Validation Failed\n\nMissing heading: %s", heading)
-				return -1
-			}
+		if missing := validateDesignHeadings(string(data)); len(missing) > 0 {
+			bb.Result = "## Design Validation Failed\n\nMissing: " + strings.Join(missing, ", ")
+			return -1
 		}
 		bb.Result = fmt.Sprintf("## Design Validated\n\nPath: `%s`", run.DesignPath)
 		return 1

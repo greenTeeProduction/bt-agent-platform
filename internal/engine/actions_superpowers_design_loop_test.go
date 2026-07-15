@@ -145,3 +145,79 @@ func TestGrillDesign_RefusesRoundsBeyondBound(t *testing.T) {
 		t.Fatalf("bound must refuse BEFORE any Claude call, got %d calls", fake.calls)
 	}
 }
+
+func TestReviseDesign_NoOpWithoutFeedback(t *testing.T) {
+	bb, run := newGrillLoopTestRun(t)
+	fake := &fakeGrillClaudeRunner{output: "IGNORED"}
+	orig := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = orig })
+
+	revise := GetAction("ReviseDesignArtifact")
+	if got := revise(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d, want 1", got)
+	}
+	if fake.calls != 0 {
+		t.Fatalf("round-1 revise must not call Claude, got %d", fake.calls)
+	}
+	if run2, _ := getSuperpowersRun(bb); run2.DesignRevision != 0 {
+		t.Fatalf("DesignRevision = %d, want 0", run2.DesignRevision)
+	}
+	_ = run
+}
+
+func TestReviseDesign_RewritesBodyPreservesAppendix(t *testing.T) {
+	bb, run := newGrillLoopTestRun(t)
+	appendix := "\n## Grill Q&A — round 1\n\n**Q (critical, p):** q?\n\n**A:** OPEN — no answerer available\n"
+	orig, _ := os.ReadFile(run.DesignPath)
+	if err := os.WriteFile(run.DesignPath, append(orig, []byte(appendix)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bb.ChainState["review_feedback"] = "OPEN CRITICAL [p]: q?"
+
+	revised := "# Superpowers Design\n\n## Goal\nX2\n\n## Architecture\nA2 (p resolved: uses fsync)\n\n## Acceptance Criteria\nC\n\n## Test Strategy\nT\n\n## Risks\nR\n"
+	fake := &fakeGrillClaudeRunner{output: revised}
+	origRunner := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = origRunner })
+
+	revise := GetAction("ReviseDesignArtifact")
+	if got := revise(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d, want 1", got)
+	}
+	data, _ := os.ReadFile(run.DesignPath)
+	if !strings.Contains(string(data), "A2 (p resolved: uses fsync)") {
+		t.Fatalf("body not rewritten: %s", data)
+	}
+	if !strings.Contains(string(data), "## Grill Q&A — round 1") {
+		t.Fatalf("appendix lost: %s", data)
+	}
+	if run2, _ := getSuperpowersRun(bb); run2.DesignRevision != 1 {
+		t.Fatalf("DesignRevision = %d, want 1", run2.DesignRevision)
+	}
+}
+
+func TestReviseDesign_ClaudeFailureIsNoOp(t *testing.T) {
+	bb, run := newGrillLoopTestRun(t)
+	bb.ChainState["review_feedback"] = "OPEN CRITICAL [p]: q?"
+	fake := &fakeGrillClaudeRunner{err: context.DeadlineExceeded}
+	origRunner := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = origRunner })
+	before, _ := os.ReadFile(run.DesignPath)
+
+	revise := GetAction("ReviseDesignArtifact")
+	if got := revise(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d, want 1 (failed revision must no-op, not kill the loop)", got)
+	}
+	after, _ := os.ReadFile(run.DesignPath)
+	if string(before) != string(after) {
+		t.Fatal("design must be unchanged after failed revision")
+	}
+}
+
+func TestValidationAliasesRegistered(t *testing.T) {
+	if GetAction("ValidateRevisedDesign") == nil || GetAction("ValidateSplitDesign") == nil {
+		t.Fatal("validation alias actions not registered")
+	}
+}
