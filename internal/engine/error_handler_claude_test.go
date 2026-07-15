@@ -2,7 +2,10 @@
 package engine
 
 import (
+	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -55,6 +58,11 @@ func TestParseErrorHandlerProposal(t *testing.T) {
 	if _, err = parseErrorHandlerProposal(`{"resolvable": true}`); err == nil {
 		t.Fatal("resolvable without node must error")
 	}
+	manyStray := `thinking {a} {b} {c} {d} {e} {f} then: {"resolvable": false, "reason": "x"}`
+	p, err = parseErrorHandlerProposal(manyStray)
+	if err != nil || p.Resolvable || p.Reason != "x" {
+		t.Fatalf("must skip past every stray '{' to find the real JSON object: p=%+v err=%v", p, err)
+	}
 }
 
 func guardedSeq(guard, action string) *evolution.SerializableNode {
@@ -69,6 +77,19 @@ func TestValidateErrorHandlerProposal(t *testing.T) {
 	valid := guardedSeq("LastErrorCategoryIs:testcat", "eh_validate_known_action")
 	if err := validateErrorHandlerProposal(valid, map[string]bool{}); err != nil {
 		t.Fatalf("valid proposal rejected: %v", err)
+	}
+	// The root/first-ticked-leaf guard checks pass (childless disallowed/unknown
+	// roots above are rejected earlier by that guard check), but a disallowed,
+	// known node type deeper in the tree must still be caught by the walk's
+	// allowlist check.
+	deeplyDisallowed := &evolution.SerializableNode{Type: "Sequence", Name: "outer", Children: []evolution.SerializableNode{
+		{Type: "Condition", Name: "LastErrorCategoryIs:x"},
+		{Type: "Parallel", Name: "par", Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "eh_validate_known_action"},
+		}},
+	}}
+	if err := validateErrorHandlerProposal(deeplyDisallowed, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("expected rejection with 'not allowed' for disallowed node type deeper in tree, got: %v", err)
 	}
 	cases := []struct {
 		desc string
@@ -128,4 +149,89 @@ func TestErrorHandlerConfigDefaults(t *testing.T) {
 	if errorHandlerMaxNodes() != 2 {
 		t.Fatal("max nodes env override")
 	}
+}
+
+// fakeClaudeRunner returns a canned proposal and counts invocations.
+type fakeClaudeRunner struct {
+	calls  atomic.Int64
+	output string
+	err    error
+}
+
+func (f *fakeClaudeRunner) RunClaude(_ context.Context, _ string, _ string) CommandResult {
+	f.calls.Add(1)
+	return CommandResult{Output: f.output, Err: f.err}
+}
+
+func swapErrorHandlerRunner(t *testing.T, r ClaudeRunner) {
+	t.Helper()
+	old := errorHandlerClaudeRunner
+	errorHandlerClaudeRunner = r
+	t.Cleanup(func() { errorHandlerClaudeRunner = old })
+}
+
+func TestRequestErrorHandlerProposal_StampsLedgerOnEveryOutcome(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	failing := &evolution.SerializableNode{Type: "Action", Name: "x"}
+	bb := &Blackboard{ChainState: map[string]any{}}
+
+	t.Run("runner error stamps error verdict", func(t *testing.T) {
+		sig := "sig-err"
+		runner := &fakeClaudeRunner{err: errors.New("boom")}
+		swapErrorHandlerRunner(t, runner)
+		if _, err := requestErrorHandlerProposal("h", failing, bb, sig); err == nil {
+			t.Fatal("expected error from runner failure")
+		}
+		entry, ok := errorHandlerLedgerGet(sig)
+		if !ok || entry.LastVerdict != "error" {
+			t.Fatalf("ledger entry = %+v ok=%v, want verdict=error", entry, ok)
+		}
+	})
+
+	t.Run("unparseable output stamps error verdict", func(t *testing.T) {
+		sig := "sig-parse"
+		runner := &fakeClaudeRunner{output: "no json here"}
+		swapErrorHandlerRunner(t, runner)
+		if _, err := requestErrorHandlerProposal("h", failing, bb, sig); err == nil {
+			t.Fatal("expected error from unparseable output")
+		}
+		entry, ok := errorHandlerLedgerGet(sig)
+		if !ok || entry.LastVerdict != "error" {
+			t.Fatalf("ledger entry = %+v ok=%v, want verdict=error", entry, ok)
+		}
+	})
+
+	t.Run("unresolvable proposal stamps unresolvable verdict", func(t *testing.T) {
+		sig := "sig-unres"
+		runner := &fakeClaudeRunner{output: `{"resolvable": false, "reason": "r"}`}
+		swapErrorHandlerRunner(t, runner)
+		p, err := requestErrorHandlerProposal("h", failing, bb, sig)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.Resolvable {
+			t.Fatal("expected Resolvable=false")
+		}
+		entry, ok := errorHandlerLedgerGet(sig)
+		if !ok || entry.LastVerdict != "unresolvable" {
+			t.Fatalf("ledger entry = %+v ok=%v, want verdict=unresolvable", entry, ok)
+		}
+	})
+
+	t.Run("resolvable proposal stamps proposed verdict", func(t *testing.T) {
+		sig := "sig-prop"
+		runner := &fakeClaudeRunner{output: `{"resolvable": true, "reason": "ok", "node": {"type": "Sequence", "name": "Handle_x"}}`}
+		swapErrorHandlerRunner(t, runner)
+		p, err := requestErrorHandlerProposal("h", failing, bb, sig)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !p.Resolvable {
+			t.Fatal("expected Resolvable=true")
+		}
+		entry, ok := errorHandlerLedgerGet(sig)
+		if !ok || entry.LastVerdict != "proposed" {
+			t.Fatalf("ledger entry = %+v ok=%v, want verdict=proposed", entry, ok)
+		}
+	})
 }

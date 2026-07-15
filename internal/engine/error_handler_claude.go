@@ -87,7 +87,7 @@ type errorHandlerProposal struct {
 // Claude's output (which may wrap it in prose or ```json fences).
 func parseErrorHandlerProposal(output string) (errorHandlerProposal, error) {
 	rest := output
-	for try := 0; try < 5; try++ {
+	for {
 		idx := strings.Index(rest, "{")
 		if idx < 0 {
 			break
