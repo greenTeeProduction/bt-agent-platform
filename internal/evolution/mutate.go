@@ -413,15 +413,28 @@ func applyReplaceNode(tree *SerializableNode, target string) bool {
 }
 
 // applyReplaceChildren replaces all children of a composite node (Sequence/Selector)
-// with a single action node — restructures the subtree entirely.
+// with a single action node — restructures the subtree entirely. The
+// replacement reuses an Action name already present in the tree rather than
+// fabricating a new one (e.g. the old "Restructured_"+target): a synthesized
+// name is never registered in the engine's action registry, so
+// engine.ValidateTreeFull rejects it as "unknown action" even though
+// evolution's own (weaker, registry-unaware) Validate() lets it through the
+// GA's in-loop gate — letting a structurally-fine but unpersistable mutant win
+// selection and then get silently discarded at persist time. Reusing a name
+// already present in the tree is always registry-valid, since the tree this
+// mutation runs against is itself derived from a previously validated tree.
 func applyReplaceChildren(tree *SerializableNode, target string) bool {
+	replacement := firstNodeNameByType(tree, "Action")
+	if replacement == "" {
+		return false
+	}
 	for i := range tree.Children {
 		if tree.Children[i].Name == target && len(tree.Children[i].Children) > 0 {
 			// Replace all children with a single action
 			tree.Children[i].Children = []SerializableNode{{
 				Type:     "Action",
-				Name:     "Restructured_" + target,
-				Metadata: map[string]any{"evolved": true, "restructured": true},
+				Name:     replacement,
+				Metadata: map[string]any{"evolved": true, "restructured": true, "restructured_from": target},
 			}}
 			return true
 		}

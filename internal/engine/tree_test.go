@@ -95,6 +95,34 @@ func TestRunTask_PreservesPendingApprovalOutcome(t *testing.T) {
 	}
 }
 
+// TestRunTask_PreservesRateLimitCarryoverOutcome locks in
+// "goap_fusion_rate_limited" as a real terminal outcome that must survive
+// RunTask's terminal switch. A GOAP fusion leaf that hits an active Claude
+// rate-limit backoff sets bb.Outcome = "goap_fusion_rate_limited" and returns
+// -1 (the tree's generic failure code) so the deliberate graceful-degrade
+// carryover can be distinguished from a genuine failure by the scheduler.
+// Today RunTask's terminal switch unconditionally stamps
+// `case code == -1: bb.Outcome = string(evolution.Failure)`, clobbering the
+// sentinel before it ever reaches the scheduler — collapsing a designed
+// pause into a generic failure that gets retried into the DLQ.
+func TestRunTask_PreservesRateLimitCarryoverOutcome(t *testing.T) {
+	RegisterAction("RunTaskRateLimitCarryoverAction", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Outcome = "goap_fusion_rate_limited"
+		ctx.Blackboard.Result = "Claude rate-limit backoff active until 2026-07-08T22:35:14Z; plan carried over to the next cycle."
+		return -1
+	})
+
+	bb := &Blackboard{Task: "goap fusion cycle"}
+	tree := &evolution.SerializableNode{Type: "Action", Name: "RunTaskRateLimitCarryoverAction"}
+	bt := BuildTree(tree, bb)
+
+	RunTask(bb, bt)
+
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		t.Fatalf("RunTask must preserve goap_fusion_rate_limited as a terminal outcome instead of collapsing it to %q, got %q", evolution.Failure, bb.Outcome)
+	}
+}
+
 // TestValidateTree_LeafTypesRejectChildren locks in the generalized
 // leaf-with-children rule across BOTH validation entry points.
 //

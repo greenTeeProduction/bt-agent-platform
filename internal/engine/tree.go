@@ -581,6 +581,11 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	bb.DurationMs = time.Since(start).Milliseconds()
 
 	switch {
+	case bb.Outcome == "goap_fusion_rate_limited":
+		// Deliberate graceful-degrade carryover set by a leaf (e.g. an active
+		// Claude rate-limit backoff) — preserve it instead of collapsing the
+		// tree's generic failure code to Failure, so the scheduler can defer
+		// rather than dead-letter this attempt.
 	case code == 1:
 		bb.Outcome = string(evolution.Success)
 	case code == -1:
