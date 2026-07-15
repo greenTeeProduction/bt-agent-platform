@@ -97,3 +97,43 @@ func TestLoadGardenerMetricsParsesAggregateDocument(t *testing.T) {
 		t.Errorf("dashboard JSON crisis_interventions = %v (present=%v), want 2 (from total_crisis_interventions)", got, ok)
 	}
 }
+
+// TestLoadGardenerMetricsParsesRollbacks verifies milestone 3/3 of the
+// "Q2 Evolvability — Make gardener mutation rollback automatic,
+// multi-revision, and observable" program: loadGardenerMetrics must surface
+// total_rollbacks from gardener-metrics.json into a Rollbacks field on
+// GardenerMetrics, so a recorded rollback cycle becomes visible in dashboard
+// metrics instead of being silently dropped.
+func TestLoadGardenerMetricsParsesRollbacks(t *testing.T) {
+	writeGardenerFixture(t, `{
+		"last_run": 1751980000,
+		"total_cycles": 5,
+		"total_rollbacks": 3,
+		"active_trees": 2,
+		"best_fitness": 42.0,
+		"history": [
+			{"tree_name": "code-analysis", "cycle": 1, "timestamp": 1751979000, "base_fitness": 40, "new_fitness": 42, "delta": 2, "improved": true, "rollbacks": 3}
+		]
+	}`)
+
+	gm := loadGardenerMetrics()
+	if gm == nil {
+		t.Fatal("loadGardenerMetrics() = nil for a valid aggregate document, dashboard drops all gardener data")
+	}
+
+	if _, ok := reflect.TypeOf(GardenerMetrics{}).FieldByName("Rollbacks"); !ok {
+		t.Error("GardenerMetrics has no Rollbacks field; total_rollbacks is dropped")
+	}
+
+	serialized, err := json.Marshal(gm)
+	if err != nil {
+		t.Fatalf("marshaling GardenerMetrics: %v", err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(serialized, &wire); err != nil {
+		t.Fatalf("round-tripping GardenerMetrics JSON: %v", err)
+	}
+	if got, ok := wire["rollbacks"]; !ok || got != float64(3) {
+		t.Errorf("dashboard JSON rollbacks = %v (present=%v), want 3 (from total_rollbacks)", got, ok)
+	}
+}

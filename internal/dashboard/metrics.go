@@ -60,6 +60,7 @@ type GardenerMetrics struct {
 	Trees               int                `json:"trees"`
 	Improvements        int                `json:"improvements"`
 	CrisisInterventions int                `json:"crisis_interventions"`
+	Rollbacks           int                `json:"rollbacks"`
 	BestFitness         float64            `json:"best_fitness"`
 	LastRun             string             `json:"last_run"`
 	SLOs                map[string]float64 `json:"slos,omitempty"`
@@ -216,6 +217,7 @@ func loadGardenerMetrics() *GardenerMetrics {
 		Trees               int     `json:"active_trees"`
 		Improvements        int     `json:"total_improvements"`
 		CrisisInterventions int     `json:"total_crisis_interventions"`
+		Rollbacks           int     `json:"total_rollbacks"`
 		BestFitness         float64 `json:"best_fitness"`
 		LastRun             int64   `json:"last_run"`
 	}
@@ -237,6 +239,7 @@ func loadGardenerMetrics() *GardenerMetrics {
 		Trees:               raw.Trees,
 		Improvements:        raw.Improvements,
 		CrisisInterventions: raw.CrisisInterventions,
+		Rollbacks:           raw.Rollbacks,
 		BestFitness:         raw.BestFitness,
 		LastRun:             lastRun,
 	}

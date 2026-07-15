@@ -201,3 +201,81 @@ func TestSnapshotRestoreNonexistent(t *testing.T) {
 		t.Error("expected error for nonexistent snapshot")
 	}
 }
+
+// TestSnapshotTreeMultiRevision verifies that repeated SnapshotTree calls for
+// the same tree name accumulate revision history instead of overwriting a
+// single snapshot_<treeName>.json file — so a regression discovered several
+// cycles after it was introduced can still roll back past just the
+// immediately-preceding cycle.
+func TestSnapshotTreeMultiRevision(t *testing.T) {
+	tmpDir := t.TempDir()
+	snapshotDir := filepath.Join(tmpDir, "snapshots")
+
+	rev1 := &SerializableNode{Type: "Sequence", Name: "gen1"}
+	rev2 := &SerializableNode{Type: "Sequence", Name: "gen2"}
+	rev3 := &SerializableNode{Type: "Sequence", Name: "gen3"}
+
+	if _, err := SnapshotTree(rev1, "multi_tree", snapshotDir); err != nil {
+		t.Fatalf("SnapshotTree(rev1) error: %v", err)
+	}
+	if _, err := SnapshotTree(rev2, "multi_tree", snapshotDir); err != nil {
+		t.Fatalf("SnapshotTree(rev2) error: %v", err)
+	}
+	if _, err := SnapshotTree(rev3, "multi_tree", snapshotDir); err != nil {
+		t.Fatalf("SnapshotTree(rev3) error: %v", err)
+	}
+
+	revisions, err := ListRevisions("multi_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("ListRevisions() error: %v", err)
+	}
+	if len(revisions) != 3 {
+		t.Fatalf("ListRevisions() returned %d revisions, want 3 (snapshots must not overwrite each other)", len(revisions))
+	}
+
+	// A regression discovered several cycles later must still be able to
+	// roll back past just the immediately-preceding cycle — restore rev1,
+	// not just rev2.
+	oldest := revisions[0]
+	restored, err := RestoreTreeRevision("multi_tree", snapshotDir, oldest)
+	if err != nil {
+		t.Fatalf("RestoreTreeRevision(oldest) error: %v", err)
+	}
+	if restored.Name != "gen1" {
+		t.Errorf("RestoreTreeRevision(oldest).Name = %s, want gen1 (oldest revision)", restored.Name)
+	}
+
+	newest := revisions[len(revisions)-1]
+	restoredNewest, err := RestoreTreeRevision("multi_tree", snapshotDir, newest)
+	if err != nil {
+		t.Fatalf("RestoreTreeRevision(newest) error: %v", err)
+	}
+	if restoredNewest.Name != "gen3" {
+		t.Errorf("RestoreTreeRevision(newest).Name = %s, want gen3 (newest revision)", restoredNewest.Name)
+	}
+
+	// Plain RestoreTree (no revision arg) must still return the latest
+	// revision, preserving backward compatibility for existing callers.
+	latest, err := RestoreTree("multi_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("RestoreTree() error: %v", err)
+	}
+	if latest.Name != "gen3" {
+		t.Errorf("RestoreTree().Name = %s, want gen3 (latest revision)", latest.Name)
+	}
+}
+
+// TestListRevisionsEmpty verifies ListRevisions returns no error and no
+// revisions for a tree with no snapshots.
+func TestListRevisionsEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	snapshotDir := filepath.Join(tmpDir, "snapshots")
+
+	revisions, err := ListRevisions("never_snapshotted", snapshotDir)
+	if err != nil {
+		t.Fatalf("ListRevisions() error on empty history: %v", err)
+	}
+	if len(revisions) != 0 {
+		t.Errorf("ListRevisions() = %d revisions, want 0", len(revisions))
+	}
+}

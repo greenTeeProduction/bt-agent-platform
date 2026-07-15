@@ -242,6 +242,44 @@ func TestMetricsTracker_SaveAggregatesDeepSearchCoverage(t *testing.T) {
 	}
 }
 
+// TestMetricsTracker_SaveAggregatesRollbacks verifies milestone 3/3 of the
+// "Q2 Evolvability — Make gardener mutation rollback automatic,
+// multi-revision, and observable" program: gardener-metrics.json must expose
+// total_rollbacks aggregated from the per-cycle CycleMetrics.Rollbacks field,
+// which Save silently drops today, so a dashboard consumer can see rollback
+// activity without replaying the full history array.
+func TestMetricsTracker_SaveAggregatesRollbacks(t *testing.T) {
+	dir := t.TempDir()
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker failed: %v", err)
+	}
+
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 1, Rollbacks: 2})
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 2, Rollbacks: 1})
+	mt.Record(CycleMetrics{TreeName: "tree_b", Cycle: 1})
+
+	if err := mt.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "gardener-metrics.json"))
+	if err != nil {
+		t.Fatalf("reading gardener-metrics.json: %v", err)
+	}
+
+	var doc struct {
+		TotalRollbacks int `json:"total_rollbacks"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("gardener-metrics.json must decode: %v", err)
+	}
+
+	if doc.TotalRollbacks != 3 {
+		t.Errorf("total_rollbacks = %d, want 3 (sum of CycleMetrics.Rollbacks across all recorded cycles)", doc.TotalRollbacks)
+	}
+}
+
 // TestRegistry_RollbackTree verifies milestone 2/3 of the "Q2 Evolvability"
 // program: RollbackTree must restore a tree from its milestone-1 pre-mutation
 // snapshot (evolution.RestoreTree) and durably persist the restored state via

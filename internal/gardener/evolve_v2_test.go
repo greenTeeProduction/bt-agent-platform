@@ -576,15 +576,9 @@ func TestEvolveTreeV2_SnapshotsTreeBeforeMutation(t *testing.T) {
 
 	g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
 
-	snapshotPath := filepath.Join(g.cfg.SnapshotDir, "snapshot_"+entry.Name+".json")
-	data, err := os.ReadFile(snapshotPath)
+	snapshotted, err := evolution.RestoreTree(entry.Name, g.cfg.SnapshotDir)
 	if err != nil {
-		t.Fatalf("expected pre-mutation snapshot at %s, got error: %v", snapshotPath, err)
-	}
-
-	var snapshotted evolution.SerializableNode
-	if err := json.Unmarshal(data, &snapshotted); err != nil {
-		t.Fatalf("unmarshal snapshot: %v", err)
+		t.Fatalf("expected pre-mutation snapshot for %s in %s, got error: %v", entry.Name, g.cfg.SnapshotDir, err)
 	}
 	if snapshotted.Name != entry.Tree.Name {
 		t.Errorf("snapshot root Name = %q, want %q (must capture the pre-cycle tree)", snapshotted.Name, entry.Tree.Name)
@@ -1429,5 +1423,103 @@ func TestEvolveTreeV2_DeepSearchMutationRejectedByMetaValidatorNotPersisted(t *t
 
 	if _, statErr := os.Stat(filePath); !os.IsNotExist(statErr) {
 		t.Errorf("expected Registry.SaveTree NOT to persist a deep-search mutation rejected by MetaValidator, but %s exists", filePath)
+	}
+}
+
+// TestEvolveTreeV2_DisabledGateTriggersAutomaticRollback pins milestone 2/3 of
+// the "Q2 Evolvability — automatic, multi-revision, observable rollback"
+// program: once QualityGate.IsDisabledFor trips (ConsecutiveFails exceeded)
+// evolveTreeV2 must call Registry.RollbackTree to restore the tree's
+// last-known-good pre-mutation snapshot, not merely skip mutations and leave
+// the tree frozen in whatever (possibly regressed) state it was already in.
+func TestEvolveTreeV2_DisabledGateTriggersAutomaticRollback(t *testing.T) {
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+	const treeName = "rollback_target"
+
+	// Seed a last-known-good snapshot revision before the tree ever regresses.
+	goodTree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "GoodRevision",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+	if _, err := evolution.SnapshotTree(goodTree, treeName, snapDir); err != nil {
+		t.Fatalf("SnapshotTree(good) failed: %v", err)
+	}
+
+	// The tree currently registered is a different, regressed revision — as if
+	// prior cycles drifted it away from the last-known-good snapshot before the
+	// gate tripped.
+	regressedTree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "RegressedRevision",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+			{Type: "Action", Name: "ExtraBadStep"},
+		},
+	}
+
+	refStore, err := evolution.NewStore(refDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	metricsTracker, err := NewMetricsTracker(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	filePath := filepath.Join(refDir, "tree-"+treeName+".json")
+	registry := &Registry{dir: refDir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "rollback test", Tree: regressedTree, FilePath: filePath, Active: true},
+	}
+	registry.mu.Unlock()
+
+	gate := evolution.NewQualityGate(snapDir)
+	gate.ConsecutiveFails = 1
+	// Simulate a prior cycle's regression streak crossing the threshold, so
+	// this cycle starts with the gate already disabled for treeName.
+	gate.ValidateFor(treeName, 100, 0)
+	if !gate.IsDisabledFor(treeName) {
+		t.Fatalf("test setup: expected gate to be disabled for %q", treeName)
+	}
+
+	cfg := Config{
+		Registry:                 registry,
+		MetricsTracker:           metricsTracker,
+		RefStore:                 refStore,
+		Gate:                     gate,
+		SnapshotDir:              snapDir,
+		MaxMutations:             1,
+		EvolveWithoutReflections: true, // bypass the evidence gate; irrelevant to this test
+	}
+	g := NewGardener(cfg)
+
+	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
+	entry := registry.List()[0]
+	g.evolveTreeV2(entry, v2cfg)
+
+	restored := registry.List()[0]
+	if restored.Tree == nil || restored.Tree.Name != goodTree.Name {
+		gotName := "<nil>"
+		if restored.Tree != nil {
+			gotName = restored.Tree.Name
+		}
+		t.Errorf("expected the disabled-gate cycle to auto-rollback the in-memory tree to the last-known-good revision %q, got %q — a bare skip leaves it frozen in the regressed state",
+			goodTree.Name, gotName)
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("reading persisted tree after rollback: %v", err)
+	}
+	var onDisk evolution.SerializableNode
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("unmarshal persisted tree: %v", err)
+	}
+	if onDisk.Name != goodTree.Name {
+		t.Errorf("expected the automatic rollback to durably persist the restored tree via Registry.SaveTree, got on-disk name %q, want %q",
+			onDisk.Name, goodTree.Name)
 	}
 }

@@ -313,6 +313,7 @@ type metricsDocument struct {
 	TotalImprovements        int            `json:"total_improvements"`
 	TotalDeepSearchCycles    int            `json:"total_deep_search_cycles"`
 	AvgTTHitRate             float64        `json:"avg_tt_hit_rate"`
+	TotalRollbacks           int            `json:"total_rollbacks"`
 	History                  []CycleMetrics `json:"history"`
 }
 
@@ -342,6 +343,7 @@ func (mt *MetricsTracker) Save() error {
 			doc.TotalDeepSearchCycles++
 			ttHitRateSum += m.TTHitRate
 		}
+		doc.TotalRollbacks += m.Rollbacks
 	}
 	doc.ActiveTrees = len(trees)
 	if doc.TotalDeepSearchCycles > 0 {

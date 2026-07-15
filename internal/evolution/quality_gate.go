@@ -139,10 +139,73 @@ func (q *QualityGate) ResetFailCount() {
 	q.failCounts = nil
 }
 
-// SnapshotTree saves a copy of the tree to the snapshot directory atomically.
+// snapshotIndex tracks the ordered revision history for one tree's snapshots,
+// oldest first, so a regression discovered several cycles after it was
+// introduced can still roll back past just the immediately-preceding cycle.
+type snapshotIndex struct {
+	Revisions []int `json:"revisions"`
+}
+
+func snapshotIndexPath(treeName, snapshotDir string) string {
+	return filepath.Join(snapshotDir, fmt.Sprintf("snapshot_%s.index.json", treeName))
+}
+
+func snapshotRevisionPath(treeName, snapshotDir string, revision int) string {
+	return filepath.Join(snapshotDir, fmt.Sprintf("snapshot_%s_%d.json", treeName, revision))
+}
+
+func loadSnapshotIndex(treeName, snapshotDir string) (snapshotIndex, error) {
+	data, err := os.ReadFile(snapshotIndexPath(treeName, snapshotDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return snapshotIndex{}, nil
+		}
+		return snapshotIndex{}, fmt.Errorf("read snapshot index: %w", err)
+	}
+
+	var idx snapshotIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return snapshotIndex{}, fmt.Errorf("unmarshal snapshot index: %w", err)
+	}
+	return idx, nil
+}
+
+func saveSnapshotIndex(treeName, snapshotDir string, idx snapshotIndex) error {
+	data, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal snapshot index: %w", err)
+	}
+
+	path := snapshotIndexPath(treeName, snapshotDir)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return fmt.Errorf("write snapshot index: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename snapshot index: %w", err)
+	}
+	return nil
+}
+
+// SnapshotTree saves a copy of the tree as a new revision in the snapshot
+// directory, atomically. Revisions accumulate — earlier snapshots for the
+// same treeName are never overwritten — so ListRevisions and
+// RestoreTreeRevision can recover any prior cycle's state, not just the one
+// immediately before the latest.
 func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string, error) {
 	if err := os.MkdirAll(snapshotDir, 0700); err != nil {
 		return "", fmt.Errorf("create snapshot dir: %w", err)
+	}
+
+	idx, err := loadSnapshotIndex(treeName, snapshotDir)
+	if err != nil {
+		return "", err
+	}
+
+	revision := 1
+	if n := len(idx.Revisions); n > 0 {
+		revision = idx.Revisions[n-1] + 1
 	}
 
 	data, err := json.MarshalIndent(tree, "", "  ")
@@ -150,7 +213,7 @@ func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string,
 		return "", fmt.Errorf("marshal snapshot: %w", err)
 	}
 
-	path := filepath.Join(snapshotDir, fmt.Sprintf("snapshot_%s.json", treeName))
+	path := snapshotRevisionPath(treeName, snapshotDir, revision)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return "", fmt.Errorf("write snapshot: %w", err)
@@ -160,16 +223,32 @@ func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string,
 		return "", fmt.Errorf("rename snapshot: %w", err)
 	}
 
+	idx.Revisions = append(idx.Revisions, revision)
+	if err := saveSnapshotIndex(treeName, snapshotDir, idx); err != nil {
+		return "", err
+	}
+
 	return path, nil
 }
 
-// RestoreTree loads a snapshot from disk and returns the tree.
-func RestoreTree(treeName, snapshotDir string) (*SerializableNode, error) {
-	path := filepath.Join(snapshotDir, fmt.Sprintf("snapshot_%s.json", treeName))
-
-	data, err := os.ReadFile(path)
+// ListRevisions returns treeName's snapshot revisions in the given
+// snapshotDir, ordered oldest to newest. An empty result with a nil error
+// means the tree has never been snapshotted.
+func ListRevisions(treeName, snapshotDir string) ([]int, error) {
+	idx, err := loadSnapshotIndex(treeName, snapshotDir)
 	if err != nil {
-		return nil, fmt.Errorf("read snapshot: %w", err)
+		return nil, err
+	}
+	return idx.Revisions, nil
+}
+
+// RestoreTreeRevision loads a specific snapshot revision from disk and
+// returns the tree, letting callers roll back past just the
+// immediately-preceding cycle when a regression is discovered late.
+func RestoreTreeRevision(treeName, snapshotDir string, revision int) (*SerializableNode, error) {
+	data, err := os.ReadFile(snapshotRevisionPath(treeName, snapshotDir, revision))
+	if err != nil {
+		return nil, fmt.Errorf("read snapshot revision: %w", err)
 	}
 
 	var tree SerializableNode
@@ -178,4 +257,18 @@ func RestoreTree(treeName, snapshotDir string) (*SerializableNode, error) {
 	}
 
 	return &tree, nil
+}
+
+// RestoreTree loads the most recent snapshot revision from disk and returns
+// the tree.
+func RestoreTree(treeName, snapshotDir string) (*SerializableNode, error) {
+	idx, err := loadSnapshotIndex(treeName, snapshotDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(idx.Revisions) == 0 {
+		return nil, fmt.Errorf("no snapshot found for tree %q in %s", treeName, snapshotDir)
+	}
+
+	return RestoreTreeRevision(treeName, snapshotDir, idx.Revisions[len(idx.Revisions)-1])
 }

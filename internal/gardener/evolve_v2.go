@@ -211,6 +211,33 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		selectedLLM = benchmark.DefaultMock()
 	}
 
+	// Fail closed AND self-heal (Q2 Evolvability milestone 2): a disabled gate
+	// means this tree regressed ConsecutiveFails times in a row. Rather than
+	// merely pausing mutations and leaving the tree frozen in that regressed
+	// state until process restart, restore its last-known-good pre-mutation
+	// snapshot right now via Registry.RollbackTree. This check must happen
+	// before the pre-mutation snapshot below — snapshotting the current
+	// (regressed) state first would make it the new "most recent" revision
+	// and defeat the rollback.
+	if g.cfg.Gate != nil && g.cfg.Gate.IsDisabledFor(entry.Name) {
+		slog.Warn("gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart",
+			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
+		rolledBack := 0
+		if g.cfg.SnapshotDir != "" {
+			if err := g.cfg.Registry.RollbackTree(entry.Name, g.cfg.SnapshotDir); err != nil {
+				slog.Warn("gardener/v2: automatic rollback failed, tree remains frozen in regressed state", "tree", entry.Name, "error", err)
+			} else {
+				rolledBack = 1
+			}
+		}
+		return CycleMetrics{
+			TreeName: entry.Name, Timestamp: time.Now().Unix(),
+			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
+			NodesBefore: nodesBefore, NodesAfter: nodesBefore,
+			Rollbacks: rolledBack,
+		}
+	}
+
 	// Durable pre-mutation snapshot (Q2 Evolvability milestone 1): originalTree
 	// below only lives in-memory for this cycle, so a process crash mid-cycle
 	// loses the pre-mutation state entirely. Persist it to g.cfg.SnapshotDir
@@ -226,14 +253,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	rollbacks := 0
 	originalTree := cloneTreeForGardener(tree)
 	currentFitness := baseFitness
-	gateDisabled := g.cfg.Gate != nil && g.cfg.Gate.IsDisabledFor(entry.Name)
-	if gateDisabled {
-		// Fail closed: a disabled gate means evolution is paused for this tree
-		// until process restart — skip every candidate, apply nothing ungated.
-		slog.Warn("gardener/v2: quality gate DISABLED — mutations SKIPPED (fail-closed), evolution paused until restart",
-			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
-	}
-	for i := 0; !gateDisabled && i < len(candidates) && applied < maxMutations; i++ {
+	for i := 0; i < len(candidates) && applied < maxMutations; i++ {
 		if candidates[i].Score < 0.45 {
 			break
 		}
