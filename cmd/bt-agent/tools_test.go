@@ -2342,6 +2342,70 @@ func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
 	}
 }
 
+// TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree pins the same fix as
+// TestBTEvolveBottlenecksPersistsEvolvedWinnerTree for the CMA-ES branch:
+// today evolution.TuneTreeParameters's tuned *SerializableNode return value is
+// discarded (bound to "_"), leaving only bestFitness in the report. This test
+// uses the same domain:code_review fixture as
+// TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport, whose Retry
+// MaxRetries knob deterministically routes it to the CMA-ES path.
+func TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 12, RunCount: 5,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	report, isList := out["report"].([]interface{})
+	if !isList || len(report) != 1 {
+		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single cmaes-path bottleneck; got %d: %v", len(report), out["report"])
+	}
+	entry, _ := report[0].(map[string]interface{})
+	if entry["algorithm"] != "cmaes" {
+		t.Fatalf("fixture bottleneck must route to the cmaes path; got algorithm=%v", entry["algorithm"])
+	}
+
+	const wantID = "domain:code_review-evolved"
+	evolvedID, _ := entry["evolved_tree_id"].(string)
+	if evolvedID != wantID {
+		t.Fatalf("bt_evolve_bottlenecks cmaes-path report entry must carry 'evolved_tree_id' = %q instead of discarding the tuned winner after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
+	}
+	if persisted, _ := entry["persisted"].(bool); !persisted {
+		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the tuned winner; got %v", entry["persisted"])
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil {
+		t.Fatalf("bt_evolve_bottlenecks must persist the cmaes-path tuned winner tree under %q instead of discarding it after computing fitness", wantID)
+	}
+
+	if meta := kg.Trees[wantID]; meta == nil {
+		t.Fatalf("bt_evolve_bottlenecks must register the tuned winner tree %q in the knowledge graph", wantID)
+	}
+}
+
 // TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree pins the same fix as
 // TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_selection_pressure:
 // today only pop.BestFitness survives via recordEvolvedFitness — the bred
@@ -2759,6 +2823,77 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 	}
 	if errOut["error"] != "unknown tree" {
 		t.Fatalf("bt_evolve_memetic unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut)
+	}
+}
+
+// TestBTEvolveMemeticPersistsEvolvedWinnerTree pins the same fix as
+// TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_memetic: today
+// best := pop.MemeticEvolve(...) is only consulted for CountNodes(best) and
+// pop.BestFitness in the report — the refined winner tree itself is discarded
+// after being bred. The tool must instead persist it through the existing
+// persistEvolvedWinner seam under a derived "<tree>-evolved" id and register
+// it in the knowledge graph, exactly like every other production evolve tool.
+func TestBTEvolveMemeticPersistsEvolvedWinnerTree(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go Developer", Category: "core"})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_memetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_memetic) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_memetic returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+
+	const wantID = "godev-evolved"
+	evolvedID, _ := out["evolved_tree_id"].(string)
+	if evolvedID != wantID {
+		t.Fatalf("bt_evolve_memetic must report the persisted evolved winner's id as 'evolved_tree_id' = %q instead of discarding the winner after computing fitness; got %v (keys %v)", wantID, out["evolved_tree_id"], out)
+	}
+	if persisted, _ := out["persisted"].(bool); !persisted {
+		t.Errorf("bt_evolve_memetic must report persisted=true for the evolved winner when it validates and a tree store is configured; got %v", out["persisted"])
+	}
+	if file, _ := out["file"].(string); file == "" {
+		t.Errorf("bt_evolve_memetic must report the on-disk 'file' path the evolved winner was persisted to; got %v", out["file"])
+	}
+
+	loaded, err := treeStore.LoadNamed(wantID)
+	if err != nil {
+		t.Fatalf("LoadNamed(%q): %v", wantID, err)
+	}
+	if loaded == nil {
+		t.Fatalf("bt_evolve_memetic must persist the evolved winner tree under %q so it survives restarts and is resolvable by id; treeStore has nothing there", wantID)
+	}
+
+	meta := kg.Trees[wantID]
+	if meta == nil {
+		t.Fatalf("bt_evolve_memetic must register the evolved winner tree %q in the knowledge graph so discovery can surface it", wantID)
+	}
+	if meta.StructuralFitness <= 0 {
+		t.Errorf("bt_evolve_memetic evolved winner %q must be registered with a positive StructuralFitness; got %v", wantID, meta.StructuralFitness)
+	}
+
+	related := kg.DiscoverRelated("godev")
+	found := false
+	for _, id := range related {
+		if id == wantID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bt_evolve_memetic must connect the evolved winner %q back to its base tree 'godev' via a KG relationship; DiscoverRelated(godev)=%v", wantID, related)
 	}
 }
 

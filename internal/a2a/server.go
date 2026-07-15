@@ -290,6 +290,26 @@ func NewServer(reg *agent.Registry, llmClient llm.LLM, port int, baseURL string)
 	}, nil
 }
 
+// RefreshCards rebuilds CardCache from the live agent registry and keeps
+// Executor.CardCache (the auction-bid scoring path) in sync. An agent created
+// after the server started — via bt_agent_create or autopilot's
+// activateAutomation, both of which call Create against this same registry —
+// is otherwise invisible to the per-agent endpoint, the global agent card, and
+// AuctionCardSource's candidate pool until the process restarts and NewServer
+// rebuilds the one-shot snapshot. Callers should invoke this after any
+// registry mutation that adds or removes an agent.
+func (s *Server) RefreshCards() error {
+	cards, err := BuildCardRegistry(s.Reg, s.BaseURL)
+	if err != nil {
+		return fmt.Errorf("refresh card registry: %w", err)
+	}
+	s.CardCache = cards
+	if s.Executor != nil {
+		s.Executor.CardCache = cards
+	}
+	return nil
+}
+
 // AuctionCardSource returns a closure yielding this server's live card registry,
 // suitable for installing as a2a.AuctionCardsFn so production auctions draw their
 // candidates from the same cards the A2A server serves. Returning the closure

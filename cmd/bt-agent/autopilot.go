@@ -237,10 +237,18 @@ func activateAutomation(deps *mcpDeps, user, agentName, treeID, signature, sched
 			"pattern_signature": signature,
 		},
 	})
-	if err != nil && strings.Contains(err.Error(), "already exists") {
-		return nil // idempotent: re-approval of an existing agent is fine
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			return nil // idempotent: re-approval of an existing agent is fine
+		}
+		return err
 	}
-	return err
+	if deps.refreshA2ACards != nil {
+		if rerr := deps.refreshA2ACards(); rerr != nil {
+			engine.Warn("a2a: card refresh after activateAutomation failed", "agent", agentName, "error", rerr)
+		}
+	}
+	return nil
 }
 
 // finalizeAutomationApproval activates an approved automation proposal and

@@ -340,6 +340,11 @@ type mcpDeps struct {
 	agentRunner *agent.RunDeps
 	// Personalization (ADR-010 Phase 1)
 	personaStore *persona.Store
+	// refreshA2ACards rebuilds the A2A server's card registry after a
+	// registry mutation (agent create), so newly created agents become
+	// reachable over A2A/auctions without a process restart. Nil when the
+	// A2A server failed to start; callers must guard the call.
+	refreshA2ACards func() error
 }
 
 // newProductionPopulation builds an evolution population for the MCP tools
@@ -1368,11 +1373,16 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			pop := newProductionPopulation(population, baseTree)
 			searcher := evolution.NewLocalSearcher(searchStrategy)
 			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
-			data, _ := json.Marshal(map[string]interface{}{
+			result := map[string]interface{}{
 				"tree": params.Tree, "strategy": params.Strategy,
 				"generations": pop.Generation, "best_fitness": pop.BestFitness,
 				"best_nodes": evolution.CountNodes(best), "diversity": pop.Diversity(),
-			})
+			}
+			// Persist the refined winner instead of discarding it after
+			// computing its fitness, exactly like every other production
+			// evolve tool.
+			persistEvolvedWinner(deps, params.Tree, best, pop.BestFitness, result)
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -1882,7 +1892,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// addFailureContext.
 				// Trees with tunable parameters get CMA-ES parameter tuning;
 				// parameterless trees fall back to structural genetic evolution.
-				if _, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
+				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
 					algorithms["cmaes"]++
 					entry := map[string]interface{}{
 						"tree":           b.TreeID,
@@ -1893,6 +1903,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 						"algorithm":      "cmaes",
 					}
 					addFailureContext(entry, b.LastFailureTask, b.LastFailureOutcome)
+					// Persist the tuned winner instead of discarding it after
+					// computing its fitness, exactly like the genetic branch below.
+					persistEvolvedWinner(deps, b.TreeID, tunedTree, bestFitness, entry)
 					report = append(report, entry)
 					continue
 				}
@@ -2362,6 +2375,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+			}
+			if deps.refreshA2ACards != nil {
+				if rerr := deps.refreshA2ACards(); rerr != nil {
+					engine.Warn("a2a: card refresh after bt_agent_create failed", "agent", inst.Definition.Name, "error", rerr)
+				}
 			}
 			data, _ := json.Marshal(map[string]interface{}{"status": "created", "agent": inst.Definition.Name, "tree": inst.Definition.Tree, "id": inst.ID})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

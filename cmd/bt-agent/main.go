@@ -741,6 +741,10 @@ func main() {
 		// Inject tree resolver and pre-resolve trees for all agents
 		a2a_mod.SetTreeResolver(resolveTree)
 		a2a_mod.InitEngineDelegate()
+		// Let bt_agent_create and autopilot's activateAutomation refresh the
+		// A2A card registry after they mutate agentReg, so newly created
+		// agents become reachable over A2A/auctions without a restart.
+		deps.refreshA2ACards = a2aSrv.RefreshCards
 		// Supply the live candidate source to the auctioneer production wiring
 		// (engine.AuctionDelegateFn is installed at link time by internal/agentexec).
 		// Candidates are the same A2A cards this server serves.

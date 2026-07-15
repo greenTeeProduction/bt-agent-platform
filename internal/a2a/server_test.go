@@ -413,6 +413,62 @@ func TestExecute_NonAnnouncementStillRunsTree(t *testing.T) {
 // check so pending_approval (and any future non-success/non-failure
 // outcome the bridge knows how to map) surfaces correctly to the caller.
 
+// ---- runtime card refresh: agents created after the server starts must
+// become reachable over A2A/auctions without a process restart -------------
+//
+// Server.CardCache is built once in NewServer via BuildCardRegistry and never
+// revisited afterward. An agent created later — via bt_agent_create or
+// autopilot's activateAutomation, both of which call reg.Create against the
+// same live *agent.Registry the server was built from — is invisible to the
+// per-agent endpoint, the global agent card, and AuctionCardSource's
+// candidate pool until the process restarts and NewServer runs again.
+// RefreshCards must rebuild CardCache from the live registry and keep the
+// executor's mirrored copy (used to score auction bids) in sync.
+
+func TestServer_RefreshCards_PicksUpAgentCreatedAfterStartup(t *testing.T) {
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "existing", Tree: "domain:code_review", Description: "seed agent"}); err != nil {
+		t.Fatalf("Create existing agent: %v", err)
+	}
+
+	srv, err := NewServer(reg, nil, 0, "http://localhost:0")
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	if _, ok := srv.CardCache["existing"]; !ok {
+		t.Fatalf("CardCache missing seed agent at startup: %+v", srv.CardCache)
+	}
+
+	// Simulate an agent created at runtime, after the server (and its
+	// one-shot CardCache snapshot) already exist.
+	if _, err := reg.Create(agent.Definition{Name: "newcomer", Tree: "domain:code_review", Description: "created after startup"}); err != nil {
+		t.Fatalf("Create newcomer agent: %v", err)
+	}
+	if _, ok := srv.CardCache["newcomer"]; ok {
+		t.Fatal("test setup invalid: newcomer already present before refresh")
+	}
+
+	if err := srv.RefreshCards(); err != nil {
+		t.Fatalf("RefreshCards: %v", err)
+	}
+
+	if _, ok := srv.CardCache["newcomer"]; !ok {
+		t.Errorf("Server.CardCache missing agent created after startup even after RefreshCards; got %v", srv.CardCache)
+	}
+	if _, ok := srv.Executor.CardCache["newcomer"]; !ok {
+		t.Errorf("Executor.CardCache (auction-bid scoring path) missing agent created after startup even after RefreshCards; got %v", srv.Executor.CardCache)
+	}
+
+	// Production auctions draw candidates from this closure — it must
+	// reflect the refreshed registry too, not just the raw field.
+	if _, ok := srv.AuctionCardSource()()["newcomer"]; !ok {
+		t.Error("AuctionCardSource() candidate pool missing agent created after startup even after RefreshCards")
+	}
+}
+
 func TestExecute_PendingApprovalRoutesThroughBridge(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := hitl.InitStore(filepath.Join(dir, "hitl")); err != nil {
