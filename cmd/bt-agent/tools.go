@@ -93,6 +93,19 @@ func nsgaArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "nsga_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// trackRecordArchivePath resolves the durable TrackRecord archive shared by
+// every benchmark-gated evolution algorithm (bt_evolve_qd,
+// bt_evolve_multiobjective, and future variants) on a given base tree (Q2
+// Evolvability: adaptive, track-record-driven generation budgets), scoped per
+// base tree like the other archive helpers so runs on different base trees
+// don't share generation-budget history. Deliberately one path per tree
+// rather than per tool: the whole point is that a regression discovered by
+// one algorithm raises the generation budget for every other algorithm's
+// next run on the same tree.
+func trackRecordArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "track_record-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // sanitizeArchiveTreeID maps a base-tree ID to a cross-platform-safe file name
 // fragment (":" is invalid on Windows, "/" everywhere), mirroring the policy
 // of evolution.TreeFileName. That helper is deliberately not reused: its
@@ -956,8 +969,21 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if reject != nil {
 				return reject
 			}
+			// Load the durable TrackRecord shared across every benchmark-gated
+			// evolution algorithm on this tree (Q2 Evolvability) before falling
+			// back to a hardcoded generations default, so a history of
+			// benchmark-gate regressions — even ones discovered by a different
+			// algorithm's run on the same tree — earns this run a larger search
+			// budget instead of always retrying with the same fixed compute. A
+			// load error is surfaced non-fatally.
+			track := evolution.NewTrackRecord()
+			trackPath := trackRecordArchivePath(params.Tree)
+			trackLoadErr := ""
+			if err := track.Load(trackPath); err != nil {
+				trackLoadErr = err.Error()
+			}
 			if params.Generations <= 0 {
-				params.Generations = 10
+				params.Generations = track.RecommendedGenerations(10)
 			}
 			if params.Domain == "" {
 				params.Domain = "general"
@@ -1036,6 +1062,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
+			if trackLoadErr != "" {
+				result["track_record_load_error"] = trackLoadErr
+			}
 			// Gate the grid's best illuminated individual through the tree's
 			// real benchmark suite before trusting it enough to persist —
 			// structural fitness alone can rate a mutation as elite while it
@@ -1050,6 +1079,19 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				result["benchmark_gate_rejected"] = gateRejected
 				result["benchmark_base_success_rate"] = baseRate
 				result["benchmark_winner_success_rate"] = winnerRate
+				// Record this call's benchmark-gate outcome into the shared
+				// TrackRecord regardless of whether the winner was accepted, so
+				// the next run on this tree (by any benchmark-gated algorithm)
+				// sees the regression and gets a bigger generation budget.
+				track.Record(gateRejected)
+				// Surface the adaptive budget driver in the result JSON
+				// alongside benchmark_gate_rejected (Q2 Evolvability
+				// milestone 3/3) instead of leaving it as internal state.
+				result["track_record_win_rate"] = track.WinRate()
+				result["track_record_recommended_generations"] = track.RecommendedGenerations(10)
+				if err := track.Save(trackPath); err != nil {
+					result["track_record_save_error"] = err.Error()
+				}
 			}
 			if !gateRejected {
 				// Persist the merged, illuminated grid so the next invocation
@@ -1087,8 +1129,20 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if reject != nil {
 				return reject
 			}
+			// Load the durable TrackRecord shared across every benchmark-gated
+			// evolution algorithm on this tree (Q2 Evolvability) before falling
+			// back to a hardcoded generations default — the same shared archive
+			// bt_evolve_qd reads and writes, so a regression discovered by
+			// either algorithm raises the generation budget for the other's
+			// next run on this tree too. A load error is surfaced non-fatally.
+			track := evolution.NewTrackRecord()
+			trackPath := trackRecordArchivePath(params.Tree)
+			trackLoadErr := ""
+			if err := track.Load(trackPath); err != nil {
+				trackLoadErr = err.Error()
+			}
 			if params.Generations <= 0 {
-				params.Generations = 10
+				params.Generations = track.RecommendedGenerations(10)
 			}
 			baseTree := resolveTree(params.Tree)
 			if baseTree == nil {
@@ -1168,6 +1222,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
+			if trackLoadErr != "" {
+				result["track_record_load_error"] = trackLoadErr
+			}
 			// Gate the front's lead individual through the tree's real
 			// benchmark suite before trusting it enough to persist — structural
 			// fitness alone can rate a mutation as elite while it actually
@@ -1177,6 +1234,20 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			result["benchmark_gate_rejected"] = gateRejected
 			result["benchmark_base_success_rate"] = baseRate
 			result["benchmark_winner_success_rate"] = winnerRate
+			// Record this call's benchmark-gate outcome into the same shared
+			// TrackRecord bt_evolve_qd writes, regardless of whether the winner
+			// was accepted, so the next run on this tree — by any
+			// benchmark-gated algorithm — sees the regression and gets a bigger
+			// generation budget.
+			track.Record(gateRejected)
+			// Surface the adaptive budget driver in the result JSON alongside
+			// benchmark_gate_rejected (Q2 Evolvability milestone 3/3) instead
+			// of leaving it as internal state.
+			result["track_record_win_rate"] = track.WinRate()
+			result["track_record_recommended_generations"] = track.RecommendedGenerations(10)
+			if err := track.Save(trackPath); err != nil {
+				result["track_record_save_error"] = err.Error()
+			}
 			if !gateRejected {
 				// Persist front 0 so the next invocation resumes from this run's
 				// Pareto-optimal individuals. A save failure is surfaced
@@ -1215,8 +1286,20 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if reject != nil {
 				return reject
 			}
+			// Load the durable TrackRecord shared across every benchmark-gated
+			// evolution algorithm on this tree (Q2 Evolvability) before falling
+			// back to a hardcoded generations default — the same shared archive
+			// bt_evolve_qd and bt_evolve_multiobjective read and write, so a
+			// regression discovered by any of them raises the generation budget
+			// for this run too. A load error is surfaced non-fatally.
+			track := evolution.NewTrackRecord()
+			trackPath := trackRecordArchivePath(params.Tree)
+			trackLoadErr := ""
+			if err := track.Load(trackPath); err != nil {
+				trackLoadErr = err.Error()
+			}
 			if params.Generations <= 0 {
-				params.Generations = 10
+				params.Generations = track.RecommendedGenerations(10)
 			}
 			baseTree := resolveTree(params.Tree)
 			if baseTree == nil {
@@ -1291,6 +1374,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
+			if trackLoadErr != "" {
+				result["track_record_load_error"] = trackLoadErr
+			}
 			// Gate the winner through the tree's real benchmark suite before
 			// trusting it enough to persist — structural fitness alone can
 			// rate a mutation as elite while it actually regresses (Q2
@@ -1301,6 +1387,20 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			result["benchmark_gate_rejected"] = gateRejected
 			result["benchmark_base_success_rate"] = baseRate
 			result["benchmark_winner_success_rate"] = winnerRate
+			// Record this call's benchmark-gate outcome into the same shared
+			// TrackRecord bt_evolve_qd and bt_evolve_multiobjective write,
+			// regardless of whether the winner was accepted, so the next run
+			// on this tree — by any benchmark-gated algorithm — sees the
+			// regression and gets a bigger generation budget.
+			track.Record(gateRejected)
+			// Surface the adaptive budget driver in the result JSON alongside
+			// benchmark_gate_rejected (Q2 Evolvability milestone 3/3) instead
+			// of leaving it as internal state.
+			result["track_record_win_rate"] = track.WinRate()
+			result["track_record_recommended_generations"] = track.RecommendedGenerations(10)
+			if err := track.Save(trackPath); err != nil {
+				result["track_record_save_error"] = err.Error()
+			}
 			if !gateRejected {
 				// Persist the merged front so the next invocation resumes from
 				// this run's Pareto-optimal individuals. A save failure is
@@ -1410,8 +1510,21 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if reject != nil {
 				return reject
 			}
+			// Load the durable TrackRecord shared across every benchmark-gated
+			// evolution algorithm on this tree (Q2 Evolvability) before falling
+			// back to a hardcoded generations default — the same shared archive
+			// bt_evolve_qd, bt_evolve_multiobjective, and bt_evolve_pareto read
+			// and write, so a regression discovered by any of them raises the
+			// generation budget for this run too. A load error is surfaced
+			// non-fatally.
+			track := evolution.NewTrackRecord()
+			trackPath := trackRecordArchivePath(params.Tree)
+			trackLoadErr := ""
+			if err := track.Load(trackPath); err != nil {
+				trackLoadErr = err.Error()
+			}
 			if params.Generations <= 0 {
-				params.Generations = 10
+				params.Generations = track.RecommendedGenerations(10)
 			}
 			// A pointer distinguishes an explicit epsilon=0 (deterministic
 			// greedy, echoed back) from an omitted one (exploration default).
@@ -1495,6 +1608,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
+			if trackLoadErr != "" {
+				result["track_record_load_error"] = trackLoadErr
+			}
 			// Gate the returned winner through the tree's real benchmark suite
 			// before trusting it enough to persist — structural fitness alone
 			// can rate a Q-learning-selected mutation as elite while it
@@ -1506,6 +1622,21 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			result["benchmark_gate_rejected"] = gateRejected
 			result["benchmark_base_success_rate"] = baseRate
 			result["benchmark_winner_success_rate"] = winnerRate
+			// Record this call's benchmark-gate outcome into the same shared
+			// TrackRecord bt_evolve_qd, bt_evolve_multiobjective, and
+			// bt_evolve_pareto write, regardless of whether the winner was
+			// accepted, so the next run on this tree — by any benchmark-gated
+			// algorithm — sees the regression and gets a bigger generation
+			// budget.
+			track.Record(gateRejected)
+			// Surface the adaptive budget driver in the result JSON alongside
+			// benchmark_gate_rejected (Q2 Evolvability milestone 3/3) instead
+			// of leaving it as internal state.
+			result["track_record_win_rate"] = track.WinRate()
+			result["track_record_recommended_generations"] = track.RecommendedGenerations(10)
+			if err := track.Save(trackPath); err != nil {
+				result["track_record_save_error"] = err.Error()
+			}
 			if !gateRejected {
 				// Persist the merged, learned table so the next invocation
 				// resumes from this run's Q-values. A save failure is
@@ -1563,8 +1694,23 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// resolveEvolvePopulation default of 20.
 				population = 10
 			}
+			// Load the durable TrackRecord shared across every benchmark-gated
+			// evolution algorithm on this tree (Q2 Evolvability) before
+			// falling back to a hardcoded generations default — the same
+			// shared archive bt_evolve_qd, bt_evolve_multiobjective,
+			// bt_evolve_pareto, and bt_evolve_qlearning read and write, so a
+			// regression discovered by any of them raises the generation
+			// budget for this run too. This is the last of the five
+			// benchmark-gated algorithms to adopt the wiring (milestone 3/3).
+			// A load error is surfaced non-fatally.
+			track := evolution.NewTrackRecord()
+			trackPath := trackRecordArchivePath(params.Tree)
+			trackLoadErr := ""
+			if err := track.Load(trackPath); err != nil {
+				trackLoadErr = err.Error()
+			}
 			if params.Generations <= 0 {
-				params.Generations = 10
+				params.Generations = track.RecommendedGenerations(10)
 			}
 			if params.MigrationInterval <= 0 {
 				params.MigrationInterval = 2
@@ -1733,6 +1879,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
+			if trackLoadErr != "" {
+				result["track_record_load_error"] = trackLoadErr
+			}
 			if legacyAdopted {
 				result["legacy_archive_adopted"] = true
 			}
@@ -1763,10 +1912,25 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			gateRejected, baseRate, winnerRate := false, 0.0, 0.0
 			if winnerTree != nil {
 				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(params.Tree, baseTree, winnerTree)
+				// Record this call's benchmark-gate outcome into the same
+				// shared TrackRecord bt_evolve_qd, bt_evolve_multiobjective,
+				// bt_evolve_pareto, and bt_evolve_qlearning write, regardless
+				// of whether the winner was accepted, so the next run on
+				// this tree — by any benchmark-gated algorithm — sees the
+				// regression and gets a bigger generation budget.
+				track.Record(gateRejected)
+				if err := track.Save(trackPath); err != nil {
+					result["track_record_save_error"] = err.Error()
+				}
 			}
 			result["benchmark_gate_rejected"] = gateRejected
 			result["benchmark_base_success_rate"] = baseRate
 			result["benchmark_winner_success_rate"] = winnerRate
+			// Surface the adaptive budget driver in the result JSON alongside
+			// benchmark_gate_rejected (Q2 Evolvability milestone 3/3) instead
+			// of leaving it as internal state.
+			result["track_record_win_rate"] = track.WinRate()
+			result["track_record_recommended_generations"] = track.RecommendedGenerations(10)
 			// Persist the merged, evolved model so the next invocation
 			// resumes from this run's state. A save failure is surfaced
 			// non-fatally alongside the evolution result.

@@ -258,6 +258,18 @@ func TestBTEvolveQDBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
 		t.Fatalf(`bt_evolve_qd must report "benchmark_gate_rejected": true when the illuminated winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
 	}
+	// Milestone 3/3 of "Q2 Evolvability — adaptive, track-record-driven
+	// generation budgets": the adaptive budget must be observable in the
+	// result JSON, not just internal state. This run is the tree's only
+	// recorded outcome and it was rejected, so the shared TrackRecord's win
+	// rate must read 0 and its post-record recommendation must double the
+	// hardcoded default of 10.
+	if winRate, isNum := out["track_record_win_rate"].(float64); !isNum || winRate != 0 {
+		t.Fatalf(`bt_evolve_qd must report "track_record_win_rate": 0 once this run's regression is the tree's only recorded benchmark-gate outcome; got %v`, out["track_record_win_rate"])
+	}
+	if recGen, isNum := out["track_record_recommended_generations"].(float64); !isNum || int(recGen) != 20 {
+		t.Fatalf(`bt_evolve_qd must report "track_record_recommended_generations": 20 after this run's regression is recorded into the shared per-tree archive; got %v`, out["track_record_recommended_generations"])
+	}
 
 	matches, err := filepath.Glob(filepath.Join(home, "map_elites_archive*.json"))
 	if err != nil {
@@ -265,6 +277,265 @@ func TestBTEvolveQDBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	}
 	if len(matches) != 0 {
 		t.Fatalf("bt_evolve_qd must skip persisting the durable MAP-Elites archive when the benchmark gate rejects the winner; found %v", matches)
+	}
+}
+
+// TestBTEvolveQDAndMultiObjectiveShareTrackRecordDrivenGenerationBudget pins
+// milestone 1/3 of the "Q2 Evolvability — adaptive, track-record-driven
+// generation budgets" program. bt_evolve_qd and bt_evolve_multiobjective
+// currently hardcode "params.Generations = 10" whenever a caller omits
+// "generations", so every run burns the same fixed compute budget no matter
+// how the tree's evolution runs have actually fared. Both handlers must
+// instead load a shared per-tree TrackRecord archive, ask it for
+// TrackRecord.RecommendedGenerations(10), and record+save this call's
+// benchmarkGateEvolvedWinner outcome back into that same archive so it
+// accumulates across runs — and across algorithms, since the archive is
+// shared per tree rather than per tool.
+//
+// This test forces every gate evaluation to reject (regress) via the
+// benchmarkRunSuiteFn seam, runs bt_evolve_qd first to seed the shared
+// archive with a rejected outcome, then runs bt_evolve_multiobjective on the
+// same tree with "generations" likewise omitted. Today both runs report
+// "generations": 10 because neither handler consults a track record at all.
+// Once wired, a track record showing a regressed prior run must recommend
+// more than the hardcoded default of 10 generations so the next run gets
+// more room to find a non-regressing improvement.
+func TestBTEvolveQDAndMultiObjectiveShareTrackRecordDrivenGenerationBudget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls%2 == 1 {
+			// Odd calls gate the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Even calls gate the evolved winner: total regression, so every
+		// benchmarkGateEvolvedWinner call this test drives rejects.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	invoke := func(tool, args, label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke(tool, json.RawMessage(args))
+		if !ok {
+			t.Fatalf("Invoke(%s) reported the tool as unregistered on the %s run", tool, label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("%s returned no content on the %s run", tool, label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("%s unexpectedly returned an error on the %s run: %v", tool, label, out)
+		}
+		return out
+	}
+
+	// bt_evolve_qd runs first on a cold shared archive: "generations" is
+	// omitted so the handler falls back to TrackRecord.RecommendedGenerations
+	// (10), which on a cold/empty archive must still equal the hardcoded
+	// default of 10. This run's benchmark-gated (rejected) outcome must then
+	// be recorded into the shared per-tree archive.
+	first := invoke("bt_evolve_qd", `{"tree":"godev","population":4}`, "qd-first")
+	if firstGen, isNum := first["generations"].(float64); !isNum || int(firstGen) != 10 {
+		t.Fatalf(`bt_evolve_qd cold-archive run must fall back to the default of 10 generations; got %v`, first["generations"])
+	}
+	if rejected, _ := first["benchmark_gate_rejected"].(bool); !rejected {
+		t.Fatalf("test setup: expected bt_evolve_qd's benchmark gate to reject the forced-regression winner; got %v", first["benchmark_gate_rejected"])
+	}
+
+	// bt_evolve_multiobjective now runs on the SAME tree with "generations"
+	// likewise omitted. It must load the same shared per-tree archive
+	// bt_evolve_qd just recorded a rejected outcome into, and recommend MORE
+	// than the hardcoded default of 10 generations.
+	second := invoke("bt_evolve_multiobjective", `{"tree":"godev","population":4}`, "multiobjective-second")
+	secondGen, isNum := second["generations"].(float64)
+	if !isNum {
+		t.Fatalf("bt_evolve_multiobjective result must report a numeric 'generations'; got %v", second["generations"])
+	}
+	if int(secondGen) <= 10 {
+		t.Fatalf(`bt_evolve_multiobjective must recommend more than the hardcoded default of 10 generations after loading a shared track record showing a regressed prior run (from bt_evolve_qd on the same tree); got %v`, second["generations"])
+	}
+}
+
+// TestBTEvolveParetoAndQLearningShareTrackRecordDrivenGenerationBudget pins
+// milestone 2/3 of the "Q2 Evolvability — adaptive, track-record-driven
+// generation budgets" program. bt_evolve_pareto and bt_evolve_qlearning
+// currently hardcode "params.Generations = 10" whenever a caller omits
+// "generations", unlike bt_evolve_qd and bt_evolve_multiobjective (milestone
+// 1/3), which already load the shared per-tree TrackRecord archive via
+// TrackRecord.RecommendedGenerations and record+save their benchmark-gate
+// outcome back into it. Both handlers must adopt the same wiring so the
+// archive accumulates across all four algorithms sharing one tree, not just
+// two of them.
+//
+// This test forces every gate evaluation to reject (regress) via the
+// benchmarkRunSuiteFn seam, runs bt_evolve_pareto first to seed the shared
+// archive with a rejected outcome, then runs bt_evolve_qlearning on the same
+// tree with "generations" likewise omitted. Today both runs report
+// "generations": 10 because neither handler consults a track record at all.
+// Once wired, a track record showing a regressed prior run must recommend
+// more than the hardcoded default of 10 generations so the next run gets
+// more room to find a non-regressing improvement.
+func TestBTEvolveParetoAndQLearningShareTrackRecordDrivenGenerationBudget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls%2 == 1 {
+			// Odd calls gate the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Even calls gate the evolved winner: total regression, so every
+		// benchmarkGateEvolvedWinner call this test drives rejects.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	invoke := func(tool, args, label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke(tool, json.RawMessage(args))
+		if !ok {
+			t.Fatalf("Invoke(%s) reported the tool as unregistered on the %s run", tool, label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("%s returned no content on the %s run", tool, label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("%s unexpectedly returned an error on the %s run: %v", tool, label, out)
+		}
+		return out
+	}
+
+	// bt_evolve_pareto runs first on a cold shared archive: "generations" is
+	// omitted so the handler falls back to TrackRecord.RecommendedGenerations
+	// (10), which on a cold/empty archive must still equal the hardcoded
+	// default of 10. This run's benchmark-gated (rejected) outcome must then
+	// be recorded into the shared per-tree archive.
+	first := invoke("bt_evolve_pareto", `{"tree":"godev","population":4}`, "pareto-first")
+	if firstGen, isNum := first["generations"].(float64); !isNum || int(firstGen) != 10 {
+		t.Fatalf(`bt_evolve_pareto cold-archive run must fall back to the default of 10 generations; got %v`, first["generations"])
+	}
+	if rejected, _ := first["benchmark_gate_rejected"].(bool); !rejected {
+		t.Fatalf("test setup: expected bt_evolve_pareto's benchmark gate to reject the forced-regression winner; got %v", first["benchmark_gate_rejected"])
+	}
+
+	// bt_evolve_qlearning now runs on the SAME tree with "generations"
+	// likewise omitted. It must load the same shared per-tree archive
+	// bt_evolve_pareto just recorded a rejected outcome into, and recommend
+	// MORE than the hardcoded default of 10 generations.
+	second := invoke("bt_evolve_qlearning", `{"tree":"godev","population":4}`, "qlearning-second")
+	secondGen, isNum := second["generations"].(float64)
+	if !isNum {
+		t.Fatalf("bt_evolve_qlearning result must report a numeric 'generations'; got %v", second["generations"])
+	}
+	if int(secondGen) <= 10 {
+		t.Fatalf(`bt_evolve_qlearning must recommend more than the hardcoded default of 10 generations after loading a shared track record showing a regressed prior run (from bt_evolve_pareto on the same tree); got %v`, second["generations"])
+	}
+}
+
+// TestBTEvolveIslandSharesTrackRecordDrivenGenerationBudget pins milestone
+// 3/3 of the "Q2 Evolvability — adaptive, track-record-driven generation
+// budgets" program. bt_evolve_island still hardcodes "params.Generations = 10"
+// whenever a caller omits "generations", unlike bt_evolve_qd,
+// bt_evolve_multiobjective, bt_evolve_pareto, and bt_evolve_qlearning
+// (milestones 1/3 and 2/3), which already load the shared per-tree
+// TrackRecord archive via TrackRecord.RecommendedGenerations and record+save
+// their benchmark-gate outcome back into it. bt_evolve_island must adopt the
+// same wiring so the archive accumulates across all five algorithms sharing
+// one tree, not just four of them.
+//
+// This test forces every gate evaluation to reject (regress) via the
+// benchmarkRunSuiteFn seam, runs bt_evolve_qd first to seed the shared
+// archive with a rejected outcome, then runs bt_evolve_island on the same
+// tree with "generations" likewise omitted. Today bt_evolve_island reports
+// "generations": 10 regardless because the handler never consults the track
+// record at all. Once wired, a track record showing a regressed prior run
+// must recommend more than the hardcoded default of 10 generations so the
+// next run gets more room to find a non-regressing improvement.
+func TestBTEvolveIslandSharesTrackRecordDrivenGenerationBudget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls%2 == 1 {
+			// Odd calls gate the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Even calls gate the evolved winner: total regression, so every
+		// benchmarkGateEvolvedWinner call this test drives rejects.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	invoke := func(tool, args, label string) map[string]interface{} {
+		t.Helper()
+		res, ok := server.Invoke(tool, json.RawMessage(args))
+		if !ok {
+			t.Fatalf("Invoke(%s) reported the tool as unregistered on the %s run", tool, label)
+		}
+		if res == nil || len(res.Content) == 0 {
+			t.Fatalf("%s returned no content on the %s run", tool, label)
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
+		}
+		if _, isErr := out["error"]; isErr {
+			t.Fatalf("%s unexpectedly returned an error on the %s run: %v", tool, label, out)
+		}
+		return out
+	}
+
+	// bt_evolve_qd runs first on a cold shared archive: "generations" is
+	// omitted so the handler falls back to TrackRecord.RecommendedGenerations
+	// (10), which on a cold/empty archive must still equal the hardcoded
+	// default of 10. This run's benchmark-gated (rejected) outcome must then
+	// be recorded into the shared per-tree archive.
+	first := invoke("bt_evolve_qd", `{"tree":"godev","population":4}`, "qd-first")
+	if firstGen, isNum := first["generations"].(float64); !isNum || int(firstGen) != 10 {
+		t.Fatalf(`bt_evolve_qd cold-archive run must fall back to the default of 10 generations; got %v`, first["generations"])
+	}
+	if rejected, _ := first["benchmark_gate_rejected"].(bool); !rejected {
+		t.Fatalf("test setup: expected bt_evolve_qd's benchmark gate to reject the forced-regression winner; got %v", first["benchmark_gate_rejected"])
+	}
+
+	// bt_evolve_island now runs on the SAME tree with "generations" likewise
+	// omitted. It must load the same shared per-tree archive bt_evolve_qd
+	// just recorded a rejected outcome into, and recommend MORE than the
+	// hardcoded default of 10 generations.
+	second := invoke("bt_evolve_island", `{"tree":"godev","islands":2,"population":4,"migration_interval":1,"migration_rate":0.5}`, "island-second")
+	secondGen, isNum := second["generations"].(float64)
+	if !isNum {
+		t.Fatalf("bt_evolve_island result must report a numeric 'generations'; got %v", second["generations"])
+	}
+	if int(secondGen) <= 10 {
+		t.Fatalf(`bt_evolve_island must recommend more than the hardcoded default of 10 generations after loading a shared track record showing a regressed prior run (from bt_evolve_qd on the same tree); got %v`, second["generations"])
 	}
 }
 
@@ -783,6 +1054,18 @@ func TestBTEvolveIslandBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 
 	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
 		t.Fatalf(`bt_evolve_island must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+	// Milestone 3/3 of "Q2 Evolvability — adaptive, track-record-driven
+	// generation budgets": the adaptive budget must be observable in the
+	// result JSON, not just internal state. This run is the tree's only
+	// recorded outcome and it was rejected, so the shared TrackRecord's win
+	// rate must read 0 and its post-record recommendation must double the
+	// hardcoded default of 10.
+	if winRate, isNum := out["track_record_win_rate"].(float64); !isNum || winRate != 0 {
+		t.Fatalf(`bt_evolve_island must report "track_record_win_rate": 0 once this run's regression is the tree's only recorded benchmark-gate outcome; got %v`, out["track_record_win_rate"])
+	}
+	if recGen, isNum := out["track_record_recommended_generations"].(float64); !isNum || int(recGen) != 20 {
+		t.Fatalf(`bt_evolve_island must report "track_record_recommended_generations": 20 after this run's regression is recorded into the shared per-tree archive; got %v`, out["track_record_recommended_generations"])
 	}
 
 	matches, err := filepath.Glob(filepath.Join(home, "island_archive*.json"))
@@ -1460,6 +1743,18 @@ func TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner(t *testing.T)
 	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
 		t.Fatalf(`bt_evolve_multiobjective must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
 	}
+	// Milestone 3/3 of "Q2 Evolvability — adaptive, track-record-driven
+	// generation budgets": the adaptive budget must be observable in the
+	// result JSON, not just internal state. This run is the tree's only
+	// recorded outcome and it was rejected, so the shared TrackRecord's win
+	// rate must read 0 and its post-record recommendation must double the
+	// hardcoded default of 10.
+	if winRate, isNum := out["track_record_win_rate"].(float64); !isNum || winRate != 0 {
+		t.Fatalf(`bt_evolve_multiobjective must report "track_record_win_rate": 0 once this run's regression is the tree's only recorded benchmark-gate outcome; got %v`, out["track_record_win_rate"])
+	}
+	if recGen, isNum := out["track_record_recommended_generations"].(float64); !isNum || int(recGen) != 20 {
+		t.Fatalf(`bt_evolve_multiobjective must report "track_record_recommended_generations": 20 after this run's regression is recorded into the shared per-tree archive; got %v`, out["track_record_recommended_generations"])
+	}
 
 	matches, err := filepath.Glob(filepath.Join(home, "*nsga*archive*.json"))
 	if err != nil {
@@ -1701,6 +1996,18 @@ func TestBTEvolveParetoBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 
 	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
 		t.Fatalf(`bt_evolve_pareto must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+	// Milestone 3/3 of "Q2 Evolvability — adaptive, track-record-driven
+	// generation budgets": the adaptive budget must be observable in the
+	// result JSON, not just internal state. This run is the tree's only
+	// recorded outcome and it was rejected, so the shared TrackRecord's win
+	// rate must read 0 and its post-record recommendation must double the
+	// hardcoded default of 10.
+	if winRate, isNum := out["track_record_win_rate"].(float64); !isNum || winRate != 0 {
+		t.Fatalf(`bt_evolve_pareto must report "track_record_win_rate": 0 once this run's regression is the tree's only recorded benchmark-gate outcome; got %v`, out["track_record_win_rate"])
+	}
+	if recGen, isNum := out["track_record_recommended_generations"].(float64); !isNum || int(recGen) != 20 {
+		t.Fatalf(`bt_evolve_pareto must report "track_record_recommended_generations": 20 after this run's regression is recorded into the shared per-tree archive; got %v`, out["track_record_recommended_generations"])
 	}
 
 	matches, err := filepath.Glob(filepath.Join(home, "pareto_front_archive*.json"))
@@ -3138,6 +3445,18 @@ func TestBTEvolveQLearningBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 
 	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
 		t.Fatalf(`bt_evolve_qlearning must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+	// Milestone 3/3 of "Q2 Evolvability — adaptive, track-record-driven
+	// generation budgets": the adaptive budget must be observable in the
+	// result JSON, not just internal state. This run is the tree's only
+	// recorded outcome and it was rejected, so the shared TrackRecord's win
+	// rate must read 0 and its post-record recommendation must double the
+	// hardcoded default of 10.
+	if winRate, isNum := out["track_record_win_rate"].(float64); !isNum || winRate != 0 {
+		t.Fatalf(`bt_evolve_qlearning must report "track_record_win_rate": 0 once this run's regression is the tree's only recorded benchmark-gate outcome; got %v`, out["track_record_win_rate"])
+	}
+	if recGen, isNum := out["track_record_recommended_generations"].(float64); !isNum || int(recGen) != 20 {
+		t.Fatalf(`bt_evolve_qlearning must report "track_record_recommended_generations": 20 after this run's regression is recorded into the shared per-tree archive; got %v`, out["track_record_recommended_generations"])
 	}
 
 	matches, err := filepath.Glob(filepath.Join(home, "qtable_archive*.json"))
