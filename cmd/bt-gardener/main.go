@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -78,6 +79,27 @@ func (t *GardenerRunCycleTool) Call(_ context.Context, _ string) (string, error)
 		items = append(items, r{Tree: m.TreeName, Improved: m.Improved, Delta: m.Delta, Mutations: m.Mutations})
 	}
 	data, _ := json.Marshal(map[string]interface{}{"trees": len(results), "results": items})
+	return string(data), nil
+}
+
+type GardenerRollbackTool struct {
+	registry    *gardener.Registry
+	snapshotDir string
+}
+
+func (t *GardenerRollbackTool) Name() string { return "gardener_rollback" }
+func (t *GardenerRollbackTool) Description() string {
+	return "Rollback a tree to its pre-mutation snapshot. Input: the tree name."
+}
+func (t *GardenerRollbackTool) Call(_ context.Context, input string) (string, error) {
+	name := strings.TrimSpace(input)
+	if name == "" {
+		return `{"error": "tree name is required"}`, nil
+	}
+	if err := t.registry.RollbackTree(name, t.snapshotDir); err != nil {
+		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
+	}
+	data, _ := json.Marshal(map[string]interface{}{"tree": name, "rolled_back": true})
 	return string(data), nil
 }
 
@@ -214,6 +236,7 @@ func main() {
 		&GardenerStatusTool{registry: registry, metrics: metricsTracker},
 		newGardenerRunCycleTool(g, v2Cfg),
 		&GardenerRecommendTool{registry: registry, refStore: refStore},
+		&GardenerRollbackTool{registry: registry, snapshotDir: cfg.SnapshotDir},
 	}
 
 	prompt := prompts.NewPromptTemplate(
@@ -223,6 +246,7 @@ Available tools:
 - gardener_status: see current state of all trees and metrics
 - gardener_run_cycle: run one evolution cycle across ALL trees
 - gardener_recommend: analyze trees and recommend which need attention
+- gardener_rollback: restore a tree to its pre-mutation snapshot by name
 
 WORKFLOW:
 1. Start with gardener_status to see current state
@@ -242,7 +266,7 @@ Question: {{.input}}`,
 		"trees", registry.Count(),
 		"max_mutations", cfg.MaxMutations,
 		"experience_bank", cfg.ExperienceBank.PersistPath)
-	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 3 tools, %s cycle, langchain analysis every 5th cycle\n", registry.Count(), cfg.Interval)
+	fmt.Fprintf(os.Stderr, "bt-gardener: %d trees, 4 tools, %s cycle, langchain analysis every 5th cycle\n", registry.Count(), cfg.Interval)
 	fmt.Fprintf(os.Stderr, "Metrics dir: %s\n", metricsDir)
 
 	// Run initial cycle immediately

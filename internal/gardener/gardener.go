@@ -204,6 +204,35 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 	return os.Rename(tmp, entry.FilePath)
 }
 
+// RollbackTree restores name's tree from its milestone-1 pre-mutation
+// snapshot in snapshotDir (evolution.RestoreTree) and durably persists the
+// restored state via SaveTree, recovering a bad mutation without rerunning a
+// full evolution cycle.
+func (r *Registry) RollbackTree(name, snapshotDir string) error {
+	restored, err := evolution.RestoreTree(name, snapshotDir)
+	if err != nil {
+		return fmt.Errorf("rollback tree %q: %w", name, err)
+	}
+
+	r.mu.Lock()
+	idx := -1
+	for i := range r.entries {
+		if r.entries[i].Name == name {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		r.mu.Unlock()
+		return fmt.Errorf("rollback tree %q: not found in registry", name)
+	}
+	r.entries[idx].Tree = restored
+	entry := r.entries[idx]
+	r.mu.Unlock()
+
+	return r.SaveTree(entry)
+}
+
 // --- Metrics ---
 
 // CycleMetrics records the outcome of one evolution cycle for a single tree.

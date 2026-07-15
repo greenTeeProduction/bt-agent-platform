@@ -198,6 +198,81 @@ func TestMetricsTracker_SaveIncludesDashboardAggregateFields(t *testing.T) {
 	}
 }
 
+// TestRegistry_RollbackTree verifies milestone 2/3 of the "Q2 Evolvability"
+// program: RollbackTree must restore a tree from its milestone-1 pre-mutation
+// snapshot (evolution.RestoreTree) and durably persist the restored state via
+// SaveTree, so a bad mutation can be recovered without rerunning a full
+// evolution cycle.
+func TestRegistry_RollbackTree(t *testing.T) {
+	tempDir := t.TempDir()
+	snapshotDir := t.TempDir()
+	r := NewRegistry(tempDir)
+
+	original := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Original"}},
+	}
+	r.addBuiltin("rollback_target", "test tree", original)
+	if _, err := evolution.SnapshotTree(original, "rollback_target", snapshotDir); err != nil {
+		t.Fatalf("SnapshotTree failed: %v", err)
+	}
+
+	// Simulate a bad mutation: overwrite the in-memory entry and persist it,
+	// exactly like evolveTreeV2 does when it applies and saves a mutation.
+	mutated := &evolution.SerializableNode{Type: "Action", Name: "Mutated"}
+	var mutatedEntry TreeEntry
+	for i := range r.entries {
+		if r.entries[i].Name == "rollback_target" {
+			r.entries[i].Tree = mutated
+			mutatedEntry = r.entries[i]
+		}
+	}
+	if err := r.SaveTree(mutatedEntry); err != nil {
+		t.Fatalf("SaveTree(mutated) failed: %v", err)
+	}
+
+	if err := r.RollbackTree("rollback_target", snapshotDir); err != nil {
+		t.Fatalf("RollbackTree failed: %v", err)
+	}
+
+	// The registry's in-memory entry must reflect the restored tree.
+	var restored TreeEntry
+	for _, e := range r.List() {
+		if e.Name == "rollback_target" {
+			restored = e
+		}
+	}
+	if restored.Tree == nil || restored.Tree.Name != "Root" || len(restored.Tree.Children) != 1 || restored.Tree.Children[0].Name != "Original" {
+		t.Errorf("RollbackTree did not restore the in-memory tree, got %+v", restored.Tree)
+	}
+
+	// The on-disk file must durably reflect the restored tree too, not the
+	// mutated one, so a process crash right after RollbackTree still recovers.
+	data, err := os.ReadFile(mutatedEntry.FilePath)
+	if err != nil {
+		t.Fatalf("reading rolled-back tree file: %v", err)
+	}
+	var onDisk evolution.SerializableNode
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("unmarshal rolled-back tree: %v", err)
+	}
+	if onDisk.Name != "Root" || len(onDisk.Children) != 1 || onDisk.Children[0].Name != "Original" {
+		t.Errorf("RollbackTree did not persist the pre-mutation snapshot to disk, got %+v", onDisk)
+	}
+}
+
+// TestRegistry_RollbackTree_UnknownTree verifies RollbackTree returns an
+// error instead of silently succeeding when no entry matches name.
+func TestRegistry_RollbackTree_UnknownTree(t *testing.T) {
+	tempDir := t.TempDir()
+	snapshotDir := t.TempDir()
+	r := NewRegistry(tempDir)
+
+	if err := r.RollbackTree("does_not_exist", snapshotDir); err == nil {
+		t.Error("RollbackTree should return an error for an unregistered tree name")
+	}
+}
+
 func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
 	dir := t.TempDir()
 	store, err := evolution.NewStore(dir)

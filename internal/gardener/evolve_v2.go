@@ -161,6 +161,16 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		selectedLLM = benchmark.DefaultMock()
 	}
 
+	// Durable pre-mutation snapshot (Q2 Evolvability milestone 1): originalTree
+	// below only lives in-memory for this cycle, so a process crash mid-cycle
+	// loses the pre-mutation state entirely. Persist it to g.cfg.SnapshotDir
+	// (when configured) so RestoreTree can recover it after a crash.
+	if g.cfg.SnapshotDir != "" {
+		if _, err := evolution.SnapshotTree(tree, entry.Name, g.cfg.SnapshotDir); err != nil {
+			slog.Warn("gardener/v2: pre-mutation snapshot failed", "tree", entry.Name, "error", err)
+		}
+	}
+
 	applied := 0
 	rejected := 0
 	rollbacks := 0

@@ -1,6 +1,7 @@
 package gardener
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -555,6 +556,36 @@ func TestEvolveTreeV2_RecordsAcceptedMutationExperience(t *testing.T) {
 	// currentFitness.Composite) equals the cycle delta.
 	if diff := e.FitnessDelta - m.Delta; diff > 0.0001 || diff < -0.0001 {
 		t.Errorf("recorded FitnessDelta = %.6f, want measured cycle delta %.6f", e.FitnessDelta, m.Delta)
+	}
+}
+
+// ============================================================================
+// Pre-mutation snapshot durability (Q2 Evolvability milestone 1)
+// ============================================================================
+
+// TestEvolveTreeV2_SnapshotsTreeBeforeMutation pins Q2 Evolvability milestone
+// 1/3: evolveTreeV2 must call evolution.SnapshotTree for the tree's pre-cycle
+// state before the mutation loop begins, so a process crash mid-cycle still
+// has a durable on-disk snapshot to recover from — not just the in-memory
+// originalTree clone. g.cfg.SnapshotDir is already wired into production
+// (cmd/bt-gardener/config.go) but had zero readers before this change.
+func TestEvolveTreeV2_SnapshotsTreeBeforeMutation(t *testing.T) {
+	g, entry := experienceRecordingGardener(t, nil)
+
+	g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	snapshotPath := filepath.Join(g.cfg.SnapshotDir, "snapshot_"+entry.Name+".json")
+	data, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("expected pre-mutation snapshot at %s, got error: %v", snapshotPath, err)
+	}
+
+	var snapshotted evolution.SerializableNode
+	if err := json.Unmarshal(data, &snapshotted); err != nil {
+		t.Fatalf("unmarshal snapshot: %v", err)
+	}
+	if snapshotted.Name != entry.Tree.Name {
+		t.Errorf("snapshot root Name = %q, want %q (must capture the pre-cycle tree)", snapshotted.Name, entry.Tree.Name)
 	}
 }
 

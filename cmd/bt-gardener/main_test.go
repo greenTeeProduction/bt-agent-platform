@@ -91,6 +91,71 @@ func TestWireSelectorOrdering_EnablesLearnedOrderingPass(t *testing.T) {
 	}
 }
 
+// TestGardenerRollbackTool_CallRestoresSnapshot pins milestone 3/3 of the "Q2
+// Evolvability" program: milestone 2's Registry.RollbackTree must be reachable
+// through a langchain tool — GardenerRollbackTool, mirroring the
+// GardenerStatusTool/GardenerRunCycleTool pattern (main.go:31-82) — instead of
+// staying internal-only, so an operator or LLM agent can trigger rollback via
+// gardener_rollback.
+func TestGardenerRollbackTool_CallRestoresSnapshot(t *testing.T) {
+	treeDir := t.TempDir()
+	snapshotDir := t.TempDir()
+
+	original := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Original"}},
+	}
+	if _, err := evolution.SnapshotTree(original, "rollback_target", snapshotDir); err != nil {
+		t.Fatalf("SnapshotTree failed: %v", err)
+	}
+
+	// Persist an already-mutated tree file under treeDir — simulating a bad
+	// mutation that evolveTreeV2 already applied and saved — so the registry
+	// loads with the mutated state, not the pre-mutation snapshot.
+	mutated := &evolution.SerializableNode{Type: "Action", Name: "Mutated"}
+	data, err := json.MarshalIndent(mutated, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated tree: %v", err)
+	}
+	treeFile := filepath.Join(treeDir, "tree-rollback_target.json")
+	if err := os.WriteFile(treeFile, data, 0644); err != nil {
+		t.Fatalf("write mutated tree file: %v", err)
+	}
+
+	registry := gardener.NewRegistry(treeDir)
+
+	tool := &GardenerRollbackTool{registry: registry, snapshotDir: snapshotDir}
+	if got, want := tool.Name(), "gardener_rollback"; got != want {
+		t.Errorf("Name() = %q, want %q", got, want)
+	}
+
+	if _, err := tool.Call(context.Background(), "rollback_target"); err != nil {
+		t.Fatalf("tool.Call: %v", err)
+	}
+
+	var restored gardener.TreeEntry
+	for _, e := range registry.List() {
+		if e.Name == "rollback_target" {
+			restored = e
+		}
+	}
+	if restored.Tree == nil || restored.Tree.Name != "Root" || len(restored.Tree.Children) != 1 || restored.Tree.Children[0].Name != "Original" {
+		t.Fatalf("gardener_rollback tool did not restore the in-memory tree, got %+v", restored.Tree)
+	}
+
+	onDiskData, err := os.ReadFile(treeFile)
+	if err != nil {
+		t.Fatalf("reading rolled-back tree file: %v", err)
+	}
+	var onDisk evolution.SerializableNode
+	if err := json.Unmarshal(onDiskData, &onDisk); err != nil {
+		t.Fatalf("unmarshal rolled-back tree: %v", err)
+	}
+	if onDisk.Name != "Root" || len(onDisk.Children) != 1 || onDisk.Children[0].Name != "Original" {
+		t.Errorf("gardener_rollback tool did not durably persist the restored tree, got %+v", onDisk)
+	}
+}
+
 // TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering pins the second
 // half of the same gap: even once the daemon's timer-driven cycle uses a
 // SelectorOrdering-enabled EvolveV2Config, the langchain gardener_run_cycle
