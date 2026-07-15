@@ -345,6 +345,8 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		return NewCheckpointVerifier(child, node.MaxRetries, postconditions)
 	case "HumanApprovalGate":
 		return buildHumanApprovalGate(node, bb, parentName)
+	case "ClaudeErrorHandler":
+		return BuildClaudeErrorHandler(node, bb)
 	case "SubTreeRef":
 		return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 			ctx.Blackboard.Outcome = "SubTreeRef not expanded — run BuildAndValidate with tree expander"

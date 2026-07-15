@@ -94,6 +94,10 @@ var KnownNodeTypes = map[string]bool{
 	"HumanApprovalGate":  true,
 	"QualityGate":        true,
 	"CheckpointVerifier": true,
+	// ClaudeErrorHandler — self-extending recovery decorator: child 0 is the
+	// protected subtree; further children are Claude-proposed recovery nodes
+	// grafted at build time (engine/error_handler_node.go).
+	"ClaudeErrorHandler": true,
 }
 
 // ValidateEdge validates a single TypedEdge against the tree structure.
