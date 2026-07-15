@@ -177,14 +177,20 @@ func registerSuperpowersProductionActions() {
 		return 1
 	})
 
-	// GrillDesignArtifact interrogates the validated design: it asks Claude
-	// to generate up to 12 "Q [critical|normal] <branch>: <question>" lines,
-	// answers them via NotebookLM (batched ≤5/call to respect the free-plan
-	// 50/day quota) falling back to a Web answerer, appends a "## Grill Q&A"
-	// section to design.md, and fails the phase iff any [critical] question
-	// is still OPEN after all fallbacks. There is no compatible web-research
-	// action to wire as the fallback, so Web is nil and unanswered questions
-	// degrade straight to OPEN.
+	// GrillDesignArtifact is the ReviewCycle reviewer for the GrillLoop. It
+	// interrogates the validated design: Claude generates up to 12
+	// "Q [critical|normal] <branch>: <question>" lines, answered via NotebookLM
+	// (batched ≤5/call); Web fallback is nil so unanswered degrade to OPEN. It
+	// appends a round-tagged "## Grill Q&A — round N" section to design.md and
+	// persists round bookkeeping to the run JSON (GrillRound is the authoritative
+	// 10-round bound, refused before any Claude call).
+	//
+	// Returns SUCCESS with ChainState["review_verdict"]="approved" (zero open
+	// criticals) or "needs_work" + ChainState["review_feedback"] (open criticals
+	// remain; the reviser consumes the digest). Returns FAILURE only on protocol
+	// errors (Claude call failed, no parseable questions), the round bound
+	// ("grill_round_bound"), or the no-progress breaker ("grill_no_progress"
+	// after 2 stale rounds) — failure ends ReviewCycle and routes to SplitPath.
 	RegisterAction("GrillDesignArtifact", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.ChainState == nil {
