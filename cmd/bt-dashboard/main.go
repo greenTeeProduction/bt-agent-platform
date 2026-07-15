@@ -115,7 +115,27 @@ func init() {
 	companyState = startup.NewDefaultCompany()
 }
 
+// versionRequested reports whether the process was invoked with a version
+// flag. Used by the deploy-drift restart handoff to smoke-test a freshly
+// rebuilt binary before adopting it (internal/agent/deploy_drift.go).
+func versionRequested() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "version" {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
+	// Version fast path: print the stamped build identity and exit before any
+	// engine/store initialization, so the drift smoke test has no side effects.
+	if versionRequested() {
+		id := dashboard.ReadBuildIdentity()
+		fmt.Printf("bt-dashboard revision=%s vcs_time=%s dirty=%v\n", id.Revision, id.CommitTime, id.Dirty)
+		return
+	}
+
 	engine.Init()
 	engine.SetAsDefault()
 

@@ -159,7 +159,27 @@ func (t *GardenerRecommendTool) Call(_ context.Context, _ string) (string, error
 	return string(data), nil
 }
 
+// versionRequested reports whether the process was invoked with a version
+// flag. Used by the deploy-drift restart handoff to smoke-test a freshly
+// rebuilt binary before adopting it (internal/agent/deploy_drift.go).
+func versionRequested() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "version" {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
+	// Version fast path: print the stamped build identity and exit before any
+	// engine/store initialization, so the drift smoke test has no side effects.
+	if versionRequested() {
+		id := dashboard.ReadBuildIdentity()
+		fmt.Printf("bt-gardener revision=%s vcs_time=%s dirty=%v\n", id.Revision, id.CommitTime, id.Dirty)
+		return
+	}
+
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")

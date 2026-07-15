@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -255,5 +256,21 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 	want := []string{"Reliable", "Cheap", "Fallback"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("gardener_run_cycle tool did not apply learned Selector ordering: Router children = %v, want %v", names, want)
+	}
+}
+
+// TestMainSupportsVersionFlagForDriftSmokeTest pins the --version fast path
+// the deploy-drift restart handoff smoke-tests rebuilt binaries with
+// (internal/agent/deploy_drift.go runs `<binary> --version` and rolls the
+// swap back on failure): without it, arming BT_AUTO_RESTART_ON_DRIFT on this
+// unit would roll back every rebuild and the daemon could never self-adopt a
+// new revision.
+func TestMainSupportsVersionFlagForDriftSmokeTest(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "if versionRequested()") {
+		t.Error("main.go must short-circuit on --version (versionRequested) so the deploy-drift smoke test can validate a rebuilt binary")
 	}
 }
