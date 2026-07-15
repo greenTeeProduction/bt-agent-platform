@@ -58,6 +58,26 @@ type execClaudeRunner struct {
 	// AllowedTools, when non-empty, replaces the env/default --allowedTools
 	// list. Used by the GOAP review fallback to run Claude read-only.
 	AllowedTools string
+	// ForceReadOnly pins the explicit --allowedTools list even when
+	// BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS=true — the skip-permissions
+	// branch would otherwise discard the caller's read-only tool set and run
+	// Claude unrestricted. Set by callers whose security contract depends on
+	// the tool list (the error handler's Read,Glob,Grep proposal run).
+	ForceReadOnly bool
+}
+
+// buildClaudeArgs assembles the claude CLI argument list (exposed for tests —
+// RunClaude cannot be observed without executing the binary).
+func (r execClaudeRunner) buildClaudeArgs(prompt string) []string {
+	allowed := r.AllowedTools
+	if allowed == "" {
+		allowed = getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", defaultSuperpowersAllowedTools)
+	}
+	args := []string{"--print", "--allowedTools", allowed, "-p", prompt}
+	if !r.ForceReadOnly && strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
+		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
+	}
+	return withSuperpowersClaudeModel(args, resolvedSuperpowersClaudeModel())
 }
 
 func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
@@ -65,16 +85,7 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	if bin == "" {
 		bin = getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")
 	}
-	model := resolvedSuperpowersClaudeModel()
-	allowed := r.AllowedTools
-	if allowed == "" {
-		allowed = getenvDefault("BT_SUPERPOWERS_CLAUDE_ALLOWED_TOOLS", defaultSuperpowersAllowedTools)
-	}
-	args := []string{"--print", "--allowedTools", allowed, "-p", prompt}
-	if strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
-		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
-	}
-	args = withSuperpowersClaudeModel(args, model)
+	args := r.buildClaudeArgs(prompt)
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = repoDir

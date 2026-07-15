@@ -109,7 +109,10 @@ func TestDaemonResolvesWiredGoapFusionLoopTree(t *testing.T) {
 		t.Fatalf("resolved tree has no children (want ClaudeErrorHandler wrapper around the wired Sequence)")
 	}
 	inner := tree.Children[0]
-	if len(inner.Children) == 0 || inner.Children[0].Name != "GoapFusionPreflight" {
+	if len(inner.Children) == 0 {
+		t.Fatal("daemon must resolve the WIRED goap_fusion_loop tree (preflight first); wired Sequence has no children")
+	}
+	if inner.Children[0].Name != "GoapFusionPreflight" {
 		t.Fatalf("daemon must resolve the WIRED goap_fusion_loop tree (preflight first); first child = %q", inner.Children[0].Name)
 	}
 }

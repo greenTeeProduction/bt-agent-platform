@@ -11,6 +11,18 @@ const (
 	errorNodeCondPrefix     = "LastErrorNodeIs:"
 )
 
+// isParameterizedErrorGuard reports whether name is a LastErrorCategoryIs:/
+// LastErrorNodeIs: guard with a non-empty parameter — the only guard shapes a
+// generated recovery node may lead with (validateErrorHandlerProposal).
+func isParameterizedErrorGuard(name string) bool {
+	for _, prefix := range []string{errorCategoryCondPrefix, errorNodeCondPrefix} {
+		if strings.HasPrefix(name, prefix) && strings.TrimSpace(strings.TrimPrefix(name, prefix)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func errorHandlerConditionFor(name string) ConditionFunc {
 	chainStateEquals := func(key, want string) ConditionFunc {
 		return func(b *Blackboard) bool {

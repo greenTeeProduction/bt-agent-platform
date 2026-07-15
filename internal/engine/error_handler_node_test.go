@@ -28,6 +28,25 @@ func init() {
 		ehTestRecoverRan.Add(1)
 		return 1
 	})
+	// Failing action that leaves quality-reject markers ("error:", "failed to")
+	// in bb.Result — the common shape of a real failure. Used to prove recovered
+	// runs survive RunTask's validateOutputQuality backstop (C1).
+	RegisterAction("eh_test_dirty_failing_action", func(ctx *btcore.BTContext[Blackboard]) int {
+		b := ctx.Blackboard
+		if b.ChainState == nil {
+			b.ChainState = map[string]any{}
+		}
+		b.ChainState["last_error_category"] = "testcat"
+		b.ChainState["last_error_node"] = "eh_test_dirty_failing_action"
+		b.ChainState["last_error"] = "error: boom failed to reach service"
+		b.Result = "error: boom failed to reach service"
+		return -1
+	})
+	// Recovery action that never terminates (returns Running). Used to pin that
+	// a running recovery child folds into failure, not a hung handler.
+	RegisterAction("eh_test_running_action", func(ctx *btcore.BTContext[Blackboard]) int {
+		return 0
+	})
 }
 
 func ehTestHandlerNode() *evolution.SerializableNode {
@@ -145,7 +164,7 @@ func TestClaudeErrorHandler_InvalidProposalRejected(t *testing.T) {
 	if len(loadErrorHandlerExtensions("eh_test_tree_ErrorHandler")) != 0 {
 		t.Fatal("rejected proposal must not be persisted")
 	}
-	if entry, ok := errorHandlerLedgerGet(errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler")); !ok || entry.LastVerdict != "rejected" {
+	if entry, ok := errorHandlerLedgerGet(errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")); !ok || entry.LastVerdict != "rejected" {
 		t.Fatalf("ledger verdict = %+v ok=%v, want rejected", entry, ok)
 	}
 }
@@ -219,6 +238,59 @@ func TestClaudeErrorHandler_SuccessPassthroughUntouched(t *testing.T) {
 	}
 	if fake.calls.Load() != 0 {
 		t.Fatal("no Claude on success")
+	}
+}
+
+// C1: a recovered run whose pre-recovery bb.Result contains quality-reject
+// markers ("error:", "failed to") must still report Success through RunTask —
+// validateOutputQuality's marker scan (tree.go) would otherwise flip the
+// outcome back to Failure, making the handler inert for the common case.
+// markRecovered must fence the pre-recovery text so stripFencedBlocks removes
+// it from the quality scan.
+func TestClaudeErrorHandler_RecoveredRunSurvivesRunTaskQualityGate(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	fake := &fakeClaudeRunner{output: ehTestProposalJSON(t)}
+	swapErrorHandlerRunner(t, fake)
+	node := &evolution.SerializableNode{
+		Type: "ClaudeErrorHandler",
+		Name: "eh_dirty_tree_ErrorHandler",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "eh_test_dirty_failing_action"},
+		},
+	}
+	bb := &Blackboard{Task: "dirty recovery", ChainState: map[string]any{}}
+	tree, err := BuildAndValidate(node, bb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RunTask(bb, tree)
+	if bb.Outcome != string(evolution.Success) {
+		t.Fatalf("recovered run must survive RunTask's quality backstop; outcome=%q result=%q", bb.Outcome, bb.Result)
+	}
+	if sig, _ := bb.ChainState["error_handler_recovered"].(string); sig == "" {
+		t.Fatal("recovery must stamp error_handler_recovered")
+	}
+	if !strings.Contains(bb.Result, "## Error Handler Recovery") {
+		t.Fatalf("recovery note missing from Result: %q", bb.Result)
+	}
+}
+
+// T5 gap: a grafted recovery child that returns 0 (Running) must fold into
+// failure (-1), not leak Running out of the handler.
+func TestClaudeErrorHandler_RunningRecoveryFoldsIntoFailure(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	prop := `{"resolvable": true, "reason": "r", "node": {"type": "Sequence", "name": "Handle_running", "children": [` +
+		`{"type": "Condition", "name": "LastErrorCategoryIs:testcat"},` +
+		`{"type": "Action", "name": "eh_test_running_action"}]}}`
+	fake := &fakeClaudeRunner{output: prop}
+	swapErrorHandlerRunner(t, fake)
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("running recovery child must fold into failure, got %d", code)
+	}
+	exts := loadErrorHandlerExtensions("eh_test_tree_ErrorHandler")
+	if len(exts) != 1 || exts[0].ConsecutiveFailures != 1 {
+		t.Fatalf("running tick must count as a recovery failure: %+v", exts)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,17 +19,20 @@ import (
 const (
 	// errorHandlerAllowedTools keeps the proposal run read-only: Claude
 	// proposes a node as JSON; it never edits the repo (spec §4).
-	errorHandlerAllowedTools  = "Read,Glob,Grep"
-	errorHandlerClaudeTimeout = 180 * time.Second
-	errorHandlerMaxProposal   = 10 // max nodes in a proposal
-	errorHandlerMaxDepth      = 4
-	errorHandlerErrExcerpt    = 200  // chars of error text in the signature
-	errorHandlerSubtreeLimit  = 4000 // chars of subtree JSON in the prompt
+	errorHandlerAllowedTools   = "Read,Glob,Grep"
+	errorHandlerClaudeTimeout  = 180 * time.Second
+	errorHandlerMaxProposal    = 10 // max nodes in a proposal
+	errorHandlerMaxDepth       = 4
+	errorHandlerErrExcerpt     = 200  // chars of error text in the signature
+	errorHandlerSubtreeLimit   = 4000 // chars of subtree JSON in the prompt
+	errorHandlerPromptErrLimit = 500  // chars of untrusted error text in the prompt
 )
 
 // errorHandlerClaudeRunner is swappable in tests (same seam pattern as
-// defaultSuperpowersClaudeRunner).
-var errorHandlerClaudeRunner ClaudeRunner = execClaudeRunner{AllowedTools: errorHandlerAllowedTools}
+// defaultSuperpowersClaudeRunner). ForceReadOnly: the proposal run's security
+// contract is its Read,Glob,Grep tool list — the skip-permissions env override
+// must never widen it.
+var errorHandlerClaudeRunner ClaudeRunner = execClaudeRunner{AllowedTools: errorHandlerAllowedTools, ForceReadOnly: true}
 
 func errorHandlerEnabled() bool {
 	return !strings.EqualFold(os.Getenv("BT_CLAUDE_ERROR_HANDLER"), "off")
@@ -60,12 +64,23 @@ func stripDigits(s string) string {
 // errorHandlerSignatureFromBB identifies an error class: same tree + failing
 // node + category + digit-stripped error text prefix ⇒ same signature, so
 // timestamps/counters in messages don't defeat the cooldown ledger.
-func errorHandlerSignatureFromBB(b *Blackboard, handlerName string) string {
+//
+// When the tree has NO reliability wiring (last_error_category AND
+// last_error_node both empty), the only available text is free-form bb.Result,
+// which is near-unique per run (hex ids, UUIDs, paths survive digit-stripping)
+// — hashing it would mint a fresh signature per failing run, defeating the
+// cooldown entirely and growing the ledger unbounded. Collapse that case to a
+// COARSE stable key: handler + protected subtree root only.
+func errorHandlerSignatureFromBB(b *Blackboard, handlerName, protectedName string) string {
 	var cat, node, errText string
 	if b.ChainState != nil {
 		cat, _ = b.ChainState["last_error_category"].(string)
 		node, _ = b.ChainState["last_error_node"].(string)
 		errText, _ = b.ChainState["last_error"].(string)
+	}
+	if cat == "" && node == "" {
+		sum := sha256.Sum256([]byte(handlerName + "|" + protectedName))
+		return hex.EncodeToString(sum[:])[:12]
 	}
 	if errText == "" {
 		errText = b.Result
@@ -84,7 +99,9 @@ type errorHandlerProposal struct {
 }
 
 // parseErrorHandlerProposal extracts the first parseable JSON object from
-// Claude's output (which may wrap it in prose or ```json fences).
+// Claude's output (which may wrap it in prose or ```json fences). Only objects
+// that actually carry the "resolvable" contract key count — a bare "{}" or an
+// echoed example node object must not decode as {resolvable:false}.
 func parseErrorHandlerProposal(output string) (errorHandlerProposal, error) {
 	rest := output
 	for {
@@ -93,12 +110,17 @@ func parseErrorHandlerProposal(output string) (errorHandlerProposal, error) {
 			break
 		}
 		rest = rest[idx:]
-		var p errorHandlerProposal
-		if err := json.NewDecoder(strings.NewReader(rest)).Decode(&p); err == nil {
-			if p.Resolvable && p.Node == nil {
-				return errorHandlerProposal{}, fmt.Errorf("claude proposal marked resolvable but has no node")
+		var raw map[string]json.RawMessage
+		if err := json.NewDecoder(strings.NewReader(rest)).Decode(&raw); err == nil {
+			if _, ok := raw["resolvable"]; ok {
+				var p errorHandlerProposal
+				if err := json.NewDecoder(strings.NewReader(rest)).Decode(&p); err == nil {
+					if p.Resolvable && p.Node == nil {
+						return errorHandlerProposal{}, fmt.Errorf("claude proposal marked resolvable but has no node")
+					}
+					return p, nil
+				}
 			}
-			return p, nil
 		}
 		rest = rest[1:]
 	}
@@ -114,6 +136,20 @@ var errorHandlerAllowedNodeTypes = map[string]bool{
 	"Sequence": true, "Selector": true,
 	"Retry": true, "Timeout": true, "Inverter": true, "Succeeder": true,
 	"Action": true, "Condition": true, "AlwaysSucceed": true,
+}
+
+// errorHandlerDeniedActionSubstrings blocks repo/fleet-mutating registered
+// actions from Claude-generated recovery nodes: proposals are auto-applied
+// with no human approval, so anything that commits, pushes, deploys, mutates
+// trees/agents, or deletes state is out of vocabulary regardless of
+// registration (e.g. ApplySuperpowersRunToMainRepo, PushBranchAndCreatePR,
+// SuperpowersTaskCommit, RunDeploy, ApplyFusion, ApplyTargetedMutation,
+// HermesUpdateAgent, UpdateBehaviorTree). Case-sensitive substring match on
+// the action name.
+var errorHandlerDeniedActionSubstrings = []string{
+	"Apply", "Push", "Deploy", "Commit", "Merge", "Mutation", "Mutate",
+	"HermesUpdate", "UpdateBehaviorTree", "SeedProgram", "CreatePR",
+	"Delete", "Remove", "Write",
 }
 
 // firstTickedLeaf follows first children down to the leaf a tick reaches
@@ -171,6 +207,21 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 	if guard == nil || guard.Type != "Condition" {
 		return fmt.Errorf("proposal's first-ticked leaf must be a Condition guard")
 	}
+	// Semantic guard enforcement: the guard must be a parameterized error
+	// condition with a real value — a registered (possibly broadly-true)
+	// condition or an empty-param guard lets an always-true guard plus a
+	// vacuous action mask ALL future failures of the tree as recovered success.
+	if !isParameterizedErrorGuard(guard.Name) {
+		return fmt.Errorf("proposal guard %q must be %s<category> or %s<node> with a non-empty value", guard.Name, errorCategoryCondPrefix, errorNodeCondPrefix)
+	}
+	// The guard must be reachable through Sequence nodes only: a Succeeder/
+	// Inverter/Selector above it can neutralize the guard so the composition
+	// succeeds even when the guard fails.
+	for n := node; n != guard; n = &n.Children[0] {
+		if n.Type != "Sequence" {
+			return fmt.Errorf("every node above the guard must be a Sequence, found %q (%s)", n.Type, n.Name)
+		}
+	}
 	var walk func(n *evolution.SerializableNode) error
 	walk = func(n *evolution.SerializableNode) error {
 		if !errorHandlerAllowedNodeTypes[n.Type] {
@@ -180,6 +231,11 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 		case "Action":
 			if GetAction(n.Name) == nil {
 				return fmt.Errorf("action %q is not registered", n.Name)
+			}
+			for _, denied := range errorHandlerDeniedActionSubstrings {
+				if strings.Contains(n.Name, denied) {
+					return fmt.Errorf("action %q is not allowed in generated recovery nodes (mutating action, matches denied token %q)", n.Name, denied)
+				}
 			}
 		case "Condition":
 			if GetCondition(n.Name) == nil && errorHandlerConditionFor(n.Name) == nil {
@@ -206,6 +262,11 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 	if errText == "" {
 		errText = b.Result
 	}
+	// Truncate the error text: it is untrusted failure output (a prompt-
+	// injection channel) — cap the excerpt like the signature does.
+	if len(errText) > errorHandlerPromptErrLimit {
+		errText = errText[:errorHandlerPromptErrLimit] + "… (truncated)"
+	}
 	subtree, _ := json.MarshalIndent(failing, "", "  ")
 	subtreeStr := string(subtree)
 	if len(subtreeStr) > errorHandlerSubtreeLimit {
@@ -215,6 +276,7 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 	for t := range errorHandlerAllowedNodeTypes {
 		allowed = append(allowed, t)
 	}
+	sort.Strings(allowed) // deterministic prompt (map iteration order is random)
 	return fmt.Sprintf(`You are the error handler for a Go behavior-tree agent platform. A subtree failed and you may propose ONE recovery node to handle this class of error in future runs.
 
 ## Failure context
@@ -230,7 +292,7 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 
 ## Rules for your proposal
 - Compose ONLY registered action/condition names listed below — you cannot invent new behavior.
-- The node must be a guard-first composition: its first-ticked leaf MUST be a Condition, typically "LastErrorCategoryIs:%s" or "LastErrorNodeIs:%s", so it never fires on unrelated failures.
+- The node must be a guard-first composition: its first-ticked leaf MUST be the Condition "LastErrorCategoryIs:<category>" or "LastErrorNodeIs:<node-name>" with a real, non-empty value (e.g. "LastErrorCategoryIs:%s" or "LastErrorNodeIs:%s"), so it never fires on unrelated failures. Every node on the path from the root down to that guard must be a Sequence — no Succeeder/Inverter/Selector above the guard.
 - Allowed node types: %s
 - Max 10 nodes, max depth 4. Give the root and every composite a short unique descriptive name.
 - Node JSON shape: {"type": "...", "name": "...", "children": [...], "max_retries": N (Retry only), "timeout_ms": N (Timeout only)}
@@ -254,11 +316,17 @@ or, if this error cannot be handled by composing the registered vocabulary:
 }
 
 // requestErrorHandlerProposal makes the single guarded Claude call and stamps
-// the ledger on EVERY outcome so the cooldown always engages.
-func requestErrorHandlerProposal(handlerName string, failing *evolution.SerializableNode, b *Blackboard, sig string) (errorHandlerProposal, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), errorHandlerClaudeTimeout)
+// the ledger on EVERY outcome so the cooldown always engages. ctx is the
+// tick's run context (RunTask's tree deadline) so the call — which holds the
+// fleet-wide claude.lock — cannot outlive the tree budget; the 180s cap
+// applies on top of it.
+func requestErrorHandlerProposal(ctx context.Context, handlerName string, failing *evolution.SerializableNode, b *Blackboard, sig string) (errorHandlerProposal, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	callCtx, cancel := context.WithTimeout(ctx, errorHandlerClaudeTimeout)
 	defer cancel()
-	res := errorHandlerClaudeRunner.RunClaude(ctx, goapFusionRepo, buildErrorHandlerPrompt(handlerName, failing, b))
+	res := errorHandlerClaudeRunner.RunClaude(callCtx, goapFusionRepo, buildErrorHandlerPrompt(handlerName, failing, b))
 	if res.Err != nil {
 		errorHandlerLedgerStamp(sig, "error")
 		return errorHandlerProposal{}, fmt.Errorf("claude error-handler call failed: %w", res.Err)

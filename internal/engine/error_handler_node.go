@@ -2,7 +2,9 @@
 package engine
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -61,7 +63,18 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			b.ChainState = map[string]any{}
 		}
 		b.ChainState["error_handler_recovered"] = sig
-		b.Result += fmt.Sprintf("\n\n## Error Handler Recovery\nHandler %s recovered via generated node %s (error signature %s).\n", handlerName, nodeName, sig)
+		// The pre-recovery Result routinely contains quality-reject markers
+		// ("error:", "failed to", …) from the original failure. RunTask's
+		// validateOutputQuality backstop would flip the recovered Success back
+		// to Failure on those markers — fence the failure text so
+		// stripFencedBlocks removes it from the quality scan, and append the
+		// recovery note as clean prose.
+		note := fmt.Sprintf("## Error Handler Recovery\nHandler %s recovered via generated node %s (error signature %s).\n", handlerName, nodeName, sig)
+		if prior := strings.TrimSpace(b.Result); prior != "" {
+			b.Result = fmt.Sprintf("```\n%s\n```\n\n%s", prior, note)
+		} else {
+			b.Result = note
+		}
 		Info("claude error handler: recovered", "handler", handlerName, "node", nodeName, "signature", sig)
 	}
 
@@ -71,7 +84,7 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			return code
 		}
 		b := ctx.Blackboard
-		sig := errorHandlerSignatureFromBB(b, handlerName)
+		sig := errorHandlerSignatureFromBB(b, handlerName, protected.Name)
 		// 1. Existing recovery extensions, guard-first. The guard is evaluated
 		// separately from the tick so a guard mismatch (expected on unrelated
 		// errors) never counts as a recovery failure toward auto-disable.
@@ -101,7 +114,14 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			return -1 // another agent is already consulting Claude — skip this run
 		}
 		defer release()
-		prop, err := requestErrorHandlerProposal(handlerName, &protected, b, sig)
+		// Thread the tick's run context (RunTask's tree deadline) into the
+		// Claude call so it cannot outlive the tree budget while holding the
+		// fleet lock. BTContext embeds context.Context; tests may leave it nil.
+		runCtx := context.Background()
+		if ctx.Context != nil {
+			runCtx = ctx.Context
+		}
+		prop, err := requestErrorHandlerProposal(runCtx, handlerName, &protected, b, sig)
 		if err != nil || !prop.Resolvable {
 			return -1
 		}

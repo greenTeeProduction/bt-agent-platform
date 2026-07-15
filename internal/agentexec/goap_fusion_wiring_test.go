@@ -51,7 +51,10 @@ func TestGoapFusionLoopTreeIsProductionWired(t *testing.T) {
 		t.Fatalf("wired tree has no children (want ClaudeErrorHandler wrapper around the wired Sequence)")
 	}
 	inner := tree.Children[0]
-	if len(inner.Children) == 0 || inner.Children[0].Name != "GoapFusionPreflight" {
+	if len(inner.Children) == 0 {
+		t.Fatal("wired tree must start with the Phase-0 preflight; wired Sequence has no children")
+	}
+	if inner.Children[0].Name != "GoapFusionPreflight" {
 		t.Fatalf("wired tree must start with the Phase-0 preflight, first child = %q", inner.Children[0].Name)
 	}
 }
