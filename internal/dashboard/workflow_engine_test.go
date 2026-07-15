@@ -507,13 +507,30 @@ func TestExecuteSprint_NoApprovedTasks(t *testing.T) {
 
 type mockTTOrch struct {
 	phases []string
+	// failPhase, if set, makes the matching Run* method below return an
+	// error (failErr, or a default if unset) after still recording the
+	// phase name — letting a test target exactly one step of
+	// RunFullPipeline's thinktank sequence without duplicating the fake.
+	failPhase string
+	failErr   error
 }
 
-func (m *mockTTOrch) RunResearchRound() error    { m.phases = append(m.phases, "research"); return nil }
-func (m *mockTTOrch) RunDebate() error           { m.phases = append(m.phases, "debate"); return nil }
-func (m *mockTTOrch) RunSynthesis() error        { m.phases = append(m.phases, "synthesis"); return nil }
-func (m *mockTTOrch) RunPeerReview() error       { m.phases = append(m.phases, "peer_review"); return nil }
-func (m *mockTTOrch) RunReportGeneration() error { m.phases = append(m.phases, "report"); return nil }
+func (m *mockTTOrch) run(phase string) error {
+	m.phases = append(m.phases, phase)
+	if m.failPhase == phase {
+		if m.failErr != nil {
+			return m.failErr
+		}
+		return fmt.Errorf("%s failed", phase)
+	}
+	return nil
+}
+
+func (m *mockTTOrch) RunResearchRound() error    { return m.run("research") }
+func (m *mockTTOrch) RunDebate() error           { return m.run("debate") }
+func (m *mockTTOrch) RunSynthesis() error        { return m.run("synthesis") }
+func (m *mockTTOrch) RunPeerReview() error       { return m.run("peer_review") }
+func (m *mockTTOrch) RunReportGeneration() error { return m.run("report") }
 
 func TestRunFullPipeline(t *testing.T) {
 	tt := &thinktank.ThinkTank{
@@ -596,6 +613,77 @@ func TestRunFullPipeline_NilSynthesis_NoPanic(t *testing.T) {
 	}
 	if wf.Status != "completed" {
 		t.Errorf("expected status 'completed', got %q", wf.Status)
+	}
+}
+
+func TestRunFullPipeline_ExecutesEverySprintPresent(t *testing.T) {
+	// Synthesis is nil so RecommendationsToTasks is a no-op and leaves the
+	// pre-populated, already-approved w.Tasks below untouched — isolating
+	// RunFullPipeline's sprint-iteration behavior from task creation.
+	tt := &thinktank.ThinkTank{Synthesis: nil}
+	company := &startup.CompanyState{Name: "TestCo"}
+	ttOrch := &mockTTOrch{}
+	compOrch := &mockOrch{}
+
+	wf := NewWorkflow("test-pipeline", tt, company)
+	wf.Tasks = []WorkflowTask{
+		{ID: "t1", SprintTarget: 1, Status: StatusApproved},
+		{ID: "t2", SprintTarget: 2, Status: StatusApproved},
+		{ID: "t3", SprintTarget: 3, Status: StatusApproved},
+	}
+
+	wf.RunFullPipeline(ttOrch, compOrch)
+
+	for _, task := range wf.Tasks {
+		if task.Status != StatusCompleted {
+			t.Errorf("task %s (sprint %d) status = %s, want %s — sprint %d was never executed by RunFullPipeline",
+				task.ID, task.SprintTarget, task.Status.String(), StatusCompleted.String(), task.SprintTarget)
+		}
+		if task.CompletedAt == nil {
+			t.Errorf("task %s (sprint %d) has no CompletedAt — sprint %d was never executed by RunFullPipeline",
+				task.ID, task.SprintTarget, task.SprintTarget)
+		}
+	}
+}
+
+// TestRunFullPipeline_HaltsOnPhaseFailure pins the requirement that
+// RunFullPipeline must check each thinktank phase's returned error instead of
+// discarding it via `_ =`. On the first failing phase it must set
+// w.Status = "failed" and stop immediately — running neither the remaining
+// thinktank phases, nor task creation, nor sprint execution — instead of
+// silently proceeding into RecommendationsToTasks with stale/empty synthesis.
+func TestRunFullPipeline_HaltsOnPhaseFailure(t *testing.T) {
+	tt := &thinktank.ThinkTank{
+		Synthesis: &thinktank.Synthesis{
+			Recommendation: "Expand to enterprise market",
+		},
+	}
+	company := &startup.CompanyState{Name: "TestCo"}
+	ttOrch := &mockTTOrch{failPhase: "synthesis", failErr: fmt.Errorf("synthesis boom")}
+	compOrch := &mockOrch{}
+
+	wf := NewWorkflow("test-pipeline", tt, company)
+	wf.RunFullPipeline(ttOrch, compOrch)
+
+	if wf.Status != "failed" {
+		t.Errorf("expected status 'failed' after synthesis phase error, got %q", wf.Status)
+	}
+
+	wantPhases := []string{"research", "debate", "synthesis"}
+	if len(ttOrch.phases) != len(wantPhases) {
+		t.Fatalf("expected phases %v (pipeline halted after synthesis failure), got %v", wantPhases, ttOrch.phases)
+	}
+	for i, p := range wantPhases {
+		if ttOrch.phases[i] != p {
+			t.Errorf("phase %d: expected %q, got %q", i, p, ttOrch.phases[i])
+		}
+	}
+
+	if len(wf.Tasks) != 0 {
+		t.Errorf("expected 0 tasks after pipeline halted on failure, got %d", len(wf.Tasks))
+	}
+	if compOrch.sprintRan {
+		t.Error("ExecuteSprint's RunSprint should never run after a thinktank phase failure")
 	}
 }
 

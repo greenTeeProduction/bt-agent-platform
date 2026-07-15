@@ -1304,6 +1304,18 @@ func DashboardRoutes() []Route {
 			}, "status", "id")).
 			ErrorResponse(404, "No active workflow, or workflow task not found").WithAuth().Build(),
 
+		NewRoute("/api/workflow/run-full-pipeline", POST).
+			Summary("Run the full thinktank-to-sprint pipeline").
+			Description("Drives Workflow.RunFullPipeline end-to-end: thinktank analysis, task derivation, and company sprint execution. Stores the resulting Workflow as the current workflow and persists its tasks into the task store.").
+			Tags("Workflow").
+			OperationID("postWorkflowRunFullPipeline").
+			QueryParam("topic", "Analysis topic (e.g., 'AI safety frameworks')", true, StringSchema("Topic")).
+			JSONResponse(200, "Pipeline result", ObjectSchema(map[string]*Schema{
+				"topic":  StringSchema("Analysis topic"),
+				"status": StringSchema("Final Workflow status ('completed' or 'failed')"),
+			}, "topic", "status")).
+			ErrorResponse(503, "Ollama unavailable").WithAuth().Build(),
+
 		// HITL (human-in-the-loop) approval
 		NewRoute("/api/hitl/pending", GET).
 			Summary("List pending HITL requests").

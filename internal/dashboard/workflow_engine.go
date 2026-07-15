@@ -397,6 +397,24 @@ func NewWorkflow(name string, tt *thinktank.ThinkTank, company *startup.CompanyS
 	}
 }
 
+// distinctSprintTargets returns every distinct SprintTarget present in
+// w.Tasks, sorted ascending, so RunFullPipeline can execute exactly the
+// sprints that have tasks instead of a hardcoded sprint count.
+func (w *Workflow) distinctSprintTargets() []int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	seen := make(map[int]bool)
+	var sprints []int
+	for _, t := range w.Tasks {
+		if !seen[t.SprintTarget] {
+			seen[t.SprintTarget] = true
+			sprints = append(sprints, t.SprintTarget)
+		}
+	}
+	sort.Ints(sprints)
+	return sprints
+}
+
 // RunFullPipeline executes: thinktank analysis → task creation → approval → company execution.
 func (w *Workflow) RunFullPipeline(ttOrch interface {
 	RunResearchRound() error
@@ -409,11 +427,26 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 }) {
 	// Phase 1: Thinktank analysis
 	w.Status = "analyzing"
-	_ = ttOrch.RunResearchRound()
-	_ = ttOrch.RunDebate()
-	_ = ttOrch.RunSynthesis()
-	_ = ttOrch.RunPeerReview()
-	_ = ttOrch.RunReportGeneration()
+	if err := ttOrch.RunResearchRound(); err != nil {
+		w.Status = "failed"
+		return
+	}
+	if err := ttOrch.RunDebate(); err != nil {
+		w.Status = "failed"
+		return
+	}
+	if err := ttOrch.RunSynthesis(); err != nil {
+		w.Status = "failed"
+		return
+	}
+	if err := ttOrch.RunPeerReview(); err != nil {
+		w.Status = "failed"
+		return
+	}
+	if err := ttOrch.RunReportGeneration(); err != nil {
+		w.Status = "failed"
+		return
+	}
 
 	// Phase 2: Convert recommendations to tasks
 	w.RecommendationsToTasks()
@@ -427,8 +460,9 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 	if len(w.Tasks) > 0 {
 		w.Company.SprintGoal = w.Tasks[0].Title
 	}
-	w.ExecuteSprint(1, compOrch)
-	w.ExecuteSprint(2, compOrch)
+	for _, sprintNum := range w.distinctSprintTargets() {
+		w.ExecuteSprint(sprintNum, compOrch)
+	}
 
 	w.Status = "completed"
 }

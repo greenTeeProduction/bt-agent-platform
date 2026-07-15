@@ -556,6 +556,90 @@ func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 	}
 }
 
+// TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks pins milestone
+// 3/3 of the Q1 Correctness "wire the dashboard's dead-code RunFullPipeline
+// autonomous workflow entry point" program.
+//
+// internal/dashboard/workflow_engine.go's Workflow.RunFullPipeline is fully
+// fixed and tested (milestone 1: iterates every distinct sprint target
+// instead of a hardcoded 1,2; milestone 2: checks each thinktank phase's
+// returned error instead of discarding it) but has zero callers outside
+// workflow_engine_test.go — confirmed via git grep for ".RunFullPipeline(" —
+// so the corrected, tested pipeline can never actually run in production.
+//
+// handleWorkflowRunFullPipeline, registered at
+// POST /api/workflow/run-full-pipeline, must build a *thinktank.Orchestrator
+// (thinktank.NewOrchestrator) and a *startup.CompanyOrchestrator
+// (startup.NewOrchestrator) the same way handleAnalyze/handleSprintExecute
+// already do, drive them through Workflow.RunFullPipeline, retain the built
+// *dashboard.Workflow in the package-level currentWorkflow (mirroring
+// handleAnalyze's currentWorkflowMu locking convention), and persist every
+// resulting WorkflowTask into taskStore under the wf.ID+"-"+wt.ID convention
+// handleAnalyze/handleWorkflowApprove/handleWorkflowReject already share —
+// giving RunFullPipeline its first production caller.
+func TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks(t *testing.T) {
+	origTaskStore := taskStore
+	origLLM := sharedLLM
+	origWorkflow := currentWorkflow
+	t.Cleanup(func() {
+		taskStore = origTaskStore
+		sharedLLM = origLLM
+		currentWorkflowMu.Lock()
+		currentWorkflow = origWorkflow
+		currentWorkflowMu.Unlock()
+	})
+
+	dir := t.TempDir()
+	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
+	sharedLLM = engine.NewMockLLM()
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/api/workflow/run-full-pipeline?topic=Should+we+ship+feature+X", nil)
+	rr := httptest.NewRecorder()
+	handleWorkflowRunFullPipeline(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		t.Fatal("handleWorkflowRunFullPipeline must store the *dashboard.Workflow it builds " +
+			"in the package-level currentWorkflow, mirroring handleAnalyze")
+	}
+	if wf.Status != "completed" {
+		t.Errorf("currentWorkflow.Status = %q, want %q — RunFullPipeline must have actually run to completion",
+			wf.Status, "completed")
+	}
+	if len(wf.Tasks) == 0 {
+		t.Fatal("currentWorkflow has zero Tasks; RunFullPipeline should have derived tasks " +
+			"from the synthesized recommendation via RecommendationsToTasks")
+	}
+
+	tasks := taskStore.List()
+	if len(tasks) != len(wf.Tasks) {
+		t.Fatalf("taskStore has %d tasks, want %d (one persisted per WorkflowTask)", len(tasks), len(wf.Tasks))
+	}
+	byID := make(map[string]dashboard.Task, len(tasks))
+	for _, tk := range tasks {
+		byID[tk.ID] = tk
+	}
+	for _, wt := range wf.Tasks {
+		wantID := wf.ID + "-" + wt.ID
+		tk, ok := byID[wantID]
+		if !ok {
+			t.Errorf("taskStore missing task %q derived from workflow task %q (title %q); "+
+				"must persist using the wf.ID+\"-\"+wt.ID convention handleAnalyze uses",
+				wantID, wt.ID, wt.Title)
+			continue
+		}
+		if tk.Title != wt.Title {
+			t.Errorf("task %q Title = %q, want %q", wantID, tk.Title, wt.Title)
+		}
+	}
+}
+
 // TestCurrentWorkflow_GuardedByMutex pins the "guard the package-level
 // currentWorkflow against concurrent HTTP access" requirement. currentWorkflow
 // (main.go) is read by handleWorkflowPending/handleWorkflowApprove/

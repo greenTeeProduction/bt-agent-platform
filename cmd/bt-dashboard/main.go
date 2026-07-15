@@ -317,6 +317,7 @@ func main() {
 	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
 	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
 	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
+	mux.HandleFunc("/api/workflow/run-full-pipeline", sessionAuth(handleWorkflowRunFullPipeline))
 	mux.HandleFunc("/api/company/default", sessionAuth(handleDefaultCompany))
 	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
 	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
@@ -594,6 +595,53 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "findings": ff})
 }
+
+// handleWorkflowRunFullPipeline drives Workflow.RunFullPipeline end-to-end —
+// thinktank analysis, task derivation, and company sprint execution — using
+// the same Orchestrator construction handleAnalyze/handleSprintExecute use.
+// This gives RunFullPipeline (internal/dashboard/workflow_engine.go), which
+// previously had zero production callers, its first one.
+func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
+	topic := r.URL.Query().Get("topic")
+	c := sharedLLM
+	if c == nil {
+		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
+		return
+	}
+	tt := thinktank.NewThinkTank("Council", topic)
+	ttOrch := thinktank.NewOrchestrator(tt, c)
+	compOrch := startup.NewOrchestrator(companyState, c)
+
+	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
+	wf.RunFullPipeline(ttOrch, compOrch)
+
+	currentWorkflowMu.Lock()
+	currentWorkflow = wf
+	currentWorkflowMu.Unlock()
+
+	// Persist each derived WorkflowTask into taskStore under the same
+	// wf.ID+"-"+wt.ID convention handleAnalyze/handleWorkflowApprove/Reject
+	// share, so approvals, sprint dispatch, and status sync all see it.
+	for _, wt := range wf.Tasks {
+		task := dashboard.Task{
+			ID:          wf.ID + "-" + wt.ID,
+			Title:       wt.Title,
+			Description: wt.Description,
+			Priority:    wt.Priority.String(),
+			Assignee:    wt.AssigneeRole,
+			Source:      "thinktank",
+			SourceID:    wt.Source,
+			Sprint:      wt.SprintTarget,
+			StoryPoints: wt.EstimatedEffort,
+			Approval:    wt.Approval,
+		}
+		task.TreeID = dashboard.PickTreeForTask(task)
+		_ = taskStore.Create(task)
+	}
+
+	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "status": wf.Status})
+}
+
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
 	_ = encodeJSON(w, companyState)
 }
