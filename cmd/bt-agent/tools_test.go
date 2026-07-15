@@ -144,6 +144,20 @@ func TestBTEvolveQDAccumulatesDurableArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
 
+	// MAP-Elites mutation uses unseeded math/rand, so the illuminated winner
+	// occasionally regresses against the base tree on the real benchmark
+	// suite once the gate (milestone 2/4) is wired, which would make this
+	// accumulation pin flaky if left alone. Pin benchmarkRunSuiteFn to a
+	// constant non-regressing result so archive accumulation is exercised
+	// deterministically regardless of gate outcome, mirroring
+	// TestBTEvolveIslandAccumulatesDurableArchive and
+	// TestBTEvolveMultiObjectiveAccumulatesDurableArchive.
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
@@ -183,6 +197,74 @@ func TestBTEvolveQDAccumulatesDurableArchive(t *testing.T) {
 	second := invoke("second")
 	if got, isBool := second["warm_started"].(bool); !isBool || !got {
 		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
+// TestBTEvolveQDBenchmarkGateRejectsRegressedWinner pins milestone 2/4 of the
+// "Finish gating every evolution algorithm's durable-archive winner through
+// the real benchmark suite" program (Q2 Evolvability). bt_evolve_qd's
+// structural fitness (evolution.StructuralMultiFitness and friends) can rate
+// a MAP-Elites grid's best illuminated individual as elite while it actually
+// performs worse than the untouched base tree against the tree's real
+// internal/benchmark suite (deterministic, sandboxed, mock-LLM RunSuite — no
+// real LLM calls, so this stays -short-safe). benchmarkGateEvolvedWinner must
+// run both the base tree and grid.BestIndividual().Tree through that suite
+// and reject the save on regression, surfacing "benchmark_gate_rejected":
+// true instead of silently archiving a worse tree — mirroring
+// TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner and
+// TestBTEvolveIslandBenchmarkGateRejectsRegressedWinner.
+//
+// benchmarkRunSuiteFn is a package-level indirection over benchmark.RunSuite
+// (mirroring the DelegateToA2AFn/AuctionDelegateFn test-seam pattern already
+// used in this package) so this test can force a regression deterministically
+// without depending on MAP-Elites' unseeded math/rand mutation, which makes
+// the illuminated winner's actual structure unpredictable across runs.
+func TestBTEvolveQDBenchmarkGateRejectsRegressedWinner(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls == 1 {
+			// First call gates the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Every subsequent call gates the illuminated winner: total regression.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	res, ok := server.Invoke("bt_evolve_qd", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qd) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_qd returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_qd result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_qd unexpectedly returned an error: %v", out)
+	}
+
+	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
+		t.Fatalf(`bt_evolve_qd must report "benchmark_gate_rejected": true when the illuminated winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "map_elites_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob map-elites archives: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("bt_evolve_qd must skip persisting the durable MAP-Elites archive when the benchmark gate rejects the winner; found %v", matches)
 	}
 }
 
@@ -2781,6 +2863,76 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	}
 }
 
+// TestBTEvolveQLearningBenchmarkGateRejectsRegressedWinner pins milestone 3/4
+// of the "Finish gating every evolution algorithm's durable-archive winner
+// through the real benchmark suite" program (Q2 Evolvability).
+// bt_evolve_qlearning picks EvolveQLearning's returned best using only
+// structuralFitnessFn — scored purely from structural heuristics, never an
+// actual tree execution — and unconditionally persists it via
+// qt.Save(archivePath) / ek.Save(expertPath). A mutation can look
+// structurally elite while actually performing worse than the untouched base
+// tree against the tree's real internal/benchmark suite (deterministic,
+// sandboxed, mock-LLM RunSuite — no real LLM calls, so this stays
+// -short-safe). benchmarkGateEvolvedWinner must run both the base tree and
+// the evolved winner through that suite and reject the save on regression,
+// surfacing "benchmark_gate_rejected": true instead of silently archiving a
+// worse tree — mirroring TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner
+// and TestBTEvolveIslandBenchmarkGateRejectsRegressedWinner.
+//
+// benchmarkRunSuiteFn is a package-level indirection over benchmark.RunSuite
+// (mirroring the DelegateToA2AFn/AuctionDelegateFn test-seam pattern already
+// used in this package) so this test can force a regression deterministically
+// without depending on EvolveQLearning's unseeded math/rand mutation, which
+// makes the evolved winner's actual structure unpredictable across runs.
+func TestBTEvolveQLearningBenchmarkGateRejectsRegressedWinner(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls == 1 {
+			// First call gates the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Every subsequent call gates the evolved winner: total regression.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2,"epsilon":0}`)
+	res, ok := server.Invoke("bt_evolve_qlearning", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qlearning) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_qlearning returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_qlearning unexpectedly returned an error: %v", out)
+	}
+
+	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
+		t.Fatalf(`bt_evolve_qlearning must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "qtable_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob QTable archives: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("bt_evolve_qlearning must skip persisting the durable QTable archive when the benchmark gate rejects the winner; found %v", matches)
+	}
+}
+
 // TestBTEvolveQLearningAccumulatesDurableArchive pins milestone 2/4 of the
 // durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
 // persist its QTable to a per-tree durable archive after every run and
@@ -2794,6 +2946,17 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	// Pin the benchmark gate to a constant non-regressing result (mirroring
+	// TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls): this test only
+	// cares about warm-start bookkeeping, and EvolveQLearning's unseeded
+	// math/rand mutation makes the real gate occasionally reject the evolved
+	// winner, which would flakily skip the archive save this test asserts on.
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
@@ -2865,6 +3028,16 @@ func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	// Pin the benchmark gate to a constant non-regressing result (mirroring
+	// TestBTEvolveIslandFeedsExpertKnowledgeArchive) so it never rejects the
+	// evolved winner and blocks the ExpertKnowledge archive save for a reason
+	// unrelated to the learned-pattern wiring under test.
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
@@ -3112,22 +3285,32 @@ func TestBTEvolveParetoFeedsExpertKnowledgeArchive(t *testing.T) {
 // shared ExpertKnowledge learned-pattern archive": the handler must warm-start
 // the shared expertArchivePath archive, Observe the illuminated grid's
 // genuinely fitness-improving mutations, and persist the merged archive back
-// — mirroring bt_evolve_pareto's unconditional (non-benchmark-gated)
-// ek.Load/Observe/Save sequence. Milestone 1 (map_elites.go) already added
-// MAPElitesPopulation.ExpertKnowledge and the Observe call at
-// map_elites.go:347 inside EvolveMAPElites's mutation step, but tools.go's
-// bt_evolve_qd handler (tools.go:941-1015) still evolves a bare
-// *evolution.Population via the generic pop.Evolve and builds a MAP-Elites
-// grid only after the fact via InsertFromPopulation — it never constructs an
-// ExpertKnowledge, never touches MAPElitesPopulation.ExpertKnowledge, and
-// never calls EvolveMAPElites, so no mutation is ever Observed. Today
-// bt_evolve_expert warm-starting from the same per-tree archive afterwards
-// must see an empty catalog. Like bt_evolve_pareto, bt_evolve_qd has no
-// benchmark gate to mock around, so no benchmarkRunSuiteFn stub is needed
-// here.
+// — mirroring bt_evolve_pareto's ek.Load/Observe/Save sequence. Milestone 1
+// (map_elites.go) already added MAPElitesPopulation.ExpertKnowledge and the
+// Observe call at map_elites.go:347 inside EvolveMAPElites's mutation step,
+// but tools.go's bt_evolve_qd handler (tools.go:941-1015) still evolves a
+// bare *evolution.Population via the generic pop.Evolve and builds a
+// MAP-Elites grid only after the fact via InsertFromPopulation — it never
+// constructs an ExpertKnowledge, never touches
+// MAPElitesPopulation.ExpertKnowledge, and never calls EvolveMAPElites, so
+// no mutation is ever Observed. Today bt_evolve_expert warm-starting from
+// the same per-tree archive afterwards must see an empty catalog.
+//
+// benchmarkRunSuiteFn is mocked to a guaranteed non-regressing result
+// (mirroring TestBTEvolveIslandFeedsExpertKnowledgeArchive and
+// TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive) so bt_evolve_qd's
+// own benchmark gate (Q2 Evolvability milestone 2/4) never rejects the
+// illuminated winner and blocks the ek.Save this test targets for a reason
+// unrelated to the ExpertKnowledge wiring under test.
 func TestBTEvolveQdFeedsExpertKnowledgeArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
@@ -3167,6 +3350,18 @@ func TestBTEvolveQdFeedsExpertKnowledgeArchive(t *testing.T) {
 // "evicted_individuals", so eviction activity is observable without
 // inspecting the archive file directly.
 func TestBTEvolveQLearningStateCapBoundsDurableArchive(t *testing.T) {
+	// Pin the benchmark gate to a constant non-regressing result (mirroring
+	// TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls): these subtests
+	// only care about cap/eviction bookkeeping, and EvolveQLearning's
+	// unseeded math/rand mutation makes the real gate occasionally reject the
+	// evolved winner, which would flakily skip the archive save these
+	// subtests assert on.
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
 	seedArchive := func(t *testing.T, path string, stateCount int) {
 		t.Helper()
 		values := make(map[string]map[string]float64, stateCount)

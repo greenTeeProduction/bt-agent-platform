@@ -1031,19 +1031,34 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
-			// Persist the merged, illuminated grid so the next invocation
-			// resumes from this run's niches. A save failure is surfaced
-			// non-fatally alongside the evolution result.
-			if err := grid.Save(archivePath); err != nil {
-				result["archive_save_error"] = err.Error()
+			// Gate the grid's best illuminated individual through the tree's
+			// real benchmark suite before trusting it enough to persist —
+			// structural fitness alone can rate a mutation as elite while it
+			// actually regresses (Q2 Evolvability), mirroring
+			// bt_evolve_multiobjective and bt_evolve_island. A rejected
+			// winner skips both saves entirely so the durable archives never
+			// accumulate a worse tree.
+			gateRejected := false
+			if best := grid.BestIndividual(); best != nil {
+				var baseRate, winnerRate float64
+				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(params.Tree, baseTree, best.Tree)
+				result["benchmark_gate_rejected"] = gateRejected
+				result["benchmark_base_success_rate"] = baseRate
+				result["benchmark_winner_success_rate"] = winnerRate
 			}
-			// Persist the ExpertKnowledge archive EvolveMAPElites observed
-			// genuinely-improving mutations into during the run above,
-			// mirroring bt_evolve_pareto's ek.Save. Like bt_evolve_pareto,
-			// this tool has no benchmark gate, so the save below always runs
-			// alongside the unconditional grid.Save.
-			if err := ek.Save(expertPath); err != nil {
-				result["expert_archive_save_error"] = err.Error()
+			if !gateRejected {
+				// Persist the merged, illuminated grid so the next invocation
+				// resumes from this run's niches. A save failure is surfaced
+				// non-fatally alongside the evolution result.
+				if err := grid.Save(archivePath); err != nil {
+					result["archive_save_error"] = err.Error()
+				}
+				// Persist the ExpertKnowledge archive EvolveMAPElites observed
+				// genuinely-improving mutations into during the run above,
+				// mirroring bt_evolve_pareto's ek.Save.
+				if err := ek.Save(expertPath); err != nil {
+					result["expert_archive_save_error"] = err.Error()
+				}
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1456,20 +1471,34 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
-			// Persist the merged, learned table so the next invocation resumes
-			// from this run's Q-values. A save failure is surfaced non-fatally
-			// alongside the evolution result.
-			if err := qt.Save(archivePath); err != nil {
-				result["archive_save_error"] = err.Error()
-			}
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
-			// Persist the merged learned-pattern archive so bt_evolve_expert
-			// can warm-start from the same accumulated patterns this run
-			// observed. A save failure is surfaced non-fatally.
-			if err := ek.Save(expertPath); err != nil {
-				result["expert_archive_save_error"] = err.Error()
+			// Gate the returned winner through the tree's real benchmark suite
+			// before trusting it enough to persist — structural fitness alone
+			// can rate a Q-learning-selected mutation as elite while it
+			// actually regresses (Q2 Evolvability), mirroring
+			// bt_evolve_multiobjective and bt_evolve_island. A rejected winner
+			// skips both saves entirely so the durable archives never
+			// accumulate a worse tree.
+			gateRejected, baseRate, winnerRate := benchmarkGateEvolvedWinner(params.Tree, baseTree, best)
+			result["benchmark_gate_rejected"] = gateRejected
+			result["benchmark_base_success_rate"] = baseRate
+			result["benchmark_winner_success_rate"] = winnerRate
+			if !gateRejected {
+				// Persist the merged, learned table so the next invocation
+				// resumes from this run's Q-values. A save failure is
+				// surfaced non-fatally alongside the evolution result.
+				if err := qt.Save(archivePath); err != nil {
+					result["archive_save_error"] = err.Error()
+				}
+				// Persist the merged learned-pattern archive so
+				// bt_evolve_expert can warm-start from the same accumulated
+				// patterns this run observed. A save failure is surfaced
+				// non-fatally.
+				if err := ek.Save(expertPath); err != nil {
+					result["expert_archive_save_error"] = err.Error()
+				}
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

@@ -354,6 +354,9 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			ttHitRate = float64(deep.TTProbeHits) / float64(deep.TTProbes)
 		}
 		if deep.BestMutation != nil && deep.BestFitness != nil && deep.BestFitness.Composite > newFitness.Composite+0.0001 {
+			preDeepSearchTree := cloneTreeForGardener(tree)
+			preDeepSearchFitness := newFitness
+			preDeepSearchApplied := applied
 			if evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
 				applied++
 				if bank != nil {
@@ -364,7 +367,21 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 				newFitness = *deep.BestFitness
 				nodesAfter = evolution.CountNodes(tree)
 				improved = newFitness.Composite > baseFitness.Composite
-				_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+
+				// ── Validation gate — mirror the greedy loop's own gate above:
+				// re-validate the deep-search mutation before persisting it, and
+				// revert to the pre-deep-search state on rejection so a mutation
+				// that fails validation is never saved.
+				if gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate); gateErr != nil {
+					slog.Warn("gardener/v2: validation gate rejected deep-search mutation, reverting", "tree", entry.Name, "error", gateErr)
+					*tree = *preDeepSearchTree
+					newFitness = preDeepSearchFitness
+					applied = preDeepSearchApplied
+					nodesAfter = evolution.CountNodes(tree)
+					improved = newFitness.Composite > baseFitness.Composite
+				} else {
+					_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+				}
 			}
 		}
 	}

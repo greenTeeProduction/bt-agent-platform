@@ -1273,3 +1273,78 @@ func TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing(t *testi
 		t.Errorf("expected the in-memory tree to be mutated by the deep search's BestMutation, but it is unchanged")
 	}
 }
+
+// TestEvolveTreeV2_DeepSearchMutationRejectedByValidationGateNotPersisted pins
+// Q2 Evolvability milestone 4: applying deep.BestMutation (milestone 3, see
+// TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing above)
+// must be re-validated against ValidationGate before evolve_v2.go's second
+// Registry.SaveTree call — exactly like the greedy loop's own gate at
+// evolve_v2.go:307-321 — so a rejection reverts the tree to its
+// pre-deep-search state and never persists the rejected mutation.
+//
+// Same fixture as the milestone-3 test (gateDisabledTestTree() +
+// seedFailureRecords() + MaxMutations: 0 so only deep search can apply
+// anything), but with ValidationGate enabled and no SLO evidence recorded for
+// this tree name — ValidationGate fails closed in that case (see
+// validation_gate.go:55-66), so the deep-search mutation must be rejected.
+func TestEvolveTreeV2_DeepSearchMutationRejectedByValidationGateNotPersisted(t *testing.T) {
+	dir := t.TempDir()
+	ttDir := filepath.Join(dir, "tt")
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	const treeName = "deep_search_gate_reject"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	filePath := filepath.Join(dir, "tree-"+treeName+".json")
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "deep search gate reject", Tree: tree, FilePath: filePath, Active: true},
+	}
+	registry.mu.Unlock()
+
+	cfg := Config{
+		Registry:               registry,
+		MetricsTracker:         mt,
+		RefStore:               refStore,
+		TranspositionTablePath: ttDir,
+		MaxMutations:           0, // greedy loop budget is zero: only deep search can apply anything
+		ValidationGate:         DefaultValidationGateConfig(),
+	}
+	g := NewGardener(cfg)
+
+	entry := registry.List()[0]
+	treeBefore := marshalTree(t, entry.Tree)
+
+	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
+	m := g.evolveTreeV2(entry, v2cfg)
+
+	if !m.DeepSearchUsed {
+		t.Fatalf("precondition failed: expected DeepSearchUsed=true with TranspositionTablePath configured, got false (metrics=%+v)", m)
+	}
+
+	if m.Mutations != 0 {
+		t.Errorf("expected the deep-search mutation to be reverted when ValidationGate rejects it (no SLO evidence, fail-closed), got Mutations=%d", m.Mutations)
+	}
+	if m.NewFitness > m.BaseFitness+0.0001 {
+		t.Errorf("expected NewFitness to be reverted to BaseFitness after ValidationGate rejection, got base=%.4f new=%.4f", m.BaseFitness, m.NewFitness)
+	}
+
+	treeAfter := marshalTree(t, entry.Tree)
+	if !bytes.Equal(treeBefore, treeAfter) {
+		t.Errorf("expected the in-memory tree to be reverted to its pre-deep-search state after ValidationGate rejection, but it changed")
+	}
+
+	if _, statErr := os.Stat(filePath); !os.IsNotExist(statErr) {
+		t.Errorf("expected Registry.SaveTree NOT to persist a deep-search mutation rejected by ValidationGate, but %s exists", filePath)
+	}
+}
