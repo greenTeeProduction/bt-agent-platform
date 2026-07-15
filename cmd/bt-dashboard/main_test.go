@@ -64,6 +64,21 @@ func TestDashboardDriftWatcherWiresRebuildBackoff(t *testing.T) {
 	}
 }
 
+// TestMainWiresKnowledgeGraphDiscoverIntoDashboard pins that main.go wires
+// the already-built knowledge graph's Discover method into
+// dashboard.DiscoverTreeFn, so dashboard.PickTreeForTask consults
+// knowledge.KnowledgeGraph.Discover instead of relying solely on its static
+// 7-branch keyword switch.
+func TestMainWiresKnowledgeGraphDiscoverIntoDashboard(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "dashboard.DiscoverTreeFn = kg.Discover") {
+		t.Error("main.go must wire dashboard.DiscoverTreeFn = kg.Discover so PickTreeForTask consults the knowledge graph")
+	}
+}
+
 // TestHandleScalability_ReflectsInjectedQueueAndRouter pins milestone 3/5 of the
 // horizontal-scaling adoption program: the /api/scalability endpoint must surface
 // the injected TaskQueue depth and AgentRouter executor health instead of the

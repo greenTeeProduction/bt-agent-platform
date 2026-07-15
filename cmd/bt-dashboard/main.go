@@ -128,6 +128,7 @@ func main() {
 	slog.Info("BT Dashboard starting", "port", port)
 
 	kg = knowledge.BuildKnowledgeGraph()
+	dashboard.DiscoverTreeFn = kg.Discover
 
 	// Dead letter queue — persisted alongside other agent state
 	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"

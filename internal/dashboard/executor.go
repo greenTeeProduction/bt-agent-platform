@@ -149,12 +149,27 @@ func isAuctionShapedTask(lower string) bool {
 	return auctionKeywordPattern.MatchString(lower)
 }
 
+// DiscoverTreeFn, when set, is consulted by PickTreeForTask ahead of the
+// static keyword switch. It mirrors knowledge.KnowledgeGraph.Discover's
+// signature so cmd/bt-dashboard can wire it directly to kg.Discover without
+// an import cycle (internal/knowledge depends on internal/dashboard's
+// sibling packages, not the other way around). A zero-value confidence (the
+// ("", 0) contract Discover returns when unconfident) falls through to the
+// static switch below instead of routing to an empty tree ID.
+var DiscoverTreeFn func(task string) (treeID string, confidence float64)
+
 // PickTreeForTask selects the best BT tree for a task based on its content.
 func PickTreeForTask(task Task) string {
 	lower := strings.ToLower(task.Title + " " + task.Description)
-	switch {
-	case isAuctionShapedTask(lower):
+	if isAuctionShapedTask(lower) {
 		return "auction_demo"
+	}
+	if DiscoverTreeFn != nil {
+		if treeID, confidence := DiscoverTreeFn(task.Title + " " + task.Description); confidence > 0 && treeID != "" {
+			return treeID
+		}
+	}
+	switch {
 	case strings.Contains(lower, "bug") || strings.Contains(lower, "review") || strings.Contains(lower, "code"):
 		return "domain:code_review"
 	case strings.Contains(lower, "build") || strings.Contains(lower, "deploy") || strings.Contains(lower, "ci"):

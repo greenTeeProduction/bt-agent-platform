@@ -2,6 +2,7 @@ package gardener
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -983,6 +984,43 @@ func TestEvolveTreeV2_CalmCycle_NoCrisisMetrics(t *testing.T) {
 	}
 	if m.MutationBudget != cfg.MaxMutations {
 		t.Errorf("expected MutationBudget == configured MaxMutations (%d) absent crisis, got %d", cfg.MaxMutations, m.MutationBudget)
+	}
+}
+
+// TestEvolveTreeV2_CrisisIntervention_UsesCalibratedEmergencyRate pins the
+// NotebookLM-research goal: crisis intervention must scale the mutation
+// budget from CrisisDetector.EmergencyRate (the detector's calibrated
+// μ_emergency), not a hardcoded ×2. evolveTreeV2 currently ignores
+// action.EmergencyRate entirely (evolve_v2.go's `maxMutations =
+// g.cfg.MaxMutations * 2`), so a calibrated rate away from the 0.50 default
+// has zero effect on the boosted budget today.
+//
+// The calibrated formula this pins is ceil(MaxMutations / (1 -
+// EmergencyRate)) — the natural generalization that reduces to the
+// pre-existing ×2 behavior exactly at the 0.50 default, but diverges for any
+// other calibration. With MaxMutations=2 and EmergencyRate=0.75, that is
+// ceil(2 / 0.25) = 8, not the hardcoded 2*2=4.
+func TestEvolveTreeV2_CrisisIntervention_UsesCalibratedEmergencyRate(t *testing.T) {
+	g, entry, cfg := crisisMetricsGardener(t, "calibrated_crisis_tree", 2)
+	g.cfg.CrisisDetector.EmergencyRate = 0.75
+	v2cfg := crisisV2Config()
+
+	var last CycleMetrics
+	for i := 0; i < 7; i++ {
+		last = g.evolveTreeV2(entry, v2cfg)
+	}
+
+	if !last.CrisisIntervened {
+		t.Fatalf("expected CrisisIntervened == true after sustained stagnation, got false (metrics=%+v)", last)
+	}
+
+	wantBudget := int(math.Ceil(float64(cfg.MaxMutations) / (1 - 0.75)))
+	if wantBudget != 8 {
+		t.Fatalf("test arithmetic sanity check failed: want 8, computed %d", wantBudget)
+	}
+	if last.MutationBudget != wantBudget {
+		t.Errorf("expected MutationBudget derived from calibrated EmergencyRate 0.75 (ceil(%d/0.25)=%d), got %d — crisis intervention must apply the detector's calibrated rate instead of a hardcoded doubling",
+			cfg.MaxMutations, wantBudget, last.MutationBudget)
 	}
 }
 

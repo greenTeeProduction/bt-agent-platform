@@ -3,6 +3,7 @@ package gardener
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -156,7 +157,13 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
 			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
-			maxMutations = g.cfg.MaxMutations * 2
+			rate := action.EmergencyRate
+			if rate < 0 {
+				rate = 0
+			} else if rate >= 1 {
+				rate = 0.99
+			}
+			maxMutations = int(math.Ceil(float64(g.cfg.MaxMutations) / (1 - rate)))
 			if maxMutations < 1 {
 				maxMutations = 1
 			}
