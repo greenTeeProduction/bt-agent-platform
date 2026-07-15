@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -35,6 +36,11 @@ const errorHandlerDisableAfter = 3
 // errorHandlerDirOverride redirects the store in tests (same var-override
 // pattern as goapFusionVaultDir).
 var errorHandlerDirOverride string
+
+// errorHandlerStoreMu guards in-process load-modify-write cycles of the error
+// handler store JSON files. Cross-process coordination is out of scope; counters
+// are advisory best-effort.
+var errorHandlerStoreMu sync.Mutex
 
 func errorHandlerDir() string {
 	if errorHandlerDirOverride != "" {
@@ -75,6 +81,8 @@ func writeErrorHandlerJSON(path string, v any) error {
 }
 
 func loadErrorHandlerExtensions(handlerName string) []ErrorHandlerExtension {
+	errorHandlerStoreMu.Lock()
+	defer errorHandlerStoreMu.Unlock()
 	all := map[string][]ErrorHandlerExtension{}
 	readErrorHandlerJSON(errorHandlerExtensionsPath(), &all)
 	return all[handlerName]
@@ -91,6 +99,8 @@ func activeErrorHandlerExtensions(handlerName string) []ErrorHandlerExtension {
 }
 
 func appendErrorHandlerExtension(handlerName string, ext ErrorHandlerExtension) error {
+	errorHandlerStoreMu.Lock()
+	defer errorHandlerStoreMu.Unlock()
 	path := errorHandlerExtensionsPath()
 	all := map[string][]ErrorHandlerExtension{}
 	readErrorHandlerJSON(path, &all)
@@ -109,6 +119,8 @@ func appendErrorHandlerExtension(handlerName string, ext ErrorHandlerExtension) 
 // and auto-disables it after errorHandlerDisableAfter consecutive failures.
 // Best-effort: persistence errors are swallowed — counters are advisory.
 func recordErrorHandlerResult(handlerName, nodeName string, success bool) {
+	errorHandlerStoreMu.Lock()
+	defer errorHandlerStoreMu.Unlock()
 	path := errorHandlerExtensionsPath()
 	all := map[string][]ErrorHandlerExtension{}
 	readErrorHandlerJSON(path, &all)
@@ -135,6 +147,8 @@ func recordErrorHandlerResult(handlerName, nodeName string, success bool) {
 }
 
 func errorHandlerLedgerGet(sig string) (errorHandlerLedgerEntry, bool) {
+	errorHandlerStoreMu.Lock()
+	defer errorHandlerStoreMu.Unlock()
 	ledger := map[string]errorHandlerLedgerEntry{}
 	readErrorHandlerJSON(errorHandlerLedgerPath(), &ledger)
 	entry, ok := ledger[sig]
@@ -142,6 +156,8 @@ func errorHandlerLedgerGet(sig string) (errorHandlerLedgerEntry, bool) {
 }
 
 func errorHandlerLedgerStamp(sig, verdict string) {
+	errorHandlerStoreMu.Lock()
+	defer errorHandlerStoreMu.Unlock()
 	ledger := map[string]errorHandlerLedgerEntry{}
 	readErrorHandlerJSON(errorHandlerLedgerPath(), &ledger)
 	entry := ledger[sig]

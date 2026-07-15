@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -105,4 +106,26 @@ func TestErrorHandlerClaudeLock_ContentionSkips(t *testing.T) {
 		t.Fatal("acquire after release must succeed")
 	}
 	release2()
+}
+
+func TestErrorHandlerStore_ConcurrentRecordsCountExactly(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	ext := ErrorHandlerExtension{Node: evolution.SerializableNode{Type: "Sequence", Name: "n1"}}
+	if err := appendErrorHandlerExtension("h", ext); err != nil {
+		t.Fatal(err)
+	}
+	const workers = 12
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			recordErrorHandlerResult("h", "n1", false)
+		}()
+	}
+	wg.Wait()
+	all := loadErrorHandlerExtensions("h")
+	if len(all) != 1 || all[0].ConsecutiveFailures != workers || !all[0].Disabled {
+		t.Fatalf("lost updates: %+v", all)
+	}
 }
