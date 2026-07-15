@@ -2548,6 +2548,78 @@ func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 	}
 }
 
+// TestBTEvolveExpertSurfacesLearnedPatternFromQLearning pins milestone 2/2 of
+// the durable Expert Knowledge program (Q2 Evolvability — "Give Expert
+// Knowledge a durable, learning archive instead of a static hardcoded rule
+// set"): bt_evolve_expert must warm-start from the same per-tree expert
+// archive that bt_evolve_qlearning persists ExpertKnowledge.LearnedPatterns
+// to (via Observe on every genuinely fitness-improving mutation, already
+// wired into qLearnMutate at learning.go:921), so advisory calls surface
+// accumulated cross-run learned patterns instead of only the hardcoded
+// benchmark catalog. Today bt_evolve_expert always builds a fresh
+// evolution.NewExpertKnowledge() (tools.go:1847) and bt_evolve_qlearning
+// passes a nil ek to EvolveQLearning (tools.go:1288), so no learned pattern
+// is ever produced, persisted, or read back.
+func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	// A large-enough population/generation budget across many mutation
+	// attempts makes at least one genuinely fitness-improving mutation
+	// overwhelmingly likely, so Observe records a learned pattern reliably in
+	// practice while staying -short-safe (LLM-free structural fitness).
+	qlArgs := json.RawMessage(`{"tree":"godev","population":10,"generations":8,"epsilon":0.2}`)
+	qlRes, ok := server.Invoke("bt_evolve_qlearning", qlArgs)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_qlearning) reported the tool as unregistered")
+	}
+	if qlRes == nil || len(qlRes.Content) == 0 {
+		t.Fatal("bt_evolve_qlearning returned no content")
+	}
+	var qlOut map[string]interface{}
+	if err := json.Unmarshal([]byte(qlRes.Content[0].Text), &qlOut); err != nil {
+		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, qlRes.Content[0].Text)
+	}
+	if _, isErr := qlOut["error"]; isErr {
+		t.Fatalf("bt_evolve_qlearning unexpectedly returned an error: %v", qlOut)
+	}
+
+	expRes, ok := server.Invoke("bt_evolve_expert", json.RawMessage(`{"tree":"godev"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_expert) reported the tool as unregistered")
+	}
+	if expRes == nil || len(expRes.Content) == 0 {
+		t.Fatal("bt_evolve_expert returned no content")
+	}
+	var expOut map[string]interface{}
+	if err := json.Unmarshal([]byte(expRes.Content[0].Text), &expOut); err != nil {
+		t.Fatalf("bt_evolve_expert result is not valid JSON: %v (text=%q)", err, expRes.Content[0].Text)
+	}
+	if _, isErr := expOut["error"]; isErr {
+		t.Fatalf("bt_evolve_expert unexpectedly returned an error: %v", expOut)
+	}
+
+	learned, isArr := expOut["learned_patterns"].([]interface{})
+	if !isArr || len(learned) == 0 {
+		t.Fatalf("bt_evolve_expert must warm-start from the same expert archive bt_evolve_qlearning persisted to and surface a non-empty 'learned_patterns'; got %v (%T)", expOut["learned_patterns"], expOut["learned_patterns"])
+	}
+	for i, raw := range learned {
+		entry, isObj := raw.(map[string]interface{})
+		if !isObj {
+			t.Fatalf("bt_evolve_expert 'learned_patterns'[%d] must be an object; got %T", i, raw)
+		}
+		action, _ := entry["action"].(string)
+		category, _ := entry["category"].(string)
+		gain, isNum := entry["gain"].(float64)
+		if action == "" || category == "" || !isNum || gain <= 0 {
+			t.Errorf("bt_evolve_expert 'learned_patterns'[%d] must carry a non-empty action/category and a positive gain (a genuine improvement observed during evolution); got %v", i, entry)
+		}
+	}
+}
+
 // TestBTEvolveQLearningStateCapBoundsDurableArchive pins milestone 4/4 of the
 // durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
 // accept an optional "state_cap" request parameter and set it on

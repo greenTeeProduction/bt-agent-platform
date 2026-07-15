@@ -1,6 +1,12 @@
 package evolution
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // ExpertKnowledge encodes proven behavior tree design patterns discovered
 // through benchmark validation across 38 trees and 1000+ evolution cycles.
@@ -15,6 +21,93 @@ type ExpertKnowledge struct {
 	AntiPatterns   []AntiPattern   `json:"anti_patterns"`
 	Heuristics     []HeuristicRule `json:"heuristics"`
 	TreeArchetypes []TreeArchetype `json:"archetypes"`
+	// LearnedPatterns accumulates mutation (action, category) pairs observed
+	// to produce a genuine fitness improvement during real evolution runs —
+	// a durable, learning archive growing alongside the hardcoded benchmark
+	// catalog above instead of it staying static.
+	LearnedPatterns []LearnedPattern `json:"learned_patterns,omitempty"`
+}
+
+// LearnedPattern is a mutation observed to improve fitness during an actual
+// evolution run, as opposed to the benchmark-derived Patterns catalog above.
+type LearnedPattern struct {
+	Action   string  `json:"action"`
+	Category string  `json:"category"`
+	Gain     float64 `json:"gain"`
+}
+
+// Observe records action applied to a tree of the given category as a
+// learned pattern when it produced a genuine (positive) fitness gain, so
+// ExpertKnowledge accumulates real evolution outcomes instead of staying
+// frozen at its hardcoded catalog. Nil-safe: a nil *ExpertKnowledge is a
+// no-op so existing callers that don't pass one see no behavior change.
+// Non-positive gains are discarded — only genuine improvements are retained.
+func (ek *ExpertKnowledge) Observe(action, category string, gain float64) {
+	if ek == nil || gain <= 0 {
+		return
+	}
+	ek.LearnedPatterns = append(ek.LearnedPatterns, LearnedPattern{
+		Action:   action,
+		Category: category,
+		Gain:     gain,
+	})
+}
+
+// Save persists LearnedPatterns as JSON at path, creating missing parent
+// directories and writing atomically (temp file + rename) under the shared
+// advisory flock so concurrent writers cannot interleave partial archives,
+// mirroring QTable.Save. The hardcoded catalog (Patterns, AntiPatterns,
+// Heuristics, TreeArchetypes) is rebuilt fresh by NewExpertKnowledge on every
+// call and is deliberately not persisted.
+func (ek *ExpertKnowledge) Save(path string) error {
+	data, err := json.MarshalIndent(ek.LearnedPatterns, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal expert archive: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create expert archive dir: %w", err)
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write expert archive: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit expert archive: %w", err)
+	}
+	return nil
+}
+
+// Load warm-starts LearnedPatterns by appending the archive at path onto the
+// in-memory slice, mirroring QTable.Load. A missing archive is a silent cold
+// start; a corrupt archive is an error that leaves the in-memory state
+// untouched, mirroring IslandModel.Load.
+func (ek *ExpertKnowledge) Load(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	release, err := acquireExperienceLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read expert archive: %w", err)
+	}
+	var learned []LearnedPattern
+	if err := json.Unmarshal(data, &learned); err != nil {
+		return fmt.Errorf("parse expert archive %s: %w", path, err)
+	}
+	ek.LearnedPatterns = append(ek.LearnedPatterns, learned...)
+	return nil
 }
 
 // DesignPattern is a proven tree structure that improves fitness.

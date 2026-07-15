@@ -842,8 +842,10 @@ func (qt *QTable) LearnedActions() map[string]string {
 // category via epsilon-greedy SelectAction, and feeds the fitness delta back
 // through Update. With epsilon=0 selection is pure greedy once a state has
 // Q-values. The caller owns the QTable and reads the learned policy
-// afterwards via LearnedActions.
-func (p *Population) EvolveQLearning(generations int, fitnessFn func(*SerializableNode) float64, qt *QTable, category string, epsilon, learningRate float64) *SerializableNode {
+// afterwards via LearnedActions. ek is an optional *ExpertKnowledge that
+// observes every genuinely-improving mutation via Observe, growing its
+// learned archive from this run; a nil ek is a no-op.
+func (p *Population) EvolveQLearning(generations int, fitnessFn func(*SerializableNode) float64, qt *QTable, category string, epsilon, learningRate float64, ek *ExpertKnowledge) *SerializableNode {
 	if len(p.Individuals) == 0 || qt == nil {
 		return nil
 	}
@@ -867,7 +869,7 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 		for i := eliteCount; i < len(p.Individuals); i++ {
 			parents := p.Select()
 			child := Crossover(parents[0], parents[1])
-			newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator)}
+			newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator, ek)}
 			newPop[i].Genome = hashTree(newPop[i].Tree)
 		}
 
@@ -883,7 +885,9 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 // qLearnMutate applies one Q-table-selected mutation to child and rewards the
 // (state, action) pair with the fitness delta. A mutation that fails to apply
 // earns reward 0; a regression is discarded (quality gate) but still recorded
-// so the table learns to avoid that category in that state.
+// so the table learns to avoid that category in that state. ek is an optional
+// *ExpertKnowledge observing the same (action, category, gain) via Observe so
+// a genuine improvement grows its learned archive; a nil ek is a no-op.
 func (p *Population) qLearnMutate(
 	child *SerializableNode,
 	fitnessFn func(*SerializableNode) float64,
@@ -891,6 +895,7 @@ func (p *Population) qLearnMutate(
 	category string,
 	epsilon, learningRate float64,
 	mutator *MCTSMutator,
+	ek *ExpertKnowledge,
 ) *SerializableNode {
 	before := fitnessFn(child)
 	state := qt.GetState(child, category)
@@ -911,7 +916,9 @@ func (p *Population) qLearnMutate(
 	if applied > 0 {
 		after = fitnessFn(mutated)
 	}
-	qt.Update(state, action, after-before, learningRate)
+	delta := after - before
+	qt.Update(state, action, delta, learningRate)
+	ek.Observe(action, category, delta)
 
 	if applied == 0 {
 		return child

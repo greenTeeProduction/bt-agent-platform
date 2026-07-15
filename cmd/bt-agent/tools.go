@@ -53,6 +53,16 @@ func qtableArchivePath(treeID string) string {
 	return filepath.Join(agent.HomeDir(), "qtable_archive-"+sanitizeArchiveTreeID(treeID)+".json")
 }
 
+// expertArchivePath resolves the durable ExpertKnowledge.LearnedPatterns
+// archive bt_evolve_qlearning persists to and bt_evolve_expert warm-starts
+// from (milestone 2/2 of the durable Expert Knowledge program, Q2
+// Evolvability), scoped per base tree like qtableArchivePath so runs on
+// different base trees do not merge each other's learned patterns through a
+// single shared file.
+func expertArchivePath(treeID string) string {
+	return filepath.Join(agent.HomeDir(), "expert_archive-"+sanitizeArchiveTreeID(treeID)+".json")
+}
+
 // mapElitesArchivePath resolves the durable MAP-Elites archive bt_evolve_qd
 // warm-starts from and persists to (Q2 Evolvability, NotebookLM research),
 // scoped per base tree like islandArchivePath and qtableArchivePath so runs
@@ -1284,8 +1294,20 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				archiveLoadErr = err.Error()
 			}
 			learnedStatesBefore := len(qt.LearnedActions())
+			// Warm-start the ExpertKnowledge learned-pattern archive so
+			// genuinely fitness-improving mutations observed across this and
+			// prior runs accumulate in the same per-tree archive
+			// bt_evolve_expert reads (milestone 2/2 of the durable Expert
+			// Knowledge program, Q2 Evolvability). A load error is surfaced
+			// non-fatally, mirroring the QTable archive above.
+			ek := evolution.NewExpertKnowledge()
+			expertPath := expertArchivePath(params.Tree)
+			expertLoadErr := ""
+			if err := ek.Load(expertPath); err != nil {
+				expertLoadErr = err.Error()
+			}
 			pop := newProductionPopulation(population, baseTree)
-			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate)
+			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate, ek)
 			learned := qt.LearnedActions()
 			result := map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,
@@ -1308,6 +1330,15 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// alongside the evolution result.
 			if err := qt.Save(archivePath); err != nil {
 				result["archive_save_error"] = err.Error()
+			}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
+			// Persist the merged learned-pattern archive so bt_evolve_expert
+			// can warm-start from the same accumulated patterns this run
+			// observed. A save failure is surfaced non-fatally.
+			if err := ek.Save(expertPath); err != nil {
+				result["expert_archive_save_error"] = err.Error()
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1845,6 +1876,17 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
 			ek := evolution.NewExpertKnowledge()
+			// Warm-start from the same per-tree archive bt_evolve_qlearning
+			// persists LearnedPatterns to (milestone 2/2 of the durable
+			// Expert Knowledge program, Q2 Evolvability), so advisory calls
+			// surface accumulated cross-run learned patterns alongside the
+			// hardcoded benchmark catalog. A missing archive is a cold start;
+			// a corrupt one degrades to the hardcoded catalog alone, surfaced
+			// non-fatally.
+			expertLoadErr := ""
+			if err := ek.Load(expertArchivePath(params.Tree)); err != nil {
+				expertLoadErr = err.Error()
+			}
 			patterns := ek.RecommendMutations(t)
 			antiPatterns := ek.DetectAntiPatterns(t)
 			var recs []map[string]interface{}
@@ -1855,7 +1897,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			for _, ap := range antiPatterns {
 				issues = append(issues, map[string]interface{}{"name": ap.Name, "severity": ap.Severity, "fix": ap.Fix})
 			}
-			data, _ := json.Marshal(map[string]interface{}{"tree": params.Tree, "recommendations": recs, "anti_patterns": issues})
+			result := map[string]interface{}{"tree": params.Tree, "recommendations": recs, "anti_patterns": issues, "learned_patterns": ek.LearnedPatterns}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
+			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

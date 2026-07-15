@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -679,5 +680,72 @@ func TestQTable_CapZeroPreservesUnboundedGrowth(t *testing.T) {
 	}
 	if qt.EvictedStates != 0 {
 		t.Fatalf("EvictedStates = %d, want 0 for unbounded table", qt.EvictedStates)
+	}
+}
+
+// ─── ExpertKnowledge learning archive (Q2 Evolvability) ────────────────────
+//
+// Program "Give Expert Knowledge a durable, learning archive instead of a
+// static hardcoded rule set," milestone 1/2: EvolveQLearning and its
+// per-mutation qLearnMutate helper thread an optional *ExpertKnowledge
+// through the Q-learning loop and call ek.Observe(action, category,
+// after-before) right after computing the existing fitness delta, so a
+// caller-owned ExpertKnowledge accumulates learned patterns from real
+// evolution runs instead of staying frozen at its hardcoded benchmark
+// catalog (Patterns/AntiPatterns/Heuristics/TreeArchetypes, expert.go).
+// EvolveQLearning's signature and ExpertKnowledge.LearnedPatterns/Observe do
+// not exist yet, so these tests fail to compile until milestone 1 lands.
+
+// TestExpertKnowledge_ObservesLearnedPatternFromQLearning asserts a
+// passed-in ExpertKnowledge gains a learned pattern after a run that finds a
+// genuine improvement.
+func TestExpertKnowledge_ObservesLearnedPatternFromQLearning(t *testing.T) {
+	ek := NewExpertKnowledge()
+	before := len(ek.LearnedPatterns)
+
+	// growthFitness (experience_bank_test.go) is monotone in node count and
+	// bounded in (0,1), so any mutation that adds nodes strictly improves
+	// fitness — matching the "run that finds a genuine improvement"
+	// requirement. A handful of fixed seeds keeps the run deterministic while
+	// tolerating exactly which mutation category the epsilon-greedy loop
+	// draws first, mirroring TestEvolveWithExperience_RecordsImprovingMutations.
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		pop := NewPopulation(8, DefaultTree())
+		qt := NewQTable()
+		best := pop.EvolveQLearning(4, growthFitness, qt, "learn_test", 0.5, 0.5, ek)
+		if best == nil {
+			t.Fatal("EvolveQLearning returned nil best tree")
+		}
+		if len(ek.LearnedPatterns) > before {
+			break
+		}
+	}
+
+	if len(ek.LearnedPatterns) <= before {
+		t.Fatal("expected EvolveQLearning to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+	}
+	for _, lp := range ek.LearnedPatterns {
+		if lp.Gain <= 0 {
+			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
+		}
+	}
+}
+
+// TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp pins the nil-safety
+// half of milestone 1/2: existing callers (bt_evolve_qlearning today passes
+// none) must see zero behavior change when qLearnMutate's ek.Observe call
+// reaches a nil *ExpertKnowledge.
+func TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	pop := NewPopulation(6, DefaultTree())
+	qt := NewQTable()
+
+	best := pop.EvolveQLearning(3, growthFitness, qt, "nilsafe_category", 0.5, 0.5, nil)
+	if best == nil {
+		t.Fatal("EvolveQLearning(nil ExpertKnowledge) must still evolve and return a winner")
+	}
+	if pop.Generation != 3 {
+		t.Errorf("expected 3 generations to run, got %d", pop.Generation)
 	}
 }
