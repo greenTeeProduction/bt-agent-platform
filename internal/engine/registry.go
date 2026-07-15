@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -199,6 +200,33 @@ func GetAction(name string) ActionFunc {
 // The fallback to the switch in conditionForName handles unregistered conditions.
 func GetCondition(name string) ConditionFunc {
 	return conditionRegistry[name]
+}
+
+// RegisteredActionNames returns a sorted snapshot of all registered action
+// names — the composition vocabulary offered to the ClaudeErrorHandler node's
+// proposal prompt and checked by its strict validator.
+func RegisteredActionNames() []string {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	names := make([]string, 0, len(actionRegistry))
+	for name := range actionRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// RegisteredConditionNames returns a sorted snapshot of all registered
+// condition names.
+func RegisteredConditionNames() []string {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	names := make([]string, 0, len(conditionRegistry))
+	for name := range conditionRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func init() {
