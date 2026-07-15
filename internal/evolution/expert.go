@@ -36,12 +36,19 @@ type LearnedPattern struct {
 	Gain     float64 `json:"gain"`
 }
 
+// learnedPatternCap bounds LearnedPatterns, mirroring ExperienceBank's
+// ADR-018 cap-500 pattern (experienceBankCap in experience_bank.go). Without
+// it every Observe call grows the slice forever.
+const learnedPatternCap = 500
+
 // Observe records action applied to a tree of the given category as a
 // learned pattern when it produced a genuine (positive) fitness gain, so
 // ExpertKnowledge accumulates real evolution outcomes instead of staying
 // frozen at its hardcoded catalog. Nil-safe: a nil *ExpertKnowledge is a
 // no-op so existing callers that don't pass one see no behavior change.
 // Non-positive gains are discarded — only genuine improvements are retained.
+// Once LearnedPatterns exceeds learnedPatternCap, the lowest-gain entry is
+// evicted, mirroring ExperienceBank.enforceCapLocked.
 func (ek *ExpertKnowledge) Observe(action, category string, gain float64) {
 	if ek == nil || gain <= 0 {
 		return
@@ -51,6 +58,15 @@ func (ek *ExpertKnowledge) Observe(action, category string, gain float64) {
 		Category: category,
 		Gain:     gain,
 	})
+	if len(ek.LearnedPatterns) > learnedPatternCap {
+		minIdx := 0
+		for i, lp := range ek.LearnedPatterns {
+			if lp.Gain < ek.LearnedPatterns[minIdx].Gain {
+				minIdx = i
+			}
+		}
+		ek.LearnedPatterns = append(ek.LearnedPatterns[:minIdx], ek.LearnedPatterns[minIdx+1:]...)
+	}
 }
 
 // Save persists LearnedPatterns as JSON at path, creating missing parent
