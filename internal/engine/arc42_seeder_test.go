@@ -127,6 +127,15 @@ func TestArc42SeederSkipsWhenProgramActive(t *testing.T) {
 	if !strings.Contains(strings.ToLower(bb.Result), "active") {
 		t.Fatalf("report must say a program is active: %s", bb.Result)
 	}
+	// A skip because a program is still active is the expected steady state
+	// (4 identical Telegram notifications/day on 2026-07-15) — a healthy
+	// no-op, refined to no_change so downstream consumers can throttle it.
+	if bb.OutcomeRefinement != "no_change" {
+		t.Fatalf("OutcomeRefinement = %q, want no_change for the healthy program-active skip", bb.OutcomeRefinement)
+	}
+	if !bb.QualityAuthoritative || bb.QualityScore != 0.5 {
+		t.Fatalf("quality = (%v, authoritative=%v), want (0.5, true)", bb.QualityScore, bb.QualityAuthoritative)
+	}
 }
 
 func TestArc42SeederReportsWhenGoalsUnavailable(t *testing.T) {
@@ -143,5 +152,11 @@ func TestArc42SeederReportsWhenGoalsUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(bb.Result), "arc42") {
 		t.Fatalf("report must explain the arc42 doc is unavailable: %s", bb.Result)
+	}
+	// Unlike the program-active skip, a missing/unparseable arc42 doc is a
+	// real problem the operator must see — it must NOT be refined into the
+	// throttleable no_change state.
+	if bb.OutcomeRefinement != "" {
+		t.Fatalf("OutcomeRefinement = %q, want empty — goals-unavailable is not a routine no-op", bb.OutcomeRefinement)
 	}
 }

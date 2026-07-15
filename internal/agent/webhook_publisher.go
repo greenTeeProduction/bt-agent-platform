@@ -54,20 +54,22 @@ var eventRoute = map[string]string{
 
 // WebhookPublisher bridges AgentBus events to Hermes webhooks.
 type WebhookPublisher struct {
-	baseURL string
-	secrets WebhookSecrets
-	client  *http.Client
-	stopCh  chan struct{}
-	eventCh <-chan AgentEvent
+	baseURL  string
+	secrets  WebhookSecrets
+	client   *http.Client
+	stopCh   chan struct{}
+	eventCh  <-chan AgentEvent
+	throttle *routineThrottle
 }
 
 // NewWebhookPublisher creates a publisher with Hermes webhook base URL and secrets.
 func NewWebhookPublisher(baseURL string, secrets WebhookSecrets) *WebhookPublisher {
 	return &WebhookPublisher{
-		baseURL: baseURL,
-		secrets: secrets,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		stopCh:  make(chan struct{}),
+		baseURL:  baseURL,
+		secrets:  secrets,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		stopCh:   make(chan struct{}),
+		throttle: newRoutineThrottle(NotificationThrottleFile()),
 	}
 }
 
@@ -109,6 +111,29 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		// Unknown event type — log and skip
 		slog.Warn("webhook: unhandled event type", "type", event.Type, "source", event.Source)
 		return
+	}
+
+	// Routine-notification throttle: repeat healthy no_change cycles are
+	// suppressed and rolled up instead of spamming the operator hourly
+	// (13/15 bt-fusion Telegram messages on 2026-07-15 were the identical
+	// "0 new findings" no-op). Only task_complete is throttled — alert and
+	// evolution routes stay untouched.
+	if event.Type == "task_complete" && p.throttle != nil {
+		data, _ := event.Data.(map[string]interface{})
+		send, annotated := p.throttle.decide(event.Source, eventDataString(data, "outcome"), eventDataString(data, "summary"))
+		if !send {
+			slog.Info("webhook: routine notification suppressed", "agent", event.Source)
+			return
+		}
+		if annotated != "" {
+			// Copy the map — event.Data is shared with other bus subscribers.
+			patched := make(map[string]interface{}, len(data)+1)
+			for k, v := range data {
+				patched[k] = v
+			}
+			patched["summary"] = annotated
+			event.Data = patched
+		}
 	}
 
 	secret, ok := p.secrets[subscription]

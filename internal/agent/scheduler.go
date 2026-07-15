@@ -678,6 +678,15 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}()
 	duration := time.Since(start)
 
+	// A retry-exhausted runner whose attempts never produced a result returns
+	// a zero-valued outcome (observed live 2026-07-15 00:08: the Telegram
+	// notification rendered "Outcome:  in 4s"). Stamp it a failure so history,
+	// the circuit breaker, and task_complete consumers see an honest outcome —
+	// runErr already carries the detail.
+	if outcome == "" && runErr != nil {
+		outcome = "failure"
+	}
+
 	// Clear in-flight flag now that execution has completed (or panicked).
 	// Update job state
 	s.mu.Lock()

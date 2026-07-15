@@ -208,6 +208,13 @@ func registerBTFusionActions() {
 		}
 		bb.Result += fmt.Sprintf("\n\n## No New Research\n\nAll findings this cycle were already recorded in the research knowledge store (%s entries at `%s`). Skipped the duplicate fusion report and verification.", entries, btFusionKnowledgePath)
 		bb.Outcome = string(evolution.Success)
+		// Honest signal: zero new knowledge is a healthy no-op, not a full
+		// success — refine to the SLO-deferred no_change state with the same
+		// authoritative quality the goap analysis-only path stamps, so the
+		// notification throttle and stats can tell a quiet cycle from real work.
+		bb.OutcomeRefinement = "no_change"
+		bb.QualityScore = 0.5
+		bb.QualityAuthoritative = true
 		return 1
 	})
 

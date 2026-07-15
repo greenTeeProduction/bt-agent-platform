@@ -39,7 +39,10 @@ func CircuitBreakersFile() string {
 	return filepath.Join(HomeDir(), "circuit_breakers.json")
 }
 func FeedbackFile() string { return filepath.Join(HomeDir(), "feedback.json") }
-func LogsDir() string      { return filepath.Join(HomeDir(), "logs") }
+func NotificationThrottleFile() string {
+	return filepath.Join(HomeDir(), "notification_throttle.json")
+}
+func LogsDir() string { return filepath.Join(HomeDir(), "logs") }
 
 // UsersDir is the root of per-user personalization workspaces (ADR-010):
 // users/<user>/{profile.json, interactions.jsonl, trees, goals, memory,

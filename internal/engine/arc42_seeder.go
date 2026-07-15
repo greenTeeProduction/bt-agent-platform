@@ -82,6 +82,14 @@ func init() {
 		if active := ps.Active(); active != nil {
 			bb.Outcome = "arc42_seeder_program_active"
 			bb.Result = fmt.Sprintf("## arc42 Program Seeding Skipped\n\nProgram %q is still active — nothing seeded (one program at a time; targeted quality goal this run would have been %s %s).", active.Title, goal.ID, goal.Name)
+			// One-program-at-a-time is the expected steady state, so this skip
+			// is a healthy no-op — refine to no_change so the notification
+			// throttle can suppress the repeats. The other skip branches
+			// (goals unavailable, store unreadable, proposal rejected) stay
+			// unrefined: those are problems the operator must see.
+			bb.OutcomeRefinement = "no_change"
+			bb.QualityScore = 0.5
+			bb.QualityAuthoritative = true
 			return 1
 		}
 
