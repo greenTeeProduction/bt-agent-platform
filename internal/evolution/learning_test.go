@@ -749,3 +749,104 @@ func TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp(t *testing.T) {
 		t.Errorf("expected 3 generations to run, got %d", pop.Generation)
 	}
 }
+
+// ─── EvolveWithExperienceContext query-aware warm-start (Q2 Evolvability) ──
+//
+// Program "Q2 Evolvability — Condition bottleneck mutation search on the
+// failing task's semantics, not just tree-type," milestone 1/3:
+// EvolveWithExperienceContext must warm-start operator selection from
+// bank.Retrieve(query, experienceHintTopK) — a semantic query over the
+// failing task's context — instead of bank.RetrieveByTreeType(treeType, ...)
+// whenever the caller supplies a non-empty query, feeding the returned
+// MutationOps into mutator.WarmStartHints exactly as the tree-type warm-start
+// path does today. The empty-query path must keep calling RetrieveByTreeType
+// unchanged so existing callers (EvolveWithExperience) see no behavior
+// change. EvolveWithExperienceContext does not exist yet, so this file fails
+// to compile until milestone 1 lands.
+
+// TestEvolveWithExperienceContext_QueryRetrievesAcrossTreeTypes proves the
+// query path consults bank.Retrieve rather than bank.RetrieveByTreeType: the
+// bank is seeded only with entries whose TreeType ("GOAP") never matches the
+// population's own tree type ("Default" for DefaultTree()), so
+// RetrieveByTreeType("Default", ...) would find nothing. A query built from
+// the seeded MutationOp's distinctive token must still surface and reuse
+// those entries via Retrieve's similarity ranking, because Retrieve is not
+// filtered by tree type at all.
+func TestEvolveWithExperienceContext_QueryRetrievesAcrossTreeTypes(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	// GoapTask's extractTreeType is "GOAP", never "Default" — so the
+	// tree-type warm-start path used by plain EvolveWithExperience could
+	// never retrieve these entries for a DefaultTree() population.
+	goapTree := NewTree("GoapTask", NewAction("PlanGoap", "plan"))
+	const distinctiveOp = "quantum_bottleneck_repair_xyz"
+	seedOp := MutationOp{Operation: distinctiveOp, Target: "PlanGoap"}
+	if err := eb.AddFromMutation(goapTree, seedOp, 0.30, 0.55, nil); err != nil {
+		t.Fatalf("seed AddFromMutation: %v", err)
+	}
+	for _, e := range eb.Entries {
+		if e.TreeType == "Default" {
+			t.Fatalf("test setup: seeded entry unexpectedly typed Default: %+v", e)
+		}
+	}
+
+	pop := NewPopulation(8, DefaultTree())
+	best := pop.EvolveWithExperienceContext(2, growthFitness, eb, distinctiveOp)
+	if best == nil {
+		t.Fatal("EvolveWithExperienceContext returned nil best tree")
+	}
+
+	reused := 0
+	for _, e := range eb.Entries {
+		if e.TimesReused > 0 {
+			reused++
+		}
+	}
+	if reused == 0 {
+		t.Fatal("expected the query path to retrieve and reuse the GOAP-typed entry via bank.Retrieve(query, ...); RetrieveByTreeType would never find it for a Default population")
+	}
+}
+
+// TestEvolveWithExperienceContext_EmptyQueryFallsBackToTreeType pins the
+// unchanged half of the contract: an empty query must keep calling
+// RetrieveByTreeType exactly like EvolveWithExperience does today, so
+// existing callers see no behavior change. The bank is seeded with a
+// Default-typed entry (matching the population's tree type) with a
+// distinctive op that has no lexical overlap with anything else, so if the
+// empty-query path ever switched to bank.Retrieve("", ...) it would still
+// find nothing to score against and the entry would go unreused.
+func TestEvolveWithExperienceContext_EmptyQueryFallsBackToTreeType(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	seedTree := DefaultTree()
+	seedOp := MutationOp{Operation: "add_fallback", Target: "SetupDefaultTools"}
+	if err := eb.AddFromMutation(seedTree, seedOp, 0.30, 0.55, nil); err != nil {
+		t.Fatalf("seed AddFromMutation: %v", err)
+	}
+
+	pop := NewPopulation(8, DefaultTree())
+	best := pop.EvolveWithExperienceContext(2, growthFitness, eb, "")
+	if best == nil {
+		t.Fatal("EvolveWithExperienceContext returned nil best tree")
+	}
+
+	reused := 0
+	for _, e := range eb.Entries {
+		if e.TreeType == "Default" && e.TimesReused > 0 {
+			reused++
+		}
+	}
+	if reused == 0 {
+		t.Fatal("expected empty-query path to retrieve the Default-typed hint via RetrieveByTreeType and mark it reused, matching EvolveWithExperience's unchanged behavior")
+	}
+}

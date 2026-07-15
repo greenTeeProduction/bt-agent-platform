@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -61,6 +62,71 @@ func TestAddFromMutation_NoLLM(t *testing.T) {
 	// Verify context was generated without LLM
 	if entry.Context == "" {
 		t.Error("Context should not be empty even without LLM")
+	}
+}
+
+// TestAddFromMutation_RecordsFailureContext verifies that the originating
+// task/failure text, when supplied, is threaded into ExperienceEntry.Context
+// alongside the existing tree-type/operation boilerplate — otherwise
+// Retrieve queries built from LastFailureTask can never match entries on
+// task semantics, only on generic tree-type/operation text.
+func TestAddFromMutation_RecordsFailureContext(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	tree := DefaultTree()
+	op := MutationOp{Operation: "add_before", Target: "HasClearTask"}
+	failureContext := "resolve circular import cycle between auth and billing packages"
+
+	err = eb.AddFromMutation(tree, op, 0.35, 0.50, nil, failureContext)
+	if err != nil {
+		t.Fatalf("AddFromMutation: %v", err)
+	}
+
+	if eb.Count() != 1 {
+		t.Fatalf("expected 1 entry, got %d", eb.Count())
+	}
+
+	entry := eb.Entries[0]
+	if !strings.Contains(entry.Context, failureContext) {
+		t.Errorf("expected Context to contain failure context %q, got %q", failureContext, entry.Context)
+	}
+}
+
+// TestRetrieve_MatchesOnFailureContext verifies that Retrieve can
+// distinguish between entries that share identical tree-type/operation
+// boilerplate but originated from semantically different failing tasks —
+// the whole point of threading failureContext into ExperienceEntry.Context.
+func TestRetrieve_MatchesOnFailureContext(t *testing.T) {
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	tree := DefaultTree()
+	op := MutationOp{Operation: "add_before", Target: "SameTarget"}
+
+	ctxA := "circular import cycle between auth and billing packages breaks build"
+	ctxB := "flaky timeout retry loop in payment gateway integration test"
+
+	if err := eb.AddFromMutation(tree, op, 0.3, 0.5, nil, ctxA); err != nil {
+		t.Fatalf("AddFromMutation A: %v", err)
+	}
+	if err := eb.AddFromMutation(tree, op, 0.3, 0.5, nil, ctxB); err != nil {
+		t.Fatalf("AddFromMutation B: %v", err)
+	}
+
+	query := "circular import cycle auth billing packages"
+	results := eb.Retrieve(query, 1)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if !strings.Contains(results[0].Context, ctxA) {
+		t.Errorf("expected retrieval to match failing-task semantics (ctxA), got entry with context %q", results[0].Context)
 	}
 }
 

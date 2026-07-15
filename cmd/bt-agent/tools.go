@@ -1823,7 +1823,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				algorithms["genetic"]++
 				pop := newProductionPopulation(population, baseTree)
-				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				// Condition the warm-start on the bottleneck's concrete failing
+				// task rather than just its tree type (Q2 Evolvability); an
+				// empty LastFailureTask falls back to RetrieveByTreeType inside
+				// EvolveWithExperienceContext, matching EvolveWithExperience.
+				best := pop.EvolveWithExperienceContext(params.Generations, structuralFitnessFn, deps.expBank, b.LastFailureTask)
 				entry := map[string]interface{}{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,

@@ -454,6 +454,19 @@ func RetrieveExperienceHints(bank *ExperienceBank, tree *SerializableNode, topK 
 // population's tree type, and every fitness-improving mutation is recorded
 // back into the bank via AddFromMutation. A nil bank degrades to plain Evolve.
 func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*SerializableNode) float64, bank *ExperienceBank) *SerializableNode {
+	return p.EvolveWithExperienceContext(generations, fitnessFn, bank, "")
+}
+
+// EvolveWithExperienceContext runs the genetic algorithm like
+// EvolveWithExperience, but conditions the warm-start hints on the failing
+// task's semantics rather than just the population's tree type: when query is
+// non-empty, hints come from bank.Retrieve(query, experienceHintTopK) —
+// Retrieve's Jaccard-similarity ranking is not filtered by tree type, so it
+// can surface relevant prior mutations regardless of what tree type recorded
+// them. An empty query keeps calling RetrieveByTreeType exactly like
+// EvolveWithExperience, so existing callers see no behavior change. A nil
+// bank degrades to plain Evolve.
+func (p *Population) EvolveWithExperienceContext(generations int, fitnessFn func(*SerializableNode) float64, bank *ExperienceBank, query string) *SerializableNode {
 	if bank == nil {
 		return p.Evolve(generations, fitnessFn)
 	}
@@ -467,10 +480,18 @@ func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*Seria
 	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	supervisor := NewLLMSupervisor()
 
-	// Warm-start: consult prior successes for this population's tree type and
-	// bias operator selection toward them.
-	treeType := extractTreeType(p.Individuals[0].Tree)
-	hints := bank.RetrieveByTreeType(treeType, experienceHintTopK)
+	// Warm-start: consult prior successes and bias operator selection toward
+	// them. A non-empty query conditions retrieval on the failing task's
+	// semantics via Retrieve's similarity ranking; an empty query falls back
+	// to the population's tree type via RetrieveByTreeType, unchanged from
+	// EvolveWithExperience's original behavior.
+	var hints []ExperienceEntry
+	if query != "" {
+		hints = bank.Retrieve(query, experienceHintTopK)
+	} else {
+		treeType := extractTreeType(p.Individuals[0].Tree)
+		hints = bank.RetrieveByTreeType(treeType, experienceHintTopK)
+	}
 	hintOps := make([]string, 0, len(hints))
 	hintIDs := make([]string, 0, len(hints))
 	for _, h := range hints {

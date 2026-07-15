@@ -1741,6 +1741,98 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	}
 }
 
+// TestBTEvolveBottlenecksGeneticPathQueriesExperienceByFailureTask pins
+// milestone 3/3 of "Q2 Evolvability — Condition bottleneck mutation search on
+// the failing task's semantics, not just tree-type": the genetic-fallback
+// path inside bt_evolve_bottlenecks must build a query string from the
+// bottleneck's structured LastFailureTask (already captured by ComputeAnalytics
+// and threaded into the report via addFailureContext, but never consulted for
+// retrieval) and pass it to evolution.(*Population).EvolveWithExperienceContext
+// instead of calling the plain EvolveWithExperience, which always warm-starts
+// via RetrieveByTreeType and ignores LastFailureTask entirely.
+//
+// domain:alert_router resolves to AlertRouter_Main, whose extractTreeType is
+// "AlertRouter" (derived from the tree's Name). An experience-bank entry
+// seeded with a deliberately mismatched TreeType ("GOAP") can never be found
+// by RetrieveByTreeType("AlertRouter", ...) — but it IS reachable via
+// ExperienceBank.Retrieve(query, ...), whose Jaccard-similarity ranking is not
+// filtered by tree type at all and returns every entry in a single-entry bank
+// regardless of the query's content. So: if the handler still calls plain
+// EvolveWithExperience (today's behavior), the seeded off-type entry is never
+// retrieved and TimesReused stays 0; once the handler threads the bottleneck's
+// LastFailureTask into an EvolveWithExperienceContext call, the entry gets
+// retrieved and marked reused.
+func TestBTEvolveBottlenecksGeneticPathQueriesExperienceByFailureTask(t *testing.T) {
+	knowledge.GlobalTraceStore.Record(knowledge.DecisionTrace{
+		RunID:   "alert-router-q2-milestone3-red",
+		TreeID:  "domain:alert_router",
+		Task:    "route the escalating disk-pressure alert to on-call",
+		Outcome: "failure",
+	})
+
+	kg := knowledge.NewKnowledgeGraph()
+	// Parameterless tree: deterministically routes to the genetic fallback
+	// path, mirroring TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport.
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 8, RunCount: 3,
+	})
+
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	// Seed directly (bypassing AddFromMutation's name-derived TreeType) with a
+	// TreeType that never matches AlertRouter_Main's "AlertRouter" tree type.
+	bank.Entries = append(bank.Entries, evolution.ExperienceEntry{
+		ID:           "seed_goap_off_type",
+		TreeType:     "GOAP",
+		MutationOp:   "add_before",
+		QualityScore: 1.0,
+		FitnessDelta: 0.2,
+	})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg, expBank: bank})
+
+	res, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	report, isList := out["report"].([]interface{})
+	if !isList || len(report) != 1 {
+		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single genetic-path bottleneck; got %d: %v", len(report), out["report"])
+	}
+	entry, _ := report[0].(map[string]interface{})
+	if entry["algorithm"] != "genetic" {
+		t.Fatalf("fixture bottleneck must route to the genetic path; got algorithm=%v", entry["algorithm"])
+	}
+	if got, _ := entry["last_failure_task"].(string); got == "" {
+		t.Fatalf("test setup: fixture bottleneck must carry a non-empty last_failure_task; got %v", entry["last_failure_task"])
+	}
+
+	var seeded *evolution.ExperienceEntry
+	for i := range bank.Entries {
+		if bank.Entries[i].ID == "seed_goap_off_type" {
+			seeded = &bank.Entries[i]
+			break
+		}
+	}
+	if seeded == nil {
+		t.Fatal("test setup: seeded experience entry disappeared from the bank")
+	}
+	if seeded.TimesReused == 0 {
+		t.Fatal("bt_evolve_bottlenecks must condition its genetic-path warm-start on the bottleneck's LastFailureTask via EvolveWithExperienceContext — the off-type seeded entry (TreeType=\"GOAP\", never matching AlertRouter_Main's tree type) should have been retrieved via ExperienceBank.Retrieve(query, ...) and marked reused; RetrieveByTreeType (the plain EvolveWithExperience path) would never find it")
+	}
+}
+
 // TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees pins the
 // bt_evolve_selection_pressure MCP tool (analytics→action loop milestone 2/4,
 // Q2 Evolvability): it gives Analytics.SelectionPressure a production consumer.

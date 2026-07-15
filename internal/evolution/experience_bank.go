@@ -116,12 +116,18 @@ func (eb *ExperienceBank) Count() int {
 // If an LLM is provided, it generates the 5-dimension summary and quality score.
 // If llm is nil, the entry is stored with minimal metadata (just the raw data).
 //
+// failureContext is an optional originating task/failure description (e.g.
+// blackboard.LastFailureTask). When supplied, it is appended to entry.Context
+// so a later Retrieve query built from that same failing task's text can
+// match on task semantics rather than only on tree-type/operation boilerplate.
+//
 // Only mutations with positive fitness delta are stored (regressions are ignored).
 func (eb *ExperienceBank) AddFromMutation(
 	tree *SerializableNode,
 	op MutationOp,
 	beforeFitness, afterFitness float64,
 	llmClient llm.LLM,
+	failureContext ...string,
 ) error {
 	fitnessDelta := afterFitness - beforeFitness
 	if fitnessDelta <= 0 {
@@ -148,6 +154,10 @@ func (eb *ExperienceBank) AddFromMutation(
 		entry.Summary = fmt.Sprintf("Apply %s to %s nodes in %s trees for +%.3f fitness gain", entry.MutationOp, entry.TargetNode, entry.TreeType, fitnessDelta)
 		entry.Reflection = "No LLM available for deeper analysis"
 		entry.QualityScore = math.Min(fitnessDelta/0.2, 1.0) // normalize delta to 0–1
+	}
+
+	if len(failureContext) > 0 && failureContext[0] != "" {
+		entry.Context = fmt.Sprintf("%s; failing_task=%s", entry.Context, failureContext[0])
 	}
 
 	return eb.addEntry(entry)
