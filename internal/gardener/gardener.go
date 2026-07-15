@@ -30,6 +30,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -262,6 +263,17 @@ type CycleMetrics struct {
 	// MutationBudget is the per-cycle mutation budget actually used, boosted
 	// above the configured MaxMutations when CrisisIntervened is true.
 	MutationBudget int `json:"mutation_budget,omitempty"`
+	// DeepSearchUsed marks a cycle that exercised evaluator.IterativeDeepening
+	// (Q2 Evolvability milestone 2), gated on a configured
+	// Config.TranspositionTablePath.
+	DeepSearchUsed bool `json:"deep_search_used,omitempty"`
+	// DeepSearchDepth is the deepest ply evaluator.IterativeDeepening reached
+	// this cycle. Zero when DeepSearchUsed is false.
+	DeepSearchDepth int `json:"deep_search_depth,omitempty"`
+	// TTHitRate is the transposition-table probe hit rate
+	// (DeepeningResult.TTProbeHits / TTProbes) for this cycle's deep search.
+	// Zero when DeepSearchUsed is false.
+	TTHitRate float64 `json:"tt_hit_rate,omitempty"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -451,6 +463,13 @@ type Config struct {
 	// expert-antipattern hits) those gates never inspect. Nil disables the
 	// check, preserving the historical fitness-only acceptance behavior.
 	MetaValidator *evolution.MetaValidator
+	// TranspositionTablePath, when set, is the directory for the Stockfish-style
+	// transposition table (evaluator.TranspositionTable) that caches (tree,task)
+	// evaluations across cycles. The gardener persists it after every tree in
+	// RunCycleV2, alongside MetricsTracker.Save(), so cached evaluations survive
+	// gardener restarts instead of only the standalone bt-evaluator binary
+	// persisting them (Q2 Evolvability milestone 1). Empty disables the table.
+	TranspositionTablePath string
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -460,6 +479,10 @@ type Gardener struct {
 	// Lazily opened per-user experience banks (see bankFor).
 	userBanksMu sync.Mutex
 	userBanks   map[string]*evolution.ExperienceBank
+
+	// Lazily opened transposition table (see transpositionTable in evolve_v2.go).
+	ttMu sync.Mutex
+	tt   *evaluator.TranspositionTable
 }
 
 // NewGardener creates a tree gardener.

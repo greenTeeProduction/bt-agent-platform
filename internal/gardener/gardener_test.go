@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -302,5 +303,102 @@ func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
 	}
 	if metrics.Mutations != 0 || metrics.Improved {
 		t.Fatalf("skipped tree must apply no mutations: %+v", metrics)
+	}
+}
+
+// ============================================================================
+// Deep-search (IterativeDeepening) metrics — Q2 Evolvability milestone 2/3
+// ============================================================================
+
+// deepSearchGardener builds a Gardener + single-tree entry for the deep-search
+// metrics tests below. ttPath == "" leaves Config.TranspositionTablePath
+// unset, the same knob milestone 1 introduced for TT persistence and that
+// evaluator.IterativeDeepening requires a non-nil table to run at all.
+func deepSearchGardener(t *testing.T, treeName, ttPath string) (*Gardener, TreeEntry) {
+	t.Helper()
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: treeName, Description: "deep search metrics", Tree: tree, FilePath: dir + "/tree-" + treeName + ".json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	g := NewGardener(Config{
+		Registry:                 reg,
+		MetricsTracker:           mt,
+		RefStore:                 refStore,
+		MaxMutations:             1,
+		EvolveWithoutReflections: true,
+		TranspositionTablePath:   ttPath,
+	})
+	return g, reg.List()[0]
+}
+
+// deepSearchV2Config mirrors crisisV2Config: a zero QuickThreshold so the
+// structural cascade never blocks the tiny test tree from reaching the
+// deep-search path.
+func deepSearchV2Config() EvolveV2Config {
+	return EvolveV2Config{CascadeCfg: evaluator.CascadeConfig{QuickThreshold: 0}}
+}
+
+// TestEvolveTreeV2_DeepSearchMetrics_PopulatedWhenTTConfigured pins Q2
+// Evolvability milestone 2/3 ("Wire the Stockfish transposition-table search
+// into the gardener's live evolution loop"): whenever evolveTreeV2 actually
+// exercises evaluator.IterativeDeepening — gated on a configured
+// TranspositionTablePath, since IterativeDeepening requires a non-nil
+// *evaluator.TranspositionTable — the returned CycleMetrics must report
+// DeepSearchUsed=true with DeepSearchDepth and TTHitRate derived from the
+// evaluator.DeepeningResult the search produced.
+func TestEvolveTreeV2_DeepSearchMetrics_PopulatedWhenTTConfigured(t *testing.T) {
+	dir := t.TempDir()
+	g, entry := deepSearchGardener(t, "deep_search_tree", filepath.Join(dir, "tt"))
+
+	metrics := g.evolveTreeV2(entry, deepSearchV2Config())
+
+	if !metrics.DeepSearchUsed {
+		t.Fatalf("expected DeepSearchUsed == true when TranspositionTablePath is configured, got %+v", metrics)
+	}
+	if metrics.DeepSearchDepth <= 0 {
+		t.Errorf("expected DeepSearchDepth > 0, got %d", metrics.DeepSearchDepth)
+	}
+	if metrics.TTHitRate < 0 || metrics.TTHitRate > 1 {
+		t.Errorf("expected TTHitRate in [0,1], got %v", metrics.TTHitRate)
+	}
+}
+
+// TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable pins the
+// counterpart this milestone also requires: a cycle that never exercises
+// IterativeDeepening (no TranspositionTablePath configured) must leave
+// DeepSearchUsed/DeepSearchDepth/TTHitRate at their zero values, not just
+// "unset but nonzero from a stale run".
+func TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable(t *testing.T) {
+	g, entry := deepSearchGardener(t, "no_tt_tree", "")
+
+	metrics := g.evolveTreeV2(entry, deepSearchV2Config())
+
+	if metrics.DeepSearchUsed {
+		t.Errorf("expected DeepSearchUsed == false without a configured TranspositionTablePath, got true (metrics=%+v)", metrics)
+	}
+	if metrics.DeepSearchDepth != 0 {
+		t.Errorf("expected DeepSearchDepth == 0, got %d", metrics.DeepSearchDepth)
+	}
+	if metrics.TTHitRate != 0 {
+		t.Errorf("expected TTHitRate == 0, got %v", metrics.TTHitRate)
 	}
 }

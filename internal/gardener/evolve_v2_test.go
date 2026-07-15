@@ -991,6 +991,96 @@ func TestEvolveTreeV2_CalmCycle_NoCrisisMetrics(t *testing.T) {
 // isolation instead.
 
 // ============================================================================
+// Transposition-table persistence (Q2 Evolvability milestone 1/3)
+// ============================================================================
+
+// TestRunCycleV2_TranspositionTablePersistsAcrossGardenerInstances pins Q2
+// Evolvability milestone 1/3: a Gardener configured with
+// Config.TranspositionTablePath must construct and thread a
+// *evaluator.TranspositionTable through the v2 evolution pipeline
+// (EvolveV2Config/evolveTreeV2), storing a cached (tree,task) evaluation for
+// every processed tree and persisting the table to disk after every tree in
+// RunCycleV2 — alongside the existing MetricsTracker.Save() call — so cached
+// evaluations survive a gardener restart instead of only the standalone
+// bt-evaluator binary persisting them. A second Gardener instance pointed at
+// the same directory must see (and continue to persist) the entries the
+// first instance wrote.
+func TestRunCycleV2_TranspositionTablePersistsAcrossGardenerInstances(t *testing.T) {
+	dir := t.TempDir()
+	ttDir := filepath.Join(dir, "tt")
+
+	simpleTree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+
+	newGardener := func(t *testing.T) *Gardener {
+		t.Helper()
+		refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		mt, err := NewMetricsTracker(dir)
+		if err != nil {
+			t.Fatalf("NewMetricsTracker: %v", err)
+		}
+		reg := &Registry{dir: dir}
+		reg.mu.Lock()
+		reg.entries = []TreeEntry{
+			{Name: "default", Description: "default", Tree: simpleTree, FilePath: dir + "/tree-default.json", Active: true},
+		}
+		reg.mu.Unlock()
+
+		cfg := Config{
+			Registry:               reg,
+			MetricsTracker:         mt,
+			RefStore:               refStore,
+			MaxMutations:           1,
+			UseRealLLM:             false,
+			TranspositionTablePath: ttDir,
+		}
+		return NewGardener(cfg)
+	}
+
+	g1 := newGardener(t)
+	if _, err := g1.RunCycleV2(DefaultEvolveV2Config()); err != nil {
+		t.Fatalf("RunCycleV2 (gardener 1): %v", err)
+	}
+
+	ttPath := filepath.Join(ttDir, "transposition.json")
+	if _, err := os.Stat(ttPath); err != nil {
+		t.Fatalf("expected transposition table to be persisted at %s after RunCycleV2, got: %v", ttPath, err)
+	}
+
+	tt1, err := evaluator.NewTranspositionTable(ttDir, 1000)
+	if err != nil {
+		t.Fatalf("NewTranspositionTable: %v", err)
+	}
+	entriesAfterFirst := tt1.Stats()
+	if entriesAfterFirst == 0 {
+		t.Fatal("expected at least one cached (tree,task) evaluation persisted after RunCycleV2, got 0 entries")
+	}
+
+	// A second Gardener instance sharing the same TranspositionTablePath must
+	// load and continue to persist the entries the first instance wrote —
+	// this is the "survives gardener restarts" contract this milestone adds.
+	g2 := newGardener(t)
+	if _, err := g2.RunCycleV2(DefaultEvolveV2Config()); err != nil {
+		t.Fatalf("RunCycleV2 (gardener 2): %v", err)
+	}
+
+	tt2, err := evaluator.NewTranspositionTable(ttDir, 1000)
+	if err != nil {
+		t.Fatalf("NewTranspositionTable (reload): %v", err)
+	}
+	if tt2.Stats() < entriesAfterFirst {
+		t.Fatalf("second gardener instance lost entries persisted by the first: got %d entries, had %d", tt2.Stats(), entriesAfterFirst)
+	}
+}
+
+// ============================================================================
 // MetaValidator wiring tests (NotebookLM research goal)
 // ============================================================================
 

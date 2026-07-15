@@ -50,6 +50,39 @@ func DefaultEvolveV2Config() EvolveV2Config {
 	}
 }
 
+// transpositionTableMaxSize bounds the number of cached (tree,task)
+// evaluations the gardener's transposition table keeps in memory/on disk.
+const transpositionTableMaxSize = 5000
+
+// deepSearchMaxDepth bounds how many mutations deep
+// evaluator.IterativeDeepening searches per cycle (Q2 Evolvability milestone
+// 2) once a transposition table is configured.
+const deepSearchMaxDepth = 2
+
+// transpositionTable lazily constructs (and caches) the Stockfish-style
+// transposition table from Config.TranspositionTablePath, so cached
+// (tree,task) evaluations survive gardener restarts instead of only the
+// standalone bt-evaluator binary persisting them (Q2 Evolvability milestone
+// 1). Returns nil when TranspositionTablePath is unset or the table failed
+// to open.
+func (g *Gardener) transpositionTable() *evaluator.TranspositionTable {
+	if g.cfg.TranspositionTablePath == "" {
+		return nil
+	}
+	g.ttMu.Lock()
+	defer g.ttMu.Unlock()
+	if g.tt != nil {
+		return g.tt
+	}
+	tt, err := evaluator.NewTranspositionTable(g.cfg.TranspositionTablePath, transpositionTableMaxSize)
+	if err != nil {
+		slog.Warn("gardener/v2: opening transposition table failed", "path", g.cfg.TranspositionTablePath, "error", err)
+		return nil
+	}
+	g.tt = tt
+	return g.tt
+}
+
 // evolveTreeV2 runs the v2 evolution pipeline on a single tree:
 // cascade quick-check → ordered candidates → block filter → per-candidate
 // benchmark + pre-score + quality gate → apply → validation-gated persist.
@@ -63,6 +96,16 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	records := recordsForEntry(allRecords, entry)
 	baseFitness := evaluator.EvaluateTree(tree, records)
 	nodesBefore := evolution.CountNodes(tree)
+
+	// Transposition-table caching (Q2 Evolvability milestone 1): cache this
+	// cycle's (tree,task) evaluation before any gate can short-circuit the
+	// rest of the pipeline, so every processed tree contributes an entry.
+	if tt := g.transpositionTable(); tt != nil {
+		tt.Store(tree, entry.Name, evaluator.TranspositionEntry{
+			SuccessRate: baseFitness.SuccessRate,
+			DurationMs:  baseFitness.AvgDurationMs,
+		})
+	}
 
 	// Evidence gate (ported from the retired v1 pipeline, extended for
 	// personal trees in ADR-010 Phase 5): a tree with no reflection records
@@ -285,6 +328,24 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
 	}
 
+	// Deep search (Q2 Evolvability milestone 2): probe further ahead from the
+	// post-cycle tree with the Stockfish-style transposition-table search,
+	// gated on a configured transposition table (IterativeDeepening requires
+	// a non-nil *evaluator.TranspositionTable to run at all). Metrics-only
+	// this milestone — the result does not yet feed back into mutation
+	// selection.
+	var deepSearchUsed bool
+	var deepSearchDepth int
+	var ttHitRate float64
+	if tt := g.transpositionTable(); tt != nil {
+		deep := evaluator.IterativeDeepening(tree, records, tt, deepSearchMaxDepth)
+		deepSearchUsed = true
+		deepSearchDepth = deep.Depth
+		if deep.TTProbes > 0 {
+			ttHitRate = float64(deep.TTProbeHits) / float64(deep.TTProbes)
+		}
+	}
+
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
@@ -297,6 +358,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		CrisisIntervention: crisisIntervened,
 		CrisisIntervened:   crisisIntervened,
 		MutationBudget:     maxMutations,
+
+		DeepSearchUsed:  deepSearchUsed,
+		DeepSearchDepth: deepSearchDepth,
+		TTHitRate:       ttHitRate,
 	}
 }
 
@@ -412,6 +477,11 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		// Persist after every tree so a mid-cycle crash or SIGTERM loses at
 		// most one tree's result, not the whole cycle.
 		_ = g.cfg.MetricsTracker.Save()
+		if tt := g.transpositionTable(); tt != nil {
+			if err := tt.Save(); err != nil {
+				slog.Warn("gardener/v2: transposition table save failed", "error", err)
+			}
+		}
 	}
 
 	// ── SLO metrics collection ──

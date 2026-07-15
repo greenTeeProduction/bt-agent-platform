@@ -260,6 +260,11 @@ type TranspositionEntry struct {
 	Complexity  string  `json:"complexity"`
 	DurationMs  int64   `json:"duration_ms"`
 	SuccessRate float64 `json:"success_rate"`
+	// InsertedAt is a monotonically increasing marker stamped by Store on every
+	// write (insert or overwrite). It lets eviction deterministically pick the
+	// lowest-value (oldest-touched) entry instead of relying on Go's randomized
+	// map iteration order.
+	InsertedAt int64 `json:"inserted_at"`
 }
 
 // TranspositionTable is a persistent cache mapping (tree, task) → evaluation.
@@ -269,6 +274,7 @@ type TranspositionTable struct {
 	entries map[string]TranspositionEntry // key = tree_hash:task_sig
 	path    string
 	maxSize int
+	nextSeq int64 // monotonic counter backing TranspositionEntry.InsertedAt
 }
 
 // NewTranspositionTable creates or loads a TT from disk.
@@ -301,14 +307,13 @@ func (tt *TranspositionTable) Store(tree *evolution.SerializableNode, task strin
 	key := makeKey(tree, task)
 	entry.TreeHash = hashTree(tree)
 	entry.TaskSig = hashTask(task)
+	tt.nextSeq++
+	entry.InsertedAt = tt.nextSeq
 	tt.entries[key] = entry
 
-	// Evict oldest if over max
+	// Evict the lowest-value (oldest-touched) entry once over max, deterministically.
 	if len(tt.entries) > tt.maxSize {
-		for k := range tt.entries {
-			delete(tt.entries, k)
-			break
-		}
+		evictLowestValueEntry(tt.entries)
 	}
 }
 
@@ -338,16 +343,33 @@ func (tt *TranspositionTable) load() {
 		return
 	}
 	_ = json.Unmarshal(data, &tt.entries)
-	if len(tt.entries) > tt.maxSize {
-		// Trim
-		count := 0
-		for k := range tt.entries {
-			delete(tt.entries, k)
-			count++
-			if len(tt.entries) <= tt.maxSize {
-				break
-			}
+	for _, e := range tt.entries {
+		if e.InsertedAt > tt.nextSeq {
+			tt.nextSeq = e.InsertedAt
 		}
+	}
+	// Trim to maxSize deterministically, evicting lowest-value entries first.
+	for len(tt.entries) > tt.maxSize {
+		evictLowestValueEntry(tt.entries)
+	}
+}
+
+// evictLowestValueEntry removes the entry with the lowest InsertedAt marker
+// (the oldest inserted/last-touched entry) so eviction is deterministic
+// across runs instead of depending on Go's randomized map iteration order.
+func evictLowestValueEntry(entries map[string]TranspositionEntry) {
+	var evictKey string
+	var lowest int64
+	first := true
+	for k, e := range entries {
+		if first || e.InsertedAt < lowest {
+			evictKey = k
+			lowest = e.InsertedAt
+			first = false
+		}
+	}
+	if !first {
+		delete(entries, evictKey)
 	}
 }
 
