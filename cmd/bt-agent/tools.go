@@ -1523,8 +1523,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
+			var bestTrees map[string]*evolution.SerializableNode
 			for g := 0; g < params.Generations; g++ {
-				im.EvolveAll(structuralFitnessFn)
+				bestTrees = im.EvolveAll(structuralFitnessFn)
 			}
 			stats := im.Stats()
 			// Report per-island bests only for the islands this run seeded:
@@ -1575,11 +1576,41 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if legacyAdoptErr != "" {
 				result["legacy_archive_error"] = legacyAdoptErr
 			}
+			// Pick the cross-island best individual: the seeded domain with
+			// the highest structural fitness this run, using the final
+			// generation's per-domain best tree (EvolveAll's return value,
+			// previously discarded). A degenerate run with no seeded domain
+			// scoring skips the gate rather than gating a nil tree.
+			var winnerTree *evolution.SerializableNode
+			bestDomain, bestFitness := "", -1.0
+			for _, name := range seeded {
+				if best, present := perIslandBest[name]; present && best > bestFitness {
+					bestFitness = best
+					bestDomain = name
+				}
+			}
+			if bestDomain != "" {
+				winnerTree = bestTrees[bestDomain]
+			}
+			// Gate the cross-island winner through the tree's real benchmark
+			// suite before trusting it enough to persist — structural fitness
+			// alone can rate a mutation as elite while it actually regresses
+			// (Q2 Evolvability). A rejected winner skips the save entirely so
+			// the durable archive never accumulates a worse tree.
+			gateRejected, baseRate, winnerRate := false, 0.0, 0.0
+			if winnerTree != nil {
+				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(params.Tree, baseTree, winnerTree)
+			}
+			result["benchmark_gate_rejected"] = gateRejected
+			result["benchmark_base_success_rate"] = baseRate
+			result["benchmark_winner_success_rate"] = winnerRate
 			// Persist the merged, evolved model so the next invocation
 			// resumes from this run's state. A save failure is surfaced
 			// non-fatally alongside the evolution result.
-			if err := im.Save(archivePath); err != nil {
-				result["archive_save_error"] = err.Error()
+			if !gateRejected {
+				if err := im.Save(archivePath); err != nil {
+					result["archive_save_error"] = err.Error()
+				}
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
