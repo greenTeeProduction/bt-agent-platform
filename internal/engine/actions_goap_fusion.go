@@ -379,6 +379,10 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 			if !researchGoalStamped {
 				setGoapState(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
+				// The raw goal text rides along so a red-pass closure can
+				// record it goap:implemented (research prompts dedup by
+				// title, not by budget key).
+				setGoapState(bb, "research_goal_charged_text", nlmGoal)
 				researchGoalStamped = true
 			}
 		}

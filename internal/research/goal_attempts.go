@@ -26,6 +26,11 @@ type GoalAttempt struct {
 	Attempts    int       `json:"attempts"`
 	LastFailure string    `json:"last_failure,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
+	// passed for this goal — evidence the work already exists at HEAD rather
+	// than an unlandable goal. RecordFailure resets it: a genuine failure
+	// proves the goal's tests can still fail.
+	RedPassStreak int `json:"red_pass_streak,omitempty"`
 }
 
 // GoalAttemptStore persists per-goal failure budgets.
@@ -71,6 +76,7 @@ func (s *GoalAttemptStore) RecordFailure(key, failureTail string) int {
 		s.Attempts[key] = a
 	}
 	a.Attempts++
+	a.RedPassStreak = 0
 	if len(failureTail) > goalFailureTailLimit {
 		failureTail = failureTail[len(failureTail)-goalFailureTailLimit:]
 	}
@@ -119,4 +125,26 @@ func (s *GoalAttemptStore) Save() error {
 		return err
 	}
 	return os.Rename(tmp, s.path)
+}
+
+// RecordRedPass increments the goal's consecutive red-pass counter and
+// returns the new streak. A red-pass (the plan's RED command passing before
+// GREEN) is evidence the goal's work already exists at HEAD.
+func (s *GoalAttemptStore) RecordRedPass(key string) int {
+	a, ok := s.Attempts[key]
+	if !ok {
+		a = &GoalAttempt{}
+		s.Attempts[key] = a
+	}
+	a.RedPassStreak++
+	a.UpdatedAt = time.Now().UTC()
+	return a.RedPassStreak
+}
+
+// RedPassStreak returns the recorded consecutive red-pass count for key.
+func (s *GoalAttemptStore) RedPassStreak(key string) int {
+	if a, ok := s.Attempts[key]; ok {
+		return a.RedPassStreak
+	}
+	return 0
 }

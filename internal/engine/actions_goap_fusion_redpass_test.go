@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -140,5 +141,124 @@ func TestGenuineFailureResetsRedPassStreak(t *testing.T) {
 	m := redPassMilestone(t)
 	if m.Status != "pending" || m.RedPassStreak != 1 {
 		t.Fatalf("post-reset red-pass must start a fresh streak (pending/1), got %q/%d", m.Status, m.RedPassStreak)
+	}
+}
+
+// isolateBtFusionKnowledge points the shared research knowledge store at a
+// temp file so goap:implemented records from tests never touch the live one.
+func isolateBtFusionKnowledge(t *testing.T) {
+	t.Helper()
+	prev := btFusionKnowledgePath
+	btFusionKnowledgePath = filepath.Join(t.TempDir(), "knowledge.json")
+	t.Cleanup(func() { btFusionKnowledgePath = prev })
+}
+
+func goalRedPassBlackboard(runID, goal string) *Blackboard {
+	return &Blackboard{
+		RunID: runID,
+		ChainState: map[string]any{
+			"goap_fusion_research_goal_charged":      goapResearchGoalKey(goal),
+			"goap_fusion_research_goal_charged_text": goal,
+		},
+	}
+}
+
+func knowledgeHasImplemented(t *testing.T, fragment string) bool {
+	t.Helper()
+	store, err := research.Open(btFusionKnowledgePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range store.Entries {
+		if strings.HasPrefix(e.Source, "goap:implemented") && strings.Contains(e.Title, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+// When no program milestone was charged, the head plan task came from the
+// charged research goal, so red-pass evidence is genuinely about it. The
+// second consecutive red-pass records the goal goap:implemented (research
+// stops re-proposing it) and clears its budget — the research-goal
+// counterpart of the milestone loop-breaker.
+func TestRepeatedRedPassClosesResearchGoalWhenNoMilestoneCharged(t *testing.T) {
+	isolateGoapProgramStore(t)
+	isolateBtFusionKnowledge(t)
+	seedGoalBudget(t)
+	goal := "Fix the frobnicator fallback (files: internal/engine/frob.go)"
+	key := goapResearchGoalKey(goal)
+
+	handleGoapRedPassCycleFailure(goalRedPassBlackboard("runA", goal))
+	if got := reloadGoalBudget(t).RedPassStreak(key); got != 1 {
+		t.Fatalf("goal streak after first red-pass = %d, want 1", got)
+	}
+	if knowledgeHasImplemented(t, "frobnicator") {
+		t.Fatal("first red-pass must not close the goal")
+	}
+
+	bb2 := goalRedPassBlackboard("runB", goal)
+	handleGoapRedPassCycleFailure(bb2)
+	if !knowledgeHasImplemented(t, "frobnicator") {
+		t.Fatal("second consecutive red-pass must record the goal goap:implemented")
+	}
+	if got := reloadGoalBudget(t).Count(key); got != 0 {
+		t.Fatalf("closed goal's budget must be cleared, count = %d", got)
+	}
+	if !strings.Contains(strings.ToLower(bb2.Result), "red-pass") {
+		t.Fatalf("closure must be surfaced in the cycle report, got: %s", bb2.Result)
+	}
+}
+
+// A red-pass on a cycle that charged a program milestone is attributed to the
+// milestone (the head plan task); the research goal queued behind it was not
+// attempted and must not accrue red-pass evidence.
+func TestMilestoneChargedRedPassDoesNotTouchResearchGoal(t *testing.T) {
+	isolateGoapProgramStore(t)
+	isolateBtFusionKnowledge(t)
+	seedGoalBudget(t)
+	p := seedRedPassProgram(t)
+	goal := "Fix the frobnicator fallback (files: internal/engine/frob.go)"
+
+	bb := redPassBlackboard("runA", p.ID+":0")
+	bb.ChainState["goap_fusion_research_goal_charged"] = goapResearchGoalKey(goal)
+	bb.ChainState["goap_fusion_research_goal_charged_text"] = goal
+	handleGoapRedPassCycleFailure(bb)
+
+	if got := reloadGoalBudget(t).RedPassStreak(goapResearchGoalKey(goal)); got != 0 {
+		t.Fatalf("milestone-charged cycle must not streak the research goal, got %d", got)
+	}
+	if m := redPassMilestone(t); m.RedPassStreak != 1 {
+		t.Fatalf("milestone streak = %d, want 1", m.RedPassStreak)
+	}
+}
+
+// A genuine implementation failure kills the already-landed hypothesis for
+// the goal too: RecordFailure resets the streak, and closure starts over.
+func TestGenuineFailureResetsResearchGoalRedPassStreak(t *testing.T) {
+	isolateGoapProgramStore(t)
+	isolateBtFusionKnowledge(t)
+	seedGoalBudget(t)
+	goal := "Fix the frobnicator fallback (files: internal/engine/frob.go)"
+	key := goapResearchGoalKey(goal)
+
+	handleGoapRedPassCycleFailure(goalRedPassBlackboard("runA", goal))
+
+	chargeBB := &Blackboard{RunID: "runB", Result: "commit gate: nilerr", ChainState: map[string]any{
+		"goap_fusion_research_goal_charged": key,
+	}}
+	if !chargeGoapResearchGoalFailure(chargeBB) {
+		t.Fatal("setup: genuine charge must land")
+	}
+	if got := reloadGoalBudget(t).RedPassStreak(key); got != 0 {
+		t.Fatalf("genuine failure must reset the goal streak, got %d", got)
+	}
+
+	handleGoapRedPassCycleFailure(goalRedPassBlackboard("runC", goal))
+	if got := reloadGoalBudget(t).RedPassStreak(key); got != 1 {
+		t.Fatalf("post-reset red-pass must start a fresh streak, got %d", got)
+	}
+	if knowledgeHasImplemented(t, "frobnicator") {
+		t.Fatal("goal must not be closed on a fresh streak of 1")
 	}
 }

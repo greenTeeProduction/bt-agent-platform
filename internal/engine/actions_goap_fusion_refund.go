@@ -184,6 +184,9 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 	refundGoapMilestoneAttemptForInfraFailure(bb)
 	programID, idx, ok := goapChargedMilestoneRef(bb)
 	if !ok {
+		// No milestone charged: the head plan task came from the charged
+		// research goal (if any), so the red-pass evidence belongs to it.
+		recordGoapResearchGoalRedPass(bb)
 		return
 	}
 	ps, err := research.OpenPrograms(goapProgramsPath)
@@ -224,4 +227,65 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	if err := ps.Save(); err != nil {
 		Info("goap fusion: red-pass streak reset not persisted", "error", err.Error())
 	}
+}
+
+// recordGoapResearchGoalRedPass tracks red-pass evidence for the charged
+// research goal. Only reached when no program milestone was charged this
+// cycle — milestones lead the queue, so with none charged the head plan task
+// came from the research goal and the red-pass evidence is genuinely about
+// it (a milestone cycle's red-pass must never close the untouched goal
+// queued behind it). At goapRedPassCompleteStreak the goal is recorded
+// goap:implemented — the same record a landed run writes, which research
+// prompts use to stop re-proposing done work — and its failure budget is
+// cleared, mirroring recordImplementedGoals.
+func recordGoapResearchGoalRedPass(bb *Blackboard) {
+	if bb == nil || bb.ChainState == nil {
+		return
+	}
+	key, _ := bb.ChainState["goap_fusion_research_goal_charged"].(string)
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	s, err := research.OpenGoalAttempts(goapGoalAttemptsPath)
+	if err != nil {
+		return
+	}
+	streak := s.RecordRedPass(key)
+	if streak < goapRedPassCompleteStreak {
+		if err := s.Save(); err != nil {
+			return
+		}
+		bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: RED command passed before GREEN (streak %d/%d) — the work may already be landed.", key, streak, goapRedPassCompleteStreak)
+		Info("goap fusion: research-goal red-pass recorded", "goal_key", key, "streak", streak)
+		return
+	}
+	// Closure needs the goal's readable text: the goap:implemented record is
+	// consumed by title in research prompts. A carryover plan without the
+	// text stamp keeps the streak and closes on a later stamped cycle.
+	goalText := strings.TrimSpace(func() string { t, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string); return t }())
+	closed := false
+	if goalText != "" {
+		if store, err := research.Open(btFusionKnowledgePath); err == nil {
+			title := goalText
+			if len(title) > 120 {
+				title = title[:120]
+			}
+			store.Record("goap:implemented", title, goalText)
+			if err := store.Save(); err == nil {
+				closed = true
+			}
+		}
+	}
+	if closed {
+		s.Clear(key)
+	}
+	if err := s.Save(); err != nil {
+		return
+	}
+	if closed {
+		bb.Result += fmt.Sprintf("\n\n## Research Goal Closed On Red-Pass Evidence\n\nResearch goal `%s`: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Recorded goap:implemented and cleared its budget instead of retrying.", truncateGoap(goalText, 120), streak)
+		Info("goap fusion: research goal closed on repeated red-pass evidence", "goal_key", key, "streak", streak)
+		return
+	}
+	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: red-pass streak %d but no goal text available this cycle — closure deferred to the next stamped cycle.", key, streak)
 }

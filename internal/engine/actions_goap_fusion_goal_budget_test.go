@@ -112,6 +112,10 @@ func TestPrioritizeGoapGoals_AbandonsExhaustedResearchGoal(t *testing.T) {
 	if charged != goapResearchGoalKey(goalB) {
 		t.Fatalf("charged stamp = %q, want the head SURVIVING goal's key %q", charged, goapResearchGoalKey(goalB))
 	}
+	chargedText, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string)
+	if chargedText != goalB {
+		t.Fatalf("charged text stamp = %q, want the goal text %q (red-pass closure records it goap:implemented)", chargedText, goalB)
+	}
 	abandoned, _ := bb.ChainState["goap_fusion_research_goals_abandoned"].(string)
 	if !strings.Contains(abandoned, "frobnicator") {
 		t.Fatalf("abandoned goals must be surfaced for the analysis note; got %q", abandoned)
