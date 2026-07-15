@@ -103,6 +103,20 @@ func (t *GardenerRollbackTool) Call(_ context.Context, input string) (string, er
 	return string(data), nil
 }
 
+type GardenerDeactivateAllTool struct {
+	registry *gardener.Registry
+}
+
+func (t *GardenerDeactivateAllTool) Name() string { return "gardener_deactivate_all" }
+func (t *GardenerDeactivateAllTool) Description() string {
+	return "Evolution kill switch: deactivate every tree in the registry. Returns how many trees were active before the call."
+}
+func (t *GardenerDeactivateAllTool) Call(_ context.Context, _ string) (string, error) {
+	deactivated := t.registry.DeactivateAll()
+	data, _ := json.Marshal(map[string]interface{}{"deactivated": deactivated})
+	return string(data), nil
+}
+
 type GardenerRecommendTool struct {
 	registry *gardener.Registry
 	refStore *evolution.Store
@@ -237,6 +251,7 @@ func main() {
 		newGardenerRunCycleTool(g, v2Cfg),
 		&GardenerRecommendTool{registry: registry, refStore: refStore},
 		&GardenerRollbackTool{registry: registry, snapshotDir: cfg.SnapshotDir},
+		&GardenerDeactivateAllTool{registry: registry},
 	}
 
 	prompt := prompts.NewPromptTemplate(
@@ -247,6 +262,7 @@ Available tools:
 - gardener_run_cycle: run one evolution cycle across ALL trees
 - gardener_recommend: analyze trees and recommend which need attention
 - gardener_rollback: restore a tree to its pre-mutation snapshot by name
+- gardener_deactivate_all: evolution kill switch — deactivate every tree in the registry
 
 WORKFLOW:
 1. Start with gardener_status to see current state

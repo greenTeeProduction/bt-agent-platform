@@ -3,6 +3,104 @@ package knowledge
 import "testing"
 
 // =============================================================================
+// Domain-specific fitness injection (RegisterDomainFitness)
+//
+// RecordRun's generic runtime-success EMA is a coarse success/failure signal.
+// Some domains (e.g. NotebookLM) have a richer, domain-aware fitness function
+// that scores anti-fabrication and output quality from recent run history, but
+// today nothing feeds a tree's recorded runs to it — the knowledge graph has no
+// hook a domain package can register itself against. RegisterDomainFitness adds
+// that hook: once a fitness function is registered for a tree ID, RecordRun must
+// track a bounded window of that tree's recent runs and use the registered
+// function's output — instead of the generic EMA — to update Fitness. Trees
+// without a registered function keep the existing EMA behavior unchanged.
+// =============================================================================
+
+// A tree with a registered domain fitness function must have its Fitness driven
+// by that function's output (scaled to the 0-100 Fitness range) from the
+// window of recent runs, not by the generic outcome EMA.
+func TestRecordRun_DomainFitness_OverridesGenericEMA(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:domainfit",
+		Name:     "Domain Fit",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	// A trivial domain fitness function: fraction of runs with Outcome=="success".
+	kg.RegisterDomainFitness("tree:domainfit", func(runs []RunSummary) float64 {
+		if len(runs) == 0 {
+			return 0
+		}
+		successes := 0.0
+		for _, r := range runs {
+			if r.Outcome == "success" {
+				successes++
+			}
+		}
+		return successes / float64(len(runs))
+	})
+
+	kg.RecordRun(RunRecord{TreeID: "tree:domainfit", Outcome: "success", Quality: 1.0})
+	kg.RecordRun(RunRecord{TreeID: "tree:domainfit", Outcome: "failure", Quality: 0.0})
+
+	tree := kg.Trees["tree:domainfit"]
+	if tree == nil {
+		t.Fatal("tree should exist")
+	}
+	// 1 success out of 2 runs -> domain fn returns 0.5 -> Fitness == 50.0.
+	// The generic EMA (0.9*50 + 0.1*(0.3*100) = 48.0 after the failure alone)
+	// would land somewhere else entirely, so this pins that the domain fn — not
+	// the EMA — drives Fitness once one is registered.
+	if tree.Fitness != 50.0 {
+		t.Errorf("expected Fitness=50.0 (domain fn output), got %.2f — RecordRun did not use the registered domain fitness function", tree.Fitness)
+	}
+}
+
+// RecordRun must maintain a bounded window of a tree's recent runs so a
+// registered domain fitness function has real history to score, without
+// growing unbounded over a tree's lifetime.
+func TestRecordRun_TracksBoundedRecentRunsWindow(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:history", Name: "History", Category: "test"})
+
+	const totalRuns = maxRunHistory + 5
+	for i := 0; i < totalRuns; i++ {
+		kg.RecordRun(RunRecord{TreeID: "tree:history", Outcome: "success", Quality: 1.0})
+	}
+
+	tree := kg.Trees["tree:history"]
+	if tree == nil {
+		t.Fatal("tree should exist")
+	}
+	if len(tree.RecentRuns) != maxRunHistory {
+		t.Errorf("expected RecentRuns bounded to %d, got %d", maxRunHistory, len(tree.RecentRuns))
+	}
+}
+
+// A tree with NO registered domain fitness function must keep using the
+// existing generic EMA — RegisterDomainFitness must not change behavior for
+// trees nobody opted in for.
+func TestRecordRun_NoDomainFitness_KeepsGenericEMA(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID:       "tree:plainema",
+		Name:     "Plain EMA",
+		Category: "test",
+		Fitness:  50.0,
+	})
+
+	kg.RecordRun(RunRecord{TreeID: "tree:plainema", Outcome: "success"})
+
+	tree := kg.Trees["tree:plainema"]
+	// Same EMA as TestRecordRun_ExistingTree: 0.9*50 + 0.1*100 = 55.0.
+	if tree.Fitness != 55.0 {
+		t.Errorf("expected Fitness=55.0 (unregistered tree keeps generic EMA), got %.2f", tree.Fitness)
+	}
+}
+
+// =============================================================================
 // Structural fitness split (evolved structural fitness must not overwrite the
 // runtime-success EMA)
 //

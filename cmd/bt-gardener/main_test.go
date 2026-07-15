@@ -156,6 +156,52 @@ func TestGardenerRollbackTool_CallRestoresSnapshot(t *testing.T) {
 	}
 }
 
+// TestGardenerDeactivateAllTool_CallDeactivatesAllTrees pins the gap:
+// Registry.DeactivateAll (internal/gardener/gardener.go) is a fully tested
+// evolution kill switch with no way to trigger it short of restarting the
+// daemon. Mirroring the GardenerRollbackTool pattern (main.go), a
+// GardenerDeactivateAllTool must expose it to the langchain agent under the
+// name "gardener_deactivate_all", reporting how many trees were active
+// before the call, and leaving every registry entry inactive afterward.
+func TestGardenerDeactivateAllTool_CallDeactivatesAllTrees(t *testing.T) {
+	treeDir := t.TempDir()
+	registry := gardener.NewRegistry(treeDir)
+
+	activeBefore := 0
+	for _, e := range registry.List() {
+		if e.Active {
+			activeBefore++
+		}
+	}
+	if activeBefore == 0 {
+		t.Fatal("precondition: registry must have at least one active tree")
+	}
+
+	tool := &GardenerDeactivateAllTool{registry: registry}
+	if got, want := tool.Name(), "gardener_deactivate_all"; got != want {
+		t.Errorf("Name() = %q, want %q", got, want)
+	}
+
+	out, err := tool.Call(context.Background(), "")
+	if err != nil {
+		t.Fatalf("tool.Call: %v", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("tool.Call output is not valid JSON: %v (%s)", err, out)
+	}
+	if got, ok := resp["deactivated"].(float64); !ok || int(got) != activeBefore {
+		t.Errorf("response deactivated = %v, want %d", resp["deactivated"], activeBefore)
+	}
+
+	for _, e := range registry.List() {
+		if e.Active {
+			t.Errorf("tree %q still active after gardener_deactivate_all", e.Name)
+		}
+	}
+}
+
 // TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering pins the second
 // half of the same gap: even once the daemon's timer-driven cycle uses a
 // SelectorOrdering-enabled EvolveV2Config, the langchain gardener_run_cycle

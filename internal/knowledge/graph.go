@@ -63,9 +63,26 @@ type TreeMeta struct {
 	LastOutcome  string        `json:"last_outcome"`
 	LastDuration time.Duration `json:"last_duration"`
 
+	// RecentRuns is a bounded window (maxRunHistory) of this tree's most recent
+	// genuine executions, maintained by RecordRun so a registered domain fitness
+	// function (see RegisterDomainFitness) has real history to score.
+	RecentRuns []RunSummary `json:"recent_runs,omitempty"`
+
 	// Embedding vector for semantic discovery
 	Embedding Embedding `json:"embedding,omitempty"`
 }
+
+// RunSummary carries the per-run data a registered domain fitness function
+// needs to score a tree's recent run history (see RegisterDomainFitness).
+type RunSummary struct {
+	Outcome string
+	Quality float64
+}
+
+// maxRunHistory bounds TreeMeta.RecentRuns: old runs age out once a tree's
+// history exceeds this many entries, so the window stays representative of
+// recent behavior without growing unbounded over a tree's lifetime.
+const maxRunHistory = 20
 
 // Capability describes what a tree can do.
 type Capability struct {
@@ -98,6 +115,25 @@ type KnowledgeGraph struct {
 	// feedbackPersist holds debounced-persistence state, guarded by mu. It is
 	// unexported so it never lands in the serialized graph.
 	feedbackPersist feedbackPersistState
+
+	// domainFitness holds per-tree domain-aware fitness functions registered
+	// via RegisterDomainFitness, guarded by mu. Unexported so it never lands in
+	// the serialized graph — callers re-register on every process start.
+	domainFitness map[string]func(runs []RunSummary) float64
+}
+
+// RegisterDomainFitness registers a domain-aware fitness function for treeID.
+// Once registered, RecordRun drives that tree's Fitness from fn's output
+// (scaled to the 0-100 Fitness range) over the tree's bounded RecentRuns
+// window, instead of the generic runtime-success EMA. Trees with no
+// registered function keep the existing EMA behavior unchanged.
+func (kg *KnowledgeGraph) RegisterDomainFitness(treeID string, fn func(runs []RunSummary) float64) {
+	kg.mu.Lock()
+	defer kg.mu.Unlock()
+	if kg.domainFitness == nil {
+		kg.domainFitness = make(map[string]func(runs []RunSummary) float64)
+	}
+	kg.domainFitness[treeID] = fn
 }
 
 // defaultExpectedDomains is the fallback expected-domain set used when the

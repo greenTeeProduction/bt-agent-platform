@@ -372,6 +372,10 @@ func main() {
 		expectedDomains = append(expectedDomains, "domain:"+name)
 	}
 	kg.ExpectedDomains = expectedDomains
+	// Wire the NotebookLM domain fitness function into the graph's per-tree
+	// fitness update so genuine notebooklm/notebooklm_consumer runs are scored
+	// by its anti-fabrication-aware function instead of the generic EMA.
+	domains.RegisterNotebookLMFitness(kg)
 	reliability.SafeGo("kg-build-index", func() {
 		if err := kg.BuildIndex(); err != nil {
 			fmt.Fprintf(os.Stderr, "KG: embedding build skipped: %v\n", err)

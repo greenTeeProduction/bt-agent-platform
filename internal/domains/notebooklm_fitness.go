@@ -1,5 +1,7 @@
 package domains
 
+import "github.com/nico/go-bt-evolve/internal/knowledge"
+
 // NotebookLMRunSummary carries the per-run data needed for fitness computation.
 type NotebookLMRunSummary struct {
 	Outcome string
@@ -51,4 +53,21 @@ func NotebookLMFitness(runs []NotebookLMRunSummary) float64 {
 	}
 
 	return successScore + qualityScore + antiFabScore
+}
+
+// RegisterNotebookLMFitness wires NotebookLMFitness into kg's per-tree fitness
+// update (see knowledge.KnowledgeGraph.RegisterDomainFitness) for the
+// "notebooklm" and "notebooklm_consumer" trees, so their recorded run history
+// drives Fitness through this domain-aware, anti-fabrication-penalizing score
+// instead of the generic runtime-success EMA.
+func RegisterNotebookLMFitness(kg *knowledge.KnowledgeGraph) {
+	fn := func(runs []knowledge.RunSummary) float64 {
+		converted := make([]NotebookLMRunSummary, len(runs))
+		for i, r := range runs {
+			converted[i] = NotebookLMRunSummary{Outcome: r.Outcome, Quality: r.Quality}
+		}
+		return NotebookLMFitness(converted)
+	}
+	kg.RegisterDomainFitness("notebooklm", fn)
+	kg.RegisterDomainFitness("notebooklm_consumer", fn)
 }

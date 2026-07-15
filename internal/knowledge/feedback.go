@@ -41,9 +41,19 @@ func (kg *KnowledgeGraph) RecordRun(rec RunRecord) {
 	} else {
 		// A genuine agent execution.
 		tree.RunCount++
-		// Exponential moving average of success (0-100)
-		successScore := outcomeScore(rec.Outcome)
-		tree.Fitness = 0.9*tree.Fitness + 0.1*(successScore*100)
+		tree.RecentRuns = append(tree.RecentRuns, RunSummary{Outcome: rec.Outcome, Quality: rec.Quality})
+		if len(tree.RecentRuns) > maxRunHistory {
+			tree.RecentRuns = tree.RecentRuns[len(tree.RecentRuns)-maxRunHistory:]
+		}
+		if fn, ok := kg.domainFitness[rec.TreeID]; ok {
+			// A registered domain fitness function scores the tree's recent run
+			// history directly — it replaces the generic EMA rather than feeding it.
+			tree.Fitness = fn(tree.RecentRuns) * 100
+		} else {
+			// Exponential moving average of success (0-100)
+			successScore := outcomeScore(rec.Outcome)
+			tree.Fitness = 0.9*tree.Fitness + 0.1*(successScore*100)
+		}
 	}
 
 	// Record tool usage as edges (Connect handles dedup)
