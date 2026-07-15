@@ -241,6 +241,22 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	return res, nil
 }
 
+// AdoptDriftOnIdle runs one synchronous drift check-rebuild-restart pass. It
+// is the scheduler's OnCycleIdle hook body: called from the scheduler loop
+// goroutine at the moment a cycle completes with nothing in flight, it BLOCKS
+// the queue for the duration of the rebuild — which is the point. The async
+// Kick variant lost a milliseconds race on saturated fleets: the tick loop
+// started the next queued job before the watcher goroutine ran its InFlightFn
+// check (observed live 2026-07-15 13:54/14:01). Synchronous adoption cannot
+// be raced; queued jobs wait ~2-3 min for the rebuild, and a restart's
+// crash-recovery + missed-slot catch-up preserves them. Errors are logged,
+// never propagated — this runs inside the scheduler loop.
+func AdoptDriftOnIdle(cfg DriftWatchConfig) {
+	if _, err := DriftWatchOnce(cfg); err != nil {
+		slog.Warn("deploy drift: idle adoption check failed", "binary", cfg.Binary, "err", err)
+	}
+}
+
 // DefaultDriftCheckInterval is the cadence for the background drift watcher.
 const DefaultDriftCheckInterval = 20 * time.Minute
 

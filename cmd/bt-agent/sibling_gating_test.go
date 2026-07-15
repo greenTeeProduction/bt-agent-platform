@@ -104,21 +104,22 @@ func TestMainGatesSchedulerOnDaemonMode(t *testing.T) {
 	requireGated(`engine.Info("auto-scheduled agent"`)
 }
 
-// TestMainWiresIdleKickToDriftWatcher pins the deploy-drift starvation fix
-// wiring: the scheduler's OnCycleIdle hook must feed the drift watcher's Kick
-// channel, so adoption fires in the idle window right after a cycle instead of
-// waiting for a fixed tick that back-to-back cycles starve forever (observed
-// 2026-07-15: drift detected all day, zero rebuilds).
-func TestMainWiresIdleKickToDriftWatcher(t *testing.T) {
+// TestMainWiresSynchronousIdleAdoption pins the deploy-drift starvation fix
+// wiring: the scheduler's OnCycleIdle hook must call agent.AdoptDriftOnIdle
+// SYNCHRONOUSLY (in the scheduler loop, queue blocked) — the async Kick
+// variant lost a milliseconds race with the tick loop starting the next
+// queued job (observed live 2026-07-15 13:54/14:01: skip 4ms after the kick;
+// zero adoptions all day despite the armed flags).
+func TestMainWiresSynchronousIdleAdoption(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatalf("read main.go: %v", err)
 	}
 	s := string(src)
 	if !strings.Contains(s, "OnCycleIdle") {
-		t.Error("main.go must set SchedulerConfig.OnCycleIdle (idle-window drift kick)")
+		t.Error("main.go must set SchedulerConfig.OnCycleIdle (idle-window drift adoption)")
 	}
-	if !strings.Contains(s, "Kick:") {
-		t.Error("main.go must pass the kick channel into DriftWatchConfig.Kick")
+	if !strings.Contains(s, "AdoptDriftOnIdle") {
+		t.Error("main.go must wire OnCycleIdle to agent.AdoptDriftOnIdle (synchronous, un-raceable adoption)")
 	}
 }

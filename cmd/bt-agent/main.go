@@ -432,17 +432,34 @@ func main() {
 
 	// Persistent agent scheduler (with FileJobStore for durability across
 	// restarts; read-only for MCP/CLI siblings — see buildSchedulerConfig).
-	// driftKick lets a completed cycle poke the drift watcher during the idle
-	// window instead of hoping a fixed 20-min tick lands between cycles.
-	driftKick := make(chan struct{}, 1)
+	//
+	// Idle-window drift adoption (daemon only): the moment a cycle completes
+	// with nothing in flight, adopt a drifted binary SYNCHRONOUSLY in the
+	// scheduler loop — the queue is blocked for the rebuild's duration, so the
+	// tick loop cannot race a new job into flight (the async kick variant lost
+	// exactly that race on saturated fleets, 2026-07-15). globalSched is
+	// assigned below before Start(), and the hook only ever fires from the
+	// scheduler's own loop, so the closure reads are ordered.
+	var globalSched *agent.Scheduler
 	scfg := buildSchedulerConfig(cfg, agentReg, agentHist, buildID.Revision, noMCPMode())
-	scfg.OnCycleIdle = func() {
-		select {
-		case driftKick <- struct{}{}:
-		default:
+	if noMCPMode() {
+		if repoDir, wdErr := os.Getwd(); wdErr == nil {
+			idleDriftCfg := agent.DriftWatchConfig{
+				RepoDir:         repoDir,
+				RunningRevision: buildID.Revision,
+				AutoRebuild:     agent.AutoRebuildEnabled(),
+				AutoRestart:     agent.AutoRestartEnabled(),
+				Targets:         agent.DefaultRebuildTargets(repoDir),
+				Binary:          "bt-agent",
+				Backoff:         agent.NewRebuildBackoff(),
+				// Post-rebuild restart re-check; nil-safe: no scheduler yet
+				// means "assume busy" and defer the restart.
+				InFlightFn: func() bool { return globalSched == nil || globalSched.AnyInFlight() },
+			}
+			scfg.OnCycleIdle = func() { agent.AdoptDriftOnIdle(idleDriftCfg) }
 		}
 	}
-	globalSched := agent.NewScheduler(scfg)
+	globalSched = agent.NewScheduler(scfg)
 
 	agentRunner := &agent.RunDeps{
 		Registry:           agentReg,
@@ -579,10 +596,6 @@ func main() {
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),
 				InFlightFn:      globalSched.AnyInFlight,
-				// Idle-window kick from the scheduler: check right after a
-				// cycle completes instead of starving on fixed ticks that
-				// always land inside back-to-back cycles (2026-07-15).
-				Kick: driftKick,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}
