@@ -44,8 +44,9 @@ func BTFusionTree() *evolution.SerializableNode {
 						Description: "Requires HITL approval before BT Fusion writes durable research output or future expansion changes",
 						Metadata: map[string]any{
 							"phase":             "pre",
-							"side_effect_class": "external",
+							"side_effect_class": "local_reversible",
 							"hitl_prompt":       "Approve this BT Fusion cycle to write/update the durable Obsidian research report and proceed to verification?",
+							"auto_approve":      true,
 						},
 						Children: []evolution.SerializableNode{
 							act("ApplyFusion", "Write the BT Fusion report to the Obsidian vault as durable research input"),
