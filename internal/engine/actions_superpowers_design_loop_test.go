@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -349,5 +350,76 @@ func TestParseSplitOutput(t *testing.T) {
 	}
 	if _, _, _, err := parseSplitOutput("=== FOLLOWUP ===\nx\n=== CLEAR DESIGN ===\ny\n=== PROGRAM ===\nz"); err == nil {
 		t.Fatal("want error for out-of-order markers")
+	}
+}
+
+// promptDispatchClaudeRunner dispatches on prompt content so a single fake can
+// drive both the grill (question-generation) and revise (rewrite) Claude calls
+// that ReviewCycle fires in alternation. (Named distinctly from the
+// scriptedClaudeRunner in superpowers_task_executor_test.go, which records
+// prompts/events rather than branching on them.)
+type promptDispatchClaudeRunner struct {
+	fn func(prompt string) CommandResult
+}
+
+func (s *promptDispatchClaudeRunner) RunClaude(_ context.Context, _ string, p string) CommandResult {
+	return s.fn(p)
+}
+
+// TestGrillLoop_EndToEnd_ConvergesInTwoRounds drives the REAL BuildReviewCycle
+// node (not the individual actions in isolation) through two grill rounds:
+// round 1 leaves a critical question OPEN (needs_work), ReviseDesignArtifact
+// then rewrites the body from that feedback, and round 2's grill answers
+// everything (approved). This is regression coverage for the loop wiring
+// itself — ChainState propagation between reviewer and child, MemSequence
+// cursor reset across ReviewCycle iterations, and round/revision bookkeeping
+// on the run — none of which the per-action unit tests above exercise.
+func TestGrillLoop_EndToEnd_ConvergesInTwoRounds(t *testing.T) {
+	bb, run := newGrillLoopTestRun(t)
+	round := 0
+	fake := &promptDispatchClaudeRunner{fn: func(prompt string) CommandResult {
+		if strings.Contains(prompt, "Interview this design relentlessly") {
+			round++
+			return CommandResult{Output: "Q [critical] persistence: what fsyncs?"}
+		}
+		// revision call
+		return CommandResult{Output: "# Superpowers Design\n\n## Goal\nX\n\n## Architecture\nA2 fsync-safe\n\n## Acceptance Criteria\nC\n\n## Test Strategy\nT\n\n## Risks\nR\n"}
+	}}
+	orig := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = orig })
+	origAns := grillNotebookLMAnswerer
+	grillNotebookLMAnswerer = func(_ context.Context, batch []grillQuestion) (map[int]string, error) {
+		if round == 1 {
+			return nil, errAnswererUnavailable // round 1: open critical
+		}
+		out := map[int]string{}
+		for i := range batch {
+			out[i] = "fsync via tmp+rename"
+		}
+		return out, nil
+	}
+	t.Cleanup(func() { grillNotebookLMAnswerer = origAns })
+
+	node := evolution.SerializableNode{Type: "ReviewCycle", Name: "GrillLoop",
+		Metadata: map[string]any{"reviewer_action": "GrillDesignArtifact", "max_iterations": 10},
+		Children: []evolution.SerializableNode{{Type: "MemSequence", Name: "GrillRound",
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "ReviseDesignArtifact"},
+				{Type: "Action", Name: "ValidateRevisedDesign"},
+			}}}}
+	cmd := BuildReviewCycle(&node, bb)
+	if got := cmd.Run(newTestBTContext(bb)); got != 1 {
+		t.Fatalf("loop = %d, want 1 (converged)", got)
+	}
+	run2, _ := getSuperpowersRun(bb)
+	if run2.GrillRound != 2 || run2.DesignRevision != 1 {
+		t.Fatalf("rounds/revisions = %d/%d, want 2/1", run2.GrillRound, run2.DesignRevision)
+	}
+	data, _ := os.ReadFile(run.DesignPath)
+	if !strings.Contains(string(data), "A2 fsync-safe") ||
+		!strings.Contains(string(data), "## Grill Q&A — round 1") ||
+		!strings.Contains(string(data), "## Grill Q&A — round 2") {
+		t.Fatalf("final design wrong: %s", data)
 	}
 }
