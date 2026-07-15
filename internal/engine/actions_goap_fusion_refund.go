@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -95,24 +96,15 @@ func refundGoapMilestoneAttemptForInfraFailure(bb *Blackboard) bool {
 	if done, _ := bb.ChainState["goap_fusion_program_milestone_refunded"].(string); done == "true" {
 		return false
 	}
-	ref, _ := bb.ChainState["goap_fusion_program_milestone_charged"].(string)
-	if strings.TrimSpace(ref) == "" {
-		blob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
-		ref = strings.SplitN(blob, ",", 2)[0]
-	}
-	parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	idx, err := strconv.Atoi(parts[1])
-	if err != nil {
+	programID, idx, ok := goapChargedMilestoneRef(bb)
+	if !ok {
 		return false
 	}
 	ps, err := research.OpenPrograms(goapProgramsPath)
 	if err != nil {
 		return false
 	}
-	if !ps.RefundAttempt(parts[0], idx, goapProgramMaxMilestoneAttempts) {
+	if !ps.RefundAttempt(programID, idx, goapProgramMaxMilestoneAttempts) {
 		return false
 	}
 	if err := ps.Save(); err != nil {
@@ -120,6 +112,116 @@ func refundGoapMilestoneAttemptForInfraFailure(bb *Blackboard) bool {
 	}
 	setGoapState(bb, "program_milestone_refunded", "true")
 	Info("goap fusion: refunded milestone attempt after infrastructure failure",
-		"milestone", parts[0]+":"+parts[1])
+		"milestone", fmt.Sprintf("%s:%d", programID, idx))
 	return true
+}
+
+// goapChargedMilestoneRef resolves the program:idx ref of the milestone this
+// cycle charged — the explicit charged stamp, falling back to the head queued
+// ref for pre-stamp blackboard state.
+func goapChargedMilestoneRef(bb *Blackboard) (programID string, idx int, ok bool) {
+	if bb == nil || bb.ChainState == nil {
+		return "", 0, false
+	}
+	ref, _ := bb.ChainState["goap_fusion_program_milestone_charged"].(string)
+	if strings.TrimSpace(ref) == "" {
+		blob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
+		ref = strings.SplitN(blob, ",", 2)[0]
+	}
+	parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
+	if len(parts) != 2 {
+		return "", 0, false
+	}
+	i, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", 0, false
+	}
+	return parts[0], i, true
+}
+
+// Failure classes for a failed ClaudeSuperpowersPath cycle.
+const (
+	goapCycleFailureRedPass = "red_pass"
+	goapCycleFailureInfra   = "infra"
+	goapCycleFailureGenuine = "genuine"
+)
+
+// isGoapRedUnexpectedlyPassed reports whether the cycle stopped because a
+// task's RED command passed before GREEN ran (the exact refusal
+// superpowersTaskVerifyRed emits). It means the plan's predicted regression
+// does not exist at HEAD: either the milestone's work already landed
+// out-of-band (hand-landed rescue, sibling lane) or the plan wrote a weak
+// test — never an unbuildable milestone.
+func isGoapRedUnexpectedlyPassed(result string) bool {
+	return strings.Contains(result, "RED command unexpectedly passed")
+}
+
+// classifyGoapCycleFailure routes a failed cycle to red-pass, infra, or
+// genuine handling.
+func classifyGoapCycleFailure(outcome, result string) string {
+	if isGoapRedUnexpectedlyPassed(result) {
+		return goapCycleFailureRedPass
+	}
+	if isGoapInfraCycleFailure(outcome, result) {
+		return goapCycleFailureInfra
+	}
+	return goapCycleFailureGenuine
+}
+
+// goapRedPassCompleteStreak is how many consecutive red-passes complete a
+// milestone: two independently written failing-test plans both passing at
+// HEAD is strong evidence the work already landed, while a single red-pass
+// may just be one weak test.
+const goapRedPassCompleteStreak = 2
+
+// handleGoapRedPassCycleFailure handles a cycle that stopped on a red-pass:
+// the charge is refunded (never the abandon budget) and evidence recorded; at
+// goapRedPassCompleteStreak the milestone is completed instead of retried
+// forever. 2026-07-15 23:04: a cycle re-attempted already-hand-landed
+// milestones, burned 16 minutes, and reported a "degraded" alarm — without
+// the streak loop-breaker the refund alone would retry that no-op every cycle.
+func handleGoapRedPassCycleFailure(bb *Blackboard) {
+	refundGoapMilestoneAttemptForInfraFailure(bb)
+	programID, idx, ok := goapChargedMilestoneRef(bb)
+	if !ok {
+		return
+	}
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		return
+	}
+	streak := ps.RecordRedPass(programID, idx)
+	completed := false
+	if streak >= goapRedPassCompleteStreak {
+		completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
+	}
+	if err := ps.Save(); err != nil {
+		return
+	}
+	ref := fmt.Sprintf("%s:%d", programID, idx)
+	if completed {
+		bb.Result += fmt.Sprintf("\n\n## Milestone Completed On Red-Pass Evidence\n\nMilestone %s: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Marked done (`red-evidence:%s`) instead of retrying.", ref, streak, bb.RunID)
+		Info("goap fusion: milestone completed on repeated red-pass evidence", "milestone", ref, "streak", streak)
+		return
+	}
+	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nMilestone %s: RED command passed before GREEN (streak %d/%d) — attempt refunded; the work may already be landed.", ref, streak, goapRedPassCompleteStreak)
+	Info("goap fusion: red-pass recorded, milestone attempt refunded", "milestone", ref, "streak", streak)
+}
+
+// resetGoapMilestoneRedPassStreak clears the charged milestone's red-pass
+// streak — a genuine implementation failure proves the milestone's tests can
+// still fail, killing the already-landed hypothesis.
+func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
+	programID, idx, ok := goapChargedMilestoneRef(bb)
+	if !ok {
+		return
+	}
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		return
+	}
+	ps.ResetRedPassStreak(programID, idx)
+	if err := ps.Save(); err != nil {
+		Info("goap fusion: red-pass streak reset not persisted", "error", err.Error())
+	}
 }

@@ -890,13 +890,23 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			// sync refusal, worktree failure) refund the milestone attempt
 			// charged at queue time — external outages must never consume the
 			// milestone-abandon budget (2026-07-09 doc-drift wedge lesson).
-			if isGoapInfraCycleFailure(bb.Outcome, bb.Result) {
+			switch classifyGoapCycleFailure(bb.Outcome, bb.Result) {
+			case goapCycleFailureRedPass:
+				// RED passed before GREEN: the predicted regression does not
+				// exist at HEAD — most likely the milestone's work already
+				// landed out-of-band. Refund the charge, record red-pass
+				// evidence, and complete the milestone on repeat evidence so
+				// it never treadmills against done work (2026-07-15 23:04).
+				handleGoapRedPassCycleFailure(bb)
+			case goapCycleFailureInfra:
 				refundGoapMilestoneAttemptForInfraFailure(bb)
-			} else {
+			default:
 				// A GENUINE implementation failure consumes one attempt of
 				// the head research goal's budget, so a goal the agent cannot
-				// land is abandoned instead of treadmilling.
+				// land is abandoned instead of treadmilling — and it kills
+				// any already-landed hypothesis the milestone had accrued.
 				chargeGoapResearchGoalFailure(bb)
+				resetGoapMilestoneRedPassStreak(bb)
 			}
 			// Clear the durable plan on every non-rate-limit failure so the
 			// next scheduled cycle re-plans from scratch instead of re-resuming

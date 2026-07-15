@@ -312,3 +312,15 @@ MORE tasks than the fallback only when the goals genuinely warrant it, else
 return the fallback plan unchanged.`,
 		strings.Join(goals, "\n- "), truncateFusion(deterministicPlan, 2000), maxGoalDrivenTasks)
 }
+
+// changedPackagesLintFixCommand is the machine-remediation twin of
+// changedPackagesLintCommand: same packages, with --fix applied so linters
+// that ship applicable fixes (staticcheck's QF class, gofmt-style issues)
+// repair the worktree in place.
+func changedPackagesLintFixCommand(changedFiles []string) string {
+	cmd := changedPackagesLintCommand(changedFiles)
+	if cmd == "" {
+		return ""
+	}
+	return strings.Replace(cmd, " run ", " run --fix ", 1)
+}

@@ -256,7 +256,15 @@ func registerGoapFusionProductionAdditions() {
 			// no-code run ("no_change") from a Claude-path failure that fell back
 			// to deterministic analysis ("degraded") so the recorded outcome and
 			// quality stop overstating a full success. (Honest-signal, 2026-07-13.)
-			if strings.Contains(lower, "implementation degraded (fallback)") ||
+			// A red-pass stop wears the degraded wrapper but means the predicted
+			// regression does not exist at HEAD — the work already landed
+			// out-of-band. That is a healthy no-op, not a degradation
+			// (2026-07-15 23:04: the re-attempt of hand-landed milestones
+			// alarmed as "degraded").
+			if strings.Contains(lower, "red command unexpectedly passed") {
+				bb.OutcomeRefinement = "no_change"
+				bb.QualityScore = 0.5
+			} else if strings.Contains(lower, "implementation degraded (fallback)") ||
 				strings.Contains(lower, "degraded to deterministic") {
 				bb.OutcomeRefinement = "degraded"
 				bb.QualityScore = 0.3

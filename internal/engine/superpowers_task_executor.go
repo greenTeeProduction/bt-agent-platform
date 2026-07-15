@@ -301,14 +301,39 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 	run.Phase = SuperpowersPhaseVerification
 	for _, check := range buildSuperpowersVerificationChecks(run) {
 		res := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)
-		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
-		run.Verification = append(run.Verification, vc)
-		_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)), 0o644)
-		if res.Err != nil {
-			return fmt.Errorf("verification %s failed: %v\n%s", check.name, res.Err, res.Output)
+		recordSuperpowersVerification(run, check.name, check.cmd, res)
+		if res.Err == nil {
+			continue
 		}
+		// A changed-packages-lint failure gets ONE machine remediation before
+		// failing the run: staticcheck's QF class ships applicable fixes, and
+		// a single auto-fixable finding once stranded a full implementation
+		// cycle (QF1008, 2026-07-15 22:29 — all three self-healing-envelope
+		// milestones lost to one redundant selector). The autofixed files are
+		// committed by the apply stage's blanket git add.
+		if check.name == "changed-packages-lint" {
+			if fixCmd := changedPackagesLintFixCommand(run.ChangedFiles); fixCmd != "" {
+				fixRes := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), fixCmd)
+				recordSuperpowersVerification(run, "changed-packages-lint-autofix", fixCmd, fixRes)
+				retry := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)
+				recordSuperpowersVerification(run, "changed-packages-lint-retry", check.cmd, retry)
+				if retry.Err == nil {
+					continue
+				}
+				res = retry
+			}
+		}
+		return fmt.Errorf("verification %s failed: %v\n%s", check.name, res.Err, res.Output)
 	}
 	return writeSuperpowersRunJSON(run)
+}
+
+// recordSuperpowersVerification appends one check result to the run record
+// and its evidence artifact.
+func recordSuperpowersVerification(run *SuperpowersRun, name, cmd string, res CommandResult) {
+	vc := VerificationCheck{Name: name, Command: cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
+	run.Verification = append(run.Verification, vc)
+	_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", name+".txt"), []byte(formatCommandResult(res)), 0o644)
 }
 
 func (run *SuperpowersRun) WorktreePathOrRepo() string {

@@ -87,3 +87,30 @@ func TestVerifyGoapFusionEvidenceClassifiesDegraded(t *testing.T) {
 		t.Fatalf("degraded quality = %v (authoritative=%v), want 0.3 authoritative", bb.QualityScore, bb.QualityAuthoritative)
 	}
 }
+
+// TestVerifyGoapFusionEvidenceClassifiesRedPassAsNoChange: a cycle whose
+// Claude path stopped because the RED command unexpectedly passed carries the
+// degraded-fallback wrapper, but the underlying reason means the predicted
+// regression does not exist at HEAD — the work most likely already landed
+// out-of-band (hand-landed rescue, sibling lane). That is a healthy no-op
+// stop, not a degradation: classify no_change/0.5 (2026-07-15 23:04 case —
+// the re-attempt of the already-landed self-healing-envelope milestones was
+// reported as a degraded alarm).
+func TestVerifyGoapFusionEvidenceClassifiesRedPassAsNoChange(t *testing.T) {
+	fn := GetAction("VerifyGoapFusionEvidence")
+	report := writeGoapFusionCycleReport(t,
+		"delegated to apply-stage worktree verification (bare main repo)",
+		"graphify update .: PASSED")
+	report += "\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n## GOAP Superpowers Execution Failed\n\nRED command unexpectedly passed; refusing to run GREEN without failing regression evidence: go test ./internal/evolution\n```\n"
+	bb := &Blackboard{Result: report}
+	code := fn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("red-pass gate = %d, want 1; result: %s", code, bb.Result)
+	}
+	if bb.OutcomeRefinement != "no_change" {
+		t.Fatalf("red-pass refinement = %q, want no_change (healthy already-landed stop)", bb.OutcomeRefinement)
+	}
+	if !bb.QualityAuthoritative || bb.QualityScore != 0.5 {
+		t.Fatalf("red-pass quality = %v (authoritative=%v), want 0.5 authoritative", bb.QualityScore, bb.QualityAuthoritative)
+	}
+}

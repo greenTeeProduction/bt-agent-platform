@@ -20,6 +20,10 @@ type Milestone struct {
 	CompletedRun string    `json:"completed_run,omitempty"`
 	CompletedAt  time.Time `json:"completed_at,omitempty"`
 	BlockedAt    time.Time `json:"blocked_at,omitempty"`
+	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
+	// passed for this milestone — evidence the work already exists at HEAD
+	// rather than an unbuildable goal. Reset on any genuine failure.
+	RedPassStreak int `json:"red_pass_streak,omitempty"`
 }
 
 type Program struct {
@@ -210,4 +214,46 @@ func (ps *ProgramStore) Save() error {
 		return err
 	}
 	return os.Rename(tmp, ps.path)
+}
+
+// RecordRedPass increments the milestone's consecutive red-pass counter and
+// returns the new streak. A red-pass (the plan's RED command passing before
+// GREEN) is evidence the milestone's work already exists at HEAD.
+func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int) int {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if milestoneIdx < 0 || milestoneIdx >= len(p.Milestones) {
+			return 0
+		}
+		m := &p.Milestones[milestoneIdx]
+		if m.Status == "done" {
+			return m.RedPassStreak
+		}
+		m.RedPassStreak++
+		p.Updated = time.Now().UTC()
+		return m.RedPassStreak
+	}
+	return 0
+}
+
+// ResetRedPassStreak clears the milestone's red-pass streak — called when a
+// genuine implementation failure proves the milestone's tests can still fail.
+func (ps *ProgramStore) ResetRedPassStreak(programID string, milestoneIdx int) {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if milestoneIdx < 0 || milestoneIdx >= len(p.Milestones) {
+			return
+		}
+		m := &p.Milestones[milestoneIdx]
+		if m.RedPassStreak == 0 {
+			return
+		}
+		m.RedPassStreak = 0
+		p.Updated = time.Now().UTC()
+		return
+	}
 }
