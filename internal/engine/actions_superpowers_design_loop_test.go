@@ -221,3 +221,133 @@ func TestValidationAliasesRegistered(t *testing.T) {
 		t.Fatal("validation alias actions not registered")
 	}
 }
+
+const splitFakeOutput = `=== CLEAR DESIGN ===
+# Superpowers Design
+
+## Goal
+Clear part only
+
+## Architecture
+A-clear
+
+## Acceptance Criteria
+C
+
+## Test Strategy
+T
+
+## Risks
+R
+=== FOLLOWUP ===
+# Follow-up: deferred persistence scope
+
+Open critical: what fsyncs? Deferred pending answer.
+=== PROGRAM ===
+PROGRAM: Design follow-up: persistence hardening
+MILESTONE1: Answer the fsync question and harden internal/engine/superpowers_artifacts.go (files: internal/engine/superpowers_artifacts.go)
+`
+
+func TestSplitDesign_WritesArtifactsAndPersistsProgram(t *testing.T) {
+	isolateGoapProgramStore(t)
+	bb, run := newGrillLoopTestRun(t)
+	run.OpenCriticalBranches = []string{"persistence"}
+	run.GrillRound = 10
+	setSuperpowersRun(bb, run)
+	fake := &fakeGrillClaudeRunner{output: splitFakeOutput}
+	orig := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = orig })
+
+	split := GetAction("SplitDesignArtifact")
+	if got := split(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d, want 1; result: %s", got, bb.Result)
+	}
+	design, _ := os.ReadFile(run.DesignPath)
+	if !strings.Contains(string(design), "Clear part only") || strings.Contains(string(design), "Deferred pending answer") {
+		t.Fatalf("design.md not reduced to clear scope: %s", design)
+	}
+	if !strings.Contains(string(design), "## Grill Loop Summary") {
+		t.Fatalf("design.md missing grill loop summary: %s", design)
+	}
+	run2, _ := getSuperpowersRun(bb)
+	followup, err := os.ReadFile(run2.FollowupPath)
+	if err != nil || !strings.Contains(string(followup), "deferred persistence scope") {
+		t.Fatalf("followup artifact missing: %v %s", err, followup)
+	}
+	if run2.FollowupProgramID != "Design follow-up: persistence hardening" {
+		t.Fatalf("FollowupProgramID = %q", run2.FollowupProgramID)
+	}
+	if reg, _ := bb.ChainState["goap_fusion_program_registered"].(string); reg == "" {
+		t.Fatal("program not persisted to store")
+	}
+}
+
+func TestSplitDesign_NothingClearFails(t *testing.T) {
+	isolateGoapProgramStore(t)
+	bb, run := newGrillLoopTestRun(t)
+	run.OpenCriticalBranches = []string{"everything"}
+	setSuperpowersRun(bb, run)
+	// Claude returns an empty clear section
+	fake := &fakeGrillClaudeRunner{output: "=== CLEAR DESIGN ===\n\n=== FOLLOWUP ===\nall deferred\n=== PROGRAM ===\nPROGRAM: t\nMILESTONE1: x (files: internal/engine/tree.go)\n"}
+	orig := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = orig })
+
+	split := GetAction("SplitDesignArtifact")
+	if got := split(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("status = %d, want -1 (nothing clear)", got)
+	}
+	if bb.Outcome != "split_nothing_clear" {
+		t.Fatalf("outcome = %q", bb.Outcome)
+	}
+}
+
+func TestSplitDesign_InvalidMilestonesStillWritesArtifacts(t *testing.T) {
+	isolateGoapProgramStore(t)
+	bb, run := newGrillLoopTestRun(t)
+	run.OpenCriticalBranches = []string{"p"}
+	setSuperpowersRun(bb, run)
+	out := strings.Replace(splitFakeOutput,
+		"MILESTONE1: Answer the fsync question and harden internal/engine/superpowers_artifacts.go (files: internal/engine/superpowers_artifacts.go)",
+		"MILESTONE1: vague milestone touching no files", 1)
+	fake := &fakeGrillClaudeRunner{output: out}
+	orig := defaultSuperpowersClaudeRunner
+	defaultSuperpowersClaudeRunner = fake
+	t.Cleanup(func() { defaultSuperpowersClaudeRunner = orig })
+
+	split := GetAction("SplitDesignArtifact")
+	if got := split(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("status = %d, want 1 (artifact still lands; pickup manual)", got)
+	}
+	run2, _ := getSuperpowersRun(bb)
+	if run2.FollowupProgramID != "" {
+		t.Fatalf("FollowupProgramID = %q, want empty (program rejected)", run2.FollowupProgramID)
+	}
+	if !strings.Contains(bb.Result, "manual") {
+		t.Fatalf("result must flag manual pickup: %s", bb.Result)
+	}
+}
+
+func TestParseSplitOutput(t *testing.T) {
+	clearScope, followup, program, err := parseSplitOutput(splitFakeOutput)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(clearScope, "Clear part only") {
+		t.Fatalf("clear = %q", clearScope)
+	}
+	if !strings.Contains(followup, "deferred persistence scope") {
+		t.Fatalf("followup = %q", followup)
+	}
+	if !strings.Contains(program, "PROGRAM: Design follow-up: persistence hardening") {
+		t.Fatalf("program = %q", program)
+	}
+
+	if _, _, _, err := parseSplitOutput("no markers here"); err == nil {
+		t.Fatal("want error for missing markers")
+	}
+	if _, _, _, err := parseSplitOutput("=== FOLLOWUP ===\nx\n=== CLEAR DESIGN ===\ny\n=== PROGRAM ===\nz"); err == nil {
+		t.Fatal("want error for out-of-order markers")
+	}
+}
