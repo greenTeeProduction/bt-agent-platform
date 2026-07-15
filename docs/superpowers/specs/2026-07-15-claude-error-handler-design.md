@@ -70,7 +70,7 @@ Prompt contains: tree + failing node name, error category/text excerpt, `Failure
 ### 5. Validation (strict, before any graft)
 
 - `SerializableNode.Validate()` passes.
-- Node-type allowlist: `Sequence, Selector, MemSequence, MemSelector, Retry, Timeout, Inverter, Succeeder, Action, Condition, AlwaysSucceed`.
+- Node-type allowlist: `Sequence, Selector, Retry, Timeout, Inverter, Succeeder, Action, Condition, AlwaysSucceed`. (MemSequence/MemSelector were dropped during planning: `evolution.KnownNodeTypes` — which `Validate()` and `ValidateTreeFull` check against — does not contain them, so proposals using them could never validate.)
 - Every `Action`/`Condition` leaf name must resolve via `GetAction`/`GetCondition` — the engine's permissive unknown-name fallback (`tree.go:365-406`) is explicitly NOT acceptable for generated nodes.
 - ≤ 10 nodes, depth ≤ 4, names unique within the handler's children.
 - The proposal's first-ticked leaf must be a `Condition` (guard), so a generated node can never become an unguarded catch-all that fires on unrelated failures.
