@@ -1167,5 +1167,274 @@ func DashboardRoutes() []Route {
 				"style": StringSchema("Preferred presentation style (visual, minimal, detailed)"),
 			}, "tags", "style")).
 			JSONResponse(200, "Updated user profile preferences", userProfileSchema).WithAuth().Build(),
+
+		// Agents lifecycle
+		NewRoute("/api/agents", GET).
+			Summary("List agents").
+			Description("Returns all registered BT agents with their live status and circuit breaker info.").
+			Tags("Agents").
+			OperationID("getAgents").
+			JSONResponse(200, "Array of agent status objects", ArraySchema(ObjectSchema(map[string]*Schema{
+				"name":         StringSchema("Agent name"),
+				"description":  StringSchema("Agent description"),
+				"tree":         StringSchema("Behavior tree ID"),
+				"status":       StringSchema("Status: running/scheduled/created/error"),
+				"schedule":     StringSchema("Cron expression or 'on_demand'"),
+				"success_rate": NumberSchema("Success rate 0.0-1.0"),
+				"total_runs":   IntSchema("Total runs recorded"),
+				"avg_quality":  NumberSchema("Average output quality"),
+				"last_run":     StringSchema("ISO 8601 timestamp of last run"),
+				"last_outcome": StringSchema("Outcome of last run: success/failure/timeout"),
+				"cb_status":    StringSchema("Circuit breaker status: open/closed/half_open/unknown"),
+			}), "List of agents")).WithAuth().Build(),
+
+		NewRoute("/api/agents/run", GET).
+			Summary("Run an agent").
+			Description("Runs a registered agent with a given task and returns the outcome.").
+			Tags("Agents").
+			OperationID("getAgentsRun").
+			QueryParam("agent", "Agent name", true, StringSchema("Agent name")).
+			QueryParam("task", "Task text (defaults to the agent's default task)", false, StringSchema("Task text")).
+			QueryParam("tree", "Optional tree ID override", false, StringSchema("Tree ID")).
+			JSONResponse(200, "Agent run result", ObjectSchema(map[string]*Schema{
+				"agent":      StringSchema("Agent name"),
+				"outcome":    StringSchema("Run outcome"),
+				"output":     StringSchema("Agent output text"),
+				"run_id":     StringSchema("Run identifier"),
+				"session_id": StringSchema("Session identifier"),
+				"error":      StringSchema("Error message if failed"),
+			}, "agent", "outcome")).
+			ErrorResponse(400, "Missing agent parameter").WithAuth().Build(),
+
+		NewRoute("/api/agents/create", POST).
+			Summary("Create an agent").
+			Description("Creates a new agent YAML template in the registry. Body: {name (required), description, tree (required), schedule}.").
+			Tags("Agents").
+			OperationID("postAgentsCreate").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"name":        StringSchema("Agent name (required)"),
+				"description": StringSchema("Agent description"),
+				"tree":        StringSchema("Behavior tree ID (required)"),
+				"schedule":    StringSchema("Cron expression or 'on_demand'"),
+			}, "name", "tree")).
+			JSONResponse(201, "Created agent info", ObjectSchema(map[string]*Schema{
+				"name":        StringSchema("Agent name"),
+				"description": StringSchema("Agent description"),
+				"tree":        StringSchema("Behavior tree ID"),
+				"status":      StringSchema("'created'"),
+				"schedule":    StringSchema("Cron expression or 'on_demand'"),
+				"cb_status":   StringSchema("'unknown'"),
+			}, "name", "tree", "status")).
+			ErrorResponse(400, "Missing required field").
+			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
+
+		NewRoute("/api/agents/delete", POST).
+			Summary("Delete an agent").
+			Description("Deletes an agent YAML template by name. Body: {name (required)}.").
+			Tags("Agents").
+			OperationID("postAgentsDelete").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"name": StringSchema("Agent name (required)"),
+			}, "name")).
+			JSONResponse(200, "Deletion confirmation", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("'deleted' on success"),
+				"name":   StringSchema("Agent name"),
+			}, "status", "name")).
+			ErrorResponse(400, "Missing required field").
+			ErrorResponse(404, "Agent not found").
+			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
+
+		// Tasks
+		NewRoute("/api/tasks/create", GET).
+			Summary("Create a task").
+			Description("Creates a new task via query params (GET — avoids CSRF on API endpoints).").
+			Tags("Tasks").
+			OperationID("getTasksCreate").
+			QueryParam("title", "Task title (required)", true, StringSchema("Task title")).
+			QueryParam("desc", "Task description", false, StringSchema("Task description")).
+			QueryParam("priority", "Priority (defaults to 'medium')", false, StringSchema("Priority")).
+			QueryParam("assignee", "Assignee role (defaults to 'bt-implementer')", false, StringSchema("Assignee")).
+			JSONResponse(200, "Creation confirmation", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("'created' on success"),
+				"id":     StringSchema("Task identifier"),
+			}, "status", "id")).
+			ErrorResponse(400, "Missing title parameter").WithAuth().Build(),
+
+		// Workflow approval — thinktank-recommendation review queue distinct
+		// from the task pipeline's /api/tasks/approve, /api/tasks/reject.
+		NewRoute("/api/workflow/pending", GET).
+			Summary("List pending workflow approvals").
+			Description("Returns the current Workflow's PendingApprovals — every WorkflowTask still awaiting an explicit human/HITL decision.").
+			Tags("Workflow").
+			OperationID("getWorkflowPending").
+			JSONResponse(200, "Array of workflow task objects", ArraySchema(ObjectSchema(map[string]*Schema{
+				"id":               StringSchema("Workflow task identifier"),
+				"title":            StringSchema("Task title"),
+				"description":      StringSchema("Task description"),
+				"source":           StringSchema("Thinktank recommendation that spawned this task"),
+				"priority":         IntSchema("Priority level"),
+				"status":           StringSchema("Workflow task status"),
+				"assignee_role":    StringSchema("Assigned role"),
+				"sprint_target":    IntSchema("Target sprint number"),
+				"estimated_effort": IntSchema("Estimated story points"),
+			}), "List of workflow tasks")).WithAuth().Build(),
+
+		NewRoute("/api/workflow/approve", POST).
+			Summary("Approve a workflow task").
+			Description("Approves a WorkflowTask on the current Workflow by ID, mirroring the approval onto the task store so the sprint runner sees it.").
+			Tags("Workflow").
+			OperationID("postWorkflowApprove").
+			QueryParam("id", "Workflow task identifier", true, StringSchema("Task ID")).
+			JSONResponse(200, "Approval confirmation", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("'approved' on success"),
+				"id":     StringSchema("Workflow task identifier"),
+			}, "status", "id")).
+			ErrorResponse(404, "No active workflow, or workflow task not found").WithAuth().Build(),
+
+		NewRoute("/api/workflow/reject", POST).
+			Summary("Reject a workflow task").
+			Description("Rejects a WorkflowTask on the current Workflow by ID, mirroring the rejection onto the task store.").
+			Tags("Workflow").
+			OperationID("postWorkflowReject").
+			QueryParam("id", "Workflow task identifier", true, StringSchema("Task ID")).
+			QueryParam("reason", "Rejection reason (defaults to a generic message)", false, StringSchema("Reason")).
+			JSONResponse(200, "Rejection confirmation", ObjectSchema(map[string]*Schema{
+				"status": StringSchema("'rejected' on success"),
+				"id":     StringSchema("Workflow task identifier"),
+			}, "status", "id")).
+			ErrorResponse(404, "No active workflow, or workflow task not found").WithAuth().Build(),
+
+		// HITL (human-in-the-loop) approval
+		NewRoute("/api/hitl/pending", GET).
+			Summary("List pending HITL requests").
+			Description("Returns all pending human-in-the-loop approval requests.").
+			Tags("HITL").
+			OperationID("getHITLPending").
+			JSONResponse(200, "Array of pending HITL requests", ArraySchema(ObjectSchema(map[string]*Schema{
+				"id":         StringSchema("Request identifier"),
+				"status":     StringSchema("Request status"),
+				"node_name":  StringSchema("Behavior tree node name"),
+				"node_type":  StringSchema("Behavior tree node type"),
+				"prompt":     StringSchema("Prompt shown to the reviewer"),
+				"task":       StringSchema("Task text"),
+				"proposed":   StringSchema("Proposed action or result preview"),
+				"agent_name": StringSchema("Agent name"),
+				"tree_id":    StringSchema("Behavior tree ID"),
+			}), "List of pending HITL requests")).WithAuth().Build(),
+
+		NewRoute("/api/hitl/", GET).
+			Summary("HITL request operations").
+			Description("Routes HITL REST operations under /api/hitl/{id}, /api/hitl/{id}/approve, /api/hitl/{id}/reject, and /api/hitl/{id}/escalate. GET /api/hitl/{id} returns a single request; POST to the approve/reject/escalate sub-paths records a reviewer decision (body: {reviewer, comment, reason}).").
+			Tags("HITL").
+			OperationID("getHITLRequest").
+			JSONResponse(200, "HITL request", ObjectSchema(map[string]*Schema{
+				"id":        StringSchema("Request identifier"),
+				"status":    StringSchema("Request status: pending/approved/rejected/expired/skipped"),
+				"node_name": StringSchema("Behavior tree node name"),
+				"node_type": StringSchema("Behavior tree node type"),
+				"prompt":    StringSchema("Prompt shown to the reviewer"),
+				"task":      StringSchema("Task text"),
+				"plan":      StringSchema("Planned action"),
+				"proposed":  StringSchema("Proposed action or result preview"),
+				"reviewer":  StringSchema("Reviewer identifier"),
+				"reason":    StringSchema("Approval/rejection reason"),
+			}, "id", "status")).
+			ErrorResponse(404, "Request not found").
+			ErrorResponse(503, "HITL store not initialized").WithAuth().Build(),
+
+		// Pipelines
+		NewRoute("/api/pipelines", GET).
+			Summary("List pipelines").
+			Description("Lists all pipeline YAML files from agents/workflows/ with their name, description, version, and step count.").
+			Tags("Pipelines").
+			OperationID("getPipelines").
+			JSONResponse(200, "Array of pipeline info objects", ArraySchema(ObjectSchema(map[string]*Schema{
+				"name":        StringSchema("Pipeline name"),
+				"filename":    StringSchema("Pipeline YAML filename"),
+				"description": StringSchema("Pipeline description"),
+				"version":     StringSchema("Pipeline version"),
+				"step_count":  IntSchema("Number of steps"),
+			}), "List of pipelines")).
+			ErrorResponse(405, "Method not allowed — GET only").WithAuth().Build(),
+
+		NewRoute("/api/pipelines/run", POST).
+			Summary("Run a pipeline").
+			Description("Starts pipeline execution asynchronously and returns a run_id immediately; poll GET /api/pipelines/status?id= for the result. Body: {pipeline_name (required), input}.").
+			Tags("Pipelines").
+			OperationID("postPipelinesRun").
+			RequestBody(ObjectSchema(map[string]*Schema{
+				"pipeline_name": StringSchema("Pipeline name (required)"),
+				"input":         StringSchema("Pipeline input text"),
+			}, "pipeline_name")).
+			JSONResponse(202, "Run accepted", ObjectSchema(map[string]*Schema{
+				"run_id":   StringSchema("Run identifier"),
+				"status":   StringSchema("'running'"),
+				"pipeline": StringSchema("Pipeline name"),
+				"message":  StringSchema("Status polling instructions"),
+			}, "run_id", "status", "pipeline")).
+			ErrorResponse(400, "Missing pipeline_name, or invalid pipeline YAML").
+			ErrorResponse(404, "Pipeline not found").
+			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
+
+		NewRoute("/api/pipelines/status", GET).
+			Summary("Get pipeline run status").
+			Description("Returns pipeline run status and result (once complete) for a given run_id.").
+			Tags("Pipelines").
+			OperationID("getPipelinesStatus").
+			QueryParam("id", "Pipeline run identifier", true, StringSchema("Run ID")).
+			JSONResponse(200, "Pipeline run status", ObjectSchema(map[string]*Schema{
+				"run_id":     StringSchema("Run identifier"),
+				"status":     StringSchema("'running'/'complete'/'failed'"),
+				"started_at": StringSchema("ISO 8601 start timestamp"),
+				"error":      StringSchema("Error message if failed"),
+				"workflow":   StringSchema("Pipeline/workflow name"),
+				"outcome":    StringSchema("Run outcome: success/failure/partial"),
+				"duration":   StringSchema("Run duration"),
+			}, "run_id", "status")).
+			ErrorResponse(400, "Missing id parameter").
+			ErrorResponse(404, "Pipeline run not found").
+			ErrorResponse(405, "Method not allowed — GET only").WithAuth().Build(),
+
+		// Blackboard
+		NewRoute("/api/blackboard", GET).
+			Summary("List blackboard entries").
+			Description("Returns blackboard entries for a given scope (run/session/agent). Query params: scope (required), scope_id (required), prefix, limit (default 50).").
+			Tags("Blackboard").
+			OperationID("getBlackboard").
+			QueryParam("scope", "Scope kind: run/session/agent", true, StringSchema("Scope kind")).
+			QueryParam("scope_id", "Scope identifier", true, StringSchema("Scope ID")).
+			QueryParam("prefix", "Key prefix filter", false, StringSchema("Key prefix")).
+			QueryParam("limit", "Max entries to return (default 50)", false, IntSchema("Limit")).
+			JSONResponse(200, "Blackboard entries", ObjectSchema(map[string]*Schema{
+				"scope":    StringSchema("Scope kind"),
+				"scope_id": StringSchema("Scope identifier"),
+				"prefix":   StringSchema("Key prefix filter"),
+				"count":    IntSchema("Number of entries returned"),
+				"entries": ArraySchema(ObjectSchema(map[string]*Schema{
+					"key":          StringSchema("Entry key"),
+					"value":        StringSchema("Entry value"),
+					"summary":      StringSchema("Entry summary"),
+					"content_type": StringSchema("Content type"),
+					"size_bytes":   IntSchema("Value size in bytes"),
+				}), "Blackboard entries"),
+			}, "scope", "scope_id", "count", "entries")).
+			ErrorResponse(400, "Missing/invalid scope or scope_id").
+			ErrorResponse(405, "Method not allowed — GET only").
+			ErrorResponse(503, "Agent runner not configured").WithAuth().Build(),
+
+		NewRoute("/api/blackboard/scopes", GET).
+			Summary("List blackboard scope IDs").
+			Description("Returns all persisted scope IDs for a given scope kind (session or agent).").
+			Tags("Blackboard").
+			OperationID("getBlackboardScopes").
+			QueryParam("scope", "Scope kind: session/agent", true, StringSchema("Scope kind")).
+			JSONResponse(200, "Persisted scope IDs", ObjectSchema(map[string]*Schema{
+				"scope": StringSchema("Scope kind"),
+				"count": IntSchema("Number of scope IDs"),
+				"ids":   ArraySchema(StringSchema("Scope ID"), "Persisted scope IDs"),
+			}, "scope", "count", "ids")).
+			ErrorResponse(400, "Scope must be session or agent").
+			ErrorResponse(405, "Method not allowed — GET only").
+			ErrorResponse(503, "Agent runner not configured").WithAuth().Build(),
 	}
 }

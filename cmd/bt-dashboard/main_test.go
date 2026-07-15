@@ -8,11 +8,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/api"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -976,5 +979,55 @@ func TestHandleAgentExecute_SetsQualityScoreFromRunResult(t *testing.T) {
 		t.Fatalf("handleAgentExecute must set AgentResult.QualityScore from the run's real quality "+
 			"estimate (RemoteExecutor decodes this field for horizontal-scaling quality tracking); "+
 			"got QualityScore=%v, want > 0 (response=%+v)", res.QualityScore, res)
+	}
+}
+
+// dashboardMuxAPIPathRE mirrors the mux.HandleFunc("/api/...", ...)
+// registrations in main.go's main(). It is deliberately loose (any path
+// starting with /api/) so the coverage check below tracks main.go's
+// registrations without needing to hand-maintain a parallel list.
+var dashboardMuxAPIPathRE = regexp.MustCompile(`mux\.HandleFunc\("(/api/[^"]*)"`)
+
+// TestDashboardAPIRoutesHaveOpenAPICoverage pins that every /api/* endpoint
+// registered on the dashboard's mux (cmd/bt-dashboard/main.go) has a
+// matching Route in api.DashboardRoutes() (internal/api/openapi.go). The
+// dashboard's OpenAPI response validator only checks traffic against
+// DashboardRoutes(), so a mux path with no matching Route is silently
+// unvalidated in production — this test names every such gap.
+func TestDashboardAPIRoutesHaveOpenAPICoverage(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+
+	matches := dashboardMuxAPIPathRE.FindAllStringSubmatch(string(src), -1)
+	if len(matches) == 0 {
+		t.Fatal("found no mux.HandleFunc(\"/api/...\" registrations in main.go; " +
+			"dashboardMuxAPIPathRE may be stale")
+	}
+
+	registered := make(map[string]bool)
+	for _, route := range api.DashboardRoutes() {
+		registered[route.Path] = true
+	}
+
+	seenMuxPath := make(map[string]bool)
+	var missing []string
+	for _, m := range matches {
+		muxPath := m[1]
+		if seenMuxPath[muxPath] {
+			continue
+		}
+		seenMuxPath[muxPath] = true
+		if !registered[muxPath] {
+			missing = append(missing, muxPath)
+		}
+	}
+
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("%d dashboard mux path(s) registered in main.go have no matching Route in "+
+			"api.DashboardRoutes(), so the OpenAPI response validator never checks them: %v",
+			len(missing), missing)
 	}
 }
