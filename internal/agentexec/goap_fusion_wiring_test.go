@@ -43,7 +43,15 @@ func TestGoapFusionLoopTreeIsProductionWired(t *testing.T) {
 			t.Fatalf("production goap_fusion_loop tree is missing wired node %q — WireGoapFusionLoopTree is not applied on the production resolution path", marker)
 		}
 	}
-	if len(tree.Children) == 0 || tree.Children[0].Name != "GoapFusionPreflight" {
-		t.Fatalf("wired tree must start with the Phase-0 preflight, first child = %q", tree.Children[0].Name)
+	// Every catalog tree root is wrapped in a ClaudeErrorHandler decorator
+	// (internal/domains/trees.go wrapWithErrorHandler); the previously-root
+	// wired Sequence is now tree.Children[0], so the Phase-0 preflight check
+	// descends one level.
+	if len(tree.Children) == 0 {
+		t.Fatalf("wired tree has no children (want ClaudeErrorHandler wrapper around the wired Sequence)")
+	}
+	inner := tree.Children[0]
+	if len(inner.Children) == 0 || inner.Children[0].Name != "GoapFusionPreflight" {
+		t.Fatalf("wired tree must start with the Phase-0 preflight, first child = %q", inner.Children[0].Name)
 	}
 }

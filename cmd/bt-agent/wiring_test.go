@@ -101,8 +101,16 @@ func TestDaemonResolvesWiredGoapFusionLoopTree(t *testing.T) {
 	if tree == nil {
 		t.Fatal("domain:goap_fusion_loop did not resolve")
 	}
-	if len(tree.Children) == 0 || tree.Children[0].Name != "GoapFusionPreflight" {
-		t.Fatalf("daemon must resolve the WIRED goap_fusion_loop tree (preflight first); first child = %q", tree.Children[0].Name)
+	// Every catalog tree root is wrapped in a ClaudeErrorHandler decorator
+	// (internal/domains/trees.go wrapWithErrorHandler); the previously-root
+	// wired Sequence is now tree.Children[0], so the Phase-0 preflight check
+	// descends one level.
+	if len(tree.Children) == 0 {
+		t.Fatalf("resolved tree has no children (want ClaudeErrorHandler wrapper around the wired Sequence)")
+	}
+	inner := tree.Children[0]
+	if len(inner.Children) == 0 || inner.Children[0].Name != "GoapFusionPreflight" {
+		t.Fatalf("daemon must resolve the WIRED goap_fusion_loop tree (preflight first); first child = %q", inner.Children[0].Name)
 	}
 }
 

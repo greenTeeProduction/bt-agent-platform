@@ -729,6 +729,22 @@ func AuctionDemoTree() *evolution.SerializableNode {
 		}}
 }
 
+// wrapWithErrorHandler wraps a tree root in a ClaudeErrorHandler decorator so
+// any failure that bubbles to the root can grow a Claude-proposed recovery
+// node (engine/error_handler_node.go). Pure data — domains must not import
+// engine (test-build cycle, see goap_fusion_wire_seam_test.go).
+func wrapWithErrorHandler(name string, tree *evolution.SerializableNode) *evolution.SerializableNode {
+	if tree == nil || tree.Type == "ClaudeErrorHandler" {
+		return tree
+	}
+	return &evolution.SerializableNode{
+		Type:        "ClaudeErrorHandler",
+		Name:        name + "_ErrorHandler",
+		Description: "Self-extending Claude error handler: on root failure, propose and gate a recovery node here (see engine/error_handler_node.go).",
+		Children:    []evolution.SerializableNode{*tree},
+	}
+}
+
 // AllDomainTrees returns all domain trees keyed by name.
 func AllDomainTrees() map[string]*evolution.SerializableNode {
 	trees := map[string]*evolution.SerializableNode{
@@ -761,6 +777,10 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
 		trees[k] = v
+	}
+	// Every domain tree root gets the self-extending error handler.
+	for k, v := range trees {
+		trees[k] = wrapWithErrorHandler(k, v)
 	}
 	return trees
 }
