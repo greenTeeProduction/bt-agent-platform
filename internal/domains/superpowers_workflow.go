@@ -15,23 +15,64 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 // SuperpowersWorkflowTree returns the full Superpowers workflow behavior tree.
 // Root is a resume-safe PersistentMemSequence (Task 3) with a 1h timeout.
 func SuperpowersWorkflowTree() *evolution.SerializableNode {
-	// --- brainstorm branch (creative path): design → validate → grill → HITL ---
+	// --- brainstorm branch (creative path): design → validate → grill-loop or split → HITL ---
+
+	// grill loop: ReviewCycle re-runs [revise → validate] while the reviewer
+	// (GrillDesignArtifact) verdicts needs_work; reviewer failure (protocol
+	// error, no-progress breaker, round bound) fails the cycle and the
+	// Selector falls through to SplitPath. NOTE: do NOT "simplify" this to a
+	// Retry node — the engine's Retry maps to a repeat-on-success decorator
+	// that fails immediately on child failure (see spec 2026-07-15).
+	grillLoop := evolution.SerializableNode{
+		Type:        "ReviewCycle",
+		Name:        "GrillLoop",
+		Description: "Bounded revise→validate→grill loop driven by grill verdicts (max 10 rounds)",
+		Metadata: map[string]any{
+			"reviewer_action": "GrillDesignArtifact",
+			"max_iterations":  10,
+		},
+		Children: []evolution.SerializableNode{
+			{
+				Type:        "MemSequence",
+				Name:        "GrillRound",
+				Description: "One design-improvement round: revise from grill feedback, then re-validate",
+				Children: []evolution.SerializableNode{
+					act("ReviseDesignArtifact", "Rewrite the design body from the previous grill round's answers and open criticals (no-op on round 1)"),
+					act("ValidateRevisedDesign", "Strictly validate the revised design's required sections"),
+				},
+			},
+		},
+	}
+
+	splitPath := evolution.SerializableNode{
+		Type:        "MemSequence",
+		Name:        "SplitPath",
+		Description: "Exhausted/stuck loop: keep the clear scope, defer open-critical scope to a goap follow-up program",
+		Children: []evolution.SerializableNode{
+			act("SplitDesignArtifact", "Partition the design: clear scope stays, deferred scope becomes design-followup.md + a design-followup goap program"),
+			act("ValidateSplitDesign", "Strictly validate the reduced clear-scope design"),
+		},
+	}
+
 	brainstorm := evolution.SerializableNode{
 		Type:        "MemSequence",
 		Name:        "BrainstormBranch",
-		Description: "Creative path: generate → validate → grill design artifact, then approve",
+		Description: "Creative path: generate → validate → grill-loop (revise until clear) or split, then approve",
 		Metadata:    map[string]any{"match": "creative"},
 		Children: []evolution.SerializableNode{
 			act("GenerateDesignArtifact", "Write or reuse design.md with architecture, acceptance criteria, tests, and risks"),
 			act("ValidateDesignArtifact", "Strictly validate design.md required sections"),
-			act("GrillDesignArtifact", "NotebookLM Q&A grill of the design with web-search fallback"),
+			sel("GrillConvergenceRouter", "Run the grill loop to convergence, else split the design into clear scope + follow-up",
+				grillLoop,
+				splitPath,
+			),
 			{
 				Type:        "HumanApprovalGate",
 				Name:        "ApproveDesign",
 				Description: "Approve the grilled design artifact before proceeding",
 				Metadata: map[string]any{
 					"phase":       "pre",
-					"hitl_prompt": "Approve the design artifact (after grilling) before implementation?",
+					"hitl_prompt": "Approve the design artifact (after the grill loop; check the Grill Loop Summary section for deferred scope) before implementation?",
 				},
 			},
 		},
