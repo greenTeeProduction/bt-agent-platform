@@ -22,6 +22,7 @@ package gardener
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,6 +311,8 @@ type metricsDocument struct {
 	ActiveTrees              int            `json:"active_trees"`
 	BestFitness              float64        `json:"best_fitness"`
 	TotalImprovements        int            `json:"total_improvements"`
+	TotalDeepSearchCycles    int            `json:"total_deep_search_cycles"`
+	AvgTTHitRate             float64        `json:"avg_tt_hit_rate"`
 	History                  []CycleMetrics `json:"history"`
 }
 
@@ -322,6 +325,7 @@ func (mt *MetricsTracker) Save() error {
 		History: mt.history,
 	}
 	trees := make(map[string]bool)
+	var ttHitRateSum float64
 	for _, m := range mt.history {
 		if m.CrisisIntervention {
 			doc.TotalCrisisInterventions++
@@ -334,8 +338,15 @@ func (mt *MetricsTracker) Save() error {
 		if m.NewFitness > doc.BestFitness {
 			doc.BestFitness = m.NewFitness
 		}
+		if m.DeepSearchUsed {
+			doc.TotalDeepSearchCycles++
+			ttHitRateSum += m.TTHitRate
+		}
 	}
 	doc.ActiveTrees = len(trees)
+	if doc.TotalDeepSearchCycles > 0 {
+		doc.AvgTTHitRate = math.Round(ttHitRateSum/float64(doc.TotalDeepSearchCycles)*10000) / 10000
+	}
 	data, _ := json.MarshalIndent(doc, "", "  ")
 	tmp := mt.path + ".tmp"
 	_ = os.WriteFile(tmp, data, 0644)

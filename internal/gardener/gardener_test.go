@@ -199,6 +199,49 @@ func TestMetricsTracker_SaveIncludesDashboardAggregateFields(t *testing.T) {
 	}
 }
 
+// TestMetricsTracker_SaveAggregatesDeepSearchCoverage verifies milestone 3/3
+// of the "Q2 Evolvability — Harden and activate the gardener's Stockfish-
+// style deep-search apply path in production" program: gardener-metrics.json
+// must expose deep-search activity (total_deep_search_cycles,
+// avg_tt_hit_rate) aggregated from the per-cycle DeepSearchUsed/TTHitRate
+// fields, so a dashboard consumer can read coverage without replaying the
+// full history array.
+func TestMetricsTracker_SaveAggregatesDeepSearchCoverage(t *testing.T) {
+	dir := t.TempDir()
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker failed: %v", err)
+	}
+
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 1, DeepSearchUsed: true, DeepSearchDepth: 4, TTHitRate: 0.8})
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 2, DeepSearchUsed: true, DeepSearchDepth: 3, TTHitRate: 0.4})
+	mt.Record(CycleMetrics{TreeName: "tree_b", Cycle: 1})
+
+	if err := mt.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "gardener-metrics.json"))
+	if err != nil {
+		t.Fatalf("reading gardener-metrics.json: %v", err)
+	}
+
+	var doc struct {
+		TotalDeepSearchCycles int     `json:"total_deep_search_cycles"`
+		AvgTTHitRate          float64 `json:"avg_tt_hit_rate"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("gardener-metrics.json must decode: %v", err)
+	}
+
+	if doc.TotalDeepSearchCycles != 2 {
+		t.Errorf("total_deep_search_cycles = %d, want 2 (cycles with DeepSearchUsed=true)", doc.TotalDeepSearchCycles)
+	}
+	if doc.AvgTTHitRate != 0.6 {
+		t.Errorf("avg_tt_hit_rate = %v, want 0.6 (mean TTHitRate over deep-search cycles only)", doc.AvgTTHitRate)
+	}
+}
+
 // TestRegistry_RollbackTree verifies milestone 2/3 of the "Q2 Evolvability"
 // program: RollbackTree must restore a tree from its milestone-1 pre-mutation
 // snapshot (evolution.RestoreTree) and durably persist the restored state via

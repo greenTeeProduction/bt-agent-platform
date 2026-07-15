@@ -1348,3 +1348,86 @@ func TestEvolveTreeV2_DeepSearchMutationRejectedByValidationGateNotPersisted(t *
 		t.Errorf("expected Registry.SaveTree NOT to persist a deep-search mutation rejected by ValidationGate, but %s exists", filePath)
 	}
 }
+
+// TestEvolveTreeV2_DeepSearchMutationRejectedByMetaValidatorNotPersisted pins
+// Q2 Evolvability ("harden and activate the deep-search apply path")
+// milestone 1/3: the deep.BestMutation branch must consult
+// Config.MetaValidator.ValidateMutation before committing, exactly like the
+// greedy per-candidate loop already does at evolve_v2.go:274-280, and revert
+// to the pre-deep-search tree on evolution.MetaReject the same way a
+// ValidationGate rejection already reverts.
+//
+// Same fixture as the milestone-3/4 deep-search tests (gateDisabledTestTree()
+// + seedFailureRecords() + MaxMutations: 0 so only deep search can apply
+// anything), but with ValidationGate disabled (so it cannot be the source of
+// rejection) and a strict MetaValidator (MinScore: 1.0, per
+// TestEvolveTreeV2_MetaValidatorRejectsStructurallyBrokenMutation's
+// "RejectsWithMetaValidator" subtest) as the only configured gate — isolating
+// MetaValidator as the sole variable.
+func TestEvolveTreeV2_DeepSearchMutationRejectedByMetaValidatorNotPersisted(t *testing.T) {
+	dir := t.TempDir()
+	ttDir := filepath.Join(dir, "tt")
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	const treeName = "deep_search_meta_reject"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	filePath := filepath.Join(dir, "tree-"+treeName+".json")
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "deep search meta reject", Tree: tree, FilePath: filePath, Active: true},
+	}
+	registry.mu.Unlock()
+
+	// MinScore: 1.0 means ANY structural issue or warning forces MetaReject —
+	// standing in for "structurally broken" without depending on exactly
+	// which check the deep-search mutation trips.
+	strict := evolution.NewMetaValidator(evolution.MetaValidatorConfig{MinScore: 1.0})
+
+	cfg := Config{
+		Registry:               registry,
+		MetricsTracker:         mt,
+		RefStore:               refStore,
+		TranspositionTablePath: ttDir,
+		MaxMutations:           0, // greedy loop budget is zero: only deep search can apply anything
+		ValidationGate:         ValidationGateConfig{Enabled: false},
+		MetaValidator:          strict,
+	}
+	g := NewGardener(cfg)
+
+	entry := registry.List()[0]
+	treeBefore := marshalTree(t, entry.Tree)
+
+	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
+	m := g.evolveTreeV2(entry, v2cfg)
+
+	if !m.DeepSearchUsed {
+		t.Fatalf("precondition failed: expected DeepSearchUsed=true with TranspositionTablePath configured, got false (metrics=%+v)", m)
+	}
+
+	if m.Mutations != 0 {
+		t.Errorf("expected the deep-search mutation to be reverted when MetaValidator rejects it (MinScore: 1.0), got Mutations=%d", m.Mutations)
+	}
+	if m.NewFitness > m.BaseFitness+0.0001 {
+		t.Errorf("expected NewFitness to be reverted to BaseFitness after MetaValidator rejection, got base=%.4f new=%.4f", m.BaseFitness, m.NewFitness)
+	}
+
+	treeAfter := marshalTree(t, entry.Tree)
+	if !bytes.Equal(treeBefore, treeAfter) {
+		t.Errorf("expected the in-memory tree to be reverted to its pre-deep-search state after MetaValidator rejection, but it changed")
+	}
+
+	if _, statErr := os.Stat(filePath); !os.IsNotExist(statErr) {
+		t.Errorf("expected Registry.SaveTree NOT to persist a deep-search mutation rejected by MetaValidator, but %s exists", filePath)
+	}
+}

@@ -104,3 +104,23 @@ func TestBuildGardenerConfig_SnapshotDirCreated(t *testing.T) {
 		t.Errorf("snapshot dir permissions = %04o, want 0700", perm)
 	}
 }
+
+// TestBuildGardenerConfig_TranspositionTableWired pins Q2 Evolvability
+// milestone 2/3: buildGardenerConfig must set Config.TranspositionTablePath,
+// otherwise Gardener.transpositionTable() (internal/gardener/evolve_v2.go)
+// always returns nil and evaluator.IterativeDeepening never runs outside
+// tests.
+func TestBuildGardenerConfig_TranspositionTableWired(t *testing.T) {
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+	metricsDir := t.TempDir()
+
+	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
+	if err != nil {
+		t.Fatalf("buildGardenerConfig returned error: %v", err)
+	}
+
+	if cfg.TranspositionTablePath == "" {
+		t.Error("TranspositionTablePath is empty — transpositionTable() always returns nil, so the Stockfish-style deep-search apply path (evaluator.IterativeDeepening) never runs in production")
+	}
+}

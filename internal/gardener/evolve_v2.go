@@ -356,8 +356,24 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		if deep.BestMutation != nil && deep.BestFitness != nil && deep.BestFitness.Composite > newFitness.Composite+0.0001 {
 			preDeepSearchTree := cloneTreeForGardener(tree)
 			preDeepSearchFitness := newFitness
+
+			// ── Meta-validation — mirror the greedy loop's own check above:
+			// consult the structural safety layer on a cloned candidate before
+			// committing the deep-search mutation to the live tree at all.
+			metaRejected := false
+			if g.cfg.MetaValidator != nil {
+				candidateTree := cloneTreeForGardener(tree)
+				if evolution.ApplyMutations(candidateTree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
+					metaReport := g.cfg.MetaValidator.ValidateMutation(preDeepSearchTree, candidateTree, preDeepSearchFitness.Composite, deep.BestFitness.Composite)
+					if metaReport.Decision == evolution.MetaReject {
+						slog.Warn("gardener/v2: meta validator rejected deep-search mutation, skipping", "tree", entry.Name)
+						metaRejected = true
+					}
+				}
+			}
+
 			preDeepSearchApplied := applied
-			if evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
+			if !metaRejected && evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
 				applied++
 				if bank != nil {
 					if err := bank.AddFromMutation(tree, deep.BestMutation.Op, newFitness.Composite, deep.BestFitness.Composite, nil); err != nil {

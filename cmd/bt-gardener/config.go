@@ -84,6 +84,12 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// fitness/quality/SLO gates above never inspect. Production-safe
 		// defaults (see evolution.NewMetaValidator).
 		MetaValidator: evolution.NewMetaValidator(evolution.MetaValidatorConfig{}),
+
+		// TranspositionTablePath enables the Stockfish-style deep-search apply
+		// path (evaluator.IterativeDeepening, Q2 Evolvability milestone 2):
+		// without it, Gardener.transpositionTable() always returns nil and
+		// deep search never runs outside tests.
+		TranspositionTablePath: filepath.Join(metricsDir, "transposition"),
 	}, nil
 }
 
