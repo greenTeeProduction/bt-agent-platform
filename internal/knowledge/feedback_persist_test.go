@@ -85,6 +85,77 @@ func TestSaveLoadFeedback_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestSaveLoadFeedback_RecentRunsRoundTrip asserts that TreeMeta.RecentRuns —
+// the bounded run-history window a registered domain fitness function scores
+// from (see RegisterDomainFitness) — survives a SaveFeedback/LoadFeedback
+// round trip. Without this, a scheduler restart resets a domain-fitness
+// tree's run history to whatever runs happen after the restart, even though
+// Fitness itself (a plain field) is preserved.
+func TestSaveLoadFeedback_RecentRunsRoundTrip(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:history",
+		Name:     "History Test",
+		Category: "test",
+	})
+
+	for i := 0; i < 5; i++ {
+		src.RecordRun(RunRecord{
+			TreeID:  "tree:history",
+			Task:    "repeat",
+			Outcome: "success",
+			Quality: 80.0,
+		})
+	}
+
+	srcRuns := src.Trees["tree:history"].RecentRuns
+	if len(srcRuns) != 5 {
+		t.Fatalf("setup: expected 5 recent runs recorded, got %d", len(srcRuns))
+	}
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:history",
+		Name:     "History Test",
+		Category: "test",
+	})
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	got := dst.Trees["tree:history"]
+	if len(got.RecentRuns) != len(srcRuns) {
+		t.Fatalf("RecentRuns length = %d, want %d (restart must not reset run history)", len(got.RecentRuns), len(srcRuns))
+	}
+	for i, rs := range srcRuns {
+		if got.RecentRuns[i] != rs {
+			t.Errorf("RecentRuns[%d] = %+v, want %+v", i, got.RecentRuns[i], rs)
+		}
+	}
+
+	// A domain fitness function registered after restart must see the full
+	// restored history immediately, not just runs recorded since the restart.
+	scored := make(chan int, 1)
+	dst.RegisterDomainFitness("tree:history", func(runs []RunSummary) float64 {
+		scored <- len(runs)
+		return 1.0
+	})
+	dst.RecordRun(RunRecord{TreeID: "tree:history", Task: "post-restart", Outcome: "success", Quality: 80.0})
+	select {
+	case n := <-scored:
+		if n != len(srcRuns)+1 {
+			t.Errorf("domain fitness fn saw %d runs, want %d (restored history + 1 new run)", n, len(srcRuns)+1)
+		}
+	default:
+		t.Fatal("domain fitness function was never invoked")
+	}
+}
+
 // TestLoadFeedback_MissingFileNoError asserts that loading from a nonexistent
 // path is a no-op: it returns nil and leaves the graph untouched.
 func TestLoadFeedback_MissingFileNoError(t *testing.T) {

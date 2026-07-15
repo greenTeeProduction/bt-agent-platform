@@ -23,6 +23,10 @@ type treeFeedback struct {
 	EvolvedCount int           `json:"evolved_count"`
 	LastOutcome  string        `json:"last_outcome"`
 	LastDuration time.Duration `json:"last_duration"`
+	// RecentRuns mirrors TreeMeta.RecentRuns so a registered domain fitness
+	// function (see RegisterDomainFitness) sees the full run-history window
+	// immediately after a restart, not just runs recorded since the restart.
+	RecentRuns []RunSummary `json:"recent_runs,omitempty"`
 }
 
 // feedbackPersistState is the debounce bookkeeping wrapped around SaveFeedback.
@@ -92,10 +96,10 @@ func (kg *KnowledgeGraph) FlushFeedback(force bool) error {
 }
 
 // SaveFeedback serializes the runtime-feedback fields (Fitness, RunCount,
-// EvolvedCount, LastOutcome, LastDuration) and the uses_tool edges to a JSON
-// file. Static tree
-// metadata is not written. The write is atomic: it lands in a temp file that is
-// renamed into place, so a crash mid-write can never leave a truncated snapshot.
+// EvolvedCount, LastOutcome, LastDuration, RecentRuns) and the uses_tool edges
+// to a JSON file. Static tree metadata is not written. The write is atomic: it
+// lands in a temp file that is renamed into place, so a crash mid-write can
+// never leave a truncated snapshot.
 func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 	kg.mu.RLock()
 	snap := feedbackSnapshot{
@@ -108,6 +112,7 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 			EvolvedCount: tree.EvolvedCount,
 			LastOutcome:  tree.LastOutcome,
 			LastDuration: tree.LastDuration,
+			RecentRuns:   tree.RecentRuns,
 		}
 	}
 	for _, e := range kg.Edges {
@@ -168,6 +173,7 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 		tree.EvolvedCount = fb.EvolvedCount
 		tree.LastOutcome = fb.LastOutcome
 		tree.LastDuration = fb.LastDuration
+		tree.RecentRuns = fb.RecentRuns
 	}
 	for _, e := range snap.ToolEdges {
 		// Only restore edges whose source tree is registered.

@@ -315,6 +315,12 @@ type ParetoPopulation struct {
 	*Population
 	Front     *ParetoFront
 	FitnessFn func(*SerializableNode) MultiFitness
+	// ExpertKnowledge is an optional, caller-owned learning archive that
+	// EvolvePareto's mutation-application step observes every
+	// genuinely-improving mutation into via Observe, mirroring the ek
+	// plumbing Population.EvolveQLearning/qLearnMutate already have
+	// (learning.go:845-921). A nil ExpertKnowledge is a no-op.
+	ExpertKnowledge *ExpertKnowledge
 }
 
 // NewParetoPopulation creates a population with Pareto multi-objective optimization.
@@ -403,7 +409,14 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 				child := Crossover(parents[0], parents[1])
 				if rand.Float64() < mutationRate {
 					ops := randomMutation(child)
-					ApplyMutations(child, ops)
+					if len(ops) > 0 {
+						ops[0] = materializeMutationOp(ops[0])
+					}
+					before := fitnessFn(child).CompositeScore(nil)
+					if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
+						after := fitnessFn(child).CompositeScore(nil)
+						pp.ExpertKnowledge.Observe(ops[0].Operation, "pareto", after-before)
+					}
 				}
 				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 			}
@@ -414,6 +427,30 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 	}
 
 	return pp.BestTree
+}
+
+// materializeMutationOp fills in the concrete Node payload for a
+// generically-named mutation op (add_before/add_after/add_fallback) that
+// randomMutation's fallback vocabulary leaves incomplete — ApplyMutations
+// silently no-ops those without one (mutate.go:217-252). Without
+// materializing a payload here, EvolvePareto's and NSGA-II Evolve's
+// mutation-application steps could never register a genuine ExpertKnowledge
+// gain: every op that survives application would be node-count-neutral or
+// -decreasing, making an "improving" mutation structurally impossible to
+// observe under a fitness function that rewards node count. Mirrors the
+// payload MCTSMutator.concreteMutationOp synthesizes for the same op names
+// (mcts_mutate.go:303-317), keeping the Target randomMutation already chose.
+func materializeMutationOp(op MutationOp) MutationOp {
+	if op.Node != nil {
+		return op
+	}
+	switch op.Operation {
+	case "add_before", "add_after":
+		op.Node = &SerializableNode{Type: "Condition", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, rand.Intn(1_000_000))}
+	case "add_fallback":
+		op.Node = &SerializableNode{Type: "Action", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, rand.Intn(1_000_000))}
+	}
+	return op
 }
 
 // ParetoStats reports multi-objective metrics.

@@ -206,6 +206,13 @@ type MAPElitesPopulation struct {
 	*Population
 	Grid   *MAPElitesGrid
 	Domain string
+	// ExpertKnowledge is an optional, caller-owned learning archive that
+	// EvolveMAPElites's mutation-application step observes every
+	// genuinely-improving mutation into via Observe, mirroring the ek
+	// plumbing EvolvePareto/NSGA-II Evolve/EvolveQLearning already have
+	// (pareto.go:323, multi_objective.go, learning.go:845-921). A nil
+	// ExpertKnowledge is a no-op.
+	ExpertKnowledge *ExpertKnowledge
 }
 
 // NewMAPElitesPopulation creates a population with MAP-Elites diversity tracking.
@@ -331,7 +338,14 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 			child := Crossover(parents[0], parents[1])
 			if rand.Float64() < mutationRate {
 				ops := randomMutation(child)
-				ApplyMutations(child, ops)
+				if len(ops) > 0 {
+					ops[0] = materializeMutationOp(ops[0])
+				}
+				before := fitnessFn(child)
+				if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
+					after := fitnessFn(child)
+					mp.ExpertKnowledge.Observe(ops[0].Operation, "map_elites", after-before)
+				}
 			}
 			newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
 		}

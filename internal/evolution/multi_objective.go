@@ -46,6 +46,13 @@ type NSGAIIPopulation struct {
 	FitnessMultiFn func(*SerializableNode) MultiFitness `json:"-"`
 	Cap            int                                  `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
 	Archive        *ParetoFront                         `json:"-"`             // durable cross-run archive of front 0, populated by Load
+	// ExpertKnowledge is an optional, caller-owned learning archive that
+	// Evolve's offspring mutation step observes every genuinely-improving
+	// mutation into via Observe, mirroring the ek plumbing
+	// Population.EvolveQLearning/qLearnMutate already have
+	// (learning.go:845-921) and EvolvePareto (pareto.go). A nil
+	// ExpertKnowledge is a no-op.
+	ExpertKnowledge *ExpertKnowledge `json:"-"`
 }
 
 // NewNSGAIIPopulation creates a population with NSGA-II support. Specialists
@@ -328,7 +335,14 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 				// Mutation
 				if rand.Float64() < mutationRate {
 					ops := randomMutation(child)
-					ApplyMutations(child, ops)
+					if len(ops) > 0 {
+						ops[0] = materializeMutationOp(ops[0])
+					}
+					before := fitnessFn(child).CompositeScore(nil)
+					if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
+						after := fitnessFn(child).CompositeScore(nil)
+						nsga2.ExpertKnowledge.Observe(ops[0].Operation, "nsga2", after-before)
+					}
 				}
 				fv := fitnessFn(child)
 				offspring[i] = Individual{

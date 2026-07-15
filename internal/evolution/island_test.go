@@ -1,6 +1,9 @@
 package evolution
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 // rigDeathSpiralIsland builds a Population that reproduces the same
 // diversity-collapse recipe TestSelfHealGeneration_ExtractsEvolveSelfHealingStep
@@ -116,6 +119,93 @@ func TestIslandModel_EvolveAllFleetParitySelfHealsEveryIsland(t *testing.T) {
 		}
 		if island.Crisis == nil {
 			t.Errorf("island %q: EvolveAll did not seed Population.Crisis — this island's evolve pass skips the shared self-healing helper", d)
+		}
+	}
+}
+
+// growthFitness (experience_bank_test.go) is monotone in node count and
+// bounded in (0,1), so any mutation that adds nodes strictly improves
+// fitness — reused here (as it already is by
+// TestExpertKnowledge_ObservesLearnedPatternFromQLearning and the Pareto/
+// NSGA-II equivalents in pareto_test.go) to guarantee a seeded run
+// encounters improving mutations for ExpertKnowledge to record.
+
+// TestIslandModel_EvolveAllObservesLearnedPatternViaExpertKnowledge pins
+// milestone 3/3 of the Q2 Evolvability "feed ExpertKnowledge's
+// learned-pattern archive back into mutation recommendations and every
+// production evolution algorithm" program: EvolveAll's per-island
+// mutation-application step must call a caller-owned
+// *ExpertKnowledge.Observe(action, category, gain) whenever a mutation
+// genuinely improves fitness, mirroring the wiring EvolvePareto and NSGA-II
+// Evolve already have (pareto.go:416-419, multi_objective.go) and
+// EvolveQLearning/qLearnMutate before them (learning.go:845-921). The
+// ExpertKnowledge field on IslandModel does not exist yet, so this test
+// fails to compile until milestone 3 lands.
+func TestIslandModel_EvolveAllObservesLearnedPatternViaExpertKnowledge(t *testing.T) {
+	ek := NewExpertKnowledge()
+	before := len(ek.LearnedPatterns)
+
+	// A handful of fixed seeds keeps the run deterministic while tolerating
+	// exactly which mutation op the random draw picks first, mirroring
+	// TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge.
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed)                 //nolint:staticcheck // deterministic evolution run for reproducibility
+		im := NewIslandModel(1000, 0.5) // migration interval far beyond this test's generations
+		im.ExpertKnowledge = ek
+		im.AddIsland("go", NewPopulation(8, DefaultTree()))
+
+		var bestTrees map[string]*SerializableNode
+		for gen := 0; gen < 4; gen++ {
+			bestTrees = im.EvolveAll(growthFitness)
+		}
+		if bestTrees["go"] == nil {
+			t.Fatal("EvolveAll returned no best tree for island 'go'")
+		}
+		if len(ek.LearnedPatterns) > before {
+			break
+		}
+	}
+
+	if len(ek.LearnedPatterns) <= before {
+		t.Fatal("expected EvolveAll to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+	}
+	for _, lp := range ek.LearnedPatterns {
+		if lp.Gain <= 0 {
+			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
+		}
+	}
+}
+
+// TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternViaExpertKnowledge
+// pins the MAP-Elites half of milestone 3/3: EvolveMAPElites's
+// mutation-application step must call a caller-owned
+// *ExpertKnowledge.Observe the same way EvolvePareto, NSGA-II Evolve, and now
+// EvolveAll do. The ExpertKnowledge field on MAPElitesPopulation does not
+// exist yet, so this test fails to compile until milestone 3 lands.
+func TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternViaExpertKnowledge(t *testing.T) {
+	ek := NewExpertKnowledge()
+	before := len(ek.LearnedPatterns)
+
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		mp := NewMAPElitesPopulation(8, DefaultTree(), "go")
+		mp.ExpertKnowledge = ek
+
+		best := mp.EvolveMAPElites(4, growthFitness)
+		if best == nil {
+			t.Fatal("EvolveMAPElites returned nil best tree")
+		}
+		if len(ek.LearnedPatterns) > before {
+			break
+		}
+	}
+
+	if len(ek.LearnedPatterns) <= before {
+		t.Fatal("expected EvolveMAPElites to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+	}
+	for _, lp := range ek.LearnedPatterns {
+		if lp.Gain <= 0 {
+			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
 		}
 	}
 }

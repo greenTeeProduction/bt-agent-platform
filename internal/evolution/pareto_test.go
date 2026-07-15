@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"math/rand"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -231,6 +232,90 @@ func TestParetoPopulation_EvolvePareto(t *testing.T) {
 	}
 	if pp.Front.Size() == 0 {
 		t.Error("Pareto front should have entries after evolution")
+	}
+}
+
+// growthMultiFitness wraps growthFitness (experience_bank_test.go) — monotone
+// in node count and bounded in (0,1) — as a single-dimension MultiFitness so
+// any mutation that adds nodes strictly improves the composite score. Used to
+// exercise the ExpertKnowledge.Observe wiring in EvolvePareto and NSGA-II's
+// Evolve, mirroring how growthFitness drives
+// TestExpertKnowledge_ObservesLearnedPatternFromQLearning (learning_test.go).
+func growthMultiFitness(tr *SerializableNode) MultiFitness {
+	mf := NewMultiFitness()
+	mf.Set(DimNodeEfficiency, growthFitness(tr)*100)
+	return mf
+}
+
+// TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge
+// pins milestone 2/3 of the Q2 Evolvability "feed ExpertKnowledge's
+// learned-pattern archive back into mutation recommendations and every
+// production evolution algorithm" program: EvolvePareto's mutation-application
+// step must call a caller-owned *ExpertKnowledge.Observe(action, category,
+// gain) whenever a mutation genuinely improves fitness, mirroring the wiring
+// EvolveQLearning/qLearnMutate already have (learning.go:845-921). The
+// ExpertKnowledge field on ParetoPopulation does not exist yet, so this test
+// fails to compile until milestone 2 lands.
+func TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge(t *testing.T) {
+	ek := NewExpertKnowledge()
+	before := len(ek.LearnedPatterns)
+
+	// A handful of fixed seeds keeps the run deterministic while tolerating
+	// exactly which mutation op the random draw picks first, mirroring
+	// TestExpertKnowledge_ObservesLearnedPatternFromQLearning.
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		pp := NewParetoPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
+		pp.ExpertKnowledge = ek
+		best := pp.EvolvePareto(4, growthMultiFitness)
+		if best == nil {
+			t.Fatal("EvolvePareto returned nil best tree")
+		}
+		if len(ek.LearnedPatterns) > before {
+			break
+		}
+	}
+
+	if len(ek.LearnedPatterns) <= before {
+		t.Fatal("expected EvolvePareto to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+	}
+	for _, lp := range ek.LearnedPatterns {
+		if lp.Gain <= 0 {
+			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
+		}
+	}
+}
+
+// TestNSGAIIPopulation_Evolve_ObservesLearnedPatternViaExpertKnowledge pins
+// the NSGA-II half of milestone 2/3: Evolve's mutation-application step must
+// call a caller-owned *ExpertKnowledge.Observe the same way EvolvePareto
+// does, mirroring learning.go:845-921. The ExpertKnowledge field on
+// NSGAIIPopulation does not exist yet, so this test fails to compile until
+// milestone 2 lands.
+func TestNSGAIIPopulation_Evolve_ObservesLearnedPatternViaExpertKnowledge(t *testing.T) {
+	ek := NewExpertKnowledge()
+	before := len(ek.LearnedPatterns)
+
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		nsga2 := NewNSGAIIPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
+		nsga2.ExpertKnowledge = ek
+		best := nsga2.Evolve(4, growthMultiFitness)
+		if best == nil {
+			t.Fatal("Evolve returned nil best tree")
+		}
+		if len(ek.LearnedPatterns) > before {
+			break
+		}
+	}
+
+	if len(ek.LearnedPatterns) <= before {
+		t.Fatal("expected NSGA-II Evolve to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+	}
+	for _, lp := range ek.LearnedPatterns {
+		if lp.Gain <= 0 {
+			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
+		}
 	}
 }
 

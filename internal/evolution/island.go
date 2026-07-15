@@ -34,6 +34,13 @@ type IslandModel struct {
 	// experience-grounded feedback loop across sibling domain trees. Nil
 	// leaves migration experience-agnostic (the pre-existing behavior).
 	Bank *ExperienceBank `json:"-"`
+	// ExpertKnowledge is an optional, caller-owned learning archive that
+	// EvolveAll's per-island mutation-application step observes every
+	// genuinely-improving mutation into via Observe, mirroring the ek
+	// plumbing EvolvePareto/NSGA-II Evolve/EvolveQLearning already have
+	// (pareto.go:323, multi_objective.go, learning.go:845-921). A nil
+	// ExpertKnowledge is a no-op.
+	ExpertKnowledge *ExpertKnowledge `json:"-"`
 }
 
 // NewIslandModel creates an island model with domain-separated populations.
@@ -147,6 +154,10 @@ func (im *IslandModel) Migrate() int {
 // a direct Population.Evolve call already gets. Islands added without a
 // pre-seeded Specialists registry (the AddIsland default) get one here so no
 // island can skip the self-healing step for lack of a registry to consult.
+// The per-island mutation-application step mirrors EvolvePareto/NSGA-II
+// Evolve (pareto.go:407-420, multi_objective.go:330-346): elites survive
+// untouched, the rest breed via crossover + mutation, and every
+// genuinely-improving mutation is observed into im.ExpertKnowledge.
 func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[string]*SerializableNode {
 	im.mu.Lock()
 	defer im.mu.Unlock()
@@ -162,7 +173,28 @@ func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[
 		// Clamp so degenerate populations (size < 2) don't overflow the elite copy.
 		eliteCount := min(max(2, len(pop.Individuals)/10), len(pop.Individuals))
 		pop.Generation++
-		pop.selfHealGeneration(eliteCount, supervisor, func(float64) {
+		pop.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
+			newPop := make([]Individual, len(pop.Individuals))
+			copy(newPop[:eliteCount], pop.Individuals[:eliteCount])
+
+			for i := eliteCount; i < len(pop.Individuals); i++ {
+				parents := pop.Select()
+				child := Crossover(parents[0], parents[1])
+				if rand.Float64() < mutationRate {
+					ops := randomMutation(child)
+					if len(ops) > 0 {
+						ops[0] = materializeMutationOp(ops[0])
+					}
+					before := fitnessFn(child)
+					if applied := ApplyMutations(child, ops); applied > 0 && len(ops) > 0 {
+						after := fitnessFn(child)
+						im.ExpertKnowledge.Observe(ops[0].Operation, "island", after-before)
+					}
+				}
+				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
+			}
+
+			pop.Individuals = newPop
 			pop.Evaluate(fitnessFn)
 		})
 		bestTrees[domain] = pop.BestTree
