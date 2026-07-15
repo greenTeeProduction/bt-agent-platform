@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -100,5 +101,98 @@ func TestTaskStore_ApprovedOrdersByPriorityThenSprint(t *testing.T) {
 	}
 	if approved[1].ID != "low-early" {
 		t.Errorf("Approved()[1].ID = %q, want %q", approved[1].ID, "low-early")
+	}
+}
+
+// TestTaskStore_LoadReturnsErrorOnCorruptJSON pins the "fail loudly on
+// corruption" half of the atomic load/save research goal: Load() must
+// surface a JSON-parse error to the caller instead of silently discarding it
+// (the prior behavior of `_ = json.Unmarshal(data, s)`), which made a
+// corrupted tasks.json indistinguishable from an empty, freshly-created
+// store — silently losing every persisted task. This mirrors the Load()
+// error contract already used by goap.GoalStore and agent.FileJobStore.
+func TestTaskStore_LoadReturnsErrorOnCorruptJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tasks.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0644); err != nil {
+		t.Fatalf("seeding corrupt file: %v", err)
+	}
+
+	store := &TaskStore{path: path, Tasks: []Task{}}
+	if err := store.Load(); err == nil {
+		t.Fatal("Load() on a corrupt tasks.json returned a nil error; corruption must fail loudly instead of being silently discarded")
+	}
+}
+
+// TestNewTaskStore_PanicsOnCorruptFile pins the same fail-loudly contract at
+// the NewTaskStore constructor, which is the entry point cmd/bt-dashboard
+// actually calls at startup (dashboard.NewTaskStore(...), no error return).
+// Silently starting the dashboard with an empty task list because the
+// on-disk file failed to parse would look identical to "no tasks yet" — an
+// operator would never know their tasks were gone.
+func TestNewTaskStore_PanicsOnCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tasks.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0644); err != nil {
+		t.Fatalf("seeding corrupt file: %v", err)
+	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("NewTaskStore did not panic on a corrupt task store file; corruption must fail loudly instead of silently starting with an empty store")
+		}
+	}()
+	NewTaskStore(path)
+}
+
+// TestTaskStore_SaveAtomicWriteLeavesOriginalIntactOnFailure pins the
+// "atomic" half of the research goal: Save must write through a sibling temp
+// file and rename into place (mirroring goap.GoalStore.saveLocked and
+// agent.FileJobStore.Save), not truncate-and-overwrite the live file
+// directly. A read-only directory blocks creating that sibling temp file, so
+// an atomic save must fail here *without* touching the existing file. The
+// prior os.WriteFile(s.path, ...) implementation truncates the existing file
+// in place — which needs only write permission on the file itself, not the
+// directory — so it silently succeeds and destroys the original content:
+// exactly the corruption-on-crash risk this goal exists to close.
+func TestTaskStore_SaveAtomicWriteLeavesOriginalIntactOnFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses directory permission checks")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tasks.json")
+
+	store := NewTaskStore(path)
+	if err := store.Create(Task{ID: "t1", Title: "first"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading seeded file: %v", err)
+	}
+
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatalf("chmod dir read-only: %v", err)
+	}
+	defer func() { _ = os.Chmod(dir, 0755) }()
+
+	saveErr := store.Create(Task{ID: "t2", Title: "second"})
+
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatalf("chmod dir writable: %v", err)
+	}
+
+	if saveErr == nil {
+		t.Fatal("Create() succeeded despite a read-only directory; an atomic save needs to create a sibling temp file and must fail here")
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading file after failed save: %v", err)
+	}
+	if string(after) != string(original) {
+		t.Errorf("tasks.json content changed after a failed save; atomic save must leave the original file untouched on failure.\noriginal: %s\nafter:    %s", original, after)
 	}
 }

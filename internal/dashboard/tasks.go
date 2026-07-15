@@ -38,20 +38,35 @@ type TaskStore struct {
 	Tasks []Task `json:"tasks"`
 }
 
+// NewTaskStore loads the store at path, creating a fresh one if the file
+// does not exist yet. It panics if the file exists but fails to parse: a
+// corrupted tasks.json must never be silently mistaken for an empty store,
+// since that would look identical to "no tasks yet" and hide real data loss.
 func NewTaskStore(path string) *TaskStore {
 	ts := &TaskStore{path: path, Tasks: []Task{}}
-	ts.Load()
+	if err := ts.Load(); err != nil {
+		panic(fmt.Sprintf("dashboard: loading task store %s: %v", path, err))
+	}
 	return ts
 }
 
-func (s *TaskStore) Load() {
+// Load reads and parses the store's JSON file. A missing file is a fresh
+// store, not an error. A file that exists but fails to parse returns an
+// error instead of silently discarding it and leaving Tasks unchanged.
+func (s *TaskStore) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, err := os.ReadFile(s.path)
 	if err != nil {
-		return // fresh store, no tasks yet
+		if os.IsNotExist(err) {
+			return nil // fresh store, no tasks yet
+		}
+		return fmt.Errorf("dashboard: read task store: %w", err)
 	}
-	_ = json.Unmarshal(data, s)
+	if err := json.Unmarshal(data, s); err != nil {
+		return fmt.Errorf("dashboard: parse task store: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskStore) Save() error {
@@ -60,12 +75,22 @@ func (s *TaskStore) Save() error {
 	return s.saveLocked()
 }
 
+// saveLocked writes the store atomically: it marshals to a sibling temp
+// file and renames it into place, so a failure (or a crash mid-write)
+// leaves the existing tasks.json untouched rather than truncated.
 func (s *TaskStore) saveLocked() error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0644)
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("dashboard: write task store: %w", err)
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		return fmt.Errorf("dashboard: rename task store: %w", err)
+	}
+	return nil
 }
 
 func (s *TaskStore) List() []Task {
