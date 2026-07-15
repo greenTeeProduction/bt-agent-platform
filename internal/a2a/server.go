@@ -23,6 +23,12 @@ type BTAgentExecutor struct {
 	Reg     *agent.Registry
 	LLM     llm.LLM
 	TreeMap map[string]*evolution.SerializableNode
+
+	// CardCache holds the same signed agent cards the A2A server advertises
+	// (see Server.CardCache), keyed by agent name. The auction-bid branch of
+	// Execute scores announcements against these cards rather than re-deriving
+	// (and re-signing) a fresh one from the tree definition on every request.
+	CardCache map[string]*a2a.AgentCard
 }
 
 // Execute runs the BT agent for the given A2A task.
@@ -82,23 +88,27 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		// declines silently (a completed task with no artifact) so the
 		// auctioneer drops it rather than seeing a spurious failure.
 		if ann, isAnn := parseAnnouncement(taskText); isAnn {
-			if card, cardErr := ConvertToAgentCard(inst.Definition, ""); cardErr == nil {
-				if bid, bidOK := ScoreAnnouncement(agentName, card, ann); bidOK {
-					if payload, mErr := json.Marshal(bid); mErr == nil {
-						if !yield(a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(string(payload))), nil) {
-							return
-						}
-						if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
-							a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
-								fmt.Sprintf("bid submitted for task %s", ann.TaskID)))), nil) {
-							return
-						}
-						return
-					}
-				}
+			// Prefer the already-signed card the A2A server actually advertises
+			// (Server.CardCache, mirrored here) over re-deriving one from the
+			// tree definition on every inbound request; fall back to a fresh
+			// conversion only when no cached card exists.
+			card := e.CardCache[agentName]
+			if card == nil {
+				card, _ = ConvertToAgentCard(inst.Definition, "")
 			}
-			// Recognized announcement but ineligible (or card/bid encoding
-			// failed): decline without running the tree.
+			if payload, ok := RespondToAnnouncement(agentName, card, taskText); ok {
+				if !yield(a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(payload)), nil) {
+					return
+				}
+				if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
+					a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
+						fmt.Sprintf("bid submitted for task %s", ann.TaskID)))), nil) {
+					return
+				}
+				return
+			}
+			// Recognized announcement but ineligible (or no usable card):
+			// decline without running the tree.
 			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
 				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
 					fmt.Sprintf("declined auction for task %s", ann.TaskID)))), nil) {
@@ -266,8 +276,9 @@ func NewServer(reg *agent.Registry, llmClient llm.LLM, port int, baseURL string)
 	}
 
 	executor := &BTAgentExecutor{
-		Reg: reg,
-		LLM: llmClient,
+		Reg:       reg,
+		LLM:       llmClient,
+		CardCache: cards,
 	}
 
 	return &Server{

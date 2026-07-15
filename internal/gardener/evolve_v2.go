@@ -335,12 +335,14 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
 	}
 
-	// Deep search (Q2 Evolvability milestone 2): probe further ahead from the
-	// post-cycle tree with the Stockfish-style transposition-table search,
-	// gated on a configured transposition table (IterativeDeepening requires
-	// a non-nil *evaluator.TranspositionTable to run at all). Metrics-only
-	// this milestone — the result does not yet feed back into mutation
-	// selection.
+	// Deep search (Q2 Evolvability milestone 2/3): probe further ahead from
+	// the post-cycle tree with the Stockfish-style transposition-table
+	// search, gated on a configured transposition table (IterativeDeepening
+	// requires a non-nil *evaluator.TranspositionTable to run at all). When
+	// the search surfaces a mutation that beats the tree's current fitness,
+	// apply it directly to the live tree instead of discarding it as
+	// metrics-only — this is the only path that can still improve the tree
+	// once the greedy per-candidate loop's budget is exhausted or zero.
 	var deepSearchUsed bool
 	var deepSearchDepth int
 	var ttHitRate float64
@@ -350,6 +352,20 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		deepSearchDepth = deep.Depth
 		if deep.TTProbes > 0 {
 			ttHitRate = float64(deep.TTProbeHits) / float64(deep.TTProbes)
+		}
+		if deep.BestMutation != nil && deep.BestFitness != nil && deep.BestFitness.Composite > newFitness.Composite+0.0001 {
+			if evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
+				applied++
+				if bank != nil {
+					if err := bank.AddFromMutation(tree, deep.BestMutation.Op, newFitness.Composite, deep.BestFitness.Composite, nil); err != nil {
+						slog.Warn("gardener/v2: recording deep-search mutation experience failed", "tree", entry.Name, "error", err)
+					}
+				}
+				newFitness = *deep.BestFitness
+				nodesAfter = evolution.CountNodes(tree)
+				improved = newFitness.Composite > baseFitness.Composite
+				_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+			}
 		}
 	}
 

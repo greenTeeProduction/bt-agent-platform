@@ -1,6 +1,7 @@
 package gardener
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"os"
@@ -1192,4 +1193,83 @@ func TestEvolveTreeV2_MetaValidatorRejectsStructurallyBrokenMutation(t *testing.
 			t.Errorf("expected MetaValidator to reject the candidate despite fitness/SLO gates accepting it, got %d mutations applied", m.Mutations)
 		}
 	})
+}
+
+// ============================================================================
+// Deep-search feedback (NotebookLM research goal, Q2 Evolvability milestone 3)
+// ============================================================================
+
+// TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing pins the
+// NotebookLM research goal: evaluator.IterativeDeepening's BestMutation/
+// BestFitness must feed back into the tree the gardener evolves instead of
+// being discarded after computing it every cycle (evolve_v2.go currently only
+// reads deep.Depth/TTProbes/TTProbeHits into metrics — see the "Metrics-only
+// this milestone" comment above the deep-search call).
+//
+// gateDisabledTestTree() + seedFailureRecords() reliably makes
+// evaluator.IterativeDeepening discover a genuine fitness-improving
+// add_before/PreGate mutation (verified: base composite ~41.5, deep search's
+// BestFitness composite ~45.1). Setting Config.MaxMutations to 0 disables the
+// greedy per-candidate loop entirely — applied stays 0 and the tree is
+// untouched by it — isolating the deep-search feedback path as the only
+// possible source of improvement.
+func TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing(t *testing.T) {
+	dir := t.TempDir()
+	ttDir := filepath.Join(dir, "tt")
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	const treeName = "deep_search_feedback"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "deep search feedback", Tree: tree, FilePath: dir + "/tree-" + treeName + ".json", Active: true},
+	}
+	registry.mu.Unlock()
+
+	cfg := Config{
+		Registry:               registry,
+		MetricsTracker:         mt,
+		RefStore:               refStore,
+		TranspositionTablePath: ttDir,
+		MaxMutations:           0, // greedy loop budget is zero: it cannot apply anything itself
+	}
+	g := NewGardener(cfg)
+
+	entry := registry.List()[0]
+	treeBefore := marshalTree(t, entry.Tree)
+
+	// A zero-value CascadeCfg (not DefaultEvolveV2Config's QuickThreshold: 30)
+	// matches the other tests built on gateDisabledTestTree() — its
+	// StructuralQuickEval score of 10 would otherwise trip the cascade's
+	// early-return gate before the pipeline ever reaches deep search.
+	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
+	m := g.evolveTreeV2(entry, v2cfg)
+
+	if !m.DeepSearchUsed {
+		t.Fatalf("precondition failed: expected DeepSearchUsed=true with TranspositionTablePath configured, got false (metrics=%+v)", m)
+	}
+
+	if m.NewFitness <= m.BaseFitness+0.0001 {
+		t.Errorf("expected the deep search's BestMutation/BestFitness to be applied and raise NewFitness above BaseFitness (base=%.4f, new=%.4f) even though the greedy mutation budget was zero — IterativeDeepening's result must feed back into the chosen mutation instead of being discarded as metrics-only",
+			m.BaseFitness, m.NewFitness)
+	}
+	if m.Mutations == 0 {
+		t.Errorf("expected Mutations > 0 from the applied deep-search mutation despite greedy MaxMutations=0, got 0 — BestMutation must be applied to the tree, not just recorded in metrics")
+	}
+
+	treeAfter := marshalTree(t, entry.Tree)
+	if bytes.Equal(treeBefore, treeAfter) {
+		t.Errorf("expected the in-memory tree to be mutated by the deep search's BestMutation, but it is unchanged")
+	}
 }

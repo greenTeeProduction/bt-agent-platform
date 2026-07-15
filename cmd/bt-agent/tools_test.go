@@ -2835,6 +2835,186 @@ func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
 	}
 }
 
+// assertExpertArchiveFedFromRun invokes bt_evolve_expert against tree and
+// requires a non-empty "learned_patterns" array with well-formed entries,
+// mirroring the assertion half of TestBTEvolveExpertSurfacesLearnedPatternFromQLearning.
+// Shared by the sibling *_FeedsExpertKnowledgeArchive tests below so
+// bt_evolve_island/bt_evolve_multiobjective/bt_evolve_pareto are each pinned
+// against the same warm-start/save contract bt_evolve_qlearning already
+// satisfies for the shared expertArchivePath archive.
+func assertExpertArchiveFedFromRun(t *testing.T, server *engine.Server, tree, writerTool string) {
+	t.Helper()
+	expRes, ok := server.Invoke("bt_evolve_expert", json.RawMessage(`{"tree":"`+tree+`"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_expert) reported the tool as unregistered")
+	}
+	if expRes == nil || len(expRes.Content) == 0 {
+		t.Fatal("bt_evolve_expert returned no content")
+	}
+	var expOut map[string]interface{}
+	if err := json.Unmarshal([]byte(expRes.Content[0].Text), &expOut); err != nil {
+		t.Fatalf("bt_evolve_expert result is not valid JSON: %v (text=%q)", err, expRes.Content[0].Text)
+	}
+	if _, isErr := expOut["error"]; isErr {
+		t.Fatalf("bt_evolve_expert unexpectedly returned an error: %v", expOut)
+	}
+
+	learned, isArr := expOut["learned_patterns"].([]interface{})
+	if !isArr || len(learned) == 0 {
+		t.Fatalf("bt_evolve_expert must warm-start from the same expert archive %s persists to and surface a non-empty 'learned_patterns'; got %v (%T)", writerTool, expOut["learned_patterns"], expOut["learned_patterns"])
+	}
+	for i, raw := range learned {
+		entry, isObj := raw.(map[string]interface{})
+		if !isObj {
+			t.Fatalf("bt_evolve_expert 'learned_patterns'[%d] must be an object; got %T", i, raw)
+		}
+		action, _ := entry["action"].(string)
+		category, _ := entry["category"].(string)
+		gain, isNum := entry["gain"].(float64)
+		if action == "" || category == "" || !isNum || gain <= 0 {
+			t.Errorf("bt_evolve_expert 'learned_patterns'[%d] must carry a non-empty action/category and a positive gain (a genuine improvement observed by %s); got %v", i, writerTool, entry)
+		}
+	}
+}
+
+// TestBTEvolveIslandFeedsExpertKnowledgeArchive pins the missing wiring of
+// ExpertKnowledge learned-pattern feedback into bt_evolve_island (NotebookLM
+// research goal, Q2 Evolvability): the handler must warm-start the shared
+// expertArchivePath archive, Observe the cross-island winner's genuine
+// structural-fitness gain over the base tree, and persist the merged archive
+// back — mirroring the ek.Load/Observe/Save sequence bt_evolve_qlearning
+// already runs at tools.go:1342-1381. Today bt_evolve_island never touches
+// ExpertKnowledge at all, so bt_evolve_expert warm-starting from the same
+// per-tree archive afterwards must see an empty catalog.
+//
+// benchmarkRunSuiteFn is mocked to a guaranteed non-regressing result
+// (mirroring TestBTEvolveIslandAccumulatesDurableArchive) so the existing
+// benchmark gate never rejects the winner and blocks archive persistence for
+// a reason unrelated to the ExpertKnowledge wiring under test. islands=3,
+// population=10, generations=20 gives the deterministic structural-fitness
+// search (internal/evolution/island.go's unseeded math/rand mutation) ample
+// attempts to find at least one genuinely improving mutation over the raw,
+// unoptimized base tree, keeping the positive-gain assumption reliable
+// without depending on a specific mutation outcome.
+func TestBTEvolveIslandFeedsExpertKnowledgeArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","islands":3,"population":10,"generations":20}`)
+	res, ok := server.Invoke("bt_evolve_island", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_island) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_island returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_island unexpectedly returned an error: %v", out)
+	}
+
+	assertExpertArchiveFedFromRun(t, server, "godev", "bt_evolve_island")
+}
+
+// TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive pins the missing
+// wiring of ExpertKnowledge learned-pattern feedback into
+// bt_evolve_multiobjective (NotebookLM research goal, Q2 Evolvability): the
+// handler must warm-start the shared expertArchivePath archive, Observe the
+// NSGA-II front's lead individual's genuine structural-fitness gain over the
+// base tree, and persist the merged archive back — mirroring
+// bt_evolve_qlearning's ek.Load/Observe/Save sequence. Today
+// bt_evolve_multiobjective never touches ExpertKnowledge at all, so
+// bt_evolve_expert warm-starting from the same per-tree archive afterwards
+// must see an empty catalog.
+//
+// benchmarkRunSuiteFn is mocked to a guaranteed non-regressing result
+// (mirroring TestBTEvolveMultiObjectiveAccumulatesDurableArchive) so the
+// existing benchmark gate never rejects the winner and blocks archive
+// persistence for a reason unrelated to the ExpertKnowledge wiring under
+// test. population=20/generations=20 gives NSGA-II's unseeded math/rand
+// mutation ample attempts to find at least one genuinely improving mutation
+// over the raw, unoptimized base tree.
+func TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":20,"generations":20}`)
+	res, ok := server.Invoke("bt_evolve_multiobjective", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_multiobjective) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_multiobjective returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_multiobjective result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_multiobjective unexpectedly returned an error: %v", out)
+	}
+
+	assertExpertArchiveFedFromRun(t, server, "godev", "bt_evolve_multiobjective")
+}
+
+// TestBTEvolveParetoFeedsExpertKnowledgeArchive pins the missing wiring of
+// ExpertKnowledge learned-pattern feedback into bt_evolve_pareto (NotebookLM
+// research goal, Q2 Evolvability): the handler must warm-start the shared
+// expertArchivePath archive, Observe the evolved winner's genuine
+// structural-fitness gain over the base tree, and persist the merged archive
+// back — mirroring bt_evolve_qlearning's ek.Load/Observe/Save sequence.
+// Today bt_evolve_pareto never touches ExpertKnowledge at all, so
+// bt_evolve_expert warm-starting from the same per-tree archive afterwards
+// must see an empty catalog. Unlike the island/multiobjective siblings,
+// bt_evolve_pareto has no benchmark gate to mock around, so no
+// benchmarkRunSuiteFn stub is needed here.
+func TestBTEvolveParetoFeedsExpertKnowledgeArchive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":20,"generations":20}`)
+	res, ok := server.Invoke("bt_evolve_pareto", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_pareto) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_pareto returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_pareto unexpectedly returned an error: %v", out)
+	}
+
+	assertExpertArchiveFedFromRun(t, server, "godev", "bt_evolve_pareto")
+}
+
 // TestBTEvolveQLearningStateCapBoundsDurableArchive pins milestone 4/4 of the
 // durable Q-learning program (Q2 Evolvability): bt_evolve_qlearning must
 // accept an optional "state_cap" request parameter and set it on

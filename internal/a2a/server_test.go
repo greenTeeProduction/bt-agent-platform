@@ -352,6 +352,38 @@ func TestExecute_IneligibleAnnouncementDeclinesWithoutRunningTree(t *testing.T) 
 	}
 }
 
+func TestExecute_AnnouncementScoresAgainstCardCacheNotFreshConversion(t *testing.T) {
+	// The agent's tree tags (research, deep) do NOT cover the announcement's
+	// RequiredTags, so a card freshly derived from the tree definition via
+	// ConvertToAgentCard would decline. But Server.CardCache holds a different,
+	// already-signed card for this agent that DOES cover the required tags.
+	// Execute must score the bid-aware branch against the CardCache entry —
+	// the same card the A2A server actually advertises and signs — instead of
+	// re-deriving (and re-signing) a fresh one from the tree definition on
+	// every inbound request.
+	exec := executorForAgent(t, "researcher", "research:deep_research")
+	exec.CardCache = map[string]*a2a.AgentCard{
+		"researcher": skillCard("researcher", "domain", "code"),
+	}
+
+	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"domain", "code"}, MinConfidence: 0.3}
+	payload, err := json.Marshal(ann)
+	if err != nil {
+		t.Fatalf("marshal announcement: %v", err)
+	}
+
+	events := drainExecute(t, exec, "researcher", string(payload))
+
+	bid, ok := bidArtifact(events)
+	if !ok {
+		t.Fatalf("Execute must score the announcement against Server.CardCache's card, "+
+			"not a freshly converted one from the tree definition; events=%s", eventKinds(events))
+	}
+	if bid.BidderName != "researcher" || bid.TaskID != "t1" {
+		t.Errorf("bid = %+v, want BidderName researcher / TaskID t1", bid)
+	}
+}
+
 func TestExecute_NonAnnouncementStillRunsTree(t *testing.T) {
 	// Plain task text is not an announcement and must keep flowing to the tree
 	// path — the bid detection must not swallow ordinary tasks. With no tree

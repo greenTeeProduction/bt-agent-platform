@@ -1049,6 +1049,23 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
 			nsga.Specialists = evolution.SeedSpecialistRegistry()
 			nsga.Cap = population * 5
+			// Warm-start the ExpertKnowledge learned-pattern archive so
+			// genuinely fitness-improving mutations observed across this and
+			// prior runs accumulate in the same per-tree archive
+			// bt_evolve_expert reads (Q2 Evolvability), mirroring
+			// bt_evolve_qlearning's ek.Load/Observe/Save sequence. Wiring
+			// nsga.ExpertKnowledge before evolving makes Evolve's mutation
+			// step observe every genuinely-improving mutation directly
+			// (multi_objective.go:344), the same ek plumbing
+			// EvolvePareto/EvolveAll/EvolveQLearning already have. A load
+			// error is surfaced non-fatally.
+			ek := evolution.NewExpertKnowledge()
+			expertPath := expertArchivePath(params.Tree)
+			expertLoadErr := ""
+			if err := ek.Load(expertPath); err != nil {
+				expertLoadErr = err.Error()
+			}
+			nsga.ExpertKnowledge = ek
 			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
@@ -1093,6 +1110,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
 			// Gate the front's lead individual through the tree's real
 			// benchmark suite before trusting it enough to persist — structural
 			// fitness alone can rate a mutation as elite while it actually
@@ -1108,6 +1128,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// non-fatally alongside the evolution result.
 				if err := nsga.Save(archivePath); err != nil {
 					result["archive_save_error"] = err.Error()
+				}
+				// Persist the ExpertKnowledge archive Evolve observed
+				// genuinely-improving mutations into during the run above,
+				// mirroring bt_evolve_qlearning's ek.Save. Persisted only
+				// alongside a gate-accepted winner, mirroring the NSGA-II
+				// archive save above.
+				if err := ek.Save(expertPath); err != nil {
+					result["expert_archive_save_error"] = err.Error()
 				}
 			}
 			data, _ := json.Marshal(result)
@@ -1155,6 +1183,23 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Population: newProductionPopulation(population, baseTree),
 				Front:      evolution.NewParetoFront(dims),
 			}
+			// Warm-start the ExpertKnowledge learned-pattern archive so
+			// genuinely fitness-improving mutations observed across this and
+			// prior runs accumulate in the same per-tree archive
+			// bt_evolve_expert reads (Q2 Evolvability), mirroring
+			// bt_evolve_qlearning's ek.Load/Observe/Save sequence. Wiring
+			// pp.ExpertKnowledge before evolving makes EvolvePareto's
+			// mutation step observe every genuinely-improving mutation
+			// directly (pareto.go:418), the same ek plumbing
+			// EvolveAll/NSGA-II Evolve/EvolveQLearning already have. A load
+			// error is surfaced non-fatally.
+			ek := evolution.NewExpertKnowledge()
+			expertPath := expertArchivePath(params.Tree)
+			expertLoadErr := ""
+			if err := ek.Load(expertPath); err != nil {
+				expertLoadErr = err.Error()
+			}
+			pp.ExpertKnowledge = ek
 			best := pp.EvolvePareto(params.Generations, evolution.StructuralMultiFitness)
 			// Warm-start a durable Pareto front archive from the evolved
 			// population so Pareto-optimal individuals accumulate across runs
@@ -1188,11 +1233,23 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
 			// Persist the merged front so the next invocation resumes from
 			// this run's Pareto-optimal individuals. A save failure is
 			// surfaced non-fatally alongside the evolution result.
 			if err := archive.Save(archivePath); err != nil {
 				result["archive_save_error"] = err.Error()
+			}
+			// Persist the ExpertKnowledge archive EvolvePareto observed
+			// genuinely-improving mutations into during the run above,
+			// mirroring bt_evolve_qlearning's ek.Save. Unlike
+			// bt_evolve_island/bt_evolve_multiobjective, this tool has no
+			// benchmark gate, so the save below always runs alongside the
+			// unconditional archive.Save.
+			if err := ek.Save(expertPath); err != nil {
+				result["expert_archive_save_error"] = err.Error()
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1523,6 +1580,24 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
+			// Warm-start the ExpertKnowledge learned-pattern archive so
+			// genuinely fitness-improving mutations observed across this and
+			// prior runs accumulate in the same per-tree archive
+			// bt_evolve_expert reads (Q2 Evolvability), mirroring
+			// bt_evolve_qlearning's ek.Load/Observe/Save sequence. Wiring
+			// im.ExpertKnowledge before evolving makes EvolveAll's per-island
+			// mutation step observe every genuinely-improving mutation
+			// directly (island.go:191), the same ek plumbing
+			// EvolvePareto/NSGA-II Evolve/EvolveQLearning already have. A
+			// load error is surfaced non-fatally, mirroring the island
+			// archive above.
+			ek := evolution.NewExpertKnowledge()
+			expertPath := expertArchivePath(params.Tree)
+			expertLoadErr := ""
+			if err := ek.Load(expertPath); err != nil {
+				expertLoadErr = err.Error()
+			}
+			im.ExpertKnowledge = ek
 			var bestTrees map[string]*evolution.SerializableNode
 			for g := 0; g < params.Generations; g++ {
 				bestTrees = im.EvolveAll(structuralFitnessFn)
@@ -1570,6 +1645,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if archiveLoadErr != "" {
 				result["archive_load_error"] = archiveLoadErr
 			}
+			if expertLoadErr != "" {
+				result["expert_archive_load_error"] = expertLoadErr
+			}
 			if legacyAdopted {
 				result["legacy_archive_adopted"] = true
 			}
@@ -1610,6 +1688,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if !gateRejected {
 				if err := im.Save(archivePath); err != nil {
 					result["archive_save_error"] = err.Error()
+				}
+				// Persist the ExpertKnowledge archive EvolveAll observed
+				// genuinely-improving mutations into during the loop above,
+				// mirroring bt_evolve_qlearning's ek.Save. Persisted only
+				// alongside a gate-accepted winner, mirroring the island
+				// archive save above.
+				if err := ek.Save(expertPath); err != nil {
+					result["expert_archive_save_error"] = err.Error()
 				}
 			}
 			data, _ := json.Marshal(result)
