@@ -1585,9 +1585,23 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 // every run. The result JSON must report the warm start honestly —
 // "warm_started": false on a cold home, true once an archive exists — and a
 // single archive file must exist under BT_AGENT_HOME after the first run.
+//
+// Pareto's mutation uses unseeded math/rand (internal/evolution/pareto.go),
+// so the evolved winner occasionally regresses against the base tree on the
+// real benchmark suite once the gate (Q2 Evolvability milestone 1/4) is
+// wired, which would make this accumulation pin flaky if left alone. Pin
+// benchmarkRunSuiteFn to a constant non-regressing result so archive
+// accumulation is exercised deterministically regardless of gate outcome,
+// mirroring TestBTEvolveIslandAccumulatesDurableArchive.
 func TestBTEvolveParetoAccumulatesDurableArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
@@ -1628,6 +1642,73 @@ func TestBTEvolveParetoAccumulatesDurableArchive(t *testing.T) {
 	second := invoke("second")
 	if got, isBool := second["warm_started"].(bool); !isBool || !got {
 		t.Errorf(`second run must warm-start from the durable archive and report "warm_started": true; got %v`, second["warm_started"])
+	}
+}
+
+// TestBTEvolveParetoBenchmarkGateRejectsRegressedWinner pins the missing
+// benchmark-suite gate on bt_evolve_pareto's durable-archive save (Q2
+// Evolvability, "gate the standalone evolution-algorithm tools' durable-archive
+// winners through the benchmark suite, not structural fitness alone"). The
+// handler merges the evolved population's front-elite individuals into the
+// durable Pareto front archive using only evolution.StructuralMultiFitness —
+// success_rate/path_coverage/stability/node_efficiency/execution_speed
+// computed from structural heuristics, never an actual tree execution — and
+// unconditionally persists via archive.Save(archivePath) and ek.Save(expertPath).
+// A mutation can look structurally elite while actually performing worse than
+// the untouched base tree against the tree's real internal/benchmark suite
+// (deterministic, sandboxed, mock-LLM RunSuite — no real LLM calls, so this
+// stays -short-safe). benchmarkGateEvolvedWinner (already wired into
+// bt_evolve_multiobjective/bt_evolve_qlearning/bt_evolve_island/bt_evolve_qd)
+// must run both the base tree and the winner through that suite and reject
+// the save on regression, surfacing "benchmark_gate_rejected": true instead
+// of silently archiving a worse tree, mirroring
+// TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner.
+func TestBTEvolveParetoBenchmarkGateRejectsRegressedWinner(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	calls := 0
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		calls++
+		if calls == 1 {
+			// First call gates the base tree: a perfect score.
+			return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+		}
+		// Every subsequent call gates the evolved winner: total regression.
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 0, SuccessRate: 0.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
+	res, ok := server.Invoke("bt_evolve_pareto", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_pareto) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_pareto returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_evolve_pareto unexpectedly returned an error: %v", out)
+	}
+
+	if rejected, isBool := out["benchmark_gate_rejected"].(bool); !isBool || !rejected {
+		t.Fatalf(`bt_evolve_pareto must report "benchmark_gate_rejected": true when the evolved winner regresses against the base tree on the real benchmark suite; got %v`, out["benchmark_gate_rejected"])
+	}
+
+	matches, err := filepath.Glob(filepath.Join(home, "pareto_front_archive*.json"))
+	if err != nil {
+		t.Fatalf("glob pareto front archives: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("bt_evolve_pareto must skip persisting the durable Pareto front archive when the benchmark gate rejects the winner; found %v", matches)
 	}
 }
 
@@ -3251,12 +3332,22 @@ func TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive(t *testing.T) {
 // back — mirroring bt_evolve_qlearning's ek.Load/Observe/Save sequence.
 // Today bt_evolve_pareto never touches ExpertKnowledge at all, so
 // bt_evolve_expert warm-starting from the same per-tree archive afterwards
-// must see an empty catalog. Unlike the island/multiobjective siblings,
-// bt_evolve_pareto has no benchmark gate to mock around, so no
-// benchmarkRunSuiteFn stub is needed here.
+// must see an empty catalog.
+//
+// benchmarkRunSuiteFn is mocked to a guaranteed non-regressing result
+// (mirroring TestBTEvolveQdFeedsExpertKnowledgeArchive) so bt_evolve_pareto's
+// own benchmark gate (Q2 Evolvability milestone 1/4) never rejects the
+// evolved winner and blocks the ek.Save this test targets for a reason
+// unrelated to the ExpertKnowledge wiring under test.
 func TestBTEvolveParetoFeedsExpertKnowledgeArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BT_AGENT_HOME", home)
+
+	origFn := benchmarkRunSuiteFn
+	benchmarkRunSuiteFn = func(tree *evolution.SerializableNode, suite benchmark.Suite, mock llm.LLM) *benchmark.RunMetrics {
+		return &benchmark.RunMetrics{TotalTasks: 1, Successes: 1, SuccessRate: 1.0}
+	}
+	defer func() { benchmarkRunSuiteFn = origFn }()
 
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})

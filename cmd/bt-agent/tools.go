@@ -1286,20 +1286,31 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
-			// Persist the merged front so the next invocation resumes from
-			// this run's Pareto-optimal individuals. A save failure is
-			// surfaced non-fatally alongside the evolution result.
-			if err := archive.Save(archivePath); err != nil {
-				result["archive_save_error"] = err.Error()
-			}
-			// Persist the ExpertKnowledge archive EvolvePareto observed
-			// genuinely-improving mutations into during the run above,
-			// mirroring bt_evolve_qlearning's ek.Save. Unlike
-			// bt_evolve_island/bt_evolve_multiobjective, this tool has no
-			// benchmark gate, so the save below always runs alongside the
-			// unconditional archive.Save.
-			if err := ek.Save(expertPath); err != nil {
-				result["expert_archive_save_error"] = err.Error()
+			// Gate the winner through the tree's real benchmark suite before
+			// trusting it enough to persist — structural fitness alone can
+			// rate a mutation as elite while it actually regresses (Q2
+			// Evolvability), mirroring bt_evolve_multiobjective. A rejected
+			// winner skips both saves entirely so the durable archives never
+			// accumulate a worse tree.
+			gateRejected, baseRate, winnerRate := benchmarkGateEvolvedWinner(params.Tree, baseTree, best)
+			result["benchmark_gate_rejected"] = gateRejected
+			result["benchmark_base_success_rate"] = baseRate
+			result["benchmark_winner_success_rate"] = winnerRate
+			if !gateRejected {
+				// Persist the merged front so the next invocation resumes from
+				// this run's Pareto-optimal individuals. A save failure is
+				// surfaced non-fatally alongside the evolution result.
+				if err := archive.Save(archivePath); err != nil {
+					result["archive_save_error"] = err.Error()
+				}
+				// Persist the ExpertKnowledge archive EvolvePareto observed
+				// genuinely-improving mutations into during the run above,
+				// mirroring bt_evolve_qlearning's ek.Save. Persisted only
+				// alongside a gate-accepted winner, mirroring the Pareto
+				// front archive save above.
+				if err := ek.Save(expertPath); err != nil {
+					result["expert_archive_save_error"] = err.Error()
+				}
 			}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
