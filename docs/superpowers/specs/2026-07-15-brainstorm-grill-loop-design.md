@@ -59,49 +59,71 @@ MemSequence BrainstormBranch
 ├─ GenerateDesignArtifact              (unchanged, template seed)
 ├─ ValidateDesignArtifact              (unchanged)
 ├─ Selector GrillConvergenceRouter
-│  ├─ Retry(MaxRetries=9) GrillLoop            ← 10 rounds total
+│  ├─ ReviewCycle GrillLoop            (reviewer_action: GrillDesignArtifact,
+│  │  │                                 max_iterations: 10 ← 10 rounds total)
 │  │  └─ MemSequence GrillRound
-│  │     ├─ GrillLoopViable            (NEW condition — fails once the
-│  │     │                              no-progress breaker has tripped)
-│  │     ├─ ReviseDesignArtifact       (NEW — no-op on round 1)
-│  │     ├─ ValidateRevisedDesign      (validation logic reused, unique name)
-│  │     └─ GrillDesignArtifact        (modified)
+│  │     ├─ ReviseDesignArtifact       (NEW — no-op when no feedback yet)
+│  │     └─ ValidateRevisedDesign      (validation logic reused, unique name)
 │  └─ MemSequence SplitPath                    ← exhausted or no-progress
 │     ├─ SplitDesignArtifact           (NEW)
 │     └─ ValidateSplitDesign
 └─ ApproveDesign HITL gate             (prompt enriched)
 ```
 
-`Retry` maps to `btdec.NewRepeat` and re-runs its child on failure — the same
-`Retry(MemSequence …)` looping pattern the tree already uses in `DebugRetry`.
-Node names are unique per tree (MemSequence naming rule).
+The loop node is the existing `ReviewCycle` (`internal/engine/review_cycle.go`),
+which already implements run-child → run-reviewer → `approved` ⇒ success /
+`needs_work` ⇒ re-run child with `ChainState["review_feedback"]`, bounded by
+`max_iterations`, FAIL on exhaustion — and FAIL when the reviewer itself
+fails, which the Selector routes to SplitPath. `GrillDesignArtifact` becomes
+the reviewer (it has no other consumer — verified: zero references outside
+`superpowers_workflow.go`).
+
+The originally sketched `Retry(MemSequence …)` shape is **wrong** for this
+engine: the library decorator behind the `"Retry"` node type
+(`btdec.NewRepeat`) fails immediately on child failure and repeats on child
+*success* — it never re-runs a failed round (verified in
+`go-bt@v0.1.0/decorators/repeat.go`; the tree's existing `DebugRetry` shares
+this behavior). ReviewCycle is the platform's actual retry-with-feedback
+primitive. Confirmed alongside: the library MemSequence deletes its cursor on
+failure, so each ReviewCycle iteration re-runs the full round.
 
 ### ReviseDesignArtifact (new action)
 
-- Reads `design.md`. No `## Grill Q&A` section yet → success no-op (round 1
-  grills the generated template).
+- Reads `design.md`. No `## Grill Q&A` section yet (equivalently: no
+  `ChainState["review_feedback"]`) → success no-op (round 1 grills the
+  generated template).
 - Otherwise: one Claude call rewrites the design **body** (Goal /
   Architecture / Acceptance Criteria / Test Strategy / Risks) incorporating
   every recorded answer and resolving each OPEN critical — either answering
   it from codebase knowledge or changing the design so the risk it probes no
   longer exists. The prompt forbids editing the Q&A appendix.
 - Q&A sections are preserved append-only: `## Grill Q&A — round N`.
-- Bumps `run.DesignRevision`, persists run JSON. Claude failure → round
-  fails (Retry consumes it).
+- Bumps `run.DesignRevision`, persists run JSON. Claude failure → log and
+  **succeed unchanged** (a ReviewCycle child failure would end the whole
+  loop; an unchanged design instead lets the reviewer's no-progress breaker
+  exit after 2 stale rounds if the failure persists).
 
-### GrillDesignArtifact (modified)
+### GrillDesignArtifact (modified — becomes the ReviewCycle reviewer)
 
 - Tags its appended section with the round number
   (`## Grill Q&A — round N`).
 - Persists to the run JSON: `run.GrillRound`, the current open-critical
-  branch set, and the design-body hash.
+  branch set, and the design-body hash. `run.GrillRound` is the
+  authoritative bound: rounds beyond 10 are refused even if ChainState was
+  lost to a run restart.
+- **Reviewer protocol:** zero open criticals → set
+  `ChainState["review_verdict"] = "approved"`, return success (loop exits,
+  branch proceeds). Open criticals remain → set verdict `needs_work` and
+  `ChainState["review_feedback"]` to a digest of the round's answers plus
+  the open critical questions, return success (ReviewCycle re-runs the
+  round; the reviser consumes the feedback). Protocol failures (Claude call
+  failed, zero parseable questions) → return failure, which fails the
+  ReviewCycle and routes to SplitPath.
 - **No-progress breaker:** if the open-critical set AND the body hash are
   unchanged for 2 consecutive rounds, stamp `run.NoProgressTripped = true`
-  and return failure with outcome `grill_no_progress`. A failure inside
-  `Retry` triggers another retry, not an exit — that is what the
-  `GrillLoopViable` guard is for: it reads the stamp and fails instantly, so
-  every remaining retry is a microsecond no-op (no Claude or nlm calls) and
-  Retry drains straight through to SplitPath. This is also the quota guard:
+  and return failure with outcome `grill_no_progress` — reviewer failure
+  ends the ReviewCycle immediately (no remaining-iteration burn) and the
+  Selector falls to SplitPath. This is also the quota guard:
   NotebookLM-unavailable rounds produce OPEN answers and no body change, so
   the loop degrades to SplitPath after ~2 rounds instead of 10 (worst case
   is otherwise ~30 of the 50/day nlm calls; expected convergence ≤3
@@ -144,8 +166,9 @@ nothing the loop needs to survive a restart.
 
 ## Error handling
 
-- Claude revision/split call fails → that round/path fails; Retry absorbs
-  round failures; a failed split fails the branch.
+- Claude revision failure → revision no-ops (see above); reviewer protocol
+  failure or no-progress → ReviewCycle fails → SplitPath; a failed split
+  fails the branch.
 - nlm unavailable → answers degrade to OPEN (existing) → no-progress breaker
   exits the loop early.
 - Killed run resumes: PersistentMemSequence re-enters the branch; round
@@ -158,8 +181,9 @@ nothing the loop needs to survive a restart.
   progress bookkeeping, open-critical branch extraction, design-body
   hashing, clear/deferred branch partitioning.
 - Action tests with fake Claude runner + fake answerers: revision
-  incorporates answers, round-1 no-op, breaker stamps after 2 stale rounds,
-  `GrillLoopViable` fails fast once tripped (zero runner/answerer calls),
+  incorporates answers, round-1 no-op, reviewer verdicts (approved /
+  needs_work with feedback), breaker fails the reviewer after 2 stale
+  rounds, round bound refuses round 11 without runner/answerer calls,
   split writes both artifacts and persists the program, nothing-clear fails.
 - Tree contract test: new BrainstormBranch structure, node-name uniqueness.
 - Resume test: kill between rounds, re-run, assert continuation at the
@@ -169,16 +193,16 @@ nothing the loop needs to survive a restart.
 
 ## Risks
 
-- **MemSequence cursor reset under Retry:** the design assumes the library
-  MemSequence resets its cursor after failure so Retry re-runs the full
-  round (DebugRetry precedent). Verify in the implementation plan's first
-  task; if it does not reset, GrillRound needs an explicit cursor-clearing
-  wrapper.
-- **Repeat attempt semantics:** `Retry` maps to `btdec.NewRepeat(child,
-  MaxRetries)`; whether that is N attempts total or 1+N decides if the tree
-  needs MaxRetries 9 or 10 for "10 rounds total". Pin it with a unit test in
-  the same first task; the run-state `GrillRound` counter is the
-  authoritative bound either way (GrillDesignArtifact refuses rounds > 10).
+- **ReviewCycle runs its whole loop inside one action closure** (a for-loop
+  over `child.Run`, not tree re-ticks): 10 genuinely-progressing rounds ×
+  (2 Claude calls + ≤3 nlm calls) can approach the tree's 1h root timeout.
+  Accepted: the breaker keeps expected convergence ≤3 rounds, and on a
+  timeout the resume path re-enters with `run.GrillRound` as the
+  authoritative bound.
+- **`"Retry"` node-type footgun (documented, not fixed here):** the engine's
+  `Retry` maps to a repeat-on-success decorator; anyone extending this loop
+  must not "simplify" it back to Retry. A one-line comment goes next to the
+  GrillLoop node.
 - **Claude rewrites drifting the Q&A appendix:** revision prompt forbids it;
   the action additionally re-appends any Q&A sections missing after the
   rewrite (defensive re-assembly).
