@@ -442,7 +442,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			deps.bb.Outcome = ""
 			deps.bb.KgResults = ""
 			deps.bb.CachedResult = ""
-			injectPersonaContext(deps, params.User)
+			injectPersonaContextLocked(deps, params.User)
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
 			recordPersonaInteraction(deps, params.User, params.Task, "", deps.bb.Outcome, duration.Milliseconds())

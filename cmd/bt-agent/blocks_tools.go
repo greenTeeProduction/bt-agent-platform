@@ -106,8 +106,10 @@ func registerBlockTools(server *engine.Server, deps *mcpDeps) {
 				if err := deps.treeStore.Save(tree); err != nil {
 					return mcpErr(fmt.Errorf("save composed tree: %w", err))
 				}
+				deps.lockBB()
 				deps.bb.TreeStore = deps.treeStore
 				*deps.bt = engine.BuildTree(tree, deps.bb)
+				deps.unlockBB()
 				saved = true
 			}
 			payload := map[string]any{

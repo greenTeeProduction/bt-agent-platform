@@ -151,7 +151,9 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			}
 			if params.Save && deps.treeStore != nil {
 				_ = deps.treeStore.Save(tree)
+				deps.lockBB()
 				*deps.bt = engine.BuildTree(tree, deps.bb)
+				deps.unlockBB()
 			}
 			data, _ := json.Marshal(map[string]any{"tree": tree, "blocks": blocks.DefaultTaskBlocksWithHITL})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
