@@ -138,18 +138,26 @@ var errorHandlerAllowedNodeTypes = map[string]bool{
 	"Action": true, "Condition": true, "AlwaysSucceed": true,
 }
 
-// errorHandlerDeniedActionSubstrings blocks repo/fleet-mutating registered
-// actions from Claude-generated recovery nodes: proposals are auto-applied
-// with no human approval, so anything that commits, pushes, deploys, mutates
-// trees/agents, or deletes state is out of vocabulary regardless of
-// registration (e.g. ApplySuperpowersRunToMainRepo, PushBranchAndCreatePR,
-// SuperpowersTaskCommit, RunDeploy, ApplyFusion, ApplyTargetedMutation,
-// HermesUpdateAgent, UpdateBehaviorTree). Case-sensitive substring match on
-// the action name.
+// errorHandlerDeniedActionSubstrings is a conservative FLOOR — a denylist,
+// not an allowlist — of repo/fleet/state-mutating verbs blocked from
+// Claude-generated recovery nodes: proposals are auto-applied with no human
+// approval, so anything that commits, pushes, deploys, mutates trees/agents/
+// worktrees/programs/schedules, or deletes state is out of vocabulary
+// regardless of registration (e.g. ApplySuperpowersRunToMainRepo,
+// PushBranchAndCreatePR, SuperpowersTaskCommit, RunDeploy, ApplyFusion,
+// ApplyTargetedMutation, HermesUpdateAgent, UpdateBehaviorTree,
+// ExecuteSuperpowersTaskBatch, RunSuperpowersClaudeImplementation,
+// SeedNextProgram, RestartDeadAgents, DiscardSuperpowersWorktree,
+// PrepareSuperpowersWorktree, FixBuildErrors, SaveDocument,
+// RunScheduledGoapFusionCycle). Case-sensitive substring match on the action
+// name. Being absent from this list does NOT make an action safe — it is
+// only ever widened, never relied on as exhaustive.
 var errorHandlerDeniedActionSubstrings = []string{
 	"Apply", "Push", "Deploy", "Commit", "Merge", "Mutation", "Mutate",
 	"HermesUpdate", "UpdateBehaviorTree", "SeedProgram", "CreatePR",
 	"Delete", "Remove", "Write",
+	"Superpowers", "Seed", "Restart", "Worktree", "Fix", "Save", "Fusion",
+	"Execute", "Schedule",
 }
 
 // firstTickedLeaf follows first children down to the leaf a tick reaches
@@ -222,6 +230,7 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 			return fmt.Errorf("every node above the guard must be a Sequence, found %q (%s)", n.Type, n.Name)
 		}
 	}
+	actionLeafCount := 0
 	var walk func(n *evolution.SerializableNode) error
 	walk = func(n *evolution.SerializableNode) error {
 		if !errorHandlerAllowedNodeTypes[n.Type] {
@@ -237,6 +246,7 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 					return fmt.Errorf("action %q is not allowed in generated recovery nodes (mutating action, matches denied token %q)", n.Name, denied)
 				}
 			}
+			actionLeafCount++
 		case "Condition":
 			if GetCondition(n.Name) == nil && errorHandlerConditionFor(n.Name) == nil {
 				return fmt.Errorf("condition %q is not registered", n.Name)
@@ -249,7 +259,17 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 		}
 		return nil
 	}
-	return walk(node)
+	if err := walk(node); err != nil {
+		return err
+	}
+	// A proposal that is only a guard (no Action leaf) always succeeds once
+	// the guard matches — it would mark EVERY recurrence of that error
+	// category as recovered Success forever, defeating the honest failure
+	// signal the tree relies on.
+	if actionLeafCount == 0 {
+		return fmt.Errorf("proposal must contain at least one Action node (a guard-only recovery masks failures)")
+	}
+	return nil
 }
 
 func buildErrorHandlerPrompt(handlerName string, failing *evolution.SerializableNode, b *Blackboard) string {

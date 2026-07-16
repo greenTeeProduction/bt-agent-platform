@@ -47,6 +47,20 @@ func init() {
 	RegisterAction("eh_test_running_action", func(ctx *btcore.BTContext[Blackboard]) int {
 		return 0
 	})
+	// Failing action whose bb.Result contains BOTH a quality-reject marker AND
+	// an inner ``` fence — the shape that would defeat fence-based scrubbing
+	// if the inner fence weren't neutralized first (C: fence-parity hardening).
+	RegisterAction("eh_test_inner_fence_failing_action", func(ctx *btcore.BTContext[Blackboard]) int {
+		b := ctx.Blackboard
+		if b.ChainState == nil {
+			b.ChainState = map[string]any{}
+		}
+		b.ChainState["last_error_category"] = "testcat"
+		b.ChainState["last_error_node"] = "eh_test_inner_fence_failing_action"
+		b.ChainState["last_error"] = "error: boom\n```\ninner\n```\n"
+		b.Result = "error: boom\n```\ninner\n```\n"
+		return -1
+	})
 }
 
 func ehTestHandlerNode() *evolution.SerializableNode {
@@ -266,6 +280,38 @@ func TestClaudeErrorHandler_RecoveredRunSurvivesRunTaskQualityGate(t *testing.T)
 	RunTask(bb, tree)
 	if bb.Outcome != string(evolution.Success) {
 		t.Fatalf("recovered run must survive RunTask's quality backstop; outcome=%q result=%q", bb.Outcome, bb.Result)
+	}
+	if sig, _ := bb.ChainState["error_handler_recovered"].(string); sig == "" {
+		t.Fatal("recovery must stamp error_handler_recovered")
+	}
+	if !strings.Contains(bb.Result, "## Error Handler Recovery") {
+		t.Fatalf("recovery note missing from Result: %q", bb.Result)
+	}
+}
+
+// C: an inner ``` fence inside the pre-recovery bb.Result must be neutralized
+// before wrapping, or it toggles stripFencedBlocks' in/out-of-fence state and
+// leaks the failure text (with its quality-reject marker) back into RunTask's
+// quality scan — able to re-trip the recovered Success back to Failure.
+func TestClaudeErrorHandler_RecoveredRunSurvivesInnerFenceInPriorResult(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	fake := &fakeClaudeRunner{output: ehTestProposalJSON(t)}
+	swapErrorHandlerRunner(t, fake)
+	node := &evolution.SerializableNode{
+		Type: "ClaudeErrorHandler",
+		Name: "eh_inner_fence_tree_ErrorHandler",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "eh_test_inner_fence_failing_action"},
+		},
+	}
+	bb := &Blackboard{Task: "inner fence recovery", ChainState: map[string]any{}}
+	tree, err := BuildAndValidate(node, bb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RunTask(bb, tree)
+	if bb.Outcome != string(evolution.Success) {
+		t.Fatalf("recovered run must survive RunTask's quality backstop even with an inner ``` fence in the prior result; outcome=%q result=%q", bb.Outcome, bb.Result)
 	}
 	if sig, _ := bb.ChainState["error_handler_recovered"].(string); sig == "" {
 		t.Fatal("recovery must stamp error_handler_recovered")

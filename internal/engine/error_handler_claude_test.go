@@ -314,6 +314,25 @@ func TestRequestErrorHandlerProposal_RespectsCallerContext(t *testing.T) {
 	}
 }
 
+// A guard-only proposal (no Action leaf) always succeeds once its guard
+// matches, so it would mark every recurrence of that error category as
+// recovered Success forever — a failure-masking hole. Must be rejected.
+func TestValidateErrorHandlerProposal_RejectsGuardOnlyProposal(t *testing.T) {
+	guardOnly := &evolution.SerializableNode{Type: "Sequence", Name: "Handle_guard_only", Children: []evolution.SerializableNode{
+		{Type: "Condition", Name: "LastErrorCategoryIs:x"},
+	}}
+	err := validateErrorHandlerProposal(guardOnly, map[string]bool{})
+	if err == nil || !strings.Contains(err.Error(), "at least one Action") {
+		t.Fatalf("guard-only proposal must be rejected as masking failures, got: %v", err)
+	}
+	// The existing guard+Action accept case still passes.
+	RegisterAction("eh_validate_guard_plus_action", func(*btcore.BTContext[Blackboard]) int { return 1 })
+	guardPlusAction := guardedSeq("LastErrorCategoryIs:x", "eh_validate_guard_plus_action")
+	if err := validateErrorHandlerProposal(guardPlusAction, map[string]bool{}); err != nil {
+		t.Fatalf("guard+Action proposal must still validate: %v", err)
+	}
+}
+
 // I6: the proposal vocabulary must exclude repo/fleet-mutating actions even
 // when they are registered — proposals auto-execute with no human approval.
 func TestValidateErrorHandlerProposal_DeniesMutatingActions(t *testing.T) {
@@ -327,6 +346,28 @@ func TestValidateErrorHandlerProposal_DeniesMutatingActions(t *testing.T) {
 	benign := guardedSeq("LastErrorCategoryIs:x", "eh_test_benign_probe")
 	if err := validateErrorHandlerProposal(benign, map[string]bool{}); err != nil {
 		t.Fatalf("benign registered action must still validate: %v", err)
+	}
+	// Code-review-flagged gaps in the original denylist: these are real
+	// production actions (registered via package init in
+	// actions_superpowers_prod.go / goap_seed_program.go), so confirm each is
+	// now caught by the expanded errorHandlerDeniedActionSubstrings without
+	// re-registering (RegisterAction panics on duplicate registration).
+	for _, name := range []string{"ExecuteSuperpowersTaskBatch", "SeedNextProgram"} {
+		if GetAction(name) == nil {
+			t.Fatalf("expected %s to already be a registered production action", name)
+		}
+		node := guardedSeq("LastErrorCategoryIs:x", name)
+		if err := validateErrorHandlerProposal(node, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "not allowed") {
+			t.Fatalf("%s must be rejected with a denylist error, got: %v", name, err)
+		}
+	}
+	// The feature's own legitimate recovery vocabulary — the lowercase,
+	// clearly-benign registered action used throughout the passing guard+
+	// Action tests — must still be accepted (guards against an over-broad
+	// new token silently swallowing it).
+	known := guardedSeq("LastErrorCategoryIs:x", "eh_validate_known_action")
+	if err := validateErrorHandlerProposal(known, map[string]bool{}); err != nil {
+		t.Fatalf("eh_validate_known_action must still validate after denylist expansion: %v", err)
 	}
 }
 

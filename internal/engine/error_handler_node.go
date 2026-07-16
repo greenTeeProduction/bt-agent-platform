@@ -71,6 +71,12 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 		// recovery note as clean prose.
 		note := fmt.Sprintf("## Error Handler Recovery\nHandler %s recovered via generated node %s (error signature %s).\n", handlerName, nodeName, sig)
 		if prior := strings.TrimSpace(b.Result); prior != "" {
+			// Neutralize any triple-backtick fences already inside prior: left
+			// intact, they would toggle stripFencedBlocks' in-fence state and
+			// leak part of the failure text back into RunTask's quality scan,
+			// able to re-trip the Success→Failure flip. Tildes still render as
+			// a fence in markdown but cannot break the outer ``` wrapper.
+			prior = strings.ReplaceAll(prior, "```", "~~~")
 			b.Result = fmt.Sprintf("```\n%s\n```\n\n%s", prior, note)
 		} else {
 			b.Result = note
