@@ -75,6 +75,10 @@ func ehTestHandlerNode() *evolution.SerializableNode {
 
 func ehTestProposalJSON(t *testing.T) string {
 	t.Helper()
+	// eh_test_recover_action is a test-only recovery action, deliberately NOT
+	// in the production errorHandlerActionAllowlist — widen the test seam so
+	// this proposal still validates/grafts for the calling test.
+	allowErrorHandlerTestActions(t, "eh_test_recover_action")
 	prop := map[string]any{
 		"resolvable": true,
 		"reason":     "guarded recovery",
@@ -325,6 +329,7 @@ func TestClaudeErrorHandler_RecoveredRunSurvivesInnerFenceInPriorResult(t *testi
 // failure (-1), not leak Running out of the handler.
 func TestClaudeErrorHandler_RunningRecoveryFoldsIntoFailure(t *testing.T) {
 	withTempErrorHandlerDir(t)
+	allowErrorHandlerTestActions(t, "eh_test_running_action")
 	prop := `{"resolvable": true, "reason": "r", "node": {"type": "Sequence", "name": "Handle_running", "children": [` +
 		`{"type": "Condition", "name": "LastErrorCategoryIs:testcat"},` +
 		`{"type": "Action", "name": "eh_test_running_action"}]}}`

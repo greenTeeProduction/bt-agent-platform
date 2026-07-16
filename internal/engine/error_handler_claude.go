@@ -138,27 +138,25 @@ var errorHandlerAllowedNodeTypes = map[string]bool{
 	"Action": true, "Condition": true, "AlwaysSucceed": true,
 }
 
-// errorHandlerDeniedActionSubstrings is a conservative FLOOR — a denylist,
-// not an allowlist — of repo/fleet/state-mutating verbs blocked from
-// Claude-generated recovery nodes: proposals are auto-applied with no human
-// approval, so anything that commits, pushes, deploys, mutates trees/agents/
-// worktrees/programs/schedules, or deletes state is out of vocabulary
-// regardless of registration (e.g. ApplySuperpowersRunToMainRepo,
-// PushBranchAndCreatePR, SuperpowersTaskCommit, RunDeploy, ApplyFusion,
-// ApplyTargetedMutation, HermesUpdateAgent, UpdateBehaviorTree,
-// ExecuteSuperpowersTaskBatch, RunSuperpowersClaudeImplementation,
-// SeedNextProgram, RestartDeadAgents, DiscardSuperpowersWorktree,
-// PrepareSuperpowersWorktree, FixBuildErrors, SaveDocument,
-// RunScheduledGoapFusionCycle). Case-sensitive substring match on the action
-// name. Being absent from this list does NOT make an action safe — it is
-// only ever widened, never relied on as exhaustive.
-var errorHandlerDeniedActionSubstrings = []string{
-	"Apply", "Push", "Deploy", "Commit", "Merge", "Mutation", "Mutate",
-	"HermesUpdate", "UpdateBehaviorTree", "SeedProgram", "CreatePR",
-	"Delete", "Remove", "Write",
-	"Superpowers", "Seed", "Restart", "Worktree", "Fix", "Save", "Fusion",
-	"Execute", "Schedule",
+// errorHandlerActionAllowlist is the exact set of registered actions a
+// Claude-proposed recovery node may compose. This is the security boundary for
+// the auto-executing recovery path: default-deny, exact-name (not substring),
+// and every entry verified recovery-safe — blackboard-only or a single bounded
+// LLM call, none mutating the repo, fleet, filesystem, or external services.
+// A registered action NOT in this set is rejected even though it exists.
+var errorHandlerActionAllowlist = map[string]bool{
+	"DefaultFallback": true, "MarkSuccessful": true, "SelfCorrect": true,
+	"EscalateToDeepSeek": true, "ClearNodeError": true,
+	"HandleTimeoutError": true, "HandleTransientError": true,
+	"HandleValidationError": true, "HandleCircuitOpen": true,
+	"RollbackOnFailure": true, "EscalateToOperator": true,
+	"SendAlert": true, "UpdateBlackboard": true,
 }
+
+// errorHandlerExtraAllowedActions is nil in production; tests populate it via
+// allowErrorHandlerTestActions so their eh_* test actions can validate without
+// polluting the production allowlist above.
+var errorHandlerExtraAllowedActions map[string]bool
 
 // firstTickedLeaf follows first children down to the leaf a tick reaches
 // first — the proposal's guard position.
@@ -241,10 +239,8 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 			if GetAction(n.Name) == nil {
 				return fmt.Errorf("action %q is not registered", n.Name)
 			}
-			for _, denied := range errorHandlerDeniedActionSubstrings {
-				if strings.Contains(n.Name, denied) {
-					return fmt.Errorf("action %q is not allowed in generated recovery nodes (mutating action, matches denied token %q)", n.Name, denied)
-				}
+			if !errorHandlerActionAllowlist[n.Name] && !errorHandlerExtraAllowedActions[n.Name] {
+				return fmt.Errorf("action %q is not in the recovery-safe allowlist", n.Name)
 			}
 			actionLeafCount++
 		case "Condition":
@@ -297,6 +293,11 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 		allowed = append(allowed, t)
 	}
 	sort.Strings(allowed) // deterministic prompt (map iteration order is random)
+	allowedActions := make([]string, 0, len(errorHandlerActionAllowlist))
+	for a := range errorHandlerActionAllowlist {
+		allowedActions = append(allowedActions, a)
+	}
+	sort.Strings(allowedActions) // deterministic prompt (map iteration order is random)
 	return fmt.Sprintf(`You are the error handler for a Go behavior-tree agent platform. A subtree failed and you may propose ONE recovery node to handle this class of error in future runs.
 
 ## Failure context
@@ -311,13 +312,13 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 %s
 
 ## Rules for your proposal
-- Compose ONLY registered action/condition names listed below — you cannot invent new behavior.
+- Compose ONLY the allowed recovery actions and registered condition names listed below — you cannot invent new behavior.
 - The node must be a guard-first composition: its first-ticked leaf MUST be the Condition "LastErrorCategoryIs:<category>" or "LastErrorNodeIs:<node-name>" with a real, non-empty value (e.g. "LastErrorCategoryIs:%s" or "LastErrorNodeIs:%s"), so it never fires on unrelated failures. Every node on the path from the root down to that guard must be a Sequence — no Succeeder/Inverter/Selector above the guard.
 - Allowed node types: %s
 - Max 10 nodes, max depth 4. Give the root and every composite a short unique descriptive name.
 - Node JSON shape: {"type": "...", "name": "...", "children": [...], "max_retries": N (Retry only), "timeout_ms": N (Timeout only)}
 
-## Registered actions
+## Allowed recovery actions (compose ONLY these)
 %s
 
 ## Registered conditions
@@ -327,11 +328,11 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 ## Reply contract
 Reply with ONLY one JSON object, no prose:
 {"resolvable": true, "reason": "<why this handles the error>", "node": {…}}
-or, if this error cannot be handled by composing the registered vocabulary:
+or, if this error cannot be handled by composing the allowed vocabulary:
 {"resolvable": false, "reason": "<what capability is missing>"}`,
 		handlerName, errNode, cat, b.FailureCount, errText, subtreeStr, cat, errNode,
 		strings.Join(allowed, ", "),
-		strings.Join(RegisteredActionNames(), ", "),
+		strings.Join(allowedActions, ", "),
 		strings.Join(RegisteredConditionNames(), ", "))
 }
 

@@ -96,6 +96,7 @@ func guardedSeq(guard, action string) *evolution.SerializableNode {
 }
 
 func TestValidateErrorHandlerProposal(t *testing.T) {
+	allowErrorHandlerTestActions(t, "eh_validate_known_action")
 	RegisterAction("eh_validate_known_action", func(*btcore.BTContext[Blackboard]) int { return 1 })
 	RegisterCondition("eh_validate_registered_cond", func(*Blackboard) bool { return true })
 	valid := guardedSeq("LastErrorCategoryIs:testcat", "eh_validate_known_action")
@@ -217,6 +218,25 @@ func swapErrorHandlerRunner(t *testing.T, r ClaudeRunner) {
 	t.Cleanup(func() { errorHandlerClaudeRunner = old })
 }
 
+// allowErrorHandlerTestActions widens errorHandlerExtraAllowedActions for the
+// duration of t so tests can validate proposals composing eh_* test actions
+// without adding those names to the production allowlist. Whole-map swap
+// under t.Cleanup is race-clean only because no error-handler test uses
+// t.Parallel() (verified: none do).
+func allowErrorHandlerTestActions(t *testing.T, names ...string) {
+	t.Helper()
+	old := errorHandlerExtraAllowedActions
+	m := map[string]bool{}
+	for k := range old {
+		m[k] = true
+	}
+	for _, n := range names {
+		m[n] = true
+	}
+	errorHandlerExtraAllowedActions = m
+	t.Cleanup(func() { errorHandlerExtraAllowedActions = old })
+}
+
 func TestRequestErrorHandlerProposal_StampsLedgerOnEveryOutcome(t *testing.T) {
 	withTempErrorHandlerDir(t)
 	failing := &evolution.SerializableNode{Type: "Action", Name: "x"}
@@ -326,6 +346,7 @@ func TestValidateErrorHandlerProposal_RejectsGuardOnlyProposal(t *testing.T) {
 		t.Fatalf("guard-only proposal must be rejected as masking failures, got: %v", err)
 	}
 	// The existing guard+Action accept case still passes.
+	allowErrorHandlerTestActions(t, "eh_validate_guard_plus_action")
 	RegisterAction("eh_validate_guard_plus_action", func(*btcore.BTContext[Blackboard]) int { return 1 })
 	guardPlusAction := guardedSeq("LastErrorCategoryIs:x", "eh_validate_guard_plus_action")
 	if err := validateErrorHandlerProposal(guardPlusAction, map[string]bool{}); err != nil {
@@ -335,39 +356,27 @@ func TestValidateErrorHandlerProposal_RejectsGuardOnlyProposal(t *testing.T) {
 
 // I6: the proposal vocabulary must exclude repo/fleet-mutating actions even
 // when they are registered — proposals auto-execute with no human approval.
-func TestValidateErrorHandlerProposal_DeniesMutatingActions(t *testing.T) {
-	RegisterAction("eh_test_ApplyDangerousFix", func(*btcore.BTContext[Blackboard]) int { return 1 })
-	RegisterAction("eh_test_benign_probe", func(*btcore.BTContext[Blackboard]) int { return 1 })
-	denied := guardedSeq("LastErrorCategoryIs:x", "eh_test_ApplyDangerousFix")
-	err := validateErrorHandlerProposal(denied, map[string]bool{})
-	if err == nil || !strings.Contains(err.Error(), "not allowed") {
-		t.Fatalf("mutating action must be rejected with a denylist error, got: %v", err)
-	}
-	benign := guardedSeq("LastErrorCategoryIs:x", "eh_test_benign_probe")
-	if err := validateErrorHandlerProposal(benign, map[string]bool{}); err != nil {
-		t.Fatalf("benign registered action must still validate: %v", err)
-	}
-	// Code-review-flagged gaps in the original denylist: these are real
-	// production actions (registered via package init in
-	// actions_superpowers_prod.go / goap_seed_program.go), so confirm each is
-	// now caught by the expanded errorHandlerDeniedActionSubstrings without
-	// re-registering (RegisterAction panics on duplicate registration).
-	for _, name := range []string{"ExecuteSuperpowersTaskBatch", "SeedNextProgram"} {
+// The allowlist is default-deny and exact-name: a registered-but-not-listed
+// action is rejected regardless of what it's named.
+func TestValidateErrorHandlerProposal_AllowlistRejectsNonAllowlistedActions(t *testing.T) {
+	for _, name := range []string{"ApplySuperpowersRunToMainRepo", "RunDeploy"} {
 		if GetAction(name) == nil {
 			t.Fatalf("expected %s to already be a registered production action", name)
 		}
 		node := guardedSeq("LastErrorCategoryIs:x", name)
-		if err := validateErrorHandlerProposal(node, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "not allowed") {
-			t.Fatalf("%s must be rejected with a denylist error, got: %v", name, err)
+		if err := validateErrorHandlerProposal(node, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "not in the recovery-safe allowlist") {
+			t.Fatalf("%s must be rejected with an allowlist error, got: %v", name, err)
 		}
 	}
-	// The feature's own legitimate recovery vocabulary — the lowercase,
-	// clearly-benign registered action used throughout the passing guard+
-	// Action tests — must still be accepted (guards against an over-broad
-	// new token silently swallowing it).
-	known := guardedSeq("LastErrorCategoryIs:x", "eh_validate_known_action")
+}
+
+// An allowlisted action validates with NO test seam — DefaultFallback is a
+// real member of the production errorHandlerActionAllowlist. This proves the
+// prod allowlist works on its own, independent of the test-only seam.
+func TestValidateErrorHandlerProposal_AllowlistAcceptsAllowlistedAction(t *testing.T) {
+	known := guardedSeq("LastErrorCategoryIs:x", "DefaultFallback")
 	if err := validateErrorHandlerProposal(known, map[string]bool{}); err != nil {
-		t.Fatalf("eh_validate_known_action must still validate after denylist expansion: %v", err)
+		t.Fatalf("DefaultFallback (allowlisted) must validate without a test seam: %v", err)
 	}
 }
 
