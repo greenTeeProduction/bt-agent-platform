@@ -128,6 +128,7 @@ func tasksForTree() map[string]string {
 		"arc42:section11": "generate arc42 risks and technical debt",
 		"arc42:section12": "generate arc42 glossary",
 		"arc42:assemble":  "assemble final arc42 document",
+		"arc42:docsync":   "sync arc42 sections and README after a change",
 	}
 }
 
