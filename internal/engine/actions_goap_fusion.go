@@ -338,7 +338,7 @@ func registerGoapFusionActions() {
 					// failure later in this cycle can refund exactly this
 					// charge — the queued refs below are re-read after the
 					// store re-open and may start past a just-blocked one.
-					setGoapState(bb, "program_milestone_charged", fmt.Sprintf("%s:%d", p.ID, idx))
+					setGoapStateDurable(bb, "program_milestone_charged", fmt.Sprintf("%s:%d", p.ID, idx))
 					// Re-open so a just-blocked milestone is reflected in the
 					// queueing pass below (which re-reads ps.Active()).
 					ps, _ = research.OpenPrograms(goapProgramsPath)
@@ -358,7 +358,7 @@ func registerGoapFusionActions() {
 					}
 				}
 				if len(refs) > 0 {
-					setGoapState(bb, "program_milestone", strings.Join(refs, ","))
+					setGoapStateDurable(bb, "program_milestone", strings.Join(refs, ","))
 				}
 			}
 		}
@@ -378,11 +378,11 @@ func registerGoapFusionActions() {
 			}
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 			if !researchGoalStamped {
-				setGoapState(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
+				setGoapStateDurable(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
 				// The raw goal text rides along so a red-pass closure can
 				// record it goap:implemented (research prompts dedup by
 				// title, not by budget key).
-				setGoapState(bb, "research_goal_charged_text", nlmGoal)
+				setGoapStateDurable(bb, "research_goal_charged_text", nlmGoal)
 				researchGoalStamped = true
 			}
 		}
@@ -679,6 +679,21 @@ func setGoapState(bb *Blackboard, key, value string) {
 	bb.ChainState["goap_fusion_"+key] = value
 }
 
+// setGoapStateDurable stamps a GOAP fusion state key in ChainState AND the
+// agent-scope blackboard, mirroring saveSuperpowersPlanState/saveGrillState:
+// a resumed cron tick builds a fresh Blackboard (RunOnce) whose ChainState
+// dies with the run, so queue-time charge stamps (program milestone /
+// research goal) must also survive there — otherwise a genuine failure on a
+// resumed tick silently fails to charge or refund the budget it should hit.
+func setGoapStateDurable(bb *Blackboard, key, value string) {
+	setGoapState(bb, key, value)
+	if bb.BB != nil && bb.BB.AgentName != "" {
+		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+		_ = bb.BB.Mgr.Set(scope, "goap_fusion_"+key, value,
+			"durable GOAP fusion charge stamp for preflight resume", "text")
+	}
+}
+
 // Grill state must survive across scheduled runs: each cron tick executes
 // GrillMeNotebookLM once, and ChainState dies with the run (RunOnce builds a
 // fresh Blackboard). The agent-scope blackboard persists to disk, so the
@@ -756,16 +771,32 @@ func loadSuperpowersPlanState(bb *Blackboard) (planPath, activePlan string) {
 
 // clearSuperpowersPlanState wipes the durable plan state after a successful
 // apply so the next scheduled cycle does not re-resume an already completed plan
-// and loop forever re-applying finished work.
+// and loop forever re-applying finished work. It also retires the durable
+// charge-stamp keys set by setGoapStateDurable (program_milestone_charged,
+// program_milestone, research_goal_charged, research_goal_charged_text): every
+// call site here already marks a cycle as completed/abandoned, so leaving those
+// stamps behind would let a later, unrelated cycle's failure handler
+// (chargeGoapResearchGoalFailure / refundGoapMilestoneAttemptForInfraFailure)
+// read a stale stamp and charge or refund the wrong goal/milestone.
 func clearSuperpowersPlanState(bb *Blackboard) {
+	keys := []string{
+		"goap_fusion_superpowers_plan_path",
+		"goap_fusion_superpowers_active_plan",
+		"goap_fusion_program_milestone_charged",
+		"goap_fusion_program_milestone",
+		"goap_fusion_research_goal_charged",
+		"goap_fusion_research_goal_charged_text",
+	}
 	if bb.ChainState != nil {
-		delete(bb.ChainState, "goap_fusion_superpowers_plan_path")
-		delete(bb.ChainState, "goap_fusion_superpowers_active_plan")
+		for _, key := range keys {
+			delete(bb.ChainState, key)
+		}
 	}
 	if bb.BB != nil && bb.BB.AgentName != "" {
 		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_superpowers_plan_path")
-		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_superpowers_active_plan")
+		for _, key := range keys {
+			_ = bb.BB.Mgr.Delete(scope, key)
+		}
 	}
 }
 

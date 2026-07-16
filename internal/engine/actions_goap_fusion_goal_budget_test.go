@@ -8,6 +8,7 @@ import (
 
 	btcore "github.com/rvitorper/go-bt/core"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/research"
 )
 
@@ -119,6 +120,49 @@ func TestPrioritizeGoapGoals_AbandonsExhaustedResearchGoal(t *testing.T) {
 	abandoned, _ := bb.ChainState["goap_fusion_research_goals_abandoned"].(string)
 	if !strings.Contains(abandoned, "frobnicator") {
 		t.Fatalf("abandoned goals must be surfaced for the analysis note; got %q", abandoned)
+	}
+}
+
+// PrioritizeGoapGoals's charge stamps must survive a fresh cron tick's
+// ChainState death: a resumed-carryover cycle (RunScheduledGoapFusionCycle)
+// builds a brand-new Blackboard whose ChainState is empty, so the queue-time
+// research-goal stamp must also land in the durable agent-scope blackboard
+// (mirroring saveSuperpowersPlanState/saveGrillState) — not ChainState alone.
+func TestPrioritizeGoapGoals_StampsResearchGoalDurably(t *testing.T) {
+	isolateGoapProgramStore(t)
+	seedGoalBudget(t)
+	goal := "Adopt the legacy island archive exactly once (files: cmd/bt-agent/tools.go)"
+
+	prioritize := GetAction("PrioritizeGoapGoals")
+	if prioritize == nil {
+		t.Fatal("action \"PrioritizeGoapGoals\" not registered")
+	}
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{
+		BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"),
+		ChainState: map[string]any{
+			"goap_fusion_improvement_gaps": "NOTEBOOKLM_GOAL: " + goal,
+		},
+	}
+	if got := prioritize(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
+		t.Fatalf("PrioritizeGoapGoals status = %d, want 1; result: %s", got, bb.Result)
+	}
+
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: "goap-loop"}
+	wantKey := goapResearchGoalKey(goal)
+	e, err := mgr.Get(scope, "goap_fusion_research_goal_charged")
+	if err != nil {
+		t.Fatalf("agent-scope store must hold the research-goal charge stamp durably (not ChainState-only): %v", err)
+	}
+	if e.Value != wantKey {
+		t.Fatalf("durable research-goal charge stamp = %q, want %q", e.Value, wantKey)
+	}
+	textEntry, err := mgr.Get(scope, "goap_fusion_research_goal_charged_text")
+	if err != nil {
+		t.Fatalf("agent-scope store must hold the research-goal charge text durably: %v", err)
+	}
+	if textEntry.Value != goal {
+		t.Fatalf("durable research-goal charge text = %q, want %q", textEntry.Value, goal)
 	}
 }
 

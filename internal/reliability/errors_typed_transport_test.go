@@ -48,3 +48,29 @@ func TestClassifyErrorUntypedBadRequestStaysValidation(t *testing.T) {
 		t.Fatalf("untyped 400 response = %v, want %v", got, ErrCatValidation)
 	}
 }
+
+// A typed *url.Error is definitionally a transport-layer failure the same
+// way it is for validation substrings above — but isAuthError still runs
+// before isTypedNetworkError, so a URL that happens to embed "401" (an auth
+// pattern) still wins the race today. Once the typed-transport check is
+// hoisted above the auth string check (mirroring 19bbae6's hoist above
+// isValidationError), this must classify as network, not auth.
+func TestClassifyErrorTypedTransportBeatsAuthSubstrings(t *testing.T) {
+	err := fmt.Errorf("ollama embedding: %w", &url.Error{
+		Op:  "Post",
+		URL: "http://127.0.0.1:40170/api/embeddings",
+		Err: io.EOF,
+	})
+	if got := ClassifyError(err); got != ErrCatNetwork {
+		t.Fatalf("EOF POST via typed url.Error with \"401\" in URL = %v, want %v (retryable network)", got, ErrCatNetwork)
+	}
+}
+
+// Untyped auth errors keep the existing string classification — a real
+// 401 response with no transport error in the chain stays auth.
+func TestClassifyErrorUntypedUnauthorizedStaysAuth(t *testing.T) {
+	err := errors.New("ollama api error: unauthorized: invalid api key")
+	if got := ClassifyError(err); got != ErrCatAuth {
+		t.Fatalf("untyped unauthorized response = %v, want %v", got, ErrCatAuth)
+	}
+}

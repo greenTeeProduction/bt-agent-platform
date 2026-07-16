@@ -276,3 +276,42 @@ func TestClaudeBackoffWindow_EnvOverride(t *testing.T) {
 		t.Fatalf("claudeBackoffWindow with an unparsable override = %v, want the 6h fallback", got)
 	}
 }
+
+// TestClearSuperpowersPlanState_WipesDurableChargeStamps proves milestone 2 of
+// the Q3 Reliability charge-stamp program: clearSuperpowersPlanState is called
+// from every path that retires a completed or abandoned Superpowers cycle
+// (actions_superpowers_prod.go:804,917,1066), but it only ever wiped the two
+// plan-resume keys. PrioritizeGoapGoals stamps FOUR durable charge-stamp keys
+// via setGoapStateDurable — program_milestone_charged, program_milestone,
+// research_goal_charged, research_goal_charged_text — into the agent-scope
+// store so a resumed cron tick (fresh ChainState) can still charge/refund the
+// right cycle. If clearSuperpowersPlanState leaves those stamps behind, a
+// later, unrelated cycle's failure handler (chargeGoapResearchGoalFailure /
+// refundGoapMilestoneAttemptForInfraFailure) reads a stale stamp from a
+// completed or abandoned cycle and charges or refunds the wrong goal/milestone.
+func TestClearSuperpowersPlanState_WipesDurableChargeStamps(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
+
+	setGoapStateDurable(bb, "program_milestone_charged", "prog-1:0")
+	setGoapStateDurable(bb, "program_milestone", "prog-1:0,prog-1:1")
+	setGoapStateDurable(bb, "research_goal_charged", "adopt-the-legacy-island-archive")
+	setGoapStateDurable(bb, "research_goal_charged_text", "Adopt the legacy island archive exactly once")
+
+	clearSuperpowersPlanState(bb)
+
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: "goap-loop"}
+	for _, key := range []string{
+		"goap_fusion_program_milestone_charged",
+		"goap_fusion_program_milestone",
+		"goap_fusion_research_goal_charged",
+		"goap_fusion_research_goal_charged_text",
+	} {
+		if e, err := mgr.Get(scope, key); err == nil {
+			t.Errorf("agent-scope store still holds %q = %q after clearSuperpowersPlanState: a completed/abandoned cycle's charge stamp must not leak into a later cycle's failure handler", key, e.Value)
+		}
+		if _, ok := bb.ChainState[key]; ok {
+			t.Errorf("ChainState still holds %q after clearSuperpowersPlanState", key)
+		}
+	}
+}
