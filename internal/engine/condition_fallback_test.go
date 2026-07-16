@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -577,30 +576,6 @@ func TestCondFallback_Section1Done(t *testing.T) {
 	// Just verify it works with ChainState set
 	if !fn(&Blackboard{ChainState: map[string]any{"section_1_done": true}}) {
 		t.Error("expected true when section_1_done is true")
-	}
-}
-
-func TestCondFallback_AllSectionsDone(t *testing.T) {
-	fn := (&Blackboard{}).conditionForName("AllSectionsDone")
-	if fn == nil {
-		t.Fatal("expected non-nil")
-	}
-	// No ChainState → false
-	if fn(&Blackboard{}) {
-		t.Error("expected false without ChainState")
-	}
-	// All sections done → true (registry version uses section_N_done with underscore)
-	cs := make(map[string]any)
-	for i := 1; i <= 12; i++ {
-		cs[fmt.Sprintf("section_%d_done", i)] = true
-	}
-	if !fn(&Blackboard{ChainState: cs}) {
-		t.Error("expected true when all sections done")
-	}
-	// One section missing → false
-	delete(cs, "section_3_done")
-	if fn(&Blackboard{ChainState: cs}) {
-		t.Error("expected false when section_3 is not done")
 	}
 }
 

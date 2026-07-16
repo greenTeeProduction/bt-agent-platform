@@ -271,32 +271,8 @@ func main() {
 		successCount++
 	}
 
-	// Assemble if all sections exist
-	if contains(targetSections, 99) || *sections == "" { // 99 = "assemble" pseudo-section
-		fmt.Println("\n  Assembling final document...")
-		assembleTree, ok := allTrees["arc42:assemble"]
-		if ok {
-			bb := engine.Blackboard{
-				Task:       "Merge all arc42 sections into final document",
-				ChainState: map[string]any{},
-				LLM:        llmClient,
-			}
-			for k, v := range worldState.ToWorldState() {
-				bb.ChainState[k] = v
-			}
-			cmd := engine.BuildTree(assembleTree, &bb)
-			result := engine.RunTask(&bb, cmd)
-			if result != "" {
-				bb.Result = result
-			}
-			if bb.Result != "" {
-				path := filepath.Join(outputDir, "go-bt-evolve-arc42.md")
-				_ = os.WriteFile(path, []byte(bb.Result), 0644)
-				fmt.Printf("    ✅ Final document: %s (%d bytes)\n", path, len(bb.Result))
-			}
-			successCount++
-		}
-	}
+	// The monolith assembly step was retired with the arc42:assemble tree —
+	// the per-section files ARE the architecture document now.
 
 	// Save state
 	state.LastRun = time.Now().Format(time.RFC3339)

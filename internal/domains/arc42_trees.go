@@ -21,7 +21,6 @@ func Arc42Trees() map[string]*evolution.SerializableNode {
 		"arc42:section10": section10Quality(),
 		"arc42:section11": section11Risks(),
 		"arc42:section12": section12Glossary(),
-		"arc42:assemble":  assembleDoc(),
 	}
 }
 
@@ -283,26 +282,6 @@ func section12Glossary() *evolution.SerializableNode {
 			act("ValidateSection", "check glossary table with 30+ terms"),
 			act("SaveSection", "write to 12-glossary.md"),
 			act("MarkSectionDone", "mark section12_done"),
-		),
-	)
-}
-
-func assembleDoc() *evolution.SerializableNode {
-	return tree(
-		seq("Assemble_Main", "Assemble the final arc42 document: gate on all sections, merge, save",
-			seq("PreGate", "Require all 12 sections to be complete",
-				cond("AllSectionsDone", "all 12 sections must be complete"),
-			),
-			sel("StrategyRouter", "Single generation path: collect all sections and merge them into the final arc42 document via LLM",
-				seq("Assemble", "Collect all sections and merge them into the final arc42 document via LLM",
-					act("CollectAllSections", "read all 12 section markdown files"),
-					act("GenerateTOC", "extract headings for table of contents"),
-					chain("LLM: merge all 12 sections into the final arc42 document with frontmatter and TOC",
-						"llm_call:Generate the final arc42 document by merging all 12 sections with proper frontmatter.\n\nSections:\n{{.CachedResult}}\n\nAdd:\n- YAML frontmatter with title, date, version, status\n- arc42 version reference\n- Table of Contents\n- All 12 sections in order\n- Document metadata footer\n\nOutput as a single markdown file.", 2048),
-				),
-			),
-			act("SaveDocument", "write to go-bt-evolve-arc42.md"),
-			act("MarkDocAssembled", "mark doc_assembled = true"),
 		),
 	)
 }

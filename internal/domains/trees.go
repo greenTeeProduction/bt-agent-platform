@@ -826,5 +826,4 @@ var Descriptions = map[string]string{
 	"arc42:section10":           "Generate arc42 section 10 (Quality Requirements): quality tree and concrete quality scenarios",
 	"arc42:section11":           "Generate arc42 section 11 (Risks and Technical Debt): known risks and technical debt inventory",
 	"arc42:section12":           "Generate arc42 section 12 (Glossary): domain and technical term definitions",
-	"arc42:assemble":            "Assemble the 12 generated arc42 section files into the final architecture document with table of contents",
 }

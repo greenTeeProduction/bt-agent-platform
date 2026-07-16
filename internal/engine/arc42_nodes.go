@@ -1,7 +1,10 @@
 // Package engine — arc42 documentation generation nodes.
 //
-// Registers 22 actions and 5 conditions for the arc42 documentation
-// generator trees defined in internal/domains/arc42_trees.go.
+// Registers 18 actions and 4 conditions for the arc42 documentation
+// generator trees defined in internal/domains/arc42_trees.go. The monolith
+// assembly nodes (SaveDocument, CollectAllSections, GenerateTOC,
+// MarkDocAssembled, AllSectionsDone) were retired with the arc42:assemble
+// tree when the per-section files became the source of truth.
 // All nodes use the global registry (RegisterAction/RegisterCondition)
 // so domain trees can reference them by name.
 package engine
@@ -279,61 +282,12 @@ func registerArc42Nodes() {
 		return 1
 	})
 
-	RegisterAction("SaveDocument", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		dir := arc42OutputDir()
-		_ = os.MkdirAll(dir, 0755)
-		path := filepath.Join(dir, "go-bt-evolve-arc42.md")
-		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
-			bb.Outcome = fmt.Sprintf("document_save_failed: %v", err)
-			return 0
-		}
-		bb.Outcome = fmt.Sprintf("document_saved: %s (%d bytes)", path, len(bb.Result))
-		return 1
-	})
-
 	RegisterAction("MarkSectionDone", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		section, ok := bb.ChainState["arc42_section"].(string)
 		if ok {
 			setChainState(bb, "section_"+section+"_done", true)
 		}
-		return 1
-	})
-
-	RegisterAction("MarkDocAssembled", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		setChainState(bb, "doc_assembled", true)
-		return 1
-	})
-
-	RegisterAction("CollectAllSections", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		dir := arc42OutputDir()
-		files, _ := filepath.Glob(filepath.Join(dir, "*-*.md"))
-		var sb strings.Builder
-		for _, f := range files {
-			if strings.Contains(f, "go-bt-evolve-arc42") {
-				continue
-			}
-			data, err := os.ReadFile(f)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(&sb, "\n---\n## %s\n\n%s\n", filepath.Base(f), string(data))
-		}
-		bb.CachedResult = sb.String()
-		return 1
-	})
-
-	RegisterAction("GenerateTOC", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		var toc []string
-		toc = append(toc, "# Table of Contents\n")
-		for i := 1; i <= 12; i++ {
-			toc = append(toc, fmt.Sprintf("%d. Section %d\n", i, i))
-		}
-		setChainState(bb, "toc", strings.Join(toc, "\n"))
 		return 1
 	})
 
@@ -359,14 +313,6 @@ func registerArc42Nodes() {
 		return getBoolChainState(bb, "section_5_done") || sectionFileExists("05-building-blocks.md")
 	})
 
-	RegisterCondition("AllSectionsDone", func(bb *Blackboard) bool {
-		for i := 1; i <= 12; i++ {
-			if !getBoolChainState(bb, fmt.Sprintf("section_%d_done", i)) {
-				return false
-			}
-		}
-		return true
-	})
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

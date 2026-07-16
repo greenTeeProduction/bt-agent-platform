@@ -2,7 +2,6 @@ package engine
 
 import (
 	"runtime"
-	"strings"
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -301,17 +300,6 @@ func TestArc42Action_SaveSection_EmptyFilename(t *testing.T) {
 	}
 }
 
-func TestArc42Action_SaveDocument_NoError(t *testing.T) {
-	bb := &Blackboard{Result: "test document content"}
-	// SaveDocument will try to write to /mnt/ssd/clawd/wiki/bt-research/docs/arc42/ which may or may not exist.
-	// We just verify it completes without panic (may fail with 0 if dir doesn't exist).
-	status := callArc42Action(t, "SaveDocument", bb)
-	// Either success (1) or failure (0) is acceptable — the path may not exist
-	if status != 1 && status != 0 {
-		t.Errorf("expected 0 or 1, got %d", status)
-	}
-}
-
 func TestArc42Action_MarkSectionDone_WithSection(t *testing.T) {
 	bb := &Blackboard{ChainState: map[string]any{"arc42_section": "3"}}
 	status := callArc42Action(t, "MarkSectionDone", bb)
@@ -341,46 +329,6 @@ func TestArc42Action_MarkSectionDone_WrongType(t *testing.T) {
 	// Should not panic when section value is not a string
 }
 
-func TestArc42Action_MarkDocAssembled(t *testing.T) {
-	bb := &Blackboard{}
-	status := callArc42Action(t, "MarkDocAssembled", bb)
-	if status != 1 {
-		t.Errorf("expected 1, got %d", status)
-	}
-	if v, ok := bb.ChainState["doc_assembled"]; !ok || v != true {
-		t.Error("doc_assembled should be true")
-	}
-}
-
-func TestArc42Action_CollectAllSections_NoFiles(t *testing.T) {
-	bb := &Blackboard{}
-	status := callArc42Action(t, "CollectAllSections", bb)
-	if status != 1 {
-		t.Errorf("expected 1, got %d", status)
-	}
-	// Should get empty string when no files exist, not panic
-}
-
-func TestArc42Action_GenerateTOC(t *testing.T) {
-	bb := &Blackboard{}
-	status := callArc42Action(t, "GenerateTOC", bb)
-	if status != 1 {
-		t.Errorf("expected 1, got %d", status)
-	}
-	toc, ok := bb.ChainState["toc"]
-	if !ok {
-		t.Fatal("toc should be set in ChainState")
-	}
-	tocStr, ok := toc.(string)
-	if !ok || tocStr == "" {
-		t.Fatal("toc should be a non-empty string")
-	}
-	// Should have 12 section entries
-	if !strings.Contains(tocStr, "Section 12") {
-		t.Error("TOC should include Section 12")
-	}
-}
-
 func TestArc42Action_GitHistory(t *testing.T) {
 	bb := &Blackboard{}
 	status := callArc42Action(t, "ReadGitHistory", bb)
@@ -389,14 +337,6 @@ func TestArc42Action_GitHistory(t *testing.T) {
 	}
 	if _, ok := bb.ChainState["git_history"]; !ok {
 		t.Error("git_history should be set")
-	}
-}
-
-func TestArc42Action_CollectAllSections_NilChainState(t *testing.T) {
-	bb := &Blackboard{}
-	status := callArc42Action(t, "CollectAllSections", bb)
-	if status != 1 {
-		t.Errorf("expected 1, got %d", status)
 	}
 }
 

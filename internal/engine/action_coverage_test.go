@@ -245,12 +245,8 @@ func TestActionForName_BulkCoverage(t *testing.T) {
 		"UseCachedResult",
 
 		// --- Arc42 doc assembly actions ---
-		"CollectAllSections",
-		"GenerateTOC",
-		"MarkDocAssembled",
 		"MarkSectionDone",
 		"ReadSection1",
-		"SaveDocument",
 		"SaveSection",
 		"ScanCodeComments",
 		"ScanTypes",
