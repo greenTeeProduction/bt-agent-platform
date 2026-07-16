@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -335,6 +336,7 @@ func newTreeFactory(deps *mcpDeps) *knowledge.Factory {
 // accesses state through this struct instead of capturing locals.
 type mcpDeps struct {
 	bb           *engine.Blackboard
+	bbMu         sync.Mutex
 	bt           *btcore.Command[engine.Blackboard]
 	treeStore    *evolution.TreeStore
 	refStore     *evolution.Store
@@ -358,6 +360,20 @@ type mcpDeps struct {
 	// reachable over A2A/auctions without a process restart. Nil when the
 	// A2A server failed to start; callers must guard the call.
 	refreshA2ACards func() error
+}
+
+// lockBB acquires the mutex guarding deps.bb. Handlers must hold this for
+// the entire read-modify-run-read critical section around the shared
+// blackboard — engine.Blackboard (internal/engine/tree.go) has no internal
+// synchronization of its own, and the MCP server dispatches concurrent tool
+// calls that all mutate the same *deps.bb.
+func (d *mcpDeps) lockBB() {
+	d.bbMu.Lock()
+}
+
+// unlockBB releases the mutex acquired by lockBB.
+func (d *mcpDeps) unlockBB() {
+	d.bbMu.Unlock()
 }
 
 // newProductionPopulation builds an evolution population for the MCP tools
@@ -416,6 +432,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf("Error: %v", err)}}}
 			}
 			engine.Info("bt_run_task: executing", "task", params.Task)
+			deps.lockBB()
+			defer deps.unlockBB()
 			start := time.Now()
 			deps.bb.Task = params.Task
 			deps.bb.Complexity = ""

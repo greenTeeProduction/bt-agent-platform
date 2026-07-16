@@ -9,8 +9,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	btcore "github.com/rvitorper/go-bt/core"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
@@ -4488,5 +4491,97 @@ func TestBTThinkTankAnalyzeSurfacesOrchestratorError(t *testing.T) {
 	if !hasErr || errVal == "" {
 		t.Fatalf("bt_thinktank_analyze with a failing orchestrator (no llmClient) must surface an "+
 			"explicit non-empty \"error\" field instead of a false-success response; got %v", out)
+	}
+}
+
+// echoTaskLeaf is a minimal btcore.Command that copies the Blackboard's Task
+// into Result, sleeping first to widen the window in which a concurrent
+// bt_run_task call can stomp the shared Blackboard's Task field before this
+// one reads it back — exactly the failure mode a correct bbMu lock around
+// the whole Task-assign -> RunTask -> response-read critical section must
+// close.
+type echoTaskLeaf struct{}
+
+func (echoTaskLeaf) Run(ctx *btcore.BTContext[engine.Blackboard]) int {
+	time.Sleep(5 * time.Millisecond)
+	ctx.Blackboard.Result = ctx.Blackboard.Task
+	return 1
+}
+
+// TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard pins the Q1
+// Correctness / Q3 Reliability fix for the mcpDeps shared-blackboard data
+// race: bt_run_task handlers read/write the single shared *deps.bb with zero
+// synchronization (internal/engine/tree.go:107 documents Blackboard as
+// "shared state passed through the behavior tree" but nothing in tools.go
+// guards concurrent access to it), while the production MCP server dispatches
+// up to 5 concurrent tool calls (internal/engine/mcp_server.go's dispatch
+// loop). Firing concurrent bt_run_task invocations with distinct task
+// strings through the same mcpDeps/engine.Blackboard must not let one call's
+// task leak into another's response: each response's echoed "result" (this
+// tree just copies Task into Result) must match the task that specific call
+// sent. Run with -race: this must also report zero data races on
+// deps.bb/deps.bb.ChainState. RED before the fix (deps.bb has no bbMu), since
+// two goroutines racing deps.bb.Task = params.Task followed by a delayed read
+// let the second writer's task stomp the first caller's echoed result.
+func TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard(t *testing.T) {
+	bb := &engine.Blackboard{}
+	var tree btcore.Command[engine.Blackboard] = echoTaskLeaf{}
+	deps := &mcpDeps{bb: bb, bt: &tree}
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, deps)
+
+	if !server.HasTool("bt_run_task") {
+		t.Fatal("bt_run_task tool must be registered by registerMCPTools")
+	}
+
+	const n = 8
+	results := make([]string, n)
+	errs := make([]error, n)
+
+	var wg sync.WaitGroup
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			task := fmt.Sprintf("concurrent-race-regression-task-number-%02d", i)
+			start.Wait() // release all goroutines together to maximize interleaving
+			args, err := json.Marshal(map[string]string{"task": task})
+			if err != nil {
+				errs[i] = fmt.Errorf("marshal args: %w", err)
+				return
+			}
+			res, ok := server.Invoke("bt_run_task", args)
+			if !ok {
+				errs[i] = fmt.Errorf("bt_run_task reported as unregistered")
+				return
+			}
+			if res == nil || len(res.Content) == 0 {
+				errs[i] = fmt.Errorf("bt_run_task returned no content for task %q", task)
+				return
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+				errs[i] = fmt.Errorf("bt_run_task result is not valid JSON: %w (text=%q)", err, res.Content[0].Text)
+				return
+			}
+			results[i] = fmt.Sprintf("%v", out["result"])
+		}(i)
+	}
+	start.Done()
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("call %d: %v", i, errs[i])
+		}
+		want := fmt.Sprintf("concurrent-race-regression-task-number-%02d", i)
+		if results[i] != want {
+			t.Errorf("call %d: echoed result = %q, want %q — a concurrent bt_run_task call "+
+				"mutated the shared deps.bb before this call's response was read; "+
+				"mcpDeps needs a bbMu sync.Mutex guarding the whole critical section", i, results[i], want)
+		}
 	}
 }
