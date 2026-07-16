@@ -140,11 +140,115 @@ func TestSyncReadmeUpdates(t *testing.T) {
 	}
 }
 
+func TestClassifyAffectedArc42Sections(t *testing.T) {
+	claude := &arc42SyncFakeClaude{result: CommandResult{Output: "Here you go:\n{\"sections\":[5,8],\"readme\":true}\n"}}
+	sections, readme, ok := classifyAffectedArc42Sections(context.Background(), claude,
+		docChangeContext{WorkDir: t.TempDir(), ChangedFiles: []string{"internal/evolution/island.go"}})
+	if !ok || !readme || len(sections) != 2 || sections[0] != 5 || sections[1] != 8 {
+		t.Errorf("got sections=%v readme=%v ok=%v", sections, readme, ok)
+	}
+}
+
+func TestClassifyAffectedArc42SectionsDegrades(t *testing.T) {
+	for _, res := range []CommandResult{
+		{Err: fmt.Errorf("boom")},
+		{Output: "not json at all"},
+		{Output: `{"sections":[0,13],"readme":false}`}, // out-of-range only
+	} {
+		if _, _, ok := classifyAffectedArc42Sections(context.Background(),
+			&arc42SyncFakeClaude{result: res}, docChangeContext{WorkDir: t.TempDir()}); ok {
+			t.Errorf("classifier must degrade (ok=false) for %+v", res)
+		}
+	}
+}
+
 func TestSyncReadmeSkipsMissingFile(t *testing.T) {
 	claude := &arc42SyncFakeClaude{}
 	changed, note := syncReadme(context.Background(), claude, &arc42SyncFakeRunner{},
 		docChangeContext{WorkDir: t.TempDir()})
 	if changed || !strings.Contains(note, "skipped") || len(claude.prompts) != 0 {
 		t.Errorf("want skip without claude call, got changed=%v note=%q calls=%d", changed, note, len(claude.prompts))
+	}
+}
+
+func TestSyncArc42SectionsAndReadmeRunsClassifiedSubset(t *testing.T) {
+	restoreS, restoreR := arc42SectionSyncFn, arc42ReadmeSyncFn
+	defer func() { arc42SectionSyncFn, arc42ReadmeSyncFn = restoreS, restoreR }()
+
+	var ran []int
+	arc42SectionSyncFn = func(_ context.Context, _ ClaudeRunner, _ CommandRunner, _ docChangeContext, sec Arc42Section) (bool, string) {
+		ran = append(ran, sec.Num)
+		return true, fmt.Sprintf("§%d: updated %s", sec.Num, sec.File)
+	}
+	readmeRan := false
+	arc42ReadmeSyncFn = func(_ context.Context, _ ClaudeRunner, _ CommandRunner, _ docChangeContext) (bool, string) {
+		readmeRan = true
+		return false, "README: no impact"
+	}
+
+	dir := t.TempDir()
+	run := &SuperpowersRun{Mode: SuperpowersModeApply, RepoDir: "/elsewhere", WorktreePath: dir,
+		ChangedFiles: []string{"internal/evolution/island.go"},
+		Tasks:        []SuperpowersTask{{Objective: "persist islands", Status: "done"}}}
+	claude := &arc42SyncFakeClaude{result: CommandResult{Output: `{"sections":[5,9],"readme":true}`}}
+	changed, note := syncArc42SectionsAndReadme(context.Background(), claude, &arc42SyncFakeRunner{}, run)
+
+	if len(ran) != 2 || ran[0] != 5 || ran[1] != 9 {
+		t.Errorf("classifier subset not honored, ran %v", ran)
+	}
+	if !readmeRan {
+		t.Error("README pass must run when classifier says readme=true")
+	}
+	if !changed || !strings.Contains(note, "§5") || !strings.Contains(note, "§9") {
+		t.Errorf("aggregate note wrong: changed=%v note=%q", changed, note)
+	}
+	want := "docs/arc42/05-building-blocks.md"
+	found := false
+	for _, f := range run.ChangedFiles {
+		if f == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("updated section file not merged into run.ChangedFiles: %v", run.ChangedFiles)
+	}
+}
+
+func TestSyncArc42SectionsAndReadmeDegradesToAll(t *testing.T) {
+	restoreS, restoreR := arc42SectionSyncFn, arc42ReadmeSyncFn
+	defer func() { arc42SectionSyncFn, arc42ReadmeSyncFn = restoreS, restoreR }()
+	var ran []int
+	arc42SectionSyncFn = func(_ context.Context, _ ClaudeRunner, _ CommandRunner, _ docChangeContext, sec Arc42Section) (bool, string) {
+		ran = append(ran, sec.Num)
+		return false, fmt.Sprintf("§%d: no impact", sec.Num)
+	}
+	readmeRan := false
+	arc42ReadmeSyncFn = func(_ context.Context, _ ClaudeRunner, _ CommandRunner, _ docChangeContext) (bool, string) {
+		readmeRan = true
+		return false, "README: no impact"
+	}
+	run := &SuperpowersRun{Mode: SuperpowersModeApply, RepoDir: "/elsewhere", WorktreePath: t.TempDir(),
+		ChangedFiles: []string{"internal/engine/tree.go"},
+		Tasks:        []SuperpowersTask{{Objective: "x", Status: "done"}}}
+	claude := &arc42SyncFakeClaude{result: CommandResult{Err: fmt.Errorf("classifier down")}}
+	syncArc42SectionsAndReadme(context.Background(), claude, &arc42SyncFakeRunner{}, run)
+	if len(ran) != 12 || !readmeRan {
+		t.Errorf("classifier failure must degrade to all 12 sections + README, ran %v readme=%v", ran, readmeRan)
+	}
+}
+
+func TestSyncArc42SectionsAndReadmeGuards(t *testing.T) {
+	if changed, note := syncArc42SectionsAndReadme(context.Background(), &arc42SyncFakeClaude{}, &arc42SyncFakeRunner{}, nil); changed || note != "" {
+		t.Error("nil run must be a silent no-op")
+	}
+	run := &SuperpowersRun{Mode: SuperpowersModeApply, RepoDir: "/same", WorktreePath: "/same",
+		ChangedFiles: []string{"internal/engine/tree.go"}}
+	if changed, _ := syncArc42SectionsAndReadme(context.Background(), &arc42SyncFakeClaude{}, &arc42SyncFakeRunner{}, run); changed {
+		t.Error("worktree==repo must be a no-op")
+	}
+	docOnly := &SuperpowersRun{Mode: SuperpowersModeApply, RepoDir: "/elsewhere", WorktreePath: "/wt",
+		ChangedFiles: []string{"docs/TUTORIAL.md", "internal/engine/tree_test.go"}}
+	if changed, note := syncArc42SectionsAndReadme(context.Background(), &arc42SyncFakeClaude{}, &arc42SyncFakeRunner{}, docOnly); changed || !strings.Contains(note, "no production Go changes") {
+		t.Errorf("doc/test-only run must skip: %q", note)
 	}
 }

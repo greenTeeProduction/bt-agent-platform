@@ -30,7 +30,8 @@ import (
 
 const docDriftScriptRelPath = "scripts/check-doc-drift.sh"
 
-// docDriftSyncTimeout bounds the docs Claude pass, mirroring arc42SyncTimeout.
+// docDriftSyncTimeout bounds the docs Claude pass, mirroring the per-section
+// arc42SectionSyncTimeout family.
 const docDriftSyncTimeout = 10 * time.Minute
 
 // superpowersDocDriftFn runs the WORKTREE's own drift checker (its ROOT

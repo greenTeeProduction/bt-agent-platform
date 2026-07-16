@@ -1004,8 +1004,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		return -1
 	}
 	// Keep the architecture documentation in the same commit as the change:
-	// best-effort arc42 sync in the run worktree before verification.
-	if _, note := syncArc42Docs(c, defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, run); note != "" {
+	// best-effort per-section arc42 + README sync in the run worktree before
+	// verification (classifier-prefiltered; degrades to all sections).
+	if _, note := syncArc42SectionsAndReadme(c, defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, run); note != "" {
 		run.Arc42Sync = note
 		_ = writeSuperpowersRunJSON(run)
 	}

@@ -10,9 +10,11 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -158,4 +160,118 @@ Rules: edit no file other than README.md.`,
 		return false, "README: no impact"
 	}
 	return true, "README: updated"
+}
+
+// arc42ClassifierTimeout bounds the cheap which-sections-changed call.
+const arc42ClassifierTimeout = 2 * time.Minute
+
+// classifyAffectedArc42Sections asks one cheap Claude call which sections a
+// change plausibly affects, so a landing runs 1-3 section passes instead of
+// 13. ok=false (invalid JSON, error, empty, out-of-range) means the caller
+// must degrade to running everything — never skip silently.
+func classifyAffectedArc42Sections(ctx context.Context, claude ClaudeRunner, chg docChangeContext) (sections []int, readme bool, ok bool) {
+	prompt := fmt.Sprintf(`Given this change to the repository, which arc42 sections (1-12) plausibly
+need a documentation update, and does README.md?
+
+Summary: %s
+Changed files:
+- %s
+
+Sections: 1 intro/goals, 2 constraints, 3 context, 4 strategy, 5 building
+blocks, 6 runtime, 7 deployment, 8 crosscutting concepts, 9 decisions (any
+architecturally significant change), 10 quality, 11 risks/debt, 12 glossary.
+
+Answer with ONLY a JSON object, no prose: {"sections":[5,9],"readme":false}`,
+		truncateGoap(chg.Summary, 1000),
+		strings.Join(chg.ChangedFiles, "\n- "))
+
+	cctx, cancel := context.WithTimeout(ctx, arc42ClassifierTimeout)
+	defer cancel()
+	res := claude.RunClaude(cctx, chg.WorkDir, prompt)
+	if res.Err != nil {
+		return nil, false, false
+	}
+	start := strings.Index(res.Output, "{")
+	end := strings.LastIndex(res.Output, "}")
+	if start < 0 || end <= start {
+		return nil, false, false
+	}
+	var parsed struct {
+		Sections []int `json:"sections"`
+		Readme   bool  `json:"readme"`
+	}
+	if err := json.Unmarshal([]byte(res.Output[start:end+1]), &parsed); err != nil {
+		return nil, false, false
+	}
+	seen := map[int]bool{}
+	for _, n := range parsed.Sections {
+		if n >= 1 && n <= 12 && !seen[n] {
+			seen[n] = true
+			sections = append(sections, n)
+		}
+	}
+	if len(sections) == 0 && !parsed.Readme {
+		return nil, false, false
+	}
+	sort.Ints(sections)
+	return sections, parsed.Readme, true
+}
+
+// syncArc42SectionsAndReadme is the pipeline entry point replacing the
+// retired whole-monolith syncArc42Docs: classifier-prefiltered per-section
+// passes + README, all non-fatal, notes aggregated for run.Arc42Sync.
+func syncArc42SectionsAndReadme(ctx context.Context, claude ClaudeRunner, runner CommandRunner, run *SuperpowersRun) (changed bool, note string) {
+	if run == nil || run.Mode == SuperpowersModeDryRun || run.WorktreePath == "" || run.WorktreePath == run.RepoDir {
+		return false, ""
+	}
+	prodFiles := nonTestGoFiles(run.ChangedFiles)
+	if len(prodFiles) == 0 {
+		return false, "skipped: no production Go changes"
+	}
+
+	var objectives []string
+	for _, task := range run.Tasks {
+		if task.Status == "done" {
+			objectives = append(objectives, "- "+task.Objective)
+		}
+	}
+	diffStat := runner.Run(ctx, run.WorktreePath, "git", "diff", "--stat", "HEAD", "--", ".", ":(exclude)graphify-out/**")
+	chg := docChangeContext{
+		ChangedFiles: prodFiles,
+		Summary:      "Objectives completed:\n" + strings.Join(objectives, "\n") + "\n\nDiff stat:\n" + truncateGoap(diffStat.Output, 3000),
+		WorkDir:      run.WorktreePath,
+		ArtifactDir:  run.ArtifactDir,
+	}
+
+	selected, readme, ok := classifyAffectedArc42Sections(ctx, claude, chg)
+	if !ok {
+		selected = nil
+		for _, sec := range arc42Sections {
+			selected = append(selected, sec.Num)
+		}
+		readme = true
+	}
+
+	var notes []string
+	if !ok {
+		notes = append(notes, "classifier unavailable — ran all sections")
+	}
+	for _, num := range selected {
+		sec := arc42Sections[num-1]
+		secChanged, secNote := arc42SectionSyncFn(ctx, claude, runner, chg, sec)
+		notes = append(notes, secNote)
+		if secChanged {
+			changed = true
+			run.ChangedFiles = mergeChangedFiles(run.ChangedFiles, []string{arc42DocsDir + "/" + sec.File})
+		}
+	}
+	if readme {
+		rChanged, rNote := arc42ReadmeSyncFn(ctx, claude, runner, chg)
+		notes = append(notes, rNote)
+		if rChanged {
+			changed = true
+			run.ChangedFiles = mergeChangedFiles(run.ChangedFiles, []string{"README.md"})
+		}
+	}
+	return changed, strings.Join(notes, "; ")
 }

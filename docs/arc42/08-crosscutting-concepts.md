@@ -182,7 +182,7 @@ scenarios that exercise these concepts in [§6](06-runtime-view.md).
 
 ## 8.10 Autonomous Landing Pipeline
 
-**What:** Every self-improvement run executes in an isolated git worktree, verifies with tests/build/changed-package suites/lint parity, commits through the full pre-commit hook, fast-forwards the bare master via ancestry-checked sync, and pushes. Partial landing preserves completed tasks when a later task fails. An arc42 sync stage updates this document in the same commit.
+**What:** Every self-improvement run executes in an isolated git worktree, verifies with tests/build/changed-package suites/lint parity, commits through the full pre-commit hook, fast-forwards the bare master via ancestry-checked sync, and pushes. Partial landing preserves completed tasks when a later task fails. A classifier-prefiltered arc42 sync stage updates the affected arc42 section files (and README.md) in the same commit — one bounded, guideline-constrained Claude pass per affected section (SyncArc42Section01..12, SyncReadme).
 
 **Why:** Autonomous code changes need the same (or stronger) gates as human changes, without a human in the loop; failed cycles must not destroy verified work; documentation must not drift.
 
