@@ -193,6 +193,31 @@ func countCrashInvocations(t *testing.T, countFile string) int {
 	return len(data)
 }
 
+// TestACPClientGenerateCtx_StderrBufferRace exercises GOAL1 of the
+// NotebookLM ACP research: GenerateCtx (acp.go) hands cmd.Stderr a plain
+// *bytes.Buffer. Because that buffer is not an *os.File, os/exec starts its
+// own goroutine that keeps copying the subprocess's stderr pipe into the
+// buffer for as long as the subprocess is alive. GenerateCtx's request()
+// closure reads stderr.String() on its ctx.Done()/scanErr branches with no
+// synchronization against that copy goroutine. This test drives an ACP
+// helper subprocess that floods stderr continuously and never answers on
+// stdout, so the client's context deadline fires while the subprocess is
+// still alive and actively writing stderr — producing a concurrent
+// Buffer.Write/Buffer.String data race that -race must catch.
+func TestACPClientGenerateCtx_StderrBufferRace(t *testing.T) {
+	client := NewACPClient(ACPConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestACPHelperProcess", "--", "stderr-flood"},
+		CWD:     t.TempDir(),
+		Timeout: 150 * time.Millisecond,
+	})
+
+	_, err := client.Generate("hello")
+	if err == nil {
+		t.Fatalf("expected GenerateCtx to time out against the stderr-flooding helper, got nil error")
+	}
+}
+
 // TestACPHelperProcess is not a real test. It is a helper subprocess used by
 // ACP client tests to emulate a newline-delimited JSON-RPC ACP server.
 func TestACPHelperProcess(_ *testing.T) {
@@ -200,6 +225,16 @@ func TestACPHelperProcess(_ *testing.T) {
 		return
 	}
 	mode := os.Args[len(os.Args)-1]
+	if mode == "stderr-flood" {
+		// Never respond on stdout; keep writing to stderr until killed or
+		// the deadline passes, so the parent's stderr.String() reads race
+		// against this process's still-open stderr pipe.
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			fmt.Fprintln(os.Stderr, "stderr flood line")
+		}
+		return
+	}
 	if strings.HasPrefix(mode, "always-crash:") {
 		// Simulates a subprocess that fails on every launch (e.g. a broken
 		// binary or crash-looping agent): record that we were invoked, then

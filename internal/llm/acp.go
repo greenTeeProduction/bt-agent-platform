@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -88,7 +89,7 @@ func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, err
 		c.breaker.RecordFailure()
 		return "", fmt.Errorf("acp stdout: %w", err)
 	}
-	var stderr bytes.Buffer
+	var stderr syncBuffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		c.breaker.RecordFailure()
@@ -221,6 +222,29 @@ func (c *ACPClient) Reflect(task, outcome, plan string) (wentWell string, toImpr
 		toImprove = "better error handling"
 	}
 	return
+}
+
+// syncBuffer wraps a bytes.Buffer with a mutex so it can be safely used as
+// cmd.Stderr while being read concurrently: os/exec spawns a background
+// goroutine that keeps writing to cmd.Stderr for as long as the subprocess
+// is alive (since it is not an *os.File), and GenerateCtx's request loop
+// reads it via String() on the ctx.Done()/scanErr branches before the
+// subprocess necessarily exits.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // startScanJSONLines launches scanJSONLines in a goroutine guarded by

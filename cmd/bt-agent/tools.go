@@ -233,6 +233,29 @@ func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.Serializ
 // fails validation or fails to write never leaves the knowledge graph
 // claiming a fitness, node count, or evolved count that disk does not back —
 // the two stay atomic: either both update or neither does.
+
+// lineageSkipsReEvolution reports whether treeID already has a fitter,
+// non-regressing evolved descendant registered via RegisterEvolved's
+// "evolved_from" bookkeeping — closing the loop RegisterEvolved's own doc
+// comment describes (discovery "can find the bred winner on the next run")
+// but that no code path previously consulted before spending another
+// evolution budget on the same tree. baseFitness is the bottleneck's current
+// runtime SuccessRate; a descendant only blocks re-evolution when its
+// StructuralFitness beats it AND the tree's shared TrackRecord archive (the
+// same one bt_evolve_qd/bt_evolve_multiobjective/bt_evolve_island write
+// benchmark-gate outcomes to) shows no recent regressions (WinRate >= 0.5) —
+// a regressing history means the stored winner may no longer be
+// trustworthy, so re-evolution proceeds anyway.
+func lineageSkipsReEvolution(kg *knowledge.KnowledgeGraph, treeID string, baseFitness float64) bool {
+	bestEvolved, ok := kg.EvolutionLineageBestFitness(treeID)
+	if !ok || bestEvolved <= baseFitness {
+		return false
+	}
+	track := evolution.NewTrackRecord()
+	_ = track.Load(trackRecordArchivePath(treeID))
+	return track.WinRate() >= 0.5
+}
+
 func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]interface{}) {
 	evolvedID := baseTreeID + "-evolved"
 	result["evolved_tree_id"] = evolvedID
@@ -2041,6 +2064,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			report := []map[string]interface{}{}
 			skipped := []string{}
+			lineageSkipped := []string{}
 			algorithms := map[string]int{}
 			for _, b := range bottlenecks {
 				baseTree := resolveTree(b.TreeID)
@@ -2048,6 +2072,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					// A KG entry without a real behavior tree must not abort the
 					// remaining bottlenecks.
 					skipped = append(skipped, b.TreeID)
+					continue
+				}
+				// Closing the loop RegisterEvolved's doc comment describes: don't
+				// burn another evolution budget on a tree that already has a
+				// fitter, non-regressing evolved descendant sitting in the
+				// knowledge graph.
+				if lineageSkipsReEvolution(deps.kg, b.TreeID, b.SuccessRate) {
+					lineageSkipped = append(lineageSkipped, b.TreeID)
 					continue
 				}
 				// Failure-targeted re-evolution: read the structured failing
@@ -2101,6 +2133,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"bottlenecks":             len(bottlenecks),
 				"report":                  report,
 				"skipped":                 skipped,
+				"lineage_skipped":         lineageSkipped,
 				"algorithms":              algorithms,
 				"experience_bank_entries": bankEntries,
 			})

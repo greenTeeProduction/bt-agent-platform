@@ -565,3 +565,27 @@ func (kg *KnowledgeGraph) EvolutionLineage(treeID string) (baseID string, evolve
 	}
 	return baseID, evolvedIDs, true
 }
+
+// EvolutionLineageBestFitness resolves treeID's evolution lineage via
+// EvolutionLineage and returns the highest StructuralFitness among its
+// evolved descendants, so a caller weighing whether to spend another
+// evolution budget on treeID can compare that against its current runtime
+// fitness first. ok is false when treeID has no evolved descendants of its
+// own — either no lineage at all, or treeID is itself the evolved side of a
+// lineage (querying with an evolved ID's own descendants, not its siblings,
+// is deliberately out of scope here).
+func (kg *KnowledgeGraph) EvolutionLineageBestFitness(treeID string) (fitness float64, ok bool) {
+	baseID, evolvedIDs, found := kg.EvolutionLineage(treeID)
+	if !found || baseID != treeID {
+		return 0, false
+	}
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+	for _, evolvedID := range evolvedIDs {
+		if meta, exists := kg.Trees[evolvedID]; exists && (!ok || meta.StructuralFitness > fitness) {
+			fitness = meta.StructuralFitness
+			ok = true
+		}
+	}
+	return fitness, ok
+}

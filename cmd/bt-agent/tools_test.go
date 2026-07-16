@@ -2719,6 +2719,84 @@ func TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree(t *testing.T) {
 	}
 }
 
+// TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant
+// pins the missing half of the loop knowledge.RegisterEvolved's own doc
+// comment describes: registering an "evolved_from" edge exists precisely so
+// "fitness-aware discovery and the gardener can find the bred winner on the
+// next run", but bt_evolve_bottlenecks never actually consults
+// knowledge.KnowledgeGraph.EvolutionLineage before re-evolving a bottleneck —
+// it burns a fresh population/generations budget on domain:alert_router even
+// though domain:alert_router-evolved (registered via the exact same
+// RegisterEvolved bookkeeping a prior production run would have used) is
+// already fitter than the base tree's current runtime SuccessRate, and the
+// tree's shared TrackRecord archive is cold (WinRate()==1: no recorded
+// benchmark-gate regressions to contradict that evolved winner). Once fixed,
+// such a bottleneck must be left out of "report" (no algorithm tally, no
+// evolution attempted) and surfaced under a "lineage_skipped" list instead,
+// so callers can see which bottlenecks were deferred to an existing evolved
+// descendant rather than silently dropped.
+func TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant(t *testing.T) {
+	// Isolate the shared TrackRecord archive trackRecordArchivePath reads via
+	// agent.HomeDir() so a stray archive from another test/run can't leave
+	// this tree's WinRate() anything but the cold-start default of 1.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:alert_router", Name: "Alert Router", Category: "domain",
+		Fitness: 8, RunCount: 3,
+	})
+	// Register the evolved descendant through the same bookkeeping call a
+	// prior production bt_evolve_bottlenecks run would have made, so the
+	// "evolved_from" edge EvolutionLineage reads is genuinely present and its
+	// StructuralFitness (90) is far above the base tree's own runtime
+	// SuccessRate (8).
+	kg.RegisterEvolved("domain:alert_router", "domain:alert_router-evolved", 5, 90)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_bottlenecks", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_bottlenecks) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_bottlenecks returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+
+	if n, isNum := out["bottlenecks"].(float64); !isNum || int(n) != 1 {
+		t.Fatalf("bt_evolve_bottlenecks must still detect domain:alert_router as a bottleneck (RunCount>=3, Fitness<30); got %v", out["bottlenecks"])
+	}
+
+	report, _ := out["report"].([]interface{})
+	for _, e := range report {
+		m, _ := e.(map[string]interface{})
+		if m["tree"] == "domain:alert_router" {
+			t.Fatalf("bt_evolve_bottlenecks must not spend another evolution budget on domain:alert_router: EvolutionLineage already shows a fitter, non-regressing evolved descendant (domain:alert_router-evolved, StructuralFitness=90 > base SuccessRate=8, cold TrackRecord WinRate()==1) — got a full report entry instead of a skip: %v", m)
+		}
+	}
+
+	algorithms, _ := out["algorithms"].(map[string]interface{})
+	if n, isNum := algorithms["genetic"].(float64); isNum && n > 0 {
+		t.Errorf("bt_evolve_bottlenecks must not tally domain:alert_router under 'algorithms': its evolution should have been skipped via EvolutionLineage rather than executed; got algorithms=%v", algorithms)
+	}
+
+	lineageSkipped, _ := out["lineage_skipped"].([]interface{})
+	found := false
+	for _, s := range lineageSkipped {
+		if id, _ := s.(string); id == "domain:alert_router" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bt_evolve_bottlenecks must report domain:alert_router under a 'lineage_skipped' list so callers can see which bottlenecks were deferred to an existing fitter evolved descendant instead of silently dropping them from 'report'; got lineage_skipped=%v (full result %v)", out["lineage_skipped"], out)
+	}
+}
+
 // TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree pins the same fix as
 // TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_selection_pressure:
 // today only pop.BestFitness survives via recordEvolvedFitness — the bred
