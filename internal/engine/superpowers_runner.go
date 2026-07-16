@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -139,8 +140,28 @@ func getenvDefault(key, fallback string) string {
 var defaultSuperpowersCommandRunner CommandRunner = execCommandRunner{}
 var defaultSuperpowersClaudeRunner ClaudeRunner = execClaudeRunner{}
 
+// superpowersCommandTimeoutSecs is the wall-clock budget for a single wrapped
+// command (build/test/lint/git). Default 600s. The OLD 180s budget was <= the
+// inner go-test timeouts it wraps — verification runs `go test ... -timeout 300s`
+// (changed-packages) and `-timeout 180s` (focused) — so it left ZERO headroom to
+// cold-compile internal/engine (which changes almost every goap-fusion cycle),
+// surfacing as "verification focused-tests failed: context deadline exceeded"
+// degrades. 600s clears the 300s inner timeout plus compile headroom; genuinely
+// slow tests still hit their own inner -timeout (a distinct, correct signal).
+// Quick preflight/git checks are unaffected — they finish in milliseconds; the
+// only effect there is a longer ceiling before a truly hung command is killed.
+// Override with BT_SUPERPOWERS_COMMAND_TIMEOUT_SECS.
+func superpowersCommandTimeoutSecs() int {
+	if v := os.Getenv("BT_SUPERPOWERS_COMMAND_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 600
+}
+
 func superpowersCommandTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 180*time.Second)
+	return context.WithTimeout(context.Background(), time.Duration(superpowersCommandTimeoutSecs())*time.Second)
 }
 
 func recordCommandArtifact(path string, result CommandResult) error {
