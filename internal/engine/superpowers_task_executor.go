@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -320,12 +321,107 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 				if retry.Err == nil {
 					continue
 				}
-				res = retry
+				// Deterministic --fix left findings it cannot repair (errcheck,
+				// prealloc, revive empty-block, ...). Before discarding a
+				// fully-tested cycle as "degraded", make ONE bounded,
+				// rate-limit-guarded Claude self-correct pass that fixes the root
+				// cause of each finding — mirroring commitWithAutoFix's Claude
+				// repair. Bails cleanly to today's failure on rate limit, tight
+				// ctx deadline, nil runner, or when disabled.
+				finalRes, passed := claudeRepairVerifyLint(ctx, run, check.cmd, fixCmd, retry)
+				if passed {
+					continue
+				}
+				res = finalRes
 			}
 		}
 		return fmt.Errorf("verification %s failed: %v\n%s", check.name, res.Err, res.Output)
 	}
 	return writeSuperpowersRunJSON(run)
+}
+
+// verifyLintFixMaxAttempts caps the bounded Claude self-correct passes attempted
+// when a changed-packages-lint verification fails on findings golangci-lint
+// --fix cannot repair (errcheck, prealloc, revive empty-block, ...). Default 1;
+// 0 disables the Claude pass entirely (escape hatch back to today's
+// deterministic --fix-only behavior). Override with
+// BT_SUPERPOWERS_VERIFY_LINT_FIX_ATTEMPTS.
+func verifyLintFixMaxAttempts() int {
+	if raw := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_VERIFY_LINT_FIX_ATTEMPTS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 1
+}
+
+// buildVerifyLintFixPrompt is the Claude repair prompt for a changed-packages
+// verification-lint failure that `golangci-lint run --fix` could NOT resolve.
+// It is deliberately lint-scoped and distinct from buildCommitFixPrompt (which
+// is pre-commit-hook scoped): the goal is to fix the ROOT CAUSE of every finding
+// by improving the code, never to suppress it or weaken behavior.
+func buildVerifyLintFixPrompt(lintOutput string) string {
+	return fmt.Sprintf("You are Claude Code repairing golangci-lint findings that `golangci-lint run --fix` could NOT auto-fix.\n"+
+		"The change is already applied to THIS worktree; make the linter pass by improving the code.\n\n"+
+		"golangci-lint output (the findings to fix):\n```\n%s\n```\n\n"+
+		"Fix the ROOT CAUSE of every finding by improving the code:\n"+
+		"- errcheck (unchecked error): actually handle the returned error — inspect it and act on it; do not discard it.\n"+
+		"- prealloc: preallocate the slice with its known capacity.\n"+
+		"- revive empty-block: remove the empty block, or fill it with the behavior it is missing.\n"+
+		"- every other finding: fix exactly what the linter points at, by making the code correct.\n\n"+
+		"STRICT RULES — you MUST NOT weaken the code to appease the linter:\n"+
+		"- Do NOT add //nolint directives or any lint-suppression comment.\n"+
+		"- Do NOT delete the error check, and do NOT remove or neuter the behavior/code that triggered the finding.\n"+
+		"- Do NOT edit .golangci.yml or otherwise disable/relax any linter.\n"+
+		"- Do NOT run git, do NOT commit, and do NOT write outside the source files — the pipeline stages and commits after you finish.\n\n"+
+		"Verify with the affected packages, e.g. /usr/local/go/bin/go build ./... and /usr/local/go/bin/go test on the changed packages.",
+		truncateGoap(lintOutput, 6000))
+}
+
+// claudeRepairVerifyLint makes ONE bounded, rate-limit-guarded Claude
+// self-correct pass over a changed-packages-lint failure that
+// `golangci-lint run --fix` could not resolve. On success the fully-tested
+// cycle lands instead of degrading. It bails cleanly to the caller's existing
+// failure (ok=false) on any of: the pass disabled (verifyLintFixMaxAttempts()
+// <= 0), a nil runner, a rate-limited signal (in the lint output or in Claude's
+// own output), or a ctx deadline too tight to finish a ~180s Claude call — so
+// the worst case is a graceful degrade to today's deterministic behavior, never
+// a hang.
+//
+// Returns (finalLintResult, passed). When passed, the plain lint retry after
+// Claude's edits is green and verification may proceed. When !passed,
+// finalLintResult is the result the caller should report as the failure: the
+// pre-Claude retry when the pass was skipped, else the post-Claude retry.
+func claudeRepairVerifyLint(ctx context.Context, run *SuperpowersRun, lintCmd, fixCmd string, retry CommandResult) (CommandResult, bool) {
+	if verifyLintFixMaxAttempts() <= 0 {
+		return retry, false
+	}
+	if defaultSuperpowersClaudeRunner == nil {
+		return retry, false
+	}
+	if isClaudeRateLimit(retry.Output) {
+		return retry, false
+	}
+	// A Claude call can take ~180s; never start one that cannot finish within the
+	// remaining budget — bail to the existing failure instead of blocking.
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < 200*time.Second {
+		return retry, false
+	}
+
+	dir := run.WorktreePathOrRepo()
+	claudeRes := defaultSuperpowersClaudeRunner.RunClaude(ctx, dir, buildVerifyLintFixPrompt(retry.Output))
+	recordSuperpowersVerification(run, "changed-packages-lint-claude-fix", claudeRes.Command, claudeRes)
+	if isClaudeRateLimit(claudeRes.Output) {
+		return retry, false
+	}
+
+	// Fold in any newly auto-fixable state Claude's edits created, then re-run the
+	// plain lint gate.
+	refix := runShellCommand(ctx, defaultSuperpowersCommandRunner, dir, fixCmd)
+	recordSuperpowersVerification(run, "changed-packages-lint-claude-refix", fixCmd, refix)
+	claudeRetry := runShellCommand(ctx, defaultSuperpowersCommandRunner, dir, lintCmd)
+	recordSuperpowersVerification(run, "changed-packages-lint-claude-retry", lintCmd, claudeRetry)
+	return claudeRetry, claudeRetry.Err == nil
 }
 
 // recordSuperpowersVerification appends one check result to the run record
