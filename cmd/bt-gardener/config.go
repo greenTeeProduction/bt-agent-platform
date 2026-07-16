@@ -34,7 +34,7 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		return gardener.Config{}, fmt.Errorf("open reflection store: %w", err)
 	}
 
-	// Personal trees (ADR-010 Phase 5) live in per-user workspaces under
+	// Personal trees (ADR-133 Phase 5) live in per-user workspaces under
 	// agent.UsersDir(); scanning them here puts them into the same 24/7
 	// evolution loop as shared trees, with per-user experience banks below.
 	registry := gardener.NewRegistryWithUsers(refDir, agent.UsersDir())
@@ -71,7 +71,7 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// bt_evolve_genetic warm-starts from.
 		ExperienceBank: expBank,
 		// Personal trees record into (and bias against) the owning user's
-		// bank instead — users/<user>/experience (ADR-010 Phase 5).
+		// bank instead — users/<user>/experience (ADR-133 Phase 5).
 		UserExperienceRoot: agent.UsersDir(),
 
 		// Safety components — wired by A1 remediation

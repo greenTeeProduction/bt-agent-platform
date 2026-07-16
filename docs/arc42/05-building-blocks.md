@@ -1,15 +1,34 @@
-# arc42 Section 5 — Building Block View
+# 5. Building Block View
 
-## 5.0 Composable building blocks (`internal/blocks`)
+Static decomposition of the platform into packages and modules. Runtime
+scenarios live in [§6](06-runtime-view.md), deployment in
+[§7](07-deployment.md), and decision rationale in
+[§9](09-decisions.md) — blocks here carry only `(→ ADR-NNN)`
+pointers.
 
-Reusable **SubTreeRef** blocks (`core:*`) compose on-demand task trees. `BuildAndValidate` expands refs at build time via `RegisterTreeExpander` (wired from `internal/blocks` init). Default pipelines:
+## 5.0 Composable Blocks
+
+Reusable **SubTreeRef** blocks (`core:*`) in `internal/blocks` compose
+on-demand task trees (→ ADR-131). `BuildAndValidate` expands refs at build
+time via `RegisterTreeExpander` (`internal/engine/tree_expand.go`, wired from
+`internal/blocks` init through `blocks.Expand`). Default pipelines:
 
 - `DefaultTaskBlocks` — pre_gate → tools profile → tool_execution → error_handling
 - Presets `agentic`, `full` — plan/RAG/clarify/HITL variants via `ComposePreset`
 
-Persistence: custom blocks under `~/.go-bt-evolve/blocks/`. Evolution can mutate block refs (`FilterEvolutionMutations`). See ADR-008.
+Persistence: custom blocks under `~/.go-bt-evolve/blocks/`. Evolution can
+mutate block refs (`FilterEvolutionMutations`). Managed over MCP by the
+`bt_blocks_*` tool family (5.1).
 
 ## 5.1 Whitebox Overall System
+
+**Motivation.** The decomposition follows dependency direction: entrypoints
+depend on services, services on the two engines, engines on the knowledge and
+infrastructure layers — never the reverse. `internal/engine` receives
+collaborators through injection hooks rather than importing service packages
+(keeping it import-cycle-free), and the frequently-evolving layers (trees,
+evolution algorithms) are separated from stable infrastructure so mutation and
+rollback never touch reliability or security code.
 
 ### Layer Model
 
@@ -17,92 +36,190 @@ Persistence: custom blocks under `~/.go-bt-evolve/blocks/`. Evolution can mutate
 ┌─────────────────────────────────────────────────────────────┐
 │ ENTRYPOINTS (cmd/)                                          │
 │ bt-agent  bt-dashboard  bt-evaluator  bt-langagent          │
-│ bt-gardener  bt-agent-cli  benchcmp  bt-docgen              │
+│ bt-gardener  bt-agent-cli  bt-assistant  benchcmp           │
+│ bt-docgen  bt-ci-doctor  bt-scalability-probe               │
+│ bt-security-probe  bt-tree-integration                      │
 ├─────────────────────────────────────────────────────────────┤
 │ SERVICE LAYER                                               │
-│ agent/  dashboard/  workflow/  thinktank/  startup/         │
-│ a2a/  kanban/  notebooklm/                                  │
+│ a2a/  agent/  agentexec/  api/  audit/  dashboard/          │
+│ domains/  hitl/  startup/  thinktank/                       │
 ├─────────────────────────────────────────────────────────────┤
 │ CORE ENGINE (internal/engine/)                              │
 │ tree.go  chains.go  registry.go  tools_real.go              │
 │ Blackboard  BuildTree  RunTask  ChainAction  ActionRegistry │
 ├─────────────────────────────────────────────────────────────┤
-│ EVOLUTION ENGINE (internal/evolution/)                      │
+│ EVOLUTION ENGINE (internal/evolution/, internal/evaluator/) │
 │ Stockfish  Pareto  MAP-Elites  Island  Q-Learning           │
 │ Mutate  Expert  Learning  VaultManager                      │
 ├─────────────────────────────────────────────────────────────┤
 │ KNOWLEDGE LAYER                                             │
-│ knowledge/ (graph, discovery, embeddings, factory)          │
 │ factory/ (agent factory, tree generator)                    │
+│ knowledge/ (graph, discovery, embeddings)                   │
+│ research/ (knowledge store, program store, quota economy)   │
 ├─────────────────────────────────────────────────────────────┤
 │ INFRASTRUCTURE                                              │
-│ security/  reliability/  metrics/  tracing/  config/        │
-│ mcp/  reflection/  domains/  api/                           │
-│ llm/  benchmark/  util/  gardener/                          │
+│ benchmark/  blackboard/  blocks/  cicd/  config/            │
+│ doormate/  fusion/  gardener/  goap/  llm/  persona/        │
+│ reliability/  security/  tracing/  util/                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Responsibility Table
+### Contained Blackboxes
 
-| Layer | Package(s) | Responsibility |
+One row per package — all 31 `internal/` packages appear exactly once,
+alphabetical within each layer (matching the diagram order):
+
+| Layer | Package | Responsibility |
 |---|---|---|
-| Entrypoints | `cmd/bt-agent`, `cmd/bt-dashboard`, `cmd/bt-evaluator`, `cmd/bt-langagent`, `cmd/bt-gardener`, `cmd/bt-agent-cli`, `cmd/benchcmp`, `cmd/bt-docgen` | Process entry points. Each is a standalone binary with its own main.go |
-| Service | `internal/agent`, `internal/dashboard`, `internal/thinktank`, `internal/startup`, `internal/a2a`, `internal/domains` | Agent lifecycle (registry, scheduler, memory), dashboard API, thinktank analysis, startup simulation, A2A protocol, domain-specific trees |
-| Core Engine | `internal/engine` | Behavior tree runtime: BuildTree, RunTask, Blackboard, chains (10 types), action/condition registry (175+ nodes), event bus |
-| Evolution | `internal/evolution` | 6 algorithms (Stockfish, Pareto, MAP-Elites, Island, Q-Learning, Expert), mutation operators (10 types), fitness scoring, vault manager |
-| Knowledge | `internal/knowledge`, `internal/factory` | Knowledge graph (38+ trees, capabilities, embeddings), tree discovery, auto-creation, factory breeding (crossover + archetypes) |
-| Infrastructure | `internal/security`, `internal/reliability`, `internal/metrics`, `internal/tracing`, `internal/config`, `internal/mcp`, `internal/llm`, `internal/benchmark`, `internal/gardener`, `internal/util`, `internal/api`, `internal/domains` | Auth, rate limiting, circuit breakers, retry, DLQ, Prometheus metrics, OpenTelemetry, config loading, MCP protocol, LLM providers, benchmarks, evolution orchestration |
+| Entrypoints | `cmd/` (13 binaries) | Standalone binaries, each with its own main.go: MCP servers (`bt-agent`, `bt-evaluator`, `bt-langagent`), `bt-dashboard`, the `bt-gardener` daemon, CLIs (`bt-agent-cli`, `bt-assistant`), and build/CI/probe utilities (`benchcmp`, `bt-docgen`, `bt-ci-doctor`, `bt-scalability-probe`, `bt-security-probe`, `bt-tree-integration`) |
+| Service | `internal/a2a` | Agent-to-Agent (A2A) protocol integration, incl. auction-based task allocation ([§8](08-crosscutting-concepts.md) A2A Auction Task Allocation) |
+| Service | `internal/agent` | Agent lifecycle: registry, scheduler, memory, pub/sub AgentBus |
+| Service | `internal/agentexec` | In-process run-dependency wiring (`NewRunDeps`, dynamic tree resolvers) |
+| Service | `internal/api` | API design primitives (OpenAPI route definitions) |
+| Service | `internal/audit` | Append-only JSONL audit logging for agent tasks |
+| Service | `internal/dashboard` | Dashboard API, metrics collection, SSE streaming (5.4) |
+| Service | `internal/domains` | Domain-specific behavior trees (catalog below) |
+| Service | `internal/hitl` | Human-in-the-loop approval for behavior tree execution |
+| Service | `internal/startup` | Startup-company simulation |
+| Service | `internal/thinktank` | Collaborative analytical think tank |
+| Core Engine | `internal/engine` | Behavior tree runtime: BuildTree, RunTask, Blackboard, chains (5.5), action/condition registry (inventory in [§1.1](01-introduction-goals.md)), GOAP/planner nodes (5.2), event bus |
+| Evolution | `internal/evaluator` | Stockfish-adapted tree evaluator behind the `bt-evaluator` MCP server |
+| Evolution | `internal/evolution` | Six evolution algorithms, mutation operators, fitness scoring, durable per-algorithm archives, safety gates, vault manager (5.3) |
+| Knowledge | `internal/factory` | Skill-to-behavior-tree compiler; breeding via crossover + archetypes |
+| Knowledge | `internal/knowledge` | Knowledge graph: semantic index of all trees with capabilities and embeddings (hardened embedding client → ADR-074); discovery and auto-creation; runtime-feedback persistence closing the learn→evolve loop across restarts ([§8](08-crosscutting-concepts.md) File-Based Persistence); change-impact graph consumed by `bt-agent-cli impact` and the `bt_impact_tests` MCP tool (→ ADR-052, ADR-070, ADR-071) |
+| Knowledge | `internal/research` | Research memory: content-hash-dedup knowledge store + multi-cycle program store (ADR-003 JSON) |
+| Infrastructure | `internal/benchmark` | A/B testing and statistical mutation-quality benchmark suites |
+| Infrastructure | `internal/blackboard` | Scoped blackboard persistence (Manager, per-scope limits) |
+| Infrastructure | `internal/blocks` | Composable SubTreeRef blocks (5.0) |
+| Infrastructure | `internal/cicd` | Local and GitHub Actions CI/CD validation (CI doctor) |
+| Infrastructure | `internal/config` | Environment-based configuration |
+| Infrastructure | `internal/doormate` | Adaptive intent/page assistant (IntentSession, PageSchema, UserProfile) |
+| Infrastructure | `internal/fusion` | Multi-model panel fusion: RunPanel → Judge → Synthesize |
+| Infrastructure | `internal/gardener` | 24/7 tree-evolution daemon |
+| Infrastructure | `internal/goap` | GOAP A* planner — the single search implementation (→ ADR-133) |
+| Infrastructure | `internal/llm` | LLM providers: Ollama client + DeepSeek escalation |
+| Infrastructure | `internal/persona` | Per-user personalization layer (→ ADR-133, 5.6) |
+| Infrastructure | `internal/reliability` | Circuit breakers, retry, DLQ, error categorization |
+| Infrastructure | `internal/security` | Auth, rate limiting, production security primitives |
+| Infrastructure | `internal/tracing` | OpenTelemetry facade (local Grafana/Tempo/Loki via `make observability-up`) |
+| Infrastructure | `internal/util` | Shared utility functions |
 
-## 5.2 Level 2: Core Engine Whitebox
+### Tree Catalog
 
-```
-internal/engine/
-├── tree.go          — BuildTree(), RunTask(), Blackboard, actionForName, conditionForName
-├── chains.go        — 10 chain types (llm_call, agent, rag_query, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_call, tool_action)
-├── registry.go      — RegisterAction(), RegisterCondition(), GetAction(), GetCondition()
-├── tools_real.go    — Real tool implementations for chain actions
-├── arc42_nodes.go   — 22 arc42-specific actions + 5 conditions
-├── goap_nodes.go    — GOAP planner integration
-├── engine.go        — Init(), logging
-└── *_test.go        — 10+ test files
-```
+~75 built-in trees (counts by category in [§1.1](01-introduction-goals.md));
+the two main registries:
 
-Key flow: `RunTask(bb, tree)` → `BuildTree(serTree, bb)` → `buildNode()` → `go-bt Command[Blackboard]` → tick loop (1000 max) → validateOutputQuality()
+| Registry | Notable trees |
+|---|---|
+| `domains.AllDomainTrees()` (`internal/domains/trees.go` + `arc42_trees.go`) | Self-improvement/GOAP: `goap_fusion`, `goap_fusion_loop`, `goap_planning`, `goap_research`, `goap_devops` · research/fusion: `bt_fusion`, `notebooklm`, `notebooklm_consumer`, `notebooklm_plan_implement` · automation: `superpowers_workflow`, `hermes_update`, `bt_manager`, `arc42_seeder`, `auction_demo` · dev/ops: `code_review`, `devops_ci`, `refactoring`, `security_audit`, `crash_investigator`, `agent_monitor`, `alert_router`, `data_pipeline` · general: `meeting_notes`, `game_ai`, `trading_signal` · docs: `arc42:section1`…`arc42:section12`, `arc42:assemble` (root wrapping: 5.2) |
+| `evolution.AllFinanceTrees()` (`internal/evolution/finance_trees.go`) | `pitch_agent`, `earnings_reviewer`, `market_researcher`, `model_builder`, `meeting_prep`, `valuation_reviewer`, `gl_reconciler`, `month_end_closer`, `statement_auditor`, `kyc_screener` |
 
-## 5.3 Level 2: Evolution Engine Whitebox
+Research, startup-role, thinktank, kanban, evolution, composed-block, and core
+trees live beside these in `internal/evolution` (`research_trees.go`,
+`goap_trees.go`, `fusion_trees.go`), `internal/startup`, `internal/thinktank`,
+and `internal/domains/kanban.go`.
 
-```
-internal/evolution/
-├── stockfish.go         — TranspositionTable, mutation ordering, alpha-beta search
-├── pareto.go            — MultiFitness, ParetoFront, ParetoPopulation
-├── map_elites.go        — BehavioralDescriptor, MAPElitesGrid
-├── island_model.go      — IslandModel with periodic migration
-├── q_learning.go        — State→Action epsilon-greedy policy
-├── expert.go            — 6 design patterns, 5 anti-patterns, TreeArchetypes
-├── mutations.go         — 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, etc.)
-├── learning.go          — cloneTree (sole deep-copy implementation)
-├── vault_manager.go     — Tree vault with checkpoint/restore
-├── types.go             — SerializableNode, Individual, Population, Fitness
-└── fitness.go           — Per-tree fitness via reflection.FilterByTreeName
-```
+### MCP Tool Families (`cmd/bt-agent`)
 
-## 5.4 Level 2: Dashboard Whitebox
+The bt-agent server's 79 tools group into families, each backed by one
+building block:
 
-```
-cmd/bt-dashboard/
-├── main.go              — HTTP server on :9800, embed FS for static files, 8 route groups
-├── pipeline_handlers.go — Sprint/quarter/year pipeline API handlers
-└── static/              — Embedded web UI (HTML/JS/CSS)
+| Family | Tools | Backing block |
+|---|---|---|
+| Execution & routing (7) | `bt_run_task`, `bt_get_tree`, `bt_delegate_to_tree`, `bt_use_domain_tree`, `bt_use_finance_tree`, `bt_use_go_tree`, `bt_use_research_tree` | engine + domains |
+| Evolution (12) | `bt_evolve`, `bt_evolve_genetic`, `bt_evolve_bottlenecks`, `bt_evolve_selection_pressure`, `bt_evolve_island`, `bt_evolve_qd`, `bt_evolve_qlearning`, `bt_evolve_memetic`, `bt_evolve_multiobjective`, `bt_evolve_pareto`, `bt_evolve_expert`, `bt_evolve_selectors` | evolution (5.3) |
+| Composable blocks (9) | `bt_blocks_compose`, `bt_blocks_compose_evolve`, `bt_blocks_register`, `bt_blocks_get`, `bt_blocks_list`, `bt_blocks_list_profiles`, `bt_blocks_fitness`, `bt_blocks_freeze`, `bt_blocks_promote` | blocks (5.0) |
+| Agent platform (10) | `bt_agent_create`, `bt_agent_run`, `bt_agent_list`, `bt_agent_delete`, `bt_agent_schedule`, `bt_agent_history`, `bt_agent_memory_read`, `bt_agent_memory_write`, `bt_agent_memory_delete`, `bt_create_agent` | agent |
+| Knowledge graph (7) | `bt_kg_discover`, `bt_kg_query`, `bt_kg_list`, `bt_kg_summary`, `bt_kg_analytics`, `bt_kg_explain`, `bt_kg_auto_create` | knowledge |
+| HITL (5) | `bt_hitl_list`, `bt_hitl_get`, `bt_hitl_approve`, `bt_hitl_reject`, `bt_hitl_compose_task` | hitl |
+| Blackboard (4) | `bt_bb_read`, `bt_bb_write`, `bt_bb_list`, `bt_bb_delete` | blackboard |
+| Personalization (10) | `bt_persona_get`, `bt_persona_patterns`, `bt_persona_set_preference`, `bt_goal_add`, `bt_goal_list`, `bt_goal_remove`, `bt_goal_from_pattern`, `bt_goal_compile`, `bt_automation_propose`, `bt_feedback` | persona + goap (→ ADR-133, 5.6) |
+| Reliability/ops (5) | `bt_dlq_list`, `bt_dlq_replay`, `bt_circuit_status`, `bt_health`, `bt_reset` | reliability |
+| Thinktank/startup/workflow (5) | `bt_thinktank_analyze`, `bt_startup_simulate`, `bt_startup_summary`, `bt_workflow_run`, `bt_workflow_approve` | thinktank + startup + dashboard |
+| Misc (5) | `bt_factory_create`, `bt_get_fitness`, `bt_get_reflections`, `bt_list_finance_trees`, `bt_impact_tests` | factory, evolution, knowledge |
 
-internal/dashboard/
-├── agents.go            — Agent listing, CRUD operations
-├── executor.go          — AgentExecutor: in-process RunOnce via agent.RunAgent; Hermes CLI fallback
-├── workflow_engine.go   — Workflow orchestration
-├── workflow_orchestrator.go — Multi-agent workflow coordination
-└── tasks.go             — Task CRUD
-```
+The bt-evaluator and bt-langagent servers' tool inventories are in
+[§3.2](03-context-scope.md).
 
-## 5.5 Level 3: Chain Types Detail
+## 5.2 Core Engine
+
+Level 2 whitebox of `internal/engine` (~112 source files; the load-bearing
+blocks). Rows ordered alphabetically by (first) filename:
+
+| Block | Responsibility | Interface |
+|---|---|---|
+| `arc42_nodes.go` | arc42 documentation pipeline nodes | 22 actions + 5 conditions |
+| `chains.go` | 11 LLM chain types as first-class BT nodes (inventory in 5.5) | `ChainAction`; node `Name` = `chain_type:prompt_text` |
+| `error_handler_node.go` | Self-extending Claude error handler wrapped around every domain tree root: on root failure, propose and gate a recovery node | `ClaudeErrorHandler` node type |
+| `goap_nodes.go`, `goap_compiled_nodes.go` | GOAP planner integration: run the `internal/goap` A* planner and store the plan on the blackboard, then execute it step-wise; compiled-plan counterparts maintain the same blackboard state | `PlanGoapActions` (plan → blackboard), `ExecuteGoapStep` (next plan step) |
+| `planner_node.go` | Utility-scored child selection as a composite node type; `PlannerNode` extends `UtilitySelector` with GOAP-style goal management (single-planner decision in [§4](04-solution-strategy.md) Key Technology Decisions #5) | `UtilitySelector`, `PlannerNode` node types (`BuildUtilitySelector`) |
+| `registry.go` | Action/condition registry backing every leaf node (count in [§1.1](01-introduction-goals.md)); populated by the `actions_*.go`/`conditions_*.go` families (domain, finance, GOAP-fusion, superpowers, notebooklm, A2A, …) | `RegisterAction`, `RegisterCondition`, `GetAction`, `GetCondition` |
+| `tools_real.go` | Real tool implementations available to chain actions | blackboard `ChainTools` |
+| `tree.go` | Builds go-bt runtime trees from the SerializableNode IR and executes them with output-quality validation | `BuildTree`, `RunTask`, `Blackboard`, `buildNode`, `actionForName`/`conditionForName` |
+| `tree_expand.go` | Expands `SubTreeRef` nodes at build time (5.0) | `RegisterTreeExpander` |
+
+Key flow: `RunTask(bb, tree)` → `BuildTree(serTree, bb)` → `buildNode()` →
+`go-bt Command[Blackboard]` → tick loop (1000 max) → `validateOutputQuality()`
+
+## 5.3 Evolution Engine
+
+Level 2 whitebox of `internal/evolution`. Two shared mechanisms, stated once:
+all durable archives use one persistence idiom — atomic tmp+rename under the
+`acquireExperienceLock` sidecar flock, merge-on-load, optional cap,
+missing-file cold start, corrupt-file error (→ ADR-024, ADR-033) — and all
+eight evolve variants (`Evolve`, `EvolveWithExperience`, `EvolveQLearning`,
+`MemeticEvolve`, `EvolvePareto`, `EvolveAll`, NSGA-II `Evolve`,
+`EvolveMAPElites`) run the shared per-generation self-healing envelope:
+crisis detect → emergency mutation rate → specialist-elite observe →
+reproduce → resurrect → streak reset (→ ADR-038, ADR-051, ADR-121).
+Rows ordered alphabetically by (first) filename:
+
+| Block | Responsibility | Interface |
+|---|---|---|
+| `cmaes.go` | (λ,μ)-CMA-ES numeric parameter tuning over normalized [0,1] solutions; extracts `TimeoutMs`/`MaxRetries`/metadata params and writes them back with bounds clamping (→ ADR-020) | `CMAESOptimizer`, `TuneTreeParameters` (Extract → Optimize → Apply) |
+| `crisis_detector.go` | Proactive diversity-collapse/regression-spiral/quality-crash detection with a calibrated emergency mutation rate feeding both the GA envelope and the gardener's mutation budget (→ ADR-031, ADR-102) | `DetectPopulation`, `Detect`/`Intervene`, `GetEmergencyMutationRate` |
+| `decision_tree.go` | C4.5/CART information-gain metrics over Selector paths with durable count-summing archive; degrades to a no-op on empty telemetry (→ ADR-029) | `DTAnalyzer`, `BTOptimizer.OptimizeSelectors` |
+| `experience_bank.go` | Persisted successful-mutation entries (EvoRepair-style), Jaccard retrieval by tree type, 500-entry quality-aware eviction, two-writer-safe lock→merge→write on every full-file path, source-aware cross-domain seeding (→ ADR-018, ADR-024, ADR-062) | `Add`/`Retrieve`/`RetrieveByTreeType`, `TransferExperiences`/`SeedDomain`, `MarkReused`, `Persist` |
+| `expert.go` | Expert knowledge: 6 design patterns, 5 anti-patterns, tree archetypes, benchmark-validated specialist seeds (→ ADR-031); durable `LearnedPatterns` archive capped at 500 with lowest-gain eviction, fed by five production algorithms (→ ADR-095, ADR-103, ADR-104, ADR-106, ADR-110) | `ExpertKnowledge.Observe/Save/Load`, `SeedSpecialists`; read by `bt_evolve_expert` |
+| `file_lock.go` | Cross-process exclusive advisory flock on the `.lock` sidecar, held across merge→rename; excludes two opens even within one process; idempotent release (→ ADR-024) | `acquireExperienceLock` |
+| `finance_trees.go`, `fusion_trees.go`, `goap_trees.go`, `research_trees.go` | Built-in tree definitions living beside the algorithms (catalog in 5.1) | `AllFinanceTrees()` |
+| `island.go` | Island model with periodic migration and per-domain durable merge archive bounded by `Cap`/`IslandCap` with observable eviction (→ ADR-033, ADR-034, ADR-040); cross-domain experience transfer riding migration via optional `Bank` (→ ADR-062, ADR-076); cross-island winner benchmark-gated (→ ADR-096); real within-island breeding + optional `ExpertKnowledge` (→ ADR-104, ADR-106) | `IslandModel.EvolveAll`/`Migrate`/`Save`/`Load`, `TotalMigrations`; driven by `bt_evolve_island` |
+| `learning.go` | GA core: `Population`/`Individual` types, sole deep-copy (`cloneTree`), home of the shared self-healing envelope; Q-learning evolution with durable bounded QTable (→ ADR-041, ADR-095); read-only health snapshot (→ ADR-032); top-K experience retrieval | `Population.Evolve`/`EvolveWithExperience`/`EvolveQLearning`, `selfHealGeneration`, `QTable.Save/Load` (`Cap`), `HealthSnapshot`, `RetrieveExperienceHints` |
+| `local_search.go` | Memetic refinement (hill-climb / simulated annealing / tabu) with the breeding step inside the shared envelope (→ ADR-121) | `LocalSearcher`, `Population.MemeticEvolve`; driven by `bt_evolve_memetic` |
+| `map_elites.go` | MAP-Elites quality diversity over behavioral descriptors; durable capped merge-safe grid (→ ADR-033, ADR-043); shared envelope replaced its hand-inlined crisis loop, fixing a single-niche-collapse blind spot in `DiversityScore()` (→ ADR-121); optional `ExpertKnowledge` (→ ADR-104) | `BehavioralDescriptor`, `MAPElitesGrid.Save/Load` (`Cap`), `MAPElitesPopulation.EvolveMAPElites`; driven by `bt_evolve_qd` (→ ADR-110, gate → ADR-111) |
+| `mcts_mutate.go`, `llm_supervisor.go` | MCTS-guided mutation search; deterministic, `-short`-safe heuristic supervisor mirroring the LLM policy contract (→ ADR-110) | `MCTSMutator.Mutate`, `LLMSupervisor.Guide` |
+| `meta_validator.go` | P0 structural-safety gate distinct from fitness/quality/SLO scoring: root-type, node-name, structural-limit, selector-shape, retry-bound, anti-pattern, archetype-fit, and fitness-floor/regression checks in one explainable MetaAccept/MetaWarn/MetaReject decision, consulted last in the gardener's acceptance loop (→ ADR-088) | `ValidateMutation`; wired via `gardener.Config.MetaValidator` |
+| `multi_objective.go` | NSGA-II: fast non-dominated sort, crowding distance, seeded specialists (→ ADR-051); durable final-front archive delegating to `ParetoFront` (→ ADR-091); persistence benchmark-gated (→ ADR-096); optional `ExpertKnowledge` observation (→ ADR-104, ADR-106) | `NSGAIIPopulation.Evolve`/`Save`/`Load` (`Cap`/`Archive`); driven by `bt_evolve_multiobjective` |
+| `mutate.go` | SerializableNode IR + 10 mutation operators (add_before, add_after, wrap_retry, prune, swap_children, …) | `SerializableNode`, `MutationOp`, `ApplyMutations` |
+| `pareto.go` | Pareto-front evolution with front-elitism crossover (→ ADR-038); durable dominance-merged, cap-evicting archive (→ ADR-091); benchmark-gated (→ ADR-113); optional `ExpertKnowledge` (→ ADR-104, ADR-106) | `MultiFitness`, `ParetoFront.Save/Load`, `ParetoPopulation.EvolvePareto`, `StructuralMultiFitness`; driven by `bt_evolve_pareto` (→ ADR-057) |
+| `quality_gate.go` | Reactive regression/floor gate with per-tree consecutive-failure disable; multi-revision pre-mutation snapshot history and automatic fail-closed rollback (→ ADR-093, ADR-115) | `Validate`/`ValidateFor`, `SnapshotTree`, `RestoreTree`/`RestoreTreeRevision`/`ListRevisions`; `gardener_rollback` tool |
+| `reflection_store.go` | Per-tree fitness evidence from run reflections | `FilterByTreeName`(`Strict`) |
+| `selector_optimizer.go` | Per-Selector child success/failure/running telemetry, learned priority ordering, durable merge-summing stats (→ ADR-029, ADR-079) | `SelectorOptimizer`, `OrderChildren`, `ApplyLearnedOrdering`, `SaveSelectorStats`/`LoadSelectorStats`; driven by `bt_evolve_selectors` |
+| `specialist_registry.go` | Best validated archetype per `specialist:<type>` so crisis recovery can resurrect an extinct niche; consulted by every production evolve variant through the shared envelope (→ ADR-031, ADR-038, ADR-051, ADR-121) | `Observe`/`ExtinctSpecialists`/`Resurrect`; seeded via `SeedSpecialistRegistry` |
+| `stockfish_evolve.go` | Stockfish-adapted mutation ordering: transposition table + alpha-beta-style search (→ ADR-005) | `TranspositionTable` |
+| `vault_manager.go` | Tree vault with checkpoint/restore | `VaultManager` |
+
+## 5.4 Dashboard
+
+Level 2 whitebox of `cmd/bt-dashboard` + `internal/dashboard` (HTTP server on
+:9800, [§7](07-deployment.md)). Rows grouped by package (`cmd/bt-dashboard`
+first, then `internal/dashboard`), alphabetical by filename within each:
+
+| Block | Responsibility | Interface |
+|---|---|---|
+| `cmd/bt-dashboard/main.go` | HTTP server, embedded static FS, 8 route groups; owns the scalability substrate (task queue + agent router over a local executor) read by `/api/scalability`; `/api/trees` surfaces fitness + evolution lineage (→ ADR-011, ADR-012, ADR-087, ADR-089, ADR-100, ADR-116, ADR-126) | `POST /api/agents/execute`, `GET /api/trees`, `POST /api/workflow/run-full-pipeline`, … |
+| `cmd/bt-dashboard/pipeline_handlers.go` | Sprint/quarter/year pipeline API handlers; enqueues each run onto the dashboard task queue and drains it on completion | `/api/pipeline/*` |
+| `cmd/bt-dashboard/static/` | Embedded web UI (HTML/JS/CSS), 8 tabs ([§1.1](01-introduction-goals.md)) | embed FS |
+| `internal/dashboard/agents.go` | Agent listing + CRUD; `cb_status` reflects durable per-agent circuit-breaker state (→ ADR-063) | `ListAgentsWithCB` |
+| `internal/dashboard/executor.go` | In-process agent execution with Hermes CLI fallback; task→tree routing checks auction-shaped text first (→ ADR-073), then the knowledge-graph discovery seam, with the static keyword switch as fallback (→ ADR-100) | `AgentExecutor.RunOnce`, `PickTreeForTask`, `DiscoverTreeFn` |
+| `internal/dashboard/metrics.go` | Platform metrics assembly; parses the aggregate gardener-metrics document (→ ADR-032); ranks live knowledge-graph `TreeSnapshot`s into `TopWinners` — no UI panel reads it yet (→ ADR-126) | `Collect`, `GardenerMetrics` |
+| `internal/dashboard/tasks.go` | Task CRUD with Approval audit records and priority-then-sprint dispatch ordering (→ ADR-072); atomic tmp+rename persistence, fail-loud on corruption (→ ADR-101) | `TaskStore.Approve`/`Reject`/`Approved` |
+| `internal/dashboard/workflow_engine.go` | Workflow orchestration (Workflow/WorkflowTask/Approval, priority ordinals); production-wired task derivation, HTTP approval gates, and full-pipeline execution; bidirectional task-store sync (→ ADR-080, ADR-081, ADR-082, ADR-086, ADR-089, ADR-116) | `RecommendationsToTasks`, `Prioritize`, `PendingApprovals`/`ApproveTask`/`RejectTask`, `ExecuteSprint`, `RunFullPipeline`, `SetTaskStatus` |
+| `internal/dashboard/workflow_orchestrator.go` | Multi-agent workflow coordination | — |
+
+## 5.5 Chain Types
+
+Level 3 detail of the engine's ChainAction block (5.2):
 
 | # | Chain Type | Description | Template Variables |
 |---|---|---|---|
@@ -116,10 +233,12 @@ internal/dashboard/
 | 8 | `conversation` | Multi-turn with memory | `{{.ChainMemory}}` |
 | 9 | `retrieval_qa` | Two-phase retrieve-then-answer | `{{.KgResults}}` → `{{.Task}}` |
 | 10 | `tool_action` | Direct tool invocation (no LLM) | Tool name + input in node config |
+| 11 | `fusion` | Multi-model panel: fans the prompt to configured analysis models and synthesizes a final answer (→ ADR-130) | Same as llm_call; results in `{{.ChainState.fusion_*}}` |
 
-Each ChainAction reads config from node `Name` (format: `chain_type:prompt_text`) and `Metadata` (max_tokens, temperature, etc.).
+Each ChainAction reads config from node `Name` (format:
+`chain_type:prompt_text`) and `Metadata` (max_tokens, temperature, etc.).
 
-## 5.6 Planned Building Blocks — Personalized Self-Evolving Agents (ADR-010)
+## 5.6 Planned Building Blocks (ADR-133)
 
 Roadmap blocks from `docs/plans/2026-07-08-personalized-self-evolving-agents.md`:
 

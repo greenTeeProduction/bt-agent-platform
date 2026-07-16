@@ -44,7 +44,7 @@ func NotificationThrottleFile() string {
 }
 func LogsDir() string { return filepath.Join(HomeDir(), "logs") }
 
-// UsersDir is the root of per-user personalization workspaces (ADR-010):
+// UsersDir is the root of per-user personalization workspaces (ADR-133):
 // users/<user>/{profile.json, interactions.jsonl, trees, goals, memory,
 // reflections, experience}. Layout inside is owned by internal/persona.
 func UsersDir() string { return filepath.Join(HomeDir(), "users") }

@@ -3,7 +3,7 @@ package engine
 // arc42 program seeder: a dedicated agent action that seeds
 // ~/.go-bt-evolve/research/programs.json from the platform's LIVE arc42
 // quality goals. It deliberately reads the original document
-// (docs/arc42/go-bt-evolve-arc42.md via arc42GoalsDocPaths) on every run —
+// (docs/arc42/01-introduction-goals.md via arc42GoalsDocPaths) on every run —
 // never a snapshot — so edits to the architecture goals steer the very next
 // seeded program. Each run targets ONE quality goal (deterministic daily
 // rotation) and rejects any proposal that does not name that goal, on top
@@ -69,7 +69,7 @@ func init() {
 		goal := arc42SeedTargetGoal()
 		if goal == nil {
 			bb.Outcome = "arc42_goals_unavailable"
-			bb.Result = "## arc42 Program Seeding Skipped\n\nThe live arc42 document yielded no quality goals (docs/arc42/go-bt-evolve-arc42.md missing or its §1.2 table unparseable) — no program seeded. Fix the document; this agent never seeds from a static copy."
+			bb.Result = "## arc42 Program Seeding Skipped\n\nThe live arc42 document yielded no quality goals (docs/arc42/01-introduction-goals.md missing or its §1.2 table unparseable) — no program seeded. Fix the document; this agent never seeds from a static copy."
 			return 1
 		}
 

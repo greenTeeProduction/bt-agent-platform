@@ -193,7 +193,6 @@ func TestSuiteForTree_Matching(t *testing.T) {
 		{"domain_alert_router", "alert_router"},
 		{"domain_trading_signal", "trading_signal"},
 		{"domain_arc42:section1", "arc42"},
-		{"domain_arc42:assemble", "arc42"},
 		{"domain_goap_devops", "goap"},
 		{"domain_goap_planning", "goap"},
 		{"domain_goap_research", "goap"},

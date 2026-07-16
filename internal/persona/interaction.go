@@ -11,7 +11,7 @@ import (
 )
 
 // Interaction is one observed unit of collaboration with the user — the raw
-// signal habit mining runs on (ADR-010 Phase 1).
+// signal habit mining runs on (ADR-133 Phase 1).
 type Interaction struct {
 	Task       string `json:"task"`
 	TreeID     string `json:"tree_id,omitempty"`

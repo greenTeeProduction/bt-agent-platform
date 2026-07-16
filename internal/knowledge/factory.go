@@ -243,7 +243,7 @@ func (f *Factory) crossoverBreed(category string, parentIDs []string, task strin
 }
 
 // structuralCrossover splices real parent subtrees: parent A's PreGate ×
-// parent B's StrategyRouter (ADR-010 Phase 3 — fixes R10 "shallow
+// parent B's StrategyRouter (ADR-133 Phase 3 — fixes R10 "shallow
 // crossover"). Returns nil when fewer than two parents resolve to actual
 // structures or when the spliced child fails validation, letting the caller
 // fall back to synthetic templates.

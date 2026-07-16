@@ -8,7 +8,7 @@ import (
 )
 
 // RecurringPattern is a cluster of similar tasks the user keeps asking for —
-// the trigger for proposing an automation (ADR-010: a task repeated ≥3 times
+// the trigger for proposing an automation (ADR-133: a task repeated ≥3 times
 // within the window yields a proposal).
 type RecurringPattern struct {
 	// Representative is the most recent task text in the cluster.
@@ -41,7 +41,7 @@ type HabitMiner struct {
 	Window time.Duration
 }
 
-// NewHabitMiner returns a miner with the ADR-010 defaults: ≥3 similar tasks
+// NewHabitMiner returns a miner with the ADR-133 defaults: ≥3 similar tasks
 // within 14 days.
 func NewHabitMiner() *HabitMiner {
 	return &HabitMiner{

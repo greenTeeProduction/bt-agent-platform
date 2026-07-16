@@ -7,7 +7,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// TestDynamicTreeResolverIsProductionWired pins ADR-010 Phase 0 at the same
+// TestDynamicTreeResolverIsProductionWired pins ADR-133 Phase 0 at the same
 // layer as the goap_fusion wiring guard: any binary that links agentexec
 // (bt-agent, bt-agent-cli, bt-dashboard) must resolve runtime-generated
 // tree-<id>.json files through domains.ResolveTreeID instead of silently
@@ -57,7 +57,7 @@ func TestResolveGeneratedTree_EndToEnd(t *testing.T) {
 	}
 }
 
-// TestResolveGeneratedTree_UserWorkspaceFallback pins ADR-010 Phase 5:
+// TestResolveGeneratedTree_UserWorkspaceFallback pins ADR-133 Phase 5:
 // user-attributed compiles persist into users/<user>/trees instead of the
 // shared store, and the dynamic resolver must find them there so scheduled
 // automations keep executing the personal tree.

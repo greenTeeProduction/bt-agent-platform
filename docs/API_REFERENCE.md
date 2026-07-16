@@ -17,7 +17,7 @@
 | [`security`](#package-security) | 580+ | 92% | Rate limiter, sanitization, IP filter, audit, request IDs |
 | [`config`](#package-config) | 540+ | 94% | Env-based config, JSON file support, hot-reload watcher |
 | [`metrics`](#package-metrics) | 200+ | 92% | Prometheus Counter/Gauge/Histogram, middleware |
-| [`persona`](#package-persona) | 1,000+ | 80% | Per-user personalization: profiles, interaction log, habit mining, automations (ADR-010) |
+| [`persona`](#package-persona) | 1,000+ | 80% | Per-user personalization: profiles, interaction log, habit mining, automations (ADR-133) |
 | [`tracing`](#package-tracing) | 250+ | 90% | OpenTelemetry-ready Tracer/Span, console exporter |
 | [`benchmark`](#package-benchmark) | 1,500+ | 85% | A/B test suite, ScoreMutation, BFCL/SWE-bench/τ-bench/ToolBench/BTPG |
 | [`api`](#package-api) | 800+ | 94% | OpenAPI 3.0 generator, JSON schema I/O, content types |
@@ -48,8 +48,8 @@
 | [`persistence`](#package-persistence) | 100+ | — | Generic persistence primitives for BT state |
 | [`agentexec`](#package-agentexec) | 400+ | — | AgentExecutor interface, AgentRouter with health-aware round-robin routing |
 | [`audit`](#package-audit) | 150+ | — | Structured audit event logging for MCP servers and dashboards |
-| [`blackboard`](#package-blackboard) | 800+ | — | Scoped context store (run/session/agent), persistence, eviction (ADR-009) |
-| [`blocks`](#package-blocks) | 700+ | — | Composable BT building blocks, SubTreeRef expansion (ADR-008) |
+| [`blackboard`](#package-blackboard) | 800+ | — | Scoped context store (run/session/agent), persistence, eviction (ADR-132) |
+| [`blocks`](#package-blocks) | 700+ | — | Composable BT building blocks, SubTreeRef expansion (ADR-131) |
 | [`doormate`](#package-doormate) | 400+ | — | DoorMate domain trees and UI backing logic |
 | [`fusion`](#package-fusion) | 500+ | — | Multi-model fusion deliberation runs, judge/deliberation orchestration |
 | [`hitl`](#package-hitl) | 300+ | — | Human-in-the-loop approval gates, pending-approval store |
@@ -654,7 +654,7 @@ func RecordTask(agentName string, success bool, duration time.Duration, quality 
 
 `github.com/nico/go-bt-evolve/internal/persona`
 
-Per-user personalization layer (ADR-010): isolated user workspaces with
+Per-user personalization layer (ADR-133): isolated user workspaces with
 profiles, an append-only interaction log, habit mining over recurring task
 patterns, and gated automation records.
 
@@ -985,7 +985,7 @@ func (e *Evaluator) Deepen(tree *SerializableNode, task string, depth int) (*Ser
 
 `github.com/nico/go-bt-evolve/internal/gardener`
 
-24/7 evolution daemon. Runs registered trees on 5-minute cycles using Stockfish-style move ordering. Single v2 pipeline (v1 retired in ADR-010 Phase 6): evidence gate, bloat cap, crisis detection, benchmark-validated mutations with clone-and-prescore isolation, MetricsTracker, quality/validation gates with snapshot rollback.
+24/7 evolution daemon. Runs registered trees on 5-minute cycles using Stockfish-style move ordering. Single v2 pipeline (v1 retired in ADR-133 Phase 6): evidence gate, bloat cap, crisis detection, benchmark-validated mutations with clone-and-prescore isolation, MetricsTracker, quality/validation gates with snapshot rollback.
 
 ```go
 type Gardener struct { ... }
@@ -1236,6 +1236,6 @@ func AgentsHandler(w http.ResponseWriter, r *http.Request)
 ## Quick Links
 
 - [Getting Started Guide](GETTING_STARTED.md)
-- [Architecture Decision Records](adr/INDEX.md)
+- [Architecture Decision Log](arc42/09-decisions.md)
 - [Changelog](../CHANGELOG.md)
 - [Maturity Progress Tracker](../../../../mnt/ssd/clawd/wiki/bt-research/goals/maturity-progress.md)

@@ -127,7 +127,7 @@ func tasksForTree() map[string]string {
 		"arc42:section10": "generate arc42 quality requirements",
 		"arc42:section11": "generate arc42 risks and technical debt",
 		"arc42:section12": "generate arc42 glossary",
-		"arc42:assemble":  "assemble final arc42 document",
+		"arc42:docsync":   "sync arc42 sections and README after a change",
 	}
 }
 
@@ -933,7 +933,7 @@ func TestSuperpowersPipelineIsGuarded(t *testing.T) {
 // the SAME gating Conditions are described in some sections and left blank in others —
 // GraphIsFresh carries "graphify has been run" in section1/section2 but is blank in
 // section3; Section1Done carries "section 1 must be complete" in section4 but is blank
-// in sections 5/10/11/12; Section4Done/Section5Done/assemble's AllSectionsDone are
+// in sections 5/10/11/12; Section4Done/Section5Done are
 // described in some places and blank in others. That inconsistency is exactly the
 // unexplained-gate coverage gap this goal targets: the gardener and switch_tree surface
 // these per-node descriptions as the human-readable routing rationale, so a blank one

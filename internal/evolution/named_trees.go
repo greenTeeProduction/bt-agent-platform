@@ -36,7 +36,7 @@ func sanitizeTreeID(id string) string {
 }
 
 // SaveNamed persists a generated tree under its canonical per-ID file in the
-// store directory (ADR-010 Phase 0). Unlike Save, which owns the single
+// store directory (ADR-133 Phase 0). Unlike Save, which owns the single
 // tree.json used for the agent's active self-mutating tree, SaveNamed writes
 // tree-<id>.json so generated trees are resolvable by ID and visible to the
 // gardener registry.
@@ -62,7 +62,7 @@ func (ts *TreeStore) LoadNamed(id string) (*SerializableNode, error) {
 
 // SaveNamedTree persists a generated tree as tree-<id>.json in an arbitrary
 // directory (created if needed) with an atomic write. It is the store-free
-// counterpart of TreeStore.SaveNamed for per-user workspaces (ADR-010
+// counterpart of TreeStore.SaveNamed for per-user workspaces (ADR-133
 // Phase 5: users/<user>/trees/).
 func SaveNamedTree(dir, id string, tree *SerializableNode) (string, error) {
 	if strings.TrimSpace(id) == "" {

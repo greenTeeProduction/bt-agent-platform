@@ -100,7 +100,7 @@ See `internal/config/config.go` for full list.
 
 - Dashboard: http://localhost:9800
 - **BT Agents operator guide:** [docs/agents.md](./agents.md)
-- Architecture Decision Records: `docs/adr/`
+- Architecture Decision Records: `docs/arc42/09-decisions.md`
 - Hands-on tutorial: `docs/TUTORIAL.md`
 - Troubleshooting guide: `docs/TROUBLESHOOTING.md`
 - Video walkthrough script and operator demo checklist: `docs/VIDEO_WALKTHROUGH.md`

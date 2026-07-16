@@ -32,13 +32,13 @@ func init() {
 	// deeper multi-task plans. Wired here (not in an engine init) so engine
 	// tests stay offline and deterministic.
 	engine.WireGoalPlanBrainstorm()
-	// Dynamic tree resolution (ADR-010 Phase 0): trees generated at runtime
+	// Dynamic tree resolution (ADR-133 Phase 0): trees generated at runtime
 	// (bt_kg_auto_create, bt_factory_create) are persisted as tree-<id>.json
 	// in the reflections dir; this hook makes them resolvable by ID so the
 	// agent runner, A2A, and bt_run_task execute them instead of silently
 	// falling back to DefaultTree.
 	domains.DynamicResolveFn = ResolveGeneratedTree
-	// Per-user dynamic tree resolution (ADR-010 personalization hardening,
+	// Per-user dynamic tree resolution (ADR-133 personalization hardening,
 	// Q1 Correctness): scopes runtime-generated tree lookups to the
 	// requesting user so a deterministic slug ID (goal:automate_<slug>) can
 	// never resolve to a different user's tree.
@@ -65,7 +65,7 @@ func wireSelectorReorder() {
 var generatedTreeDir string
 
 // usersTreeRoot is the root of per-user workspaces scanned as a fallback
-// (users/<user>/trees, ADR-010 Phase 5). Overridable for tests; empty means
+// (users/<user>/trees, ADR-133 Phase 5). Overridable for tests; empty means
 // "resolve agent.UsersDir() at call time".
 var usersTreeRoot string
 
@@ -81,7 +81,7 @@ func ReflectionsPath() (string, error) {
 
 // ResolveGeneratedTree loads a runtime-generated tree by ID: first from the
 // shared reflections dir, then from per-user personalization workspaces
-// (users/<user>/trees, ADR-010 Phase 5 — user-attributed compiles persist
+// (users/<user>/trees, ADR-133 Phase 5 — user-attributed compiles persist
 // there so the gardener evolves them per user). Returns nil when no such
 // tree has been persisted or the file is unreadable — resolution then falls
 // through to DefaultTree.
@@ -135,7 +135,7 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 }
 
 // ResolveGeneratedTreeForUser is the user-scoped counterpart to
-// ResolveGeneratedTree (ADR-010 personalization hardening, Q1 Correctness):
+// ResolveGeneratedTree (ADR-133 personalization hardening, Q1 Correctness):
 // the shared reflections dir is still consulted first (trees not yet
 // user-attributed), but the per-user fallback loads ONLY the requesting
 // user's own workspace — never the sorted scan across every user that

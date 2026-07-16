@@ -14,7 +14,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
-// This file is the interaction-time GOAP autopilot (ADR-010 Phase 4): after
+// This file is the interaction-time GOAP autopilot (ADR-133 Phase 4): after
 // good user-attributed runs the agent mines the user's habits, and when a
 // recurring pattern has no automation yet it compiles a tree (Phase 2 goal →
 // GOAP plan → Phase 3 compiler), persists it, and proposes scheduling it as

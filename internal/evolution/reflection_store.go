@@ -33,7 +33,7 @@ type Record struct {
 	AdjustedBehavior string   `json:"adjusted_behavior"`
 	Outcome          Outcome  `json:"outcome"`
 	DurationMs       int64    `json:"duration_ms"`
-	// User attributes the record to a persona (ADR-010 Phase 5); empty for
+	// User attributes the record to a persona (ADR-133 Phase 5); empty for
 	// anonymous/system runs.
 	User string `json:"user,omitempty"`
 	// UserFeedback carries an explicit satisfaction signal from the user
@@ -69,7 +69,7 @@ func FilterByTreeName(records []Record, treeName string) []Record {
 }
 
 // FilterByTreeNameStrict returns only records whose TreeName matches exactly,
-// with no backward-compat fallback. Personal trees (ADR-010 Phase 5) must be
+// with no backward-compat fallback. Personal trees (ADR-133 Phase 5) must be
 // evaluated on their own evidence: inheriting the global record pool would
 // hide a missing history from the gardener's evidence gate and score the tree
 // on other trees' runs.

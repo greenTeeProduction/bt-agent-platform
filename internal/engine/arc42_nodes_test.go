@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -164,49 +163,3 @@ func TestSectionFileExists_NonExistent(t *testing.T) {
 }
 
 // ─── arc42 Registered Conditions (pure, no FS needed) ───────────────────────
-
-func TestAllSectionsDone_NoneDone(t *testing.T) {
-	// registerArc42Nodes is called in init(), conditions are already registered
-	cond, ok := conditionRegistry["AllSectionsDone"]
-	if !ok {
-		t.Fatal("AllSectionsDone not registered")
-	}
-
-	bb := &Blackboard{ChainState: map[string]any{}}
-	if cond(bb) {
-		t.Error("AllSectionsDone should be false when nothing is done")
-	}
-}
-
-func TestAllSectionsDone_AllDone(t *testing.T) {
-	cond, ok := conditionRegistry["AllSectionsDone"]
-	if !ok {
-		t.Fatal("AllSectionsDone not registered")
-	}
-
-	cs := map[string]any{}
-	for i := 1; i <= 12; i++ {
-		cs[fmt.Sprintf("section_%d_done", i)] = true
-	}
-	bb := &Blackboard{ChainState: cs}
-	if !cond(bb) {
-		t.Error("AllSectionsDone should be true when all 12 sections done")
-	}
-}
-
-func TestAllSectionsDone_OneMissing(t *testing.T) {
-	cond, ok := conditionRegistry["AllSectionsDone"]
-	if !ok {
-		t.Fatal("AllSectionsDone not registered")
-	}
-
-	cs := map[string]any{}
-	for i := 1; i <= 11; i++ {
-		cs[fmt.Sprintf("section_%d_done", i)] = true
-	}
-	// section_12_done is missing
-	bb := &Blackboard{ChainState: cs}
-	if cond(bb) {
-		t.Error("AllSectionsDone should be false when section 12 is missing")
-	}
-}

@@ -1,4 +1,4 @@
-# arc42 Section 3 — Context and Scope
+# 3. Context and Scope
 
 ## 3.1 Business Context
 
@@ -7,11 +7,13 @@
 | Partner | Inputs | Outputs |
 |---|---|---|
 | Hermes Agent | Tasks, delegated work, agent management commands | Execution results, reflections, fitness scores, agent status |
-| End user / persona owner (roadmap, ADR-010) | Tasks, goals, feedback (👍/👎/corrections), HITL approvals | Personalized results, automation proposals, self-generated GOAP trees, scheduled agents |
+| End user / persona owner (roadmap, ADR-133) | Tasks, goals, feedback (👍/👎/corrections), HITL approvals | Personalized results, automation proposals, self-generated GOAP trees, scheduled agents |
 | BT Dashboard users | HTTP requests (navigation, API calls) | HTML pages, JSON responses, sprint status |
 | Ollama qwen3.6:35b | Prompts (via ChainAction nodes) | Completions (text/markdown/code) |
 | DeepSeek API | Escalated prompts, batch LLM work | Completions (5-10s latency) |
-| Cron job system | Scheduled triggers (every 1h, daily, etc.) | Agent output delivered to Telegram/local/files |
+| NotebookLM (via `nlm` CLI) | Research queries, notebook/vault imports, web-research starts (quota-metered, [§2](02-constraints.md)) | Grounded literature answers with citations |
+| Claude Code CLI | Implementation plans, code-review prompts (restricted tool allowlists per phase) | Code changes and commits in isolated worktrees, review findings, rate-limit signals ([§2](02-constraints.md)) |
+| Cron / systemd (user services) | Scheduled triggers (every 1h, daily, etc.); service lifecycle for the `bt-agent.service` goap-fusion daemon | Agent output delivered to Telegram/local/files; journal logs |
 | Hermes gateway | MCP spawn requests, tool invocations | MCP tool responses (JSON-RPC 2.0) |
 | A2A clients | Agent card discovery, task requests | Task results, agent cards |
 | Webhook subscribers | Agent events (lifecycle, outcome) | HTTP POST to configured endpoints |
@@ -23,42 +25,45 @@
 
 | Interface | Protocol | Endpoint | Purpose |
 |---|---|---|---|
-| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 73 tools: tree execution, agent management, knowledge graph, evolution, blocks, HITL, blackboard, persona, goals, plan→BT compiler, automation autopilot + user feedback (`bt_feedback`, ADR-010) |
+| bt-agent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 79 tools: tree execution, agent management, knowledge graph, evolution, blocks, HITL, blackboard, persona, goals, plan→BT compiler, automation autopilot + user feedback (`bt_feedback`, ADR-133) |
 | bt-evaluator MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 5 tools: fitness evaluation, mutation ordering, iterative deepening |
-| bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 2 tools: evolved langchain agent execution |
-| bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (8 tabs) |
+| bt-langagent MCP | JSON-RPC 2.0 / stdio | (stdin/stdout) | 3 tools: evolved langchain agent execution |
+| bt-dashboard | HTTP/1.1 | `:9800` | REST API + embedded web UI (tabs listed in [§1.1](01-introduction-goals.md)) |
 | Ollama | HTTP/1.1 | `localhost:11434` | OpenAI-compatible `/api/generate`, `/api/chat` |
 | DeepSeek API | HTTPS | `api.deepseek.com` | `/v1/chat/completions` |
 | A2A Server | HTTP/1.1 | `:8686` | Agent-to-Agent protocol: card discovery, task delegation |
 | Hermes Webhook Bridge | HTTP/1.1 | `localhost:8644` | AgentBus events → Hermes gateway |
+| NotebookLM | subprocess (`nlm` CLI) | local binary → Google NotebookLM | Quota-metered research: query, import, web-research; quota economy in [§2](02-constraints.md) |
+| Claude Code | subprocess (`claude` CLI) | local binary → Anthropic API | Self-improvement loop: plan implementation and code review; durable rate-limit backoff ([§2](02-constraints.md)) |
+| git | subprocess (`git` CLI) | local repos + origin | Tree version history, evolution commits, worktree isolation, autonomous landing pushes |
 
 ### System Boundary
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Hermes Gateway                                         │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────┐     │
-│  │ bt-agent │  │ bt-evaluator │  │ bt-langagent  │     │
-│  │ (stdio)  │  │   (stdio)    │  │   (stdio)     │     │
-│  └────┬─────┘  └──────┬───────┘  └───────┬───────┘     │
-│       │               │                  │              │
-│  ─────┼───────────────┼──────────────────┼────────────  │
-│       │               │                  │              │
-│  ┌────▼─────┐  ┌──────▼───────┐  ┌───────▼───────┐     │
-│  │ Ollama   │  │ bt-dashboard │  │ A2A Server   │     │
-│  │ :11434   │  │ :9800        │  │ :8686        │     │
-│  └──────────┘  └──────────────┘  └───────────────┘     │
-│                                                         │
-│  ─────────────────────────────────────────────────────  │
-│                         │                               │
-│                    ┌────▼─────┐                          │
-│                    │ DeepSeek │                          │
-│                    │ API (ext)│                          │
-│                    └──────────┘                          │
-└─────────────────────────────────────────────────────────┘
+  Hermes Agent ──(MCP tools via ─┐             ┌─(HTTP :9800)── Dashboard users
+  Hermes gateway, JSON-RPC 2.0   │             │
+  over stdio ×3 servers)         ▼             ▼
+                          ┌─────────────────────────────┐
+  End user ──────────────▶│                             │◀────── A2A clients
+  (tasks, feedback,       │        go-bt-evolve         │        (HTTP :8686)
+   HITL approvals)        │     (BT Agent Platform)     │
+                          │                             │──────▶ Webhook subscribers
+  Cron / systemd ────────▶│                             │        (HTTP POST via :8644 bridge)
+  (triggers, lifecycle)   └──────────────┬──────────────┘
+                                         │ outbound calls
+              ┌───────────┬──────────────┼──────────────┬─────────────┐
+              ▼           ▼              ▼              ▼             ▼
+            Ollama     DeepSeek      NotebookLM    Claude Code       git
+            :11434     API (ext)    (`nlm` CLI)   (`claude` CLI)  (local repos
+                                                                   + origin)
 ```
 
-All local services run on the Jetson ARM64 host. Only DeepSeek API is external. Hermes gateway manages the MCP child process lifecycle. The dashboard and A2A server run independently via systemd or the gateway.
+The platform itself runs entirely on the Jetson ARM64 host. Cloud services —
+DeepSeek API (HTTPS), NotebookLM (via the `nlm` CLI), and the Anthropic API
+(via the `claude` CLI) — are the only external cloud services. Hermes gateway
+manages the MCP child-process lifecycle; the dashboard, A2A server, and the
+goap-fusion daemon (`bt-agent.service`) run independently via systemd user
+services or the gateway.
 
 ---
 

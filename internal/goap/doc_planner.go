@@ -13,7 +13,7 @@
 //	  ├─→ Section4 BT  → arc42:section4  § (depends on §1, §3)
 //	  ├─→ Section5 BT  → arc42:section5  § (depends on §1, §4)
 //	  ├─→ Section6-12 BTs                  § (various deps)
-//	  └─→ Assemble BT  → arc42:assemble   § Merge all
+//	  └─→ (assembly retired — per-section files are the document)
 //
 // The planner produces a sequence of 14 actions (AnalyzeCodebase + 12 sections + Assemble)
 // that respects the arc42 dependency order.

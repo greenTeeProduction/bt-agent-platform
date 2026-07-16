@@ -175,7 +175,7 @@ func TestGenerator_FallbackExecutionUsesChainAction(t *testing.T) {
 	}
 }
 
-// TestGenerator_StrategyRouterIsModelRouted pins the ADR-010 Phase 0 routing
+// TestGenerator_StrategyRouterIsModelRouted pins the ADR-133 Phase 0 routing
 // fix: nothing in a generated tree ever wrote ChainState["route"], so a
 // key-only DecisionTree always took the default branch and every skill path
 // was dead. The router must be model-routed (engine classifies the task into

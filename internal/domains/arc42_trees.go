@@ -21,7 +21,6 @@ func Arc42Trees() map[string]*evolution.SerializableNode {
 		"arc42:section10": section10Quality(),
 		"arc42:section11": section11Risks(),
 		"arc42:section12": section12Glossary(),
-		"arc42:assemble":  assembleDoc(),
 	}
 }
 
@@ -38,7 +37,7 @@ func section1IntroGoals() *evolution.SerializableNode {
 				seq("GenerateIntro", "Read graph/git/ADR context and render the intro section via LLM",
 					act("ReadGraphReport", "load graphify-out/GRAPH_REPORT.md"),
 					act("ReadGitHistory", "git log --oneline -30"),
-					act("ReadADRs", "read docs/adr/INDEX.md"),
+					act("ReadADRs", "read docs/arc42/09-decisions.md"),
 					chain("LLM: generate arc42 Section 1 (Introduction and Goals) from graph, git, and ADR context",
 						"llm_call:Generate arc42 Section 1 — Introduction and Goals for the go-bt-evolve platform.\n\n1.1 Requirements Overview: Summarize what the platform does — BT execution engine, 41 trees across 7 categories, MCP servers, dashboard at :9800.\n1.2 Quality Goals (top 3): correctness (trees route correctly), evolvability (Stockfish/Pareto/MAP-Elites), reliability (panic recovery, circuit breakers).\n1.3 Stakeholders table: Nico (architect), Hermes Agent (operator), Dashboard users, Cron watchers.\n\nContext from codebase:\nGraph: {{.CachedResult}}\nGit: {{.ChainState.git_history}}\nADRs: {{.ChainState.adrs}}\n\nFormat as arc42 markdown with proper headings.", 2048),
 				),
@@ -217,9 +216,9 @@ func section9Decisions() *evolution.SerializableNode {
 			seq("PreGate", "Require section 4 to be complete", cond("Section4Done", "section 4 must be complete")),
 			sel("StrategyRouter", "Single generation path: read ADRs and render them in Nygard format via LLM",
 				seq("Decisions", "Read all ADRs and render them in Nygard format via LLM",
-					act("ReadADRs", "read all docs/adr/ADR-*.md files"),
+					act("ReadADRs", "read the ADR log from docs/arc42/09-decisions.md"),
 					chain("LLM: generate arc42 Section 9 (Architecture Decisions) rendering ADRs in Nygard format",
-						"llm_call:Generate arc42 Section 9 — Architecture Decisions.\n\nFormat the following ADRs using the Nygard format (Title, Context, Decision, Status, Consequences):\n\n{{.ChainState.adrs}}\n\nRefer to the actual ADR files at docs/adr/INDEX.md.", 2048),
+						"llm_call:Generate arc42 Section 9 — Architecture Decisions.\n\nFormat the following ADRs using the Nygard format (Title, Context, Decision, Status, Consequences):\n\n{{.ChainState.adrs}}\n\nRefer to the ADR log at docs/arc42/09-decisions.md.", 2048),
 				),
 			),
 			act("ValidateSection", "check at least 3 ADRs present"),
@@ -283,26 +282,6 @@ func section12Glossary() *evolution.SerializableNode {
 			act("ValidateSection", "check glossary table with 30+ terms"),
 			act("SaveSection", "write to 12-glossary.md"),
 			act("MarkSectionDone", "mark section12_done"),
-		),
-	)
-}
-
-func assembleDoc() *evolution.SerializableNode {
-	return tree(
-		seq("Assemble_Main", "Assemble the final arc42 document: gate on all sections, merge, save",
-			seq("PreGate", "Require all 12 sections to be complete",
-				cond("AllSectionsDone", "all 12 sections must be complete"),
-			),
-			sel("StrategyRouter", "Single generation path: collect all sections and merge them into the final arc42 document via LLM",
-				seq("Assemble", "Collect all sections and merge them into the final arc42 document via LLM",
-					act("CollectAllSections", "read all 12 section markdown files"),
-					act("GenerateTOC", "extract headings for table of contents"),
-					chain("LLM: merge all 12 sections into the final arc42 document with frontmatter and TOC",
-						"llm_call:Generate the final arc42 document by merging all 12 sections with proper frontmatter.\n\nSections:\n{{.CachedResult}}\n\nAdd:\n- YAML frontmatter with title, date, version, status\n- arc42 version reference\n- Table of Contents\n- All 12 sections in order\n- Document metadata footer\n\nOutput as a single markdown file.", 2048),
-				),
-			),
-			act("SaveDocument", "write to go-bt-evolve-arc42.md"),
-			act("MarkDocAssembled", "mark doc_assembled = true"),
 		),
 	)
 }

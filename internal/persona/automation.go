@@ -22,7 +22,7 @@ const (
 // AutomationRecord tracks one automation proposal derived from a recurring
 // pattern, keyed by the pattern's keyword signature. It is the autopilot's
 // dedup + rejection memory: the same habit is proposed at most once, and a
-// rejected proposal is never re-raised (ADR-010 Phase 4 anti-spam rail).
+// rejected proposal is never re-raised (ADR-133 Phase 4 anti-spam rail).
 type AutomationRecord struct {
 	// Signature is the stable keyword fingerprint of the pattern (see
 	// PatternSignature).

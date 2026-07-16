@@ -78,17 +78,17 @@ func (ds docgenState) isGraphStale() bool {
 
 // sectionSourceFiles maps each arc42 section to the files it depends on.
 var sectionSourceFiles = map[int][]string{
-	1: {"graphify-out/GRAPH_REPORT.md", "docs/adr/INDEX.md"},
+	1: {"graphify-out/GRAPH_REPORT.md", "docs/arc42/09-decisions.md"},
 	2: {"go.mod", "config.yaml"},
 	3: {"internal/mcp/server.go", "internal/a2a/server.go"},
-	4: {"docs/adr/ADR-001-behavior-trees.md", "docs/adr/ADR-002-mcp-interface.md", "docs/adr/ADR-003-file-persistence.md"},
+	4: {"docs/arc42/09-decisions.md"},
 	5: {"internal/engine/tree.go", "internal/engine/chains.go", "internal/engine/registry.go",
 		"internal/evolution/mutate.go", "internal/evolution/stockfish.go"},
 	6: {"internal/engine/tree.go", "internal/gardener/gardener.go", "internal/reliability/panic_handler.go"},
 	7: {"cmd/bt-dashboard/main.go", "cmd/bt-agent/main.go"},
 	8: {"internal/engine/chains.go", "internal/mcp/server.go", "internal/reliability/panic_handler.go",
 		"internal/evolution/mutate.go"},
-	9:  {"docs/adr/ADR-001-behavior-trees.md", "docs/adr/ADR-002-mcp-interface.md", "docs/adr/ADR-003-file-persistence.md"},
+	9:  {"docs/arc42/09-decisions.md"},
 	10: {"internal/reliability/panic_handler.go", "internal/security/security.go", "internal/engine/validate.go"},
 	11: {"graphify-out/GRAPH_REPORT.md", "internal/evolution/mutate.go"},
 	12: {"internal/engine/tree.go", "internal/engine/chains.go", "internal/domains/trees.go",
@@ -271,32 +271,8 @@ func main() {
 		successCount++
 	}
 
-	// Assemble if all sections exist
-	if contains(targetSections, 99) || *sections == "" { // 99 = "assemble" pseudo-section
-		fmt.Println("\n  Assembling final document...")
-		assembleTree, ok := allTrees["arc42:assemble"]
-		if ok {
-			bb := engine.Blackboard{
-				Task:       "Merge all arc42 sections into final document",
-				ChainState: map[string]any{},
-				LLM:        llmClient,
-			}
-			for k, v := range worldState.ToWorldState() {
-				bb.ChainState[k] = v
-			}
-			cmd := engine.BuildTree(assembleTree, &bb)
-			result := engine.RunTask(&bb, cmd)
-			if result != "" {
-				bb.Result = result
-			}
-			if bb.Result != "" {
-				path := filepath.Join(outputDir, "go-bt-evolve-arc42.md")
-				_ = os.WriteFile(path, []byte(bb.Result), 0644)
-				fmt.Printf("    ✅ Final document: %s (%d bytes)\n", path, len(bb.Result))
-			}
-			successCount++
-		}
-	}
+	// The monolith assembly step was retired with the arc42:assemble tree —
+	// the per-section files ARE the architecture document now.
 
 	// Save state
 	state.LastRun = time.Now().Format(time.RFC3339)

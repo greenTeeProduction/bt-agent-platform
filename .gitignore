@@ -41,3 +41,4 @@ bt-scalability-probe
 # a rebuilt 19.8MB benchcmp; TestNoCommittedRootBinaries enforces this)
 /benchcmp
 /bt-ci-doctor
+.worktrees/

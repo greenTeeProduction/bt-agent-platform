@@ -1,4 +1,8 @@
-# arc42 Section 10 — Quality Requirements
+# 10. Quality Requirements
+
+Refines the top-level quality goals Q1–Q4 in
+[§1.2](01-introduction-goals.md); how each goal is achieved is in
+[§4](04-solution-strategy.md).
 
 ## 10.1 Quality Tree
 
@@ -10,10 +14,10 @@ go-bt-evolve
 │   ├── Retry with backoff: Full jitter, 3 classes (standard, LLM, unknown), max 3 retries
 │   └── Dead letter queue: Persistent JSON, exhausted retries preserved
 ├── #evolvable
-│   ├── 6 evolution algorithms: Stockfish, Pareto, MAP-Elites, Island, Q-Learning, Expert
+│   ├── Six evolution algorithms (§1.1): Stockfish, Pareto, MAP-Elites, Island, Q-Learning, Expert
 │   ├── Git-versioned trees: Every accepted mutation is a commit
 │   ├── Benchmark gating: Pre/post fitness comparison with rollback
-│   └── 10 mutation operators: add_before, add_after, wrap_retry, prune, swap_children, etc.
+│   └── Mutation operators: add_before, add_after, wrap_retry, prune, swap_children, … (§12 Glossary)
 ├── #secure
 │   ├── Rate limiting: Token bucket, configurable rate
 │   ├── API key auth: Bearer token validation on MCP and HTTP
@@ -23,23 +27,23 @@ go-bt-evolve
 │   ├── Audit logging: Request/response logging with dedup
 │   └── Key rotation: Periodic API key refresh
 ├── #testable
-│   ├── 71+ test files across all packages
+│   ├── 295 test files across all packages
 │   ├── 24+ passing packages (go test ./...)
 │   ├── 78% average coverage (aspirational target: 85%)
 │   ├── Test Watchdog cron: Detects new failures within 4h
 │   └── Benchmark suite: BFCL, BTPG, ToolBench, SWE-bench integrations
 ├── #operable
 │   ├── slog structured logging: JSON format, levels (debug/info/warn/error)
-│   ├── Prometheus metrics: Counters, gauges, histograms on /metrics
+│   ├── Prometheus metrics: counters, gauges, full histogram series (_bucket/_sum/_count) + bt_build_info on /metrics
 │   ├── Health endpoint: LLM availability check via bt_health
 │   ├── Trace reader: OpenTelemetry spans with console tracer
 │   └── Dashboard: 8-tab web UI on :9800
 ├── #flexible
-│   ├── 41 trees across 7 categories: domain, finance, research, startup, thinktank, evolution, core
+│   ├── Tree catalog across 8+ categories (inventory in §5.1)
 │   ├── 21-path merged main tree
-│   ├── 10 chain types: llm_call, agent, rag_query, tool_call, structured_output, refine, map_reduce, conversation, retrieval_qa, tool_action
+│   ├── Declarative chain types (inventory in §5.5)
 │   └── YAML-defined agents: Easy creation, templating, import/export
-└── #personalized (roadmap — ADR-010)
+└── #personalized (→ ADR-133)
     ├── Persona layer: per-user profile, interaction log, habit mining
     ├── Goal factory: intent/pattern → grounded goap.Goal, persistent GoalQueue
     ├── Tree factory v2: plan→BT compiler, real structural crossover
@@ -54,17 +58,17 @@ go-bt-evolve
 |---|---|---|---|---|
 | QS1 | Agent process crash | Goroutine panic in ChainAction | SafeGo recovers in <1s, DLQ persists task, circuit breaker opens for agent | Recovery <1s, no process restart needed |
 | QS2 | 100 consecutive evolutions | bt-gardener runs evolution cycle | No fitness drop >20% from baseline | Fitness delta tracked per-mutation (aspirational) |
-| QS3 | Dashboard tree listing | GET /api/tree with 41 trees | Returns all trees with metadata | Response <500ms |
+| QS3 | Dashboard tree listing | GET /api/tree over the full tree catalog ([§5.1](05-building-blocks.md)) | Returns all trees with metadata | Response <500ms |
 | QS4 | Test regression detection | New test failure introduced | Test Watchdog cron detects within 4h | Detection latency <4h |
-| QS5 | Concurrent MCP calls | 3 simultaneous bt_run_task | bt-agent handles all 3 without deadlock | All 3 complete within timeout |
+| QS5 | Concurrent MCP calls | 3 simultaneous bt_run_task | bt-agent handles all 3 without deadlock | All 3 complete within timeout. **Since 2026-07-16 (ADR-123, milestone 1/5):** each response's task/result also stays correctly attributed to its own caller — `bbMu` serializes `bt_run_task`'s Task-assign → RunTask → response-read critical section on the shared `deps.bb`, pinned by `TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard` under `-race`. **Since 2026-07-16 (ADR-123, milestone 4/5):** `bt_blocks_compose(save:true)`, `bt_hitl_compose_task(save:true)`, and `injectPersonaContext` also serialize on `bbMu`. Other `deps.bb`-touching tools (`bt_delegate_to_tree`, `bt_use_*_tree`) remain unguarded. **Since 2026-07-16 (ADR-123, milestone 5/5):** `internal/engine`'s `Server` itself gained an analogous `bbMu`/`RegisterBlackboardTool` registration-time locking primitive, proven race-free under `-race` by `TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard`. **Since 2026-07-16 (ADR-124):** `cmd/bt-agent` migrated `bt_run_task`, `bt_use_*_tree`, and `bt_delegate_to_tree` (plus `bt_blocks_compose`/`bt_hitl_compose_task`) onto that primitive and removed `mcpDeps.bbMu`/`lockBB`/`unlockBB` entirely, so all previously-unguarded tools are now covered. |
 | QS6 | Ollama outage | LLM health check fails | All LLM-dependent tools return degraded error, non-LLM tools continue | Graceful degradation, no crashes |
 | QS7 | Disk full during persistence | writeFile fails with ENOSPC | Error logged, operation returns failure, no corruption (atomic write aborted) | No partial/corrupt files |
 | QS8 | Config validation | Invalid config.yaml on startup | Load fails with clear error message, defaults used as fallback | Config validation error reported |
-| QS9 | Generated tree executability (roadmap) | `bt_kg_auto_create` / plan→BT compile produces a tree | Tree is resolvable via `ResolveTreeID`, validates, and executes (not `DefaultTree` fallback) | ≥90% of auto-created trees run end-to-end |
-| QS10 | Habit detection (roadmap) | User issues a similar task for the 3rd time in 14 days | HabitMiner emits RecurringPattern; automation proposal appears in HITL queue next session | Proposal latency ≤1 session |
-| QS11 | Plan compilation quality (roadmap) | Goal Factory goal → A* plan → CompilePlanToTree | Compiled tree passes ValidateTreeFull + benchmark.QuickValidate on first compile | ≥80% first-compile pass rate |
-| QS12 | Personal tree evolution safety (roadmap) | 10 gardener cycles on a personal tree with user feedback | `user_satisfaction` fitness non-decreasing; regressions roll back from snapshots | Quality gate: ≤20% regression, floor 30 |
-| QS13 | Automation spam guard (roadmap) | Agent detects many candidate patterns | Only patterns ≥3 occurrences proposed; per-user cap on active auto-created agents; HITL default-on | 0 unapproved scheduled automations |
+| QS9 | Generated tree executability (personalization — ADR-133) | `bt_kg_auto_create` / plan→BT compile produces a tree | Tree is resolvable via `ResolveTreeID`, validates, and executes (not `DefaultTree` fallback) | ≥90% of auto-created trees run end-to-end |
+| QS10 | Habit detection (personalization — ADR-133) | User issues a similar task for the 3rd time in 14 days | HabitMiner emits RecurringPattern; automation proposal appears in HITL queue next session | Proposal latency ≤1 session |
+| QS11 | Plan compilation quality (personalization — ADR-133) | Goal Factory goal → A* plan → CompilePlanToTree | Compiled tree passes ValidateTreeFull + benchmark.QuickValidate on first compile | ≥80% first-compile pass rate |
+| QS12 | Personal tree evolution safety (personalization — ADR-133) | 10 gardener cycles on a personal tree with user feedback | `user_satisfaction` fitness non-decreasing; regressions roll back from snapshots | Quality gate: ≤20% regression, floor 30 |
+| QS13 | Automation spam guard (personalization — ADR-133) | Agent detects many candidate patterns | Only patterns ≥3 occurrences proposed; per-user cap on active auto-created agents; HITL default-on | 0 unapproved scheduled automations |
 
 ---
 

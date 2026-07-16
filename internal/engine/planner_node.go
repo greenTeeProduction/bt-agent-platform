@@ -191,7 +191,7 @@ type PlannerNode struct {
 	Actions  []GOAPAction
 	MaxDepth int // max plan depth (default 5)
 	// Mode is retained for API compatibility; both "greedy" and "search"
-	// now run the unified internal/goap A* planner (ADR-010 Phase 6), which
+	// now run the unified internal/goap A* planner (ADR-133 Phase 6), which
 	// finds a complete plan whenever the old greedy walk did.
 	Mode string
 }
@@ -209,7 +209,7 @@ const plannerNodeMaxNodes = 10000
 
 // Plan searches for an action sequence from the current world state to the
 // goal by delegating to internal/goap's A* planner — the platform's single
-// GOAP search implementation (ADR-010 Phase 6 removed the duplicate here).
+// GOAP search implementation (ADR-133 Phase 6 removed the duplicate here).
 //
 // Semantics note: the engine's bool-typed domain historically treated a
 // missing key as false, while goap.WorldState.Satisfies requires the key to

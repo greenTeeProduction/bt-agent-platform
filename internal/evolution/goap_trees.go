@@ -152,7 +152,7 @@ func GOAPDevOpsTree() *SerializableNode {
 // FromGoapNode converts a goap-package tree (goap.SerializableNode mirrors
 // this package's type to avoid an import cycle) into an evolution tree,
 // ready for engine building, validation, and persistence. Used by the
-// plan→BT compiler consumers (ADR-010 Phase 3).
+// plan→BT compiler consumers (ADR-133 Phase 3).
 func FromGoapNode(node *goap.SerializableNode) *SerializableNode {
 	if node == nil {
 		return nil

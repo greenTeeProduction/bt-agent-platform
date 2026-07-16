@@ -45,7 +45,6 @@ var builtinActionNames = map[string]bool{
 	"ChooseAction":              true,
 	"ClassifyThreat":            true,
 	"CollectAgentMetrics":       true,
-	"CollectAllSections":        true,
 	"CompareGLEntries":          true,
 	"CompareVsConsensus":        true,
 	"CompileGoCode":             true,
@@ -95,7 +94,6 @@ var builtinActionNames = map[string]bool{
 	"GenerateSASTReport":        true,
 	"GenerateSummary":           true,
 	"GenerateTASignals":         true,
-	"GenerateTOC":               true,
 	"GenerateVisualizations":    true,
 	"IdentifyBreaks":            true,
 	"IdentifyCrashSite":         true,
@@ -115,7 +113,6 @@ var builtinActionNames = map[string]bool{
 	"LoadData":                  true,
 	"LoadNotebookLMState":       true,
 	"MapCompetitors":            true,
-	"MarkDocAssembled":          true,
 	"MarkSectionDone":           true,
 	"ParseOnboardingDocs":       true,
 	"ParseStackFrames":          true,
@@ -156,7 +153,6 @@ var builtinActionNames = map[string]bool{
 	"RunSASTScan":               true,
 	"RunTests":                  true,
 	"RunValuationTemplate":      true,
-	"SaveDocument":              true,
 	"SaveNotebookLMState":       true,
 	"SaveSection":               true,
 	"ScanCodeComments":          true,
@@ -217,7 +213,6 @@ var builtinActionNames = map[string]bool{
 }
 
 var builtinConditionNames = map[string]bool{
-	"AllSectionsDone":           true,
 	"CheckCitationFormat":       true,
 	"CheckConfidence":           true,
 	"CheckCoverageCompleteness": true,

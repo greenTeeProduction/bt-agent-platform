@@ -1,4 +1,4 @@
-// Automation autopilot hook (ADR-010 Phase 4). engine must not import the
+// Automation autopilot hook (ADR-133 Phase 4). engine must not import the
 // persona/goal layers, so the in-tree ConsiderTreeCompile action delegates
 // through an injection-hook var wired from cmd/bt-agent — the same pattern
 // as DelegateToTreeFn (delegate_hooks.go).

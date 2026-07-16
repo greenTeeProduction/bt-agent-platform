@@ -1,4 +1,4 @@
-// Per-user gardener support (ADR-010 Phase 5): personal trees live in user
+// Per-user gardener support (ADR-133 Phase 5): personal trees live in user
 // workspaces (<usersRoot>/<user>/trees/tree-*.json), are evaluated strictly on
 // their own reflection evidence, and evolve against the user's own experience
 // bank so mutation priors learned on one user's trees never bleed into

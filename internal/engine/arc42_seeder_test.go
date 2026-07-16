@@ -12,7 +12,7 @@ import (
 
 // The arc42 program seeder is a dedicated agent action: it reads the LIVE
 // arc42 document (never a copy — arc42GoalsDocPaths resolves the original
-// docs/arc42/go-bt-evolve-arc42.md), targets one quality goal per run, and
+// docs/arc42/01-introduction-goals.md), targets one quality goal per run, and
 // seeds ~/.go-bt-evolve/research/programs.json with a program that must
 // name that goal. It reuses the loop seeder's grounding gates so fabricated
 // greenfield proposals are rejected.

@@ -8,7 +8,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// Personal-tree gardener support (ADR-010 Phase 5).
+// Personal-tree gardener support (ADR-133 Phase 5).
 
 func writeUserTree(t *testing.T, usersRoot, user, treeID string) string {
 	t.Helper()

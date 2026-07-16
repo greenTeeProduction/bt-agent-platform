@@ -6,7 +6,7 @@
 # 2. GETTING_STARTED.md binary list matches actual cmd/ directories
 # 3. TUTORIAL.md commands reference existing files and binaries
 # 4. TROUBLESHOOTING.md references existing tool commands
-# 5. ADR INDEX.md references all ADR files
+# 5. arc42 section files: presence, required headings, footers, ADR log, README paths
 # 6. VIDEO_WALKTHROUGH.md commands work (syntax check)
 #
 # Returns: number of drift issues found (0 = clean)
@@ -171,41 +171,137 @@ else
     green "  All troubleshooting command references are valid"
 fi
 
-# ----- 5. ADR INDEX.md references -----
+# ----- 5. arc42 section files validation -----
 echo
-echo "--- ADR catalog validation ---"
+echo "--- arc42 section validation ---"
 
-ADR_FILES=$(find "$ROOT/docs/adr" -maxdepth 1 -name '*.md' ! -name 'INDEX.md' | sort)
-ADR_LISTED=$(grep -oP '\(\.\/ADR-\d+' "$ROOT/docs/adr/INDEX.md" 2>/dev/null | sed 's|[./]||g' | sort || true)
-ADR_ACTUAL=$(echo "$ADR_FILES" | sed 's|.*/||; s|\.md$||' | sort)
+ARC42_ERRORS_BEFORE=$ERRORS
+ARC42_DIR="$ROOT/docs/arc42"
+ARC42_SECTIONS="01-introduction-goals.md 02-constraints.md 03-context-scope.md 04-solution-strategy.md 05-building-blocks.md 06-runtime-view.md 07-deployment.md 08-crosscutting-concepts.md 09-decisions.md 10-quality.md 11-risks-debt.md 12-glossary.md"
 
-MISSING_ADRS=""
-for a in $ADR_ACTUAL; do
-    adr_id=$(echo "$a" | grep -oP 'ADR-\d+')
-    if ! echo "$ADR_LISTED" | grep -q "$adr_id"; then
-        MISSING_ADRS="$MISSING_ADRS $a"
-    fi
-done
-
-if [ -n "$MISSING_ADRS" ]; then
-    red "  ADR files not listed in INDEX.md:"
-    for a in $MISSING_ADRS; do echo "    - $a"; done
-    ERRORS=$((ERRORS + $(echo "$MISSING_ADRS" | wc -w)))
-else
-    green "  All ADR files are indexed"
-fi
-
-# Check all ADRs have status markers
-MISSING_STATUS=false
-for f in $ADR_FILES; do
-    if ! grep -qE '^\*\*Status:\*+' "$f" 2>/dev/null; then
-        red "  Missing status in $(basename "$f")"
-        MISSING_STATUS=true
+# 5a. Presence: 12 sections + GUIDELINES.md; retired artifacts absent
+for f in $ARC42_SECTIONS; do
+    if [ ! -f "$ARC42_DIR/$f" ]; then
+        red "  arc42 drift: missing section file $f"
         ERRORS=$((ERRORS + 1))
     fi
 done
-if ! $MISSING_STATUS; then
-    green "  All ADRs have status markers"
+if [ -f "$ARC42_DIR/go-bt-evolve-arc42.md" ]; then
+    red "  arc42 drift: retired monolith go-bt-evolve-arc42.md present (sections are the source of truth)"
+    ERRORS=$((ERRORS + 1))
+fi
+if [ -d "$ROOT/docs/adr" ]; then
+    red "  arc42 drift: retired docs/adr/ present (the ADR log lives in docs/arc42/09-decisions.md)"
+    ERRORS=$((ERRORS + 1))
+fi
+if [ -f "$ARC42_DIR/GUIDELINES.md" ]; then
+    GUIDE_COUNT=$(grep -c '^## Section [0-9]' "$ARC42_DIR/GUIDELINES.md" || true)
+    if [ "${GUIDE_COUNT:-0}" -ne 12 ]; then
+        red "  arc42 drift: GUIDELINES.md has ${GUIDE_COUNT:-0} '## Section N' blocks (want 12)"
+        ERRORS=$((ERRORS + 1))
+    fi
+else
+    red "  arc42 drift: docs/arc42/GUIDELINES.md missing"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# 5b. Required headings (mirror of internal/engine/arc42_sections.go — keep in lockstep)
+check_arc42_heading() {
+    local file="$1" heading="$2"
+    if [ -f "$ARC42_DIR/$file" ] && ! grep -qF "$heading" "$ARC42_DIR/$file"; then
+        red "  arc42 drift: $file missing required heading: $heading"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+check_arc42_heading 01-introduction-goals.md    "# 1. Introduction and Goals"
+check_arc42_heading 01-introduction-goals.md    "## 1.1 Requirements Overview"
+check_arc42_heading 01-introduction-goals.md    "## 1.2 Quality Goals"
+check_arc42_heading 01-introduction-goals.md    "## 1.3 Stakeholders"
+check_arc42_heading 02-constraints.md           "# 2. Architecture Constraints"
+check_arc42_heading 02-constraints.md           "## Technical Constraints"
+check_arc42_heading 02-constraints.md           "## Organizational Constraints"
+check_arc42_heading 02-constraints.md           "## Conventions"
+check_arc42_heading 03-context-scope.md         "# 3. Context and Scope"
+check_arc42_heading 03-context-scope.md         "## 3.1 Business Context"
+check_arc42_heading 03-context-scope.md         "## 3.2 Technical Context"
+check_arc42_heading 04-solution-strategy.md     "# 4. Solution Strategy"
+check_arc42_heading 04-solution-strategy.md     "## Quality Goals → Solution Approaches"
+check_arc42_heading 04-solution-strategy.md     "## Key Technology Decisions"
+check_arc42_heading 05-building-blocks.md       "# 5. Building Block View"
+check_arc42_heading 05-building-blocks.md       "## 5.1 Whitebox Overall System"
+check_arc42_heading 06-runtime-view.md          "# 6. Runtime View"
+check_arc42_heading 07-deployment.md            "# 7. Deployment View"
+check_arc42_heading 07-deployment.md            "## 7.1 Infrastructure Level 1"
+check_arc42_heading 08-crosscutting-concepts.md "# 8. Crosscutting Concepts"
+check_arc42_heading 08-crosscutting-concepts.md "## 8.1"
+check_arc42_heading 09-decisions.md             "# 9. Architecture Decisions"
+check_arc42_heading 10-quality.md               "# 10. Quality Requirements"
+check_arc42_heading 10-quality.md               "## 10.1 Quality Tree"
+check_arc42_heading 10-quality.md               "## 10.2 Quality Scenarios"
+check_arc42_heading 11-risks-debt.md            "# 11. Risks and Technical Debt"
+check_arc42_heading 12-glossary.md              "# 12. Glossary"
+if [ -f "$ARC42_DIR/06-runtime-view.md" ]; then
+    RT_SCENARIOS=$(grep -c '^## 6\.' "$ARC42_DIR/06-runtime-view.md" || true)
+    if [ "${RT_SCENARIOS:-0}" -lt 3 ]; then
+        red "  arc42 drift: 06-runtime-view.md has ${RT_SCENARIOS:-0} scenario subsections (want >= 3)"
+        ERRORS=$((ERRORS + 1))
+    fi
+fi
+
+# 5c. Generated footer must be the LAST line of every section file
+for f in $ARC42_SECTIONS; do
+    [ -f "$ARC42_DIR/$f" ] || continue
+    if ! tail -n 1 "$ARC42_DIR/$f" | grep -q 'Generated by bt-agent arc42 pipeline'; then
+        red "  arc42 drift: $f generated footer is not the last line (content appended after the footer?)"
+        ERRORS=$((ERRORS + 1))
+    fi
+done
+
+# 5d. ADR log integrity in 09-decisions.md (entries are '## ADR-NNN: Title')
+DEC="$ARC42_DIR/09-decisions.md"
+if [ -f "$DEC" ]; then
+    ADR_HEADINGS=$(grep -cE '^## ADR-[0-9]+' "$DEC" || true)
+    ADR_STATUS=$(grep -cE '^\*\*Status:\*\*' "$DEC" || true)
+    if [ "${ADR_STATUS:-0}" -lt "${ADR_HEADINGS:-0}" ]; then
+        red "  arc42 drift: 09-decisions.md has ${ADR_HEADINGS:-0} ADR headings but only ${ADR_STATUS:-0} '**Status:**' lines"
+        ERRORS=$((ERRORS + 1))
+    fi
+    if ! grep -qE '^\| *ADR-[0-9]+ *\|' "$DEC"; then
+        red "  arc42 drift: 09-decisions.md is missing the ADR overview index table"
+        ERRORS=$((ERRORS + 1))
+    else
+        MAX_HEADING=$(grep -oE '^## ADR-[0-9]+' "$DEC" | grep -oE '[0-9]+$' | sort -n | tail -1)
+        MAX_INDEXED=$(grep -oE '^\| *ADR-[0-9]+' "$DEC" | grep -oE '[0-9]+$' | sort -n | tail -1)
+        if [ "${MAX_HEADING:-0}" != "${MAX_INDEXED:-0}" ]; then
+            red "  arc42 drift: 09-decisions.md index table max ADR-${MAX_INDEXED:-none} != log max ADR-${MAX_HEADING:-none}"
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+fi
+
+# 5e. Countable arc42 rules
+if [ -f "$ARC42_DIR/01-introduction-goals.md" ]; then
+    GOALS=$(grep -cE '^\| *Q[0-9]+ *\| *\*\*' "$ARC42_DIR/01-introduction-goals.md" || true)
+    if [ "${GOALS:-0}" -lt 3 ] || [ "${GOALS:-0}" -gt 5 ]; then
+        red "  arc42 drift: 01-introduction-goals.md quality-goal table has ${GOALS:-0} rows (arc42 wants 3-5)"
+        ERRORS=$((ERRORS + 1))
+    fi
+fi
+if [ -f "$ARC42_DIR/11-risks-debt.md" ] && ! grep -qi 'priority' "$ARC42_DIR/11-risks-debt.md"; then
+    red "  arc42 drift: 11-risks-debt.md has no priority column/marker"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# 5f. README referenced doc paths must exist
+README_PATHS=$(grep -oE 'docs/[A-Za-z0-9_/.-]+\.md' "$ROOT/README.md" | sort -u || true)
+for p in $README_PATHS; do
+    if [ ! -f "$ROOT/$p" ]; then
+        red "  README drift: referenced path $p does not exist"
+        ERRORS=$((ERRORS + 1))
+    fi
+done
+if [ "$ERRORS" -eq "$ARC42_ERRORS_BEFORE" ]; then
+    green "  arc42 sections, ADR log, and README paths are consistent"
 fi
 
 # ----- 6. VIDEO_WALKTHROUGH.md command syntax check -----
