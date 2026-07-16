@@ -25,8 +25,15 @@ func rateLimitedServer(t *testing.T, retryAfter string) *httptest.Server {
 	}))
 }
 
+// retryAfter is kept to a single second (not a realistic multi-minute
+// window) because GenerateWithModel now retries through
+// reliability.DefaultRetryPolicy(), which honors the server's Retry-After
+// value for real between attempts (milestone 2/5 of the Q3 Reliability
+// program) — a server that always 429s and a large header would make this
+// unit test sleep out multiple real Retry-After windows before its 3
+// attempts are exhausted.
 func TestOpenAICompat_429ReturnsRateLimitError(t *testing.T) {
-	server := rateLimitedServer(t, "120")
+	server := rateLimitedServer(t, "1")
 	defer server.Close()
 
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
@@ -36,8 +43,8 @@ func TestOpenAICompat_429ReturnsRateLimitError(t *testing.T) {
 	if !errors.As(err, &rle) {
 		t.Fatalf("expected RateLimitError, got %T: %v", err, err)
 	}
-	if rle.RetryAfter != 120*time.Second {
-		t.Errorf("RetryAfter = %v, want 120s", rle.RetryAfter)
+	if rle.RetryAfter != 1*time.Second {
+		t.Errorf("RetryAfter = %v, want 1s", rle.RetryAfter)
 	}
 	if !strings.Contains(rle.Message, "model=model-a") {
 		t.Errorf("message should carry the per-call model, got %q", rle.Message)
@@ -62,7 +69,7 @@ func TestOpenAICompat_429WithoutRetryAfterHeader(t *testing.T) {
 
 func TestOpenAICompat_429NonJSONBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "5")
+		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`<html>Too Many Requests</html>`))
 	}))

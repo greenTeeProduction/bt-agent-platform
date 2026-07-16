@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 	"github.com/tmc/langchaingo/llms/ollama"
 )
@@ -92,7 +93,22 @@ func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt 
 
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	result, err := c.llm.Call(callCtx, prompt)
+
+	// The LLM call is wrapped in reliability.DefaultRetryPolicy()'s full-jitter
+	// backoff so a retryable failure (Ollama 5xx-style server errors) gets a
+	// jittered retry instead of failing the caller on the first transient
+	// response, while a non-retryable failure (validation, auth) fails
+	// immediately without a second call to the backend.
+	var result string
+	policy := reliability.DefaultRetryPolicy()
+	err := policy.ExecuteContext(callCtx, func() error {
+		out, callErr := c.llm.Call(callCtx, prompt)
+		if callErr != nil {
+			return callErr
+		}
+		result = out
+		return nil
+	})
 	if err != nil {
 		span.RecordError(err)
 		return "", fmt.Errorf("llm call: %w", err)

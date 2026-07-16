@@ -115,6 +115,44 @@ func TestFallbackLLM_GenerateReturnsAllFailures(t *testing.T) {
 	}
 }
 
+// TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel exercises
+// milestone 4/5 of the Q3 Reliability program: FallbackLLM.generate must keep
+// a per-model reliability.CircuitBreaker (keyed by model.Name) so a model that
+// fails on every call trips its breaker and gets skipped on subsequent
+// requests instead of being re-invoked (and re-failing) every time. Today
+// generate has no failure memory across calls, so it relaunches the
+// perpetually-failing primary model on every single Generate call — this test
+// fails because the failing model's invocation count keeps pace with the
+// call count.
+func TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel(t *testing.T) {
+	failing := &stubLLM{name: "failing", err: errors.New("model A down")}
+	healthy := &stubLLM{name: "healthy"}
+	chain := NewFallbackLLM([]NamedLLM{
+		{Name: "model-a", LLM: failing},
+		{Name: "model-b", LLM: healthy},
+	})
+
+	const attempts = 10
+	for i := 0; i < attempts; i++ {
+		got, err := chain.Generate("hello")
+		if err != nil {
+			t.Fatalf("attempt %d: Generate returned error: %v", i, err)
+		}
+		if got != "healthy:hello" {
+			t.Fatalf("attempt %d: expected fallback response, got %q", i, got)
+		}
+	}
+
+	if failing.calls >= attempts {
+		t.Fatalf("circuit breaker did not skip persistently-failing model: model A was invoked %d times "+
+			"across %d Generate calls; expected consecutive failures to trip the breaker and route "+
+			"straight to model B without re-invoking model A", failing.calls, attempts)
+	}
+	if healthy.calls != attempts {
+		t.Fatalf("expected model B to be invoked on every call, got %d out of %d", healthy.calls, attempts)
+	}
+}
+
 func TestNewProvider_BuildsFallbackChainFromConfiguredModels(t *testing.T) {
 	cfg := &config.Config{
 		LLMProvider:    "deepseek",
