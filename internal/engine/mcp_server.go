@@ -88,6 +88,7 @@ type Server struct {
 	in             io.Reader // stdin reader (os.Stdin by default, overridable for tests)
 	out            io.Writer
 	mu             sync.Mutex // protects out writes (concurrent handlers)
+	bbMu           sync.Mutex // guards handlers registered via RegisterBlackboardTool
 	sanitizeArgs   bool
 	apiKey         string
 	rateLimiter    *security.RateLimiter
@@ -117,6 +118,26 @@ func (s *Server) RegisterTool(name, description string, props map[string]Propert
 		},
 	})
 	s.handler[name] = handler
+}
+
+// RegisterBlackboardTool registers a tool like RegisterTool, but wraps the
+// handler so its whole body runs under a Server-wide mutex shared by every
+// tool registered through this method. Run() (below) dispatches concurrent
+// tools/call requests to goroutines, so any handler that reads or writes a
+// *Blackboard shared across tool calls — the common pattern of one
+// server-wide Blackboard backing every registered tool — must register
+// through RegisterBlackboardTool instead of RegisterTool: RegisterTool
+// alone provides no protection, and a lock taken ad hoc inside only some
+// handlers (the failure mode this replaces) still lets any handler that
+// forgot to opt in interleave into a "protected" handler's critical
+// section, corrupting the shared Blackboard. Every tool sharing a
+// Blackboard must register through this method for the guarantee to hold.
+func (s *Server) RegisterBlackboardTool(name, description string, props map[string]Property, required []string, handler ToolHandler) {
+	s.RegisterTool(name, description, props, required, func(args json.RawMessage) *ToolResult {
+		s.bbMu.Lock()
+		defer s.bbMu.Unlock()
+		return handler(args)
+	})
 }
 
 // HasTool reports whether a tool with the given name has been registered.
