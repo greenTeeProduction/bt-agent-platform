@@ -74,3 +74,38 @@ func TestClassifyErrorUntypedUnauthorizedStaysAuth(t *testing.T) {
 		t.Fatalf("untyped unauthorized response = %v, want %v", got, ErrCatAuth)
 	}
 }
+
+// failingResultExecutor returns a populated result together with an error —
+// the shape of a graceful non-success run (e.g. the rate-limit carryover).
+type failingResultExecutor struct {
+	res   *AgentResult
+	err   error
+	calls int
+}
+
+func (f *failingResultExecutor) Execute(agent, task string) (*AgentResult, error) {
+	f.calls++
+	return f.res, f.err
+}
+func (f *failingResultExecutor) Health() error  { return nil }
+func (f *failingResultExecutor) String() string { return "failing-with-result" }
+
+// The failover loop must not discard a failed executor's result: the caller
+// needs the outcome (e.g. goap_fusion_rate_limited) to classify the failure.
+func TestAgentRouterPreservesResultFromFailedExecutor(t *testing.T) {
+	exec := &failingResultExecutor{
+		res: &AgentResult{Agent: "a", Outcome: "goap_fusion_rate_limited", Output: "paused"},
+		err: errors.New("agent outcome: goap_fusion_rate_limited: paused"),
+	}
+	r := NewAgentRouter(exec)
+	res, err := r.Execute("a", "task")
+	if err == nil {
+		t.Fatal("executor error must propagate")
+	}
+	if res == nil {
+		t.Fatal("the failed executor's result must survive to the caller — dropping it loses the sentinel outcome")
+	}
+	if res.Outcome != "goap_fusion_rate_limited" {
+		t.Fatalf("Outcome = %q, want the sentinel preserved", res.Outcome)
+	}
+}

@@ -1336,7 +1336,13 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	// Failover loop: try executors starting from `start`.
 	// Each executor's Health() must pass before we try Execute().
 	// Cooling-down executors are skipped regardless of Health().
+	// A failed executor's RESULT is preserved alongside its error: graceful
+	// non-success runs (e.g. the goap rate-limit carryover) return a
+	// populated result the caller needs for classification — dropping it
+	// once turned a healthy pause into 3 retries and a dead-letter entry
+	// (2026-07-16 20:30).
 	var lastErr error
+	var lastResult *AgentResult
 	tried := 0
 	for i := 0; i < len(executors) && tried < maxFailover; i++ {
 		idx := (start + i) % len(executors)
@@ -1362,6 +1368,9 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		// Record failure for zombie detection.
 		r.recordFailure(idx)
 		lastErr = err
+		if result != nil {
+			lastResult = result
+		}
 	}
 
 	// If we have a specific error, include it; otherwise fall back to local
@@ -1372,9 +1381,12 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 			if localErr == nil {
 				return result, nil
 			}
+			if result != nil {
+				lastResult = result
+			}
 			lastErr = fmt.Errorf("all executors failed (last remote: %w; local: %v)", lastErr, localErr)
 		}
-		return nil, lastErr
+		return lastResult, lastErr
 	}
 
 	// No remote executor was healthy — fall back to local

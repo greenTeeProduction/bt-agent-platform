@@ -147,23 +147,7 @@ func newLocalAgentExecutor(nodeURL string, runner *agent.RunDeps) *reliability.L
 			InjectMemory:   true,
 			EnforceQuality: true,
 		})
-		if err != nil {
-			return nil, err
-		}
-		return &reliability.AgentResult{
-			Agent:        agentName,
-			Task:         task,
-			Output:       res.Output,
-			Duration:     res.Duration,
-			Success:      res.Outcome == "success",
-			QualityScore: res.Quality,
-			// Outcome preserves RunOnce's raw disposition (e.g. the
-			// scheduler's rate-limit-carryover sentinel) across the
-			// AgentExecutor boundary, so callers dispatching through
-			// agentRouter.Execute can still distinguish it instead of
-			// collapsing every non-"success" run to a bare failure.
-			Outcome: res.Outcome,
-		}, nil
+		return localAgentResult(agentName, task, res, err)
 	})
 }
 
@@ -212,8 +196,9 @@ func attemptOutcomeError(outcome, output string) error {
 // it as terminal — an expected, healthy backoff, neither retried nor
 // dead-lettered — and records it as a *deferred* outcome rather than a success,
 // so a rate-limit pause never inflates the success-count/success-latency stats
-// the gardener's validation gate reads.
-const schedulerRateLimitCarryover = "goap_fusion_rate_limited"
+// the gardener's validation gate reads. Aliases the exported definition so the
+// scheduler's breaker accounting and this attempt recording can never drift.
+const schedulerRateLimitCarryover = agent.RateLimitCarryoverOutcome
 
 // recordSchedulerAttempt records one scheduler attempt against the agent's SLO
 // metrics and returns the error the retry policy should observe: nil stops the
@@ -839,4 +824,32 @@ func versionRequested() bool {
 		}
 	}
 	return false
+}
+
+// localAgentResult adapts a RunOnce result to the AgentExecutor contract.
+// The result survives ALONGSIDE a non-nil error: RunOnce wraps every
+// non-"success", non-healthy outcome as an error, and dropping the result on
+// that path lost the rate-limit carryover sentinel (2026-07-16 20:30 — the
+// scheduler saw outcome "" instead of goap_fusion_rate_limited, retried a
+// healthy pause 3x, and dead-lettered it). Outcome preserves RunOnce's raw
+// disposition across the boundary so callers dispatching through
+// agentRouter.Execute can still distinguish it instead of collapsing every
+// non-"success" run to a bare failure.
+func localAgentResult(agentName, task string, res *agent.RunResult, err error) (*reliability.AgentResult, error) {
+	if res == nil {
+		return nil, err
+	}
+	ar := &reliability.AgentResult{
+		Agent:        agentName,
+		Task:         task,
+		Output:       res.Output,
+		Duration:     res.Duration,
+		Success:      err == nil && res.Outcome == "success",
+		QualityScore: res.Quality,
+		Outcome:      res.Outcome,
+	}
+	if err != nil {
+		ar.Error = err.Error()
+	}
+	return ar, err
 }

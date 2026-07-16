@@ -410,3 +410,11 @@ func (d *RunDeps) injectMemoryContext(agentName, task string, prevLimit int) str
 	}
 	return full
 }
+
+// RateLimitCarryoverOutcome is the sentinel a goap cycle returns when it
+// pauses gracefully on a Claude rate-limit backoff and carries its plan over
+// to the next cycle. The literal is written by the engine's rate-limit branch
+// (internal/engine, which cannot import this package) and consumed by the
+// scheduler's attempt recording — it is an expected, healthy pause, never a
+// retryable failure.
+const RateLimitCarryoverOutcome = "goap_fusion_rate_limited"

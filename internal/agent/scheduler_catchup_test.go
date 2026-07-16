@@ -165,3 +165,13 @@ var errTest = &testError{}
 type testError struct{}
 
 func (*testError) Error() string { return "test error" }
+
+// A Claude rate-limit pause is an expected, healthy stop: it must not count
+// against the agent's circuit breaker, or a long backoff window (cycles every
+// 30 minutes, each returning the carryover) walks the breaker open and the
+// agent gets skipped as "broken" precisely when it is behaving correctly.
+func TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy(t *testing.T) {
+	if !cycleBreakerSuccess(RateLimitCarryoverOutcome, nil) {
+		t.Fatal("rate-limit carryover must keep the circuit breaker closed")
+	}
+}

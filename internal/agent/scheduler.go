@@ -861,9 +861,14 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 
 // cycleBreakerSuccess reports whether a completed cycle counts as a success
 // for the agent's circuit breaker. Healthy terminal outcomes — success,
-// no_change (analysis-only), degraded (deterministic fallback) — keep the
-// breaker closed; genuine failures and errored runs count against it.
+// no_change (analysis-only), degraded (deterministic fallback), and the
+// rate-limit carryover (an expected pause; a long backoff window must not
+// walk the breaker open) — keep the breaker closed; genuine failures and
+// errored runs count against it.
 func cycleBreakerSuccess(outcome string, runErr error) bool {
+	if outcome == RateLimitCarryoverOutcome {
+		return true
+	}
 	return runErr == nil && isHealthyOutcome(outcome)
 }
 
