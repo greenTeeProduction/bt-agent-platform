@@ -82,9 +82,13 @@ func errorHandlerSignatureFromBB(b *Blackboard, handlerName, protectedName strin
 		sum := sha256.Sum256([]byte(handlerName + "|" + protectedName))
 		return hex.EncodeToString(sum[:])[:12]
 	}
-	if errText == "" {
-		errText = b.Result
-	}
+	// Deliberately do NOT fall back to b.Result here. A category set WITHOUT an
+	// explicit last_error is the ClaudeErrorHandler classifying an otherwise-
+	// unclassified failure (error_handler_classify.go): b.Result is still the
+	// near-unique free text, so hashing it would defeat the cooldown just as in
+	// the coarse case above. With errText empty the signature keys on
+	// handler|node|category alone — stable across recurrences. The prompt keeps
+	// its own b.Result fallback (buildErrorHandlerPrompt) for readable context.
 	if len(errText) > errorHandlerErrExcerpt {
 		errText = errText[:errorHandlerErrExcerpt]
 	}

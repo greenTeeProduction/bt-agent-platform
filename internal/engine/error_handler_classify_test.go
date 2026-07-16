@@ -116,6 +116,39 @@ func TestClaudeErrorHandler_GoapFailureGetsGoapCategory(t *testing.T) {
 	}
 }
 
+func TestErrorHandlerSignature_ClassifiedWithoutLastErrorIsStable(t *testing.T) {
+	// The classifier sets category+node but NOT last_error. Two runs of the same
+	// classified failure with DIFFERENT free-text Result must share ONE signature,
+	// or the cooldown is defeated (the bug the review caught).
+	bb1 := &Blackboard{Result: "run a1b2c3 failed at /tmp/x-deadbeef", ChainState: map[string]any{
+		"last_error_category": "unclassified", "last_error_node": "CodeReview_Main",
+	}}
+	bb2 := &Blackboard{Result: "run 99z entirely different f00dface", ChainState: map[string]any{
+		"last_error_category": "unclassified", "last_error_node": "CodeReview_Main",
+	}}
+	if s1, s2 := errorHandlerSignatureFromBB(bb1, "h", "p"), errorHandlerSignatureFromBB(bb2, "h", "p"); s1 != s2 {
+		t.Fatalf("classified failures with different free text must share a signature: %s vs %s", s1, s2)
+	}
+	// A different category must still change the signature (retains discrimination).
+	bb3 := &Blackboard{ChainState: map[string]any{"last_error_category": "rate_limit", "last_error_node": "CodeReview_Main"}}
+	if errorHandlerSignatureFromBB(bb3, "h", "p") == errorHandlerSignatureFromBB(bb1, "h", "p") {
+		t.Fatal("different category must change the signature")
+	}
+}
+
+func TestClassifyReliabilityFallback(t *testing.T) {
+	// non-goap, reliability-recognizable text → a reliability category, not "unclassified".
+	nbb := &Blackboard{Result: "dial tcp 10.0.0.1:443: connect: connection refused", ChainState: map[string]any{}}
+	if got := classifyErrorHandlerFailure(nbb); got == "unclassified" || got == "" {
+		t.Fatalf("reliability-recognizable text should classify to a category, got %q", got)
+	}
+	// goapFailureCategory's reliability fallback (past the goap taxonomy branches).
+	gbb := &Blackboard{Result: "dial tcp 10.0.0.1:443: connect: connection refused"}
+	if got := goapFailureCategory(gbb); got == "goap_fusion_failure" || got == "" {
+		t.Fatalf("goapFailureCategory reliability fallback should classify, got %q", got)
+	}
+}
+
 func TestClaudeErrorHandler_DoesNotClobberExistingCategory(t *testing.T) {
 	withTempErrorHandlerDir(t)
 	t.Setenv("BT_CLAUDE_ERROR_HANDLER", "off")
