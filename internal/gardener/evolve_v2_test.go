@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -561,6 +562,33 @@ func TestEvolveTreeV2_RecordsAcceptedMutationExperience(t *testing.T) {
 	}
 }
 
+// TestEvolveTreeV2_RecordsFailingTaskContext pins Q2 Evolvability milestone
+// 2/3: an accepted mutation's ExperienceBank entry must carry the tree's most
+// recent failing reflection's task text as failing_task= context, so ADR-109's
+// read-side retrieval-by-failure-semantics has signal to match against.
+// experienceRecordingGardener already seeds failing reflection records
+// (seedFailureRecords) for this tree before the cycle runs.
+func TestEvolveTreeV2_RecordsFailingTaskContext(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	if m.Mutations < 1 {
+		t.Fatalf("setup produced no accepted mutations (metrics=%+v) — fix the seeding", m)
+	}
+	if bank.Count() == 0 {
+		t.Fatalf("ExperienceBank has no entries to inspect")
+	}
+	e := bank.Entries[0]
+	if !strings.Contains(e.Context, "failing_task=") {
+		t.Errorf("recorded entry Context = %q, want it to carry failing_task= from the tree's most recent failing reflection", e.Context)
+	}
+}
+
 // ============================================================================
 // Pre-mutation snapshot durability (Q2 Evolvability milestone 1)
 // ============================================================================
@@ -648,7 +676,7 @@ func TestBiasCandidatesWithExperience_SeededBankReordersCandidates(t *testing.T)
 		{Op: evolution.MutationOp{Operation: "reorder_children", Target: "Root"}, Score: 0.48, Reason: "heuristic tail"},
 	}
 
-	got := biasCandidatesWithExperience(bank, tree, candidates)
+	got := biasCandidatesWithExperience(bank, tree, candidates, "")
 
 	if len(got) != len(candidates) {
 		t.Fatalf("biasing changed candidate count: got %d, want %d", len(got), len(candidates))
@@ -701,7 +729,7 @@ func TestBiasCandidatesWithExperience_NilOrEmptyBankKeepsOrder(t *testing.T) {
 	}
 
 	for name, bank := range map[string]*evolution.ExperienceBank{"nil": nil, "empty": emptyBank} {
-		got := biasCandidatesWithExperience(bank, tree, candidates)
+		got := biasCandidatesWithExperience(bank, tree, candidates, "")
 		if len(got) != len(candidates) {
 			t.Fatalf("%s bank changed candidate count: got %d, want %d", name, len(got), len(candidates))
 		}
@@ -735,6 +763,72 @@ func TestEvolveTreeV2_MarksMatchingExperienceReused(t *testing.T) {
 	}
 	if n := experienceReuseCount(t, bank, seededID); n < 1 {
 		t.Fatalf("evolveTreeV2 did not mark the matching experience entry reused: TimesReused = %d, want >= 1", n)
+	}
+}
+
+// seedExperienceWithFailureContext records one high-quality experience entry
+// like seedExperience, but also appends failureContext as
+// AddFromMutation's optional failing-task text, so the resulting entry's
+// Context carries "; failing_task=<failureContext>" — the ADR-109 write-side
+// signal milestone 3 conditions retrieval on.
+func seedExperienceWithFailureContext(t *testing.T, bank *evolution.ExperienceBank, tree *evolution.SerializableNode, op, target, failureContext string) string {
+	t.Helper()
+	if err := bank.AddFromMutation(tree, evolution.MutationOp{Operation: op, Target: target}, 0.0, 0.2, nil, failureContext); err != nil {
+		t.Fatalf("AddFromMutation(%s/%s): %v", op, target, err)
+	}
+	return bank.Entries[len(bank.Entries)-1].ID
+}
+
+// TestBiasCandidatesWithExperience_QueryPathSurfacesOffTreeTypeEntry pins Q2
+// Evolvability milestone 3/3: biasCandidatesWithExperience must condition
+// retrieval on the milestone-2 lastFailureTask signal — a non-empty query
+// calls bank.Retrieve(query, experienceBiasTopK), which is not filtered by
+// tree type, instead of the tree-type-only evolution.RetrieveExperienceHints
+// path. An off-tree-type entry whose Context carries the matching
+// failing_task= text must only be surfaced (boosted + marked reused) when the
+// query is supplied; the empty-query fallback must behave exactly like
+// today's tree-type-filtered retrieval and leave it untouched.
+func TestBiasCandidatesWithExperience_QueryPathSurfacesOffTreeTypeEntry(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	tree := gateDisabledTestTree()                                                      // extractTreeType(tree) == "Root"
+	offTypeTree := &evolution.SerializableNode{Type: "Sequence", Name: "godev_variant"} // extractTreeType == "GoDev"
+
+	const failingTask = "research production readiness"
+	offTypeID := seedExperienceWithFailureContext(t, bank, offTypeTree, "add_fallback", "Router", failingTask)
+
+	candidates := []evaluator.MutationCandidate{
+		{Op: evolution.MutationOp{Operation: "increase_retries", Target: "ResearchAgent"}, Score: 0.55, Reason: "heuristic top"},
+		{Op: evolution.MutationOp{Operation: "add_fallback", Target: "Router"}, Score: 0.50, Reason: "matches off-tree-type experience"},
+	}
+
+	// Empty query (no failing-task signal): falls back to today's
+	// tree-type-only RetrieveExperienceHints, which excludes the off-tree-type
+	// entry — ordering and reuse count stay untouched.
+	unbiased := biasCandidatesWithExperience(bank, tree, candidates, "")
+	if unbiased[0].Op.Operation != "increase_retries" || unbiased[1].Op.Operation != "add_fallback" {
+		t.Fatalf("empty query changed candidate ordering: got %+v", unbiased)
+	}
+	if n := experienceReuseCount(t, bank, offTypeID); n != 0 {
+		t.Fatalf("empty-query fallback marked off-tree-type entry reused: TimesReused = %d, want 0", n)
+	}
+
+	// Non-empty query built from the milestone-2 lastFailureTask signal must
+	// route through bank.Retrieve(query, experienceBiasTopK), surfacing the
+	// off-tree-type entry by Context match regardless of tree type.
+	biased := biasCandidatesWithExperience(bank, tree, candidates, failingTask)
+	if biased[0].Op.Operation != "add_fallback" || biased[0].Op.Target != "Router" {
+		t.Fatalf("query path did not boost the off-tree-type matching candidate to the front: got %s/%s first",
+			biased[0].Op.Operation, biased[0].Op.Target)
+	}
+	if biased[0].Score <= 0.50 {
+		t.Errorf("query-matched candidate score not boosted: got %.4f, want > 0.50", biased[0].Score)
+	}
+	if n := experienceReuseCount(t, bank, offTypeID); n < 1 {
+		t.Errorf("query path did not mark the off-tree-type experience entry reused: TimesReused = %d, want >= 1", n)
 	}
 }
 

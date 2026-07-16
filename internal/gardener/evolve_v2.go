@@ -84,6 +84,28 @@ func (g *Gardener) transpositionTable() *evaluator.TranspositionTable {
 	return g.tt
 }
 
+// lastFailureTask returns the Task text of the most recent (by Timestamp)
+// record in records whose Outcome is evolution.Failure, so ExperienceBank
+// entries recorded during this cycle can carry ADR-109 failing-task context
+// for later retrieval-by-failure-semantics. Returns "" when no record failed.
+func lastFailureTask(records []evolution.Record) string {
+	var latest evolution.Record
+	found := false
+	for _, r := range records {
+		if r.Outcome != evolution.Failure {
+			continue
+		}
+		if !found || r.Timestamp >= latest.Timestamp {
+			latest = r
+			found = true
+		}
+	}
+	if !found {
+		return ""
+	}
+	return latest.Task
+}
+
 // evolveTreeV2 runs the v2 evolution pipeline on a single tree:
 // cascade quick-check → ordered candidates → block filter → per-candidate
 // benchmark + pre-score + quality gate → apply → validation-gated persist.
@@ -178,7 +200,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// ── Generate and filter mutations ──
 	// Personal trees bias against (and record into) the owning user's bank.
 	bank := g.bankFor(entry)
-	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, baseFitness))
+	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, baseFitness), lastFailureTask(records))
 
 	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
@@ -304,7 +326,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			if bank != nil {
 				// Record before advancing currentFitness so the delta is the
 				// per-candidate improvement, not cumulative across the cycle.
-				if err := bank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil); err != nil {
+				if err := bank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil, lastFailureTask(records)); err != nil {
 					slog.Warn("gardener/v2: recording mutation experience failed", "tree", entry.Name, "error", err)
 				}
 			}
@@ -396,7 +418,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			if !metaRejected && evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
 				applied++
 				if bank != nil {
-					if err := bank.AddFromMutation(tree, deep.BestMutation.Op, newFitness.Composite, deep.BestFitness.Composite, nil); err != nil {
+					if err := bank.AddFromMutation(tree, deep.BestMutation.Op, newFitness.Composite, deep.BestFitness.Composite, nil, lastFailureTask(records)); err != nil {
 						slog.Warn("gardener/v2: recording deep-search mutation experience failed", "tree", entry.Name, "error", err)
 					}
 				}
@@ -475,12 +497,26 @@ const (
 
 // biasCandidatesWithExperience reorders OrderMutations candidates using
 // ExperienceBank retrieval: a candidate whose op/target matches a high-quality
-// past entry for the same tree type gets its score boosted (proportional to the
-// entry's quality) and the matched entry is marked reused. Non-matching
-// candidates keep their relative heuristic order (stable sort). A nil or empty
-// bank — or one with no usable matches — leaves the ordering untouched.
-func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolution.SerializableNode, candidates []evaluator.MutationCandidate) []evaluator.MutationCandidate {
-	hints := evolution.RetrieveExperienceHints(bank, tree, experienceBiasTopK)
+// past entry gets its score boosted (proportional to the entry's quality) and
+// the matched entry is marked reused. Non-matching candidates keep their
+// relative heuristic order (stable sort). A nil or empty bank — or one with no
+// usable matches — leaves the ordering untouched.
+//
+// query is the milestone-2 lastFailureTask signal for this cycle. When
+// non-empty, retrieval routes through bank.Retrieve(query, topK) — a
+// similarity/quality-ranked search across the whole bank, not filtered by
+// tree type — so an entry recorded against a different tree's failing task
+// can still warm-start this tree's candidates. When empty, retrieval falls
+// back to today's tree-type-only evolution.RetrieveExperienceHints path.
+func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolution.SerializableNode, candidates []evaluator.MutationCandidate, query string) []evaluator.MutationCandidate {
+	var hints []evolution.ExperienceEntry
+	if query != "" {
+		if bank != nil {
+			hints = bank.Retrieve(query, experienceBiasTopK)
+		}
+	} else {
+		hints = evolution.RetrieveExperienceHints(bank, tree, experienceBiasTopK)
+	}
 	if len(hints) == 0 || len(candidates) == 0 {
 		return candidates
 	}

@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -849,4 +850,63 @@ func TestEvolveWithExperienceContext_EmptyQueryFallsBackToTreeType(t *testing.T)
 	if reused == 0 {
 		t.Fatal("expected empty-query path to retrieve the Default-typed hint via RetrieveByTreeType and mark it reused, matching EvolveWithExperience's unchanged behavior")
 	}
+}
+
+// TestEvolveWithExperienceContext_RecordsFailingTaskInContext proves the
+// write-side half of the ADR-109 warm-start loop (Q2 Evolvability, milestone
+// 1/3): EvolveWithExperienceContext's query — the failing task's text — must
+// be threaded through mutateAndRecord into bank.AddFromMutation's
+// failureContext parameter, so every fitness-improving mutation recorded
+// during a non-empty-query run carries "failing_task=<query>" in its
+// ExperienceEntry.Context. Today mutateAndRecord calls
+// bank.AddFromMutation(mutated, op, before, after, nil) — a bare trailing nil
+// with no failureContext argument at all — so no recorded entry's Context
+// ever contains "failing_task=", regardless of query.
+func TestEvolveWithExperienceContext_RecordsFailingTaskInContext(t *testing.T) {
+	const query = "failing_task_goap_planner_timeout"
+	dir := t.TempDir()
+	eb, err := NewExperienceBank(dir)
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+
+	// growthFitness is monotone in node count, so improving mutations are
+	// guaranteed across a run — but WHICH generation produces one is
+	// seed-sensitive, so retry a few fixed seeds like
+	// TestEvolveWithExperience_RecordsImprovingMutations does.
+	for _, seed := range []int64{42, 43, 44} {
+		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
+		pop := NewPopulation(8, DefaultTree())
+		best := pop.EvolveWithExperienceContext(3, growthFitness, eb, query)
+		if best == nil {
+			t.Fatal("EvolveWithExperienceContext returned nil best tree")
+		}
+		if eb.Count() > 0 {
+			break
+		}
+	}
+
+	if eb.Count() == 0 {
+		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation across three seeded runs; bank is empty")
+	}
+
+	found := false
+	for _, e := range eb.Entries {
+		if strings.Contains(e.Context, "failing_task="+query) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected at least one recorded ExperienceEntry.Context to contain %q, but none did (contexts: %v)", "failing_task="+query, contextsOf(eb.Entries))
+	}
+}
+
+// contextsOf collects ExperienceEntry.Context values for failure diagnostics.
+func contextsOf(entries []ExperienceEntry) []string {
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Context
+	}
+	return out
 }

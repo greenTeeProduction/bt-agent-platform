@@ -516,7 +516,7 @@ func (p *Population) EvolveWithExperienceContext(generations int, fitnessFn func
 				parents := p.Select()
 				child := Crossover(parents[0], parents[1])
 				if rand.Float64() < mutationRate {
-					child = p.mutateAndRecord(child, hintOps, fitnessFn, bank, mutator)
+					child = p.mutateAndRecord(child, hintOps, fitnessFn, bank, mutator, query)
 					p.TotalMutations++
 				}
 				newPop[i] = Individual{Tree: child, Genome: hashTree(child)}
@@ -535,14 +535,16 @@ func (p *Population) EvolveWithExperienceContext(generations int, fitnessFn func
 }
 
 // mutateAndRecord applies one experience-biased mutation to child. Improving
-// mutations are recorded in the bank; regressions are discarded so the
-// quality gate holds.
+// mutations are recorded in the bank, tagged with the failing task's query
+// text (see EvolveWithExperienceContext) so a later Retrieve can match on
+// task semantics; regressions are discarded so the quality gate holds.
 func (p *Population) mutateAndRecord(
 	child *SerializableNode,
 	hintOps []string,
 	fitnessFn func(*SerializableNode) float64,
 	bank *ExperienceBank,
 	mutator *MCTSMutator,
+	query string,
 ) *SerializableNode {
 	before := fitnessFn(child)
 
@@ -562,7 +564,7 @@ func (p *Population) mutateAndRecord(
 		p.Regressions++
 		return child
 	}
-	_ = bank.AddFromMutation(mutated, op, before, after, nil)
+	_ = bank.AddFromMutation(mutated, op, before, after, nil, query)
 	return mutated
 }
 
