@@ -21,6 +21,7 @@ var leafNodeTypes = map[string]bool{
 	"Action":        true,
 	"Condition":     true,
 	"AlwaysSucceed": true,
+	"ChainAction":   true,
 }
 
 // ValidateTreeFull performs a 5-stage validation on a SerializableNode tree.

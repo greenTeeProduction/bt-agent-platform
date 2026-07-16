@@ -46,6 +46,28 @@ const (
 	ChainToolAction       ChainKind = "tool_action" // direct tool invocation without agent loop
 )
 
+// knownChainKinds is the set of all declared ChainKind values, used to
+// validate ChainConfig.ChainType at authoring time.
+var knownChainKinds = map[string]bool{
+	string(ChainLLMCall):          true,
+	string(ChainRAGQuery):         true,
+	string(ChainToolCall):         true,
+	string(ChainConversation):     true,
+	string(ChainStructuredOutput): true,
+	string(ChainRetrievalQA):      true,
+	string(ChainMapReduce):        true,
+	string(ChainRefine):           true,
+	string(ChainFusion):           true,
+	string(ChainAgent):            true,
+	string(ChainToolAction):       true,
+}
+
+// IsKnownChainKind reports whether kind matches one of the declared
+// ChainKind constants exactly (case-sensitive).
+func IsKnownChainKind(kind string) bool {
+	return knownChainKinds[kind]
+}
+
 // BuildChainAction creates a BT action node that executes a langchain chain via the blackboard.
 func BuildChainAction(cfg ChainConfig, bb *Blackboard) *btleaf.Action[Blackboard] {
 	fn := buildChainActionFn(cfg, bb)

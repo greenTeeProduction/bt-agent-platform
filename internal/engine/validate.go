@@ -58,6 +58,12 @@ func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts m
 				fmt.Sprintf("CachedCondition %s: must not wrap approval/HITL condition %s",
 					node.Name, guarded))
 		}
+	case "ChainAction":
+		cfg := parseChainConfig(node)
+		if !IsKnownChainKind(cfg.ChainType) {
+			*msgs = append(*msgs,
+				fmt.Sprintf("%s: unknown chain_type %q", node.Name, cfg.ChainType))
+		}
 	}
 	// Mirror ValidateTreeFull's leaf-with-children rule (shared leafNodeTypes
 	// map so the two validation paths cannot drift): engine.buildNode

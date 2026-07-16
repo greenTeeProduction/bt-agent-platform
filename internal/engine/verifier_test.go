@@ -211,6 +211,40 @@ func TestVerifierFull_AlwaysSucceedRejectsChildren(t *testing.T) {
 	}
 }
 
+func TestVerifierFull_ChainActionRejectsChildren(t *testing.T) {
+	// ChainAction is a leaf type: engine.buildNode (tree.go:322-325) reads
+	// ChainConfig from node metadata and never looks at node.Children.
+	// ValidateTreeFull must flag a leaf type that declares children so the
+	// discard surfaces as a validation error at authoring time.
+	withChildren := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "chain",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "GeneratePlan"},
+		},
+	}
+	info := ValidateTreeFull(withChildren)
+	found := false
+	for _, e := range info.Errors {
+		if strings.Contains(e, "ChainAction") && strings.Contains(e, "children") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected a leaf-children error mentioning ChainAction and children, got: %v", info.Errors)
+	}
+
+	// A childless ChainAction must NOT trigger the leaf-children rule.
+	childless := &evolution.SerializableNode{Type: "ChainAction", Name: "chainLeaf"}
+	info = ValidateTreeFull(childless)
+	for _, e := range info.Errors {
+		if strings.Contains(e, "must not declare children") {
+			t.Fatalf("childless ChainAction should not trigger leaf-children rule, got: %v", info.Errors)
+		}
+	}
+}
+
 func TestBuildTree_InvalidTreeReturnsFailureCommand(t *testing.T) {
 	bb := &Blackboard{}
 	cmd := BuildTree(&evolution.SerializableNode{Type: "Action", Name: "MissingAction"}, bb)

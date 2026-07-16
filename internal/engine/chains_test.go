@@ -3010,3 +3010,27 @@ func TestIncompleteInvestigationNote_StopReasons(t *testing.T) {
 		t.Errorf("expected no note for a natural final answer, got %q", note)
 	}
 }
+
+// TestIsKnownChainKind verifies every declared ChainKind constant is recognized
+// as known, and that unrelated strings — including a mistyped chain_type, an
+// empty string, and a wrong-case variant — are rejected. This backs the
+// authoring-time validation gate: a mistyped chain_type must fail before the
+// tree ever reaches LLM-call runtime.
+func TestIsKnownChainKind(t *testing.T) {
+	known := []ChainKind{
+		ChainLLMCall, ChainRAGQuery, ChainToolCall, ChainConversation,
+		ChainStructuredOutput, ChainRetrievalQA, ChainMapReduce, ChainRefine,
+		ChainFusion, ChainAgent, ChainToolAction,
+	}
+	for _, k := range known {
+		if !IsKnownChainKind(string(k)) {
+			t.Errorf("IsKnownChainKind(%q) = false, want true", k)
+		}
+	}
+
+	for _, bad := range []string{"", "llm_calls", "LLM_CALL", "tool_actionn", "unknown_kind"} {
+		if IsKnownChainKind(bad) {
+			t.Errorf("IsKnownChainKind(%q) = true, want false", bad)
+		}
+	}
+}
