@@ -6,7 +6,7 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
-// TestConsiderTreeCompileAction pins the in-tree autopilot seam (ADR-010
+// TestConsiderTreeCompileAction pins the in-tree autopilot seam (ADR-133
 // Phase 4): the ConsiderTreeCompile action is registered, invokes the
 // injection hook with the run's persona user on good outcomes, and is a
 // successful no-op for anonymous runs, failed runs, and unwired hooks —

@@ -17,11 +17,11 @@ import (
 //
 // Installed by agentexec at link time (see internal/agentexec/wiring.go) —
 // domains itself cannot load the files because the store location is an
-// execution-layer concern. Nil means no dynamic resolution (ADR-010 Phase 0).
+// execution-layer concern. Nil means no dynamic resolution (ADR-133 Phase 0).
 var DynamicResolveFn func(id string) *evolution.SerializableNode
 
 // DynamicResolveForUserFn is the user-scoped counterpart to DynamicResolveFn
-// (ADR-010 personalization hardening, Q1 Correctness): resolves a
+// (ADR-133 personalization hardening, Q1 Correctness): resolves a
 // runtime-generated tree ID against ONE requesting user's own workspace, so a
 // deterministic slug ID (goal:automate_<slug>) can never resolve to a
 // different user's tree just because it was compiled first. Installed by
@@ -65,7 +65,7 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 }
 
 // ResolveTreeIDForUser is the user-scoped counterpart to ResolveTreeID
-// (ADR-010 personalization hardening, Q1 Correctness): when user is
+// (ADR-133 personalization hardening, Q1 Correctness): when user is
 // non-empty, runtime-generated tree lookups are scoped to that user's own
 // workspace via DynamicResolveForUserFn instead of the unscoped
 // DynamicResolveFn, so a deterministic slug ID (goal:automate_<slug>) always
@@ -179,7 +179,7 @@ func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.Ser
 	// Category-prefixed IDs: builtin catalog first; on a miss, consult the
 	// dynamic resolver before preserving the branch's legacy miss behavior —
 	// factory-generated tree IDs use exactly these "<category>:<name>" shapes
-	// (ADR-010 Phase 0), so an early nil/default return here would make every
+	// (ADR-133 Phase 0), so an early nil/default return here would make every
 	// generated tree unreachable.
 	if len(id) > 8 && id[:8] == "finance:" {
 		if t := evolution.AllFinanceTrees()[id[8:]]; t != nil {

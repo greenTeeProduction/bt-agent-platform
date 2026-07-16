@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// CompileOptions parameterizes the plan→BT compiler (ADR-010 Phase 3).
+// CompileOptions parameterizes the plan→BT compiler (ADR-133 Phase 3).
 type CompileOptions struct {
 	// TreeName names the root node; default "goap_plan_<goalslug>".
 	TreeName string

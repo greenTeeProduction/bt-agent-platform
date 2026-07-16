@@ -6,7 +6,7 @@ import (
 )
 
 // Vocabulary is the world-state key registry that grounds goal extraction
-// (ADR-010 Phase 2): a goal condition is only accepted when its key is a
+// (ADR-133 Phase 2): a goal condition is only accepted when its key is a
 // known world-state key some action can actually affect, so every goal the
 // factory emits is plannable rather than hallucinated.
 type Vocabulary struct {
@@ -127,7 +127,7 @@ func normalizeKey(key string) string {
 	return key
 }
 
-// AutomationActions model the personalization pipeline (ADR-010 Phases 3–5)
+// AutomationActions model the personalization pipeline (ADR-133 Phases 3–5)
 // as planner operators, giving goals like task_automated=true a real action
 // path: detect pattern → compile tree → HITL approval → schedule agent.
 // Quality/turnaround/watcher operators back the remaining goal archetypes.

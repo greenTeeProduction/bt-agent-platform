@@ -13,7 +13,7 @@
 //   - MetricsTracker — per-tree cycle counts, mutation history, fitness scores
 //   - Config — cycle interval, mutation cap, benchmark validation, real-LLM flag
 //
-// Evolution guarantees (RunCycleV2, the single pipeline since ADR-010
+// Evolution guarantees (RunCycleV2, the single pipeline since ADR-133
 // Phase 6): evidence gate (no mutation without reflection records), bloat cap
 // (20x original node count), clone-and-prescore candidate isolation, quality
 // and validation gates with snapshot rollback.
@@ -42,7 +42,7 @@ type TreeEntry struct {
 	Tree        *evolution.SerializableNode `json:"-"`
 	FilePath    string                      `json:"file_path"`
 	Active      bool                        `json:"active"`
-	// User marks a personal tree loaded from a user workspace (ADR-010
+	// User marks a personal tree loaded from a user workspace (ADR-133
 	// Phase 5). It is the workspace directory name (already sanitized by
 	// persona.SanitizeUserID); empty for shared/builtin trees. Personal
 	// trees are evaluated on strictly-matching reflections and evolve
@@ -66,7 +66,7 @@ func NewRegistry(storageDir string) *Registry {
 }
 
 // NewRegistryWithUsers creates a registry that additionally scans per-user
-// personalization workspaces (<usersRoot>/<user>/trees/tree-*.json, ADR-010
+// personalization workspaces (<usersRoot>/<user>/trees/tree-*.json, ADR-133
 // Phase 5) so personal trees join the 24/7 evolution loop. Snapshots and
 // rollback work per tree as usual; SaveTree writes back into the user's own
 // workspace.
@@ -460,7 +460,7 @@ type Config struct {
 	// degrades to the historical no-recording behavior.
 	ExperienceBank *evolution.ExperienceBank
 	// UserExperienceRoot, when set (usually agent.UsersDir()), gives personal
-	// trees per-user experience banks at <root>/<user>/experience (ADR-010
+	// trees per-user experience banks at <root>/<user>/experience (ADR-133
 	// Phase 5); empty means every tree shares ExperienceBank.
 	UserExperienceRoot string
 	// SelectorStatsPath, when set, is the durable Selector telemetry file
@@ -503,7 +503,7 @@ func NewGardener(cfg Config) *Gardener {
 	return &Gardener{cfg: cfg}
 }
 
-// The v1 RunCycle/evolveTree pipeline was retired in ADR-010 Phase 6.
+// The v1 RunCycle/evolveTree pipeline was retired in ADR-133 Phase 6.
 // RunCycleV2 (evolve_v2.go) is the single evolution pipeline; the v1 safety
 // rails it lacked — evidence gate, bloat cap, crisis detection — were ported
 // into evolveTreeV2.

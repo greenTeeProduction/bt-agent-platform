@@ -64,16 +64,14 @@ func registerArc42Nodes() {
 
 	RegisterAction("ReadADRs", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		files, _ := filepath.Glob("docs/adr/ADR-*.md")
-		var sb strings.Builder
-		for _, f := range files {
-			data, err := os.ReadFile(f)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(&sb, "\n### %s\n\n%s\n", filepath.Base(f), string(data))
+		// The ADR log lives in the arc42 decisions section since the docs/adr
+		// directory was folded into it (ADR-131..133 carry the old numbers).
+		data, err := os.ReadFile("docs/arc42/09-decisions.md")
+		if err != nil {
+			setChainState(bb, "adrs", fmt.Sprintf("ADR log unavailable: %v", err))
+			return 1
 		}
-		setChainState(bb, "adrs", sb.String())
+		setChainState(bb, "adrs", string(data))
 		return 1
 	})
 

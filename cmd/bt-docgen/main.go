@@ -78,17 +78,17 @@ func (ds docgenState) isGraphStale() bool {
 
 // sectionSourceFiles maps each arc42 section to the files it depends on.
 var sectionSourceFiles = map[int][]string{
-	1: {"graphify-out/GRAPH_REPORT.md", "docs/adr/INDEX.md"},
+	1: {"graphify-out/GRAPH_REPORT.md", "docs/arc42/09-decisions.md"},
 	2: {"go.mod", "config.yaml"},
 	3: {"internal/mcp/server.go", "internal/a2a/server.go"},
-	4: {"docs/adr/ADR-001-behavior-trees.md", "docs/adr/ADR-002-mcp-interface.md", "docs/adr/ADR-003-file-persistence.md"},
+	4: {"docs/arc42/09-decisions.md"},
 	5: {"internal/engine/tree.go", "internal/engine/chains.go", "internal/engine/registry.go",
 		"internal/evolution/mutate.go", "internal/evolution/stockfish.go"},
 	6: {"internal/engine/tree.go", "internal/gardener/gardener.go", "internal/reliability/panic_handler.go"},
 	7: {"cmd/bt-dashboard/main.go", "cmd/bt-agent/main.go"},
 	8: {"internal/engine/chains.go", "internal/mcp/server.go", "internal/reliability/panic_handler.go",
 		"internal/evolution/mutate.go"},
-	9:  {"docs/adr/ADR-001-behavior-trees.md", "docs/adr/ADR-002-mcp-interface.md", "docs/adr/ADR-003-file-persistence.md"},
+	9:  {"docs/arc42/09-decisions.md"},
 	10: {"internal/reliability/panic_handler.go", "internal/security/security.go", "internal/engine/validate.go"},
 	11: {"graphify-out/GRAPH_REPORT.md", "internal/evolution/mutate.go"},
 	12: {"internal/engine/tree.go", "internal/engine/chains.go", "internal/domains/trees.go",

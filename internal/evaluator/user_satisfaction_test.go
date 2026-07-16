@@ -6,7 +6,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// User satisfaction fitness dimension (ADR-010 Phase 5): explicit 👍/👎
+// User satisfaction fitness dimension (ADR-133 Phase 5): explicit 👍/👎
 // signals recorded via bt_feedback must shift the composite, and their
 // absence must leave the historical formula untouched.
 

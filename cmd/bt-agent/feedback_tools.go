@@ -10,7 +10,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// User feedback as a fitness signal (ADR-010 Phase 5): bt_feedback records an
+// User feedback as a fitness signal (ADR-133 Phase 5): bt_feedback records an
 // explicit 👍/👎 (plus optional correction text) as a reflection record with
 // UserFeedback set. The evaluator folds these into the user_satisfaction
 // fitness dimension, so the gardener's evolution of a personal tree is pulled

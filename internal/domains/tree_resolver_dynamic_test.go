@@ -6,7 +6,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// TestResolveTreeID_ConsultsDynamicResolver pins ADR-010 Phase 0: an ID with
+// TestResolveTreeID_ConsultsDynamicResolver pins ADR-133 Phase 0: an ID with
 // no compiled-in mapping must be offered to DynamicResolveFn before falling
 // back to DefaultTree, so runtime-generated trees are actually executable.
 func TestResolveTreeID_ConsultsDynamicResolver(t *testing.T) {

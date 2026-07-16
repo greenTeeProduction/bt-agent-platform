@@ -1,4 +1,4 @@
-// Compiled-GOAP leaf nodes (ADR-010 Phase 3). The plan→BT compiler
+// Compiled-GOAP leaf nodes (ADR-133 Phase 3). The plan→BT compiler
 // (goap.CompilePlanToTree) emits precondition guards and effect writes as
 // name-parameterized leaves, following the same name-encoding convention as
 // ChainAction's "llm_call:<prompt>":

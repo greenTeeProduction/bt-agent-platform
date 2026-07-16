@@ -3,7 +3,7 @@ package domains
 import "github.com/nico/go-bt-evolve/internal/evolution"
 
 // Arc42SeederTree is the dedicated arc42 program-seeder agent: it reads the
-// LIVE arc42 quality goals (docs/arc42/go-bt-evolve-arc42.md — never a
+// LIVE arc42 quality goals (docs/arc42/01-introduction-goals.md — never a
 // snapshot) and, when no multi-cycle program is active, seeds
 // ~/.go-bt-evolve/research/programs.json with a goal-targeted, grounded
 // program for the goap-fusion loop to build. All skip paths (goals

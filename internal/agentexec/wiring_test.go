@@ -7,7 +7,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-// TestResolveGeneratedTreeForUser_TwoUserCollision pins ADR-010 personalization
+// TestResolveGeneratedTreeForUser_TwoUserCollision pins ADR-133 personalization
 // hardening (Q1 Correctness): deterministic slug IDs like
 // "goal:automate_reports" are derived from the goal text, not the user, so two
 // different users can independently compile a personal tree under the exact

@@ -74,7 +74,7 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 }
 
 // TestConsiderAutomation_ProposesViaHITLOnce pins the observe→propose loop
-// (ADR-010 Phase 4): a task repeated 3× yields exactly one HITL automation
+// (ADR-133 Phase 4): a task repeated 3× yields exactly one HITL automation
 // proposal backed by a compiled, persisted, KG-registered tree — and the
 // dedup ledger prevents the same habit from being proposed twice.
 func TestConsiderAutomation_ProposesViaHITLOnce(t *testing.T) {

@@ -662,7 +662,7 @@ func main() {
 		engine.Warn("experience bank unavailable — evolution runs memoryless", "error", expBankErr)
 	}
 
-	// Per-user personalization store (ADR-010 Phase 1). A nil store degrades
+	// Per-user personalization store (ADR-133 Phase 1). A nil store degrades
 	// the bt_persona_* tools and bt_run_task user hooks to no-ops.
 	personaStore, personaErr := persona.NewStore(agent.UsersDir())
 	if personaErr != nil {
@@ -691,7 +691,7 @@ func main() {
 	}
 	registerMCPTools(server, deps)
 
-	// In-tree autopilot hook (ADR-010 Phase 4): trees embedding the
+	// In-tree autopilot hook (ADR-133 Phase 4): trees embedding the
 	// ConsiderTreeCompile action feed the automation autopilot directly
 	// after a good run (injection-hook pattern, like DelegateToTreeFn).
 	engine.ConsiderAutomationFn = func(user string) {

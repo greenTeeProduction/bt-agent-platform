@@ -82,7 +82,7 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return mcpErr(err)
 			}
-			// Automation proposals (ADR-010 Phase 4): approval activates the
+			// Automation proposals (ADR-133 Phase 4): approval activates the
 			// compiled automation as a scheduled agent.
 			if activation := finalizeAutomationApproval(deps, req, true); activation != nil {
 				data, _ := json.Marshal(map[string]any{"request": req, "automation": activation})

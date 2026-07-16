@@ -11,7 +11,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
-// registerGoalTools registers the per-user goal factory tools (ADR-010
+// registerGoalTools registers the per-user goal factory tools (ADR-133
 // Phase 2): extracting grounded goap goals from free-form intent or mined
 // habit patterns, and managing the persistent per-user goal queue.
 func registerGoalTools(server *engine.Server, deps *mcpDeps) {
@@ -298,7 +298,7 @@ func userGoalStore(deps *mcpDeps, user string) (*goap.GoalStore, *engine.ToolRes
 }
 
 // personaStyleHints derives prompt style hints from the user's profile so
-// compiled ChainAction prompts respect preferences (ADR-010 Phase 3
+// compiled ChainAction prompts respect preferences (ADR-133 Phase 3
 // preference-aware generation). Best-effort: no profile → no hints.
 func personaStyleHints(deps *mcpDeps, user string) string {
 	if deps.personaStore == nil || strings.TrimSpace(user) == "" {

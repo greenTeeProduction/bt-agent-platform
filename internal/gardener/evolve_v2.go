@@ -131,7 +131,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	}
 
 	// Evidence gate (ported from the retired v1 pipeline, extended for
-	// personal trees in ADR-010 Phase 5): a tree with no reflection records
+	// personal trees in ADR-133 Phase 5): a tree with no reflection records
 	// has no run-derived fitness gradient, so mutation is a blind coin flip
 	// that only burns benchmark compute. Personal trees use strict filtering
 	// (recordsForEntry), so a freshly compiled tree relies on its seed

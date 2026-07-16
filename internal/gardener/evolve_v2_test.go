@@ -1114,7 +1114,7 @@ func TestEvolveTreeV2_CrisisIntervention_UsesCalibratedEmergencyRate(t *testing.
 }
 
 // hasChildNamed and the other v1 idempotency-guard helpers were retired with
-// the v1 pipeline (ADR-010 Phase 6); v2 relies on clone-and-prescore candidate
+// the v1 pipeline (ADR-133 Phase 6); v2 relies on clone-and-prescore candidate
 // isolation instead.
 
 // ============================================================================

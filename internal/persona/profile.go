@@ -1,4 +1,4 @@
-// Package persona implements the per-user personalization layer (ADR-010
+// Package persona implements the per-user personalization layer (ADR-133
 // Phase 1): user profiles, per-user workspaces, interaction logs, and habit
 // mining. It generalizes the DoorMate UserProfile into a platform-wide
 // concept so agents can adapt to the specific human they work with.
@@ -36,7 +36,7 @@ type Profile struct {
 }
 
 // ApprovalPolicy bounds how autonomously the platform may act for this user
-// (ADR-010: HITL default-on, per-user cap on auto-created automations).
+// (ADR-133: HITL default-on, per-user cap on auto-created automations).
 type ApprovalPolicy struct {
 	// AutoApproveAutomations skips the HITL gate for auto-compiled
 	// automations. Default false: every proposal needs explicit approval.
@@ -198,7 +198,7 @@ func (s *Store) AddPreferenceTag(user, tag string) (*Profile, error) {
 	})
 }
 
-// Workspace is the per-user persistence layout (ADR-010):
+// Workspace is the per-user persistence layout (ADR-133):
 //
 //	users/<user>/
 //	├── profile.json        — Profile

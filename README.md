@@ -106,8 +106,7 @@ agents/                       # Agent YAML definitions
 └── workflows/                # 4 workflow definitions
 
 docs/                         # Documentation
-├── adr/                      # 7 Architecture Decision Records
-├── arc42/                    # 12-section arc42 documentation
+├── arc42/                    # 12-section arc42 documentation + ADR log (ADR-001–133)
 ├── GETTING_STARTED.md
 ├── API_REFERENCE.md
 └── TUTORIAL.md
@@ -163,8 +162,8 @@ evaluate → order_mutations → apply_top → re-evaluate → accept (commit) /
 
 ## Documentation
 
-- [arc42 Architecture (12 sections)](docs/arc42/go-bt-evolve-arc42.md)
-- [Architecture Decision Records](docs/adr/INDEX.md) (7 ADRs)
+- [arc42 Architecture (12 sections)](docs/arc42/01-introduction-goals.md) — one file per section under `docs/arc42/`
+- [Architecture Decision Log](docs/arc42/09-decisions.md) (ADR-001–133)
 - [Getting Started](docs/GETTING_STARTED.md)
 - [BT Agents operator guide](docs/agents.md)
 - [API Reference](docs/API_REFERENCE.md)

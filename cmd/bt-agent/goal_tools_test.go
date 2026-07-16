@@ -12,7 +12,7 @@ import (
 )
 
 // Characterization tests for registerGoalTools and its unexported helpers
-// (ADR-010 Phase 2 per-user goal factory tools): pin the currently observed
+// (ADR-133 Phase 2 per-user goal factory tools): pin the currently observed
 // behavior of bt_goal_add, bt_goal_list, bt_goal_remove, bt_goal_compile,
 // bt_goal_from_pattern, and the pure helpers they share.
 

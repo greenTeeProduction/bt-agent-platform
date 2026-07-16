@@ -66,7 +66,7 @@ func TestBaseNodeCount(t *testing.T) {
 }
 
 // hasNodeNamed / isNodeWrapped / getRetryCount were retired with the v1
-// pipeline (ADR-010 Phase 6).
+// pipeline (ADR-133 Phase 6).
 
 // ============================================================================
 // Config and NewGardener tests
@@ -620,7 +620,7 @@ func TestEvolveTreeV2_WithRealTree(t *testing.T) {
 
 // TestRunCycleV2_MultipleTrees and metrics-save coverage live in
 // evolve_v2_test.go; the v1 duplicates were removed with the v1 pipeline
-// (ADR-010 Phase 6).
+// (ADR-133 Phase 6).
 
 func TestNewMetricsTracker_InvalidDir(t *testing.T) {
 	// Create a file where a directory is expected

@@ -1,9 +1,9 @@
 package engine
 
 // arc42 goal anchoring: the platform's architecture documentation
-// (docs/arc42/go-bt-evolve-arc42.md, §1.2 "Quality Goals") is the single
+// (docs/arc42/01-introduction-goals.md, §1.2 "Quality Goals") is the single
 // authoritative statement of WHAT the platform is trying to be good at —
-// Q1 Correctness, Q2 Evolvability, Q3 Reliability as of 2026-07. Research
+// Q1 Correctness, Q2 Evolvability, Q3 Reliability, Q4 Personalization as of 2026-07. Research
 // direction used to come from static hardcoded topic lists with no tie to
 // those goals, so scheduled research could drift into paper-chasing while
 // the documented goals went unserved. Every research entry point (the
@@ -35,8 +35,8 @@ type arc42Goal struct {
 // path resolves there; the absolute fallback covers bt-agent-cli invocations
 // from other directories. Package var so tests can substitute a fixture.
 var arc42GoalsDocPaths = []string{
-	"docs/arc42/go-bt-evolve-arc42.md",
-	"/home/nico/go-bt-evolve/docs/arc42/go-bt-evolve-arc42.md",
+	"docs/arc42/01-introduction-goals.md",
+	"/home/nico/go-bt-evolve/docs/arc42/01-introduction-goals.md",
 }
 
 var arc42GoalRowRe = regexp.MustCompile(`(?m)^\|\s*(Q\d+)\s*\|\s*\*\*([^*|]+)\*\*\s*\|\s*([^|]+?)\s*\|\s*$`)

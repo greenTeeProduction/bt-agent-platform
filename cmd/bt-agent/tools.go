@@ -166,7 +166,7 @@ func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResu
 
 // persistGeneratedTree validates a runtime-generated tree and persists it as
 // tree-<id>.json so it becomes resolvable by ID (agentexec dynamic resolver)
-// and visible to the gardener registry (ADR-010 Phase 0). The outcome is
+// and visible to the gardener registry (ADR-133 Phase 0). The outcome is
 // recorded in the tool result: an invalid tree stays KG-registered for
 // discovery but is never persisted, so it can never be executed.
 // recordEvolvedFitness writes a winning QD/island elite's structural fitness
@@ -274,7 +274,7 @@ func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.Se
 }
 
 // persistGeneratedTreeForUser persists a user-attributed generated tree into
-// the user's own workspace (users/<user>/trees, ADR-010 Phase 5) so the
+// the user's own workspace (users/<user>/trees, ADR-133 Phase 5) so the
 // gardener evolves it per user and the dynamic resolver's user-workspace
 // fallback finds it. Falls back to the shared store when no user or persona
 // store is available, so behavior degrades to Phase 0 rather than failing.
@@ -300,7 +300,7 @@ func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolu
 }
 
 // seedCompileReflection writes the compile-time plan validation as the tree's
-// first reflection record (ADR-010 Phase 5). Freshly compiled trees would
+// first reflection record (ADR-133 Phase 5). Freshly compiled trees would
 // otherwise carry zero evidence and stay frozen behind the gardener's
 // evidence gate forever. The TaskID is derived from the tree ID, so
 // recompiling the same goal overwrites the seed instead of accumulating
@@ -328,7 +328,7 @@ func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSte
 }
 
 // newTreeFactory builds a knowledge factory with real structural crossover
-// enabled (ADR-010 Phase 3): parents resolve to their actual tree structures
+// enabled (ADR-133 Phase 3): parents resolve to their actual tree structures
 // (compiled-in catalogs + persisted generated trees) and spliced children
 // are gated by full engine validation before they replace the synthetic
 // template path.
@@ -374,7 +374,7 @@ type mcpDeps struct {
 	globalSched *agent.Scheduler
 	dlq         *reliability.DeadLetterQueue
 	agentRunner *agent.RunDeps
-	// Personalization (ADR-010 Phase 1)
+	// Personalization (ADR-133 Phase 1)
 	personaStore *persona.Store
 	// refreshA2ACards rebuilds the A2A server's card registry after a
 	// registry mutation (agent create), so newly created agents become
@@ -451,7 +451,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
 			recordPersonaInteraction(deps, params.User, params.Task, "", deps.bb.Outcome, duration.Milliseconds())
-			// Interaction-time autopilot (ADR-010 Phase 4): after a good
+			// Interaction-time autopilot (ADR-133 Phase 4): after a good
 			// user-attributed run, check whether a recurring habit should
 			// become an automation proposal. Best-effort by design.
 			if params.User != "" && deps.bb.Outcome != string(evolution.Failure) {

@@ -33,7 +33,7 @@ type FitnessScore struct {
 	StructuralQuality float64 `json:"structural_quality"` // static safeguards/tooling quality, 0.0-1.0
 	// UserSatisfaction is the fraction of positive explicit feedback signals
 	// (bt_feedback 👍/👎) among the tree's feedback-carrying records
-	// (ADR-010 Phase 5). -1 when no feedback exists.
+	// (ADR-133 Phase 5). -1 when no feedback exists.
 	UserSatisfaction float64 `json:"user_satisfaction"`
 	Composite        float64 `json:"composite"` // weighted sum, in centipawns-like scale
 }
@@ -91,7 +91,7 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 		structuralQuality*8 +
 		(1.0-minFloat64(float64(evolution.CountNodes(tree))/100.0, 1.0))*2
 
-	// User satisfaction (ADR-010 Phase 5): explicit 👍/👎 signals recorded by
+	// User satisfaction (ADR-133 Phase 5): explicit 👍/👎 signals recorded by
 	// bt_feedback. Only applied when feedback exists — the composite is then
 	// rescaled (90% base + 10% satisfaction) so the 0–100 scale is preserved
 	// and pre/post-mutation comparisons over the same records stay consistent.

@@ -1,38 +1,41 @@
-# arc42 Section 2 — Architecture Constraints
+# 2. Architecture Constraints
+
+Only externally imposed constraints and organization-level policies are listed
+here; self-chosen architecture cornerstones live in
+[§4 Solution Strategy](04-solution-strategy.md) and [§9 Architecture
+Decisions](09-decisions.md). Negotiability is noted per row in *Imposed by*.
 
 ## Technical Constraints
 
-| Constraint | Type | Explanation |
+| Constraint | Imposed by | Consequence |
 |---|---|---|
-| Go 1.26.3 | Runtime | Language version enforced by go.mod |
-| Platform: Linux ARM64 (Jetson) | Hardware | 12-core NVIDIA Jetson, 61GB RAM, 57GB eMMC + 1.8TB NVMe. No x86-specific optimizations allowed |
-| MCP transport: stdio only (ADR-002) | Protocol | All MCP servers use JSON-RPC 2.0 over stdin/stdout. No HTTP/SSE transport |
-| File-based persistence (ADR-003) | Storage | JSON files with atomic writes (write .tmp → rename). No SQL database. `~/.go-bt-evolve/` for agents, history, reflections, scheduler, DLQ |
-| LLM: Ollama qwen3.6:35b primary | Dependency | Local LLM at localhost:11434. 2-3 min per call. DeepSeek v4-flash as escalation path |
-| Single developer (Nico) | Organizational | All code authored and reviewed by one person. No PR approval gates needed |
-| 120s task timeout | Runtime | `RunTask()` applies `context.WithTimeout(120s)`. Longer tasks must use checkpoint/resume |
-| 1000-tick safety limit | Runtime | Trees that don't reach a terminal state in 1000 ticks are terminated as partial |
-| Hermes gateway spawning | Deployment | bt-agent, bt-evaluator, bt-langagent are spawned by hermes-gateway as MCP child processes. No independent systemd units |
+| Go 1.26.3 | `go.mod` toolchain directive (non-negotiable for builds) | Every build and CI environment must provide this toolchain; language features are capped at 1.26 |
+| Platform: Linux ARM64 (Jetson) | Hardware — 12-core NVIDIA Jetson, 61GB RAM, 57GB eMMC + 1.8TB NVMe (non-negotiable) | No x86-specific optimizations allowed; local LLM sizing is bounded by the available RAM |
+| MCP transport: stdio only | Hermes gateway, which spawns MCP servers as child processes (recorded in ADR-002; non-negotiable while the gateway is the host) | All MCP servers speak JSON-RPC 2.0 over stdin/stdout; no HTTP/SSE transport |
+| LLM: Ollama qwen3.6:35b primary | Near-zero-cost budget plus Jetson-local inference; 2-3 min per call (negotiable via paid APIs) | Timeouts, scheduling, and caching must absorb minute-scale LLM calls; DeepSeek v4-flash (5-10s) is the escalation path |
+| Hermes gateway spawning | Hermes gateway deployment model (negotiable only by changing the deployment) | bt-evaluator and bt-langagent run only as gateway-spawned MCP child processes; the goap-fusion daemon is the independent systemd user service `bt-agent.service` running `bt-agent --no-mcp` against the bare main repo |
+| NotebookLM quota (~50 metered calls/day) | Google NotebookLM service limits (non-negotiable) | Metered research calls must be budgeted and cached; over budget, research falls back to Claude review — quota-economy mechanism in [§8](08-crosscutting-concepts.md) |
+| Claude Code CLI session rate limits | Anthropic subscription limits (non-negotiable) | The self-improvement loop depends on the `claude` CLI; rate-limited work must park and resume later, and Claude attempts are suppressed for a durable backoff window — mechanism in [§6](06-runtime-view.md)/[§8](08-crosscutting-concepts.md) |
 
 ## Organizational Constraints
 
-| Constraint | Impact |
-|---|---|
-| Single developer | All changes go through one person. Fast iteration, no merge conflicts, but no peer review safety net |
-| Behavior-tree-first execution | All cron jobs must use BT agents. Shell scripts are stopgaps. New automation → build a tree |
-| Git-versioned trees with conventional commits | Every tree mutation creates a git commit. Evolution is auditable and reversible |
-| Skill-based documentation | Project knowledge lives in SKILL.md files, not traditional docs. Skills drive both human and agent workflows |
-| Free-tier utilization (100%) | Minimize API costs. DeepSeek v4-flash for batch work (cheap), Ollama for interactive |
+| Constraint | Imposed by | Consequence |
+|---|---|---|
+| Single developer (Nico) | Team size — one person authors and reviews all code (non-negotiable) | Fast iteration, no merge conflicts, no PR approval gates — but no peer-review safety net |
+| Behavior-tree-first execution | Platform Architect (policy, revisable) | All cron jobs must use BT agents; shell scripts are stopgaps; new automation → build a tree |
+| Git-versioned trees with conventional commits | Platform Architect (auditability policy, revisable) | Every tree mutation creates a git commit; evolution is auditable and reversible |
+| Skill-based documentation | Platform Architect (policy, revisable) | Project knowledge lives in SKILL.md files, not traditional docs; skills drive both human and agent workflows |
+| Free-tier utilization (100%) | Project budget — near-zero cost (non-negotiable) | Minimize API costs; drives the local-first LLM split (see *LLM: Ollama qwen3.6:35b primary* under Technical Constraints) |
 
 ## Conventions
 
-| Convention | Description |
-|---|---|
-| Conventional Commits | `feat(scope):`, `fix(scope):`, `test(scope):` format enforced |
-| Go code edits via `patch` tool | Never `sed -i`. Edit Go files only through the patch tool |
-| `go-bt` library conventions | `Run(ctx)` not `Execute`. `btleaf.NewAction` not `btcore.NewActionNode` |
-| Blackboard must include Reflections+TreeStore | `{Task, LLM, Reflections, TreeStore}` required. Without, bt-manager fails silently |
-| Gateway reload vs restart | `systemctl --user reload hermes-gateway` (SIGHUP) for config. Full restart for MCP binary changes |
+| Convention | Imposed by | Consequence |
+|---|---|---|
+| Conventional Commits | Project convention (revisable) | `feat(scope):`, `fix(scope):`, `test(scope):` format enforced on every commit |
+| Go code edits via `patch` tool | Project convention (revisable) | Never `sed -i`; Go files are edited only through the patch tool |
+| `go-bt` library conventions | Upstream `go-bt` API (non-negotiable while on this library) | `Run(ctx)` not `Execute`; `btleaf.NewAction` not `btcore.NewActionNode` |
+| Blackboard must include Reflections+TreeStore | bt-manager runtime requirement (non-negotiable) | `{Task, LLM, Reflections, TreeStore}` required on every Blackboard; without them bt-manager fails silently |
+| Gateway reload vs restart | Hermes gateway operations (non-negotiable) | `systemctl --user reload hermes-gateway` (SIGHUP) for config changes; full restart for MCP binary changes |
 
 ---
 

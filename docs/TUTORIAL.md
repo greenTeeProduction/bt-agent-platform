@@ -453,7 +453,7 @@ hermes mcp add bt-langagent --command $(pwd)/bin/bt-langagent
 
 | Resource | Path |
 |----------|------|
-| Architecture Decision Records | `docs/adr/` |
+| Architecture Decision Records | `docs/arc42/09-decisions.md` |
 | API Reference | `docs/API_REFERENCE.md` |
 | Getting Started Guide | `docs/GETTING_STARTED.md` |
 | Runner Setup | `docs/runner-setup.md` |
@@ -533,5 +533,5 @@ You've successfully:
 - MCP integration for Hermes Agent
 - Quality gates preventing regression
 
-For questions, consult the Architecture Decision Records (`docs/adr/`)
+For questions, consult the Architecture Decision Records (`docs/arc42/09-decisions.md`)
 or the full API Reference (`docs/API_REFERENCE.md`).

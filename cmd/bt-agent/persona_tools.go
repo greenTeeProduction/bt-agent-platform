@@ -12,7 +12,7 @@ import (
 )
 
 // registerPersonaTools registers the per-user personalization tools
-// (ADR-010 Phase 1): profile inspection, preference updates, and habit
+// (ADR-133 Phase 1): profile inspection, preference updates, and habit
 // pattern mining over the user's interaction log.
 func registerPersonaTools(server *engine.Server, deps *mcpDeps) {
 	server.RegisterTool("bt_persona_get", "Get a user's personalization profile and workspace layout",
@@ -215,7 +215,7 @@ func injectPersonaContextLocked(deps *mcpDeps, user string) {
 }
 
 // recordPersonaInteraction appends a bt_run_task execution to the user's
-// interaction log (ADR-010 Phase 1: every run with a user feeds habit
+// interaction log (ADR-133 Phase 1: every run with a user feeds habit
 // mining). Best-effort: logging must never fail the task itself.
 func recordPersonaInteraction(deps *mcpDeps, user, task, treeID, outcome string, durationMs int64) {
 	if deps.personaStore == nil || strings.TrimSpace(user) == "" {

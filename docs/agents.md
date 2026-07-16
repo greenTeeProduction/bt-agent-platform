@@ -2,7 +2,7 @@
 
 This guide explains how **YAML-defined agents** work in the BT Agent Platform: installation, creation, execution, scheduling, memory, workflows, and known operational footguns.
 
-For architecture decisions, see [ADR-004: YAML-Defined Agent Platform](./adr/ADR-004-agent-platform.md). For MCP tool schemas, see [API Reference](./API_REFERENCE.md).
+For architecture decisions, see [ADR-004: YAML-Defined Agent Platform](./arc42/09-decisions.md). For MCP tool schemas, see [API Reference](./API_REFERENCE.md).
 
 ---
 
@@ -341,7 +341,7 @@ Each run records outcome, duration, output, quality score. MCP `bt_agent_history
 
 ## Blackboard (context offloading)
 
-Scoped key-value store for moving large context off the prompt. See [ADR-009](./adr/ADR-009-blackboard-context-offloading.md).
+Scoped key-value store for moving large context off the prompt. See [ADR-132 (formerly ADR-009)](./arc42/09-decisions.md).
 
 | Scope | ID | Lifetime | On disk |
 |-------|-----|----------|---------|
@@ -484,7 +484,7 @@ Implementation: `internal/doormate/` (`PageAgent` + LLM). Do not install `doorma
 
 ## Reliability (scheduled agents)
 
-Scheduled execution implements [ADR-007](./adr/ADR-007-reliability-architecture.md):
+Scheduled execution implements [ADR-007](./arc42/09-decisions.md):
 
 1. **Panic recovery** in scheduler runner — one bad agent does not stop others.
 2. **Circuit breaker** — per agent; open → skip until cooldown → half-open test.
@@ -569,9 +569,9 @@ MCP tools call `checkLLMHealth` and fail fast when Ollama is down. Start Ollama 
 
 ## See also
 
-- [ADR-004: YAML-Defined Agent Platform](./adr/ADR-004-agent-platform.md)
-- [ADR-007: Reliability Architecture](./adr/ADR-007-reliability-architecture.md)
-- [ADR-008: Composable Blocks](./adr/ADR-008-composable-blocks.md)
+- [ADR-004: YAML-Defined Agent Platform](./arc42/09-decisions.md)
+- [ADR-007: Reliability Architecture](./arc42/09-decisions.md)
+- [ADR-131: Composable Blocks (formerly ADR-008)](./arc42/09-decisions.md)
 - [GETTING_STARTED](./GETTING_STARTED.md)
 - [TROUBLESHOOTING](./TROUBLESHOOTING.md)
 - [API Reference — MCP tools](./API_REFERENCE.md)
