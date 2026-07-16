@@ -154,6 +154,25 @@ func ClassifyError(err error) ErrorCategory {
 		return ErrCatAuth
 	}
 
+	// ─── Typed transport errors (before the string patterns) ───────────
+	// A *url.Error / net.Error / net.OpError / *net.DNSError in the chain is
+	// definitionally a transport-layer failure — its message can contain
+	// anything, so it must beat substring guessing (an httptest port
+	// containing "400" once classified an EOF POST as a non-retryable
+	// validation error and refused the retry, 2026-07-16). Timeout and
+	// resource-exhaustion evidence keep their precedence: bare syscall
+	// errnos satisfy net.Error too (Errno has Timeout/Temporary), and
+	// ENOMEM/ENOSPC must stay resource_exhausted.
+	if isTypedNetworkError(err) {
+		if isTimeoutError(err, lower) {
+			return ErrCatTimeout
+		}
+		if isResourceError(lower, err) {
+			return ErrCatResourceExhausted
+		}
+		return ErrCatNetwork
+	}
+
 	// ─── Validation errors (should NOT retry) ──────────────────────────
 	if isValidationError(lower) {
 		return ErrCatValidation
@@ -268,8 +287,9 @@ func isTimeoutError(err error, lower string) bool {
 }
 
 // isNetworkError checks for transport-layer network failures.
-func isNetworkError(err error, lower string) bool {
-	// Check known net error types.
+// isTypedNetworkError reports whether the chain carries typed transport-layer
+// evidence (net.Error, *url.Error, *net.DNSError, *net.OpError).
+func isTypedNetworkError(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true
@@ -283,7 +303,11 @@ func isNetworkError(err error, lower string) bool {
 		return true
 	}
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	return errors.As(err, &opErr)
+}
+
+func isNetworkError(err error, lower string) bool {
+	if isTypedNetworkError(err) {
 		return true
 	}
 
