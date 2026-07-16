@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -87,6 +88,22 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 	return writeSuperpowersRunJSON(run)
 }
 
+// ffRebaseMaxAttempts bounds the apply-time rebase-then-retry so a fast-moving
+// sibling scheduler that keeps advancing master cannot spin the landing forever.
+// Default 2; override with BT_SUPERPOWERS_FF_REBASE_ATTEMPTS. A value of 0 (or an
+// unset/invalid env) disables the rebase entirely — the first refused
+// fast-forward parks as pending_patch, i.e. the pre-fix behavior — while any
+// n>=1 rebases-and-retries up to n times. 1 means "rebase once, retry the ff
+// once, else park".
+func ffRebaseMaxAttempts() int {
+	if raw := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_FF_REBASE_ATTEMPTS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 2
+}
+
 // applySuperpowersRunFromBareRepo lands a run when the main repo is bare. The
 // run's worktree serves as the staging checkout: verification and the run
 // commit happen there, then the bare repo's master ref is fast-forwarded to
@@ -115,11 +132,14 @@ func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, 
 		run.ApplyStatus = "applied_no_commit"
 		return writeSuperpowersRunJSON(run)
 	}
-	ff := runner.Run(ctx, run.RepoDir, "git", "fetch", ".", branch+":master")
-	if ff.Err != nil {
+	// Land the run onto master. The non-forced ff refuses when master moved
+	// during this cycle; instead of discarding the verified work, re-apply the
+	// run branch onto the moved master (rebase in its worktree), re-verify, and
+	// retry — bounded, and parking cleanly on any non-clean outcome.
+	if err := reapplyRunBranchOntoMaster(ctx, runner, run); err != nil {
 		run.ApplyStatus = "pending_patch"
 		_ = writeSuperpowersRunJSON(run)
-		return fmt.Errorf("pending_patch: fast-forward of master to %s refused (master moved since the worktree was created): %v\npatch: %s\n%s", branch, ff.Err, run.PatchPath, ff.Output)
+		return err
 	}
 	if head := runner.Run(ctx, run.RepoDir, "git", "rev-parse", "--short", "master"); head.Err == nil {
 		run.AppliedCommit = strings.TrimSpace(head.Output)
@@ -132,6 +152,85 @@ func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, 
 		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
 	}
 	return writeSuperpowersRunJSON(run)
+}
+
+// reapplyRunBranchOntoMaster fast-forwards the bare repo's master to the run
+// branch, re-applying (rebasing) the branch onto a moved master and retrying
+// when the non-forced fast-forward is refused. It returns nil once master has
+// been fast-forwarded to the (re-verified) run branch, and a `pending_patch:`
+// error — for the caller to park — for EVERY non-clean outcome. Master safety
+// is the whole point of this helper; the invariants it upholds are, in order:
+//
+//  1. The NON-FORCED `git fetch . <branch>:master` is the ONLY command here
+//     that writes master. It is inherently ff-guarded: a concurrent sibling
+//     scheduler that advanced master since this worktree was created is REFUSED,
+//     never clobbered. There is no update-ref / branch -f / push --force / `+`
+//     refspec anywhere — a refusal must stay a refusal.
+//  2. Never leave a rebase in progress: every rebase failure runs
+//     `git rebase --abort` before returning, restoring the branch tip. Master
+//     is untouched regardless, because a rebase never moves its base ref.
+//  3. Never land an unverified tree: after a successful rebase the branch has a
+//     NEW BASE (current master) that was never built/tested, so it is re-run
+//     through verifySuperpowersRuntimeInDir before the retry ff.
+//  4. Plain `git rebase master` only — no -s/-X strategy that could silently
+//     drop master's or the run's commits.
+//  5. A symbolic-ref guard refuses to rebase unless the worktree HEAD is exactly
+//     the run branch; a detached or wrong HEAD would let rebase move the wrong
+//     ref. On a guard/rebase/verify failure, or once ffRebaseMaxAttempts is
+//     exhausted, it returns a pending_patch error (invariant 6: every non-clean
+//     outcome reaches pending_patch).
+//
+// The worktree at run.WorktreePath is the run's LINKED worktree of the bare
+// repo, checked out on run.WorktreeBranch (the same checkout the earlier verify
+// and commit ran in) — so `git rebase master` there is valid even though the
+// bare run.RepoDir has no working tree.
+func reapplyRunBranchOntoMaster(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	branch := strings.TrimSpace(run.WorktreeBranch)
+	attempts := ffRebaseMaxAttempts()
+	for {
+		// Invariant 1: the sole, non-forced writer of master.
+		ff := runner.Run(ctx, run.RepoDir, "git", "fetch", ".", branch+":master")
+		if ff.Err == nil {
+			return nil
+		}
+		// master moved during this cycle; the non-forced fetch refused rather
+		// than clobbering the sibling advance. Re-apply onto it if the budget
+		// allows, otherwise park (attempts==0 reproduces the pre-fix behavior).
+		if attempts < 1 {
+			return fmt.Errorf("pending_patch: fast-forward of master to %s refused (master moved since the worktree was created): %v\npatch: %s\n%s", branch, ff.Err, run.PatchPath, ff.Output)
+		}
+		attempts--
+
+		// Invariant 5 (guard): never rebase unless the worktree HEAD is exactly
+		// the run branch — a detached/wrong HEAD would let rebase move the wrong
+		// ref. Failing the guard parks (invariant 6) WITHOUT touching the branch.
+		sym := runner.Run(ctx, run.WorktreePath, "git", "symbolic-ref", "--short", "HEAD")
+		if sym.Err != nil || strings.TrimSpace(sym.Output) != branch {
+			return fmt.Errorf("pending_patch: fast-forward of master to %s refused and re-apply skipped: worktree HEAD is not on %s (symbolic-ref=%q, err=%v)\npatch: %s\n%s", branch, branch, strings.TrimSpace(sym.Output), sym.Err, run.PatchPath, ff.Output)
+		}
+
+		// Invariant 4: PLAIN rebase only — no strategy flag that could drop
+		// commits. master is the base; rebase never moves the base ref.
+		rebase := runner.Run(ctx, run.WorktreePath, "git", "rebase", "master")
+		if rebase.Err != nil {
+			// Invariant 2: never leave a rebase in progress. Abort to restore
+			// the branch tip, then park — whether or not the abort itself
+			// succeeds, NEVER proceed to the ff.
+			abort := runner.Run(ctx, run.WorktreePath, "git", "rebase", "--abort")
+			writeApplyRebaseEvidence(run, rebase, abort)
+			return fmt.Errorf("pending_patch: re-apply of %s onto moved master failed (rebase conflict) and was aborted: %v\npatch: %s\nrebase: %s\nabort: %s", branch, rebase.Err, run.PatchPath, rebase.Output, abort.Output)
+		}
+
+		// Invariant 3: the branch now descends from current master, but that new
+		// base was never verified. Re-run the read-only build/test verification
+		// before retrying the ff. Do NOT re-commit — the rebase already carries
+		// the run's commits. A failure here sets pending_patch and returns.
+		if err := verifySuperpowersRuntimeInDir(ctx, runner, run, run.WorktreePath); err != nil {
+			return err
+		}
+		// Loop back and retry the ff against the freshly-rebased, re-verified
+		// branch (invariant 1 again). Bounded by attempts.
+	}
 }
 
 // prBodyFooter is the standard attribution footer the plan
@@ -390,6 +489,19 @@ func writeApplyCommitEvidence(run *SuperpowersRun, label string, res CommandResu
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-commit.txt")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	_ = os.WriteFile(path, []byte(label+"\n\n"+formatCommandResult(res)), 0o644)
+}
+
+// writeApplyRebaseEvidence persists a failed apply-time re-apply (the rebase of
+// the run branch onto a moved master, plus its abort) as a verification
+// artifact so a pending_patch run parked by a rebase conflict is diagnosable.
+func writeApplyRebaseEvidence(run *SuperpowersRun, rebase, abort CommandResult) {
+	if run == nil || run.ArtifactDir == "" {
+		return
+	}
+	path := filepath.Join(run.ArtifactDir, "verification", "apply-rebase.txt")
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	body := "rebase onto master failed:\n\n" + formatCommandResult(rebase) + "\n\nrebase --abort:\n\n" + formatCommandResult(abort)
+	_ = os.WriteFile(path, []byte(body), 0o644)
 }
 
 // runVerificationPassed reports whether a named verification check ran and
