@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,10 +16,21 @@ import (
 
 // Metrics holds a snapshot of live dashboard data.
 type Metrics struct {
-	Timestamp int64            `json:"timestamp"`
-	System    SystemMetrics    `json:"system"`
-	Trees     TreeMetrics      `json:"trees"`
-	Gardener  *GardenerMetrics `json:"gardener,omitempty"`
+	Timestamp  int64            `json:"timestamp"`
+	System     SystemMetrics    `json:"system"`
+	Trees      TreeMetrics      `json:"trees"`
+	Gardener   *GardenerMetrics `json:"gardener,omitempty"`
+	TopWinners []TreeSnapshot   `json:"top_winners,omitempty"`
+}
+
+// TreeSnapshot is a lightweight per-tree view of live KnowledgeGraph state
+// (structural fitness, evolution lineage, evolved count) used to rank the
+// top evolved winners in dashboard metrics.
+type TreeSnapshot struct {
+	ID                string  `json:"id"`
+	StructuralFitness float64 `json:"structural_fitness"`
+	EvolvedCount      int     `json:"evolved_count"`
+	BaseID            string  `json:"base_id,omitempty"`
 }
 
 // SystemMetrics holds system health data.
@@ -73,7 +85,7 @@ var (
 )
 
 // Collect gathers live system and platform metrics.
-func Collect(treeCount int, categories map[string]int) Metrics {
+func Collect(treeCount int, categories map[string]int, trees []TreeSnapshot) Metrics {
 	mu.RLock()
 	if lastSnap != nil && time.Since(snapTime) < 2*time.Second {
 		snap := *lastSnap
@@ -88,6 +100,7 @@ func Collect(treeCount int, categories map[string]int) Metrics {
 			Total:      treeCount,
 			Categories: categories,
 		},
+		TopWinners: rankTopWinners(trees),
 	}
 
 	// System health via shell commands
@@ -102,6 +115,18 @@ func Collect(treeCount int, categories map[string]int) Metrics {
 	mu.Unlock()
 
 	return m
+}
+
+// rankTopWinners ranks tree snapshots descending by StructuralFitness so the
+// Evolution tab can render live top-evolved-winners instead of the static
+// "Algorithms Active" panel.
+func rankTopWinners(trees []TreeSnapshot) []TreeSnapshot {
+	winners := make([]TreeSnapshot, len(trees))
+	copy(winners, trees)
+	sort.SliceStable(winners, func(i, j int) bool {
+		return winners[i].StructuralFitness > winners[j].StructuralFitness
+	})
+	return winners
 }
 
 func collectSystem() SystemMetrics {

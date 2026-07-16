@@ -515,16 +515,43 @@ func handleSummary(w http.ResponseWriter, _ *http.Request) {
 
 func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
 	cats := make(map[string]int)
+	snaps := make([]dashboard.TreeSnapshot, 0, len(kg.Trees))
 	for _, t := range kg.Trees {
 		cats[t.Category]++
+		snap := dashboard.TreeSnapshot{
+			ID:                t.ID,
+			StructuralFitness: t.StructuralFitness,
+			EvolvedCount:      t.EvolvedCount,
+		}
+		if baseID, _, ok := kg.EvolutionLineage(t.ID); ok && baseID != t.ID {
+			snap.BaseID = baseID
+		}
+		snaps = append(snaps, snap)
 	}
-	m := dashboard.Collect(len(kg.Trees), cats)
+	m := dashboard.Collect(len(kg.Trees), cats, snaps)
 	_ = encodeJSON(w, m)
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	r2 := make([]map[string]interface{}, 0, 8)
 	for _, t := range kg.Trees {
-		r2 = append(r2, map[string]interface{}{"id": t.ID, "name": t.Name, "category": t.Category, "node_count": t.NodeCount})
+		entry := map[string]interface{}{
+			"id":                 t.ID,
+			"name":               t.Name,
+			"category":           t.Category,
+			"node_count":         t.NodeCount,
+			"fitness":            t.Fitness,
+			"structural_fitness": t.StructuralFitness,
+			"run_count":          t.RunCount,
+			"evolved_count":      t.EvolvedCount,
+			"last_outcome":       t.LastOutcome,
+		}
+		if baseID, evolvedIDs, ok := kg.EvolutionLineage(t.ID); ok {
+			entry["lineage"] = map[string]interface{}{
+				"base_id":     baseID,
+				"evolved_ids": evolvedIDs,
+			}
+		}
+		r2 = append(r2, entry)
 	}
 	_ = encodeJSON(w, r2)
 }

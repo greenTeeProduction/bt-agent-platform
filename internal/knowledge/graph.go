@@ -534,3 +534,34 @@ func (kg *KnowledgeGraph) DiscoverRelated(treeID string) []string {
 	}
 	return results
 }
+
+// EvolutionLineage resolves the evolution lineage for treeID, built on the
+// "evolved_from" edges RegisterEvolved writes (From: baseID, To: evolvedID).
+// Querying with the base tree's ID returns every evolved descendant;
+// querying with any evolved descendant's ID returns the shared base plus
+// every sibling descendant (the full lineage), not just the queried tree.
+// ok is false, with baseID and evolvedIDs zero-valued, when treeID has no
+// evolution lineage at all.
+func (kg *KnowledgeGraph) EvolutionLineage(treeID string) (baseID string, evolvedIDs []string, ok bool) {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+
+	baseID = treeID
+	for _, edge := range kg.Edges {
+		if edge.Type == "evolved_from" && edge.To == treeID {
+			baseID = edge.From
+			break
+		}
+	}
+
+	for _, edge := range kg.Edges {
+		if edge.Type == "evolved_from" && edge.From == baseID {
+			evolvedIDs = append(evolvedIDs, edge.To)
+		}
+	}
+
+	if len(evolvedIDs) == 0 {
+		return "", nil, false
+	}
+	return baseID, evolvedIDs, true
+}

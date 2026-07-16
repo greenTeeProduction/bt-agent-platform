@@ -20,6 +20,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -1144,5 +1145,90 @@ func TestMainSupportsVersionFlagForDriftSmokeTest(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "if versionRequested()") {
 		t.Error("main.go must short-circuit on --version (versionRequested) so the deploy-drift smoke test can validate a rebuilt binary")
+	}
+}
+
+// TestHandleTrees_IncludesFitnessAndLineage pins milestone 2/4 of the
+// "surface knowledge-graph fitness and evolution lineage" program:
+// /api/trees currently returns only id/name/category/node_count
+// (main.go:524-530), leaving a tree's Fitness, StructuralFitness, RunCount,
+// EvolvedCount, LastOutcome, and evolution lineage (EvolutionLineage) as a
+// dead blind spot for the dashboard UI. The handler must include all of
+// these per tree.
+func TestHandleTrees_IncludesFitnessAndLineage(t *testing.T) {
+	origKG := kg
+	t.Cleanup(func() { kg = origKG })
+
+	g := knowledge.NewKnowledgeGraph()
+	g.Register(&knowledge.TreeMeta{
+		ID:                "base:tree",
+		Name:              "Base Tree",
+		Category:          "finance",
+		NodeCount:         5,
+		Fitness:           72.5,
+		StructuralFitness: 60.0,
+		RunCount:          10,
+		EvolvedCount:      2,
+		LastOutcome:       "success",
+	})
+	g.Register(&knowledge.TreeMeta{
+		ID:        "base:tree-evolved-1",
+		Name:      "Evolved 1",
+		Category:  "finance",
+		NodeCount: 8,
+	})
+	g.Connect("base:tree", "base:tree-evolved-1", "evolved_from")
+	kg = g
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trees", nil)
+	rr := httptest.NewRecorder()
+	handleTrees(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var trees []map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+	}
+
+	var base map[string]interface{}
+	for _, tr := range trees {
+		if tr["id"] == "base:tree" {
+			base = tr
+			break
+		}
+	}
+	if base == nil {
+		t.Fatalf("response missing entry for base:tree; body=%s", rr.Body.String())
+	}
+
+	if got, want := base["fitness"], 72.5; got != want {
+		t.Errorf("fitness = %v, want %v", got, want)
+	}
+	if got, want := base["structural_fitness"], 60.0; got != want {
+		t.Errorf("structural_fitness = %v, want %v", got, want)
+	}
+	if got, want := base["run_count"], float64(10); got != want {
+		t.Errorf("run_count = %v, want %v", got, want)
+	}
+	if got, want := base["evolved_count"], float64(2); got != want {
+		t.Errorf("evolved_count = %v, want %v", got, want)
+	}
+	if got, want := base["last_outcome"], "success"; got != want {
+		t.Errorf("last_outcome = %v, want %v", got, want)
+	}
+
+	lineage, ok := base["lineage"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("lineage missing or not an object; body=%s", rr.Body.String())
+	}
+	if got, want := lineage["base_id"], "base:tree"; got != want {
+		t.Errorf("lineage.base_id = %v, want %v", got, want)
+	}
+	evolvedIDs, ok := lineage["evolved_ids"].([]interface{})
+	if !ok || len(evolvedIDs) != 1 || evolvedIDs[0] != "base:tree-evolved-1" {
+		t.Errorf("lineage.evolved_ids = %v, want [base:tree-evolved-1]", lineage["evolved_ids"])
 	}
 }

@@ -98,6 +98,68 @@ func TestLoadGardenerMetricsParsesAggregateDocument(t *testing.T) {
 	}
 }
 
+// TestCollect_SurfacesTopEvolvedWinnersFromTrees pins milestone 3/4 of the
+// "Surface knowledge-graph fitness and evolution lineage" program: the
+// Evolution tab's "Best Fitness" stat and static "Algorithms Active" panel
+// are sourced only from the disconnected gardener-metrics.json aggregate
+// (loadGardenerMetrics/GardenerMetrics.BestFitness), never from live
+// KnowledgeGraph tree data. Collect must accept a per-tree snapshot slice —
+// the same structural_fitness/evolved_count/lineage fields milestone 2
+// already added to the /api/trees response — and rank them into
+// Metrics.TopWinners (descending by StructuralFitness) so the dashboard can
+// render a live top-evolved-winners view instead of the static panel.
+func TestCollect_SurfacesTopEvolvedWinnersFromTrees(t *testing.T) {
+	trees := []TreeSnapshot{
+		{ID: "base:tree", StructuralFitness: 40.0, EvolvedCount: 1},
+		{ID: "base:tree-evolved-1", StructuralFitness: 72.5, EvolvedCount: 0, BaseID: "base:tree"},
+		{ID: "other:tree", StructuralFitness: 55.0, EvolvedCount: 3},
+	}
+
+	m := Collect(len(trees), map[string]int{"finance": len(trees)}, trees)
+
+	if len(m.TopWinners) != len(trees) {
+		t.Fatalf("TopWinners len = %d, want %d (one ranked entry per tree)", len(m.TopWinners), len(trees))
+	}
+
+	// Ranked descending by StructuralFitness (live KnowledgeGraph data), not
+	// the gardener-file best_fitness scalar.
+	wantOrder := []string{"base:tree-evolved-1", "other:tree", "base:tree"}
+	for i, id := range wantOrder {
+		if m.TopWinners[i].ID != id {
+			t.Errorf("TopWinners[%d].ID = %q, want %q (ranked by structural fitness desc)", i, m.TopWinners[i].ID, id)
+		}
+	}
+
+	top := m.TopWinners[0]
+	if top.StructuralFitness != 72.5 {
+		t.Errorf("TopWinners[0].StructuralFitness = %v, want 72.5", top.StructuralFitness)
+	}
+	if top.BaseID != "base:tree" {
+		t.Errorf("TopWinners[0].BaseID = %q, want %q (lineage base id, not dropped)", top.BaseID, "base:tree")
+	}
+	if got, want := m.TopWinners[1].EvolvedCount, 3; got != want {
+		t.Errorf("TopWinners[1].EvolvedCount = %d, want %d", got, want)
+	}
+
+	// The dashboard JS reads /metrics/live JSON directly, so the ranked
+	// winners must round-trip under a snake_case top_winners key.
+	var wire map[string]any
+	if err := json.Unmarshal(m.ToJSON(), &wire); err != nil {
+		t.Fatalf("round-tripping Metrics JSON: %v", err)
+	}
+	winners, ok := wire["top_winners"].([]any)
+	if !ok || len(winners) != len(trees) {
+		t.Fatalf("dashboard JSON top_winners = %v, want %d entries", wire["top_winners"], len(trees))
+	}
+	first, ok := winners[0].(map[string]any)
+	if !ok || first["structural_fitness"] != 72.5 {
+		t.Errorf("wire top_winners[0].structural_fitness = %v, want 72.5", first["structural_fitness"])
+	}
+	if first["id"] != "base:tree-evolved-1" {
+		t.Errorf("wire top_winners[0].id = %v, want %q", first["id"], "base:tree-evolved-1")
+	}
+}
+
 // TestLoadGardenerMetricsParsesRollbacks verifies milestone 3/3 of the
 // "Q2 Evolvability — Make gardener mutation rollback automatic,
 // multi-revision, and observable" program: loadGardenerMetrics must surface

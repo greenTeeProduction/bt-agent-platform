@@ -127,6 +127,80 @@ func TestDiscoverRelated_SelfLoopEdge(t *testing.T) {
 }
 
 // =============================================================================
+// EvolutionLineage
+//
+// RegisterEvolved already writes an "evolved_from" edge (From: baseID, To:
+// evolvedID) for every winner a production evolution pass breeds, and
+// DiscoverRelated already walks it — but nothing typed exposes the lineage
+// itself. EvolutionLineage(treeID) must resolve either direction: querying
+// with the base ID returns every evolved descendant; querying with any
+// evolved descendant's ID returns the shared base plus all sibling
+// descendants (the full lineage), not just the queried tree.
+// =============================================================================
+
+func TestEvolutionLineage_BaseToEvolved(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "base:tree", Name: "Base", Category: "test"})
+	kg.RegisterEvolved("base:tree", "base:tree-evolved-1", 10, 50)
+	kg.RegisterEvolved("base:tree", "base:tree-evolved-2", 12, 60)
+
+	baseID, evolvedIDs, ok := kg.EvolutionLineage("base:tree")
+	if !ok {
+		t.Fatalf("expected ok=true for a base tree with evolved descendants")
+	}
+	if baseID != "base:tree" {
+		t.Errorf("expected baseID %q, got %q", "base:tree", baseID)
+	}
+	seen := map[string]bool{}
+	for _, id := range evolvedIDs {
+		seen[id] = true
+	}
+	if len(evolvedIDs) != 2 || !seen["base:tree-evolved-1"] || !seen["base:tree-evolved-2"] {
+		t.Errorf("expected evolvedIDs [base:tree-evolved-1 base:tree-evolved-2], got %v", evolvedIDs)
+	}
+}
+
+func TestEvolutionLineage_EvolvedToBase(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "base:tree", Name: "Base", Category: "test"})
+	kg.RegisterEvolved("base:tree", "base:tree-evolved-1", 10, 50)
+	kg.RegisterEvolved("base:tree", "base:tree-evolved-2", 12, 60)
+
+	baseID, evolvedIDs, ok := kg.EvolutionLineage("base:tree-evolved-1")
+	if !ok {
+		t.Fatalf("expected ok=true when querying by an evolved tree's ID")
+	}
+	if baseID != "base:tree" {
+		t.Errorf("expected baseID %q, got %q", "base:tree", baseID)
+	}
+	seen := map[string]bool{}
+	for _, id := range evolvedIDs {
+		seen[id] = true
+	}
+	if len(evolvedIDs) != 2 || !seen["base:tree-evolved-1"] || !seen["base:tree-evolved-2"] {
+		t.Errorf("expected sibling evolvedIDs [base:tree-evolved-1 base:tree-evolved-2], got %v", evolvedIDs)
+	}
+}
+
+func TestEvolutionLineage_NotFound(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "isolated", Name: "Isolated", Category: "test"})
+
+	baseID, evolvedIDs, ok := kg.EvolutionLineage("isolated")
+	if ok {
+		t.Errorf("expected ok=false for a tree with no evolution lineage, got baseID=%q evolvedIDs=%v", baseID, evolvedIDs)
+	}
+	if baseID != "" || len(evolvedIDs) != 0 {
+		t.Errorf("expected zero-value results when ok=false, got baseID=%q evolvedIDs=%v", baseID, evolvedIDs)
+	}
+
+	baseID2, evolvedIDs2, ok2 := kg.EvolutionLineage("nonexistent")
+	if ok2 {
+		t.Errorf("expected ok=false for a nonexistent tree, got baseID=%q evolvedIDs=%v", baseID2, evolvedIDs2)
+	}
+}
+
+// =============================================================================
 // Deterministic, rank-based tree discovery
 //
 // Go randomizes map iteration, so Discover must never let map order decide the
