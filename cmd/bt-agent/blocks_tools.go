@@ -50,7 +50,7 @@ func registerBlockTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_blocks_compose", "Compose a task/action tree from building blocks on demand",
+	server.RegisterBlackboardTool("bt_blocks_compose", "Compose a task/action tree from building blocks on demand",
 		map[string]engine.Property{
 			"name":          {Type: "string", Description: "Root sequence name"},
 			"block_ids":     {Type: "string", Description: "Comma-separated block ids"},
@@ -106,10 +106,8 @@ func registerBlockTools(server *engine.Server, deps *mcpDeps) {
 				if err := deps.treeStore.Save(tree); err != nil {
 					return mcpErr(fmt.Errorf("save composed tree: %w", err))
 				}
-				deps.lockBB()
 				deps.bb.TreeStore = deps.treeStore
 				*deps.bt = engine.BuildTree(tree, deps.bb)
-				deps.unlockBB()
 				saved = true
 			}
 			payload := map[string]any{

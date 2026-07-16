@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -336,7 +335,6 @@ func newTreeFactory(deps *mcpDeps) *knowledge.Factory {
 // accesses state through this struct instead of capturing locals.
 type mcpDeps struct {
 	bb           *engine.Blackboard
-	bbMu         sync.Mutex
 	bt           *btcore.Command[engine.Blackboard]
 	treeStore    *evolution.TreeStore
 	refStore     *evolution.Store
@@ -360,20 +358,6 @@ type mcpDeps struct {
 	// reachable over A2A/auctions without a process restart. Nil when the
 	// A2A server failed to start; callers must guard the call.
 	refreshA2ACards func() error
-}
-
-// lockBB acquires the mutex guarding deps.bb. Handlers must hold this for
-// the entire read-modify-run-read critical section around the shared
-// blackboard — engine.Blackboard (internal/engine/tree.go) has no internal
-// synchronization of its own, and the MCP server dispatches concurrent tool
-// calls that all mutate the same *deps.bb.
-func (d *mcpDeps) lockBB() {
-	d.bbMu.Lock()
-}
-
-// unlockBB releases the mutex acquired by lockBB.
-func (d *mcpDeps) unlockBB() {
-	d.bbMu.Unlock()
 }
 
 // newProductionPopulation builds an evolution population for the MCP tools
@@ -413,7 +397,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
 
-	server.RegisterTool("bt_run_task", "Execute a task through the behavior tree",
+	server.RegisterBlackboardTool("bt_run_task", "Execute a task through the behavior tree",
 		map[string]engine.Property{
 			"task": {Type: "string", Description: "The task to execute"},
 			"user": {Type: "string", Description: "Optional user ID: injects the user's profile context and records the run in their interaction log for habit mining"},
@@ -432,8 +416,6 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf("Error: %v", err)}}}
 			}
 			engine.Info("bt_run_task: executing", "task", params.Task)
-			deps.lockBB()
-			defer deps.unlockBB()
 			start := time.Now()
 			deps.bb.Task = params.Task
 			deps.bb.Complexity = ""
@@ -560,7 +542,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── DOMAIN SWITCHING ─────────────────────────────────────────────
 
-	server.RegisterTool("bt_use_go_tree", "Switch to Go developer tree",
+	server.RegisterBlackboardTool("bt_use_go_tree", "Switch to Go developer tree",
 		map[string]engine.Property{}, nil,
 		func(args json.RawMessage) *engine.ToolResult {
 			tree := evolution.GoDeveloperTree()
@@ -572,7 +554,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_use_finance_tree", "Switch to an Anthropic finance agent behavior tree",
+	server.RegisterBlackboardTool("bt_use_finance_tree", "Switch to an Anthropic finance agent behavior tree",
 		map[string]engine.Property{"agent": {Type: "string", Description: "Agent name: pitch_agent, earnings_reviewer, market_researcher, model_builder, meeting_prep, valuation_reviewer, gl_reconciler, month_end_closer, statement_auditor, kyc_screener"}},
 		[]string{"agent"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -614,7 +596,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_use_research_tree", "Switch to deep research or quick research behavior tree",
+	server.RegisterBlackboardTool("bt_use_research_tree", "Switch to deep research or quick research behavior tree",
 		map[string]engine.Property{"variant": {Type: "string", Description: "deep_research or quick_research"}},
 		[]string{"variant"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -637,7 +619,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_use_domain_tree", "Switch to a domain behavior tree (code_review, devops_ci, agent_monitor, refactoring, security_audit, data_pipeline, meeting_notes, crash_investigator, game_ai, trading_signal)",
+	server.RegisterBlackboardTool("bt_use_domain_tree", "Switch to a domain behavior tree (code_review, devops_ci, agent_monitor, refactoring, security_audit, data_pipeline, meeting_notes, crash_investigator, game_ai, trading_signal)",
 		map[string]engine.Property{"tree": {Type: "string", Description: "Tree name"}},
 		[]string{"tree"},
 		func(args json.RawMessage) *engine.ToolResult {
@@ -755,7 +737,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── DELEGATION ───────────────────────────────────────────────────
 
-	server.RegisterTool("bt_delegate_to_tree", "Delegate a task to a specific behavior tree for execution",
+	server.RegisterBlackboardTool("bt_delegate_to_tree", "Delegate a task to a specific behavior tree for execution",
 		map[string]engine.Property{
 			"tree": {Type: "string", Description: "Tree type: godev, finance:<name>, research:<name>, domain:<name>, startup:<role>, thinktank:<role>"},
 			"task": {Type: "string", Description: "The task to delegate"},

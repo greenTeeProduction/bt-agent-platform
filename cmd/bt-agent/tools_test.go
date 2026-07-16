@@ -28,14 +28,16 @@ import (
 // registerMCPTools against drift: the comment claims it "registers all N MCP
 // tools on the server", and N must equal the true number of tools the function
 // wires up. registerMCPTools registers tools both directly (server.RegisterTool
-// calls in tools.go) and via the registerBlackboardTools / registerBlockTools /
-// registerHITLTools helpers, so the count is summed across every non-test source
-// file in the package. When a tool is added or removed, this test fails until
-// the comment is corrected.
+// and server.RegisterBlackboardTool calls in tools.go) and via the
+// registerBlackboardTools / registerBlockTools / registerHITLTools helpers, so
+// the count is summed across every non-test source file in the package. When a
+// tool is added or removed, this test fails until the comment is corrected.
 func TestRegisterMCPToolsCommentMatchesActualToolCount(t *testing.T) {
-	// Count every server.RegisterTool( call across the package's non-test Go
-	// source. This mirrors exactly what registerMCPTools reaches, directly and
-	// through its helper registrars.
+	// Count every server.RegisterTool( and server.RegisterBlackboardTool( call
+	// across the package's non-test Go source. This mirrors exactly what
+	// registerMCPTools reaches, directly and through its helper registrars —
+	// RegisterBlackboardTool registers a real tool too, just under the
+	// Server-wide blackboard lock.
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("glob package sources: %v", err)
@@ -50,6 +52,7 @@ func TestRegisterMCPToolsCommentMatchesActualToolCount(t *testing.T) {
 			t.Fatalf("read %s: %v", path, err)
 		}
 		actual += strings.Count(string(data), "server.RegisterTool(")
+		actual += strings.Count(string(data), "server.RegisterBlackboardTool(")
 	}
 	if actual == 0 {
 		t.Fatal("found no server.RegisterTool( calls; test cannot verify the count")
@@ -4582,6 +4585,135 @@ func TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard(t *testing.T) {
 			t.Errorf("call %d: echoed result = %q, want %q — a concurrent bt_run_task call "+
 				"mutated the shared deps.bb before this call's response was read; "+
 				"mcpDeps needs a bbMu sync.Mutex guarding the whole critical section", i, results[i], want)
+		}
+	}
+}
+
+// TestBTUseResearchTreeHoldsServerLock pins milestone 4/4 of the Q1
+// Correctness / Q3 Reliability mcpDeps shared-blackboard race program:
+// bt_use_research_tree swaps *deps.bt and must be registered via
+// server.RegisterBlackboardTool so that swap contends on the same
+// Server-wide mutex bt_run_task and the other migrated tools now share. RED
+// before the fix: the handler registers via the plain server.RegisterTool,
+// so it races straight through even while the lock is held by another
+// caller (standing in for a concurrent bt_run_task, via the
+// blockOnHeldServerLock helper blocks_tools_test.go defines).
+func TestBTUseResearchTreeHoldsServerLock(t *testing.T) {
+	dir := t.TempDir()
+	store, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatalf("tree store: %v", err)
+	}
+	var live btcore.Command[engine.Blackboard]
+	deps := &mcpDeps{bb: &engine.Blackboard{}, bt: &live, treeStore: store}
+	server := engine.NewServer("test")
+	registerMCPTools(server, deps)
+
+	blockOnHeldServerLock(t, server, func() {
+		server.Invoke("bt_use_research_tree", json.RawMessage(`{"variant":"quick_research"}`))
+	}, "bt_use_research_tree")
+}
+
+// TestBTUseDomainTreeHoldsServerLock is the bt_use_domain_tree counterpart:
+// same *deps.bt swap, same RegisterBlackboardTool requirement, same RED
+// reason as TestBTUseResearchTreeHoldsServerLock.
+func TestBTUseDomainTreeHoldsServerLock(t *testing.T) {
+	dir := t.TempDir()
+	store, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatalf("tree store: %v", err)
+	}
+	var live btcore.Command[engine.Blackboard]
+	deps := &mcpDeps{bb: &engine.Blackboard{}, bt: &live, treeStore: store}
+	server := engine.NewServer("test")
+	registerMCPTools(server, deps)
+
+	blockOnHeldServerLock(t, server, func() {
+		server.Invoke("bt_use_domain_tree", json.RawMessage(`{"tree":"code_review"}`))
+	}, "bt_use_domain_tree")
+}
+
+// TestBTDelegateToTreeHoldsServerLock pins milestone 4/4 of the Q1
+// Correctness / Q3 Reliability mcpDeps shared-blackboard race program:
+// bt_delegate_to_tree writes deps.bb.Task, swaps *deps.bt, and then calls
+// engine.RunTask(deps.bb, *deps.bt) — the same read-modify-run-read shape as
+// bt_run_task's critical section — and must be registered via
+// server.RegisterBlackboardTool for the same reason as the other tools in
+// this program. RED before the fix: the handler registers via the plain
+// server.RegisterTool, so it races straight through even while the lock is
+// held by another caller (standing in for a concurrent bt_run_task, via the
+// blockOnHeldServerLock helper blocks_tools_test.go defines).
+func TestBTDelegateToTreeHoldsServerLock(t *testing.T) {
+	var live btcore.Command[engine.Blackboard]
+	deps := &mcpDeps{bb: &engine.Blackboard{}, bt: &live}
+	server := engine.NewServer("test")
+	registerMCPTools(server, deps)
+
+	blockOnHeldServerLock(t, server, func() {
+		server.Invoke("bt_delegate_to_tree", json.RawMessage(`{"tree":"godev","task":"race-regression-task"}`))
+	}, "bt_delegate_to_tree")
+}
+
+// TestSixSharedBlackboardToolsUseRegisterBlackboardTool pins milestone 4/4 of
+// the Q1 Correctness / Q3 Reliability mcpDeps shared-blackboard race program:
+// bt_run_task, bt_use_go_tree, bt_use_finance_tree, bt_use_research_tree,
+// bt_use_domain_tree, and bt_delegate_to_tree must all register through
+// engine.Server.RegisterBlackboardTool (internal/engine/mcp_server.go),
+// which wraps every handler it registers in a single Server-wide mutex, in
+// place of the ad hoc per-handler deps.lockBB()/deps.unlockBB() opt-in the
+// earlier milestones in this program used. The opt-in pattern is the exact
+// failure mode RegisterBlackboardTool exists to close: bt_use_go_tree and
+// bt_use_finance_tree (tools.go ~563-597) still call neither lockBB nor
+// RegisterBlackboardTool today, so they race on *deps.bt/deps.bb with zero
+// protection whatsoever, and the other four handlers in this list only hold
+// deps.bbMu because someone remembered to add the calls by hand at each call
+// site. RED before the fix: none of the six registers via
+// server.RegisterBlackboardTool( yet — all six still use the plain
+// server.RegisterTool(.
+func TestSixSharedBlackboardToolsUseRegisterBlackboardTool(t *testing.T) {
+	data, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	src := string(data)
+
+	toolNames := []string{
+		"bt_run_task",
+		"bt_use_go_tree",
+		"bt_use_finance_tree",
+		"bt_use_research_tree",
+		"bt_use_domain_tree",
+		"bt_delegate_to_tree",
+	}
+	for _, name := range toolNames {
+		want := `server.RegisterBlackboardTool("` + name + `"`
+		if !strings.Contains(src, want) {
+			t.Errorf("tools.go: %q must be registered via server.RegisterBlackboardTool(...), not server.RegisterTool(...) — "+
+				"it shares *deps.bb/*deps.bt with the other five tree-switching/delegation tools and must not rely on a "+
+				"hand-added deps.lockBB() call to stay race-free", name)
+		}
+	}
+}
+
+// TestMcpDepsHasNoAdHocBlackboardMutexScaffolding is the other half of
+// milestone 4/4: once all six handlers above register through
+// server.RegisterBlackboardTool, mcpDeps's own bbMu field and its
+// lockBB/unlockBB methods (tools.go ~337-376) become redundant — the
+// Server-wide mutex in RegisterBlackboardTool supersedes them — and must be
+// removed so there is exactly one shared-blackboard lock in the codebase,
+// not two independent ones that could silently drift out of sync. RED
+// before the fix: bbMu/lockBB/unlockBB are still declared in tools.go.
+func TestMcpDepsHasNoAdHocBlackboardMutexScaffolding(t *testing.T) {
+	data, err := os.ReadFile("tools.go")
+	if err != nil {
+		t.Fatalf("read tools.go: %v", err)
+	}
+	src := string(data)
+
+	for _, needle := range []string{"bbMu", "func (d *mcpDeps) lockBB", "func (d *mcpDeps) unlockBB"} {
+		if strings.Contains(src, needle) {
+			t.Errorf("tools.go still contains %q; once all six shared-blackboard tools register via "+
+				"server.RegisterBlackboardTool, mcpDeps.bbMu and its lockBB/unlockBB methods are redundant and must be removed", needle)
 		}
 	}
 }

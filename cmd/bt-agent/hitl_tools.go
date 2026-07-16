@@ -125,7 +125,7 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_hitl_compose_task", "Compose a task tree with human approval before tool execution",
+	server.RegisterBlackboardTool("bt_hitl_compose_task", "Compose a task tree with human approval before tool execution",
 		map[string]engine.Property{
 			"name":     {Type: "string", Description: "Root tree name"},
 			"strategy": {Type: "string", Description: "Optional strategy tree id for middle section"},
@@ -151,9 +151,7 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			}
 			if params.Save && deps.treeStore != nil {
 				_ = deps.treeStore.Save(tree)
-				deps.lockBB()
 				*deps.bt = engine.BuildTree(tree, deps.bb)
-				deps.unlockBB()
 			}
 			data, _ := json.Marshal(map[string]any{"tree": tree, "blocks": blocks.DefaultTaskBlocksWithHITL})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

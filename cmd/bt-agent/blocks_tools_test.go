@@ -241,18 +241,31 @@ func TestBTBlocksComposeSaveGatesActivation(t *testing.T) {
 	})
 }
 
-// blockOnHeldBBMu is the shared assertion behind the three regression tests
-// below: it holds deps.bbMu itself (standing in for another in-flight
-// handler, e.g. a concurrent bt_run_task), runs fn in a goroutine, and checks
-// that fn does NOT complete while the lock is held. A handler that mutates
-// deps.bb / *deps.bt without calling deps.lockBB() first has no reason to
-// wait on a lock it never touches, so it races straight through and the
-// "still blocked" assertion fails — that is the RED signal this milestone
-// closes. Once fn correctly locks first, it blocks until bbMu is released
-// here, then completes.
-func blockOnHeldBBMu(t *testing.T, deps *mcpDeps, fn func(), desc string) {
+// blockOnHeldServerLock is the shared assertion behind the regression tests
+// below: it registers a throwaway tool through server.RegisterBlackboardTool
+// that blocks until released, invokes it in a goroutine to occupy the
+// Server-wide mutex (internal/engine/mcp_server.go's bbMu, shared by every
+// tool registered via RegisterBlackboardTool), runs fn, and checks that fn
+// does NOT complete while that lock is held. A handler registered via the
+// plain server.RegisterTool never contends on the shared mutex, so it races
+// straight through and the "still blocked" assertion fails — that is the RED
+// signal this milestone closes. Once fn's target handler is correctly
+// registered via RegisterBlackboardTool, it blocks until the lock is
+// released here, then completes.
+func blockOnHeldServerLock(t *testing.T, server *engine.Server, fn func(), desc string) {
 	t.Helper()
-	deps.lockBB()
+	release := make(chan struct{})
+	held := make(chan struct{})
+	server.RegisterBlackboardTool("test_hold_server_lock", "test-only lock holder",
+		map[string]engine.Property{}, nil,
+		func(_ json.RawMessage) *engine.ToolResult {
+			close(held)
+			<-release
+			return &engine.ToolResult{}
+		})
+	go server.Invoke("test_hold_server_lock", json.RawMessage(`{}`))
+	<-held
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -261,30 +274,30 @@ func blockOnHeldBBMu(t *testing.T, deps *mcpDeps, fn func(), desc string) {
 
 	select {
 	case <-done:
-		t.Errorf("%s completed its deps.bb / *deps.bt mutation while deps.bbMu was held by "+
-			"another handler — it must call deps.lockBB()/deps.unlockBB() around that mutation", desc)
+		t.Errorf("%s completed while the server-wide blackboard lock was held by another handler — "+
+			"it must be registered via server.RegisterBlackboardTool to contend on that lock", desc)
 	case <-time.After(100 * time.Millisecond):
-		// Expected: still blocked waiting on deps.bbMu.
+		// Expected: still blocked waiting on the server-wide lock.
 	}
-	deps.unlockBB()
+	close(release)
 
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatalf("%s never completed after deps.bbMu was released — deadlock", desc)
+		t.Fatalf("%s never completed after the server-wide lock was released — deadlock", desc)
 	}
 }
 
-// TestBTBlocksComposeSaveHoldsBBMu pins milestone 4/5 of the Q1 Correctness /
-// Q3 Reliability mcpDeps shared-blackboard race program: bt_blocks_compose's
-// save:true branch (blocks_tools.go ~109-110) writes deps.bb.TreeStore and
-// swaps *deps.bt with zero synchronization, even though mcpDeps.bbMu
-// (tools.go) exists precisely to guard the whole shared *deps.bb / *deps.bt
-// state and bt_run_task already holds it for its own critical section. A
-// concurrent bt_run_task in flight gives this save no protection at all
-// today. RED before the fix: the handler never calls deps.lockBB(), so it
-// races straight through even while bbMu is held by another caller.
-func TestBTBlocksComposeSaveHoldsBBMu(t *testing.T) {
+// TestBTBlocksComposeSaveHoldsServerLock pins milestone 4/4 of the Q1
+// Correctness / Q3 Reliability mcpDeps shared-blackboard race program:
+// bt_blocks_compose's save:true branch (blocks_tools.go) writes
+// deps.bb.TreeStore and swaps *deps.bt, and must be registered via
+// server.RegisterBlackboardTool so that mutation contends on the same
+// Server-wide mutex bt_run_task and the other migrated tools now share. RED
+// before the fix: the handler registers via the plain server.RegisterTool,
+// so it races straight through even while the lock is held by another
+// caller.
+func TestBTBlocksComposeSaveHoldsServerLock(t *testing.T) {
 	dir := t.TempDir()
 	store, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -295,18 +308,17 @@ func TestBTBlocksComposeSaveHoldsBBMu(t *testing.T) {
 	server := engine.NewServer("test")
 	registerBlockTools(server, deps)
 
-	blockOnHeldBBMu(t, deps, func() {
+	blockOnHeldServerLock(t, server, func() {
 		server.Invoke("bt_blocks_compose", json.RawMessage(
 			`{"block_ids":"core:tool_execution","inline":true,"save":true}`))
 	}, "bt_blocks_compose(save:true)")
 }
 
-// TestBTHITLComposeTaskSaveHoldsBBMu is the hitl_tools.go counterpart
-// (~line 154): bt_hitl_compose_task's save:true branch also swaps *deps.bt
-// with no deps.bbMu protection, so no tool handler is left bypassing the
-// guard this program is closing. RED before the fix for the same reason as
-// TestBTBlocksComposeSaveHoldsBBMu.
-func TestBTHITLComposeTaskSaveHoldsBBMu(t *testing.T) {
+// TestBTHITLComposeTaskSaveHoldsServerLock is the hitl_tools.go counterpart:
+// bt_hitl_compose_task's save:true branch also swaps *deps.bt and must be
+// registered via server.RegisterBlackboardTool, for the same reason as
+// TestBTBlocksComposeSaveHoldsServerLock.
+func TestBTHITLComposeTaskSaveHoldsServerLock(t *testing.T) {
 	dir := t.TempDir()
 	store, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -317,26 +329,8 @@ func TestBTHITLComposeTaskSaveHoldsBBMu(t *testing.T) {
 	server := engine.NewServer("test")
 	registerHITLTools(server, deps)
 
-	blockOnHeldBBMu(t, deps, func() {
+	blockOnHeldServerLock(t, server, func() {
 		server.Invoke("bt_hitl_compose_task", json.RawMessage(
 			`{"name":"Task2HITLLockRegression","save":true}`))
 	}, "bt_hitl_compose_task(save:true)")
-}
-
-// TestInjectPersonaContextHoldsBBMu is the persona_tools.go counterpart
-// (~lines 195-210): injectPersonaContext resets and repopulates
-// deps.bb.ChainState with zero deps.bbMu protection of its own. It happens
-// to be called today only from within bt_run_task's already-locked critical
-// section, but that leaves the function itself unsafe to call from anywhere
-// else — exactly the "no tool handler bypasses the new protection" gap this
-// milestone closes. Calling it directly here (bypassing bt_run_task) with
-// bbMu held by another caller must block until released. RED before the fix:
-// injectPersonaContext never touches deps.bbMu, so it races straight
-// through.
-func TestInjectPersonaContextHoldsBBMu(t *testing.T) {
-	deps := &mcpDeps{bb: &engine.Blackboard{}}
-
-	blockOnHeldBBMu(t, deps, func() {
-		injectPersonaContext(deps, "task2-lock-regression-user")
-	}, "injectPersonaContext")
 }

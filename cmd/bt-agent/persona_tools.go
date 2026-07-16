@@ -184,26 +184,16 @@ func personaEmbedder(deps *mcpDeps) func(string) ([]float64, error) {
 	}
 }
 
-// injectPersonaContext seeds ChainState["persona_context"] with the user's
-// profile block so ChainAction prompts can reference
+// injectPersonaContextLocked seeds ChainState["persona_context"] with the
+// user's profile block so ChainAction prompts can reference
 // {{.ChainState.persona_context}}, and ChainState["persona_user"] so
 // in-tree hooks (ConsiderTreeCompile) know who the run belongs to. Always
 // resets the keys first: the shared blackboard survives across bt_run_task
 // calls, and one user's preferences must never leak into another user's
 // (or an anonymous) run.
 //
-// Acquires deps.bbMu itself, so it is safe to call standalone. bt_run_task
-// already holds deps.bbMu for its whole critical section and must call
-// injectPersonaContextLocked instead to avoid deadlocking on the
-// non-reentrant mutex.
-func injectPersonaContext(deps *mcpDeps, user string) {
-	deps.lockBB()
-	defer deps.unlockBB()
-	injectPersonaContextLocked(deps, user)
-}
-
-// injectPersonaContextLocked is injectPersonaContext's mutation body. Callers
-// must already hold deps.bbMu.
+// Callers must be registered via server.RegisterBlackboardTool so the whole
+// call runs under the Server-wide blackboard lock (internal/engine/mcp_server.go).
 func injectPersonaContextLocked(deps *mcpDeps, user string) {
 	if deps.bb.ChainState == nil {
 		deps.bb.ChainState = map[string]any{}
