@@ -101,6 +101,11 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 		if node.MaxRetries <= 0 {
 			info.Errors = append(info.Errors, fmt.Sprintf("node %q: %s requires max_retries > 0", node.Name, node.Type))
 		}
+	case "ChainAction":
+		cfg := parseChainConfig(node)
+		if !IsKnownChainKind(cfg.ChainType) {
+			info.Errors = append(info.Errors, fmt.Sprintf("node %q: unknown chain_type %q", node.Name, cfg.ChainType))
+		}
 	}
 
 	if leafNodeTypes[node.Type] && len(node.Children) > 0 {

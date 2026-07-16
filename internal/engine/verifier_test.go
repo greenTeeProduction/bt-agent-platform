@@ -167,6 +167,9 @@ func TestVerifierFull_KnownNodeTypes(t *testing.T) {
 		if nodeType == "Condition" {
 			tree.Name = "ValidateInput"
 		}
+		if nodeType == "ChainAction" {
+			tree.Name = "llm_call:analyze"
+		}
 		if nodeType == "Retry" || nodeType == "Repeater" {
 			tree.MaxRetries = 1
 			tree.Children = []evolution.SerializableNode{{Type: "Action", Name: "GeneratePlan"}}
@@ -241,6 +244,28 @@ func TestVerifierFull_ChainActionRejectsChildren(t *testing.T) {
 	for _, e := range info.Errors {
 		if strings.Contains(e, "must not declare children") {
 			t.Fatalf("childless ChainAction should not trigger leaf-children rule, got: %v", info.Errors)
+		}
+	}
+}
+
+func TestVerifierFull_ChainActionUnknownChainType(t *testing.T) {
+	// parseChainConfig derives ChainType from the node name up to the first
+	// ":" (chains.go:1466). A mistyped chain_type like "llm_cal" (missing an
+	// "l") is a valid node name, so nothing else catches it — the tree builds
+	// and only fails once the chain actually executes and hits the LLM call.
+	// ValidateTreeFull must catch this at authoring time via IsKnownChainKind,
+	// mirroring the check ValidateTree already performs (validate.go:61-66).
+	tree := &evolution.SerializableNode{Type: "ChainAction", Name: "llm_cal:analyze"}
+	info := ValidateTreeFull(tree)
+	assertInvalidContains(t, info, "unknown chain_type")
+}
+
+func TestVerifierFull_ChainActionKnownChainType(t *testing.T) {
+	tree := &evolution.SerializableNode{Type: "ChainAction", Name: "llm_call:analyze"}
+	info := ValidateTreeFull(tree)
+	for _, e := range info.Errors {
+		if strings.Contains(e, "unknown chain_type") {
+			t.Fatalf("known chain_type should not be flagged, got: %v", info.Errors)
 		}
 	}
 }
