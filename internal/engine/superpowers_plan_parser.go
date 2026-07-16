@@ -27,6 +27,7 @@ func ParseSuperpowersPlan(markdown string) ([]SuperpowersTask, error) {
 		task.Objective = extractMarkdownField(body, "Objective")
 		task.Files = extractBulletValues(body, []string{"Modify:", "Create:", "Test:"})
 		task.Tests = extractRunCommands(body)
+		hardenSuperpowersTaskForRace(&task)
 		if risk := extractMarkdownField(body, "Risk"); risk != "" {
 			task.Risk = strings.ToLower(risk)
 		}
@@ -108,4 +109,51 @@ func validateSuperpowersTask(task SuperpowersTask) error {
 		}
 	}
 	return nil
+}
+
+// superpowersRaceMarkerRe matches task text that names shared-state
+// concurrency work. Word boundaries keep this codebase's ubiquitous
+// "trace"/"tracing" (OTel) from matching the embedded "race". Over-matching
+// is safe — a needlessly hardened test is just slower; under-matching is the
+// vacuous-RED hole this exists to close.
+var superpowersRaceMarkerRe = regexp.MustCompile(`(?i)\b(races?|racy|concurren(t|tly|cy)|(rw)?mutex(es)?|goroutines?)\b`)
+
+// superpowersTaskMentionsRace reports whether a task's text names shared-state
+// concurrency work.
+func superpowersTaskMentionsRace(task SuperpowersTask) bool {
+	return superpowersRaceMarkerRe.MatchString(task.Title + "\n" + task.Objective + "\n" + task.Body)
+}
+
+// goTestVerbRe locates the `go test` verb in a plan command (any go binary
+// path prefix).
+var goTestVerbRe = regexp.MustCompile(`\bgo test\b`)
+
+// raceHardenedGoTestCommand injects -race directly after the `go test` verb.
+// Commands that already carry -race, and non-go-test commands, pass through
+// unchanged.
+func raceHardenedGoTestCommand(cmd string) string {
+	if strings.Contains(cmd, "-race") {
+		return cmd
+	}
+	loc := goTestVerbRe.FindStringIndex(cmd)
+	if loc == nil {
+		return cmd
+	}
+	return cmd[:loc[1]] + " -race" + cmd[loc[1]:]
+}
+
+// hardenSuperpowersTaskForRace runs a race-flavored task's go-test commands
+// under the race detector. A data-race regression test cannot fail without
+// it: on 2026-07-16 two race-guard milestones were closed on red-pass
+// evidence while the guard did not yet exist, because their RED commands ran
+// race-blind and passed vacuously. Applied at plan parse — the single point
+// tasks are materialized — so RED, GREEN, review, and resumed plans all see
+// the same hardened commands.
+func hardenSuperpowersTaskForRace(task *SuperpowersTask) {
+	if !superpowersTaskMentionsRace(*task) {
+		return
+	}
+	for i, cmd := range task.Tests {
+		task.Tests[i] = raceHardenedGoTestCommand(cmd)
+	}
 }
