@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-133. Early entries (001–007) record the founding decisions; the rest is
+ADR-134. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -156,6 +156,7 @@ Consolidation notes (2026-07-16):
 | ADR-131 | Composable Behavior-Tree Building Blocks (formerly docs/adr ADR-008) | Accepted | 2026-06-04 |
 | ADR-132 | Scoped Blackboard for Context Offloading (formerly docs/adr ADR-009) | Accepted | 2026-06-14 |
 | ADR-133 | Personalized Self-Evolving Agents (formerly docs/adr ADR-010) | Accepted — implemented | 2026-07-08 |
+| ADR-134 | `RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2394,6 +2395,24 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ LLM goal extraction can produce unplannable goals — mitigated by world-state grounding + `ValidatePlan` with a capped repair loop
 - ⚠️ Per-user gardener scans add cycle load — mitigated by round-robin budgets and the existing evidence gate
 - ⚠️ New trees start without reflections — seeded with compile-time validation and first supervised runs so the evidence gate does not freeze them
+
+---
+
+## ADR-134: `RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3)
+
+**Context (2026-07-17):** Program "Q3 Reliability — Close the deploy-drift restart-handoff gap: adopted binaries must restart their services." The restart-handoff mechanism itself (`driftRestartFn`, smoke-test-then-restart, `.previous` rollback on a failed smoke test, `AutoRestartEnabled`/`BT_AUTO_RESTART_ON_DRIFT`) had already landed (commit 4b5e413) but only ever restarted the daemon's *own* unit — `DriftWatchOnce` (`internal/agent/deploy_drift.go`) called `driftRestartFn(cfg.Binary)` once, after a successful rebuild+swap, with no notion that `RebuildBinaries` can swap several sibling binaries in one pass. Live case 2026-07-16 23:46: `bt-agent`'s fleet-wide rebuild swapped `bin/bt-gardener` to `fd0746d`, but the running gardener process — a separate systemd unit — kept executing `ce20198` until a human ran `systemctl restart` by hand. Separately, `DefaultRebuildTargets` deliberately excluded `bt-dashboard` ("callers pass the set they own"), so the daemon's fleet-wide sweep rebuilt nothing for it, and `bt-dashboard`'s own `DashboardRebuildTargets` wrote its rebuilt binary to the repo root while the production unit's 2026-07-15 drop-in `ExecStart` override actually runs it from `bin/` — a "successful" self-rebuild that never landed where the running unit executed from. The MCP server binary `bin/bt-agent`, which `.mcp.json` spawns fresh per cycle-session, was nobody's rebuild target at all and needed two manual rebuilds on 2026-07-16 (30+ commits stale at b2a318a).
+
+**Decision:** **Milestone 1 (sibling-unit restart):** `RebuildTarget` (`internal/agent/rebuild.go`) gains a `Unit string` field — the owning systemd unit name without `.service`, empty for unit-less targets (e.g. `bt-agent-cli`, a CLI tool with no long-running service). `DriftWatchOnce`, immediately after a successful rebuild+smoke-test and its in-flight re-check but before restarting itself, loops `cfg.Targets` and calls `driftRestartFn(t.Unit)` for every swapped target with a non-empty `Unit` other than `cfg.Binary` itself — restarting siblings first, the daemon's own unit last (preserving prior ordering/behavior). The whole loop is gated on the same `AutoRestart`/`AutoRestartEnabled()` flag as the pre-existing self-restart; a sibling restart failure is logged (`slog.Error`) but does not block adopting the fix on the daemon's own unit. **Milestone 2 (`bt-dashboard` fleet adoption):** `DefaultRebuildTargets` now includes `bt-dashboard` (`OutPath` under `bin/`, `Unit: "bt-dashboard"`), matching the corrected production `ExecStart` path; `DashboardRebuildTargets` becomes a direct alias of `DefaultRebuildTargets` rather than appending a second, differently-pathed `bt-dashboard` entry — kept as its own name only so `cmd/bt-dashboard/main.go`'s watcher wiring stays self-documenting. `cmd/bt-dashboard/main.go` additionally wires `AutoRestart: agent.AutoRestartEnabled()` into its `DriftWatchConfig`, mirroring `cmd/bt-agent/main.go`; without it a correctly-pathed self-rebuild would still only log "restart to adopt" and never actually restart the unit. **Milestone 3 (MCP binary):** a `bt-agent-mcp` target (`Pkg: "./cmd/bt-agent"`, `OutPath: bin/bt-agent`) joins `DefaultRebuildTargets`, left unit-less (`Unit: ""`) since MCP client sessions spawn a fresh process per session rather than running under a long-lived systemd unit — milestone 1's sibling-restart loop skips it by the same `t.Unit == ""` guard that already skips `bt-agent-cli`.
+
+**Status:** Accepted (2026-07-17)
+
+**Consequences:**
+- ✅ A fleet-wide rebuild that swaps multiple sibling binaries in one pass (e.g. `bt-agent`'s default targets rebuilding `bt-gardener`/`bt-dashboard`/the MCP binary alongside itself) now restarts every swapped unit-owning sibling, not just the daemon's own — closing the exact gap the 2026-07-16 23:46 live incident exposed. Pinned by `TestDriftWatchOnceRestartsSwappedSiblingUnits` (`internal/agent/deploy_drift_restart_test.go`), which asserts restart order (siblings first, self last) and that a unit-less target (`bt-agent-cli`) triggers no restart call.
+- ✅ `bt-dashboard` is now covered by the same reliable rebuild+restart mechanism `bt-agent`/`bt-agent-cli`/`bt-gardener` already had, with its binary written to the path its production systemd unit actually executes from. Pinned by `TestDefaultRebuildTargets_IncludesBtDashboard` and `TestDashboardRebuildTargets_OutPathUnderBin` (`internal/agent/rebuild_test.go`) and `TestDashboardDriftWatcherWiresAutoRestart` (`cmd/bt-dashboard/main_test.go`, a source-level audit since `main()` can't run inside a unit test).
+- ✅ `DashboardRebuildTargets` collapsing into an alias of `DefaultRebuildTargets` (instead of appending a second `bt-dashboard` entry on top of it) avoids a double-build/double-swap of the same binary within one `RebuildBinaries` call — pinned by `TestDashboardRebuildTargets_NoDuplicateTargets`.
+- ✅ The MCP server binary `bin/bt-agent` — previously nobody's rebuild target — now rebuilds automatically via the daemon's fleet-wide sweep, correctly unit-less so the sibling-restart loop never attempts to restart a per-session-spawned process. Pinned by `TestDefaultRebuildTargets_PinsFullListIncludingMCPBinary` (`internal/agent/deploy_drift_restart_test.go`).
+- ⚠️ A sibling unit restart failure is logged but non-fatal by design (`slog.Error`, loop continues) — a systemd-level failure to restart one sibling (e.g. `bt-gardener`) does not block the daemon from adopting its own fix, but also does not retry or escalate; an operator must still notice the error log for that specific sibling.
+- Pinned by the tests named above; §7.2.2 (`07-deployment.md`) records the corresponding binary-layout fix (`bt-gardener`/`bt-dashboard` under `bin/`, matching each unit's `ExecStart`).
 
 ---
 

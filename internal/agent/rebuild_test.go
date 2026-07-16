@@ -85,3 +85,77 @@ func TestRebuildBinaries(t *testing.T) {
 		}
 	})
 }
+
+// TestDashboardRebuildTargets_OutPathUnderBin pins the deploy-drift restart-
+// handoff fix (Q3 Reliability milestone 2/3): the production bt-dashboard
+// systemd unit's drop-in ExecStart (2026-07-15 override) runs bin/bt-dashboard,
+// but DashboardRebuildTargets still wrote the rebuilt binary to the repo
+// root — a "successful" rebuild that never lands where the running unit
+// actually executes from.
+func TestDashboardRebuildTargets_OutPathUnderBin(t *testing.T) {
+	targets := DashboardRebuildTargets("/repo")
+	var dash *RebuildTarget
+	for i := range targets {
+		if targets[i].Name == "bt-dashboard" {
+			dash = &targets[i]
+			break
+		}
+	}
+	if dash == nil {
+		t.Fatal("DashboardRebuildTargets did not include a bt-dashboard target")
+	}
+	want := filepath.Join("/repo", "bin", "bt-dashboard")
+	if dash.OutPath != want {
+		t.Errorf("bt-dashboard OutPath = %q, want %q (production unit's ExecStart runs bin/bt-dashboard)", dash.OutPath, want)
+	}
+}
+
+// TestDefaultRebuildTargets_IncludesBtDashboard pins bringing bt-dashboard
+// into the daemon's fleet-wide rebuild adoption — the mechanism that already
+// reliably rebuilds+restarts bt-agent/bt-agent-cli/bt-gardener via
+// cmd/bt-agent's AutoRestart-armed AdoptDriftOnIdle/StartDriftWatcher.
+// DefaultRebuildTargets previously excluded bt-dashboard by design, so that
+// daemon-driven sweep rebuilt nothing for bt-dashboard during the
+// 2026-07-16 23:46 adoption (the same event that exposed the sibling
+// bt-gardener restart gap fixed for milestone 1) — only bt-dashboard's own
+// separate, mis-pathed watcher covered it, and that one never restarted
+// anything either.
+func TestDefaultRebuildTargets_IncludesBtDashboard(t *testing.T) {
+	targets := DefaultRebuildTargets("/repo")
+	var dash *RebuildTarget
+	for i := range targets {
+		if targets[i].Name == "bt-dashboard" {
+			dash = &targets[i]
+			break
+		}
+	}
+	if dash == nil {
+		t.Fatal("DefaultRebuildTargets does not include bt-dashboard; the daemon's fleet-wide rebuild sweep never covers it")
+	}
+	if dash.Unit != "bt-dashboard" {
+		t.Errorf("bt-dashboard target Unit = %q, want %q so DriftWatchOnce's sibling-unit restart (milestone 1) actually restarts it after a swap", dash.Unit, "bt-dashboard")
+	}
+	want := filepath.Join("/repo", "bin", "bt-dashboard")
+	if dash.OutPath != want {
+		t.Errorf("bt-dashboard target OutPath = %q, want %q", dash.OutPath, want)
+	}
+}
+
+// TestDashboardRebuildTargets_NoDuplicateTargets guards against a
+// double-rebuild once bt-dashboard is covered by both DefaultRebuildTargets
+// (the daemon's fleet-wide list) and DashboardRebuildTargets (bt-dashboard's
+// own self-watcher, built on top of it): the same binary must not appear
+// twice in one Targets slice, or RebuildBinaries builds and swaps it twice
+// per drift check.
+func TestDashboardRebuildTargets_NoDuplicateTargets(t *testing.T) {
+	targets := DashboardRebuildTargets("/repo")
+	seen := make(map[string]int, len(targets))
+	for _, tg := range targets {
+		seen[tg.Name]++
+	}
+	for name, count := range seen {
+		if count > 1 {
+			t.Errorf("target %q appears %d times in DashboardRebuildTargets; each target must appear exactly once to avoid a double rebuild", name, count)
+		}
+	}
+}

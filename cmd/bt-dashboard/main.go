@@ -163,6 +163,7 @@ func main() {
 			RepoDir:         repoDir,
 			RunningRevision: dashboard.ReadBuildIdentity().Revision,
 			AutoRebuild:     agent.AutoRebuildEnabled(),
+			AutoRestart:     agent.AutoRestartEnabled(),
 			Targets:         agent.DashboardRebuildTargets(repoDir),
 			Binary:          "bt-dashboard",
 			Backoff:         agent.NewRebuildBackoff(),

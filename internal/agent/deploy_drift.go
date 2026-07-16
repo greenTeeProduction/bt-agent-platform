@@ -232,6 +232,23 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			"binary", cfg.Binary, "head_revision", head)
 		return res, nil
 	}
+	// A rebuild can swap multiple sibling binaries (e.g. bt-agent's
+	// DefaultRebuildTargets also rebuilds bin/bt-gardener); each swapped
+	// unit-owning sibling must be restarted too, or it keeps running its old
+	// binary until someone restarts it by hand (live case 2026-07-16 23:46).
+	// Best-effort: a sibling restart failure is logged but does not block
+	// adopting the fix on the daemon's own unit, restarted last below.
+	for _, t := range cfg.Targets {
+		if t.Unit == "" || t.Name == cfg.Binary {
+			continue
+		}
+		slog.Warn("deploy drift: restarting swapped sibling unit",
+			"binary", cfg.Binary, "unit", t.Unit, "head_revision", head)
+		if err := driftRestartFn(t.Unit); err != nil {
+			slog.Error("deploy drift: sibling unit restart failed",
+				"binary", cfg.Binary, "unit", t.Unit, "err", err)
+		}
+	}
 	slog.Warn("deploy drift: restarting to adopt rebuilt binary",
 		"binary", cfg.Binary, "head_revision", head)
 	if err := driftRestartFn(cfg.Binary); err != nil {

@@ -23,32 +23,42 @@ type RebuildTarget struct {
 	Name    string // display name, e.g. "bt-agent"
 	Pkg     string // build package, e.g. "./cmd/bt-agent"
 	OutPath string // live binary path to swap on success
+	// Unit is the systemd --user unit owning this binary (without the
+	// ".service" suffix), e.g. "bt-gardener". Empty for unit-less targets
+	// (e.g. bt-agent-cli, a CLI tool with no long-running service to restart).
+	Unit string
 }
 
-// DefaultRebuildTargets returns the daemon-owned binaries rebuilt on drift, all
-// resolved under repoDir. bt-dashboard and the MCP bin/bt-agent are intentionally
-// excluded here — callers pass the set they own.
+// DefaultRebuildTargets returns the daemon-owned binaries rebuilt on drift,
+// all resolved under repoDir. bt-dashboard is included (Q3 Reliability
+// milestone 2) so the daemon's fleet-wide sweep rebuilds it too, not just
+// bt-dashboard's own watcher; OutPath matches bin/bt-gardener above (not the
+// repo root) since that is where the production systemd unit's drop-in
+// ExecStart override (2026-07-15) actually runs bt-dashboard from.
+// bt-agent-mcp (Q3 Reliability milestone 3) is the MCP server binary
+// bin/bt-agent that .mcp.json boots per cycle-session — it is unit-less
+// since MCP client sessions spawn a fresh process per session rather than
+// running under a long-lived systemd unit, so it needs no restart handoff.
 func DefaultRebuildTargets(repoDir string) []RebuildTarget {
 	return []RebuildTarget{
-		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bt-agent")},
+		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bt-agent"), Unit: "bt-agent"},
 		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join(repoDir, "bt-agent-cli")},
-		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener")},
+		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener"), Unit: "bt-gardener"},
+		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join(repoDir, "bin", "bt-dashboard"), Unit: "bt-dashboard"},
+		{Name: "bt-agent-mcp", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bin", "bt-agent")},
 	}
 }
 
 // DashboardRebuildTargets returns the rebuild targets for bt-dashboard's own
-// deploy-drift watcher: the daemon-owned defaults plus bt-dashboard itself,
-// which DefaultRebuildTargets deliberately excludes. Without this, an
-// AutoRebuild-enabled bt-dashboard detects its own drift but the rebuild it
-// triggers never swaps its own binary. OutPath is the repo root (matching
-// bt-agent/bt-agent-cli above, not bin/) since that is where the production
-// systemd unit's ExecStart actually runs bt-dashboard from.
+// deploy-drift watcher. bt-dashboard is now part of DefaultRebuildTargets
+// (see above), so this is a direct alias — kept as its own name so
+// cmd/bt-dashboard/main.go's watcher wiring stays self-documenting even
+// though both watchers currently cover the same target list. It must NOT
+// append a second bt-dashboard entry on top of DefaultRebuildTargets (the
+// pre-fix behavior): that would double-build and double-swap the same binary
+// within a single RebuildBinaries call.
 func DashboardRebuildTargets(repoDir string) []RebuildTarget {
-	return append(DefaultRebuildTargets(repoDir), RebuildTarget{
-		Name:    "bt-dashboard",
-		Pkg:     "./cmd/bt-dashboard",
-		OutPath: filepath.Join(repoDir, "bt-dashboard"),
-	})
+	return DefaultRebuildTargets(repoDir)
 }
 
 var (

@@ -180,9 +180,12 @@ pointers only.
                                (syntheses/, plans/)
 
 /home/nico/go-bt-evolve/     — BARE main repo (master never checked out); live
-                               binaries at the repo root with .previous backups;
-                               run worktrees under /tmp/worktrees/; durable run
-                               artifacts in docs/superpowers/runs/<id>/
+                               binaries with .previous backups — bt-agent and
+                               bt-agent-cli at the repo root, bt-gardener and
+                               bt-dashboard under bin/, matching each one's
+                               systemd unit ExecStart; run worktrees under
+                               /tmp/worktrees/; durable run artifacts in
+                               docs/superpowers/runs/<id>/
 ```
 
 ### 7.2.3 Network Topology

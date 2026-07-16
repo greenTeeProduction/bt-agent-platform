@@ -31,13 +31,13 @@ import (
 // — that bt-dashboard's deploy-drift watcher can actually rebuild its own
 // binary, not just detect that it has drifted from repo HEAD.
 //
-// agent.DefaultRebuildTargets deliberately excludes bt-dashboard (its doc
-// comment: "bt-dashboard and the MCP bin/bt-agent are intentionally excluded
-// here — callers pass the set they own"), so passing it unmodified as
-// Targets means an AutoRebuild-enabled bt-dashboard WARNs on its own drift
-// but the rebuild it triggers only ever swaps bt-agent/bt-agent-cli/
-// bt-gardener — never itself. main.go must instead pass a target list that
-// includes bt-dashboard's own binary.
+// As of Q3 Reliability milestone 2, agent.DefaultRebuildTargets includes
+// bt-dashboard too (the daemon's fleet-wide sweep now covers it), and
+// agent.DashboardRebuildTargets is a direct alias of it — so this no longer
+// guards against a target list that omits bt-dashboard, but it still pins
+// that main.go's own watcher wiring names the dashboard-specific alias
+// explicitly rather than hardcoding agent.DefaultRebuildTargets, keeping the
+// call site self-documenting if the two ever diverge again.
 func TestDashboardDriftWatcherRebuildsItself(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {
@@ -45,8 +45,7 @@ func TestDashboardDriftWatcherRebuildsItself(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "agent.DashboardRebuildTargets(repoDir)") {
 		t.Errorf("main.go's deploy-drift watcher must pass agent.DashboardRebuildTargets(repoDir) as " +
-			"Targets so bt-dashboard rebuilds its own binary on drift; found agent.DefaultRebuildTargets " +
-			"(or equivalent) which intentionally excludes bt-dashboard")
+			"Targets so bt-dashboard rebuilds its own binary on drift")
 	}
 }
 
@@ -62,6 +61,26 @@ func TestDashboardDriftWatcherWiresRebuildBackoff(t *testing.T) {
 	}
 	if !strings.Contains(string(src), "Backoff:") {
 		t.Error("main.go's deploy-drift watcher must wire a RebuildBackoff (Backoff:); not found")
+	}
+}
+
+// TestDashboardDriftWatcherWiresAutoRestart pins — the same audit style as
+// TestDashboardDriftWatcherWiresRebuildBackoff above — that bt-dashboard's
+// own deploy-drift watcher sets AutoRestart, mirroring cmd/bt-agent/main.go's
+// wiring. Without it, even a correctly-pathed self-rebuild (see
+// internal/agent/rebuild.go's DashboardRebuildTargets OutPath fix) only ever
+// logs "rebuilt binaries — restart to adopt" and never actually restarts the
+// unit to run the new binary, leaving bt-dashboard's own detection layer
+// unable to self-heal without a human running `systemctl restart` by hand.
+func TestDashboardDriftWatcherWiresAutoRestart(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(src), "AutoRestart:") {
+		t.Error("main.go's deploy-drift watcher must wire AutoRestart (AutoRestart: agent.AutoRestartEnabled()), " +
+			"mirroring cmd/bt-agent/main.go, so a successful self-rebuild actually restarts the unit instead of " +
+			"silently doing nothing")
 	}
 }
 
