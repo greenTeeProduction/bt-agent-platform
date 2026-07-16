@@ -103,6 +103,22 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			return code
 		}
 		b := ctx.Blackboard
+		// Classify an otherwise-unclassified failure so the handler has a
+		// category to guard a recovery on. A recovery must guard on
+		// LastErrorCategoryIs:<cat>/LastErrorNodeIs:<node>, so a failure that
+		// reaches here with neither set (no CircuitBreaker/Timeout on its path)
+		// can never be recovered — Claude judges it "unresolvable". Fill only
+		// when both are empty: never clobber a more specific category an inner
+		// reliability decorator already recorded.
+		if b.ChainState == nil {
+			b.ChainState = map[string]any{}
+		}
+		if cat, _ := b.ChainState["last_error_category"].(string); cat == "" {
+			if node, _ := b.ChainState["last_error_node"].(string); node == "" {
+				b.ChainState["last_error_category"] = classifyErrorHandlerFailure(b)
+				b.ChainState["last_error_node"] = protected.Name
+			}
+		}
 		sig := errorHandlerSignatureFromBB(b, handlerName, protected.Name)
 		// 1. Existing recovery extensions, guard-first. The guard is evaluated
 		// separately from the tick so a guard mismatch (expected on unrelated
