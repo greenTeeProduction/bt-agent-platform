@@ -54,6 +54,19 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 	var recoveries []recovery
 	takenNames := map[string]bool{protected.Name: true}
 	for _, ext := range activeErrorHandlerExtensions(handlerName) {
+		// Re-validate every persisted extension against the CURRENT policy on
+		// each build. The action allowlist is the security boundary for this
+		// auto-executing path, and it must apply to already-granted extensions
+		// and to any hand-edited store — not only to freshly-proposed nodes.
+		// Validation happens once at proposal time; without this a tightened
+		// allowlist (or a tampered extensions.json) would still graft and tick a
+		// now-disallowed node. Skip (do not graft) anything that no longer passes.
+		extNode := ext.Node
+		if err := validateErrorHandlerProposal(&extNode, map[string]bool{}); err != nil {
+			Warn("claude error handler: skipping persisted extension that fails current policy",
+				"handler", handlerName, "node", ext.Node.Name, "err", err)
+			continue
+		}
 		recoveries = append(recoveries, buildRecovery(ext))
 		takenNames[ext.Node.Name] = true
 	}

@@ -103,6 +103,41 @@ func runHandler(t *testing.T, bb *Blackboard) int {
 	return cmd.Run(&btcore.BTContext[Blackboard]{Blackboard: bb})
 }
 
+// A persisted extension whose action is no longer allowed (a tightened policy,
+// or a hand-edited extensions.json) must be re-validated and skipped on graft —
+// the allowlist is the security boundary and must apply to already-granted
+// extensions, not only to freshly-proposed nodes.
+func TestClaudeErrorHandler_SkipsPersistedExtensionFailingCurrentPolicy(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	t.Setenv("BT_CLAUDE_ERROR_HANDLER", "off") // no fresh proposal; isolate graft re-validation
+	// Seed directly (no validation at write time), using a registered action that
+	// is deliberately NOT in the production allowlist and NOT widened via the test
+	// seam here — simulating a stale-policy or tampered store entry. Its guard
+	// matches eh_test_failing_action's category, so without re-validation it would
+	// graft and tick.
+	seed := ErrorHandlerExtension{Node: evolution.SerializableNode{
+		Type: "Sequence", Name: "Handle_stale_policy",
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "LastErrorCategoryIs:testcat"},
+			{Type: "Action", Name: "eh_test_recover_action"},
+		},
+	}}
+	if err := appendErrorHandlerExtension("eh_test_tree_ErrorHandler", seed); err != nil {
+		t.Fatal(err)
+	}
+	ehTestRecoverRan.Store(0)
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("a persisted extension failing current policy must be skipped and the failure pass through; got %d", code)
+	}
+	if ehTestRecoverRan.Load() != 0 {
+		t.Fatal("the skipped extension's action must never tick")
+	}
+	if _, stamped := bb.ChainState["error_handler_recovered"]; stamped {
+		t.Fatal("no recovery must be recorded for a policy-rejected extension")
+	}
+}
+
 func TestClaudeErrorHandler_ProposalGraftedAndTicked(t *testing.T) {
 	withTempErrorHandlerDir(t)
 	fake := &fakeClaudeRunner{output: ehTestProposalJSON(t)}
