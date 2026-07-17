@@ -71,6 +71,7 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 	}
 	e.recordCircuitBreakerOutcome(agentName, res)
 	e.recordTaskMetric(agentName, res)
+	e.recordBlockFitnessMetric(agentName, treeID, res)
 	return res, err
 }
 
@@ -101,6 +102,36 @@ func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult)
 		return
 	}
 	RecordTask(agentName, res.Outcome == "success", uint64(res.Duration.Milliseconds()))
+}
+
+// recordBlockFitnessMetric reports a bt_block_fitness_score gauge for the
+// tree treeID ran through, closing the milestone-3/3 gap: RecordBlockFitness
+// was previously reachable only from the FitnessProbe BT action
+// (internal/engine/ops_actions.go) and internal/blocks' own
+// RecordTaskBlockFitness, never from the dashboard's own RunTaskResult
+// dispatch path. internal/dashboard can't import internal/blocks to reuse
+// its per-node block_id walk (blocks already imports dashboard), so this
+// mirrors ops_actions.go's fitnessProbeAction: it scores the whole task run
+// under treeID as a single block key rather than segmenting by tree node.
+func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult) {
+	if res == nil || treeID == "" {
+		return
+	}
+	success := res.Outcome == "success"
+	score := res.Quality * 100
+	if score <= 0 {
+		if success || strings.EqualFold(res.Outcome, "completed") {
+			score = 75
+		} else {
+			score = 25
+		}
+	}
+	if score > 100 {
+		score = 100
+	} else if score < 0 {
+		score = 0
+	}
+	RecordBlockFitness(treeID, agentName, score)
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {

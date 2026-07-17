@@ -165,6 +165,7 @@ Consolidation notes (2026-07-16):
 | ADR-140 | `bt_evolve_selection_pressure` Adopts the ADR-127 Lineage-Skip Guard and `bt_evolve_genetic` Writes Fitness Back to the Base Tree, Closing the Q2 Evolvability Fitness-Feedback/Lineage-Skip Consistency Program (Milestones 1–2/2) | Accepted | 2026-07-17 |
 | ADR-141 | `AgentExecutor.RunTaskResult` Joins the Shared Per-Agent Circuit Breaker as a Third Writer/Enforcer, Closing the Dashboard's Dead Task-Metrics Recording Gap (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-142 | `dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-17 |
+| ADR-143 | `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2553,6 +2554,22 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ The fix is additive and side-effect-only — no change to `RunTaskResult`'s, `RunPipelineWithID`'s, or `runPipelineAgentStep`'s return values or error handling, so the blast radius is limited to the new metrics calls.
 - ⚠️ Milestone 3 (block-fitness recording) is not yet wired into these same call sites — `RecordBlockFitness` remains reachable only from the probe/blocks-fitness paths, not from ordinary agent-execution runs, so the "block-fitness recorders" half of the program's title is still an open gap.
 - ⚠️ `cmd/bt-dashboard/main.go`'s `handleAgentExecute`/`handleAgentRun` and any other callers that construct an `agent.RunResult` by hand outside these three call sites still bypass `RecordTask` — this program only covers the three call sites enumerated above, not a blanket sweep of every `agent.RunAgent` invocation in the tree.
+
+---
+
+## ADR-143: `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3)
+
+**Context (2026-07-17):** ADR-142 closed milestones 1–2/3 of "Q3 Reliability — Wire the dashboard's dead task-metrics and block-fitness recorders into every production agent-execution path," wiring `dashboard.RecordTask` into `RunTaskResult` and the two direct `agent.RunAgent` call sites, but left milestone 3 open: `RecordBlockFitness` (`internal/dashboard/metrics_utils.go`), the gauge backing `bt_block_fitness_score`, was reachable only from `internal/engine/ops_actions.go`'s `fitnessProbeAction` BT node and `internal/blocks/fitness.go`'s `RecordTaskBlockFitness` — never from `AgentExecutor.RunTaskResult`, the dashboard's own single-task dispatch path — so an agent run driven through the dashboard's HTTP endpoint never contributed a block-fitness series regardless of outcome or quality.
+
+**Decision:** `AgentExecutor` gains a `recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult)` method, called from `RunTaskResult` immediately after `recordTaskMetric`. It scores `res.Quality * 100` when positive; when `Quality` is unset (`<= 0`), it falls back to a coarse 75/25 split on whether `res.Outcome` is `"success"` or case-insensitively `"completed"`, clamped to `[0, 100]`, then calls `RecordBlockFitness(treeID, agentName, score)`. It no-ops when `res` is nil or `treeID` is empty. `internal/dashboard` cannot import `internal/blocks` to reuse its per-`block_id` walk (`internal/blocks` already imports `internal/dashboard`), so this mirrors `ops_actions.go`'s `fitnessProbeAction` instead: it scores the whole task run under `treeID` as a single block key rather than segmenting by tree node — coarser than the engine probe's per-node breakdown, but sufficient to give `RunTaskResult`-driven runs a non-empty series. Pinned end-to-end by `TestRunTaskResult_EndToEnd_EmitsTaskAndBlockFitnessMetrics` (`internal/dashboard/metrics_utils_test.go`), which drives a real task through `RunTaskResult` and asserts the `/metrics` Prometheus handler emits non-zero `bt_agent_tasks_total`, `bt_agent_task_duration_ms`, and `bt_block_fitness_score` series for the run — the first test in this program to assert against the actual scraped exposition rather than `GetAgentMetrics()` directly.
+
+**Status:** Accepted (2026-07-17) — closes milestone 3/3 of the Q3 Reliability task-metrics/block-fitness program (ADR-142 closed milestones 1–2).
+
+**Consequences:**
+- ✅ Agent runs driven through the dashboard's own dispatch endpoint now contribute a `bt_block_fitness_score` series alongside the `bt_agent_tasks_total`/`bt_agent_task_duration_ms` series ADR-142 already wired, closing the second half of the program's title and the gap ADR-142's own consequences section flagged as still open.
+- ✅ The regression test asserts against the scraped `/metrics` exposition itself, not an in-process accessor — closing the risk (implicit in ADR-142's milestone 1–2 tests, which asserted `GetAgentMetrics()` directly) that the Prometheus handler's rendering path could silently diverge from the underlying counters.
+- ⚠️ The block-fitness score this records is a single whole-run value keyed by `treeID`, not the per-`block_id` breakdown `internal/engine/ops_actions.go`'s probe hook and `internal/blocks/fitness.go` produce — `RunTaskResult`-driven runs get coarser fitness attribution than tree-node-level probe runs, a deliberate scope limit forced by the import-cycle constraint, not an oversight.
+- ⚠️ `RunPipelineWithID` and `runPipelineAgentStep` — the two direct `agent.RunAgent` call sites ADR-142 milestone 2 wired for `RecordTask` — still do not call `RecordBlockFitness`; this program's milestone 3 only covers `AgentExecutor.RunTaskResult`, so block-fitness recording for pipeline-driven runs remains an open gap beyond this program's stated scope.
 
 ---
 

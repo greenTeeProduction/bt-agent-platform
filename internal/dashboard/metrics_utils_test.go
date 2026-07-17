@@ -5,6 +5,10 @@ import (
 	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // scrapeMetrics renders the Prometheus exposition and returns the body.
@@ -255,6 +259,50 @@ func TestKGAnalyticsGaugesRenderedAndUpdated(t *testing.T) {
 		if strings.Contains(body, stale) {
 			t.Errorf("stale gauge line %q still exposed after second RecordKGAnalytics", strings.TrimSuffix(stale, "\n"))
 		}
+	}
+}
+
+// TestRunTaskResult_EndToEnd_EmitsTaskAndBlockFitnessMetrics drives a real
+// task through AgentExecutor.RunTaskResult (the dashboard's own single-task
+// dispatch path) and asserts the /metrics Prometheus handler reflects it —
+// closing the milestone 3/3 gap ADR-142 documents as still open. Milestones
+// 1-2 of that program already wired dashboard.RecordTask into RunTaskResult
+// (bt_agent_tasks_total/bt_agent_task_duration_ms below pass today), but
+// RecordBlockFitness remains reachable only from internal/engine/ops_actions.go's
+// probe hook and internal/blocks/fitness.go's RecordTaskBlockFitness — never
+// from RunTaskResult's production paths — so bt_block_fitness_score never
+// gets a series for agent runs driven through the dashboard.
+func TestRunTaskResult_EndToEnd_EmitsTaskAndBlockFitnessMetrics(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	exec := &AgentExecutor{
+		Timeout: 5 * time.Second,
+		Runner: &agent.RunDeps{
+			ResolveTree: func(_ string) *evolution.SerializableNode {
+				return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+			},
+		},
+	}
+
+	const agentName = "e2e-metrics-dashboard-agent"
+	res, err := exec.RunTaskResult(agentName, "do the thing", "e2e-metrics-tree")
+	if res == nil {
+		t.Fatalf("RunTaskResult returned nil result (err=%v)", err)
+	}
+	if res.Outcome != "success" {
+		t.Fatalf("got outcome %q, want %q (test setup must drive a succeeding outcome)", res.Outcome, "success")
+	}
+
+	body := scrapeMetrics(t)
+
+	if want := `bt_agent_tasks_total{agent="` + agentName + `"} 1`; !strings.Contains(body, want+"\n") {
+		t.Errorf("missing line %q in /metrics exposition after RunTaskResult:\n%s", want, body)
+	}
+	if want := `bt_agent_task_duration_ms_count{agent="` + agentName + `"} 1`; !strings.Contains(body, want+"\n") {
+		t.Errorf("missing line %q in /metrics exposition after RunTaskResult:\n%s", want, body)
+	}
+	if want := `bt_block_fitness_score{agent="` + agentName + `"`; !strings.Contains(body, want) {
+		t.Errorf("RunTaskResult must record a bt_block_fitness_score series for agent %q (milestone 3/3: RecordBlockFitness is never called from RunTaskResult), got exposition:\n%s", agentName, body)
 	}
 }
 
