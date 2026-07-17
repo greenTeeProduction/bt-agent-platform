@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -63,6 +64,9 @@ type WebhookPublisher struct {
 	throttle *routineThrottle
 	breakers map[string]*reliability.CircuitBreaker
 	dlq      *reliability.DeadLetterQueue
+	// replaying guards the background dead-letter replay sweep: at most one
+	// runs at a time (see replayDeadLetters).
+	replaying atomic.Bool
 }
 
 // NewWebhookPublisher creates a publisher with Hermes webhook base URL and secrets.
@@ -225,6 +229,33 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	if breaker != nil {
 		breaker.RecordSuccess()
 	}
+	// A successful delivery is the recovery signal: replay queued dead
+	// letters in the background through the same signed single-shot path
+	// (SetReplayExecutor). Without this the DLQ was write-only — entries
+	// accumulated until MaxDeadLetterEntries silently evicted them.
+	p.replayDeadLetters()
+}
+
+// replayDeadLetters requeues and replays every eligible dead letter once, in
+// the background. A CAS guard keeps at most one sweep in flight so a burst of
+// successful deliveries doesn't pile up replay goroutines; Requeue's
+// attempt/abandonment budget (MaxReplayAttempts) bounds retries per entry, so
+// a poison entry cannot loop forever.
+func (p *WebhookPublisher) replayDeadLetters() {
+	if p.dlq.Len() == 0 || !p.replaying.CompareAndSwap(false, true) {
+		return
+	}
+	reliability.SafeGo("webhook-dlq-replay", func() {
+		defer p.replaying.Store(false)
+		for _, e := range p.dlq.List() {
+			if _, ok := p.dlq.Requeue(e.ID); !ok {
+				continue // abandoned or budget exhausted
+			}
+			if _, ok := p.dlq.Replay(e.ID); !ok {
+				slog.Warn("webhook: dead-letter replay failed; entry retained", "subscription", e.Agent, "id", e.ID)
+			}
+		}
+	}, nil)
 }
 
 // postSigned POSTs body to the given subscription's Hermes webhook endpoint,
