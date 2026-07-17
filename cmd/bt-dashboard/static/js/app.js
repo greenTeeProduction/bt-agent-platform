@@ -43,7 +43,7 @@ function renderTab(tab) {
     case 'trees':     main.innerHTML = renderTrees(); break;
     case 'mindmap':   main.innerHTML = renderMindMap(); setTimeout(loadMindMap, 200); break;
     case 'evolution': main.innerHTML = renderEvolution(); break;
-    case 'agents':    main.innerHTML = renderAgents(); setTimeout(loadAgents, 200); break;
+    case 'agents':    main.innerHTML = renderAgents(); setTimeout(loadAgents, 200); setTimeout(populateTreeDropdown, 200); break;
     case 'workflows': main.innerHTML = renderWorkflows(); setTimeout(loadWorkflows, 200); break;
     case 'scalability': main.innerHTML = renderScalability(); break;
     case 'doormate': main.innerHTML = renderDoormate(); setTimeout(initDoormateTab, 100); break;

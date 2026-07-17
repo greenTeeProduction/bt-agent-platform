@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-152. Early entries (001–007) record the founding decisions; the rest is
+ADR-153. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -175,6 +175,7 @@ Consolidation notes (2026-07-16):
 | ADR-150 | `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-151 | `RunPanel` Adopts `SafeGo` and a Package-Level Circuit Breaker, and `Run` Enforces `cfg.Timeout` via `context.WithTimeout` (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
 | ADR-152 | `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4) | Accepted | 2026-07-17 |
+| ADR-153 | `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2650,12 +2651,12 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 **Decision:** `handleTrees` now unions `kg.Trees` with every `domains.AllDomainTrees()` entry not already present (checked against both the bare name and the `"domain:"+name` ID form, since `kg` may register a domain tree under either once it has run). New entries are appended with `id: "domain:"+name`, `category: "domain"`, and `node_count` from `evolution.CountNodes(tree)`, iterated in sorted-name order for a deterministic response. The `"domain:"` ID prefix and its stripping (`strings.LastIndex(treeID, ":")`) were already an established convention in `handleTreeStructure`, which resolves the same prefix against the same `domains.AllDomainTrees()` map — this decision reuses that convention rather than inventing a second ID scheme. Merging inside `handleTrees` (rather than having the frontend fetch `/api/trees` and `domains.AllDomainTrees()` separately, or eagerly registering every domain tree into `kg` at startup) keeps `/api/trees` a single source of truth for any client and leaves `kg`'s semantics — "trees with runtime history" — unchanged.
 
-**Status:** Accepted, but only a prerequisite — the client-visible gap this targets is **not yet closed**. `/api/trees` can now serve the full catalog (pinned by `TestHandleTrees_IncludesFullDomainCatalog`, `cmd/bt-dashboard/main_test.go`), but `agents.js`'s Create-Agent dropdown still renders its static 10-option `<select>` and does not call `/api/trees` at all. Wiring the dropdown to fetch and populate from this endpoint remains open (tracked from the 2026-07-17 structural review as the dashboard agent-create dropdown finding).
+**Status:** Accepted, but only a prerequisite — the client-visible gap this targets is **not yet closed**. `/api/trees` can now serve the full catalog (pinned by `TestHandleTrees_IncludesFullDomainCatalog`, `cmd/bt-dashboard/main_test.go`), but `agents.js`'s Create-Agent dropdown still renders its static 10-option `<select>` and does not call `/api/trees` at all. Wiring the dropdown to fetch and populate from this endpoint remains open (tracked from the 2026-07-17 structural review as the dashboard agent-create dropdown finding). **Update (2026-07-17):** closed by ADR-153, which wires the frontend fetch and adds per-tree descriptions.
 
 **Consequences:**
 - ✅ `/api/trees` is now a complete, deterministic catalog of every selectable tree — runtime-registered and static domain — closing the backend half of the gap.
 - ✅ Reuses the existing `"domain:"` ID convention from `handleTreeStructure` instead of introducing a parallel scheme, so a client resolving a returned ID against tree-structure lookups needs no special-casing.
-- ⚠️ The frontend dropdown is unchanged: it is still a hardcoded static list and still does not fetch `/api/trees`. Users creating an agent still cannot select any of the 19+ catalog trees this endpoint now exposes until `agents.js` is updated to fetch and render from it.
+- ⚠️ ~~The frontend dropdown is unchanged: it is still a hardcoded static list and still does not fetch `/api/trees`. Users creating an agent still cannot select any of the 19+ catalog trees this endpoint now exposes until `agents.js` is updated to fetch and render from it.~~ — resolved by ADR-153 (2026-07-17).
 
 ---
 
@@ -2727,6 +2728,27 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ A lone transient failure in the post-panel `Judge` or `Synthesize` call no longer discards an otherwise-successful multi-model panel run — up to 3 retries with full-jitter backoff (200ms–2s per step) absorb it instead.
 - ✅ Closes the "Q3 Reliability — Harden the fusion multi-model panel" program end to end: ADR-151 (SafeGo, timeout enforcement, circuit breaker) plus this entry (post-panel retry) now cover all four identified milestones.
 - ⚠️ `RetryUnknown: true` means a genuinely non-transient error (e.g. a prompt the model will never accept) is retried up to 3 times before `Judge`/`Synthesize` returns it, adding retry latency to a call that was always going to fail — the same tradeoff ADR-135 already accepted at the `FallbackLLM` layer for the same reason (raw upstream errors predate category classification).
+
+---
+
+## ADR-153: `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability)
+
+**Context (2026-07-17):** ADR-148 made `/api/trees` a complete catalog (`kg.Trees` merged with `domains.AllDomainTrees()`) but explicitly left its own program open: the Create-Agent dropdown in `cmd/bt-dashboard/static/js/tabs/agents.js` still rendered a static, hardcoded 10-option `<select>` and never called `/api/trees` at all, so evolved and domain trees stayed unreachable from the UI without a code deploy. Separately, each domain-tree entry `handleTrees` merges in carries only `id`/`name`/`category`/`node_count` — the human-readable summary already maintained in the exported `domains.Descriptions` map (`internal/domains/trees.go`, consulted today by `internal/gardener/gardener.go` and `cmd/bt-agent/tools.go`) was never surfaced through the endpoint, so even a wired-up dropdown could list a tree's raw ID but not explain what it does.
+
+**Decision:** Two changes close both halves of the gap:
+  - **Frontend (milestone 1/2):** add `populateTreeDropdown()` to `agents.js`, called on tab activation (`app.js`'s `agents` case) and on initial script load, alongside the existing `loadAgents()` calls rather than replacing them. It fetches `/api/trees`, groups the results by each entry's `category` field into a `groups` map, sorts the category keys, and rebuilds the `#create-tree` `<select>`'s `innerHTML` as one `<optgroup label="...">` per category containing that category's `<option>`s. A fetch failure or empty response is caught silently, leaving the original hardcoded `<option>` list in place as a fallback — the dropdown never renders empty.
+  - **Backend (milestone 2/2):** `handleTrees` (`cmd/bt-dashboard/main.go`) adds a `"description"` field to every merged `domains.AllDomainTrees()` entry, sourced directly from `domains.Descriptions[name]` — no new data, just surfacing an already-maintained map through an endpoint that previously dropped it.
+
+**Rejected alternative:** grouping by a client-computed heuristic (e.g. splitting on the `"domain:"` ID prefix) was rejected in favor of grouping on the server-supplied `category` field — `category` already distinguishes `core`/`domain`/`research`/`thinktank`/`finance`/etc. (per ADR-126/148), so re-deriving groups from the ID string would duplicate categorization logic the backend already owns and could drift from it.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestHandleTrees_DomainEntriesCarryDescription` (asserts `domain:goap_fusion`'s response entry carries `domains.Descriptions["goap_fusion"]` verbatim) and `TestAgentsJS_TreeDropdownGroupedByCategory` (asserts the embedded `agents.js` references `/api/trees`, builds `<optgroup>` elements, and keys them on `.category`), both in `cmd/bt-dashboard/main_test.go`. Closes the ADR-148 program end to end: ADR-148 (backend catalog completeness) plus this entry (frontend wiring + descriptions) together make every evolved and domain tree selectable in the Create-Agent UI without a code deploy.
+
+**Consequences:**
+- ✅ The Create-Agent dropdown now reflects the live `/api/trees` catalog instead of a static list frozen since 2026-06-14 — new evolved winners and domain trees become selectable as soon as they're registered, with no frontend deploy required.
+- ✅ `<optgroup>` grouping by `category` gives the dropdown the same core/domain/research/thinktank/finance structure the backend already tracks, instead of one flat unsorted list of 19+ trees.
+- ✅ Each domain-tree option's description is now available in the API response for a future UI affordance (e.g. a tooltip) to consume, without duplicating text that already lives in `domains.Descriptions`.
+- ⚠️ The silent catch-and-fallback in `populateTreeDropdown()` means a persistent `/api/trees` failure degrades invisibly to the old hardcoded 10-option list rather than surfacing an error — acceptable because the fallback is still a functional (if incomplete) dropdown, but an operator investigating "why can't I see tree X" has no client-side signal that the fetch failed.
+- ⚠️ `domains.Descriptions` is not surfaced for `kg.Trees`-sourced entries (runtime-registered trees that already had a history before this change) — only entries merged in from `domains.AllDomainTrees()` gain a `description` field; a tree present in both would still only get one if it happens to hit the merge path.
 
 ---
 

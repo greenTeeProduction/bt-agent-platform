@@ -608,10 +608,11 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 		}
 		tree := domainTrees[name]
 		r2 = append(r2, map[string]interface{}{
-			"id":         id,
-			"name":       tree.Name,
-			"category":   "domain",
-			"node_count": evolution.CountNodes(tree),
+			"id":          id,
+			"name":        tree.Name,
+			"category":    "domain",
+			"node_count":  evolution.CountNodes(tree),
+			"description": domains.Descriptions[name],
 		})
 	}
 

@@ -1447,3 +1447,94 @@ func TestHandleTrees_IncludesFullDomainCatalog(t *testing.T) {
 			"endpoint instead of a hardcoded client-side list", len(missing), len(domainTrees), missing)
 	}
 }
+
+// TestHandleTrees_DomainEntriesCarryDescription pins milestone 2/2 of the
+// "wire the dashboard's live /api/trees catalog into the Create-Agent
+// dropdown" program: handleTrees already merges every domains.AllDomainTrees()
+// entry missing from kg (TestHandleTrees_IncludesFullDomainCatalog), but each
+// merged entry only carries id/name/category/node_count — the human-readable
+// summary in the exported internal/domains.Descriptions map (consulted today
+// by internal/gardener/gardener.go and cmd/bt-agent/tools.go, but never
+// surfaced through this endpoint) is dropped on the floor. Without it, the
+// Create-Agent dropdown can list a tree's raw ID but not explain what it
+// does. Each merged domain-tree entry must carry a "description" field
+// populated from domains.Descriptions[name].
+func TestHandleTrees_DomainEntriesCarryDescription(t *testing.T) {
+	origKG := kg
+	t.Cleanup(func() { kg = origKG })
+
+	g := knowledge.NewKnowledgeGraph()
+	g.Register(&knowledge.TreeMeta{
+		ID:       "default",
+		Name:     "Default Agent",
+		Category: "core",
+	})
+	kg = g
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trees", nil)
+	rr := httptest.NewRecorder()
+	handleTrees(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var trees []map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+	}
+
+	wantDesc := domains.Descriptions["goap_fusion"]
+	if wantDesc == "" {
+		t.Fatal("domains.Descriptions[\"goap_fusion\"] is empty; test fixture assumption broken")
+	}
+
+	var entry map[string]interface{}
+	for _, tr := range trees {
+		if tr["id"] == "domain:goap_fusion" {
+			entry = tr
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("response missing entry for domain:goap_fusion; body=%s", rr.Body.String())
+	}
+
+	if got, ok := entry["description"].(string); !ok || got == "" {
+		t.Errorf("domain:goap_fusion description = %v, want non-empty string %q", entry["description"], wantDesc)
+	} else if got != wantDesc {
+		t.Errorf("domain:goap_fusion description = %q, want %q (domains.Descriptions[\"goap_fusion\"])", got, wantDesc)
+	}
+}
+
+// TestAgentsJS_TreeDropdownGroupedByCategory is the client-side follow-up to
+// TestHandleTrees_IncludesFullDomainCatalog: now that /api/trees serves a
+// complete, live tree catalog (kg.Trees merged with domains.AllDomainTrees()),
+// cmd/bt-dashboard/static/js/tabs/agents.js must actually fetch it and use it
+// to populate the Create-Agent "Select tree..." dropdown, instead of the
+// hardcoded <option> list baked into renderAgents(). It must also group the
+// resulting <option> elements into <optgroup> elements keyed by each tree's
+// "category" field (as returned by handleTrees), so trees from different
+// categories (core, domain, research, thinktank, finance, ...) are visually
+// distinguishable and a flat unsorted dropdown can't silently return.
+func TestAgentsJS_TreeDropdownGroupedByCategory(t *testing.T) {
+	data, err := staticFS.ReadFile("static/js/tabs/agents.js")
+	if err != nil {
+		t.Fatalf("read static/js/tabs/agents.js: %v", err)
+	}
+	js := string(data)
+
+	if !strings.Contains(js, "/api/trees") {
+		t.Errorf("agents.js must fetch the live tree catalog from /api/trees to populate the Create-Agent " +
+			"dropdown instead of relying on the hardcoded <option> list in renderAgents(); found no " +
+			"reference to /api/trees in the embedded JS")
+	}
+	if !strings.Contains(js, "<optgroup") {
+		t.Errorf("agents.js must group the Create-Agent tree dropdown into <optgroup> elements (one per " +
+			"tree category) instead of a flat list; found no <optgroup in the embedded JS")
+	}
+	if !strings.Contains(js, ".category") {
+		t.Errorf("agents.js must key the <optgroup> grouping on each tree's category field, as returned " +
+			"by handleTrees; found no reference to a tree's .category property in the embedded JS")
+	}
+}

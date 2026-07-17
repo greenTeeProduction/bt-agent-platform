@@ -37,6 +37,39 @@ function renderAgents() {
   `;
 }
 
+async function populateTreeDropdown() {
+  const select = document.getElementById('create-tree');
+  if (!select) return;
+  try {
+    // Fetch the live tree catalog from /api/trees (kg.Trees merged with
+    // domains.AllDomainTrees() in handleTrees) so evolved and domain trees
+    // are selectable without a code deploy, instead of the hardcoded list.
+    const trees = await apiFetch('/trees');
+    if (!Array.isArray(trees) || trees.length === 0) return;
+
+    const groups = {};
+    const order = [];
+    trees.forEach(function(t) {
+      var cat = t.category || 'other';
+      if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+      groups[cat].push(t);
+    });
+    order.sort();
+
+    var html = '<option value="">Select tree...</option>';
+    order.forEach(function(cat) {
+      html += '<optgroup label="' + cat + '">';
+      groups[cat].forEach(function(t) {
+        html += '<option value="' + t.id + '">' + (t.name || t.id) + '</option>';
+      });
+      html += '</optgroup>';
+    });
+    select.innerHTML = html;
+  } catch (e) {
+    // Keep the hardcoded fallback options if the catalog fetch fails.
+  }
+}
+
 async function createAgent() {
   const name = document.getElementById('create-name').value.trim();
   const description = document.getElementById('create-desc').value.trim();
@@ -212,3 +245,4 @@ async function loadAgents() {
 // Load on tab activation
 setInterval(function() { if (state.activeTab === 'agents') loadAgents(); }, 30000);
 setTimeout(loadAgents, 800);
+setTimeout(populateTreeDropdown, 800);
