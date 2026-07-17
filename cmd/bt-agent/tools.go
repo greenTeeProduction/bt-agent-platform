@@ -32,6 +32,13 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
+// textToolResult wraps s as a single-item text ToolResult — the shape every
+// handler in this file builds inline; kept here for the live-mutation tools
+// added alongside it.
+func textToolResult(s string) *engine.ToolResult {
+	return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: s}}}
+}
+
 // checkLLMHealth returns a ToolResult with a degradation error if the LLM is
 // unhealthy, or nil if the LLM is available. LLM-dependent tool handlers should
 // call this first to fail fast with a clear message instead of timing out.
@@ -420,7 +427,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
 	}
 }
 
-// registerMCPTools registers all 79 MCP tools on the server.
+// registerMCPTools registers all 82 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -2928,6 +2935,79 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 			data, _ := json.Marshal(map[string]interface{}{"circuit_breakers": status, "agent_count": len(status)})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_live_runs", "List live mutable behavior-tree runs (run_id, agent, tree, generation, pending ops)",
+		map[string]engine.Property{}, nil,
+		func(args json.RawMessage) *engine.ToolResult {
+			data, _ := json.MarshalIndent(engine.ListLiveRuns(), "", "  ")
+			return textToolResult(string(data))
+		})
+
+	server.RegisterTool("bt_live_mutate", "Enqueue an add/remove node mutation against a live run's behavior tree; applied at the next tick boundary. Returns an op ID (fire-and-forget — poll bt_live_mutations for the result).",
+		map[string]engine.Property{
+			"run_id":      {Type: "string", Description: "target run (from bt_live_runs)"},
+			"kind":        {Type: "string", Description: "add | remove"},
+			"parent_path": {Type: "string", Description: "add: index path of parent ('' = root, '0.2' = second grandchild)"},
+			"index":       {Type: "number", Description: "add: insertion position, -1 appends"},
+			"path":        {Type: "string", Description: "remove: index path of the node to remove"},
+			"expect_name": {Type: "string", Description: "optional: resolved node's Name must match"},
+			"subtree":     {Type: "string", Description: "add: SerializableNode JSON to graft"},
+			"persist":     {Type: "boolean", Description: "snapshot the mutated tree so future runs inherit it"},
+		}, []string{"run_id", "kind"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var in struct {
+				RunID      string `json:"run_id"`
+				Kind       string `json:"kind"`
+				ParentPath string `json:"parent_path"`
+				Index      *int   `json:"index"`
+				Path       string `json:"path"`
+				ExpectName string `json:"expect_name"`
+				Subtree    string `json:"subtree"`
+				Persist    bool   `json:"persist"`
+			}
+			if err := json.Unmarshal(args, &in); err != nil {
+				return textToolResult("error: " + err.Error())
+			}
+			op := engine.MutationOp{
+				Kind: in.Kind, ParentPath: in.ParentPath, Index: -1,
+				Path: in.Path, ExpectName: in.ExpectName, Persist: in.Persist,
+				Origin: engine.OriginOperator, // MCP entry point always stamps operator
+			}
+			if in.Index != nil {
+				op.Index = *in.Index
+			}
+			if in.Subtree != "" {
+				var sub evolution.SerializableNode
+				if err := json.Unmarshal([]byte(in.Subtree), &sub); err != nil {
+					return textToolResult("error: bad subtree JSON: " + err.Error())
+				}
+				op.Subtree = &sub
+			}
+			id, err := engine.EnqueueLiveMutation(in.RunID, op)
+			if err != nil {
+				return textToolResult("error: " + err.Error())
+			}
+			return textToolResult(fmt.Sprintf("queued op %s (applies at next tick boundary)", id))
+		})
+
+	server.RegisterTool("bt_live_mutations", "Mutation journal for a live run: applied/rejected ops with errors and generations",
+		map[string]engine.Property{
+			"run_id": {Type: "string", Description: "target run"},
+		}, []string{"run_id"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var in struct {
+				RunID string `json:"run_id"`
+			}
+			if err := json.Unmarshal(args, &in); err != nil {
+				return textToolResult("error: " + err.Error())
+			}
+			recs, err := engine.LiveMutationJournal(in.RunID)
+			if err != nil {
+				return textToolResult("error: " + err.Error())
+			}
+			data, _ := json.MarshalIndent(recs, "", "  ")
+			return textToolResult(string(data))
 		})
 
 	registerBlockTools(server, deps)

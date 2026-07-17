@@ -195,14 +195,6 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		fullTask = d.injectMemoryContext(agentName, fullTask, opts.PreviousRunLimit)
 	}
 	bb.Task = fullTask
-	bt, err := engine.BuildAndValidate(tree, bb)
-	if err != nil {
-		result.Outcome = "failure"
-		result.Output = err.Error()
-		result.EndedAt = time.Now()
-		result.Duration = result.EndedAt.Sub(start)
-		return result, err
-	}
 	runCtx := ctx
 	if runCtx == nil {
 		runCtx = context.Background()
@@ -215,7 +207,15 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	result.TraceID = runSpanCtx.TraceID
 	result.SpanID = runSpanCtx.SpanID
 	bb.TraceContext = spanCtx
-	_ = engine.RunTask(bb, bt)
+	if _, err := engine.RunTaskMutable(bb, tree, engine.LiveRunInfo{Agent: agentName, TreeID: result.TreeID}); err != nil {
+		runSpan.RecordError(err)
+		runSpan.End()
+		result.Outcome = "failure"
+		result.Output = err.Error()
+		result.EndedAt = time.Now()
+		result.Duration = result.EndedAt.Sub(start)
+		return result, err
+	}
 	runSpan.SetAttribute("outcome", bb.Outcome)
 	if bb.Outcome != "success" && bb.Outcome != "" {
 		runSpan.RecordError(fmt.Errorf("agent outcome: %s", bb.Outcome))

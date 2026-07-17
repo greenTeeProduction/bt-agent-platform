@@ -31,6 +31,9 @@ import (
 )
 
 func resolveTree(id string) *evolution.SerializableNode {
+	if t := agent.LoadMutatedTreeOverride(id); t != nil {
+		return t
+	}
 	return domains.ResolveTreeID(id)
 }
 
@@ -493,6 +496,10 @@ func main() {
 		TreeStore:          treeStore,
 		ResolveTree:        resolveTree,
 		ResolveTreeForUser: resolveTreeForUser,
+	}
+
+	engine.PersistMutatedTreeFn = func(info engine.LiveRunInfo, tree *evolution.SerializableNode) error {
+		return agent.SaveMutatedTree(info.TreeID, tree)
 	}
 
 	// ── Horizontal-scaling substrate ────────────────────────────────────────
