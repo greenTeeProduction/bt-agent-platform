@@ -39,6 +39,19 @@ func TestCloneNode(t *testing.T) {
 	if src2.Metadata["k"] != "v" {
 		t.Fatal("metadata map aliased between source and clone")
 	}
+	// Edges Blackboard map must be deep-copied, not aliased.
+	src3 := &evolution.SerializableNode{Type: "Sequence", Name: "seq",
+		Edges: []evolution.TypedEdge{{
+			Type:       evolution.EdgeChild,
+			ChildIndex: 0,
+			Label:      "test_edge",
+			Blackboard: map[string]string{"k": "v"},
+		}}}
+	dst3 := cloneNode(src3)
+	dst3.Edges[0].Blackboard["k"] = "w"
+	if src3.Edges[0].Blackboard["k"] != "v" {
+		t.Fatal("edge blackboard map aliased between source and clone")
+	}
 }
 
 func TestMapCorrespondenceIdentityWalk(t *testing.T) {
@@ -170,6 +183,54 @@ func TestApplyMutationOpDecoratorCap(t *testing.T) {
 	if _, _, err := applyMutationOp(root, MutationOp{Kind: "add", ParentPath: "", Index: -1,
 		Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}); err == nil {
 		t.Fatal("adding a second child to a single-child decorator must be rejected")
+	}
+
+	// QualityGate accepts up to 2 children (primary + recovery).
+	qg := &evolution.SerializableNode{Type: "QualityGate", Name: "qg",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Primary"}}}
+	if _, _, err := applyMutationOp(qg, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Recovery"}}); err != nil {
+		t.Fatalf("QualityGate should accept 2nd child (recovery): %v", err)
+	}
+	if _, _, err := applyMutationOp(qg, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Third"}}); err == nil {
+		t.Fatal("QualityGate should reject 3rd child")
+	}
+
+	// ForEachTask requires exactly 1 child.
+	fe := &evolution.SerializableNode{Type: "ForEachTask", Name: "fe",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Template"}}}
+	if _, _, err := applyMutationOp(fe, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Second"}}); err == nil {
+		t.Fatal("ForEachTask should reject 2nd child")
+	}
+
+	// ReviewCycle requires exactly 1 child.
+	rc := &evolution.SerializableNode{Type: "ReviewCycle", Name: "rc",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "WorkItem"}}}
+	if _, _, err := applyMutationOp(rc, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Second"}}); err == nil {
+		t.Fatal("ReviewCycle should reject 2nd child")
+	}
+
+	// AbortOnEvent requires exactly 1 child.
+	ae := &evolution.SerializableNode{Type: "AbortOnEvent", Name: "ae",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "WorkItem"}}}
+	if _, _, err := applyMutationOp(ae, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Second"}}); err == nil {
+		t.Fatal("AbortOnEvent should reject 2nd child")
+	}
+
+	// HumanApprovalGate accepts any number of children (gets wrapped in Sequence).
+	ha := &evolution.SerializableNode{Type: "HumanApprovalGate", Name: "ha",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Action1"}}}
+	if _, _, err := applyMutationOp(ha, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Action2"}}); err != nil {
+		t.Fatalf("HumanApprovalGate should accept 2nd child: %v", err)
+	}
+	if _, _, err := applyMutationOp(ha, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "Action3"}}); err != nil {
+		t.Fatalf("HumanApprovalGate should accept 3rd child: %v", err)
 	}
 }
 

@@ -48,6 +48,15 @@ func cloneNode(n *evolution.SerializableNode) *evolution.SerializableNode {
 	}
 	if n.Edges != nil {
 		cp.Edges = append([]evolution.TypedEdge(nil), n.Edges...)
+		for i := range cp.Edges {
+			if cp.Edges[i].Blackboard != nil {
+				bb := make(map[string]string, len(cp.Edges[i].Blackboard))
+				for k, v := range cp.Edges[i].Blackboard {
+					bb[k] = v
+				}
+				cp.Edges[i].Blackboard = bb
+			}
+		}
 	}
 	if len(n.Children) > 0 {
 		cp.Children = make([]evolution.SerializableNode, len(n.Children))
@@ -107,17 +116,19 @@ func mapCorrespondence(oldN, newN, mutParent *evolution.SerializableNode, kind s
 }
 
 // maxChildrenForType bounds how many children a node type meaningfully
-// executes: 0 for leaves, 1 for single-child decorators, -1 for unbounded
-// composites. buildNodeInner silently ignores extra children on leaf and
-// single-child types, so an add beyond the cap would graft dead structure.
+// executes: 0 for leaves, 1 for single-child decorators, 2 for two-child types,
+// -1 for unbounded composites. buildNodeInner silently ignores extra children on
+// leaf and single-child types, so an add beyond the cap would graft dead structure.
 func maxChildrenForType(t string) int {
 	switch t {
 	case "Action", "Condition", "ChainAction", "AlwaysSucceed", "SubTreeRef":
 		return 0
+	case "QualityGate":
+		return 2 // primary child + recovery child
 	case "Retry", "Inverter", "Succeeder", "Repeater", "Runner", "Timeout",
-		"Budget", "RateLimit", "CircuitBreaker", "Monitor", "QualityGate",
+		"Budget", "RateLimit", "CircuitBreaker", "Monitor",
 		"CheckpointVerifier", "SemaphoreGuard", "CachedCondition",
-		"ClaudeErrorHandler", "HumanApprovalGate":
+		"ClaudeErrorHandler", "ForEachTask", "ReviewCycle", "AbortOnEvent":
 		return 1
 	default:
 		return -1
