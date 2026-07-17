@@ -21,6 +21,24 @@ type ModelCaller interface {
 // on) every call.
 var fusionBreaker = reliability.NewCircuitBreaker("fusion-panel", 3, 60*time.Second)
 
+// fusionPostPanelRetryPolicy returns a fresh full-jitter retry policy for the
+// single-shot Judge/Synthesize LLM calls. Unlike RunPanel (which tolerates
+// individual model failures via successfulResponses), Judge and Synthesize
+// each make exactly one LLM call; without a retry, a lone transient failure
+// after a successful panel run would discard the whole result.
+// RetryUnknown is enabled because these calls surface raw upstream errors
+// that predate error-category classification, matching the scheduler's
+// legacy-compatible retry behavior (cmd/bt-agent/main.go).
+func fusionPostPanelRetryPolicy() *reliability.RetryPolicy {
+	return &reliability.RetryPolicy{
+		MaxRetries:   3,
+		Base:         200 * time.Millisecond,
+		MaxDelay:     2 * time.Second,
+		RetryUnknown: true,
+		Jitter:       reliability.FullJitterStrategy,
+	}
+}
+
 type Tool interface {
 	Name() string
 	Description() string
@@ -145,7 +163,15 @@ Original prompt:
 
 Panel responses:
 %s`, prompt, string(body))
-	raw, _, err := RunToolLoop(ctx, caller, cfg.JudgeModel, judgeSystemPrompt(), judgePrompt, nil, cfg)
+	var raw string
+	err := fusionPostPanelRetryPolicy().ExecuteContext(ctx, func() error {
+		out, _, callErr := RunToolLoop(ctx, caller, cfg.JudgeModel, judgeSystemPrompt(), judgePrompt, nil, cfg)
+		if callErr != nil {
+			return callErr
+		}
+		raw = out
+		return nil
+	})
 	if err != nil {
 		return Analysis{}, err
 	}
@@ -162,7 +188,16 @@ Original prompt:
 
 Fusion result:
 %s`, originalPrompt, string(payload))
-	return caller.GenerateWithModel(ctx, cfg.JudgeModel, "You synthesize final answers from multi-model deliberation analysis.", prompt)
+	var final string
+	err := fusionPostPanelRetryPolicy().ExecuteContext(ctx, func() error {
+		out, callErr := caller.GenerateWithModel(ctx, cfg.JudgeModel, "You synthesize final answers from multi-model deliberation analysis.", prompt)
+		if callErr != nil {
+			return callErr
+		}
+		final = out
+		return nil
+	})
+	return final, err
 }
 
 func RunToolLoop(ctx context.Context, caller ModelCaller, model, system, prompt string, tools []Tool, cfg Config) (string, int, error) {

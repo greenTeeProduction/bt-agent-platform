@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-146. Early entries (001–007) record the founding decisions; the rest is
+ADR-152. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -174,6 +174,7 @@ Consolidation notes (2026-07-16):
 | ADR-149 | `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2) | Accepted | 2026-07-17 |
 | ADR-150 | `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-151 | `RunPanel` Adopts `SafeGo` and a Package-Level Circuit Breaker, and `Run` Enforces `cfg.Timeout` via `context.WithTimeout` (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
+| ADR-152 | `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2711,6 +2712,21 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ Three consecutive all-models-failed panel runs open `fusionBreaker` for 60s, so a persistently-down model backend stops being redispatched to (and re-timed-out on) on every `RunPanel` call during the cooldown — matching the failure-memory shape ADR-135/ADR-074/ADR-054 already give the underlying LLM clients, one layer up at the panel-dispatch level.
 - ⚠️ `fusionBreaker` is a single package-level breaker shared across every `RunPanel` call regardless of which models are configured (see rejected alternative above) — a caller that intentionally varies `cfg.AnalysisModels` between calls shares one breaker state across all of them, unlike the per-model-name breakers `FallbackLLM` uses.
 - ⚠️ Milestone 4/4 of the stated program is not addressed by this change and remains open; its scope was not identified in this pass.
+
+## ADR-152: `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4)
+
+**Context (2026-07-17):** ADR-151 closed milestones 1–3/4 of the "Q3 Reliability — Harden the fusion multi-model panel" program but left milestone 4/4 open, its scope not yet identified. Unlike `RunPanel`, which tolerates individual model failures via `successfulResponses` and dispatches every configured model concurrently, `Judge` and `Synthesize` (`internal/fusion/run.go`) each make exactly one LLM call apiece, with no retry. A single transient upstream failure in either call — after `RunPanel` had already produced a successful multi-model panel — discarded the entire fusion result: the same "successful work thrown away by a downstream blip" shape ADR-135 already fixed at the `FallbackLLM`/`GenerateWithModel` layer and ADR-150 fixed for Hermes webhook delivery.
+
+**Decision:** Wrap the LLM call inside `Judge` (via `RunToolLoop`) and the LLM call inside `Synthesize` (via `caller.GenerateWithModel`) in a shared `*reliability.RetryPolicy`, built fresh per call by a new `fusionPostPanelRetryPolicy()` helper — `MaxRetries: 3, Base: 200ms, MaxDelay: 2s, RetryUnknown: true, Jitter: reliability.FullJitterStrategy` — and invoked through `RetryPolicy.ExecuteContext`. `RetryUnknown` is enabled because both call sites surface raw upstream errors that predate ADR-135's error-category classification, matching the scheduler's legacy-compatible retry behavior (`cmd/bt-agent/main.go`) rather than the stricter category-aware default `NewRetryPolicy()` ships with. Each call gets its own policy instance rather than a shared package-level one — unlike `fusionBreaker` (ADR-151), retry state is call-scoped and needs no cross-call failure memory.
+
+**Rejected alternative:** wrapping the retry around the whole `Judge`/`Synthesize` function body (including `parseAnalysisJSON` and prompt construction) was rejected in favor of wrapping only the LLM call itself — that surrounding logic is pure and deterministic, so retrying it on failure would be wasted work and could mask a genuine JSON-parse bug as a transient upstream failure.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestJudge_RetriesTransientFailure` and `TestSynthesize_RetriesTransientFailure` (`internal/fusion/fusion_test.go`), both using a `flakyCaller` that fails a model's first call then succeeds, asserting the retried call eventually returns the successful result and that more than one call was made. Closes milestone 4/4 of the "Q3 Reliability — Harden the fusion multi-model panel" program; ADR-151 (milestones 1–3/4) plus this entry close the program end to end.
+
+**Consequences:**
+- ✅ A lone transient failure in the post-panel `Judge` or `Synthesize` call no longer discards an otherwise-successful multi-model panel run — up to 3 retries with full-jitter backoff (200ms–2s per step) absorb it instead.
+- ✅ Closes the "Q3 Reliability — Harden the fusion multi-model panel" program end to end: ADR-151 (SafeGo, timeout enforcement, circuit breaker) plus this entry (post-panel retry) now cover all four identified milestones.
+- ⚠️ `RetryUnknown: true` means a genuinely non-transient error (e.g. a prompt the model will never accept) is retried up to 3 times before `Judge`/`Synthesize` returns it, adding retry latency to a call that was always going to fail — the same tradeoff ADR-135 already accepted at the `FallbackLLM` layer for the same reason (raw upstream errors predate category classification).
 
 ---
 

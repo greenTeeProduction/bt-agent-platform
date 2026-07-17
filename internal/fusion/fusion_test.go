@@ -158,6 +158,77 @@ func TestSynthesize_UsesAnalysisAndResponses(t *testing.T) {
 	}
 }
 
+// flakyCaller fails the first failN calls per model with err, then succeeds
+// with result. Used to simulate a transient post-panel failure that should
+// be absorbed by a retry instead of discarding an otherwise-successful run.
+type flakyCaller struct {
+	mu     sync.Mutex
+	calls  map[string]int
+	failN  int
+	err    error
+	result string
+}
+
+func (f *flakyCaller) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
+	f.mu.Lock()
+	f.calls[model]++
+	n := f.calls[model]
+	f.mu.Unlock()
+	if n <= f.failN {
+		return "", f.err
+	}
+	return f.result, nil
+}
+
+func (f *flakyCaller) callCount(model string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls[model]
+}
+
+func TestJudge_RetriesTransientFailure(t *testing.T) {
+	caller := &flakyCaller{
+		calls:  map[string]int{},
+		failN:  1,
+		err:    errors.New("transient upstream error"),
+		result: `{"consensus":["agree"],"contradictions":[],"partial_coverage":[],"unique_insights":[],"blind_spots":[]}`,
+	}
+	cfg := DefaultConfig()
+	cfg.JudgeModel = "judge"
+	analysis, err := Judge(context.Background(), caller, cfg, "prompt", []Response{{Model: "a", Content: "A"}})
+	if err != nil {
+		t.Fatalf("Judge should retry a transient failure and succeed instead of discarding the panel, got err: %v", err)
+	}
+	if len(analysis.Consensus) != 1 {
+		t.Fatalf("unexpected analysis after retry: %#v", analysis)
+	}
+	if calls := caller.callCount("judge"); calls < 2 {
+		t.Fatalf("expected Judge to retry the LLM call at least once, got %d call(s)", calls)
+	}
+}
+
+func TestSynthesize_RetriesTransientFailure(t *testing.T) {
+	caller := &flakyCaller{
+		calls:  map[string]int{},
+		failN:  1,
+		err:    errors.New("transient upstream error"),
+		result: "final synthesized answer",
+	}
+	cfg := DefaultConfig()
+	cfg.JudgeModel = "judge"
+	result := Result{Analysis: Analysis{Consensus: []string{"c"}}, Responses: []Response{{Model: "a", Content: "A"}}}
+	final, err := Synthesize(context.Background(), caller, cfg, "prompt", result)
+	if err != nil {
+		t.Fatalf("Synthesize should retry a transient failure and succeed instead of discarding the panel, got err: %v", err)
+	}
+	if final != "final synthesized answer" {
+		t.Fatalf("unexpected final answer after retry: %q", final)
+	}
+	if calls := caller.callCount("judge"); calls < 2 {
+		t.Fatalf("expected Synthesize to retry the LLM call at least once, got %d call(s)", calls)
+	}
+}
+
 func TestRun_EndToEnd(t *testing.T) {
 	caller := &fakeCaller{answers: map[string]string{
 		"a":     "panel A",
