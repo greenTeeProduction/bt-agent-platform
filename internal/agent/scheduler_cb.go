@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -253,6 +254,13 @@ type CircuitSummary struct {
 	Cooldown     time.Duration `json:"cooldown"`
 }
 
+// A2AWinnerBreakerKeyPrefix namespaces the auction-winner circuit breakers
+// internal/a2a's winnerBreakerStore persists into the SAME on-disk file
+// (CircuitBreakersFile()) this store saves. Load skips keys with this prefix
+// and Save preserves them, so the two owners can share the file without
+// clobbering each other's entries.
+const A2AWinnerBreakerKeyPrefix = "a2a.auction.winner."
+
 // circuitBreakerFileEntry mirrors internal/dashboard/agents.go's
 // CircuitBreakerEntry JSON shape (status, failures, last_failure) so Save/Load
 // round-trip through the same file the dashboard's cb_status column reads.
@@ -271,9 +279,25 @@ type circuitBreakersFile struct {
 // Save persists every tracked circuit breaker's state to path as JSON in the
 // {"breakers": {name: {status, failures, last_failure}}} shape the dashboard's
 // loadCircuitBreakers (internal/dashboard/agents.go) already decodes.
+//
+// Save MERGES into the existing file rather than rewriting it wholesale
+// (mirroring internal/a2a's winnerBreakerStore.save): entries this store does
+// not own — the a2a winner breakers, or agents another process tracks — are
+// preserved, so a scheduler/dashboard save cannot clobber a winner breaker
+// that opened after this store loaded. The temp file is unique per writer
+// (os.CreateTemp) because the daemon, the dashboard, and the a2a store all
+// write this path concurrently — a shared fixed ".tmp" let interleaved writes
+// publish a torn file.
 func (s *AgentCircuitBreakerStore) Save(path string) error {
-	s.mu.RLock()
 	out := circuitBreakersFile{Breakers: make(map[string]circuitBreakerFileEntry, len(s.agents))}
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &out) // best-effort merge; a corrupt file is simply overwritten
+		if out.Breakers == nil {
+			out.Breakers = make(map[string]circuitBreakerFileEntry, len(s.agents))
+		}
+	}
+
+	s.mu.RLock()
 	for name, cb := range s.agents {
 		cb.mu.Lock()
 		entry := circuitBreakerFileEntry{
@@ -292,16 +316,29 @@ func (s *AgentCircuitBreakerStore) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("marshal circuit breaker state: %w", err)
 	}
-	if dir := filepath.Dir(path); dir != "" {
+	dir := filepath.Dir(path)
+	if dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("create circuit breaker state dir: %w", err)
 		}
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	tmp, err := os.CreateTemp(dir, ".circuit_breakers-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create circuit breaker temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("write circuit breaker state: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("close circuit breaker temp file: %w", err)
+	}
+	_ = os.Chmod(tmpName, 0644) // CreateTemp defaults to 0600; the dashboard process reads this file
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("rename circuit breaker state: %w", err)
 	}
 	return nil
@@ -326,13 +363,23 @@ func (s *AgentCircuitBreakerStore) Load(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for name, entry := range in.Breakers {
+		// Keys the a2a winnerBreakerStore owns are skipped: absorbing them
+		// would freeze a boot-time copy in this store that Save then re-writes
+		// stale over a2a's live updates.
+		if strings.HasPrefix(name, A2AWinnerBreakerKeyPrefix) {
+			continue
+		}
 		cb := NewAgentCircuitBreaker(name, s.options.Threshold, s.options.Cooldown)
 		cb.failureCount = entry.Failures
 		switch entry.Status {
 		case "open":
 			cb.state = CircuitOpen
 		case "half_open":
-			cb.state = CircuitHalfOpen
+			// A persisted half-open has no in-flight probe in this process and
+			// no time-based escape (Allow() in HalfOpen always refuses), so
+			// restoring it verbatim would wedge the breaker forever. Map it to
+			// Open with a fresh cooldown clock so a probe can be re-issued.
+			cb.state = CircuitOpen
 		default:
 			cb.state = CircuitClosed
 		}

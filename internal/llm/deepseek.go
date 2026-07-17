@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // DeepSeekClient implements the LLM interface using the DeepSeek API.
@@ -80,6 +82,10 @@ type deepseekResponse struct {
 
 // Generate implements LLM.Generate for DeepSeek.
 func (d *DeepSeekClient) Generate(prompt string) (string, error) {
+	return d.generate(context.Background(), prompt)
+}
+
+func (d *DeepSeekClient) generate(ctx context.Context, prompt string) (string, error) {
 	req := deepseekRequest{
 		Model: d.model,
 		Messages: []deepseekMsg{
@@ -94,7 +100,7 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -118,6 +124,28 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
+	// Classify by HTTP status BEFORE parsing the body, mirroring
+	// openai_compat.go: a gateway 5xx with a non-JSON body must classify as
+	// retryable infrastructure, not as a non-retryable "unmarshal" validation
+	// error — internal/engine/chains.go's generateWithRetry gates its retries
+	// on this classification.
+	if resp.StatusCode >= 500 {
+		return "", reliability.NewCategorizedError(reliability.ErrCatLLM,
+			fmt.Errorf("deepseek api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+	}
+	if resp.StatusCode >= 400 {
+		cat := reliability.ErrCatValidation
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			cat = reliability.ErrCatAuth
+		}
+		return "", reliability.NewCategorizedError(cat,
+			fmt.Errorf("deepseek api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", reliability.NewCategorizedError(reliability.ErrCatValidation,
+			fmt.Errorf("deepseek api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+	}
+
 	var dsResp deepseekResponse
 	if err := json.Unmarshal(respBody, &dsResp); err != nil {
 		return "", fmt.Errorf("unmarshal response: %w", err)
@@ -135,13 +163,15 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 }
 
 // GenerateCtx generates with caller-provided context for cancellation propagation.
-func (d *DeepSeekClient) GenerateCtx(_ context.Context, prompt string) (string, error) {
-	return d.Generate(prompt)
+func (d *DeepSeekClient) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return d.generate(ctx, prompt)
 }
 
-// GenerateWithTimeout generates with a per-operation timeout (DeepSeek API has its own timeout).
-func (d *DeepSeekClient) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
-	return d.Generate(prompt)
+// GenerateWithTimeout generates with a per-operation timeout.
+func (d *DeepSeekClient) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return d.generate(ctx, prompt)
 }
 
 // AnalyzeComplexity estimates task complexity (1-5).

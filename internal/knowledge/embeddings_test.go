@@ -133,6 +133,82 @@ func TestBuildIndex_PanicRecovered(t *testing.T) {
 // returns an error within a bounded deadline when the Ollama backend accepts
 // the connection but never writes a response, instead of hanging forever the
 // way http.Post with http.DefaultClient's zero timeout would.
+// TestGetEmbedding_HTTPErrorStatusIsError pins the status-before-parse
+// mechanism (mirroring internal/llm/openai_compat.go): an HTTP error response
+// whose JSON body decodes cleanly into the embedding struct (Ollama's normal
+// {"error":"..."} shape, e.g. model-not-pulled 404) must surface as an error —
+// the pre-fix code returned SUCCESS with a nil embedding and recorded a
+// breaker success, so a persistently erroring backend never opened the
+// breaker and discovery silently degraded.
+func TestGetEmbedding_HTTPErrorStatusIsError(t *testing.T) {
+	origCB := embeddingBreaker
+	t.Cleanup(func() { embeddingBreaker = origCB })
+	embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, time.Minute)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"model \"missing\" not found, try pulling it first"}`))
+	}))
+	defer srv.Close()
+
+	ec := &EmbeddingClient{BaseURL: srv.URL, Model: "missing"}
+	emb, err := ec.GetEmbedding("text")
+	if err == nil {
+		t.Fatalf("expected an error for HTTP 404, got success with %d-dim embedding", len(emb))
+	}
+}
+
+// TestGetEmbedding_EmptyEmbeddingOn200IsError: a 2xx whose body carries no
+// embedding vector is not a usable success — treating it as one poisons the
+// index with nil vectors and silently disables embedding discovery.
+func TestGetEmbedding_EmptyEmbeddingOn200IsError(t *testing.T) {
+	origCB := embeddingBreaker
+	t.Cleanup(func() { embeddingBreaker = origCB })
+	embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, time.Minute)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	ec := &EmbeddingClient{BaseURL: srv.URL, Model: "m"}
+	if _, err := ec.GetEmbedding("text"); err == nil {
+		t.Fatal("expected an error for a 200 response with no embedding vector")
+	}
+}
+
+// TestGetEmbedding_5xxIsRetriedThenSucceeds: a transient backend 5xx must be
+// classified retryable (typed, not dependent on body substrings) so the retry
+// policy recovers on the next attempt.
+func TestGetEmbedding_5xxIsRetriedThenSucceeds(t *testing.T) {
+	origCB := embeddingBreaker
+	t.Cleanup(func() { embeddingBreaker = origCB })
+	embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, time.Minute)
+
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&n, 1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("<html>backend restarting</html>"))
+			return
+		}
+		_, _ = w.Write([]byte(`{"embedding":[0.1,0.2,0.3]}`))
+	}))
+	defer srv.Close()
+
+	ec := &EmbeddingClient{BaseURL: srv.URL, Model: "m"}
+	emb, err := ec.GetEmbedding("text")
+	if err != nil {
+		t.Fatalf("expected the retry policy to recover from a transient 500, got: %v", err)
+	}
+	if len(emb) != 3 {
+		t.Fatalf("got %d-dim embedding, want 3", len(emb))
+	}
+	if atomic.LoadInt32(&n) < 2 {
+		t.Fatalf("expected at least 2 attempts, got %d", n)
+	}
+}
+
 func TestGetEmbedding_TimesOutOnUnresponsiveBackend(t *testing.T) {
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -192,18 +268,28 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 
 	ec := &EmbeddingClient{BaseURL: srv.URL, Model: "test-model"}
 
-	const calls = 6
+	// Threshold is 3: the first three calls each fail (a 5xx is retryable, so
+	// each call may make several attempts) and open the breaker.
+	const calls = 3
 	for i := 0; i < calls; i++ {
 		if _, err := ec.GetEmbedding("task"); err == nil {
 			t.Fatalf("call %d: expected error from failing backend, got nil", i)
 		}
 	}
-
-	if got := atomic.LoadInt32(&requests); got >= calls {
-		t.Errorf("expected the circuit breaker to short-circuit after repeated failures instead of hitting the dead backend on every call; got %d requests for %d calls", got, calls)
-	}
 	if state := embeddingBreaker.State(); state != reliability.CircuitOpen {
-		t.Errorf("expected circuit breaker to be open after %d consecutive failures, got state %v", calls, state)
+		t.Fatalf("expected circuit breaker to be open after %d consecutive failures, got state %v", calls, state)
+	}
+
+	// Once open, further calls must short-circuit without touching the dead
+	// backend at all.
+	before := atomic.LoadInt32(&requests)
+	for i := 0; i < 3; i++ {
+		if _, err := ec.GetEmbedding("task"); err == nil {
+			t.Fatalf("post-open call %d: expected the breaker-open error, got nil", i)
+		}
+	}
+	if got := atomic.LoadInt32(&requests); got != before {
+		t.Errorf("open breaker must short-circuit: backend saw %d extra requests after opening", got-before)
 	}
 }
 

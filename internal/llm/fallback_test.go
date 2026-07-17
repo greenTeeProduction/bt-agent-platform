@@ -8,7 +8,36 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
+
+// TestFallbackLLM_ValidationErrorsDoNotTripBreaker mirrors the openai_compat
+// gating one layer up: a model that keeps returning typed caller-side errors
+// (400 validation) must not have its per-model breaker walked open — otherwise
+// three malformed prompts cool a healthy model down for 60s and force the
+// chain onto worse fallbacks for well-formed prompts.
+func TestFallbackLLM_ValidationErrorsDoNotTripBreaker(t *testing.T) {
+	stub := &stubLLM{name: "m1", err: reliability.NewCategorizedError(reliability.ErrCatValidation, errors.New("api status 400"))}
+	f := NewFallbackLLM([]NamedLLM{{Name: "m1", LLM: stub}})
+
+	for i := 0; i < 5; i++ {
+		if _, err := f.Generate("bad prompt"); err == nil {
+			t.Fatalf("call %d: expected the validation error to surface", i)
+		}
+	}
+	// A healthy request must still reach the model, not hit an open breaker.
+	stub.err = nil
+	got, err := f.Generate("good prompt")
+	if err != nil {
+		t.Fatalf("well-formed prompt after 5 client errors was blocked (breaker wrongly tripped): %v", err)
+	}
+	if !strings.Contains(got, "good prompt") {
+		t.Fatalf("got %q, want the model's answer", got)
+	}
+	if stub.calls != 6 {
+		t.Fatalf("model saw %d calls, want 6 (no call may be short-circuited by a breaker opened on validation errors)", stub.calls)
+	}
+}
 
 type stubLLM struct {
 	name      string

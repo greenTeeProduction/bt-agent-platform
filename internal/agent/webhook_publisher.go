@@ -208,7 +208,11 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	if err != nil {
 		slog.Warn("webhook: POST failed after retries", "subscription", subscription, "status", lastStatus, "error", err)
 		if breaker != nil {
-			breaker.RecordFailure()
+			// Only infrastructure failures (5xx/transport, per postSigned's
+			// typed classification) walk the breaker toward open: a payload
+			// Hermes rejects with 4xx must not suppress deliverable events for
+			// the whole cooldown. A consumed half-open probe is still resolved.
+			breaker.RecordOutcome(err)
 		}
 		p.dlq.Push(reliability.DeadLetterEntry{
 			Agent: subscription,

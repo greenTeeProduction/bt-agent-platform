@@ -627,6 +627,14 @@ func (s *Scheduler) tick(runner AgentRunner) {
 func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	inst, err := s.reg.Get(job.AgentName)
 	if err != nil {
+		// tick() consumed this agent's breaker probe via Allowed() before
+		// calling runJob; returning without recording an outcome would leak a
+		// half-open probe and wedge the breaker HalfOpen forever (Allow() in
+		// HalfOpen always refuses). Record a failure: the cooldown clock
+		// restarts, so a later probe can still be granted, and a genuinely
+		// vanished agent walks toward open until reconciliation removes its job.
+		slog.Warn("scheduler: agent missing from registry at run time", "agent", job.AgentName, "err", err)
+		reportAgentOutcome(s.cbStore, job.AgentName, false)
 		return
 	}
 	_ = inst

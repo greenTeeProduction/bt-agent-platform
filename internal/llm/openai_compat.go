@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
@@ -159,7 +158,7 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		// whatever substrings happen to appear in the body.
 		if resp.StatusCode >= 500 {
 			return reliability.NewCategorizedError(reliability.ErrCatLLM,
-				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
 		}
 		if resp.StatusCode >= 400 {
 			cat := reliability.ErrCatValidation
@@ -167,14 +166,14 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 				cat = reliability.ErrCatAuth
 			}
 			return reliability.NewCategorizedError(cat,
-				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
 		}
 		// Residual non-2xx (an unfollowed 3xx): not retryable, and the body is
 		// unlikely to be the expected JSON — classify by status rather than
 		// letting the unmarshal failure name the error.
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return reliability.NewCategorizedError(reliability.ErrCatValidation,
-				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
 		}
 		var parsed openAICompatResponse
 		if unmarshalErr := json.Unmarshal(respBody, &parsed); unmarshalErr != nil {
@@ -189,36 +188,15 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		result = strings.TrimSpace(parsed.Choices[0].Message.Content)
 		return nil
 	})
+	// RecordOutcome only counts infrastructure (retryable) failures toward
+	// open — a caller-side 400/401 must not deny service to well-formed
+	// requests — and always resolves a consumed half-open probe, so an
+	// unlucky probe error can never wedge the breaker HalfOpen.
+	c.breaker.RecordOutcome(err)
 	if err != nil {
-		// Only infrastructure failures (5xx/network/timeout/rate-limit) should
-		// walk the breaker toward open. A caller-side 400/401 is not the
-		// backend's fault, and counting it would let one malformed prompt open
-		// the per-baseURL circuit and deny service to well-formed requests
-		// sharing this client.
-		if reliability.ClassifyError(err).IsRetryable() {
-			c.breaker.RecordFailure()
-		}
 		return "", err
 	}
-	c.breaker.RecordSuccess()
 	return result, nil
-}
-
-// truncateBody caps an error-response body so a large HTML/error page from a
-// gateway doesn't bloat the returned error string. Classification no longer
-// depends on the body content (status drives it), so this is purely cosmetic.
-// The cut is backed off to a rune boundary so a multi-byte UTF-8 sequence is
-// never split into an invalid tail.
-func truncateBody(b []byte) string {
-	const max = 512
-	if len(b) <= max {
-		return string(b)
-	}
-	cut := max
-	for cut > 0 && !utf8.RuneStart(b[cut]) {
-		cut--
-	}
-	return string(b[:cut]) + "…"
 }
 
 func (c *OpenAICompatClient) AnalyzeComplexity(task string) string {

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // ErrorCategory classifies errors into actionable groups for
@@ -377,6 +378,23 @@ func isRateLimitError(lower string) bool {
 		}
 	}
 	return false
+}
+
+// TruncateForError caps an HTTP error-response body for inclusion in an error
+// string, so a multi-KB gateway HTML page doesn't bloat logs. The cut backs
+// off to a UTF-8 rune boundary so a multi-byte sequence is never split.
+// Classification never depends on the body (status codes drive it), so the
+// cap is purely cosmetic. Shared by the LLM/embedding HTTP clients.
+func TruncateForError(b []byte) string {
+	const max = 512
+	if len(b) <= max {
+		return string(b)
+	}
+	cut := max
+	for cut > 0 && !utf8.RuneStart(b[cut]) {
+		cut--
+	}
+	return string(b[:cut]) + "…"
 }
 
 // contextDeadlineExceeded returns a sentinel error matching context.DeadlineExceeded

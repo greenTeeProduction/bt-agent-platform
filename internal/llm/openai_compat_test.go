@@ -132,6 +132,35 @@ func TestOpenAICompat_RetryableFailureRecordsBreakerFailure(t *testing.T) {
 	}
 }
 
+// TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker reproduces the
+// probe-leak the RecordOutcome contract closes: an Open breaker grants exactly
+// one half-open probe; if that probe's request fails with a non-retryable
+// error (400 validation) and no outcome is recorded, the breaker is stuck
+// HalfOpen forever and every later request is rejected. The backend answering
+// 400 proves the infrastructure is healthy, so the probe must resolve the
+// breaker closed.
+func TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid request"}}`))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
+	// Swap in a primed short-cooldown breaker: tripped open, cooldown elapsed,
+	// exactly one half-open probe pending.
+	client.breaker = reliability.NewCircuitBreaker("probe-test", 1, time.Millisecond)
+	client.breaker.RecordFailure()
+	time.Sleep(10 * time.Millisecond)
+
+	if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "p"); err == nil {
+		t.Fatal("expected the 400 to surface as an error")
+	}
+	if state := client.breaker.State(); state != reliability.CircuitClosed {
+		t.Fatalf("breaker state = %v, want closed — a non-retryable probe answer must resolve the half-open probe, not leak it", state)
+	}
+}
+
 // TestOpenAICompat_OpenBreakerRejectsWithoutRequest verifies an open breaker
 // fails fast without hitting the backend.
 func TestOpenAICompat_OpenBreakerRejectsWithoutRequest(t *testing.T) {

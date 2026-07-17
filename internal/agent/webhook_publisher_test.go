@@ -55,6 +55,32 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 	}
 }
 
+// TestWebhookPublisher_ClientErrorsDoNotTripBreaker verifies delivery
+// failures Hermes rejects as bad requests (4xx, typed non-retryable by
+// postSigned) do not walk the subscription breaker open: five consecutive
+// payload rejections must not suppress the next deliverable event for the
+// whole cooldown window.
+func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
+	var serves int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&serves, 1)
+		if n <= 5 { // breaker threshold is 5
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+	for i := 0; i < 6; i++ {
+		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]interface{}{"i": i}})
+	}
+	if got := atomic.LoadInt32(&serves); got != 6 {
+		t.Fatalf("server saw %d requests, want 6 — the 6th deliverable event must not be skipped by a breaker opened on 4xx rejections", got)
+	}
+}
+
 func TestDefaultWebhookSecrets(t *testing.T) {
 	secrets := DefaultWebhookSecrets()
 	if len(secrets) != 3 {
