@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-156. Early entries (001–007) record the founding decisions; the rest is
+ADR-157. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -179,6 +179,7 @@ Consolidation notes (2026-07-16):
 | ADR-154 | `Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
 | ADR-155 | `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
 | ADR-156 | `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
+| ADR-157 | `BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2803,6 +2804,21 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ Closes the "Q1 Correctness / Q3 Reliability — ChainState nil-map panic" program in full: milestone 1 (ADR-155's `RunTask` guard) made the `auction_award` write reliable instead of a silent no-op on a nil map; milestones 2–3 needed no fix; milestone 4 (this ADR) reads that write back out.
 - ⚠️ The override only fires when `Execute`'s own `RunTask` call wrote `auction_award` into its own `bb.ChainState` — a multi-hop delegation where the award is produced by a nested `RunTask` call against a different `Blackboard` instance is out of scope.
 - Pinned by `TestExecute_AuctionAwardAttributesHistoryToWinner`.
+
+---
+
+## ADR-157: `BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research)
+
+**Context (2026-07-17):** `knowledge.RecordRun` looks up `kg.Trees[rec.TreeID]` and silently no-ops when the ID isn't present — there is no error, log line, or metric, so a domain tree missing from the registry has every run outcome it ever produces dropped on the floor, invisible to `ComputeAnalytics`, `RegisterDomainFitness`, and the gardener's tree-prioritization ranking (ADR-146). `internal/knowledge/registry.go`'s `BuildKnowledgeGraph()` hand-registers each `domain:*` tree as a `TreeMeta` literal, a manual step independent of `internal/domains.AllDomainTrees()`, the actual catalog of runnable domain trees. The two had drifted: 24 trees present in `AllDomainTrees()` — including `bt_fusion`, `goap_fusion`, `goap_fusion_loop`, `notebooklm`, `superpowers_workflow`, `arc42_seeder`, `arc42:docsync`, and all twelve `arc42:section1`–`section12` generators — had no `TreeMeta` entry at all, so every cycle of the platform's own self-improvement loops (the GOAP fusion loop, the arc42 docsync trees, superpowers workflow runs) was running blind: none of that activity ever reached analytics or influenced gardener prioritization, even though those are exactly the trees the platform relies on to improve itself.
+
+**Decision:** Add a `TreeMeta` registration for each of the 24 missing trees to `BuildKnowledgeGraph()`, populated with a real `Name`/`Description`/`Keywords`/`Capabilities` per tree (not placeholder stubs) and a `NodeCount` measured via `evolution.CountNodes` against the actual wrapped tree `AllDomainTrees()` returns, plus a handful of `kg.Connect` relationship edges (e.g. `goap_fusion` specializes `goap_planning`, `goap_fusion_loop` extends `goap_fusion`, `notebooklm_consumer` depends on `notebooklm`) consistent with the graph's existing relationship conventions. A new guard test, `TestKnowledgeGraphRegistersAllDomainTrees` (`internal/domains/kg_registry_coverage_test.go`), diffs `AllDomainTrees()` against `kg.Trees` and fails naming every missing ID, so any future tree added to the catalog without a matching `TreeMeta` breaks the build instead of silently losing its run history. Registering per-tree metadata by hand (rather than, say, auto-generating stub `TreeMeta` entries from `AllDomainTrees()` at graph-build time) was kept because `TreeMeta.Keywords`/`Capabilities` feed `Discover`'s matching and the gardener's domain-fitness weighting — an auto-generated stub with empty keywords would silence the coverage gap without actually making these trees discoverable or fairly weighted.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestKnowledgeGraphRegistersAllDomainTrees` (`internal/domains/kg_registry_coverage_test.go`), which now passes with zero missing IDs, plus updated counts in `internal/knowledge/coverage_test.go` and `registry_test.go` (`GlobalGraph` grows from 43 to 67 trees; the `domain` category from 15 to 39).
+
+**Consequences:**
+- ✅ Every tree `AllDomainTrees()` returns — including the platform's own self-improvement trees (GOAP fusion, arc42 docsync, superpowers workflow) — now has its run outcomes recorded into `ComputeAnalytics`/`RegisterDomainFitness` and factored into gardener tree-prioritization instead of being silently dropped.
+- ✅ `TestKnowledgeGraphRegistersAllDomainTrees` makes the drift regression-proof: a tree added to `AllDomainTrees()` without a corresponding `TreeMeta` now fails CI instead of degrading analytics invisibly.
+- ⚠️ This closes the registry-side of the gap only. The gardener daemon's own `Config.KnowledgeGraph` field is still never set in `cmd/bt-gardener/config.go` (a separate, previously-identified production-wiring gap — ADR-146's algorithm is tested but not live), so the newly-visible analytics do not yet reach the running gardener daemon's prioritization until that field is wired.
 
 ---
 

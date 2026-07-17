@@ -447,6 +447,215 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	kg.Connect("domain:goap_planning", "domain:goap_research", "specializes")
 	kg.Connect("domain:goap_planning", "domain:goap_devops", "specializes")
 
+	// ── PREVIOUSLY-UNREGISTERED DOMAIN TREES ────────────────────────────────
+	// These trees exist in domains.AllDomainTrees() but were missing from the
+	// knowledge graph, so knowledge.RecordRun silently dropped their run
+	// outcomes (see kg_registry_coverage_test.go). NodeCount values below are
+	// measured via evolution.CountNodes against the wrapped (error-handler
+	// included) tree returned by AllDomainTrees().
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:alert_router",
+		Category:    "domain",
+		Name:        "Alert Router",
+		Description: "Route any alert (critical/security/trading/disk/health) by severity and type to the right channel — keyword-matching only, no LLM, instant execution",
+		NodeCount:   26,
+		Keywords:    []string{"alert", "route", "critical", "security", "trading", "disk", "health", "notification"},
+		Capabilities: []Capability{
+			{Action: "route_alert", Domain: "engineering", Strength: 0.9},
+			{Action: "detect_severity", Domain: "engineering", Strength: 0.85},
+			{Action: "notify_channel", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:auction_demo",
+		Category:    "domain",
+		Name:        "Auction Demo",
+		Description: "Auction-based A2A task allocation demo: announce a TaskAnnouncement, collect Bids, and award to the winning bidder via the AuctionDelegate seam, falling back to a delegate tree when no eligible bidder responds",
+		NodeCount:   12,
+		Keywords:    []string{"auction", "bid", "award", "a2a", "task-allocation", "announce"},
+		Capabilities: []Capability{
+			{Action: "run_auction", Domain: "engineering", Strength: 0.85},
+			{Action: "allocate_task", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:bt_fusion",
+		Category:    "domain",
+		Name:        "BT Fusion",
+		Description: "Research behavior-tree/self-improving-agent patterns and expand this Go BT platform with evidence-backed fusion reports",
+		NodeCount:   25,
+		Keywords:    []string{"fusion", "research", "bt", "self-improving", "pattern", "vault"},
+		Capabilities: []Capability{
+			{Action: "research_patterns", Domain: "research", Strength: 0.85},
+			{Action: "apply_fusion", Domain: "engineering", Strength: 0.8},
+			{Action: "verify_build", Domain: "engineering", Strength: 0.75},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:bt_manager",
+		Category:    "domain",
+		Name:        "BT Manager",
+		Description: "Post-execution meta-agent: analyze failures, detect degraded agents, apply targeted tree mutations — self-healing for the BT fleet",
+		NodeCount:   24,
+		Keywords:    []string{"manager", "meta", "degraded", "bootstrap", "health", "reflection", "self-healing"},
+		Capabilities: []Capability{
+			{Action: "diagnose_agent", Domain: "engineering", Strength: 0.85},
+			{Action: "apply_mutation", Domain: "engineering", Strength: 0.8},
+			{Action: "report_health", Domain: "engineering", Strength: 0.75},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:goap_fusion",
+		Category:    "domain",
+		Name:        "GOAP Fusion",
+		Description: "GOAP-driven BT platform improvement: reads NotebookLM vault research, runs graphify codebase analysis, identifies gaps, prioritizes goals, implements safe tree improvements, verifies with build/test",
+		NodeCount:   33,
+		Keywords:    []string{"goap", "fusion", "research", "vault", "graphify", "implement", "verify"},
+		Capabilities: []Capability{
+			{Action: "plan_goals", Domain: "engineering", Strength: 0.85},
+			{Action: "implement_via_superpowers", Domain: "engineering", Strength: 0.9},
+			{Action: "verify_evidence", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:goap_fusion_loop",
+		Category:    "domain",
+		Name:        "GOAP Fusion Loop",
+		Description: "Continuous self-improving GOAP fusion loop: grills NotebookLM with critical review, identifies gaps, implements improvements via Claude Code, verifies, and repeats forever — autonomous BT framework self-evolution",
+		NodeCount:   35,
+		Keywords:    []string{"goap", "fusion", "loop", "continuous", "grill", "autonomous", "self-evolution"},
+		Capabilities: []Capability{
+			{Action: "continuous_improvement", Domain: "meta", Strength: 0.9},
+			{Action: "implement_via_superpowers", Domain: "engineering", Strength: 0.85},
+			{Action: "verify_evidence", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:hermes_update",
+		Category:    "domain",
+		Name:        "Hermes Update",
+		Description: "Zero-LLM daily Hermes Agent maintenance: version check, git fetch, run hermes update when behind, report",
+		NodeCount:   11,
+		Keywords:    []string{"hermes", "update", "maintenance", "version", "git"},
+		Capabilities: []Capability{
+			{Action: "check_version", Domain: "engineering", Strength: 0.8},
+			{Action: "run_update", Domain: "engineering", Strength: 0.85},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:notebooklm",
+		Category:    "domain",
+		Name:        "NotebookLM",
+		Description: "NotebookLM operations: research→import→query, vault ingest, studio content creation (podcasts/briefings), sync-back to vault. Deterministic nlm CLI tool stubs with anti-fabrication evidence gate",
+		NodeCount:   26,
+		Keywords:    []string{"notebooklm", "nlm", "research", "query", "vault", "studio"},
+		Capabilities: []Capability{
+			{Action: "research_notebook", Domain: "research", Strength: 0.9},
+			{Action: "query_notebook", Domain: "research", Strength: 0.85},
+			{Action: "sync_vault", Domain: "research", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:notebooklm_consumer",
+		Category:    "domain",
+		Name:        "NotebookLM Consumer",
+		Description: "Consume NotebookLM research outputs: read synthesis files, compute source trends, write structured summaries back to vault",
+		NodeCount:   10,
+		Keywords:    []string{"notebooklm", "consumer", "synthesis", "trends", "summary"},
+		Capabilities: []Capability{
+			{Action: "consume_research", Domain: "research", Strength: 0.85},
+			{Action: "summarize_trends", Domain: "research", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:superpowers_workflow",
+		Category:    "domain",
+		Name:        "Superpowers Workflow",
+		Description: "Production Superpowers workflow v2: skill routing, grill gate, TDD task loop with review cycles, debug branch, finish options",
+		NodeCount:   82,
+		Keywords:    []string{"superpowers", "workflow", "skill", "tdd", "brainstorm", "grill", "hitl", "finish"},
+		Capabilities: []Capability{
+			{Action: "route_skill", Domain: "engineering", Strength: 0.85},
+			{Action: "run_tdd_loop", Domain: "engineering", Strength: 0.9},
+			{Action: "gate_hitl", Domain: "engineering", Strength: 0.75},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:arc42_seeder",
+		Category:    "domain",
+		Name:        "Arc42 Seeder",
+		Description: "Seed the next multi-cycle improvement program from the LIVE arc42 quality goals (reads docs/arc42 at runtime, never a copy): one goal targeted per run, grounded goal-named milestones, persisted to programs.json for the goap-fusion loop",
+		NodeCount:   5,
+		Keywords:    []string{"arc42", "seed", "program", "quality-goals", "backlog"},
+		Capabilities: []Capability{
+			{Action: "seed_program", Domain: "engineering", Strength: 0.85},
+			{Action: "read_quality_goals", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "domain:arc42:docsync",
+		Category:    "domain",
+		Name:        "Arc42 Docsync",
+		Description: "Per-section arc42 + README documentation sync: SyncArc42Section01..12 + SyncReadme, each a bounded guideline-constrained Claude pass that updates its file only when the last change affects it",
+		NodeCount:   15,
+		Keywords:    []string{"arc42", "docsync", "documentation", "readme", "sync"},
+		Capabilities: []Capability{
+			{Action: "sync_documentation", Domain: "engineering", Strength: 0.85},
+			{Action: "update_readme", Domain: "engineering", Strength: 0.75},
+		},
+	})
+
+	arc42Sections := []struct {
+		id, title string
+		nodes     int
+	}{
+		{"domain:arc42:section1", "Introduction and Goals", 16},
+		{"domain:arc42:section2", "Architecture Constraints", 13},
+		{"domain:arc42:section3", "Context and Scope", 12},
+		{"domain:arc42:section4", "Solution Strategy", 12},
+		{"domain:arc42:section5", "Building Block View", 22},
+		{"domain:arc42:section6", "Runtime View", 10},
+		{"domain:arc42:section7", "Deployment View", 12},
+		{"domain:arc42:section8", "Crosscutting Concepts", 10},
+		{"domain:arc42:section9", "Architecture Decisions", 11},
+		{"domain:arc42:section10", "Quality Requirements", 11},
+		{"domain:arc42:section11", "Risks and Technical Debt", 13},
+		{"domain:arc42:section12", "Glossary", 13},
+	}
+	for _, s := range arc42Sections {
+		kg.Register(&TreeMeta{
+			ID:          s.id,
+			Category:    "domain",
+			Name:        "Arc42 " + s.title,
+			Description: "Generate arc42 " + s.id[len("domain:arc42:"):] + " (" + s.title + ") via LLM with hardcoded-template fallback",
+			NodeCount:   s.nodes,
+			Keywords:    []string{"arc42", "section", "documentation", "architecture"},
+			Capabilities: []Capability{
+				{Action: "generate_arc42_section", Domain: "engineering", Strength: 0.8},
+				{Action: "document_architecture", Domain: "engineering", Strength: 0.75},
+			},
+		})
+	}
+
+	// Relationships among the newly-registered trees
+	kg.Connect("domain:goap_fusion", "domain:goap_planning", "specializes")
+	kg.Connect("domain:goap_fusion_loop", "domain:goap_fusion", "extends")
+	kg.Connect("domain:bt_manager", "domain:agent_monitor", "extends")
+	kg.Connect("domain:notebooklm_consumer", "domain:notebooklm", "depends_on")
+	kg.Connect("domain:arc42:docsync", "domain:arc42_seeder", "depends_on")
+
 	// ── STARTUP TREES ───────────────────────────────────────────────────────
 
 	kg.Register(&TreeMeta{
@@ -698,5 +907,5 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	return kg
 }
 
-// GlobalGraph is the pre-built knowledge graph containing all 40 behavior trees.
+// GlobalGraph is the pre-built knowledge graph containing all 67 behavior trees.
 var GlobalGraph = BuildKnowledgeGraph()

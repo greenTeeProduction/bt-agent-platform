@@ -8,15 +8,15 @@ import (
 func TestKnowledgeGraph(t *testing.T) {
 	g := GlobalGraph
 
-	if len(g.Trees) != 43 {
-		t.Errorf("expected 43 trees, got %d", len(g.Trees))
+	if len(g.Trees) != 67 {
+		t.Errorf("expected 67 trees, got %d", len(g.Trees))
 	}
 
 	expectedCats := map[string]int{
 		"core":      2,
 		"finance":   10,
 		"research":  2,
-		"domain":    15,
+		"domain":    39,
 		"startup":   6,
 		"thinktank": 5,
 		"evolution": 3,
