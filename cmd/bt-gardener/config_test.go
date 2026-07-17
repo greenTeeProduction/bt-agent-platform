@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // TestBuildGardenerConfig_SafetyComponentsWired proves that the production config
@@ -105,6 +108,27 @@ func TestBuildGardenerConfig_SnapshotDirCreated(t *testing.T) {
 	}
 }
 
+// TestBuildGardenerConfig_KnowledgeGraphWired pins Q2 Evolvability milestone
+// 1/4: buildGardenerConfig must wire a real *knowledge.KnowledgeGraph into
+// Config.KnowledgeGraph, otherwise RunCycleV2's treePriorityRanks()
+// (internal/gardener/evolve_v2.go) always sees a nil graph and silently
+// falls back to alphabetical tree ordering in the real daemon instead of
+// prioritizing by KG analytics (bottlenecks / underbred-but-proven trees).
+func TestBuildGardenerConfig_KnowledgeGraphWired(t *testing.T) {
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+	metricsDir := t.TempDir()
+
+	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
+	if err != nil {
+		t.Fatalf("buildGardenerConfig returned error: %v", err)
+	}
+
+	if cfg.KnowledgeGraph == nil {
+		t.Fatal("KnowledgeGraph is nil — RunCycleV2's treePriorityRanks() falls back to alphabetical ordering instead of KG-driven prioritization in the real daemon")
+	}
+}
+
 // TestBuildGardenerConfig_TranspositionTableWired pins Q2 Evolvability
 // milestone 2/3: buildGardenerConfig must set Config.TranspositionTablePath,
 // otherwise Gardener.transpositionTable() (internal/gardener/evolve_v2.go)
@@ -122,5 +146,49 @@ func TestBuildGardenerConfig_TranspositionTableWired(t *testing.T) {
 
 	if cfg.TranspositionTablePath == "" {
 		t.Error("TranspositionTablePath is empty — transpositionTable() always returns nil, so the Stockfish-style deep-search apply path (evaluator.IterativeDeepening) never runs in production")
+	}
+}
+
+// TestBuildGardenerConfig_FeedbackPersistenceArmed pins Q2 Evolvability
+// milestone 3/4: buildGardenerConfig must arm the KnowledgeGraph's debounced
+// feedback writer (kg.ConfigureFeedbackPersistence) against the shared
+// feedback file (agent.FeedbackFile()), the same file bt-agent's scheduler and
+// bt-dashboard read. Without it, Config.KnowledgeGraph's persistence path
+// stays empty, so FlushFeedback is a permanent no-op and the milestone-2
+// write-back never survives a bt-gardener restart.
+//
+// The knowledge package's feedbackPersist state is unexported, so this proves
+// the wiring behaviorally: register a tree, mark it dirty, force a flush, and
+// confirm the shared feedback file actually landed on disk (mirrors
+// internal/agent/scheduler_test.go's TestNewScheduler_RestoresAndConfiguresFeedback).
+func TestBuildGardenerConfig_FeedbackPersistenceArmed(t *testing.T) {
+	agentHome := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", agentHome)
+
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+	metricsDir := t.TempDir()
+
+	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
+	if err != nil {
+		t.Fatalf("buildGardenerConfig returned error: %v", err)
+	}
+	if cfg.KnowledgeGraph == nil {
+		t.Fatal("KnowledgeGraph is nil")
+	}
+
+	cfg.KnowledgeGraph.Register(&knowledge.TreeMeta{
+		ID:       "tree:feedback-persist-armed-test",
+		Name:     "Feedback Persist Armed Test",
+		Category: "test",
+	})
+	cfg.KnowledgeGraph.MarkFeedbackDirty()
+	if err := cfg.KnowledgeGraph.FlushFeedback(true); err != nil {
+		t.Fatalf("FlushFeedback: %v", err)
+	}
+
+	feedbackPath := agent.FeedbackFile()
+	if _, statErr := os.Stat(feedbackPath); statErr != nil {
+		t.Fatalf("shared feedback file %q was not written after a forced flush: %v — buildGardenerConfig never armed ConfigureFeedbackPersistence with a non-empty path", feedbackPath, statErr)
 	}
 }

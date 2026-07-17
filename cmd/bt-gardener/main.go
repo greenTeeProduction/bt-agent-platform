@@ -334,6 +334,14 @@ Question: {{.input}}`,
 		case sig := <-sigCh:
 			engine.Info("bt-gardener: shutting down", "signal", sig.String(), "cycles", cycleCount)
 			_ = metricsTracker.Save()
+			// Force a final feedback flush so the milestone-2 KG write-back
+			// survives this restart even inside the debounce window — mirrors
+			// internal/agent/scheduler.go's Stop().
+			if cfg.KnowledgeGraph != nil {
+				if err := cfg.KnowledgeGraph.FlushFeedback(true); err != nil {
+					engine.Error("bt-gardener: final feedback flush failed", "error", err)
+				}
+			}
 			return
 		case <-ticker.C:
 		}

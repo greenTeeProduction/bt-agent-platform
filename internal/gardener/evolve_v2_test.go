@@ -12,6 +12,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // ============================================================================
@@ -1663,5 +1664,177 @@ func TestEvolveTreeV2_DisabledGateTriggersAutomaticRollback(t *testing.T) {
 	if onDisk.Name != goodTree.Name {
 		t.Errorf("expected the automatic rollback to durably persist the restored tree via Registry.SaveTree, got on-disk name %q, want %q",
 			onDisk.Name, goodTree.Name)
+	}
+}
+
+// ============================================================================
+// Knowledge-graph "evolved" write-back (evolve_v2.go) — Q2 Evolvability
+// program milestone 2/4: evolveTreeV2 must call KnowledgeGraph.RecordRun with
+// Outcome="evolved" whenever a cycle accepts at least one mutation, mirroring
+// recordEvolvedFitness in cmd/bt-agent/tools.go, guarded so a nil
+// KnowledgeGraph or an unregistered tree ID stays a safe no-op.
+// ============================================================================
+
+// knowledgeRecordingGardener mirrors experienceRecordingGardener but wires a
+// knowledge.KnowledgeGraph into Config instead of an ExperienceBank, reusing
+// the same gateDisabledTestTree()+seedFailureRecords() fixture that
+// deterministically produces exactly one accepted, fitness-improving mutation.
+func knowledgeRecordingGardener(t *testing.T, kg *knowledge.KnowledgeGraph) (*Gardener, TreeEntry) {
+	t.Helper()
+	snapDir := t.TempDir()
+	refDir := t.TempDir()
+
+	metricsTracker, err := NewMetricsTracker(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	refStore, err := evolution.NewStore(refDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	const treeName = "knowledge_recording"
+	tree := gateDisabledTestTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	registry := &Registry{dir: refDir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "knowledge recording", Tree: tree, FilePath: refDir + "/tree-" + treeName + ".json", Active: true},
+	}
+	registry.mu.Unlock()
+
+	cfg := Config{
+		Registry:       registry,
+		MetricsTracker: metricsTracker,
+		RefStore:       refStore,
+		Gate:           evolution.NewQualityGate(snapDir),
+		SnapshotDir:    snapDir,
+		CrisisDetector: evolution.NewCrisisDetector(),
+		ValidationGate: ValidationGateConfig{Enabled: false},
+		MaxMutations:   1,
+		KnowledgeGraph: kg,
+	}
+	return NewGardener(cfg), registry.List()[0]
+}
+
+// TestEvolveTreeV2_RecordsEvolvedRunInKnowledgeGraph pins the core milestone
+// 2/4 behavior: an accepted mutation must write an "evolved" RunRecord back
+// into the configured KnowledgeGraph, bumping the tree's StructuralFitness.
+func TestEvolveTreeV2_RecordsEvolvedRunInKnowledgeGraph(t *testing.T) {
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "knowledge_recording", Name: "Knowledge Recording", Category: "test"})
+
+	g, entry := knowledgeRecordingGardener(t, kg)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	// Non-vacuity: this setup must accept an improving mutation, otherwise the
+	// write-back assertions below prove nothing.
+	if m.Mutations < 1 {
+		t.Fatalf("setup produced no accepted mutations (metrics=%+v) — fix the seeding", m)
+	}
+
+	tree := kg.Trees[entry.Name]
+	if tree == nil {
+		t.Fatalf("KnowledgeGraph has no entry for %q after an accepted-mutation cycle", entry.Name)
+	}
+	if tree.LastOutcome != "evolved" {
+		t.Errorf("LastOutcome = %q, want %q", tree.LastOutcome, "evolved")
+	}
+	if tree.EvolvedCount != 1 {
+		t.Errorf("EvolvedCount = %d, want 1", tree.EvolvedCount)
+	}
+	if tree.StructuralFitness <= 0 {
+		t.Errorf("StructuralFitness = %.4f, want > 0 after an accepted mutation", tree.StructuralFitness)
+	}
+}
+
+// TestEvolveTreeV2_NoAcceptedMutation_DoesNotRecordEvolvedRun pins the other
+// half of the "whenever a cycle accepts at least one mutation" condition: a
+// cycle that accepts zero mutations must not write an "evolved" run at all.
+func TestEvolveTreeV2_NoAcceptedMutation_DoesNotRecordEvolvedRun(t *testing.T) {
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "knowledge_no_mutation", Name: "No Mutation", Category: "test"})
+
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "Step"}},
+	}
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "knowledge_no_mutation", Description: "no mutation", Tree: tree, FilePath: dir + "/tree-knowledge_no_mutation.json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	cfg := Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   1,
+		KnowledgeGraph: kg,
+	}
+	g := NewGardener(cfg)
+
+	// No reflection records were seeded, so the evidence gate skips mutation
+	// entirely — this fixture deterministically accepts zero mutations.
+	m := g.evolveTreeV2(reg.List()[0], DefaultEvolveV2Config())
+	if m.Mutations != 0 {
+		t.Fatalf("setup accepted a mutation (metrics=%+v) — fix the setup so this test isolates the no-mutation path", m)
+	}
+
+	got := kg.Trees["knowledge_no_mutation"]
+	if got == nil {
+		t.Fatalf("KnowledgeGraph lost its registered entry for %q", "knowledge_no_mutation")
+	}
+	if got.LastOutcome == "evolved" {
+		t.Errorf("LastOutcome = %q — evolveTreeV2 must not record an 'evolved' run when no mutation was accepted", got.LastOutcome)
+	}
+	if got.EvolvedCount != 0 {
+		t.Errorf("EvolvedCount = %d, want 0 (no accepted mutation this cycle)", got.EvolvedCount)
+	}
+}
+
+// TestEvolveTreeV2_NilKnowledgeGraphIsNoOp pins the degradation contract: a nil
+// KnowledgeGraph must leave evolveTreeV2 behaving exactly as today — mutations
+// still accepted, no panic.
+func TestEvolveTreeV2_NilKnowledgeGraphIsNoOp(t *testing.T) {
+	g, entry := knowledgeRecordingGardener(t, nil)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	if m.Mutations < 1 {
+		t.Fatalf("nil KnowledgeGraph changed behavior: expected accepted mutations, got metrics=%+v", m)
+	}
+	if m.Delta <= 0 {
+		t.Fatalf("nil KnowledgeGraph changed behavior: expected fitness improvement, got delta=%.6f", m.Delta)
+	}
+}
+
+// TestEvolveTreeV2_UnregisteredTreeID_KnowledgeGraphWriteBackIsNoOp pins the
+// unregistered-tree-ID guard: evolveTreeV2 must not panic or otherwise change
+// its accepted-mutation behavior when the configured KnowledgeGraph has no
+// entry for entry.Name — relying on KnowledgeGraph.RecordRun's own no-op for
+// unknown tree IDs rather than skipping the call outright.
+func TestEvolveTreeV2_UnregisteredTreeID_KnowledgeGraphWriteBackIsNoOp(t *testing.T) {
+	kg := knowledge.NewKnowledgeGraph() // no Register call — entry.Name is unknown to the graph
+	g, entry := knowledgeRecordingGardener(t, kg)
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{UseRealLLM: false})
+
+	if m.Mutations < 1 {
+		t.Fatalf("setup produced no accepted mutations (metrics=%+v) — fix the seeding", m)
+	}
+	if _, ok := kg.Trees[entry.Name]; ok {
+		t.Errorf("KnowledgeGraph gained a phantom entry for unregistered tree %q", entry.Name)
 	}
 }

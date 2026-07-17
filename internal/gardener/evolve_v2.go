@@ -14,6 +14,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
@@ -451,6 +452,14 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 
+	// Knowledge-graph write-back (Q2 Evolvability milestone 2): a cycle that
+	// accepted at least one mutation is evidence the KG's fitness-aware
+	// discovery should see, mirroring recordEvolvedFitness in
+	// cmd/bt-agent/tools.go.
+	if applied > 0 {
+		g.recordEvolvedRun(entry.Name, newFitness.Composite)
+	}
+
 	return CycleMetrics{
 		TreeName: entry.Name, Timestamp: time.Now().Unix(),
 		BaseFitness: baseFitness.Composite, NewFitness: newFitness.Composite,
@@ -470,6 +479,24 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 		SaveFailed: saveFailed,
 	}
+}
+
+// recordEvolvedRun writes an "evolved" RunRecord for treeID back into the
+// configured KnowledgeGraph, mirroring recordEvolvedFitness in
+// cmd/bt-agent/tools.go so fitness-aware discovery can surface trees the
+// gardener daemon (not just QD/island runs) has improved. A nil
+// KnowledgeGraph is a safe no-op; an unregistered tree ID relies on
+// KnowledgeGraph.RecordRun's own no-op for unknown tree IDs.
+func (g *Gardener) recordEvolvedRun(treeID string, fitness float64) {
+	if g.cfg.KnowledgeGraph == nil {
+		return
+	}
+	g.cfg.KnowledgeGraph.RecordRun(knowledge.RunRecord{
+		TreeID:  treeID,
+		Task:    "gardener v2 evolution cycle",
+		Outcome: "evolved",
+		Quality: fitness,
+	})
 }
 
 // applyLearnedSelectorOrdering seeds a SelectorOptimizer from the durable

@@ -9,7 +9,14 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
+
+// feedbackFlushInterval throttles the knowledge graph's debounced feedback
+// writer, matching internal/agent/scheduler.go's default
+// (cfg.FeedbackFlushInterval fallback). The gardener has no equivalent
+// config knob yet, so this is a fixed constant.
+const feedbackFlushInterval = 30 * time.Second
 
 // experienceBankDir resolves the on-disk directory backing the gardener's
 // ExperienceBank. It deliberately matches bt-agent's experienceBankDir()
@@ -57,6 +64,22 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		return gardener.Config{}, fmt.Errorf("open shared experience bank: %w", err)
 	}
 
+	// KG mirrors bt-agent's scheduler (internal/agent/scheduler.go): build the
+	// full tree registry, then overlay persisted runtime feedback from the
+	// same shared file so RunCycleV2's treePriorityRanks() sees real
+	// Fitness/RunCount data instead of falling back to alphabetical ordering.
+	kg := knowledge.BuildKnowledgeGraph()
+	if err := kg.LoadFeedback(agent.FeedbackFile()); err != nil {
+		return gardener.Config{}, fmt.Errorf("load knowledge graph feedback: %w", err)
+	}
+	// Write-side of feedback persistence (Q2 Evolvability milestone 3): arm the
+	// debounced writer against the same shared file so the milestone-2
+	// write-back (RunCycleV2 marking trees dirty on RecordRun) survives a
+	// bt-gardener restart and is visible to bt-agent/bt-dashboard, which read
+	// this identical path. Matches internal/agent/scheduler.go's NewScheduler
+	// wiring of knowledge.GlobalGraph.
+	kg.ConfigureFeedbackPersistence(agent.FeedbackFile(), feedbackFlushInterval)
+
 	return gardener.Config{
 		Registry:       registry,
 		MetricsTracker: metricsTracker,
@@ -90,6 +113,11 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// without it, Gardener.transpositionTable() always returns nil and
 		// deep search never runs outside tests.
 		TranspositionTablePath: filepath.Join(metricsDir, "transposition"),
+
+		// KnowledgeGraph seeds treePriorityRanks() with KG-driven prioritization
+		// (bottlenecks and underbred-but-proven trees first) instead of the
+		// alphabetical fallback (Q2 Evolvability milestone 1).
+		KnowledgeGraph: kg,
 	}, nil
 }
 
