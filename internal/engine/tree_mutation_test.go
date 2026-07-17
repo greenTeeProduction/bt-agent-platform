@@ -1,0 +1,188 @@
+// internal/engine/tree_mutation_test.go
+package engine
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
+)
+
+func mkTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "root",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "ApplyFix"},
+			{Type: "Selector", Name: "sel", Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "ApplyKnowledge"},
+				{Type: "Action", Name: "ChooseAction"},
+			}},
+		},
+	}
+}
+
+func TestCloneNode(t *testing.T) {
+	src := mkTree()
+	dst := cloneNode(src)
+	if dst == src || &dst.Children[1] == &src.Children[1] {
+		t.Fatal("clone must not alias source")
+	}
+	dst.Children[1].Children[0].Name = "changed"
+	if src.Children[1].Children[0].Name != "ApplyKnowledge" {
+		t.Fatal("mutating clone must not touch source")
+	}
+	// Metadata map must be copied, not aliased.
+	src2 := &evolution.SerializableNode{Type: "Action", Name: "m",
+		Metadata: map[string]any{"k": "v"}}
+	dst2 := cloneNode(src2)
+	dst2.Metadata["k"] = "w"
+	if src2.Metadata["k"] != "v" {
+		t.Fatal("metadata map aliased between source and clone")
+	}
+}
+
+func TestMapCorrespondenceIdentityWalk(t *testing.T) {
+	old := mkTree()
+	nw := cloneNode(old)
+	corr := map[*evolution.SerializableNode]*evolution.SerializableNode{}
+	mapCorrespondence(old, nw, nil, "", 0, corr)
+	if corr[old] != nw || corr[&old.Children[1]] != &nw.Children[1] ||
+		corr[&old.Children[1].Children[0]] != &nw.Children[1].Children[0] {
+		t.Fatal("identity walk must pair every node 1:1")
+	}
+}
+
+func TestMapCorrespondenceAfterAddSurvivesRealloc(t *testing.T) {
+	// The regression this guards: correspondence captured during the clone
+	// goes stale when applyMutationOp's insert reallocates the parent's
+	// children backing array. Correspondence must therefore be computed
+	// AFTER the op, via this dual walk with shift arithmetic.
+	old := mkTree()
+	nw := cloneNode(old)
+	parent, at, err := applyMutationOp(nw, MutationOp{
+		Kind: "add", ParentPath: "1", Index: 0,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "BuildCompsTable"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	corr := map[*evolution.SerializableNode]*evolution.SerializableNode{}
+	mapCorrespondence(old, nw, parent, "add", at, corr)
+	// Shifted siblings ApplyKnowledge (old 1.0 → new 1.1) and ChooseAction (old 1.1 → new 1.2)
+	// must pair with their POST-reallocation addresses.
+	if corr[&old.Children[1].Children[0]] != &nw.Children[1].Children[1] {
+		t.Fatal("sibling ApplyKnowledge must pair across the insert shift")
+	}
+	if corr[&old.Children[1].Children[1]] != &nw.Children[1].Children[2] {
+		t.Fatal("sibling ChooseAction must pair across the insert shift")
+	}
+	// The inserted node has no old counterpart.
+	for _, nwNode := range corr {
+		if nwNode == &nw.Children[1].Children[0] {
+			t.Fatal("inserted node must not be paired")
+		}
+	}
+}
+
+func TestMapCorrespondenceAfterRemove(t *testing.T) {
+	old := mkTree()
+	nw := cloneNode(old)
+	parent, at, err := applyMutationOp(nw, MutationOp{Kind: "remove", Path: "1.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	corr := map[*evolution.SerializableNode]*evolution.SerializableNode{}
+	mapCorrespondence(old, nw, parent, "remove", at, corr)
+	if corr[&old.Children[1].Children[1]] != &nw.Children[1].Children[0] {
+		t.Fatal("sibling ChooseAction must pair across the removal shift")
+	}
+	if corr[&old.Children[1].Children[0]] != nil {
+		t.Fatal("removed node must not be paired")
+	}
+}
+
+func TestApplyMutationOpAdd(t *testing.T) {
+	root := mkTree()
+	parent, idx, err := applyMutationOp(root, MutationOp{
+		Kind: "add", ParentPath: "1", Index: 1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "BuildCompsTable"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent.Name != "sel" || idx != 1 {
+		t.Fatalf("want parent sel idx 1, got %s idx %d", parent.Name, idx)
+	}
+	got := []string{root.Children[1].Children[0].Name, root.Children[1].Children[1].Name, root.Children[1].Children[2].Name}
+	if got[0] != "ApplyKnowledge" || got[1] != "BuildCompsTable" || got[2] != "ChooseAction" {
+		t.Fatalf("insertion order wrong: %v", got)
+	}
+	// Append with Index -1.
+	if _, idx, err = applyMutationOp(root, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "AssemblePitchDeck"}}); err != nil || idx != 2 {
+		t.Fatalf("append: idx=%d err=%v", idx, err)
+	}
+	if root.Children[2].Name != "AssemblePitchDeck" {
+		t.Fatal("append did not land at end of root children")
+	}
+}
+
+func TestApplyMutationOpRemove(t *testing.T) {
+	root := mkTree()
+	parent, idx, err := applyMutationOp(root, MutationOp{Kind: "remove", Path: "1.0", ExpectName: "ApplyKnowledge"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent.Name != "sel" || idx != 0 || len(root.Children[1].Children) != 1 || root.Children[1].Children[0].Name != "ChooseAction" {
+		t.Fatal("remove 1.0 must delete node ApplyKnowledge")
+	}
+}
+
+func TestApplyMutationOpRejections(t *testing.T) {
+	cases := []struct {
+		name string
+		op   MutationOp
+		want string
+	}{
+		{"remove root", MutationOp{Kind: "remove", Path: ""}, "root"},
+		{"bad path", MutationOp{Kind: "remove", Path: "9.9"}, "resolve"},
+		{"expect name mismatch", MutationOp{Kind: "remove", Path: "0", ExpectName: "zzz"}, "expect"},
+		{"add under leaf", MutationOp{Kind: "add", ParentPath: "0", Index: -1,
+			Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}, "children"},
+		{"nil subtree", MutationOp{Kind: "add", ParentPath: "", Index: -1}, "subtree"},
+		{"subtree with SubTreeRef", MutationOp{Kind: "add", ParentPath: "", Index: -1,
+			Subtree: &evolution.SerializableNode{Type: "SubTreeRef", Name: "blk"}}, "SubTreeRef"},
+		{"unknown kind", MutationOp{Kind: "replace", Path: "0"}, "kind"},
+		{"index out of range", MutationOp{Kind: "add", ParentPath: "", Index: 7,
+			Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}, "index"},
+	}
+	for _, tc := range cases {
+		root := mkTree()
+		if _, _, err := applyMutationOp(root, tc.op); err == nil || !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.want)) {
+			t.Errorf("%s: want error containing %q, got %v", tc.name, tc.want, err)
+		}
+	}
+}
+
+func TestApplyMutationOpDecoratorCap(t *testing.T) {
+	root := &evolution.SerializableNode{Type: "Retry", Name: "r", MaxRetries: 2,
+		Children: []evolution.SerializableNode{{Type: "Action", Name: "ApplyFix"}}}
+	if _, _, err := applyMutationOp(root, MutationOp{Kind: "add", ParentPath: "", Index: -1,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}); err == nil {
+		t.Fatal("adding a second child to a single-child decorator must be rejected")
+	}
+}
+
+func TestValidateMutatedTreeLLMAllowlist(t *testing.T) {
+	root := mkTree()
+	// Operator-origin: a plain action subtree is fine.
+	if err := validateMutatedTree(root, MutationOp{Kind: "add", Origin: OriginOperator,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}); err != nil {
+		t.Fatalf("operator origin should pass: %v", err)
+	}
+	// LLM-origin: same subtree fails the proposal policy (no Condition guard).
+	if err := validateMutatedTree(root, MutationOp{Kind: "add", Origin: OriginLLM,
+		Subtree: &evolution.SerializableNode{Type: "Action", Name: "ApplyKnowledge"}}); err == nil {
+		t.Fatal("llm origin without guard-first structure must be rejected")
+	}
+}
