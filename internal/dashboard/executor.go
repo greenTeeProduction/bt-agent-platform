@@ -138,7 +138,9 @@ func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *
 	success := agent.IsBreakerSuccess(res.Outcome, runErr)
 	score := res.Quality * 100
 	if score <= 0 {
-		if success || strings.EqualFold(res.Outcome, "completed") {
+		// The shared classifier already treats the Hermes-fallback "completed"
+		// outcome as healthy, so no per-outcome special case is needed here.
+		if success {
 			score = 75
 		} else {
 			score = 25
@@ -150,6 +152,26 @@ func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *
 		score = 0
 	}
 	RecordBlockFitness(treeID, agentName, score)
+}
+
+// hermesOutcome maps a Hermes-CLI run onto the scheduler's canonical outcome
+// vocabulary: "failure" for an exec error or failure keywords (never the
+// one-off "failed" spelling only literal matchers understood), "success" for
+// success keywords, and "completed" — a healthy outcome per
+// agent.IsHealthyOutcome — when the error-free output matches no keyword.
+func hermesOutcome(output string, execErr error) string {
+	if execErr != nil {
+		return "failure"
+	}
+	lower := strings.ToLower(output)
+	switch {
+	case strings.Contains(lower, "success") || strings.Contains(lower, "completed") || strings.Contains(lower, "done"):
+		return "success"
+	case strings.Contains(lower, "error") || strings.Contains(lower, "failed"):
+		return "failure"
+	default:
+		return "completed" // ran but couldn't determine
+	}
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {
@@ -190,20 +212,11 @@ func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcom
 		return output, "timeout", fmt.Errorf("task timed out after %v", e.Timeout)
 	}
 	if err != nil {
-		outcome = "failed"
 		// Still return output — it may contain useful error info
-		return output, outcome, nil
+		return output, hermesOutcome(output, err), nil
 	}
 
-	// Determine outcome from output
-	lower := strings.ToLower(output)
-	if strings.Contains(lower, "success") || strings.Contains(lower, "completed") || strings.Contains(lower, "done") {
-		outcome = "success"
-	} else if strings.Contains(lower, "error") || strings.Contains(lower, "failed") {
-		outcome = "failed"
-	} else {
-		outcome = "completed" // ran but couldn't determine
-	}
+	outcome = hermesOutcome(output, nil)
 
 	return output, outcome, nil
 }

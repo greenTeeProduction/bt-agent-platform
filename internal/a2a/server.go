@@ -188,16 +188,30 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 				return
 			}
 		default:
-			errMsg := fmt.Sprintf("BT tree %s failed: %s (elapsed %v)", inst.Definition.Tree, bb.Outcome, elapsed.Round(time.Millisecond))
-			if result != "" {
-				errMsg = result
-			}
+			errMsg := failureEventMessage(inst.Definition.Tree, bb.Outcome, result, elapsed)
 			if !yield(a2a.NewStatusUpdateEvent(execCtx, state,
 				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(errMsg))), nil) {
 				return
 			}
 		}
 	}
+}
+
+// failureEventMessage builds the status message for a non-completed bridged
+// outcome. When bb.Result is set it is preferred as the human-readable
+// message; for a rate-limit carryover the sentinel outcome is kept in the
+// text regardless, because the delegating caller (internal/engine's
+// DelegateToA2A node) detects the sentinel in the returned error to classify
+// the delegation as a healthy deferred pause instead of a hard failure —
+// the "new call site" gap the carryover ADRs warn about.
+func failureEventMessage(tree, outcome, result string, elapsed time.Duration) string {
+	if result == "" {
+		return fmt.Sprintf("BT tree %s failed: %s (elapsed %v)", tree, outcome, elapsed.Round(time.Millisecond))
+	}
+	if agent.IsRateLimitCarryover(outcome) && !strings.Contains(result, outcome) {
+		return outcome + ": " + result
+	}
+	return result
 }
 
 // Cancel handles task cancellation.

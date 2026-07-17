@@ -27,7 +27,7 @@ func TestRecordCircuitBreakerOutcome_HealthyOutcomesKeepBreakerClosed(t *testing
 	})
 	exec := &AgentExecutor{CBStore: cbStore}
 
-	for _, outcome := range []string{"no_change", "degraded", "no_change", "degraded"} {
+	for _, outcome := range []string{"no_change", "degraded", "completed", "no_change", "degraded", "completed"} {
 		exec.recordCircuitBreakerOutcome("analysis-agent", &agent.RunResult{Outcome: outcome}, nil)
 	}
 	if cb := cbStore.Get("analysis-agent"); cb.State() == agent.CircuitOpen {
@@ -57,6 +57,32 @@ func TestRecordCircuitBreakerOutcome_NilResultTripsBreaker(t *testing.T) {
 }
 
 var errAgentBroken = errors.New("runner not configured")
+
+// TestHermesOutcome pins the Hermes-fallback outcome vocabulary to the
+// scheduler's canonical one: the CLI path must emit "failure" (not the
+// one-off "failed" spelling only literal matchers downstream understood) and
+// "completed" for an error-free run whose output matches no keyword.
+func TestHermesOutcome(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		execErr error
+		want    string
+	}{
+		{"exec error is canonical failure", "boom", errors.New("exit 1"), "failure"},
+		{"success keyword", "Task succeeded: success", nil, "success"},
+		{"failed keyword is canonical failure", "the run failed", nil, "failure"},
+		{"error keyword is canonical failure", "error: nope", nil, "failure"},
+		{"indeterminate is completed", "42 widgets processed", nil, "completed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hermesOutcome(tc.output, tc.execErr); got != tc.want {
+				t.Fatalf("hermesOutcome(%q, %v) = %q, want %q", tc.output, tc.execErr, got, tc.want)
+			}
+		})
+	}
+}
 
 // TestRecordTaskMetric_NilResultRecordsFailure verifies the task metrics stay
 // consistent with the circuit breaker for hard failures: a nil RunResult with

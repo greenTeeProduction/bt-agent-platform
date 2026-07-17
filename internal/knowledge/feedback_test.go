@@ -370,6 +370,35 @@ func TestOutcomeScore_Success(t *testing.T) {
 	}
 }
 
+// TestOutcomeScore_SharedVocabulary pins outcomeScore to the scheduler's
+// outcome vocabulary: healthy non-"success" outcomes (no_change, degraded —
+// see internal/agent's isHealthyOutcome) must score as healthy runs, the
+// rate-limit carryover is a neutral pause (it is not evidence about tree
+// quality either way), and the named bad outcomes must score at or below
+// "failure" — the pre-fix default of 0.5 ranked a panicked or timed-out run
+// ABOVE a plain failure and penalized healthy analysis-only runs to half
+// credit.
+func TestOutcomeScore_SharedVocabulary(t *testing.T) {
+	fail := outcomeScore("failure")
+	tests := []struct {
+		outcome string
+		min     float64
+		max     float64
+	}{
+		{"no_change", 0.8, 1.0},                // healthy: analysis-only
+		{"degraded", 0.6, 1.0},                 // healthy: deterministic fallback
+		{"goap_fusion_rate_limited", 0.5, 0.5}, // neutral pause
+		{"panic", 0.0, fail},                   // at or below failure
+		{"timeout", 0.0, fail},                 // at or below failure
+		{"failed", fail, fail},                 // alias of failure
+	}
+	for _, tc := range tests {
+		if s := outcomeScore(tc.outcome); s < tc.min || s > tc.max {
+			t.Errorf("outcomeScore(%q) = %.2f, want in [%.2f, %.2f]", tc.outcome, s, tc.min, tc.max)
+		}
+	}
+}
+
 func TestOutcomeScore_ChainSuccess(t *testing.T) {
 	if s := outcomeScore("chain_success"); s != 1.0 {
 		t.Errorf("chain_success should score 1.0, got %.2f", s)

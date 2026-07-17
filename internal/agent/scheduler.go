@@ -781,14 +781,13 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			eventType = "error_detected"
 		}
 		// Raw values — consumers (Hermes webhook templates) do the labeling.
-		// Empty on success / when unavailable. RateLimitCarryoverOutcome is a
-		// healthy, expected backoff pause (see IsBreakerSuccess), not a
-		// genuine failure, so it must not alarm the Hermes webhook/Telegram
-		// template either.
+		// Empty for any run the shared classifier calls healthy — success,
+		// no_change, degraded, and the rate-limit carryover — so a healthy
+		// cycle is never labeled FAILED in the operator-facing summary.
 		failureReason := ""
 		if runErr != nil {
 			failureReason = runErr.Error()
-		} else if outcome != "success" && !IsRateLimitCarryover(outcome) {
+		} else if !IsBreakerSuccess(outcome, runErr) {
 			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
 		}
 

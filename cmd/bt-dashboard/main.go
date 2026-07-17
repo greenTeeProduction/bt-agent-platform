@@ -213,13 +213,8 @@ func main() {
 	dashAgentRouter = reliability.NewAgentRouter(reliability.NewLocalExecutor(
 		"dashboard-local",
 		func(agentName, task string) (*reliability.AgentResult, error) {
-			output, outcome, err := newAgentExecutor().RunTask(agentName, task, "")
-			return &reliability.AgentResult{
-				Agent:   agentName,
-				Task:    task,
-				Output:  output,
-				Success: outcome == "success" || outcome == "completed",
-			}, err
+			res, err := newAgentExecutor().RunTaskResult(agentName, task, "")
+			return dashboardLocalAgentResult(agentName, task, res, err)
 		},
 	))
 	slog.Info("Scalability components initialized",
@@ -985,19 +980,39 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 				taskDesc = task.Description
 			}
 
+			// Skip agents whose breaker is open, mirroring handleAgentExecute's
+			// gate and the scheduler's tick-time skip — no point burning a
+			// worker slot and an LLM call on a known-broken agent. The task
+			// goes back to approved so a later sprint retries it once the
+			// breaker recovers.
+			if !getDashCBStore().Allowed(agentName) {
+				slog.Warn("sprint: skipping task — circuit breaker open", "task", task.ID, "agent", agentName)
+				_ = taskStore.UpdateStatus(task.ID, "approved")
+				_ = taskStore.SetOutput(task.ID, "skipped: circuit breaker open for agent "+agentName, "deferred")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
+				continue
+			}
+
 			slog.Info("sprint: running task", "task", task.ID, "agent", agentName, "tree", treeID)
 
 			output, outcome, err := executor.RunTask(agentName, taskDesc, treeID)
 
-			if err != nil && outcome == "timeout" {
+			switch sprintTaskDisposition(outcome, err) {
+			case sprintDeferred:
+				// Healthy rate-limit pause: requeue for a later sprint.
+				_ = taskStore.UpdateStatus(task.ID, "approved")
+				_ = taskStore.SetOutput(task.ID, output, "deferred")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
+			case sprintFailed:
+				failLabel := "failed"
+				if err != nil && outcome == "timeout" {
+					output = "timeout: " + err.Error()
+					failLabel = "timeout"
+				}
 				_ = taskStore.UpdateStatus(task.ID, "failed")
-				_ = taskStore.SetOutput(task.ID, "timeout: "+err.Error(), "timeout")
+				_ = taskStore.SetOutput(task.ID, output, failLabel)
 				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
-			} else if outcome == "failed" || err != nil {
-				_ = taskStore.UpdateStatus(task.ID, "failed")
-				_ = taskStore.SetOutput(task.ID, output, "failed")
-				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
-			} else {
+			default: // sprintCompleted
 				_ = taskStore.UpdateStatus(task.ID, "completed")
 				_ = taskStore.SetOutput(task.ID, output, outcome)
 				syncWorkflowTaskStatus(task.ID, dashboard.StatusCompleted)
@@ -1735,8 +1750,12 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 
 // agentExecuteResult adapts an agent.RunResult from AgentExecutor.RunTaskResult
 // into the reliability.AgentResult wire shape RemoteExecutor decodes, carrying
-// over the real Quality estimate RunOnce already computed (mirrors
-// cmd/bt-agent/main.go's newLocalAgentExecutor, the in-process analogue).
+// over the real Quality estimate RunOnce already computed. It mirrors
+// cmd/bt-agent/main.go's localAgentResult contract exactly: Success stays
+// strict (err == nil && outcome == "success") and the raw Outcome travels on
+// the wire, so a peer's routedRunResult can classify healthy non-"success"
+// outcomes (no_change, degraded, rate-limit carryover, completed) itself
+// instead of fabricating "failure" from a bare Success=false.
 func agentExecuteResult(agentName, task string, runRes *agent.RunResult, elapsed time.Duration, err error) reliability.AgentResult {
 	res := reliability.AgentResult{
 		Agent:    agentName,
@@ -1746,16 +1765,65 @@ func agentExecuteResult(agentName, task string, runRes *agent.RunResult, elapsed
 	if runRes != nil {
 		res.Output = runRes.Output
 		res.QualityScore = runRes.Quality
-		outcome := runRes.Outcome
-		res.Success = outcome == "success" || outcome == "completed"
-		if outcome == "failed" || outcome == "timeout" {
-			res.Success = false
-		}
+		res.Outcome = runRes.Outcome
+		res.Success = err == nil && runRes.Outcome == "success"
 	}
 	if err != nil {
 		res.Error = err.Error()
 	}
 	return res
+}
+
+// dashboardLocalAgentResult adapts an agent.RunResult into the router's
+// AgentResult, mirroring cmd/bt-agent/main.go's localAgentResult: Success
+// strict, raw Outcome preserved so downstream consumers classify it with the
+// shared helpers instead of a collapsed bool.
+func dashboardLocalAgentResult(agentName, task string, res *agent.RunResult, err error) (*reliability.AgentResult, error) {
+	if res == nil {
+		return nil, err
+	}
+	ar := &reliability.AgentResult{
+		Agent:        agentName,
+		Task:         task,
+		Output:       res.Output,
+		Duration:     res.Duration,
+		Success:      err == nil && res.Outcome == "success",
+		QualityScore: res.Quality,
+		Outcome:      res.Outcome,
+	}
+	if err != nil {
+		ar.Error = err.Error()
+	}
+	return ar, err
+}
+
+// sprintDisposition classifies one sprint task run for the dispatch loop.
+type sprintDisposition int
+
+const (
+	// sprintCompleted — the run was healthy per the shared classifier; the
+	// task is done.
+	sprintCompleted sprintDisposition = iota
+	// sprintFailed — a genuine failure; the task is marked failed/Blocked.
+	sprintFailed
+	// sprintDeferred — a rate-limit carryover: a healthy, expected pause the
+	// executor just recorded as a breaker/metric success. The task goes back
+	// to approved so a later sprint retries it instead of being marked failed.
+	sprintDeferred
+)
+
+// sprintTaskDisposition routes the sprint loop's task-status decision through
+// agent.IsBreakerSuccess — the same classifier that just recorded the run's
+// breaker and metric outcome — so one run can no longer be a breaker success
+// and a workflow-Blocked task failure at the same time.
+func sprintTaskDisposition(outcome string, err error) sprintDisposition {
+	if agent.IsRateLimitCarryover(outcome) {
+		return sprintDeferred
+	}
+	if agent.IsBreakerSuccess(outcome, err) {
+		return sprintCompleted
+	}
+	return sprintFailed
 }
 
 // handleAgentsList returns all registered BT agents with their live status and circuit breaker info.

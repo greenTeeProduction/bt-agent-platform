@@ -170,7 +170,7 @@ func routedRunResult(agentName, task string, ar *reliability.AgentResult) *agent
 		if ar.Success {
 			outcome = "success"
 		} else {
-			outcome = "failed"
+			outcome = "failure" // canonical failure token, not the one-off "failed"
 		}
 	}
 	return &agent.RunResult{

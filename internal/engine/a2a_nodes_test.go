@@ -37,6 +37,36 @@ func TestDelegateToA2A_MissingURL(t *testing.T) {
 	}
 }
 
+// TestDelegateToA2A_RateLimitCarryoverPropagates pins the carryover contract
+// across the A2A boundary: when the remote agent's run ended in the rate-limit
+// carryover (the A2A server reports the task failed with the sentinel in the
+// error text), the delegating tree must surface the carryover outcome — the
+// same bb.Outcome + return -1 shape the local GOAP emission sites use — so the
+// caller's scheduler treats it as a healthy deferred pause instead of a hard
+// delegation failure (breaker failure + retries + DLQ).
+func TestDelegateToA2A_RateLimitCarryoverPropagates(t *testing.T) {
+	registerA2ANodes()
+	action := actionRegistry["DelegateToA2A"]
+
+	origFn := DelegateToA2AFn
+	DelegateToA2AFn = func(_, _ string) (string, error) {
+		return "", fmt.Errorf("A2A task failed: goap_fusion_rate_limited: Claude rate-limit backoff active")
+	}
+	defer func() { DelegateToA2AFn = origFn }()
+
+	bb := &Blackboard{
+		Task:       "do something",
+		ChainState: map[string]any{"a2a_target_url": "http://example.com"},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
+	if status := action(ctx); status != -1 {
+		t.Errorf("expected -1 (the selector must advance), got %d", status)
+	}
+	if bb.Outcome != "goap_fusion_rate_limited" {
+		t.Errorf("outcome = %q, want the carryover sentinel preserved across the A2A boundary", bb.Outcome)
+	}
+}
+
 func TestDelegateToA2A_MissingTaskEmptyChainState(t *testing.T) {
 	registerA2ANodes()
 	action, ok := actionRegistry["DelegateToA2A"]

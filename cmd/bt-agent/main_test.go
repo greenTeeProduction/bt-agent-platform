@@ -594,3 +594,22 @@ func TestA2AServeErrorDemotesPortContention(t *testing.T) {
 		}
 	}
 }
+
+// TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure pins the outcome
+// vocabulary at the router boundary: when a peer's AgentResult omits Outcome,
+// the fabricated fallback must use the scheduler's canonical "failure" token,
+// not the one-off "failed" spelling.
+func TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure(t *testing.T) {
+	res := routedRunResult("a", "t", &reliability.AgentResult{Success: false})
+	if res.Outcome != "failure" {
+		t.Fatalf("fabricated outcome = %q, want canonical %q", res.Outcome, "failure")
+	}
+	ok := routedRunResult("a", "t", &reliability.AgentResult{Success: true})
+	if ok.Outcome != "success" {
+		t.Fatalf("fabricated success outcome = %q, want %q", ok.Outcome, "success")
+	}
+	preserved := routedRunResult("a", "t", &reliability.AgentResult{Outcome: agent.RateLimitCarryoverOutcome})
+	if preserved.Outcome != agent.RateLimitCarryoverOutcome {
+		t.Fatalf("outcome = %q, want the peer's raw outcome preserved", preserved.Outcome)
+	}
+}
