@@ -36,7 +36,7 @@ func withTempSelfReview(t *testing.T) (stateDir, programsPath string) {
 	return stateDir, programsPath
 }
 
-func selfReviewTestDeps(stateDir string, runner ClaudeRunner, scanner func(repoDir, lastSHA string) (string, string, string, error)) selfReviewDeps {
+func selfReviewTestDeps(stateDir string, runner ClaudeRunner, scanner func(repoDir, lastSHA string) (string, string, string, string, error)) selfReviewDeps {
 	return selfReviewDeps{
 		runner:        runner,
 		repoDir:       "/tmp/self-review-test-repo",
@@ -70,8 +70,8 @@ const validFinding2 = `{"title":"Fix leaked handle","milestone":"fix internal/fo
 
 func TestRunSelfReview_UpToDateNoNewCommits(t *testing.T) {
 	stateDir, programsPath := withTempSelfReview(t)
-	scanner := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "", "", "headsha", nil
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "", "", "headsha", "", nil
 	}
 	deps := selfReviewTestDeps(stateDir, &fakeReviewClaudeRunner{}, scanner)
 	bb := &Blackboard{Task: "self-review"}
@@ -99,8 +99,8 @@ func TestRunSelfReview_UpToDateNoNewCommits(t *testing.T) {
 
 func TestRunSelfReview_SeedsProgramsForConfirmedFindings(t *testing.T) {
 	stateDir, programsPath := withTempSelfReview(t)
-	scanner := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "abc1234 superpowers: apply verified run x", "diff body", "abc123", nil
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff body", "abc123", "beginning..HEAD", nil
 	}
 	output := "[" + validFinding1 + "," + validFinding2 + "]"
 	runner := &fakeReviewClaudeRunner{output: output}
@@ -127,8 +127,8 @@ func TestRunSelfReview_ReviewFailureDoesNotAdvanceSHA(t *testing.T) {
 	if err := saveSelfReviewState(stateDir, selfReviewState{LastReviewedSHA: "prevsha"}); err != nil {
 		t.Fatal(err)
 	}
-	scanner := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "abc1234 superpowers: apply verified run x", "diff", "newsha", nil
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff", "newsha", "prevsha..HEAD", nil
 	}
 	runner := &fakeReviewClaudeRunner{output: ""} // empty output => review failure
 	deps := selfReviewTestDeps(stateDir, runner, scanner)
@@ -148,8 +148,8 @@ func TestRunSelfReview_ReviewFailureDoesNotAdvanceSHA(t *testing.T) {
 
 func TestRunSelfReview_DropsInvalidFindings(t *testing.T) {
 	stateDir, programsPath := withTempSelfReview(t)
-	scanner := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "abc1234 superpowers: apply verified run x", "diff", "abc999", nil
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff", "abc999", "beginning..HEAD", nil
 	}
 	invalid := `{"title":"","milestone":"","files":[],"severity":"low","signature":"invalid-sig"}`
 	output := "[" + validFinding1 + "," + invalid + "]"
@@ -173,8 +173,8 @@ func TestRunSelfReview_DedupSameSignatureWithinCooldown(t *testing.T) {
 	finding := `[{"title":"Fix X","milestone":"fix internal/foo/bar.go: guard nil deref","files":["internal/foo/bar.go"],"severity":"high","signature":"dup-sig"}]`
 	runner := &fakeReviewClaudeRunner{output: finding}
 
-	scanner1 := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "abc1234 superpowers: apply verified run x", "diff", "abc001", nil
+	scanner1 := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff", "abc001", "beginning..HEAD", nil
 	}
 	deps1 := selfReviewTestDeps(stateDir, runner, scanner1)
 	bb1 := &Blackboard{Task: "self-review"}
@@ -182,8 +182,8 @@ func TestRunSelfReview_DedupSameSignatureWithinCooldown(t *testing.T) {
 		t.Fatalf("first run status = %d, want 1", got)
 	}
 
-	scanner2 := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "def5678 superpowers: apply verified run y", "diff2", "abc002", nil
+	scanner2 := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "def5678 superpowers: apply verified run y", "diff2", "abc002", "abc001..HEAD", nil
 	}
 	deps2 := selfReviewTestDeps(stateDir, runner, scanner2)
 	bb2 := &Blackboard{Task: "self-review"}
@@ -199,8 +199,8 @@ func TestRunSelfReview_DedupSameSignatureWithinCooldown(t *testing.T) {
 func TestRunSelfReview_KillSwitchSkipsSeedingButStillReports(t *testing.T) {
 	stateDir, programsPath := withTempSelfReview(t)
 	t.Setenv("BT_SELF_FIX", "off")
-	scanner := func(repoDir, lastSHA string) (string, string, string, error) {
-		return "abc1234 superpowers: apply verified run x", "diff", "abc777", nil
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff", "abc777", "beginning..HEAD", nil
 	}
 	finding := `[{"title":"Fix X","milestone":"fix internal/foo/bar.go: guard nil deref","files":["internal/foo/bar.go"],"severity":"high","signature":"killed-sig"}]`
 	runner := &fakeReviewClaudeRunner{output: finding}
@@ -246,4 +246,80 @@ func TestRunSelfReviewActionRegistered(t *testing.T) {
 	if GetAction("RunSelfReview") == nil {
 		t.Fatal("RunSelfReview not registered")
 	}
+}
+
+// TestSelfReviewDiffRange is the regression pin for the `git diff
+// --since="24 hours ago"` bug: `--since` is a `git log` flag, `git diff`
+// silently ignores it and diffs the WORKING TREE instead of the intended
+// commit range. selfReviewDiffRange is the pure range-construction helper
+// scanSelfReviewCommits calls — it must never produce "--since" in the diff
+// args, on either path, and must always build a real two-endpoint range.
+func TestSelfReviewDiffRange(t *testing.T) {
+	assertNoSince := func(t *testing.T, diffArgs []string, rangeDesc string) {
+		t.Helper()
+		for _, a := range diffArgs {
+			if strings.Contains(a, "--since") {
+				t.Fatalf("diffArgs must never contain --since (git diff silently ignores it): %v", diffArgs)
+			}
+		}
+		if strings.Contains(rangeDesc, "--since") {
+			t.Fatalf("rangeDesc must never contain --since: %q", rangeDesc)
+		}
+	}
+
+	t.Run("ancestor path diffs lastSHA..HEAD", func(t *testing.T) {
+		diffArgs, rangeDesc := selfReviewDiffRange("lastsha123", "", true)
+		assertNoSince(t, diffArgs, rangeDesc)
+		joined := strings.Join(diffArgs, " ")
+		if !strings.Contains(joined, "lastsha123..HEAD") {
+			t.Fatalf("diffArgs must contain the real two-endpoint range lastsha123..HEAD, got %v", diffArgs)
+		}
+		if rangeDesc != "lastsha123..HEAD" {
+			t.Fatalf("rangeDesc = %q, want lastsha123..HEAD", rangeDesc)
+		}
+	})
+
+	t.Run("first-run/non-ancestor path diffs oldest^..HEAD", func(t *testing.T) {
+		// The caller (scanSelfReviewCommits) has already resolved the
+		// oldest-in-window hash and confirmed its parent resolves, so it
+		// passes the caret-adjusted hash straight through.
+		diffArgs, rangeDesc := selfReviewDiffRange("", "oldsha456^", false)
+		assertNoSince(t, diffArgs, rangeDesc)
+		joined := strings.Join(diffArgs, " ")
+		if !strings.Contains(joined, "oldsha456^..HEAD") {
+			t.Fatalf("diffArgs must contain the real two-endpoint range oldsha456^..HEAD, got %v", diffArgs)
+		}
+		if rangeDesc != "oldsha456^..HEAD" {
+			t.Fatalf("rangeDesc = %q, want oldsha456^..HEAD", rangeDesc)
+		}
+	})
+
+	t.Run("root-commit fallback diffs oldest..HEAD (no caret)", func(t *testing.T) {
+		// The caller found that oldestInWindow^ does not resolve (oldest
+		// commit in the window IS the repo root) and passes the bare hash
+		// through as the documented fallback.
+		diffArgs, rangeDesc := selfReviewDiffRange("", "rootsha789", false)
+		assertNoSince(t, diffArgs, rangeDesc)
+		joined := strings.Join(diffArgs, " ")
+		if !strings.Contains(joined, "rootsha789..HEAD") {
+			t.Fatalf("diffArgs must contain the root-commit fallback range rootsha789..HEAD, got %v", diffArgs)
+		}
+		if rangeDesc != "rootsha789..HEAD" {
+			t.Fatalf("rangeDesc = %q, want rootsha789..HEAD", rangeDesc)
+		}
+	})
+
+	t.Run("unresolved lower bound never falls back to --since", func(t *testing.T) {
+		// Defensive: if the caller couldn't resolve an oldest-in-window hash
+		// at all, the helper must still never reach for --since; it may
+		// simply produce no diff args (the commit list alone still goes to
+		// the reviewer).
+		diffArgs, rangeDesc := selfReviewDiffRange("", "", false)
+		assertNoSince(t, diffArgs, rangeDesc)
+	})
+
+	// The empty-24h-window case (nothing to review at all) is handled by the
+	// caller (scanSelfReviewCommits returns early on an empty filtered
+	// commit list, before ever calling selfReviewDiffRange) and is covered
+	// by TestRunSelfReview_UpToDateNoNewCommits via the faked commitScanner.
 }

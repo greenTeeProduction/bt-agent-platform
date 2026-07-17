@@ -59,10 +59,18 @@ type selfReviewState struct {
 }
 
 // loadSelfReviewState reads state.json from dir; a missing file reads as the
-// zero value (first run — reviews from the beginning of history).
+// zero value (first run — reviews from the beginning of history). A genuine
+// read/parse error (corrupt state.json) is NOT the same thing as "no file
+// yet" — the safe fallback is still to proceed as empty (re-review all
+// autonomous history rather than fail the cycle), but that fallback is
+// logged so operators can tell corruption apart from a normal first run.
 func loadSelfReviewState(dir string) selfReviewState {
 	var s selfReviewState
-	readErrorHandlerJSON(selfReviewStatePath(dir), &s)
+	if err := readErrorHandlerJSONStrict(selfReviewStatePath(dir), &s); err != nil {
+		Warn("self-review: state.json unreadable, proceeding as empty (will re-review all autonomous history)",
+			"path", selfReviewStatePath(dir), "err", err)
+		s = selfReviewState{}
+	}
 	return s
 }
 
@@ -95,9 +103,11 @@ type selfReviewDeps struct {
 	now      func() time.Time
 	// commitScanner isolates ALL git from unit tests: returns the
 	// autonomous-commit log and diff body for lastSHA..HEAD (or an initial
-	// window on first run) plus the current HEAD sha. Real impl is
+	// window on first run) plus the current HEAD sha and a human-readable
+	// description of the actual range diffed (rangeDesc — must always match
+	// what was really diffed; see selfReviewDiffRange). Real impl is
 	// scanSelfReviewCommits; tests fake it.
-	commitScanner func(repoDir, lastSHA string) (commitLog string, diff string, head string, err error)
+	commitScanner func(repoDir, lastSHA string) (commitLog string, diff string, head string, rangeDesc string, err error)
 }
 
 func defaultSelfReviewDeps() selfReviewDeps {
@@ -132,37 +142,121 @@ func init() {
 // GOAP review fallback's read-only git helper) with a 30s timeout to gather
 // the autonomous commits since lastSHA and their diff. When lastSHA is empty
 // or no longer an ancestor of HEAD (rebased away), it falls back to the last
-// 24 hours instead of failing.
-func scanSelfReviewCommits(repoDir, lastSHA string) (commitLog, diff, head string, err error) {
+// 24 hours for the COMMIT LIST (`git log` accepts `--since`) — but the DIFF
+// is always built as a real two-endpoint range via selfReviewDiffRange:
+// `git diff` silently ignores `--since` (it's a `git log`-only flag) and
+// ignoring it means git diff would run with no range at all, diffing the
+// WORKING TREE instead of the intended commits.
+func scanSelfReviewCommits(repoDir, lastSHA string) (commitLog, diff, head, rangeDesc string, err error) {
 	const gitTimeout = 30 * time.Second
 
 	rawHead, herr := runGoapGit(repoDir, gitTimeout, "rev-parse", "HEAD")
 	if herr != nil {
-		return "", "", "", fmt.Errorf("rev-parse HEAD: %w", herr)
+		return "", "", "", "", fmt.Errorf("rev-parse HEAD: %w", herr)
 	}
 	head = strings.TrimSpace(rawHead)
 
-	rangeSpec := "--since=24 hours ago"
+	// logRangeSpec is used ONLY for the `git log` commit-list command below
+	// — both forms (`--since=...` and `SHA..HEAD`) are valid `git log`
+	// arguments. It must NOT be reused for `git diff` (that's the bug).
+	ancestor := false
+	logRangeSpec := "--since=24 hours ago"
 	if lastSHA != "" {
 		if _, aerr := runGoapGit(repoDir, gitTimeout, "merge-base", "--is-ancestor", lastSHA, "HEAD"); aerr == nil {
-			rangeSpec = lastSHA + "..HEAD"
+			ancestor = true
+			logRangeSpec = lastSHA + "..HEAD"
 		}
 	}
 
-	rawLog, lerr := runGoapGit(repoDir, gitTimeout, "log", "--oneline", "--no-merges", rangeSpec)
+	rawLog, lerr := runGoapGit(repoDir, gitTimeout, "log", "--oneline", "--no-merges", logRangeSpec)
 	if lerr != nil {
-		return "", "", head, fmt.Errorf("git log %s: %w", rangeSpec, lerr)
+		return "", "", head, "", fmt.Errorf("git log %s: %w", logRangeSpec, lerr)
 	}
 
 	filtered := filterAutonomousCommits(rawLog)
 	if filtered == "" {
 		// No autonomous commits in range: the caller treats an empty
 		// commitLog as the healthy up-to-date skip, so no diff is needed.
-		return "", "", head, nil
+		return "", "", head, "", nil
 	}
 
-	rawDiff, _ := runGoapGit(repoDir, gitTimeout, "diff", rangeSpec)
-	return filtered, truncateGoap(rawDiff, goapReviewDiffLimit), head, nil
+	// Non-ancestor/first-run path: derive a real lower bound from the
+	// commit-list window. oldestInWindow^ is the parent of the oldest commit
+	// in the window, so the range includes that commit's own change (a bare
+	// oldest..HEAD would exclude it). Guard the repo-root case: if the
+	// oldest commit in the window IS the root, it has no parent — rev-parse
+	// fails and we fall back to diffing from the root commit itself.
+	oldestInWindow := ""
+	if !ancestor {
+		oldestInWindow = oldestCommitHash(rawLog)
+		if oldestInWindow != "" {
+			if _, rerr := runGoapGit(repoDir, gitTimeout, "rev-parse", oldestInWindow+"^"); rerr == nil {
+				oldestInWindow += "^"
+			}
+			// else: oldestInWindow names the repo root commit (no parent) —
+			// leave it as the bare hash, the root-commit fallback documented
+			// on selfReviewDiffRange.
+		}
+	}
+
+	diffArgs, desc := selfReviewDiffRange(lastSHA, oldestInWindow, ancestor)
+	var rawDiff string
+	if len(diffArgs) > 0 {
+		rawDiff, _ = runGoapGit(repoDir, gitTimeout, diffArgs...)
+	}
+	return filtered, truncateGoap(rawDiff, goapReviewDiffLimit), head, desc, nil
+}
+
+// oldestCommitHash returns the hash of the OLDEST commit in a `git log
+// --oneline` listing. `git log` lists newest-first, so that's the hash on
+// the last non-empty line. Empty if oneline has no parseable lines. Pure —
+// no git calls.
+func oldestCommitHash(oneline string) string {
+	lines := strings.Split(strings.TrimSpace(oneline), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(lines[i])
+		if l == "" {
+			continue
+		}
+		hash := strings.SplitN(l, " ", 2)[0]
+		if hash != "" {
+			return hash
+		}
+	}
+	return ""
+}
+
+// selfReviewDiffRange builds the `git diff` args and a human-readable range
+// description for the self-review commit scan. Pure — no git calls; the
+// caller (scanSelfReviewCommits) does the merge-base ancestor check and the
+// oldest-in-window commit lookup and passes the results in. This isolates
+// the exact range-construction logic — and the `--since`-reaches-`git diff`
+// bug it replaces — from git I/O so it's directly unit-testable
+// (TestSelfReviewDiffRange is the regression pin).
+//
+// ancestor==true: lastSHA is a valid, still-present ancestor of HEAD. The
+// range is the real two-endpoint lastSHA..HEAD (unchanged from before the
+// fix — this path was already correct).
+//
+// ancestor==false: first run, or lastSHA is no longer an ancestor (rebased
+// away). oldestInWindow is the caller-resolved lower bound: normally the
+// oldest commit hash in the scan window suffixed with "^" (its parent, so
+// that commit's own change is included), or — the documented root-commit
+// fallback — the bare hash with no "^" when the caller found that commit
+// has no parent. Either way the range is a real two-endpoint
+// oldestInWindow..HEAD. If oldestInWindow is empty (defensive: the caller
+// could not resolve a lower bound), no diff args are returned rather than
+// ever falling back to --since.
+func selfReviewDiffRange(lastSHA, oldestInWindow string, ancestor bool) (diffArgs []string, rangeDesc string) {
+	if ancestor {
+		spec := lastSHA + "..HEAD"
+		return []string{"diff", spec, "--"}, spec
+	}
+	if oldestInWindow == "" {
+		return nil, "last 24 hours (no diff range resolved)"
+	}
+	spec := oldestInWindow + "..HEAD"
+	return []string{"diff", spec, "--"}, spec
 }
 
 // filterAutonomousCommits keeps only `git log --oneline` lines whose commit
@@ -324,17 +418,17 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	state := loadSelfReviewState(deps.stateDir)
 	lastSHA := state.LastReviewedSHA
 
-	commitLog, diff, head, err := deps.commitScanner(deps.repoDir, lastSHA)
+	commitLog, diff, head, rangeDesc, err := deps.commitScanner(deps.repoDir, lastSHA)
 	if err != nil {
 		bb.Outcome = "self_review_scan_failed"
 		bb.Result = fmt.Sprintf("## Self-Review Scan Failed\n\nCould not gather the autonomous commit range: %v", err)
 		return 1
 	}
-
-	rangeDesc := lastSHA + "..HEAD"
-	if lastSHA == "" {
-		rangeDesc = "beginning..HEAD"
-	}
+	// rangeDesc comes straight from the scanner (selfReviewDiffRange) so it
+	// always names the range that was actually diffed — never a guess based
+	// on lastSHA alone, which would mislabel the rebased-away/first-run
+	// fallback path as "lastSHA..HEAD" when the real diff used a different
+	// lower bound.
 
 	if strings.TrimSpace(commitLog) == "" {
 		sinceDesc := lastSHA
@@ -404,7 +498,11 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 		Error("self-review: failed to persist last-reviewed SHA; next run will re-review this range", "err", err)
 	}
 
-	if len(findings) == 0 {
+	// self_review_seeded claims a program was actually seeded — that must
+	// track seededCount, not len(findings): findings that were all
+	// cooldown/cap-skipped (kill switch, dedup) produced zero programs, so
+	// the outcome must not claim "seeded" for them either.
+	if seededCount == 0 {
 		bb.Outcome = "self_review_clean"
 	} else {
 		bb.Outcome = "self_review_seeded"
