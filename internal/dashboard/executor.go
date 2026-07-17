@@ -55,6 +55,7 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 		}
 		_, _, res, err = agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
 	} else {
+		start := time.Now()
 		var output, outcome string
 		output, outcome, err = e.runViaHermes(task, treeID)
 		if err != nil && outcome == "" {
@@ -65,9 +66,11 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 			Task:      task,
 			Outcome:   outcome,
 			Output:    output,
+			Duration:  time.Since(start),
 		}
 	}
 	e.recordCircuitBreakerOutcome(agentName, res)
+	e.recordTaskMetric(agentName, res)
 	return res, err
 }
 
@@ -86,6 +89,18 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 	if err := e.CBStore.Save(agent.CircuitBreakersFile()); err != nil {
 		slog.Warn("dashboard: persist circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
 	}
+}
+
+// recordTaskMetric reports res's outcome and duration to the dashboard's
+// global agent-task metrics (GetAgentMetrics), so every agent run through
+// the dashboard — in-process or via the Hermes fallback — is reflected in
+// the agent metrics panel and /metrics endpoint the same way
+// internal/agent/scheduler.go's runJob already records its runs.
+func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult) {
+	if res == nil {
+		return
+	}
+	RecordTask(agentName, res.Outcome == "success", uint64(res.Duration.Milliseconds()))
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {

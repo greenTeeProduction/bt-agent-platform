@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -48,7 +49,9 @@ func RunPipelineWithID(ctx context.Context, d *agent.RunDeps, pipeline dashboard
 				DisplayName:    agentName,
 				SessionID:      runID,
 			}
+			start := time.Now()
 			outcome, output, _, err := agent.RunAgent(stepCtx, d, agentName, task, "", opts)
+			dashboard.RecordTask(agentName, outcome == "success", uint64(time.Since(start).Milliseconds()))
 			return outcome, output, err
 		},
 		WaitApproval: dashboard.WorkflowApprovalWait,

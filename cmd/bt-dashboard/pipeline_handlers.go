@@ -51,7 +51,9 @@ func runPipelineAgentStep(ctx context.Context, runner *agent.RunDeps, agentName,
 		DisplayName:    agentName,
 		SessionID:      sessionID,
 	}
+	start := time.Now()
 	outcome, output, _, err = agent.RunAgent(ctx, runner, agentName, task, "", opts)
+	dashboard.RecordTask(agentName, outcome == "success", uint64(time.Since(start).Milliseconds()))
 	return outcome, output, err
 }
 

@@ -68,6 +68,55 @@ func TestRunTaskResult_RecordsCircuitBreakerOutcome(t *testing.T) {
 	}
 }
 
+// TestRunTaskResult_RecordsTaskMetric verifies that AgentExecutor.
+// RunTaskResult, run through the in-process Runner path, records every run's
+// outcome and duration to the dashboard's global agent-task metrics (via
+// dashboard.RecordTask) so GetAgentMetrics() — the data backing the
+// dashboard's agent metrics panel and /metrics endpoint — reflects agent
+// executions. Today RunTaskResult's only per-run side effect is
+// recordCircuitBreakerOutcome; it never calls RecordTask, so every agent run
+// through the dashboard leaves GetAgentMetrics() permanently empty for that
+// agent even though internal/agent/scheduler.go's equivalent path records it.
+func TestRunTaskResult_RecordsTaskMetric(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	exec := &AgentExecutor{
+		Timeout: 5 * time.Second,
+		Runner: &agent.RunDeps{
+			ResolveTree: func(_ string) *evolution.SerializableNode {
+				return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+			},
+		},
+	}
+
+	const agentName = "metrics-dashboard-agent"
+	res, err := exec.RunTaskResult(agentName, "do the thing", "metrics-tree")
+	if res == nil {
+		t.Fatalf("RunTaskResult returned nil result (err=%v)", err)
+	}
+	if res.Outcome != "success" {
+		t.Fatalf("got outcome %q, want %q (test setup must drive a succeeding outcome)", res.Outcome, "success")
+	}
+
+	var stats *AgentStats
+	for _, s := range GetAgentMetrics() {
+		s := s
+		if s.Name == agentName {
+			stats = &s
+			break
+		}
+	}
+	if stats == nil {
+		t.Fatalf("GetAgentMetrics() has no entry for %q — RunTaskResult must call dashboard.RecordTask on every run", agentName)
+	}
+	if stats.TotalCount != 1 {
+		t.Errorf("GetAgentMetrics()[%q].TotalCount = %d, want 1", agentName, stats.TotalCount)
+	}
+	if stats.SuccessCount != 1 {
+		t.Errorf("GetAgentMetrics()[%q].SuccessCount = %d, want 1", agentName, stats.SuccessCount)
+	}
+}
+
 // TestPickTreeForTask_RoutesAuctionShapedTasksToAuctionDemo verifies that
 // tasks whose text signals auction/delegation intent (mirroring
 // engine.AuctionTaskKeywords, the same keyword set that gates the
