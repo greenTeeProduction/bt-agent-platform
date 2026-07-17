@@ -8,11 +8,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 type ModelCaller interface {
 	GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error)
 }
+
+// fusionBreaker short-circuits RunPanel after repeated all-models-failed
+// panel runs so a dead model backend isn't re-dispatched to (and re-timed-out
+// on) every call.
+var fusionBreaker = reliability.NewCircuitBreaker("fusion-panel", 3, 60*time.Second)
 
 type Tool interface {
 	Name() string
@@ -71,6 +78,8 @@ func Run(ctx context.Context, caller ModelCaller, cfg Config, prompt string, too
 	if !cfg.Enabled {
 		return Result{Status: "disabled"}, fmt.Errorf("fusion disabled")
 	}
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
 	responses, err := RunPanel(ctx, caller, cfg, prompt, tools)
 	if err != nil {
 		return Result{Status: "error", Responses: responses}, err
@@ -93,26 +102,35 @@ func RunPanel(ctx context.Context, caller ModelCaller, cfg Config, prompt string
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if !fusionBreaker.Allow() {
+		return nil, fmt.Errorf("fusion panel: circuit breaker open")
+	}
 	responses := make([]Response, len(cfg.AnalysisModels))
 	var wg sync.WaitGroup
 	for i, model := range cfg.AnalysisModels {
 		i, model := i, model
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			start := time.Now()
+		start := time.Now()
+		reliability.SafeGo(fmt.Sprintf("fusion.RunPanel[%s]", model), func() {
 			system := panelSystemPrompt(tools)
 			content, calls, err := RunToolLoop(ctx, caller, model, system, prompt, tools, cfg)
 			responses[i] = Response{Model: model, Content: content, DurationMS: time.Since(start).Milliseconds(), ToolCalls: calls}
 			if err != nil {
 				responses[i].Error = err.Error()
 			}
-		}()
+			wg.Done()
+		}, func(panicVal any, panicCtx string) {
+			reliability.DefaultPanicHandler(panicVal, panicCtx)
+			responses[i] = Response{Model: model, Error: fmt.Sprintf("panic: %v", panicVal), DurationMS: time.Since(start).Milliseconds()}
+			wg.Done()
+		})
 	}
 	wg.Wait()
 	if len(successfulResponses(responses)) == 0 {
+		fusionBreaker.RecordFailure()
 		return responses, fmt.Errorf("all fusion panel models failed")
 	}
+	fusionBreaker.RecordSuccess()
 	return responses, nil
 }
 

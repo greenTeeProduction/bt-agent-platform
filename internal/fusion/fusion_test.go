@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 type fakeCaller struct {
@@ -15,6 +17,7 @@ type fakeCaller struct {
 	delay   time.Duration
 	answers map[string]string
 	errs    map[string]error
+	panics  map[string]bool
 }
 
 func (f *fakeCaller) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
@@ -28,6 +31,9 @@ func (f *fakeCaller) GenerateWithModel(ctx context.Context, model, system, promp
 	f.mu.Lock()
 	f.calls = append(f.calls, model+":"+prompt)
 	f.mu.Unlock()
+	if f.panics[model] {
+		panic("intentional test panic for model " + model)
+	}
 	if err := f.errs[model]; err != nil {
 		return "", err
 	}
@@ -73,6 +79,33 @@ func TestRunPanel_FailsWhenAllModelsFail(t *testing.T) {
 	cfg.AnalysisModels = []string{"a", "b"}
 	if _, err := RunPanel(context.Background(), caller, cfg, "prompt", nil); err == nil {
 		t.Fatal("expected all-panel-failure error")
+	}
+}
+
+func TestRunPanel_RecoversFromModelPanic(t *testing.T) {
+	caller := &fakeCaller{
+		answers: map[string]string{"a": "ok"},
+		errs:    map[string]error{},
+		panics:  map[string]bool{"b": true},
+	}
+	cfg := DefaultConfig()
+	cfg.AnalysisModels = []string{"a", "b"}
+
+	responses, err := RunPanel(context.Background(), caller, cfg, "prompt", nil)
+	if err != nil {
+		t.Fatalf("RunPanel should not fail entirely when only one model panics: %v", err)
+	}
+	if len(responses) != 2 {
+		t.Fatalf("responses=%d, want 2", len(responses))
+	}
+	if responses[0].Error != "" {
+		t.Fatalf("expected model a to succeed, got %#v", responses[0])
+	}
+	if responses[1].Error == "" {
+		t.Fatalf("expected panicking model b to record a response error instead of crashing, got %#v", responses[1])
+	}
+	if !strings.Contains(responses[1].Error, "panic") {
+		t.Fatalf("expected recorded error to mention panic, got %q", responses[1].Error)
 	}
 }
 
@@ -140,6 +173,78 @@ func TestRun_EndToEnd(t *testing.T) {
 	}
 	if result.Status != "ok" || len(result.Responses) != 2 || result.Final == "" {
 		t.Fatalf("bad result: %#v", result)
+	}
+}
+
+func TestRun_RespectsTimeout(t *testing.T) {
+	caller := &fakeCaller{delay: 300 * time.Millisecond, answers: map[string]string{}, errs: map[string]error{}}
+	cfg := DefaultConfig()
+	cfg.AnalysisModels = []string{"a"}
+	cfg.JudgeModel = "judge"
+	cfg.Timeout = 50 * time.Millisecond
+
+	start := time.Now()
+	result, err := Run(context.Background(), caller, cfg, "prompt", nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected Run to fail once cfg.Timeout elapses")
+	}
+	if elapsed > 200*time.Millisecond {
+		t.Fatalf("Run did not respect cfg.Timeout=%s, took %s (caller delay=%s)", cfg.Timeout, elapsed, caller.delay)
+	}
+	if len(result.Responses) != 1 || !strings.Contains(result.Responses[0].Error, "context deadline exceeded") {
+		t.Fatalf("expected panel response to fail with context deadline exceeded, got %#v", result.Responses)
+	}
+}
+
+// =============================================================================
+// Circuit breaker (short-circuit repeated all-panel failures instead of
+// dispatching a doomed model panel on every call)
+// =============================================================================
+
+// withFreshFusionBreaker swaps the package-level fusion circuit breaker for a
+// freshly closed one for the duration of the test, restoring the prior
+// breaker afterward so this test cannot leak open/tripped state into other
+// tests in the package that expect a working panel.
+func withFreshFusionBreaker(t *testing.T, threshold int, cooldown time.Duration) {
+	t.Helper()
+	orig := fusionBreaker
+	t.Cleanup(func() { fusionBreaker = orig })
+	fusionBreaker = reliability.NewCircuitBreaker("fusion-panel", threshold, cooldown)
+}
+
+// TestRunPanel_CircuitBreakerOpensAfterConsecutiveFailures verifies that
+// after enough consecutive all-models-failed panel runs, the breaker opens
+// and short-circuits further RunPanel calls instead of dispatching the panel
+// (and hitting a dead model backend) on every single call.
+func TestRunPanel_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
+	withFreshFusionBreaker(t, 3, time.Minute)
+
+	caller := &fakeCaller{errs: map[string]error{"a": errors.New("boom")}}
+	cfg := DefaultConfig()
+	cfg.AnalysisModels = []string{"a"}
+
+	const attempts = 6
+	for i := 0; i < attempts; i++ {
+		if _, err := RunPanel(context.Background(), caller, cfg, "prompt", nil); err == nil {
+			t.Fatalf("attempt %d: expected RunPanel to fail while all models fail", i)
+		}
+	}
+
+	if state := fusionBreaker.State(); state != reliability.CircuitOpen {
+		t.Fatalf("expected fusion circuit breaker to be open after %d consecutive failed panel runs, got state %v", attempts, state)
+	}
+
+	caller.mu.Lock()
+	calls := len(caller.calls)
+	caller.mu.Unlock()
+	if calls >= attempts {
+		t.Errorf("expected the circuit breaker to short-circuit some RunPanel calls instead of dispatching the panel on every call; got %d model calls for %d attempts", calls, attempts)
+	}
+
+	if _, err := RunPanel(context.Background(), caller, cfg, "prompt", nil); err == nil || !strings.Contains(err.Error(), "circuit breaker") {
+		t.Fatalf("expected an open-breaker RunPanel call to fail mentioning the circuit breaker, got %v", err)
 	}
 }
 
