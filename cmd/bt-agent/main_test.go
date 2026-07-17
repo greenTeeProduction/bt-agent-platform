@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
@@ -125,6 +126,79 @@ func TestSchedulerAttempt_SuccessAndFailureUnchanged(t *testing.T) {
 	}
 	if bad.FailedCalls != 1 || bad.DeferredCalls != 0 {
 		t.Errorf("failure accounting drifted: FailedCalls=%d DeferredCalls=%d", bad.FailedCalls, bad.DeferredCalls)
+	}
+}
+
+// TestDLQReplayOutcomeError_HealthyNonSuccessNotFailing pins the NotebookLM
+// research finding that the DLQ replay executor's outcome classification
+// (main.go dlq.SetReplayExecutor, ~line 592-609) must treat the rate-limit
+// carryover and other healthy non-success outcomes (no_change, degraded) as
+// non-failing replays — mirroring recordSchedulerAttempt/cycleBreakerSuccess
+// above, which already give those same outcomes the same terminal-and-healthy
+// treatment on the scheduler path. Before this fix the replay executor's
+// inline check (res.Outcome != "success") flagged EVERY non-"success"
+// outcome as a failure, so a replayed dead letter that gracefully paused on a
+// Claude rate limit (or landed on an analysis-only/deterministic-fallback
+// outcome) was kept in the DLQ and endlessly re-replayed instead of being
+// dropped as a healthy terminal result — drop-safe Replay only removes an
+// entry on a nil error (reliability.go:249-251).
+func TestDLQReplayOutcomeError_HealthyNonSuccessNotFailing(t *testing.T) {
+	cases := []struct {
+		name    string
+		outcome string
+	}{
+		{"success", "success"},
+		{"rate-limit carryover", agent.RateLimitCarryoverOutcome},
+		{"no_change", "no_change"},
+		{"degraded", "degraded"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := &agent.RunResult{AgentName: "a", Task: "t", Outcome: c.outcome, Output: "ok"}
+			if err := dlqReplayOutcomeError(res); err != nil {
+				t.Errorf("dlqReplayOutcomeError(outcome=%q) = %v, want nil — a healthy non-success replay must not be treated as a failing one", c.outcome, err)
+			}
+		})
+	}
+
+	// Positive control: a genuine failure must still classify as an error so
+	// the fix doesn't degrade into a blanket no-op — a truly failed replay
+	// must keep its DLQ entry.
+	bad := &agent.RunResult{AgentName: "a", Task: "t", Outcome: "failure", Output: "boom"}
+	if err := dlqReplayOutcomeError(bad); err == nil {
+		t.Fatal(`dlqReplayOutcomeError(outcome="failure") = nil, want non-nil error — a genuine failure must still keep its DLQ entry`)
+	}
+
+	// No result at all (nil) must not be treated as a failure either.
+	if err := dlqReplayOutcomeError(nil); err != nil {
+		t.Errorf("dlqReplayOutcomeError(nil) = %v, want nil", err)
+	}
+}
+
+// TestDLQReplayExecutorUsesOutcomeClassifier pins — source-level, the same
+// audit style as TestSchedulerAndDLQReplayDispatchThroughAgentRouter below —
+// that the DLQ replay executor's closure in main.go actually delegates to
+// dlqReplayOutcomeError instead of re-inlining the "!= \"success\"" check
+// TestDLQReplayOutcomeError_HealthyNonSuccessNotFailing pins above. Without
+// this the extracted classifier could be added and tested while the closure
+// itself keeps using the old blanket check.
+func TestDLQReplayExecutorUsesOutcomeClassifier(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	replayIdx := strings.Index(s, "dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {")
+	if replayIdx < 0 {
+		t.Fatal("main.go lost the DLQ replay executor")
+	}
+	tickerIdx := strings.Index(s, `reliability.SafeGo("dlq-replay-scan-ticker"`)
+	if tickerIdx < 0 {
+		t.Fatal("main.go lost the dlq-replay-scan-ticker wiring")
+	}
+	body := s[replayIdx:tickerIdx]
+	if !strings.Contains(body, "dlqReplayOutcomeError(") {
+		t.Error("the DLQ replay executor must classify outcomes via dlqReplayOutcomeError(res) instead of an inline `res.Outcome != \"success\"` check, so rate-limit carryover and other healthy non-success outcomes (mirroring recordSchedulerAttempt/cycleBreakerSuccess) are not treated as failing replays")
 	}
 }
 

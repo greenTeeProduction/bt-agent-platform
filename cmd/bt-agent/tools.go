@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -270,6 +271,10 @@ func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.Se
 	}
 	if deps.kg != nil {
 		deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness)
+		deps.kg.MarkFeedbackDirty()
+		if err := deps.kg.FlushFeedback(false); err != nil {
+			slog.Warn("persistEvolvedWinner: feedback flush failed", "err", err)
+		}
 	}
 }
 

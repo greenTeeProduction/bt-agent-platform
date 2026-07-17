@@ -240,6 +240,26 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 	return attemptOutcomeError(outcome, output)
 }
 
+// dlqReplayOutcomeError classifies a drop-safe DLQ replay's RunResult into
+// the error the replay executor returns to reliability.DeadLetterQueue's
+// Replay: nil drops the entry (reliability.go:249-251), non-nil keeps it
+// queued for another replay. Mirrors recordSchedulerAttempt/
+// cycleBreakerSuccess above — rate-limit carryover and the other healthy
+// no-code outcomes (no_change, degraded) are terminal-and-healthy, not
+// failures, so a replay that gracefully pauses or lands on an
+// analysis-only/deterministic-fallback outcome is dropped instead of
+// endlessly re-replayed. A nil result classifies as healthy — there is
+// nothing to flag as a failure.
+func dlqReplayOutcomeError(res *agent.RunResult) error {
+	if res == nil {
+		return nil
+	}
+	if res.Outcome == agent.RateLimitCarryoverOutcome || agent.IsHealthyOutcome(res.Outcome) {
+		return nil
+	}
+	return fmt.Errorf("agent outcome: %s: %s", res.Outcome, agent.OutcomeErrorDetail(res.Output))
+}
+
 // dlqReplayScanInterval is how often the daemon consumes requeued dead-letter
 // entries (dashboard/MCP "replay" flags) through the drop-safe replay executor.
 const dlqReplayScanInterval = 5 * time.Minute
@@ -602,10 +622,7 @@ func main() {
 				return runErr
 			}
 			res := routedRunResult(e.Agent, e.Task, routedRes)
-			if res != nil && res.Outcome != "success" {
-				return fmt.Errorf("agent outcome: %s: %s", res.Outcome, agent.OutcomeErrorDetail(res.Output))
-			}
-			return nil
+			return dlqReplayOutcomeError(res)
 		})
 		reliability.SafeGo("dlq-replay-scan-ticker", func() {
 			ticker := time.NewTicker(dlqReplayScanInterval)

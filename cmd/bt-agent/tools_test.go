@@ -2975,6 +2975,57 @@ func TestPersistEvolvedWinner_AtomicWithFailedDiskWrite(t *testing.T) {
 	}
 }
 
+// TestPersistEvolvedWinner_FlushesFeedbackToDisk pins milestone 4/4 of the Q2
+// Evolvability program: an evolution winner registered via persistEvolvedWinner
+// (the seam every bt_evolve_* MCP tool routes through) must reach the feedback
+// snapshot on disk immediately, not just the tree file. Today only the
+// scheduler's run-outcome path (persistRunFeedback in internal/agent/scheduler.go)
+// calls MarkFeedbackDirty + FlushFeedback, so a winner registered purely via an
+// MCP evolve tool call — with no scheduled run in between — has its
+// StructuralFitness/NodeCount/evolved_from bookkeeping live only in the
+// in-memory graph. A daemon restart before the next scheduled run silently
+// drops it, even though RegisterEvolved already committed it in memory and the
+// tree file itself survived on disk.
+//
+// The test arms ConfigureFeedbackPersistence with a zero minInterval (so the
+// very first flush always lands, mirroring lastFlush's zero value), calls
+// persistEvolvedWinner once, and asserts the feedback file exists and decodes
+// back the evolved tree's StructuralFitness — proving MarkFeedbackDirty +
+// FlushFeedback(false) actually ran off the back of RegisterEvolved succeeding.
+func TestPersistEvolvedWinner_FlushesFeedbackToDisk(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	feedbackPath := filepath.Join(t.TempDir(), "feedback.json")
+	kg.ConfigureFeedbackPersistence(feedbackPath, 0)
+	deps := &mcpDeps{treeStore: treeStore, kg: kg}
+
+	winner := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
+	const wantID = "godev-evolved"
+
+	result := map[string]interface{}{}
+	persistEvolvedWinner(deps, "godev", winner, 90, result)
+	if persisted, _ := result["persisted"].(bool); !persisted {
+		t.Fatalf("persistEvolvedWinner must persist the winner; result=%v", result)
+	}
+
+	if _, err := os.Stat(feedbackPath); err != nil {
+		t.Fatalf("feedback snapshot missing after persistEvolvedWinner — MarkFeedbackDirty/FlushFeedback not wired: %v", err)
+	}
+
+	verify := knowledge.NewKnowledgeGraph()
+	verify.Register(&knowledge.TreeMeta{ID: wantID, Name: "Verify", Category: "test"})
+	if err := verify.LoadFeedback(feedbackPath); err != nil {
+		t.Fatalf("LoadFeedback(%q): %v", feedbackPath, err)
+	}
+	if got := verify.Trees[wantID].StructuralFitness; got != 90 {
+		t.Errorf("persisted StructuralFitness for %q = %v, want 90 — RegisterEvolved's bookkeeping did not reach disk", wantID, got)
+	}
+}
+
 // TestEvolveToolsSurfacePopulationHealthSnapshot pins that the three production
 // evolve tools that run a genetic Population — bt_evolve_genetic,
 // bt_evolve_bottlenecks, and bt_evolve_selection_pressure — surface that
