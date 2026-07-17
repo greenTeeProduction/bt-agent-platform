@@ -278,6 +278,20 @@ func logA2AServeError(err error) {
 	engine.Error("a2a server failed", "error", err)
 }
 
+// validateDomainRegistry runs engine.ValidateTree over every tree in a domain
+// registry and returns the resulting messages, each prefixed with the
+// offending domain name, so a startup failure names the broken tree instead
+// of just a bare node name.
+func validateDomainRegistry(registry map[string]*evolution.SerializableNode) []string {
+	var msgs []string
+	for name, tree := range registry {
+		for _, m := range engine.ValidateTree(tree) {
+			msgs = append(msgs, fmt.Sprintf("%s: %s", name, m))
+		}
+	}
+	return msgs
+}
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -380,8 +394,16 @@ func main() {
 	// Inject the live domain registry as the expected-domain set so CoverageGaps
 	// audits against the real registry (domain:<name> IDs) instead of a stale
 	// hardcoded slice. Injection here avoids an analytics→domains import cycle.
-	expectedDomains := make([]string, 0, len(domains.AllDomainTrees()))
-	for name := range domains.AllDomainTrees() {
+	domainRegistry := domains.AllDomainTrees()
+	if msgs := validateDomainRegistry(domainRegistry); len(msgs) > 0 {
+		for _, m := range msgs {
+			engine.Error("domain tree failed validation", "message", m)
+		}
+		fmt.Fprintf(os.Stderr, "fatal: %d domain tree validation error(s), see log above\n", len(msgs))
+		os.Exit(1)
+	}
+	expectedDomains := make([]string, 0, len(domainRegistry))
+	for name := range domainRegistry {
 		expectedDomains = append(expectedDomains, "domain:"+name)
 	}
 	kg.ExpectedDomains = expectedDomains

@@ -592,7 +592,8 @@ func GoapPlanningTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 		Children: []evolution.SerializableNode{
 			act("SetupUniversalTools", "Give chain agents access to web_search, file_read, shell_exec"),
 			seq("PreGate", "Validate the task is non-empty before routing", cond("ValidateInput", "Non-empty")),
-			sel("StrategyRouter", "Route to assessment or synchronization by task keywords, falling back to the general planning agent",
+			sel("StrategyRouter", "Try the real GOAP A* planner first, falling back to assessment or synchronization by task keywords, then the general planning agent",
+				*evolution.GOAPPlanningTree(),
 				seq("AssessPath", "Run the planning-assessment chain agent over the current state",
 					cond("IsAssessRequest", "Detect assess/check/review/scan/audit keywords"),
 					chainAgent("PlanningAssessAgent",
@@ -629,7 +630,8 @@ func GoapResearchTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 		Children: []evolution.SerializableNode{
 			act("SetupResearchTools", "Give chain agents access to web_search, knowledge_graph, calculator"),
 			seq("PreGate", "Validate the task is non-empty before routing", cond("ValidateInput", "Non-empty")),
-			sel("StrategyRouter", "Route to web research or graphify codebase analysis by task keywords, falling back to the general research agent",
+			sel("StrategyRouter", "Try the real GOAP A* planner first, falling back to web research or graphify codebase analysis by task keywords, then the general research agent",
+				*evolution.GOAPResearchTree(),
 				seq("ResearchPath", "Run the web/knowledge-graph research chain agent",
 					cond("IsResearchRequest", "Detect research/analyze/find/query/search keywords"),
 					chainAgent("ResearchAgent",
@@ -666,7 +668,8 @@ func GoapDevopsTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 		Children: []evolution.SerializableNode{
 			act("SetupDevTools", "Give chain agents access to go_build, go_test, go_vet, web_search"),
 			seq("PreGate", "Validate the task is non-empty before routing", cond("ValidateInput", "Non-empty")),
-			sel("StrategyRouter", "Route to build or implementation by task keywords, falling back to the general DevOps agent",
+			sel("StrategyRouter", "Try the real GOAP A* planner first, falling back to build or implementation by task keywords, then the general DevOps agent",
+				*evolution.GOAPDevOpsTree(),
 				seq("BuildPath", "Run the build/test/vet chain agent and report results",
 					cond("IsBuildRequest", "Detect build/compile/install keywords"),
 					chainAgent("DevopsBuildAgent",

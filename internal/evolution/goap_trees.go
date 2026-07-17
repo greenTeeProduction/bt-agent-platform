@@ -66,9 +66,10 @@ func GOAPPlanningTree() *SerializableNode {
 
 	node := goap.BuildSerializableTree(def)
 	return &SerializableNode{
-		Type:     string(node.Type),
-		Name:     node.Name,
-		Children: convertGoapChildren(node.Children),
+		Type:        string(node.Type),
+		Name:        node.Name,
+		Description: goapNodeDescriptions[node.Name],
+		Children:    convertGoapChildren(node.Children),
 	}
 }
 
@@ -105,9 +106,10 @@ func GOAPResearchTree() *SerializableNode {
 
 	node := goap.BuildSerializableTree(def)
 	return &SerializableNode{
-		Type:     string(node.Type),
-		Name:     node.Name,
-		Children: convertGoapChildren(node.Children),
+		Type:        string(node.Type),
+		Name:        node.Name,
+		Description: goapNodeDescriptions[node.Name],
+		Children:    convertGoapChildren(node.Children),
 	}
 }
 
@@ -143,9 +145,10 @@ func GOAPDevOpsTree() *SerializableNode {
 
 	node := goap.BuildSerializableTree(def)
 	return &SerializableNode{
-		Type:     string(node.Type),
-		Name:     node.Name,
-		Children: convertGoapChildren(node.Children),
+		Type:        string(node.Type),
+		Name:        node.Name,
+		Description: goapNodeDescriptions[node.Name],
+		Children:    convertGoapChildren(node.Children),
 	}
 }
 
@@ -165,6 +168,22 @@ func FromGoapNode(node *goap.SerializableNode) *SerializableNode {
 	}
 }
 
+// goapNodeDescriptions documents the fixed node names goap.BuildSerializableTree
+// produces (see its doc comment for the shape). goap.SerializableNode carries no
+// Description field of its own, so descriptions are attached here on conversion
+// to satisfy the domains package's tree-coverage conventions.
+var goapNodeDescriptions = map[string]string{
+	"GOAP_Root":          "GOAP A* planning pipeline: plan a multi-step action sequence, execute it, and reflect on the outcome",
+	"HasGoapGoal":        "Detect whether the task requires multi-step planning and a GOAP goal can be derived from it",
+	"PlanGoapActions":    "Run the A* planner over the configured actions to find an optimal step sequence toward the goal",
+	"GoapStrategyRouter": "Execute the planned steps, falling back to a partial-result path if execution fails",
+	"GoapExecutePath":    "Execute the next planned GOAP step and continue while steps remain",
+	"ExecuteGoapStep":    "Execute the next step of the computed GOAP plan via an LLM chain agent",
+	"HasMoreGoapSteps":   "Detect whether the computed plan has remaining unexecuted steps",
+	"GoapFallback":       "Mark the plan as partially complete and continue when execution cannot proceed",
+	"ReflectGoapOutcome": "Finalize the outcome and result of the GOAP planning run",
+}
+
 func convertGoapChildren(children []goap.SerializableNode) []SerializableNode {
 	if len(children) == 0 {
 		return nil
@@ -172,9 +191,10 @@ func convertGoapChildren(children []goap.SerializableNode) []SerializableNode {
 	result := make([]SerializableNode, len(children))
 	for i, c := range children {
 		node := SerializableNode{
-			Type:     string(c.Type),
-			Name:     c.Name,
-			Metadata: c.Metadata,
+			Type:        string(c.Type),
+			Name:        c.Name,
+			Description: goapNodeDescriptions[c.Name],
+			Metadata:    c.Metadata,
 		}
 		if len(c.Children) > 0 {
 			node.Children = convertGoapChildren(c.Children)

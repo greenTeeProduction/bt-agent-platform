@@ -193,6 +193,137 @@ func findNode(node evolution.SerializableNode, name string) *evolution.Serializa
 	return nil
 }
 
+// TestGoapPlanningRunsRealGOAPPlannerFirst is milestone 1/3 of "Wire the real
+// GOAP A* planner into production domain trees instead of the orphaned keyword
+// router": AllDomainTrees()["goap_planning"]'s StrategyRouter Selector must try
+// the real evolution.GOAPPlanningTree() (root node "GOAP_Root", the A* planner
+// evolution.GOAPPlanningTree() builds via goap.BuildSerializableTree) ahead of
+// the existing keyword-routed AssessPath/SyncPath and the ExecutionPath
+// fallback — mirroring the fallback-through-Selector pattern
+// internal/evolution/merged.go's GoapPlanningPath already proves for the
+// evaluator's MergedTree(). Selector semantics mean a failed GOAP_Root
+// (e.g. no plan found) falls through to the untouched keyword paths, so this
+// also pins that TestDomainFallbacksUseChainAction's ExecutionPath invariant
+// and the keyword-path fallback keep working unchanged.
+func TestGoapPlanningRunsRealGOAPPlannerFirst(t *testing.T) {
+	tree, ok := AllDomainTrees()["goap_planning"]
+	if !ok || tree == nil {
+		t.Fatal(`AllDomainTrees()["goap_planning"] missing`)
+	}
+
+	router := findNode(*tree, "StrategyRouter")
+	if router == nil {
+		t.Fatal("goap_planning: StrategyRouter selector not found")
+	}
+	if router.Type != "Selector" {
+		t.Fatalf("goap_planning StrategyRouter type = %q, want Selector", router.Type)
+	}
+
+	names := make([]string, len(router.Children))
+	for i, c := range router.Children {
+		names[i] = c.Name
+	}
+	want := []string{"GOAP_Root", "AssessPath", "SyncPath", "ExecutionPath"}
+	same := len(names) == len(want)
+	if same {
+		for i, w := range want {
+			if names[i] != w {
+				same = false
+				break
+			}
+		}
+	}
+	if !same {
+		t.Fatalf("goap_planning StrategyRouter children = %v, want %v (real GOAP A* planner first, keyword paths and ExecutionPath fallback preserved)", names, want)
+	}
+}
+
+// TestGoapResearchRunsRealGOAPPlannerFirst is milestone 2/3 of "Wire the real
+// GOAP A* planner into production domain trees instead of the orphaned keyword
+// router": AllDomainTrees()["goap_research"]'s StrategyRouter Selector must try
+// the real evolution.GOAPResearchTree() (root node "GOAP_Root", the A* planner
+// evolution.GOAPResearchTree() builds via goap.BuildSerializableTree) ahead of
+// the existing keyword-routed ResearchPath/GraphifyPath and the ExecutionPath
+// fallback — mirroring TestGoapPlanningRunsRealGOAPPlannerFirst's pattern for
+// goap_planning. Selector semantics mean a failed GOAP_Root (e.g. no plan
+// found) falls through to the untouched keyword paths, so this also pins the
+// keyword-path fallback behavior unchanged.
+func TestGoapResearchRunsRealGOAPPlannerFirst(t *testing.T) {
+	tree, ok := AllDomainTrees()["goap_research"]
+	if !ok || tree == nil {
+		t.Fatal(`AllDomainTrees()["goap_research"] missing`)
+	}
+
+	router := findNode(*tree, "StrategyRouter")
+	if router == nil {
+		t.Fatal("goap_research: StrategyRouter selector not found")
+	}
+	if router.Type != "Selector" {
+		t.Fatalf("goap_research StrategyRouter type = %q, want Selector", router.Type)
+	}
+
+	names := make([]string, len(router.Children))
+	for i, c := range router.Children {
+		names[i] = c.Name
+	}
+	want := []string{"GOAP_Root", "ResearchPath", "GraphifyPath", "ExecutionPath"}
+	same := len(names) == len(want)
+	if same {
+		for i, w := range want {
+			if names[i] != w {
+				same = false
+				break
+			}
+		}
+	}
+	if !same {
+		t.Fatalf("goap_research StrategyRouter children = %v, want %v (real GOAP A* planner first, keyword paths and ExecutionPath fallback preserved)", names, want)
+	}
+}
+
+// TestGoapDevopsRunsRealGOAPPlannerFirst is milestone 2/3 of "Wire the real
+// GOAP A* planner into production domain trees instead of the orphaned keyword
+// router": AllDomainTrees()["goap_devops"]'s StrategyRouter Selector must try
+// the real evolution.GOAPDevOpsTree() (root node "GOAP_Root", the A* planner
+// evolution.GOAPDevOpsTree() builds via goap.BuildSerializableTree) ahead of
+// the existing keyword-routed BuildPath/ImplementPath and the ExecutionPath
+// fallback — mirroring TestGoapPlanningRunsRealGOAPPlannerFirst's pattern for
+// goap_planning. Selector semantics mean a failed GOAP_Root (e.g. no plan
+// found) falls through to the untouched keyword paths, so this also pins the
+// keyword-path fallback behavior unchanged.
+func TestGoapDevopsRunsRealGOAPPlannerFirst(t *testing.T) {
+	tree, ok := AllDomainTrees()["goap_devops"]
+	if !ok || tree == nil {
+		t.Fatal(`AllDomainTrees()["goap_devops"] missing`)
+	}
+
+	router := findNode(*tree, "StrategyRouter")
+	if router == nil {
+		t.Fatal("goap_devops: StrategyRouter selector not found")
+	}
+	if router.Type != "Selector" {
+		t.Fatalf("goap_devops StrategyRouter type = %q, want Selector", router.Type)
+	}
+
+	names := make([]string, len(router.Children))
+	for i, c := range router.Children {
+		names[i] = c.Name
+	}
+	want := []string{"GOAP_Root", "BuildPath", "ImplementPath", "ExecutionPath"}
+	same := len(names) == len(want)
+	if same {
+		for i, w := range want {
+			if names[i] != w {
+				same = false
+				break
+			}
+		}
+	}
+	if !same {
+		t.Fatalf("goap_devops StrategyRouter children = %v, want %v (real GOAP A* planner first, keyword paths and ExecutionPath fallback preserved)", names, want)
+	}
+}
+
 func TestNotebooklmPlanImplement(t *testing.T) {
 	tree := evolution.NotebooklmPlanImplementTree()
 	mock := benchmark.DefaultMock()

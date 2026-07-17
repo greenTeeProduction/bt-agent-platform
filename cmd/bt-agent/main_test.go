@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -512,6 +514,71 @@ func TestSchedulerAndDLQReplayDispatchThroughAgentRouter(t *testing.T) {
 // (CLAUDE.md documents it as warned-and-ignored), yet it was logged at ERROR
 // ~38×/day. The serve-error path must classify the expected case as WARN and
 // keep everything else at ERROR.
+// TestValidateDomainRegistry_FlagsInvalidTree is milestone 3/3 of "Wire the
+// real GOAP A* planner into production domain trees instead of the orphaned
+// keyword router": validateDomainRegistry must run engine.ValidateTree over
+// every tree in a domain registry and surface any validation message,
+// prefixed with the offending domain name so a startup failure names the
+// broken tree instead of just "something is wrong".
+func TestValidateDomainRegistry_FlagsInvalidTree(t *testing.T) {
+	broken := map[string]*evolution.SerializableNode{
+		"bogus_domain": {
+			Type: "Action",
+			Name: "TotallyUnregisteredAction",
+		},
+	}
+	msgs := validateDomainRegistry(broken)
+	if len(msgs) != 1 {
+		t.Fatalf("validateDomainRegistry(broken) = %v, want 1 message", msgs)
+	}
+	if !strings.Contains(msgs[0], "bogus_domain") || !strings.Contains(msgs[0], "TotallyUnregisteredAction") {
+		t.Errorf("expected message to name both the domain and the bad node, got %q", msgs[0])
+	}
+}
+
+// TestValidateDomainRegistry_RealTreesClean pins that the production domain
+// registry domains.AllDomainTrees() — including the newly-composed
+// goap_planning/goap_research/goap_devops trees that nest the real GOAP A*
+// planner subtree beside the pre-existing keyword-routed paths — passes
+// validateDomainRegistry with zero messages, so the startup gate this
+// milestone adds to main() never trips on a tree that is actually fine.
+func TestValidateDomainRegistry_RealTreesClean(t *testing.T) {
+	if msgs := validateDomainRegistry(domains.AllDomainTrees()); len(msgs) != 0 {
+		t.Errorf("validateDomainRegistry(real registry) = %v, want no messages", msgs)
+	}
+}
+
+// TestDaemonValidatesDomainRegistryAtStartup pins — source-level, the same
+// audit style as TestDaemonWiresDLQReplayConsumer above — that main()'s
+// startup registry loop (which already ranges over domains.AllDomainTrees()
+// to build kg.ExpectedDomains) also runs validateDomainRegistry over the same
+// registry and exits fatally if it reports any messages. Without this wiring
+// a future authoring mistake in a domain tree (duplicate node name, unguarded
+// HITL condition under a CachedCondition, unknown chain_type, ...) would be
+// silently served instead of failing the daemon's startup loudly.
+func TestDaemonValidatesDomainRegistryAtStartup(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+	loopIdx := strings.Index(s, "domains.AllDomainTrees()")
+	if loopIdx < 0 {
+		t.Fatal("main.go lost the domains.AllDomainTrees() startup registry loop")
+	}
+	kgAssignIdx := strings.Index(s, "kg.ExpectedDomains = expectedDomains")
+	if kgAssignIdx < 0 || kgAssignIdx < loopIdx {
+		t.Fatal("main.go lost the kg.ExpectedDomains assignment after the registry loop")
+	}
+	section := s[loopIdx:kgAssignIdx]
+	if !strings.Contains(section, "validateDomainRegistry(") {
+		t.Error("main.go's startup registry loop must call validateDomainRegistry(...) over domains.AllDomainTrees() before assigning kg.ExpectedDomains, so an invalid tree fails startup instead of being silently served")
+	}
+	if !strings.Contains(section, "os.Exit(1)") {
+		t.Error("main.go must exit fatally (os.Exit(1)) when validateDomainRegistry reports messages, matching the fatal-startup-error pattern used elsewhere in this file")
+	}
+}
+
 func TestA2AServeErrorDemotesPortContention(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {
