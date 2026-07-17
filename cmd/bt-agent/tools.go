@@ -971,6 +971,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// fitness (Q2 Evolvability): it becomes resolvable by id and
 			// discoverable via the knowledge graph, not just a scalar number.
 			persistEvolvedWinner(deps, params.Tree, best, pop.BestFitness, result)
+			// Also write the fitness back onto the *base* tree (Q2 Evolvability
+			// milestone 2/2), matching bt_evolve_qd/bt_evolve_selection_pressure:
+			// fitness-aware discovery ranks the base tree itself, not just its
+			// "-evolved" descendant.
+			recordEvolvedFitness(deps, params.Tree, pop.BestFitness)
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -2181,12 +2186,21 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			report := []map[string]interface{}{}
 			skipped := []string{}
+			lineageSkipped := []string{}
 			for _, sp := range pressure {
 				baseTree := resolveTree(sp.TreeID)
 				if baseTree == nil {
 					// A KG entry without a real behavior tree must not abort the
 					// remaining pressure entries.
 					skipped = append(skipped, sp.TreeID)
+					continue
+				}
+				// Closing the loop RegisterEvolved's doc comment describes: don't
+				// burn another evolution budget on a tree that already has a
+				// fitter, non-regressing evolved descendant sitting in the
+				// knowledge graph. Mirrors bt_evolve_bottlenecks.
+				if lineageSkipsReEvolution(deps.kg, sp.TreeID, sp.Fitness) {
+					lineageSkipped = append(lineageSkipped, sp.TreeID)
 					continue
 				}
 				pop := newProductionPopulation(population, baseTree)
@@ -2210,6 +2224,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"selection_pressure":      len(pressure),
 				"report":                  report,
 				"skipped":                 skipped,
+				"lineage_skipped":         lineageSkipped,
 				"experience_bank_entries": bankEntries,
 			})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}

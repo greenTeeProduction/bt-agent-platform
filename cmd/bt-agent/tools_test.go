@@ -2591,6 +2591,43 @@ func TestBTEvolveGeneticPersistsEvolvedWinnerTree(t *testing.T) {
 	}
 }
 
+// TestBTEvolveGeneticRecordsBaseTreeFitness pins the base-tree write-back gap
+// (Q2 Evolvability milestone 2/2): bt_evolve_genetic persists the winner
+// under "<tree>-evolved" via persistEvolvedWinner, but never calls
+// recordEvolvedFitness(deps, params.Tree, pop.BestFitness) the way
+// bt_evolve_qd/bt_evolve_selection_pressure/the gardener's domain loop do —
+// so the *base* tree's StructuralFitness (used by fitness-aware discovery to
+// rank the base tree itself, not just its "-evolved" descendant) never
+// updates after a genetic-evolution pass.
+func TestBTEvolveGeneticRecordsBaseTreeFitness(t *testing.T) {
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go Developer", Category: "core"})
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore, kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_genetic", json.RawMessage(`{"tree":"godev","population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_genetic) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_genetic returned no content")
+	}
+
+	baseMeta := kg.Trees["godev"]
+	if baseMeta == nil {
+		t.Fatalf("base tree 'godev' vanished from the knowledge graph after bt_evolve_genetic")
+	}
+	if baseMeta.StructuralFitness <= 0 {
+		t.Errorf("bt_evolve_genetic must write pop.BestFitness back onto the *base* tree's StructuralFitness (via recordEvolvedFitness), not just the persisted '-evolved' tree; got StructuralFitness=%v", baseMeta.StructuralFitness)
+	}
+}
+
 // TestBTEvolveBottlenecksPersistsEvolvedWinnerTree pins the same fix as
 // TestBTEvolveGeneticPersistsEvolvedWinnerTree for the genetic-fallback path
 // inside bt_evolve_bottlenecks: today pop.EvolveWithExperience(...)'s return
@@ -2794,6 +2831,81 @@ func TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant(t 
 	}
 	if !found {
 		t.Errorf("bt_evolve_bottlenecks must report domain:alert_router under a 'lineage_skipped' list so callers can see which bottlenecks were deferred to an existing fitter evolved descendant instead of silently dropping them from 'report'; got lineage_skipped=%v (full result %v)", out["lineage_skipped"], out)
+	}
+}
+
+// TestBTEvolveSelectionPressureSkipsTreeWithFitterNonRegressingEvolvedDescendant
+// pins the selection_pressure half of the same gap
+// TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant pins
+// for bt_evolve_bottlenecks: lineageSkipsReEvolution (cmd/bt-agent/tools.go)
+// already guards bt_evolve_bottlenecks's loop, but bt_evolve_selection_pressure
+// never consults it before re-breeding a proven, underbred tree — it burns a
+// fresh population/generations budget on domain:code_review even though
+// domain:code_review-evolved (registered via the exact same RegisterEvolved
+// bookkeeping a prior production run would have used) is already fitter than
+// the base tree's current Fitness, and the tree's shared TrackRecord archive
+// is cold (WinRate()==1: no recorded benchmark-gate regressions to contradict
+// that evolved winner). Once fixed, such a selection-pressure entry must be
+// left out of "report" (no algorithm tally, no evolution attempted) and
+// surfaced under a "lineage_skipped" list instead, mirroring bottlenecks.
+func TestBTEvolveSelectionPressureSkipsTreeWithFitterNonRegressingEvolvedDescendant(t *testing.T) {
+	// Isolate the shared TrackRecord archive trackRecordArchivePath reads via
+	// agent.HomeDir() so a stray archive from another test/run can't leave
+	// this tree's WinRate() anything but the cold-start default of 1.
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{
+		ID: "domain:code_review", Name: "Code Review", Category: "domain",
+		Fitness: 90, RunCount: 2,
+	})
+	// Register the evolved descendant through the same bookkeeping call a
+	// prior production bt_evolve_selection_pressure run would have made, so
+	// the "evolved_from" edge EvolutionLineage reads is genuinely present and
+	// its StructuralFitness (95) is above the base tree's own Fitness (90).
+	kg.RegisterEvolved("domain:code_review", "domain:code_review-evolved", 5, 95)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{kg: kg})
+
+	res, ok := server.Invoke("bt_evolve_selection_pressure", json.RawMessage(`{"population":4,"generations":2}`))
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selection_pressure) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_selection_pressure returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+
+	if n, isNum := out["selection_pressure"].(float64); !isNum || int(n) != 1 {
+		t.Fatalf("bt_evolve_selection_pressure must still detect domain:code_review as proven+underbred (Fitness>=70, RunCount<5); got %v", out["selection_pressure"])
+	}
+
+	report, _ := out["report"].([]interface{})
+	for _, e := range report {
+		m, _ := e.(map[string]interface{})
+		if m["tree"] == "domain:code_review" {
+			t.Fatalf("bt_evolve_selection_pressure must not spend another evolution budget on domain:code_review: EvolutionLineage already shows a fitter, non-regressing evolved descendant (domain:code_review-evolved, StructuralFitness=95 > base Fitness=90, cold TrackRecord WinRate()==1) — got a full report entry instead of a skip: %v", m)
+		}
+	}
+
+	algorithms, _ := out["algorithms"].(map[string]interface{})
+	if n, isNum := algorithms["genetic"].(float64); isNum && n > 0 {
+		t.Errorf("bt_evolve_selection_pressure must not tally domain:code_review under 'algorithms': its evolution should have been skipped via EvolutionLineage rather than executed; got algorithms=%v", algorithms)
+	}
+
+	lineageSkipped, _ := out["lineage_skipped"].([]interface{})
+	found := false
+	for _, s := range lineageSkipped {
+		if id, _ := s.(string); id == "domain:code_review" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bt_evolve_selection_pressure must report domain:code_review under a 'lineage_skipped' list so callers can see which selection-pressure trees were deferred to an existing fitter evolved descendant instead of silently re-breeding them; got lineage_skipped=%v (full result %v)", out["lineage_skipped"], out)
 	}
 }
 
