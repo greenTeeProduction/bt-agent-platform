@@ -386,11 +386,11 @@ func isRateLimitError(lower string) bool {
 // Classification never depends on the body (status codes drive it), so the
 // cap is purely cosmetic. Shared by the LLM/embedding HTTP clients.
 func TruncateForError(b []byte) string {
-	const max = 512
-	if len(b) <= max {
+	const maxLen = 512
+	if len(b) <= maxLen {
 		return string(b)
 	}
-	cut := max
+	cut := maxLen
 	for cut > 0 && !utf8.RuneStart(b[cut]) {
 		cut--
 	}
