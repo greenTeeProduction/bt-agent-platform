@@ -134,8 +134,11 @@ func parseErrorHandlerProposal(output string) (errorHandlerProposal, error) {
 // errorHandlerAllowedNodeTypes is the strict proposal vocabulary (spec §5).
 // Deliberately a subset of evolution.KnownNodeTypes: no gates, no subtrees,
 // no planners — a recovery node composes existing leaves under basic control
-// flow. (MemSequence/MemSelector are absent from KnownNodeTypes, so they
-// could never validate anyway.)
+// flow. This is an explicit, independent allowlist — it does not rely on
+// evolution.KnownNodeTypes to exclude anything on its behalf. (MemSelector is
+// still absent from KnownNodeTypes and so could never validate there either;
+// MemSequence was added to KnownNodeTypes for runtime tree mutation's
+// cursor-migration support, but stays excluded here explicitly.)
 var errorHandlerAllowedNodeTypes = map[string]bool{
 	"Sequence": true, "Selector": true,
 	"Retry": true, "Timeout": true, "Inverter": true, "Succeeder": true,

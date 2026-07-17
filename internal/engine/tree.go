@@ -584,6 +584,9 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	defer cancel()
 	btCtx := btcore.NewBTContext(ctx, bb)
 
+	if bb.liveRun != nil {
+		tree = bb.liveRun.applyPending(btCtx, bb, tree)
+	}
 	code := tree.Run(btCtx)
 
 	// Multi-tick loop: Repeat and other decorators return 0 (Running) between
@@ -592,8 +595,13 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	// Running, but nothing inside this synchronous loop can change that
 	// status — re-ticking would just burn maxTicks iterations for no effect —
 	// so stop immediately and let RunTask return that outcome to the caller.
+	// Mutable runs (bb.liveRun set) apply queued tree mutations at each tick
+	// boundary — a quiescent point — and keep ticking the rebuilt tree.
 	const maxTicks = 1000
 	for tick := 1; code == 0 && bb.Outcome != "pending_approval" && tick < maxTicks; tick++ {
+		if bb.liveRun != nil {
+			tree = bb.liveRun.applyPending(btCtx, bb, tree)
+		}
 		code = tree.Run(btCtx)
 	}
 

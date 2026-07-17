@@ -98,6 +98,16 @@ var KnownNodeTypes = map[string]bool{
 	// protected subtree; further children are Claude-proposed recovery nodes
 	// grafted at build time (engine/error_handler_node.go).
 	"ClaudeErrorHandler": true,
+	// MemSequence — memory-variant Sequence (engine/tree.go buildNodeInner,
+	// btcomp.NewMemSequence): already built and run in production trees
+	// (internal/domains/superpowers_workflow.go) and by runtime tree mutation
+	// (RunTaskMutable's MemSequence cursor-migration path), but was missing
+	// from this allowlist, so ValidateTreeFull unconditionally rejected any
+	// tree containing one with "unknown node type". This did not weaken the
+	// separate, stricter ClaudeErrorHandler LLM-proposal allowlist
+	// (errorHandlerAllowedNodeTypes in error_handler_claude.go), which already
+	// excludes MemSequence explicitly and independently of this map.
+	"MemSequence": true,
 }
 
 // ValidateEdge validates a single TypedEdge against the tree structure.
