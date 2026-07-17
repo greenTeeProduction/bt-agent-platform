@@ -18,6 +18,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -60,18 +61,48 @@ type WebhookPublisher struct {
 	stopCh   chan struct{}
 	eventCh  <-chan AgentEvent
 	throttle *routineThrottle
+	breakers map[string]*reliability.CircuitBreaker
+	dlq      *reliability.DeadLetterQueue
 }
 
 // NewWebhookPublisher creates a publisher with Hermes webhook base URL and secrets.
 func NewWebhookPublisher(baseURL string, secrets WebhookSecrets) *WebhookPublisher {
-	return &WebhookPublisher{
+	breakers := make(map[string]*reliability.CircuitBreaker, len(secrets))
+	for subscription := range secrets {
+		breakers[subscription] = reliability.NewCircuitBreaker(subscription, webhookCircuitBreakerThreshold, webhookCircuitBreakerCooldown)
+	}
+	pub := &WebhookPublisher{
 		baseURL:  baseURL,
 		secrets:  secrets,
 		client:   &http.Client{Timeout: 10 * time.Second},
 		stopCh:   make(chan struct{}),
 		throttle: newRoutineThrottle(NotificationThrottleFile()),
+		breakers: breakers,
+		// In-memory only: each WebhookPublisher instance owns its own DLQ, and
+		// unlike the scheduler's file-backed queue (wired once per daemon in
+		// main.go), publishers are constructed per-test as well as per-process,
+		// so a shared persistence path would leak dead letters across them.
+		dlq: reliability.NewDeadLetterQueue(""),
 	}
+	// Replays run the delivery ONCE through the same signed-request path used
+	// by handleEvent, without webhookRetryPolicy's own retries — a failed
+	// replay simply retains the entry (see DeadLetterQueue.Replay) rather than
+	// pushing a duplicate dead letter.
+	pub.dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
+		_, err := pub.postSigned(e.Agent, []byte(e.Task))
+		return err
+	})
+	return pub
 }
+
+// webhookCircuitBreakerThreshold/Cooldown configure the per-subscription
+// breaker: five consecutive failed deliveries (each already exhausting
+// webhookRetryPolicy's own retries) trip the circuit, which then stays open
+// for a minute before allowing a single half-open probe through.
+const (
+	webhookCircuitBreakerThreshold = 5
+	webhookCircuitBreakerCooldown  = time.Minute
+)
 
 // Attach subscribes to the AgentBus and starts forwarding events to Hermes webhooks.
 // Runs in a goroutine until Close() is called.
@@ -136,13 +167,16 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		}
 	}
 
-	secret, ok := p.secrets[subscription]
-	if !ok {
+	if _, ok := p.secrets[subscription]; !ok {
 		slog.Warn("webhook: no secret for subscription", "subscription", subscription)
 		return
 	}
 
-	url := fmt.Sprintf("%s/webhooks/%s", p.baseURL, subscription)
+	breaker := p.breakers[subscription]
+	if breaker != nil && !breaker.Allow() {
+		slog.Warn("webhook: circuit breaker open, skipping delivery", "subscription", subscription)
+		return
+	}
 
 	// Build JSON payload matching the webhook prompt template variables
 	payload := map[string]interface{}{
@@ -159,26 +193,88 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		return
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	var lastStatus int
+	err = webhookRetryPolicy().ExecuteContext(context.Background(), func() error {
+		status, postErr := p.postSigned(subscription, body)
+		lastStatus = status
+		return postErr
+	})
+
 	if err != nil {
-		slog.Error("webhook: request build error", "error", err)
+		slog.Warn("webhook: POST failed after retries", "subscription", subscription, "status", lastStatus, "error", err)
+		if breaker != nil {
+			breaker.RecordFailure()
+		}
+		p.dlq.Push(reliability.DeadLetterEntry{
+			Agent: subscription,
+			Task:  string(body),
+			Error: err.Error(),
+		})
 		return
+	}
+
+	if breaker != nil {
+		breaker.RecordSuccess()
+	}
+}
+
+// postSigned POSTs body to the given subscription's Hermes webhook endpoint,
+// HMAC-signed with that subscription's secret, and returns the response
+// status alongside a reliability-categorized error. Shared by handleEvent's
+// retrying delivery path and the DLQ's single-shot replay executor so a
+// replayed dead letter is re-delivered through the identical signing logic
+// the original attempt used.
+func (p *WebhookPublisher) postSigned(subscription string, body []byte) (int, error) {
+	secret, ok := p.secrets[subscription]
+	if !ok {
+		return 0, reliability.NewCategorizedError(reliability.ErrCatValidation,
+			fmt.Errorf("webhook: no secret for subscription %q", subscription))
+	}
+	url := fmt.Sprintf("%s/webhooks/%s", p.baseURL, subscription)
+	sig := computeHMAC(body, secret)
+
+	req, reqErr := http.NewRequest("POST", url, bytes.NewReader(body))
+	if reqErr != nil {
+		return 0, reliability.NewCategorizedError(reliability.ErrCatValidation, reqErr)
 	}
 	req.Header.Set("Content-Type", "application/json")
-
-	// HMAC-SHA256 signature (Hermes expects X-Hub-Signature-256 header)
-	sig := computeHMAC(body, secret)
 	req.Header.Set("X-Hub-Signature-256", "sha256="+sig)
 
-	resp, err := p.client.Do(req)
-	if err != nil {
-		slog.Error("webhook: POST failed", "subscription", subscription, "error", err)
-		return
+	resp, doErr := p.client.Do(req)
+	if doErr != nil {
+		// Transport errors (connection refused/reset, EOF, DNS, timeout) are
+		// classified as retryable network errors by ClassifyError.
+		return 0, doErr
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		slog.Warn("webhook: POST returned error status", "subscription", subscription, "status", resp.StatusCode)
+	switch {
+	case resp.StatusCode >= 500:
+		// Hermes-side trouble — worth retrying.
+		return resp.StatusCode, reliability.NewCategorizedError(reliability.ErrCatNetwork,
+			fmt.Errorf("webhook: server error status %d", resp.StatusCode))
+	case resp.StatusCode >= 400:
+		// The request itself is bad — retrying wastes attempts.
+		return resp.StatusCode, reliability.NewCategorizedError(reliability.ErrCatValidation,
+			fmt.Errorf("webhook: client error status %d", resp.StatusCode))
+	default:
+		return resp.StatusCode, nil
+	}
+}
+
+// webhookRetryPolicy returns the reliability.RetryPolicy used for the
+// outbound Hermes webhook POST. Transport errors and 5xx responses are
+// retried with jittered exponential backoff (FullJitterStrategy — see
+// reliability.FullJitter); 4xx responses mean the request itself is bad, so
+// RetryPolicy.IsRetryable() refuses to retry them (ErrCatValidation). Bounded
+// at 3 attempts / 500ms max delay so a Hermes outage doesn't stall the
+// AgentBus subscriber loop for long.
+func webhookRetryPolicy() *reliability.RetryPolicy {
+	return &reliability.RetryPolicy{
+		MaxRetries: 3,
+		Base:       50 * time.Millisecond,
+		MaxDelay:   500 * time.Millisecond,
+		Jitter:     reliability.FullJitterStrategy,
 	}
 }
 

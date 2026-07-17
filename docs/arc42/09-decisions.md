@@ -172,6 +172,7 @@ Consolidation notes (2026-07-16):
 | ADR-147 | The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-148 | `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research) | Accepted | 2026-07-17 |
 | ADR-149 | `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2) | Accepted | 2026-07-17 |
+| ADR-150 | `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2668,6 +2669,28 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ All three of the platform's run-triggering paths — scheduler (`runJob`), dashboard (`RunTaskResult`), and A2A (`Execute`) — now record to the same `agent.History` store, and `Cancel` no longer lets a mid-run cancellation disappear without a trace.
 - ✅ `AuctionDelegate` no longer silently drops `AuctionResult.Award` on a win; any caller with a `chainState` in hand can recover which agent actually ran the task, not just the result text.
 - ⚠️ `Execute`'s `History.Record` call attributes the run to `agentName` (the executor's own identity), not to the auction winner threaded through `chainState["auction_award"]` — a task that reaches `Execute` only after `AuctionDelegate` awarded it to a different agent is still recorded under the executing agent's own name, since no call site yet reads `chainState["auction_award"]` back out to override attribution. Closing that requires the still-open milestone 3.
+
+---
+
+## ADR-150: `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3)
+
+**Context (2026-07-17):** `WebhookPublisher.handleEvent` (`internal/agent/webhook_publisher.go`) sent alert/task/evolution notifications to Hermes as a single unretried, HMAC-signed `http.Client.Do` POST: a transport error or any non-2xx status was logged at `Warn`/`Error` and the event was gone — no retry, no backoff, no record of the failure. A persistently-down or slow Hermes endpoint meant every subsequent event took the same doomed single attempt, and a Hermes outage silently dropped every notification published during it, with no way to recover them once Hermes came back.
+
+**Decision:** Reuse the platform's existing three-layer reliability primitives (ADR-007) at this call site rather than write bespoke retry/failure-handling logic:
+  - **Retry (m1):** the POST is now issued through a `postSigned` helper wrapped in `webhookRetryPolicy().ExecuteContext` — `reliability.RetryPolicy{MaxRetries: 3, Base: 50ms, MaxDelay: 500ms, Jitter: reliability.FullJitterStrategy}`. `postSigned` classifies the outcome so `RetryPolicy.IsRetryable()` retries transport errors and 5xx responses (`ErrCatNetwork`) but not 4xx responses (`ErrCatValidation`) — a bad request wastes retry budget without a different outcome. The bound (3 attempts / 500ms max delay) keeps a Hermes outage from stalling the `AgentBus` subscriber loop for long.
+  - **Circuit breaker (m2):** `WebhookPublisher` gains a `breakers map[string]*reliability.CircuitBreaker`, one `reliability.NewCircuitBreaker(subscription, 5, time.Minute)` per configured subscription, checked via `breaker.Allow()` before each delivery attempt — before the retry-wrapped POST runs at all. Five consecutive exhausted delivery attempts (each already having retried internally) trip the breaker; it then fails fast for a minute before allowing a single half-open probe through. Breaker isolation is per-subscription so one persistently-failing Hermes endpoint doesn't affect deliveries to a different, still-healthy one.
+  - **Dead-letter queue with replay (m3):** a delivery that exhausts `webhookRetryPolicy` is pushed onto an in-memory `*reliability.DeadLetterQueue` (`reliability.NewDeadLetterQueue("")`) owned by the `WebhookPublisher` instance, with `SetReplayExecutor` wired to re-invoke `postSigned` — so a replayed dead letter goes through the identical signing/POST path the original attempt used, once, without `webhookRetryPolicy`'s own retries (a failed replay just retains the entry per `DeadLetterQueue.Replay`'s existing contract).
+
+**Rejected alternative:** a shared, file-backed DLQ persistence path (mirroring the scheduler's file-backed queue, wired once per daemon in `cmd/bt-agent/main.go`) was rejected for this call site — `WebhookPublisher` instances are constructed per-test as well as per-process, and a shared persistence path would leak dead letters across otherwise-independent instances. The queue is deliberately in-memory-only and scoped to the owning publisher instance instead.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestWebhookPublisher_HandleEventRetry` (retries 5xx/transport errors to eventual success, does not retry 4xx), `TestWebhookPublisher_CircuitBreakerTripsAndRecovers` (no further HTTP calls once tripped; recovers after cooldown), and `TestWebhookPublisher_DLQReplayRedeliversAfterRecovery` (`internal/agent/webhook_publisher_test.go`). Closes all three milestones of the "Q3 Reliability — harden Hermes webhook delivery" program in one change.
+
+**Consequences:**
+- ✅ Alert/task/evolution notifications now survive a transient Hermes 5xx blip or connection failure instead of being dropped on the first attempt.
+- ✅ A persistently-down Hermes subscription stops being hammered by every subsequent `AgentEvent` once its breaker trips, while deliveries to other subscriptions continue unaffected.
+- ✅ A delivery that exhausts retries is recoverable via `dlq.Replay(id)` once Hermes comes back, rather than lost the moment the retry budget runs out.
+- ⚠️ The DLQ is in-memory only (by design, see rejected alternative above): dead letters do not survive a `bt-agent` process restart, unlike the scheduler's file-backed DLQ (ADR-036). Replay must be triggered while the same process instance is still running.
+- ⚠️ No production call site yet invokes `dlq.Replay`/`dlq.List` for the webhook publisher's queue — the queue and replay executor exist and are exercised by `TestWebhookPublisher_DLQReplayRedeliversAfterRecovery`, but nothing currently drains it automatically (contrast the scheduler's DLQ, which the dashboard and a background scan both consume). Dead letters accumulate for the life of the process until something reads them.
 
 ---
 

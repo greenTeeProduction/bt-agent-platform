@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ─── WebhookPublisher Coverage ───
@@ -309,5 +312,258 @@ func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 		t.Fatalf("WebhookPublisher loop: a panicking event handler crashed the process (or "+
 			"the loop stopped forwarding events) instead of being recovered via "+
 			"reliability.SafeGo and continuing to run; exit error=%v output=%s", err, out)
+	}
+}
+
+// ─── retry-with-backoff regression ───
+
+// TestWebhookPublisher_HandleEventRetry is the regression test for
+// handleEvent's outbound POST lacking retry: transport errors and 5xx
+// responses from Hermes must be retried with backoff until they eventually
+// succeed, but non-retryable 4xx responses must NOT be retried (Hermes is
+// telling us the request itself is bad, so retrying just wastes attempts).
+func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
+	tests := []struct {
+		name            string
+		failCount       int  // requests to fail before the server starts succeeding
+		failStatus      int  // 0 means simulate a transport error (hijack + close, no response)
+		wantEventually  bool // event must eventually be delivered (server sees a 200)
+		wantMaxRequests int64
+	}{
+		{
+			name:           "retries on 5xx then succeeds",
+			failCount:      1,
+			failStatus:     http.StatusInternalServerError,
+			wantEventually: true,
+		},
+		{
+			name:           "retries on transport error then succeeds",
+			failCount:      1,
+			failStatus:     0,
+			wantEventually: true,
+		},
+		{
+			name:            "does not retry non-retryable 4xx",
+			failCount:       1 << 30, // always fails
+			failStatus:      http.StatusBadRequest,
+			wantEventually:  false,
+			wantMaxRequests: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requests int64
+			var delivered int64
+
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				n := atomic.AddInt64(&requests, 1)
+				if int(n) <= tt.failCount {
+					if tt.failStatus == 0 {
+						hj, ok := w.(http.Hijacker)
+						if !ok {
+							t.Fatalf("ResponseWriter does not support hijacking")
+						}
+						conn, _, err := hj.Hijack()
+						if err != nil {
+							t.Fatalf("hijack: %v", err)
+						}
+						conn.Close() // abrupt close simulates a transport error
+						return
+					}
+					w.WriteHeader(tt.failStatus)
+					return
+				}
+				atomic.StoreInt64(&delivered, 1)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer ts.Close()
+
+			bus := InitAgentBus(100)
+			pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+			pub.Attach(bus)
+			defer pub.Close()
+
+			bus.Publish(AgentEvent{
+				Type:      "service_down",
+				Source:    "test",
+				Timestamp: time.Now(),
+			})
+
+			if tt.wantEventually {
+				deadline := time.Now().Add(3 * time.Second)
+				for time.Now().Before(deadline) && atomic.LoadInt64(&delivered) == 0 {
+					time.Sleep(10 * time.Millisecond)
+				}
+				if atomic.LoadInt64(&delivered) == 0 {
+					t.Fatalf("event was not eventually delivered after %d failing attempt(s); got %d requests",
+						tt.failCount, atomic.LoadInt64(&requests))
+				}
+				return
+			}
+
+			// Non-retryable case: give handleEvent time to run its (single,
+			// non-retried) attempt, then confirm no retry followed.
+			time.Sleep(300 * time.Millisecond)
+			if got := atomic.LoadInt64(&requests); got > tt.wantMaxRequests {
+				t.Fatalf("expected non-retryable status %d to result in at most %d request(s), got %d",
+					tt.failStatus, tt.wantMaxRequests, got)
+			}
+		})
+	}
+}
+
+// ─── circuit breaker regression ───
+
+// TestWebhookPublisher_CircuitBreakerTripsAndRecovers is the regression test
+// for milestone 2 of the Q3 reliability program: WebhookPublisher must keep
+// a *reliability.CircuitBreaker per webhook subscription, checked before
+// each delivery attempt in handleEvent (before the retry-wrapped POST), so
+// a persistently-failing Hermes endpoint stops being hammered by every
+// subsequent event once the breaker trips — and resumes deliveries once the
+// breaker's cooldown elapses.
+func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
+	const failThreshold = 3 // matches webhookRetryPolicy's MaxRetries: every attempt of the first delivery fails
+
+	var requests int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt64(&requests, 1)
+		if n <= failThreshold {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	bus := InitAgentBus(100)
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+	// Inject a fast breaker (threshold=1, short cooldown) for the
+	// "bt-agent-alert" subscription so the test doesn't have to wait out a
+	// production-sized cooldown window.
+	pub.breakers = map[string]*reliability.CircuitBreaker{
+		"bt-agent-alert": reliability.NewCircuitBreaker("bt-agent-alert", 1, 250*time.Millisecond),
+	}
+	pub.Attach(bus)
+	defer pub.Close()
+
+	// First event: every retried attempt fails (5xx), so once the delivery
+	// attempt is exhausted the breaker (threshold=1) trips open.
+	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) < failThreshold {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := atomic.LoadInt64(&requests); got != failThreshold {
+		t.Fatalf("expected exactly %d requests from the first (failing) delivery attempt, got %d", failThreshold, got)
+	}
+
+	breaker := pub.breakers["bt-agent-alert"]
+	deadline = time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) && breaker.State() != reliability.CircuitOpen {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if breaker.State() != reliability.CircuitOpen {
+		t.Fatalf("expected circuit breaker to be open after the first delivery attempt exhausted its retries, got %v", breaker.State())
+	}
+
+	// Second event while the breaker is still open (cooldown not yet
+	// elapsed): handleEvent must skip the HTTP call entirely instead of
+	// hammering the persistently-failing endpoint again.
+	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
+	time.Sleep(100 * time.Millisecond)
+	if got := atomic.LoadInt64(&requests); got != failThreshold {
+		t.Fatalf("expected no further HTTP calls once the breaker tripped, got %d requests (want %d)", got, failThreshold)
+	}
+
+	// Wait for the cooldown to elapse, then publish a third event. The
+	// breaker should allow this single delivery attempt through
+	// (half-open); the server now answers 200, so it succeeds and the
+	// breaker should recover to closed.
+	time.Sleep(300 * time.Millisecond)
+	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
+
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) <= failThreshold {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := atomic.LoadInt64(&requests); got != failThreshold+1 {
+		t.Fatalf("expected exactly one more request after the cooldown elapsed, got %d requests (want %d)", got, failThreshold+1)
+	}
+
+	deadline = time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) && breaker.State() != reliability.CircuitClosed {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if breaker.State() != reliability.CircuitClosed {
+		t.Fatalf("expected circuit breaker to recover to closed after a successful delivery post-cooldown, got %v", breaker.State())
+	}
+}
+
+// ─── DLQ replay regression (milestone 3) ───
+
+// TestWebhookPublisher_DLQReplayRedeliversAfterRecovery is the regression
+// test for milestone 3 of the Q3 reliability program: once a webhook
+// delivery exhausts webhookRetryPolicy's retries, it must be pushed to the
+// publisher's dead letter queue, and dlq.Replay(id) — wired via
+// SetReplayExecutor to re-POST through the same signed-request path used by
+// handleEvent — must successfully redeliver the event once the mock Hermes
+// endpoint recovers, removing the entry from the DLQ.
+func TestWebhookPublisher_DLQReplayRedeliversAfterRecovery(t *testing.T) {
+	var requests int64
+	var recovered int32
+	var lastSig string
+	var lastBody []byte
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&requests, 1)
+		if atomic.LoadInt32(&recovered) == 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		lastBody = body
+		lastSig = r.Header.Get("X-Hub-Signature-256")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	bus := InitAgentBus(100)
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+	pub.Attach(bus)
+	defer pub.Close()
+
+	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
+
+	// Wait for the failing delivery to exhaust its retries and land in the DLQ.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && pub.dlq.Len() == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := pub.dlq.Len(); got != 1 {
+		t.Fatalf("expected exactly one dead-lettered webhook event after retries were exhausted, got %d", got)
+	}
+	entries := pub.dlq.List()
+	entry := entries[0]
+
+	// Hermes recovers.
+	atomic.StoreInt32(&recovered, 1)
+
+	redelivered, ok := pub.dlq.Replay(entry.ID)
+	if !ok || redelivered == nil {
+		t.Fatalf("expected dlq.Replay(%q) to succeed once Hermes recovered", entry.ID)
+	}
+
+	if lastSig == "" {
+		t.Fatalf("expected replay to re-POST through the signed-request path (X-Hub-Signature-256 header), got none")
+	}
+	wantSig := computeHMAC(lastBody, DefaultWebhookSecrets()["bt-agent-alert"])
+	if lastSig != "sha256="+wantSig {
+		t.Fatalf("replay signature mismatch: got %q, want %q (body not signed with the subscription's own secret)", lastSig, "sha256="+wantSig)
+	}
+
+	if got := pub.dlq.Len(); got != 0 {
+		t.Fatalf("expected the dead letter entry to be removed after a successful replay, got %d remaining", got)
 	}
 }
