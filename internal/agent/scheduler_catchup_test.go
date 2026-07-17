@@ -154,8 +154,8 @@ func TestCycleBreakerSuccess_HealthyOutcomesDoNotTripBreaker(t *testing.T) {
 		{"degraded", errTest, false},
 	}
 	for _, c := range cases {
-		if got := cycleBreakerSuccess(c.outcome, c.err); got != c.want {
-			t.Errorf("cycleBreakerSuccess(%q, err=%v) = %v, want %v", c.outcome, c.err, got, c.want)
+		if got := IsBreakerSuccess(c.outcome, c.err); got != c.want {
+			t.Errorf("IsBreakerSuccess(%q, err=%v) = %v, want %v", c.outcome, c.err, got, c.want)
 		}
 	}
 }
@@ -171,7 +171,7 @@ func (*testError) Error() string { return "test error" }
 // 30 minutes, each returning the carryover) walks the breaker open and the
 // agent gets skipped as "broken" precisely when it is behaving correctly.
 func TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy(t *testing.T) {
-	if !cycleBreakerSuccess(RateLimitCarryoverOutcome, nil) {
+	if !IsBreakerSuccess(RateLimitCarryoverOutcome, nil) {
 		t.Fatal("rate-limit carryover must keep the circuit breaker closed")
 	}
 }

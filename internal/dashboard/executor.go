@@ -69,23 +69,29 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 			Duration:  time.Since(start),
 		}
 	}
-	e.recordCircuitBreakerOutcome(agentName, res)
-	e.recordTaskMetric(agentName, res)
-	e.recordBlockFitnessMetric(agentName, treeID, res)
+	e.recordCircuitBreakerOutcome(agentName, res, err)
+	e.recordTaskMetric(agentName, res, err)
+	e.recordBlockFitnessMetric(agentName, treeID, res, err)
 	return res, err
 }
 
 // recordCircuitBreakerOutcome reports res's outcome to CBStore and persists
 // it, mirroring internal/agent/scheduler.go's runJob: reportAgentOutcome
-// followed by cbStore.Save(CircuitBreakersFile()) on every cycle. A
-// RateLimitCarryoverOutcome result counts as a breaker success, matching
-// scheduler.go's cycleBreakerSuccess — it's a healthy, expected backoff
-// pause, not a genuine failure.
-func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult) {
-	if e.CBStore == nil || res == nil {
+// followed by cbStore.Save(CircuitBreakersFile()) on every cycle. Success is
+// classified by agent.IsBreakerSuccess — the shared classifier the scheduler
+// uses — so healthy non-"success" outcomes (no_change, degraded, rate-limit
+// carryover) keep the breaker closed, while a run error flips an otherwise
+// healthy outcome to failure (carryover excepted).
+func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult, runErr error) {
+	if e.CBStore == nil {
 		return
 	}
-	if res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome) {
+	// A nil result is a hard failure (agent.RunAgent returns (nil, err) on
+	// degenerate input: nil RunDeps/ResolveTree or an empty agent name/task)
+	// and must trip the breaker, not be silently skipped. Otherwise defer to
+	// the shared classifier so the dashboard and scheduler can't disagree on
+	// which outcomes count as healthy.
+	if res != nil && agent.IsBreakerSuccess(res.Outcome, runErr) {
 		e.CBStore.RecordSuccess(agentName)
 	} else {
 		e.CBStore.RecordFailure(agentName)
@@ -99,15 +105,20 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 // global agent-task metrics (GetAgentMetrics), so every agent run through
 // the dashboard — in-process or via the Hermes fallback — is reflected in
 // the agent metrics panel and /metrics endpoint the same way
-// internal/agent/scheduler.go's runJob already records its runs. A
-// RateLimitCarryoverOutcome result counts as a success here too, matching
-// recordCircuitBreakerOutcome's exemption — it's a healthy backoff pause,
-// not a genuine task failure.
-func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult) {
+// internal/agent/scheduler.go's runJob already records its runs. Success is
+// classified by agent.IsBreakerSuccess, keeping the metrics panel consistent
+// with the circuit breaker's view of the same run: healthy non-"success"
+// outcomes count as success, a run error flips a healthy outcome to failure,
+// and a nil result (hard failure) records a zero-duration failure so broken
+// runs stay visible in the metrics the breaker already counts.
+func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult, runErr error) {
 	if res == nil {
+		if runErr != nil {
+			RecordTask(agentName, false, 0)
+		}
 		return
 	}
-	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
+	success := agent.IsBreakerSuccess(res.Outcome, runErr)
 	RecordTask(agentName, success, uint64(res.Duration.Milliseconds()))
 }
 
@@ -120,14 +131,16 @@ func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult)
 // its per-node block_id walk (blocks already imports dashboard), so this
 // mirrors ops_actions.go's fitnessProbeAction: it scores the whole task run
 // under treeID as a single block key rather than segmenting by tree node.
-func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult) {
+func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult, runErr error) {
 	if res == nil || treeID == "" {
 		return
 	}
-	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
+	success := agent.IsBreakerSuccess(res.Outcome, runErr)
 	score := res.Quality * 100
 	if score <= 0 {
-		if success || strings.EqualFold(res.Outcome, "completed") {
+		// The shared classifier already treats the Hermes-fallback "completed"
+		// outcome as healthy, so no per-outcome special case is needed here.
+		if success {
 			score = 75
 		} else {
 			score = 25
@@ -139,6 +152,26 @@ func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *
 		score = 0
 	}
 	RecordBlockFitness(treeID, agentName, score)
+}
+
+// hermesOutcome maps a Hermes-CLI run onto the scheduler's canonical outcome
+// vocabulary: "failure" for an exec error or failure keywords (never the
+// one-off "failed" spelling only literal matchers understood), "success" for
+// success keywords, and "completed" — a healthy outcome per
+// agent.IsHealthyOutcome — when the error-free output matches no keyword.
+func hermesOutcome(output string, execErr error) string {
+	if execErr != nil {
+		return "failure"
+	}
+	lower := strings.ToLower(output)
+	switch {
+	case strings.Contains(lower, "success") || strings.Contains(lower, "completed") || strings.Contains(lower, "done"):
+		return "success"
+	case strings.Contains(lower, "error") || strings.Contains(lower, "failed"):
+		return "failure"
+	default:
+		return "completed" // ran but couldn't determine
+	}
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {
@@ -179,20 +212,11 @@ func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcom
 		return output, "timeout", fmt.Errorf("task timed out after %v", e.Timeout)
 	}
 	if err != nil {
-		outcome = "failed"
 		// Still return output — it may contain useful error info
-		return output, outcome, nil
+		return output, hermesOutcome(output, err), nil
 	}
 
-	// Determine outcome from output
-	lower := strings.ToLower(output)
-	if strings.Contains(lower, "success") || strings.Contains(lower, "completed") || strings.Contains(lower, "done") {
-		outcome = "success"
-	} else if strings.Contains(lower, "error") || strings.Contains(lower, "failed") {
-		outcome = "failed"
-	} else {
-		outcome = "completed" // ran but couldn't determine
-	}
+	outcome = hermesOutcome(output, nil)
 
 	return output, outcome, nil
 }

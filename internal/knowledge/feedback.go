@@ -93,15 +93,31 @@ func evolvedFitness(current, elite float64) float64 {
 	return elite
 }
 
+// outcomeScore maps a run outcome to its fitness contribution using the
+// scheduler's shared vocabulary (knowledge cannot import internal/agent —
+// agent imports knowledge — so the healthy strings are mirrored here, pinned
+// against drift by TestOutcomeScore_SharedVocabulary): healthy non-"success"
+// outcomes score as healthy runs, the rate-limit carryover stays neutral (a
+// pause is not evidence about tree quality either way), and every named bad
+// outcome scores at or below "failure" — the bare 0.5 default once ranked a
+// panicked run above a plain failure.
 func outcomeScore(outcome string) float64 {
 	switch outcome {
 	case "success", "chain_success":
 		return 1.0
-	case "failure":
+	case "no_change": // healthy: analysis-only, nothing to change
+		return 0.9
+	case "degraded": // healthy: deterministic fallback did the work
+		return 0.7
+	case "goap_fusion_rate_limited": // neutral pause
+		return 0.5
+	case "failure", "failed":
 		return 0.3
+	case "timeout":
+		return 0.2
 	case "chain_failed":
 		return 0.1
-	case "chain_panic":
+	case "chain_panic", "panic":
 		return 0.0
 	default:
 		return 0.5

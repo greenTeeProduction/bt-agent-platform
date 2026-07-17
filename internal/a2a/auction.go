@@ -289,7 +289,7 @@ func (a *Auctioneer) winnerBreaker(name string) *reliability.CircuitBreaker {
 	}
 	cb, ok := a.breakers[name]
 	if !ok {
-		cb = reliability.NewCircuitBreaker("a2a.auction.winner."+name, winnerCircuitBreakerThreshold, winnerCircuitBreakerCooldown)
+		cb = reliability.NewCircuitBreaker(winnerBreakerKeyPrefix+name, winnerCircuitBreakerThreshold, winnerCircuitBreakerCooldown)
 		a.breakers[name] = cb
 	}
 	return cb
@@ -395,8 +395,10 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 // winnerBreakerKeyPrefix namespaces winner breaker entries within
 // agent.CircuitBreakersFile() so the store below only ever reads/writes keys
 // it owns, leaving the scheduler's per-agent breaker entries in the same file
-// untouched.
-const winnerBreakerKeyPrefix = "a2a.auction.winner."
+// untouched. The value is owned by internal/agent (whose store skips these
+// keys on Load and preserves them on Save) so the two file owners cannot
+// drift apart.
+const winnerBreakerKeyPrefix = agent.A2AWinnerBreakerKeyPrefix
 
 // winnerBreakerFileEntry / winnerBreakerFile mirror the on-disk shape
 // internal/agent's AgentCircuitBreakerStore.Save/Load already use for
@@ -521,11 +523,26 @@ func (s *winnerBreakerStore) save() error {
 			return fmt.Errorf("create circuit breaker state dir: %w", err)
 		}
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	// Unique temp per writer: the daemon scheduler, the dashboard executor,
+	// and this store all write the same path — a shared fixed ".tmp" let
+	// interleaved writes publish a torn file.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".circuit_breakers-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create winner circuit breaker temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("write winner circuit breaker state: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("close winner circuit breaker temp file: %w", err)
+	}
+	_ = os.Chmod(tmpName, 0644) // CreateTemp defaults to 0600; other processes read this file
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("rename winner circuit breaker state: %w", err)
 	}
 	return nil

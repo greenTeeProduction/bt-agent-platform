@@ -104,7 +104,12 @@ func (f *FallbackLLM) generate(call func(LLM) (string, error)) (string, error) {
 			breaker.RecordSuccess()
 			return result, nil
 		}
-		breaker.RecordFailure()
+		// RecordOutcome: only infrastructure failures walk this model's
+		// breaker toward open — a caller-side validation/auth error must not
+		// cool down a healthy model (the panic path above stays unconditional:
+		// a panicking client is broken regardless of error category). A
+		// consumed half-open probe is always resolved.
+		breaker.RecordOutcome(err)
 		errs = append(errs, fmt.Errorf("%s: %w", model.Name, err))
 	}
 

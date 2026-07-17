@@ -121,6 +121,37 @@ func (cb *CircuitBreaker) RecordFailureWithCategory(err error) {
 	cb.recordFailure(ClassifyError(err))
 }
 
+// RecordOutcome resolves one Allow()-granted request with its final error.
+// It is the record-once companion every Allow() caller needs: a granted
+// half-open probe MUST reach exactly one Record* call or the breaker wedges
+// HalfOpen forever (Allow() in HalfOpen always returns false). Semantics:
+//
+//   - err == nil: success.
+//   - caller-side err (validation/auth per ClassifyError): NOT counted — a
+//     malformed request or bad credential must not open the circuit against
+//     well-formed requests — but a pending half-open probe is resolved as
+//     success, because the backend answered; infrastructure is healthy.
+//   - any other err (network/timeout/5xx/rate-limit, and unknown — junk
+//     output is evidence of a broken backend): a categorized failure that
+//     walks the breaker toward open.
+func (cb *CircuitBreaker) RecordOutcome(err error) {
+	if err == nil {
+		cb.RecordSuccess()
+		return
+	}
+	switch ClassifyError(err) {
+	case ErrCatValidation, ErrCatAuth:
+		cb.mu.Lock()
+		halfOpen := cb.state == CircuitHalfOpen
+		cb.mu.Unlock()
+		if halfOpen {
+			cb.RecordSuccess()
+		}
+	default:
+		cb.RecordFailureWithCategory(err)
+	}
+}
+
 func (cb *CircuitBreaker) recordFailure(cat ErrorCategory) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

@@ -51,7 +51,9 @@ func RunPipelineWithID(ctx context.Context, d *agent.RunDeps, pipeline dashboard
 			}
 			start := time.Now()
 			outcome, output, _, err := agent.RunAgent(stepCtx, d, agentName, task, "", opts)
-			dashboard.RecordTask(agentName, outcome == "success", uint64(time.Since(start).Milliseconds()))
+			// Shared classifier: healthy non-"success" outcomes count as
+			// metric successes, matching the executor's recordTaskMetric.
+			dashboard.RecordTask(agentName, agent.IsBreakerSuccess(outcome, err), uint64(time.Since(start).Milliseconds()))
 			return outcome, output, err
 		},
 		WaitApproval: dashboard.WorkflowApprovalWait,

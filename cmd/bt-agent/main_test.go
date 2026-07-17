@@ -135,7 +135,7 @@ func TestSchedulerAttempt_SuccessAndFailureUnchanged(t *testing.T) {
 // research finding that the DLQ replay executor's outcome classification
 // (main.go dlq.SetReplayExecutor, ~line 592-609) must treat the rate-limit
 // carryover and other healthy non-success outcomes (no_change, degraded) as
-// non-failing replays — mirroring recordSchedulerAttempt/cycleBreakerSuccess
+// non-failing replays — mirroring recordSchedulerAttempt/IsBreakerSuccess
 // above, which already give those same outcomes the same terminal-and-healthy
 // treatment on the scheduler path. Before this fix the replay executor's
 // inline check (res.Outcome != "success") flagged EVERY non-"success"
@@ -200,7 +200,7 @@ func TestDLQReplayExecutorUsesOutcomeClassifier(t *testing.T) {
 	}
 	body := s[replayIdx:tickerIdx]
 	if !strings.Contains(body, "dlqReplayOutcomeError(") {
-		t.Error("the DLQ replay executor must classify outcomes via dlqReplayOutcomeError(res) instead of an inline `res.Outcome != \"success\"` check, so rate-limit carryover and other healthy non-success outcomes (mirroring recordSchedulerAttempt/cycleBreakerSuccess) are not treated as failing replays")
+		t.Error("the DLQ replay executor must classify outcomes via dlqReplayOutcomeError(res) instead of an inline `res.Outcome != \"success\"` check, so rate-limit carryover and other healthy non-success outcomes (mirroring recordSchedulerAttempt/IsBreakerSuccess) are not treated as failing replays")
 	}
 }
 
@@ -592,5 +592,43 @@ func TestA2AServeErrorDemotesPortContention(t *testing.T) {
 		if !strings.Contains(s, needle) {
 			t.Errorf("main.go must classify A2A serve errors (WARN for port contention): missing %q", needle)
 		}
+	}
+}
+
+// TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure pins the outcome
+// vocabulary at the router boundary: when a peer's AgentResult omits Outcome,
+// the fabricated fallback must use the scheduler's canonical "failure" token,
+// not the one-off "failed" spelling.
+func TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure(t *testing.T) {
+	res := routedRunResult("a", "t", &reliability.AgentResult{Success: false})
+	if res.Outcome != "failure" {
+		t.Fatalf("fabricated outcome = %q, want canonical %q", res.Outcome, "failure")
+	}
+	ok := routedRunResult("a", "t", &reliability.AgentResult{Success: true})
+	if ok.Outcome != "success" {
+		t.Fatalf("fabricated success outcome = %q, want %q", ok.Outcome, "success")
+	}
+	preserved := routedRunResult("a", "t", &reliability.AgentResult{Outcome: agent.RateLimitCarryoverOutcome})
+	if preserved.Outcome != agent.RateLimitCarryoverOutcome {
+		t.Fatalf("outcome = %q, want the peer's raw outcome preserved", preserved.Outcome)
+	}
+}
+
+// TestDriftConfigs_FleetOwnerSetsRestartSiblings audits — at the source level,
+// like the build-identity wiring tests above — that BOTH of bt-agent's
+// DriftWatchConfig constructions (the periodic StartDriftWatcher and the
+// synchronous OnCycleIdle idleDriftCfg, the path that reliably fires on busy
+// fleets) opt into RestartSiblings. bt-agent is the fleet owner: if either
+// path omits it, siblings get rebuilt on disk but keep running their old
+// binaries — the 2026-07-16 23:46 live case the sibling-restart loop exists
+// for — because after bt-agent's own restart the drift clears and the other
+// path never fires.
+func TestDriftConfigs_FleetOwnerSetsRestartSiblings(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if got := strings.Count(string(src), "RestartSiblings: true"); got < 2 {
+		t.Fatalf("found %d 'RestartSiblings: true' in cmd/bt-agent/main.go, want >= 2 (both the periodic watcher config and idleDriftCfg must opt in as fleet owner)", got)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +17,133 @@ import (
 )
 
 // ─── WebhookPublisher Coverage ───
+
+// TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker reproduces the
+// permanent-wedge bug: once a subscription's breaker has tripped open and its
+// cooldown elapses, the next event consumes the single half-open probe via
+// breaker.Allow(). If that event's Data fails to JSON-marshal, handleEvent
+// returned before recording any breaker outcome, leaving the breaker stuck
+// HalfOpen — where Allow() always returns false — so every subsequent
+// deliverable event was silently dropped until process restart.
+func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) {
+	var delivered int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&delivered, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+
+	const sub = "bt-agent-alert" // service_down events route here
+	// Replace the minute-cooldown breaker with a short-cooldown one already
+	// tripped open and past its cooldown — primed to serve exactly one
+	// half-open probe on the next Allow().
+	cb := reliability.NewCircuitBreaker(sub, 1, time.Millisecond)
+	cb.RecordFailure() // threshold 1 -> Open
+	pub.breakers[sub] = cb
+	time.Sleep(10 * time.Millisecond) // let the cooldown elapse
+
+	// An event whose Data cannot be JSON-marshaled (a channel value) must NOT
+	// consume the half-open probe.
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: make(chan int)})
+
+	// A subsequent well-formed event must be delivered, not dropped by a
+	// breaker the marshal failure wedged half-open.
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "ok", Data: map[string]interface{}{"k": "v"}})
+
+	if got := atomic.LoadInt32(&delivered); got != 1 {
+		t.Fatalf("valid event after a marshal-failing one was not delivered (delivered=%d); the marshal failure wedged the half-open breaker", got)
+	}
+}
+
+// TestWebhookPublisher_ClientErrorsDoNotTripBreaker verifies delivery
+// failures Hermes rejects as bad requests (4xx, typed non-retryable by
+// postSigned) do not walk the subscription breaker open: five consecutive
+// payload rejections must not suppress the next deliverable event for the
+// whole cooldown window.
+func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
+	var serves int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&serves, 1)
+		if n <= 5 { // breaker threshold is 5
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+	for i := 0; i < 6; i++ {
+		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]interface{}{"i": i}})
+	}
+	if got := atomic.LoadInt32(&serves); got != 6 {
+		t.Fatalf("server saw %d requests, want 6 — the 6th deliverable event must not be skipped by a breaker opened on 4xx rejections", got)
+	}
+}
+
+// TestWebhookPublisher_ReplaysDeadLettersOnRecovery closes the write-only-DLQ
+// gap: dead-lettered deliveries were pushed but nothing ever replayed them, so
+// failed webhooks were silently evicted oldest-first. A successful delivery is
+// the recovery signal — after it, queued dead letters must be replayed through
+// the same signed single-shot path and removed from the queue on success.
+func TestWebhookPublisher_ReplaysDeadLettersOnRecovery(t *testing.T) {
+	var mu sync.Mutex
+	var fail bool
+	var bodies []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		defer mu.Unlock()
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		bodies = append(bodies, string(b))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+
+	// First event: backend down -> delivery fails after retries -> dead letter.
+	mu.Lock()
+	fail = true
+	mu.Unlock()
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "first", Data: map[string]interface{}{"n": 1}})
+	if pub.dlq.Len() != 1 {
+		t.Fatalf("dlq.Len() = %d, want 1 after a failed delivery", pub.dlq.Len())
+	}
+
+	// Backend recovers; the next successful delivery must trigger a replay.
+	mu.Lock()
+	fail = false
+	mu.Unlock()
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "second", Data: map[string]interface{}{"n": 2}})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if pub.dlq.Len() == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := pub.dlq.Len(); got != 0 {
+		t.Fatalf("dlq.Len() = %d after recovery, want 0 (queued dead letters must be replayed once delivery succeeds)", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	found := false
+	for _, b := range bodies {
+		if strings.Contains(b, `"first"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the dead-lettered payload was never re-delivered; server saw: %v", bodies)
+	}
+}
 
 func TestDefaultWebhookSecrets(t *testing.T) {
 	secrets := DefaultWebhookSecrets()
@@ -480,16 +609,18 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	// Wait for the cooldown to elapse, then publish a third event. The
 	// breaker should allow this single delivery attempt through
 	// (half-open); the server now answers 200, so it succeeds and the
-	// breaker should recover to closed.
+	// breaker should recover to closed. The successful delivery also
+	// triggers the dead-letter replay sweep, which re-delivers the first
+	// (dead-lettered) event: one delivery + one replay request.
 	time.Sleep(300 * time.Millisecond)
 	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
 
 	deadline = time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) <= failThreshold {
+	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) < failThreshold+2 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if got := atomic.LoadInt64(&requests); got != failThreshold+1 {
-		t.Fatalf("expected exactly one more request after the cooldown elapsed, got %d requests (want %d)", got, failThreshold+1)
+	if got := atomic.LoadInt64(&requests); got != failThreshold+2 {
+		t.Fatalf("expected the post-cooldown delivery plus the dead-letter replay (%d requests total), got %d", failThreshold+2, got)
 	}
 
 	deadline = time.Now().Add(1 * time.Second)

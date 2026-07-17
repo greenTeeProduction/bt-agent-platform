@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"time"
@@ -74,20 +75,46 @@ func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 		}
 		defer resp.Body.Close()
 
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("ollama embedding: read response: %w", readErr)
+		}
+		// Classify by HTTP status BEFORE parsing the body, mirroring
+		// internal/llm/openai_compat.go: Ollama's error responses carry a JSON
+		// {"error": "..."} body that decodes cleanly into the embedding struct,
+		// so decoding first turned a 404 model-not-found into a SUCCESS with a
+		// nil embedding — the breaker recorded success forever and discovery
+		// silently degraded to keyword matching.
+		if resp.StatusCode >= 500 {
+			return reliability.NewCategorizedError(reliability.ErrCatLLM,
+				fmt.Errorf("ollama embedding status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return reliability.NewCategorizedError(reliability.ErrCatValidation,
+				fmt.Errorf("ollama embedding status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+		}
+
 		var result struct {
 			Embedding []float64 `json:"embedding"`
 		}
-		if decodeErr := json.NewDecoder(resp.Body).Decode(&result); decodeErr != nil {
+		if decodeErr := json.Unmarshal(respBody, &result); decodeErr != nil {
 			return fmt.Errorf("decode embedding: %w", decodeErr)
+		}
+		if len(result.Embedding) == 0 {
+			// A 2xx with no vector is not a usable success: storing it would
+			// poison the index with nil embeddings.
+			return fmt.Errorf("ollama embedding: empty embedding in response")
 		}
 		embedding = Embedding(result.Embedding)
 		return nil
 	})
+	// RecordOutcome: infrastructure failures (5xx/transport/timeout) walk the
+	// breaker toward open; caller-side errors (404 model-not-found) do not,
+	// and a consumed half-open probe is always resolved.
+	embeddingBreaker.RecordOutcome(err)
 	if err != nil {
-		embeddingBreaker.RecordFailure()
 		return nil, err
 	}
-	embeddingBreaker.RecordSuccess()
 	return embedding, nil
 }
 

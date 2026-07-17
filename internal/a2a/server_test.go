@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -609,5 +610,32 @@ func TestExecute_PendingApprovalRoutesThroughBridge(t *testing.T) {
 	if got := terminalState(events); got != a2a.TaskStateInputRequired {
 		t.Errorf("terminal state = %q, want input-required — pending_approval must route through "+
 			"TaskStateBridge instead of the binary success/fail check; events=%s", got, eventKinds(events))
+	}
+}
+
+// TestFailureEventMessage_CarryoverKeepsSentinel pins the cross-boundary
+// carryover contract: the failure message the A2A server yields for a
+// rate-limit-carryover run must contain the sentinel outcome even when
+// bb.Result carries a human-readable message, because the delegating caller
+// (internal/engine's DelegateToA2A node) detects the sentinel in the error
+// text to classify the delegation as a healthy deferred pause instead of a
+// hard failure.
+func TestFailureEventMessage_CarryoverKeepsSentinel(t *testing.T) {
+	msg := failureEventMessage("goap:fusion", "goap_fusion_rate_limited",
+		"## GOAP Superpowers Rate Limited\n\nClaude rate-limit backoff active.", 3*time.Second)
+	if !strings.Contains(msg, "goap_fusion_rate_limited") {
+		t.Fatalf("failure message %q must contain the carryover sentinel for caller-side classification", msg)
+	}
+
+	// A plain failure with a result keeps the result untouched.
+	plain := failureEventMessage("domain:x", "failure", "it broke", time.Second)
+	if plain != "it broke" {
+		t.Fatalf("plain failure message = %q, want the raw result", plain)
+	}
+
+	// No result: the default formatted message names tree and outcome.
+	def := failureEventMessage("domain:x", "failure", "", time.Second)
+	if !strings.Contains(def, "domain:x") || !strings.Contains(def, "failure") {
+		t.Fatalf("default message %q must name the tree and outcome", def)
 	}
 }

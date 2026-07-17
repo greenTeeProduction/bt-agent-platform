@@ -149,6 +149,32 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		if readErr != nil {
 			return fmt.Errorf("read response: %w", readErr)
 		}
+		// Classify by HTTP status BEFORE parsing the body. A proxy-level 5xx
+		// (nginx / Cloudflare / ALB) usually carries a non-JSON (HTML or empty)
+		// body; unmarshaling it first produced an "unmarshal response" error
+		// that ClassifyError tagged as non-retryable validation, so a transient
+		// 503 failed on the first attempt instead of being retried. A typed
+		// CategorizedError makes the retry decision follow the status code, not
+		// whatever substrings happen to appear in the body.
+		if resp.StatusCode >= 500 {
+			return reliability.NewCategorizedError(reliability.ErrCatLLM,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+		}
+		if resp.StatusCode >= 400 {
+			cat := reliability.ErrCatValidation
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				cat = reliability.ErrCatAuth
+			}
+			return reliability.NewCategorizedError(cat,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+		}
+		// Residual non-2xx (an unfollowed 3xx): not retryable, and the body is
+		// unlikely to be the expected JSON — classify by status rather than
+		// letting the unmarshal failure name the error.
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return reliability.NewCategorizedError(reliability.ErrCatValidation,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, reliability.TruncateForError(respBody)))
+		}
 		var parsed openAICompatResponse
 		if unmarshalErr := json.Unmarshal(respBody, &parsed); unmarshalErr != nil {
 			return fmt.Errorf("unmarshal response: %w", unmarshalErr)
@@ -156,20 +182,20 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		if parsed.Error != nil {
 			return fmt.Errorf("openai-compatible api error (status %d): %s", resp.StatusCode, parsed.Error.Message)
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, string(respBody))
-		}
 		if len(parsed.Choices) == 0 {
 			return fmt.Errorf("no choices in response")
 		}
 		result = strings.TrimSpace(parsed.Choices[0].Message.Content)
 		return nil
 	})
+	// RecordOutcome only counts infrastructure (retryable) failures toward
+	// open — a caller-side 400/401 must not deny service to well-formed
+	// requests — and always resolves a consumed half-open probe, so an
+	// unlucky probe error can never wedge the breaker HalfOpen.
+	c.breaker.RecordOutcome(err)
 	if err != nil {
-		c.breaker.RecordFailure()
 		return "", err
 	}
-	c.breaker.RecordSuccess()
 	return result, nil
 }
 

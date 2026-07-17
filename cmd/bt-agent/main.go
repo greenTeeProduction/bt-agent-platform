@@ -170,7 +170,7 @@ func routedRunResult(agentName, task string, ar *reliability.AgentResult) *agent
 		if ar.Success {
 			outcome = "success"
 		} else {
-			outcome = "failed"
+			outcome = "failure" // canonical failure token, not the one-off "failed"
 		}
 	}
 	return &agent.RunResult{
@@ -235,7 +235,7 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 // the error the replay executor returns to reliability.DeadLetterQueue's
 // Replay: nil drops the entry (reliability.go:249-251), non-nil keeps it
 // queued for another replay. Mirrors recordSchedulerAttempt/
-// cycleBreakerSuccess above — rate-limit carryover and the other healthy
+// IsBreakerSuccess above — rate-limit carryover and the other healthy
 // no-code outcomes (no_change, degraded) are terminal-and-healthy, not
 // failures, so a replay that gracefully pauses or lands on an
 // analysis-only/deterministic-fallback outcome is dropped instead of
@@ -467,6 +467,12 @@ func main() {
 				RunningRevision: buildID.Revision,
 				AutoRebuild:     agent.AutoRebuildEnabled(),
 				AutoRestart:     agent.AutoRestartEnabled(),
+				// Fleet owner here too: on busy fleets THIS is the config that
+				// actually adopts (the periodic watcher defers to in-flight
+				// work), and after the self-restart drift clears — so if this
+				// path skipped siblings, rebuilt sibling units would keep
+				// running their old binaries (live case 2026-07-16 23:46).
+				RestartSiblings: true,
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),
@@ -610,6 +616,9 @@ func main() {
 				RunningRevision: buildID.Revision,
 				AutoRebuild:     agent.AutoRebuildEnabled(),
 				AutoRestart:     agent.AutoRestartEnabled(),
+				// Fleet owner: only THIS watcher restarts sibling units after
+				// a sweep (bt-dashboard's watcher rebuilds its own binary only).
+				RestartSiblings: true,
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),

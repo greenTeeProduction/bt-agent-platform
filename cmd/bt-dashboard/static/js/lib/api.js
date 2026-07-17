@@ -2,6 +2,19 @@
 
 const API = '/api';
 
+/**
+ * HTML-escape a value for interpolation into innerHTML markup (element bodies
+ * and double-quoted attribute values). Agent and tree names/descriptions/ids
+ * are partly user-influenced; interpolating them raw is an injection surface.
+ * @param {any} s
+ * @returns {string}
+ */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);

@@ -349,10 +349,14 @@ func IsHealthyOutcome(outcome string) bool { return isHealthyOutcome(outcome) }
 // isHealthyOutcome reports whether an outcome is a healthy terminal state that
 // the scheduler must neither retry nor dead-letter. no_change (analysis-only,
 // nothing to change) and degraded (Claude path fell back to deterministic
-// analysis) join success as non-error outcomes.
+// analysis) join success as non-error outcomes. completed is the dashboard's
+// Hermes-CLI fallback outcome for a run that finished without error but whose
+// output matched no success/failure keyword — the run itself was healthy;
+// scheduler-driven runs never produce it, so listing it here only affects the
+// dashboard paths that classify Hermes runs.
 func isHealthyOutcome(outcome string) bool {
 	switch outcome {
-	case "success", "no_change", "degraded":
+	case "success", "no_change", "degraded", "completed":
 		return true
 	}
 	return false

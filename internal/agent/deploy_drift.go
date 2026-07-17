@@ -133,6 +133,13 @@ type DriftWatchConfig struct {
 	// swaps the daemon's own binary out from under a mid-execution job. Nil
 	// disables the guard (every stale tick may rebuild).
 	InFlightFn func() bool
+	// RestartSiblings opts this watcher into restarting OTHER swapped
+	// unit-owning targets after a rebuild. Exactly one watcher per fleet — the
+	// bt-agent daemon — sets this; without single ownership the bt-agent and
+	// bt-dashboard watchers restarted each other symmetrically, with no
+	// cross-daemon in-flight coordination (InFlightFn only guards the local
+	// process), so one daemon could kill the other's mid-execution cycle.
+	RestartSiblings bool
 	// AutoRestart gates adopting the rebuilt binary by restarting the daemon.
 	// It only applies AFTER a successful AutoRebuild (a rebuild without a
 	// restart leaves the running process on the old code). Opt-in via
@@ -236,17 +243,29 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	// DefaultRebuildTargets also rebuilds bin/bt-gardener); each swapped
 	// unit-owning sibling must be restarted too, or it keeps running its old
 	// binary until someone restarts it by hand (live case 2026-07-16 23:46).
-	// Best-effort: a sibling restart failure is logged but does not block
+	// Fleet ownership: only the RestartSiblings watcher (cmd/bt-agent) runs
+	// this loop, so two daemons can never bounce each other. Each sibling gets
+	// the same smoke-test + rollback protection as the self binary below — a
+	// compile-clean but crash-on-startup build must not be restarted into a
+	// crash loop. Best-effort: a sibling failure is logged but does not block
 	// adopting the fix on the daemon's own unit, restarted last below.
-	for _, t := range cfg.Targets {
-		if t.Unit == "" || t.Name == cfg.Binary {
-			continue
-		}
-		slog.Warn("deploy drift: restarting swapped sibling unit",
-			"binary", cfg.Binary, "unit", t.Unit, "head_revision", head)
-		if err := driftRestartFn(t.Unit); err != nil {
-			slog.Error("deploy drift: sibling unit restart failed",
-				"binary", cfg.Binary, "unit", t.Unit, "err", err)
+	if cfg.RestartSiblings {
+		for _, t := range cfg.Targets {
+			if t.Unit == "" || t.Name == cfg.Binary {
+				continue
+			}
+			if err := driftSmokeTestFn(t.OutPath); err != nil {
+				restoreErr := restorePreviousBinaryFn(t.OutPath)
+				slog.Error("deploy drift: sibling binary failed smoke test — rolled back, NOT restarting",
+					"binary", cfg.Binary, "unit", t.Unit, "path", t.OutPath, "err", err, "rollback_err", restoreErr)
+				continue
+			}
+			slog.Warn("deploy drift: restarting swapped sibling unit",
+				"binary", cfg.Binary, "unit", t.Unit, "head_revision", head)
+			if err := driftRestartFn(t.Unit); err != nil {
+				slog.Error("deploy drift: sibling unit restart failed",
+					"binary", cfg.Binary, "unit", t.Unit, "err", err)
+			}
 		}
 	}
 	slog.Warn("deploy drift: restarting to adopt rebuilt binary",

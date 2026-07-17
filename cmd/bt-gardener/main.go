@@ -201,9 +201,11 @@ func main() {
 			RepoDir:         repoDir,
 			RunningRevision: buildID.Revision,
 			AutoRebuild:     agent.AutoRebuildEnabled(),
-			Targets:         agent.DefaultRebuildTargets(repoDir),
-			Binary:          "bt-gardener",
-			Backoff:         agent.NewRebuildBackoff(),
+			// Own binary only: the fleet-wide sweep (and sibling restarts)
+			// is owned by cmd/bt-agent's watcher.
+			Targets: agent.GardenerRebuildTargets(repoDir),
+			Binary:  "bt-gardener",
+			Backoff: agent.NewRebuildBackoff(),
 		}, agent.DefaultDriftCheckInterval)
 	}
 

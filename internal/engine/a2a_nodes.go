@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
@@ -45,6 +46,18 @@ func registerA2ANodes() {
 
 		result, err := DelegateToA2AFn(targetURL, task)
 		if err != nil {
+			// A remote rate-limit carryover is a healthy, expected pause, not
+			// a delegation failure: the A2A server keeps the sentinel in the
+			// failed task's error text (see internal/a2a's
+			// failureEventMessage), and preserving it here — the same
+			// bb.Outcome + return -1 shape the local GOAP emission sites use —
+			// lets the calling scheduler defer instead of recording a breaker
+			// failure, retrying, and dead-lettering a healthy run.
+			if strings.Contains(err.Error(), "goap_fusion_rate_limited") {
+				b.Result = fmt.Sprintf("A2A delegation rate-limit carryover: %v", err)
+				b.Outcome = "goap_fusion_rate_limited"
+				return -1
+			}
 			b.Result = fmt.Sprintf("A2A delegation failed: %v", err)
 			b.Outcome = "failure"
 			return -1

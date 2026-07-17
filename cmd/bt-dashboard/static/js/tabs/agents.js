@@ -56,15 +56,18 @@ async function populateTreeDropdown() {
     });
     order.sort();
 
-    var html = '<option value="">Select tree...</option>';
+    // Build via DOM nodes, not innerHTML string concatenation: tree names and
+    // ids are partly user-influenced (evolved/goal trees), and a `"` or `<`
+    // in one would break the markup — or inject it.
+    select.replaceChildren(new Option('Select tree...', ''));
     order.forEach(function(cat) {
-      html += '<optgroup label="' + cat + '">';
+      var group = document.createElement('optgroup');
+      group.label = cat;
       groups[cat].forEach(function(t) {
-        html += '<option value="' + t.id + '">' + (t.name || t.id) + '</option>';
+        group.appendChild(new Option(t.name || t.id, t.id));
       });
-      html += '</optgroup>';
+      select.appendChild(group);
     });
-    select.innerHTML = html;
   } catch (e) {
     // Keep the hardcoded fallback options if the catalog fetch fails.
   }
@@ -208,30 +211,37 @@ async function loadAgents() {
       var ratePct = Math.round(a.success_rate * 100);
       var rateColor = ratePct >= 50 ? 'green' : ratePct >= 25 ? 'amber' : 'red';
       var cbStatus = a.cb_status || 'unknown';
-      var escName = a.name.replace(/'/g, "\\'");
+      // Two escaping layers for the onclick handlers: backslash/quote-escape
+      // for the JS string literal, then esc() for the HTML attribute the
+      // literal is embedded in. Every other user-influenced field (name,
+      // description, tree, schedule, timestamps, outcome) is esc()'d — raw
+      // interpolation into innerHTML is an injection surface (an agent named
+      // '<img src=x onerror=...>' would execute on every poll).
+      var jsName = a.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var attrName = esc(jsName);
       var panelId = 'bb-panel-' + a.name.replace(/[^a-zA-Z0-9_-]/g, '_');
       return ''
         + '<div class="task-card">'
         + '  <div class="task-header">'
-        + '    <span class="task-title">' + a.name + '</span>'
+        + '    <span class="task-title">' + esc(a.name) + '</span>'
         + '    <span class="badge ' + rateColor + '">' + ratePct + '% success</span>'
-        + '    <span style="font-size:11px;margin-left:4px" title="Circuit breaker: ' + cbStatus + '">' + cbIcon(cbStatus) + '</span>'
+        + '    <span style="font-size:11px;margin-left:4px" title="Circuit breaker: ' + esc(cbStatus) + '">' + cbIcon(cbStatus) + '</span>'
         + '  </div>'
-        + '  <div style="font-size:12px;color:var(--text-tertiary);margin:8px 0">' + (a.description || '') + '</div>'
+        + '  <div style="font-size:12px;color:var(--text-tertiary);margin:8px 0">' + esc(a.description || '') + '</div>'
         + '  <div class="task-meta">'
-        + '    <span>🌳 ' + (a.tree || '—') + '</span>'
-        + '    <span>⏱ ' + (a.schedule || 'on demand') + '</span>'
+        + '    <span>🌳 ' + esc(a.tree || '—') + '</span>'
+        + '    <span>⏱ ' + esc(a.schedule || 'on demand') + '</span>'
         + '    <span>🔄 ' + a.total_runs + ' runs</span>'
         + '    <span>⭐ ' + a.avg_quality.toFixed(2) + ' avg quality</span>'
         + '  </div>'
         + '  <div class="task-meta">'
-        + '    <span>Last: ' + (a.last_run || 'never') + '</span>'
-        + '    <span class="badge ' + (a.last_outcome === 'success' ? 'green' : a.last_outcome === 'failed' ? 'red' : 'blue') + '">' + (a.last_outcome || '—') + '</span>'
+        + '    <span>Last: ' + esc(a.last_run || 'never') + '</span>'
+        + '    <span class="badge ' + (a.last_outcome === 'success' ? 'green' : a.last_outcome === 'failed' ? 'red' : 'blue') + '">' + esc(a.last_outcome || '—') + '</span>'
         + '  </div>'
         + '  <div style="margin-top:10px;display:flex;gap:8px">'
-        + '    <button class="agent-run-btn" data-agent="' + escName + '" onclick="runAgent(\'' + escName + '\')" style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600">▶ Run</button>'
-        + '    <button onclick="toggleAgentBlackboard(\'' + escName + '\')" style="padding:4px 12px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px">📋 BB</button>'
-        + '    <button onclick="deleteAgent(\'' + escName + '\')" style="padding:4px 12px;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">🗑 Delete</button>'
+        + '    <button class="agent-run-btn" data-agent="' + esc(a.name) + '" onclick="runAgent(\'' + attrName + '\')" style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600">▶ Run</button>'
+        + '    <button onclick="toggleAgentBlackboard(\'' + attrName + '\')" style="padding:4px 12px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px">📋 BB</button>'
+        + '    <button onclick="deleteAgent(\'' + attrName + '\')" style="padding:4px 12px;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">🗑 Delete</button>'
         + '  </div>'
         + '  <div id="' + panelId + '" style="display:none;margin-top:10px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)"></div>'
         + '</div>';

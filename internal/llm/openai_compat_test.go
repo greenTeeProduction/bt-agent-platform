@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 func TestOpenAICompat_GenerateWithModel_SendsChatCompletion(t *testing.T) {
@@ -34,6 +37,149 @@ func TestOpenAICompat_GenerateWithModel_SendsChatCompletion(t *testing.T) {
 	}
 	if got != "panel answer" || gotModel != "model-a" || gotAuth != "Bearer key" {
 		t.Fatalf("got=%q model=%q auth=%q", got, gotModel, gotAuth)
+	}
+}
+
+// TestOpenAICompat_NonJSONServerError_IsRetried covers the gap the
+// JSON-error-body retry test misses: a proxy-level 5xx (nginx / Cloudflare /
+// ALB) returns an HTML or empty body, not a provider JSON error object. The
+// pre-fix code unmarshaled the body before inspecting the status, so the JSON
+// parse failure ("unmarshal response: ...") was classified as a non-retryable
+// validation error and the transient 503 failed on the first attempt with zero
+// retries — exactly the case the retry wrapper was added to handle.
+func TestOpenAICompat_NonJSONServerError_IsRetried(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n >= 2 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"recovered"}}]}`))
+			return
+		}
+		// Non-JSON body, the norm for gateway-level 5xx.
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("<html><body>503 Service Temporarily Unavailable</body></html>"))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	got, err := client.GenerateWithModel(context.Background(), "model-a", "sys", "prompt")
+	if err != nil {
+		t.Fatalf("expected the retry policy to recover from a non-JSON 503 on the second attempt, got error: %v", err)
+	}
+	if got != "recovered" {
+		t.Fatalf("got=%q, want %q", got, "recovered")
+	}
+	if n := atomic.LoadInt32(&attempts); n < 2 {
+		t.Fatalf("expected at least 2 attempts (initial 503 + retry) for a non-JSON 5xx, got %d", n)
+	}
+}
+
+// TestOpenAICompat_ClientErrorsDoNotTripBreaker verifies that non-retryable
+// caller-side failures (400 validation, 401 auth) do not walk the per-baseURL
+// circuit breaker toward open. A backend that keeps returning 400 for one
+// malformed prompt must not deny service to well-formed requests sharing the
+// same client — only infrastructure failures (5xx/network/timeout/rate-limit)
+// should open the breaker.
+func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
+	var serves int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&serves, 1) <= 5 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"invalid request"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	// The breaker threshold is 3; five 400s would open it if 400s counted as
+	// breaker failures.
+	for i := 0; i < 5; i++ {
+		if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "bad"); err == nil {
+			t.Fatalf("call %d: expected a 400 error", i)
+		}
+	}
+	// A subsequent well-formed request must still reach the backend, not be
+	// rejected by an open breaker.
+	got, err := client.GenerateWithModel(context.Background(), "m", "sys", "good")
+	if err != nil {
+		t.Fatalf("well-formed request after 5 client errors was blocked (breaker wrongly tripped by 4xx): %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("got=%q, want %q", got, "ok")
+	}
+}
+
+// TestOpenAICompat_RetryableFailureRecordsBreakerFailure pins the positive
+// half of the breaker gating: a retryable failure that exhausts its retries
+// must record a breaker failure, or the breaker could never open on a real
+// outage (the negative half — 4xx not counting — is pinned by
+// TestOpenAICompat_ClientErrorsDoNotTripBreaker).
+func TestOpenAICompat_RetryableFailureRecordsBreakerFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("<html>503</html>"))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "p"); err == nil {
+		t.Fatal("expected an error from a persistent 503")
+	}
+	if n := client.breaker.FailureCount(); n != 1 {
+		t.Fatalf("breaker FailureCount = %d, want 1 (a retry-exhausted 5xx must record exactly one breaker failure)", n)
+	}
+}
+
+// TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker reproduces the
+// probe-leak the RecordOutcome contract closes: an Open breaker grants exactly
+// one half-open probe; if that probe's request fails with a non-retryable
+// error (400 validation) and no outcome is recorded, the breaker is stuck
+// HalfOpen forever and every later request is rejected. The backend answering
+// 400 proves the infrastructure is healthy, so the probe must resolve the
+// breaker closed.
+func TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid request"}}`))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
+	// Swap in a primed short-cooldown breaker: tripped open, cooldown elapsed,
+	// exactly one half-open probe pending.
+	client.breaker = reliability.NewCircuitBreaker("probe-test", 1, time.Millisecond)
+	client.breaker.RecordFailure()
+	time.Sleep(10 * time.Millisecond)
+
+	if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "p"); err == nil {
+		t.Fatal("expected the 400 to surface as an error")
+	}
+	if state := client.breaker.State(); state != reliability.CircuitClosed {
+		t.Fatalf("breaker state = %v, want closed — a non-retryable probe answer must resolve the half-open probe, not leak it", state)
+	}
+}
+
+// TestOpenAICompat_OpenBreakerRejectsWithoutRequest verifies an open breaker
+// fails fast without hitting the backend.
+func TestOpenAICompat_OpenBreakerRejectsWithoutRequest(t *testing.T) {
+	var serves int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&serves, 1)
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
+	for i := 0; i < 3; i++ { // threshold is 3
+		client.breaker.RecordFailure()
+	}
+	_, err := client.GenerateWithModel(context.Background(), "m", "sys", "p")
+	if err == nil || !strings.Contains(err.Error(), "circuit breaker open") {
+		t.Fatalf("expected a circuit-breaker-open error, got: %v", err)
+	}
+	if n := atomic.LoadInt32(&serves); n != 0 {
+		t.Fatalf("open breaker must not reach the backend, saw %d requests", n)
 	}
 }
 
@@ -67,6 +213,7 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 		status    int
 		body      string
 		retryable bool
+		wantCat   reliability.ErrorCategory
 	}{
 		{
 			name:      "429 too many requests retries then succeeds",
@@ -85,12 +232,14 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 			status:    http.StatusBadRequest,
 			body:      `{"error":{"message":"invalid request"}}`,
 			retryable: false,
+			wantCat:   reliability.ErrCatValidation,
 		},
 		{
 			name:      "401 unauthorized fails without retry",
 			status:    http.StatusUnauthorized,
 			body:      `{"error":{"message":"invalid api key"}}`,
 			retryable: false,
+			wantCat:   reliability.ErrCatAuth,
 		},
 	}
 
@@ -127,6 +276,9 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 				}
 				if n := atomic.LoadInt32(&attempts); n != 1 {
 					t.Fatalf("expected exactly 1 attempt (no retry) for non-retryable status %d, got %d", tc.status, n)
+				}
+				if got := reliability.ClassifyError(err); got != tc.wantCat {
+					t.Fatalf("ClassifyError = %v, want %v for status %d (typed status classification must survive the retry wrapper)", got, tc.wantCat, tc.status)
 				}
 			}
 		})
