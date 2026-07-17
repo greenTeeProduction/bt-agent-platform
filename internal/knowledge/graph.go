@@ -238,13 +238,27 @@ func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount in
 
 	meta, exists := kg.Trees[evolvedID]
 	if !exists {
-		meta = &TreeMeta{ID: evolvedID, Name: evolvedID, Category: "evolution"}
+		meta = &TreeMeta{ID: evolvedID, Name: evolvedID}
+		kg.Trees[evolvedID] = meta
+	}
+	// Base-metadata inheritance runs for new trees AND for bare shells:
+	// LoadFeedback resurrects unregistered evolved trees as ID/Name-only
+	// entries, and gating this on !exists left resurrected trees permanently
+	// undiscoverable (no Capabilities/Keywords, no Synonyms index). It runs
+	// BEFORE the fitness gate below so a weaker later winner still repairs
+	// discoverability. A restored non-empty Category is kept — it is the
+	// original registration-time value.
+	if len(meta.Capabilities) == 0 && len(meta.Keywords) == 0 {
 		if base, ok := kg.Trees[baseID]; ok {
-			meta.Category = base.Category
+			if meta.Category == "" {
+				meta.Category = base.Category
+			}
 			meta.Capabilities = base.Capabilities
 			meta.Keywords = base.Keywords
 		}
-		kg.Trees[evolvedID] = meta
+		if meta.Category == "" {
+			meta.Category = "evolution"
+		}
 		for _, kw := range meta.Keywords {
 			kg.Synonyms[strings.ToLower(kw)] = meta.ID
 		}

@@ -1529,9 +1529,12 @@ func TestAgentsJS_TreeDropdownGroupedByCategory(t *testing.T) {
 			"dropdown instead of relying on the hardcoded <option> list in renderAgents(); found no " +
 			"reference to /api/trees in the embedded JS")
 	}
-	if !strings.Contains(js, "<optgroup") {
-		t.Errorf("agents.js must group the Create-Agent tree dropdown into <optgroup> elements (one per " +
-			"tree category) instead of a flat list; found no <optgroup in the embedded JS")
+	// The grouping is built via DOM nodes (document.createElement('optgroup')),
+	// not innerHTML markup: tree names/ids are partly user-influenced, so
+	// string-concatenated markup was an injection surface.
+	if !strings.Contains(js, "<optgroup") && !strings.Contains(js, "createElement('optgroup')") && !strings.Contains(js, `createElement("optgroup")`) {
+		t.Errorf("agents.js must group the Create-Agent tree dropdown into optgroup elements (one per " +
+			"tree category) instead of a flat list; found neither <optgroup markup nor createElement('optgroup') in the embedded JS")
 	}
 	if !strings.Contains(js, ".category") {
 		t.Errorf("agents.js must key the <optgroup> grouping on each tree's category field, as returned " +

@@ -192,9 +192,26 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 		tree.LastOutcome = fb.LastOutcome
 		tree.LastDuration = fb.LastDuration
 		tree.RecentRuns = fb.RecentRuns
-		tree.StructuralFitness = fb.StructuralFitness
-		tree.NodeCount = fb.NodeCount
-		tree.Category = fb.Category
+		// Metadata fields fill gaps only — they must never clobber what a
+		// live Register/RegisterEvolved already set (the snapshot-level
+		// contract above: a Load merges into already-registered trees without
+		// clobbering static metadata). The zero-value guards also make a
+		// PRE-upgrade feedback file — written before these keys existed, so
+		// they unmarshal to zero — a no-op instead of a wipe that the next
+		// Save would persist forever. Save uses omitempty, so a zero on disk
+		// is indistinguishable from absent anyway.
+		if tree.StructuralFitness == 0 {
+			tree.StructuralFitness = fb.StructuralFitness
+		}
+		if tree.NodeCount == 0 {
+			tree.NodeCount = fb.NodeCount
+		}
+		// A real registered category ("domain", "finance", …) is never
+		// clobbered; the empty string and the "unknown" pre-registration
+		// placeholder are fillable gaps.
+		if (tree.Category == "" || tree.Category == "unknown") && fb.Category != "" {
+			tree.Category = fb.Category
+		}
 	}
 	for _, e := range snap.ToolEdges {
 		// Only restore edges whose source tree is registered.

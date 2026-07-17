@@ -107,7 +107,7 @@ func TestDriftWatchOnceRestartsSwappedSiblingUnits(t *testing.T) {
 
 	cfg := DriftWatchConfig{
 		RepoDir: "/r", RunningRevision: "oldrev", AutoRebuild: true,
-		AutoRestart: true, Targets: targets, Binary: "bt-agent",
+		AutoRestart: true, RestartSiblings: true, Targets: targets, Binary: "bt-agent",
 	}
 	res, err := DriftWatchOnce(cfg)
 	if err != nil || !res.Restarted {
@@ -122,6 +122,99 @@ func TestDriftWatchOnceRestartsSwappedSiblingUnits(t *testing.T) {
 		if restarted[i] != u {
 			t.Fatalf("restarted[%d] = %q, want %q (order: siblings first, self last): got %v", i, restarted[i], u, restarted)
 		}
+	}
+}
+
+// TestDriftWatchOnce_SiblingRestartRequiresOptIn pins fleet-restart ownership:
+// only the watcher explicitly opted in via RestartSiblings (cmd/bt-agent, the
+// fleet owner) may restart sibling units. Without the opt-in — bt-dashboard's
+// watcher — only the process's own unit is restarted. Pre-fix, both daemons'
+// watchers carried the full unit-owning target list and restarted each other
+// symmetrically, with no cross-daemon in-flight coordination: the dashboard
+// could kill a mid-execution bt-agent cycle regardless of bt-agent's own
+// AnyInFlight guard.
+func TestDriftWatchOnce_SiblingRestartRequiresOptIn(t *testing.T) {
+	prevHead, prevRebuild := driftHeadFn, driftRebuildFn
+	prevRestart, prevSmoke := driftRestartFn, driftSmokeTestFn
+	t.Cleanup(func() {
+		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
+		driftRestartFn, driftSmokeTestFn = prevRestart, prevSmoke
+	})
+
+	targets := []RebuildTarget{
+		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/repo/bt-agent", Unit: "bt-agent"},
+		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: "/repo/bin/bt-gardener", Unit: "bt-gardener"},
+		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: "/repo/bin/bt-dashboard", Unit: "bt-dashboard"},
+	}
+	driftHeadFn = func(string) (string, error) { return "newhead", nil }
+	driftRebuildFn = func(string, []RebuildTarget) error { return nil }
+	driftSmokeTestFn = func(string) error { return nil }
+
+	var restarted []string
+	driftRestartFn = func(unit string) error { restarted = append(restarted, unit); return nil }
+
+	cfg := DriftWatchConfig{
+		RepoDir: "/r", RunningRevision: "oldrev", AutoRebuild: true,
+		AutoRestart: true, Targets: targets, Binary: "bt-dashboard",
+		// RestartSiblings deliberately false.
+	}
+	res, err := DriftWatchOnce(cfg)
+	if err != nil || !res.Restarted {
+		t.Fatalf("restarted=%v err=%v; want self restarted", res.Restarted, err)
+	}
+	if len(restarted) != 1 || restarted[0] != "bt-dashboard" {
+		t.Fatalf("restarted units = %v, want [bt-dashboard] only — without RestartSiblings a watcher must never bounce sibling daemons", restarted)
+	}
+}
+
+// TestDriftWatchOnce_SiblingSmokeFailureRollsBackAndSkipsRestart mirrors the
+// self-binary protection onto siblings: a swapped sibling whose binary fails
+// its smoke test is rolled back to <bin>.previous and NOT restarted (a
+// successful restart onto a compile-clean but crash-on-startup build would
+// crash-loop until manual intervention), while healthy siblings and the self
+// binary still restart normally.
+func TestDriftWatchOnce_SiblingSmokeFailureRollsBackAndSkipsRestart(t *testing.T) {
+	prevHead, prevRebuild := driftHeadFn, driftRebuildFn
+	prevRestart, prevSmoke, prevRestore := driftRestartFn, driftSmokeTestFn, restorePreviousBinaryFn
+	t.Cleanup(func() {
+		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
+		driftRestartFn, driftSmokeTestFn, restorePreviousBinaryFn = prevRestart, prevSmoke, prevRestore
+	})
+
+	targets := []RebuildTarget{
+		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/repo/bt-agent", Unit: "bt-agent"},
+		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: "/repo/bin/bt-gardener", Unit: "bt-gardener"},
+		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: "/repo/bin/bt-dashboard", Unit: "bt-dashboard"},
+	}
+	driftHeadFn = func(string) (string, error) { return "newhead", nil }
+	driftRebuildFn = func(string, []RebuildTarget) error { return nil }
+
+	// bt-gardener's rebuilt binary crashes on --version; everything else is fine.
+	driftSmokeTestFn = func(p string) error {
+		if p == "/repo/bin/bt-gardener" {
+			return errors.New("binary crashes on --version")
+		}
+		return nil
+	}
+	var rolledBack []string
+	restorePreviousBinaryFn = func(p string) error { rolledBack = append(rolledBack, p); return nil }
+	var restarted []string
+	driftRestartFn = func(unit string) error { restarted = append(restarted, unit); return nil }
+
+	cfg := DriftWatchConfig{
+		RepoDir: "/r", RunningRevision: "oldrev", AutoRebuild: true,
+		AutoRestart: true, RestartSiblings: true, Targets: targets, Binary: "bt-agent",
+	}
+	res, err := DriftWatchOnce(cfg)
+	if err != nil || !res.Restarted {
+		t.Fatalf("restarted=%v err=%v; a sibling smoke failure is best-effort and must not block the daemon's own adoption", res.Restarted, err)
+	}
+	if len(rolledBack) != 1 || rolledBack[0] != "/repo/bin/bt-gardener" {
+		t.Fatalf("rolled back = %v, want [/repo/bin/bt-gardener]", rolledBack)
+	}
+	want := []string{"bt-dashboard", "bt-agent"}
+	if len(restarted) != len(want) || restarted[0] != want[0] || restarted[1] != want[1] {
+		t.Fatalf("restarted units = %v, want %v (the failed sibling must be skipped, healthy sibling + self restart)", restarted, want)
 	}
 }
 

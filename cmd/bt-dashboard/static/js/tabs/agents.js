@@ -56,15 +56,18 @@ async function populateTreeDropdown() {
     });
     order.sort();
 
-    var html = '<option value="">Select tree...</option>';
+    // Build via DOM nodes, not innerHTML string concatenation: tree names and
+    // ids are partly user-influenced (evolved/goal trees), and a `"` or `<`
+    // in one would break the markup — or inject it.
+    select.replaceChildren(new Option('Select tree...', ''));
     order.forEach(function(cat) {
-      html += '<optgroup label="' + cat + '">';
+      var group = document.createElement('optgroup');
+      group.label = cat;
       groups[cat].forEach(function(t) {
-        html += '<option value="' + t.id + '">' + (t.name || t.id) + '</option>';
+        group.appendChild(new Option(t.name || t.id, t.id));
       });
-      html += '</optgroup>';
+      select.appendChild(group);
     });
-    select.innerHTML = html;
   } catch (e) {
     // Keep the hardcoded fallback options if the catalog fetch fails.
   }

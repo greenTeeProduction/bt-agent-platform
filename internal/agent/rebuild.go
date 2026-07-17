@@ -50,15 +50,18 @@ func DefaultRebuildTargets(repoDir string) []RebuildTarget {
 }
 
 // DashboardRebuildTargets returns the rebuild targets for bt-dashboard's own
-// deploy-drift watcher. bt-dashboard is now part of DefaultRebuildTargets
-// (see above), so this is a direct alias — kept as its own name so
-// cmd/bt-dashboard/main.go's watcher wiring stays self-documenting even
-// though both watchers currently cover the same target list. It must NOT
-// append a second bt-dashboard entry on top of DefaultRebuildTargets (the
-// pre-fix behavior): that would double-build and double-swap the same binary
-// within a single RebuildBinaries call.
+// deploy-drift watcher: its OWN binary only. The fleet-wide sweep — all of
+// DefaultRebuildTargets plus sibling-unit restarts (RestartSiblings) — is
+// owned exclusively by cmd/bt-agent's watcher: when both watchers carried the
+// full list they raced `go build` onto the identical output paths and
+// restarted each other's units with no cross-daemon in-flight coordination.
+// bt-agent's sweep still rebuilds and restarts bt-dashboard, so the dashboard
+// keeps adopting fleet fixes; its own watcher just lets it self-heal faster
+// when only the dashboard binary is stale.
 func DashboardRebuildTargets(repoDir string) []RebuildTarget {
-	return DefaultRebuildTargets(repoDir)
+	return []RebuildTarget{
+		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join(repoDir, "bin", "bt-dashboard"), Unit: "bt-dashboard"},
+	}
 }
 
 var (
@@ -78,16 +81,25 @@ func RebuildBinaries(repoDir string, targets []RebuildTarget) error {
 	defer cleanup()
 
 	for _, t := range targets {
-		newPath := t.OutPath + ".new"
+		// Unique intermediate per writer: two watchers (bt-agent's fleet
+		// sweep and bt-dashboard's own) can rebuild the same OutPath
+		// concurrently; a shared fixed ".new" let their writes interleave
+		// before either rename published a torn binary. With a PID suffix
+		// each writer renames its own complete build (rename is atomic;
+		// concurrent renames just mean last-writer-wins with intact files).
+		newPath := fmt.Sprintf("%s.new.%d", t.OutPath, os.Getpid())
 		if err := rebuildBuildFn(scratch, t.Pkg, newPath); err != nil {
+			_ = os.Remove(newPath) // don't leave half-written intermediates behind
 			return fmt.Errorf("build %s: %w", t.Name, err)
 		}
 		// Keep a .previous backup (best-effort) before swapping, matching the
 		// repo's binary rollback convention.
 		if err := copyFile(t.OutPath, t.OutPath+".previous"); err != nil && !os.IsNotExist(err) {
+			_ = os.Remove(newPath)
 			return fmt.Errorf("back up %s: %w", t.Name, err)
 		}
 		if err := os.Rename(newPath, t.OutPath); err != nil {
+			_ = os.Remove(newPath)
 			return fmt.Errorf("swap %s: %w", t.Name, err)
 		}
 	}

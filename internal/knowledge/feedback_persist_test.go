@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -349,6 +350,120 @@ func TestLoadFeedback_ResurrectsUnregisteredEvolvedTree(t *testing.T) {
 	}
 	if len(evolvedIDs) != 1 || evolvedIDs[0] != "tree:resurrect-base-evolved" {
 		t.Errorf("evolvedIDs = %v, want [tree:resurrect-base-evolved]", evolvedIDs)
+	}
+}
+
+// TestLoadFeedback_DoesNotClobberRegisteredStaticMetadata pins the contract
+// the feedbackSnapshot doc states ("static tree metadata is deliberately
+// excluded so a Load merges into already-registered trees without clobbering
+// it"): loading a feedback file written by a PRE-upgrade build — whose entries
+// carry no category/structural_fitness/node_count keys — must not wipe the
+// Category (or evolved bookkeeping) a fresh Register/RegisterEvolved just set.
+// The pre-fix code assigned all three unconditionally, so the zero values from
+// the old file blanked the live tree's Category; the next Save then persisted
+// "" and the corruption survived every later restart.
+func TestLoadFeedback_DoesNotClobberRegisteredStaticMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	// Pre-upgrade file shape: runtime feedback only, no metadata keys.
+	blob := `{"trees":{"tree:static":{"fitness":61.5,"run_count":7,"last_outcome":"success"}},"tool_edges":[]}`
+	if err := os.WriteFile(path, []byte(blob), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:static", Name: "Static", Category: "domain"})
+	kg.Trees["tree:static"].StructuralFitness = 42.0
+	kg.Trees["tree:static"].NodeCount = 9
+
+	if err := kg.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	tree := kg.Trees["tree:static"]
+	if tree.Category != "domain" {
+		t.Errorf("Category = %q, want %q preserved (a pre-upgrade feedback file must not blank registered static metadata)", tree.Category, "domain")
+	}
+	if tree.StructuralFitness != 42.0 {
+		t.Errorf("StructuralFitness = %.1f, want 42.0 preserved", tree.StructuralFitness)
+	}
+	if tree.NodeCount != 9 {
+		t.Errorf("NodeCount = %d, want 9 preserved", tree.NodeCount)
+	}
+	// Runtime feedback must still restore.
+	if tree.Fitness != 61.5 || tree.RunCount != 7 {
+		t.Errorf("runtime feedback not restored: fitness=%.1f runs=%d, want 61.5/7", tree.Fitness, tree.RunCount)
+	}
+}
+
+// TestRegisterEvolved_FillsMetadataForResurrectedTree closes the discovery
+// regression resurrection introduced: LoadFeedback pre-creates unregistered
+// evolved trees as bare ID/Name shells, so the next evolution pass's
+// RegisterEvolved found the tree "existing" and skipped the base-metadata
+// inheritance (Capabilities/Keywords/Synonyms) it performs on first creation —
+// leaving the resurrected tree permanently undiscoverable by keyword or
+// capability routing. The fill must happen even when the pass's fitness does
+// not beat the restored StructuralFitness.
+func TestRegisterEvolved_FillsMetadataForResurrectedTree(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:fill-base",
+		Name:     "Base",
+		Category: "finance",
+		Keywords: []string{"ledger"},
+		Capabilities: []Capability{
+			{Action: "analyze_financials", Domain: "finance"},
+		},
+	})
+	src.RegisterEvolved("tree:fill-base", "tree:fill-base-evolved", 17, 91.0)
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	// Restart: base re-registered, evolved tree resurrected by LoadFeedback.
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:fill-base",
+		Name:     "Base",
+		Category: "finance",
+		Keywords: []string{"ledger"},
+		Capabilities: []Capability{
+			{Action: "analyze_financials", Domain: "finance"},
+		},
+	})
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	// Next evolution pass: a WEAKER winner (fitness below the restored 91.0
+	// structural fitness) must still fill the resurrected shell's metadata,
+	// even though the bookkeeping write-back is correctly skipped.
+	if updated := dst.RegisterEvolved("tree:fill-base", "tree:fill-base-evolved", 17, 50.0); updated {
+		t.Fatal("a weaker winner must not update the stored bookkeeping")
+	}
+
+	evolved := dst.Trees["tree:fill-base-evolved"]
+	if len(evolved.Capabilities) == 0 || evolved.Capabilities[0].Action != "analyze_financials" {
+		t.Errorf("Capabilities = %v, want inherited from base — the resurrected tree stays undiscoverable without them", evolved.Capabilities)
+	}
+	if len(evolved.Keywords) == 0 {
+		t.Errorf("Keywords = %v, want inherited from base", evolved.Keywords)
+	}
+	if got := dst.Synonyms["analyze_financials"]; got != "tree:fill-base-evolved" && got != "tree:fill-base" {
+		t.Errorf("Synonyms[analyze_financials] = %q, want indexed", got)
+	}
+	// The synonym index must be able to reach the evolved tree via at least
+	// one of its inherited terms.
+	found := false
+	for _, id := range dst.Synonyms {
+		if id == "tree:fill-base-evolved" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no synonym entry points at the resurrected evolved tree; it is unreachable via keyword/capability discovery")
 	}
 }
 

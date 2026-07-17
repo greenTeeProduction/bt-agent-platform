@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -92,6 +94,73 @@ func TestRebuildBinaries(t *testing.T) {
 // but DashboardRebuildTargets still wrote the rebuilt binary to the repo
 // root — a "successful" rebuild that never lands where the running unit
 // actually executes from.
+// TestDashboardRebuildTargets_OwnBinaryOnly pins single-writer rebuild
+// ownership: bt-dashboard's watcher rebuilds only its own binary. The
+// fleet-wide sweep (all targets, sibling restarts) belongs to cmd/bt-agent's
+// watcher alone. Pre-fix the dashboard list was a full alias of
+// DefaultRebuildTargets, so both daemons raced `go build` onto the identical
+// output paths and cross-restarted each other's units.
+func TestDashboardRebuildTargets_OwnBinaryOnly(t *testing.T) {
+	targets := DashboardRebuildTargets("/repo")
+	if len(targets) != 1 {
+		t.Fatalf("DashboardRebuildTargets has %d targets %v, want exactly the bt-dashboard target", len(targets), targets)
+	}
+	tg := targets[0]
+	if tg.Name != "bt-dashboard" || tg.Unit != "bt-dashboard" {
+		t.Fatalf("target = %+v, want the bt-dashboard unit target", tg)
+	}
+}
+
+// TestRebuildBinaries_UniqueTempPerWriter pins torn-binary protection: the
+// intermediate build output must be unique per process (two daemons' watchers
+// can rebuild the same OutPath concurrently; a shared fixed ".new" let their
+// writes interleave before either rename), and a failed build must not leave
+// the intermediate file behind.
+func TestRebuildBinaries_UniqueTempPerWriter(t *testing.T) {
+	prevMat, prevBuild := rebuildMaterializeFn, rebuildBuildFn
+	t.Cleanup(func() { rebuildMaterializeFn, rebuildBuildFn = prevMat, prevBuild })
+
+	out := filepath.Join(t.TempDir(), "bt-agent")
+	if err := os.WriteFile(out, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := RebuildTarget{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: out}
+
+	var builtPath string
+	rebuildMaterializeFn = func(string) (string, func(), error) { return t.TempDir(), func() {}, nil }
+	rebuildBuildFn = func(_, _, newPath string) error {
+		builtPath = newPath
+		return os.WriteFile(newPath, []byte("NEW"), 0o755)
+	}
+	if err := RebuildBinaries("/repo", []RebuildTarget{target}); err != nil {
+		t.Fatalf("RebuildBinaries: %v", err)
+	}
+	if builtPath == out+".new" {
+		t.Fatalf("build wrote to the shared fixed %q; the intermediate path must be unique per writer (e.g. carry the PID)", builtPath)
+	}
+	if !strings.Contains(builtPath, strconv.Itoa(os.Getpid())) {
+		t.Fatalf("intermediate path %q does not carry the writer's PID", builtPath)
+	}
+	if got, _ := os.ReadFile(out); string(got) != "NEW" {
+		t.Fatalf("live binary not swapped: %q", got)
+	}
+
+	// Failed build: the unique intermediate must be cleaned up.
+	rebuildBuildFn = func(_, _, newPath string) error {
+		_ = os.WriteFile(newPath, []byte("HALF"), 0o755)
+		return os.ErrInvalid
+	}
+	if err := RebuildBinaries("/repo", []RebuildTarget{target}); err == nil {
+		t.Fatal("expected the build failure to surface")
+	}
+	entries, _ := os.ReadDir(filepath.Dir(out))
+	for _, e := range entries {
+		if e.Name() != "bt-agent" && e.Name() != "bt-agent.previous" {
+			t.Fatalf("leftover intermediate %q after failed build", e.Name())
+		}
+	}
+}
+
 func TestDashboardRebuildTargets_OutPathUnderBin(t *testing.T) {
 	targets := DashboardRebuildTargets("/repo")
 	var dash *RebuildTarget

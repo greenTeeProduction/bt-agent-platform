@@ -610,6 +610,9 @@ func main() {
 				RunningRevision: buildID.Revision,
 				AutoRebuild:     agent.AutoRebuildEnabled(),
 				AutoRestart:     agent.AutoRestartEnabled(),
+				// Fleet owner: only THIS watcher restarts sibling units after
+				// a sweep (bt-dashboard's watcher rebuilds its own binary only).
+				RestartSiblings: true,
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),
