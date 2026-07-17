@@ -558,6 +558,11 @@ var newAuctionCollector = func() BidCollector { return NewBTAgentClient() }
 // awarded is false — signalling the caller to fall back to a delegate tree —
 // when there are no candidates or no eligible bidder wins; any other
 // transport/auction failure is returned as err.
+//
+// On a win, the resulting AuctionResult.Award is written back into chainState
+// under "auction_award" (when chainState is non-nil) so a caller whose return
+// signature only carries the bare result string can still attribute the run
+// to the winning agent, e.g. for a follow-up History.Record call.
 func AuctionDelegate(task string, chainState map[string]any) (string, bool, error) {
 	ann := auctionAnnouncement(task, chainState)
 	candidates := auctionCandidates(ann, chainState)
@@ -571,6 +576,9 @@ func AuctionDelegate(task string, chainState map[string]any) (string, bool, erro
 			return "", false, nil // no eligible bidder → fall back to delegate tree
 		}
 		return "", false, err
+	}
+	if chainState != nil {
+		chainState["auction_award"] = res.Award
 	}
 	return res.Result, true, nil
 }

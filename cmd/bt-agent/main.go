@@ -756,6 +756,10 @@ func main() {
 		// Inject tree resolver and pre-resolve trees for all agents
 		a2a_mod.SetTreeResolver(resolveTree)
 		a2a_mod.InitEngineDelegate()
+		// Share the platform's run-history store so tasks executed over A2A
+		// leave a RunRecord, matching what runJob/RunTaskResult already record
+		// for scheduler- and dashboard-driven runs.
+		a2aSrv.Executor.History = agentHist
 		// Let bt_agent_create and autopilot's activateAutomation refresh the
 		// A2A card registry after they mutate agentReg, so newly created
 		// agents become reachable over A2A/auctions without a restart.

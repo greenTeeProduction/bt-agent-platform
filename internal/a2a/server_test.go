@@ -401,6 +401,61 @@ func TestExecute_NonAnnouncementStillRunsTree(t *testing.T) {
 	}
 }
 
+// ---- Execute must leave a History trace, just like Cancel already does ------
+//
+// runJob/RunTaskResult (the scheduler- and dashboard-driven run paths) both
+// call agent.History.Record after every run via agent.RunAgent. Execute is a
+// third, independent run path — tasks delivered over A2A, direct or as an
+// auction winner — and today it runs engine.RunTask (server.go) but never
+// touches e.History, so those runs are invisible to `bt-agent-cli agent
+// history` and the dashboard's per-agent run list even though the field
+// exists and Cancel already populates it for cancelled tasks. Execute must
+// record a RunRecord with the agent name, task text, and the outcome/elapsed
+// it already computes right before discarding them.
+
+func TestExecute_RecordsRunToHistory(t *testing.T) {
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "coder", Tree: "domain:code_review", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	hist, err := agent.NewHistory(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewHistory: %v", err)
+	}
+
+	// AlwaysSucceed (not MarkSuccessful) — MarkSuccessful gates on output
+	// quality and requires a pre-populated bb.Result, which this bare tree
+	// never produces; AlwaysSucceed is the codebase's standard no-content
+	// success leaf (see internal/engine/tree.go) and keeps this test focused
+	// on History recording rather than quality-gate semantics.
+	tree := &evolution.SerializableNode{
+		Type: "AlwaysSucceed",
+	}
+	exec := &BTAgentExecutor{
+		Reg:     reg,
+		History: hist,
+		TreeMap: map[string]*evolution.SerializableNode{"coder": tree},
+	}
+
+	drainExecute(t, exec, "coder", "please review this pull request")
+
+	runs := hist.List("coder", 0)
+	if len(runs) != 1 {
+		t.Fatalf("History has %d runs for agent %q after Execute, want 1: %+v", len(runs), "coder", runs)
+	}
+	if runs[0].Outcome != "success" {
+		t.Errorf("recorded outcome = %q, want %q", runs[0].Outcome, "success")
+	}
+	if runs[0].Task != "please review this pull request" {
+		t.Errorf("recorded task = %q, want the original task text", runs[0].Task)
+	}
+}
+
 // ---- outcome handling must route through TaskStateBridge, not a binary
 // success/fail check ------------------------------------------------------
 //
@@ -466,6 +521,56 @@ func TestServer_RefreshCards_PicksUpAgentCreatedAfterStartup(t *testing.T) {
 	// reflect the refreshed registry too, not just the raw field.
 	if _, ok := srv.AuctionCardSource()()["newcomer"]; !ok {
 		t.Error("AuctionCardSource() candidate pool missing agent created after startup even after RefreshCards")
+	}
+}
+
+// ---- Cancel must leave a History trace, not vanish silently -----------------
+//
+// Execute records every run outcome to the platform's shared History store
+// (internal/agent/history.go) so `bt-agent-cli agent history` and the
+// dashboard's per-agent run list show what happened. Cancel bypasses that
+// chokepoint entirely: it discards its ctx parameter (`_ context.Context`)
+// and never touches History, so a task cancelled mid-run leaves no trace —
+// it just disappears from the caller's perspective while History shows the
+// agent never ran. Cancel must resolve the agent name the same way Execute
+// does (ctx.Value(agentNameKey{}) falling back to execCtx.ContextID) and
+// record a RunRecord with Outcome "cancelled".
+
+func TestCancel_RecordsCancelledOutcomeToHistory(t *testing.T) {
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "coder", Tree: "domain:code_review", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	hist, err := agent.NewHistory(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewHistory: %v", err)
+	}
+
+	exec := &BTAgentExecutor{Reg: reg, History: hist}
+
+	// Mirrors the per-agent endpoint's interceptor (agentNameInterceptor),
+	// which is how Execute learns the target agent name — Cancel must use
+	// the identical resolution instead of discarding ctx.
+	ctx := context.WithValue(context.Background(), agentNameKey{}, "coder")
+	execCtx := &a2asrv.ExecutorContext{}
+
+	for _, err := range exec.Cancel(ctx, execCtx) {
+		if err != nil {
+			t.Fatalf("Cancel yielded error: %v", err)
+		}
+	}
+
+	runs := hist.List("coder", 0)
+	if len(runs) != 1 {
+		t.Fatalf("History has %d runs for agent %q after Cancel, want 1: %+v", len(runs), "coder", runs)
+	}
+	if runs[0].Outcome != "cancelled" {
+		t.Errorf("recorded outcome = %q, want %q", runs[0].Outcome, "cancelled")
 	}
 }
 

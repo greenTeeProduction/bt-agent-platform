@@ -716,3 +716,48 @@ func TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(t *testing.T) {
 		t.Errorf("no task should be dispatched when no bid wins, dispatched=%v", ft.dispatched)
 	}
 }
+
+// ---- milestone 5: thread AuctionResult.Award through AuctionDelegate -------
+
+// AuctionDelegate must thread the winning AuctionResult.Award back through
+// chainState so a caller whose (result, awarded, err) return only carries a
+// bare result string — like the engine.AuctionDelegateFn call site — can still
+// attribute the run to the actual winning agent (e.g. for a follow-up
+// History.Record call) instead of losing the Award entirely.
+func TestAuctionDelegate_ThreadsAwardIntoChainState(t *testing.T) {
+	ft := newAuctionTransport()
+	ft.bids["http://cheap"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "cheap", Cost: 10, Confidence: 0.9})
+	ft.results["http://cheap"] = "done by cheap"
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"cheap": cardWithURL("cheap", "http://cheap", "domain"),
+	}, ft)
+
+	// A nil chainState (the zero value most tree runs pass — confirmed a real
+	// input by internal/engine's TestEvaluateGuardCondition_NilChainState) must
+	// not panic when AuctionDelegate tries to write the Award back: writing
+	// into a nil map panics, so the implementation must guard this path.
+	if result, awarded, err := AuctionDelegate("do the work", nil); err != nil || !awarded || result != "done by cheap" {
+		t.Fatalf("AuctionDelegate with nil chainState = (%q, %v, %v), want (\"done by cheap\", true, nil)", result, awarded, err)
+	}
+
+	chainState := map[string]any{}
+	result, awarded, err := AuctionDelegate("do the work", chainState)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored: %v", err)
+	}
+	if !awarded || result != "done by cheap" {
+		t.Fatalf("expected an award: awarded=%v result=%q", awarded, result)
+	}
+
+	award, ok := chainState["auction_award"].(Award)
+	if !ok {
+		t.Fatalf("chainState[%q] = %#v, want an Award", "auction_award", chainState["auction_award"])
+	}
+	if award.WinnerName != "cheap" {
+		t.Errorf("award.WinnerName = %q, want %q", award.WinnerName, "cheap")
+	}
+	if award.WinningBid.Cost != 10 {
+		t.Errorf("award.WinningBid.Cost = %v, want 10", award.WinningBid.Cost)
+	}
+}

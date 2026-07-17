@@ -171,6 +171,7 @@ Consolidation notes (2026-07-16):
 | ADR-146 | `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research) | Accepted | 2026-07-17 |
 | ADR-147 | The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-148 | `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research) | Accepted | 2026-07-17 |
+| ADR-149 | `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2652,6 +2653,21 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ `/api/trees` is now a complete, deterministic catalog of every selectable tree — runtime-registered and static domain — closing the backend half of the gap.
 - ✅ Reuses the existing `"domain:"` ID convention from `handleTreeStructure` instead of introducing a parallel scheme, so a client resolving a returned ID against tree-structure lookups needs no special-casing.
 - ⚠️ The frontend dropdown is unchanged: it is still a hardcoded static list and still does not fetch `/api/trees`. Users creating an agent still cannot select any of the 19+ catalog trees this endpoint now exposes until `agents.js` is updated to fetch and render from it.
+
+---
+
+## ADR-149: `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2)
+
+**Context (2026-07-17):** `runJob`/`AgentExecutor.RunTaskResult` — the scheduler- and dashboard-driven run paths — both call `agent.History.Record` after every run (ADR-141/142), so `bt-agent-cli agent history` and the dashboard's per-agent run list see them. `BTAgentExecutor.Execute` (`internal/a2a/server.go`) is a third, independent run path — tasks delivered over the A2A protocol, direct or as an auction winner — but it ran `engine.RunTask` and computed the outcome/duration only to discard them: no `History` field existed on the executor at all, so every A2A-driven run was invisible to both surfaces. `Cancel` (`internal/a2a/server.go:204`) compounded the gap by discarding its own `ctx` parameter (`_ context.Context`), so a task cancelled mid-run left no trace anywhere — it simply vanished from the caller's perspective. Separately, `AuctionDelegate` (`internal/a2a/auction.go:566`) returned only `res.Result` on a win, discarding `AuctionResult.Award`; a caller wiring `Execute`'s new `History.Record` call to the actual winning agent (rather than a bare result string) had no way to recover which agent won.
+
+**Decision:** Give `BTAgentExecutor` a `History *agent.History` field (nil-tolerant, matching the existing `CardCache`/`TreeMap` fields) and thread it through all three sites. `Execute` records a `RunRecord` (agent name, task text, `bb.Outcome`, `result`, elapsed duration, start/end times) immediately after `engine.RunTask` returns, before the `TaskStateBridge` mapping runs. `Cancel`'s signature changes from `(_ context.Context, ...)` to `(ctx context.Context, ...)` and resolves the agent name the same way `Execute` already does — `ctx.Value(agentNameKey{})` falling back to `execCtx.ContextID` — then records a `RunRecord{Outcome: "cancelled"}` (skipped only if both resolutions yield an empty name). `AuctionDelegate` writes `res.Award` into `chainState["auction_award"]` on a win, guarded by a `chainState != nil` check (a nil `chainState` is the common case for most tree runs and writing into a nil map panics), so a caller whose `(result, awarded, err)` return signature has no room for `Award` can still recover it from `chainState` for its own `History.Record` call. `cmd/bt-agent/main.go` wires the production seam: `a2aSrv.Executor.History = agentHist` — the same `*agent.History` instance `runJob`/dashboard already share — right after `SetTreeResolver`/`InitEngineDelegate`.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestExecute_RecordsRunToHistory` and `TestCancel_RecordsCancelledOutcomeToHistory` (`internal/a2a/server_test.go`) and `TestAuctionDelegate_ThreadsAwardIntoChainState` (`internal/a2a/auction_test.go`, including the nil-`chainState` case). This closes milestones 1, 2, and 4 of the four-milestone A2A history-instrumentation program (History field + `Execute`/`Cancel` wiring, regression tests, `AuctionResult.Award` attribution); milestone 3 (recording `Award`-attributed runs at the auction-delegation call site itself, e.g. in `engine.AuctionDelegateFn`'s caller) remains open.
+
+**Consequences:**
+- ✅ All three of the platform's run-triggering paths — scheduler (`runJob`), dashboard (`RunTaskResult`), and A2A (`Execute`) — now record to the same `agent.History` store, and `Cancel` no longer lets a mid-run cancellation disappear without a trace.
+- ✅ `AuctionDelegate` no longer silently drops `AuctionResult.Award` on a win; any caller with a `chainState` in hand can recover which agent actually ran the task, not just the result text.
+- ⚠️ `Execute`'s `History.Record` call attributes the run to `agentName` (the executor's own identity), not to the auction winner threaded through `chainState["auction_award"]` — a task that reaches `Execute` only after `AuctionDelegate` awarded it to a different agent is still recorded under the executing agent's own name, since no call site yet reads `chainState["auction_award"]` back out to override attribution. Closing that requires the still-open milestone 3.
 
 ---
 

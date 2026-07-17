@@ -29,6 +29,11 @@ type BTAgentExecutor struct {
 	// Execute scores announcements against these cards rather than re-deriving
 	// (and re-signing) a fresh one from the tree definition on every request.
 	CardCache map[string]*a2a.AgentCard
+
+	// History is the platform's shared run-history store. Cancel records a
+	// "cancelled" RunRecord here so cancelled tasks leave a trace instead of
+	// vanishing silently. Nil is tolerated (e.g. in tests that don't need it).
+	History *agent.History
 }
 
 // Execute runs the BT agent for the given A2A task.
@@ -150,6 +155,18 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		result := engine.RunTask(bb, bt)
 		elapsed := time.Since(startTime)
 
+		if e.History != nil {
+			_ = e.History.Record(agent.RunRecord{
+				AgentName: agentName,
+				Task:      taskText,
+				Outcome:   bb.Outcome,
+				Output:    result,
+				Duration:  elapsed.Truncate(time.Second).String(),
+				StartedAt: startTime,
+				EndedAt:   startTime.Add(elapsed),
+			})
+		}
+
 		bridge := &TaskStateBridge{}
 		switch state := bridge.BTToA2A(bb.Outcome); state {
 		case a2a.TaskStateCompleted:
@@ -184,8 +201,18 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 }
 
 // Cancel handles task cancellation.
-func (e *BTAgentExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (e *BTAgentExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
+		if e.History != nil {
+			agentName, _ := ctx.Value(agentNameKey{}).(string)
+			if agentName == "" {
+				agentName = execCtx.ContextID
+			}
+			if agentName != "" {
+				_ = e.History.Record(agent.RunRecord{AgentName: agentName, Outcome: "cancelled"})
+			}
+		}
+
 		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCanceled,
 			a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("task cancelled by client"))), nil) {
 			return
