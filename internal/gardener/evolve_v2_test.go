@@ -330,6 +330,54 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 	}
 }
 
+// TestRunCycleV2_MetricsSaveFailurePropagates pins Q3 Reliability milestone 3:
+// RunCycleV2 currently discards every MetricsTracker.Save() error behind
+// `_ = g.cfg.MetricsTracker.Save()` (evolve_v2.go lines 633 and 654), so a
+// corrupted-write metrics snapshot is silently treated as successfully
+// persisted. Pointing MetricsTracker at a path inside a directory that does
+// not exist makes every Save() call fail at write time; RunCycleV2 must
+// surface that failure through its existing error return instead of
+// swallowing it.
+func TestRunCycleV2_MetricsSaveFailurePropagates(t *testing.T) {
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	simpleTree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "default", Description: "default", Tree: simpleTree, FilePath: dir + "/tree-default.json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	// mt.path points inside a directory that is never created, so every
+	// os.WriteFile inside MetricsTracker.Save() fails.
+	mt := &MetricsTracker{path: filepath.Join(dir, "missing-subdir", "gardener-metrics.json")}
+
+	cfg := Config{
+		Registry:                 reg,
+		MetricsTracker:           mt,
+		RefStore:                 refStore,
+		MaxMutations:             1,
+		EvolveWithoutReflections: true,
+		UseRealLLM:               false,
+	}
+	g := NewGardener(cfg)
+
+	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err == nil {
+		t.Fatal("RunCycleV2 returned a nil error despite every MetricsTracker.Save() call failing — the write failure is being silently discarded instead of propagated")
+	}
+}
+
 func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 	dir := t.TempDir()
 	refStore, _ := evolution.NewStore(filepath.Join(dir, "reflections"))

@@ -203,7 +203,10 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 		return err
 	}
 	tmp := entry.FilePath + ".tmp"
-	_ = os.WriteFile(tmp, data, 0644)
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("write tree %q: %w", entry.FilePath, err)
+	}
 	return os.Rename(tmp, entry.FilePath)
 }
 
@@ -276,6 +279,11 @@ type CycleMetrics struct {
 	// (DeepeningResult.TTProbeHits / TTProbes) for this cycle's deep search.
 	// Zero when DeepSearchUsed is false.
 	TTHitRate float64 `json:"tt_hit_rate,omitempty"`
+	// SaveFailed marks a cycle where persisting the evolved tree via
+	// Registry.SaveTree failed (Q3 Reliability milestone 3) — the in-memory
+	// mutation was applied, but it is not durably saved, so it must not be
+	// treated as a successfully persisted result.
+	SaveFailed bool `json:"save_failed,omitempty"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.
@@ -350,9 +358,15 @@ func (mt *MetricsTracker) Save() error {
 	if doc.TotalDeepSearchCycles > 0 {
 		doc.AvgTTHitRate = math.Round(ttHitRateSum/float64(doc.TotalDeepSearchCycles)*10000) / 10000
 	}
-	data, _ := json.MarshalIndent(doc, "", "  ")
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
 	tmp := mt.path + ".tmp"
-	_ = os.WriteFile(tmp, data, 0644)
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("write metrics %q: %w", mt.path, err)
+	}
 	return os.Rename(tmp, mt.path)
 }
 

@@ -56,6 +56,65 @@ func TestRegistry_SaveAndReload(t *testing.T) {
 	}
 }
 
+// TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched forces the
+// os.WriteFile call in SaveTree to fail while a stale tmp file is already on
+// disk (e.g. left over from a prior crashed write). A naive implementation
+// that ignores the WriteFile error still calls os.Rename, which succeeds
+// unconditionally (rename permission is governed by the *directory*, not the
+// file's own mode) and silently clobbers entry.FilePath with the stale tmp
+// content. SaveTree must check the WriteFile error first and refuse to
+// rename, leaving entry.FilePath untouched and reporting a non-nil error.
+func TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: file write permission cannot be revoked to force this failure")
+	}
+
+	tempDir := t.TempDir()
+	r := NewRegistry(tempDir)
+
+	filePath := filepath.Join(tempDir, "tree.json")
+	original := []byte(`{"original":"content"}`)
+	if err := os.WriteFile(filePath, original, 0644); err != nil {
+		t.Fatalf("seed WriteFile: %v", err)
+	}
+
+	// Pre-create the tmp file SaveTree will target, then revoke its write
+	// permission so os.WriteFile(tmp, ...) inside SaveTree fails while the
+	// stale tmp file remains on disk.
+	tmpPath := filePath + ".tmp"
+	stale := []byte("stale-leftover-data")
+	if err := os.WriteFile(tmpPath, stale, 0644); err != nil {
+		t.Fatalf("seed tmp WriteFile: %v", err)
+	}
+	if err := os.Chmod(tmpPath, 0444); err != nil {
+		t.Fatalf("Chmod tmp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tmpPath, 0644) })
+
+	entry := TreeEntry{
+		Name:     "write-failure-test",
+		Tree:     &evolution.SerializableNode{Type: "selector", Name: "root"},
+		FilePath: filePath,
+	}
+
+	err := r.SaveTree(entry)
+	if err == nil {
+		t.Fatal("expected SaveTree to return a non-nil error when the write fails, got nil")
+	}
+
+	data, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		t.Fatalf("original file unreadable after failed SaveTree: %v", readErr)
+	}
+	if string(data) != string(original) {
+		t.Errorf("original file content changed after failed SaveTree: got %q, want %q", data, original)
+	}
+
+	if _, statErr := os.Stat(tmpPath); !os.IsNotExist(statErr) {
+		t.Errorf("expected stale tmp file to be removed after failed write, stat err = %v", statErr)
+	}
+}
+
 func TestMetricsTracker_RecordAndSummary(t *testing.T) {
 	tempDir := t.TempDir()
 	mt, err := NewMetricsTracker(tempDir)
@@ -278,6 +337,63 @@ func TestMetricsTracker_SaveAggregatesRollbacks(t *testing.T) {
 
 	if doc.TotalRollbacks != 3 {
 		t.Errorf("total_rollbacks = %d, want 3 (sum of CycleMetrics.Rollbacks across all recorded cycles)", doc.TotalRollbacks)
+	}
+}
+
+// TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched verifies
+// milestone 2/4 of the "Q3 Reliability — Stop silent write-failure and
+// breaker-bypass gaps in gardener persistence, dashboard circuit-breaker
+// gating, and A2A history recording" program: like SaveTree, Save must not
+// discard the os.WriteFile error via `_ =`. This test forces the WriteFile
+// call to fail while a stale tmp file is already on disk (e.g. left over
+// from a prior crashed write). A naive implementation that ignores the
+// WriteFile error still calls os.Rename, which succeeds unconditionally
+// (rename permission is governed by the *directory*, not the file's own
+// mode) and silently clobbers gardener-metrics.json with the stale tmp
+// content. Save must check the WriteFile error first and refuse to rename,
+// leaving the prior metrics file untouched and reporting a non-nil error.
+func TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: file write permission cannot be revoked to force this failure")
+	}
+
+	dir := t.TempDir()
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker failed: %v", err)
+	}
+	mt.Record(CycleMetrics{TreeName: "tree_a", Cycle: 1})
+
+	filePath := filepath.Join(dir, "gardener-metrics.json")
+	original := []byte(`{"original":"content"}`)
+	if err := os.WriteFile(filePath, original, 0644); err != nil {
+		t.Fatalf("seed WriteFile: %v", err)
+	}
+
+	// Pre-create the tmp file Save will target, then revoke its write
+	// permission so os.WriteFile(tmp, ...) inside Save fails while the
+	// stale tmp file remains on disk.
+	tmpPath := filePath + ".tmp"
+	stale := []byte("stale-leftover-data")
+	if err := os.WriteFile(tmpPath, stale, 0644); err != nil {
+		t.Fatalf("seed tmp WriteFile: %v", err)
+	}
+	if err := os.Chmod(tmpPath, 0444); err != nil {
+		t.Fatalf("Chmod tmp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tmpPath, 0644) })
+
+	err = mt.Save()
+	if err == nil {
+		t.Fatal("expected Save to return a non-nil error when the write fails, got nil")
+	}
+
+	data, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		t.Fatalf("original metrics file unreadable after failed Save: %v", readErr)
+	}
+	if string(data) != string(original) {
+		t.Errorf("original metrics file content changed after failed Save: got %q, want %q", data, original)
 	}
 }
 

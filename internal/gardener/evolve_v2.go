@@ -2,6 +2,8 @@ package gardener
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"os"
@@ -367,8 +369,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// so Selector short-circuit semantics are preserved. A reorder is itself a
 	// persistable change, so it forces a save even when no mutation applied.
 	reordered := g.applyLearnedSelectorOrdering(tree, cfg)
+	saveFailed := false
 	if applied > 0 || reordered > 0 {
-		_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
+			slog.Error("gardener/v2: saving evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
+			saveFailed = true
+		}
 	}
 
 	// A successful crisis intervention resets the stagnation counter so the
@@ -437,8 +443,9 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 					applied = preDeepSearchApplied
 					nodesAfter = evolution.CountNodes(tree)
 					improved = newFitness.Composite > baseFitness.Composite
-				} else {
-					_ = g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath})
+				} else if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
+					slog.Error("gardener/v2: saving deep-search evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
+					saveFailed = true
 				}
 			}
 		}
@@ -460,6 +467,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		DeepSearchUsed:  deepSearchUsed,
 		DeepSearchDepth: deepSearchDepth,
 		TTHitRate:       ttHitRate,
+
+		SaveFailed: saveFailed,
 	}
 }
 
@@ -616,6 +625,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	})
 
 	results := make([]CycleMetrics, 0, len(entries))
+	var errs []error
 
 	for _, entry := range entries {
 		if !entry.Active {
@@ -626,11 +636,17 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		metrics := g.evolveTreeV2(entry, cfg)
 		metrics.DurationMs = time.Since(start).Milliseconds()
 		results = append(results, metrics)
+		if metrics.SaveFailed {
+			errs = append(errs, fmt.Errorf("tree %q: saving evolved tree failed", entry.Name))
+		}
 
 		g.cfg.MetricsTracker.Record(metrics)
 		// Persist after every tree so a mid-cycle crash or SIGTERM loses at
 		// most one tree's result, not the whole cycle.
-		_ = g.cfg.MetricsTracker.Save()
+		if err := g.cfg.MetricsTracker.Save(); err != nil {
+			slog.Error("gardener/v2: saving metrics failed, snapshot is not durably persisted", "tree", entry.Name, "error", err)
+			errs = append(errs, fmt.Errorf("saving metrics after tree %q: %w", entry.Name, err))
+		}
 		if tt := g.transpositionTable(); tt != nil {
 			if err := tt.Save(); err != nil {
 				slog.Warn("gardener/v2: transposition table save failed", "error", err)
@@ -651,7 +667,13 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		}
 	}
 
-	_ = g.cfg.MetricsTracker.Save()
+	if err := g.cfg.MetricsTracker.Save(); err != nil {
+		slog.Error("gardener/v2: final metrics save failed, snapshot is not durably persisted", "error", err)
+		errs = append(errs, fmt.Errorf("final metrics save: %w", err))
+	}
+	if len(errs) > 0 {
+		return results, errors.Join(errs...)
+	}
 	return results, nil
 }
 
