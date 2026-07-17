@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -100,6 +101,68 @@ type errorHandlerProposal struct {
 	Resolvable bool                        `json:"resolvable"`
 	Reason     string                      `json:"reason"`
 	Node       *evolution.SerializableNode `json:"node"`
+	// CodeFix is an OPTIONAL escalation carried only on an unresolvable verdict
+	// (self-fixing fleet Part A, spec §2): when a tree failure cannot be
+	// recovered at runtime by composing actions BUT is a genuine source-code bug,
+	// Claude describes the fix here so the node can seed a code-fix program. Nil
+	// for the ordinary two branches (resolvable node / plain unresolvable).
+	CodeFix *errorHandlerCodeFix `json:"code_fix"`
+}
+
+// errorHandlerCodeFix is the escalation payload: a file-scoped, TDD-able
+// description of a source bug the runtime-recovery vocabulary can't fix. The
+// milestone is the instruction the goap loop RED→GREENs; validateCodeFix gates
+// it before it seeds anything.
+type errorHandlerCodeFix struct {
+	IsBug     bool     `json:"is_bug"`
+	Title     string   `json:"title"`
+	Milestone string   `json:"milestone"`
+	Files     []string `json:"files"`
+	Rationale string   `json:"rationale"`
+}
+
+// validateCodeFix gates an escalation before it seeds a code-fix program. It is
+// deliberately strict on the fields the goap loop needs to RED→GREEN a fix — a
+// real is_bug flag, a title, a file-scoped milestone, and at least one plausible
+// repo file path (contains "/" or ends ".go") — and soft-checks that the
+// milestone actually names one of those files, since a milestone that references
+// no file at all makes the goap loop flail. Runtime-recoverable / transient
+// failures carry no code_fix and never reach here.
+func validateCodeFix(cf *errorHandlerCodeFix) error {
+	if cf == nil {
+		return fmt.Errorf("code_fix is nil")
+	}
+	if !cf.IsBug {
+		return fmt.Errorf("code_fix.is_bug must be true to escalate")
+	}
+	if strings.TrimSpace(cf.Title) == "" {
+		return fmt.Errorf("code_fix.title must be non-empty")
+	}
+	if strings.TrimSpace(cf.Milestone) == "" {
+		return fmt.Errorf("code_fix.milestone must be non-empty")
+	}
+	var files []string
+	for _, f := range cf.Files {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		if !strings.Contains(f, "/") && !strings.HasSuffix(f, ".go") {
+			continue // not a plausible repo path
+		}
+		files = append(files, f)
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("code_fix.files must contain at least one plausible repo path")
+	}
+	// Soft check: the milestone must name at least one of the files (full path or
+	// basename) so the loop has a concrete file to fix. Reject only if it names none.
+	for _, f := range files {
+		if strings.Contains(cf.Milestone, f) || strings.Contains(cf.Milestone, filepath.Base(f)) {
+			return nil
+		}
+	}
+	return fmt.Errorf("code_fix.milestone must reference at least one of the files")
 }
 
 // parseErrorHandlerProposal extracts the first parseable JSON object from
@@ -336,7 +399,10 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 Reply with ONLY one JSON object, no prose:
 {"resolvable": true, "reason": "<why this handles the error>", "node": {…}}
 or, if this error cannot be handled by composing the allowed vocabulary:
-{"resolvable": false, "reason": "<what capability is missing>"}`,
+{"resolvable": false, "reason": "<what capability is missing>"}
+If — and ONLY if — the failure cannot be recovered at runtime by composing the actions above BUT is a genuine SOURCE-CODE bug that a small code fix would resolve (NOT a transient, rate-limit, config, or environment failure), add a "code_fix" object naming the specific file(s) to fix:
+{"resolvable": false, "reason": "<...>", "code_fix": {"is_bug": true, "title": "<short title>", "milestone": "<file-scoped TDD instruction: name the file(s), the defect, and the exact fix so an implementer can write a failing test then make it pass>", "files": ["path/to/file.go"], "rationale": "<why this is a real code bug>"}}
+Omit "code_fix" entirely for transient/rate-limit/config/environment failures — set it only for a real source-code bug.`,
 		handlerName, errNode, cat, b.FailureCount, errText, subtreeStr, cat, errNode,
 		strings.Join(allowed, ", "),
 		strings.Join(allowedActions, ", "),
@@ -365,9 +431,18 @@ func requestErrorHandlerProposal(ctx context.Context, handlerName string, failin
 		return errorHandlerProposal{}, err
 	}
 	if !p.Resolvable {
-		errorHandlerLedgerStamp(sig, "unresolvable")
+		// A valid code_fix escalates: stamp "escalated" (distinct from
+		// "unresolvable") so a re-firing within cooldown reads as an escalation and
+		// doesn't re-call Claude. This is the single ledger write for the Claude-call
+		// outcome; the node seeds the program using the same condition (no double
+		// stamp). Invalid/absent code_fix stays "unresolvable" (today's behavior).
+		verdict := "unresolvable"
+		if p.CodeFix != nil && validateCodeFix(p.CodeFix) == nil {
+			verdict = "escalated"
+		}
+		errorHandlerLedgerStamp(sig, verdict)
 		Warn("claude error handler: error judged unresolvable with registered vocabulary",
-			"handler", handlerName, "signature", sig, "reason", p.Reason)
+			"handler", handlerName, "signature", sig, "reason", p.Reason, "verdict", verdict)
 		return p, nil
 	}
 	errorHandlerLedgerStamp(sig, "proposed")

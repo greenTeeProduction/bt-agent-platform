@@ -157,7 +157,23 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			runCtx = ctx.Context
 		}
 		prop, err := requestErrorHandlerProposal(runCtx, handlerName, &protected, b, sig)
-		if err != nil || !prop.Resolvable {
+		if err != nil {
+			return -1
+		}
+		if !prop.Resolvable {
+			// Self-fixing fleet Part A: an unresolvable failure that is a genuine
+			// source-code bug escalates — seed a code-fix program so the goap loop
+			// implements the fix (async). The tree failure still passes through
+			// immediately below. The ledger verdict was already stamped "escalated"
+			// by requestErrorHandlerProposal for the same valid-code_fix condition,
+			// so a re-firing within cooldown never reaches this call again. Seeding
+			// is further bounded by seedCodeFixProgram's own dedup/cap/kill-switch;
+			// that double-bound is intentional.
+			if prop.CodeFix != nil && validateCodeFix(prop.CodeFix) == nil {
+				seeded, reason := seedCodeFixProgram(sig, prop.CodeFix.Title, prop.CodeFix.Milestone, "self-fix:error-handler:"+sig)
+				Info("claude error handler: escalated unresolvable failure to a code-fix program",
+					"handler", handlerName, "signature", sig, "title", prop.CodeFix.Title, "seeded", seeded, "reason", reason)
+			}
 			return -1
 		}
 		if err := validateErrorHandlerProposal(prop.Node, takenNames); err != nil {

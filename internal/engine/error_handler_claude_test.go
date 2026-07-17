@@ -399,6 +399,91 @@ func TestExecClaudeRunner_ForceReadOnlyIgnoresSkipPermissions(t *testing.T) {
 	}
 }
 
+// validCodeFix returns an escalation verdict that passes validateCodeFix — a
+// real is_bug flag, a title, a file-scoped milestone naming a plausible repo
+// path that the milestone references.
+func validCodeFix() *errorHandlerCodeFix {
+	return &errorHandlerCodeFix{
+		IsBug:     true,
+		Title:     "Fix nil deref",
+		Milestone: "In internal/engine/foo.go guard the nil map before write; add a failing test then fix",
+		Files:     []string{"internal/engine/foo.go"},
+		Rationale: "unconditional map write panics",
+	}
+}
+
+func TestValidateCodeFix(t *testing.T) {
+	if err := validateCodeFix(validCodeFix()); err != nil {
+		t.Fatalf("valid code_fix rejected: %v", err)
+	}
+	cases := []struct {
+		desc string
+		mut  func(cf *errorHandlerCodeFix)
+	}{
+		{"nil", nil},
+		{"is_bug false", func(cf *errorHandlerCodeFix) { cf.IsBug = false }},
+		{"empty title", func(cf *errorHandlerCodeFix) { cf.Title = "   " }},
+		{"empty milestone", func(cf *errorHandlerCodeFix) { cf.Milestone = "" }},
+		{"no files", func(cf *errorHandlerCodeFix) { cf.Files = nil }},
+		{"only implausible files", func(cf *errorHandlerCodeFix) { cf.Files = []string{"", "notapath"} }},
+		{"milestone names no file", func(cf *errorHandlerCodeFix) { cf.Milestone = "just fix the bug somewhere" }},
+	}
+	for _, tc := range cases {
+		var cf *errorHandlerCodeFix
+		if tc.desc != "nil" {
+			cf = validCodeFix()
+			tc.mut(cf)
+		}
+		if err := validateCodeFix(cf); err == nil {
+			t.Errorf("%s: expected validation error", tc.desc)
+		}
+	}
+	// A bare basename in files (no slash but ends .go) is a plausible path, and a
+	// milestone naming that basename validates — the check is deliberately lenient.
+	lenient := &errorHandlerCodeFix{IsBug: true, Title: "t", Milestone: "fix foo.go now", Files: []string{"foo.go"}}
+	if err := validateCodeFix(lenient); err != nil {
+		t.Fatalf("lenient basename path/milestone must validate: %v", err)
+	}
+}
+
+// A {resolvable:false} proposal may carry an optional code_fix escalation; it
+// must decode into prop.CodeFix and validate. Absent code_fix leaves it nil.
+func TestParseErrorHandlerProposal_CodeFix(t *testing.T) {
+	out := `{"resolvable": false, "reason": "genuine bug", "code_fix": {"is_bug": true, "title": "T", "milestone": "fix internal/engine/foo.go", "files": ["internal/engine/foo.go"], "rationale": "r"}}`
+	p, err := parseErrorHandlerProposal(out)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if p.Resolvable {
+		t.Fatal("must be unresolvable")
+	}
+	if p.CodeFix == nil {
+		t.Fatal("code_fix must decode into prop.CodeFix")
+	}
+	if !p.CodeFix.IsBug || p.CodeFix.Title != "T" || len(p.CodeFix.Files) != 1 {
+		t.Fatalf("code_fix = %+v", p.CodeFix)
+	}
+	if err := validateCodeFix(p.CodeFix); err != nil {
+		t.Fatalf("parsed code_fix must validate: %v", err)
+	}
+	p2, err := parseErrorHandlerProposal(`{"resolvable": false, "reason": "transient"}`)
+	if err != nil || p2.CodeFix != nil {
+		t.Fatalf("no code_fix must leave CodeFix nil: p=%+v err=%v", p2, err)
+	}
+}
+
+// The reply contract must offer the third (code_fix) branch and constrain it to
+// genuine source bugs, not transient failures.
+func TestBuildErrorHandlerPrompt_DescribesCodeFixBranch(t *testing.T) {
+	bb := &Blackboard{ChainState: map[string]any{}}
+	prompt := buildErrorHandlerPrompt("h", &evolution.SerializableNode{Type: "Action", Name: "a"}, bb)
+	for _, want := range []string{"code_fix", "is_bug", "milestone"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt must document the %q field of the code_fix escalation", want)
+		}
+	}
+}
+
 // I6: untrusted error text (a prompt-injection channel) is excerpted in the
 // prompt, not embedded whole.
 func TestBuildErrorHandlerPrompt_TruncatesErrorText(t *testing.T) {

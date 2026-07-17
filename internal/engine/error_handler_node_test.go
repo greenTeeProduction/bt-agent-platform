@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -377,6 +378,108 @@ func TestClaudeErrorHandler_RunningRecoveryFoldsIntoFailure(t *testing.T) {
 	exts := loadErrorHandlerExtensions("eh_test_tree_ErrorHandler")
 	if len(exts) != 1 || exts[0].ConsecutiveFailures != 1 {
 		t.Fatalf("running tick must count as a recovery failure: %+v", exts)
+	}
+}
+
+// ehTestCodeFixJSON is an unresolvable verdict carrying a valid code_fix
+// escalation (real is_bug, file-scoped milestone naming the file).
+func ehTestCodeFixJSON() string {
+	return `{"resolvable": false, "reason": "genuine source bug", "code_fix": {` +
+		`"is_bug": true, "title": "Fix eh_test defect", ` +
+		`"milestone": "In internal/engine/error_handler_node.go guard the nil case; write a failing test then fix", ` +
+		`"files": ["internal/engine/error_handler_node.go"], "rationale": "unconditional deref"}}`
+}
+
+// Part A escalation: an unresolvable verdict with a valid code_fix seeds a
+// self-fix:error-handler:* program, still passes the tree failure through (-1),
+// stamps the ledger verdict "escalated", and re-firing within cooldown does not
+// re-call Claude or re-seed (double-bounded by the eh cooldown).
+func TestClaudeErrorHandler_UnresolvableWithCodeFixEscalates(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	_, programsPath := withTempSelfFix(t)
+	fake := &fakeClaudeRunner{output: ehTestCodeFixJSON()}
+	swapErrorHandlerRunner(t, fake)
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("escalation must still pass the tree failure through; got %d", code)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 1 {
+		t.Fatalf("expected exactly one seeded self-fix program, got %d", n)
+	}
+	ps, err := research.OpenPrograms(programsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seeded *research.Program
+	for _, p := range ps.Programs {
+		if strings.HasPrefix(p.Source, "self-fix:error-handler:") {
+			seeded = p
+		}
+	}
+	if seeded == nil {
+		t.Fatalf("no self-fix:error-handler:* program seeded: %+v", ps.Programs)
+	}
+	if seeded.Title != "Fix eh_test defect" {
+		t.Fatalf("seeded program title = %q", seeded.Title)
+	}
+	sig := errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "escalated" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want escalated", entry, ok)
+	}
+
+	// Re-firing within cooldown: no second Claude call, no second seed.
+	bb2 := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb2); code != -1 {
+		t.Fatal("second failure must still pass through")
+	}
+	if fake.calls.Load() != 1 {
+		t.Fatalf("cooldown must suppress the second Claude call, got %d", fake.calls.Load())
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 1 {
+		t.Fatalf("cooldown must suppress a second seed, got %d programs", n)
+	}
+}
+
+// An unresolvable verdict WITHOUT code_fix (a transient failure) seeds nothing
+// and keeps today's "unresolvable" ledger verdict.
+func TestClaudeErrorHandler_UnresolvableWithoutCodeFixSeedsNothing(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	_, programsPath := withTempSelfFix(t)
+	fake := &fakeClaudeRunner{output: `{"resolvable": false, "reason": "transient rate limit"}`}
+	swapErrorHandlerRunner(t, fake)
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("unresolvable must pass the failure through; got %d", code)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("no code_fix must seed nothing, got %d", n)
+	}
+	sig := errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "unresolvable" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want unresolvable", entry, ok)
+	}
+}
+
+// An unresolvable verdict carrying an INVALID code_fix (is_bug=false) must not
+// seed and must keep the "unresolvable" verdict.
+func TestClaudeErrorHandler_InvalidCodeFixSeedsNothing(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	_, programsPath := withTempSelfFix(t)
+	fake := &fakeClaudeRunner{output: `{"resolvable": false, "reason": "r", "code_fix": {"is_bug": false, "title": "t", "milestone": "internal/engine/foo.go", "files": ["internal/engine/foo.go"]}}`}
+	swapErrorHandlerRunner(t, fake)
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("invalid code_fix must pass the failure through; got %d", code)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("invalid code_fix must seed nothing, got %d", n)
+	}
+	sig := errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "unresolvable" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want unresolvable", entry, ok)
 	}
 }
 
