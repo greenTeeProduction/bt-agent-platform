@@ -350,3 +350,57 @@ func TestApplyMutations_PromptToolIterationMutationsAreBounded(t *testing.T) {
 		t.Fatalf("expected only bounded iteration bump to remain applicable on second pass, got %d", applied)
 	}
 }
+
+func TestShiftEdgeIndices(t *testing.T) {
+	t.Run("insert shifts edges at or after the insertion point up", func(t *testing.T) {
+		node := &SerializableNode{
+			// Reflects the post-insertion state: a new child was already spliced in
+			// at index 1, so Children has grown from 4 to 5 entries before this call
+			// (mirrors how applyAddBefore/applyAddAfter mutate Children first).
+			Children: []SerializableNode{{Name: "A"}, {Name: "New"}, {Name: "B"}, {Name: "C"}, {Name: "D"}},
+			Edges: []TypedEdge{
+				{ChildIndex: 0, Label: "before"},
+				{ChildIndex: 1, Label: "at"},
+				{ChildIndex: 3, Label: "after"},
+			},
+		}
+
+		ShiftEdgeIndices(node, 1, 1)
+
+		if got := node.Edges[0].ChildIndex; got != 0 {
+			t.Errorf("edge below insertion point: expected ChildIndex 0, got %d", got)
+		}
+		if got := node.Edges[1].ChildIndex; got != 2 {
+			t.Errorf("edge at insertion point: expected ChildIndex 2, got %d", got)
+		}
+		if got := node.Edges[2].ChildIndex; got != 4 {
+			t.Errorf("edge after insertion point: expected ChildIndex 4, got %d", got)
+		}
+	})
+
+	t.Run("remove shifts edges down and invalidates out-of-range indices", func(t *testing.T) {
+		node := &SerializableNode{
+			// len(Children) is already reduced below what a single-position shift
+			// would account for (e.g. a sibling removal collapsed multiple slots),
+			// so the highest edge must fall out of range and get invalidated.
+			Children: []SerializableNode{{Name: "A"}, {Name: "C"}},
+			Edges: []TypedEdge{
+				{ChildIndex: 0, Label: "before"},
+				{ChildIndex: 1, Label: "at-removed"},
+				{ChildIndex: 3, Label: "dangling"},
+			},
+		}
+
+		ShiftEdgeIndices(node, 1, -1)
+
+		if got := node.Edges[0].ChildIndex; got != 0 {
+			t.Errorf("edge below removal point: expected untouched ChildIndex 0, got %d", got)
+		}
+		if got := node.Edges[1].ChildIndex; got != 0 {
+			t.Errorf("edge at removal point: expected shift to ChildIndex 0, got %d", got)
+		}
+		if got := node.Edges[2].ChildIndex; got != -1 {
+			t.Errorf("edge shifted out of [0, len(Children)) range: expected invalidation to -1, got %d", got)
+		}
+	})
+}

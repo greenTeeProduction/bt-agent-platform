@@ -234,6 +234,67 @@ func TestApplyMutationOpDecoratorCap(t *testing.T) {
 	}
 }
 
+func TestApplyMutationOpShiftsEdgeIndices(t *testing.T) {
+	t.Run("add shifts edges at or after the insertion point up", func(t *testing.T) {
+		root := &evolution.SerializableNode{
+			Type: "Selector", Name: "root",
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "A"},
+				{Type: "Action", Name: "B"},
+				{Type: "Action", Name: "C"},
+			},
+			Edges: []evolution.TypedEdge{
+				{ChildIndex: 0, Label: "before"},
+				{ChildIndex: 1, Label: "at"},
+				{ChildIndex: 2, Label: "after"},
+			},
+		}
+		if _, _, err := applyMutationOp(root, MutationOp{
+			Kind: "add", ParentPath: "", Index: 1,
+			Subtree: &evolution.SerializableNode{Type: "Action", Name: "New"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got := root.Edges[0].ChildIndex; got != 0 {
+			t.Errorf("edge before insertion point: want ChildIndex 0, got %d", got)
+		}
+		if got := root.Edges[1].ChildIndex; got != 2 {
+			t.Errorf("edge at insertion point: want ChildIndex 2, got %d", got)
+		}
+		if got := root.Edges[2].ChildIndex; got != 3 {
+			t.Errorf("edge after insertion point: want ChildIndex 3, got %d", got)
+		}
+	})
+
+	t.Run("remove shifts edges down and invalidates out-of-range indices", func(t *testing.T) {
+		root := &evolution.SerializableNode{
+			Type: "Selector", Name: "root",
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "A"},
+				{Type: "Action", Name: "B"},
+				{Type: "Action", Name: "C"},
+			},
+			Edges: []evolution.TypedEdge{
+				{ChildIndex: 0, Label: "before"},
+				{ChildIndex: 1, Label: "at-removed"},
+				{ChildIndex: 3, Label: "dangling"},
+			},
+		}
+		if _, _, err := applyMutationOp(root, MutationOp{Kind: "remove", Path: "1"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := root.Edges[0].ChildIndex; got != 0 {
+			t.Errorf("edge before removal point: want untouched ChildIndex 0, got %d", got)
+		}
+		if got := root.Edges[1].ChildIndex; got != 0 {
+			t.Errorf("edge at removal point: want ChildIndex shifted to 0, got %d", got)
+		}
+		if got := root.Edges[2].ChildIndex; got != -1 {
+			t.Errorf("edge shifted out of [0, len(Children)) range: want invalidation to -1, got %d", got)
+		}
+	})
+}
+
 func TestValidateMutatedTreeLLMAllowlist(t *testing.T) {
 	root := mkTree()
 	// Operator-origin: a plain action subtree is fine.

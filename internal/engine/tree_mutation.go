@@ -206,6 +206,7 @@ func applyMutationOp(root *evolution.SerializableNode, op MutationOp) (*evolutio
 		parent.Children = append(parent.Children, evolution.SerializableNode{})
 		copy(parent.Children[at+1:], parent.Children[at:])
 		parent.Children[at] = *sub
+		evolution.ShiftEdgeIndices(parent, at, 1)
 		return parent, at, nil
 	case "remove":
 		idx, err := parseIndexPath(op.Path)
@@ -228,6 +229,7 @@ func applyMutationOp(root *evolution.SerializableNode, op MutationOp) (*evolutio
 			return nil, 0, fmt.Errorf("remove: expect_name %q does not match node %q", op.ExpectName, target.Name)
 		}
 		parent.Children = append(parent.Children[:at], parent.Children[at+1:]...)
+		evolution.ShiftEdgeIndices(parent, at, -1)
 		return parent, at, nil
 	default:
 		return nil, 0, fmt.Errorf("unknown mutation kind %q", op.Kind)

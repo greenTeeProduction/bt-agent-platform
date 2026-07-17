@@ -274,7 +274,7 @@ func applyAddBefore(tree *SerializableNode, target string, newNode SerializableN
 			}
 			// Insert before
 			tree.Children = append(tree.Children[:i], append([]SerializableNode{newNode}, tree.Children[i:]...)...)
-			shiftEdgeIndices(tree, i, 1)
+			ShiftEdgeIndices(tree, i, 1)
 			return true
 		}
 	}
@@ -295,7 +295,7 @@ func applyAddAfter(tree *SerializableNode, target string, newNode SerializableNo
 			// Insert after
 			insertAt := i + 1
 			tree.Children = append(tree.Children[:insertAt], append([]SerializableNode{newNode}, tree.Children[insertAt:]...)...)
-			shiftEdgeIndices(tree, insertAt, 1)
+			ShiftEdgeIndices(tree, insertAt, 1)
 			return true
 		}
 	}
@@ -374,7 +374,7 @@ func applyPruneNode(tree *SerializableNode, target string) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target {
 			tree.Children = append(tree.Children[:i], tree.Children[i+1:]...)
-			shiftEdgeIndices(tree, i, -1)
+			ShiftEdgeIndices(tree, i, -1)
 			return true
 		}
 	}
@@ -528,9 +528,13 @@ func remapEdgeIndices(node *SerializableNode) {
 	}
 }
 
-// shiftEdgeIndices adjusts Edge.ChildIndex values after inserting or removing
+// ShiftEdgeIndices adjusts Edge.ChildIndex values after inserting or removing
 // a child at the given position. delta is +1 for inserts, -1 for removes.
-func shiftEdgeIndices(node *SerializableNode, at, delta int) {
+// Edges whose ChildIndex falls outside [0, len(node.Children)) after the
+// shift are invalidated to -1. Exported for reuse by internal/engine's
+// runtime tree mutation, which needs the exact same shift/invalidate
+// semantics.
+func ShiftEdgeIndices(node *SerializableNode, at, delta int) {
 	for j, e := range node.Edges {
 		if e.ChildIndex >= at {
 			node.Edges[j].ChildIndex += delta
