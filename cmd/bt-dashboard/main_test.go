@@ -17,6 +17,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/api"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
@@ -1384,5 +1385,65 @@ func TestHandleTrees_IncludesFitnessAndLineage(t *testing.T) {
 	evolvedIDs, ok := lineage["evolved_ids"].([]interface{})
 	if !ok || len(evolvedIDs) != 1 || evolvedIDs[0] != "base:tree-evolved-1" {
 		t.Errorf("lineage.evolved_ids = %v, want [base:tree-evolved-1]", lineage["evolved_ids"])
+	}
+}
+
+// TestHandleTrees_IncludesFullDomainCatalog pins the "Create-Agent tree
+// dropdown" gap found in the 2026-07-17 structural review:
+// cmd/bt-dashboard/static/js/tabs/agents.js hardcodes a stale client-side
+// list of trees, and the obvious fix — fetch the dropdown from /api/trees —
+// doesn't actually work today, because handleTrees only echoes back
+// kg.Trees (the runtime knowledge-graph registry, ~43 entries) while
+// internal/domains.AllDomainTrees() defines 29 additional catalog trees
+// (goap_fusion, goap_fusion_loop, bt_fusion, bt_manager, notebooklm,
+// auction_demo, the arc42:section1..12 family, etc.) that never appear in
+// kg and so can never be selected when creating a new agent. /api/trees
+// must merge in every domains.AllDomainTrees() entry missing from kg so it
+// can serve as a single, live, complete catalog for the dropdown.
+func TestHandleTrees_IncludesFullDomainCatalog(t *testing.T) {
+	origKG := kg
+	t.Cleanup(func() { kg = origKG })
+
+	g := knowledge.NewKnowledgeGraph()
+	g.Register(&knowledge.TreeMeta{
+		ID:       "default",
+		Name:     "Default Agent",
+		Category: "core",
+	})
+	kg = g
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trees", nil)
+	rr := httptest.NewRecorder()
+	handleTrees(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var trees []map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+	}
+
+	seen := make(map[string]bool, len(trees))
+	for _, tr := range trees {
+		if id, ok := tr["id"].(string); ok {
+			seen[id] = true
+		}
+	}
+
+	domainTrees := domains.AllDomainTrees()
+	var missing []string
+	for name := range domainTrees {
+		if !seen["domain:"+name] && !seen[name] {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("/api/trees is missing %d of %d domains.AllDomainTrees() catalog entries not present "+
+			"in the runtime knowledge graph (e.g. %v); handleTrees must merge the domain-tree catalog "+
+			"into its response so the Create-Agent dropdown can fetch a complete tree list from this "+
+			"endpoint instead of a hardcoded client-side list", len(missing), len(domainTrees), missing)
 	}
 }

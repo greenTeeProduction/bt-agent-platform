@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -566,8 +567,10 @@ func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
 	_ = encodeJSON(w, m)
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
+	seen := make(map[string]bool, len(kg.Trees))
 	r2 := make([]map[string]interface{}, 0, 8)
 	for _, t := range kg.Trees {
+		seen[t.ID] = true
 		entry := map[string]interface{}{
 			"id":                 t.ID,
 			"name":               t.Name,
@@ -587,6 +590,31 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 		}
 		r2 = append(r2, entry)
 	}
+
+	// Merge in the static domain-tree catalog (internal/domains) that isn't
+	// yet registered in the runtime knowledge graph, so the Create-Agent
+	// dropdown can fetch a single, complete tree list from this endpoint
+	// instead of relying on a hardcoded client-side list.
+	domainTrees := domains.AllDomainTrees()
+	names := make([]string, 0, len(domainTrees))
+	for name := range domainTrees {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		id := "domain:" + name
+		if seen[id] || seen[name] {
+			continue
+		}
+		tree := domainTrees[name]
+		r2 = append(r2, map[string]interface{}{
+			"id":         id,
+			"name":       tree.Name,
+			"category":   "domain",
+			"node_count": evolution.CountNodes(tree),
+		})
+	}
+
 	_ = encodeJSON(w, r2)
 }
 func handleFellows(w http.ResponseWriter, _ *http.Request) {

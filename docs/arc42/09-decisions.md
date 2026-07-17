@@ -170,6 +170,7 @@ Consolidation notes (2026-07-16):
 | ADR-145 | `AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5) | Accepted | 2026-07-17 |
 | ADR-146 | `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research) | Accepted | 2026-07-17 |
 | ADR-147 | The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3) | Accepted | 2026-07-17 |
+| ADR-148 | `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2636,6 +2637,21 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ `validateDomainRegistry` plus the startup `os.Exit(1)` gate (`cmd/bt-agent/main.go`) is new, general-purpose protection: it validates every domain tree, not just the three touched here, so it also catches unrelated future authoring mistakes (duplicate memory-node names, unknown `chain_type`, a `CachedCondition` wrapping an approval gate) before the daemon ever serves them.
 - ✅ Pinned by `TestGoapPlanningRunsRealGOAPPlannerFirst`/`TestGoapResearchRunsRealGOAPPlannerFirst`/`TestGoapDevopsRunsRealGOAPPlannerFirst` (`internal/domains/domains_test.go`, exact `StrategyRouter` child-order assertions) and `TestDaemonValidatesDomainRegistryAtStartup`/`TestValidateDomainRegistry_FlagsInvalidTree`/`TestValidateDomainRegistry_RealTreesClean` (`cmd/bt-agent/main_test.go`).
 - ⚠️ This wires reachability, not runtime quality: whether `GOAP_Root` actually finds a usable plan for a given task before falling through to the keyword paths is unverified by this change and remains to be observed in production.
+
+---
+
+## ADR-148: `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research)
+
+**Context (2026-07-17):** `cmd/bt-dashboard`'s `/api/trees` endpoint (`handleTrees`, `cmd/bt-dashboard/main.go`) only echoed `kg.Trees` — the runtime `knowledge.KnowledgeGraph` registry (trees a domain/finance agent has actually run at least once, ~43 entries). Meanwhile the Create-Agent dropdown (`cmd/bt-dashboard/static/js/tabs/agents.js`) is a static HTML `<select>` with 10 hardcoded `<option>` values, unchanged since 2026-06-14, and has no `fetch`/`/api/trees` call at all. `internal/domains.AllDomainTrees()` defines the full curated catalog — 29 entries including `goap_fusion`, `goap_fusion_loop`, `bt_fusion`, `bt_manager`, `notebooklm`, `auction_demo`, and the `arc42:section1`–`section12` family — most of which never appear in `kg` until first run, so even a dropdown that *did* fetch `/api/trees` could not have offered a complete, correct list: the endpoint itself was missing most of the catalog.
+
+**Decision:** `handleTrees` now unions `kg.Trees` with every `domains.AllDomainTrees()` entry not already present (checked against both the bare name and the `"domain:"+name` ID form, since `kg` may register a domain tree under either once it has run). New entries are appended with `id: "domain:"+name`, `category: "domain"`, and `node_count` from `evolution.CountNodes(tree)`, iterated in sorted-name order for a deterministic response. The `"domain:"` ID prefix and its stripping (`strings.LastIndex(treeID, ":")`) were already an established convention in `handleTreeStructure`, which resolves the same prefix against the same `domains.AllDomainTrees()` map — this decision reuses that convention rather than inventing a second ID scheme. Merging inside `handleTrees` (rather than having the frontend fetch `/api/trees` and `domains.AllDomainTrees()` separately, or eagerly registering every domain tree into `kg` at startup) keeps `/api/trees` a single source of truth for any client and leaves `kg`'s semantics — "trees with runtime history" — unchanged.
+
+**Status:** Accepted, but only a prerequisite — the client-visible gap this targets is **not yet closed**. `/api/trees` can now serve the full catalog (pinned by `TestHandleTrees_IncludesFullDomainCatalog`, `cmd/bt-dashboard/main_test.go`), but `agents.js`'s Create-Agent dropdown still renders its static 10-option `<select>` and does not call `/api/trees` at all. Wiring the dropdown to fetch and populate from this endpoint remains open (tracked from the 2026-07-17 structural review as the dashboard agent-create dropdown finding).
+
+**Consequences:**
+- ✅ `/api/trees` is now a complete, deterministic catalog of every selectable tree — runtime-registered and static domain — closing the backend half of the gap.
+- ✅ Reuses the existing `"domain:"` ID convention from `handleTreeStructure` instead of introducing a parallel scheme, so a client resolving a returned ID against tree-structure lookups needs no special-casing.
+- ⚠️ The frontend dropdown is unchanged: it is still a hardcoded static list and still does not fetch `/api/trees`. Users creating an agent still cannot select any of the 19+ catalog trees this endpoint now exposes until `agents.js` is updated to fetch and render from it.
 
 ---
 
