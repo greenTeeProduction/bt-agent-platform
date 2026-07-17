@@ -869,6 +869,19 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 // walk the breaker open) — keep the breaker closed; genuine failures and
 // errored runs count against it.
 func cycleBreakerSuccess(outcome string, runErr error) bool {
+	return IsBreakerSuccess(outcome, runErr)
+}
+
+// IsBreakerSuccess is the single source of truth for whether a completed run
+// keeps an agent's circuit breaker closed. Every caller that records breaker
+// outcomes — the scheduler (cycleBreakerSuccess) and the dashboard executor —
+// must route through this so their definitions can no longer drift apart.
+// Healthy terminal outcomes (success, no_change (analysis-only), degraded
+// (deterministic fallback)) with no run error keep the breaker closed, as does
+// the rate-limit carryover (an expected pause; a long backoff window must not
+// walk the breaker open). Genuine failures, errored runs, and healthy outcomes
+// that still carried a run error count against it.
+func IsBreakerSuccess(outcome string, runErr error) bool {
 	if IsRateLimitCarryover(outcome) {
 		return true
 	}

@@ -149,15 +149,31 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		if readErr != nil {
 			return fmt.Errorf("read response: %w", readErr)
 		}
+		// Classify by HTTP status BEFORE parsing the body. A proxy-level 5xx
+		// (nginx / Cloudflare / ALB) usually carries a non-JSON (HTML or empty)
+		// body; unmarshaling it first produced an "unmarshal response" error
+		// that ClassifyError tagged as non-retryable validation, so a transient
+		// 503 failed on the first attempt instead of being retried. A typed
+		// CategorizedError makes the retry decision follow the status code, not
+		// whatever substrings happen to appear in the body.
+		if resp.StatusCode >= 500 {
+			return reliability.NewCategorizedError(reliability.ErrCatLLM,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+		}
+		if resp.StatusCode >= 400 {
+			cat := reliability.ErrCatValidation
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				cat = reliability.ErrCatAuth
+			}
+			return reliability.NewCategorizedError(cat,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+		}
 		var parsed openAICompatResponse
 		if unmarshalErr := json.Unmarshal(respBody, &parsed); unmarshalErr != nil {
 			return fmt.Errorf("unmarshal response: %w", unmarshalErr)
 		}
 		if parsed.Error != nil {
 			return fmt.Errorf("openai-compatible api error (status %d): %s", resp.StatusCode, parsed.Error.Message)
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, string(respBody))
 		}
 		if len(parsed.Choices) == 0 {
 			return fmt.Errorf("no choices in response")
@@ -166,11 +182,29 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 		return nil
 	})
 	if err != nil {
-		c.breaker.RecordFailure()
+		// Only infrastructure failures (5xx/network/timeout/rate-limit) should
+		// walk the breaker toward open. A caller-side 400/401 is not the
+		// backend's fault, and counting it would let one malformed prompt open
+		// the per-baseURL circuit and deny service to well-formed requests
+		// sharing this client.
+		if reliability.ClassifyError(err).IsRetryable() {
+			c.breaker.RecordFailure()
+		}
 		return "", err
 	}
 	c.breaker.RecordSuccess()
 	return result, nil
+}
+
+// truncateBody caps an error-response body so a large HTML/error page from a
+// gateway doesn't bloat the returned error string. Classification no longer
+// depends on the body content (status drives it), so this is purely cosmetic.
+func truncateBody(b []byte) string {
+	const max = 512
+	if len(b) > max {
+		return string(b[:max]) + "…"
+	}
+	return string(b)
 }
 
 func (c *OpenAICompatClient) AnalyzeComplexity(task string) string {

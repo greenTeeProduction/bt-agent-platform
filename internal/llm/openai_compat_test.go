@@ -37,6 +37,77 @@ func TestOpenAICompat_GenerateWithModel_SendsChatCompletion(t *testing.T) {
 	}
 }
 
+// TestOpenAICompat_NonJSONServerError_IsRetried covers the gap the
+// JSON-error-body retry test misses: a proxy-level 5xx (nginx / Cloudflare /
+// ALB) returns an HTML or empty body, not a provider JSON error object. The
+// pre-fix code unmarshaled the body before inspecting the status, so the JSON
+// parse failure ("unmarshal response: ...") was classified as a non-retryable
+// validation error and the transient 503 failed on the first attempt with zero
+// retries — exactly the case the retry wrapper was added to handle.
+func TestOpenAICompat_NonJSONServerError_IsRetried(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n >= 2 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"recovered"}}]}`))
+			return
+		}
+		// Non-JSON body, the norm for gateway-level 5xx.
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("<html><body>503 Service Temporarily Unavailable</body></html>"))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	got, err := client.GenerateWithModel(context.Background(), "model-a", "sys", "prompt")
+	if err != nil {
+		t.Fatalf("expected the retry policy to recover from a non-JSON 503 on the second attempt, got error: %v", err)
+	}
+	if got != "recovered" {
+		t.Fatalf("got=%q, want %q", got, "recovered")
+	}
+	if n := atomic.LoadInt32(&attempts); n < 2 {
+		t.Fatalf("expected at least 2 attempts (initial 503 + retry) for a non-JSON 5xx, got %d", n)
+	}
+}
+
+// TestOpenAICompat_ClientErrorsDoNotTripBreaker verifies that non-retryable
+// caller-side failures (400 validation, 401 auth) do not walk the per-baseURL
+// circuit breaker toward open. A backend that keeps returning 400 for one
+// malformed prompt must not deny service to well-formed requests sharing the
+// same client — only infrastructure failures (5xx/network/timeout/rate-limit)
+// should open the breaker.
+func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
+	var serves int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&serves, 1) <= 5 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"invalid request"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	// The breaker threshold is 3; five 400s would open it if 400s counted as
+	// breaker failures.
+	for i := 0; i < 5; i++ {
+		if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "bad"); err == nil {
+			t.Fatalf("call %d: expected a 400 error", i)
+		}
+	}
+	// A subsequent well-formed request must still reach the backend, not be
+	// rejected by an open breaker.
+	got, err := client.GenerateWithModel(context.Background(), "m", "sys", "good")
+	if err != nil {
+		t.Fatalf("well-formed request after 5 client errors was blocked (breaker wrongly tripped by 4xx): %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("got=%q, want %q", got, "ok")
+	}
+}
+
 func TestOpenAICompat_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

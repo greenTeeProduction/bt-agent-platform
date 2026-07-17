@@ -12,6 +12,57 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
+// TestRecordCircuitBreakerOutcome_HealthyOutcomesKeepBreakerClosed verifies
+// that healthy-but-not-"success" outcomes — no_change (analysis-only) and
+// degraded (deterministic fallback) — do NOT trip the breaker. The scheduler's
+// authoritative classifier treats these as healthy; the dashboard must agree,
+// or an analysis-heavy agent run repeatedly through the dashboard opens the
+// shared breaker and gets blocked everywhere despite nothing being broken.
+func TestRecordCircuitBreakerOutcome_HealthyOutcomesKeepBreakerClosed(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	cbStore := agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+		Threshold: 2,
+		Cooldown:  time.Minute,
+	})
+	exec := &AgentExecutor{CBStore: cbStore}
+
+	for _, outcome := range []string{"no_change", "degraded", "no_change", "degraded"} {
+		exec.recordCircuitBreakerOutcome("analysis-agent", &agent.RunResult{Outcome: outcome}, nil)
+	}
+	if cb := cbStore.Get("analysis-agent"); cb.State() == agent.CircuitOpen {
+		t.Fatalf("healthy no_change/degraded runs opened the breaker (state=%v); they must count as successes", cb.State())
+	}
+}
+
+// TestRecordCircuitBreakerOutcome_NilResultTripsBreaker verifies that a hard
+// failure — agent.RunAgent returning (nil, err) on runner-not-configured,
+// context timeout, or LLM-unavailable — is recorded as a breaker failure. The
+// pre-fix code returned early on res == nil, so a persistently broken agent
+// never opened the breaker and the dashboard kept burning worker slots on it.
+func TestRecordCircuitBreakerOutcome_NilResultTripsBreaker(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	cbStore := agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+		Threshold: 2,
+		Cooldown:  time.Minute,
+	})
+	exec := &AgentExecutor{CBStore: cbStore}
+
+	for i := 0; i < 2; i++ {
+		exec.recordCircuitBreakerOutcome("broken-agent", nil, errAgentBroken)
+	}
+	if cb := cbStore.Get("broken-agent"); cb.State() != agent.CircuitOpen {
+		t.Fatalf("after 2 nil-result hard failures with threshold 2, breaker state = %v, want open", cb.State())
+	}
+}
+
+var errAgentBroken = errorsNew("runner not configured")
+
+func errorsNew(s string) error { return &staticErr{s} }
+
+type staticErr struct{ s string }
+
+func (e *staticErr) Error() string { return e.s }
+
 // TestRunTaskResult_RecordsCircuitBreakerOutcome verifies that AgentExecutor.
 // RunTaskResult, when given a CBStore, reports each run's outcome to the
 // shared agent.AgentCircuitBreakerStore and persists it to
@@ -184,7 +235,7 @@ func TestRecordTaskMetric_RateLimitCarryoverOutcome_CountsAsSuccess(t *testing.T
 		AgentName: agentName,
 		Outcome:   agent.RateLimitCarryoverOutcome,
 		Duration:  time.Millisecond,
-	})
+	}, nil)
 
 	var stats *AgentStats
 	for _, s := range GetAgentMetrics() {
@@ -224,7 +275,7 @@ func TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier(t *t
 		AgentName: agentName,
 		Outcome:   agent.RateLimitCarryoverOutcome,
 		Quality:   0,
-	})
+	}, nil)
 
 	snap := BlockFitnessSnapshot()
 	var score int64

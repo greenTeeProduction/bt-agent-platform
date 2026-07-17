@@ -69,9 +69,9 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 			Duration:  time.Since(start),
 		}
 	}
-	e.recordCircuitBreakerOutcome(agentName, res)
-	e.recordTaskMetric(agentName, res)
-	e.recordBlockFitnessMetric(agentName, treeID, res)
+	e.recordCircuitBreakerOutcome(agentName, res, err)
+	e.recordTaskMetric(agentName, res, err)
+	e.recordBlockFitnessMetric(agentName, treeID, res, err)
 	return res, err
 }
 
@@ -81,11 +81,16 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 // RateLimitCarryoverOutcome result counts as a breaker success, matching
 // scheduler.go's cycleBreakerSuccess — it's a healthy, expected backoff
 // pause, not a genuine failure.
-func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult) {
-	if e.CBStore == nil || res == nil {
+func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult, runErr error) {
+	if e.CBStore == nil {
 		return
 	}
-	if res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome) {
+	// A nil result is a hard failure (agent.RunAgent returns (nil, err) on
+	// runner-not-configured, context timeout, or LLM-unavailable) and must trip
+	// the breaker, not be silently skipped. Otherwise defer to the shared
+	// classifier so the dashboard and scheduler can't disagree on which
+	// outcomes count as healthy.
+	if res != nil && agent.IsBreakerSuccess(res.Outcome, runErr) {
 		e.CBStore.RecordSuccess(agentName)
 	} else {
 		e.CBStore.RecordFailure(agentName)
@@ -103,11 +108,11 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 // RateLimitCarryoverOutcome result counts as a success here too, matching
 // recordCircuitBreakerOutcome's exemption — it's a healthy backoff pause,
 // not a genuine task failure.
-func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult) {
+func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult, runErr error) {
 	if res == nil {
 		return
 	}
-	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
+	success := agent.IsBreakerSuccess(res.Outcome, runErr)
 	RecordTask(agentName, success, uint64(res.Duration.Milliseconds()))
 }
 
@@ -120,11 +125,11 @@ func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult)
 // its per-node block_id walk (blocks already imports dashboard), so this
 // mirrors ops_actions.go's fitnessProbeAction: it scores the whole task run
 // under treeID as a single block key rather than segmenting by tree node.
-func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult) {
+func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *agent.RunResult, runErr error) {
 	if res == nil || treeID == "" {
 		return
 	}
-	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
+	success := agent.IsBreakerSuccess(res.Outcome, runErr)
 	score := res.Quality * 100
 	if score <= 0 {
 		if success || strings.EqualFold(res.Outcome, "completed") {

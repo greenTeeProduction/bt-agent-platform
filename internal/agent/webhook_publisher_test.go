@@ -16,6 +16,45 @@ import (
 
 // ─── WebhookPublisher Coverage ───
 
+// TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker reproduces the
+// permanent-wedge bug: once a subscription's breaker has tripped open and its
+// cooldown elapses, the next event consumes the single half-open probe via
+// breaker.Allow(). If that event's Data fails to JSON-marshal, handleEvent
+// returned before recording any breaker outcome, leaving the breaker stuck
+// HalfOpen — where Allow() always returns false — so every subsequent
+// deliverable event was silently dropped until process restart.
+func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) {
+	var delivered int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&delivered, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+
+	const sub = "bt-agent-alert" // service_down events route here
+	// Replace the minute-cooldown breaker with a short-cooldown one already
+	// tripped open and past its cooldown — primed to serve exactly one
+	// half-open probe on the next Allow().
+	cb := reliability.NewCircuitBreaker(sub, 1, time.Millisecond)
+	cb.RecordFailure() // threshold 1 -> Open
+	pub.breakers[sub] = cb
+	time.Sleep(10 * time.Millisecond) // let the cooldown elapse
+
+	// An event whose Data cannot be JSON-marshaled (a channel value) must NOT
+	// consume the half-open probe.
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: make(chan int)})
+
+	// A subsequent well-formed event must be delivered, not dropped by a
+	// breaker the marshal failure wedged half-open.
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "ok", Data: map[string]interface{}{"k": "v"}})
+
+	if got := atomic.LoadInt32(&delivered); got != 1 {
+		t.Fatalf("valid event after a marshal-failing one was not delivered (delivered=%d); the marshal failure wedged the half-open breaker", got)
+	}
+}
+
 func TestDefaultWebhookSecrets(t *testing.T) {
 	secrets := DefaultWebhookSecrets()
 	if len(secrets) != 3 {

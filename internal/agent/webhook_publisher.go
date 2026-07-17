@@ -172,12 +172,6 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		return
 	}
 
-	breaker := p.breakers[subscription]
-	if breaker != nil && !breaker.Allow() {
-		slog.Warn("webhook: circuit breaker open, skipping delivery", "subscription", subscription)
-		return
-	}
-
 	// Build JSON payload matching the webhook prompt template variables
 	payload := map[string]interface{}{
 		"type":      event.Type,
@@ -190,6 +184,17 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		slog.Error("webhook: marshal error", "error", err)
+		return
+	}
+
+	// Take the breaker probe only once we're actually about to deliver. Doing
+	// this before json.Marshal meant an unmarshalable event.Data consumed the
+	// single half-open probe and then returned without recording an outcome,
+	// wedging the breaker HalfOpen forever (Allow() then always returns false)
+	// so every later deliverable event was silently dropped.
+	breaker := p.breakers[subscription]
+	if breaker != nil && !breaker.Allow() {
+		slog.Warn("webhook: circuit breaker open, skipping delivery", "subscription", subscription)
 		return
 	}
 
