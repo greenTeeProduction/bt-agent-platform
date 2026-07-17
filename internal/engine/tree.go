@@ -154,6 +154,14 @@ type Blackboard struct {
 	// A pointer so shallow Blackboard copies share the same log (copylocks).
 	childTicks *childTickLog
 
+	// liveRun and buildCapture support runtime tree mutation
+	// (tree_mutation.go / live_run.go). Pointer + map so forkBlackboard's
+	// shallow copies share them. buildCapture, when non-nil, makes buildNode
+	// record each source node's INNER command — the pointer the go-bt library
+	// keys per-node state by — enabling state migration across rebuilds.
+	liveRun      *liveRun
+	buildCapture map[*evolution.SerializableNode]btcore.Command[Blackboard]
+
 	// Sandbox disables real action side effects: when true, actionForName
 	// returns a simulated success for every action instead of dispatching to
 	// the registered implementation. Used by benchmark/evolution harnesses so
@@ -223,7 +231,11 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 // applied — node metrics, node spans, and selector telemetry all silently
 // produced nothing until this wiring.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
-	return observeNode(node, parentName, buildNodeInner(node, bb, parentName))
+	inner := buildNodeInner(node, bb, parentName)
+	if bb != nil && bb.buildCapture != nil {
+		bb.buildCapture[node] = inner
+	}
+	return observeNode(node, parentName, inner)
 }
 
 // buildNodeInner recursively builds a go-bt Command from a SerializableNode.
