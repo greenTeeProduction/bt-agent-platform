@@ -12,8 +12,11 @@ import (
 // metadata (Name, Category, Description, Capabilities, …) is deliberately
 // excluded so a Load merges into already-registered trees without clobbering it.
 type feedbackSnapshot struct {
-	Trees     map[string]treeFeedback `json:"trees"`
-	ToolEdges []Edge                  `json:"tool_edges"`
+	Trees map[string]treeFeedback `json:"trees"`
+	// ToolEdges holds both uses_tool and evolved_from edges. The field and JSON
+	// key keep their original name for backward compatibility with feedback
+	// files written before evolved_from edges were captured.
+	ToolEdges []Edge `json:"tool_edges"`
 }
 
 // treeFeedback is the per-tree runtime feedback restored on Load.
@@ -27,6 +30,13 @@ type treeFeedback struct {
 	// function (see RegisterDomainFitness) sees the full run-history window
 	// immediately after a restart, not just runs recorded since the restart.
 	RecentRuns []RunSummary `json:"recent_runs,omitempty"`
+	// StructuralFitness and NodeCount mirror the bookkeeping RegisterEvolved
+	// writes onto an evolved tree's metadata, and Category mirrors the value
+	// (often inherited from the base tree) at registration time — none of
+	// which a fresh Register call after a restart can reconstruct on its own.
+	StructuralFitness float64 `json:"structural_fitness,omitempty"`
+	NodeCount         int     `json:"node_count,omitempty"`
+	Category          string  `json:"category,omitempty"`
 }
 
 // feedbackPersistState is the debounce bookkeeping wrapped around SaveFeedback.
@@ -96,10 +106,10 @@ func (kg *KnowledgeGraph) FlushFeedback(force bool) error {
 }
 
 // SaveFeedback serializes the runtime-feedback fields (Fitness, RunCount,
-// EvolvedCount, LastOutcome, LastDuration, RecentRuns) and the uses_tool edges
-// to a JSON file. Static tree metadata is not written. The write is atomic: it
-// lands in a temp file that is renamed into place, so a crash mid-write can
-// never leave a truncated snapshot.
+// EvolvedCount, LastOutcome, LastDuration, RecentRuns) and the uses_tool and
+// evolved_from edges to a JSON file. Static tree metadata is not written. The
+// write is atomic: it lands in a temp file that is renamed into place, so a
+// crash mid-write can never leave a truncated snapshot.
 func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 	kg.mu.RLock()
 	snap := feedbackSnapshot{
@@ -107,16 +117,19 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 	}
 	for id, tree := range kg.Trees {
 		snap.Trees[id] = treeFeedback{
-			Fitness:      tree.Fitness,
-			RunCount:     tree.RunCount,
-			EvolvedCount: tree.EvolvedCount,
-			LastOutcome:  tree.LastOutcome,
-			LastDuration: tree.LastDuration,
-			RecentRuns:   tree.RecentRuns,
+			Fitness:           tree.Fitness,
+			RunCount:          tree.RunCount,
+			EvolvedCount:      tree.EvolvedCount,
+			LastOutcome:       tree.LastOutcome,
+			LastDuration:      tree.LastDuration,
+			RecentRuns:        tree.RecentRuns,
+			StructuralFitness: tree.StructuralFitness,
+			NodeCount:         tree.NodeCount,
+			Category:          tree.Category,
 		}
 	}
 	for _, e := range kg.Edges {
-		if e.Type == "uses_tool" {
+		if e.Type == "uses_tool" || e.Type == "evolved_from" {
 			snap.ToolEdges = append(snap.ToolEdges, e)
 		}
 	}
@@ -145,8 +158,12 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 }
 
 // LoadFeedback restores runtime feedback from a JSON snapshot into the already
-// registered trees, merging by ID so static metadata is preserved. Feedback for
-// unregistered tree IDs is skipped. A missing file is a no-op (returns nil).
+// registered trees, merging by ID so static metadata is preserved. An
+// unregistered tree ID is resurrected as a new TreeMeta: evolved trees are
+// only ever added to kg.Trees at runtime via RegisterEvolved, so after a
+// daemon restart LoadFeedback runs before any evolution pass has
+// re-registered them, even though their tree file and feedback metadata both
+// still exist on disk. A missing file is a no-op (returns nil).
 func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -166,7 +183,8 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 	for id, fb := range snap.Trees {
 		tree, ok := kg.Trees[id]
 		if !ok {
-			continue // unknown tree — don't resurrect it, only merge feedback
+			tree = &TreeMeta{ID: id, Name: id}
+			kg.Trees[id] = tree
 		}
 		tree.Fitness = fb.Fitness
 		tree.RunCount = fb.RunCount
@@ -174,6 +192,9 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 		tree.LastOutcome = fb.LastOutcome
 		tree.LastDuration = fb.LastDuration
 		tree.RecentRuns = fb.RecentRuns
+		tree.StructuralFitness = fb.StructuralFitness
+		tree.NodeCount = fb.NodeCount
+		tree.Category = fb.Category
 	}
 	for _, e := range snap.ToolEdges {
 		// Only restore edges whose source tree is registered.

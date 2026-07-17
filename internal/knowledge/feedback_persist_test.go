@@ -156,6 +156,108 @@ func TestSaveLoadFeedback_RecentRunsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSaveLoadFeedback_EvolvedMetadataRoundTrip asserts that StructuralFitness,
+// NodeCount, and Category — populated on an evolved tree's metadata via
+// RegisterEvolved, not through static registration — survive a
+// SaveFeedback/LoadFeedback round trip. Without this, a daemon restart loses
+// the evolved tree's structural-quality signal, node count, and inherited
+// category even though the evolved tree file itself is still on disk.
+func TestSaveLoadFeedback_EvolvedMetadataRoundTrip(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:base",
+		Name:     "Base",
+		Category: "finance",
+	})
+	src.RegisterEvolved("tree:base", "tree:base-evolved", 42, 88.5)
+
+	srcTree := src.Trees["tree:base-evolved"]
+	wantStructural := srcTree.StructuralFitness // 88.5
+	wantNodeCount := srcTree.NodeCount          // 42
+	wantCategory := srcTree.Category            // "finance", inherited from base
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	// Fresh graph where the evolved tree is re-registered (e.g. rebuilt from its
+	// tree file at startup) but without the runtime structural metadata that
+	// only RegisterEvolved populates — LoadFeedback must restore it.
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:base-evolved",
+		Name:     "Base Evolved",
+		Category: "unknown",
+	})
+
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	got := dst.Trees["tree:base-evolved"]
+	if got.StructuralFitness != wantStructural {
+		t.Errorf("StructuralFitness = %.2f, want %.2f", got.StructuralFitness, wantStructural)
+	}
+	if got.NodeCount != wantNodeCount {
+		t.Errorf("NodeCount = %d, want %d", got.NodeCount, wantNodeCount)
+	}
+	if got.Category != wantCategory {
+		t.Errorf("Category = %q, want %q (must be restored, not left at the pre-registration placeholder)", got.Category, wantCategory)
+	}
+}
+
+// TestSaveLoadFeedback_EvolvedFromEdgeRoundTrip asserts that the "evolved_from"
+// edge RegisterEvolved writes between a base tree and its evolved descendant
+// survives a SaveFeedback/LoadFeedback round trip, just like uses_tool edges
+// already do. Without this, a daemon restart loses the evolution lineage
+// (EvolutionLineage) even though both tree files and their bookkeeping
+// metadata (StructuralFitness, NodeCount, Category) are otherwise restored.
+func TestSaveLoadFeedback_EvolvedFromEdgeRoundTrip(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:lineage-base",
+		Name:     "Base",
+		Category: "finance",
+	})
+	src.RegisterEvolved("tree:lineage-base", "tree:lineage-base-evolved", 10, 75.0)
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	// Fresh graph: both trees are re-registered (e.g. rebuilt from tree files
+	// at startup), but the evolved_from edge connecting them only exists in
+	// the persisted feedback state — LoadFeedback must restore it.
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:lineage-base",
+		Name:     "Base",
+		Category: "finance",
+	})
+	dst.Register(&TreeMeta{
+		ID:       "tree:lineage-base-evolved",
+		Name:     "Base Evolved",
+		Category: "finance",
+	})
+
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	baseID, evolvedIDs, ok := dst.EvolutionLineage("tree:lineage-base-evolved")
+	if !ok {
+		t.Fatal("expected evolution lineage to be restored after LoadFeedback, got ok=false")
+	}
+	if baseID != "tree:lineage-base" {
+		t.Errorf("baseID = %q, want tree:lineage-base", baseID)
+	}
+	if len(evolvedIDs) != 1 || evolvedIDs[0] != "tree:lineage-base-evolved" {
+		t.Errorf("evolvedIDs = %v, want [tree:lineage-base-evolved]", evolvedIDs)
+	}
+}
+
 // TestLoadFeedback_MissingFileNoError asserts that loading from a nonexistent
 // path is a no-op: it returns nil and leaves the graph untouched.
 func TestLoadFeedback_MissingFileNoError(t *testing.T) {
@@ -170,6 +272,83 @@ func TestLoadFeedback_MissingFileNoError(t *testing.T) {
 	tree := kg.Trees["tree:solo"]
 	if tree.RunCount != 0 || tree.LastOutcome != "" {
 		t.Errorf("graph should be untouched, got RunCount=%d LastOutcome=%q", tree.RunCount, tree.LastOutcome)
+	}
+}
+
+// TestLoadFeedback_ResurrectsUnregisteredEvolvedTree asserts that an evolved
+// tree's ID found in the feedback snapshot, but not yet present in kg.Trees,
+// is resurrected as a new TreeMeta instead of being silently skipped.
+//
+// Evolved trees are only ever added to kg.Trees at runtime via RegisterEvolved
+// (called from the evolution MCP tool) — unlike static domain trees, nothing
+// rebuilds them from disk at daemon startup. So after a restart, LoadFeedback
+// runs before any evolution pass has re-registered the evolved tree, and its
+// ID is genuinely absent from kg.Trees even though its tree file and feedback
+// metadata both still exist. Skipping it here would permanently lose the
+// evolved tree's StructuralFitness/NodeCount/Category/EvolvedCount bookkeeping
+// even though the tree file itself survived the restart on disk.
+func TestLoadFeedback_ResurrectsUnregisteredEvolvedTree(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:resurrect-base",
+		Name:     "Base",
+		Category: "finance",
+	})
+	src.RegisterEvolved("tree:resurrect-base", "tree:resurrect-base-evolved", 17, 91.0)
+
+	srcTree := src.Trees["tree:resurrect-base-evolved"]
+	wantStructural := srcTree.StructuralFitness
+	wantNodeCount := srcTree.NodeCount
+	wantCategory := srcTree.Category
+	wantEvolvedCount := srcTree.EvolvedCount
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	// Fresh graph simulating a daemon restart: only the base tree has been
+	// re-registered (as static domain trees always are at startup) — the
+	// evolved tree has NOT, since no evolution pass has run yet since restart.
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:resurrect-base",
+		Name:     "Base",
+		Category: "finance",
+	})
+
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	got, ok := dst.Trees["tree:resurrect-base-evolved"]
+	if !ok {
+		t.Fatal("expected tree:resurrect-base-evolved to be resurrected into kg.Trees, but it is missing")
+	}
+	if got.StructuralFitness != wantStructural {
+		t.Errorf("StructuralFitness = %.2f, want %.2f", got.StructuralFitness, wantStructural)
+	}
+	if got.NodeCount != wantNodeCount {
+		t.Errorf("NodeCount = %d, want %d", got.NodeCount, wantNodeCount)
+	}
+	if got.Category != wantCategory {
+		t.Errorf("Category = %q, want %q", got.Category, wantCategory)
+	}
+	if got.EvolvedCount != wantEvolvedCount {
+		t.Errorf("EvolvedCount = %d, want %d", got.EvolvedCount, wantEvolvedCount)
+	}
+
+	// The evolution lineage should also resolve now that the evolved tree is
+	// itself a real node in the graph.
+	baseID, evolvedIDs, ok := dst.EvolutionLineage("tree:resurrect-base-evolved")
+	if !ok {
+		t.Fatal("expected evolution lineage to resolve after resurrection")
+	}
+	if baseID != "tree:resurrect-base" {
+		t.Errorf("baseID = %q, want tree:resurrect-base", baseID)
+	}
+	if len(evolvedIDs) != 1 || evolvedIDs[0] != "tree:resurrect-base-evolved" {
+		t.Errorf("evolvedIDs = %v, want [tree:resurrect-base-evolved]", evolvedIDs)
 	}
 }
 
