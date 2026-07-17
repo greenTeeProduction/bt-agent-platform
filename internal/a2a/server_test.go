@@ -12,8 +12,10 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ---- bidder-side evaluation: an agent scores an announced task from its own
@@ -637,5 +639,81 @@ func TestFailureEventMessage_CarryoverKeepsSentinel(t *testing.T) {
 	def := failureEventMessage("domain:x", "failure", "", time.Second)
 	if !strings.Contains(def, "domain:x") || !strings.Contains(def, "failure") {
 		t.Fatalf("default message %q must name the tree and outcome", def)
+	}
+}
+
+// ---- an auction-won task's History entry must attribute to the winning
+// bidder, not the agent that merely hosted the delegating tree --------------
+//
+// AuctionDelegate (internal/a2a/auction.go) writes the winning Award into
+// bb.ChainState["auction_award"] when a production tree delegates a subtask
+// through an auction (RunAuction dispatches only the real work to the winner,
+// never the losing candidates). Execute's e.History.Record call today always
+// attributes the run to agentName — the agent whose endpoint Execute is
+// running under — even when the tree it ran was really just a thin auction
+// wrapper whose real work was done by a different, winning bidder. Execute
+// must read bb.ChainState["auction_award"] after engine.RunTask returns and,
+// when an Award with a non-empty WinnerName is present, record the History
+// entry under that winner's name instead.
+
+func TestExecute_AuctionAwardAttributesHistoryToWinner(t *testing.T) {
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "executor", Tree: "domain:code_review", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	hist, err := agent.NewHistory(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewHistory: %v", err)
+	}
+
+	// Stands in for a production tree that delegated its work through an
+	// auction (AuctionDelegate), leaving the winning Award in ChainState for
+	// the caller to attribute the run to.
+	engine.RegisterAction("TestWriteAuctionAward", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		bb := ctx.Blackboard
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
+		bb.ChainState["auction_award"] = Award{
+			TaskID:     "t1",
+			WinnerName: "winner-bot",
+			WinningBid: Bid{TaskID: "t1", BidderName: "winner-bot", Confidence: 1},
+		}
+		return 1
+	})
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "TestWriteAuctionAward"},
+			{Type: "AlwaysSucceed"},
+		},
+	}
+
+	exec := &BTAgentExecutor{
+		Reg:     reg,
+		History: hist,
+		TreeMap: map[string]*evolution.SerializableNode{"executor": tree},
+	}
+
+	drainExecute(t, exec, "executor", "please handle this task")
+
+	winnerRuns := hist.List("winner-bot", 0)
+	if len(winnerRuns) != 1 {
+		t.Fatalf("History has %d runs for auction winner %q, want 1: %+v", len(winnerRuns), "winner-bot", winnerRuns)
+	}
+	if winnerRuns[0].AgentName != "winner-bot" {
+		t.Errorf("recorded AgentName = %q, want the auction winner %q", winnerRuns[0].AgentName, "winner-bot")
+	}
+
+	executorRuns := hist.List("executor", 0)
+	if len(executorRuns) != 0 {
+		t.Errorf("History has %d runs for the executing agent %q, want 0 — the auction-won run "+
+			"must attribute to the winning bidder, not the executor: %+v", len(executorRuns), "executor", executorRuns)
 	}
 }

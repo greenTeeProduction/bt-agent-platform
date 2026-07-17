@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-155. Early entries (001–007) record the founding decisions; the rest is
+ADR-156. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -178,6 +178,7 @@ Consolidation notes (2026-07-16):
 | ADR-153 | `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability) | Accepted | 2026-07-17 |
 | ADR-154 | `Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
 | ADR-155 | `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
+| ADR-156 | `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2668,12 +2669,12 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 **Decision:** Give `BTAgentExecutor` a `History *agent.History` field (nil-tolerant, matching the existing `CardCache`/`TreeMap` fields) and thread it through all three sites. `Execute` records a `RunRecord` (agent name, task text, `bb.Outcome`, `result`, elapsed duration, start/end times) immediately after `engine.RunTask` returns, before the `TaskStateBridge` mapping runs. `Cancel`'s signature changes from `(_ context.Context, ...)` to `(ctx context.Context, ...)` and resolves the agent name the same way `Execute` already does — `ctx.Value(agentNameKey{})` falling back to `execCtx.ContextID` — then records a `RunRecord{Outcome: "cancelled"}` (skipped only if both resolutions yield an empty name). `AuctionDelegate` writes `res.Award` into `chainState["auction_award"]` on a win, guarded by a `chainState != nil` check (a nil `chainState` is the common case for most tree runs and writing into a nil map panics), so a caller whose `(result, awarded, err)` return signature has no room for `Award` can still recover it from `chainState` for its own `History.Record` call. `cmd/bt-agent/main.go` wires the production seam: `a2aSrv.Executor.History = agentHist` — the same `*agent.History` instance `runJob`/dashboard already share — right after `SetTreeResolver`/`InitEngineDelegate`.
 
-**Status:** Accepted (2026-07-17) — pinned by `TestExecute_RecordsRunToHistory` and `TestCancel_RecordsCancelledOutcomeToHistory` (`internal/a2a/server_test.go`) and `TestAuctionDelegate_ThreadsAwardIntoChainState` (`internal/a2a/auction_test.go`, including the nil-`chainState` case). This closes milestones 1, 2, and 4 of the four-milestone A2A history-instrumentation program (History field + `Execute`/`Cancel` wiring, regression tests, `AuctionResult.Award` attribution); milestone 3 (recording `Award`-attributed runs at the auction-delegation call site itself, e.g. in `engine.AuctionDelegateFn`'s caller) remains open.
+**Status:** Accepted (2026-07-17) — pinned by `TestExecute_RecordsRunToHistory` and `TestCancel_RecordsCancelledOutcomeToHistory` (`internal/a2a/server_test.go`) and `TestAuctionDelegate_ThreadsAwardIntoChainState` (`internal/a2a/auction_test.go`, including the nil-`chainState` case). This closes milestones 1, 2, and 4 of the four-milestone A2A history-instrumentation program (History field + `Execute`/`Cancel` wiring, regression tests, `AuctionResult.Award` attribution); ~~milestone 3 (recording `Award`-attributed runs at the auction-delegation call site itself, e.g. in `engine.AuctionDelegateFn`'s caller) remains open.~~ — resolved 2026-07-17 (ADR-156): `Execute` now reads `chainState["auction_award"]` back after `RunTask` returns to attribute the `History` record to the winning bidder.
 
 **Consequences:**
 - ✅ All three of the platform's run-triggering paths — scheduler (`runJob`), dashboard (`RunTaskResult`), and A2A (`Execute`) — now record to the same `agent.History` store, and `Cancel` no longer lets a mid-run cancellation disappear without a trace.
 - ✅ `AuctionDelegate` no longer silently drops `AuctionResult.Award` on a win; any caller with a `chainState` in hand can recover which agent actually ran the task, not just the result text.
-- ⚠️ `Execute`'s `History.Record` call attributes the run to `agentName` (the executor's own identity), not to the auction winner threaded through `chainState["auction_award"]` — a task that reaches `Execute` only after `AuctionDelegate` awarded it to a different agent is still recorded under the executing agent's own name, since no call site yet reads `chainState["auction_award"]` back out to override attribution. Closing that requires the still-open milestone 3.
+- ~~⚠️ `Execute`'s `History.Record` call attributes the run to `agentName` (the executor's own identity), not to the auction winner threaded through `chainState["auction_award"]` — a task that reaches `Execute` only after `AuctionDelegate` awarded it to a different agent is still recorded under the executing agent's own name, since no call site yet reads `chainState["auction_award"]` back out to override attribution. Closing that requires the still-open milestone 3.~~ — resolved 2026-07-17, see ADR-156.
 
 ---
 
@@ -2784,8 +2785,24 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 **Consequences:**
 - ✅ Every `RunTask` caller is covered by one guard, including callers not yet individually audited for this gap.
 - ✅ The dozens of individually-unguarded production write sites named above no longer need their own nil checks; none were touched by this change.
-- ⚠️ The related, same-root-cause gap on `AuctionDelegate`'s `chainState["auction_award"]` write (`internal/a2a/auction.go`) and `a2a.Execute`'s `History.Record` not reading that value back to override `AgentName` (ADR-149's own open remainder) is unrelated to this guard and remains open — a non-nil `ChainState` now lets that write succeed instead of silently no-oping, but the read-back to attribute an auction win still needs to be added.
-- Milestones 2–4/4 of the program are not addressed by this change.
+- ~~⚠️ The related, same-root-cause gap on `AuctionDelegate`'s `chainState["auction_award"]` write (`internal/a2a/auction.go`) and `a2a.Execute`'s `History.Record` not reading that value back to override `AgentName` (ADR-149's own open remainder) is unrelated to this guard and remains open — a non-nil `ChainState` now lets that write succeed instead of silently no-oping, but the read-back to attribute an auction win still needs to be added.~~ — resolved 2026-07-17, see ADR-156.
+- ~~Milestones 2–4/4 of the program are not addressed by this change.~~ — resolved 2026-07-17: milestones 2 (`internal/a2a/checkpoint_verifier.go`) and 3 (the `bt_run_task` MCP tool's shared `Blackboard`) were each found already nil-safe on inspection — no code change was needed — and milestone 4 (`a2a.Execute`'s auction-award read-back) is closed by ADR-156, completing the program.
+
+---
+
+## ADR-156: `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)
+
+**Context (2026-07-17):** Milestone 4/4 of the "Q1 Correctness / Q3 Reliability — Close the ChainState nil-map panic across `engine.RunTask`'s production Blackboard-construction sites" program (ADR-155), and simultaneously the open remainder ADR-149 flagged in its own consequences: `Execute`'s `e.History.Record` call always attributed a run to `agentName` — the executor's own identity — even when the tree it ran was a thin auction wrapper whose real work `AuctionDelegate` (`internal/a2a/auction.go`) had already dispatched to a different, winning bidder, leaving that winner's `Award` sitting unread in `bb.ChainState["auction_award"]`. Milestones 2 and 3 of ADR-155's program turned out to require no code change on inspection — `internal/a2a/checkpoint_verifier.go` has been nil-safe since its original commit, and the `bt_run_task` MCP tool's shared `Blackboard` is doubly guarded (the `RunTask` choke point plus unconditional persona injection) — leaving milestone 4 as the program's only remaining code change.
+
+**Decision:** In `Execute` (`internal/a2a/server.go`), immediately before the existing `e.History.Record` call and after `engine.RunTask(bb, bt)` returns, type-assert `bb.ChainState["auction_award"]` to `Award` (`internal/a2a/auction.go`); when the assertion succeeds and `WinnerName` is non-empty, record the `RunRecord` under that `WinnerName` instead of `agentName`. The change is local to the existing `historyAgent` computation right before the `Record` call — no new exported surface.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestExecute_AuctionAwardAttributesHistoryToWinner` (`internal/a2a/server_test.go`), which drives `Execute` over a tree that writes an `Award{WinnerName: "winner-bot"}` into `ChainState` and asserts `agent.History` records the run under `winner-bot`, with zero runs recorded under the executing agent's own name. Closes milestone 4/4 of ADR-155's program and ADR-149's flagged open remainder in the same change.
+
+**Consequences:**
+- ✅ An auction-won task's `agent.History` entry — and therefore the dashboard's per-agent run stats/quality/success-rate (`mergeHistoryStats`) and `bt-agent-cli agent history` — now attribute to the agent that actually did the work, not the agent hosting the thin delegating tree.
+- ✅ Closes the "Q1 Correctness / Q3 Reliability — ChainState nil-map panic" program in full: milestone 1 (ADR-155's `RunTask` guard) made the `auction_award` write reliable instead of a silent no-op on a nil map; milestones 2–3 needed no fix; milestone 4 (this ADR) reads that write back out.
+- ⚠️ The override only fires when `Execute`'s own `RunTask` call wrote `auction_award` into its own `bb.ChainState` — a multi-hop delegation where the award is produced by a nested `RunTask` call against a different `Blackboard` instance is out of scope.
+- Pinned by `TestExecute_AuctionAwardAttributesHistoryToWinner`.
 
 ---
 

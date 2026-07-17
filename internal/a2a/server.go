@@ -156,8 +156,12 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		elapsed := time.Since(startTime)
 
 		if e.History != nil {
+			historyAgent := agentName
+			if award, ok := bb.ChainState["auction_award"].(Award); ok && award.WinnerName != "" {
+				historyAgent = award.WinnerName
+			}
 			_ = e.History.Record(agent.RunRecord{
-				AgentName: agentName,
+				AgentName: historyAgent,
 				Task:      taskText,
 				Outcome:   bb.Outcome,
 				Output:    result,
