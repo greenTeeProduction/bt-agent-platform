@@ -17,8 +17,19 @@ package engine
 // The whole read-modify-write (ledger read → cap count → program-store add →
 // ledger record) is serialized by an in-process mutex AND an on-disk lock file
 // (fleet siblings share these files — see the job-table-wiper incident), so
-// concurrent seeds can't lose an update. It never errors upward: it returns
-// (seeded, reason) for the caller to log/observe.
+// concurrent SELF-FIX seeds can't lose an update against EACH OTHER. That
+// guarantee is scoped to self-fix-vs-self-fix only: the rest of the engine
+// writes the SAME programs.json via research.OpenPrograms(goapProgramsPath)
+// .Save() WITHOUT this lock (arc42_seeder, goap_seed_program,
+// actions_goap_fusion[_refund], actions_superpowers, nlm_quota), and
+// ProgramStore.Save uses a fixed path+".tmp" name (not a randomized
+// os.CreateTemp), so a truly concurrent unrelated writer can still lose an
+// update. TODO/NOTE: that broader programs.json multi-writer gap is
+// pre-existing and engine-wide (tracked for the combined review) — fixing it
+// means randomizing ProgramStore.Save's tmp name, a separate change since it
+// touches every call site, not something this file should do unilaterally.
+// It never errors upward: it returns (seeded, reason) for the caller to
+// log/observe.
 
 import (
 	"os"
@@ -44,6 +55,15 @@ type selfFixLedgerEntry struct {
 // pattern as errorHandlerDirOverride).
 var selfFixDirOverride string
 
+// selfFixWriteLedger persists the ledger; writeErrorHandlerJSON in production.
+// Tests override it to deterministically simulate a ledger-write failure
+// (e.g. a full disk) to pin the ledger-before-store fail-safe ordering below —
+// an OS-level directory permission can't isolate that failure, because
+// store.lock (the on-disk cross-process lock acquired above) shares
+// selfFixDir() with ledger.json, so a read-only ledger dir blocks the lock's
+// own O_CREATE before the ledger write is ever reached.
+var selfFixWriteLedger = writeErrorHandlerJSON
+
 // selfFixStoreMu guards the in-process read-modify-write cycle of the self-fix
 // ledger AND the program-store seed it wraps, so two goroutines seeding at once
 // can't clobber each other's Add. Cross-process cycles are guarded by the
@@ -58,6 +78,10 @@ func selfFixEnabled() bool {
 
 // selfFixCooldown is the per-signature dedup window (env BT_SELF_FIX_COOLDOWN,
 // a Go duration; default 24h) — a recurring defect seeds at most once per window.
+// Note the asymmetry with selfFixMaxOpen: here a parseable-but-non-positive
+// value (0s or negative) is treated as UNPARSEABLE and falls back to the 24h
+// default, deliberately — a near-zero cooldown is the DANGEROUS direction
+// (unbounded re-seeding), so refusing to honor it is the safe choice.
 func selfFixCooldown() time.Duration {
 	if d, err := time.ParseDuration(os.Getenv("BT_SELF_FIX_COOLDOWN")); err == nil && d > 0 {
 		return d
@@ -66,12 +90,20 @@ func selfFixCooldown() time.Duration {
 }
 
 // selfFixMaxOpen caps concurrently-open self-fix programs (env
-// BT_SELF_FIX_MAX_OPEN, an int; default 3) so the backlog stays bounded.
+// BT_SELF_FIX_MAX_OPEN, an int; default 3) so the backlog stays bounded. A
+// parseable value <= 0 is honored as an explicit pause dial (0: block ALL new
+// seeds) rather than falling back to the default — the safe/stricter
+// direction, unlike selfFixCooldown's asymmetric handling of 0/negative
+// (see its comment). Only an unparseable or absent value falls back to 3.
 func selfFixMaxOpen() int {
-	if n, err := strconv.Atoi(os.Getenv("BT_SELF_FIX_MAX_OPEN")); err == nil && n > 0 {
-		return n
+	n, err := strconv.Atoi(os.Getenv("BT_SELF_FIX_MAX_OPEN"))
+	if err != nil {
+		return 3
 	}
-	return 3
+	if n <= 0 {
+		return 0
+	}
+	return n
 }
 
 // selfFixDir is the ledger directory (~/.go-bt-evolve/self_fix), overridable in
@@ -144,6 +176,11 @@ func seedCodeFixProgram(sig, title, milestoneGoal, source string) (bool, string)
 		// Preserve the "self-fix:" prefix the cap counter keys on even if a
 		// caller forgets to tag the source.
 		source = "self-fix:" + sig
+	} else if !strings.HasPrefix(source, "self-fix:") {
+		// A non-empty but MIS-tagged source (missing the prefix) would
+		// otherwise escape the cap count entirely, since the cap keys on the
+		// "self-fix:" prefix (step below). Normalize rather than trust callers.
+		source = "self-fix:" + source
 	}
 
 	// Serialize the whole ledger+store read-modify-write (in-process mutex +
@@ -185,26 +222,50 @@ func seedCodeFixProgram(sig, title, milestoneGoal, source string) (bool, string)
 		return false, "self-fix backlog cap reached"
 	}
 
-	// 5. Seed (Add dedupes by title-key; Save is atomic tmp+rename per ADR-003).
+	// 5. Seed in-memory only (Add dedupes by title-key: on a title collision it
+	// returns the PRE-EXISTING program unchanged and mutates nothing, so
+	// ps.Programs' length is unchanged). This mutates only the in-memory ps; it
+	// is NOT yet durable, so aborting below and discarding ps leaves the store
+	// untouched on disk.
+	preCount := len(ps.Programs)
 	p := ps.Add(title, source, []string{milestoneGoal})
-	if err := ps.Save(); err != nil {
-		return false, "program store write failed: " + err.Error()
+	if len(ps.Programs) == preCount {
+		// Add returned a pre-existing program (title-key collision), not a new
+		// one. The caller's defect was never queued — record NOTHING (no ledger
+		// entry, no ps.Save()) rather than reporting success for work that
+		// silently didn't happen.
+		return false, "title collides with existing program " + p.ID
 	}
 
-	// 6. Record the ledger (atomic write, same helper as the error-handler store).
+	// 6. Record the ledger entry in memory, then persist it BEFORE the program
+	// store — deliberately. Cooldown recording must never be weaker than
+	// program persistence: if a durable program existed without a durable
+	// cooldown stamp, the very next identical failure would re-seed it (the
+	// exact runaway the ledger exists to prevent). Ledger-first means any
+	// failure here aborts with NOTHING persisted (ps is simply discarded, still
+	// only in-memory) — a clean, correctly-retryable fail-safe.
 	entry := ledger[sig]
 	entry.LastSeeded = time.Now()
 	entry.Title = title
 	entry.ProgramID = p.ID
 	entry.Count++
 	ledger[sig] = entry
-	if err := writeErrorHandlerJSON(selfFixLedgerPath(), ledger); err != nil {
+	if err := selfFixWriteLedger(selfFixLedgerPath(), ledger); err != nil {
 		return false, "self-fix ledger write failed: " + err.Error()
 	}
 
-	// 7. Log.
+	// 7. Now persist the program store. The ledger stamp is ALREADY durable at
+	// this point, so a failure here errs toward under-seeding (the fix is
+	// deferred up to one cooldown window) rather than over-seeding — safe, but
+	// worth logging loudly since it means a queued fix silently didn't land.
+	if err := ps.Save(); err != nil {
+		Error("self-fix: program store write failed after ledger stamp; fix deferred to next cooldown", "sig", sig, "title", title, "program", p.ID, "err", err)
+		return false, "program store write failed: " + err.Error()
+	}
+
+	// 8. Log.
 	Info("self-fix: seeded code-fix program", "sig", sig, "title", title, "source", source, "program", p.ID)
 
-	// 8. Done.
+	// 9. Done.
 	return true, "seeded program " + p.ID
 }

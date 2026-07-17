@@ -212,6 +212,154 @@ func TestSeedCodeFixProgram_EmptyInputs(t *testing.T) {
 	}
 }
 
+// TestSeedCodeFixProgram_LedgerWriteFailureLeavesStoreUntouched pins the
+// CRITICAL finding: the ledger stamp must be durable BEFORE the program is
+// persisted, so a ledger-write failure never leaves a live, un-cooled-down
+// program behind (the exact runaway the ledger exists to prevent). We can't
+// induce this via OS-level directory permissions: store.lock and ledger.json
+// both live directly under selfFixDir(), so a read-only ledger dir blocks the
+// on-disk store LOCK's own O_CREATE before the ledger write is ever reached
+// (verified: this fails identically whether or not the CRITICAL fix is
+// applied, so it can't pin the reordering). selfFixWriteLedger is the
+// package's test seam for this specific failure instead.
+func TestSeedCodeFixProgram_LedgerWriteFailureLeavesStoreUntouched(t *testing.T) {
+	_, programsPath := withTempSelfFix(t)
+
+	oldWrite := selfFixWriteLedger
+	selfFixWriteLedger = func(path string, v any) error {
+		return fmt.Errorf("simulated disk full")
+	}
+	t.Cleanup(func() { selfFixWriteLedger = oldWrite })
+
+	seeded, reason := seedCodeFixProgram("sig1", "Fix X", "fix file y.go", "self-fix:test:sig1")
+	if seeded || !strings.HasPrefix(reason, "self-fix ledger write failed") {
+		t.Fatalf("expected (false, self-fix ledger write failed: ...), got (%v, %q)", seeded, reason)
+	}
+
+	ps, err := research.OpenPrograms(programsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(ps.Programs); n != 0 {
+		t.Fatalf("program store must be untouched when the ledger write fails (ledger-before-store fail-safe): %d programs, want 0", n)
+	}
+}
+
+// TestSeedCodeFixProgram_TitleCollisionRecordsNothing pins the IMPORTANT
+// finding: ProgramStore.Add dedupes by title-key, so a second sig proposing
+// the SAME title must not silently drop its defect while telling the caller
+// it succeeded.
+func TestSeedCodeFixProgram_TitleCollisionRecordsNothing(t *testing.T) {
+	_, programsPath := withTempSelfFix(t)
+
+	if seeded, reason := seedCodeFixProgram("sigA", "Fix X", "fix file y.go", "self-fix:test:sigA"); !seeded {
+		t.Fatalf("first seed must succeed: %q", reason)
+	}
+
+	seeded, reason := seedCodeFixProgram("sigB", "Fix X", "fix file z.go: a different defect", "self-fix:test:sigB")
+	if seeded || !strings.HasPrefix(reason, "title collides with existing program") {
+		t.Fatalf("expected (false, title collides with existing program ...), got (%v, %q)", seeded, reason)
+	}
+
+	if n := countSelfFixPrograms(t, programsPath); n != 1 {
+		t.Fatalf("title collision must not add a second program: %d self-fix programs, want 1", n)
+	}
+
+	ledger := map[string]selfFixLedgerEntry{}
+	if err := readErrorHandlerJSONStrict(selfFixLedgerPath(), &ledger); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ledger["sigB"]; ok {
+		t.Fatalf("colliding sig must not record a ledger entry: %+v", ledger["sigB"])
+	}
+	if _, ok := ledger["sigA"]; !ok {
+		t.Fatal("winning sig's ledger entry must be untouched")
+	}
+}
+
+// TestSeedCodeFixProgram_SameSigConcurrentDoubleSeed pins the mutex/lock
+// serialization guarantee for the SAME sig+title under -race: exactly one
+// program and one ledger entry, not N.
+func TestSeedCodeFixProgram_SameSigConcurrentDoubleSeed(t *testing.T) {
+	dir, programsPath := withTempSelfFix(t)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			seedCodeFixProgram("sig-same", "Fix Same", "fix file same.go: recurring defect", "self-fix:test:sig-same")
+		}()
+	}
+	wg.Wait()
+
+	if n := countSelfFixPrograms(t, programsPath); n != 1 {
+		t.Fatalf("same-sig concurrent seeds must produce exactly one program: got %d", n)
+	}
+	ledger := map[string]selfFixLedgerEntry{}
+	if err := readErrorHandlerJSONStrict(filepath.Join(dir, "ledger.json"), &ledger); err != nil {
+		t.Fatal(err)
+	}
+	if e, ok := ledger["sig-same"]; !ok || e.Count != 1 {
+		t.Fatalf("same-sig concurrent seeds must produce exactly one ledger entry with count 1: %+v (ok=%v)", e, ok)
+	}
+}
+
+// TestSeedCodeFixProgram_CapZeroPauses pins the MINOR finding:
+// BT_SELF_FIX_MAX_OPEN=0 (a parseable non-positive value) must be honored as
+// an explicit pause dial, not fall back to the default of 3.
+func TestSeedCodeFixProgram_CapZeroPauses(t *testing.T) {
+	_, programsPath := withTempSelfFix(t)
+	t.Setenv("BT_SELF_FIX_MAX_OPEN", "0")
+
+	seeded, reason := seedCodeFixProgram("sig1", "Fix X", "fix file y.go", "self-fix:test:sig1")
+	if seeded || reason != "self-fix backlog cap reached" {
+		t.Fatalf("expected (false, self-fix backlog cap reached), got (%v, %q)", seeded, reason)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("cap=0 pause must write nothing: %d self-fix programs, want 0", n)
+	}
+}
+
+// TestSeedCodeFixProgram_SourceNormalization pins the MINOR finding: a
+// non-empty but mis-tagged source (missing the "self-fix:" prefix) must still
+// be counted by the backlog cap, which keys on that prefix.
+func TestSeedCodeFixProgram_SourceNormalization(t *testing.T) {
+	_, programsPath := withTempSelfFix(t)
+	t.Setenv("BT_SELF_FIX_MAX_OPEN", "2")
+
+	// Two distinct, mis-tagged (no "self-fix:" prefix) sources fill the cap.
+	if seeded, reason := seedCodeFixProgram("sig1", "Fix One", "fix a.go", "mis-tagged-source-1"); !seeded {
+		t.Fatalf("first seed must succeed: %q", reason)
+	}
+	if seeded, reason := seedCodeFixProgram("sig2", "Fix Two", "fix b.go", "mis-tagged-source-2"); !seeded {
+		t.Fatalf("second seed must succeed: %q", reason)
+	}
+
+	// The persisted source must carry the normalized "self-fix:" prefix.
+	ps, err := research.OpenPrograms(programsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *research.Program
+	for _, p := range ps.Programs {
+		if p.Title == "Fix One" {
+			found = p
+		}
+	}
+	if found == nil || found.Source != "self-fix:mis-tagged-source-1" {
+		t.Fatalf("mis-tagged source must be normalized with the self-fix: prefix, got %+v", found)
+	}
+
+	// A third, distinct sig must be cap-blocked: if the mis-tagged sources had
+	// escaped the cap count, this would incorrectly succeed instead.
+	seeded, reason := seedCodeFixProgram("sig3", "Fix Three", "fix c.go", "self-fix:test:sig3")
+	if seeded || reason != "self-fix backlog cap reached" {
+		t.Fatalf("mis-tagged sources must still count toward the cap: expected (false, self-fix backlog cap reached), got (%v, %q)", seeded, reason)
+	}
+}
+
 func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 	dir, programsPath := withTempSelfFix(t)
 	t.Setenv("BT_SELF_FIX_MAX_OPEN", "100")
