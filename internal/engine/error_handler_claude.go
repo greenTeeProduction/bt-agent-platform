@@ -157,12 +157,25 @@ func validateCodeFix(cf *errorHandlerCodeFix) error {
 	}
 	// Soft check: the milestone must name at least one of the files (full path or
 	// basename) so the loop has a concrete file to fix. Reject only if it names none.
+	named := false
 	for _, f := range files {
 		if strings.Contains(cf.Milestone, f) || strings.Contains(cf.Milestone, filepath.Base(f)) {
-			return nil
+			named = true
+			break
 		}
 	}
-	return fmt.Errorf("code_fix.milestone must reference at least one of the files")
+	if !named {
+		return fmt.Errorf("code_fix.milestone must reference at least one of the files")
+	}
+	// I2(b) — the sharpest defense: deny an escalation that targets a self-fix
+	// guard file itself (self_fix_seed.go, error_handler_claude/node/store.go,
+	// actions_self_review.go). Without this, the error-handler could escalate
+	// (and the goap loop then auto-apply) a "fix" that quietly weakens its own
+	// guards — e.g. raising selfFixMaxOpen's cap. Guard changes require a human.
+	if namesSelfFixGuardFile(cf.Files) {
+		return fmt.Errorf("code_fix targets a self-fix guard file; guard changes require a human")
+	}
+	return nil
 }
 
 // parseErrorHandlerProposal extracts the first parseable JSON object from

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/research"
 )
@@ -386,5 +387,63 @@ func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 	}
 	if len(ledger) != workers {
 		t.Fatalf("ledger corrupted: %d entries, want %d", len(ledger), workers)
+	}
+}
+
+// withUnsetSelfFixEnv saves, unsets, and (on cleanup) restores
+// BT_SELF_FIX/BT_SELF_FIX_COOLDOWN/BT_SELF_FIX_MAX_OPEN so a default-pinning
+// test observes the guard readers with NO ENV SET at all, not merely set to
+// "" — the true "absent from the environment" condition a freshly seeded
+// process actually runs under.
+func withUnsetSelfFixEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"BT_SELF_FIX", "BT_SELF_FIX_COOLDOWN", "BT_SELF_FIX_MAX_OPEN"} {
+		old, wasSet := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unsetenv %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if wasSet {
+				_ = os.Setenv(key, old)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		})
+	}
+}
+
+// TestSelfFixGuardDefaults_PinnedWithNoEnvSet is a SAFETY BACKSTOP, not just
+// coverage (I2(a)): the goap verification gate that auto-applies a seeded
+// code-fix runs the changed package's tests before landing. If the loop ever
+// seeds a fix that edits one of these defaults — e.g. selfFixMaxOpen's
+// `return 3` becoming `return 10`, quietly widening its own backlog cap — that
+// change touches internal/engine, so THIS test runs in the gate and fails,
+// which DEGRADES the cycle instead of landing the self-weakening change. Pin
+// the exact values so any autonomous edit to them is caught here, not by a
+// human reading a diff after the fact.
+func TestSelfFixGuardDefaults_PinnedWithNoEnvSet(t *testing.T) {
+	withUnsetSelfFixEnv(t)
+
+	if got := selfFixMaxOpen(); got != 3 {
+		t.Fatalf("selfFixMaxOpen() with no env set = %d, want 3 (see safety-backstop comment)", got)
+	}
+	if got := selfFixCooldown(); got != 24*time.Hour {
+		t.Fatalf("selfFixCooldown() with no env set = %v, want 24h (see safety-backstop comment)", got)
+	}
+	if got := selfFixEnabled(); got != true {
+		t.Fatalf("selfFixEnabled() with no env set (kill switch absent) = %v, want true (see safety-backstop comment)", got)
+	}
+}
+
+// TestSelfFixEnabled_KillSwitchPinned pins the OTHER half of selfFixEnabled's
+// contract: BT_SELF_FIX=off must disable seeding. Same safety-backstop
+// rationale as above — an autonomous edit that breaks the kill switch (e.g.
+// inverting the EqualFold check) fails this test in the changed-package gate.
+func TestSelfFixEnabled_KillSwitchPinned(t *testing.T) {
+	withUnsetSelfFixEnv(t)
+	t.Setenv("BT_SELF_FIX", "off")
+
+	if got := selfFixEnabled(); got != false {
+		t.Fatalf("selfFixEnabled() with BT_SELF_FIX=off = %v, want false", got)
 	}
 }

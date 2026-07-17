@@ -1,7 +1,10 @@
 package research
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -56,6 +59,59 @@ func TestProgramLifecycle(t *testing.T) {
 	re2.MarkDone(active2.ID, 1, "run-def")
 	if re2.Active() != nil {
 		t.Fatal("fully completed program must no longer be active")
+	}
+}
+
+// I3: Save's tmp file must be RANDOMIZED (os.CreateTemp), not a fixed
+// ps.path+".tmp" — this feature adds a second scheduled writer (the
+// self-review agent) to the SAME programs.json alongside the existing
+// arc42/goap seeders, and a fixed tmp name lets two concurrent writers
+// interleave their writes to the SAME tmp file, so whichever rename lands
+// last can persist a torn/corrupt (or simply lost) update. Randomizing the
+// tmp name isolates each writer's in-flight bytes; this test hammers Save
+// from many goroutines and requires the final store to always be valid,
+// parseable JSON with no leftover tmp file and the documented 0o644 perms
+// (os.CreateTemp defaults to 0600, so Save must restore them before rename).
+func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "programs.json")
+
+	const workers = 30
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ps := &ProgramStore{path: path}
+			ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
+			if err := ps.Save(); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent save failed: %v", err)
+	}
+
+	if _, err := OpenPrograms(path); err != nil {
+		t.Fatalf("programs.json corrupt after concurrent saves (torn/interleaved tmp write?): %v", err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.tmp"))
+	if len(matches) != 0 {
+		t.Fatalf("leftover tmp file(s) after concurrent saves: %v", matches)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat final programs.json: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o644 {
+		t.Fatalf("perm = %o, want 0o644 (os.CreateTemp defaults to 0600 — Save must restore 0644)", perm)
 	}
 }
 

@@ -152,6 +152,19 @@ func (m *promptCaptureLLM) Generate(prompt string) (string, error) {
 	return m.seqMockLLM.Generate(prompt)
 }
 
+// GenerateCtx must be overridden too, not just Generate: Go embedding has no
+// virtual dispatch, so without this override the promoted
+// seqMockLLM.GenerateCtx would call the EMBEDDED seqMockLLM's own Generate("")
+// directly — discarding the real prompt and bypassing this type's Generate
+// override entirely, so lastPrompt would never be captured. This surfaced
+// when chainGenerate (internal/engine/chains.go) switched from
+// bb.LLM.Generate(prompt) to bb.LLM.GenerateCtx(ctx, prompt) (M1, tree-deadline
+// propagation): the same mock-embedding pattern is already handled correctly
+// by every other LLM test double in internal/engine/chains_test.go.
+func (m *promptCaptureLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+
 func TestEngineExpandBBTemplate_InLLMCall(t *testing.T) {
 	mgr := blackboard.DefaultManager()
 	h := blackboard.NewHandle(mgr, "run_tpl", "sess_tpl", "demo-agent")

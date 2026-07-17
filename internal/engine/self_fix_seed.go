@@ -106,6 +106,44 @@ func selfFixMaxOpen() int {
 	return n
 }
 
+// selfFixGuardFileMarkers names the SEEDING-AUTONOMY guard files — the ones
+// that decide whether/how much the loop is allowed to self-fix at all
+// (selfFixEnabled/selfFixCooldown/selfFixMaxOpen live in self_fix_seed.go
+// itself; validateCodeFix in error_handler_claude.go and
+// validateSelfReviewFinding in actions_self_review.go gate what either
+// producer may propose; error_handler_node.go/error_handler_store.go hold the
+// escalation graft path and its ledger). namesSelfFixGuardFile denies BOTH
+// producers from proposing a fix that edits any of these — the sharpest
+// vector in the whole feature is the loop seeding a fix that quietly weakens
+// its own guard (e.g. selfFixMaxOpen's `return 3` becoming `return 10`).
+// Deliberately does NOT include the superpowers/goap fusion pipeline files
+// (actions_superpowers*, actions_goap_fusion*) — the fleet does legitimate
+// autonomous work there; only the guard files above are off-limits to
+// self-seeded fixes.
+var selfFixGuardFileMarkers = []string{
+	"self_fix_seed",
+	"error_handler_claude",
+	"error_handler_node",
+	"error_handler_store",
+	"actions_self_review",
+}
+
+// namesSelfFixGuardFile reports whether any entry in files names one of the
+// self-fix guard files above (substring match, so it catches both the .go
+// source and its _test.go). Used by validateCodeFix and
+// validateSelfReviewFinding to deny an autonomous fix that targets its own
+// guards — those changes require a human.
+func namesSelfFixGuardFile(files []string) bool {
+	for _, f := range files {
+		for _, marker := range selfFixGuardFileMarkers {
+			if strings.Contains(f, marker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // selfFixDir is the ledger directory (~/.go-bt-evolve/self_fix), overridable in
 // tests. Empty only when the home dir is unresolvable.
 func selfFixDir() string {

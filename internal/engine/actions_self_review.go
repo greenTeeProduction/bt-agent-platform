@@ -22,10 +22,13 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -291,6 +294,38 @@ type selfReviewFinding struct {
 	Signature string   `json:"signature"`
 }
 
+// canonicalSelfReviewSig computes the DETERMINISTIC dedup key seedCodeFixProgram
+// uses for a self-review finding (I1) — deliberately NOT Claude's own
+// f.Signature slug. An LLM can emit a different slug for the same underlying
+// defect across separate review runs (crash mid-review, then re-review), which
+// would mint a fresh cooldown-ledger key each time and silently defeat the
+// per-signature cooldown that exists precisely to stop a recurring defect from
+// being re-seeded every run. Canonicalizing on the finding's files+title
+// (sorted, trimmed, case/whitespace-normalized) means the SAME underlying
+// defect always maps to the SAME key regardless of how Claude worded its slug
+// this time. Claude's f.Signature is kept ONLY for the human-readable report
+// line at the call site — never as the dedup key or program source.
+func canonicalSelfReviewSig(f selfReviewFinding) string {
+	var files []string
+	for _, file := range f.Files {
+		file = strings.TrimSpace(file)
+		if file != "" {
+			files = append(files, file)
+		}
+	}
+	sort.Strings(files)
+	sum := sha256.Sum256([]byte(strings.Join(files, "\n") + "\x00" + normalizeSelfReviewTitle(f.Title)))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// normalizeSelfReviewTitle lowercases and collapses whitespace runs so titles
+// that differ only in case or spacing still canonicalize to the same
+// dedup key (mirrors research.normalize's whitespace collapsing, which isn't
+// exported for reuse here, plus a lowercase fold).
+func normalizeSelfReviewTitle(title string) string {
+	return strings.ToLower(strings.Join(strings.Fields(title), " "))
+}
+
 // buildSelfReviewPrompt frames the read-only review: modeled on
 // buildClaudeReviewPrompt's "commits" branch, but with a different return
 // contract — CONFIRMED defects only, capped at 3, returned as a single JSON
@@ -371,12 +406,25 @@ func validateSelfReviewFinding(f selfReviewFinding) bool {
 	if len(files) == 0 {
 		return false
 	}
+	named := false
 	for _, file := range files {
 		if strings.Contains(milestone, file) || strings.Contains(milestone, filepath.Base(file)) {
-			return true
+			named = true
+			break
 		}
 	}
-	return false
+	if !named {
+		return false
+	}
+	// I2(b) — same sharpest-vector defense as validateCodeFix
+	// (error_handler_claude.go): drop a finding that targets a self-fix guard
+	// file itself, so the proactive self-review producer can't propose a "fix"
+	// that quietly weakens its own guards either. Counted as an invalid/dropped
+	// finding by the caller (parseSelfReviewFindings), not seeded.
+	if namesSelfFixGuardFile(f.Files) {
+		return false
+	}
+	return true
 }
 
 // parseSelfReviewFindings extracts and validates the findings array from
@@ -481,8 +529,13 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	seededCount := 0
 	var lines []string
 	for _, f := range findings {
-		seeded, reason := seedCodeFixProgram(f.Signature, f.Title, f.Milestone, "self-fix:self-review:"+f.Signature)
-		Info("self-review: seed result", "sig", f.Signature, "seeded", seeded, "reason", reason)
+		// I1: dedup on the DETERMINISTIC canonical sig (files+title), not
+		// Claude's f.Signature — an LLM slug can vary run-to-run for the same
+		// defect, which would otherwise defeat the cooldown. f.Signature is kept
+		// below ONLY for the human-readable report line.
+		sig := canonicalSelfReviewSig(f)
+		seeded, reason := seedCodeFixProgram(sig, f.Title, f.Milestone, "self-fix:self-review:"+sig)
+		Info("self-review: seed result", "sig", f.Signature, "canonical_sig", sig, "seeded", seeded, "reason", reason)
 		if seeded {
 			seededCount++
 			lines = append(lines, fmt.Sprintf("- SEEDED %q (sig=%s, severity=%s)", f.Title, f.Signature, f.Severity))

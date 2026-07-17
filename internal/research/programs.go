@@ -200,20 +200,52 @@ func (ps *ProgramStore) MarkDone(programID string, milestoneIdx int, runID strin
 	return false
 }
 
-// Save writes the store atomically (tmp+rename) per ADR-003.
+// Save writes the store atomically (tmp+rename) per ADR-003. The tmp file
+// uses a RANDOMIZED name (os.CreateTemp) rather than a fixed ps.path+".tmp" —
+// this branch adds a second scheduled writer (the self-review agent) to the
+// SAME programs.json alongside the existing arc42/goap seeders, and a fixed
+// tmp name lets two concurrent writers interleave: whichever writer's
+// os.Rename runs first moves the SHARED tmp file away, so the other writer's
+// own os.Rename of that now-nonexistent path fails outright (losing that
+// writer's update) or, with different timing, one writer's WriteFile can
+// truncate/overwrite the other's in-flight bytes before either renames.
+// Creating the tmp file in the SAME directory as ps.path keeps the rename
+// atomic on one filesystem while giving each concurrent Save its own,
+// unrelated tmp file.
 func (ps *ProgramStore) Save() error {
-	if err := os.MkdirAll(filepath.Dir(ps.path), 0o755); err != nil {
+	dir := filepath.Dir(ps.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(ps, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := ps.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	f, err := os.CreateTemp(dir, filepath.Base(ps.path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, ps.path)
+	tmp := f.Name()
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	// os.CreateTemp creates the file 0600; restore the documented 0644 perms
+	// before the rename makes it visible as ps.path.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, ps.path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // RecordRedPass increments the milestone's consecutive red-pass counter and

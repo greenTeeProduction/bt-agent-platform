@@ -382,12 +382,18 @@ func TestClaudeErrorHandler_RunningRecoveryFoldsIntoFailure(t *testing.T) {
 }
 
 // ehTestCodeFixJSON is an unresolvable verdict carrying a valid code_fix
-// escalation (real is_bug, file-scoped milestone naming the file).
+// escalation (real is_bug, file-scoped milestone naming the file). Uses a
+// fabricated non-guard file name (eh_test_target.go, not error_handler_node.go
+// itself) — error_handler_node.go is one of the I2(b) self-fix guard files
+// namesSelfFixGuardFile denies, and this test's escalate-and-seed path is
+// exercising the ORDINARY-bug case, not the guard-file-rejection case (that's
+// TestValidateCodeFix_RejectsSelfFixGuardFileTargets in
+// error_handler_claude_test.go).
 func ehTestCodeFixJSON() string {
 	return `{"resolvable": false, "reason": "genuine source bug", "code_fix": {` +
 		`"is_bug": true, "title": "Fix eh_test defect", ` +
-		`"milestone": "In internal/engine/error_handler_node.go guard the nil case; write a failing test then fix", ` +
-		`"files": ["internal/engine/error_handler_node.go"], "rationale": "unconditional deref"}}`
+		`"milestone": "In internal/engine/eh_test_target.go guard the nil case; write a failing test then fix", ` +
+		`"files": ["internal/engine/eh_test_target.go"], "rationale": "unconditional deref"}}`
 }
 
 // Part A escalation: an unresolvable verdict with a valid code_fix seeds a

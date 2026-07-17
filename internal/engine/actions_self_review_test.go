@@ -196,6 +196,61 @@ func TestRunSelfReview_DedupSameSignatureWithinCooldown(t *testing.T) {
 	}
 }
 
+// I1: canonicalSelfReviewSig must produce the SAME key for two findings that
+// name the same files+title (modulo case/whitespace/file order), even when
+// Claude's own f.Signature slug differs between them — an LLM can emit a
+// different slug for the same underlying defect across separate review runs
+// (crash-then-re-review), which would otherwise defeat seedCodeFixProgram's
+// per-signature cooldown by minting a fresh key every time.
+func TestCanonicalSelfReviewSig(t *testing.T) {
+	f1 := selfReviewFinding{Title: "Fix Nil Deref", Files: []string{"b.go", "a.go"}, Signature: "llm-slug-one"}
+	f2 := selfReviewFinding{Title: "fix   nil deref", Files: []string{"a.go", "b.go"}, Signature: "llm-slug-two-totally-different"}
+	if canonicalSelfReviewSig(f1) != canonicalSelfReviewSig(f2) {
+		t.Fatalf("same files+title (modulo case/whitespace/order) must canonicalize identically: %q vs %q",
+			canonicalSelfReviewSig(f1), canonicalSelfReviewSig(f2))
+	}
+
+	f3 := selfReviewFinding{Title: "Fix Nil Deref", Files: []string{"c.go"}, Signature: "llm-slug-one"}
+	if canonicalSelfReviewSig(f1) == canonicalSelfReviewSig(f3) {
+		t.Fatal("different files must canonicalize differently even with the same LLM signature")
+	}
+}
+
+// I1 end-to-end: two review runs report the SAME underlying defect (same
+// files+title) but Claude assigns each a DIFFERENT signature slug. The second
+// must be cooldown-deduped against the first via the canonical sig, not
+// treated as a fresh defect because the LLM's slug text differs.
+func TestRunSelfReview_DedupBySameFilesAndTitleDespiteDifferentLLMSignature(t *testing.T) {
+	stateDir, programsPath := withTempSelfReview(t)
+	finding1 := `[{"title":"Fix nil deref","milestone":"fix internal/foo/bar.go: guard nil deref",` +
+		`"files":["internal/foo/bar.go"],"severity":"high","signature":"llm-slug-one"}]`
+	finding2 := `[{"title":"Fix nil deref","milestone":"fix internal/foo/bar.go: guard nil deref differently",` +
+		`"files":["internal/foo/bar.go"],"severity":"high","signature":"llm-slug-two-totally-different"}]`
+
+	scanner1 := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff", "abc001", "beginning..HEAD", nil
+	}
+	deps1 := selfReviewTestDeps(stateDir, &fakeReviewClaudeRunner{output: finding1}, scanner1)
+	bb1 := &Blackboard{Task: "self-review"}
+	if got := runSelfReview(bb1, deps1); got != 1 {
+		t.Fatalf("first run status = %d, want 1", got)
+	}
+
+	scanner2 := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "def5678 superpowers: apply verified run y", "diff2", "abc002", "abc001..HEAD", nil
+	}
+	deps2 := selfReviewTestDeps(stateDir, &fakeReviewClaudeRunner{output: finding2}, scanner2)
+	bb2 := &Blackboard{Task: "self-review"}
+	if got := runSelfReview(bb2, deps2); got != 1 {
+		t.Fatalf("second run status = %d, want 1", got)
+	}
+
+	if n := countSelfReviewPrograms(t, programsPath); n != 1 {
+		t.Fatalf("different LLM signature slugs for the SAME files+title must canonicalize to the "+
+			"same dedup key: expected 1 program, got %d", n)
+	}
+}
+
 func TestRunSelfReview_KillSwitchSkipsSeedingButStillReports(t *testing.T) {
 	stateDir, programsPath := withTempSelfReview(t)
 	t.Setenv("BT_SELF_FIX", "off")
@@ -239,6 +294,41 @@ func TestParseSelfReviewFindings_CleanReviewEmptyArray(t *testing.T) {
 	findings, dropped := parseSelfReviewFindings("No issues found.\n[]")
 	if len(findings) != 0 || dropped != 0 {
 		t.Fatalf("expected clean review, got findings=%v dropped=%d", findings, dropped)
+	}
+}
+
+// I2(b): validateSelfReviewFinding must drop a finding that targets a
+// self-fix guard file itself — same defense as validateCodeFix
+// (error_handler_claude.go), applied to the proactive self-review producer.
+func TestValidateSelfReviewFinding_RejectsSelfFixGuardFileTargets(t *testing.T) {
+	ok := selfReviewFinding{
+		Title:     "Fix nil deref",
+		Milestone: "fix internal/engine/foo.go: guard nil deref before use",
+		Files:     []string{"internal/engine/foo.go"},
+		Signature: "sig1",
+	}
+	if !validateSelfReviewFinding(ok) {
+		t.Fatal("finding naming only ordinary files must validate")
+	}
+
+	guardOnly := selfReviewFinding{
+		Title:     "Weaken self-fix cap",
+		Milestone: "raise the cap in internal/engine/self_fix_seed.go",
+		Files:     []string{"internal/engine/self_fix_seed.go"},
+		Signature: "sig2",
+	}
+	if validateSelfReviewFinding(guardOnly) {
+		t.Fatal("finding naming a guard file alone must be rejected")
+	}
+
+	mixed := selfReviewFinding{
+		Title:     "Mixed guard and legit file",
+		Milestone: "fix internal/engine/foo.go and internal/engine/actions_self_review.go",
+		Files:     []string{"internal/engine/foo.go", "internal/engine/actions_self_review.go"},
+		Signature: "sig3",
+	}
+	if validateSelfReviewFinding(mixed) {
+		t.Fatal("finding mixing a guard file with a legit file must still be rejected")
 	}
 }
 

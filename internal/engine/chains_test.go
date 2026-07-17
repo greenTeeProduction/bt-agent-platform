@@ -77,6 +77,56 @@ func DemoChainTree() *evolution.SerializableNode {
 	}
 }
 
+// ctxCapturingMockLLM records the context.Context passed to GenerateCtx so
+// chainGenerate's ctx plumbing (M1) can be pinned directly, independent of
+// any higher-level chain executor.
+type ctxCapturingMockLLM struct {
+	gotCtx context.Context
+}
+
+func (m *ctxCapturingMockLLM) Generate(prompt string) (string, error) {
+	return m.GenerateCtx(context.Background(), prompt)
+}
+func (m *ctxCapturingMockLLM) GenerateCtx(ctx context.Context, _ string) (string, error) {
+	m.gotCtx = ctx
+	return "mock response with sufficient length for validation checks", nil
+}
+func (m *ctxCapturingMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *ctxCapturingMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *ctxCapturingMockLLM) GeneratePlan(_, _ string) string         { return "plan" }
+func (m *ctxCapturingMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// M1: chainGenerate must call bb.LLM.GenerateCtx with bb.TraceContext (the
+// tree's run deadline) rather than bb.LLM.Generate, which every production
+// LLM client (deepseek/acp/ollama/openai_compat) implements with
+// context.Background() — a burst of 429 retries inside that call could
+// otherwise sleep past the tree's own run budget. A nil TraceContext falls
+// back to context.Background() rather than passing a nil ctx through.
+func TestChainGenerate_UsesTraceContext(t *testing.T) {
+	type ctxKey string
+	traceCtx := context.WithValue(context.Background(), ctxKey("trace"), "yes")
+
+	mock := &ctxCapturingMockLLM{}
+	bb := &Blackboard{LLM: mock, TraceContext: traceCtx}
+	if _, err := chainGenerate(bb, "prompt"); err != nil {
+		t.Fatalf("chainGenerate: %v", err)
+	}
+	if mock.gotCtx != traceCtx {
+		t.Fatalf("chainGenerate must call GenerateCtx with bb.TraceContext, got %v", mock.gotCtx)
+	}
+
+	mockNilTrace := &ctxCapturingMockLLM{}
+	bbNilTrace := &Blackboard{LLM: mockNilTrace}
+	if _, err := chainGenerate(bbNilTrace, "prompt"); err != nil {
+		t.Fatalf("chainGenerate: %v", err)
+	}
+	if mockNilTrace.gotCtx == nil {
+		t.Fatal("chainGenerate must never pass a nil context to GenerateCtx (fall back to context.Background())")
+	}
+}
+
 func TestChainAction_LLMCall(t *testing.T) {
 	mock := &chainMockLLM{responses: map[string]string{
 		"generate": "This is a test analysis result.",

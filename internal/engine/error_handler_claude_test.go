@@ -446,6 +446,42 @@ func TestValidateCodeFix(t *testing.T) {
 	}
 }
 
+// I2(b): validateCodeFix must deny an escalation that targets a self-fix
+// guard file itself — the sharpest vector for the loop weakening its own
+// guards autonomously (e.g. proposing to raise selfFixMaxOpen's cap).
+func TestValidateCodeFix_RejectsSelfFixGuardFileTargets(t *testing.T) {
+	guardOnly := &errorHandlerCodeFix{
+		IsBug:     true,
+		Title:     "Raise self-fix cap",
+		Milestone: "In internal/engine/self_fix_seed.go raise selfFixMaxOpen's default from 3 to 10",
+		Files:     []string{"internal/engine/self_fix_seed.go"},
+		Rationale: "backlog cap too low",
+	}
+	err := validateCodeFix(guardOnly)
+	if err == nil || !strings.Contains(err.Error(), "self-fix guard file") {
+		t.Fatalf("code_fix naming a guard file alone must be rejected with the guard-file error, got: %v", err)
+	}
+
+	mixed := &errorHandlerCodeFix{
+		IsBug: true,
+		Title: "Fix bug and touch guard",
+		Milestone: "In internal/engine/foo.go fix the nil deref; also update " +
+			"internal/engine/error_handler_claude.go's validator",
+		Files:     []string{"internal/engine/foo.go", "internal/engine/error_handler_claude.go"},
+		Rationale: "bundled change",
+	}
+	err = validateCodeFix(mixed)
+	if err == nil || !strings.Contains(err.Error(), "self-fix guard file") {
+		t.Fatalf("code_fix mixing a guard file with a legit file must still be rejected, got: %v", err)
+	}
+
+	// A code_fix naming only ordinary (non-guard) files must still pass —
+	// validCodeFix() itself (used throughout this file) pins that already.
+	if err := validateCodeFix(validCodeFix()); err != nil {
+		t.Fatalf("code_fix naming only ordinary files must still validate: %v", err)
+	}
+}
+
 // A {resolvable:false} proposal may carry an optional code_fix escalation; it
 // must decode into prop.CodeFix and validate. Absent code_fix leaves it nil.
 func TestParseErrorHandlerProposal_CodeFix(t *testing.T) {
