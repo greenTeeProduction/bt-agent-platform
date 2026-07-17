@@ -32,6 +32,10 @@ import (
 
 func resolveTree(id string) *evolution.SerializableNode {
 	if t := agent.LoadMutatedTreeOverride(id); t != nil {
+		// A persisted runtime mutation shadows the code-defined tree until its
+		// override file is removed — surface that, or code changes to this
+		// tree silently never take effect.
+		engine.Warn("tree resolution using persisted mutation override", "tree", id)
 		return t
 	}
 	return domains.ResolveTreeID(id)

@@ -116,8 +116,10 @@ func mapCorrespondence(oldN, newN, mutParent *evolution.SerializableNode, kind s
 }
 
 // maxChildrenForType bounds how many children a node type meaningfully
-// executes: 0 for leaves, 1 for single-child decorators, 2 for two-child types,
-// -1 for unbounded composites. buildNodeInner silently ignores extra children on
+// executes: 0 for leaves; 1 for single-child decorators and for single-child
+// builder-contract composites (ForEachTask, ReviewCycle, AbortOnEvent — their
+// builders execute exactly Children[0]); 2 for two-child types; -1 for
+// unbounded composites. buildNodeInner silently ignores extra children on
 // leaf and single-child types, so an add beyond the cap would graft dead structure.
 func maxChildrenForType(t string) int {
 	switch t {
