@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -17,6 +18,13 @@ import (
 type AgentExecutor struct {
 	Runner  *agent.RunDeps
 	Timeout time.Duration
+	// CBStore, when set, records each RunTaskResult call's outcome to the
+	// shared agent circuit breaker store and persists it to
+	// agent.CircuitBreakersFile() after every run — mirroring
+	// internal/agent/scheduler.go's reportAgentOutcome/Save calls, so a
+	// flaky agent invoked only through the dashboard still trips the
+	// breaker the scheduler and A2A auction paths already honor.
+	CBStore *agent.AgentCircuitBreakerStore
 }
 
 func NewAgentExecutor() *AgentExecutor {
@@ -34,6 +42,8 @@ func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, 
 
 // RunTaskResult executes a task and returns the full RunResult (includes blackboard run_id).
 func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.RunResult, error) {
+	var res *agent.RunResult
+	var err error
 	if e.Runner != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 		defer cancel()
@@ -43,19 +53,39 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 			RecordHistory:  true,
 			DisplayName:    agentName,
 		}
-		_, _, res, err := agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
-		return res, err
+		_, _, res, err = agent.RunAgent(ctx, e.Runner, agentName, task, treeID, opts)
+	} else {
+		var output, outcome string
+		output, outcome, err = e.runViaHermes(task, treeID)
+		if err != nil && outcome == "" {
+			outcome = "failure"
+		}
+		res = &agent.RunResult{
+			AgentName: agentName,
+			Task:      task,
+			Outcome:   outcome,
+			Output:    output,
+		}
 	}
-	output, outcome, err := e.runViaHermes(task, treeID)
-	if err != nil && outcome == "" {
-		outcome = "failure"
+	e.recordCircuitBreakerOutcome(agentName, res)
+	return res, err
+}
+
+// recordCircuitBreakerOutcome reports res's outcome to CBStore and persists
+// it, mirroring internal/agent/scheduler.go's runJob: reportAgentOutcome
+// followed by cbStore.Save(CircuitBreakersFile()) on every cycle.
+func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult) {
+	if e.CBStore == nil || res == nil {
+		return
 	}
-	return &agent.RunResult{
-		AgentName: agentName,
-		Task:      task,
-		Outcome:   outcome,
-		Output:    output,
-	}, err
+	if res.Outcome == "success" {
+		e.CBStore.RecordSuccess(agentName)
+	} else {
+		e.CBStore.RecordFailure(agentName)
+	}
+	if err := e.CBStore.Save(agent.CircuitBreakersFile()); err != nil {
+		slog.Warn("dashboard: persist circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
+	}
 }
 
 func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {

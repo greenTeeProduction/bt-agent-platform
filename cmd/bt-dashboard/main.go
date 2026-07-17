@@ -40,6 +40,36 @@ var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
 var dashAgentRunner *agent.RunDeps
 
+// dashCBStore is the shared per-agent circuit breaker store, loaded once at
+// startup from agent.CircuitBreakersFile() so dashboard-dispatched runs honor
+// the same breaker state the scheduler and A2A auction paths already do (see
+// cmd/bt-agent/main.go's buildSchedulerConfig). newAgentExecutor wires it into
+// every AgentExecutor's CBStore field. Access it via getDashCBStore, which
+// creates and loads it on first use (guarded by dashCBStoreOnce) so it is
+// available even to callers that run before or without main()'s startup
+// sequence, such as tests that call newAgentExecutor() directly.
+var dashCBStore *agent.AgentCircuitBreakerStore
+var dashCBStoreOnce sync.Once
+
+// getDashCBStore returns the shared circuit breaker store, initializing it
+// from dashConfig's CB settings (or defaults, if dashConfig hasn't been
+// loaded yet) and restoring persisted state from agent.CircuitBreakersFile()
+// the first time it is called.
+func getDashCBStore() *agent.AgentCircuitBreakerStore {
+	dashCBStoreOnce.Do(func() {
+		var opts agent.CircuitBreakerOptions
+		if dashConfig != nil {
+			opts.Threshold = dashConfig.CBThreshold
+			opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
+		}
+		dashCBStore = agent.NewAgentCircuitBreakerStore(opts)
+		if err := dashCBStore.Load(agent.CircuitBreakersFile()); err != nil {
+			slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
+		}
+	})
+	return dashCBStore
+}
+
 // dlq is the dead letter queue for failed agent tasks.
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
 var dlq *reliability.DeadLetterQueue
@@ -235,6 +265,9 @@ func main() {
 		dashAgentRunner = runner
 		slog.Info("In-process agent runner initialized")
 	}
+
+	getDashCBStore()
+	slog.Info("Circuit breaker store initialized", "path", agent.CircuitBreakersFile())
 
 	// API key from env/config — if set, all /api/* endpoints require X-API-Key header
 	apiKey := os.Getenv("BT_API_KEY")
@@ -1623,6 +1656,17 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 
 	treeID := req.Tree
 
+	// Reject before submitting to the worker pool if the agent's circuit
+	// breaker is open, mirroring the job-skip gate in
+	// internal/agent/scheduler.go's tick — no point wasting a worker slot
+	// and an LLM call on a known-broken agent.
+	if !getDashCBStore().Allowed(req.Agent) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + req.Agent})
+		return
+	}
+
 	// Acquire concurrency slot before submitting to worker pool.
 	// The limiter prevents more than 2 simultaneous LLM-bound agent
 	// executions, avoiding Ollama queue overflows on this Jetson.
@@ -1708,6 +1752,16 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	treeID := r.URL.Query().Get("tree")
+
+	// Reject before submitting to the worker pool if the agent's circuit
+	// breaker is open, mirroring the job-skip gate in
+	// internal/agent/scheduler.go's tick.
+	if !getDashCBStore().Allowed(agentName) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + agentName})
+		return
+	}
 
 	// Acquire concurrency slot to prevent LLM resource exhaustion.
 	if dashConcurrencyLimiter != nil {

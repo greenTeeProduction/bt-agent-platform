@@ -1167,6 +1167,141 @@ func TestMainSupportsVersionFlagForDriftSmokeTest(t *testing.T) {
 	}
 }
 
+// TestNewAgentExecutor_SetsCBStore pins milestone 2/3 of the Q3 Reliability
+// program closing the dashboard's dead task-metrics and circuit-breaker
+// recording gap in AgentExecutor.RunTaskResult. Milestone 1 added
+// AgentExecutor.CBStore (internal/dashboard/executor.go) and wired
+// RunTaskResult to report outcomes to it — but newAgentExecutor
+// (cmd/bt-dashboard/agent_executor.go) only sets Runner, never CBStore, so in
+// production every dashboard-dispatched RunTaskResult call's
+// recordCircuitBreakerOutcome silently no-ops on a nil CBStore: a flaky agent
+// invoked only through the dashboard never trips the shared breaker the
+// scheduler and A2A auction paths already honor. newAgentExecutor must set
+// CBStore from a package-level *agent.AgentCircuitBreakerStore loaded once at
+// startup in main.go via agent.CircuitBreakersFile(), mirroring
+// cmd/bt-agent/main.go's buildSchedulerConfig wiring.
+func TestNewAgentExecutor_SetsCBStore(t *testing.T) {
+	e := newAgentExecutor()
+	if e.CBStore == nil {
+		t.Fatal("newAgentExecutor().CBStore is nil; must be wired from a package-level " +
+			"*agent.AgentCircuitBreakerStore loaded at startup in main.go via " +
+			"agent.CircuitBreakersFile(), mirroring cmd/bt-agent/main.go's buildSchedulerConfig")
+	}
+}
+
+// TestHandleAgentExecute_CircuitBreakerOpenReturns503 pins milestone 3/3 of
+// the Q3 Reliability program closing the dashboard's dead task-metrics and
+// circuit-breaker recording gap in AgentExecutor.RunTaskResult. Milestone 2
+// wired newAgentExecutor's CBStore so RunTaskResult *records* outcomes to the
+// shared breaker — but nothing on the dashboard's HTTP path *checks* it
+// before dispatching, unlike internal/agent/scheduler.go's tick, which skips
+// a job outright when s.cbStore.Allowed(job.AgentName) is false. So even
+// after a dashboard-triggered agent trips its breaker open, the very next
+// POST /api/agents/execute for that agent still submits to the worker pool
+// and calls RunTaskResult, wasting resources on a known-broken agent exactly
+// like the scheduler gate was added to prevent. handleAgentExecute must
+// check CBStore.Allowed(agentName) before submitting to the worker pool and
+// return a 503 JSON error instead of executing when the breaker is open.
+func TestHandleAgentExecute_CircuitBreakerOpenReturns503(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	prevRunner, prevPool, prevLimiter := dashAgentRunner, dashWorkerPool, dashConcurrencyLimiter
+	t.Cleanup(func() {
+		dashAgentRunner = prevRunner
+		dashWorkerPool = prevPool
+		dashConcurrencyLimiter = prevLimiter
+	})
+	// Force the synchronous fallback path so the test doesn't race a
+	// worker-pool goroutine.
+	dashWorkerPool = nil
+	dashConcurrencyLimiter = nil
+
+	const agentName = "breaker-tripped-execute-agent"
+	cb := getDashCBStore().Get(agentName)
+	for i := 0; i < 10; i++ {
+		cb.RecordFailure()
+	}
+	if cb.State() != agent.CircuitOpen {
+		t.Fatalf("test setup: expected circuit breaker for %q to be open after repeated failures, got %v",
+			agentName, cb.State())
+	}
+
+	invoked := false
+	dashAgentRunner = &agent.RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode {
+			invoked = true
+			return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+		},
+	}
+
+	body, _ := json.Marshal(map[string]string{
+		"agent": agentName,
+		"task":  "run the thing",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/agents/execute", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	handleAgentExecute(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAgentExecute with an open circuit breaker: got status %d, want %d (body=%s)",
+			rr.Code, http.StatusServiceUnavailable, rr.Body.String())
+	}
+	if invoked {
+		t.Error("handleAgentExecute invoked RunTaskResult (ResolveTree was called) despite an open " +
+			"circuit breaker for the agent; it must check CBStore.Allowed(agentName) before submitting " +
+			"to the worker pool")
+	}
+}
+
+// TestHandleAgentRun_CircuitBreakerOpenReturns503 is handleAgentRun's
+// counterpart to TestHandleAgentExecute_CircuitBreakerOpenReturns503 above —
+// GET /api/agents/run is the dashboard UI's own agent-trigger path and must
+// honor the same shared breaker gate as POST /api/agents/execute.
+func TestHandleAgentRun_CircuitBreakerOpenReturns503(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	prevRunner, prevPool, prevLimiter := dashAgentRunner, dashWorkerPool, dashConcurrencyLimiter
+	t.Cleanup(func() {
+		dashAgentRunner = prevRunner
+		dashWorkerPool = prevPool
+		dashConcurrencyLimiter = prevLimiter
+	})
+	dashWorkerPool = nil
+	dashConcurrencyLimiter = nil
+
+	const agentName = "breaker-tripped-run-agent"
+	cb := getDashCBStore().Get(agentName)
+	for i := 0; i < 10; i++ {
+		cb.RecordFailure()
+	}
+	if cb.State() != agent.CircuitOpen {
+		t.Fatalf("test setup: expected circuit breaker for %q to be open after repeated failures, got %v",
+			agentName, cb.State())
+	}
+
+	invoked := false
+	dashAgentRunner = &agent.RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode {
+			invoked = true
+			return &evolution.SerializableNode{Type: "AlwaysSucceed"}
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agents/run?agent="+agentName+"&task=run+the+thing", nil)
+	rr := httptest.NewRecorder()
+	handleAgentRun(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAgentRun with an open circuit breaker: got status %d, want %d (body=%s)",
+			rr.Code, http.StatusServiceUnavailable, rr.Body.String())
+	}
+	if invoked {
+		t.Error("handleAgentRun invoked RunTaskResult (ResolveTree was called) despite an open circuit " +
+			"breaker for the agent; it must check CBStore.Allowed(agentName) before submitting to the " +
+			"worker pool")
+	}
+}
+
 // TestHandleTrees_IncludesFitnessAndLineage pins milestone 2/4 of the
 // "surface knowledge-graph fitness and evolution lineage" program:
 // /api/trees currently returns only id/name/category/node_count

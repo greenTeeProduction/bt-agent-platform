@@ -1,10 +1,72 @@
 package dashboard
 
 import (
+	"os"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
+
+// TestRunTaskResult_RecordsCircuitBreakerOutcome verifies that AgentExecutor.
+// RunTaskResult, when given a CBStore, reports each run's outcome to the
+// shared agent.AgentCircuitBreakerStore and persists it to
+// agent.CircuitBreakersFile() — mirroring internal/agent/scheduler.go's
+// runJob, which calls reportAgentOutcome then cbStore.Save(CircuitBreakersFile())
+// on every cycle. Today RunTaskResult never touches a circuit breaker store at
+// all, so a flaky agent invoked only through the dashboard never trips the
+// breaker the scheduler and A2A auction paths already honor.
+func TestRunTaskResult_RecordsCircuitBreakerOutcome(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	cbStore := agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+		Threshold: 2,
+		Cooldown:  time.Minute,
+	})
+
+	exec := &AgentExecutor{
+		Timeout: 5 * time.Second,
+		CBStore: cbStore,
+		Runner: &agent.RunDeps{
+			// Inverter(AlwaysSucceed) deterministically fails without needing
+			// a real LLM or registry — the same technique cmd/bt-dashboard's
+			// tests use for a deterministic AlwaysSucceed tree, inverted.
+			ResolveTree: func(_ string) *evolution.SerializableNode {
+				return &evolution.SerializableNode{
+					Type:     "Inverter",
+					Children: []evolution.SerializableNode{{Type: "AlwaysSucceed"}},
+				}
+			},
+		},
+	}
+
+	const agentName = "flaky-dashboard-agent"
+	for i := 0; i < 2; i++ {
+		res, err := exec.RunTaskResult(agentName, "do the thing", "flaky-tree")
+		if res == nil {
+			t.Fatalf("run %d: RunTaskResult returned nil result (err=%v)", i, err)
+		}
+		if res.Outcome != "failure" {
+			t.Fatalf("run %d: got outcome %q, want %q (test setup must drive a failing outcome)", i, res.Outcome, "failure")
+		}
+	}
+
+	cb := cbStore.Get(agentName)
+	if cb.State() != agent.CircuitOpen {
+		t.Fatalf("after %d consecutive failing RunTaskResult calls with threshold 2, breaker state = %v, want %v (open) — RunTaskResult must call CBStore.RecordFailure on failing outcomes", 2, cb.State(), agent.CircuitOpen)
+	}
+
+	data, err := os.ReadFile(agent.CircuitBreakersFile())
+	if err != nil {
+		t.Fatalf("RunTaskResult must persist breaker state via CBStore.Save(agent.CircuitBreakersFile()) on every run, like scheduler.go's runJob does: %v", err)
+	}
+	if !strings.Contains(string(data), agentName) || !strings.Contains(string(data), "open") {
+		t.Fatalf("persisted circuit breaker file missing open state for %q: %s", agentName, data)
+	}
+}
 
 // TestPickTreeForTask_RoutesAuctionShapedTasksToAuctionDemo verifies that
 // tasks whose text signals auction/delegation intent (mirroring
