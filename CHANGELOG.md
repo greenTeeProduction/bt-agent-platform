@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **(engine):** Runtime tree mutation — behavior trees can now be mutated (nodes added or removed) while they are being ticked. Mutations queue per live run (from action nodes via `bb.EnqueueMutation`, or externally via the new `bt_live_runs` / `bt_live_mutate` / `bt_live_mutations` MCP tools) and apply copy-on-write at tick boundaries with validation, llm-origin allowlisting, and pointer-state migration (an unrelated graft never restarts an in-progress MemSequence). `persist: true` snapshots the mutated tree to `~/.go-bt-evolve/mutated_trees/` where tree resolution consults it override-first. Spec: `docs/superpowers/specs/2026-07-17-runtime-tree-mutation-design.md`.
 - **(blackboard):** Scoped context store (`run`, `session`, `agent`) with ReAct `bb_*` tools, memory/history offloading, pipeline session sharing, MCP `bt_bb_*` tools, `{{.BB.*}}` chain templates, and session/agent JSON persistence under `${AGENT_HOME}/blackboard/` (ADR-009).
 - **(blackboard):** Agent-scope auto-promotion (`runs/latest/*`), `run_id`/`session_id` on run responses, dashboard `GET /api/blackboard`, workflow session key viewer.
 - **(blackboard):** CLI `bb list/read/scopes`, dashboard Agents tab BB panel, `GET /api/blackboard/scopes`.
