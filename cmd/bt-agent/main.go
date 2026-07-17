@@ -235,7 +235,7 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 // the error the replay executor returns to reliability.DeadLetterQueue's
 // Replay: nil drops the entry (reliability.go:249-251), non-nil keeps it
 // queued for another replay. Mirrors recordSchedulerAttempt/
-// cycleBreakerSuccess above — rate-limit carryover and the other healthy
+// IsBreakerSuccess above — rate-limit carryover and the other healthy
 // no-code outcomes (no_change, degraded) are terminal-and-healthy, not
 // failures, so a replay that gracefully pauses or lands on an
 // analysis-only/deterministic-fallback outcome is dropped instead of

@@ -38,25 +38,3 @@ func TestIsBreakerSuccess(t *testing.T) {
 		})
 	}
 }
-
-// TestCycleBreakerSuccessDelegatesToIsBreakerSuccess guards against the
-// scheduler's own classifier diverging from the shared one again.
-func TestCycleBreakerSuccessDelegatesToIsBreakerSuccess(t *testing.T) {
-	cases := []struct {
-		outcome string
-		err     error
-	}{
-		{"success", nil},
-		{"no_change", nil},
-		{"degraded", nil},
-		{"failure", nil},
-		{"success", errors.New("x")},
-		{"goap_fusion_rate_limited", errors.New("x")},
-	}
-	for _, c := range cases {
-		if cycleBreakerSuccess(c.outcome, c.err) != IsBreakerSuccess(c.outcome, c.err) {
-			t.Fatalf("cycleBreakerSuccess(%q,%v)=%v disagrees with IsBreakerSuccess=%v",
-				c.outcome, c.err, cycleBreakerSuccess(c.outcome, c.err), IsBreakerSuccess(c.outcome, c.err))
-		}
-	}
-}

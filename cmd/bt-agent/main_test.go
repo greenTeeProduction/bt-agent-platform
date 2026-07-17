@@ -135,7 +135,7 @@ func TestSchedulerAttempt_SuccessAndFailureUnchanged(t *testing.T) {
 // research finding that the DLQ replay executor's outcome classification
 // (main.go dlq.SetReplayExecutor, ~line 592-609) must treat the rate-limit
 // carryover and other healthy non-success outcomes (no_change, degraded) as
-// non-failing replays — mirroring recordSchedulerAttempt/cycleBreakerSuccess
+// non-failing replays — mirroring recordSchedulerAttempt/IsBreakerSuccess
 // above, which already give those same outcomes the same terminal-and-healthy
 // treatment on the scheduler path. Before this fix the replay executor's
 // inline check (res.Outcome != "success") flagged EVERY non-"success"
@@ -200,7 +200,7 @@ func TestDLQReplayExecutorUsesOutcomeClassifier(t *testing.T) {
 	}
 	body := s[replayIdx:tickerIdx]
 	if !strings.Contains(body, "dlqReplayOutcomeError(") {
-		t.Error("the DLQ replay executor must classify outcomes via dlqReplayOutcomeError(res) instead of an inline `res.Outcome != \"success\"` check, so rate-limit carryover and other healthy non-success outcomes (mirroring recordSchedulerAttempt/cycleBreakerSuccess) are not treated as failing replays")
+		t.Error("the DLQ replay executor must classify outcomes via dlqReplayOutcomeError(res) instead of an inline `res.Outcome != \"success\"` check, so rate-limit carryover and other healthy non-success outcomes (mirroring recordSchedulerAttempt/IsBreakerSuccess) are not treated as failing replays")
 	}
 }
 

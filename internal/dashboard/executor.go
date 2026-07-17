@@ -77,19 +77,20 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 
 // recordCircuitBreakerOutcome reports res's outcome to CBStore and persists
 // it, mirroring internal/agent/scheduler.go's runJob: reportAgentOutcome
-// followed by cbStore.Save(CircuitBreakersFile()) on every cycle. A
-// RateLimitCarryoverOutcome result counts as a breaker success, matching
-// scheduler.go's cycleBreakerSuccess — it's a healthy, expected backoff
-// pause, not a genuine failure.
+// followed by cbStore.Save(CircuitBreakersFile()) on every cycle. Success is
+// classified by agent.IsBreakerSuccess — the shared classifier the scheduler
+// uses — so healthy non-"success" outcomes (no_change, degraded, rate-limit
+// carryover) keep the breaker closed, while a run error flips an otherwise
+// healthy outcome to failure (carryover excepted).
 func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult, runErr error) {
 	if e.CBStore == nil {
 		return
 	}
 	// A nil result is a hard failure (agent.RunAgent returns (nil, err) on
-	// runner-not-configured, context timeout, or LLM-unavailable) and must trip
-	// the breaker, not be silently skipped. Otherwise defer to the shared
-	// classifier so the dashboard and scheduler can't disagree on which
-	// outcomes count as healthy.
+	// degenerate input: nil RunDeps/ResolveTree or an empty agent name/task)
+	// and must trip the breaker, not be silently skipped. Otherwise defer to
+	// the shared classifier so the dashboard and scheduler can't disagree on
+	// which outcomes count as healthy.
 	if res != nil && agent.IsBreakerSuccess(res.Outcome, runErr) {
 		e.CBStore.RecordSuccess(agentName)
 	} else {
@@ -104,12 +105,17 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 // global agent-task metrics (GetAgentMetrics), so every agent run through
 // the dashboard — in-process or via the Hermes fallback — is reflected in
 // the agent metrics panel and /metrics endpoint the same way
-// internal/agent/scheduler.go's runJob already records its runs. A
-// RateLimitCarryoverOutcome result counts as a success here too, matching
-// recordCircuitBreakerOutcome's exemption — it's a healthy backoff pause,
-// not a genuine task failure.
+// internal/agent/scheduler.go's runJob already records its runs. Success is
+// classified by agent.IsBreakerSuccess, keeping the metrics panel consistent
+// with the circuit breaker's view of the same run: healthy non-"success"
+// outcomes count as success, a run error flips a healthy outcome to failure,
+// and a nil result (hard failure) records a zero-duration failure so broken
+// runs stay visible in the metrics the breaker already counts.
 func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult, runErr error) {
 	if res == nil {
+		if runErr != nil {
+			RecordTask(agentName, false, 0)
+		}
 		return
 	}
 	success := agent.IsBreakerSuccess(res.Outcome, runErr)

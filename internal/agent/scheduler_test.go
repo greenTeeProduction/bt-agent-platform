@@ -756,7 +756,7 @@ func TestScheduler_AnyInFlight(t *testing.T) {
 }
 
 // A RateLimitCarryoverOutcome cycle is a healthy, expected backoff pause (see
-// cycleBreakerSuccess), not a genuine failure — the AgentEvent runJob publishes
+// IsBreakerSuccess), not a genuine failure — the AgentEvent runJob publishes
 // to GlobalAgentBus (→ Hermes webhook bridge) must not carry a failure_reason
 // for it, or the Hermes webhook/Telegram template alarms on a healthy cycle.
 func TestRunJob_RateLimitCarryoverOutcome_NoFailureReasonPublished(t *testing.T) {

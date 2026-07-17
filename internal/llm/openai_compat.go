@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
@@ -168,6 +169,13 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 			return reliability.NewCategorizedError(cat,
 				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
 		}
+		// Residual non-2xx (an unfollowed 3xx): not retryable, and the body is
+		// unlikely to be the expected JSON — classify by status rather than
+		// letting the unmarshal failure name the error.
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return reliability.NewCategorizedError(reliability.ErrCatValidation,
+				fmt.Errorf("openai-compatible api status %d: %s", resp.StatusCode, truncateBody(respBody)))
+		}
 		var parsed openAICompatResponse
 		if unmarshalErr := json.Unmarshal(respBody, &parsed); unmarshalErr != nil {
 			return fmt.Errorf("unmarshal response: %w", unmarshalErr)
@@ -199,12 +207,18 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 // truncateBody caps an error-response body so a large HTML/error page from a
 // gateway doesn't bloat the returned error string. Classification no longer
 // depends on the body content (status drives it), so this is purely cosmetic.
+// The cut is backed off to a rune boundary so a multi-byte UTF-8 sequence is
+// never split into an invalid tail.
 func truncateBody(b []byte) string {
 	const max = 512
-	if len(b) > max {
-		return string(b[:max]) + "…"
+	if len(b) <= max {
+		return string(b)
 	}
-	return string(b)
+	cut := max
+	for cut > 0 && !utf8.RuneStart(b[cut]) {
+		cut--
+	}
+	return string(b[:cut]) + "…"
 }
 
 func (c *OpenAICompatClient) AnalyzeComplexity(task string) string {

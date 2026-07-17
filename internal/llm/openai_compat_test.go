@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 func TestOpenAICompat_GenerateWithModel_SendsChatCompletion(t *testing.T) {
@@ -108,6 +111,49 @@ func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	}
 }
 
+// TestOpenAICompat_RetryableFailureRecordsBreakerFailure pins the positive
+// half of the breaker gating: a retryable failure that exhausts its retries
+// must record a breaker failure, or the breaker could never open on a real
+// outage (the negative half — 4xx not counting — is pinned by
+// TestOpenAICompat_ClientErrorsDoNotTripBreaker).
+func TestOpenAICompat_RetryableFailureRecordsBreakerFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("<html>503</html>"))
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
+	if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "p"); err == nil {
+		t.Fatal("expected an error from a persistent 503")
+	}
+	if n := client.breaker.FailureCount(); n != 1 {
+		t.Fatalf("breaker FailureCount = %d, want 1 (a retry-exhausted 5xx must record exactly one breaker failure)", n)
+	}
+}
+
+// TestOpenAICompat_OpenBreakerRejectsWithoutRequest verifies an open breaker
+// fails fast without hitting the backend.
+func TestOpenAICompat_OpenBreakerRejectsWithoutRequest(t *testing.T) {
+	var serves int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&serves, 1)
+	}))
+	defer server.Close()
+
+	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
+	for i := 0; i < 3; i++ { // threshold is 3
+		client.breaker.RecordFailure()
+	}
+	_, err := client.GenerateWithModel(context.Background(), "m", "sys", "p")
+	if err == nil || !strings.Contains(err.Error(), "circuit breaker open") {
+		t.Fatalf("expected a circuit-breaker-open error, got: %v", err)
+	}
+	if n := atomic.LoadInt32(&serves); n != 0 {
+		t.Fatalf("open breaker must not reach the backend, saw %d requests", n)
+	}
+}
+
 func TestOpenAICompat_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -138,6 +184,7 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 		status    int
 		body      string
 		retryable bool
+		wantCat   reliability.ErrorCategory
 	}{
 		{
 			name:      "429 too many requests retries then succeeds",
@@ -156,12 +203,14 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 			status:    http.StatusBadRequest,
 			body:      `{"error":{"message":"invalid request"}}`,
 			retryable: false,
+			wantCat:   reliability.ErrCatValidation,
 		},
 		{
 			name:      "401 unauthorized fails without retry",
 			status:    http.StatusUnauthorized,
 			body:      `{"error":{"message":"invalid api key"}}`,
 			retryable: false,
+			wantCat:   reliability.ErrCatAuth,
 		},
 	}
 
@@ -198,6 +247,9 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 				}
 				if n := atomic.LoadInt32(&attempts); n != 1 {
 					t.Fatalf("expected exactly 1 attempt (no retry) for non-retryable status %d, got %d", tc.status, n)
+				}
+				if got := reliability.ClassifyError(err); got != tc.wantCat {
+					t.Fatalf("ClassifyError = %v, want %v for status %d (typed status classification must survive the retry wrapper)", got, tc.wantCat, tc.status)
 				}
 			}
 		})

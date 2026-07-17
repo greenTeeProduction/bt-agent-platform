@@ -774,7 +774,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		}
 		// Raw values — consumers (Hermes webhook templates) do the labeling.
 		// Empty on success / when unavailable. RateLimitCarryoverOutcome is a
-		// healthy, expected backoff pause (see cycleBreakerSuccess), not a
+		// healthy, expected backoff pause (see IsBreakerSuccess), not a
 		// genuine failure, so it must not alarm the Hermes webhook/Telegram
 		// template either.
 		failureReason := ""
@@ -847,7 +847,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	// (no_change, degraded) count as breaker success: a stretch of
 	// analysis-only cycles must not open an agent's breaker with nothing
 	// actually broken.
-	reportAgentOutcome(s.cbStore, job.AgentName, cycleBreakerSuccess(outcome, runErr))
+	reportAgentOutcome(s.cbStore, job.AgentName, IsBreakerSuccess(outcome, runErr))
 	if s.cbStore != nil {
 		if err := s.cbStore.Save(CircuitBreakersFile()); err != nil {
 			slog.Warn("scheduler: persist circuit breaker state failed", "path", CircuitBreakersFile(), "err", err)
@@ -862,25 +862,15 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 }
 
-// cycleBreakerSuccess reports whether a completed cycle counts as a success
-// for the agent's circuit breaker. Healthy terminal outcomes — success,
-// no_change (analysis-only), degraded (deterministic fallback), and the
-// rate-limit carryover (an expected pause; a long backoff window must not
-// walk the breaker open) — keep the breaker closed; genuine failures and
-// errored runs count against it.
-func cycleBreakerSuccess(outcome string, runErr error) bool {
-	return IsBreakerSuccess(outcome, runErr)
-}
-
 // IsBreakerSuccess is the single source of truth for whether a completed run
 // keeps an agent's circuit breaker closed. Every caller that records breaker
-// outcomes — the scheduler (cycleBreakerSuccess) and the dashboard executor —
-// must route through this so their definitions can no longer drift apart.
-// Healthy terminal outcomes (success, no_change (analysis-only), degraded
-// (deterministic fallback)) with no run error keep the breaker closed, as does
-// the rate-limit carryover (an expected pause; a long backoff window must not
-// walk the breaker open). Genuine failures, errored runs, and healthy outcomes
-// that still carried a run error count against it.
+// outcomes — the scheduler's runJob and the dashboard executor — must route
+// through this so their definitions can no longer drift apart. Healthy
+// terminal outcomes (see isHealthyOutcome) with no run error keep the breaker
+// closed, as does the rate-limit carryover (an expected pause; a long backoff
+// window must not walk the breaker open).
+// Genuine failures, errored runs, and healthy outcomes that still carried a
+// run error count against it.
 func IsBreakerSuccess(outcome string, runErr error) bool {
 	if IsRateLimitCarryover(outcome) {
 		return true
@@ -903,7 +893,7 @@ func stepsFromChildTicks(ticks []engine.ChildTick) []knowledge.TraceStep {
 // historyQualityScore combines heuristic and YAML QualitySpec scoring for
 // history records. The rate-limit carryover pause is exempted from the
 // 0.0-quality convention below: it is a healthy, expected state (see
-// cycleBreakerSuccess), not a genuine failure, so it must not be persisted to
+// IsBreakerSuccess), not a genuine failure, so it must not be persisted to
 // scheduler history looking indistinguishable from one.
 func historyQualityScore(inst *Instance, outcome, output string) float64 {
 	quality := 0.0
@@ -926,7 +916,7 @@ func historyQualityScore(inst *Instance, outcome, output string) float64 {
 // it for healthy outcomes instead of recomputing the text-shape estimate, which
 // discards those signals (committed runs otherwise land as 0.75/0.9/1.0 by
 // output length, and no_change/degraded as 0.0). The rate-limit carryover pause
-// is healthy too (see cycleBreakerSuccess) even though isHealthyOutcome doesn't
+// is healthy too (see IsBreakerSuccess) even though isHealthyOutcome doesn't
 // cover it, so it also prefers the RunResult's authoritative quality. Non-healthy
 // outcomes (failure/timeout/partial) keep the historyQualityScore 0.0
 // convention, and a nil RunResult (e.g. a panicked run) falls back to the

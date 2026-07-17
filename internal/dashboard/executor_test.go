@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -55,13 +56,64 @@ func TestRecordCircuitBreakerOutcome_NilResultTripsBreaker(t *testing.T) {
 	}
 }
 
-var errAgentBroken = errorsNew("runner not configured")
+var errAgentBroken = errors.New("runner not configured")
 
-func errorsNew(s string) error { return &staticErr{s} }
+// TestRecordTaskMetric_NilResultRecordsFailure verifies the task metrics stay
+// consistent with the circuit breaker for hard failures: a nil RunResult with
+// a run error records a zero-duration failed task instead of being silently
+// skipped, so an agent the breaker counts as failing is also visible as
+// failing in GetAgentMetrics.
+func TestRecordTaskMetric_NilResultRecordsFailure(t *testing.T) {
+	exec := &AgentExecutor{}
+	const agentName = "nil-result-metric-agent"
 
-type staticErr struct{ s string }
+	exec.recordTaskMetric(agentName, nil, errAgentBroken)
 
-func (e *staticErr) Error() string { return e.s }
+	var stats *AgentStats
+	for _, s := range GetAgentMetrics() {
+		s := s
+		if s.Name == agentName {
+			stats = &s
+			break
+		}
+	}
+	if stats == nil {
+		t.Fatalf("GetAgentMetrics() has no entry for %q — a nil-result hard failure must record a failed task", agentName)
+	}
+	if stats.ErrorCount != 1 {
+		t.Errorf("ErrorCount = %d, want 1 (nil result + run error must count as a task failure)", stats.ErrorCount)
+	}
+}
+
+// TestRecordTaskMetric_HealthyOutcomeWithRunErrorIsFailure pins the runErr
+// half of the shared classifier at the metrics layer: an outcome that reads
+// healthy but arrived with a non-nil run error must count as a task failure,
+// matching agent.IsBreakerSuccess.
+func TestRecordTaskMetric_HealthyOutcomeWithRunErrorIsFailure(t *testing.T) {
+	exec := &AgentExecutor{}
+	const agentName = "errored-success-metric-agent"
+
+	exec.recordTaskMetric(agentName, &agent.RunResult{
+		AgentName: agentName,
+		Outcome:   "success",
+		Duration:  time.Millisecond,
+	}, errAgentBroken)
+
+	var stats *AgentStats
+	for _, s := range GetAgentMetrics() {
+		s := s
+		if s.Name == agentName {
+			stats = &s
+			break
+		}
+	}
+	if stats == nil {
+		t.Fatalf("GetAgentMetrics() has no entry for %q", agentName)
+	}
+	if stats.ErrorCount != 1 || stats.SuccessCount != 0 {
+		t.Errorf("got SuccessCount=%d ErrorCount=%d, want 0/1 (healthy outcome with a run error must count as failure)", stats.SuccessCount, stats.ErrorCount)
+	}
+}
 
 // TestRunTaskResult_RecordsCircuitBreakerOutcome verifies that AgentExecutor.
 // RunTaskResult, when given a CBStore, reports each run's outcome to the
@@ -123,7 +175,7 @@ func TestRunTaskResult_RecordsCircuitBreakerOutcome(t *testing.T) {
 // TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker verifies
 // that recordCircuitBreakerOutcome treats a agent.RateLimitCarryoverOutcome
 // result as a circuit-breaker success, matching internal/agent/scheduler.go's
-// cycleBreakerSuccess semantics (a rate-limit carryover is a healthy,
+// IsBreakerSuccess semantics (a rate-limit carryover is a healthy,
 // expected backoff pause, not a genuine failure). Today
 // recordCircuitBreakerOutcome only special-cases the literal "success"
 // string, so a rate-limit carryover run calls CBStore.RecordFailure exactly
@@ -162,7 +214,7 @@ func TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker(t *testing.T
 
 	cb := cbStore.Get(agentName)
 	if cb.State() != agent.CircuitClosed {
-		t.Fatalf("after a single RateLimitCarryoverOutcome run with threshold 1, breaker state = %v, want %v (closed) — recordCircuitBreakerOutcome must call CBStore.RecordSuccess for a rate-limit carryover outcome, matching scheduler.go's cycleBreakerSuccess semantics", cb.State(), agent.CircuitClosed)
+		t.Fatalf("after a single RateLimitCarryoverOutcome run with threshold 1, breaker state = %v, want %v (closed) — recordCircuitBreakerOutcome must call CBStore.RecordSuccess for a rate-limit carryover outcome, matching scheduler.go's IsBreakerSuccess semantics", cb.State(), agent.CircuitClosed)
 	}
 	if cb.FailureCount() != 0 {
 		t.Errorf("cb.FailureCount() = %d, want 0 (a rate-limit carryover must not be counted as a failure)", cb.FailureCount())
@@ -222,7 +274,7 @@ func TestRunTaskResult_RecordsTaskMetric(t *testing.T) {
 // that recordTaskMetric treats a agent.RateLimitCarryoverOutcome result as a
 // dashboard success, matching the exemption recordCircuitBreakerOutcome
 // already applies (see TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker)
-// and scheduler.go's cycleBreakerSuccess: a rate-limit carryover is an
+// and scheduler.go's IsBreakerSuccess: a rate-limit carryover is an
 // expected backoff pause, not a genuine task failure. Today recordTaskMetric
 // only treats the literal "success" string as success, so RecordTask logs a
 // carryover run as an error, inflating GetAgentMetrics().ErrorCount for a
