@@ -559,6 +559,14 @@ func stripFencedBlocks(s string) string {
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	start := time.Now()
 
+	// Production Blackboard-construction sites (a2a Execute, bt_run_task MCP
+	// tool) leave ChainState nil; dozens of engine nodes write
+	// bb.ChainState[k]=v unguarded, which panics on a nil map. Guard here,
+	// the single choke point every caller goes through.
+	if bb.ChainState == nil {
+		bb.ChainState = make(map[string]any)
+	}
+
 	// ── Tracing: wrap tree execution in a span ──
 	taskName := bb.Task
 	if len(taskName) > 50 {

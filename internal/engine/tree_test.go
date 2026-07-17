@@ -123,6 +123,45 @@ func TestRunTask_PreservesRateLimitCarryoverOutcome(t *testing.T) {
 	}
 }
 
+// TestRunTask_NilChainStateDoesNotPanic locks in a single choke-point nil
+// guard for bb.ChainState: RunTask must initialize it before tree execution
+// begins instead of relying on every action/decorator across the engine
+// package to defensively nil-check before writing. Production
+// Blackboard-construction sites (internal/a2a/server.go's Execute,
+// cmd/bt-agent/main.go's shared bb used by the bt_run_task MCP tool) leave
+// ChainState at its zero value (nil); any tree that reaches a node writing
+// to it unconditionally panics with "assignment to entry in nil map",
+// recovered by RunTask's top-level defer into bb.Outcome=failure,
+// bb.Result="TREE PANIC: assignment to entry in nil map" — permanently,
+// since the panicked write never completes and ChainState stays nil on
+// every retry.
+//
+// decorators.go's BuildCircuitBreaker (the Q3 3-state circuit breaker) was
+// the originally-suspected culprit, but it already nil-guards itself at the
+// top of its action closure (present since c046c008, 2026-06-04) — verified
+// empirically here to rule it out: wrapping any child under a CircuitBreaker
+// eagerly initializes bb.ChainState for the whole subtree before the child
+// ever ticks, so it can never reproduce this panic either at itself or via
+// a descendant. MarkClarifyOK (internal/engine/telegram_init.go) is a real,
+// currently-unguarded production write
+// (`b.ChainState["telegram_clarify_ok"] = true`, no nil check anywhere in
+// the function) reachable through the standard BuildTree/RunTask path, so it
+// demonstrates the actual bug this milestone closes.
+func TestRunTask_NilChainStateDoesNotPanic(t *testing.T) {
+	bb := &Blackboard{Task: "exercise an unguarded ChainState write with ChainState left nil"}
+	tree := &evolution.SerializableNode{Type: "Action", Name: "MarkClarifyOK"}
+	bt := BuildTree(tree, bb)
+
+	RunTask(bb, bt)
+
+	if strings.Contains(bb.Result, "TREE PANIC: assignment to entry in nil map") {
+		t.Fatalf("RunTask must nil-guard bb.ChainState before tree execution begins instead of panicking mid-tree, got bb.Result=%q", bb.Result)
+	}
+	if bb.ChainState == nil {
+		t.Fatal("RunTask must leave bb.ChainState initialized after running a tree that writes to it")
+	}
+}
+
 // TestValidateTree_LeafTypesRejectChildren locks in the generalized
 // leaf-with-children rule across BOTH validation entry points.
 //

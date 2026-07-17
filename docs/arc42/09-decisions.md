@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-153. Early entries (001–007) record the founding decisions; the rest is
+ADR-155. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -177,6 +177,7 @@ Consolidation notes (2026-07-16):
 | ADR-152 | `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4) | Accepted | 2026-07-17 |
 | ADR-153 | `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability) | Accepted | 2026-07-17 |
 | ADR-154 | `Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
+| ADR-155 | `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2769,6 +2770,22 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ `evolveTreeV2`'s in-memory mutation and its durable persistence are no longer conflated: `CycleMetrics.SaveFailed` lets a caller distinguish "evolved but not saved" from "evolved and saved," and `RunCycleV2`'s non-nil `error` return means both the `gardener_run_cycle` MCP tool (`cmd/bt-gardener/main.go`, which surfaces it as `{"error": ...}`) and the daemon's *scheduled* (ticker-driven) cycle loop (which logs it via `engine.Error` and skips that cycle's summary) now see the failure instead of it vanishing behind a discarded return value.
 - ⚠️ `cmd/bt-gardener/main.go`'s *initial* cycle at startup (`results, _ := g.RunCycleV2(v2Cfg)`, before the ticker loop begins) still discards the error via `_` — only the recurring scheduled-cycle path (inside the `for { select { ... } }` loop) was already wired to consume it. A save failure on the very first cycle after daemon startup is still silent at that one call site.
 - ⚠️ Milestone 4/4 of the originating program — dashboard circuit-breaker gating and A2A history recording — is unrelated to file-based persistence and was not addressed by this change.
+
+## ADR-155: `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)
+
+**Context (2026-07-17):** Program "Q1 Correctness / Q3 Reliability — Close the ChainState nil-map panic across `engine.RunTask`'s production Blackboard-construction sites," milestone 1/4. Several production sites that construct an `engine.Blackboard` — `internal/a2a/server.go`'s `Execute` and `cmd/bt-agent/main.go`'s shared `bb` behind the `bt_run_task` MCP tool — leave `ChainState map[string]any` at its zero value (nil), unlike `internal/startup/orchestrator.go`, `internal/thinktank/orchestrator.go`, and `cmd/bt-docgen/main.go`, which all explicitly set `ChainState: make(map[string]any)`. Dozens of production engine nodes write `bb.ChainState[k] = v` with no nil-guard — including load-bearing ones in `hitl_gate.go` (the Q4 HITL-approval gate), `decorators.go` (the Q3 3-state circuit breaker), `model_routing.go`, `chains.go`, `planner_node.go`, and `telegram_init.go`'s `MarkClarifyOK` — so any tree reaching one of them on a nil-ChainState `Blackboard` panics with "assignment to entry in nil map." `RunTask`'s own tree-level `recover()` keeps the daemon alive but turns this into a permanent per-task failure (`bb.Outcome = "failure"`, `bb.Result = "TREE PANIC: assignment to entry in nil map"`): the panicked write never completes, so `ChainState` stays nil on every retry of the same task shape.
+
+**Decision:** Add `if bb.ChainState == nil { bb.ChainState = make(map[string]any) }` at the top of `RunTask` (`internal/engine/tree.go`), immediately after `start := time.Now()` and before tree execution begins. `RunTask` is the single tick-entry point every caller — `a2a.Execute`, the `bt_run_task` MCP tool, `RunOnce`, dashboard direct-run paths, `bt-langagent` — already passes through, so one guard there covers every current and future caller without requiring each to remember to pre-populate `ChainState` itself.
+
+**Rejected alternative:** Guarding at each individual `Blackboard`-construction call site (fixing `a2a.Execute` and `cmd/bt-agent/main.go` directly) was rejected — it would close only the sites audited today and leave any future or overlooked construction site (another MCP tool, a new adapter) equally vulnerable. Guarding at each of the dozens of individual `ChainState` write sites across `hitl_gate.go`/`decorators.go`/`model_routing.go`/`chains.go`/`planner_node.go`/`telegram_init.go` was also rejected as an ongoing tax on every present and future write site, with no single point to verify the fix is complete. `RunTask`'s own choke-point position made the single-guard fix both smaller and more durable than either alternative.
+
+**Status:** Accepted (2026-07-17) — pinned by `TestRunTask_NilChainStateDoesNotPanic` (`internal/engine/tree_test.go`), which runs a tree built around `MarkClarifyOK` (`internal/engine/telegram_init.go`) — a genuinely unguarded production `ChainState` writer reachable through the standard `BuildTree`/`RunTask` path — with `ChainState` left nil, and asserts the result is not the `"TREE PANIC: assignment to entry in nil map"` failure and that `ChainState` is left initialized afterward. The test's own commentary documents that `decorators.go`'s `BuildCircuitBreaker` was the originally-suspected culprit but was verified *not* to reproduce the panic — it has self-guarded since commit c046c008 (2026-06-04) — before `MarkClarifyOK` was chosen as the node that actually demonstrates the bug.
+
+**Consequences:**
+- ✅ Every `RunTask` caller is covered by one guard, including callers not yet individually audited for this gap.
+- ✅ The dozens of individually-unguarded production write sites named above no longer need their own nil checks; none were touched by this change.
+- ⚠️ The related, same-root-cause gap on `AuctionDelegate`'s `chainState["auction_award"]` write (`internal/a2a/auction.go`) and `a2a.Execute`'s `History.Record` not reading that value back to override `AgentName` (ADR-149's own open remainder) is unrelated to this guard and remains open — a non-nil `ChainState` now lets that write succeed instead of silently no-oping, but the read-back to attribute an auction win still needs to be added.
+- Milestones 2–4/4 of the program are not addressed by this change.
 
 ---
 
