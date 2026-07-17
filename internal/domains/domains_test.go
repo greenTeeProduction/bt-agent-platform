@@ -107,6 +107,7 @@ func tasksForTree() map[string]string {
 		"goap_fusion_loop":          "start the self-improving GOAP fusion loop cycle",
 		"hermes_update":             "check for hermes agent updates and apply them",
 		"arc42_seeder":              "seed next program from arc42 quality goals",
+		"self_review":               "review autonomous commits since the last self-review and seed code-fix programs",
 		"bt_manager":                "analyze all agent failures and fix degraded ones",
 		"notebooklm":                "research latest BT framework developments using NotebookLM",
 		"notebooklm_consumer":       "consume notebooklm synthesis and write summary",
@@ -437,8 +438,13 @@ func TestAllDomainTrees(t *testing.T) {
 		// a live A2A transport / AuctionDelegateFn hook (nil offline), so it is
 		// structural-only as well. arc42_seeder queries nlm/Claude for a program
 		// proposal, so it is structural-only too (its action logic is unit-tested
-		// in engine/arc42_seeder_test.go with stubbed fetch).
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" || name == "arc42_seeder" {
+		// in engine/arc42_seeder_test.go with stubbed fetch). self_review's
+		// RunSelfReview action shells out to the real git binary and the real
+		// claude CLI via its default (non-overridable-from-here) deps — its
+		// action logic is unit-tested in engine/actions_self_review_test.go
+		// with a faked commitScanner and ClaudeRunner, so this smoke test stays
+		// structural-only too.
+		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" || name == "arc42_seeder" || name == "self_review" {
 			bb := &engine.Blackboard{Task: task, LLM: mock}
 			cmd := engine.BuildTree(tree, bb)
 			if cmd == nil {

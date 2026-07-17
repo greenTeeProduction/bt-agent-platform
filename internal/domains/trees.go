@@ -777,6 +777,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"auction_demo":              AuctionDemoTree(),
 		"arc42_seeder":              Arc42SeederTree(),
 		"arc42:docsync":             Arc42DocsyncTree(),
+		"self_review":               SelfReviewTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
 	for k, v := range Arc42Trees() {
@@ -816,6 +817,7 @@ var Descriptions = map[string]string{
 	"hermes_update":             "Zero-LLM daily Hermes Agent maintenance: version check, git fetch, run hermes update when behind, report",
 	"arc42:docsync":             "Per-section arc42 + README documentation sync: SyncArc42Section01..12 + SyncReadme, each a bounded guideline-constrained Claude pass that updates its file only when the last change affects it",
 	"arc42_seeder":              "Seed the next multi-cycle improvement program from the LIVE arc42 quality goals (reads docs/arc42 at runtime, never a copy): one goal targeted per run, grounded goal-named milestones, persisted to programs.json for the goap-fusion loop",
+	"self_review":               "Proactive self-review agent: gathers the autonomous commits landed since the last review, runs a read-only Claude Code review over their diffs, and seeds a self-fix:self-review:<sig> code-fix program per CONFIRMED defect for the goap-fusion loop to implement",
 	"auction_demo":              "Auction-based A2A task allocation demo: announce a TaskAnnouncement → collect Bids → award to the winning bidder via the AuctionDelegate seam, falling back to a delegate tree when no eligible bidder responds",
 	"arc42:section1":            "Generate arc42 section 1 (Introduction and Goals): requirements overview, quality goals, stakeholders — via LLM with template fallback",
 	"arc42:section2":            "Generate arc42 section 2 (Architecture Constraints): technical, organizational, and convention constraints as a table",
