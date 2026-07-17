@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-158. Early entries (001–007) record the founding decisions; the rest is
+ADR-159. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -181,6 +181,7 @@ Consolidation notes (2026-07-16):
 | ADR-156 | `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
 | ADR-157 | `BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research) | Accepted | 2026-07-17 |
 | ADR-158 | `buildGardenerConfig` Wires a Live `*knowledge.KnowledgeGraph` into the Gardener Daemon, and `evolveTreeV2` Writes Accepted Mutations Back into It, Closing ADR-146's Production-Wiring Gap (Q2 Evolvability, Milestones 1–3/4) | Accepted | 2026-07-17 |
+| ADR-159 | `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2841,6 +2842,21 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ A forced `FlushFeedback(true)` on daemon shutdown means the write-back from milestone 2 is not lost to an in-progress debounce window on a routine restart or deploy.
 - ⚠️ `buildGardenerConfig` builds its own process-local `*knowledge.KnowledgeGraph` rather than referencing `knowledge.GlobalGraph` directly — correct given `bt-gardener` is a separate process from `bt-agent`/`bt-dashboard` with no shared memory, but it means the three binaries stay synchronized only through the shared feedback file (loaded once at startup, flushed on a 30s debounce and at shutdown), not through any live in-process channel — a burst of gardener activity between flushes is invisible to a concurrently-running `bt-agent`/`bt-dashboard` process until the next flush.
 - Rejected: auto-registering a `TreeMeta` stub for the acting tree inside `recordEvolvedRun` when `RecordRun`'s tree-ID lookup misses, to make the write-back unconditionally land. Kept as a no-op instead, consistent with `recordEvolvedFitness`'s existing contract and ADR-157's registration-time review of `TreeMeta.Keywords`/`Capabilities` — a synthesized stub would silently create an under-described entry rather than surfacing the real registration gap.
+
+---
+
+## ADR-159: `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability)
+
+**Context (2026-07-18):** Program "Q2 Evolvability — Wire the knowledge graph into the gardener daemon's live prioritization loop and write evolution outcomes back into it" (ADR-158, milestones 1–3/4; milestone 4 left as "a further write-back or consumption path... not part of this change"). `cmd/bt-gardener/config.go`'s `buildGardenerConfig` and `internal/agent/scheduler.go`'s scheduler constructor both call `knowledge.BuildKnowledgeGraph()` followed by `kg.LoadFeedback(agent.FeedbackFile())`, so each process's in-memory graph is overlaid with the shared, persisted runtime fitness/run-count history before it's used. `cmd/bt-dashboard/main.go`'s `main()` was the one remaining call site still assigning `kg = knowledge.BuildKnowledgeGraph()` directly, with no `LoadFeedback` step — so `dashboard.DiscoverTreeFn` and any analytics views built on the dashboard's `kg` always showed the zero-feedback seed catalog (every `TreeMeta.Fitness`/`RunCount` at its construction default) regardless of how much real evolution/run history the platform had accumulated in the shared feedback file.
+
+**Decision:** Add `buildDashboardKnowledgeGraph(path string) *knowledge.KnowledgeGraph` (`cmd/bt-dashboard/main.go`), a small testable wrapper that calls `knowledge.BuildKnowledgeGraph()` and then `kg.LoadFeedback(path)`, logging (`slog.Warn`) rather than failing on a load error — consistent with this being an optional overlay of historical data, not a correctness-critical read, and matching the non-fatal error handling `buildGardenerConfig` already uses for the same call. `main()` now calls `kg = buildDashboardKnowledgeGraph(agent.FeedbackFile())` in place of the bare constructor call. Pinned by `TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness` (`cmd/bt-dashboard/main_test.go`), which seeds a feedback file with a non-default `Fitness`/`RunCount` via `SaveFeedback`, builds the graph through the wrapper, and asserts both values survive into the returned graph's `Trees["default"]` entry.
+
+**Status:** Accepted (2026-07-18) — closes milestone 4/4 of the program ADR-158 left open.
+
+**Consequences:**
+- ✅ All three long-running binaries that build their own `*knowledge.KnowledgeGraph` (`bt-agent`'s scheduler, `bt-gardener`'s `buildGardenerConfig`, and now `bt-dashboard`'s `main`) consistently overlay the shared persisted feedback file at construction, so `dashboard.DiscoverTreeFn` and any dashboard analytics view now reflect real accumulated fitness/run-count history instead of an always-zero seed catalog.
+- ✅ `buildDashboardKnowledgeGraph` is independently unit-testable without booting the dashboard's HTTP server, following the same small-wrapper-around-a-side-effecting-constructor pattern `buildGardenerConfig` established.
+- ⚠️ `bt-dashboard` does not call `ConfigureFeedbackPersistence`/`FlushFeedback` (ADR-158 milestone 3's debounced write-back) — it only *reads* the shared feedback file at startup, on the reasoning that the dashboard is a read/observe surface and does not itself accept mutations that would need writing back. If the dashboard later gains a KG-mutating code path, it will need that write-back wiring added separately.
 
 ---
 

@@ -100,6 +100,41 @@ func TestMainWiresKnowledgeGraphDiscoverIntoDashboard(t *testing.T) {
 	}
 }
 
+// TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness pins milestone 4/4 of
+// the Q2 Evolvability KG-adoption program: buildDashboardKnowledgeGraph must
+// register the static catalog (via knowledge.BuildKnowledgeGraph) and then
+// load accumulated runtime feedback from the given path (via LoadFeedback),
+// so dashboard.DiscoverTreeFn and analytics views reflect real fitness/run
+// history instead of always showing a zero-feedback seed catalog.
+func TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "feedback.json")
+
+	seed := knowledge.BuildKnowledgeGraph()
+	seedTree, ok := seed.Trees["default"]
+	if !ok {
+		t.Fatal("seed graph missing expected \"default\" tree")
+	}
+	seedTree.Fitness = 0.87
+	seedTree.RunCount = 12
+	if err := seed.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	kg := buildDashboardKnowledgeGraph(path)
+
+	tree, ok := kg.Trees["default"]
+	if !ok {
+		t.Fatal("expected \"default\" tree to still be registered after loading feedback")
+	}
+	if tree.Fitness != 0.87 {
+		t.Errorf("Fitness = %v, want 0.87 (feedback file was not loaded)", tree.Fitness)
+	}
+	if tree.RunCount != 12 {
+		t.Errorf("RunCount = %v, want 12 (feedback file was not loaded)", tree.RunCount)
+	}
+}
+
 // TestHandleScalability_ReflectsInjectedQueueAndRouter pins milestone 3/5 of the
 // horizontal-scaling adoption program: the /api/scalability endpoint must surface
 // the injected TaskQueue depth and AgentRouter executor health instead of the

@@ -158,6 +158,19 @@ func versionRequested() bool {
 	return false
 }
 
+// buildDashboardKnowledgeGraph mirrors bt-gardener's config.go and bt-agent's
+// scheduler.go: build the static tree catalog, then overlay persisted runtime
+// feedback from the shared feedback file so dashboard.DiscoverTreeFn and
+// analytics views reflect real Fitness/RunCount data instead of always
+// showing a zero-feedback seed catalog.
+func buildDashboardKnowledgeGraph(path string) *knowledge.KnowledgeGraph {
+	kg := knowledge.BuildKnowledgeGraph()
+	if err := kg.LoadFeedback(path); err != nil {
+		slog.Warn("load knowledge graph feedback", "path", path, "error", err)
+	}
+	return kg
+}
+
 func main() {
 	// Version fast path: print the stamped build identity and exit before any
 	// engine/store initialization, so the drift smoke test has no side effects.
@@ -178,7 +191,7 @@ func main() {
 	// Structured logging
 	slog.Info("BT Dashboard starting", "port", port)
 
-	kg = knowledge.BuildKnowledgeGraph()
+	kg = buildDashboardKnowledgeGraph(agent.FeedbackFile())
 	dashboard.DiscoverTreeFn = kg.Discover
 
 	// Dead letter queue — persisted alongside other agent state
