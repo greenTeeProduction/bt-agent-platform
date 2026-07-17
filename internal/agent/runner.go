@@ -418,3 +418,13 @@ func (d *RunDeps) injectMemoryContext(agentName, task string, prevLimit int) str
 // scheduler's attempt recording — it is an expected, healthy pause, never a
 // retryable failure.
 const RateLimitCarryoverOutcome = "goap_fusion_rate_limited"
+
+// IsRateLimitCarryover reports whether outcome is the rate-limit-carryover
+// sentinel — a healthy, expected backoff pause, never a genuine failure.
+// Consolidates the `outcome == RateLimitCarryoverOutcome` comparison that was
+// duplicated across scheduler.go, cmd/bt-agent/main.go, and
+// dashboard/executor.go before the 2026-07-17 fix closed the gap; future call
+// sites should use this helper instead of re-typing the raw comparison.
+func IsRateLimitCarryover(outcome string) bool {
+	return outcome == RateLimitCarryoverOutcome
+}

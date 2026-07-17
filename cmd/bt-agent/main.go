@@ -191,15 +191,6 @@ func attemptOutcomeError(outcome, output string) error {
 	return fmt.Errorf("agent outcome: %s: %s", outcome, agent.OutcomeErrorDetail(output))
 }
 
-// schedulerRateLimitCarryover is the sentinel outcome an agent surfaces when a
-// scheduled run gracefully pauses on a Claude rate limit. The scheduler treats
-// it as terminal — an expected, healthy backoff, neither retried nor
-// dead-lettered — and records it as a *deferred* outcome rather than a success,
-// so a rate-limit pause never inflates the success-count/success-latency stats
-// the gardener's validation gate reads. Aliases the exported definition so the
-// scheduler's breaker accounting and this attempt recording can never drift.
-const schedulerRateLimitCarryover = agent.RateLimitCarryoverOutcome
-
 // recordSchedulerAttempt records one scheduler attempt against the agent's SLO
 // metrics and returns the error the retry policy should observe: nil stops the
 // loop (terminal), non-nil keeps retrying.
@@ -207,7 +198,7 @@ const schedulerRateLimitCarryover = agent.RateLimitCarryoverOutcome
 // Three dispositions:
 //   - success (outcome=="success", no runErr): RecordSuccess, terminal. A retry
 //     that finally succeeds (attempts>1) also RecordRecovery.
-//   - rate-limit carryover (outcome==schedulerRateLimitCarryover): RecordDeferred,
+//   - rate-limit carryover (agent.IsRateLimitCarryover(outcome)): RecordDeferred,
 //     terminal. The pause leaves the success/failure counters and latency totals
 //     untouched so success rate and success-latency are unaffected.
 //   - anything else: RecordFailure, retryable (returns runErr, or the wrapped
@@ -220,7 +211,7 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 		}
 		return nil
 	}
-	if outcome == schedulerRateLimitCarryover {
+	if agent.IsRateLimitCarryover(outcome) {
 		slo.RecordDeferred()
 		return nil
 	}
@@ -254,7 +245,7 @@ func dlqReplayOutcomeError(res *agent.RunResult) error {
 	if res == nil {
 		return nil
 	}
-	if res.Outcome == agent.RateLimitCarryoverOutcome || agent.IsHealthyOutcome(res.Outcome) {
+	if agent.IsRateLimitCarryover(res.Outcome) || agent.IsHealthyOutcome(res.Outcome) {
 		return nil
 	}
 	return fmt.Errorf("agent outcome: %s: %s", res.Outcome, agent.OutcomeErrorDetail(res.Output))

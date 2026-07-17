@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-144. Early entries (001–007) record the founding decisions; the rest is
+ADR-146. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -167,6 +167,8 @@ Consolidation notes (2026-07-16):
 | ADR-142 | `dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-17 |
 | ADR-143 | `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3) | Accepted | 2026-07-17 |
 | ADR-144 | `historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5) | Accepted | 2026-07-17 |
+| ADR-145 | `AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5) | Accepted | 2026-07-17 |
+| ADR-146 | `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2587,6 +2589,36 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ The Hermes webhook/Telegram template no longer alarms on a healthy rate-limit backoff cycle, closing the same class of false alarm ADR-016/ADR-025 already fixed for the retry and circuit-breaker paths but left open on the publish path — pinned by `TestRunJob_RateLimitCarryoverOutcome_NoFailureReasonPublished` (`internal/agent/scheduler_test.go`), which drives a real `runJob` cycle and asserts the published `AgentEvent.Data["failure_reason"]` is empty.
 - ✅ A rate-limit carryover run dispatched through the dashboard's own path (`AgentExecutor.RunTaskResult`, not the scheduler) no longer counts against that agent's shared circuit breaker, closing the drift between `recordCircuitBreakerOutcome`'s literal `"success"` check and `cycleBreakerSuccess`'s broader definition — pinned by `TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker` (`internal/dashboard/executor_test.go`), which asserts the breaker stays closed and `FailureCount()` is 0 after a single carryover run against a threshold-1 breaker.
 - ⚠️ Milestones 4–5/5 of the program are not part of this change — any further outcome-classification call sites this audit still needs to reach remain open.
+
+---
+
+## ADR-145: `AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5)
+
+**Context (2026-07-17):** ADR-144 closed milestones 1–3 of the 5-milestone audit into `RateLimitCarryoverOutcome` classification gaps but left the dashboard's own task/block-fitness metrics unaudited. `AgentExecutor.recordTaskMetric` (`internal/dashboard/executor.go`) fed `dashboard.RecordTask` purely off `res.Outcome == "success"`, so a rate-limit carryover run dispatched through `RunTaskResult` — the Hermes-fallback dashboard path, not the scheduler — logged as a task error, inflating `GetAgentMetrics().ErrorCount` for a healthy backoff pause. `recordBlockFitnessMetric`'s `score <= 0` fallback had the same gap: a carryover run's `RunResult.Quality` is always zero (the Hermes-CLI fallback path never sets it), so it fell through to the failure-tier score of 25 instead of the healthy tier (75) `"success"`/`"completed"` outcomes get. Separately, the `outcome == RateLimitCarryoverOutcome` comparison this whole audit chases had been re-typed independently in `internal/agent/scheduler.go`, `cmd/bt-agent/main.go` (as the now-redundant `schedulerRateLimitCarryover` alias), and `internal/dashboard/executor.go` — three independent copies that could silently drift out of sync, which is exactly how ADR-144's gaps accumulated in the first place.
+
+**Decision:** *Milestone 4/5:* `recordTaskMetric` and `recordBlockFitnessMetric` (`internal/dashboard/executor.go`) each add `res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)` to their success/healthy-tier check, matching `recordCircuitBreakerOutcome`'s existing exemption. *Milestone 5/5:* Export `agent.IsRateLimitCarryover(outcome string) bool` (`internal/agent/runner.go`) as the single definition of the exemption, and switch every call site — `scheduler.go`'s `cycleBreakerSuccess`, `historyQualityScore`, and `recordedQuality`; `cmd/bt-agent/main.go`'s `recordSchedulerAttempt` and `dlqReplayOutcomeError`; and `dashboard/executor.go`'s `recordCircuitBreakerOutcome`, `recordTaskMetric`, and `recordBlockFitnessMetric` — to call it instead of repeating the raw `outcome == RateLimitCarryoverOutcome` comparison. `cmd/bt-agent/main.go`'s local `schedulerRateLimitCarryover` alias constant is removed as redundant.
+
+**Status:** Accepted (2026-07-17) — closes the 5-milestone program ADR-144 opened; every known `RateLimitCarryoverOutcome` classification site now shares one definition.
+
+**Consequences:**
+- ✅ A rate-limit carryover dispatched through the dashboard's `RunTaskResult` path no longer inflates `GetAgentMetrics().ErrorCount` or drops the block-fitness score to the failure tier — pinned by `TestRecordTaskMetric_RateLimitCarryoverOutcome_CountsAsSuccess` and `TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier` (`internal/dashboard/executor_test.go`).
+- ✅ Every production call site that classifies this sentinel now delegates to one exported helper (`agent.IsRateLimitCarryover`) instead of a copy of the raw string comparison, closing the specific "reintroduced independently" failure mode that produced ADR-144's own gap — pinned by `TestIsRateLimitCarryover` (`internal/agent/runner_test.go`).
+- ⚠️ This closes the known-audit list, not a formal guarantee — a genuinely new call site (e.g. a future dashboard panel reading `RunResult.Outcome` directly) must still be written to call `IsRateLimitCarryover` rather than compare the string itself; nothing enforces that at compile time.
+
+---
+
+## ADR-146: `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research)
+
+**Context (2026-07-17):** `Gardener.RunCycleV2` (`internal/gardener/evolve_v2.go`) sorted the registry's tree entries with `sort.Slice(entries, ... entries[i].Name < entries[j].Name)` — a flat alphabetical ordering with no signal from the system's own health data. `internal/knowledge.KnowledgeGraph.ComputeAnalytics()` (§8, KG cold-start confidence work) already computes `Bottlenecks` (trees with enough runs to trust and a low success rate) and `SelectionPressure` (proven trees that are underbred relative to their fitness), but nothing read that output to influence which trees the gardener's limited per-cycle mutation budget (`MaxMutations`) actually reaches — a tree named `zzz_broken_tree` could starve behind a dozen healthy, alphabetically-earlier trees indefinitely.
+
+**Decision:** Add `Config.KnowledgeGraph *knowledge.KnowledgeGraph` (`internal/gardener/gardener.go`), nil by default so existing callers keep today's alphabetical-only behavior. When set, `Gardener.treePriorityRanks()` (`internal/gardener/evolve_v2.go`) calls `ComputeAnalytics()` once per cycle and buckets tree names into rank 0 (`Bottlenecks`), rank 1 (`SelectionPressure`, unless already ranked 0), or the `treePriorityDefaultRank` (2, everything else). `RunCycleV2` sorts with `sort.SliceStable`, comparing rank first and falling back to the existing alphabetical `Name` comparison within a rank — so bottleneck trees are evolved first, selection-pressure trees next, and the rest keep their historical relative order.
+
+**Status:** Accepted (2026-07-17) — the ranking mechanism is implemented and covered, but `cmd/bt-gardener/config.go`'s `buildGardenerConfig` (the daemon's production `Config` constructor) does not set `KnowledgeGraph`, so the live `bt-gardener` daemon still sorts alphabetically today; wiring a live `*knowledge.KnowledgeGraph` (e.g. `knowledge.GlobalGraph`, already used by `cmd/bt-agent` and `cmd/bt-dashboard`) into `buildGardenerConfig` remains open.
+
+**Consequences:**
+- ✅ Given a populated `KnowledgeGraph`, `RunCycleV2` evolves bottleneck trees before healthy, alphabetically-earlier ones — pinned by `TestRunCycleV2_PrioritizesByKGAnalytics` (`internal/gardener/gardener_test.go`), which registers a low-fitness/high-run-count tree that sorts last alphabetically and asserts it is evolved first.
+- ✅ `sort.SliceStable` (not `sort.Slice`) preserves alphabetical order within a rank tier, so the change is additive over the historical ordering rather than a full replacement.
+- ⚠️ The daemon (`cmd/bt-gardener`) does not construct or pass a `KnowledgeGraph` today — this ADR closes the in-package mechanism, not the production wiring; do not treat the daemon as KG-prioritized until `buildGardenerConfig` is updated.
 
 ---
 

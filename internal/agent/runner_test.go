@@ -119,6 +119,24 @@ func TestHistoryQualityScore_UsesSpecWhenHigher(t *testing.T) {
 	}
 }
 
+// TestIsRateLimitCarryover pins the single exported exemption check that
+// consolidates the previously-duplicated `outcome == RateLimitCarryoverOutcome`
+// comparison scattered across scheduler.go, cmd/bt-agent/main.go, and
+// dashboard/executor.go — every call site must classify the sentinel (and
+// only the sentinel) as a rate-limit carryover, so a future call site can
+// consult this helper instead of re-typing the raw comparison and
+// reintroducing the classification bug the 2026-07-17 scheduler fix chased.
+func TestIsRateLimitCarryover(t *testing.T) {
+	if !IsRateLimitCarryover(RateLimitCarryoverOutcome) {
+		t.Fatalf("%q must be classified as a rate-limit carryover", RateLimitCarryoverOutcome)
+	}
+	for _, o := range []string{"success", "no_change", "degraded", "failure", "timeout", "partial", ""} {
+		if IsRateLimitCarryover(o) {
+			t.Fatalf("%q must not be classified as a rate-limit carryover", o)
+		}
+	}
+}
+
 func repeatChar(c byte, n int) string {
 	b := make([]byte, n)
 	for i := range b {

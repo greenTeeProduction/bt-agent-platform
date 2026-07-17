@@ -85,7 +85,7 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 	if e.CBStore == nil || res == nil {
 		return
 	}
-	if res.Outcome == "success" || res.Outcome == agent.RateLimitCarryoverOutcome {
+	if res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome) {
 		e.CBStore.RecordSuccess(agentName)
 	} else {
 		e.CBStore.RecordFailure(agentName)
@@ -99,12 +99,16 @@ func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent
 // global agent-task metrics (GetAgentMetrics), so every agent run through
 // the dashboard — in-process or via the Hermes fallback — is reflected in
 // the agent metrics panel and /metrics endpoint the same way
-// internal/agent/scheduler.go's runJob already records its runs.
+// internal/agent/scheduler.go's runJob already records its runs. A
+// RateLimitCarryoverOutcome result counts as a success here too, matching
+// recordCircuitBreakerOutcome's exemption — it's a healthy backoff pause,
+// not a genuine task failure.
 func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult) {
 	if res == nil {
 		return
 	}
-	RecordTask(agentName, res.Outcome == "success", uint64(res.Duration.Milliseconds()))
+	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
+	RecordTask(agentName, success, uint64(res.Duration.Milliseconds()))
 }
 
 // recordBlockFitnessMetric reports a bt_block_fitness_score gauge for the
@@ -120,7 +124,7 @@ func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *
 	if res == nil || treeID == "" {
 		return
 	}
-	success := res.Outcome == "success"
+	success := res.Outcome == "success" || agent.IsRateLimitCarryover(res.Outcome)
 	score := res.Quality * 100
 	if score <= 0 {
 		if success || strings.EqualFold(res.Outcome, "completed") {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 func TestRegistry_Count(t *testing.T) {
@@ -481,5 +482,78 @@ func TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable(t *testing
 	}
 	if metrics.TTHitRate != 0 {
 		t.Errorf("expected TTHitRate == 0, got %v", metrics.TTHitRate)
+	}
+}
+
+// TestRunCycleV2_PrioritizesByKGAnalytics pins the gap identified in the
+// 2026-07-17 structural review: RunCycleV2 round-robins its registry entries
+// in flat alphabetical order and is completely blind to the knowledge graph's
+// ComputeAnalytics() output (Bottlenecks/SelectionPressure). A tree the graph
+// flags as a bottleneck (low success rate, enough runs to be trusted) should
+// be evolved before healthy, well-run trees that merely sort earlier
+// alphabetically — otherwise the daemon spends its limited per-cycle budget
+// on trees that don't need attention while a known-broken tree waits behind
+// them purely because of its name.
+func TestRunCycleV2_PrioritizesByKGAnalytics(t *testing.T) {
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	mkTree := func(name string) *evolution.SerializableNode {
+		return &evolution.SerializableNode{
+			Type: "Sequence", Name: name,
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "Step"},
+			},
+		}
+	}
+
+	// "alpha_tree" and "beta_tree" sort well before "zzz_bottleneck" under a
+	// flat alphabetical ordering, but the KG below marks zzz_bottleneck as a
+	// bottleneck and the other two as healthy — it must run first.
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "alpha_tree", Description: "healthy", Tree: mkTree("alpha_tree"), FilePath: dir + "/tree-alpha_tree.json", Active: true},
+		{Name: "beta_tree", Description: "healthy", Tree: mkTree("beta_tree"), FilePath: dir + "/tree-beta_tree.json", Active: true},
+		{Name: "zzz_bottleneck", Description: "broken", Tree: mkTree("zzz_bottleneck"), FilePath: dir + "/tree-zzz_bottleneck.json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "alpha_tree", Name: "alpha_tree", Category: "domain", Fitness: 95, RunCount: 20})
+	kg.Register(&knowledge.TreeMeta{ID: "beta_tree", Name: "beta_tree", Category: "domain", Fitness: 90, RunCount: 20})
+	// Bottleneck criteria (see knowledge.ComputeAnalytics): RunCount >= 3 and
+	// Fitness < 30.
+	kg.Register(&knowledge.TreeMeta{ID: "zzz_bottleneck", Name: "zzz_bottleneck", Category: "domain", Fitness: 10, RunCount: 8})
+
+	g := NewGardener(Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   1,
+		UseRealLLM:     false,
+		KnowledgeGraph: kg,
+	})
+
+	results, err := g.RunCycleV2(DefaultEvolveV2Config())
+	if err != nil {
+		t.Fatalf("RunCycleV2: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+	if results[0].TreeName != "zzz_bottleneck" {
+		names := make([]string, len(results))
+		for i, r := range results {
+			names[i] = r.TreeName
+		}
+		t.Errorf("expected KG-flagged bottleneck tree to be evolved first, got order %v", names)
 	}
 }

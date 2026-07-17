@@ -780,7 +780,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		failureReason := ""
 		if runErr != nil {
 			failureReason = runErr.Error()
-		} else if outcome != "success" && outcome != RateLimitCarryoverOutcome {
+		} else if outcome != "success" && !IsRateLimitCarryover(outcome) {
 			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
 		}
 
@@ -869,7 +869,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 // walk the breaker open) — keep the breaker closed; genuine failures and
 // errored runs count against it.
 func cycleBreakerSuccess(outcome string, runErr error) bool {
-	if outcome == RateLimitCarryoverOutcome {
+	if IsRateLimitCarryover(outcome) {
 		return true
 	}
 	return runErr == nil && isHealthyOutcome(outcome)
@@ -894,7 +894,7 @@ func stepsFromChildTicks(ticks []engine.ChildTick) []knowledge.TraceStep {
 // scheduler history looking indistinguishable from one.
 func historyQualityScore(inst *Instance, outcome, output string) float64 {
 	quality := 0.0
-	if outcome != "success" && outcome != RateLimitCarryoverOutcome {
+	if outcome != "success" && !IsRateLimitCarryover(outcome) {
 		return quality
 	}
 	quality = estimateQuality(output)
@@ -919,7 +919,7 @@ func historyQualityScore(inst *Instance, outcome, output string) float64 {
 // convention, and a nil RunResult (e.g. a panicked run) falls back to the
 // estimate.
 func recordedQuality(inst *Instance, outcome, output string, res *RunResult) float64 {
-	if res != nil && (isHealthyOutcome(outcome) || outcome == RateLimitCarryoverOutcome) {
+	if res != nil && (isHealthyOutcome(outcome) || IsRateLimitCarryover(outcome)) {
 		return res.Quality
 	}
 	return historyQualityScore(inst, outcome, output)

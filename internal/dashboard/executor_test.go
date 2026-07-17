@@ -167,6 +167,83 @@ func TestRunTaskResult_RecordsTaskMetric(t *testing.T) {
 	}
 }
 
+// TestRecordTaskMetric_RateLimitCarryoverOutcome_CountsAsSuccess verifies
+// that recordTaskMetric treats a agent.RateLimitCarryoverOutcome result as a
+// dashboard success, matching the exemption recordCircuitBreakerOutcome
+// already applies (see TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker)
+// and scheduler.go's cycleBreakerSuccess: a rate-limit carryover is an
+// expected backoff pause, not a genuine task failure. Today recordTaskMetric
+// only treats the literal "success" string as success, so RecordTask logs a
+// carryover run as an error, inflating GetAgentMetrics().ErrorCount for a
+// healthy pause.
+func TestRecordTaskMetric_RateLimitCarryoverOutcome_CountsAsSuccess(t *testing.T) {
+	exec := &AgentExecutor{}
+
+	const agentName = "rate-limit-task-metric-agent"
+	exec.recordTaskMetric(agentName, &agent.RunResult{
+		AgentName: agentName,
+		Outcome:   agent.RateLimitCarryoverOutcome,
+		Duration:  time.Millisecond,
+	})
+
+	var stats *AgentStats
+	for _, s := range GetAgentMetrics() {
+		s := s
+		if s.Name == agentName {
+			stats = &s
+			break
+		}
+	}
+	if stats == nil {
+		t.Fatalf("GetAgentMetrics() has no entry for %q — recordTaskMetric must call dashboard.RecordTask", agentName)
+	}
+	if stats.SuccessCount != 1 {
+		t.Errorf("GetAgentMetrics()[%q].SuccessCount = %d, want 1 (recordTaskMetric must treat RateLimitCarryoverOutcome as a dashboard success, not a failure)", agentName, stats.SuccessCount)
+	}
+	if stats.ErrorCount != 0 {
+		t.Errorf("GetAgentMetrics()[%q].ErrorCount = %d, want 0 (a healthy rate-limit carryover must not count as a dashboard task failure)", agentName, stats.ErrorCount)
+	}
+}
+
+// TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier
+// verifies that recordBlockFitnessMetric treats a zero-Quality
+// agent.RateLimitCarryoverOutcome result as healthy — the same tier a
+// "success" or "completed" outcome gets (score 75) — instead of the
+// failure-tier score of 25. A zero Quality is exactly what the Hermes-CLI
+// fallback path in RunTaskResult produces (it never sets RunResult.Quality),
+// so this is the scenario the milestone's failure-tier regression actually
+// hits. Today recordBlockFitnessMetric's score<=0 fallback only checks
+// success/"completed", so a RateLimitCarryoverOutcome result falls through
+// to the failure tier.
+func TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier(t *testing.T) {
+	exec := &AgentExecutor{}
+
+	const agentName = "rate-limit-block-fitness-agent"
+	const treeID = "rate-limit-block-fitness-tree"
+	exec.recordBlockFitnessMetric(agentName, treeID, &agent.RunResult{
+		AgentName: agentName,
+		Outcome:   agent.RateLimitCarryoverOutcome,
+		Quality:   0,
+	})
+
+	snap := BlockFitnessSnapshot()
+	var score int64
+	var found bool
+	for key, val := range snap {
+		if strings.Contains(key, treeID) && strings.Contains(key, agentName) {
+			score = val
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("BlockFitnessSnapshot() has no entry for tree %q / agent %q — recordBlockFitnessMetric must call RecordBlockFitness", treeID, agentName)
+	}
+	if score < 75 {
+		t.Errorf("block fitness score for %q/%q = %d, want >= 75 (healthy tier) — recordBlockFitnessMetric must not drop a RateLimitCarryoverOutcome result to the failure tier (25)", treeID, agentName, score)
+	}
+}
+
 // TestPickTreeForTask_RoutesAuctionShapedTasksToAuctionDemo verifies that
 // tasks whose text signals auction/delegation intent (mirroring
 // engine.AuctionTaskKeywords, the same keyword set that gates the

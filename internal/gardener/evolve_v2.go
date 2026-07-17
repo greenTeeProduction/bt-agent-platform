@@ -566,10 +566,52 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 	return biased
 }
 
+// treePriorityDefaultRank is the rank assigned to trees that ComputeAnalytics
+// neither flags as a Bottleneck nor as SelectionPressure — they keep the
+// historical flat alphabetical ordering relative to each other.
+const treePriorityDefaultRank = 2
+
+// treePriorityRanks maps tree names to a priority rank derived from
+// Config.KnowledgeGraph's ComputeAnalytics() output: Bottleneck trees (low
+// success rate, enough runs to trust) get rank 0, SelectionPressure trees
+// (proven but underbred) get rank 1. A nil KnowledgeGraph or a name absent
+// from the returned map falls back to treePriorityDefaultRank in
+// treePriorityRank, preserving today's alphabetical-only behavior.
+func (g *Gardener) treePriorityRanks() map[string]int {
+	if g.cfg.KnowledgeGraph == nil {
+		return nil
+	}
+	analytics := g.cfg.KnowledgeGraph.ComputeAnalytics()
+	ranks := make(map[string]int, len(analytics.Bottlenecks)+len(analytics.SelectionPressure))
+	for _, b := range analytics.Bottlenecks {
+		ranks[b.TreeID] = 0
+	}
+	for _, sp := range analytics.SelectionPressure {
+		if _, exists := ranks[sp.TreeID]; !exists {
+			ranks[sp.TreeID] = 1
+		}
+	}
+	return ranks
+}
+
+// treePriorityRank looks up name's priority rank, defaulting to
+// treePriorityDefaultRank when ranks is nil or does not mention name.
+func treePriorityRank(ranks map[string]int, name string) int {
+	if rank, ok := ranks[name]; ok {
+		return rank
+	}
+	return treePriorityDefaultRank
+}
+
 // RunCycleV2 executes one full evolution cycle using the v2 pipeline.
 func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	entries := g.cfg.Registry.List()
-	sort.Slice(entries, func(i, j int) bool {
+	ranks := g.treePriorityRanks()
+	sort.SliceStable(entries, func(i, j int) bool {
+		ri, rj := treePriorityRank(ranks, entries[i].Name), treePriorityRank(ranks, entries[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
 		return entries[i].Name < entries[j].Name
 	})
 

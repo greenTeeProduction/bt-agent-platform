@@ -33,6 +33,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // TreeEntry is a named tree in the registry with its evolution state.
@@ -483,6 +484,14 @@ type Config struct {
 	// gardener restarts instead of only the standalone bt-evaluator binary
 	// persisting them (Q2 Evolvability milestone 1). Empty disables the table.
 	TranspositionTablePath string
+	// KnowledgeGraph, when non-nil, seeds RunCycleV2's per-cycle tree ordering
+	// from ComputeAnalytics(): trees flagged as Bottlenecks (low success rate,
+	// enough runs to trust) go first, SelectionPressure trees (proven but
+	// underbred) go next, and everything else keeps the historical flat
+	// alphabetical order — so the daemon's limited per-cycle mutation budget
+	// goes to trees that need attention instead of round-robining blindly.
+	// Nil preserves the historical alphabetical-only ordering.
+	KnowledgeGraph *knowledge.KnowledgeGraph
 }
 
 // Gardener is the 24/7 tree evolution agent.

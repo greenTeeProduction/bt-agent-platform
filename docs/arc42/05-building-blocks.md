@@ -95,7 +95,7 @@ alphabetical within each layer (matching the diagram order):
 | Infrastructure | `internal/config` | Environment-based configuration |
 | Infrastructure | `internal/doormate` | Adaptive intent/page assistant (IntentSession, PageSchema, UserProfile) |
 | Infrastructure | `internal/fusion` | Multi-model panel fusion: RunPanel → Judge → Synthesize |
-| Infrastructure | `internal/gardener` | 24/7 tree-evolution daemon |
+| Infrastructure | `internal/gardener` | 24/7 tree-evolution daemon; `RunCycleV2` optionally ranks trees via `Config.KnowledgeGraph`'s `ComputeAnalytics()` (Bottlenecks first, then SelectionPressure), spending the per-cycle mutation budget on trees that need it before falling back to alphabetical order when unset |
 | Infrastructure | `internal/goap` | GOAP A* planner — the single search implementation (→ ADR-133) |
 | Infrastructure | `internal/llm` | LLM providers: Ollama client + DeepSeek escalation |
 | Infrastructure | `internal/persona` | Per-user personalization layer (→ ADR-133, 5.6) |
