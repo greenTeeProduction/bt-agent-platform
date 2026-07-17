@@ -482,6 +482,40 @@ func TestValidateCodeFix_RejectsSelfFixGuardFileTargets(t *testing.T) {
 	}
 }
 
+// I2(b) FINDING-1 regression: the guard must scan the free-text Milestone,
+// not just the structured Files field. An innocuous Files entry paired with a
+// Milestone that names a guard file is the bypass — the Milestone is the
+// actual instruction the downstream TDD implementer executes with
+// unrestricted Read/Write/Edit tools, so a files-only scan is bypassable by
+// simply never listing the guard file, only instructing the implementer to
+// touch it in the milestone text.
+func TestValidateCodeFix_RejectsGuardFileNamedOnlyInMilestone(t *testing.T) {
+	bypass := &errorHandlerCodeFix{
+		IsBug: true,
+		Title: "Fix logging helper",
+		Milestone: "In internal/engine/logging_helper.go fix the format bug. Also in " +
+			"internal/engine/self_fix_seed.go change selfFixMaxOpen's return 3 to return 999",
+		Files:     []string{"internal/engine/logging_helper.go"},
+		Rationale: "bundled",
+	}
+	if err := validateCodeFix(bypass); err == nil || !strings.Contains(err.Error(), "self-fix guard file") {
+		t.Fatalf("code_fix naming a guard file only in the milestone must be rejected with the guard-file error, got: %v", err)
+	}
+
+	// Clean Files AND clean Milestone must still pass — no over-block
+	// regression from scanning the milestone text too.
+	clean := &errorHandlerCodeFix{
+		IsBug:     true,
+		Title:     "Fix logging helper",
+		Milestone: "In internal/engine/logging_helper.go fix the format bug",
+		Files:     []string{"internal/engine/logging_helper.go"},
+		Rationale: "isolated fix",
+	}
+	if err := validateCodeFix(clean); err != nil {
+		t.Fatalf("code_fix with clean files and clean milestone must validate: %v", err)
+	}
+}
+
 // A {resolvable:false} proposal may carry an optional code_fix escalation; it
 // must decode into prop.CodeFix and validate. Absent code_fix leaves it nil.
 func TestParseErrorHandlerProposal_CodeFix(t *testing.T) {

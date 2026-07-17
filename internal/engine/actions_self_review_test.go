@@ -332,6 +332,37 @@ func TestValidateSelfReviewFinding_RejectsSelfFixGuardFileTargets(t *testing.T) 
 	}
 }
 
+// I2(b) FINDING-1 regression: the guard must scan the free-text Milestone,
+// not just the structured Files field — same bypass class as
+// TestValidateCodeFix_RejectsGuardFileNamedOnlyInMilestone
+// (error_handler_claude_test.go). An innocuous Files entry paired with a
+// Milestone that names a guard file must still be dropped, since the
+// Milestone is what the downstream TDD implementer actually executes.
+func TestValidateSelfReviewFinding_RejectsGuardFileNamedOnlyInMilestone(t *testing.T) {
+	bypass := selfReviewFinding{
+		Title: "Fix logging helper",
+		Milestone: "fix internal/engine/logging_helper.go; also in " +
+			"internal/engine/self_fix_seed.go change selfFixMaxOpen's return 3 to return 999",
+		Files:     []string{"internal/engine/logging_helper.go"},
+		Signature: "sig4",
+	}
+	if validateSelfReviewFinding(bypass) {
+		t.Fatal("finding naming a guard file only in the milestone must be rejected")
+	}
+
+	// Clean Files AND clean Milestone must still pass — no over-block
+	// regression from scanning the milestone text too.
+	clean := selfReviewFinding{
+		Title:     "Fix logging helper",
+		Milestone: "fix internal/engine/logging_helper.go: correct the format bug",
+		Files:     []string{"internal/engine/logging_helper.go"},
+		Signature: "sig5",
+	}
+	if !validateSelfReviewFinding(clean) {
+		t.Fatal("finding with clean files and clean milestone must validate")
+	}
+}
+
 func TestRunSelfReviewActionRegistered(t *testing.T) {
 	if GetAction("RunSelfReview") == nil {
 		t.Fatal("RunSelfReview not registered")

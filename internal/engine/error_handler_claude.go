@@ -172,7 +172,11 @@ func validateCodeFix(cf *errorHandlerCodeFix) error {
 	// actions_self_review.go). Without this, the error-handler could escalate
 	// (and the goap loop then auto-apply) a "fix" that quietly weakens its own
 	// guards — e.g. raising selfFixMaxOpen's cap. Guard changes require a human.
-	if namesSelfFixGuardFile(cf.Files) {
+	// Scans Files AND the free-text Milestone (not Files alone): the Milestone
+	// is the instruction the downstream TDD implementer actually executes with
+	// unrestricted Read/Write/Edit, so an innocuous Files list paired with a
+	// Milestone that names a guard file must be caught too.
+	if mentionsSelfFixGuardFile(append(append([]string{}, cf.Files...), cf.Milestone)...) {
 		return fmt.Errorf("code_fix targets a self-fix guard file; guard changes require a human")
 	}
 	return nil

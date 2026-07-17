@@ -21,13 +21,14 @@ package engine
 // guarantee is scoped to self-fix-vs-self-fix only: the rest of the engine
 // writes the SAME programs.json via research.OpenPrograms(goapProgramsPath)
 // .Save() WITHOUT this lock (arc42_seeder, goap_seed_program,
-// actions_goap_fusion[_refund], actions_superpowers, nlm_quota), and
-// ProgramStore.Save uses a fixed path+".tmp" name (not a randomized
-// os.CreateTemp), so a truly concurrent unrelated writer can still lose an
-// update. TODO/NOTE: that broader programs.json multi-writer gap is
-// pre-existing and engine-wide (tracked for the combined review) — fixing it
-// means randomizing ProgramStore.Save's tmp name, a separate change since it
-// touches every call site, not something this file should do unilaterally.
+// actions_goap_fusion[_refund], actions_superpowers, nlm_quota). Save now
+// writes via a randomized os.CreateTemp (fixed in 5ccef44), which closes the
+// fixed-tmp-name clobber; the remaining gap is that those other writers still
+// take no SHARED cross-process lock around their read-modify-write, so a truly
+// concurrent unrelated writer can still lose an update. TODO/NOTE: that
+// broader programs.json multi-writer LOCK gap is pre-existing and engine-wide
+// (tracked for the combined review) — a separate change since it touches
+// every call site, not something this file should do unilaterally.
 // It never errors upward: it returns (seeded, reason) for the caller to
 // log/observe.
 
@@ -112,7 +113,7 @@ func selfFixMaxOpen() int {
 // itself; validateCodeFix in error_handler_claude.go and
 // validateSelfReviewFinding in actions_self_review.go gate what either
 // producer may propose; error_handler_node.go/error_handler_store.go hold the
-// escalation graft path and its ledger). namesSelfFixGuardFile denies BOTH
+// escalation graft path and its ledger). mentionsSelfFixGuardFile denies BOTH
 // producers from proposing a fix that edits any of these — the sharpest
 // vector in the whole feature is the loop seeding a fix that quietly weakens
 // its own guard (e.g. selfFixMaxOpen's `return 3` becoming `return 10`).
@@ -128,15 +129,22 @@ var selfFixGuardFileMarkers = []string{
 	"actions_self_review",
 }
 
-// namesSelfFixGuardFile reports whether any entry in files names one of the
+// mentionsSelfFixGuardFile reports whether any of texts names one of the
 // self-fix guard files above (substring match, so it catches both the .go
-// source and its _test.go). Used by validateCodeFix and
-// validateSelfReviewFinding to deny an autonomous fix that targets its own
-// guards — those changes require a human.
-func namesSelfFixGuardFile(files []string) bool {
-	for _, f := range files {
+// source and its _test.go, and is deliberately robust to "./", "//", and
+// absolute-path tricks — no path normalization is attempted). Used by
+// validateCodeFix and validateSelfReviewFinding to deny an autonomous fix
+// that targets its own guards — those changes require a human. Callers pass
+// BOTH the structured Files entries and the free-text Milestone: the
+// Milestone is the actual instruction the downstream TDD implementer
+// executes with unrestricted Read/Write/Edit tools, so an innocuous Files
+// list paired with a Milestone that names a guard file must be caught too
+// (a files-only scan is bypassable by never listing the guard file, only
+// instructing the implementer to touch it).
+func mentionsSelfFixGuardFile(texts ...string) bool {
+	for _, t := range texts {
 		for _, marker := range selfFixGuardFileMarkers {
-			if strings.Contains(f, marker) {
+			if strings.Contains(t, marker) {
 				return true
 			}
 		}

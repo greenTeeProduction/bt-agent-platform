@@ -385,7 +385,7 @@ func TestClaudeErrorHandler_RunningRecoveryFoldsIntoFailure(t *testing.T) {
 // escalation (real is_bug, file-scoped milestone naming the file). Uses a
 // fabricated non-guard file name (eh_test_target.go, not error_handler_node.go
 // itself) — error_handler_node.go is one of the I2(b) self-fix guard files
-// namesSelfFixGuardFile denies, and this test's escalate-and-seed path is
+// mentionsSelfFixGuardFile denies, and this test's escalate-and-seed path is
 // exercising the ORDINARY-bug case, not the guard-file-rejection case (that's
 // TestValidateCodeFix_RejectsSelfFixGuardFileTargets in
 // error_handler_claude_test.go).

@@ -420,8 +420,11 @@ func validateSelfReviewFinding(f selfReviewFinding) bool {
 	// (error_handler_claude.go): drop a finding that targets a self-fix guard
 	// file itself, so the proactive self-review producer can't propose a "fix"
 	// that quietly weakens its own guards either. Counted as an invalid/dropped
-	// finding by the caller (parseSelfReviewFindings), not seeded.
-	if namesSelfFixGuardFile(f.Files) {
+	// finding by the caller (parseSelfReviewFindings), not seeded. Scans Files
+	// AND the free-text Milestone — the Milestone is the instruction the
+	// downstream TDD implementer actually executes, so an innocuous Files list
+	// paired with a Milestone naming a guard file must be caught too.
+	if mentionsSelfFixGuardFile(append(append([]string{}, f.Files...), f.Milestone)...) {
 		return false
 	}
 	return true
