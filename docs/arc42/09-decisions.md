@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-134. Early entries (001–007) record the founding decisions; the rest is
+ADR-144. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -166,6 +166,7 @@ Consolidation notes (2026-07-16):
 | ADR-141 | `AgentExecutor.RunTaskResult` Joins the Shared Per-Agent Circuit Breaker as a Third Writer/Enforcer, Closing the Dashboard's Dead Task-Metrics Recording Gap (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-142 | `dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-17 |
 | ADR-143 | `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3) | Accepted | 2026-07-17 |
+| ADR-144 | `historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5) | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2570,6 +2571,22 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ The regression test asserts against the scraped `/metrics` exposition itself, not an in-process accessor — closing the risk (implicit in ADR-142's milestone 1–2 tests, which asserted `GetAgentMetrics()` directly) that the Prometheus handler's rendering path could silently diverge from the underlying counters.
 - ⚠️ The block-fitness score this records is a single whole-run value keyed by `treeID`, not the per-`block_id` breakdown `internal/engine/ops_actions.go`'s probe hook and `internal/blocks/fitness.go` produce — `RunTaskResult`-driven runs get coarser fitness attribution than tree-node-level probe runs, a deliberate scope limit forced by the import-cycle constraint, not an oversight.
 - ⚠️ `RunPipelineWithID` and `runPipelineAgentStep` — the two direct `agent.RunAgent` call sites ADR-142 milestone 2 wired for `RecordTask` — still do not call `RecordBlockFitness`; this program's milestone 3 only covers `AgentExecutor.RunTaskResult`, so block-fitness recording for pipeline-driven runs remains an open gap beyond this program's stated scope.
+
+---
+
+## ADR-144: `historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5)
+
+**Context (2026-07-17):** Commit `ca2a152` ("preserve run results across the executor boundary; rate-limit pause never trips retries or the breaker") fixed the `AgentExecutor` boundary so a `goap_fusion_rate_limited` carryover (`agent.RateLimitCarryoverOutcome`, §6.4/ADR-016) survives as far as `internal/agent/scheduler.go`'s `cycleBreakerSuccess`, which now correctly treats it as breaker-healthy. That fix stopped short of the rest of `runJob`'s own downstream classification logic, which still applied the older `outcome != "success"` blanket check in places that share no code with `cycleBreakerSuccess`: `historyQualityScore`/`recordedQuality` (used to persist each run's quality field to scheduler history) scored a healthy rate-limit pause as `0.0`, indistinguishable from a genuine failure in every history-driven view and fitness computation; and the `GlobalAgentBus.Publish` block in `runJob` set `failureReason = "agent outcome: goap_fusion_rate_limited"` on the published `AgentEvent`, which the Hermes webhook/Telegram template renders as an alarm, even though the cycle was a healthy, expected backoff. Separately, ADR-141's `AgentExecutor.recordCircuitBreakerOutcome` (`internal/dashboard/executor.go`) keys `CBStore.RecordSuccess`/`RecordFailure` purely off the literal `"success"` string, so a rate-limit carryover routed through the dashboard's own dispatch path (not the scheduler) called `RecordFailure` and could trip the shared `circuit_breakers.json` breaker on a pause that never should have counted against it — the same class of drift `cycleBreakerSuccess` exists to prevent, just on the dashboard's copy of the check.
+
+**Decision:** Extend the identical `RateLimitCarryoverOutcome` exemption to each remaining call site, mirroring `cycleBreakerSuccess`'s existing treatment rather than introducing a new classification. *Milestone 1/5:* `historyQualityScore` and `recordedQuality` (`internal/agent/scheduler.go`) each add `outcome != RateLimitCarryoverOutcome` alongside their `outcome != "success"` guard, so a rate-limit carryover run keeps `res.Quality`'s authoritative score (or falls through to the heuristic estimate with a nil `RunResult`) instead of being forced to `0.0`. *Milestone 2/5:* `runJob`'s `GlobalAgentBus.Publish` block adds the same `outcome != RateLimitCarryoverOutcome` condition before formatting `failureReason`, so the published `AgentEvent.Data["failure_reason"]` stays empty for this outcome. *Milestone 3/5:* `AgentExecutor.recordCircuitBreakerOutcome` (`internal/dashboard/executor.go`) adds `|| res.Outcome == agent.RateLimitCarryoverOutcome` to its success check, so the dashboard's own breaker bookkeeping matches `cycleBreakerSuccess`'s semantics instead of diverging from it.
+
+**Status:** Accepted (2026-07-17) — closes milestones 1–3 of a 5-milestone program auditing every remaining outcome-classification site for the same gap; milestones 4–5 remain open.
+
+**Consequences:**
+- ✅ A healthy rate-limit pause is no longer persisted to scheduler history as a zero-quality run, so history-driven views and fitness computations that read `quality` can no longer confuse it with a genuine failure — pinned by the extended `TestRecordedQuality` table case and a new nil-`RunResult` assertion on `historyQualityScore`, both in `internal/agent/scheduler_history_quality_test.go`.
+- ✅ The Hermes webhook/Telegram template no longer alarms on a healthy rate-limit backoff cycle, closing the same class of false alarm ADR-016/ADR-025 already fixed for the retry and circuit-breaker paths but left open on the publish path — pinned by `TestRunJob_RateLimitCarryoverOutcome_NoFailureReasonPublished` (`internal/agent/scheduler_test.go`), which drives a real `runJob` cycle and asserts the published `AgentEvent.Data["failure_reason"]` is empty.
+- ✅ A rate-limit carryover run dispatched through the dashboard's own path (`AgentExecutor.RunTaskResult`, not the scheduler) no longer counts against that agent's shared circuit breaker, closing the drift between `recordCircuitBreakerOutcome`'s literal `"success"` check and `cycleBreakerSuccess`'s broader definition — pinned by `TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker` (`internal/dashboard/executor_test.go`), which asserts the breaker stays closed and `FailureCount()` is 0 after a single carryover run against a threshold-1 breaker.
+- ⚠️ Milestones 4–5/5 of the program are not part of this change — any further outcome-classification call sites this audit still needs to reach remain open.
 
 ---
 

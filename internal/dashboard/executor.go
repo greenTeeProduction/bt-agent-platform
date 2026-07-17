@@ -77,12 +77,15 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 
 // recordCircuitBreakerOutcome reports res's outcome to CBStore and persists
 // it, mirroring internal/agent/scheduler.go's runJob: reportAgentOutcome
-// followed by cbStore.Save(CircuitBreakersFile()) on every cycle.
+// followed by cbStore.Save(CircuitBreakersFile()) on every cycle. A
+// RateLimitCarryoverOutcome result counts as a breaker success, matching
+// scheduler.go's cycleBreakerSuccess — it's a healthy, expected backoff
+// pause, not a genuine failure.
 func (e *AgentExecutor) recordCircuitBreakerOutcome(agentName string, res *agent.RunResult) {
 	if e.CBStore == nil || res == nil {
 		return
 	}
-	if res.Outcome == "success" {
+	if res.Outcome == "success" || res.Outcome == agent.RateLimitCarryoverOutcome {
 		e.CBStore.RecordSuccess(agentName)
 	} else {
 		e.CBStore.RecordFailure(agentName)

@@ -754,3 +754,64 @@ func TestScheduler_AnyInFlight(t *testing.T) {
 		t.Fatal("AnyInFlight = true after all jobs completed, want false")
 	}
 }
+
+// A RateLimitCarryoverOutcome cycle is a healthy, expected backoff pause (see
+// cycleBreakerSuccess), not a genuine failure — the AgentEvent runJob publishes
+// to GlobalAgentBus (→ Hermes webhook bridge) must not carry a failure_reason
+// for it, or the Hermes webhook/Telegram template alarms on a healthy cycle.
+func TestRunJob_RateLimitCarryoverOutcome_NoFailureReasonPublished(t *testing.T) {
+	prevBus := GlobalAgentBus
+	InitAgentBus(10)
+	t.Cleanup(func() { GlobalAgentBus = prevBus })
+
+	sub := GlobalAgentBus.Subscribe("")
+
+	dir := t.TempDir()
+	reg, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Create(Definition{Name: "rate-limit-carryover-agent", Tree: "domain:default", Version: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+
+	hist, err := NewHistory(filepath.Join(dir, "history"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sched := NewScheduler(SchedulerConfig{
+		Registry:     reg,
+		History:      hist,
+		TickInterval: time.Hour,
+	})
+
+	job := &ScheduledJob{
+		ID:        "job_rate-limit-carryover-agent_test",
+		AgentName: "rate-limit-carryover-agent",
+		Schedule:  "every 1h",
+		Timeout:   "30s",
+	}
+
+	runner := func(ctx RunContext) (string, string, *RunResult, error) {
+		return RateLimitCarryoverOutcome, "carrying over due to rate limit", &RunResult{
+			AgentName: ctx.AgentName,
+			Outcome:   RateLimitCarryoverOutcome,
+		}, nil
+	}
+
+	sched.runJob(job, runner)
+
+	select {
+	case event := <-sub:
+		data, ok := event.Data.(map[string]interface{})
+		if !ok {
+			t.Fatalf("event.Data is %T, want map[string]interface{}", event.Data)
+		}
+		if fr, _ := data["failure_reason"].(string); fr != "" {
+			t.Fatalf("failure_reason = %q for RateLimitCarryoverOutcome, want empty (healthy backoff must not alarm the Hermes webhook/Telegram template)", fr)
+		}
+	default:
+		t.Fatal("no event published on GlobalAgentBus")
+	}
+}

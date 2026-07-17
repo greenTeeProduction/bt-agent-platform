@@ -21,6 +21,7 @@ func TestRecordedQuality(t *testing.T) {
 		{"degraded uses refined 0.3", "degraded", &RunResult{Quality: 0.3}, 0.3},
 		{"failure keeps the 0.0 convention", "failure", &RunResult{Quality: 0.8}, 0.0},
 		{"timeout keeps the 0.0 convention", "timeout", &RunResult{Quality: 0.7}, 0.0},
+		{"rate-limit carryover keeps its authoritative quality, not the 0.0 convention", RateLimitCarryoverOutcome, &RunResult{Quality: 0.55}, 0.55},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -33,5 +34,12 @@ func TestRecordedQuality(t *testing.T) {
 	// A nil RunResult (e.g. a panicked run) falls back to the text-shape estimate.
 	if got, want := recordedQuality(nil, "success", out, nil), historyQualityScore(nil, "success", out); got != want {
 		t.Fatalf("nil RunResult: got %v, want fallback %v", got, want)
+	}
+
+	// The rate-limit carryover pause (2026-07-17) is an expected, healthy state,
+	// not a genuine failure — historyQualityScore must not apply the
+	// 0.0-quality convention to it, even with a nil RunResult to fall back on.
+	if got := historyQualityScore(nil, RateLimitCarryoverOutcome, out); got == 0.0 {
+		t.Fatalf("historyQualityScore(%s) = 0.0, want a non-zero score — a healthy rate-limit pause must not be recorded as a zero-quality run", RateLimitCarryoverOutcome)
 	}
 }

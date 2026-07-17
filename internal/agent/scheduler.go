@@ -773,11 +773,14 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			eventType = "error_detected"
 		}
 		// Raw values — consumers (Hermes webhook templates) do the labeling.
-		// Empty on success / when unavailable.
+		// Empty on success / when unavailable. RateLimitCarryoverOutcome is a
+		// healthy, expected backoff pause (see cycleBreakerSuccess), not a
+		// genuine failure, so it must not alarm the Hermes webhook/Telegram
+		// template either.
 		failureReason := ""
 		if runErr != nil {
 			failureReason = runErr.Error()
-		} else if outcome != "success" {
+		} else if outcome != "success" && outcome != RateLimitCarryoverOutcome {
 			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
 		}
 
@@ -884,10 +887,14 @@ func stepsFromChildTicks(ticks []engine.ChildTick) []knowledge.TraceStep {
 	return knowledge.StepsFromChildTicks(converted)
 }
 
-// historyQualityScore combines heuristic and YAML QualitySpec scoring for history records.
+// historyQualityScore combines heuristic and YAML QualitySpec scoring for
+// history records. The rate-limit carryover pause is exempted from the
+// 0.0-quality convention below: it is a healthy, expected state (see
+// cycleBreakerSuccess), not a genuine failure, so it must not be persisted to
+// scheduler history looking indistinguishable from one.
 func historyQualityScore(inst *Instance, outcome, output string) float64 {
 	quality := 0.0
-	if outcome != "success" {
+	if outcome != "success" && outcome != RateLimitCarryoverOutcome {
 		return quality
 	}
 	quality = estimateQuality(output)
@@ -905,11 +912,14 @@ func historyQualityScore(inst *Instance, outcome, output string) float64 {
 // committed=0.9 and the refined no_change=0.5 / degraded=0.3 signals — so prefer
 // it for healthy outcomes instead of recomputing the text-shape estimate, which
 // discards those signals (committed runs otherwise land as 0.75/0.9/1.0 by
-// output length, and no_change/degraded as 0.0). Non-healthy outcomes
-// (failure/timeout/partial) keep the historyQualityScore 0.0 convention, and a
-// nil RunResult (e.g. a panicked run) falls back to the estimate.
+// output length, and no_change/degraded as 0.0). The rate-limit carryover pause
+// is healthy too (see cycleBreakerSuccess) even though isHealthyOutcome doesn't
+// cover it, so it also prefers the RunResult's authoritative quality. Non-healthy
+// outcomes (failure/timeout/partial) keep the historyQualityScore 0.0
+// convention, and a nil RunResult (e.g. a panicked run) falls back to the
+// estimate.
 func recordedQuality(inst *Instance, outcome, output string, res *RunResult) float64 {
-	if res != nil && isHealthyOutcome(outcome) {
+	if res != nil && (isHealthyOutcome(outcome) || outcome == RateLimitCarryoverOutcome) {
 		return res.Quality
 	}
 	return historyQualityScore(inst, outcome, output)

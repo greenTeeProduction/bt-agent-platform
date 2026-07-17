@@ -9,6 +9,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // TestRunTaskResult_RecordsCircuitBreakerOutcome verifies that AgentExecutor.
@@ -65,6 +66,55 @@ func TestRunTaskResult_RecordsCircuitBreakerOutcome(t *testing.T) {
 	}
 	if !strings.Contains(string(data), agentName) || !strings.Contains(string(data), "open") {
 		t.Fatalf("persisted circuit breaker file missing open state for %q: %s", agentName, data)
+	}
+}
+
+// TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker verifies
+// that recordCircuitBreakerOutcome treats a agent.RateLimitCarryoverOutcome
+// result as a circuit-breaker success, matching internal/agent/scheduler.go's
+// cycleBreakerSuccess semantics (a rate-limit carryover is a healthy,
+// expected backoff pause, not a genuine failure). Today
+// recordCircuitBreakerOutcome only special-cases the literal "success"
+// string, so a rate-limit carryover run calls CBStore.RecordFailure exactly
+// like a real failure would, tripping the breaker on a healthy pause.
+func TestRunTaskResult_RateLimitCarryoverOutcome_DoesNotTripBreaker(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	engine.RegisterAction("DashboardRateLimitCarryoverAction", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		ctx.Blackboard.Outcome = agent.RateLimitCarryoverOutcome
+		return -1
+	})
+
+	cbStore := agent.NewAgentCircuitBreakerStore(agent.CircuitBreakerOptions{
+		Threshold: 1,
+		Cooldown:  time.Minute,
+	})
+
+	exec := &AgentExecutor{
+		Timeout: 5 * time.Second,
+		CBStore: cbStore,
+		Runner: &agent.RunDeps{
+			ResolveTree: func(_ string) *evolution.SerializableNode {
+				return &evolution.SerializableNode{Type: "Action", Name: "DashboardRateLimitCarryoverAction"}
+			},
+		},
+	}
+
+	const agentName = "rate-limit-dashboard-agent"
+	res, err := exec.RunTaskResult(agentName, "do the thing", "rate-limit-tree")
+	if res == nil {
+		t.Fatalf("RunTaskResult returned nil result (err=%v)", err)
+	}
+	if res.Outcome != agent.RateLimitCarryoverOutcome {
+		t.Fatalf("got outcome %q, want %q (test setup must drive a rate-limit carryover outcome)", res.Outcome, agent.RateLimitCarryoverOutcome)
+	}
+
+	cb := cbStore.Get(agentName)
+	if cb.State() != agent.CircuitClosed {
+		t.Fatalf("after a single RateLimitCarryoverOutcome run with threshold 1, breaker state = %v, want %v (closed) — recordCircuitBreakerOutcome must call CBStore.RecordSuccess for a rate-limit carryover outcome, matching scheduler.go's cycleBreakerSuccess semantics", cb.State(), agent.CircuitClosed)
+	}
+	if cb.FailureCount() != 0 {
+		t.Errorf("cb.FailureCount() = %d, want 0 (a rate-limit carryover must not be counted as a failure)", cb.FailureCount())
 	}
 }
 
