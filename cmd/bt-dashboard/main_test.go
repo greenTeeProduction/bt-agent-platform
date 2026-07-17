@@ -1541,3 +1541,34 @@ func TestAgentsJS_TreeDropdownGroupedByCategory(t *testing.T) {
 			"by handleTrees; found no reference to a tree's .category property in the embedded JS")
 	}
 }
+
+// TestDashboardJS_EscapesUserInfluencedInterpolations audits the embedded JS
+// for the injection-surface fix: lib/api.js must define the shared esc()
+// HTML-escaper, and the three renderers that interpolate user-influenced data
+// (agent names/descriptions in agents.js, tree names/ids in mindmap.js and
+// trees.js) must actually call it. An agent or tree named '<img onerror=...>'
+// must never reach innerHTML unescaped.
+func TestDashboardJS_EscapesUserInfluencedInterpolations(t *testing.T) {
+	api, err := staticFS.ReadFile("static/js/lib/api.js")
+	if err != nil {
+		t.Fatalf("read lib/api.js: %v", err)
+	}
+	if !strings.Contains(string(api), "function esc(") {
+		t.Fatal("lib/api.js must define the shared esc() HTML-escape helper")
+	}
+	for _, f := range []string{"static/js/tabs/agents.js", "static/js/tabs/mindmap.js", "static/js/tabs/trees.js"} {
+		data, err := staticFS.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		if !strings.Contains(string(data), "esc(") {
+			t.Errorf("%s interpolates user-influenced data into innerHTML but never calls esc()", f)
+		}
+	}
+	// The specific pre-fix hole: agents.js interpolated a.name raw into the
+	// task-title span.
+	agentsJS, _ := staticFS.ReadFile("static/js/tabs/agents.js")
+	if strings.Contains(string(agentsJS), "'    <span class=\"task-title\">' + a.name +") {
+		t.Error("agents.js interpolates a.name raw into the task-title markup; wrap it in esc()")
+	}
+}

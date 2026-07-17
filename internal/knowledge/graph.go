@@ -179,6 +179,38 @@ func (kg *KnowledgeGraph) Register(tree *TreeMeta) {
 	}
 }
 
+// inheritBaseMetadataLocked fills an evolved tree's discovery metadata
+// (Category, Capabilities, Keywords + the Synonyms index) from its base tree
+// when the evolved entry has none — a freshly created tree, or the bare
+// ID/Name shell LoadFeedback resurrects. Without this repair a resurrected
+// evolved tree stayed permanently unreachable via keyword/capability routing:
+// production only calls RegisterEvolved for a strictly BETTER winner
+// (persistEvolvedWinner peeks EvolvedFitnessImproves first), and the
+// resurrected StructuralFitness is exactly the strong stored value. A restored
+// non-empty Category is kept — it is the original registration-time value.
+// Caller must hold kg.mu.
+func (kg *KnowledgeGraph) inheritBaseMetadataLocked(baseID string, meta *TreeMeta) {
+	if len(meta.Capabilities) != 0 || len(meta.Keywords) != 0 {
+		return
+	}
+	if base, ok := kg.Trees[baseID]; ok {
+		if meta.Category == "" {
+			meta.Category = base.Category
+		}
+		meta.Capabilities = base.Capabilities
+		meta.Keywords = base.Keywords
+	}
+	if meta.Category == "" {
+		meta.Category = "evolution"
+	}
+	for _, kw := range meta.Keywords {
+		kg.Synonyms[strings.ToLower(kw)] = meta.ID
+	}
+	for _, cap := range meta.Capabilities {
+		kg.Synonyms[strings.ToLower(cap.Action)] = meta.ID
+	}
+}
+
 // Connect adds a relationship between two trees. Deduplicates existing edges.
 func (kg *KnowledgeGraph) Connect(from, to, relType string) {
 	kg.mu.Lock()
@@ -241,31 +273,10 @@ func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount in
 		meta = &TreeMeta{ID: evolvedID, Name: evolvedID}
 		kg.Trees[evolvedID] = meta
 	}
-	// Base-metadata inheritance runs for new trees AND for bare shells:
-	// LoadFeedback resurrects unregistered evolved trees as ID/Name-only
-	// entries, and gating this on !exists left resurrected trees permanently
-	// undiscoverable (no Capabilities/Keywords, no Synonyms index). It runs
-	// BEFORE the fitness gate below so a weaker later winner still repairs
-	// discoverability. A restored non-empty Category is kept — it is the
-	// original registration-time value.
-	if len(meta.Capabilities) == 0 && len(meta.Keywords) == 0 {
-		if base, ok := kg.Trees[baseID]; ok {
-			if meta.Category == "" {
-				meta.Category = base.Category
-			}
-			meta.Capabilities = base.Capabilities
-			meta.Keywords = base.Keywords
-		}
-		if meta.Category == "" {
-			meta.Category = "evolution"
-		}
-		for _, kw := range meta.Keywords {
-			kg.Synonyms[strings.ToLower(kw)] = meta.ID
-		}
-		for _, cap := range meta.Capabilities {
-			kg.Synonyms[strings.ToLower(cap.Action)] = meta.ID
-		}
-	}
+	// Base-metadata inheritance runs for new trees AND for bare shells (see
+	// inheritBaseMetadataLocked), BEFORE the fitness gate below so a weaker
+	// later winner still repairs discoverability.
+	kg.inheritBaseMetadataLocked(baseID, meta)
 
 	kg.connectLocked(baseID, evolvedID, "evolved_from")
 

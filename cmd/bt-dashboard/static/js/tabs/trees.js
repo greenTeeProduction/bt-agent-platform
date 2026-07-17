@@ -16,13 +16,13 @@ function renderTrees() {
     </div>
     <div id="trees-list">
       ${Object.entries(cats).map(([cat, ts]) => `
-        <div class="section-title">${cat.toUpperCase()} <span class="badge blue">${ts.length}</span></div>
+        <div class="section-title">${esc(cat.toUpperCase())} <span class="badge blue">${ts.length}</span></div>
         ${ts.map(t => `
-          <div class="table-row" data-tree-cat="${cat}" data-tree-name="${(t.name || '').toLowerCase()} ${t.id.toLowerCase()}">
-            <div class="icon-cell" style="background:${catColor(cat)}">${cat[0].toUpperCase()}</div>
+          <div class="table-row" data-tree-cat="${esc(cat)}" data-tree-name="${esc((t.name || '').toLowerCase() + ' ' + t.id.toLowerCase())}">
+            <div class="icon-cell" style="background:${catColor(cat)}">${esc(cat[0].toUpperCase())}</div>
             <div class="content">
-              <div class="title">${t.name || t.id.split(':')[1] || t.id}</div>
-              <div class="subtitle">${t.id}</div>
+              <div class="title">${esc(t.name || t.id.split(':')[1] || t.id)}</div>
+              <div class="subtitle">${esc(t.id)}</div>
             </div>
             <div class="meta">${t.node_count || '?'} nodes</div>
           </div>

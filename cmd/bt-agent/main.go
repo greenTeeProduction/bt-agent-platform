@@ -467,6 +467,12 @@ func main() {
 				RunningRevision: buildID.Revision,
 				AutoRebuild:     agent.AutoRebuildEnabled(),
 				AutoRestart:     agent.AutoRestartEnabled(),
+				// Fleet owner here too: on busy fleets THIS is the config that
+				// actually adopts (the periodic watcher defers to in-flight
+				// work), and after the self-restart drift clears — so if this
+				// path skipped siblings, rebuilt sibling units would keep
+				// running their old binaries (live case 2026-07-16 23:46).
+				RestartSiblings: true,
 				Targets:         agent.DefaultRebuildTargets(repoDir),
 				Binary:          "bt-agent",
 				Backoff:         agent.NewRebuildBackoff(),

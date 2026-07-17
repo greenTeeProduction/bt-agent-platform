@@ -45,8 +45,12 @@ func TestRebuildBinaries(t *testing.T) {
 			if string(got) != "NEW" {
 				t.Fatalf("%s not swapped: content=%q", tg.Name, got)
 			}
-			if _, err := os.Stat(tg.OutPath + ".new"); !os.IsNotExist(err) {
-				t.Fatalf("%s.new should be gone after rename", tg.Name)
+			// No intermediate (pid-suffixed .new.*) may be left behind.
+			entries, _ := os.ReadDir(filepath.Dir(tg.OutPath))
+			for _, e := range entries {
+				if strings.Contains(e.Name(), ".new") {
+					t.Fatalf("leftover intermediate %q after successful rebuild of %s", e.Name(), tg.Name)
+				}
 			}
 		}
 		if !cleaned {
@@ -108,6 +112,23 @@ func TestDashboardRebuildTargets_OwnBinaryOnly(t *testing.T) {
 	tg := targets[0]
 	if tg.Name != "bt-dashboard" || tg.Unit != "bt-dashboard" {
 		t.Fatalf("target = %+v, want the bt-dashboard unit target", tg)
+	}
+}
+
+// TestGardenerRebuildTargets_OwnBinaryOnly pins the same single-writer rule
+// for bt-gardener's watcher as for bt-dashboard's: the fleet-wide sweep (and
+// sibling restarts) belongs to cmd/bt-agent alone. Pre-fix bt-gardener also
+// passed DefaultRebuildTargets, so a third daemon raced builds onto the shared
+// output paths — and could clobber a sibling's fixed <bin>.previous backup
+// between bt-agent's swap and a smoke-test rollback.
+func TestGardenerRebuildTargets_OwnBinaryOnly(t *testing.T) {
+	targets := GardenerRebuildTargets("/repo")
+	if len(targets) != 1 {
+		t.Fatalf("GardenerRebuildTargets has %d targets %v, want exactly the bt-gardener target", len(targets), targets)
+	}
+	tg := targets[0]
+	if tg.Name != "bt-gardener" || tg.Unit != "bt-gardener" || tg.OutPath != filepath.Join("/repo", "bin", "bt-gardener") {
+		t.Fatalf("target = %+v, want the bin/bt-gardener unit target", tg)
 	}
 }
 

@@ -395,6 +395,68 @@ func TestLoadFeedback_DoesNotClobberRegisteredStaticMetadata(t *testing.T) {
 	}
 }
 
+// TestLoadFeedback_ResurrectedTreeIsDiscoverableWithoutReEvolution pins that
+// resurrection ALONE restores discoverability. Waiting for the next
+// RegisterEvolved call is not enough in production: persistEvolvedWinner
+// (cmd/bt-agent/tools.go) peeks EvolvedFitnessImproves and returns before
+// RegisterEvolved unless a strictly BETTER winner appears — and the restored
+// StructuralFitness is exactly the strong stored value, so a resurrected
+// strong tree would stay permanently undiscoverable. LoadFeedback must
+// inherit the base's Capabilities/Keywords (via the restored evolved_from
+// edge, whose From side is the registered base) at resurrection time.
+func TestLoadFeedback_ResurrectedTreeIsDiscoverableWithoutReEvolution(t *testing.T) {
+	src := NewKnowledgeGraph()
+	src.Register(&TreeMeta{
+		ID:       "tree:disco-base",
+		Name:     "Base",
+		Category: "finance",
+		Keywords: []string{"ledger"},
+		Capabilities: []Capability{
+			{Action: "analyze_financials", Domain: "finance"},
+		},
+	})
+	src.RegisterEvolved("tree:disco-base", "tree:disco-base-evolved", 17, 91.0)
+
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	if err := src.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	dst := NewKnowledgeGraph()
+	dst.Register(&TreeMeta{
+		ID:       "tree:disco-base",
+		Name:     "Base",
+		Category: "finance",
+		Keywords: []string{"ledger"},
+		Capabilities: []Capability{
+			{Action: "analyze_financials", Domain: "finance"},
+		},
+	})
+	if err := dst.LoadFeedback(path); err != nil {
+		t.Fatalf("LoadFeedback: %v", err)
+	}
+
+	// No RegisterEvolved call — LoadFeedback alone must have repaired the
+	// resurrected tree's metadata.
+	evolved := dst.Trees["tree:disco-base-evolved"]
+	if evolved == nil {
+		t.Fatal("evolved tree not resurrected")
+	}
+	if len(evolved.Capabilities) == 0 || len(evolved.Keywords) == 0 {
+		t.Fatalf("resurrected tree has Capabilities=%v Keywords=%v; LoadFeedback must inherit them from the evolved_from base so the tree is discoverable without waiting for a strictly better evolution winner", evolved.Capabilities, evolved.Keywords)
+	}
+	found := false
+	for _, id := range dst.Synonyms {
+		if id == "tree:disco-base-evolved" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("no synonym entry points at the resurrected tree after LoadFeedback alone")
+	}
+}
+
 // TestRegisterEvolved_FillsMetadataForResurrectedTree closes the discovery
 // regression resurrection introduced: LoadFeedback pre-creates unregistered
 // evolved trees as bare ID/Name shells, so the next evolution pass's

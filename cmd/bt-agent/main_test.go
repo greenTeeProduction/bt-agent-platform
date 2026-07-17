@@ -613,3 +613,22 @@ func TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure(t *testing.T) {
 		t.Fatalf("outcome = %q, want the peer's raw outcome preserved", preserved.Outcome)
 	}
 }
+
+// TestDriftConfigs_FleetOwnerSetsRestartSiblings audits — at the source level,
+// like the build-identity wiring tests above — that BOTH of bt-agent's
+// DriftWatchConfig constructions (the periodic StartDriftWatcher and the
+// synchronous OnCycleIdle idleDriftCfg, the path that reliably fires on busy
+// fleets) opt into RestartSiblings. bt-agent is the fleet owner: if either
+// path omits it, siblings get rebuilt on disk but keep running their old
+// binaries — the 2026-07-16 23:46 live case the sibling-restart loop exists
+// for — because after bt-agent's own restart the drift clears and the other
+// path never fires.
+func TestDriftConfigs_FleetOwnerSetsRestartSiblings(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if got := strings.Count(string(src), "RestartSiblings: true"); got < 2 {
+		t.Fatalf("found %d 'RestartSiblings: true' in cmd/bt-agent/main.go, want >= 2 (both the periodic watcher config and idleDriftCfg must opt in as fleet owner)", got)
+	}
+}

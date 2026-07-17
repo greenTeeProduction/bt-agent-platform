@@ -219,6 +219,17 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 			continue
 		}
 		kg.connectLocked(e.From, e.To, e.Type)
+		// Resurrection repair: a restored evolved_from edge names the
+		// registered base (From) of a tree this load may have resurrected as
+		// a bare ID/Name shell (To). Inherit the base's discovery metadata
+		// here — waiting for the next RegisterEvolved is not enough, since
+		// production only calls it for a strictly better winner than the
+		// strong StructuralFitness just restored.
+		if e.Type == "evolved_from" {
+			if evolved, ok := kg.Trees[e.To]; ok {
+				kg.inheritBaseMetadataLocked(e.From, evolved)
+			}
+		}
 	}
 	return nil
 }

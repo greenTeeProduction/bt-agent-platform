@@ -64,6 +64,18 @@ func DashboardRebuildTargets(repoDir string) []RebuildTarget {
 	}
 }
 
+// GardenerRebuildTargets returns the rebuild targets for bt-gardener's own
+// deploy-drift watcher: its OWN binary only, for the same single-writer
+// reason as DashboardRebuildTargets above — bt-agent's fleet sweep already
+// rebuilds and restarts bin/bt-gardener, and a third daemon racing builds
+// onto the shared output paths could clobber a sibling's fixed
+// <bin>.previous backup between bt-agent's swap and a smoke-test rollback.
+func GardenerRebuildTargets(repoDir string) []RebuildTarget {
+	return []RebuildTarget{
+		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener"), Unit: "bt-gardener"},
+	}
+}
+
 var (
 	rebuildMaterializeFn = defaultRebuildMaterialize
 	rebuildBuildFn       = defaultRebuildBuild
@@ -178,13 +190,24 @@ func resolveGoBinary() string {
 }
 
 // copyFile copies src to dst (best-effort backup). A missing src returns an
-// os.IsNotExist error the caller tolerates.
+// os.IsNotExist error the caller tolerates. The write goes through a
+// pid-unique temp + rename so a concurrent writer targeting the same backup
+// path (e.g. two watchers backing up the same <bin>.previous) can never
+// publish a torn file — each rename installs one writer's complete copy.
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o755)
+	tmp := fmt.Sprintf("%s.tmp.%d", dst, os.Getpid())
+	if err := os.WriteFile(tmp, data, 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // RebuildBackoff caps consecutive rebuild attempts against the same stale

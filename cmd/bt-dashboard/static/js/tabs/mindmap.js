@@ -10,8 +10,9 @@ const NODE_W = 140, NODE_H = 32, LEVEL_DX = 220, MIN_GAP = 14;
 let mindMapData = null, mindMapZoom = 1;
 
 function renderMindMap() {
+  // esc(): tree names/ids are partly user-influenced (see agents.js dropdown).
   const options = state.trees.map(t =>
-    `<option value="${t.id}">${t.name || t.id.split(':')[1] || t.id}</option>`
+    `<option value="${esc(t.id)}">${esc(t.name || t.id.split(':')[1] || t.id)}</option>`
   ).join('');
   return `
     <div class="header">
