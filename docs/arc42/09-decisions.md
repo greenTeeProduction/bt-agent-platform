@@ -158,6 +158,7 @@ Consolidation notes (2026-07-16):
 | ADR-133 | Personalized Self-Evolving Agents (formerly docs/adr ADR-010) | Accepted — implemented | 2026-07-08 |
 | ADR-134 | `RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
 | ADR-135 | `GenerateWithModel`/`generateCtx` Adopt Retry-With-Full-Jitter, and `FallbackLLM.generate` Gains a Per-Model Circuit Breaker (Q3 Reliability, Milestones 2–4/5) | Accepted | 2026-07-17 |
+| ADR-136 | `internal/engine/chains.go`'s Chain Executors Adopt the Shared `reliability.RetryPolicy`, Closing Milestone 5/5 of the LLM Text-Generation Reliability Program | Accepted | 2026-07-17 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2432,6 +2433,23 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ `TestOpenAICompat_429ReturnsRateLimitError`/`TestOpenAICompat_429NonJSONBody` (`internal/llm/ratelimit_test.go`) had their `Retry-After` fixtures lowered from 120s/5s to 1s: `GenerateWithModel`'s retry loop now sleeps for the server's real `Retry-After` value between attempts, so the prior multi-minute fixture would have made the unit test sleep out several real windows before its attempts were exhausted.
 - ⚠️ `OpenAICompatClient`'s breaker is keyed by `baseURL` and built once in `NewOpenAICompatClient` (one breaker per backend endpoint); `FallbackLLM`'s breakers are keyed by `model.Name` and created lazily per chain instance (one breaker per model in the chain). These are deliberately different granularities — matching the same choice ADR-054 (`ACPClient`, keyed by `cfg.Command`) and ADR-074 (a single package-level `ollama-embeddings` breaker) made for their respective call shapes — not an inconsistency to reconcile.
 - ⚠️ This entry covers only the three milestones named above; milestone 1/5 and milestone 5/5 of the stated program are not addressed by this change and remain open.
+
+---
+
+## ADR-136: `internal/engine/chains.go`'s Chain Executors Adopt the Shared `reliability.RetryPolicy`, Closing Milestone 5/5 of the LLM Text-Generation Reliability Program
+
+**Context (2026-07-17):** Program "Q3 Reliability — Harden the LLM text-generation call path with retry-with-full-jitter and circuit breakers" (ADR-135, milestones 2–4/5). `internal/engine/chains.go`'s chain executors call `bb.LLM.Generate` directly and predate ADR-135: `execMapReduce` (decompose, per-subtask, reduce) and `execRefine` (initial, critique, revise) each hand-rolled an un-jittered "call, if err retry exactly once" pattern with no Retry-After awareness, and the six single-shot executors (`execLLMCall`, `execRAGQuery`, `execToolCall`, `execConversation`, `execStructuredOutput`, `execRetrievalQA`) had no retry at all. A 429 hitting any of these paths was retried (or first-tried) immediately, ignoring the backend's `Retry-After` hint that `reliability.RetryPolicy.ExecuteContext` already knows how to honor via `RetryAfterFromError`/`ParseRetryAfter`.
+
+**Decision:** A shared `chainRetryPolicy` (`internal/engine/chains.go`) wraps every chain executor's `bb.LLM.Generate` call in `reliability.RetryPolicy.ExecuteContext`, run under `bb.TraceContext` when present so caller-driven cancellation propagates into the retry sleep. `MaxRetries: 2` preserves the exact "one retry, then give up" attempt-count parity the hand-rolled versions and their call-count-sensitive tests already assumed. `RetryUnknown: true` is load-bearing: `ClassifyError` falls through to `ErrCatUnknown` for any error whose message doesn't match a known substring pattern, which is the shape of every `chains_test.go` mock LLM error — leaving `RetryUnknown` at `DefaultRetryPolicy`'s `false` would have silently stopped retrying them (Auth/Validation/ResourceExhausted still fail fast regardless, since `IsRetryable()` gates before `RetryUnknown` is consulted). `Jitter: FullJitterStrategy` replaces the immediate un-jittered retry. Two helpers cover both call shapes: `generateWithRetry` (no telemetry, for the six single-shot executors) and `generateWithRetryPolicy` (takes an `onRetry` callback, for `execMapReduce`/`execRefine`, which populate `map_reduce_decompose_retried`/`map_reduce_reduce_retried`/`refine_retried` `ChainState` counters from `RetryPolicy.OnRetry` instead of a manual boolean/counter). No circuit breaker is added at this layer — `bb.LLM` is typically the ADR-135 breaker-wrapped `OpenAICompatClient`/`ollama.Client`/`FallbackLLM`, so per-backend circuit breaking is already provided one layer down; this milestone's scope is retry-with-jitter parity at the chain-executor call sites only.
+
+**Status:** Accepted (2026-07-17) — closes milestone 5/5 of the program ADR-135 left open; milestone 1/5 remains open.
+
+**Consequences:**
+- ✅ A 429 hit by any chain executor (including the six previously single-shot ones) now backs off using the backend's `Retry-After` value instead of re-hammering immediately — pinned by `TestChainAction_LLMCall_HonorsRetryAfter`, `TestChainAction_MapReduce_DecomposeHonorsRetryAfter`, and `TestChainAction_Refine_InitialCallHonorsRetryAfter` (`internal/engine/chains_test.go`).
+- ✅ The six previously single-shot executors (`execLLMCall`, `execRAGQuery`, `execToolCall`, `execConversation`, `execStructuredOutput`, `execRetrievalQA`) now retry once on a transient error instead of failing on the first attempt — pinned by `TestChainAction_SingleShotExecutors_RetryOnTransientError`.
+- ✅ `execMapReduce`/`execRefine`'s existing call-count-sensitive tests (e.g. `TestChainAction_MapReduce_PartialFailureRecovery`, which enumerates calls 1–6 by comment) stay green unchanged — `MaxRetries: 2` and `RetryUnknown: true` were chosen specifically to preserve their exact attempt counts rather than adopting `DefaultRetryPolicy()` as-is.
+- ⚠️ Milestone 1/5 of the program (ADR-135's other open milestone) is not addressed by this change and remains open; its scope was not identified in this pass.
+- Pinned by the tests named above; see ADR-135 for the sibling milestones (2–4/5) at the `internal/llm` client layer this milestone's chain executors ultimately call through.
 
 ---
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // MockLLM for chain tests
@@ -3032,5 +3033,248 @@ func TestIsKnownChainKind(t *testing.T) {
 		if IsKnownChainKind(bad) {
 			t.Errorf("IsKnownChainKind(%q) = true, want false", bad)
 		}
+	}
+}
+
+// --- reliability.RetryPolicy adoption (Q3 Reliability milestone 5/5) ---
+
+// flakyOnceMockLLM fails the first N Generate calls (regardless of prompt
+// content) and succeeds after, so the retry-recovery path can be exercised
+// uniformly across every currently single-shot chain executor.
+type flakyOnceMockLLM struct {
+	failFirstN int
+	calls      int
+}
+
+func (m *flakyOnceMockLLM) Generate(_ string) (string, error) {
+	m.calls++
+	if m.calls <= m.failFirstN {
+		return "", fmt.Errorf("transient upstream error %d", m.calls)
+	}
+	return "recovered response after retry", nil
+}
+func (m *flakyOnceMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyOnceMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *flakyOnceMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *flakyOnceMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *flakyOnceMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// Every previously single-shot chain executor (llm_call, rag_query, tool_call,
+// conversation, structured_output, retrieval_qa) must now retry a transient
+// LLM error once instead of failing immediately — mirroring the retry
+// resilience execMapReduce and execRefine already had before this milestone.
+func TestChainAction_SingleShotExecutors_RetryOnTransientError(t *testing.T) {
+	cases := []struct {
+		name     string
+		nodeName string
+		setup    func(bb *Blackboard)
+	}{
+		{"llm_call", "llm_call:{{.Task}}", nil},
+		{"rag_query", "rag_query:{{.Task}}", func(bb *Blackboard) { bb.KgResults = "some context" }},
+		{"tool_call", "tool_call:{{.Task}}", nil},
+		{"conversation", "conversation:{{.Task}}", func(bb *Blackboard) { bb.ChainState = map[string]any{} }},
+		{"structured_output", "structured_output:{{.Task}}", nil},
+		{"retrieval_qa", "retrieval_qa:{{.Task}}", func(bb *Blackboard) { bb.CachedResult = "cached context" }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &flakyOnceMockLLM{failFirstN: 1}
+			bb := &Blackboard{Task: "do the thing", LLM: mock}
+			if tc.setup != nil {
+				tc.setup(bb)
+			}
+			tree := &evolution.SerializableNode{
+				Type: "ChainAction",
+				Name: tc.nodeName,
+			}
+
+			bt := BuildTree(tree, bb)
+			RunTask(bb, bt)
+
+			if bb.Outcome != "success" {
+				t.Fatalf("expected success after transient-error retry, got %s: %s", bb.Outcome, bb.Result)
+			}
+			if mock.calls < 2 {
+				t.Errorf("expected at least 2 Generate calls (initial + retry), got %d", mock.calls)
+			}
+		})
+	}
+}
+
+// rateLimitedOnceMockLLM fails the very first Generate call with a
+// reliability.RateLimitError carrying a server-provided Retry-After duration,
+// then succeeds. It records the wall-clock time of every call so a test can
+// verify the retry actually waited for the Retry-After delay instead of
+// re-hammering the call immediately.
+type rateLimitedOnceMockLLM struct {
+	retryAfter time.Duration
+	calls      int
+	callTimes  []time.Time
+}
+
+func (m *rateLimitedOnceMockLLM) Generate(_ string) (string, error) {
+	m.calls++
+	m.callTimes = append(m.callTimes, time.Now())
+	if m.calls == 1 {
+		return "", &reliability.RateLimitError{RetryAfter: m.retryAfter, Message: "429 too many requests"}
+	}
+	return "recovered after rate limit backoff", nil
+}
+func (m *rateLimitedOnceMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedOnceMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedOnceMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *rateLimitedOnceMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *rateLimitedOnceMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// A 429 with a Retry-After duration must not be re-hammered immediately: the
+// retry has to wait at least the server-provided delay before trying again.
+func TestChainAction_LLMCall_HonorsRetryAfter(t *testing.T) {
+	mock := &rateLimitedOnceMockLLM{retryAfter: 80 * time.Millisecond}
+	bb := &Blackboard{
+		Task: "test task",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "llm_call:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after rate-limit retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if len(mock.callTimes) != 2 {
+		t.Fatalf("expected exactly 2 Generate calls, got %d", len(mock.callTimes))
+	}
+	if gap := mock.callTimes[1].Sub(mock.callTimes[0]); gap < mock.retryAfter {
+		t.Errorf("retry re-called after only %s, want at least the server Retry-After delay of %s — a 429 with Retry-After must not be immediately re-hammered", gap, mock.retryAfter)
+	}
+}
+
+// rateLimitedDecomposeMockLLM fails the first "Break down this task" call
+// with a reliability.RateLimitError carrying a Retry-After duration, then
+// succeeds; every other call succeeds immediately so only the decompose call
+// site's retry timing is under test.
+type rateLimitedDecomposeMockLLM struct {
+	retryAfter    time.Duration
+	decomposeSeen int
+	callTimes     []time.Time
+}
+
+func (m *rateLimitedDecomposeMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "Break down this task") {
+		m.decomposeSeen++
+		m.callTimes = append(m.callTimes, time.Now())
+		if m.decomposeSeen == 1 {
+			return "", &reliability.RateLimitError{RetryAfter: m.retryAfter, Message: "429 too many requests"}
+		}
+		return "1. first subtask\n2. second subtask", nil
+	}
+	return "subtask result with sufficient length for validation", nil
+}
+func (m *rateLimitedDecomposeMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedDecomposeMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedDecomposeMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *rateLimitedDecomposeMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *rateLimitedDecomposeMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+// execMapReduce's decompose call site must honor Retry-After too, not just the
+// newly-retrying single-shot executors.
+func TestChainAction_MapReduce_DecomposeHonorsRetryAfter(t *testing.T) {
+	mock := &rateLimitedDecomposeMockLLM{retryAfter: 80 * time.Millisecond}
+	bb := &Blackboard{
+		Task: "analyze a complex topic",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "map_reduce:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after decompose rate-limit retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if len(mock.callTimes) != 2 {
+		t.Fatalf("expected exactly 2 decompose calls, got %d", len(mock.callTimes))
+	}
+	if gap := mock.callTimes[1].Sub(mock.callTimes[0]); gap < mock.retryAfter {
+		t.Errorf("decompose retry re-called after only %s, want at least the server Retry-After delay of %s", gap, mock.retryAfter)
+	}
+}
+
+// rateLimitedRefineInitialMockLLM fails the very first Generate call (the
+// refine chain's initial-answer generation) with a reliability.RateLimitError
+// carrying a Retry-After duration, then succeeds; the critique call that
+// follows immediately reports convergence so the test only exercises the
+// initial-call retry timing.
+type rateLimitedRefineInitialMockLLM struct {
+	retryAfter time.Duration
+	callTimes  []time.Time
+}
+
+func (m *rateLimitedRefineInitialMockLLM) Generate(prompt string) (string, error) {
+	if strings.Contains(prompt, "Critique this answer") {
+		return "NO_FURTHER_IMPROVEMENT", nil
+	}
+	m.callTimes = append(m.callTimes, time.Now())
+	if len(m.callTimes) == 1 {
+		return "", &reliability.RateLimitError{RetryAfter: m.retryAfter, Message: "429 too many requests"}
+	}
+	return "initial answer with sufficient length for validation", nil
+}
+func (m *rateLimitedRefineInitialMockLLM) GenerateCtx(_ context.Context, p string) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedRefineInitialMockLLM) GenerateWithTimeout(p string, _ time.Duration) (string, error) {
+	return m.Generate(p)
+}
+func (m *rateLimitedRefineInitialMockLLM) AnalyzeComplexity(_ string) string { return "medium" }
+func (m *rateLimitedRefineInitialMockLLM) GeneratePlan(_, _ string) string   { return "1. a\n2. b" }
+func (m *rateLimitedRefineInitialMockLLM) Reflect(_, _, _ string) (string, string) {
+	return "ok", "better"
+}
+
+// execRefine's initial-answer call site must honor Retry-After too, not just
+// the decompose/subtask/reduce calls in execMapReduce.
+func TestChainAction_Refine_InitialCallHonorsRetryAfter(t *testing.T) {
+	mock := &rateLimitedRefineInitialMockLLM{retryAfter: 80 * time.Millisecond}
+	bb := &Blackboard{
+		Task: "improve this text",
+		LLM:  mock,
+	}
+	tree := &evolution.SerializableNode{
+		Type: "ChainAction",
+		Name: "refine:{{.Task}}",
+	}
+
+	bt := BuildTree(tree, bb)
+	RunTask(bb, bt)
+
+	if bb.Outcome != "success" {
+		t.Fatalf("expected success after initial-call rate-limit retry, got %s: %s", bb.Outcome, bb.Result)
+	}
+	if len(mock.callTimes) != 2 {
+		t.Fatalf("expected exactly 2 initial-answer calls, got %d", len(mock.callTimes))
+	}
+	if gap := mock.callTimes[1].Sub(mock.callTimes[0]); gap < mock.retryAfter {
+		t.Errorf("initial-answer retry re-called after only %s, want at least the server Retry-After delay of %s", gap, mock.retryAfter)
 	}
 }

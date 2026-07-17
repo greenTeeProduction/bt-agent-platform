@@ -11,6 +11,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/fusion"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 
 	btcore "github.com/rvitorper/go-bt/core"
 	btleaf "github.com/rvitorper/go-bt/leaf"
@@ -224,6 +225,70 @@ func renderChainHistory(bb *Blackboard) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
+// --- Chain executor retry policy (Q3 Reliability milestone 5/5) ---
+
+// chainRetryBase is the initial backoff delay for a chain executor's LLM
+// retry. Kept short because it only matters for the plain-backoff path — a
+// RateLimitError's server-provided Retry-After (honored via
+// RetryPolicy.ExecuteContext's delayForCategory) always takes precedence over
+// this base, so a 429 is never re-hammered immediately regardless of its value.
+const chainRetryBase = 20 * time.Millisecond
+
+// chainRetryPolicy returns the reliability.RetryPolicy shared by every chain
+// executor's LLM call. MaxRetries: 2 preserves the "one retry, then give up"
+// behavior every chain executor already had before this milestone.
+// RetryUnknown is true because ClassifyError falls through to ErrCatUnknown
+// for any error whose message doesn't match a known substring pattern —
+// every existing chain-test mock LLM (and many real provider-wrapped errors)
+// returns exactly that shape, so leaving RetryUnknown at DefaultRetryPolicy's
+// false would silently stop retrying them. onRetry, when non-nil, fires once
+// per retry so callers can populate their own ChainState telemetry (e.g.
+// map_reduce_retried, refine_retried) the way the pre-milestone hand-rolled
+// retries did.
+func chainRetryPolicy(onRetry func(attempt int, cat reliability.ErrorCategory, delay time.Duration)) *reliability.RetryPolicy {
+	return &reliability.RetryPolicy{
+		MaxRetries:   2,
+		Base:         chainRetryBase,
+		RetryUnknown: true,
+		Jitter:       reliability.FullJitterStrategy,
+		OnRetry:      onRetry,
+	}
+}
+
+// chainContext returns the context a chain executor's retry policy should run
+// under: the tree's trace context when present (so caller-driven cancellation
+// propagates into the retry sleep), or a background context otherwise.
+func chainContext(bb *Blackboard) context.Context {
+	if bb != nil && bb.TraceContext != nil {
+		return bb.TraceContext
+	}
+	return context.Background()
+}
+
+// generateWithRetryPolicy calls bb.LLM.Generate(prompt) under the shared
+// chain retry policy, invoking onRetry (if non-nil) once per retry attempt.
+func generateWithRetryPolicy(bb *Blackboard, prompt string, onRetry func(attempt int, cat reliability.ErrorCategory, delay time.Duration)) (string, error) {
+	var result string
+	err := chainRetryPolicy(onRetry).ExecuteContext(chainContext(bb), func() error {
+		out, callErr := bb.LLM.Generate(prompt)
+		if callErr != nil {
+			return callErr
+		}
+		result = out
+		return nil
+	})
+	return result, err
+}
+
+// generateWithRetry calls bb.LLM.Generate(prompt) under the shared chain
+// retry policy with no retry telemetry callback — the single-shot executors
+// (execLLMCall, execRAGQuery, execToolCall, execConversation,
+// execStructuredOutput, execRetrievalQA) have no per-call ChainState counter
+// to update, unlike execMapReduce and execRefine.
+func generateWithRetry(bb *Blackboard, prompt string) (string, error) {
+	return generateWithRetryPolicy(bb, prompt, nil)
+}
+
 // --- Chain executors ---
 
 func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
@@ -236,7 +301,7 @@ func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
 		bb.Result = generateTemplateOutput(prompt, bb)
 		return 1
 	}
-	result, err := bb.LLM.Generate(prompt)
+	result, err := generateWithRetry(bb, prompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("LLM error: %v", err)
@@ -319,7 +384,7 @@ Answer:`, context, query)
 		bb.Result = "no LLM available for RAG"
 		return -1
 	}
-	result, err := bb.LLM.Generate(prompt)
+	result, err := generateWithRetry(bb, prompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("RAG error: %v", err)
@@ -359,7 +424,7 @@ Otherwise, respond directly.`, toolDesc, prompt)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := bb.LLM.Generate(fullPrompt)
+	result, err := generateWithRetry(bb, fullPrompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -392,7 +457,7 @@ Assistant:`, cfg.SystemMsg, history, userMsg)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := bb.LLM.Generate(prompt)
+	result, err := generateWithRetry(bb, prompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -424,7 +489,7 @@ Respond in valid JSON format only, no other text.`, prompt, schemaDesc)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := bb.LLM.Generate(fullPrompt)
+	result, err := generateWithRetry(bb, fullPrompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -466,7 +531,7 @@ Provide a comprehensive answer. If the information is insufficient, state what's
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := bb.LLM.Generate(qaPrompt)
+	result, err := generateWithRetry(bb, qaPrompt)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -506,14 +571,14 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// and the final reduce depend on it — yet it was the only LLM call in this
 	// function without retry resilience. A single transient blip (rate limit,
 	// timeout) on decomposition would sink the whole node even though the subtask
-	// and reduce calls each retry once. Retry once here too, symmetric with the
-	// rest of the function, so one flaky decompose call doesn't fail a complex task.
+	// and reduce calls each retry once. Retry once here too (via the shared
+	// reliability.RetryPolicy, which also honors a 429's Retry-After delay
+	// instead of re-hammering immediately), symmetric with the rest of the
+	// function, so one flaky decompose call doesn't fail a complex task.
 	mapPrompt := fmt.Sprintf("Break down this task into 3-5 independent subtasks:\n%s\n\nSubtasks (one per line, numbered):", task)
-	subtasks, err := bb.LLM.Generate(mapPrompt)
-	if err != nil {
+	subtasks, err := generateWithRetryPolicy(bb, mapPrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		bb.ChainState["map_reduce_decompose_retried"] = true
-		subtasks, err = bb.LLM.Generate(mapPrompt)
-	}
+	})
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("map_reduce decompose error: %v", err)
@@ -564,15 +629,14 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 			subPrompt += fmt.Sprintf("\nResults from earlier subtasks (build on these, do not repeat them):\n%s\n", carried)
 		}
 		subPrompt += "\nResult:"
-		subResult, err := bb.LLM.Generate(subPrompt)
-		if err != nil {
-			// Partial failure recovery: a single LLM error is often transient
-			// (rate limit, timeout, blip), and dropping a whole subtask loses a
-			// chunk of the decomposed task. Retry once before giving up so one
-			// flaky call doesn't permanently gap the final answer.
+		// Partial failure recovery: a single LLM error is often transient (rate
+		// limit, timeout, blip), and dropping a whole subtask loses a chunk of
+		// the decomposed task. Retry once before giving up (via the shared
+		// reliability.RetryPolicy, which honors a 429's Retry-After delay) so
+		// one flaky call doesn't permanently gap the final answer.
+		subResult, err := generateWithRetryPolicy(bb, subPrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
-			subResult, err = bb.LLM.Generate(subPrompt)
-		}
+		})
 		if err != nil {
 			// Still failed after the retry — record the subtask instead of
 			// silently dropping it, then continue with the remaining subtasks.
@@ -631,15 +695,14 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// Reduce phase: combine. A failure here after subtasks have already completed
 	// would otherwise discard every completed result and fail the whole node over a
 	// single (often transient) final call — the most wasteful failure mode, since
-	// all the per-subtask reasoning is gone. Retry once for transient errors, then
-	// fall back to a deterministic synthesis that stitches the completed subtask
-	// results together rather than throwing them away. Downstream nodes can detect
-	// the degraded combine via map_reduce_reduce_degraded.
-	final, err := bb.LLM.Generate(reducePrompt)
-	if err != nil {
+	// all the per-subtask reasoning is gone. Retry once for transient errors (via
+	// the shared reliability.RetryPolicy, which honors a 429's Retry-After delay),
+	// then fall back to a deterministic synthesis that stitches the completed
+	// subtask results together rather than throwing them away. Downstream nodes
+	// can detect the degraded combine via map_reduce_reduce_degraded.
+	final, err := generateWithRetryPolicy(bb, reducePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		bb.ChainState["map_reduce_reduce_retried"] = true
-		final, err = bb.LLM.Generate(reducePrompt)
-	}
+	})
 	if err != nil {
 		bb.ChainState["map_reduce_reduce_degraded"] = true
 		bb.Outcome = "chain_partial"
@@ -706,15 +769,15 @@ func execRefine(cfg ChainConfig, bb *Blackboard) int {
 	// Initial answer. This single call gates the whole refine chain — no initial
 	// answer means nothing to critique or revise — yet it was the only LLM call
 	// here without the retry resilience map_reduce and agent already have. Retry
-	// once on a transient error (rate limit, timeout, blip) before hard-failing so
-	// one flaky call doesn't sink a complex refinement task. refine_retried counts
-	// every retried call across all phases, mirroring map_reduce_retried.
+	// once on a transient error (rate limit, timeout, blip) before hard-failing —
+	// via the shared reliability.RetryPolicy, which also honors a 429's
+	// Retry-After delay instead of re-hammering immediately — so one flaky call
+	// doesn't sink a complex refinement task. refine_retried counts every
+	// retried call across all phases, mirroring map_reduce_retried.
 	retried := 0
-	current, err := bb.LLM.Generate(task)
-	if err != nil {
+	current, err := generateWithRetryPolicy(bb, task, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		retried++
-		current, err = bb.LLM.Generate(task)
-	}
+	})
 	if err != nil {
 		bb.ChainState["refine_retried"] = retried
 		bb.Outcome = "chain_failed"
@@ -735,13 +798,12 @@ CURRENT ANSWER:
 
 Critique:`, task, current)
 
-		critique, err := bb.LLM.Generate(critiquePrompt)
-		if err != nil {
-			// A transient critique failure shouldn't end refinement prematurely —
-			// retry once before giving up, symmetric with the initial/revise calls.
+		// A transient critique failure shouldn't end refinement prematurely —
+		// retry once before giving up (via the shared reliability.RetryPolicy),
+		// symmetric with the initial/revise calls.
+		critique, err := generateWithRetryPolicy(bb, critiquePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
-			critique, err = bb.LLM.Generate(critiquePrompt)
-		}
+		})
 		if err != nil {
 			stopReason = "critique_error"
 			break
@@ -764,13 +826,12 @@ CRITIQUE:
 
 Improved answer:`, task, current, critique)
 
-		improved, err := bb.LLM.Generate(revisePrompt)
-		if err != nil {
-			// Retry once before abandoning this revision round, so a single transient
-			// blip doesn't discard a round of critique-driven improvement.
+		// Retry once before abandoning this revision round (via the shared
+		// reliability.RetryPolicy), so a single transient blip doesn't discard a
+		// round of critique-driven improvement.
+		improved, err := generateWithRetryPolicy(bb, revisePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
-			improved, err = bb.LLM.Generate(revisePrompt)
-		}
+		})
 		if err != nil {
 			stopReason = "revise_error"
 			break
