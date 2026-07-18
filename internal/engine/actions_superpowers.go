@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -1343,47 +1344,84 @@ func init() {
 		// file, so the tracked source stays frozen arbitrarily many commits behind
 		// HEAD. A plain `git diff --name-only HEAD --` there dies with "this
 		// operation must be run in a work tree" (exit 128), so the guard cannot even
-		// observe the drift. Rather than delegating (a no-op that materializes
-		// nothing and passes in exactly the stale-tree case this guard exists to
-		// catch), materialize the on-disk tree to HEAD with an explicit
-		// --git-dir/--work-tree checkout before the build+TDD step compiles it, then
-		// confirm no tracked file differs from HEAD.
+		// observe the drift without an explicit --git-dir/--work-tree pair.
+		//
+		// Diff-first, non-destructive by default: sync the index to HEAD
+		// (`read-tree HEAD`, which rewrites only the index, never the working
+		// tree) and diff against HEAD BEFORE any checkout. A prior version of this
+		// guard ran `checkout -f HEAD -- .` unconditionally on every cycle,
+		// silently wiping any uncommitted tracked drift with no backup even when
+		// the tree already matched HEAD and nothing needed to change. Now: an
+		// empty diff returns pass with zero mutation; a non-empty diff is
+		// snapshotted to a patch file BEFORE the checkout runs, so a wipe is
+		// never irreversible.
 		if out, err := runGoapShell("git rev-parse --is-bare-repository"); err == nil && strings.TrimSpace(out) == "true" {
 			gitDir, gderr := runGoapShell("git rev-parse --git-dir")
 			if gderr != nil {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare but its git directory could not be resolved to materialize the on-disk tree: %v\n\n%s", goapFusionRepo, gderr, strings.TrimSpace(gitDir))
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare but its git directory could not be resolved to check it for drift: %v\n\n%s", goapFusionRepo, gderr, strings.TrimSpace(gitDir))
 				return -1
 			}
 			gd := strings.TrimSpace(gitDir)
-			checkout := fmt.Sprintf("git --git-dir=%s --work-tree=. checkout -f HEAD -- .", gd)
-			if co, coErr := runGoapShell(checkout); coErr != nil {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; could not materialize its on-disk tree to HEAD via `%s`: %v\n\n%s", goapFusionRepo, checkout, coErr, strings.TrimSpace(co))
-				return -1
-			}
-			// checkout -f HEAD -- . rewrites files present in HEAD but neither
-			// removes on-disk files a commit deleted nor drops their stale index
-			// entries — a landing that deletes a tracked file (git rm) then wedges
-			// every cycle on a phantom diff (2026-07-10 bt-scalability-probe;
-			// predicted by the 2026-07-03 cicd-move incident). Sync the index to
-			// HEAD so the verification below sees only real drift; the deleted
-			// file may remain on disk as untracked, which the tracked-files
-			// contract deliberately ignores.
+
+			// checkout -f HEAD -- . (below, only if drift is found) rewrites files
+			// present in HEAD but neither removes on-disk files a commit deleted
+			// nor drops their stale index entries — a landing that deletes a
+			// tracked file (git rm) then wedges every cycle on a phantom diff
+			// (2026-07-10 bt-scalability-probe; predicted by the 2026-07-03
+			// cicd-move incident). Sync the index to HEAD first, non-destructively,
+			// so the diff below sees only real drift; a deleted file may remain on
+			// disk as untracked, which the tracked-files contract deliberately
+			// ignores.
 			indexSync := fmt.Sprintf("git --git-dir=%s --work-tree=. read-tree HEAD", gd)
 			if so, syncErr := runGoapShell(indexSync); syncErr != nil {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materialized the on-disk tree but could not sync its index to HEAD via `%s`: %v\n\n%s", goapFusionRepo, indexSync, syncErr, strings.TrimSpace(so))
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; could not sync its index to HEAD via `%s` before checking for drift: %v\n\n%s", goapFusionRepo, indexSync, syncErr, strings.TrimSpace(so))
 				return -1
 			}
+
 			verify := fmt.Sprintf("git --git-dir=%s --work-tree=. diff --name-only HEAD --", gd)
 			diff, derr := runGoapShell(verify)
 			if derr != nil {
-				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materialized the on-disk tree to HEAD but could not verify it via `%s`: %v\n\n%s", goapFusionRepo, verify, derr, strings.TrimSpace(diff))
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; could not diff its on-disk tree against HEAD via `%s`: %v\n\n%s", goapFusionRepo, verify, derr, strings.TrimSpace(diff))
 				return -1
 			}
-			if stale := strings.TrimSpace(diff); stale != "" {
+
+			changed := strings.TrimSpace(diff)
+			if changed == "" {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Passed\n\nMain repo `%s` is bare; its on-disk tree already matched HEAD via `%s`, checked before touching anything, so no materialization was needed.", goapFusionRepo, verify)
+				return 1
+			}
+
+			// Real drift: snapshot the full patch atomically BEFORE materializing,
+			// so the wipe the checkout below performs is never irreversible.
+			patchCmd := fmt.Sprintf("git --git-dir=%s --work-tree=. diff HEAD --", gd)
+			patch, perr := runGoapShell(patchCmd)
+			if perr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare and drifted from HEAD (%s), but its full diff could not be captured via `%s` to snapshot before materializing: %v", goapFusionRepo, changed, patchCmd, perr)
+				return -1
+			}
+			snapPath, snapErr := writeGoapFusionMaterializerSnapshot(patch)
+			if snapErr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare and drifted from HEAD (%s), but the pre-materialization snapshot could not be written: %v", goapFusionRepo, changed, snapErr)
+				return -1
+			}
+
+			checkout := fmt.Sprintf("git --git-dir=%s --work-tree=. checkout -f HEAD -- .", gd)
+			if co, coErr := runGoapShell(checkout); coErr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; snapshotted its drift to `%s` but could not materialize its on-disk tree to HEAD via `%s`: %v\n\n%s", goapFusionRepo, snapPath, checkout, coErr, strings.TrimSpace(co))
+				return -1
+			}
+
+			reverify, rderr := runGoapShell(verify)
+			if rderr != nil {
+				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materialized its on-disk tree to HEAD but could not verify it via `%s`: %v\n\n%s", goapFusionRepo, verify, rderr, strings.TrimSpace(reverify))
+				return -1
+			}
+			if stale := strings.TrimSpace(reverify); stale != "" {
 				bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `%s` is bare; materializing the on-disk tree to HEAD left tracked file(s) still differing from HEAD, so the build would compile stale source:\n\n%s", goapFusionRepo, stale)
 				return -1
 			}
-			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Materialized\n\nMain repo `%s` is bare (no ref-update materializes the working tree during apply); materialized its on-disk tree to HEAD via `%s` so the build+TDD step compiles HEAD, not a stale tree. No tracked file now differs from HEAD.", goapFusionRepo, checkout)
+
+			bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Materialized\n\nMain repo `%s` is bare (no ref-update materializes the working tree during apply); found real drift via `%s` BEFORE touching anything in the following tracked file(s):\n\n%s\n\nSnapshotted the full pre-materialization diff to `%s`, then materialized the on-disk tree to HEAD via `%s` so the build+TDD step compiles HEAD, not a stale tree. No tracked file now differs from HEAD.", goapFusionRepo, verify, changed, snapPath, checkout)
 			return 1
 		}
 
@@ -1403,6 +1441,45 @@ func init() {
 		bb.Result = fmt.Sprintf("## Scheduled GOAP Fusion Build Tree Preflight Passed\n\nThe on-disk build tree in `%s` is materialized to HEAD; no tracked file differs from the committed HEAD.", goapFusionRepo)
 		return 1
 	})
+}
+
+// writeGoapFusionMaterializerSnapshot atomically (tmp file + rename, ADR-003)
+// writes patch to ~/.go-bt-evolve/materializer-snapshots/<UTC-timestamp>.patch
+// so a crash mid-write can never leave a truncated snapshot on disk, and
+// returns the path written. Called by VerifyScheduledGoapFusionBuildTreeMaterialized
+// before it wipes real drift on a bare main repo, so the wipe is never
+// irreversible.
+func writeGoapFusionMaterializerSnapshot(patch string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory for materializer snapshot: %w", err)
+	}
+	dir := filepath.Join(home, ".go-bt-evolve", "materializer-snapshots")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("creating materializer snapshot dir %s: %w", dir, err)
+	}
+	name := time.Now().UTC().Format("20060102T150405") + ".patch"
+	path := filepath.Join(dir, name)
+	tmp, err := os.CreateTemp(dir, name+".*.tmp")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString(patch); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	_ = os.Chmod(tmpName, 0o644)
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	return path, nil
 }
 
 // GoapFusionPreflightNode composes the scheduled GOAP fusion loop's Phase-0

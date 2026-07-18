@@ -17,8 +17,16 @@ func TestGoapFailureCategory(t *testing.T) {
 		{"rate limit outcome", "goap_fusion_rate_limited", "paused", "rate_limit"},
 		{"rate limit text", "", "hit the rate limit again", "rate_limit"},
 		{"impl gate", "", "✗ golangci-lint found issues in staged files", "impl_gate"},
-		{"infra pending_patch outcome", "pending_patch", "fast-forward refused", "infra"},
-		{"infra result marker", "", "applied_uncommitted: gate rejected", "infra"},
+		{"pending_patch outcome gets its own category, not generic infra", "pending_patch", "fast-forward refused", "pending_patch"},
+		{"pending_patch result marker gets its own category, not generic infra", "",
+			"## GOAP Superpowers Pending Patch\n\napplied_uncommitted: git commit failed (pre-commit hook?)", "pending_patch"},
+		{"infra result marker without a pending_patch marker stays generic infra", "", "applied_uncommitted: gate rejected", "infra"},
+		{"materializer drift on a bare repo maps to working_tree_drift", "",
+			"## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nMain repo `/repo` is bare; materializing the on-disk tree to HEAD left tracked file(s) still differing from HEAD, so the build would compile stale source:\n\ncmd/bt-agent/main.go",
+			"working_tree_drift"},
+		{"materializer drift on a non-bare repo maps to working_tree_drift", "",
+			"## Scheduled GOAP Fusion Build Tree Preflight Failed\n\nThe on-disk build tree in `/repo` is not materialized to HEAD; the following tracked file(s) differ from the committed HEAD and would be compiled stale, so the deployed binary would not match HEAD:\n\ncmd/bt-agent/main.go",
+			"working_tree_drift"},
 		{"quality gate", "", "output quality failed at evidence gate", "quality_gate"},
 		{"default", "", "zzq unrecognized goap failure zzq", "goap_fusion_failure"},
 	}
@@ -30,6 +38,26 @@ func TestGoapFailureCategory(t *testing.T) {
 	}
 	if goapFailureCategory(nil) != "goap_fusion_failure" {
 		t.Error("nil bb must be safe")
+	}
+}
+
+// The pending_patch/working_tree_drift split only refines the error-handler
+// guard label goapFailureCategory returns. The milestone-abandon refund
+// decision must stay exactly as before: classifyGoapCycleFailure (the single
+// canonical owner of red_pass/infra/genuine routing, in
+// actions_goap_fusion_refund.go) still folds a pending_patch outcome into
+// goapCycleFailureInfra, and isGoapInfraCycleFailure — the predicate that
+// decision is built on — still reports it as refundable.
+func TestGoapPendingPatchCategoryDoesNotChangeRefundSemantics(t *testing.T) {
+	outcome, result := "pending_patch", "fast-forward refused"
+	if got := goapFailureCategory(&Blackboard{Outcome: outcome, Result: result}); got != "pending_patch" {
+		t.Errorf("goapFailureCategory = %q, want pending_patch", got)
+	}
+	if !isGoapInfraCycleFailure(outcome, result) {
+		t.Error("pending_patch must still refund the milestone-abandon budget charge (isGoapInfraCycleFailure unchanged)")
+	}
+	if got := classifyGoapCycleFailure(outcome, result); got != goapCycleFailureInfra {
+		t.Errorf("classifyGoapCycleFailure = %q, want %q (pending_patch still routes to infra refund handling)", got, goapCycleFailureInfra)
 	}
 }
 

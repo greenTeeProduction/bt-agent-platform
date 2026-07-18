@@ -465,20 +465,24 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 
 // TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedMaterializesOnBareRepo
 // pins the reconciled bare-main-repo *behavior* the P0 NotebookLM research goal
-// requires. Commit 54011e3 turned this guard into a bare-repo no-op: on a bare
-// (core.bare=true) main repo it returned 1 with a "Delegated" note and
-// materialized nothing — passing in exactly the stale-tree case the guard was
-// invented to catch. goapFusionRepo is bare yet keeps an on-disk working tree
-// that can sit arbitrarily many commits behind HEAD (updating the bare `master`
-// ref during apply touches no file). The cycle's build+TDD step then compiles
-// that stale tree, so the loop's own committed fixes never reach the deployed
-// binary — the live "silently building a stale tree" failure the guard exists to
-// block. The reconciled guard must therefore *materialize* the on-disk tree to
-// HEAD (e.g. `git checkout -f HEAD -- .`) before returning pass, not skip.
+// requires, as reconciled again by milestone 1 of the "Non-destructive
+// goap-fusion materializer" program. Commit 54011e3 turned this guard into a
+// bare-repo no-op: on a bare (core.bare=true) main repo it returned 1 with a
+// "Delegated" note and materialized nothing — passing in exactly the
+// stale-tree case the guard was invented to catch. A later fix made it
+// unconditionally `git checkout -f HEAD -- .` on every run, which materializes
+// correctly but silently wipes any uncommitted tracked drift with no backup,
+// even when the tree already matched HEAD and nothing needed to change.
+// Milestone 1 makes the guard diff-first: it syncs the index (`read-tree
+// HEAD`, non-destructive) and diffs against HEAD BEFORE any checkout, and only
+// materializes when that diff is non-empty (see
+// TestVerifyScheduledGoapFusionBuildTreeMaterialized_BareRepoSnapshotsDriftBeforeMaterializing
+// for that path).
 //
-// This test asserts that on a bare repo the guard (1) returns 1, (2) reports that
-// it materialized the on-disk tree to HEAD rather than merely delegating, and
-// (3) leaves no tracked file on disk differing from the committed HEAD.
+// This test exercises the empty-diff path against the REAL goapFusionRepo: on
+// a bare repo whose on-disk tree already matches HEAD, the guard must (1)
+// return 1, (2) perform no checkout (no mutation — nothing needed to change),
+// and (3) leave no tracked file on disk differing from the committed HEAD.
 //
 // Skips when goapFusionRepo is not a bare repo (CI checkouts): the non-bare path
 // already runs a real HEAD comparison against the on-disk tree.
@@ -487,14 +491,14 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	if err != nil || strings.TrimSpace(out) != "true" {
 		t.Skipf("goapFusionRepo is not a bare repo here (out=%q err=%v)", strings.TrimSpace(out), err)
 	}
-	// SAFETY GUARD (2026-07-18): the pinned action materializes the REAL repo
-	// tree to HEAD (`git checkout -f HEAD -- .`) — on a dirty tracked tree that
-	// is destructive: every uncommitted tracked change is wiped. A plain
-	// `go test ./internal/engine -short` from a clean shell in this bare
-	// checkout did exactly that once mid-implementation. Refuse to exercise the
-	// materializer unless the tracked tree already matches HEAD; the pin still
-	// runs on the clean tree it was designed for. Skip too when cleanliness
-	// cannot be proven — never destroy what we cannot verify.
+	// SAFETY GUARD (2026-07-18): the pre-milestone-1 guard materialized the REAL
+	// repo tree to HEAD (`git checkout -f HEAD -- .`) unconditionally — on a
+	// dirty tracked tree that is destructive: every uncommitted tracked change
+	// is wiped. A plain `go test ./internal/engine -short` from a clean shell in
+	// this bare checkout did exactly that once mid-implementation. Refuse to
+	// exercise the materializer unless the tracked tree already matches HEAD;
+	// the pin still runs on the clean tree it was designed for. Skip too when
+	// cleanliness cannot be proven — never destroy what we cannot verify.
 	dirty, derr := runGoapShell("git --git-dir=.git --work-tree=. diff --name-only HEAD --")
 	if derr != nil || strings.TrimSpace(dirty) != "" {
 		t.Skipf("uncommitted tracked changes present (or undeterminable, err=%v); running the materializer would destroy them:\n%s", derr, truncateGoap(strings.TrimSpace(dirty), 500))
@@ -506,22 +510,185 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	bb := &Blackboard{Task: "verify scheduled goap fusion build tree materialized"}
 	code := fn(btcore.NewBTContext(context.Background(), bb))
 	if code != 1 {
-		t.Fatalf("VerifyScheduledGoapFusionBuildTreeMaterialized on bare repo = %d, want 1 (materialize on-disk tree to HEAD)", code)
+		t.Fatalf("VerifyScheduledGoapFusionBuildTreeMaterialized on a clean bare repo = %d, want 1 (already at HEAD)", code)
 	}
-	if !strings.Contains(bb.Result, "Materialized") {
-		t.Fatalf("expected a bare-repo materialization note in Result (guard must check out HEAD, not delegate), got: %s", bb.Result[:min(len(bb.Result), 300)])
+	// The tree was already proven clean above, so a diff-first guard has nothing
+	// to materialize and must not run a checkout at all.
+	if strings.Contains(bb.Result, "checkout -f HEAD") {
+		t.Fatalf("expected no checkout on a tree already matching HEAD (diff-first: checkout only when the pre-checkout diff is non-empty), but Result mentions one: %s", bb.Result[:min(len(bb.Result), 300)])
 	}
 
-	// After the guard runs, the on-disk tracked tree must match HEAD: a bare repo
-	// with a work tree lets us compare via an explicit --git-dir/--work-tree diff.
-	// A delegation no-op leaves the stale files in place, so this stays non-empty
-	// until the guard actually materializes the tree.
+	// After the guard runs, the on-disk tracked tree must still match HEAD: a
+	// bare repo with a work tree lets us compare via an explicit
+	// --git-dir/--work-tree diff.
 	diff, derr := runGoapShell("git --git-dir=.git --work-tree=. diff --name-only HEAD --")
 	if derr != nil {
-		t.Fatalf("post-materialization diff against HEAD failed: %v\n%s", derr, diff)
+		t.Fatalf("post-guard diff against HEAD failed: %v\n%s", derr, diff)
 	}
 	if stale := strings.TrimSpace(diff); stale != "" {
-		t.Fatalf("expected the on-disk build tree materialized to HEAD (no tracked file differs), but these still differ:\n%s", stale)
+		t.Fatalf("expected the on-disk build tree to still match HEAD (no tracked file differs), but these differ:\n%s", stale)
+	}
+}
+
+// TestVerifyScheduledGoapFusionBuildTreeMaterialized_BareRepoCleanTreeReturnsWithoutMutation
+// pins milestone 1 of the "Non-destructive goap-fusion materializer" program
+// deterministically against a throwaway bare repo (rather than relying on
+// goapFusionRepo happening to be clean): the guard must run the
+// non-destructive index sync (`read-tree HEAD`) and a `diff --name-only HEAD
+// --` BEFORE any checkout, and when that diff is empty (the on-disk tree
+// already matches HEAD) it must return 1 WITHOUT touching the working tree —
+// no checkout, no snapshot patch written. The pre-milestone-1 guard ran
+// `checkout -f HEAD -- .` unconditionally, silently overwriting any
+// uncommitted tracked drift with no backup on every single cycle, even when
+// nothing needed to change.
+func TestVerifyScheduledGoapFusionBuildTreeMaterialized_BareRepoCleanTreeReturnsWithoutMutation(t *testing.T) {
+	// The pre-commit hook exports GIT_DIR/GIT_INDEX_FILE while running tests;
+	// inherited by this test's git commands (and the guard's own shell), they
+	// would silently operate on the OUTER repository instead of the throwaway
+	// one. Scrub them for the test's duration (t.Setenv registers the restore).
+	for _, k := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX", "GIT_COMMON_DIR"} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Setenv(k, v)
+			os.Unsetenv(k)
+		}
+	}
+
+	dir := t.TempDir()
+	runInDir(t, dir, "git init -q . && git config user.email t@t.local && git config user.name t")
+	trackedPath := filepath.Join(dir, "tracked.txt")
+	if err := os.WriteFile(trackedPath, []byte("committed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runInDir(t, dir, "git add -A && git commit -qm one")
+	runInDir(t, dir, "git config core.bare true")
+
+	prevRepo := goapFusionRepo
+	goapFusionRepo = dir
+	t.Cleanup(func() { goapFusionRepo = prevRepo })
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	before, err := os.Stat(trackedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fn := GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized")
+	if fn == nil {
+		t.Fatal("missing action VerifyScheduledGoapFusionBuildTreeMaterialized")
+	}
+	bb := &Blackboard{Task: "verify scheduled goap fusion build tree materialized on a clean tree"}
+	code := fn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("guard on a clean bare tree = %d, want 1 (no drift)", code)
+	}
+	if strings.Contains(bb.Result, "checkout -f HEAD") {
+		t.Fatalf("expected no checkout when the on-disk tree already matches HEAD, but Result mentions one: %s", bb.Result)
+	}
+
+	after, err := os.Stat(trackedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("tracked file was rewritten (mtime %s -> %s) even though the tree already matched HEAD; the diff-first guard must not mutate when there is nothing to materialize", before.ModTime(), after.ModTime())
+	}
+
+	snapDir := filepath.Join(home, ".go-bt-evolve", "materializer-snapshots")
+	if entries, err := os.ReadDir(snapDir); err == nil && len(entries) > 0 {
+		t.Fatalf("expected no snapshot patch written for a clean tree, found: %v", entries)
+	}
+}
+
+// TestVerifyScheduledGoapFusionBuildTreeMaterialized_BareRepoSnapshotsDriftBeforeMaterializing
+// pins milestone 1's other path: when the diff-first check (after the
+// non-destructive `read-tree HEAD` index sync) finds real drift, the guard
+// must atomically snapshot the full `git diff HEAD` patch to
+// ~/.go-bt-evolve/materializer-snapshots/<UTC-timestamp>.patch (tmp+rename, so
+// a crash mid-write can never leave a truncated snapshot), name the
+// overwritten file(s) in bb.Result, and only THEN materialize (checkout) — so
+// a wipe is never irreversible. Before milestone 1 the guard checked out HEAD
+// unconditionally with no backup of what it was about to overwrite.
+func TestVerifyScheduledGoapFusionBuildTreeMaterialized_BareRepoSnapshotsDriftBeforeMaterializing(t *testing.T) {
+	for _, k := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX", "GIT_COMMON_DIR"} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Setenv(k, v)
+			os.Unsetenv(k)
+		}
+	}
+
+	dir := t.TempDir()
+	runInDir(t, dir, "git init -q . && git config user.email t@t.local && git config user.name t")
+	trackedPath := filepath.Join(dir, "tracked.txt")
+	if err := os.WriteFile(trackedPath, []byte("committed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runInDir(t, dir, "git add -A && git commit -qm one")
+	runInDir(t, dir, "git config core.bare true")
+
+	// Drift: the on-disk tree diverges from HEAD with no commit backing it up —
+	// exactly the stale-tree scenario a bare main repo's frozen working files
+	// can hit, and precisely what the guard must snapshot before it wipes.
+	if err := os.WriteFile(trackedPath, []byte("STALE UNCOMMITTED DRIFT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prevRepo := goapFusionRepo
+	goapFusionRepo = dir
+	t.Cleanup(func() { goapFusionRepo = prevRepo })
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	fn := GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized")
+	if fn == nil {
+		t.Fatal("missing action VerifyScheduledGoapFusionBuildTreeMaterialized")
+	}
+	bb := &Blackboard{Task: "verify scheduled goap fusion build tree materialized with drift"}
+	code := fn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("guard on a drifted bare tree = %d, want 1 (snapshot then materialize)", code)
+	}
+
+	if !strings.Contains(bb.Result, "tracked.txt") {
+		t.Fatalf("expected the overwritten file to be named in Result, got: %s", bb.Result)
+	}
+
+	snapDir := filepath.Join(home, ".go-bt-evolve", "materializer-snapshots")
+	entries, err := os.ReadDir(snapDir)
+	if err != nil {
+		t.Fatalf("reading snapshot dir %s: %v", snapDir, err)
+	}
+	var patches []os.DirEntry
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".patch") {
+			patches = append(patches, e)
+		}
+		if strings.Contains(e.Name(), ".tmp") {
+			t.Fatalf("leftover temp file %q in snapshot dir; the snapshot write must tmp+rename atomically", e.Name())
+		}
+	}
+	if len(patches) != 1 {
+		t.Fatalf("expected exactly one snapshot patch under %s, got %v", snapDir, entries)
+	}
+
+	patchBytes, err := os.ReadFile(filepath.Join(snapDir, patches[0].Name()))
+	if err != nil {
+		t.Fatalf("reading snapshot patch: %v", err)
+	}
+	patch := string(patchBytes)
+	if !strings.Contains(patch, "tracked.txt") || !strings.Contains(patch, "STALE UNCOMMITTED DRIFT") {
+		t.Fatalf("expected the snapshot patch to capture the overwritten drift, got:\n%s", patch)
+	}
+
+	// The guard must materialize AFTER the snapshot is safely on disk.
+	after, err := os.ReadFile(trackedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != "committed\n" {
+		t.Fatalf("expected the on-disk tree materialized to HEAD after snapshotting, got %q", string(after))
 	}
 }
 

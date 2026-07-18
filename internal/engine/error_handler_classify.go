@@ -51,8 +51,13 @@ func isGoapFusionCycle(bb *Blackboard) bool {
 // goapFailureCategory maps a failed goap fusion cycle onto the platform's existing
 // failure taxonomy (see isGoapInfraCycleFailure / goapImplGateFailureMarkers). The
 // ordering is specificity-first: an own-code gate rejection reproduces every cycle
-// and must not be masked as generic "infra", and a rate-limit carryover is an
-// expected pause distinct from a real infrastructure wedge.
+// and must not be masked as generic "infra", a rate-limit carryover is an expected
+// pause distinct from a real infrastructure wedge, and pending_patch / a drifted
+// build tree are each recoverable in their own specific way (re-apply; re-materialize)
+// so they get distinct guard labels rather than collapsing into generic "infra".
+// This categorization is display/guard-label only — it does NOT change the
+// red_pass/infra/genuine refund routing, which classifyGoapCycleFailure
+// (actions_goap_fusion_refund.go) alone owns.
 func goapFailureCategory(bb *Blackboard) string {
 	if bb == nil {
 		return "goap_fusion_failure"
@@ -66,6 +71,12 @@ func goapFailureCategory(bb *Blackboard) string {
 		if strings.Contains(result, m) {
 			return "impl_gate"
 		}
+	}
+	if isGoapPendingPatchFailure(outcome, result) {
+		return "pending_patch"
+	}
+	if isGoapWorkingTreeDriftFailure(result) {
+		return "working_tree_drift"
 	}
 	if isGoapInfraCycleFailure(outcome, result) {
 		return "infra"

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/blackboard"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -317,6 +319,13 @@ func registerGoapFusionProductionAdditions() {
 		if strings.Contains(verify, goapFusionBareDelegationMarker) {
 			bb.Result += "\n\n" + goapFusionNormalizedDelegationLine
 		}
+		// Surface silent-wipe evidence and the parked-run triage backlog in
+		// every cycle report — the only artifact that reaches runs/latest/
+		// output and the dashboard. Both are best-effort: neither can fail the
+		// cycle, since a snapshot dir or git listing being briefly unreadable
+		// must not dead-letter an otherwise genuinely verified cycle.
+		bb.Result += goapFusionMaterializerSnapshotsSection(bb)
+		bb.Result += goapFusionParkedBranchesSection()
 		return 1
 	})
 
@@ -378,6 +387,136 @@ func goapFusionImplDegradedSection(bb *Blackboard) string {
 		return fmt.Sprintf("\n## Implementation Deferred (Rate Limit Carryover)\nClaudeSuperpowersPath paused on a Claude rate limit; the saved plan carries over to the next cycle. This is an expected, healthy pause — not a degradation.\n\n```\n%s\n```\n", reason)
 	}
 	return fmt.Sprintf("\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n%s\n```\n", reason)
+}
+
+// goapFusionMaterializerSnapshotsSection lists every materializer snapshot
+// patch (written by writeGoapFusionMaterializerSnapshot to
+// ~/.go-bt-evolve/materializer-snapshots before a bare-repo wipe) that has not
+// already been surfaced in a prior cycle report — filename, byte size, and
+// changed-file count — so a silent wipe on the bare main repo leaves a
+// visible trace in cycle history and on the dashboard instead of none.
+// Already-reported filenames are tracked durably (agent-scope blackboard, the
+// same pattern as saveSuperpowersPlanState) so a snapshot is listed exactly
+// once, in the first cycle report after it was written, and does not
+// accumulate forever in every later report.
+func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(home, ".go-bt-evolve", "materializer-snapshots")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	reported := loadGoapFusionReportedSnapshots(bb)
+	var lines []string
+	var newNames []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".patch") || reported[e.Name()] {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
+		if rerr != nil {
+			continue
+		}
+		changed := 0
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "diff --git ") {
+				changed++
+			}
+		}
+		lines = append(lines, fmt.Sprintf("- `%s` — %d bytes, %d file(s) changed", e.Name(), len(data), changed))
+		newNames = append(newNames, e.Name())
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	sort.Strings(lines)
+	markGoapFusionReportedSnapshots(bb, newNames)
+	return "\n\n## Materializer Snapshots\n\nMaterializer snapshot patch(es) written since the prior cycle (a bare-repo wipe was snapshotted before materializing, never destructive):\n\n" + strings.Join(lines, "\n")
+}
+
+// loadGoapFusionReportedSnapshots reads the durable set of materializer
+// snapshot filenames already surfaced in a prior cycle report. Nil when the
+// agent-scope blackboard is unavailable (unit paths, scope-off deployments),
+// which makes every snapshot look new on every call — acceptable there since
+// nothing persists across calls anyway.
+func loadGoapFusionReportedSnapshots(bb *Blackboard) map[string]bool {
+	reported := map[string]bool{}
+	if bb.BB == nil || bb.BB.AgentName == "" {
+		return reported
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+	e, err := bb.BB.Mgr.Get(scope, "goap_fusion_reported_materializer_snapshots")
+	if err != nil {
+		return reported
+	}
+	for _, name := range strings.Split(e.Value, "\n") {
+		if name = strings.TrimSpace(name); name != "" {
+			reported[name] = true
+		}
+	}
+	return reported
+}
+
+// markGoapFusionReportedSnapshots records names as surfaced, merging with the
+// existing durable set rather than overwriting it, so snapshots reported
+// across multiple cycles all stay marked.
+func markGoapFusionReportedSnapshots(bb *Blackboard, names []string) {
+	if bb.BB == nil || bb.BB.AgentName == "" || len(names) == 0 {
+		return
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+	reported := loadGoapFusionReportedSnapshots(bb)
+	for _, n := range names {
+		reported[n] = true
+	}
+	all := make([]string, 0, len(reported))
+	for n := range reported {
+		all = append(all, n)
+	}
+	sort.Strings(all)
+	_ = bb.BB.Mgr.Set(scope, "goap_fusion_reported_materializer_snapshots", strings.Join(all, "\n"),
+		"durable set of materializer snapshot filenames already surfaced in a cycle report", "text")
+}
+
+// goapFusionParkedBranchesSection lists every superpowers/* branch that is
+// unmerged into master and whose tip commit is older than 24h, tagged
+// pending_patch. reapOrphanedSuperpowersBranches only reaps an orphan once
+// `git branch -d` finds it merged into HEAD; a genuinely unmerged branch
+// survives that sweep forever, so it is exactly the parked-run triage
+// backlog this section makes visible in cycle history and on the dashboard.
+// Best-effort: an unreadable/non-git goapFusionRepo yields an empty section
+// rather than failing the cycle.
+func goapFusionParkedBranchesSection() string {
+	out, err := runGoapShell(`git branch --list 'superpowers/*' --no-merged master --format='%(refname:short)^%(committerdate:iso-strict)'`)
+	if err != nil {
+		return ""
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	var lines []string
+	for _, raw := range strings.Split(out, "\n") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		branch, tsRaw, ok := strings.Cut(raw, "^")
+		if !ok {
+			continue
+		}
+		branch = strings.TrimSpace(branch)
+		ts, perr := time.Parse(time.RFC3339, strings.TrimSpace(tsRaw))
+		if perr != nil || ts.After(cutoff) {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- `%s` — pending_patch (last commit %s)", branch, ts.UTC().Format(time.RFC3339)))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	sort.Strings(lines)
+	return "\n\n## Parked Work (pending_patch)\n\nUnmerged superpowers/* branch(es) older than 24h — parked-run triage backlog:\n\n" + strings.Join(lines, "\n")
 }
 
 func goapBacktickValueAfter(s, prefix string) string {

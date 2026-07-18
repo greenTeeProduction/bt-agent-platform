@@ -786,6 +786,16 @@ func registerSuperpowersProductionActions() {
 	// ~120ms with "No existing plan path found" (2026-07-03 23:00/23:30).
 	RegisterAction("RunScheduledGoapFusionCycle", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
+		// Bounded, best-effort: sweep every parked (pending_patch) run under
+		// superpowersRunsDir for a rebase/ff-land recovery attempt BEFORE
+		// deciding whether to resume a saved plan — a run parked by an earlier
+		// cycle's refused fast-forward is otherwise stuck forever once its own
+		// cycle already cleared its plan carryover. A failure here must never
+		// abort the preflight; it only ever records evidence in each run's own
+		// run.json.
+		recoverCtx, recoverCancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		recoverGoapFusionPendingPatchesInDir(recoverCtx, defaultSuperpowersCommandRunner, superpowersRunsDir)
+		recoverCancel()
 		// Read the saved plan DURABLY: a fresh cron tick's ChainState is empty, so
 		// the only place a rate-limited carryover survives is the agent-scope store.
 		planPath, activePlan := loadSuperpowersPlanState(bb)
@@ -850,6 +860,93 @@ func registerSuperpowersProductionActions() {
 		return k == "creative"
 	})
 
+}
+
+// pendingPatchRecoveryCheckName is the VerificationCheck.Name a recorded
+// pending_patch recovery attempt uses — reusing run.Verification (rather than
+// a new SuperpowersRun field) as the durable per-run attempt ledger, the same
+// artifact shape every other apply-time check already uses
+// (superpowers_apply.go's verifySuperpowersRuntimeInDir).
+const pendingPatchRecoveryCheckName = "pending-patch-recovery"
+
+// pendingPatchRecoveryMaxAttempts bounds the TOTAL rebase/ff-land attempts a
+// parked run may accumulate across scheduled cycles (not per-cycle): once a
+// run has this many recorded pendingPatchRecoveryCheckName attempts in
+// run.json it is abandoned — left parked, but never retried again — so a run
+// that keeps failing to land cannot spin the scheduler forever.
+const pendingPatchRecoveryMaxAttempts = 2
+
+// recoverGoapFusionPendingPatchesInDir is the bounded pending_patch recovery
+// pass for the scheduled runtime cycle (Q3 Reliability & Q5 Consistency —
+// non-destructive goap-fusion materializer, milestone 4/5). It scans every
+// run parked under runsDir and, for each one still recorded as
+// ApplyStatus=="pending_patch" whose superpowers/<id> branch still exists,
+// attempts at most ONE rebase-onto-master + full re-verify + ff-land
+// (reapplyRunBranchOntoMaster) per cycle — UNLESS the run's plan is already
+// recorded as landed in the knowledge store (superpowersPlanAlreadyImplemented),
+// in which case it is stale carryover and is skipped entirely, untouched. Every
+// attempt (success or failure) is recorded durably via
+// pendingPatchRecoveryCheckName so the count survives across cron ticks; once
+// a run has accumulated pendingPatchRecoveryMaxAttempts attempts it is
+// abandoned outright — skipped with zero commands issued, never a 3rd time.
+// Failures here are non-fatal to the caller: this is a best-effort background
+// sweep, not the main scheduled-cycle path.
+func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRunner, runsDir string) {
+	entries, err := os.ReadDir(runsDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		run, err := readSuperpowersRunJSON(filepath.Join(runsDir, entry.Name(), "run.json"))
+		if err != nil || run == nil || run.ApplyStatus != "pending_patch" {
+			continue
+		}
+		if pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts {
+			continue // abandoned: attempt budget exhausted, never retried again
+		}
+		branch := strings.TrimSpace(run.WorktreeBranch)
+		if branch == "" {
+			continue
+		}
+		listed := runner.Run(ctx, run.RepoDir, "git", "branch", "--list", branch)
+		if strings.TrimSpace(listed.Output) == "" {
+			continue // branch gone; nothing left to recover
+		}
+		planText, _ := os.ReadFile(run.PlanPath)
+		if superpowersPlanAlreadyImplemented(string(planText)) {
+			continue // superseded: this work already landed out-of-band
+		}
+		recoverErr := reapplyRunBranchOntoMaster(ctx, runner, run)
+		vc := VerificationCheck{Name: pendingPatchRecoveryCheckName, Command: "reapplyRunBranchOntoMaster", Passed: recoverErr == nil}
+		if recoverErr != nil {
+			vc.Output = recoverErr.Error()
+			run.Verification = append(run.Verification, vc)
+			run.ApplyStatus = "pending_patch"
+			_ = writeSuperpowersRunJSON(run)
+			continue
+		}
+		run.Verification = append(run.Verification, vc)
+		// ffLandRunBranchAndPush sets ApplyStatus to "committed" or
+		// "committed_unpushed"; either way the run is no longer pending_patch,
+		// so a future cycle will not re-attempt it regardless of its error.
+		_ = ffLandRunBranchAndPush(ctx, runner, run)
+		_ = writeSuperpowersRunJSON(run)
+	}
+}
+
+// pendingPatchRecoveryAttempts counts the recorded pending_patch recovery
+// attempts already accumulated in run.Verification.
+func pendingPatchRecoveryAttempts(run *SuperpowersRun) int {
+	n := 0
+	for _, v := range run.Verification {
+		if v.Name == pendingPatchRecoveryCheckName {
+			n++
+		}
+	}
+	return n
 }
 
 // markGoapFusionImplDegraded records a durable signal that the ClaudeSuperpowersPath

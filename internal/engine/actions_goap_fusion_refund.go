@@ -66,6 +66,48 @@ var goapImplGateFailureMarkers = []string{
 	"go.mod/go.sum out of sync",  // "✗ go.mod/go.sum out of sync …"
 }
 
+// goapPendingPatchResultMarkers identify a pending_patch park specifically —
+// the exact markers superpowers_apply.go and actions_superpowers_prod.go
+// stamp when a run's patch could not be applied/committed/fast-forwarded and
+// was parked for recovery instead of landing. A pending_patch park is
+// recoverable by re-running the apply (its own recovery path, unlike a
+// generic infra wedge), so classifyErrorHandlerFailure's guard label
+// distinguishes it from the broader "infra" bucket rather than collapsing
+// into it.
+var goapPendingPatchResultMarkers = []string{
+	"pending_patch:",
+	"Superpowers Pending Patch",
+}
+
+// isGoapPendingPatchFailure reports whether a failed cycle parked as
+// pending_patch specifically, rather than a different infrastructure wedge.
+func isGoapPendingPatchFailure(outcome, result string) bool {
+	if outcome == "pending_patch" {
+		return true
+	}
+	for _, m := range goapPendingPatchResultMarkers {
+		if strings.Contains(result, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// goapWorkingTreeDriftMarker is the marker
+// VerifyScheduledGoapFusionBuildTreeMaterialized (actions_superpowers.go)
+// stamps when the main repo's on-disk tree — bare or not — has drifted from
+// HEAD (a dirty checkout, or a wipe/materialize step that left tracked files
+// stale). Unlike a pending_patch park, nothing needs re-applying; the tree
+// just needs re-materializing before the next cycle builds it, so it earns
+// its own guard category distinct from both "pending_patch" and "infra".
+const goapWorkingTreeDriftMarker = "Build Tree Preflight Failed"
+
+// isGoapWorkingTreeDriftFailure reports whether a failed cycle died because
+// the on-disk build tree had drifted from HEAD.
+func isGoapWorkingTreeDriftFailure(result string) bool {
+	return strings.Contains(result, goapWorkingTreeDriftMarker)
+}
+
 // isGoapInfraCycleFailure reports whether a failed cycle died for
 // infrastructure reasons rather than an implementation failure.
 func isGoapInfraCycleFailure(outcome, result string) bool {

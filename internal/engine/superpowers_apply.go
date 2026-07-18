@@ -141,6 +141,22 @@ func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, 
 		_ = writeSuperpowersRunJSON(run)
 		return err
 	}
+	if err := ffLandRunBranchAndPush(ctx, runner, run); err != nil {
+		_ = writeSuperpowersRunJSON(run)
+		return err
+	}
+	return writeSuperpowersRunJSON(run)
+}
+
+// ffLandRunBranchAndPush records the "committed"/"committed_unpushed" landing
+// outcome once reapplyRunBranchOntoMaster has already fast-forwarded
+// run.RepoDir's master ref to the run branch: it captures the landed commit
+// and pushes master to origin, mirroring the bare repo (this repo has no
+// remote of its own — origin IS the ref this bare repo's master must reach)
+// and the pending_patch recovery pass (recoverGoapFusionPendingPatchesInDir,
+// actions_superpowers_prod.go) share this exact tail so a run recovered later
+// lands identically to one that landed on its first apply attempt.
+func ffLandRunBranchAndPush(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
 	if head := runner.Run(ctx, run.RepoDir, "git", "rev-parse", "--short", "master"); head.Err == nil {
 		run.AppliedCommit = strings.TrimSpace(head.Output)
 	}
@@ -148,10 +164,9 @@ func applySuperpowersRunFromBareRepo(ctx context.Context, runner CommandRunner, 
 	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
 	if push.Err != nil {
 		run.ApplyStatus = "committed_unpushed"
-		_ = writeSuperpowersRunJSON(run)
 		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
 	}
-	return writeSuperpowersRunJSON(run)
+	return nil
 }
 
 // reapplyRunBranchOntoMaster fast-forwards the bare repo's master to the run

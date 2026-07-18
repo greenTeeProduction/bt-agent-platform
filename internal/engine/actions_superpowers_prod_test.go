@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -1160,5 +1161,204 @@ func TestFusionAnalysis_RateLimitCarryoverNotConflatedAsDegradation(t *testing.T
 func TestSuperpowersRuntimeRunBudgetCoversGoalDrivenBatch(t *testing.T) {
 	if superpowersRuntimeRunBudget != 90*time.Minute {
 		t.Fatalf("superpowersRuntimeRunBudget = %v, want 90m (a 3-milestone batch needs ~55-70m; 45m treadmilled 2026-07-18)", superpowersRuntimeRunBudget)
+	}
+}
+
+// recoveryScriptRunner fakes the commands the bounded pending_patch recovery
+// pass (recoverGoapFusionPendingPatchesInDir) issues against a parked run:
+// a branch-survival check ("git branch --list <branch>") followed by the
+// reused reapplyRunBranchOntoMaster sequence (symbolic-ref guard, the
+// non-forced "git fetch . <branch>:master" ff, and — only on a refused ff —
+// "git rebase master" / "git rebase --abort"). When alwaysFailReapply is set,
+// both the ff and the rebase keep failing, modelling a run whose recovery
+// keeps failing so the bounded-attempts/abandon contract can be exercised.
+type recoveryScriptRunner struct {
+	calls             []string
+	branchExists      bool
+	headBranch        string
+	alwaysFailReapply bool
+}
+
+func (r *recoveryScriptRunner) Run(_ context.Context, dir string, name string, args ...string) CommandResult {
+	cmd := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	r.calls = append(r.calls, dir+" :: "+cmd)
+	res := CommandResult{Command: cmd, Dir: dir, Duration: time.Millisecond}
+	switch {
+	case name == "git" && len(args) >= 2 && args[0] == "branch" && args[1] == "--list":
+		if r.branchExists && len(args) >= 3 {
+			res.Output = args[2] + "\n"
+		}
+	case name == "git" && len(args) >= 2 && args[0] == "fetch" && args[1] == ".":
+		if r.alwaysFailReapply {
+			res.Err = errors.New("fast-forward refused")
+			res.Output = "! [rejected]        master -> master (non-fast-forward)"
+		}
+	case name == "git" && len(args) >= 1 && args[0] == "symbolic-ref":
+		res.Output = r.headBranch + "\n"
+	case name == "git" && len(args) >= 2 && args[0] == "rebase" && args[1] == "master":
+		if r.alwaysFailReapply {
+			res.Err = errors.New("rebase conflict")
+			res.Output = "CONFLICT (content): Merge conflict"
+		}
+	case name == "git" && len(args) >= 2 && args[0] == "rebase" && args[1] == "--abort":
+		// no-op success
+	}
+	return res
+}
+
+func (r *recoveryScriptRunner) joined() string { return strings.Join(r.calls, "\n") }
+
+// writeParkedSuperpowersRun writes a pending_patch run.json (plus its plan.md,
+// a REUSE-EXISTING pattern mirroring writeSuperpowersRunJSON/ensureSuperpowersRunDirs)
+// under runsDir/<id>, the on-disk shape recoverGoapFusionPendingPatchesInDir must
+// scan — mirroring how newSuperpowersRunID-based runs already land under
+// superpowersRunsDir (superpowers_artifacts.go).
+func writeParkedSuperpowersRun(t *testing.T, runsDir, id, planText string) *SuperpowersRun {
+	t.Helper()
+	dir := filepath.Join(runsDir, id)
+	planPath := filepath.Join(dir, "plan.md")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(planPath, []byte(planText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := &SuperpowersRun{
+		ID:             id,
+		Task:           "recover " + id,
+		Mode:           SuperpowersModeApply,
+		RepoDir:        t.TempDir(),
+		WorktreePath:   t.TempDir(),
+		WorktreeBranch: "superpowers/" + id,
+		ArtifactDir:    dir,
+		PlanPath:       planPath,
+		ApplyStatus:    "pending_patch",
+	}
+	if err := writeSuperpowersRunJSON(run); err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
+
+// TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore pins the
+// first half of milestone 4/5's contract (Q3 Reliability & Q5 Consistency —
+// non-destructive goap-fusion materializer): before attempting any rebase/ff
+// recovery on a parked run, the pass must consult superpowersPlanAlreadyImplemented
+// against the knowledge store. A parked run whose plan objective is already
+// recorded as landed (goap:implemented) is stale/superseded — re-attempting it
+// would redo work that landed out-of-band — so it must be skipped with zero
+// git rebase/ff commands issued and its ApplyStatus left untouched.
+func TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore(t *testing.T) {
+	runsDir := t.TempDir()
+	planText := buildDeterministicImplementationPlan("known fix")
+	run := writeParkedSuperpowersRun(t, runsDir, "run-known", planText)
+
+	prevKnowledge := btFusionKnowledgePath
+	btFusionKnowledgePath = filepath.Join(t.TempDir(), "knowledge.json")
+	t.Cleanup(func() { btFusionKnowledgePath = prevKnowledge })
+
+	tasks, err := ParseSuperpowersPlan(planText)
+	if err != nil || len(tasks) == 0 {
+		t.Fatalf("test setup: could not parse seeded plan: %v", err)
+	}
+	store, err := research.Open(btFusionKnowledgePath)
+	if err != nil {
+		t.Fatalf("test setup: open knowledge store: %v", err)
+	}
+	store.Record("goap:implemented", tasks[0].Title, stripGoapGoalTransientNotes(tasks[0].Objective))
+	if err := store.Save(); err != nil {
+		t.Fatalf("test setup: save knowledge store: %v", err)
+	}
+
+	runner := &recoveryScriptRunner{branchExists: true, headBranch: run.WorktreeBranch}
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+
+	joined := runner.joined()
+	if strings.Contains(joined, "fetch . "+run.WorktreeBranch+":master") || strings.Contains(joined, "rebase master") {
+		t.Fatalf("a parked run whose plan is already recorded as implemented must be skipped entirely, not re-attempted; calls:\n%s", joined)
+	}
+
+	reloaded, err := readSuperpowersRunJSON(filepath.Join(runsDir, "run-known", "run.json"))
+	if err != nil {
+		t.Fatalf("reload run.json: %v", err)
+	}
+	if reloaded.ApplyStatus != "pending_patch" {
+		t.Fatalf("ApplyStatus = %q, want unchanged pending_patch for a skipped superseded run", reloaded.ApplyStatus)
+	}
+}
+
+// TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons pins the
+// second half of milestone 4/5's contract: a surviving parked run (branch
+// intact, plan NOT already recorded as implemented) gets at most ONE bounded
+// rebase-onto-master + full re-verify + ff-land attempt (reapplyRunBranchOntoMaster)
+// per scheduled cycle. Each failed attempt is recorded in run.json so the
+// count survives across cron ticks; after 2 total recorded attempts the run
+// is abandoned — a 3rd cycle must skip it (no new commands), never spin
+// forever retrying a run that keeps failing to land.
+func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T) {
+	runsDir := t.TempDir()
+	planText := buildDeterministicImplementationPlan("unknown fix")
+	run := writeParkedSuperpowersRun(t, runsDir, "run-x", planText)
+
+	// No knowledge-store seeding: this run's plan is not recorded as landed,
+	// so it is a genuine surviving parked run eligible for recovery attempts.
+	prevKnowledge := btFusionKnowledgePath
+	btFusionKnowledgePath = filepath.Join(t.TempDir(), "knowledge.json")
+	t.Cleanup(func() { btFusionKnowledgePath = prevKnowledge })
+
+	runner := &recoveryScriptRunner{branchExists: true, headBranch: run.WorktreeBranch, alwaysFailReapply: true}
+	runJSONPath := filepath.Join(runsDir, "run-x", "run.json")
+
+	// pendingPatchRecoveryCheckName is the VerificationCheck.Name a recorded
+	// recovery attempt must use — reusing run.Verification (rather than a new
+	// SuperpowersRun field) as the "record the attempt in run.json" ledger, the
+	// same durable-artifact shape every other apply-time check already uses
+	// (superpowers_apply.go's verifySuperpowersRuntimeInDir).
+	const pendingPatchRecoveryCheckName = "pending-patch-recovery"
+	countAttempts := func() int {
+		reloaded, err := readSuperpowersRunJSON(runJSONPath)
+		if err != nil {
+			t.Fatalf("reload run.json: %v", err)
+		}
+		if reloaded.ApplyStatus != "pending_patch" {
+			t.Fatalf("ApplyStatus = %q, want pending_patch (recovery kept failing, run stays parked)", reloaded.ApplyStatus)
+		}
+		n := 0
+		for _, v := range reloaded.Verification {
+			if v.Name == pendingPatchRecoveryCheckName {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Cycle 1: one bounded attempt, recorded, run stays parked.
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	if got := countAttempts(); got != 1 {
+		t.Fatalf("attempts recorded after cycle 1 = %d, want 1", got)
+	}
+	callsAfterCycle1 := len(runner.calls)
+	if callsAfterCycle1 == 0 {
+		t.Fatalf("expected the surviving parked run to be attempted on cycle 1, but no commands ran")
+	}
+
+	// Cycle 2: second (and final, per the 2-total-attempts budget) attempt.
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	if got := countAttempts(); got != 2 {
+		t.Fatalf("attempts recorded after cycle 2 = %d, want 2", got)
+	}
+	callsAfterCycle2 := len(runner.calls)
+	if callsAfterCycle2 <= callsAfterCycle1 {
+		t.Fatalf("expected a second recovery attempt to issue new commands; calls stayed at %d", callsAfterCycle2)
+	}
+
+	// Cycle 3: 2 total attempts already recorded — the run must be abandoned,
+	// i.e. skipped with NO new commands issued and no 3rd attempt recorded.
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	if got := countAttempts(); got != 2 {
+		t.Fatalf("attempts recorded after cycle 3 = %d, want still 2 (abandoned, no 3rd attempt)", got)
+	}
+	if len(runner.calls) != callsAfterCycle2 {
+		t.Fatalf("a run with 2 recorded attempts must be abandoned: no new commands may run on cycle 3; calls before=%d after=%d", callsAfterCycle2, len(runner.calls))
 	}
 }
