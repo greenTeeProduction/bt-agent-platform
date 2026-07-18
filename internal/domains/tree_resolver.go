@@ -52,6 +52,16 @@ var SelectorStatsPath string
 // that tree. Wired (opt-in) by internal/agentexec.
 var SelectorStatsPathFn func(treeID string) string
 
+// DTStatsPath points at a durable DTAnalyzer telemetry file
+// (evolution.DTAnalyzer.Save format). When non-empty, every tree returned by
+// ResolveTreeID has its Selector children additionally reordered by
+// information gain via evolution.BTOptimizer.OptimizeSelectors — the
+// non-destructive sibling of the SelectorOptimizer pass above, applied after
+// it. Selectors with no recorded DT telemetry keep their (possibly already
+// SelectorOptimizer-reordered) order. Empty means no DT reordering, matching
+// SelectorStatsPath's nil-tolerant, opt-in convention.
+var DTStatsPath string
+
 // ResolveTreeID maps a tree identifier string to a serializable behavior tree,
 // then applies any learned Selector ordering (SelectorStatsPath) so accumulated
 // telemetry reorders Selector children before the tree reaches the engine.
@@ -89,6 +99,8 @@ func ResolveTreeIDForUser(user, id string) *evolution.SerializableNode {
 // SelectorStatsPath as fallback) and reorders the tree's Selector children in
 // place by learned success rate. A missing/empty path or a load error leaves
 // the authored order untouched, so cold or unwired deployments are unaffected.
+// It then runs the non-destructive DTAnalyzer/BTOptimizer information-gain
+// pass (applyDTOptimizerOrdering) on the same tree.
 func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
 	path := ""
 	if SelectorStatsPathFn != nil {
@@ -97,14 +109,32 @@ func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
 	if path == "" {
 		path = SelectorStatsPath
 	}
-	if path == "" {
+	if path != "" {
+		so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+		if err := so.LoadSelectorStats(path); err == nil {
+			so.ApplyLearnedOrdering(tree)
+		}
+	}
+
+	applyDTOptimizerOrdering(tree)
+}
+
+// applyDTOptimizerOrdering loads DTStatsPath into a fresh DTAnalyzer and, when
+// telemetry exists, applies evolution.BTOptimizer.OptimizeSelectors to
+// information-gain-reorder the tree's Selector children in place. A missing/
+// empty DTStatsPath, a load error, or a Selector with no recorded stats
+// leaves the tree's (possibly already SelectorOptimizer-reordered) order
+// untouched — OptimizeSelectors itself is a no-op when the analyzer has no
+// telemetry.
+func applyDTOptimizerOrdering(tree *evolution.SerializableNode) {
+	if DTStatsPath == "" {
 		return
 	}
-	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
-	if err := so.LoadSelectorStats(path); err != nil {
+	da := evolution.NewDTAnalyzer()
+	if err := da.Load(DTStatsPath); err != nil {
 		return
 	}
-	so.ApplyLearnedOrdering(tree)
+	(&evolution.BTOptimizer{Analyzer: da}).OptimizeSelectors(tree)
 }
 
 // resolveTreeID performs the raw ID→tree mapping without the learned-ordering

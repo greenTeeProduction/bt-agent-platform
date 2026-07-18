@@ -43,9 +43,10 @@ func TestPackageTestsIsolateHomeDir(t *testing.T) {
 	realDataDir := filepath.Join(realHome, ".go-bt-evolve")
 
 	for name, got := range map[string]string{
-		"HomeDir":           HomeDir(),
-		"SchedulerJobsFile": SchedulerJobsFile(),
-		"SelectorStatsFile": SelectorStatsFile("trace-test-agent"),
+		"HomeDir":               HomeDir(),
+		"SchedulerJobsFile":     SchedulerJobsFile(),
+		"SelectorStatsFile":     SelectorStatsFile("trace-test-agent"),
+		"DecisionTreeStatsFile": DecisionTreeStatsFile("trace-test-agent"),
 	} {
 		if got == realDataDir || strings.HasPrefix(got, realDataDir+string(os.PathSeparator)) {
 			t.Fatalf("%s resolves to %q under the real %q; internal/agent tests must run with an isolated BT_AGENT_HOME (TestMain)", name, got, realDataDir)

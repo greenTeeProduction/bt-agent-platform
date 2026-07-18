@@ -441,6 +441,34 @@ func (o *BTOptimizer) pathHitRatio(ss *DTSelectorStats, pathName string) float64
 
 // ─── Helpers ───
 
+// SelectorChildConditions returns, for every Selector node in tree, a map
+// from each of that Selector's direct children (by node name) to the
+// decision-tree condition extractCondition attributes to it. Callers outside
+// this package (the agent runner's telemetry bridge) use this to enrich
+// terminal child ticks with the condition DTAnalyzer.RecordHit expects,
+// without needing extractCondition itself exported.
+func SelectorChildConditions(tree *SerializableNode) map[string]map[string]string {
+	out := make(map[string]map[string]string)
+	collectSelectorChildConditions(tree, out)
+	return out
+}
+
+func collectSelectorChildConditions(n *SerializableNode, out map[string]map[string]string) {
+	if n == nil {
+		return
+	}
+	if n.Type == "Selector" && n.Name != "" {
+		children := make(map[string]string, len(n.Children))
+		for i := range n.Children {
+			children[n.Children[i].Name] = extractCondition(&n.Children[i])
+		}
+		out[n.Name] = children
+	}
+	for i := range n.Children {
+		collectSelectorChildConditions(&n.Children[i], out)
+	}
+}
+
 func extractCondition(child *SerializableNode) string {
 	// A Selector path's condition is usually the first Condition child
 	for _, c := range child.Children {

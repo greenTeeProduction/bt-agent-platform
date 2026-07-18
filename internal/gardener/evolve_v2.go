@@ -42,6 +42,14 @@ type EvolveV2Config struct {
 	// AlwaysSucceed children stay last, preserving short-circuit semantics.
 	// Off by default so the pass is a no-op until explicitly enabled.
 	SelectorOrdering bool
+
+	// DTOrdering, when true, applies entropy/Gini-based BTOptimizer reordering
+	// from the durable DTAnalyzer telemetry at Config.DTStatsPath before an
+	// evolved tree is persisted — the sibling of SelectorOrdering above, using
+	// information gain instead of raw success rate. Fallback and AlwaysSucceed
+	// children stay last, preserving short-circuit semantics. Off by default so
+	// the pass is a no-op until explicitly enabled.
+	DTOrdering bool
 }
 
 // DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
@@ -370,6 +378,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// so Selector short-circuit semantics are preserved. A reorder is itself a
 	// persistable change, so it forces a save even when no mutation applied.
 	reordered := g.applyLearnedSelectorOrdering(tree, cfg)
+	// ── DT-optimizer ordering (Q2 Evolvability milestone 3) — the
+	// entropy/Gini-based sibling of the Selector-ordering pass above, applied
+	// to the same tree just before persistence.
+	reordered += g.applyDTOptimizerOrdering(tree, cfg)
 	saveFailed := false
 	if applied > 0 || reordered > 0 {
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
@@ -515,6 +527,26 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 		return 0
 	}
 	return so.ApplyLearnedOrdering(tree)
+}
+
+// applyDTOptimizerOrdering seeds a BTOptimizer from the durable DTAnalyzer
+// telemetry at Config.DTStatsPath and reorders every Selector's children in
+// tree by information gain (entropy/Gini), keeping fallback/AlwaysSucceed
+// children last. It is a no-op (returns 0) unless the pass is enabled and a
+// stats path is configured. Returns the number of Selector nodes whose
+// ordering changed — the DTAnalyzer/BTOptimizer sibling of
+// applyLearnedSelectorOrdering above.
+func (g *Gardener) applyDTOptimizerOrdering(tree *evolution.SerializableNode, cfg EvolveV2Config) int {
+	if !cfg.DTOrdering || g.cfg.DTStatsPath == "" || tree == nil {
+		return 0
+	}
+	bo := evolution.NewBTOptimizer()
+	if err := bo.Analyzer.Load(g.cfg.DTStatsPath); err != nil {
+		slog.Warn("gardener/v2: loading decision-tree stats failed, skipping ordering",
+			"path", g.cfg.DTStatsPath, "error", err)
+		return 0
+	}
+	return bo.OptimizeSelectors(tree)
 }
 
 const (

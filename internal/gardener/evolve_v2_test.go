@@ -1023,6 +1023,133 @@ func TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist(t *testing.T) 
 	})
 }
 
+// dtOrderingTree returns a tree with a "Router" Selector whose three real
+// paths (A, B, C) are each guarded by their own Condition child, plus an
+// AlwaysSucceed "Fallback" default path. seedDTStats below records B as hit
+// far more often than A or C, so B's condition carries the highest
+// information gain and a DTAnalyzer/BTOptimizer reorder must promote B ahead
+// of A and C — which stay in their original relative order (tied gain) —
+// while Fallback stays last (the default-path guard).
+func dtOrderingTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Selector", Name: "Router",
+				Children: []evolution.SerializableNode{
+					{Type: "Sequence", Name: "A", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondA"},
+					}},
+					{Type: "Sequence", Name: "B", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondB"},
+					}},
+					{Type: "Sequence", Name: "C", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondC"},
+					}},
+					{Type: "AlwaysSucceed", Name: "Fallback"},
+				},
+			},
+		},
+	}
+}
+
+// seedDTStats writes durable DTAnalyzer telemetry (the evolution.DTAnalyzer.Save
+// format) to path so that under "Router" the B path (hit 8x) has far higher
+// information gain than the A and C paths (hit 1x each, tied with one another).
+func seedDTStats(t *testing.T, path string) {
+	t.Helper()
+	da := evolution.NewDTAnalyzer()
+	da.RecordHit("Router", "A", "CondA", true)
+	for i := 0; i < 8; i++ {
+		da.RecordHit("Router", "B", "CondB", true)
+	}
+	da.RecordHit("Router", "C", "CondC", true)
+	if err := da.Save(path); err != nil {
+		t.Fatalf("Save DT stats: %v", err)
+	}
+}
+
+// TestEvolveTreeV2_AppliesDTOptimizerOrderingBeforePersist pins milestone 3/4
+// of the "wire the entropy/Gini-based BTOptimizer/DTAnalyzer decision-tree
+// engine into the same production telemetry and mutation paths its sibling
+// SelectorOptimizer already uses" program: evolveTreeV2 must apply
+// information-gain-based Selector child reordering (evolution.BTOptimizer,
+// seeded from Config.DTStatsPath) before an evolved tree is persisted,
+// alongside the existing learned-Selector-ordering pass. The pass is
+// flag-gated (EvolveV2Config.DTOrdering). MaxMutations is 0 so the ONLY
+// change to the tree is the reorder itself — isolating the behavior under
+// test.
+func TestEvolveTreeV2_AppliesDTOptimizerOrderingBeforePersist(t *testing.T) {
+	statsPath := filepath.Join(t.TempDir(), "dt_stats.json")
+	seedDTStats(t, statsPath)
+
+	newGardener := func(t *testing.T) (*Gardener, *evolution.SerializableNode, TreeEntry) {
+		t.Helper()
+		refStore, err := evolution.NewStore(filepath.Join(t.TempDir(), "reflections"))
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		mt, err := NewMetricsTracker(t.TempDir())
+		if err != nil {
+			t.Fatalf("NewMetricsTracker: %v", err)
+		}
+		treeDir := t.TempDir()
+		tree := dtOrderingTree()
+		reg := &Registry{dir: treeDir}
+		reg.mu.Lock()
+		reg.entries = []TreeEntry{
+			{Name: "dt_tree", Description: "dt ordering", Tree: tree, FilePath: treeDir + "/tree-dt_tree.json", Active: true},
+		}
+		reg.mu.Unlock()
+		cfg := Config{
+			Registry:                 reg,
+			MetricsTracker:           mt,
+			RefStore:                 refStore,
+			MaxMutations:             0, // isolate the reorder — no structural mutations this cycle
+			EvolveWithoutReflections: true,
+			DTStatsPath:              statsPath,
+		}
+		return NewGardener(cfg), tree, reg.List()[0]
+	}
+
+	v2 := func(enabled bool) EvolveV2Config {
+		return EvolveV2Config{
+			CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+			BlocksEnabled: false,
+			UseRealLLM:    false,
+			DTOrdering:    enabled,
+		}
+	}
+
+	t.Run("enabled promotes highest-information-gain child and keeps fallback last", func(t *testing.T) {
+		g, tree, entry := newGardener(t)
+
+		if got, want := routerChildNames(t, tree), []string{"A", "B", "C", "Fallback"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("precondition: Router children = %v, want %v", got, want)
+		}
+
+		g.evolveTreeV2(entry, v2(true))
+
+		got := routerChildNames(t, tree)
+		want := []string{"B", "A", "C", "Fallback"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("DT-optimizer ordering not applied before persist: Router children = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("disabled is a no-op", func(t *testing.T) {
+		g, tree, entry := newGardener(t)
+
+		g.evolveTreeV2(entry, v2(false))
+
+		got := routerChildNames(t, tree)
+		want := []string{"A", "B", "C", "Fallback"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("DT-optimizer ordering ran while disabled: Router children = %v, want %v", got, want)
+		}
+	})
+}
+
 // ============================================================================
 // CrisisIntervened / MutationBudget metrics (evolve_v2.go) — Q3 Reliability
 // milestone 1: crisis intervention and the boosted mutation budget must be

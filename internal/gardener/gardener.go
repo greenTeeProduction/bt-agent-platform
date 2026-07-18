@@ -494,6 +494,12 @@ type Config struct {
 	// learned-ordering pass in evolveTreeV2 when EvolveV2Config.SelectorOrdering
 	// is enabled. Empty disables the pass regardless of the flag.
 	SelectorStatsPath string
+	// DTStatsPath, when set, is the durable DTAnalyzer telemetry file (written
+	// by DTAnalyzer.Save, e.g. agent.DecisionTreeStatsFile) that seeds the
+	// entropy/Gini-based BTOptimizer reordering pass in evolveTreeV2 when
+	// EvolveV2Config.DTOrdering is enabled — the sibling of SelectorStatsPath's
+	// learned-ordering pass above. Empty disables the pass regardless of the flag.
+	DTStatsPath string
 	// MetaValidator, when non-nil, is consulted inside evolveTreeV2's
 	// per-candidate acceptance loop after the fitness/quality/SLO gates have
 	// already accepted a candidate: a MetaReject decision rejects the

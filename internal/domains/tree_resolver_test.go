@@ -164,3 +164,125 @@ func TestResolveTreeID_PerTreeStatsFn(t *testing.T) {
 			b.Children[0].Name, b.Children[1].Name)
 	}
 }
+
+// dtRouterTree returns a fresh Selector "DTRouter" whose two Condition
+// children have deliberately overlapping condition strings: "TypeA" is a
+// substring of "TypeAExtra". That overlap is what makes
+// evolution.BTOptimizer.OptimizeSelectors see differential information gain
+// between the two children — a Selector whose paths have non-overlapping,
+// mutually-exclusive single-path conditions always ties at parentEntropy,
+// because either split perfectly isolates one path (see
+// evolution.DTAnalyzer.InformationGain). Authored order is [TypeA,
+// TypeAExtra]; genuine DT telemetry recorded on "TypeAExtra" must promote it
+// ahead of "TypeA".
+func dtRouterTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Selector",
+		Name: "DTRouter",
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "TypeA"},
+			{Type: "Condition", Name: "TypeAExtra"},
+		},
+	}
+}
+
+// writeDTStats persists a durable DTAnalyzer telemetry file for "DTRouter",
+// recording hitCounts[name] hits under each named child using its own name as
+// both path and condition — the same shape production telemetry takes via
+// knowledge.RecordDecisionTreeChildOutcomes (Condition comes from
+// evolution.SelectorChildConditions, which for a leaf Condition node is the
+// node's own Name).
+func writeDTStats(t *testing.T, hitCounts map[string]int) string {
+	t.Helper()
+	da := evolution.NewDTAnalyzer()
+	for name, n := range hitCounts {
+		for i := 0; i < n; i++ {
+			da.RecordHit("DTRouter", name, name, true)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "dt_stats.json")
+	if err := da.Save(path); err != nil {
+		t.Fatalf("DTAnalyzer.Save: %v", err)
+	}
+	return path
+}
+
+// TestResolveTreeID_AppliesDTOptimizerOrdering pins the entropy/Gini-based
+// sibling consumer: after the existing SelectorOptimizer pass, when a durable
+// DTAnalyzer stats file is wired via DTStatsPath and the resolved tree
+// contains a Selector with recorded telemetry, ResolveTreeID must reorder
+// that Selector's children by evolution.BTOptimizer.OptimizeSelectors
+// (information-gain reordering) — the non-destructive sibling of the
+// SelectorOptimizer pass above, milestone 2 of the Q2 Evolvability program
+// wiring BTOptimizer/DTAnalyzer into the same production path.
+//
+// "TypeAExtra" has higher information gain than "TypeA" (see dtRouterTree)
+// and so must be promoted ahead of it. Without the consumer wired at tree
+// resolution, the authored order [TypeA, TypeAExtra] survives and this fails.
+func TestResolveTreeID_AppliesDTOptimizerOrdering(t *testing.T) {
+	origFn := DynamicResolveFn
+	defer func() { DynamicResolveFn = origFn }()
+	origDTPath := DTStatsPath
+	defer func() { DTStatsPath = origDTPath }()
+	origPath := SelectorStatsPath
+	defer func() { SelectorStatsPath = origPath }()
+	SelectorStatsPath = "" // isolate the DT pass from the SelectorOptimizer pass
+
+	DTStatsPath = writeDTStats(t, map[string]int{
+		"TypeA":      6,
+		"TypeAExtra": 3,
+	})
+
+	tree := dtRouterTree()
+	DynamicResolveFn = func(id string) *evolution.SerializableNode {
+		if id == "core:dt" {
+			return tree
+		}
+		return nil
+	}
+
+	got := ResolveTreeID("core:dt")
+	if got == nil {
+		t.Fatal("ResolveTreeID returned nil for core:dt")
+	}
+	if len(got.Children) != 2 {
+		t.Fatalf("expected 2 children, got %d", len(got.Children))
+	}
+	if got.Children[0].Name != "TypeAExtra" || got.Children[1].Name != "TypeA" {
+		t.Fatalf("DT-optimizer ordering not applied: children = [%s, %s], want [TypeAExtra, TypeA]",
+			got.Children[0].Name, got.Children[1].Name)
+	}
+}
+
+// TestResolveTreeID_NoDTStatsLeavesTreeUnchanged guards the no-telemetry
+// case: a tree resolved with no DTStatsPath/DTStatsPathFn wired (or one
+// pointing at a selector with no recorded stats) must keep its authored
+// Selector order untouched, so cold or unwired deployments are unaffected by
+// the DT-optimizer pass.
+func TestResolveTreeID_NoDTStatsLeavesTreeUnchanged(t *testing.T) {
+	origFn := DynamicResolveFn
+	defer func() { DynamicResolveFn = origFn }()
+	origDTPath := DTStatsPath
+	defer func() { DTStatsPath = origDTPath }()
+	origPath := SelectorStatsPath
+	defer func() { SelectorStatsPath = origPath }()
+	SelectorStatsPath = ""
+	DTStatsPath = "" // no DT telemetry wired at all
+
+	tree := dtRouterTree()
+	DynamicResolveFn = func(id string) *evolution.SerializableNode {
+		if id == "core:dt-cold" {
+			return tree
+		}
+		return nil
+	}
+
+	got := ResolveTreeID("core:dt-cold")
+	if got == nil {
+		t.Fatal("ResolveTreeID returned nil for core:dt-cold")
+	}
+	if got.Children[0].Name != "TypeA" || got.Children[1].Name != "TypeAExtra" {
+		t.Fatalf("tree with no DT telemetry was reordered: children = [%s, %s], want authored [TypeA, TypeAExtra]",
+			got.Children[0].Name, got.Children[1].Name)
+	}
+}
