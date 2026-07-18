@@ -24,6 +24,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
 )
 
@@ -82,14 +83,20 @@ func NewClient(cfg Config) (*Client, error) {
 
 // generateCtx calls the LLM with a caller-provided context and timeout.
 // Wraps the call in a tracing span so LLM execution time is visible
-// alongside the existing engine and MCP tracing.
-func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt string) (string, error) {
+// alongside the existing engine and MCP tracing. maxTokens caps the
+// response length (Ollama's num_predict) when > 0; 0 leaves it unbounded.
+func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt string, maxTokens int) (string, error) {
 	traceCtx, span := tracing.StartSpan(ctx, "llm:generate")
 	defer span.End()
 
 	span.SetAttribute("llm.model", c.cfg.Model)
 	span.SetAttribute("llm.prompt_len", fmt.Sprintf("%d", len(prompt)))
 	span.SetAttribute("llm.timeout", timeout.String())
+	var callOpts []llms.CallOption
+	if maxTokens > 0 {
+		span.SetAttribute("llm.max_tokens", fmt.Sprintf("%d", maxTokens))
+		callOpts = append(callOpts, llms.WithMaxTokens(maxTokens))
+	}
 
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -102,7 +109,7 @@ func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt 
 	var result string
 	policy := reliability.DefaultRetryPolicy()
 	err := policy.ExecuteContext(callCtx, func() error {
-		out, callErr := c.llm.Call(callCtx, prompt)
+		out, callErr := c.llm.Call(callCtx, prompt, callOpts...)
 		if callErr != nil {
 			return callErr
 		}
@@ -122,7 +129,7 @@ func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt 
 
 // generate is the legacy helper using context.Background() and the default timeout.
 func (c *Client) generate(prompt string) (string, error) {
-	return c.generateCtx(context.Background(), c.cfg.Timeout, prompt)
+	return c.generateCtx(context.Background(), c.cfg.Timeout, prompt, 0)
 }
 
 // Generate is the public entry point for raw LLM calls. Used by the agent factory.
@@ -132,12 +139,20 @@ func (c *Client) Generate(prompt string) (string, error) {
 
 // GenerateCtx generates with a caller-provided context for cancellation propagation.
 func (c *Client) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	return c.generateCtx(ctx, c.cfg.Timeout, prompt)
+	return c.generateCtx(ctx, c.cfg.Timeout, prompt, 0)
 }
 
 // GenerateWithTimeout generates with a per-operation timeout override.
 func (c *Client) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
-	return c.generateCtx(context.Background(), timeout, prompt)
+	return c.generateCtx(context.Background(), timeout, prompt, 0)
+}
+
+// GenerateWithMaxTokens generates like Generate, but caps the response at
+// maxTokens output tokens (Ollama's num_predict option) so a configured
+// ChainConfig.MaxTokens budget actually reaches the backend instead of being
+// silently discarded. maxTokens<=0 leaves the request unbounded.
+func (c *Client) GenerateWithMaxTokens(prompt string, maxTokens int) (string, error) {
+	return c.generateCtx(context.Background(), c.cfg.Timeout, prompt, maxTokens)
 }
 
 // AnalyzeComplexity classifies task complexity as "low", "medium", or "high".
@@ -148,7 +163,7 @@ func (c *Client) AnalyzeComplexity(task string) string {
 Task: %s
 Complexity:`, task,
 	)
-	result, err := c.generateCtx(context.Background(), 30*time.Second, prompt)
+	result, err := c.generateCtx(context.Background(), 30*time.Second, prompt, 0)
 	if err != nil {
 		return "medium"
 	}
@@ -170,7 +185,7 @@ func (c *Client) GeneratePlan(task, complexity string) string {
 Task: %s
 Plan:`, complexity, task,
 	)
-	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt)
+	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt, 0)
 	if err != nil {
 		return fmt.Sprintf("1. Analyze: %s\n2. Execute: %s\n3. Verify result", task, task)
 	}
@@ -190,7 +205,7 @@ WENT_WELL: <text>
 TO_IMPROVE: <text>`,
 		task, plan, outcome,
 	)
-	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt)
+	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt, 0)
 	if err != nil {
 		return "task completed", "better error handling"
 	}

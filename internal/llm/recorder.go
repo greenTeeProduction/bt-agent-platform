@@ -47,6 +47,12 @@ func (r *ErrorRecorder) GenerateWithTimeout(prompt string, timeout time.Duration
 	return result, err
 }
 
+func (r *ErrorRecorder) GenerateWithMaxTokens(prompt string, maxTokens int) (string, error) {
+	result, err := generateWithMaxTokens(r.LLM, prompt, maxTokens)
+	r.record(err)
+	return result, err
+}
+
 func (r *ErrorRecorder) record(err error) {
 	if err == nil {
 		return

@@ -56,6 +56,16 @@ func (f *FallbackLLM) GenerateWithTimeout(prompt string, timeout time.Duration) 
 	})
 }
 
+// GenerateWithMaxTokens tries each model in order like Generate, calling
+// GenerateWithMaxTokens on models that support capping output tokens and
+// falling back to unbounded Generate on those that don't (see
+// generateWithMaxTokens in provider.go).
+func (f *FallbackLLM) GenerateWithMaxTokens(prompt string, maxTokens int) (string, error) {
+	return f.generate(func(model LLM) (string, error) {
+		return generateWithMaxTokens(model, prompt, maxTokens)
+	})
+}
+
 // breakerFor returns the circuit breaker tracking failures for the named
 // model, creating it on first use. Keyed by model.Name so each entry in the
 // fallback chain trips independently.

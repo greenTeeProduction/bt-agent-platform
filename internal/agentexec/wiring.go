@@ -168,6 +168,24 @@ func automationApproved(root, user, treeID string) bool {
 	return true
 }
 
+// AutomationBlocked reports whether treeID has an automation record for user
+// that exists and is not persona.AutomationApproved (e.g. pending, rejected,
+// or paused via automationFlaggedStatus). Callers that resolve a user's tree
+// through a path with a generic fallback for "nothing matched" — such as
+// domains.ResolveTreeIDForUser, which falls back to evolution.DefaultTree()
+// — must check this FIRST and refuse (return nil) rather than fall through:
+// otherwise a gated automation's tree looks like "not found" and silently
+// executes the default tree instead of failing closed (Q4 Personalization
+// milestone 2 — the feedback-escalation resume loop must actually block
+// execution while flagged, not just skip to a different runnable tree).
+func AutomationBlocked(user, treeID string) bool {
+	root := usersTreeRoot
+	if root == "" {
+		root = agent.UsersDir()
+	}
+	return !automationApproved(root, user, treeID)
+}
+
 // ResolveGeneratedTreeForUser is the user-scoped counterpart to
 // ResolveGeneratedTree (ADR-133 personalization hardening, Q1 Correctness):
 // the shared reflections dir is still consulted first (trees not yet

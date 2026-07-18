@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
@@ -293,6 +294,77 @@ func TestRecordUserFeedback_FlaggedForReviewEscalatesAndPausesAutomation(t *test
 	}
 }
 
+// Q4 Personalization & Self-Growth milestone 1: once a tree is flagged and its
+// automation record sits in automationFlaggedStatus pending human review,
+// every subsequent bt_feedback call must NOT raise another HITL escalation —
+// the ledger record is already flagged, so re-escalating on each call would
+// spam duplicate review requests for the same pending decision.
+func TestRecordUserFeedback_FlaggedForReviewDoesNotReEscalateWhilePending(t *testing.T) {
+	deps := newFeedbackDeps(t)
+
+	prevStore := hitl.DefaultStore
+	prevPolicy := hitl.GetPolicy()
+	if _, err := hitl.InitStore(t.TempDir()); err != nil {
+		t.Fatalf("hitl store: %v", err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour, DefaultPrompt: "review"})
+	t.Cleanup(func() {
+		hitl.DefaultStore = prevStore
+		hitl.SetPolicy(prevPolicy)
+	})
+
+	const user = "nico"
+	const treeID = "goal:automate_reports"
+	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
+	if err != nil {
+		t.Fatalf("automation store: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: "weekly_sales_report",
+		Status:    persona.AutomationApproved,
+		TreeID:    treeID,
+		AgentName: "auto-nico-weekly_sales_report",
+	}); err != nil {
+		t.Fatalf("seed automation record: %v", err)
+	}
+
+	// Two negatives trip the threshold and raise the first (only) escalation.
+	recordUserFeedback(deps, user, treeID, "negative", "wrong currency")
+	tripped := recordUserFeedback(deps, user, treeID, "negative", "still wrong")
+	if tripped["flagged_for_review"] != true {
+		t.Fatalf("expected flagged_for_review on threshold trip, got %v", tripped)
+	}
+	firstHitlID, _ := tripped["hitl_id"].(string)
+	if firstHitlID == "" {
+		t.Fatalf("threshold trip must raise a HITL escalation: %v", tripped)
+	}
+
+	// Two more negative-feedback calls while the ledger record is still
+	// automationFlaggedStatus must not create additional HITL requests.
+	for i := 0; i < 2; i++ {
+		result := recordUserFeedback(deps, user, treeID, "negative", "yet again")
+		if result["flagged_for_review"] != true {
+			t.Errorf("call %d: still over threshold, expected flagged_for_review=true, got %v", i, result)
+		}
+		if hitlID, _ := result["hitl_id"].(string); hitlID != "" && hitlID != firstHitlID {
+			t.Errorf("call %d: re-escalated with a new HITL request %q while %q is still pending review", i, hitlID, firstHitlID)
+		}
+	}
+
+	pending := hitl.DefaultStore.ListPending()
+	if len(pending) != 1 {
+		t.Fatalf("expected exactly 1 HITL request after threshold trip + 2 more negatives, got %d", len(pending))
+	}
+
+	rec, exists, err := ledger.Get("weekly_sales_report")
+	if err != nil || !exists {
+		t.Fatalf("automation record missing: exists=%v err=%v", exists, err)
+	}
+	if rec.Status != automationFlaggedStatus {
+		t.Errorf("automation status = %q, want %q", rec.Status, automationFlaggedStatus)
+	}
+}
+
 // Feedback on a tree with no tracked automation (e.g. a manually compiled
 // tree, or one never proposed through the autopilot) must still record the
 // flag but has no automation to pause — no HITL escalation should be raised.
@@ -320,5 +392,113 @@ func TestRecordUserFeedback_FlaggedForReviewNoAutomationTracked(t *testing.T) {
 	}
 	if len(hitl.DefaultStore.ListPending()) != 0 {
 		t.Errorf("no automation is tracked for this tree; HITL store must stay empty")
+	}
+}
+
+// Q4 Personalization & Self-Growth milestone 2/2: the feedback-escalation loop
+// must actually resume, not just pause forever. This is the true end-to-end
+// path: escalateFlaggedTreeForReview (via recordUserFeedback) pauses the
+// automation and the engine's execution gate (domains.ResolveTreeIDForUser,
+// wired here as resolveTreeForUser) must refuse to resolve the tree while
+// flagged; once a human approves the HITL escalation, finalizeFeedbackEscalation
+// must flip the persona.AutomationRecord back to persona.AutomationApproved so
+// the SAME execution gate resolves the tree again — proving the automation
+// genuinely recovers instead of staying dead forever after one bad streak.
+func TestFinalizeFeedbackEscalation_ResumesAutomationAfterHumanApproval(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	refStore, err := evolution.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("ref store: %v", err)
+	}
+	// Rooted at agent.UsersDir() (not an arbitrary t.TempDir()) so the
+	// production resolution path — resolveTreeForUser, which the daemon wires
+	// through domains.DynamicResolveForUserFn to
+	// agentexec.ResolveGeneratedTreeForUser — reads the very same workspace
+	// this test writes into.
+	personaStore, err := persona.NewStore(agent.UsersDir())
+	if err != nil {
+		t.Fatalf("persona store: %v", err)
+	}
+	treeStore, err := evolution.NewTreeStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("tree store: %v", err)
+	}
+	deps := &mcpDeps{refStore: refStore, personaStore: personaStore, treeStore: treeStore}
+
+	prevStore := hitl.DefaultStore
+	prevPolicy := hitl.GetPolicy()
+	if _, err := hitl.InitStore(t.TempDir()); err != nil {
+		t.Fatalf("hitl store: %v", err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour, DefaultPrompt: "review"})
+	t.Cleanup(func() {
+		hitl.DefaultStore = prevStore
+		hitl.SetPolicy(prevPolicy)
+	})
+
+	const user = "nico"
+	const treeID = "goal:automate_reports"
+
+	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
+	if err != nil {
+		t.Fatalf("automation store: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: "weekly_sales_report",
+		Status:    persona.AutomationApproved,
+		TreeID:    treeID,
+		AgentName: "auto-nico-weekly_sales_report",
+	}); err != nil {
+		t.Fatalf("seed automation record: %v", err)
+	}
+
+	tree := &evolution.SerializableNode{Type: "AlwaysSucceed", Name: "WeeklySalesReport"}
+	if _, err := evolution.SaveNamedTree(deps.personaStore.Workspace(user).TreesDir(), treeID, tree); err != nil {
+		t.Fatalf("SaveNamedTree: %v", err)
+	}
+
+	// Sanity: before any feedback, the approved automation's tree resolves.
+	if got := resolveTreeForUser(user, treeID); got == nil {
+		t.Fatal("expected tree to resolve before any negative feedback (automation starts approved)")
+	}
+
+	recordUserFeedback(deps, user, treeID, "negative", "wrong currency")
+	tripped := recordUserFeedback(deps, user, treeID, "negative", "still wrong")
+	if tripped["flagged_for_review"] != true {
+		t.Fatalf("expected flagged_for_review on threshold trip, got %v", tripped)
+	}
+	hitlID, _ := tripped["hitl_id"].(string)
+	if hitlID == "" {
+		t.Fatalf("threshold trip must raise a HITL escalation: %v", tripped)
+	}
+
+	// automationApproved must now gate execution off: the engine's execution
+	// gate refuses to resolve a flagged tree.
+	if got := resolveTreeForUser(user, treeID); got != nil {
+		t.Fatalf("expected flagged automation's tree to be gated from execution, got %+v", got)
+	}
+
+	req, err := hitl.DefaultStore.Approve(hitlID, "human", "reviewed — looks fine now")
+	if err != nil {
+		t.Fatalf("approve escalation: %v", err)
+	}
+
+	// finalizeFeedbackEscalation is the resume half of the loop: a human
+	// approving the escalation must resume the paused automation.
+	finalizeFeedbackEscalation(deps, req, true)
+
+	rec, exists, err := ledger.Get("weekly_sales_report")
+	if err != nil || !exists {
+		t.Fatalf("automation record missing after resume: exists=%v err=%v", exists, err)
+	}
+	if rec.Status != persona.AutomationApproved {
+		t.Errorf("automation status = %q, want %q after finalizeFeedbackEscalation resumes it", rec.Status, persona.AutomationApproved)
+	}
+
+	// automationApproved must return true again: the engine's execution gate
+	// resolves the tree once more, closing the loop end-to-end.
+	if got := resolveTreeForUser(user, treeID); got == nil {
+		t.Fatal("expected tree to resolve again after finalizeFeedbackEscalation resumed the automation")
 	}
 }

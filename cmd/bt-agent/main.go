@@ -14,6 +14,7 @@ import (
 	a2acard "github.com/a2aproject/a2a-go/v2/a2a"
 	a2a_mod "github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/agentexec"
 	"github.com/nico/go-bt-evolve/internal/audit"
 	"github.com/nico/go-bt-evolve/internal/blocks"
 	"github.com/nico/go-bt-evolve/internal/config"
@@ -46,7 +47,17 @@ func resolveTree(id string) *evolution.SerializableNode {
 // (goal:automate_<slug>) can never resolve to a different user's compiled
 // tree just because it was compiled first. Wired into agent.RunDeps so
 // agent.RunOnce consults it whenever the run's Definition has a known owner.
+//
+// AutomationBlocked is checked before delegating to domains.ResolveTreeIDForUser
+// because that resolver falls back to evolution.DefaultTree() when nothing
+// matches — indistinguishable, from its return value alone, from "this ID's
+// automation exists but is gated." Checking the gate here first ensures a
+// pending/rejected/flagged automation refuses execution outright instead of
+// silently running the default tree (Q4 Personalization milestone 2).
 func resolveTreeForUser(user, id string) *evolution.SerializableNode {
+	if agentexec.AutomationBlocked(user, id) {
+		return nil
+	}
 	return domains.ResolveTreeIDForUser(user, id)
 }
 

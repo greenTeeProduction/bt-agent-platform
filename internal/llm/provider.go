@@ -92,6 +92,28 @@ func buildProvider(provider, model string, cfg *config.Config) (LLM, string, err
 	}
 }
 
+// maxTokensCapable is implemented by concrete LLM clients (e.g. *Client) that
+// support capping the number of output tokens on a single call. It mirrors
+// internal/engine/chains.go's maxTokensLLM and is checked via type assertion
+// rather than folded into the LLM interface itself — LLM is implemented by
+// many providers and test mocks (DeepSeekClient, OpenAICompatClient,
+// ACPClient, and every mock LLM across the codebase) that don't support this
+// and shouldn't be forced to grow the method just to keep compiling.
+type maxTokensCapable interface {
+	GenerateWithMaxTokens(prompt string, maxTokens int) (string, error)
+}
+
+// generateWithMaxTokens calls inner.GenerateWithMaxTokens(prompt, maxTokens)
+// when inner supports it, else falls back to the unbounded inner.Generate,
+// so decorators (ErrorRecorder, TracedLLM, FallbackLLM) forward the
+// capability when present without requiring every wrapped LLM to have it.
+func generateWithMaxTokens(inner LLM, prompt string, maxTokens int) (string, error) {
+	if capped, ok := inner.(maxTokensCapable); ok {
+		return capped.GenerateWithMaxTokens(prompt, maxTokens)
+	}
+	return inner.Generate(prompt)
+}
+
 type fallbackSpec struct {
 	Provider string
 	Model    string

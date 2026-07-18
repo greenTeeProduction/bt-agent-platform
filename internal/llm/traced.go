@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -81,6 +82,19 @@ func (t *TracedLLM) GenerateWithTimeout(prompt string, timeout time.Duration) (s
 	_, span := t.span(t.parentCtx())
 	span.SetAttribute("llm.timeout", timeout.String())
 	result, err := t.LLM.GenerateWithTimeout(prompt, timeout)
+	t.finish(span, err)
+	return result, err
+}
+
+// GenerateWithMaxTokens forwards to the wrapped LLM's GenerateWithMaxTokens
+// when it supports capping output tokens, else falls back to its unbounded
+// Generate — see generateWithMaxTokens (provider.go).
+func (t *TracedLLM) GenerateWithMaxTokens(prompt string, maxTokens int) (string, error) {
+	_, span := t.span(t.parentCtx())
+	if maxTokens > 0 {
+		span.SetAttribute("llm.max_tokens", fmt.Sprintf("%d", maxTokens))
+	}
+	result, err := generateWithMaxTokens(t.LLM, prompt, maxTokens)
 	t.finish(span, err)
 	return result, err
 }
