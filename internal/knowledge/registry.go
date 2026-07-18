@@ -538,6 +538,19 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	})
 
 	kg.Register(&TreeMeta{
+		ID:          "domain:self_review",
+		Category:    "domain",
+		Name:        "Self Review",
+		Description: "Proactive self-review agent: gathers autonomous commits landed since the last review, runs a read-only Claude Code review over their diffs, and seeds a self-fix code-fix program per confirmed defect for the goap-fusion loop to implement",
+		NodeCount:   4,
+		Keywords:    []string{"self-review", "code-review", "commits", "defects", "self-fix", "seed", "autonomous"},
+		Capabilities: []Capability{
+			{Action: "review_commits", Domain: "engineering", Strength: 0.85},
+			{Action: "seed_fix_programs", Domain: "meta", Strength: 0.85},
+		},
+	})
+
+	kg.Register(&TreeMeta{
 		ID:          "domain:hermes_update",
 		Category:    "domain",
 		Name:        "Hermes Update",
