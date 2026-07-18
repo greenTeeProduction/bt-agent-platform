@@ -93,6 +93,30 @@ func SaveNamedTree(dir, id string, tree *SerializableNode) (string, error) {
 	return path, nil
 }
 
+// QuarantineNamedTree renames a generated tree's on-disk file aside (adding a
+// ".rejected" suffix) so it can no longer be resolved by ID via LoadNamedTree
+// or the gardener's tree-*.json registry scan. Used when a proposed
+// automation is rejected: the compiled tree must stop being resolvable even
+// though nothing else in its lifecycle has changed. A no-op if the file does
+// not exist (idempotent under repeated rejection or a tree that was never
+// persisted).
+func QuarantineNamedTree(dir, id string) error {
+	if strings.TrimSpace(id) == "" || dir == "" {
+		return nil
+	}
+	path := filepath.Join(dir, TreeFileName(id))
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("quarantine tree %q: %w", id, err)
+	}
+	if err := os.Rename(path, path+".rejected"); err != nil {
+		return fmt.Errorf("quarantine tree %q: %w", id, err)
+	}
+	return nil
+}
+
 // LoadNamedTree reads tree-<id>.json from dir. Returns (nil, nil) when the
 // file does not exist, so callers can distinguish "not generated" from a
 // genuinely broken file.

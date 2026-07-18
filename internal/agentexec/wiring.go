@@ -10,6 +10,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
 // init installs the engine's production wiring for the scheduled
@@ -128,10 +129,43 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 	for _, user := range names {
 		tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
 		if err == nil && tree != nil {
+			if !automationApproved(root, user, id) {
+				continue
+			}
 			return tree
 		}
 	}
 	return nil
+}
+
+// automationApproved reports whether a tree ID is safe to execute: true when
+// no persona.AutomationRecord references it (not an automation-tracked
+// tree — e.g. a manually compiled bt_factory_create tree) or when the
+// matching record's Status is persona.AutomationApproved. Pending and
+// rejected automation proposals must never run just because their compiled
+// tree file happens to exist on disk (Q4 Personalization milestone 1).
+func automationApproved(root, user, treeID string) bool {
+	if root == "" || user == "" || treeID == "" {
+		return true
+	}
+	store, err := persona.NewStore(root)
+	if err != nil {
+		return true
+	}
+	ledger, err := persona.NewAutomationStore(store.Workspace(user))
+	if err != nil {
+		return true
+	}
+	records, err := ledger.All()
+	if err != nil {
+		return true
+	}
+	for _, rec := range records {
+		if rec.TreeID == treeID {
+			return rec.Status == persona.AutomationApproved
+		}
+	}
+	return true
 }
 
 // ResolveGeneratedTreeForUser is the user-scoped counterpart to
@@ -144,6 +178,10 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 // another. Returns nil when no such tree has been persisted for this user or
 // the file is unreadable — resolution then falls through to DefaultTree.
 func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
+	root := usersTreeRoot
+	if root == "" {
+		root = agent.UsersDir()
+	}
 	dir := generatedTreeDir
 	if dir == "" {
 		d, err := ReflectionsPath()
@@ -153,14 +191,16 @@ func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
 		dir = d
 	}
 	if tree, err := evolution.LoadNamedTree(dir, id); err == nil && tree != nil {
+		if !automationApproved(root, user, id) {
+			return nil
+		}
 		return tree
-	}
-	root := usersTreeRoot
-	if root == "" {
-		root = agent.UsersDir()
 	}
 	tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
 	if err == nil && tree != nil {
+		if !automationApproved(root, user, id) {
+			return nil
+		}
 		return tree
 	}
 	return nil

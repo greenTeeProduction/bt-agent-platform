@@ -154,6 +154,17 @@ func (r *Registry) loadAll() {
 	r.loadUserTreesLocked()
 }
 
+// Rescan re-scans usersRoot for personal trees written since construction (or
+// the last Rescan) and adds them to the registry, so a tree an autopilot
+// compiles and a human approves via HITL while the gardener daemon is
+// already running becomes visible to evolution without a process restart.
+// No-op if usersRoot was never configured (NewRegistry).
+func (r *Registry) Rescan() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loadUserTreesLocked()
+}
+
 func (r *Registry) addBuiltin(name, desc string, tree *evolution.SerializableNode) {
 	path := filepath.Join(r.dir, "tree-"+name+".json")
 	r.entries = append(r.entries, TreeEntry{

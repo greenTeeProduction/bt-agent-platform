@@ -269,6 +269,15 @@ func finalizeAutomationApproval(deps *mcpDeps, req *hitl.Request, approved bool)
 		if ledger != nil {
 			_, _, _ = ledger.SetStatus(req.ID, persona.AutomationRejected, "")
 		}
+		// Quarantine the compiled tree so a rejected automation can't be
+		// resolved by direct tree-ID even before per-request tree isolation
+		// (Milestone 1) lands.
+		if deps.personaStore != nil && user != "" {
+			ws := deps.personaStore.Workspace(user)
+			if qerr := evolution.QuarantineNamedTree(ws.TreesDir(), req.Context["tree_id"]); qerr != nil {
+				engine.Warn("finalizeAutomationApproval: tree quarantine failed", "tree", req.Context["tree_id"], "error", qerr)
+			}
+		}
 		out["activated"] = false
 		return out
 	}

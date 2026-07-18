@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-159. Early entries (001–007) record the founding decisions; the rest is
+ADR-161. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -183,6 +183,7 @@ Consolidation notes (2026-07-16):
 | ADR-158 | `buildGardenerConfig` Wires a Live `*knowledge.KnowledgeGraph` into the Gardener Daemon, and `evolveTreeV2` Writes Accepted Mutations Back into It, Closing ADR-146's Production-Wiring Gap (Q2 Evolvability, Milestones 1–3/4) | Accepted | 2026-07-17 |
 | ADR-159 | `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability) | Accepted | 2026-07-18 |
 | ADR-160 | `loadGoapChargeStampsDurable` Reads the Durable Charge Stamps Back into a Resumed Tick's `ChainState`, Closing ADR-129's Flagged Remainder (Q3 Reliability) | Accepted | 2026-07-18 |
+| ADR-161 | Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2873,6 +2874,28 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ ADR-129's program title — "so resumed cron ticks charge and refund correctly" — is now fully realized: a genuine failure or an infra-failure refund on a resumed tick reads the correct stamp regardless of whether `PrioritizeGoapGoals` ran this tick.
 - ✅ The fill-only-if-absent contract means this read-back is safe to call unconditionally at the top of the resumed-plan entry point with no risk to the normal (non-resumed) path, where `PrioritizeGoapGoals` already populated `ChainState` earlier in the same tick.
 - Pinned by the three tests named above.
+
+---
+
+## ADR-161: Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth)
+
+**Context (2026-07-18):** Program "Q4 Personalization & Self-Growth — Close the HITL-adoption and live-rescan gaps in the self-generated GOAP tree lifecycle," milestones 1–3/4. ADR-133's HITL automation policy (decision point 5) said only an *approved* proposal gets "an agent YAML with schedule written" — but the compiled tree itself is persisted to disk (`tree-<id>.json`) at proposal time, before HITL review, and neither `ResolveGeneratedTree`/`ResolveGeneratedTreeForUser` (`internal/agentexec/wiring.go`) nor `RunOnce`'s fallback resolution path (`internal/agent/runner.go`) checked a resolved tree's actual approval state — any tree file found by ID was returned and run. A tree tied to a still-pending or explicitly rejected `persona.AutomationRecord` was therefore executable — via direct tree-ID request or via `resolveUserTree`'s cross-user scan — purely because its compiled JSON existed on disk. Separately, `finalizeAutomationApproval` (`cmd/bt-agent/autopilot.go`) only flipped `AutomationRecord.Status` to rejected via `SetStatus`; the tree file itself was left in place, reachable by the same tree-ID gap even before any status check ran. And `gardener.Registry` (`internal/gardener/gardener.go`) scanned `usersRoot` only once, at construction (`NewRegistryWithUsers`) — a personal tree the autopilot compiler wrote and a human approved via HITL after the long-running `bt-gardener` daemon had already started was invisible to evolution until the process restarted.
+
+**Decision (milestone 1 of 4):** `resolveUserTree` and `ResolveGeneratedTreeForUser` now call a new `automationApproved(root, user, treeID)` helper (`internal/agentexec/wiring.go`) before returning any tree they find: it loads the user's `persona.AutomationStore` ledger, looks up the record whose `TreeID` matches, and returns `false` unless that record's `Status == persona.AutomationApproved`. A tree with no matching `AutomationRecord` at all (e.g. one compiled directly through `bt_factory_create`, never routed through the automation-proposal path) is treated as approved by default, so the gate applies only to automation-tracked trees. `RunOnce`'s fallback path treats a gated (nil) resolution the same as "no tree found" and refuses to execute rather than falling through to any other resolution branch.
+
+**Decision (milestone 2 of 4):** `finalizeAutomationApproval` now calls a new `evolution.QuarantineNamedTree(dir, id)` (`internal/evolution/named_trees.go`) on rejection, immediately after `SetStatus`: it renames `tree-<id>.json` to `tree-<id>.json.rejected` (a no-op if the file was never persisted). This closes the same gap independently of milestone 1's status check — the tree stops being resolvable by `LoadNamedTree`, or discoverable by the gardener's `tree-*.json` glob, at all.
+
+**Decision (milestone 3 of 4):** `gardener.Registry` gains `Rescan()` (`internal/gardener/gardener.go`), which re-acquires the registry's mutex and re-invokes the same `loadUserTreesLocked()` used at construction. `cmd/bt-gardener/main.go`'s cycle ticker calls `registry.Rescan()` once per cycle, immediately before `RunCycleV2`, so a tree an autopilot compiles and a human approves while the daemon is already running becomes visible to evolution on the next cycle instead of requiring a restart.
+
+**Status:** Accepted (2026-07-18) — milestones 1–3 of 4 landed; milestone 4 is not part of this change. Pinned by `TestResolveGeneratedTreeForUser_AutomationStatusGate` and `TestResolveGeneratedTree_AutomationStatusGate` (pending/rejected/approved cases across both the user-scoped and cross-user resolvers) and `TestRunOnce_RefusesExecutionForNonApprovedAutomation` (`internal/agentexec/wiring_test.go`); `TestConsiderAutomation_ApprovalActivatesRejectionRemembers`'s extended assertion that a rejected proposal's tree file is gone from disk (`cmd/bt-agent/autopilot_test.go`); and `TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction` (`internal/gardener/gardener_test.go`).
+
+**Consequences:**
+- ✅ A pending or rejected automation proposal's compiled tree can no longer execute — neither through direct tree-ID resolution, the cross-user scan, nor `RunOnce`'s fallback path — closing the gap ADR-133's HITL policy left between "tree compiled and persisted" and "human approved."
+- ✅ Rejection is now enforced two independent ways: the `AutomationRecord.Status` gate (milestone 1) and physical quarantine of the tree file (milestone 2). Quarantine also removes the rejected tree from the gardener's own `tree-*.json` directory scan, not just from execution.
+- ✅ Newly-approved personal trees reach the gardener's evolution loop within one cycle instead of requiring a `bt-gardener` daemon restart.
+- Rejected alternative: gating only at `RunOnce` (skipping a `wiring.go`-level check) was rejected because `ResolveGeneratedTree`/`ResolveGeneratedTreeForUser` are also reachable directly from other paths (e.g. dashboard tree preview, `bt_run_task`), which would otherwise still resolve a non-approved tree even with `RunOnce` itself refusing it.
+- ⚠️ `QuarantineNamedTree` renames rather than deletes the tree file (`.rejected` suffix), so a rejection can be inspected or recovered rather than being destroyed outright — any future caller that globs `tree-*.json` unfiltered outside `gardener.Registry` would need to also skip the `.rejected` suffix.
+- Milestone 4/4 of the program is not addressed by this change.
 
 ---
 

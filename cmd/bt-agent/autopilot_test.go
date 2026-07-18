@@ -165,6 +165,13 @@ func TestConsiderAutomation_ApprovalActivatesRejectionRemembers(t *testing.T) {
 	if second["proposed"] != true {
 		t.Fatalf("second pattern must yield a new proposal: %v", second)
 	}
+	treePath, _ := second["file"].(string)
+	if treePath == "" {
+		t.Fatalf("second proposal must persist a tree file: %v", second)
+	}
+	if _, err := os.Stat(treePath); err != nil {
+		t.Fatalf("tree file must exist before rejection: %v", err)
+	}
 	req2, err := hitl.DefaultStore.Reject(second["hitl_id"].(string), "tester", "not useful")
 	if err != nil {
 		t.Fatalf("reject: %v", err)
@@ -174,6 +181,12 @@ func TestConsiderAutomation_ApprovalActivatesRejectionRemembers(t *testing.T) {
 	}
 	if _, err := deps.agentReg.Get(req2.Context["agent_name"]); err == nil {
 		t.Error("rejected automation must not create an agent")
+	}
+	// A rejected automation's compiled tree must be quarantined so it can't
+	// be resolved by direct tree-ID even before per-request tree isolation
+	// (Milestone 1) lands.
+	if _, err := os.Stat(treePath); err == nil {
+		t.Errorf("rejected automation's tree file must be quarantined (renamed or deleted), still present at %s", treePath)
 	}
 
 	third := considerAutomation(deps, "nico")

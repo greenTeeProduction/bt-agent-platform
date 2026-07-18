@@ -348,6 +348,11 @@ Question: {{.input}}`,
 		cycleCount++
 		fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))
 
+		// Pick up autopilot-compiled/HITL-approved personal trees written into
+		// a user workspace since the last cycle, so evolution reaches them
+		// without a daemon restart.
+		registry.Rescan()
+
 		results, err := g.RunCycleV2(v2Cfg)
 		if err != nil {
 			engine.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)

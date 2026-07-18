@@ -673,3 +673,47 @@ func TestRunCycleV2_PrioritizesByKGAnalytics(t *testing.T) {
 		t.Errorf("expected KG-flagged bottleneck tree to be evolved first, got order %v", names)
 	}
 }
+
+// TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction verifies milestone
+// 3/4 of the "Q4 Personalization & Self-Growth — Close the HITL-adoption and
+// live-rescan gaps in the self-generated GOAP tree lifecycle" program:
+// NewRegistryWithUsers only scans usersRoot once, at construction time. A
+// personal tree the autopilot compiler writes into a user's workspace after
+// HITL approval — while the gardener daemon is already running — is
+// therefore invisible to evolution until the process restarts. Rescan() must
+// re-invoke loadUserTreesLocked so a tree written post-construction becomes
+// visible without a restart.
+func TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction(t *testing.T) {
+	storageDir := t.TempDir()
+	usersRoot := t.TempDir()
+
+	r := NewRegistryWithUsers(storageDir, usersRoot)
+
+	for _, e := range r.List() {
+		if e.User == "nico" {
+			t.Fatalf("tree unexpectedly present before it was ever written: %+v", e)
+		}
+	}
+
+	// Simulate autopilot compiling + HITL-approving a new personal tree while
+	// the daemon is already running.
+	writeUserTree(t, usersRoot, "nico", "goal:automate_reports")
+
+	for _, e := range r.List() {
+		if e.User == "nico" && e.Name == "goal:automate_reports" {
+			t.Fatal("tree written after construction must not be visible before Rescan() is called")
+		}
+	}
+
+	r.Rescan()
+
+	found := false
+	for _, e := range r.List() {
+		if e.User == "nico" && e.Name == "goal:automate_reports" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Rescan() did not pick up the personal tree added to usersRoot after construction")
+	}
+}
