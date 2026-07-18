@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-166. Early entries (001–007) record the founding decisions; the rest is
+ADR-167. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -189,6 +189,7 @@ Consolidation notes (2026-07-16):
 | ADR-164 | `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-165 | `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-166 | `DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability) | Accepted | 2026-07-18 |
+| ADR-167 | `generateWithRetry`/`generateWithRetryPolicy` Honor `ChainConfig.MaxTokens` via `GenerateWithMaxTokens`, `bb.TokensUsed` Becomes Real, and `SerializableNode.Validate()` Flags Implausibly Small `max_tokens`, Closing Milestones 1–3/4 of ADR-006's Flagged max_tokens Gap (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -289,7 +290,7 @@ Consolidation notes (2026-07-16):
 - ✅ Template variables enable context injection ({{.Task}}, {{.ChainState.*}})
 - ✅ 10 chain types cover diverse LLM workflows
 - ⚠️ ChainAction panic recovery needed SafeGo wrapper
-- ⚠️ max_tokens audit detected nodes with max_tokens=1 (aspirational fix)
+- ~~⚠️ max_tokens audit detected nodes with max_tokens=1 (aspirational fix)~~ — closed 2026-07-18 (milestones 1–3/4): `max_tokens` now actually governs the LLM call and `Validate()` flags an implausibly small value at tree-authoring time instead of requiring manual post-evolution audit — see ADR-167.
 
 **Details (from the original ADR file):** The 10 chain types as accepted (the 11th, `fusion`, was added later — see ADR-130):
 
@@ -2981,6 +2982,28 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ Establishes the `ctx`-carrying call shape milestones 2–5 of the DelegateToA2A hardening program (retry and circuit breaker) depend on to bound their own timing against the caller's context.
 - ⚠️ `engine.DelegateToA2AFn` is a breaking signature change for any other injector of this package-level var; the only production injector (`InitEngineDelegate`) and all test stubs in this repo were updated in the same change.
 - Pinned by `TestDelegateToA2A_ContextPropagates`; the pre-existing `DelegateToA2A` test suite (`internal/engine/a2a_nodes_test.go`) and `TestInitEngineDelegate` (`internal/a2a/init_test.go`) continue to pass against the new signature.
+
+---
+
+## ADR-167: `generateWithRetry`/`generateWithRetryPolicy` Honor `ChainConfig.MaxTokens` via `GenerateWithMaxTokens`, `bb.TokensUsed` Becomes Real, and `SerializableNode.Validate()` Flags Implausibly Small `max_tokens`, Closing Milestones 1–3/4 of ADR-006's Flagged max_tokens Gap (Q1 Correctness / Q3 Reliability)
+
+**Context (2026-07-18):** Program "Q1 Correctness / Q3 Reliability — Make ChainAction `max_tokens` output-budget metadata actually govern LLM calls instead of being silently discarded," milestones 1–3/4. ADR-006 accepted `ChainConfig.MaxTokens` (`internal/engine/chains.go:29`, `json:"max_tokens"`) as node metadata but flagged at acceptance that a "max_tokens audit detected nodes with max_tokens=1" — the field was parsed into `ChainConfig` but every single-shot executor (`execLLMCall`, `execRAGQuery`, `execStructuredOutput`, `execRetrievalQA`) called the unbounded `bb.LLM.Generate(prompt)` directly, so a node's configured output cap never reached the LLM client. Separately, `bb.TokensUsed` (`internal/engine/tree.go:146`) was declared but never incremented anywhere in the engine, so `Budget`'s `max_tokens` check (`budget.go`'s `budget_exhausted_tokens` outcome) could never trip — a tree configured with a token budget ran unbounded regardless. And nothing caught a node authored with an implausibly tiny `max_tokens` at tree-validation time, so the exact failure mode ADR-006 flagged — silent truncation to a few words — could only be caught by manual post-evolution audit.
+
+**Decision (milestones 1–2 of 4):** A new `maxTokensLLM` interface (`GenerateWithMaxTokens(prompt string, maxTokens int) (string, error)`) is checked via type assertion inside a new `generateOnce(bb, prompt, maxTokens)` helper — a type assertion rather than a method added to the broader `llm.LLM` interface, so existing providers and test mocks aren't forced to implement a capability they don't need. `generateWithRetry`/`generateWithRetryPolicy` both gain a `maxTokens int` parameter and route through `generateOnce`; the four single-shot executors that issue one real LLM call and produce prose (`execLLMCall`, `execRAGQuery`, `execStructuredOutput`, `execRetrievalQA`) now pass `cfg.MaxTokens` through, while `execToolCall`, `execConversation`, and the multi-call executors (`execMapReduce`, `execRefine`) continue to pass `0` (unbounded), since their `MaxTokens` field carries other semantics or none apply. On a successful call, `generateWithRetryPolicy` also advances `bb.TokensUsed` by a new `estimateTokens(s string)` helper (the standard ~4-characters-per-token heuristic), since LLM implementations aren't required to report exact usage.
+
+**Decision (milestone 3 of 4):** `SerializableNode.Validate()` (`internal/evolution/node_types.go`) gains a check: for `ChainAction` nodes whose chain kind (parsed from `Name` before the first `:`) is `llm_call`, `rag_query`, or `structured_output` — the kinds that actually issue an LLM call and produce token-bounded output — a `max_tokens` metadata value below `minPlausibleMaxTokens = 16` is flagged as a validation error naming the node, the value, the chain kind, and the floor. `tool_call`, `agent`, and `conversation` nodes are excluded: `tool_call` may legitimately need no output tokens, `agent` repurposes its `MaxTokens` field as a ReAct loop iteration cap (`execAgent`'s `maxIter := cfg.MaxTokens`) rather than an output-token budget, and `conversation` is excluded per the same executor-side `0` passthrough.
+
+**Status:** Accepted (2026-07-18) — milestones 1–3 of 4 landed; milestone 4/4 remains open. Pinned by `TestExecLLMCall_UsesConfiguredMaxTokens`, `TestExecRAGQuery_UsesConfiguredMaxTokens`, `TestExecStructuredOutput_UsesConfiguredMaxTokens`, and `TestExecRetrievalQA_UsesConfiguredMaxTokens` (`internal/engine/chains_test.go`), each asserting a mock LLM's `GenerateWithMaxTokens` receives the configured cap instead of `Generate` being called; `TestGenerateWithRetry_IncrementsBlackboardTokensUsed` and `TestBuildBudget_MaxTokens_TripsOnCumulativeUsage` (`internal/engine/budget_test.go`), the latter driving a `Budget` node through repeated ticks and asserting `budget_exhausted_tokens` trips once cumulative usage crosses `maxTokens`; and `TestSerializableNodeValidate_MaxTokensFloor` (`internal/evolution/node_types_test.go`), covering all three flagged chain kinds, the exempt kinds, both float64/int metadata shapes, and the floor boundary itself.
+
+**Consequences:**
+- ✅ A `ChainConfig.MaxTokens` set on an `llm_call`/`rag_query`/`structured_output`/`retrieval_qa` node now actually caps the LLM call via `GenerateWithMaxTokens` when the configured `bb.LLM` supports it, closing the gap ADR-006 flagged at acceptance where the field was accepted metadata but silently discarded by every single-shot executor.
+- ✅ `bb.TokensUsed` is real: `Budget`'s `max_tokens` check can now actually trip mid-tree instead of a configured token budget being unconditionally unenforceable.
+- ✅ Tree authors get a loud, tree-validation-time error for an implausibly small `max_tokens` on the three chain kinds where it matters, instead of only discovering the truncation via manual post-evolution audit — ADR-006's original mitigation.
+- ⚠️ Token usage is an estimate (~4 chars/token), not exact provider-reported usage — sufficient for budget-tripping but not for precise cost accounting.
+- ⚠️ `maxTokensLLM` is checked via type assertion rather than added to `llm.LLM`, so a `bb.LLM` implementation that doesn't implement `GenerateWithMaxTokens` silently falls back to the unbounded `Generate` even when `cfg.MaxTokens > 0` — matching the pre-existing per-provider capability gap rather than closing it universally.
+- Rejected alternative: adding `GenerateWithMaxTokens` directly to the `llm.LLM` interface was rejected — it would force every existing provider and test mock to implement a method most don't need, for a capability only some providers actually support.
+- ~~Milestone 4/4 of the program is not addressed by this change.~~
+- Pinned by the tests named above.
 
 ---
 

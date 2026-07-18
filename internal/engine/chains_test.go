@@ -3278,3 +3278,104 @@ func TestChainAction_Refine_InitialCallHonorsRetryAfter(t *testing.T) {
 		t.Errorf("initial-answer retry re-called after only %s, want at least the server Retry-After delay of %s", gap, mock.retryAfter)
 	}
 }
+
+// --- MaxTokens output-budget wiring ---
+
+// maxTokensMockLLM records whether generateWithRetry/generateWithRetryPolicy
+// called GenerateWithMaxTokens (with the configured cap) instead of the
+// unbounded Generate, so single-shot executors can be tested for whether
+// they actually pass cfg.MaxTokens through to the LLM.
+type maxTokensMockLLM struct {
+	resp              string
+	generateCalled    bool
+	maxTokensCalled   bool
+	receivedMaxTokens int
+}
+
+func (m *maxTokensMockLLM) Generate(_ string) (string, error) {
+	m.generateCalled = true
+	return m.resp, nil
+}
+func (m *maxTokensMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *maxTokensMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *maxTokensMockLLM) GenerateWithMaxTokens(_ string, maxTokens int) (string, error) {
+	m.maxTokensCalled = true
+	m.receivedMaxTokens = maxTokens
+	return m.resp, nil
+}
+func (m *maxTokensMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *maxTokensMockLLM) GeneratePlan(_, _ string) string         { return "1. Step one\n2. Step two" }
+func (m *maxTokensMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+var _ llm.LLM = (*maxTokensMockLLM)(nil)
+
+const maxTokensMockResp = "A sufficiently long mock response for quality validation checks."
+
+func TestExecLLMCall_UsesConfiguredMaxTokens(t *testing.T) {
+	mock := &maxTokensMockLLM{resp: maxTokensMockResp}
+	bb := &Blackboard{Task: "test task", LLM: mock}
+	cfg := ChainConfig{ChainType: string(ChainLLMCall), Prompt: "{{.Task}}", MaxTokens: 256}
+
+	execLLMCall(cfg, bb)
+
+	if !mock.maxTokensCalled {
+		t.Fatalf("expected GenerateWithMaxTokens to be called when cfg.MaxTokens > 0, but Generate was called instead (called=%v)", mock.generateCalled)
+	}
+	if mock.receivedMaxTokens != 256 {
+		t.Errorf("expected configured MaxTokens=256 to be passed through, got %d", mock.receivedMaxTokens)
+	}
+}
+
+func TestExecRAGQuery_UsesConfiguredMaxTokens(t *testing.T) {
+	mock := &maxTokensMockLLM{resp: maxTokensMockResp}
+	bb := &Blackboard{Task: "test question", KgResults: "some context", LLM: mock}
+	cfg := ChainConfig{ChainType: string(ChainRAGQuery), Prompt: "test question", MaxTokens: 512}
+
+	execRAGQuery(cfg, bb)
+
+	if !mock.maxTokensCalled {
+		t.Fatalf("expected GenerateWithMaxTokens to be called when cfg.MaxTokens > 0, but Generate was called instead (called=%v)", mock.generateCalled)
+	}
+	if mock.receivedMaxTokens != 512 {
+		t.Errorf("expected configured MaxTokens=512 to be passed through, got %d", mock.receivedMaxTokens)
+	}
+}
+
+func TestExecStructuredOutput_UsesConfiguredMaxTokens(t *testing.T) {
+	mock := &maxTokensMockLLM{resp: `{"summary": "ok"}`}
+	bb := &Blackboard{Task: "summarize", LLM: mock}
+	cfg := ChainConfig{
+		ChainType: string(ChainStructuredOutput),
+		Prompt:    "Summarize as JSON",
+		MaxTokens: 128,
+		Params:    map[string]string{"json_schema": `{"type":"object"}`},
+	}
+
+	execStructuredOutput(cfg, bb)
+
+	if !mock.maxTokensCalled {
+		t.Fatalf("expected GenerateWithMaxTokens to be called when cfg.MaxTokens > 0, but Generate was called instead (called=%v)", mock.generateCalled)
+	}
+	if mock.receivedMaxTokens != 128 {
+		t.Errorf("expected configured MaxTokens=128 to be passed through, got %d", mock.receivedMaxTokens)
+	}
+}
+
+func TestExecRetrievalQA_UsesConfiguredMaxTokens(t *testing.T) {
+	mock := &maxTokensMockLLM{resp: maxTokensMockResp}
+	bb := &Blackboard{Task: "test question", KgResults: "some retrieved context", LLM: mock}
+	cfg := ChainConfig{ChainType: string(ChainRetrievalQA), Prompt: "test question", MaxTokens: 999}
+
+	execRetrievalQA(cfg, bb)
+
+	if !mock.maxTokensCalled {
+		t.Fatalf("expected GenerateWithMaxTokens to be called when cfg.MaxTokens > 0, but Generate was called instead (called=%v)", mock.generateCalled)
+	}
+	if mock.receivedMaxTokens != 999 {
+		t.Errorf("expected configured MaxTokens=999 to be passed through, got %d", mock.receivedMaxTokens)
+	}
+}

@@ -265,28 +265,64 @@ func chainContext(bb *Blackboard) context.Context {
 	return context.Background()
 }
 
-// generateWithRetryPolicy calls bb.LLM.Generate(prompt) under the shared
-// chain retry policy, invoking onRetry (if non-nil) once per retry attempt.
-func generateWithRetryPolicy(bb *Blackboard, prompt string, onRetry func(attempt int, cat reliability.ErrorCategory, delay time.Duration)) (string, error) {
+// maxTokensLLM is implemented by LLM clients that support capping the
+// number of output tokens on a single call. bb.LLM is declared as the
+// broader llm.LLM interface (which every provider and test mock must
+// satisfy), so this is checked via type assertion rather than added to
+// llm.LLM directly — that would force every existing implementation to grow
+// the method just to keep compiling.
+type maxTokensLLM interface {
+	GenerateWithMaxTokens(prompt string, maxTokens int) (string, error)
+}
+
+// generateOnce calls bb.LLM.Generate(prompt), or bb.LLM.GenerateWithMaxTokens
+// when maxTokens > 0 and bb.LLM supports it — otherwise a configured
+// max_tokens budget is silently discarded and the call runs unbounded.
+func generateOnce(bb *Blackboard, prompt string, maxTokens int) (string, error) {
+	if maxTokens > 0 {
+		if capped, ok := bb.LLM.(maxTokensLLM); ok {
+			return capped.GenerateWithMaxTokens(prompt, maxTokens)
+		}
+	}
+	return bb.LLM.Generate(prompt)
+}
+
+// generateWithRetryPolicy calls generateOnce(bb, prompt, maxTokens) under the
+// shared chain retry policy, invoking onRetry (if non-nil) once per retry
+// attempt. On success it advances bb.TokensUsed (internal/engine/tree.go:146)
+// by an estimate of the response's token count, so Budget nodes (budget.go)
+// see real cumulative usage instead of a value that never leaves zero.
+func generateWithRetryPolicy(bb *Blackboard, prompt string, maxTokens int, onRetry func(attempt int, cat reliability.ErrorCategory, delay time.Duration)) (string, error) {
 	var result string
 	err := chainRetryPolicy(onRetry).ExecuteContext(chainContext(bb), func() error {
-		out, callErr := bb.LLM.Generate(prompt)
+		out, callErr := generateOnce(bb, prompt, maxTokens)
 		if callErr != nil {
 			return callErr
 		}
 		result = out
 		return nil
 	})
+	if err == nil && bb != nil {
+		bb.TokensUsed += estimateTokens(result)
+	}
 	return result, err
 }
 
-// generateWithRetry calls bb.LLM.Generate(prompt) under the shared chain
-// retry policy with no retry telemetry callback — the single-shot executors
-// (execLLMCall, execRAGQuery, execToolCall, execConversation,
-// execStructuredOutput, execRetrievalQA) have no per-call ChainState counter
-// to update, unlike execMapReduce and execRefine.
-func generateWithRetry(bb *Blackboard, prompt string) (string, error) {
-	return generateWithRetryPolicy(bb, prompt, nil)
+// estimateTokens approximates a response's token count with the common
+// ~4-characters-per-token heuristic. bb.LLM implementations are not required
+// to report exact usage, so this keeps bb.TokensUsed advancing on every call
+// without depending on provider-specific accounting.
+func estimateTokens(s string) int {
+	return (len(s) + 3) / 4
+}
+
+// generateWithRetry calls generateOnce(bb, prompt, maxTokens) under the
+// shared chain retry policy with no retry telemetry callback — the
+// single-shot executors (execLLMCall, execRAGQuery, execToolCall,
+// execConversation, execStructuredOutput, execRetrievalQA) have no per-call
+// ChainState counter to update, unlike execMapReduce and execRefine.
+func generateWithRetry(bb *Blackboard, prompt string, maxTokens int) (string, error) {
+	return generateWithRetryPolicy(bb, prompt, maxTokens, nil)
 }
 
 // --- Chain executors ---
@@ -301,7 +337,7 @@ func execLLMCall(cfg ChainConfig, bb *Blackboard) int {
 		bb.Result = generateTemplateOutput(prompt, bb)
 		return 1
 	}
-	result, err := generateWithRetry(bb, prompt)
+	result, err := generateWithRetry(bb, prompt, cfg.MaxTokens)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("LLM error: %v", err)
@@ -384,7 +420,7 @@ Answer:`, context, query)
 		bb.Result = "no LLM available for RAG"
 		return -1
 	}
-	result, err := generateWithRetry(bb, prompt)
+	result, err := generateWithRetry(bb, prompt, cfg.MaxTokens)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		bb.Result = fmt.Sprintf("RAG error: %v", err)
@@ -424,7 +460,7 @@ Otherwise, respond directly.`, toolDesc, prompt)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := generateWithRetry(bb, fullPrompt)
+	result, err := generateWithRetry(bb, fullPrompt, 0)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -457,7 +493,7 @@ Assistant:`, cfg.SystemMsg, history, userMsg)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := generateWithRetry(bb, prompt)
+	result, err := generateWithRetry(bb, prompt, 0)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -489,7 +525,7 @@ Respond in valid JSON format only, no other text.`, prompt, schemaDesc)
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := generateWithRetry(bb, fullPrompt)
+	result, err := generateWithRetry(bb, fullPrompt, cfg.MaxTokens)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -531,7 +567,7 @@ Provide a comprehensive answer. If the information is insufficient, state what's
 		bb.Outcome = "chain_failed"
 		return -1
 	}
-	result, err := generateWithRetry(bb, qaPrompt)
+	result, err := generateWithRetry(bb, qaPrompt, cfg.MaxTokens)
 	if err != nil {
 		bb.Outcome = "chain_failed"
 		return -1
@@ -576,7 +612,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// instead of re-hammering immediately), symmetric with the rest of the
 	// function, so one flaky decompose call doesn't fail a complex task.
 	mapPrompt := fmt.Sprintf("Break down this task into 3-5 independent subtasks:\n%s\n\nSubtasks (one per line, numbered):", task)
-	subtasks, err := generateWithRetryPolicy(bb, mapPrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+	subtasks, err := generateWithRetryPolicy(bb, mapPrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		bb.ChainState["map_reduce_decompose_retried"] = true
 	})
 	if err != nil {
@@ -634,7 +670,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		// the decomposed task. Retry once before giving up (via the shared
 		// reliability.RetryPolicy, which honors a 429's Retry-After delay) so
 		// one flaky call doesn't permanently gap the final answer.
-		subResult, err := generateWithRetryPolicy(bb, subPrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+		subResult, err := generateWithRetryPolicy(bb, subPrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
 		})
 		if err != nil {
@@ -700,7 +736,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// then fall back to a deterministic synthesis that stitches the completed
 	// subtask results together rather than throwing them away. Downstream nodes
 	// can detect the degraded combine via map_reduce_reduce_degraded.
-	final, err := generateWithRetryPolicy(bb, reducePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+	final, err := generateWithRetryPolicy(bb, reducePrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		bb.ChainState["map_reduce_reduce_retried"] = true
 	})
 	if err != nil {
@@ -775,7 +811,7 @@ func execRefine(cfg ChainConfig, bb *Blackboard) int {
 	// doesn't sink a complex refinement task. refine_retried counts every
 	// retried call across all phases, mirroring map_reduce_retried.
 	retried := 0
-	current, err := generateWithRetryPolicy(bb, task, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+	current, err := generateWithRetryPolicy(bb, task, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		retried++
 	})
 	if err != nil {
@@ -801,7 +837,7 @@ Critique:`, task, current)
 		// A transient critique failure shouldn't end refinement prematurely —
 		// retry once before giving up (via the shared reliability.RetryPolicy),
 		// symmetric with the initial/revise calls.
-		critique, err := generateWithRetryPolicy(bb, critiquePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+		critique, err := generateWithRetryPolicy(bb, critiquePrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
 		})
 		if err != nil {
@@ -829,7 +865,7 @@ Improved answer:`, task, current, critique)
 		// Retry once before abandoning this revision round (via the shared
 		// reliability.RetryPolicy), so a single transient blip doesn't discard a
 		// round of critique-driven improvement.
-		improved, err := generateWithRetryPolicy(bb, revisePrompt, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+		improved, err := generateWithRetryPolicy(bb, revisePrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 			retried++
 		})
 		if err != nil {

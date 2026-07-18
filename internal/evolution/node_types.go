@@ -2,6 +2,8 @@ package evolution
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 )
 
 // EdgeType represents the type of relationship between behavior tree nodes.
@@ -190,6 +192,24 @@ func (e TypedEdge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// minPlausibleMaxTokens is the floor below which a ChainAction node's
+// max_tokens metadata is almost certainly a mistake rather than an
+// intentional tiny budget: milestones 1-2 made max_tokens actually govern
+// LLM calls (generateWithRetry, Budget node), so a node authored with e.g.
+// max_tokens=1 now silently truncates every response instead of being an
+// inert, ignored field.
+const minPlausibleMaxTokens = 16
+
+// chainKindsRequiringOutputBudget are the ChainAction chain kinds that
+// actually issue an LLM call and produce output tokens. tool_call, agent,
+// and conversation nodes may legitimately need few or no output tokens, so
+// they are excluded from the floor check.
+var chainKindsRequiringOutputBudget = map[string]bool{
+	"llm_call":          true,
+	"rag_query":         true,
+	"structured_output": true,
+}
+
 // Validate performs basic validation on a SerializableNode tree.
 // Returns nil if the tree is valid, or a list of validation errors.
 // This is a lightweight check suitable for callers that don't import the engine package;
@@ -199,6 +219,24 @@ func (n *SerializableNode) Validate() []string {
 	visited := make(map[string]bool)
 	n.validateRecursive(&errors, visited)
 	return errors
+}
+
+// maxTokensFromMetadata extracts the max_tokens value from node metadata,
+// accepting both float64 (the typical shape after JSON unmarshaling) and int
+// (the shape when nodes are constructed directly in Go).
+func maxTokensFromMetadata(metadata map[string]any) (int, bool) {
+	v, ok := metadata["max_tokens"]
+	if !ok {
+		return 0, false
+	}
+	switch t := v.(type) {
+	case float64:
+		return int(t), true
+	case int:
+		return t, true
+	default:
+		return 0, false
+	}
 }
 
 // validateRecursive is the internal recursive helper for Validate() with cycle detection.
@@ -220,6 +258,20 @@ func (n *SerializableNode) validateRecursive(errors *[]string, visited map[strin
 	// Check node type
 	if !KnownNodeTypes[n.Type] {
 		*errors = append(*errors, "node "+n.Name+": unknown node type "+n.Type)
+	}
+
+	// Check for implausibly small max_tokens on ChainAction nodes that issue
+	// an LLM call, since that metadata now actually governs the call instead
+	// of being silently discarded.
+	if n.Type == "ChainAction" {
+		kind, _, _ := strings.Cut(n.Name, ":")
+		if chainKindsRequiringOutputBudget[kind] {
+			if tokens, ok := maxTokensFromMetadata(n.Metadata); ok && tokens < minPlausibleMaxTokens {
+				*errors = append(*errors, fmt.Sprintf(
+					"node %s: max_tokens %d is implausibly small for a %s chain (floor %d) — this will truncate LLM responses",
+					n.Name, tokens, kind, minPlausibleMaxTokens))
+			}
+		}
 	}
 
 	// Check edges
