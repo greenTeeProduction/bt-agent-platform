@@ -694,6 +694,36 @@ func setGoapStateDurable(bb *Blackboard, key, value string) {
 	}
 }
 
+// loadGoapChargeStampsDurable is the read-back counterpart of
+// setGoapStateDurable: a resumed cron tick builds a fresh Blackboard
+// (RunOnce) whose ChainState dies with the run, so the charge stamps written
+// by setGoapStateDurable (program_milestone_charged, program_milestone,
+// research_goal_charged, research_goal_charged_text) must be restored from
+// the agent-scope store into ChainState before the resumed tick's failure
+// handlers (chargeGoapResearchGoalFailure /
+// refundGoapMilestoneAttemptForInfraFailure) look for them there. It only
+// fills keys ChainState doesn't already hold, so an in-flight originating
+// tick's fresher value is never clobbered by a stale durable stamp.
+func loadGoapChargeStampsDurable(bb *Blackboard) {
+	if bb.BB == nil || bb.BB.AgentName == "" {
+		return
+	}
+	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
+	for _, key := range []string{
+		"program_milestone_charged",
+		"program_milestone",
+		"research_goal_charged",
+		"research_goal_charged_text",
+	} {
+		if _, ok := bb.ChainState["goap_fusion_"+key]; ok {
+			continue
+		}
+		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_"+key); err == nil {
+			setGoapState(bb, key, e.Value)
+		}
+	}
+}
+
 // Grill state must survive across scheduled runs: each cron tick executes
 // GrillMeNotebookLM once, and ChainState dies with the run (RunOnce builds a
 // fresh Blackboard). The agent-scope blackboard persists to disk, so the

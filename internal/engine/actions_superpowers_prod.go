@@ -879,6 +879,12 @@ func markGoapFusionImplDegraded(bb *Blackboard, reason string) {
 
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) (result int) {
 	bb := ctx.Blackboard
+	// Restore durable charge stamps BEFORE the deferred failure handler below
+	// can need them: a resumed cron tick builds a fresh Blackboard with an
+	// empty ChainState, so chargeGoapResearchGoalFailure/
+	// refundGoapMilestoneAttemptForInfraFailure would otherwise see no stamp
+	// and silently no-op on a genuine failure.
+	loadGoapChargeStampsDurable(bb)
 	// ANY failure of ClaudeSuperpowersPath — not just a Claude rate limit — must
 	// degrade the cycle to the deterministic ScheduledAnalysisPath rather than
 	// abort the loop. Every failure exit returns -1; stamp the durable

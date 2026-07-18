@@ -230,6 +230,53 @@ func TestScheduledRuntime_ChargesGoalOnGenuineFailureOnly(t *testing.T) {
 	}
 }
 
+// A resumed cron tick builds a fresh Blackboard whose ChainState never saw
+// PrioritizeGoapGoals stamp the research-goal charge — only the durable
+// agent-scope store did (setGoapStateDurable). runSuperpowersRuntimeFromExistingPlanAction
+// must load that durable stamp back into ChainState before its deferred
+// failure handler runs, or a genuine failure on the resumed tick goes
+// uncharged (see goap-fusion-resume-charge-stamps-chainstate-only memory).
+func TestScheduledRuntime_ResumedTickChargesGoalOnGenuineFailure(t *testing.T) {
+	isolateClaudeBackoffStore(t)
+	seedGoalBudget(t)
+	goal := "resumed research goal (files: internal/engine/tree.go)"
+	key := goapResearchGoalKey(goal)
+
+	mgr := blackboard.NewManager(nil)
+
+	// Originating tick: PrioritizeGoapGoals stamps the charge durably.
+	originating := &Blackboard{
+		BB:         blackboard.NewHandle(mgr, "run-originating", "", "resume-goal-agent"),
+		ChainState: map[string]any{},
+	}
+	setGoapStateDurable(originating, "research_goal_charged", key)
+	setGoapStateDurable(originating, "research_goal_charged_text", goal)
+
+	// Resumed tick: fresh Blackboard, empty ChainState, same agent/BB handle
+	// (as RunScheduledGoapFusionCycle builds on a resumed cron tick). Seed the
+	// plan path so the runtime does not short-circuit on "no plan", and force
+	// a genuine (non-infra) failure by pointing it at a plan file that does
+	// not exist.
+	resumed := &Blackboard{
+		BB: blackboard.NewHandle(mgr, "run-resumed", "", "resume-goal-agent"),
+		ChainState: map[string]any{
+			"plan_path": filepath.Join(t.TempDir(), "nonexistent-plan.md"),
+		},
+		Outcome: "goap_fusion_impl_failed",
+	}
+
+	if got := runSuperpowersRuntimeFromExistingPlanAction(&btcore.BTContext[Blackboard]{Blackboard: resumed}); got != -1 {
+		t.Fatalf("resumed runtime = %d, want -1; result: %s", got, resumed.Result)
+	}
+	if class := classifyGoapCycleFailure(resumed.Outcome, resumed.Result); class != goapCycleFailureGenuine {
+		t.Fatalf("test setup bug: resumed failure classified as %q, want genuine; result: %s", class, resumed.Result)
+	}
+
+	if got := reloadGoalBudget(t).Count(key); got != 1 {
+		t.Fatalf("resumed tick must charge the goal via the durable stamp; attempts = %d, want 1", got)
+	}
+}
+
 // The plan builder must steer retries: a goal with a recorded failure carries
 // the parse-safe failure note into its task section, and a clean goal does not.
 func TestBuildGoalDrivenPlan_InjectsPreviousFailureNote(t *testing.T) {

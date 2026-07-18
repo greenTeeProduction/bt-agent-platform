@@ -315,3 +315,67 @@ func TestClearSuperpowersPlanState_WipesDurableChargeStamps(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadGoapChargeStampsDurable_RestoresFromAgentScope proves the read-back
+// counterpart of setGoapStateDurable (actions_goap_fusion.go:688): a resumed
+// cron tick builds a fresh Blackboard (RunOnce) whose ChainState dies with the
+// run, so program_milestone_charged, program_milestone, research_goal_charged,
+// and research_goal_charged_text must be restored from the agent-scope store
+// into ChainState before the resumed tick's failure handlers
+// (chargeGoapResearchGoalFailure / refundGoapMilestoneAttemptForInfraFailure)
+// look for them there.
+func TestLoadGoapChargeStampsDurable_RestoresFromAgentScope(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	originating := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
+
+	setGoapStateDurable(originating, "program_milestone_charged", "prog-1:0")
+	setGoapStateDurable(originating, "program_milestone", "prog-1:0,prog-1:1")
+	setGoapStateDurable(originating, "research_goal_charged", "adopt-the-legacy-island-archive")
+	setGoapStateDurable(originating, "research_goal_charged_text", "Adopt the legacy island archive exactly once")
+
+	// A resumed tick: same agent, brand-new Blackboard, empty ChainState.
+	resumed := &Blackboard{
+		BB:         blackboard.NewHandle(mgr, "run-2", "", "goap-loop"),
+		ChainState: map[string]any{},
+	}
+
+	loadGoapChargeStampsDurable(resumed)
+
+	want := map[string]string{
+		"goap_fusion_program_milestone_charged":  "prog-1:0",
+		"goap_fusion_program_milestone":          "prog-1:0,prog-1:1",
+		"goap_fusion_research_goal_charged":      "adopt-the-legacy-island-archive",
+		"goap_fusion_research_goal_charged_text": "Adopt the legacy island archive exactly once",
+	}
+	for key, wantVal := range want {
+		got, _ := resumed.ChainState[key].(string)
+		if got != wantVal {
+			t.Errorf("ChainState[%q] after loadGoapChargeStampsDurable = %q, want %q restored from the agent-scope store", key, got, wantVal)
+		}
+	}
+}
+
+// TestLoadGoapChargeStampsDurable_DoesNotClobberFresherChainState proves the
+// fill-only-if-absent contract: an in-flight originating tick already holds a
+// fresher value in ChainState (e.g. it just charged a NEW milestone this very
+// tick, before setGoapStateDurable's agent-scope write is even relevant to it)
+// and loadGoapChargeStampsDurable must never overwrite that with a stale
+// agent-scope value from a prior, unrelated cycle.
+func TestLoadGoapChargeStampsDurable_DoesNotClobberFresherChainState(t *testing.T) {
+	mgr := blackboard.NewManager(nil)
+	prior := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop")}
+	setGoapStateDurable(prior, "program_milestone_charged", "prog-1:0")
+
+	fresh := &Blackboard{
+		BB: blackboard.NewHandle(mgr, "run-2", "", "goap-loop"),
+		ChainState: map[string]any{
+			"goap_fusion_program_milestone_charged": "prog-2:5",
+		},
+	}
+
+	loadGoapChargeStampsDurable(fresh)
+
+	if got := fresh.ChainState["goap_fusion_program_milestone_charged"]; got != "prog-2:5" {
+		t.Errorf("ChainState[\"goap_fusion_program_milestone_charged\"] after loadGoapChargeStampsDurable = %q, want the pre-existing %q left untouched: an in-flight tick's fresher value must never be clobbered by a stale durable stamp", got, "prog-2:5")
+	}
+}
