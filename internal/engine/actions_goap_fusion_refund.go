@@ -36,6 +36,14 @@ var goapInfraResultMarkers = []string{
 	// the loop treadmilled, landing nothing.
 	"reached your ",
 	"/usage-credits",
+	// A GREEN-verification process killed by the cycle deadline rather than
+	// by its own tests — superpowersTaskVerifyGreen emits this marker when
+	// its context is already dead. Charging it as genuine risked blocking a
+	// healthy milestone after 3 deadline deaths (2026-07-18, run
+	// 20260718T164339: a 3-milestone batch overran the cycle budget and the
+	// kill was charged to a milestone whose implementation had already
+	// verified green earlier in the same run).
+	"cycle budget exhausted",
 }
 
 // goapImplGateFailureMarkers identify a commit-gate rejection caused by the

@@ -127,7 +127,18 @@ func superpowersTaskVerifyGreen(ctx context.Context, runner CommandRunner, run *
 		}
 		if res.Err != nil {
 			task.Status = "failed"
-			return fmt.Errorf("task GREEN verification failed: %s\n%s", cmd, res.Output)
+			// A verification process killed because the CYCLE's own deadline
+			// expired is no evidence against the milestone. Without this
+			// branch the kill surfaced as a generic GREEN failure and charged
+			// the milestone-abandon budget (2026-07-18, run 20260718T164339:
+			// task 2's engine suite was SIGKILLed 28s in at the 59-minute
+			// cycle mark, after task 1 had passed the identical suite twice).
+			// goapInfraResultMarkers classifies this marker as infrastructure
+			// so the cycle refunds the attempt instead.
+			if ctx.Err() != nil {
+				return fmt.Errorf("task GREEN verification aborted: cycle budget exhausted (%v) during: %s\nerror: %v\n%s", ctx.Err(), cmd, res.Err, res.Output)
+			}
+			return fmt.Errorf("task GREEN verification failed: %s\nerror: %v\n%s", cmd, res.Err, res.Output)
 		}
 	}
 	before, _ := os.ReadFile(filepath.Join(task.ArtifactDir, preRedStatusArtifact))

@@ -188,3 +188,35 @@ func readFileForTest(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	return string(b), err
 }
+
+// A GREEN verification killed by the cycle deadline must surface the
+// budget-exhausted marker (classified as infrastructure → the milestone
+// attempt refunds), not a generic failure that charges the abandon budget;
+// a live-context failure keeps the plain genuine-failure message and must
+// include the underlying error for observability (a bare SIGKILL previously
+// vanished because only res.Output was reported).
+func TestSuperpowersTaskVerifyGreenBudgetExhaustedMarker(t *testing.T) {
+	run := &SuperpowersRun{WorktreePath: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	task := &SuperpowersTask{ArtifactDir: t.TempDir(), Tests: []string{"go test ./internal/engine -short"}}
+	runner := &scriptedSuperpowersRunner{t: t, testResults: []CommandResult{{Err: errors.New("signal: killed")}}}
+	err := superpowersTaskVerifyGreen(expired, runner, run, task)
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+	if task.Status != "failed" {
+		t.Fatalf("task status = %q, want failed", task.Status)
+	}
+
+	task2 := &SuperpowersTask{ArtifactDir: t.TempDir(), Tests: []string{"go test ./internal/engine -short"}}
+	runner2 := &scriptedSuperpowersRunner{t: t, testResults: []CommandResult{{Err: errors.New("exit status 1"), Output: "--- FAIL: TestFoo"}}}
+	err2 := superpowersTaskVerifyGreen(context.Background(), runner2, run, task2)
+	if err2 == nil || strings.Contains(err2.Error(), "cycle budget exhausted") {
+		t.Fatalf("live ctx: must stay a plain GREEN failure, got %v", err2)
+	}
+	if !strings.Contains(err2.Error(), "task GREEN verification failed") || !strings.Contains(err2.Error(), "exit status 1") {
+		t.Fatalf("live ctx: must report the failure with the underlying error, got %v", err2)
+	}
+}

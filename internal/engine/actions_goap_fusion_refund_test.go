@@ -69,6 +69,8 @@ func TestIsGoapInfraCycleFailure(t *testing.T) {
 		{"claude usage limit is infra (quota outage carries over, not an unbuildable milestone)", "failure", "## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nYou've reached your Fable 5 limit. Run /usage-credits to continue or switch models with /model.", true},
 		{"claude usage limit is model-agnostic", "failure", "## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nClaude usage limit reached — run /usage-credits to continue.", true},
 		{"plain success", "success", "## GOAP Superpowers Runtime Complete", false},
+		{"cycle-deadline kill during GREEN verification is infra", "failure", "## GOAP Superpowers Execution Failed\n\ntask GREEN verification aborted: cycle budget exhausted (context deadline exceeded) during: go test ./internal/engine -short\nerror: signal: killed", true},
+		{"plain GREEN test failure stays genuine", "failure", "## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine -short\nerror: exit status 1\n--- FAIL: TestFoo", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
