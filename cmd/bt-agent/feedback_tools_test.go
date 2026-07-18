@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
@@ -225,5 +227,98 @@ func TestRecordUserFeedback_TrimsUserAndTreeID(t *testing.T) {
 	}
 	if result["negatives"] != 1 {
 		t.Errorf("negatives = %v, want 1", result["negatives"])
+	}
+}
+
+// Q4 Personalization & Self-Growth milestone 4: the flagged_for_review signal
+// (crossed at feedbackReviewThreshold negatives) must escalate to a real HITL
+// request and pause the tree's automation — not just log a warning. Pausing
+// means flipping the persona.AutomationRecord.Status away from "approved" to
+// a new "flagged" state, which Milestone 1's automationApproved guard
+// (internal/agentexec/wiring.go) already treats as non-executable since it
+// only allows Status == persona.AutomationApproved through.
+func TestRecordUserFeedback_FlaggedForReviewEscalatesAndPausesAutomation(t *testing.T) {
+	deps := newFeedbackDeps(t)
+
+	prevStore := hitl.DefaultStore
+	prevPolicy := hitl.GetPolicy()
+	if _, err := hitl.InitStore(t.TempDir()); err != nil {
+		t.Fatalf("hitl store: %v", err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour, DefaultPrompt: "review"})
+	t.Cleanup(func() {
+		hitl.DefaultStore = prevStore
+		hitl.SetPolicy(prevPolicy)
+	})
+
+	const user = "nico"
+	const treeID = "goal:automate_reports"
+	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
+	if err != nil {
+		t.Fatalf("automation store: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: "weekly_sales_report",
+		Status:    persona.AutomationApproved,
+		TreeID:    treeID,
+		AgentName: "auto-nico-weekly_sales_report",
+	}); err != nil {
+		t.Fatalf("seed automation record: %v", err)
+	}
+
+	recordUserFeedback(deps, user, treeID, "negative", "wrong currency")
+	result := recordUserFeedback(deps, user, treeID, "negative", "still wrong")
+	if result["flagged_for_review"] != true {
+		t.Fatalf("expected flagged_for_review, got %v", result)
+	}
+
+	hitlID, _ := result["hitl_id"].(string)
+	if hitlID == "" {
+		t.Fatalf("flagging must raise a HITL escalation and surface its id in the result: %v", result)
+	}
+	req, ok := hitl.DefaultStore.Get(hitlID)
+	if !ok {
+		t.Fatalf("HITL request %q was not created", hitlID)
+	}
+	if req.Context["tree_id"] != treeID || req.Context["user"] != user {
+		t.Errorf("HITL request context missing tree/user: %+v", req.Context)
+	}
+
+	rec, exists, err := ledger.Get("weekly_sales_report")
+	if err != nil || !exists {
+		t.Fatalf("automation record missing after flagging: exists=%v err=%v", exists, err)
+	}
+	if rec.Status != "flagged" {
+		t.Errorf("automation status = %q, want %q so Milestone 1's guard treats it as non-executable and pauses the automation", rec.Status, "flagged")
+	}
+}
+
+// Feedback on a tree with no tracked automation (e.g. a manually compiled
+// tree, or one never proposed through the autopilot) must still record the
+// flag but has no automation to pause — no HITL escalation should be raised.
+func TestRecordUserFeedback_FlaggedForReviewNoAutomationTracked(t *testing.T) {
+	deps := newFeedbackDeps(t)
+
+	prevStore := hitl.DefaultStore
+	prevPolicy := hitl.GetPolicy()
+	if _, err := hitl.InitStore(t.TempDir()); err != nil {
+		t.Fatalf("hitl store: %v", err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour, DefaultPrompt: "review"})
+	t.Cleanup(func() {
+		hitl.DefaultStore = prevStore
+		hitl.SetPolicy(prevPolicy)
+	})
+
+	recordUserFeedback(deps, "nico", "goal:untracked", "negative", "")
+	result := recordUserFeedback(deps, "nico", "goal:untracked", "negative", "")
+	if result["flagged_for_review"] != true {
+		t.Fatalf("expected flagged_for_review, got %v", result)
+	}
+	if hitlID, _ := result["hitl_id"].(string); hitlID != "" {
+		t.Errorf("no automation is tracked for this tree; must not raise a HITL escalation, got hitl_id=%q", hitlID)
+	}
+	if len(hitl.DefaultStore.ListPending()) != 0 {
+		t.Errorf("no automation is tracked for this tree; HITL store must stay empty")
 	}
 }

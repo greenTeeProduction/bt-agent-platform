@@ -8,6 +8,8 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
 // User feedback as a fitness signal (ADR-133 Phase 5): bt_feedback records an
@@ -98,8 +100,72 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 		result["flagged_for_review"] = true
 		engine.Warn("tree flagged for supervised review after repeated negative feedback",
 			"tree", treeID, "user", user, "negatives", negatives)
+		if hitlID := escalateFlaggedTreeForReview(deps, user, treeID, negatives); hitlID != "" {
+			result["hitl_id"] = hitlID
+		}
 	}
 	return result
+}
+
+// automationFlaggedStatus pauses an automation pending human review: unlike
+// persona.AutomationPending/Approved/Rejected, this state is entered only via
+// repeated negative feedback (never via the autopilot proposal flow), but it
+// is still a plain string status so Milestone 1's automationApproved guard
+// (internal/agentexec/wiring.go) — which allows execution only when
+// Status == persona.AutomationApproved — treats it as non-executable without
+// any change on that side.
+const automationFlaggedStatus = "flagged"
+
+// escalateFlaggedTreeForReview raises a HITL escalation for a tree that just
+// crossed feedbackReviewThreshold negatives and pauses the automation
+// tracked against it, pending human review (Q4 Personalization milestone 4).
+// Returns the new request's ID, or "" when the tree has no automation to
+// pause — e.g. a tree compiled manually and never proposed through the
+// autopilot has nothing to escalate.
+func escalateFlaggedTreeForReview(deps *mcpDeps, user, treeID string, negatives int) string {
+	if deps.personaStore == nil || hitl.DefaultStore == nil {
+		return ""
+	}
+	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
+	if err != nil {
+		return ""
+	}
+	records, err := ledger.All()
+	if err != nil {
+		return ""
+	}
+	var rec *persona.AutomationRecord
+	for i := range records {
+		if records[i].TreeID == treeID {
+			rec = &records[i]
+			break
+		}
+	}
+	if rec == nil {
+		return ""
+	}
+
+	req := hitl.NewRequest("FeedbackReviewEscalation", "automation-review",
+		fmt.Sprintf("Tree %s received %d negative feedback signals in a row", treeID, negatives),
+		"", "", "Repeated negative user feedback — review before this automation resumes.",
+		map[string]any{
+			"tree_id":    treeID,
+			"user":       user,
+			"agent_name": rec.AgentName,
+			"signature":  rec.Signature,
+		})
+	if err := hitl.DefaultStore.Create(req); err != nil {
+		engine.Warn("failed to raise HITL escalation for flagged tree",
+			"tree", treeID, "user", user, "error", err)
+		return ""
+	}
+
+	rec.Status = automationFlaggedStatus
+	if err := ledger.Upsert(*rec); err != nil {
+		engine.Warn("failed to pause automation after flagging",
+			"tree", treeID, "user", user, "error", err)
+	}
+	return req.ID
 }
 
 // registerFeedbackTools registers the user-feedback MCP surface.

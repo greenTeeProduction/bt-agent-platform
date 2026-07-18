@@ -59,8 +59,8 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 			}
 		}
 
-		// Find the target agent: the per-agent endpoint's interceptor carries
-		// the name in ctx. ContextID is a fallback for direct callers only —
+		// Find the target agent: handleAgentEndpoint carries the name in ctx
+		// (agentNameKey). ContextID is a fallback for direct callers only —
 		// the SDK owns that field (it must match the request's context id;
 		// overwriting it fails event validation with "context IDs don't match").
 		agentName, _ := ctx.Value(agentNameKey{}).(string)
@@ -311,6 +311,18 @@ type Server struct {
 	Executor  *BTAgentExecutor
 	CardCache map[string]*a2a.AgentCard
 	httpSrv   *http.Server
+
+	// rpcHandler is the single shared A2A JSON-RPC request handler — and,
+	// critically, its single shared in-memory task store — reused across
+	// every per-agent HTTP request. It used to be rebuilt from scratch inside
+	// handleAgentEndpoint on every incoming request, which silently handed
+	// each request its own throwaway task store: a task created by one
+	// request (SendMessage) was invisible to the very next request against
+	// the same endpoint (GetTask, resubscribe, or a follow-up message
+	// referencing the TaskID). One handler now serves all agent endpoints;
+	// the target agent for a given request travels via ctx (agentNameKey),
+	// set by handleAgentEndpoint from the URL path.
+	rpcHandler http.Handler
 }
 
 // NewServer creates a new A2A server.
@@ -327,11 +339,12 @@ func NewServer(reg *agent.Registry, llmClient llm.LLM, port int, baseURL string)
 	}
 
 	return &Server{
-		Port:      port,
-		BaseURL:   baseURL,
-		Reg:       reg,
-		Executor:  executor,
-		CardCache: cards,
+		Port:       port,
+		BaseURL:    baseURL,
+		Reg:        reg,
+		Executor:   executor,
+		CardCache:  cards,
+		rpcHandler: a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(executor)),
 	}, nil
 }
 
@@ -413,21 +426,16 @@ func (s *Server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// agentNameKey carries the target agent name through the request context.
+// agentNameKey carries the target agent name through the request context. It
+// must NOT be confused with execCtx.ContextID: that field is the SDK's
+// server-generated correlation id and every emitted event is validated
+// against it.
 type agentNameKey struct{}
 
-// agentNameInterceptor injects an agent name into the request context. It
-// must NOT touch execCtx.ContextID: that field is the SDK's server-generated
-// correlation id and every emitted event is validated against it.
-type agentNameInterceptor struct {
-	name string
-}
-
-func (a *agentNameInterceptor) Intercept(ctx context.Context, _ *a2asrv.ExecutorContext) (context.Context, error) {
-	return context.WithValue(ctx, agentNameKey{}, a.name), nil
-}
-
-// handleAgentEndpoint routes per-agent A2A JSON-RPC calls.
+// handleAgentEndpoint routes per-agent A2A JSON-RPC calls. Every agent name
+// is served by the single shared s.rpcHandler (see the Server.rpcHandler
+// doc comment) — the target agent for this request travels via ctx rather
+// than via a freshly constructed handler.
 func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/agents/")
 	agentName := strings.Split(path, "/")[0]
@@ -447,12 +455,8 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler := a2asrv.NewJSONRPCHandler(
-		a2asrv.NewHandler(s.Executor,
-			a2asrv.WithExecutorContextInterceptor(&agentNameInterceptor{name: agentName}),
-		),
-	)
-	handler.ServeHTTP(w, r)
+	ctx := context.WithValue(r.Context(), agentNameKey{}, agentName)
+	s.rpcHandler.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // handleHealth serves health check.

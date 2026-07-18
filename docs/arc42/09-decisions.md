@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-161. Early entries (001–007) record the founding decisions; the rest is
+ADR-164. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -184,6 +184,9 @@ Consolidation notes (2026-07-16):
 | ADR-159 | `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability) | Accepted | 2026-07-18 |
 | ADR-160 | `loadGoapChargeStampsDurable` Reads the Durable Charge Stamps Back into a Resumed Tick's `ChainState`, Closing ADR-129's Flagged Remainder (Q3 Reliability) | Accepted | 2026-07-18 |
 | ADR-161 | Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
+| ADR-162 | `recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
+| ADR-163 | `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research) | Accepted | 2026-07-18 |
+| ADR-164 | `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -1288,7 +1291,7 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ A failed winner dispatch is now a real `error` the caller (`engine/actions_a2a.go`'s `AuctionDelegate` action) can detect and react to, instead of success text describing a failure — closing a silent-failure class in the same family the platform already guards against elsewhere (§8.12, §8.13, §8.15)
 - ✅ A transient dispatch failure is retried up to 3 times before the auction gives up on that winner, and a persistently-failing winner is circuit-broken after 3 failures rather than being redispatched to (and re-timed-out by) every subsequent auction
 - ⚠️ `CollectBids`' existing behavior of treating `SendTask` errors identically to an empty/declined response is unaffected — bid fan-out semantics don't change, only the winner-dispatch path does
-- ⚠️ No runner-up fallback yet: if the winner's breaker is open or all retries are exhausted, `RunAuction` still fails the auction outright rather than trying the next-best bid
+- ~~⚠️ No runner-up fallback yet: if the winner's breaker is open or all retries are exhausted, `RunAuction` still fails the auction outright rather than trying the next-best bid~~ — partially resolved 2026-07-18, see ADR-164: `AuctionDelegate` now treats both cases as a fallback-to-delegate-tree signal instead of a hard error; retrying the next-best bid inside `RunAuction` itself remains open
 - ✅ (2026-07-13, ADR-065) Per-winner breaker state now persists both across calls (the production `AuctionDelegate` entrypoint had been discarding its `Auctioneer` — and thus its breaker map — on every single engine tick, so the breaker guarding the real production path could never actually open) and across restarts, via a process-wide store round-tripped through `circuit_breakers.json`
 - Pinned by tests in `internal/a2a/client_test.go`: `TestInterpretSendResult_HonestlyReportsFailureStates` (honest-error coverage per response shape) and `TestAuctioneer_RunAuction_RetriesWinnerDispatchOnTransientFailure`/`_ReturnsErrorAfterExhaustingRetries`/`_CircuitBreaksWinnerAfterRepeatedFailures` (retry/circuit-breaker behavior); milestone 5 pinned by `TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts` (ADR-065)
 
@@ -2887,7 +2890,7 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 **Decision (milestone 3 of 4):** `gardener.Registry` gains `Rescan()` (`internal/gardener/gardener.go`), which re-acquires the registry's mutex and re-invokes the same `loadUserTreesLocked()` used at construction. `cmd/bt-gardener/main.go`'s cycle ticker calls `registry.Rescan()` once per cycle, immediately before `RunCycleV2`, so a tree an autopilot compiles and a human approves while the daemon is already running becomes visible to evolution on the next cycle instead of requiring a restart.
 
-**Status:** Accepted (2026-07-18) — milestones 1–3 of 4 landed; milestone 4 is not part of this change. Pinned by `TestResolveGeneratedTreeForUser_AutomationStatusGate` and `TestResolveGeneratedTree_AutomationStatusGate` (pending/rejected/approved cases across both the user-scoped and cross-user resolvers) and `TestRunOnce_RefusesExecutionForNonApprovedAutomation` (`internal/agentexec/wiring_test.go`); `TestConsiderAutomation_ApprovalActivatesRejectionRemembers`'s extended assertion that a rejected proposal's tree file is gone from disk (`cmd/bt-agent/autopilot_test.go`); and `TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction` (`internal/gardener/gardener_test.go`).
+**Status:** Accepted (2026-07-18) — milestones 1–3 of 4 landed; milestone 4 closed the same day, see ADR-162. Pinned by `TestResolveGeneratedTreeForUser_AutomationStatusGate` and `TestResolveGeneratedTree_AutomationStatusGate` (pending/rejected/approved cases across both the user-scoped and cross-user resolvers) and `TestRunOnce_RefusesExecutionForNonApprovedAutomation` (`internal/agentexec/wiring_test.go`); `TestConsiderAutomation_ApprovalActivatesRejectionRemembers`'s extended assertion that a rejected proposal's tree file is gone from disk (`cmd/bt-agent/autopilot_test.go`); and `TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction` (`internal/gardener/gardener_test.go`).
 
 **Consequences:**
 - ✅ A pending or rejected automation proposal's compiled tree can no longer execute — neither through direct tree-ID resolution, the cross-user scan, nor `RunOnce`'s fallback path — closing the gap ADR-133's HITL policy left between "tree compiled and persisted" and "human approved."
@@ -2895,7 +2898,55 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ Newly-approved personal trees reach the gardener's evolution loop within one cycle instead of requiring a `bt-gardener` daemon restart.
 - Rejected alternative: gating only at `RunOnce` (skipping a `wiring.go`-level check) was rejected because `ResolveGeneratedTree`/`ResolveGeneratedTreeForUser` are also reachable directly from other paths (e.g. dashboard tree preview, `bt_run_task`), which would otherwise still resolve a non-approved tree even with `RunOnce` itself refusing it.
 - ⚠️ `QuarantineNamedTree` renames rather than deletes the tree file (`.rejected` suffix), so a rejection can be inspected or recovered rather than being destroyed outright — any future caller that globs `tree-*.json` unfiltered outside `gardener.Registry` would need to also skip the `.rejected` suffix.
-- Milestone 4/4 of the program is not addressed by this change.
+- ~~Milestone 4/4 of the program is not addressed by this change.~~ — closed 2026-07-18, see ADR-162.
+
+---
+
+## ADR-162: `recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth)
+
+**Context (2026-07-18):** Program "Q4 Personalization & Self-Growth — Close the HITL-adoption and live-rescan gaps in the self-generated GOAP tree lifecycle," milestone 4/4. `cmd/bt-agent/feedback_tools.go`'s `recordUserFeedback` already set `result["flagged_for_review"] = true` and logged a warning once a tree crossed `feedbackReviewThreshold` consecutive negative signals — but did nothing else with that signal: no HITL request was raised, and the tree's automation kept running exactly as before. ADR-161 closed milestones 1–3/4 of this program (gating tree resolution/execution on `AutomationRecord.Status`, quarantining a rejected tree's file, and a live gardener `Rescan()`), all of which depend on an `AutomationRecord.Status` that repeated bad feedback could never actually change — the flagged signal was a dead end.
+
+**Decision:** `recordUserFeedback` now calls a new `escalateFlaggedTreeForReview(deps, user, treeID, negatives)` (`cmd/bt-agent/feedback_tools.go`) whenever it crosses `feedbackReviewThreshold`. It looks up the `persona.AutomationRecord` tracked against `treeID` (via `persona.AutomationStore.All()`, matching on `TreeID`); a tree with no tracked automation at all (e.g. one compiled directly and never routed through the autopilot proposal flow) has nothing to pause, so the call is a no-op beyond the existing flag. When a record is found, it raises an `hitl.NewRequest("FeedbackReviewEscalation", "automation-review", ...)` carrying the tree ID, user, agent name, and signature in its context, then sets `rec.Status` to a new `automationFlaggedStatus = "flagged"` constant and persists it via `ledger.Upsert`. Because ADR-161 milestone 1's `automationApproved` guard (`internal/agentexec/wiring.go`) allows execution only when `Status == persona.AutomationApproved`, any other string — including this new `"flagged"` value — is already treated as non-executable with no change needed on the guard side. The new HITL request's ID is surfaced back to the MCP caller as `result["hitl_id"]`.
+
+**Status:** Accepted (2026-07-18) — closes milestone 4/4 of the Q4 Personalization & Self-Growth HITL-adoption program (ADR-161 closed milestones 1–3). Pinned by `TestRecordUserFeedback_FlaggedForReviewEscalatesAndPausesAutomation` (seeds an approved `AutomationRecord`, drives two negative signals, and asserts a HITL request is created with matching context and the record's status flips to `"flagged"`) and `TestRecordUserFeedback_FlaggedForReviewNoAutomationTracked` (an untracked tree still gets the flag but raises no HITL request) in `cmd/bt-agent/feedback_tools_test.go`.
+
+**Consequences:**
+- ✅ Repeated negative feedback now actually pauses the automation pending human review instead of only logging a warning — closing the gap between "flagged" and any real effect that ADR-133's HITL automation policy (decision point 5) never covered, since that policy only gates the initial proposal, not a previously-approved automation going bad in production.
+- ✅ Reuses ADR-161 milestone 1's `automationApproved` guard as-is: a plain string status change is sufficient to make the automation non-executable, with zero changes to `internal/agentexec/wiring.go`.
+- ⚠️ There is no automated path back from `"flagged"` to `persona.AutomationApproved` — resolving the raised HITL request (approve/reject) does not touch the `AutomationRecord`, since `"FeedbackReviewEscalation"` is a distinct request kind from `"AutomationProposal"` (`cmd/bt-agent/autopilot.go`), which is the only kind whose resolution currently writes back to the ledger. An operator must currently flip the status by some other means (e.g. direct ledger edit or a future dedicated resolution path) to resume the automation.
+- Pinned by the two tests named above.
+
+---
+
+## ADR-163: `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research)
+
+**Context (2026-07-18):** `internal/a2a/server.go`'s `handleAgentEndpoint` constructed a brand-new `a2asrv.NewHandler(s.Executor, a2asrv.WithExecutorContextInterceptor(&agentNameInterceptor{name: agentName}))` — wrapped in a fresh `a2asrv.NewJSONRPCHandler` — on every single incoming HTTP request. The a2a-go SDK's handler owns its own in-memory task store internally, so each freshly-built handler came with its own empty store: a task created by one request (`SendMessage`) was invisible to the very next request against the same per-agent endpoint, because that next request built an entirely new handler with an entirely new, empty store rather than reusing the first request's. This broke any multi-request interaction with a task — polling `GetTask`, resubscribing, or sending a follow-up message that references an existing `TaskID` — for every agent endpoint the server served.
+
+**Decision:** `Server` gains an `rpcHandler http.Handler` field, built exactly once in `NewServer` via `a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(executor))` — with no per-agent interceptor at construction time, since there is now only one handler for every agent. The `agentNameInterceptor` type (an `a2asrv.ExecutorContextInterceptor` previously injected per-request to carry the target agent name into `execCtx`) is removed entirely; `handleAgentEndpoint` instead sets `agentNameKey` directly on the incoming request's `context.Context` (`context.WithValue(r.Context(), agentNameKey{}, agentName)`) and calls `s.rpcHandler.ServeHTTP(w, r.WithContext(ctx))` — the identical shared handler instance, and therefore its identical shared task store, now serves every agent's every request. `BTAgentExecutor.Execute` already read the agent name back off `ctx` via `agentNameKey`, so it is unchanged.
+
+**Status:** Accepted (2026-07-18) — pinned by `TestHandleAgentEndpoint_ReusesSharedTaskStoreAcrossRequests` (`internal/a2a/server_test.go`), which POSTs a `SendMessage` and then a `GetTask` against the same `*Server` through two independent `*http.Request` values and asserts the second call finds the task the first one created, and by `TestExecuteAgentNameFromCtxWinsOverContextID` (`internal/a2a/first_event_test.go`, renamed from `TestInterceptorCarriesNameWithoutTouchingContextID`), which now drives the ctx-injection path directly through a real `Execute` call since the interceptor type it used to test no longer exists.
+
+**Consequences:**
+- ✅ A task created via `SendMessage` against a per-agent endpoint is now visible to a subsequent `GetTask`/resubscribe/follow-up request against that same endpoint, closing a class of bug where every single incoming HTTP request silently reset all A2A task state for that agent.
+- ✅ One handler now serves every registered agent's endpoint; per-request routing is carried entirely by `ctx` (`agentNameKey`), not by which handler instance happens to have been constructed for that particular request.
+- Rejected alternative: keeping a handler constructed per request but caching it per agent name in a map was not pursued — task IDs are process-global regardless of which agent handles them, so a per-agent handler/store would add its own synchronized cache state for no isolation benefit the codebase actually needs; a single shared handler fully closes the bug with less state to reason about.
+- ⚠️ The task store is now genuinely process-wide and shared across all agents (previously, accidentally, it was shared by no one — not even two requests to the same agent). No caller currently depends on per-agent task ID namespacing, but one introduced in the future would need to namespace IDs itself rather than relying on per-agent store isolation.
+
+---
+
+## ADR-164: `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research)
+
+**Context (2026-07-18):** ADR-064 gave the A2A auction's winner dispatch a per-winner circuit breaker and a retry policy, but its own Consequences flagged the result as incomplete: "No runner-up fallback yet: if the winner's breaker is open or all retries are exhausted, `RunAuction` still fails the auction outright rather than trying the next-best bid." `AuctionDelegate` (`internal/a2a/auction.go`)'s only fallback condition was `errors.Is(err, ErrNoEligibleBids)` — a winner-breaker-open refusal (from `breaker.Allow()`) or a retry-exhausted transient dispatch failure both surfaced as a bare `fmt.Errorf`, which `AuctionDelegate` treated as a hard error rather than "no usable winner," so the whole engine action — and the tree tick driving it — hard-failed instead of falling back to the node's configured delegate tree, even though that delegate tree exists for precisely this "the auction didn't produce a usable winner" case.
+
+**Decision:** Two new sentinel errors, `ErrWinnerCircuitBreakerOpen` and `ErrWinnerDispatchExhausted`, are wrapped via `%w` into `RunAuction`'s returned error: the former at the breaker-refusal site, the latter at the dispatch-failure site — but only when the underlying error's message contains `"retry exhausted"` (`reliability.RetryPolicy.ExecuteContext`'s own wording for a retryable failure that persisted past every attempt, as opposed to a non-retryable validation/auth failure, which is left un-wrapped and stays a hard error). `AuctionDelegate` now checks `errors.Is` against all three sentinels — `ErrNoEligibleBids`, `ErrWinnerCircuitBreakerOpen`, `ErrWinnerDispatchExhausted` — and returns `awarded=false, err=nil` for any of them, falling back to the delegate tree exactly as it already did for "no eligible bids."
+
+**Status:** Accepted (2026-07-18) — pinned by `TestAuctionDelegate_DispatchRetryExhaustedFallsBack` and `TestAuctionDelegate_WinnerCircuitBreakerOpenFallsBack` (`internal/a2a/auction_test.go`).
+
+**Consequences:**
+- ✅ An auction whose winner is circuit-broken or whose dispatch retries are exhausted on a transient failure now falls back to the tree's configured delegate instead of hard-failing the whole engine tick — matching how "no eligible bids" was already handled.
+- ✅ A non-retryable dispatch failure (validation, auth — never wrapped with `ErrWinnerDispatchExhausted`) still surfaces as a hard error, since it signals a real problem with the dispatch itself rather than transient unavailability a fallback should paper over.
+- Rejected alternative: implementing ADR-064's flagged runner-up fallback (retrying the next-best bid inside `RunAuction` itself) was not pursued here — this change instead widens the existing delegate-tree fallback at the `AuctionDelegate` seam, which is smaller in scope and reuses machinery already in place. Trying the next-best bid before giving up on the auction remains open, tracked by ADR-064's own flagged gap.
+- Pinned by the two tests named above.
 
 ---
 

@@ -6,6 +6,8 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // TestExecuteFirstEventIsTask pins the a2a-go v2 stream contract: when no
@@ -50,20 +52,47 @@ func TestExecuteFirstEventIsTask(t *testing.T) {
 	}
 }
 
-// TestInterceptorCarriesNameWithoutTouchingContextID pins the interceptor
-// contract: agent name travels via ctx; execCtx.ContextID (the SDK's
-// correlation id, validated on every event) is left alone.
-func TestInterceptorCarriesNameWithoutTouchingContextID(t *testing.T) {
-	ic := &agentNameInterceptor{name: "some-agent"}
-	execCtx := &a2asrv.ExecutorContext{ContextID: "sdk-generated-id"}
-	ctx, err := ic.Intercept(context.Background(), execCtx)
+// TestExecuteAgentNameFromCtxWinsOverContextID pins the agent-name resolution
+// contract: handleAgentEndpoint carries the target agent name via ctx
+// (agentNameKey), not by constructing anything per-request keyed off
+// ContextID. execCtx.ContextID — the SDK's server-generated correlation id,
+// validated on every emitted event — must be left untouched, and must NOT be
+// used to resolve the agent when ctx already carries a name.
+func TestExecuteAgentNameFromCtxWinsOverContextID(t *testing.T) {
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
 	if err != nil {
-		t.Fatalf("Intercept error: %v", err)
+		t.Fatalf("NewRegistry: %v", err)
 	}
+	if _, err := reg.Create(agent.Definition{Name: "some-agent", Tree: "domain:code_review", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	exec := &BTAgentExecutor{
+		Reg:     reg,
+		TreeMap: map[string]*evolution.SerializableNode{"some-agent": {Type: "AlwaysSucceed"}},
+	}
+
+	ctx := context.WithValue(context.Background(), agentNameKey{}, "some-agent")
+	execCtx := &a2asrv.ExecutorContext{
+		Message:   a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("run something")),
+		ContextID: "sdk-generated-id",
+	}
+
+	var terminal a2a.TaskState
+	for ev, err := range exec.Execute(ctx, execCtx) {
+		if err != nil {
+			t.Fatalf("Execute yielded error: %v", err)
+		}
+		if su, ok := ev.(*a2a.TaskStatusUpdateEvent); ok {
+			terminal = su.Status.State
+		}
+	}
+
 	if execCtx.ContextID != "sdk-generated-id" {
 		t.Fatalf("ContextID overwritten to %q — SDK event validation will fail with 'context IDs don't match'", execCtx.ContextID)
 	}
-	if name, _ := ctx.Value(agentNameKey{}).(string); name != "some-agent" {
-		t.Fatalf("ctx agent name = %q, want some-agent", name)
+	if terminal == a2a.TaskStateFailed {
+		t.Fatalf("Execute failed — agent name must resolve from ctx (%q), not fall back to ContextID (%q), which is not a registered agent", "some-agent", execCtx.ContextID)
 	}
 }

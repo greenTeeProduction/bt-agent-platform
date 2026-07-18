@@ -74,7 +74,7 @@ alphabetical within each layer (matching the diagram order):
 | Entrypoints | `cmd/` (13 binaries) | Standalone binaries, each with its own main.go: MCP servers (`bt-agent`, `bt-evaluator`, `bt-langagent`), `bt-dashboard`, the `bt-gardener` daemon, CLIs (`bt-agent-cli`, `bt-assistant`), and build/CI/probe utilities (`benchcmp`, `bt-docgen`, `bt-ci-doctor`, `bt-scalability-probe`, `bt-security-probe`, `bt-tree-integration`) |
 | Service | `internal/a2a` | Agent-to-Agent (A2A) protocol integration, incl. auction-based task allocation ([§8](08-crosscutting-concepts.md) A2A Auction Task Allocation) |
 | Service | `internal/agent` | Agent lifecycle: registry, scheduler, memory, pub/sub AgentBus |
-| Service | `internal/agentexec` | In-process run-dependency wiring (`NewRunDeps`, dynamic tree resolvers); `ResolveGeneratedTree`/`ResolveGeneratedTreeForUser` consult the matching `persona.AutomationRecord.Status` before returning a tree, refusing pending/rejected automations (→ ADR-133) |
+| Service | `internal/agentexec` | In-process run-dependency wiring (`NewRunDeps`, dynamic tree resolvers); `ResolveGeneratedTree`/`ResolveGeneratedTreeForUser` consult the matching `persona.AutomationRecord.Status` before returning a tree, refusing pending/rejected/flagged automations (→ ADR-133) |
 | Service | `internal/api` | API design primitives (OpenAPI route definitions) |
 | Service | `internal/audit` | Append-only JSONL audit logging for agent tasks |
 | Service | `internal/dashboard` | Dashboard API, metrics collection, SSE streaming (5.4) |
@@ -133,7 +133,7 @@ building block:
 | Knowledge graph (7) | `bt_kg_discover`, `bt_kg_query`, `bt_kg_list`, `bt_kg_summary`, `bt_kg_analytics`, `bt_kg_explain`, `bt_kg_auto_create` | knowledge |
 | HITL (5) | `bt_hitl_list`, `bt_hitl_get`, `bt_hitl_approve`, `bt_hitl_reject`, `bt_hitl_compose_task` | hitl |
 | Blackboard (4) | `bt_bb_read`, `bt_bb_write`, `bt_bb_list`, `bt_bb_delete` | blackboard |
-| Personalization (10) | `bt_persona_get`, `bt_persona_patterns`, `bt_persona_set_preference`, `bt_goal_add`, `bt_goal_list`, `bt_goal_remove`, `bt_goal_from_pattern`, `bt_goal_compile`, `bt_automation_propose`, `bt_feedback` | persona + goap (→ ADR-133, 5.6) |
+| Personalization (10) | `bt_persona_get`, `bt_persona_patterns`, `bt_persona_set_preference`, `bt_goal_add`, `bt_goal_list`, `bt_goal_remove`, `bt_goal_from_pattern`, `bt_goal_compile`, `bt_automation_propose`, `bt_feedback` | persona + goap + hitl (`bt_automation_propose` and repeated-negative `bt_feedback` both raise `hitl.NewRequest` escalations) (→ ADR-133, 5.6) |
 | Reliability/ops (5) | `bt_dlq_list`, `bt_dlq_replay`, `bt_circuit_status`, `bt_health`, `bt_reset` | reliability |
 | Thinktank/startup/workflow (5) | `bt_thinktank_analyze`, `bt_startup_simulate`, `bt_startup_summary`, `bt_workflow_run`, `bt_workflow_approve` | thinktank + startup + dashboard |
 | Misc (5) | `bt_factory_create`, `bt_get_fitness`, `bt_get_reflections`, `bt_list_finance_trees`, `bt_impact_tests` | factory, evolution, knowledge |

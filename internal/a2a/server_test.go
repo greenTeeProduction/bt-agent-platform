@@ -1,9 +1,12 @@
 package a2a
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -242,8 +245,8 @@ func executorForAgent(t *testing.T, name, tree string) *BTAgentExecutor {
 }
 
 // drainExecute runs Execute to completion — with the target agent name carried
-// through ctx exactly as the per-agent endpoint's interceptor delivers it — and
-// returns every yielded event.
+// through ctx exactly as handleAgentEndpoint delivers it — and returns every
+// yielded event.
 func drainExecute(t *testing.T, exec *BTAgentExecutor, agentName, taskText string) []a2a.Event {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), agentNameKey{}, agentName)
@@ -527,6 +530,99 @@ func TestServer_RefreshCards_PicksUpAgentCreatedAfterStartup(t *testing.T) {
 	}
 }
 
+// ---- handleAgentEndpoint must reuse one shared task store across requests --
+//
+// handleAgentEndpoint currently builds a brand new a2asrv.NewHandler(...) —
+// and therefore a brand new in-memory task store — on every incoming HTTP
+// request. A task created by one request (SendMessage) is invisible to the
+// very next request against the same per-agent endpoint (GetTask), because
+// each request gets its own throwaway store. This breaks any multi-request
+// interaction with a task: polling GetTask, resubscribing, or sending a
+// follow-up message that references an existing TaskID.
+
+type rpcRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+	ID      any    `json:"id"`
+}
+
+type rpcResponse struct {
+	Result json.RawMessage `json:"result"`
+	Error  *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func postAgentRPC(t *testing.T, srv *Server, agentName, method string, params any) rpcResponse {
+	t.Helper()
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", Method: method, Params: params, ID: 1})
+	if err != nil {
+		t.Fatalf("marshal %s request: %v", method, err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/"+agentName, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.handleAgentEndpoint(w, req)
+
+	var resp rpcResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal %s response %s: %v", method, w.Body.String(), err)
+	}
+	return resp
+}
+
+func TestHandleAgentEndpoint_ReusesSharedTaskStoreAcrossRequests(t *testing.T) {
+	SetTreeResolver(func(string) *evolution.SerializableNode { return nil })
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "coder", Tree: "domain:code_review", Description: "test agent"}); err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	srv, err := NewServer(reg, nil, 0, "http://localhost:0")
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	// First request: submit a task. There is no tree registered for "coder"
+	// (SetTreeResolver above returns nil), so Execute fails fast — but not
+	// before yielding a Task in TaskStateSubmitted, so the task is created
+	// and persisted before the terminal Failed event is returned here.
+	sendResp := postAgentRPC(t, srv, "coder", "SendMessage", &a2a.SendMessageRequest{
+		Message: a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("hello")),
+	})
+	if sendResp.Error != nil {
+		t.Fatalf("SendMessage rpc error: %s", sendResp.Error.Message)
+	}
+	var sendResult struct {
+		Task *a2a.Task `json:"task"`
+	}
+	if err := json.Unmarshal(sendResp.Result, &sendResult); err != nil || sendResult.Task == nil || sendResult.Task.ID == "" {
+		t.Fatalf("SendMessage result missing task: %s (unmarshal err: %v)", sendResp.Result, err)
+	}
+
+	// Second request, same agent endpoint, separate *http.Request: fetch the
+	// task the first request just created.
+	getResp := postAgentRPC(t, srv, "coder", "GetTask", &a2a.GetTaskRequest{ID: sendResult.Task.ID})
+	if getResp.Error != nil {
+		t.Fatalf("GetTask on a follow-up request to the same agent endpoint failed: %s — "+
+			"handleAgentEndpoint must reuse a single shared A2A request handler/task store "+
+			"instead of constructing a brand-new a2asrv.NewHandler(...) on every request",
+			getResp.Error.Message)
+	}
+	var gotTask a2a.Task
+	if err := json.Unmarshal(getResp.Result, &gotTask); err != nil {
+		t.Fatalf("unmarshal GetTask result: %v (%s)", err, getResp.Result)
+	}
+	if gotTask.ID != sendResult.Task.ID {
+		t.Errorf("GetTask returned task ID %q, want %q", gotTask.ID, sendResult.Task.ID)
+	}
+}
+
 // ---- Cancel must leave a History trace, not vanish silently -----------------
 //
 // Execute records every run outcome to the platform's shared History store
@@ -556,9 +652,9 @@ func TestCancel_RecordsCancelledOutcomeToHistory(t *testing.T) {
 
 	exec := &BTAgentExecutor{Reg: reg, History: hist}
 
-	// Mirrors the per-agent endpoint's interceptor (agentNameInterceptor),
-	// which is how Execute learns the target agent name — Cancel must use
-	// the identical resolution instead of discarding ctx.
+	// Mirrors how handleAgentEndpoint carries the target agent name via ctx
+	// (agentNameKey), which is how Execute learns it — Cancel must use the
+	// identical resolution instead of discarding ctx.
 	ctx := context.WithValue(context.Background(), agentNameKey{}, "coder")
 	execCtx := &a2asrv.ExecutorContext{}
 

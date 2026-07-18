@@ -761,3 +761,79 @@ func TestAuctionDelegate_ThreadsAwardIntoChainState(t *testing.T) {
 		t.Errorf("award.WinningBid.Cost = %v, want 10", award.WinningBid.Cost)
 	}
 }
+
+// ---- widened fallback: circuit-breaker-open / retry-exhausted dispatch -----
+
+// dispatchFailTransport plays the announcement-fan-out role normally (a canned
+// bid) but always fails the follow-up winner dispatch with dispatchErr, so a
+// test can drive RunAuction's winner-dispatch retry policy to exhaustion.
+type dispatchFailTransport struct {
+	bid         string
+	dispatchErr error
+}
+
+func (f *dispatchFailTransport) SendTask(_ context.Context, _, taskText string) (string, error) {
+	var probe TaskAnnouncement
+	if err := json.Unmarshal([]byte(taskText), &probe); err == nil && probe.TaskID != "" {
+		return f.bid, nil // announcement fan-out: return the canned bid
+	}
+	return "", f.dispatchErr // winner dispatch: always fails
+}
+
+// AuctionDelegate must widen its fallback condition beyond ErrNoEligibleBids:
+// when the winner dispatch exhausts its retries on a transient (retryable)
+// error, that must also report awarded=false with a nil error — so the
+// AuctionDelegate engine action falls back to its delegate tree instead of
+// hard-failing the whole run — not surface the dispatch error to the caller.
+func TestAuctionDelegate_DispatchRetryExhaustedFallsBack(t *testing.T) {
+	ft := &dispatchFailTransport{
+		bid:         bidJSON(t, Bid{TaskID: "auction", BidderName: "flakywinner", Cost: 10, Confidence: 0.9}),
+		dispatchErr: errors.New("connection refused"), // classifies as retryable ErrCatNetwork
+	}
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"flakywinner": cardWithURL("flakywinner", "http://flakywinner", "domain"),
+	}, ft)
+
+	result, awarded, err := AuctionDelegate("do the work", nil)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored instead of falling back: %v", err)
+	}
+	if awarded || result != "" {
+		t.Errorf("expected fallback (awarded=false, result=\"\") when dispatch retries are exhausted, got awarded=%v result=%q", awarded, result)
+	}
+}
+
+// AuctionDelegate must also widen its fallback condition to a winner whose
+// circuit breaker is already open: RunAuction refuses to dispatch at all in
+// that case, and that refusal must report awarded=false with a nil error, not
+// a hard error, so the caller falls back to its delegate tree instead of
+// treating an open breaker as a fatal auction failure.
+func TestAuctionDelegate_WinnerCircuitBreakerOpenFallsBack(t *testing.T) {
+	// Force the winner's shared, persistent circuit breaker open by recording
+	// enough consecutive failures directly — the same store AuctionDelegate's
+	// NewPersistentAuctioneer consults via winnerBreaker.
+	breaker := winnerBreakers.get("breakerwinner")
+	for i := 0; i < winnerCircuitBreakerThreshold; i++ {
+		breaker.RecordFailure()
+	}
+
+	ft := newAuctionTransport()
+	ft.bids["http://breakerwinner"] = bidJSON(t, Bid{TaskID: "auction", BidderName: "breakerwinner", Cost: 10, Confidence: 0.9})
+	ft.results["http://breakerwinner"] = "should never be dispatched"
+
+	withAuctionSeams(t, map[string]*a2a.AgentCard{
+		"breakerwinner": cardWithURL("breakerwinner", "http://breakerwinner", "domain"),
+	}, ft)
+
+	result, awarded, err := AuctionDelegate("do the work", nil)
+	if err != nil {
+		t.Fatalf("AuctionDelegate errored instead of falling back: %v", err)
+	}
+	if awarded || result != "" {
+		t.Errorf("expected fallback (awarded=false, result=\"\") when the winner's circuit breaker is open, got awarded=%v result=%q", awarded, result)
+	}
+	if _, dispatched := ft.dispatched["http://breakerwinner"]; dispatched {
+		t.Error("winner should not be dispatched while its circuit breaker is open")
+	}
+}

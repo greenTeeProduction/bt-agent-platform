@@ -35,6 +35,18 @@ const (
 // eligible to win the announced task (wrong task, or below min confidence).
 var ErrNoEligibleBids = errors.New("a2a: no eligible bids for announced task")
 
+// ErrWinnerCircuitBreakerOpen is wrapped into RunAuction's returned error when
+// the winning bidder's circuit breaker is already open, refusing dispatch
+// outright without attempting it.
+var ErrWinnerCircuitBreakerOpen = errors.New("a2a: winner circuit breaker open")
+
+// ErrWinnerDispatchExhausted is wrapped into RunAuction's returned error when
+// the winner dispatch retry policy exhausts its retries on a transient
+// (network/timeout/etc.) failure. It is distinct from a non-retryable
+// dispatch failure (validation, auth), which is not wrapped with this
+// sentinel and remains a hard error.
+var ErrWinnerDispatchExhausted = errors.New("a2a: winner dispatch retries exhausted")
+
 // defaultBidDeadline bounds each candidate's fan-out call when the announcement
 // carries no explicit Deadline, so an unbounded announcement can never let a
 // single hung candidate stall the auction forever.
@@ -352,7 +364,7 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 
 	breaker := a.winnerBreaker(award.WinnerName)
 	if !breaker.Allow() {
-		return AuctionResult{}, fmt.Errorf("a2a: winner %q circuit breaker open, refusing dispatch", award.WinnerName)
+		return AuctionResult{}, fmt.Errorf("a2a: winner %q circuit breaker open, refusing dispatch: %w", award.WinnerName, ErrWinnerCircuitBreakerOpen)
 	}
 
 	// Bound the winner dispatch by a deadline derived from the announcement (or a
@@ -384,7 +396,16 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 	if dispatchErr != nil {
 		breaker.RecordFailureWithCategory(dispatchErr)
 		a.persistWinnerBreakerState()
-		return AuctionResult{}, fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, dispatchErr)
+		wrapped := fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, dispatchErr)
+		// ExecuteContext's own "retry exhausted" wording marks the case where
+		// the failure was transient (retryable) but persisted past every
+		// retry attempt — as opposed to a "retry refused" non-retryable
+		// failure (validation, auth), which stays a hard error since it
+		// signals a real problem with the dispatch itself, not flakiness.
+		if strings.Contains(dispatchErr.Error(), "retry exhausted") {
+			wrapped = fmt.Errorf("%w: %w", ErrWinnerDispatchExhausted, wrapped)
+		}
+		return AuctionResult{}, wrapped
 	}
 	breaker.RecordSuccess()
 	a.persistWinnerBreakerState()
@@ -573,8 +594,9 @@ var newAuctionCollector = func() BidCollector { return NewBTAgentClient() }
 // eligible to bid).
 //
 // awarded is false — signalling the caller to fall back to a delegate tree —
-// when there are no candidates or no eligible bidder wins; any other
-// transport/auction failure is returned as err.
+// when there are no candidates, no eligible bidder wins, the winner's circuit
+// breaker is open, or the winner dispatch exhausts its retries on a
+// transient failure; any other transport/auction failure is returned as err.
 //
 // On a win, the resulting AuctionResult.Award is written back into chainState
 // under "auction_award" (when chainState is non-nil) so a caller whose return
@@ -589,8 +611,10 @@ func AuctionDelegate(task string, chainState map[string]any) (string, bool, erro
 
 	res, err := NewPersistentAuctioneer(newAuctionCollector()).RunAuction(context.Background(), ann, candidates)
 	if err != nil {
-		if errors.Is(err, ErrNoEligibleBids) {
-			return "", false, nil // no eligible bidder → fall back to delegate tree
+		if errors.Is(err, ErrNoEligibleBids) ||
+			errors.Is(err, ErrWinnerCircuitBreakerOpen) ||
+			errors.Is(err, ErrWinnerDispatchExhausted) {
+			return "", false, nil // no eligible/available winner → fall back to delegate tree
 		}
 		return "", false, err
 	}
