@@ -314,6 +314,43 @@ updates:
 	}
 }
 
+func TestValidateWorkflowsAdvisoryCheckFlagged(t *testing.T) {
+	root := t.TempDir()
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(wfDir, "ci.yml"), minimalCI())
+	writeFile(t, filepath.Join(wfDir, "nightly.yml"), minimalNightly())
+	writeFile(t, filepath.Join(root, ".github", "dependabot.yml"), `version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+`)
+	report, err := ValidateWorkflows(root)
+	if err != nil {
+		t.Fatalf("ValidateWorkflows: %v", err)
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Name == "self-hosted runner installed" {
+			found = true
+			if !check.Advisory {
+				t.Fatalf("expected 'self-hosted runner installed' check to have Advisory=true, got %+v", check)
+			}
+		} else if check.Advisory {
+			t.Fatalf("expected only the self-hosted runner check to be advisory, but %q was flagged Advisory=true", check.Name)
+		}
+	}
+	if !found {
+		t.Fatal("expected to find 'self-hosted runner installed' check in report")
+	}
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

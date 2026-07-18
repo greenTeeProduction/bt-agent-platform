@@ -303,6 +303,32 @@ func TestBuildGoalDrivenPlan_InjectsPreviousFailureNote(t *testing.T) {
 	}
 }
 
+// goapGoalFailureNote must preserve the actionable END of the recorded
+// failure tail. RecordFailure already keeps the TAIL of the raw output (the
+// actionable lint/test lines of a commit-gate transcript come last), but
+// goapGoalFailureNote re-truncates that tail with truncateGoap, which keeps
+// the HEAD — discarding the actionable ending a second time.
+func TestGoapGoalFailureNote_PreservesActionableEnding(t *testing.T) {
+	store := seedGoalBudget(t)
+	goal := "Fix the flaky frobnicator (files: internal/engine/tree.go)"
+	key := goapResearchGoalKey(goal)
+
+	// Longer than both truncation limits (1200 tail-kept by RecordFailure, 500
+	// head-kept by goapGoalFailureNote), with the actionable content at the
+	// very end, mirroring a real commit-gate transcript.
+	noise := strings.Repeat("x", 1400)
+	failure := noise + "ACTIONABLE_MARKER_XYZ"
+	store.RecordFailure(key, failure)
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	note := goapGoalFailureNote(goal)
+	if !strings.Contains(note, "ACTIONABLE_MARKER_XYZ") {
+		t.Fatalf("failure note must preserve the actionable ending of the recorded failure tail, got %q", note)
+	}
+}
+
 // Landing clears the budget: a goal that finally ships stops carrying stale
 // failure state (and its earlier attempts no longer count toward abandon).
 func TestRecordImplementedGoals_ClearsGoalBudget(t *testing.T) {

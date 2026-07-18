@@ -860,6 +860,17 @@ func truncateGoap(s string, limit int) string {
 	return s[:limit] + "\n...<truncated>"
 }
 
+// truncateGoapTail bounds s to its last limit characters, prefixing an
+// ellipsis marker when truncated. It complements truncateGoap (which keeps
+// the head) for callers whose actionable content sits at the end of s — e.g.
+// re-truncating a failure tail that was already tail-kept upstream.
+func truncateGoapTail(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	return "...<truncated>\n" + s[len(s)-limit:]
+}
+
 func extractSection(text, startMarker, endMarker string) string {
 	start := strings.Index(text, startMarker)
 	if start < 0 {

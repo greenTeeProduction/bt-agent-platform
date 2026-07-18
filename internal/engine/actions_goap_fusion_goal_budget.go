@@ -90,7 +90,7 @@ func goapGoalFailureNote(goal string) string {
 	if fail == "" {
 		return ""
 	}
-	return goapGoalFailureNoteMarker + " " + collapseToSingleLine(truncateGoap(fail, 500)) +
+	return goapGoalFailureNoteMarker + " " + collapseToSingleLine(truncateGoapTail(fail, 500)) +
 		" — fix this explicitly; do not resubmit the same approach]"
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/cicd"
 )
@@ -44,7 +43,7 @@ func run(args []string, out, errOut io.Writer) int {
 				mark = "✗"
 			}
 			fmt.Fprintf(out, "%s %s — %s\n", mark, check.Name, check.Details)
-			if strings.Contains(check.Name, "advisory") && !check.Passed {
+			if check.Advisory && !check.Passed {
 				advisoryCount++
 			}
 		}

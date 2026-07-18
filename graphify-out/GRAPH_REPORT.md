@@ -1,16 +1,16 @@
-# Graph Report - superpowers-20260718T034058-2cd90354-goap-fusion-loop-runner-blackboard-conte  (2026-07-18)
+# Graph Report - superpowers-20260718T042131-7dfaeb70-scheduled-goap-fusion-cycle-read-vault-r  (2026-07-18)
 
 ## Corpus Check
-- 915 files · ~1,187,167 words
+- 915 files · ~1,187,479 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 26628 nodes · 39606 edges · 2092 communities (1735 shown, 357 thin omitted)
-- Extraction: 76% EXTRACTED · 24% INFERRED · 0% AMBIGUOUS · INFERRED: 9456 edges (avg confidence: 0.8)
+- 26686 nodes · 39672 edges · 2081 communities (1731 shown, 350 thin omitted)
+- Extraction: 76% EXTRACTED · 24% INFERRED · 0% AMBIGUOUS · INFERRED: 9460 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2181f499`
+- Built from commit: `d98dc5ab`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -175,7 +175,7 @@
 - [[_COMMUNITY_Community 157|Community 157]]
 - [[_COMMUNITY_Community 158|Community 158]]
 - [[_COMMUNITY_Community 159|Community 159]]
-- [[_COMMUNITY_Community 161|Community 161]]
+- [[_COMMUNITY_Community 160|Community 160]]
 - [[_COMMUNITY_Community 162|Community 162]]
 - [[_COMMUNITY_Community 163|Community 163]]
 - [[_COMMUNITY_Community 164|Community 164]]
@@ -736,7 +736,6 @@
 - [[_COMMUNITY_Community 719|Community 719]]
 - [[_COMMUNITY_Community 720|Community 720]]
 - [[_COMMUNITY_Community 721|Community 721]]
-- [[_COMMUNITY_Community 722|Community 722]]
 - [[_COMMUNITY_Community 723|Community 723]]
 - [[_COMMUNITY_Community 724|Community 724]]
 - [[_COMMUNITY_Community 725|Community 725]]
@@ -744,6 +743,7 @@
 - [[_COMMUNITY_Community 727|Community 727]]
 - [[_COMMUNITY_Community 728|Community 728]]
 - [[_COMMUNITY_Community 729|Community 729]]
+- [[_COMMUNITY_Community 730|Community 730]]
 - [[_COMMUNITY_Community 731|Community 731]]
 - [[_COMMUNITY_Community 732|Community 732]]
 - [[_COMMUNITY_Community 733|Community 733]]
@@ -980,13 +980,13 @@
 - [[_COMMUNITY_Community 964|Community 964]]
 - [[_COMMUNITY_Community 965|Community 965]]
 - [[_COMMUNITY_Community 966|Community 966]]
-- [[_COMMUNITY_Community 967|Community 967]]
 - [[_COMMUNITY_Community 968|Community 968]]
 - [[_COMMUNITY_Community 969|Community 969]]
 - [[_COMMUNITY_Community 970|Community 970]]
 - [[_COMMUNITY_Community 971|Community 971]]
 - [[_COMMUNITY_Community 972|Community 972]]
 - [[_COMMUNITY_Community 973|Community 973]]
+- [[_COMMUNITY_Community 974|Community 974]]
 - [[_COMMUNITY_Community 975|Community 975]]
 - [[_COMMUNITY_Community 976|Community 976]]
 - [[_COMMUNITY_Community 977|Community 977]]
@@ -1041,7 +1041,6 @@
 - [[_COMMUNITY_Community 1026|Community 1026]]
 - [[_COMMUNITY_Community 1027|Community 1027]]
 - [[_COMMUNITY_Community 1028|Community 1028]]
-- [[_COMMUNITY_Community 1029|Community 1029]]
 - [[_COMMUNITY_Community 1030|Community 1030]]
 - [[_COMMUNITY_Community 1031|Community 1031]]
 - [[_COMMUNITY_Community 1032|Community 1032]]
@@ -1055,6 +1054,7 @@
 - [[_COMMUNITY_Community 1040|Community 1040]]
 - [[_COMMUNITY_Community 1041|Community 1041]]
 - [[_COMMUNITY_Community 1042|Community 1042]]
+- [[_COMMUNITY_Community 1043|Community 1043]]
 - [[_COMMUNITY_Community 1044|Community 1044]]
 - [[_COMMUNITY_Community 1045|Community 1045]]
 - [[_COMMUNITY_Community 1046|Community 1046]]
@@ -1068,8 +1068,6 @@
 - [[_COMMUNITY_Community 1054|Community 1054]]
 - [[_COMMUNITY_Community 1055|Community 1055]]
 - [[_COMMUNITY_Community 1056|Community 1056]]
-- [[_COMMUNITY_Community 1057|Community 1057]]
-- [[_COMMUNITY_Community 1058|Community 1058]]
 - [[_COMMUNITY_Community 1059|Community 1059]]
 - [[_COMMUNITY_Community 1060|Community 1060]]
 - [[_COMMUNITY_Community 1061|Community 1061]]
@@ -1078,6 +1076,8 @@
 - [[_COMMUNITY_Community 1064|Community 1064]]
 - [[_COMMUNITY_Community 1065|Community 1065]]
 - [[_COMMUNITY_Community 1066|Community 1066]]
+- [[_COMMUNITY_Community 1067|Community 1067]]
+- [[_COMMUNITY_Community 1068|Community 1068]]
 - [[_COMMUNITY_Community 1069|Community 1069]]
 - [[_COMMUNITY_Community 1070|Community 1070]]
 - [[_COMMUNITY_Community 1071|Community 1071]]
@@ -1346,18 +1346,18 @@
 - [[_COMMUNITY_Community 1334|Community 1334]]
 - [[_COMMUNITY_Community 1335|Community 1335]]
 - [[_COMMUNITY_Community 1336|Community 1336]]
-- [[_COMMUNITY_Community 1337|Community 1337]]
 - [[_COMMUNITY_Community 1338|Community 1338]]
 - [[_COMMUNITY_Community 1339|Community 1339]]
 - [[_COMMUNITY_Community 1340|Community 1340]]
-- [[_COMMUNITY_Community 1341|Community 1341]]
 - [[_COMMUNITY_Community 1342|Community 1342]]
 - [[_COMMUNITY_Community 1343|Community 1343]]
 - [[_COMMUNITY_Community 1344|Community 1344]]
+- [[_COMMUNITY_Community 1345|Community 1345]]
 - [[_COMMUNITY_Community 1346|Community 1346]]
 - [[_COMMUNITY_Community 1347|Community 1347]]
 - [[_COMMUNITY_Community 1348|Community 1348]]
 - [[_COMMUNITY_Community 1349|Community 1349]]
+- [[_COMMUNITY_Community 1350|Community 1350]]
 - [[_COMMUNITY_Community 1351|Community 1351]]
 - [[_COMMUNITY_Community 1352|Community 1352]]
 - [[_COMMUNITY_Community 1353|Community 1353]]
@@ -1388,7 +1388,6 @@
 - [[_COMMUNITY_Community 1378|Community 1378]]
 - [[_COMMUNITY_Community 1379|Community 1379]]
 - [[_COMMUNITY_Community 1380|Community 1380]]
-- [[_COMMUNITY_Community 1381|Community 1381]]
 - [[_COMMUNITY_Community 1382|Community 1382]]
 - [[_COMMUNITY_Community 1383|Community 1383]]
 - [[_COMMUNITY_Community 1384|Community 1384]]
@@ -1396,6 +1395,7 @@
 - [[_COMMUNITY_Community 1386|Community 1386]]
 - [[_COMMUNITY_Community 1387|Community 1387]]
 - [[_COMMUNITY_Community 1388|Community 1388]]
+- [[_COMMUNITY_Community 1389|Community 1389]]
 - [[_COMMUNITY_Community 1390|Community 1390]]
 - [[_COMMUNITY_Community 1391|Community 1391]]
 - [[_COMMUNITY_Community 1392|Community 1392]]
@@ -1415,7 +1415,6 @@
 - [[_COMMUNITY_Community 1406|Community 1406]]
 - [[_COMMUNITY_Community 1407|Community 1407]]
 - [[_COMMUNITY_Community 1408|Community 1408]]
-- [[_COMMUNITY_Community 1409|Community 1409]]
 - [[_COMMUNITY_Community 1410|Community 1410]]
 - [[_COMMUNITY_Community 1411|Community 1411]]
 - [[_COMMUNITY_Community 1412|Community 1412]]
@@ -1423,6 +1422,7 @@
 - [[_COMMUNITY_Community 1414|Community 1414]]
 - [[_COMMUNITY_Community 1415|Community 1415]]
 - [[_COMMUNITY_Community 1416|Community 1416]]
+- [[_COMMUNITY_Community 1417|Community 1417]]
 - [[_COMMUNITY_Community 1418|Community 1418]]
 - [[_COMMUNITY_Community 1419|Community 1419]]
 - [[_COMMUNITY_Community 1420|Community 1420]]
@@ -1440,7 +1440,6 @@
 - [[_COMMUNITY_Community 1432|Community 1432]]
 - [[_COMMUNITY_Community 1433|Community 1433]]
 - [[_COMMUNITY_Community 1434|Community 1434]]
-- [[_COMMUNITY_Community 1435|Community 1435]]
 - [[_COMMUNITY_Community 1436|Community 1436]]
 - [[_COMMUNITY_Community 1437|Community 1437]]
 - [[_COMMUNITY_Community 1438|Community 1438]]
@@ -1451,6 +1450,7 @@
 - [[_COMMUNITY_Community 1443|Community 1443]]
 - [[_COMMUNITY_Community 1444|Community 1444]]
 - [[_COMMUNITY_Community 1445|Community 1445]]
+- [[_COMMUNITY_Community 1446|Community 1446]]
 - [[_COMMUNITY_Community 1447|Community 1447]]
 - [[_COMMUNITY_Community 1448|Community 1448]]
 - [[_COMMUNITY_Community 1449|Community 1449]]
@@ -1461,16 +1461,13 @@
 - [[_COMMUNITY_Community 1454|Community 1454]]
 - [[_COMMUNITY_Community 1455|Community 1455]]
 - [[_COMMUNITY_Community 1456|Community 1456]]
-- [[_COMMUNITY_Community 1457|Community 1457]]
-- [[_COMMUNITY_Community 1458|Community 1458]]
 - [[_COMMUNITY_Community 1459|Community 1459]]
 - [[_COMMUNITY_Community 1460|Community 1460]]
 - [[_COMMUNITY_Community 1461|Community 1461]]
 - [[_COMMUNITY_Community 1462|Community 1462]]
 - [[_COMMUNITY_Community 1463|Community 1463]]
-- [[_COMMUNITY_Community 1464|Community 1464]]
-- [[_COMMUNITY_Community 1465|Community 1465]]
-- [[_COMMUNITY_Community 1466|Community 1466]]
+- [[_COMMUNITY_Community 1467|Community 1467]]
+- [[_COMMUNITY_Community 1468|Community 1468]]
 - [[_COMMUNITY_Community 1469|Community 1469]]
 - [[_COMMUNITY_Community 1470|Community 1470]]
 - [[_COMMUNITY_Community 1471|Community 1471]]
@@ -1479,6 +1476,9 @@
 - [[_COMMUNITY_Community 1474|Community 1474]]
 - [[_COMMUNITY_Community 1475|Community 1475]]
 - [[_COMMUNITY_Community 1476|Community 1476]]
+- [[_COMMUNITY_Community 1477|Community 1477]]
+- [[_COMMUNITY_Community 1478|Community 1478]]
+- [[_COMMUNITY_Community 1479|Community 1479]]
 - [[_COMMUNITY_Community 1480|Community 1480]]
 - [[_COMMUNITY_Community 1481|Community 1481]]
 - [[_COMMUNITY_Community 1482|Community 1482]]
@@ -1776,26 +1776,15 @@
 - [[_COMMUNITY_Community 1774|Community 1774]]
 - [[_COMMUNITY_Community 1775|Community 1775]]
 - [[_COMMUNITY_Community 1776|Community 1776]]
-- [[_COMMUNITY_Community 1777|Community 1777]]
-- [[_COMMUNITY_Community 1778|Community 1778]]
-- [[_COMMUNITY_Community 1779|Community 1779]]
-- [[_COMMUNITY_Community 1780|Community 1780]]
 - [[_COMMUNITY_Community 1781|Community 1781]]
-- [[_COMMUNITY_Community 1782|Community 1782]]
 - [[_COMMUNITY_Community 1783|Community 1783]]
 - [[_COMMUNITY_Community 1784|Community 1784]]
-- [[_COMMUNITY_Community 1785|Community 1785]]
-- [[_COMMUNITY_Community 1786|Community 1786]]
-- [[_COMMUNITY_Community 1787|Community 1787]]
-- [[_COMMUNITY_Community 1788|Community 1788]]
+- [[_COMMUNITY_Community 1789|Community 1789]]
+- [[_COMMUNITY_Community 1790|Community 1790]]
 - [[_COMMUNITY_Community 1791|Community 1791]]
-- [[_COMMUNITY_Community 1794|Community 1794]]
-- [[_COMMUNITY_Community 1800|Community 1800]]
-- [[_COMMUNITY_Community 1801|Community 1801]]
-- [[_COMMUNITY_Community 1802|Community 1802]]
-- [[_COMMUNITY_Community 1803|Community 1803]]
-- [[_COMMUNITY_Community 1804|Community 1804]]
-- [[_COMMUNITY_Community 1806|Community 1806]]
+- [[_COMMUNITY_Community 1792|Community 1792]]
+- [[_COMMUNITY_Community 1793|Community 1793]]
+- [[_COMMUNITY_Community 1795|Community 1795]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Append()` - 392 edges
@@ -1810,671 +1799,671 @@
 10. `sleep()` - 95 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrependsToLoopSequence()` --calls--> `References`  [INFERRED]
-  internal/engine/superpowers_runtime_contract_test.go → docs/adr/ADR-008-composable-blocks.md
 - `buildSeedProgramPrompt` --references--> `arc42 §1.2 Quality Goals Table`  [INFERRED]
   internal/engine/goap_seed_program.go → docs/arc42/go-bt-evolve-arc42.md
 - `TestAllSuites_Complete()` --calls--> `AllSuites()`  [INFERRED]
   internal/benchmark/benchmark_test.go → /home/nico/go-bt-evolve/internal/benchmark/eval_suites.go
-- `NewComparator()` --calls--> `checkCmd()`  [INFERRED]
-  internal/benchmark/benchreg.go → cmd/benchcmp/main.go
-- `HasRegressions()` --calls--> `checkCmd()`  [INFERRED]
-  internal/benchmark/benchreg.go → cmd/benchcmp/main.go
+- `Collect()` --calls--> `handleMetricsLive()`  [INFERRED]
+  internal/dashboard/metrics.go → cmd/bt-dashboard/main.go
+- `NewDefaultCompany()` --calls--> `TestNewDefaultCompany_Values()`  [INFERRED]
+  /home/nico/go-bt-evolve/internal/startup/company.go → internal/startup/startup_test.go
+- `TestDashboardAPIRoutesHaveOpenAPICoverage()` --calls--> `DashboardRoutes()`  [INFERRED]
+  cmd/bt-dashboard/main_test.go → internal/api/openapi.go
 
 ## Hyperedges (group relationships)
 - **Runaway-Backstop Deadlock Causal Chain** — research_process_overhaul_2026_07_08_commit_4ae9d61, actions_superpowers_publishgoapfusionstatehash, actions_superpowers_runscheduledgoapfusionloop, research_process_overhaul_2026_07_08_runaway_backstop_deadlock [EXTRACTED 1.00]
 - **arc42-Anchored Research Lanes** — nlm_quota_derivenotebooklmresearchquery, actions_goap_fusion_claude_review_buildclaudereviewprompt, goap_seed_program_buildseedprogramprompt, actions_goap_fusion_buildgrillround1query, actions_btfusion_searchforbtpatterns [EXTRACTED 1.00]
 - **NotebookLM Corpus Hygiene Effort** — research_process_overhaul_2026_07_08_corpus_pollution_loop, research_process_overhaul_2026_07_08_import_budget_gate, research_process_overhaul_2026_07_08_nlm_cli, research_process_overhaul_2026_07_08_notebooklm_py, research_process_overhaul_2026_07_08_vault_quarantine [EXTRACTED 1.00]
 
-## Communities (2092 total, 357 thin omitted)
+## Communities (2081 total, 350 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (211): { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig } (+203 more)
+Nodes (212): { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig }, { defineConfig } (+204 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.01
-Nodes (211): { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium } (+203 more)
+Nodes (212): { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium }, { chromium } (+204 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.03
-Nodes (128): containsAnyStr(), TestGoDevTree_NonGoTask_Rejected(), TestGoDevTree_RetryBehavior(), TestGoDevTree_RoutesToBuild(), TestGoDevTree_RoutesToCodeReview(), TestGoDevTree_RoutesToGoKnowledge(), TestGoDevTree_RoutesToTest(), TestRunTask_CacheHit() (+120 more)
-
-### Community 3 - "Community 3"
 Cohesion: 0.01
 Nodes (155): 9. Architecture Decisions, ADR-008: Auction-Based A2A Task Allocation, ADR-009: Deterministic, LLM-Free Evolution MCP Tools, ADR-010: Non-Wedging Self-Halting Circuit Gates for the GOAP Fusion Loop, ADR-011: Adopting the Horizontal-Scaling Substrate (RemoteExecutor + AgentRouter), ADR-012: Wiring the Scalability Substrate into the Dashboard Endpoint and Probe (Milestones 3–4), ADR-013: Making the Production Superpowers Pipeline Tree Operator-Selectable and Guarded, ADR-014: Mandatory Descriptions for Every Node Class in Curated Domain Trees (+147 more)
 
+### Community 3 - "Community 3"
+Cohesion: 0.02
+Nodes (107): expandChainStateTemplates(), parseFinalAnswer(), DemoChainTree(), TestChainAction_Agent_DirectAnswer(), TestChainAction_Agent_LLMError(), TestChainAction_Agent_MaxIterBoundaries(), TestChainAction_Agent_NilLLM(), TestChainAction_Agent_NoTools() (+99 more)
+
 ### Community 4 - "Community 4"
 Cohesion: 0.03
-Nodes (114): ErrorCategory, ApplyJitter(), ClassifyError(), contextDeadlineExceeded(), DecorrelatedJitter(), DefaultRetryPolicy(), EqualJitter(), ExecuteWithPolicy() (+106 more)
+Nodes (116): TestContainsWord_EmptySource(), TestContainsWord_EmptyWord(), TestContainsWord_ExactMatch(), TestContainsWord_NoMatch(), TestContainsWord_PrefixMatch(), TestContainsWord_ShorterThanWord(), TestContainsWord_SuffixMatch(), TestCountSelectors_Nested() (+108 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.01
 Nodes (135): ADR-001: Behavior Trees as Core Execution Model, ADR-002: MCP as External Interface, ADR-003: File-Based Persistence over SQL, ADR-004: YAML-Defined Agent Platform, ADR-005: Stockfish-Adapted Evolution Engine, ADR-006: ChainAction — LLM Integration via BT Nodes, ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ, ADR-008: Auction-Based A2A Task Allocation (+127 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.03
-Nodes (112): main(), TestContainsWord_EmptySource(), TestContainsWord_EmptyWord(), TestContainsWord_ExactMatch(), TestContainsWord_NoMatch(), TestContainsWord_PrefixMatch(), TestContainsWord_ShorterThanWord(), TestContainsWord_SuffixMatch() (+104 more)
-
-### Community 7 - "Community 7"
 Cohesion: 0.02
 Nodes (19): agentTestMockLLM, chainMockLLM, countedErrorMockLLM, emptyDecomposeMockLLM, errorMockLLM, flakyDecomposeMockLLM, flakyOnceMockLLM, flakyRefineMockLLM (+11 more)
 
+### Community 7 - "Community 7"
+Cohesion: 0.04
+Nodes (107): TestQualityGateFloorOn100Scale(), NewQualityGate(), TestQualityGateGlobalStreakDisablesAllTrees(), TestQualityGatePerTreeIsolation(), TestQualityGatePerTreeResetOnPass(), perTreeStats(), setupGardener(), TestEvolveTree_BloatGuard() (+99 more)
+
 ### Community 8 - "Community 8"
 Cohesion: 0.03
-Nodes (117): ABDelta, ABTest, absDiff(), AgentMonitorSuite(), AlertRouterSuite(), AnnotateMetrics(), Arc42Suite(), BootstrapCI() (+109 more)
+Nodes (106): TestKnowledgeGraphRegistersAllDomainTrees(), TestAutoCreateTree_ConfidenceThreshold(), TestAutoCreateTree_Existing(), TestAutoCreateTree_New(), TestBreed(), TestBreed_FromArchetype(), TestBreed_FromArchetype_Fallback(), TestBreed_NoParents() (+98 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.03
-Nodes (90): expandChainStateTemplates(), isReActSectionMarker(), parseAgentAction(), parseFinalAnswer(), DemoChainTree(), TestChainAction_Agent_DirectAnswer(), TestChainAction_Agent_LLMError(), TestChainAction_Agent_MaxIterBoundaries() (+82 more)
+Nodes (72): newDefaultConfig(), TestCheckRuntime_AllEmptyPaths(), TestCheckRuntime_AllOk(), TestCheckRuntime_ConfigFileNotFound(), TestCheckRuntime_CreatedDir_Valid(), TestCheckRuntime_DeepSeekEmptyHost(), TestCheckRuntime_DeepSeekNoOllamaCheck(), TestCheckRuntime_DeepSeekReachable() (+64 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.03
-Nodes (72): newDefaultConfig(), TestCheckRuntime_AllEmptyPaths(), TestCheckRuntime_AllOk(), TestCheckRuntime_ConfigFileNotFound(), TestCheckRuntime_CreatedDir_Valid(), TestCheckRuntime_DeepSeekEmptyHost(), TestCheckRuntime_DeepSeekNoOllamaCheck(), TestCheckRuntime_DeepSeekReachable() (+64 more)
+Nodes (110): ABDelta, ABTest, absDiff(), AgentMonitorSuite(), AlertRouterSuite(), AnnotateMetrics(), Arc42Suite(), BootstrapCI() (+102 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.04
-Nodes (105): TestDeprecatedHandler_NoSunset(), TestDeprecatedHandler_WithSunsetDate(), TestDeprecatedHandlerFunc(), DeprecatedHandler(), DeprecatedHandlerFunc(), TestDeprecatedHandler_WithoutSunset(), TestDeprecatedHandler_WithSunset(), TestDeprecatedHandlerFunc_WithSunset() (+97 more)
+Cohesion: 0.05
+Nodes (91): main(), run(), evidenceVerificationReport, defaultStorageDir(), encodeJSON(), main(), run(), contains() (+83 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.05
-Nodes (90): main(), run(), evidenceVerificationReport, defaultStorageDir(), encodeJSON(), main(), run(), contains() (+82 more)
+Nodes (98): TestSet_ByteLimitTooLargeStillErrors(), TestSet_EvictsOldestOnEntryLimit(), TestSet_EvictsOnByteLimit(), TestSet_NoEvictKeepsStrictLimit(), TestSet_UpdateDoesNotEvictAtEntryLimit(), NewHandle(), NewManager(), defaultGoapReviewDeps() (+90 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.04
-Nodes (94): saveGoapFusionStateHashes(), TestRunScheduledGoapFusionLoop_RunawayBackstopIsHalfOpen(), arc42SeedTargetGoal(), buildArc42SeedPrompt(), init(), programNamesGoal(), newLoopBB(), TestClearGoapFusionStateHashes() (+86 more)
+Cohesion: 0.02
+Nodes (65): ActionFunc, ActionProvider, ConditionFunc, ConditionProvider, Engine, Provider, actionStatusString(), cacheCheckAction() (+57 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.06
-Nodes (96): TestSet_ByteLimitTooLargeStillErrors(), TestSet_EvictsOldestOnEntryLimit(), TestSet_EvictsOnByteLimit(), TestSet_NoEvictKeepsStrictLimit(), TestSet_UpdateDoesNotEvictAtEntryLimit(), NewHandle(), NewManager(), defaultGoapReviewDeps() (+88 more)
+Cohesion: 0.04
+Nodes (96): blockOnHeldServerLock(), echoTaskLeaf, mcpDeps, addFailureContext(), benchmarkGateEvolvedWinner(), checkLLMHealth(), countTypes(), detectAntiPatternsInTree() (+88 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.04
-Nodes (93): Duration(), TestCheckConfidence_ConditionExists(), TestTranspositionTable_SaveLoadRoundTrip(), TestTranspositionTable_Store_EvictionPreservesLowestAmongSurvivors(), TestTranspositionTable_Store_EvictsLowestValueDeterministically(), TestTranspositionTable_Store_EvictsLowestValueRepeated(), TestTranspositionTable_StoreProbeMiss(), TestTranspositionTable_StoreProbeRoundTrip() (+85 more)
+Nodes (79): NewRunDeps(), TestGoapFusionLoopTreeIsProductionWired(), treeContainsNode(), Compose(), ComposeFromRefs(), ComposeTaskTree(), composeWithMiddle(), composeOrderedWithMiddle() (+71 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.07
-Nodes (87): TestBTPG_QualityMetrics_AllDomainTrees(), AlertRouterTree(), Arc42DocsyncTree(), TestArc42DocsyncTreeRegistered(), TestArc42DocsyncTreeShape(), Arc42SeederTree(), Arc42Trees(), assembleDoc() (+79 more)
+Cohesion: 0.04
+Nodes (91): truncateGoap(), arc42SeedTargetGoal(), buildArc42SeedPrompt(), init(), programNamesGoal(), TestNoopPatchStreakStillHaltsUnderBypass(), appendGoapResearchGoals(), collapseToSingleLine() (+83 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.05
-Nodes (91): TestHandleScalability_ReflectsInjectedQueueAndRouter(), biddingExecutor, TestDeadLetterQueue_AutoClassify(), TestDeadLetterQueue_CategoryCounts(), TestDeadLetterQueue_CategoryCounts_Empty(), TestDeadLetterQueue_EmptyErrorNoCategory(), TestDeadLetterQueue_PersistenceRoundtrip(), TestDeadLetterQueue_PreserveCategory() (+83 more)
+Cohesion: 0.04
+Nodes (94): auditKey, bearerPrincipalKey, IPFilter, IPFilterMode, RateLimiter, requestIDKey, AuditContext(), AuditMiddleware() (+86 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.05
-Nodes (81): clearSuperpowersPlanState(), goapBacktickValueAfter(), goapFusionImplDegradedSection(), init(), registerGoapFusionProductionAdditions(), buildDeterministicDesign(), buildSuperpowersFinishReport(), defaultNlmGrillAuthGuard() (+73 more)
+Nodes (89): ctxAwareBlockingRunner, classifyErrorHandlerFailure(), goapFailureCategory(), isGoapFusionCycle(), init(), TestClassifyErrorHandlerFailure(), TestClassifyReliabilityFallback(), TestClaudeErrorHandler_ClassifiesUnclassifiedFailure() (+81 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.04
-Nodes (58): newAgentExecutor(), agentExecuteResult(), buildDashboardKnowledgeGraph(), dashboardLocalAgentResult(), getDashCBStore(), getHomeDir(), handleAgentCreate(), handleAgentDelete() (+50 more)
+Nodes (91): Duration(), TestDuration(), TestCheckConfidence_ConditionExists(), TestDefaultTree_NodeCount(), TestEvaluateTree_StructuralQualityRewardsUsefulContentMutations(), TestNewPopulation_Evolution(), TestNewReinforcementLearner(), TestPopulation_Diversity() (+83 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.06
-Nodes (80): DefaultLLM(), RealLLM(), TestTauBenchBuiltinRetailAndDefaultEntries(), BuiltinBFCLV3(), EvaluateBFCLV3(), minInt(), TestBFCLV3_LongContext(), TestBFCLV3_MultiTurn_Basic() (+72 more)
+Cohesion: 0.05
+Nodes (89): DefaultLLM(), RealLLM(), TestDetectPath_FromCurrentPath(), TestDetectPath_FromVisitedPaths(), TestDetectPath_KeywordFallback(), TestTauBenchBuiltinRetailAndDefaultEntries(), BuiltinBFCLV3(), EvaluateBFCLV3() (+81 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.06
-Nodes (55): AllSuites(), CodeReview(), Cron(), DataPipeline(), DevOps(), Evolution(), Finance(), GoDev() (+47 more)
+Cohesion: 0.07
+Nodes (82): TestBTPG_QualityMetrics_AllDomainTrees(), AlertRouterTree(), Arc42DocsyncTree(), TestArc42DocsyncTreeRegistered(), TestArc42DocsyncTreeShape(), Arc42SeederTree(), Arc42Trees(), assembleDoc() (+74 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.05
-Nodes (75): blockOnHeldServerLock(), TestBTBlocksComposeSaveHoldsServerLock(), echoTaskLeaf, islandArchivePath(), persistEvolvedWinner(), qtableArchivePath(), registerMCPTools(), assertExpertArchiveFedFromRun() (+67 more)
+Cohesion: 0.04
+Nodes (85): brokenTool, ChainConfig, ChainKind, availableToolNames(), bbRunID(), bbTemplateDisplay(), bbTemplateValue(), BuildChainAction() (+77 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.05
-Nodes (79): IsKnownChainKind(), parseChainConfig(), TestChainAction_ParseConfig(), TestExtractDuckDuckGoResults_EmptyHTML(), TestExtractDuckDuckGoResults_FallbackToLinks(), TestExtractDuckDuckGoResults_NoResults(), TestExtractDuckDuckGoResults_ValidHTML(), TestIsKnownChainKind() (+71 more)
+Cohesion: 0.04
+Nodes (78): alwaysSampler, Attr, TestConsoleTracer_ExporterReceivesCompletedSpan(), fakeTracer, TestTracingMiddleware_BasicSpan(), TestTracingMiddleware_DifferentMethods(), TestTracingMiddleware_FlushSupport(), TestTracingMiddleware_Implicit200() (+70 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.05
-Nodes (60): NewRunDeps(), TestGoapFusionLoopTreeIsProductionWired(), treeContainsNode(), Compose(), ComposeFromRefs(), ComposeTaskTree(), composeWithMiddle(), ComposeTaskTreeAgentic() (+52 more)
+Nodes (68): AgentBus, AgentEvent, InitAgentBus(), PublishHealthAlert(), PublishServiceDown(), TestAgentBus_AllSubscribersReceiveAll(), TestAgentBus_CloseSubscriberChannelsClosed(), TestAgentBus_ConcurrentPublish() (+60 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.05
-Nodes (69): appendMissingRealTools(), inferToolsForTask(), init(), registerSetupActions(), uniqueStrings(), TestArc42SectionsAgainstRealRepoDocs(), TestNewFileReadTool_Structure(), TestNewFileWriteTool_Structure() (+61 more)
+Cohesion: 0.04
+Nodes (60): main(), main(), TestBlackboard_AllFields(), containsAnyStr(), TestGoDevTree_NonGoTask_Rejected(), TestGoDevTree_RetryBehavior(), TestGoDevTree_RoutesToBuild(), TestGoDevTree_RoutesToCodeReview() (+52 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.03
-Nodes (41): cacheCheckAction(), cacheResultAction(), execLLMCallAction(), execRefineAction(), generatePlanAction(), knowledgeQueryAction(), NewEngine(), RegisterProviders() (+33 more)
+Cohesion: 0.06
+Nodes (55): AllSuites(), CodeReview(), Cron(), DataPipeline(), DevOps(), Evolution(), Finance(), GoDev() (+47 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.05
-Nodes (66): brokenTool, ChainConfig, ChainKind, bbRunID(), bbTemplateDisplay(), bbTemplateValue(), BuildChainAction(), buildChainActionFn() (+58 more)
+Cohesion: 0.04
+Nodes (63): ApplyJitter(), DecorrelatedJitter(), DefaultRetryPolicy(), EqualJitter(), FullJitter(), GetErrorContext(), NewErrorContext(), TestApplyJitter_AllStrategiesDeterministicRange() (+55 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.05
-Nodes (55): TestOutcomeErrorDetail(), BlackboardDir(), CircuitBreakersFile(), DLQFile(), FeedbackFile(), HistoryDir(), HomeDir(), JobsDir() (+47 more)
+Cohesion: 0.06
+Nodes (69): clearSuperpowersPlanState(), goapBacktickValueAfter(), goapFusionImplDegradedSection(), init(), registerGoapFusionProductionAdditions(), buildDeterministicDesign(), buildSuperpowersFinishReport(), currentSuperpowersForEachTask() (+61 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.05
-Nodes (55): condCase, condTest(), simpleContainsCond(), TestCondBulk_StandardConditions(), TestCondFallback_HasModelToolIssues(), TestCondFallback_HasNewContent(), TestCondFallback_HasSkillGaps(), TestCondFallback_HasStackTrace() (+47 more)
+Nodes (71): IsKnownChainKind(), parseChainConfig(), TestIsKnownChainKind(), TestBuildChainActionFn_LlmCallNilLLM(), TestBuildChainActionFn_UnknownChainType(), TestComputeSubtreeMetrics_MixedChildren(), TestComputeSubtreeMetrics_NilInput(), TestComputeSubtreeMetrics_UpdatesMaxValues() (+63 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.07
-Nodes (57): chargeGoapResearchGoalFailure(), goapAbandonedResearchGoal(), goapGoalFailureNote(), goapResearchGoalKey(), isolateGoapProgramStore(), reloadGoalBudget(), seedGoalBudget(), TestBuildGoalDrivenPlan_InjectsPreviousFailureNote() (+49 more)
+Cohesion: 0.05
+Nodes (69): NewEventBus(), itoa(), TestEventBus_Close(), TestEventBus_CloseMultipleSubscribers(), TestEventBus_ConcurrentAccess(), TestEventBus_DropOnFullChannel(), TestEventBus_HasFired(), TestEventBus_HasFiredAfterReset() (+61 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.05
-Nodes (51): AgentMetrics, AgentStats, Counter, Gauge, HealthResponse, Histogram, LabeledCounter, LabeledGauge (+43 more)
+Nodes (55): condCase, condTest(), simpleContainsCond(), TestCondBulk_StandardConditions(), TestCondFallback_HasModelToolIssues(), TestCondFallback_HasNewContent(), TestCondFallback_HasSkillGaps(), TestCondFallback_HasStackTrace() (+47 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.05
-Nodes (49): AgentCircuitBreaker, AgentCircuitBreakerStore, circuitBreakerFileEntry, CircuitBreakerOptions, circuitBreakersFile, circuitBreakersFileForTest, CircuitState, CircuitSummary (+41 more)
+Nodes (51): AgentMetrics, AgentStats, Counter, Gauge, HealthResponse, Histogram, LabeledCounter, LabeledGauge (+43 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.07
-Nodes (57): AgentBus, AgentEvent, InitAgentBus(), PublishHealthAlert(), PublishServiceDown(), TestAgentBus_AllSubscribersReceiveAll(), TestAgentBus_CloseSubscriberChannelsClosed(), TestAgentBus_ConcurrentPublish() (+49 more)
+Cohesion: 0.05
+Nodes (45): AgentMetrics, AgentStats, TestBuildIdentityStampedRevisionFallback(), BuildIdentity, Counter, Gauge, HealthResponse, Histogram (+37 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.04
-Nodes (49): Blackboard, ChildTick, childTickLog, init(), TestBuildPlannerNode_AllFail(), TestBuildPlannerNode_FailThenSuccess(), TestValidateOutputQuality_BlankResult(), TestValidateOutputQuality_ErrorPattern() (+41 more)
+Nodes (39): findChildByName(), TestAssignComplexityAction_NoLLM_DefaultsMedium(), TestAssignComplexityAction_NoLLM_HeuristicHigh(), TestAssignComplexityAction_WithLLM(), TestContainsAnyLower_BasicMatch(), TestContainsAnyLower_CaseInsensitive(), TestContainsAnyLower_EmptyInput(), TestContainsAnyLower_MultipleKeywords() (+31 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.06
-Nodes (58): AllTools(), DevTools(), DiskUsage(), FileRead(), HTTPGet(), MemoryUsage(), MonitorTools(), ProcessCheck() (+50 more)
+Cohesion: 0.05
+Nodes (56): AgentDefinition, ContentType, TestAddTag(), TestAddTag_EmptyDescription(), TestContentResponse_200(), TestContentResponse_Non200(), TestMustParseAgentDefinition_PanicsOnInvalid(), TestMustParseAgentDefinition_Valid() (+48 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.05
-Nodes (44): Approval, NewWorkflow(), sortTasks(), TestApproval_Fields(), TestApproveTask(), TestExecuteSprint(), TestExecuteSprint_ApprovedToCompleted(), TestExecuteSprint_NoApprovedTasks() (+36 more)
+Nodes (49): AgentCircuitBreaker, AgentCircuitBreakerStore, circuitBreakerFileEntry, CircuitBreakerOptions, circuitBreakersFile, circuitBreakersFileForTest, CircuitState, CircuitSummary (+41 more)
 
 ### Community 37 - "Community 37"
+Cohesion: 0.1
+Nodes (57): TestDomainTree_Registration(), TestFullTreeIntegration_SmokeCheck(), TestSuiteForTree_CoversAllRegisteredTrees(), TestTreeLoadFromDisk_NodeCount(), handleTreeStructure(), TestRouting_Research(), TestTree_Research(), TestIntegration_AllTreesExecute() (+49 more)
+
+### Community 38 - "Community 38"
+Cohesion: 0.05
+Nodes (25): AgentMetric, Alert, AlertReport, History, splitLines(), MetricsJSON, evaluateAgentAlerts(), EvaluateAlerts() (+17 more)
+
+### Community 39 - "Community 39"
+Cohesion: 0.06
+Nodes (53): deregisterLiveRun(), EnqueueLiveMutation(), ListLiveRuns(), LiveMutationJournal(), registerLiveRun(), TestBuildNodeCapture(), TestLiveRunEnqueueAndDrain(), TestLiveRunOpCap() (+45 more)
+
+### Community 40 - "Community 40"
 Cohesion: 0.06
 Nodes (58): Tool, AllTools(), DevTools(), DiskUsage(), FileRead(), HTTPGet(), MemoryUsage(), MonitorTools() (+50 more)
 
-### Community 38 - "Community 38"
-Cohesion: 0.06
-Nodes (53): AgentDefinition, ContentType, TestMustParseAgentDefinition_PanicsOnInvalid(), TestMustParseAgentDefinition_Valid(), TestNumberIn_InvalidNumberString(), TestNumberIn_Matching(), TestNumberIn_NotFound(), TestNumberValue_Float64() (+45 more)
-
-### Community 39 - "Community 39"
-Cohesion: 0.05
-Nodes (43): GateResult, ListRevisions(), loadSnapshotIndex(), RestoreTree(), RestoreTreeRevision(), saveSnapshotIndex(), snapshotIndexPath(), snapshotRevisionPath() (+35 more)
-
-### Community 40 - "Community 40"
-Cohesion: 0.04
-Nodes (32): findChildByName(), TestContainsAnyLower_BasicMatch(), TestContainsAnyLower_CaseInsensitive(), TestContainsAnyLower_EmptyInput(), TestContainsAnyLower_MultipleKeywords(), TestContainsAnyLower_NoKeywords(), TestContainsAnyLower_NoMatch(), TestContainsAnyLower_Substring() (+24 more)
-
 ### Community 41 - "Community 41"
-Cohesion: 0.07
-Nodes (54): TestAutoCreateTree_ConfidenceThreshold(), TestAutoCreateTree_New(), TestBreed(), TestBreed_FromArchetype(), TestBreed_FromArchetype_Fallback(), TestBreed_NoParents(), TestBreed_TooFewParents(), TestBuildFromArchetype() (+46 more)
+Cohesion: 0.06
+Nodes (58): AllTools(), DevTools(), DiskUsage(), FileRead(), HTTPGet(), MemoryUsage(), MonitorTools(), ProcessCheck() (+50 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.06
-Nodes (46): HTTPMethod, IntSchema(), collectViolations(), fieldPath(), findResponse(), NewRouteIndex(), pathOrRoot(), ResponseValidator() (+38 more)
+Cohesion: 0.05
+Nodes (44): Approval, NewWorkflow(), sortTasks(), TestApproval_Fields(), TestApproveTask(), TestExecuteSprint(), TestExecuteSprint_ApprovedToCompleted(), TestExecuteSprint_NoApprovedTasks() (+36 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.05
-Nodes (48): Block, ptr(), TestBlockMutationsInsert(), TestComposeAndExpand(), TestComposeTaskTreeWithStrategy(), TestPromoteSubtree(), Category, composeOrderedWithMiddle() (+40 more)
+Cohesion: 0.09
+Nodes (55): chargeGoapResearchGoalFailure(), goapAbandonedResearchGoal(), goapGoalFailureNote(), goapResearchGoalKey(), isolateGoapProgramStore(), reloadGoalBudget(), seedGoalBudget(), TestBuildGoalDrivenPlan_InjectsPreviousFailureNote() (+47 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.05
-Nodes (18): AgentEndpoint, AgentExecutor, AgentResult, CircuitState, ConcurrencyLimiter, DeadLetterEntry, DeadLetterQueue, executorFailureState (+10 more)
+Nodes (34): Warn(), biasCandidatesWithExperience(), cloneMetadataForGardener(), cloneTreeForGardener(), extractDomain(), hashTreeForGardener(), lastFailureTask(), serializeTreeForGardener() (+26 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.07
-Nodes (46): NewAgent(), NewDocPlanner(), assertError(), TestAgentActionFails(), TestAgentCallbacks(), TestAgentGetSetState(), TestAgentHistory(), TestAgentNoPlan() (+38 more)
+Cohesion: 0.05
+Nodes (38): GateResult, ListRevisions(), loadSnapshotIndex(), RestoreTree(), RestoreTreeRevision(), saveSnapshotIndex(), snapshotIndexPath(), snapshotRevisionPath() (+30 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.07
-Nodes (48): applyScriptRunner, bareApplyScriptRunner, bareSyncRunner, cleanApplyScriptRunner, applySuperpowersRunFromBareRepo(), applySuperpowersRunToMainRepo(), assertNoForcedMasterWrite(), bareTestRun() (+40 more)
+Nodes (46): applyScriptRunner, bareApplyScriptRunner, bareSyncRunner, cleanApplyScriptRunner, applySuperpowersRunFromBareRepo(), applySuperpowersRunToMainRepo(), assertNoForcedMasterWrite(), bareTestRun() (+38 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.06
-Nodes (48): ConnPool, NewConnPool(), NewSharedConnPool(), TestAgentRouter_PooledExecutors_LeastConnections(), TestAgentRouter_WithSharedPool(), TestConnPool_Close(), TestConnPool_CloseIdleConnections(), TestConnPool_CustomConfig() (+40 more)
+Cohesion: 0.05
+Nodes (34): TestStartDriftWatcher_KickTriggersImmediateCheck(), StartDriftWatcher(), buildGardenerConfig(), experienceBankDir(), TestBuildGardenerConfig_ExperienceBankSharedWithDaemon(), TestBuildGardenerConfig_FeedbackPersistenceArmed(), TestBuildGardenerConfig_KnowledgeGraphWired(), TestBuildGardenerConfig_SafetyComponentsWired() (+26 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.07
-Nodes (35): AllSLOMetrics(), GetSLOMetrics(), contains(), stringsContains(), TestAllSLOMetrics(), TestGetSLOMetrics_SameInstance(), TestSLOMetrics_Summary(), LoadSLOEvidence() (+27 more)
+Nodes (45): TestDebugPhase_DryRunSkipsClaudeAndWritesMarker(), TestDebugPhases_WriteEvidenceFiles(), TestDiscardWorktree_RefusesEmptyPath(), TestDiscardWorktree_RefusesMainRepoPath(), TestDiscardWorktree_RemovesWorktreeAndDeletesBranch(), TestPushBranchAndCreatePR_InvokesGitPushAndGhPr(), withSwappedSuperpowersRunners(), init() (+37 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.09
-Nodes (54): TestAddTag(), TestAddTag_EmptyDescription(), TestContentResponse_200(), TestContentResponse_Non200(), TestNumberSchema(), TestRouteBuilder_Build(), TestRouteBuilder_SunsetDate(), ArraySchema() (+46 more)
+Cohesion: 0.07
+Nodes (54): TestHandleScalability_ReflectsInjectedQueueAndRouter(), biddingExecutor, NewAgentRouter(), NewLocalExecutor(), TestAgentRouter_AllExecutorsFail(), TestAgentRouter_EmptyHealth(), TestAgentRouter_Executors(), TestAgentRouter_FailoverMixedHealthyAndErrors() (+46 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.07
-Nodes (42): NewCatalog(), TestCatalog_Export(), TestCatalog_ListInstalled(), TestCatalog_ListTemplates(), TestCatalog_Search(), TestCatalog_SkillToAgent(), TestInferTree(), NewHistory() (+34 more)
-
-### Community 51 - "Community 51"
-Cohesion: 0.06
-Nodes (37): FileJobStore, JobStore, TestFileJobStore_AllowsEmptySaveOnFreshStore(), TestFileJobStore_AllowsLegitimateEmptyAfterOwnership(), TestFileJobStore_RefusesEmptyOverwriteFromBlindProcess(), TestReadOnlyJobStore_LoadsButNeverSaves(), NewFileJobStore(), NewReadOnlyJobStore() (+29 more)
-
-### Community 52 - "Community 52"
 Cohesion: 0.06
 Nodes (39): TestPromoteRunToAgentScope(), TestEngineBlackboardAppendTool(), TestEngineBlackboardToolsRoundTrip(), TestEngineExpandBBTemplate_InLLMCall(), TestEnginePrepareBlackboard_Idempotent(), Entry, Limits, DefaultManager() (+31 more)
 
-### Community 53 - "Community 53"
-Cohesion: 0.07
-Nodes (47): buildClaudeFusionPrompt(), buildGoapFusionNotebookLMQuery(), changedGoapPackages(), isGoapNotebookLMQuotaError(), TestIsGoapNotebookLMQuotaError(), extractConversationID(), extractGoapGoals(), extractGoapNotebookLMRecommendation() (+39 more)
-
-### Community 54 - "Community 54"
-Cohesion: 0.05
-Nodes (32): buildGardenerConfig(), experienceBankDir(), TestBuildGardenerConfig_ExperienceBankSharedWithDaemon(), TestBuildGardenerConfig_FeedbackPersistenceArmed(), TestBuildGardenerConfig_KnowledgeGraphWired(), TestBuildGardenerConfig_SafetyComponentsWired(), TestBuildGardenerConfig_SnapshotDirCreated(), TestBuildGardenerConfig_TranspositionTableWired() (+24 more)
-
-### Community 55 - "Community 55"
+### Community 51 - "Community 51"
 Cohesion: 0.07
 Nodes (45): AggregatedTrace, buildAggregatedTrace(), NewTraceReader(), parseRemaining(), ParseTraceEvent(), ParseTraceLine(), BenchmarkParseTraceLine(), BenchmarkTraceReader_ReadRecent() (+37 more)
 
-### Community 56 - "Community 56"
+### Community 52 - "Community 52"
+Cohesion: 0.07
+Nodes (44): ConnPool, NewConnPool(), NewSharedConnPool(), TestAgentRouter_PooledExecutors_LeastConnections(), TestAgentRouter_WithSharedPool(), TestConnPool_Close(), TestConnPool_CloseIdleConnections(), TestConnPool_CustomConfig() (+36 more)
+
+### Community 53 - "Community 53"
+Cohesion: 0.07
+Nodes (47): buildClaudeFusionPrompt(), buildGoapFusionNotebookLMQuery(), changedGoapPackages(), saveNlmQuotaExhausted(), extractConversationID(), extractGoapGoals(), extractGoapNotebookLMRecommendation(), extractJSONStringField() (+39 more)
+
+### Community 54 - "Community 54"
+Cohesion: 0.06
+Nodes (38): TestOutcomeErrorDetail(), applyOutcomeRefinement(), IsHealthyOutcome(), OutcomeErrorDetail(), TestApplyOutcomeRefinement(), TestIsHealthyOutcome(), RunOptions, RunResult (+30 more)
+
+### Community 55 - "Community 55"
 Cohesion: 0.08
-Nodes (51): BuildEventDrivenAbort(), evaluateEventCondition(), evaluateEventPredicate(), evaluatePredicate(), eventMatches(), parseEventSources(), TestBuildEventDrivenAbort_BlackboardKeyCondition(), TestBuildEventDrivenAbort_BlackboardKeyNotPresent() (+43 more)
+Nodes (31): AllSLOMetrics(), GetSLOMetrics(), TestAllSLOMetrics(), LoadSLOEvidence(), SaveSLOMetrics(), TestLoadSLOEvidence_MissingFile(), TestSaveSLOMetrics_AtomicNoTmpLeftBehind(), TestSaveSLOMetrics_LoadSLOEvidence_Roundtrip() (+23 more)
+
+### Community 56 - "Community 56"
+Cohesion: 0.07
+Nodes (32): TestBuildPlannerNode_ChainStateGoals(), TestReadGoals_Preconditions(), GoalDefinition, GOAPAction, GOAPGoal, Plan, boolConditions(), BuildPlannerNode() (+24 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.06
-Nodes (39): NewCrisisDetector(), containsReason(), TestCrisisDetector_Detect_DiversityCollapse(), TestCrisisDetector_Detect_DiversityZero(), TestCrisisDetector_Detect_ImprovementResetsStagnation(), TestCrisisDetector_Detect_NoCrisis(), TestCrisisDetector_Detect_Stagnation(), TestCrisisDetector_DetectPopulation_DiversityCollapse() (+31 more)
+Cohesion: 0.05
+Nodes (7): TestEndpointsFromCardsSingleNodeYieldsNoPeers(), AgentRouter, CircuitBreaker, LocalExecutor, NewRouterFromEndpoints(), TestNewRouterFromEndpoints_BuildsRemoteExecutorsWithLocalFallback(), TestNewRouterFromEndpoints_EmptyRoutesToLocal()
 
 ### Community 58 - "Community 58"
 Cohesion: 0.07
-Nodes (46): Approval, mockOrch, NewWorkflow(), sortTasks(), TestApproval_Fields(), TestApproveTask(), TestExecuteSprint(), TestExecuteSprint_ApprovedToCompleted() (+38 more)
+Nodes (34): HTTPMethod, collectViolations(), fieldPath(), findResponse(), NewRouteIndex(), pathOrRoot(), ResponseValidator(), routeKey() (+26 more)
 
 ### Community 59 - "Community 59"
-Cohesion: 0.06
-Nodes (41): ctxAwareBlockingRunner, classifyErrorHandlerFailure(), goapFailureCategory(), isGoapFusionCycle(), init(), TestClassifyErrorHandlerFailure(), TestClassifyReliabilityFallback(), TestClaudeErrorHandler_ClassifiesUnclassifiedFailure() (+33 more)
+Cohesion: 0.05
+Nodes (36): CategorizedError, ErrorContext, ClassifyError(), contextDeadlineExceeded(), isAuthError(), isLLMError(), isNetworkError(), isRateLimitError() (+28 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.05
-Nodes (37): ActionFunc, ActionProvider, ConditionFunc, ConditionProvider, init(), Engine, TestAssignComplexityAction_NoLLM_DefaultsMedium(), TestAssignComplexityAction_NoLLM_HeuristicHigh() (+29 more)
+Cohesion: 0.06
+Nodes (32): agentExecuteResult(), dashboardLocalAgentResult(), getHomeDir(), handleAgentCreate(), handleAgentDelete(), handleAlertRules(), handleDLQReplay(), handleLogin() (+24 more)
 
 ### Community 61 - "Community 61"
 Cohesion: 0.08
-Nodes (26): AgentRunner, Checkpoint, extractCycleFacts(), TestExtractCycleFacts(), truncateForLog(), TestEstimateQualityPenalizesGenericShortSuccess(), TestEstimateQualityScoresEvidenceRichDeterministicReports(), RunContext (+18 more)
+Nodes (38): CompressionMiddleware(), isCompressibleContentType(), gzipDecompress(), TestCompressionMiddleware_AlreadyCompressed(), TestCompressionMiddleware_BinaryContentType(), TestCompressionMiddleware_EmptyBody(), TestCompressionMiddleware_GzipRequest(), TestCompressionMiddleware_HTMLContentType() (+30 more)
 
 ### Community 62 - "Community 62"
 Cohesion: 0.07
-Nodes (27): cloneMetadataForGardener(), cloneTreeForGardener(), extractDomain(), hashTreeForGardener(), lastFailureTask(), serializeTreeForGardener(), TestCloneTreeForGardener_Basic(), TestCloneTreeForGardener_DoubleNested() (+19 more)
+Nodes (37): NewMemoryStore(), priorityWeight(), summarizeOutput(), storeForTest(), TestContextBlock_EmptyStoreReturnsEmpty(), TestContextBlock_IncludesFactsPitfallsPatterns(), TestContextBlock_SkipsNonHighPriorityItems(), TestDelete_PersistsAfterReopen() (+29 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.09
-Nodes (16): extractTreeType(), TestExtractTreeType(), Individual, cloneTree(), containsCrisisReason(), Crossover(), ExperienceRetrievalHits(), hashTree() (+8 more)
+Cohesion: 0.06
+Nodes (28): TestRunOnce_EmitsRunRootSpan(), fanoutHandler, TestNestedActionSpansParentCorrectly(), TestPanickingActionRestoresTraceContextAndEndsSpan(), TestRegisteredActionEmitsSpan(), TestRegisteredConditionEmitsSpan(), withRecordingGlobalTracer(), traceContextHandler (+20 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.06
-Nodes (3): AgentRouter, CircuitBreaker, LocalExecutor
+Cohesion: 0.07
+Nodes (38): Analysis, Contradiction, CoveragePoint, fakeCaller, fakeTool, flakyCaller, TestJudge_ParsesStructuredJSON(), TestJudge_RejectsInvalidJSON() (+30 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.06
-Nodes (27): AgentFactory, Analyzer, extractJSON(), NewAnalyzer(), truncate(), NewAgentFactory(), TestFactory_RejectsInvalidGeneratedTreeBeforePersisting(), TestGenerator_CompilesSkillActionsToChainActions() (+19 more)
+Cohesion: 0.08
+Nodes (14): jaccardSimilarity(), TestJaccardSimilarity(), TestTokenize(), tokenize(), ExperienceBank, ExperienceEntry, acquireExperienceLock(), TestAcquireExperienceLockMissingDir() (+6 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.06
-Nodes (35): BuildBudget(), budgetCmd, BuildCachedCondition(), BuildCircuitBreaker(), BuildInverter(), BuildRepeater(), BuildRunner(), BuildSucceeder() (+27 more)
+Cohesion: 0.08
+Nodes (32): growthFitness(), FitnessDimension, TestNSGAII_Evolve_Basic(), MultiFitness, MultiIndividual, clampScore(), countActions(), countConditions() (+24 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.17
-Nodes (41): TestDomainTree_Registration(), TestFullTreeIntegration_SmokeCheck(), TestSuiteForTree_CoversAllRegisteredTrees(), TestTreeLoadFromDisk_NodeCount(), handleTreeStructure(), TestRouting_Research(), TestTree_Research(), TestIntegration_AllTreesExecute() (+33 more)
+Cohesion: 0.06
+Nodes (36): Block, ptr(), TestBlockMutationsInsert(), TestComposeAndExpand(), TestComposeTaskTreeWithStrategy(), TestPromoteSubtree(), Category, ComposeSpec (+28 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.07
-Nodes (28): TestResolveGeneratedTree_EndToEnd(), TestResolveGeneratedTree_UserWorkspaceFallback(), init(), ReflectionsPath(), ResolveGeneratedTree(), ResolveGeneratedTreeForUser(), resolveUserTree(), TestWireSelectorReorderIsOptIn() (+20 more)
+Nodes (27): TestBuildDelegateBlockTree(), TestComposedTaskTree_BuildExpand_EmptyTaskFails(), TestComposedTaskTree_BuildExpand_ValidTaskRuns(), TestComposedTaskTreeAgentic_SetsPlan(), InitRegistry(), pipelineMockLLM, ApplyHITLPolicy(), TestWorkflowApprovalWait_EscalatedIsNotApproved() (+19 more)
 
 ### Community 69 - "Community 69"
-Cohesion: 0.07
-Nodes (12): History, splitLines(), RunRecord, RunStats, OpenAPIGenerator, Append(), mockTTOrch, EventBus (+4 more)
+Cohesion: 0.06
+Nodes (35): BuildBudget(), budgetCmd, BuildCachedCondition(), BuildCircuitBreaker(), BuildInverter(), BuildRepeater(), BuildRunner(), BuildSucceeder() (+27 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.08
-Nodes (27): BlockConfig, ApplyDiffMutation(), DefaultBlockConfig(), findBlockForNode(), NewMetaPromptEvolver(), NewMutationContext(), TestApplyDiffMutation(), TestBlockConfig_FilterMutations() (+19 more)
+Cohesion: 0.1
+Nodes (30): appendMissingRealTools(), inferToolsForTask(), init(), registerSetupActions(), uniqueStrings(), TestArc42SectionsAgainstRealRepoDocs(), TestRealToolFactory_DiscoveryAndFailClosed(), allRealToolNames() (+22 more)
 
 ### Community 71 - "Community 71"
-Cohesion: 0.12
-Nodes (37): NewEvolvedAgent(), saveRecordWithDelay(), TestConfig_AllFields(), TestCreateAgentTool_Call_NilFactory(), TestEvolvedAgent_Run(), TestEvolvedAgent_Run_Error(), TestEvolvedAgent_Run_WithAutoEvolve(), TestEvolvedAgent_StructFields() (+29 more)
+Cohesion: 0.08
+Nodes (25): AgentRunner, Checkpoint, extractCycleFacts(), TestExtractCycleFacts(), truncateForLog(), TestEstimateQualityPenalizesGenericShortSuccess(), TestEstimateQualityScoresEvidenceRichDeterministicReports(), RunContext (+17 more)
 
 ### Community 72 - "Community 72"
 Cohesion: 0.09
-Nodes (38): TestBrainstormExpansionAcceptedWhenDeeper(), TestBrainstormNotCalledWhenPlanAlreadyFull(), TestBrainstormRejectedWhenFilesNotGoPath(), TestBrainstormRejectedWhenMalformedOrProse(), TestBrainstormRejectedWhenNotDeeper(), TestBrainstormRejectedWhenRunOmitsShort(), withBrainstorm(), brainstormExpandPlan() (+30 more)
+Nodes (19): extractTreeType(), TestExtractTreeType(), Individual, cloneTree(), collectNodeNames(), containsCrisisReason(), Crossover(), ExperienceRetrievalHits() (+11 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.09
-Nodes (40): growthFitness(), FitnessDimension, NewNSGAIIPopulation(), TestNewNSGAIIPopulation(), TestNewNSGAIIPopulation_SeedsSpecialists(), TestNSGAII_CrowdedComparison(), TestNSGAII_CrowdingDistance(), TestNSGAII_Evolve_Basic() (+32 more)
+Cohesion: 0.06
+Nodes (41): TestNewFileReadTool_Structure(), TestNewFileWriteTool_Structure(), TestNewWebSearchTool_Structure(), TestNewGraphifyTool_EmptyActionDefaultToQuery(), TestNewGraphifyTool_ErrorHandling(), TestNewShellExecTool_StderrCaptureOnlyFailure(), TestNewShellExecTool_TimeoutTruncation(), mockTool (+33 more)
 
 ### Community 74 - "Community 74"
-Cohesion: 0.09
-Nodes (37): cmdImpact(), impactedTestsForSource(), normalizeImpactSource(), TestImpactedTestsForSource_AbsoluteSourceUnderRoot(), TestNormalizeImpactSource_AbsoluteUnderRoot(), TestNormalizeImpactSource_RejectsOutsideRoot(), writeImpactCLIFixture(), impactTests() (+29 more)
+Cohesion: 0.13
+Nodes (35): TestRunSuiteIsSandboxed(), init(), loadBanditStats(), TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(), TestBanditSelector_ColdStartTriesEveryArmOnce(), TestBanditSelector_ConcurrentTicksNoLostOutcomes(), TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(), TestBanditSelector_DisabledMatchesSelectorSemantics() (+27 more)
 
 ### Community 75 - "Community 75"
-Cohesion: 0.08
-Nodes (27): TestBuildDelegateBlockTree(), TestComposedTaskTree_BuildExpand_EmptyTaskFails(), TestComposedTaskTree_BuildExpand_ValidTaskRuns(), TestComposedTaskTreeAgentic_SetsPlan(), InitRegistry(), TestWorkflowApprovalWait_EscalatedIsNotApproved(), WorkflowApprovalTaskID(), WorkflowApprovalWait() (+19 more)
+Cohesion: 0.06
+Nodes (31): Blackboard, ChildTick, childTickLog, TestBuildPlannerNode_AllFail(), TestBuildPlannerNode_FailThenSuccess(), TestValidateOutputQuality_BlankResult(), TestValidateOutputQuality_ErrorPattern(), TestValidateOutputQuality_MarkdownStructure() (+23 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.07
-Nodes (33): winnerBreakerStore, Embedding, EmbeddingClient, CosineSimilarity(), TestBuildIndex_PanicRecovered(), TestCosineSimilarity_BothZero(), TestCosineSimilarity_DifferentLengths(), TestCosineSimilarity_Empty() (+25 more)
+Cohesion: 0.08
+Nodes (32): NewCrisisDetector(), containsReason(), TestCrisisDetector_Detect_DiversityCollapse(), TestCrisisDetector_Detect_DiversityZero(), TestCrisisDetector_Detect_ImprovementResetsStagnation(), TestCrisisDetector_Detect_NoCrisis(), TestCrisisDetector_Detect_Stagnation(), TestCrisisDetector_DetectPopulation_DiversityCollapse() (+24 more)
 
 ### Community 77 - "Community 77"
-Cohesion: 0.1
-Nodes (17): TestAutoCreateTree_Existing(), TestDetermineCategory(), TestExtractKeywords(), Factory, AutoCreateTree(), AutoCreateTreeWith(), containsAnyStr(), determineCategory() (+9 more)
+Cohesion: 0.07
+Nodes (41): TestDeadLetterQueue_AutoClassify(), TestDeadLetterQueue_CategoryCounts(), TestDeadLetterQueue_CategoryCounts_Empty(), TestDeadLetterQueue_EmptyErrorNoCategory(), TestDeadLetterQueue_PersistenceRoundtrip(), TestDeadLetterQueue_PreserveCategory(), Backoff(), NewConcurrencyLimiter() (+33 more)
 
 ### Community 78 - "Community 78"
 Cohesion: 0.09
-Nodes (28): handleSecurityAudit(), CaptureAuditEvent(), CountEvents(), GlobalAuditBuffer(), NewAuditBuffer(), SetGlobalAuditBuffer(), TestAuditBuffer_Capacity(), TestAuditBuffer_EmptyBuffer() (+20 more)
+Nodes (37): cmdImpact(), impactedTestsForSource(), normalizeImpactSource(), TestImpactedTestsForSource_AbsoluteSourceUnderRoot(), TestNormalizeImpactSource_AbsoluteUnderRoot(), TestNormalizeImpactSource_RejectsOutsideRoot(), writeImpactCLIFixture(), impactTests() (+29 more)
 
 ### Community 79 - "Community 79"
-Cohesion: 0.14
-Nodes (33): TestRunSuiteIsSandboxed(), init(), loadBanditStats(), TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(), TestBanditSelector_ColdStartTriesEveryArmOnce(), TestBanditSelector_ConcurrentTicksNoLostOutcomes(), TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(), TestBanditSelector_DisabledMatchesSelectorSemantics() (+25 more)
+Cohesion: 0.08
+Nodes (21): handlePipelineRun(), handlePipelines(), handlePipelineStatus(), newPipelineRunner(), newRunID(), resolveTree(), runPipelineAgentStep(), TestHandlePipelineRun_PanicRecoveredAsFailedStatus() (+13 more)
 
 ### Community 80 - "Community 80"
 Cohesion: 0.09
-Nodes (41): callArc42Action(), TestArc42Action_CollectAllSections_NilChainState(), TestArc42Action_CollectAllSections_NoFiles(), TestArc42Action_DetectHardware(), TestArc42Action_DetectProcesses(), TestArc42Action_GenerateTOC(), TestArc42Action_GitHistory(), TestArc42Action_ListBinaries() (+33 more)
+Nodes (40): mockOrch, NewWorkflow(), sortTasks(), TestApproval_Fields(), TestApproveTask(), TestExecuteSprint(), TestExecuteSprint_ApprovedToCompleted(), TestExecuteSprint_NoApprovedTasks() (+32 more)
 
 ### Community 81 - "Community 81"
+Cohesion: 0.1
+Nodes (37): TestBrainstormExpansionAcceptedWhenDeeper(), TestBrainstormNotCalledWhenPlanAlreadyFull(), TestBrainstormRejectedWhenFilesNotGoPath(), TestBrainstormRejectedWhenMalformedOrProse(), TestBrainstormRejectedWhenNotDeeper(), TestBrainstormRejectedWhenRunOmitsShort(), withBrainstorm(), brainstormExpandPlan() (+29 more)
+
+### Community 82 - "Community 82"
+Cohesion: 0.09
+Nodes (41): callArc42Action(), TestArc42Action_CollectAllSections_NilChainState(), TestArc42Action_CollectAllSections_NoFiles(), TestArc42Action_DetectHardware(), TestArc42Action_DetectProcesses(), TestArc42Action_GenerateTOC(), TestArc42Action_GitHistory(), TestArc42Action_ListBinaries() (+33 more)
+
+### Community 83 - "Community 83"
 Cohesion: 0.07
 Nodes (38): TestBuiltinSWELite_CoverageAndUniqueness(), TestMax1(), benchmarkPlanTree(), benchmarkSuccessTree(), TestBFCLV3LoadErrorsAndEmptyEvaluation(), TestBFCLV3LoadFlattenAndEvaluate(), TestBuiltinBFCLSuitesHaveStableShape(), TestBuiltinBFCLV3StableShape() (+30 more)
 
-### Community 82 - "Community 82"
+### Community 84 - "Community 84"
+Cohesion: 0.09
+Nodes (28): handleSecurityAudit(), CaptureAuditEvent(), CountEvents(), GlobalAuditBuffer(), NewAuditBuffer(), SetGlobalAuditBuffer(), TestAuditBuffer_Capacity(), TestAuditBuffer_EmptyBuffer() (+20 more)
+
+### Community 85 - "Community 85"
+Cohesion: 0.09
+Nodes (32): NewHistory(), TestScheduler_RemoveNonexistent(), TestScheduler_UnknownAgent(), minInt(), TestExportPreviousRuns(), TestSeedMemoryToBlackboard_HistoryOffloaded(), TestRunJob_WarnsOnDeployDriftAtCycleComplete(), TestRunJob_WebhookIncludesBuildRevision() (+24 more)
+
+### Community 86 - "Community 86"
+Cohesion: 0.07
+Nodes (31): TestMatchBlockPattern(), AntiPattern, countTreeNodes(), TestCrossover_Single(), TestExpertKnowledge_DetectAntiPatterns(), TestExpertKnowledge_New(), TestExpertKnowledge_RecommendMutations(), TestExpertKnowledge_ValidateArchetype() (+23 more)
+
+### Community 87 - "Community 87"
+Cohesion: 0.1
+Nodes (17): TestDetermineCategory(), TestExtractKeywords(), TestTruncateTask(), Factory, AutoCreateTree(), AutoCreateTreeWith(), containsAnyStr(), determineCategory() (+9 more)
+
+### Community 88 - "Community 88"
 Cohesion: 0.06
 Nodes (23): AgentScore, collectErrors(), contains(), TestContainsErrorPattern(), TestRunSuite_RoutingFailure(), TestScoreAgent_EmptyResultsLists(), TestScoreAgent_OutputQualityOnly(), TestScoreAgent_SpeedNormalization() (+15 more)
 
-### Community 83 - "Community 83"
-Cohesion: 0.05
-Nodes (22): A2AHandoffBlock(), builtinBlocks(), TestBuiltinBlocks_Count(), TestBuiltinBlocks_UniqueNonEmptyIDs(), DelegateBlock(), EvolveOnFailureBlock(), MergeResultsBlock(), ParallelFanoutBlock() (+14 more)
-
-### Community 84 - "Community 84"
-Cohesion: 0.06
-Nodes (21): AgentScore, Runner, Suite, SuiteResult, TestCase, TestKind, TestResult, collectErrors() (+13 more)
-
-### Community 85 - "Community 85"
+### Community 89 - "Community 89"
 Cohesion: 0.08
 Nodes (27): NewNodeHeartbeat(), NewNodeHeartbeatWithCleanupInterval(), TestNodeHeartbeat_CleanupKeepsAliveNodes(), TestNodeHeartbeat_CleanupRemovesExpired(), TestNodeHeartbeat_ConcurrentAccess(), TestNodeHeartbeat_ConcurrentDeregister(), TestNodeHeartbeat_Deregister(), TestNodeHeartbeat_EmptyListAlive() (+19 more)
 
-### Community 86 - "Community 86"
+### Community 90 - "Community 90"
+Cohesion: 0.06
+Nodes (21): AgentScore, Runner, Suite, SuiteResult, TestCase, TestKind, TestResult, collectErrors() (+13 more)
+
+### Community 91 - "Community 91"
+Cohesion: 0.07
+Nodes (35): stringContains(), TestBuildGoapStepPrompt(), TestPlanStepsToStrings(), TestPlanStepsToStrings_Empty(), TestWorldStateFromMap(), buildGoapStepPrompt(), getStepResults(), planStepsToStrings() (+27 more)
+
+### Community 92 - "Community 92"
+Cohesion: 0.07
+Nodes (25): Analyzer, extractJSON(), NewAnalyzer(), truncate(), NewAgentFactory(), TestFactory_RejectsInvalidGeneratedTreeBeforePersisting(), TestGenerator_CompilesSkillActionsToChainActions(), TestAnalyzer_EmptyResponse_Error() (+17 more)
+
+### Community 93 - "Community 93"
+Cohesion: 0.08
+Nodes (5): DeadLetterQueue, PriorityQueue, acquireFileLock(), SchedulerState, TaskQueue
+
+### Community 94 - "Community 94"
 Cohesion: 0.09
 Nodes (39): TestScoreChild_GoalAlignmentBranch(), TestScoreChild_NilChainState(), TestScoreChildren_BasicRanking(), ScoringCriteria, BuildUtilitySelector(), DefaultScoringCriteria(), ScoreChild(), ScoreChildren() (+31 more)
 
-### Community 87 - "Community 87"
+### Community 95 - "Community 95"
 Cohesion: 0.09
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/engine -count=1 -run Te), code:block2 (--- FAIL: TestSuperpowersRuntime_ActionsRegistered_Scheduled), code:block3 (FILES_CHANGED:), GREEN phase, RED phase, RED Phase Complete, RED Phase Report, RED Phase Result (+1 more)
 
-### Community 88 - "Community 88"
+### Community 96 - "Community 96"
 Cohesion: 0.08
-Nodes (29): TraceParent, traceParentSpan, ContextWithTraceParent(), ExtractTraceParentFromRequest(), ExtractTraceStateFromRequest(), GenerateSpanID(), GenerateTraceID(), GenerateTraceParent() (+21 more)
+Nodes (23): TestResolveGeneratedTree_EndToEnd(), TestResolveGeneratedTree_UserWorkspaceFallback(), init(), ReflectionsPath(), ResolveGeneratedTree(), ResolveGeneratedTreeForUser(), resolveUserTree(), TestWireSelectorReorderIsOptIn() (+15 more)
 
-### Community 89 - "Community 89"
+### Community 97 - "Community 97"
 Cohesion: 0.12
 Nodes (37): ParallelMode, intSliceFromInterface(), BuildReactiveParallel(), childPanicHandler(), forkBlackboard(), intSliceFromInterface(), runReactiveParallel(), evaluateGuardCondition() (+29 more)
 
-### Community 90 - "Community 90"
-Cohesion: 0.07
-Nodes (27): TestAdoptDriftOnIdle_AdoptsSynchronously(), TestAdoptDriftOnIdle_SwallowsErrors(), AdoptDriftOnIdle(), AutoRebuildEnabled(), AutoRestartEnabled(), defaultDriftHead(), defaultDriftSmokeTest(), DriftStatus() (+19 more)
-
-### Community 91 - "Community 91"
+### Community 98 - "Community 98"
 Cohesion: 0.08
 Nodes (7): sha256Hex(), KeyRing, KeyRotationScheduler, Session, SessionInfo, SessionStore, SessionStoreConfig
 
-### Community 92 - "Community 92"
-Cohesion: 0.1
-Nodes (33): distributedDispatch, appendDispatchErr(), driveDistributedDispatch(), main(), parseNodes(), run(), multiNodeReport, MultiNodeProbeConfig (+25 more)
+### Community 99 - "Community 99"
+Cohesion: 0.08
+Nodes (28): TraceParent, traceParentSpan, ContextWithTraceParent(), ExtractTraceParentFromRequest(), ExtractTraceStateFromRequest(), GenerateSpanID(), GenerateTraceID(), GenerateTraceParent() (+20 more)
 
-### Community 93 - "Community 93"
+### Community 100 - "Community 100"
 Cohesion: 0.13
 Nodes (35): recordUserFeedback(), registerFeedbackTools(), newFeedbackDeps(), TestBTFeedbackRegistered(), TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback(), TestRecordUserFeedback_FeedsSatisfactionAndFlags(), TestRecordUserFeedback_RejectsBadInput(), TestRecordUserFeedback_TrimsUserAndTreeID() (+27 more)
 
-### Community 94 - "Community 94"
+### Community 101 - "Community 101"
 Cohesion: 0.08
-Nodes (33): TestBuildPlannerNode_ChainStateGoals(), TestReadGoals_ChainStateFallback(), TestReadGoals_InvalidItemInList(), TestReadGoals_NonListMetadata(), TestReadGoals_Preconditions(), GoalDefinition, GOAPAction, GOAPGoal (+25 more)
+Nodes (31): Embedding, EmbeddingClient, CosineSimilarity(), TestBuildIndex_PanicRecovered(), TestCosineSimilarity_BothZero(), TestCosineSimilarity_DifferentLengths(), TestCosineSimilarity_Empty(), TestCosineSimilarity_Identical() (+23 more)
 
-### Community 95 - "Community 95"
-Cohesion: 0.07
-Nodes (14): DeepSeekClient, OpenAICompatClient, OpenAICompatConfig, openAICompatMessage, openAICompatRequest, openAICompatResponse, checkRateLimit(), CategorizedError (+6 more)
+### Community 102 - "Community 102"
+Cohesion: 0.12
+Nodes (31): agentNameInterceptor, agentNameKey, ScoreAnnouncement(), BTAgentExecutor, cardResponder, failureEventMessage(), parseAnnouncement(), RespondToAnnouncement() (+23 more)
 
-### Community 96 - "Community 96"
+### Community 103 - "Community 103"
+Cohesion: 0.08
+Nodes (23): auctionAnnouncement(), auctionCandidates(), betterBid(), candidateContext(), candidateOverride(), cardURL(), NewPersistentAuctioneer(), stateFloat() (+15 more)
+
+### Community 104 - "Community 104"
 Cohesion: 0.11
 Nodes (31): Handler, NewSessionStore(), TestSessionCleanup_PanicRecovered(), TestSessionMiddleware_APIKeyFallback(), TestSessionMiddleware_CustomCheckFunc(), TestSessionMiddleware_ExpiredCookie(), TestSessionMiddleware_InvalidAPIKey(), TestSessionMiddleware_NoAPIKeyWhenEmpty() (+23 more)
 
-### Community 97 - "Community 97"
-Cohesion: 0.13
-Nodes (22): NewRedisPriorityQueue(), NewRedisPriorityQueueFromClient(), NewRedisQueue(), NewRedisQueueFromClient(), redisID(), testRedisAddr(), testRedisClient(), TestRedisPriorityQueue_DefaultKey() (+14 more)
+### Community 105 - "Community 105"
+Cohesion: 0.08
+Nodes (11): Capability, Edge, evolvedFitness(), blendedSelectionFitness(), coldStartConfidence(), coldStartWeightedFitness(), structuralGate(), KnowledgeGraph (+3 more)
 
-### Community 98 - "Community 98"
+### Community 106 - "Community 106"
 Cohesion: 0.11
 Nodes (25): BenchEvalFunc, countConditionsActions(), DefaultCascadeConfig(), maxTreeDepthEval(), NewCascadeEvaluator(), StructuralQuickEval(), buildDeepTree(), buildOptimalTree() (+17 more)
 
-### Community 99 - "Community 99"
+### Community 107 - "Community 107"
+Cohesion: 0.1
+Nodes (31): TestMultiNode_ConcurrentAgentExecution(), TestMultiNode_ProbeFailsOnEmptyNodeURL(), TestMultiNode_ProbeFailsOnLessThanTwoNodes(), TestMultiNode_ScalabilityStatusRouterReporting(), TestMultiNodeExecutionPipeline(), MultiNodeProbeConfig, MultiNodeProbeReport, NodeProbeStatus (+23 more)
+
+### Community 108 - "Community 108"
 Cohesion: 0.05
 Nodes (36): Chunk 1: Backend Domain Models & File-Based Storage, Chunk 2: AI Intent Parsing & Page Generation (LLM + Fallback), Chunk 3: REST API Handlers & Routing Integration, Chunk 4: Page-First Web Interface & Page Template Library, Chunk 5: E2E Playwright Verification, code:go (package doormate), code:go (package doormate), code:go (package doormate) (+28 more)
 
-### Community 100 - "Community 100"
-Cohesion: 0.12
-Nodes (28): deregisterLiveRun(), EnqueueLiveMutation(), ListLiveRuns(), LiveMutationJournal(), registerLiveRun(), TestBuildNodeCapture(), TestLiveRunEnqueueAndDrain(), TestLiveRunOpCap() (+20 more)
-
-### Community 101 - "Community 101"
-Cohesion: 0.08
-Nodes (34): fakeTracer, AlwaysSample(), hashTraceID(), NeverSample(), NewRatioSampler(), TestAlwaysSample(), TestConsoleTracer_ChildSpansNotSampled(), TestConsoleTracer_Concurrent() (+26 more)
-
-### Community 102 - "Community 102"
-Cohesion: 0.07
-Nodes (14): TestActionForName_BulkCoverage(), TestInitAction_HealthCheckAgent(), TestInitAction_MetricsCollectionAgent(), Recover(), SafeGo(), TestRecover_CatchesPanic(), TestRecover_NoPanic(), TestRecover_ReturnsErrorWithContext() (+6 more)
-
-### Community 103 - "Community 103"
-Cohesion: 0.11
-Nodes (33): introspectionResult, DefaultOAuth2DiscoveryConfig(), DefaultOAuth2IntrospectionConfig(), DiscoverOAuth2IntrospectionConfig(), OAuth2DiscoveryValidator(), OAuth2IntrospectionValidator(), TestDefaultOAuth2DiscoveryConfig(), TestDiscoverOAuth2IntrospectionConfig_Defaults() (+25 more)
-
-### Community 104 - "Community 104"
-Cohesion: 0.1
-Nodes (28): ConcurrencyLimiterStats, QueueStats, NewConcurrencyLimiter(), NewWorkerPool(), TestConcurrencyLimiter_AcquireRelease(), TestConcurrencyLimiter_Available(), TestConcurrencyLimiter_MultipleReleaseNoUnderflow(), TestConcurrencyLimiter_ReleaseWhenEmpty() (+20 more)
-
-### Community 105 - "Community 105"
-Cohesion: 0.07
-Nodes (35): Binaries, code:go (type Counter struct { ... }), code:go (type Store struct { ... }                                // ), code:go (type Tracer interface {), code:go (type Suite struct {), code:go (type ContentType string), code:go (type KnowledgeGraph struct { ... }), code:go (type Analyzer struct { ... }) (+27 more)
-
-### Community 106 - "Community 106"
-Cohesion: 0.06
-Nodes (35): code:go (package engine), code:go (// goapReviewContext is what the Claude review fallback will), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (type fakeReviewClaudeRunner struct {), code:go (// goapReviewAllowedTools keeps the review run read-only: th), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T), code:go (if nlmQuotaExhausted(bb) {) (+27 more)
-
-### Community 107 - "Community 107"
-Cohesion: 0.11
-Nodes (23): AgentMetrics, AgentStats, BuildIdentity, HealthResponse, Histogram, LabeledCounter, LabeledGauge, bucketForStatus() (+15 more)
-
-### Community 108 - "Community 108"
-Cohesion: 0.1
-Nodes (18): BTOptimizer, collectSelectors(), conditionOverlap(), extractCondition(), findMainSelector(), TestExtractCondition(), TestSplitCamelCase(), isDefaultPath() (+10 more)
-
 ### Community 109 - "Community 109"
-Cohesion: 0.13
-Nodes (32): apiKey, KeyHash(), NewKeyRing(), NewKeyRotationScheduler(), TestExpireKey_NotFound(), TestExpireKey_Success(), TestExpiringKeys_EmptyRing(), TestExpiringKeys_OnlyPermanent() (+24 more)
+Cohesion: 0.11
+Nodes (25): CompanyOrchestrator, EngineerTree(), MarketingTree(), SalesTree(), StartupTrees(), clamp(), safeDiv(), CEOTree() (+17 more)
 
 ### Community 110 - "Community 110"
 Cohesion: 0.11
-Nodes (33): dart:convert, _ActivityCard, _ApproveButton, BTStudioApp, build, _buildBody, _buildOverview, Card (+25 more)
+Nodes (33): introspectionResult, DefaultOAuth2DiscoveryConfig(), DefaultOAuth2IntrospectionConfig(), DiscoverOAuth2IntrospectionConfig(), OAuth2DiscoveryValidator(), OAuth2IntrospectionValidator(), TestDefaultOAuth2DiscoveryConfig(), TestDiscoverOAuth2IntrospectionConfig_Defaults() (+25 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.08
-Nodes (35): nlmFusionResearchRun, SearchForBTPatterns, buildGrillRound1Query, buildClaudeReviewPrompt, PublishGoapFusionStateHash, RunScheduledGoapFusionLoop, arc42GoalsPromptBlock, arc42ResearchTopics (+27 more)
+Cohesion: 0.07
+Nodes (14): TestActionForName_BulkCoverage(), TestInitAction_HealthCheckAgent(), TestInitAction_MetricsCollectionAgent(), Recover(), SafeGo(), TestRecover_CatchesPanic(), TestRecover_NoPanic(), TestRecover_ReturnsErrorWithContext() (+6 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.1
-Nodes (12): acquireExperienceLock(), TestAcquireExperienceLockMissingDir(), TestAcquireExperienceLockMutualExclusion(), TestAcquireExperienceLockReleaseIdempotent(), enforceIslandCap(), mergeIslandPopulation(), islandArchive, IslandModel (+4 more)
+Cohesion: 0.08
+Nodes (29): TestClient_AnalyzeComplexity_FallbackOnError(), TestClient_Generate_ConnectionRefused(), TestClient_GeneratePlan_FallbackOnError(), TestClient_Reflect_FallbackOnError(), TestDeepSeekClient_AnalyzeComplexity(), TestDeepSeekClient_Generate_APIError(), TestDeepSeekClient_Generate_ConnectionRefused(), TestDeepSeekClient_Generate_EmptyChoices() (+21 more)
 
 ### Community 113 - "Community 113"
-Cohesion: 0.08
-Nodes (17): tracingMiddleware(), fanoutHandler, traceContextHandler, ContextWithTraceParentHeader(), Endpoint(), InitFromEnv(), parseOTLPEndpoint(), ParseOTLPTarget() (+9 more)
+Cohesion: 0.11
+Nodes (32): TestDaemonConfiguresGoalPlanBrainstorm(), addFusionNewCount(), addFusionNewItems(), btFusionPatternQuestion(), btFusionResearchFindings(), fusionMarkdown(), fusionNewCount(), fusionTitle() (+24 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.13
-Nodes (30): BehavioralDescriptor, FeatureDimension, Descriptor(), maxTreeDepthEvo(), NewMAPElitesGrid(), NewMAPElitesPopulation(), cellFitnesses(), insertPersistNiche() (+22 more)
+Cohesion: 0.06
+Nodes (35): code:go (package engine), code:go (// goapReviewContext is what the Claude review fallback will), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (type fakeReviewClaudeRunner struct {), code:go (// goapReviewAllowedTools keeps the review run read-only: th), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T), code:go (if nlmQuotaExhausted(bb) {) (+27 more)
 
 ### Community 115 - "Community 115"
-Cohesion: 0.11
-Nodes (32): AgentMetric, Alert, AlertReport, evaluateAgentAlerts(), EvaluateAlerts(), EvaluateFromJSON(), evaluateGlobalAlerts(), evaluateHTTPAlerts() (+24 more)
+Cohesion: 0.13
+Nodes (32): apiKey, KeyHash(), NewKeyRing(), NewKeyRotationScheduler(), TestExpireKey_NotFound(), TestExpireKey_Success(), TestExpiringKeys_EmptyRing(), TestExpiringKeys_OnlyPermanent() (+24 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.06
-Nodes (33): ClaudeErrorHandler Node Implementation Plan, code:go (// internal/engine/error_handler_store_test.go), code:bash (git add internal/engine/registry.go internal/engine/error_ha), code:go (// internal/engine/error_handler_claude_test.go), code:go (// internal/engine/error_handler_claude.go), code:bash (git add internal/engine/error_handler_claude.go internal/eng), code:go (// internal/engine/error_handler_node_test.go), code:go (// ClaudeErrorHandler — self-extending recovery decorator: c) (+25 more)
+Cohesion: 0.11
+Nodes (26): handleWorkflowRunFullPipeline(), TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks(), NewMockLLM(), main(), NewDefaultCompany(), companySummary(), TestCompanySimulation_Quarter(), TestCompanySimulation_Sprint() (+18 more)
 
 ### Community 117 - "Community 117"
-Cohesion: 0.1
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -count=1 -run Te), code:block2 (--- FAIL: TestSuperpowersRuntime_ActionsRegistered_Scheduled), RED Phase Complete, RED Phase Report, RED Phase Result
+Cohesion: 0.07
+Nodes (13): References, TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedMaterializesOnBareRepo(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHaltsOnConsecutiveNoopPatches(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner() (+5 more)
 
 ### Community 118 - "Community 118"
-Cohesion: 0.07
-Nodes (11): TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedDelegatesOnBareRepo(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMaterializedMaterializesOnBareRepo(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHalts(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionCircuitBreakerHaltsOnConsecutiveNoopPatches(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopHaltsOnConsecutiveNoopPatches(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsNonFatal(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightSchemaValid() (+3 more)
+Cohesion: 0.12
+Nodes (31): BehavioralDescriptor, FeatureDimension, Descriptor(), maxTreeDepthEvo(), NewMAPElitesGrid(), NewMAPElitesPopulation(), cellFitnesses(), insertPersistNiche() (+23 more)
 
 ### Community 119 - "Community 119"
 Cohesion: 0.11
-Nodes (9): Manager, newScopedStore(), normalizeKey(), truncateSummary(), isPersistentScope(), loadScopeFile(), safeFilename(), scopedStore (+1 more)
+Nodes (33): dart:convert, _ActivityCard, _ApproveButton, BTStudioApp, build, _buildBody, _buildOverview, Card (+25 more)
 
 ### Community 120 - "Community 120"
-Cohesion: 0.11
-Nodes (30): NewMemoryStore(), storeForTest(), TestContextBlock_EmptyStoreReturnsEmpty(), TestContextBlock_IncludesFactsPitfallsPatterns(), TestContextBlock_SkipsNonHighPriorityItems(), TestDelete_PersistsAfterReopen(), TestDelete_RemovesEntry(), TestDelete_ReturnsFalseForMissing() (+22 more)
+Cohesion: 0.08
+Nodes (34): Binaries, code:go (type Counter struct { ... }), code:go (type Store struct { ... }                                // ), code:go (type Tracer interface {), code:go (type Suite struct {), code:go (type ContentType string), code:go (type KnowledgeGraph struct { ... }), code:go (type Analyzer struct { ... }) (+26 more)
 
 ### Community 121 - "Community 121"
-Cohesion: 0.15
-Nodes (17): ChildStats, NodeExecutionRecord, applyOrderToNode(), Entropy(), GiniImpurity(), InformationGain(), mergeSelectorStatsMaps(), normalizedIG() (+9 more)
+Cohesion: 0.08
+Nodes (35): nlmFusionResearchRun, SearchForBTPatterns, buildGrillRound1Query, buildClaudeReviewPrompt, PublishGoapFusionStateHash, RunScheduledGoapFusionLoop, arc42GoalsPromptBlock, arc42ResearchTopics (+27 more)
 
 ### Community 122 - "Community 122"
-Cohesion: 0.1
-Nodes (28): dataFileMetrics(), extractExistingDataPath(), init(), inspectDataSource(), registerDomainActions(), availableToolNames(), buildToolList(), execAgent() (+20 more)
+Cohesion: 0.08
+Nodes (24): FileJobStore, JobStore, TestFileJobStore_AllowsEmptySaveOnFreshStore(), TestFileJobStore_AllowsLegitimateEmptyAfterOwnership(), TestFileJobStore_RefusesEmptyOverwriteFromBlindProcess(), TestReadOnlyJobStore_LoadsButNeverSaves(), NewFileJobStore(), NewReadOnlyJobStore() (+16 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.14
-Nodes (22): cooldownStepIndex(), DefaultLoginThrottleConfig(), NewLoginThrottle(), stripPort(), TestCooldownStepIndex(), TestLoginThrottle_CleanupExpired(), TestLoginThrottle_ConcurrentAccess(), TestLoginThrottle_DecayWindowReset() (+14 more)
+Cohesion: 0.11
+Nodes (32): handleAlerts(), AgentMetric, AlertReport, evaluateAgentAlerts(), EvaluateAlerts(), EvaluateFromJSON(), evaluateGlobalAlerts(), evaluateHTTPAlerts() (+24 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.09
-Nodes (21): TestMatchBlockPattern(), AntiPattern, DesignPattern, BlockIDFromRef(), containsStr(), coreHeuristics(), hasNodeMatching(), hasNodeType() (+13 more)
+Cohesion: 0.06
+Nodes (33): ClaudeErrorHandler Node Implementation Plan, code:go (// internal/engine/error_handler_store_test.go), code:bash (git add internal/engine/registry.go internal/engine/error_ha), code:go (// internal/engine/error_handler_claude_test.go), code:go (// internal/engine/error_handler_claude.go), code:bash (git add internal/engine/error_handler_claude.go internal/eng), code:go (// internal/engine/error_handler_node_test.go), code:go (// ClaudeErrorHandler — self-extending recovery decorator: c) (+25 more)
 
 ### Community 125 - "Community 125"
-Cohesion: 0.11
-Nodes (26): ApplyParameters(), cholesky(), collectParams(), ExtractParameters(), invertCholesky(), itoa(), multiplyCholesky(), navigateToPath() (+18 more)
+Cohesion: 0.1
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -count=1 -run Te), code:block2 (--- FAIL: TestSuperpowersRuntime_ActionsRegistered_Scheduled), RED Phase Complete, RED Phase Report, RED Phase Result
 
 ### Community 126 - "Community 126"
-Cohesion: 0.13
-Nodes (24): convertGoapChildren(), FromGoapNode(), GOAPDevOpsTree(), GOAPPlanningTree(), GOAPResearchTree(), Blackboard, BlackboardBridge, BTNodeType (+16 more)
+Cohesion: 0.08
+Nodes (12): Server, NewPageAgent(), TestAgentLLMGeneration(), TestAgentMockFallback(), TestBubbleRecommendation(), NewHandler(), TestHandleBookmark(), TestHandleIntent() (+4 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.06
-Nodes (31): Brainstorm Grill-Driven Design-Improvement Loop — Implementation Plan, code:go (// internal/engine/superpowers_runner.go), code:go (// Package engine — grill-driven design-improvement loop act), code:bash (git add internal/engine/actions_superpowers_design_loop.go i), code:block12 (=== CLEAR DESIGN ===), code:go (const splitFakeOutput = `=== CLEAR DESIGN ===), code:go (RegisterAction("SplitDesignArtifact", func(ctx *btcore.BTCon), code:go (func parseSplitOutput(out string) (clear, followup, program ) (+23 more)
+Cohesion: 0.11
+Nodes (9): Manager, newScopedStore(), normalizeKey(), truncateSummary(), isPersistentScope(), loadScopeFile(), safeFilename(), scopedStore (+1 more)
 
 ### Community 128 - "Community 128"
-Cohesion: 0.12
-Nodes (25): registerA2ANodes(), TestDelegateToA2A_FnNotConfigured(), TestDelegateToA2A_FnReturnsError(), TestDelegateToA2A_MissingTaskEmptyChainState(), TestDelegateToA2A_MissingURL(), TestDelegateToA2A_RateLimitCarryoverPropagates(), TestDelegateToA2A_Success(), TestDelegateToA2A_UsesTaskFromChainState() (+17 more)
+Cohesion: 0.08
+Nodes (22): TestAdoptDriftOnIdle_AdoptsSynchronously(), TestAdoptDriftOnIdle_SwallowsErrors(), AdoptDriftOnIdle(), AutoRebuildEnabled(), AutoRestartEnabled(), defaultDriftHead(), defaultDriftSmokeTest(), DriftStatus() (+14 more)
 
 ### Community 129 - "Community 129"
-Cohesion: 0.16
-Nodes (28): deriveNotebookLMResearchQuery(), isBoilerplateResearchTopic(), loadNlmQueryCache(), loadNlmUsage(), nlmBudgetFor(), nlmExtractQuery(), nlmIsResearchImport(), nlmIsResearchStart() (+20 more)
+Cohesion: 0.14
+Nodes (18): ChildStats, NodeExecutionRecord, applyOrderToNode(), Entropy(), GiniImpurity(), InformationGain(), isSelectorFallback(), mergeSelectorStatsMaps() (+10 more)
 
 ### Community 130 - "Community 130"
 Cohesion: 0.14
-Nodes (28): addFusionNewCount(), addFusionNewItems(), btFusionPatternQuestion(), btFusionResearchFindings(), fusionMarkdown(), fusionNewCount(), fusionTitle(), init() (+20 more)
+Nodes (22): cooldownStepIndex(), DefaultLoginThrottleConfig(), NewLoginThrottle(), stripPort(), TestCooldownStepIndex(), TestLoginThrottle_CleanupExpired(), TestLoginThrottle_ConcurrentAccess(), TestLoginThrottle_DecayWindowReset() (+14 more)
 
 ### Community 131 - "Community 131"
-Cohesion: 0.13
-Nodes (25): MutationOp, migrateNodeState(), prepareTreeForBuild(), RegisterTreeExpander(), TestBuildAndValidate_SubTreeRefRequiresExpander(), TestPrepareTreeForBuild_NoRefs(), treeHasSubTreeRefs(), applyMutationOp() (+17 more)
+Cohesion: 0.18
+Nodes (31): TestRouteBuilder_Build(), NewOpenAPIGenerator(), NewRoute(), StringSchema(), mapKeys(), TestDashboardRoutes_AllRoutesBuildWithoutPanic(), TestDashboardRoutes_AuthConsistency(), TestDashboardRoutes_GeneratesValidSpec() (+23 more)
 
 ### Community 132 - "Community 132"
 Cohesion: 0.11
-Nodes (19): asFloat(), compiledGoapActionFor(), compiledGoapConditionFor(), goapValuesEqual(), goapWorldStateFrom(), isCompiledGoapAction(), isCompiledGoapCondition(), parseGoapPairs() (+11 more)
+Nodes (26): ApplyParameters(), cholesky(), collectParams(), ExtractParameters(), invertCholesky(), itoa(), multiplyCholesky(), navigateToPath() (+18 more)
 
 ### Community 133 - "Community 133"
-Cohesion: 0.09
-Nodes (26): stringContains(), TestBuildGoapStepPrompt(), buildGoapStepPrompt(), TestAction_ExecuteGoapStep_NoLLM(), TestAction_ExecuteGoapStep_WithLLM(), TestAction_PlanGoapActions_CustomGoal(), TestAction_PlanGoapActions_JSONActions(), TestAction_PlanGoapActions_JSONActionsEmptyAfterFilter() (+18 more)
+Cohesion: 0.12
+Nodes (21): activateAutomation(), automationAgentName(), considerAutomation(), finalizeAutomationApproval(), proposeAutomation(), registerAutomationTools(), suggestSchedule(), newAutopilotDeps() (+13 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.1
-Nodes (20): main(), attachLogHandler(), buildBaseHandler(), buildLogger(), Debug(), envLogLevel(), Error(), Init() (+12 more)
+Cohesion: 0.06
+Nodes (31): Brainstorm Grill-Driven Design-Improvement Loop — Implementation Plan, code:go (// internal/engine/superpowers_runner.go), code:go (// Package engine — grill-driven design-improvement loop act), code:bash (git add internal/engine/actions_superpowers_design_loop.go i), code:block12 (=== CLEAR DESIGN ===), code:go (const splitFakeOutput = `=== CLEAR DESIGN ===), code:go (RegisterAction("SplitDesignArtifact", func(ctx *btcore.BTCon), code:go (func parseSplitOutput(out string) (clear, followup, program ) (+23 more)
 
 ### Community 135 - "Community 135"
+Cohesion: 0.12
+Nodes (25): registerA2ANodes(), TestDelegateToA2A_FnNotConfigured(), TestDelegateToA2A_FnReturnsError(), TestDelegateToA2A_MissingTaskEmptyChainState(), TestDelegateToA2A_MissingURL(), TestDelegateToA2A_RateLimitCarryoverPropagates(), TestDelegateToA2A_Success(), TestDelegateToA2A_UsesTaskFromChainState() (+17 more)
+
+### Community 136 - "Community 136"
+Cohesion: 0.1
+Nodes (23): TestDriftWatchOnce_SkipsRestartWhenJobStartedMidRebuild(), TestRunJob_KicksOnCycleIdleWhenQueueEmpty(), TestRunJob_NoIdleKickWhileAnotherJobInFlight(), JobsDir(), RegistryDir(), SchedulerJobsFile(), TestRemoveAgentJobs(), TestResolvePipelineAgent_Aliases() (+15 more)
+
+### Community 137 - "Community 137"
+Cohesion: 0.11
+Nodes (16): NewNSGAIIPopulation(), NewNSGAIISorter(), TestNewNSGAIIPopulation(), TestNewNSGAIIPopulation_SeedsSpecialists(), TestNSGAII_CrowdedComparison(), TestNSGAII_CrowdingDistance(), TestNSGAII_FastNonDominatedSort(), TestNSGAII_FrontRank() (+8 more)
+
+### Community 138 - "Community 138"
 Cohesion: 0.13
 Nodes (28): TestPriorityQueue_PersistAndReloadViaInterface(), TestPriorityTaskQueue_DequeueEmpty(), TestPriorityTaskQueue_EnqueueDequeue(), TestPriorityTaskQueue_Peek(), TestPriorityTaskQueue_PeekEmpty(), TestPriorityTaskQueue_PurgeViaInterface(), TestPriorityTaskQueue_SamePriorityFIFO(), TestPriorityTaskQueueInterfaceCompliance() (+20 more)
 
-### Community 136 - "Community 136"
+### Community 139 - "Community 139"
+Cohesion: 0.11
+Nodes (19): asFloat(), compiledGoapActionFor(), compiledGoapConditionFor(), goapValuesEqual(), goapWorldStateFrom(), isCompiledGoapAction(), isCompiledGoapCondition(), parseGoapPairs() (+11 more)
+
+### Community 140 - "Community 140"
+Cohesion: 0.13
+Nodes (23): convertGoapChildren(), FromGoapNode(), GOAPDevOpsTree(), GOAPPlanningTree(), GOAPResearchTree(), Blackboard, BlackboardBridge, BTNodeType (+15 more)
+
+### Community 141 - "Community 141"
 Cohesion: 0.06
 Nodes (30): code:go (// internal/engine/tree_mutation_test.go), code:go (// internal/engine/run_task_mutable.go), code:go (if bb.liveRun != nil {), code:bash (cd /home/nico/go-bt-evolve && git add internal/engine/run_ta), code:go (// internal/agent/mutated_trees_test.go), code:go (// internal/agent/mutated_trees.go), code:go (runCtx := ctx), code:go (func resolveTree(id string) *evolution.SerializableNode {) (+22 more)
 
-### Community 137 - "Community 137"
+### Community 142 - "Community 142"
 Cohesion: 0.09
 Nodes (26): applyDotEnvFiles(), applyDotEnvToConfig(), applyEnvOverrides(), Load(), LoadFile(), LoadFileWithDotEnv(), parseBool(), TestLoadFile_Basic() (+18 more)
 
-### Community 138 - "Community 138"
-Cohesion: 0.1
-Nodes (23): main(), TestClient_AnalyzeComplexity_FallbackOnError(), TestClient_Generate_ConnectionRefused(), TestClient_GeneratePlan_FallbackOnError(), TestClient_Reflect_FallbackOnError(), TestDeepSeekClient_AnalyzeComplexity(), TestDeepSeekClient_Generate_APIError(), TestDeepSeekClient_Generate_ConnectionRefused() (+15 more)
+### Community 143 - "Community 143"
+Cohesion: 0.13
+Nodes (23): BTAgentClient, treeSkillName(), treeTags(), interpretSendResult(), NewBTAgentClient(), safetyGetMessageText(), TestInterpretSendResult_HonestlyReportsFailureStates(), TestA2AServer_HandleAgentEndpoint_EmptyName() (+15 more)
 
-### Community 139 - "Community 139"
+### Community 144 - "Community 144"
 Cohesion: 0.11
 Nodes (15): AuctionDelegate(), cardWithURL(), newAuctionTransport(), TestAuctionDelegate_AwardsWinnerFromCardRegistry(), TestAuctionDelegate_ChainStateCandidateOverride(), TestAuctionDelegate_NoCandidatesFallsBack(), TestAuctionDelegate_NoEligibleBidsFallsBack(), TestAuctionDelegate_RequiredTagsFilterCandidates() (+7 more)
 
-### Community 140 - "Community 140"
-Cohesion: 0.09
-Nodes (18): auctionAnnouncement(), betterBid(), candidateContext(), NewPersistentAuctioneer(), stateFloat(), stateString(), stateStrings(), Auctioneer (+10 more)
+### Community 145 - "Community 145"
+Cohesion: 0.12
+Nodes (27): main(), tracingMiddleware(), finishProbe(), headerEquals(), headerPresent(), probeCSRFCookie(), ProbeDashboard(), probeSessionCookies() (+19 more)
 
-### Community 141 - "Community 141"
+### Community 146 - "Community 146"
 Cohesion: 0.11
-Nodes (16): TestIsBreakerSuccess(), IsRateLimitCarryover(), repeatChar(), TestHistoryQualityScore_UsesSpecWhenHigher(), TestIsRateLimitCarryover(), newCatchupFixture(), TestCycleBreakerSuccess_HealthyOutcomesDoNotTripBreaker(), TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy() (+8 more)
+Nodes (27): goapFusionNoopPatchStreak(), defaultNlmGrillAuthGuard(), nlmGrillAnswerer(), nlmGrillUnavailable(), parseNumberedAnswers(), runGrillAuthGuardAction(), TestGoapFusionNoopPatchStreak_DurableAcrossCronTicks(), TestGoapFusionNoopPatchStreak_IncrementsOnNoopResetsOnChange() (+19 more)
 
-### Community 142 - "Community 142"
+### Community 147 - "Community 147"
+Cohesion: 0.14
+Nodes (27): buildGrillRound1Query(), buildClaudeReviewPrompt(), TestBuildClaudeReviewPrompt_ContractMarkers(), arc42GoalsPromptBlock(), arc42ResearchTopics(), loadArc42QualityGoals(), TestArc42GoalsPromptBlockContainsEveryGoal(), TestArc42GoalsPromptBlockEmptyWhenDocMissing() (+19 more)
+
+### Community 148 - "Community 148"
 Cohesion: 0.11
 Nodes (24): arc42OutputDir(), countCPUCores(), execWithTimeout(), getBoolChainState(), init(), registerArc42Nodes(), sectionFileExists(), setChainState() (+16 more)
 
-### Community 143 - "Community 143"
-Cohesion: 0.13
-Nodes (22): fakeClaude, fakeCommitRunner, hookFailureClass, TestVerifyNotebookLMEvidenceAcceptsRealNotebookPayload(), TestVerifyNotebookLMEvidenceRejectsEmptyOrUngroundedSuccess(), TestVerifyNotebookLMEvidenceRejectsFabricatedOutput(), verifyNotebookLMEvidenceAction(), applyDeterministicCommitFixes() (+14 more)
+### Community 149 - "Community 149"
+Cohesion: 0.12
+Nodes (22): ConcurrencyLimiterStats, QueueStats, NewWorkerPool(), TestWorkerPool_Stats(), TestWorkerPool_Submit(), RouterStats, HTTPHandler(), NewScalabilityStatus() (+14 more)
 
-### Community 144 - "Community 144"
+### Community 150 - "Community 150"
+Cohesion: 0.14
+Nodes (28): NewAgent(), assertError(), TestAgentActionFails(), TestAgentCallbacks(), TestAgentGetSetState(), TestAgentHistory(), TestAgentNoPlan(), TestAgentSimpleExecution() (+20 more)
+
+### Community 151 - "Community 151"
 Cohesion: 0.14
 Nodes (25): DefaultRegressionConfig(), HasRegressions(), HasWarnings(), NewComparator(), ParseBenchOutput(), TestComparator_CriticalRegression(), TestComparator_Improvement(), TestComparator_MinNsFilter() (+17 more)
 
-### Community 145 - "Community 145"
-Cohesion: 0.12
-Nodes (25): TestLocalSearcher_New(), TestSelectorOptimizer_New(), degeneratePopulation(), runWithoutPanic(), TestEvolve_DegeneratePopulations(), TestEvolveWithExperience_DegeneratePopulations(), TestMemeticEvolve_DegeneratePopulations(), NewLocalSearcher() (+17 more)
-
-### Community 146 - "Community 146"
-Cohesion: 0.09
-Nodes (26): mcpDeps, addFailureContext(), benchmarkGateEvolvedWinner(), checkLLMHealth(), countTypes(), detectAntiPatternsInTree(), evolveHealthProjection(), expertArchivePath() (+18 more)
-
-### Community 147 - "Community 147"
-Cohesion: 0.09
-Nodes (26): collectDiscoverIDs(), TestDiscover_RegisterNotStarvedBySlowEmbeddingCall(), TestDiscoverRelated_Bidirectional(), TestDiscoverRelated_ConnectedFrom(), TestDiscoverRelated_ConnectedTo(), TestDiscoverRelated_Deduplicates(), TestDiscoverRelated_EmptyGraph(), TestDiscoverRelated_NonExistentTree() (+18 more)
-
-### Community 148 - "Community 148"
-Cohesion: 0.13
-Nodes (21): docgenState, allSections(), buildSectionMap(), contains(), fileHash(), hashSectionSources(), isSectionDone(), main() (+13 more)
-
-### Community 149 - "Community 149"
-Cohesion: 0.1
-Nodes (25): TestRunPipelineWithID_RecordsAgentMetrics(), handleSprintExecute(), handleTaskCreate(), syncWorkflowTaskStatus(), TestHandleSprintExecute_UpdatesCurrentWorkflow(), hermesOutcome(), isAuctionShapedTask(), NewAgentExecutor() (+17 more)
-
-### Community 150 - "Community 150"
-Cohesion: 0.1
-Nodes (21): TestDefaultRebuildTargets_PinsFullListIncludingMCPBinary(), buildStampLdflags(), copyFile(), DashboardRebuildTargets(), defaultRebuildBuild(), DefaultRebuildTargets(), GardenerRebuildTargets(), NewRebuildBackoff() (+13 more)
-
-### Community 151 - "Community 151"
-Cohesion: 0.2
-Nodes (27): acquireErrorHandlerClaudeLock(), acquireErrorHandlerFileLock(), acquireErrorHandlerStoreLock(), activeErrorHandlerExtensions(), appendErrorHandlerExtension(), errorHandlerDir(), errorHandlerExtensionsPath(), errorHandlerLedgerGet() (+19 more)
-
 ### Community 152 - "Community 152"
-Cohesion: 0.12
-Nodes (16): handleFellows(), NewMockLLM(), mockLLM, DefaultFellows(), NewThinkTank(), TestDefaultFellows(), TestFellowConfidence(), TestFullAnalysis_MultipleTopics() (+8 more)
+Cohesion: 0.13
+Nodes (18): MustNewBatchExporter(), NewBatchExporter(), TestBatchExporter_BuffersAndFlushes(), TestBatchExporter_CloseIsIdempotent(), TestBatchExporter_ConcurrentExports(), TestBatchExporter_DefaultBatchSizeAndInterval(), TestBatchExporter_ErrorInInnerIsReported(), TestBatchExporter_FlushCallback() (+10 more)
 
 ### Community 153 - "Community 153"
 Cohesion: 0.13
-Nodes (23): init(), parseSplitOutput(), registerSuperpowersDesignLoopActions(), newGrillLoopTestRun(), TestGrillDesign_ApprovedWhenNoOpenCriticals(), TestGrillDesign_NeedsWorkWithFeedbackWhenCriticalsOpen(), TestGrillDesign_NoProgressBreakerFailsAfterTwoStaleRounds(), TestGrillDesign_RefusesRoundsBeyondBound() (+15 more)
+Nodes (21): docgenState, allSections(), buildSectionMap(), contains(), fileHash(), hashSectionSources(), isSectionDone(), main() (+13 more)
 
 ### Community 154 - "Community 154"
-Cohesion: 0.11
-Nodes (22): TestDebugPhase_DryRunSkipsClaudeAndWritesMarker(), TestDebugPhases_WriteEvidenceFiles(), TestDiscardWorktree_RefusesEmptyPath(), TestDiscardWorktree_RefusesMainRepoPath(), TestDiscardWorktree_RemovesWorktreeAndDeletesBranch(), TestPushBranchAndCreatePR_InvokesGitPushAndGhPr(), withSwappedSuperpowersRunners(), TestSuperpowersTaskCommitAction_ExcludesGeneratedPaths() (+14 more)
+Cohesion: 0.1
+Nodes (25): TestRunPipelineWithID_RecordsAgentMetrics(), handleSprintExecute(), handleTaskCreate(), syncWorkflowTaskStatus(), TestHandleSprintExecute_UpdatesCurrentWorkflow(), hermesOutcome(), isAuctionShapedTask(), NewAgentExecutor() (+17 more)
 
 ### Community 155 - "Community 155"
-Cohesion: 0.08
-Nodes (17): alwaysSampler, Attr, neverSampler, noopSpan, noopTracer, Sampler, Span, SpanContext (+9 more)
+Cohesion: 0.17
+Nodes (26): isGoapNotebookLMFailure(), loadNlmQueryCache(), loadNlmUsage(), nlmBudgetFor(), nlmExtractQuery(), nlmIsResearchImport(), nlmIsResearchStart(), nlmPacificDay() (+18 more)
 
 ### Community 156 - "Community 156"
+Cohesion: 0.1
+Nodes (21): TestDefaultRebuildTargets_PinsFullListIncludingMCPBinary(), buildStampLdflags(), copyFile(), DashboardRebuildTargets(), defaultRebuildBuild(), DefaultRebuildTargets(), GardenerRebuildTargets(), NewRebuildBackoff() (+13 more)
+
+### Community 157 - "Community 157"
 Cohesion: 0.16
 Nodes (25): islandTestPopulation(), islandTestTree(), TestExperienceBank_TransferExperiencesIsSourceTreeAware(), TestIslandModel_AddGetAndSingleIslandMigration(), TestIslandModel_DiversityEdgeCases(), TestIslandModel_DiversityStatsAndSummary(), TestIslandModel_EvolveAllEvaluatesPopulations(), TestIslandModel_LoadCapEvictionIncrementsEvictedIndividuals() (+17 more)
 
-### Community 157 - "Community 157"
+### Community 158 - "Community 158"
 Cohesion: 0.17
 Nodes (23): NewAuctioneer(), newDeadlineProbeTransport(), TestAuctioneer_RunAuction_AppliesDefaultDispatchDeadline(), TestAuctioneer_RunAuction_BoundsWinnerDispatchWithAnnouncementDeadline(), TestAuctioneer_RunAuction_DispatchesToWinnerAndReturnsResult(), TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(), TestAuctioneer_RunAuction_RejectsEmptyDescription(), TestCollectBids_AppliesDefaultDeadlineWhenAnnouncementHasNone() (+15 more)
 
-### Community 158 - "Community 158"
-Cohesion: 0.18
-Nodes (25): ScoreAnnouncement(), cardResponder, RespondToAnnouncement(), SetTreeResolver(), bidArtifact(), drainExecute(), eventKinds(), executorForAgent() (+17 more)
-
 ### Community 159 - "Community 159"
-Cohesion: 0.12
-Nodes (25): finishProbe(), headerEquals(), headerPresent(), probeCSRFCookie(), ProbeDashboard(), probeSessionCookies(), statusCheck(), TestProbeDashboard_CSRFProtection() (+17 more)
-
-### Community 161 - "Community 161"
 Cohesion: 0.1
 Nodes (25): fakeGrillClaude, grillAnswerers, grillQuestion, grillResult, designBodyHash(), grillRoundHeading(), openCriticalDigest(), parseGrillQuestions() (+17 more)
 
+### Community 160 - "Community 160"
+Cohesion: 0.11
+Nodes (22): claudeBackoffWindow(), TestClaudeBackoffWindow_EnvOverride(), ClaudeRunner, CommandResult, CommandRunner, execClaudeRunner, execCommandRunner, claudeBackoffWindow() (+14 more)
+
 ### Community 162 - "Community 162"
-Cohesion: 0.12
-Nodes (20): ErrorRecorder, NewOpenAICompatClient(), TestOpenAICompat_ClientErrorsDoNotTripBreaker(), TestOpenAICompat_ErrorResponse(), TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(), TestOpenAICompat_GenerateWithModel_SendsChatCompletion(), TestOpenAICompat_NonJSONServerError_IsRetried(), TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker() (+12 more)
+Cohesion: 0.1
+Nodes (12): DeepSeekClient, OpenAICompatClient, OpenAICompatConfig, openAICompatMessage, openAICompatRequest, openAICompatResponse, checkRateLimit(), ParseRetryAfter() (+4 more)
 
 ### Community 163 - "Community 163"
 Cohesion: 0.12
@@ -2489,316 +2478,320 @@ Cohesion: 0.07
 Nodes (27): Bubble System, Core User Journey, Data Model, DoorMate Page-First AI Assistant Design, Feedback Event, Follow-Up Bubbles, Generated Page, Generated Page (+19 more)
 
 ### Community 166 - "Community 166"
-Cohesion: 0.15
-Nodes (21): BTAgentClient, interpretSendResult(), NewBTAgentClient(), safetyGetMessageText(), TestInterpretSendResult_HonestlyReportsFailureStates(), TestA2AServer_HandleAgentEndpoint_EmptyName(), TestA2AServer_HandleAgentEndpoint_UnknownAgent(), TestA2AServer_HandleHealth_Direct() (+13 more)
-
-### Community 167 - "Community 167"
-Cohesion: 0.14
-Nodes (21): CompressionMiddleware(), isCompressibleContentType(), gzipDecompress(), TestCompressionMiddleware_AlreadyCompressed(), TestCompressionMiddleware_BinaryContentType(), TestCompressionMiddleware_EmptyBody(), TestCompressionMiddleware_GzipRequest(), TestCompressionMiddleware_HTMLContentType() (+13 more)
-
-### Community 168 - "Community 168"
-Cohesion: 0.13
-Nodes (18): CompanyOrchestrator, EngineerTree(), MarketingTree(), SalesTree(), StartupTrees(), clamp(), safeDiv(), checkTreeBasics() (+10 more)
-
-### Community 169 - "Community 169"
-Cohesion: 0.16
-Nodes (24): buildGrillRound1Query(), buildClaudeReviewPrompt(), TestBuildClaudeReviewPrompt_ContractMarkers(), arc42GoalsPromptBlock(), arc42ResearchTopics(), loadArc42QualityGoals(), TestArc42GoalsPromptBlockContainsEveryGoal(), TestArc42GoalsPromptBlockEmptyWhenDocMissing() (+16 more)
-
-### Community 170 - "Community 170"
-Cohesion: 0.13
-Nodes (23): arc42GuidelineFor(), classifyAffectedArc42Sections(), syncArc42Section(), syncArc42SectionsAndReadme(), syncReadme(), TestArc42GuidelineForMissingFileDegrades(), TestArc42GuidelineForSlicesOneSection(), TestClassifyAffectedArc42Sections() (+15 more)
-
-### Community 171 - "Community 171"
-Cohesion: 0.09
-Nodes (22): TestValidate_BanditSelectorRequiresUniqueName(), TestCachedCondition_RefusesHITLConditions(), TestCachedCondition_RefusesNestedHITLConditions(), TestValidateTree_NestedChildren(), TestValidateTree_ValidTree(), TestValidate_MemoryNodesDuplicateNames(), TestValidate_MemoryNodesRequireUniqueNames(), TestSuperpowersWorkflowTree_BuildsAndValidates() (+14 more)
-
-### Community 172 - "Community 172"
 Cohesion: 0.25
 Nodes (26): NewConfigWatcher(), TestConfigWatcher_BackwardCompatibleNoDotEnv(), TestConfigWatcher_ConfigChangeWithDotEnv(), TestConfigWatcher_DotEnvChangeDoesNotTriggerOnNoChange(), TestConfigWatcher_DotEnvFileDisappears(), TestConfigWatcher_DotEnvHotReload(), TestConfigWatcher_DotEnvPriorityChain(), TestConfigWatcher_FileAppears() (+18 more)
 
-### Community 173 - "Community 173"
-Cohesion: 0.12
-Nodes (9): FitnessFunc, collectNodeNames(), randomNodeName(), firstNodeNameByType(), firstOpName(), maxInt(), MCTSMetrics, MCTSMutator (+1 more)
+### Community 167 - "Community 167"
+Cohesion: 0.09
+Nodes (15): newAgentExecutor(), buildDashboardKnowledgeGraph(), getDashCBStore(), handleAgentExecute(), handleAgentRun(), handleTrees(), TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness(), TestDashboardAPIRoutesHaveOpenAPICoverage() (+7 more)
 
-### Community 174 - "Community 174"
+### Community 168 - "Community 168"
 Cohesion: 0.13
-Nodes (22): requireOllamaFinanceTest(), runTeslaTree(), TestTeslaEarnings(), TestTeslaFullAnalysis(), TestTeslaMarket(), TestTeslaModel(), TestTeslaPitchAgent(), TestTeslaValuation() (+14 more)
+Nodes (23): arc42GuidelineFor(), classifyAffectedArc42Sections(), syncArc42Section(), syncArc42SectionsAndReadme(), syncReadme(), TestArc42GuidelineForMissingFileDegrades(), TestArc42GuidelineForSlicesOneSection(), TestClassifyAffectedArc42Sections() (+15 more)
 
-### Community 175 - "Community 175"
+### Community 169 - "Community 169"
 Cohesion: 0.12
-Nodes (17): injectPersonaContext(), injectPersonaContextLocked(), mineUserPatterns(), personaEmbedder(), personaError(), recordPersonaInteraction(), registerPersonaTools(), NewHabitMiner() (+9 more)
+Nodes (9): FitnessFunc, randomMutation(), randomNodeName(), firstNodeNameByType(), firstOpName(), maxInt(), MCTSMetrics, MCTSMutator (+1 more)
 
-### Community 176 - "Community 176"
+### Community 170 - "Community 170"
 Cohesion: 0.08
 Nodes (26): 5.0 Composable Blocks, 5.0 Composable building blocks (`internal/blocks`), 5.1 Whitebox Overall System, 5.2 Core Engine, 5.2 Level 2: Core Engine Whitebox, 5.3 Evolution Engine, 5.3 Level 2: Evolution Engine Whitebox, 5.4 Dashboard (+18 more)
 
-### Community 177 - "Community 177"
-Cohesion: 0.1
-Nodes (23): outcomeScore(), TestOutcomeScore_ChainFailed(), TestOutcomeScore_ChainPanic(), TestOutcomeScore_ChainSuccess(), TestOutcomeScore_Default(), TestOutcomeScore_Failure(), TestOutcomeScore_SharedVocabulary(), TestOutcomeScore_Success() (+15 more)
-
-### Community 178 - "Community 178"
-Cohesion: 0.16
-Nodes (9): app, generator, buildGraph(), main(), newApp(), normalizeFlagArgs(), parseIntent(), printUsage() (+1 more)
-
-### Community 179 - "Community 179"
-Cohesion: 0.11
-Nodes (11): NewPageAgent(), TestAgentLLMGeneration(), TestAgentMockFallback(), TestBubbleRecommendation(), NewHandler(), TestHandleBookmark(), TestHandleIntent(), TestHandleProfile() (+3 more)
-
-### Community 180 - "Community 180"
-Cohesion: 0.13
-Nodes (23): goapFusionNoopPatchStreak(), nlmGrillAnswerer(), nlmGrillUnavailable(), parseNumberedAnswers(), TestGoapFusionNoopPatchStreak_DurableAcrossCronTicks(), TestGoapFusionNoopPatchStreak_IncrementsOnNoopResetsOnChange(), TestNlmGrillAnswerer_AuthGuardFailureIsUnavailable(), TestNlmGrillAnswerer_EmptyOutputIsUnavailable() (+15 more)
-
-### Community 181 - "Community 181"
-Cohesion: 0.17
-Nodes (23): registerDecisionTreeAction(), TestDecisionTreeRoutesByChainStateMatch(), TestDecisionTreeUsesDefaultBranchWhenNoMatch(), TestDecisionTreeValidatesAsKnownNodeType(), RouteHistory(), modelRouterTree(), TestCollectBranchLabels_SkipsDefault(), TestModelRouting_HighConfidenceRoutesToModelLabel() (+15 more)
-
-### Community 182 - "Community 182"
-Cohesion: 0.2
-Nodes (25): TestConsoleTracer_ExporterReceivesCompletedSpan(), TestTracingMiddleware_BasicSpan(), TestTracingMiddleware_DifferentMethods(), TestTracingMiddleware_FlushSupport(), TestTracingMiddleware_Implicit200(), TestTracingMiddleware_NoopTracerSafe(), TestTracingMiddleware_SlowRequest(), TestTracingMiddleware_StatusCodes() (+17 more)
-
-### Community 183 - "Community 183"
-Cohesion: 0.17
-Nodes (21): NewMCTSMutator(), hasNodeWithPrefix(), mockFitnessEvaluator(), testBaseTree(), TestMCTSMutation_FitnessGap(), TestMCTSMutator_Backpropagate(), TestMCTSMutator_BuildMutationOps(), TestMCTSMutator_ExpandNode() (+13 more)
-
-### Community 184 - "Community 184"
-Cohesion: 0.17
-Nodes (17): extractBulletPoints(), extractFirstLine(), extractListSection(), extractSection(), findNextSection(), parseDebateTranscript(), parseProbability(), parseReport() (+9 more)
-
-### Community 186 - "Community 186"
+### Community 171 - "Community 171"
 Cohesion: 0.12
 Nodes (19): TestDataPipelineTreeNoSourceReportsBlockedNotFabricated(), TestDataPipelineTreeUsesObservedFileMetrics(), TestDomainTreeMonitoringRoutesThroughEngine(), TestNotebookLMTreePreGateDiscoversRealToolset(), NotebookLMTree(), findChildByName(), hasNode(), TestNotebookLMResearchPathUsesDeterministicToolsAndAntiFabricationGuard() (+11 more)
 
+### Community 172 - "Community 172"
+Cohesion: 0.16
+Nodes (9): app, generator, buildGraph(), main(), newApp(), normalizeFlagArgs(), parseIntent(), printUsage() (+1 more)
+
+### Community 173 - "Community 173"
+Cohesion: 0.16
+Nodes (20): fakeClaude, fakeCommitRunner, hookFailureClass, stageAndCommitSuperpowersRunInDir(), writeApplyCommitEvidence(), applyDeterministicCommitFixes(), buildCommitFixPrompt(), classifyHookFailure() (+12 more)
+
+### Community 174 - "Community 174"
+Cohesion: 0.12
+Nodes (16): attachLogHandler(), buildBaseHandler(), buildLogger(), envLogLevel(), Error(), Init(), L(), SetAsDefault() (+8 more)
+
+### Community 175 - "Community 175"
+Cohesion: 0.17
+Nodes (17): extractBulletPoints(), extractFirstLine(), extractListSection(), extractSection(), findNextSection(), parseDebateTranscript(), parseProbability(), parseReport() (+9 more)
+
+### Community 176 - "Community 176"
+Cohesion: 0.19
+Nodes (26): Collect(), indexOf(), GoapFusionPreflightNode(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsNonFatal(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitBreaker(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitPolicy(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitRemote(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitTool() (+18 more)
+
+### Community 177 - "Community 177"
+Cohesion: 0.14
+Nodes (25): ClearGoapFusionStateHashes(), goapFusionCircuitBreakerVerdict(), goapFusionCircuitBreakerWindow(), goapFusionCircuitPolicyVerdict(), goapFusionCircuitPolicyVerdictWithBypass(), goapFusionImplementationGateWired(), goapFusionPreflightWired(), goapFusionRepeatedHashBypassed() (+17 more)
+
+### Community 178 - "Community 178"
+Cohesion: 0.12
+Nodes (15): exportMemoryCategory(), exportPreviousRuns(), BlackboardDir(), CircuitBreakersFile(), DLQFile(), HistoryDir(), HomeDir(), LogsDir() (+7 more)
+
+### Community 179 - "Community 179"
+Cohesion: 0.17
+Nodes (21): NewMCTSMutator(), hasNodeWithPrefix(), mockFitnessEvaluator(), testBaseTree(), TestMCTSMutation_FitnessGap(), TestMCTSMutator_Backpropagate(), TestMCTSMutator_BuildMutationOps(), TestMCTSMutator_ExpandNode() (+13 more)
+
+### Community 180 - "Community 180"
+Cohesion: 0.13
+Nodes (18): ErrorRecorder, NewOpenAICompatClient(), TestOpenAICompat_ClientErrorsDoNotTripBreaker(), TestOpenAICompat_ErrorResponse(), TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(), TestOpenAICompat_GenerateWithModel_SendsChatCompletion(), TestOpenAICompat_NonJSONServerError_IsRetried(), TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker() (+10 more)
+
+### Community 181 - "Community 181"
+Cohesion: 0.13
+Nodes (22): TestSelectorOptimizer_KillerChild(), TestSelectorOptimizer_ShouldPrune(), NewSelectorOptimizer(), TestGiniImpurity(), TestInformationGain(), TestLocalSearch_HillClimb(), TestLocalSearch_SimulatedAnnealing(), TestLocalSearch_TabuSearch() (+14 more)
+
+### Community 182 - "Community 182"
+Cohesion: 0.14
+Nodes (17): fakeLLM, DefaultInitialState(), NewGoalFactory(), TestAutomationActions_ReachTaskAutomated(), TestGoalFactory_ArchetypeFallbackWhenLLMKeepsFailing(), TestGoalFactory_ArchetypeFallbackWithoutLLM(), TestGoalFactory_EmptyIntent(), TestGoalFactory_FromIntentLLM() (+9 more)
+
+### Community 183 - "Community 183"
+Cohesion: 0.11
+Nodes (19): blockOnHeldBBMu(), TestBTBlocksComposeRejectsUnknownStrategyTree(), TestBTBlocksComposeSaveGatesActivation(), TestBTBlocksComposeSaveHoldsBBMu(), TestBTHITLComposeTaskSaveHoldsBBMu(), TestBTHITLComposeTaskSaveHoldsServerLock(), TestInjectPersonaContextHoldsBBMu(), registerHITLTools() (+11 more)
+
+### Community 184 - "Community 184"
+Cohesion: 0.1
+Nodes (23): outcomeScore(), TestOutcomeScore_ChainFailed(), TestOutcomeScore_ChainPanic(), TestOutcomeScore_ChainSuccess(), TestOutcomeScore_Default(), TestOutcomeScore_Failure(), TestOutcomeScore_SharedVocabulary(), TestOutcomeScore_Success() (+15 more)
+
+### Community 185 - "Community 185"
+Cohesion: 0.13
+Nodes (25): TestNumberSchema(), ArraySchema(), BoolSchema(), IntSchema(), NumberSchema(), ObjectSchema(), TestConvenienceSchemaConstructors(), TestValidateResponse_ArrayValidation() (+17 more)
+
+### Community 186 - "Community 186"
+Cohesion: 0.12
+Nodes (11): handleAnalyze(), TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses(), TestHandleAnalyze_UsesWorkflowForTaskDerivation(), Task, NewTaskStore(), priorityRank(), TestNewTaskStore_PanicsOnCorruptFile(), TestTaskStore_ApprovedOrdersByPriorityThenSprint() (+3 more)
+
 ### Community 187 - "Community 187"
-Cohesion: 0.09
-Nodes (17): init(), modal, num, renderTab(), state, TAB_KEYS, renderAgents(), renderCompany() (+9 more)
+Cohesion: 0.1
+Nodes (21): TestValidate_BanditSelectorRequiresUniqueName(), TestCachedCondition_RefusesHITLConditions(), TestCachedCondition_RefusesNestedHITLConditions(), TestValidateTree_NestedChildren(), TestValidateTree_ValidTree(), TestValidate_MemoryNodesDuplicateNames(), TestValidate_MemoryNodesRequireUniqueNames(), containsLeafChildrenMsg() (+13 more)
 
 ### Community 188 - "Community 188"
-Cohesion: 0.14
-Nodes (6): errToString(), TestStatusString(), HealthMonitor, HealthState, HealthStatus, Info()
+Cohesion: 0.1
+Nodes (15): FeedbackFile(), TestPathHelpers(), buildSchedulerConfig(), experienceBankDir(), feedbackSnapshotPath(), TestSchedulerAttempt_HealthyNoCodeOutcomesAreDeferredTerminal(), TestSchedulerJobStoreIsReadOnlyForSiblings(), cardAt() (+7 more)
 
 ### Community 189 - "Community 189"
-Cohesion: 0.12
-Nodes (24): Analysis, Contradiction, CoveragePoint, TestJudge_ParsesStructuredJSON(), TestJudge_RejectsInvalidJSON(), TestSynthesize_UsesAnalysisAndResponses(), TestToolLoop_StopsAtMaxToolCalls(), ModelCaller (+16 more)
+Cohesion: 0.26
+Nodes (23): NewGoalQueue(), names(), names2(), TestGoalIsSatisfied(), TestGoalQueueAddAndSelect(), TestGoalQueueAddReplace(), TestGoalQueueAll(), TestGoalQueueAllSatisfied() (+15 more)
 
 ### Community 190 - "Community 190"
-Cohesion: 0.21
-Nodes (25): Collect(), indexOf(), GoapFusionPreflightNode(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGatesClaudeImplementation(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitBreaker(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitPolicy(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitRemote(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitTool() (+17 more)
-
-### Community 191 - "Community 191"
 Cohesion: 0.15
 Nodes (23): collectSystem(), BuildDecisionTree(), childMatchesDecision(), chooseDecisionBranch(), decisionKey(), decisionValue(), defaultDecisionBranch(), stringifyDecisionValue() (+15 more)
+
+### Community 191 - "Community 191"
+Cohesion: 0.14
+Nodes (21): apiFetch(), esc(), getCookie(), Alert, cbIcon(), createAgent(), deleteAgent(), loadAgents() (+13 more)
 
 ### Community 192 - "Community 192"
 Cohesion: 0.11
 Nodes (6): ApprovalPolicy, TestSanitizeUserID(), Profile, SanitizeUserID(), Store, Workspace
 
 ### Community 193 - "Community 193"
-Cohesion: 0.13
-Nodes (16): TestRunOnceFlushesSelectorTelemetry(), TestSelectorStatsFileSanitizesTreeID(), GoalArchetype, GoalFactory, clamp01(), containsAny(), DefaultInitialState(), DetectArchetype() (+8 more)
-
-### Community 194 - "Community 194"
-Cohesion: 0.26
-Nodes (23): NewGoalQueue(), names(), names2(), TestGoalIsSatisfied(), TestGoalQueueAddAndSelect(), TestGoalQueueAddReplace(), TestGoalQueueAll(), TestGoalQueueAllSatisfied() (+15 more)
-
-### Community 195 - "Community 195"
-Cohesion: 0.14
-Nodes (16): fakeLLM, NewGoalFactory(), TestAutomationActions_ReachTaskAutomated(), TestGoalFactory_ArchetypeFallbackWhenLLMKeepsFailing(), TestGoalFactory_ArchetypeFallbackWithoutLLM(), TestGoalFactory_EmptyIntent(), TestGoalFactory_FromIntentLLM(), TestGoalFactory_FromPattern() (+8 more)
-
-### Community 196 - "Community 196"
 Cohesion: 0.21
 Nodes (23): readMessages(), TestInitialize(), TestMaxMessageSize_AllowsNormalSized(), TestNotification_Initialized(), TestParseError(), TestRateLimiting(), TestRateLimitingDisabled(), TestRegisterMultipleTools() (+15 more)
 
-### Community 197 - "Community 197"
-Cohesion: 0.14
-Nodes (19): min(), generateTemplateOutput(), TestGenerateTemplateOutput_Basic(), TestGenerateTemplateOutput_NilChainState(), TestGenerateTemplateOutput_NoArc42Section(), TestGenerateTemplateOutput_TruncatedCache(), TestGenerateTemplateOutput_Arc42Section(), TestGenerateTemplateOutput_Arc42TitleNoNewline() (+11 more)
+### Community 194 - "Community 194"
+Cohesion: 0.09
+Nodes (23): TestDeprecatedHandlerFunc(), TestSchemaToMap_Format(), DeprecationHeader, DeprecatedHandlerFunc(), httpStatusText(), schemaToMap(), TestDeprecatedHandlerFunc_WithSunset(), TestHTTPStatusText() (+15 more)
 
-### Community 198 - "Community 198"
-Cohesion: 0.14
-Nodes (23): ClearGoapFusionStateHashes(), goapFusionCircuitBreakerVerdict(), goapFusionCircuitBreakerWindow(), goapFusionCircuitPolicyVerdict(), goapFusionCircuitPolicyVerdictWithBypass(), goapFusionImplementationGateWired(), goapFusionPreflightWired(), goapFusionRepeatedHashBypassed() (+15 more)
+### Community 195 - "Community 195"
+Cohesion: 0.11
+Nodes (16): agentNameFromBB(), init(), registerDelegateNodes(), init(), registerAuctionDelegateNode(), registerIsAuctionTaskCondition(), init(), init() (+8 more)
 
-### Community 199 - "Community 199"
-Cohesion: 0.13
-Nodes (19): claudeBackoffWindow(), TestClaudeBackoffWindow_EnvOverride(), ClaudeRunner, CommandResult, CommandRunner, execClaudeRunner, execCommandRunner, claudeBackoffWindow() (+11 more)
-
-### Community 200 - "Community 200"
+### Community 196 - "Community 196"
 Cohesion: 0.15
 Nodes (18): cleanupAppliedSuperpowersWorktree(), cleanupSuperpowersWorktree(), createSuperpowersWorktree(), planSuperpowersWorktree(), reapOrphanedSuperpowersBranches(), superpowersWorktreeBranches(), TestCleanupAppliedSuperpowersWorktreeNoOpsOnDryRun(), TestCleanupAppliedSuperpowersWorktreeRemovesWorktreeAndMergedBranch() (+10 more)
 
-### Community 201 - "Community 201"
+### Community 197 - "Community 197"
+Cohesion: 0.24
+Nodes (20): NewRedisPriorityQueue(), NewRedisPriorityQueueFromClient(), NewRedisQueue(), NewRedisQueueFromClient(), redisID(), testRedisAddr(), testRedisClient(), TestRedisPriorityQueue_DefaultKey() (+12 more)
+
+### Community 198 - "Community 198"
+Cohesion: 0.14
+Nodes (19): min(), generateTemplateOutput(), TestGenerateTemplateOutput_Basic(), TestGenerateTemplateOutput_NilChainState(), TestGenerateTemplateOutput_NoArc42Section(), TestGenerateTemplateOutput_TruncatedCache(), TestGenerateTemplateOutput_Arc42Section(), TestGenerateTemplateOutput_Arc42TitleNoNewline() (+11 more)
+
+### Community 199 - "Community 199"
 Cohesion: 0.18
 Nodes (8): MaxDepth(), hasExecutionPathFirst(), hasUnboundedRetry(), MetaValidationDecision, MetaValidationIssue, MetaValidationReport, MetaValidator, MetaValidatorConfig
+
+### Community 200 - "Community 200"
+Cohesion: 0.14
+Nodes (15): TestRunOnceFlushesSelectorTelemetry(), TestSelectorStatsFileSanitizesTreeID(), GoalArchetype, GoalFactory, clamp01(), containsAny(), DetectArchetype(), extractJSONObject() (+7 more)
+
+### Community 201 - "Community 201"
+Cohesion: 0.13
+Nodes (14): NewDocPlanner(), fakeBlackboard, NewBlackboardBridge(), TestAgentFailurePathsAndSummary(), TestBlackboardBridgeHandlesNilChainStateAndFailure(), TestBlackboardBridgeSyncAndPlanSuccess(), TestBuildGoalFromTaskMultipleKeywordsAndTruncation(), TestDocPlannerAlreadyCompleteReturnsEmptyPlan() (+6 more)
 
 ### Community 202 - "Community 202"
 Cohesion: 0.19
 Nodes (22): CompilePlanToTree(), compileStep(), encodePairs(), encodePairsReadable(), executableNode(), outcomeSelector(), PlanHash(), preGate() (+14 more)
 
 ### Community 203 - "Community 203"
+Cohesion: 0.09
+Nodes (15): init(), modal, num, renderTab(), state, TAB_KEYS, renderCompany(), loadEvolutionData() (+7 more)
+
+### Community 204 - "Community 204"
 Cohesion: 0.08
 Nodes (23): 10.1 Quality Tree, 10.2 Quality Scenarios, 1.1 Requirements Overview, 1.2 Quality Goals (Top 3), 1.3 Stakeholders, arc42 Architecture Documentation — go-bt-evolve, arc42 Section 10 — Quality Requirements, arc42 Section 11 — Risks and Technical Debt (+15 more)
 
-### Community 204 - "Community 204"
-Cohesion: 0.09
-Nodes (14): TestComputeAnalytics_BottleneckCarriesStructuredFailure(), TestComputeAnalytics_Bottlenecks(), TestComputeAnalytics_BottleneckWithoutTraceHasEmptyFailure(), TestComputeAnalytics_BottleneckWithTrace(), TestComputeAnalytics_Centrality(), TestComputeAnalytics_CoverageGapsUseExpectedDomains(), TestComputeAnalytics_EmptyGraph(), TestComputeAnalytics_ExtendedEdges() (+6 more)
-
 ### Community 205 - "Community 205"
-Cohesion: 0.13
-Nodes (17): NewTraceStore(), TestExplainLastFailure_NoTrace(), TestExplainLastFailure_RendersPathFromChildTicks(), TestExplainLastFailure_TraceFound(), TestTraceStore_GetByTreeID(), TestTraceStore_GetEmpty(), TestTraceStore_GetLimited(), TestTraceStore_GetNoMatch() (+9 more)
+Cohesion: 0.11
+Nodes (11): ContentItem, InputSchema, sanitizeArg(), Message, Property, RPCError, Server, ToolDef (+3 more)
 
 ### Community 206 - "Community 206"
-Cohesion: 0.26
-Nodes (22): requestErrorHandlerProposal(), swapErrorHandlerRunner(), TestRequestErrorHandlerProposal_RespectsCallerContext(), TestRequestErrorHandlerProposal_StampsLedgerOnEveryOutcome(), ehTestHandlerNode(), ehTestProposalJSON(), init(), runHandler() (+14 more)
-
-### Community 207 - "Community 207"
-Cohesion: 0.12
-Nodes (16): currentSuperpowersForEachTask(), banditChildKey(), banditLockFor(), banditStatsDir(), banditStatsPath(), banditUCB1Order(), BuildBanditSelector(), recordBanditOutcome() (+8 more)
-
-### Community 208 - "Community 208"
-Cohesion: 0.19
-Nodes (18): FusionDeliberationTree(), collectFusionNames(), findFusionNode(), TestFusionDeliberationTree_HasFusionAndDirectPaths(), TestFusionDeliberationTree_UsesFusionChainAction(), NewAction(), NewAdapt(), NewChainAction() (+10 more)
-
-### Community 209 - "Community 209"
-Cohesion: 0.11
-Nodes (10): ContentItem, InputSchema, sanitizeArg(), Message, Property, RPCError, Server, ToolDef (+2 more)
-
-### Community 210 - "Community 210"
 Cohesion: 0.13
 Nodes (17): captureExporter, ExportedEvent, ExportedSpan, ConfigureOTLPFromEnv(), firstNonEmpty(), NewOTLPHTTPExporter(), otlpTracePayload(), parseOTLPHeaders() (+9 more)
 
-### Community 211 - "Community 211"
-Cohesion: 0.19
-Nodes (18): DiversityMetrics, EvolutionParameters, FitnessMetrics, BuildPopulationState(), BuildPopulationStateWithGrid(), clamp01(), clampMutationRate(), DefaultPhaseRanges() (+10 more)
+### Community 207 - "Community 207"
+Cohesion: 0.12
+Nodes (8): Approval, Workflow, newTaskNonce(), TestPriority_String(), TestTaskStatus_String(), WorkflowPriority, WorkflowTask, WorkflowTaskStatus
 
-### Community 212 - "Community 212"
+### Community 208 - "Community 208"
 Cohesion: 0.18
 Nodes (21): TestMutation_TargetNotFound(), TestMutation_WrapRetry(), applyAddAfter(), applyAddBefore(), applyAddFallback(), applyAddTool(), applyImprovePrompt(), applyIncreaseIterations() (+13 more)
 
-### Community 213 - "Community 213"
+### Community 209 - "Community 209"
+Cohesion: 0.09
+Nodes (12): A2AHandoffBlock(), builtinBlocks(), DelegateBlock(), EvolveOnFailureBlock(), HumanGateBlock(), HumanReviewBlock(), HITLTieredBlock(), MemoryLoadBlock() (+4 more)
+
+### Community 210 - "Community 210"
+Cohesion: 0.21
+Nodes (18): saveRecordWithDelay(), TestCreateAgentTool_Call_NilFactory(), TestEvolveTool_Call_NotEnoughFailures(), TestEvolveTool_Call_NoTree(), TestEvolveTool_Call_Success(), TestFitnessTool_Call(), TestFitnessTool_Call_NoData(), TestGetReflectionsTool_Call_NoRecords() (+10 more)
+
+### Community 211 - "Community 211"
 Cohesion: 0.14
-Nodes (17): NewEvolvedAgent(), TestConfig_AllFields(), TestCreateAgentTool_Call_NilFactory(), TestEvolvedAgent_Run(), TestEvolvedAgent_Run_Error(), TestEvolvedAgent_Run_WithAutoEvolve(), TestEvolvedAgent_StructFields(), TestMockModel_SatisfiesInterface() (+9 more)
+Nodes (11): TestIsBreakerSuccess(), IsRateLimitCarryover(), repeatChar(), TestHistoryQualityScore_UsesSpecWhenHigher(), TestIsRateLimitCarryover(), TestCycleBreakerSuccess_HealthyOutcomesDoNotTripBreaker(), TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy(), cycleBreakerSuccess() (+3 more)
+
+### Community 212 - "Community 212"
+Cohesion: 0.19
+Nodes (18): FusionDeliberationTree(), collectFusionNames(), findFusionNode(), TestFusionDeliberationTree_HasFusionAndDirectPaths(), TestFusionDeliberationTree_UsesFusionChainAction(), NewAction(), NewAdapt(), NewChainAction() (+10 more)
+
+### Community 213 - "Community 213"
+Cohesion: 0.19
+Nodes (18): DiversityMetrics, EvolutionParameters, FitnessMetrics, BuildPopulationState(), BuildPopulationStateWithGrid(), clamp01(), clampMutationRate(), DefaultPhaseRanges() (+10 more)
 
 ### Community 214 - "Community 214"
+Cohesion: 0.18
+Nodes (18): baselineCmd(), baselinePath(), checkCmd(), main(), printUsage(), resetCmd(), run(), showCmd() (+10 more)
+
+### Community 215 - "Community 215"
+Cohesion: 0.13
+Nodes (17): NewTraceStore(), TestExplainLastFailure_NoTrace(), TestExplainLastFailure_RendersPathFromChildTicks(), TestExplainLastFailure_TraceFound(), TestTraceStore_GetByTreeID(), TestTraceStore_GetEmpty(), TestTraceStore_GetLimited(), TestTraceStore_GetNoMatch() (+9 more)
+
+### Community 216 - "Community 216"
+Cohesion: 0.09
+Nodes (14): TestComputeAnalytics_BottleneckCarriesStructuredFailure(), TestComputeAnalytics_Bottlenecks(), TestComputeAnalytics_BottleneckWithoutTraceHasEmptyFailure(), TestComputeAnalytics_BottleneckWithTrace(), TestComputeAnalytics_Centrality(), TestComputeAnalytics_CoverageGapsUseExpectedDomains(), TestComputeAnalytics_EmptyGraph(), TestComputeAnalytics_ExtendedEdges() (+6 more)
+
+### Community 217 - "Community 217"
+Cohesion: 0.21
+Nodes (18): saveRecordWithDelay(), TestCreateAgentTool_Call_NilFactory(), TestEvolveTool_Call_NotEnoughFailures(), TestEvolveTool_Call_NoTree(), TestEvolveTool_Call_Success(), TestFitnessTool_Call(), TestFitnessTool_Call_NoData(), TestGetReflectionsTool_Call_NoRecords() (+10 more)
+
+### Community 218 - "Community 218"
 Cohesion: 0.11
 Nodes (20): envBool(), hasExplicitField(), mergeFileConfig(), TestEnvBool(), marshalConfig(), TestDiff_DifferentValues(), TestDiff_EmptyConfigs(), TestEnvBool_DefaultValue() (+12 more)
 
-### Community 215 - "Community 215"
-Cohesion: 0.12
-Nodes (13): fakeCaller, fakeTool, flakyCaller, TestJudge_RetriesTransientFailure(), TestRunPanel_CircuitBreakerOpensAfterConsecutiveFailures(), TestRunPanel_FailsWhenAllModelsFail(), TestRunPanel_PreservesPerModelErrors(), TestRunPanel_RecoversFromModelPanic() (+5 more)
-
-### Community 216 - "Community 216"
-Cohesion: 0.1
-Nodes (11): requireBuildIdentityWiring(), TestDaemonLogsBuildIdentityAtStartup(), TestDLQReplayOutcomeError_HealthyNonSuccessNotFailing(), TestDLQReplayScanSurvivesPanicAcrossTicks(), TestGardenerLogsBuildIdentityAtStartup(), TestRoutedRunResult_FabricatedOutcomeUsesCanonicalFailure(), TestSchedulerAttempt_RateLimitCarryoverRecordedAsDeferred(), TestSchedulerAttempt_SuccessAndFailureUnchanged() (+3 more)
-
-### Community 217 - "Community 217"
-Cohesion: 0.14
-Nodes (11): eventDataString(), newRoutineThrottle(), routineThrottle, throttleEntry, computeHMAC(), TestComputeHMAC(), TestComputeHMAC_Deterministic(), TestComputeHMAC_DifferentKeys() (+3 more)
-
-### Community 218 - "Community 218"
-Cohesion: 0.13
-Nodes (3): Request, Status, Store
-
 ### Community 219 - "Community 219"
-Cohesion: 0.1
-Nodes (6): CreateAgentTool, FitnessTool, GetReflectionsTool, GetTreeTool, RunTaskTool, truncateStr()
+Cohesion: 0.14
+Nodes (19): NewACPClient(), countCrashInvocations(), TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures(), TestACPClientGenerateCtx_StderrBufferRace(), TestACPClientGenerateReturnsErrorWhenSessionMissing(), TestACPClientGenerateTalksToACPServer(), TestACPClientGenerateTalksToHermesACP(), TestACPHelperProcess() (+11 more)
 
 ### Community 220 - "Community 220"
-Cohesion: 0.2
-Nodes (17): auctionCandidates(), candidateOverride(), cardURL(), cardSignatureValid(), SignAgentCard(), TestAuctionCandidates_RejectsTamperedCardSignature(), TestConvertToAgentCard_AttachesSignature(), TestHandleGlobalAgentCard_ResponseIsSigned() (+9 more)
+Cohesion: 0.13
+Nodes (15): banditChildKey(), banditLockFor(), banditStatsDir(), banditStatsPath(), banditUCB1Order(), BuildBanditSelector(), recordBanditOutcome(), saveBanditStats() (+7 more)
 
 ### Community 221 - "Community 221"
-Cohesion: 0.1
-Nodes (20): TestSchemaToMap_Format(), DeprecationHeader, httpStatusText(), schemaToMap(), TestHTTPStatusText(), TestSchemaToMap_Array(), TestSchemaToMap_Enum(), TestSchemaToMap_Nil() (+12 more)
+Cohesion: 0.17
+Nodes (19): buildRunActivitySummary(), fencedItems(), isFactLine(), joinCapped(), salientOutputLines(), TestBuildRunActivitySummaryCapsLongFencedLists(), TestBuildRunActivitySummaryEmptyEverything(), TestBuildRunActivitySummaryFailureLeadsWithReason() (+11 more)
 
 ### Community 222 - "Community 222"
 Cohesion: 0.17
-Nodes (18): TestBTOptimizer_New(), TestDTAnalyzer_New(), TestFindMainSelector(), TestMergeOverlappingPaths_MergeNode(), TestPathHitRatioExtras(), TestPruneDeadPaths(), NewBTOptimizer(), NewDTAnalyzer() (+10 more)
+Nodes (10): BlockConfig, ApplyDiffMutation(), findBlockForNode(), TestApplyDiffMutation(), DiffMutation, EvolveBlock, MetaPromptEvolver, MutationContext (+2 more)
 
 ### Community 223 - "Community 223"
-Cohesion: 0.15
-Nodes (18): gitOutput(), TestNoCommittedRootBinaries(), extractTaskID(), init(), nlmAuthNeedsRefresh(), nlmAuthUnhealthy(), registerNotebookLMActions(), writeString() (+10 more)
-
-### Community 224 - "Community 224"
-Cohesion: 0.13
-Nodes (19): isKnownActionName(), isKnownConditionName(), TestBuildNode_AbortOnEvent(), TestBuildNode_PlannerNode(), TestBuildNode_ReactiveParallel(), TestBuildNode_UtilitySelector(), TestIsKnownActionName_BuiltinOnly(), TestIsKnownActionName_Empty() (+11 more)
-
-### Community 225 - "Community 225"
-Cohesion: 0.15
-Nodes (15): allDigits(), consecutiveFailures(), diagnoseFailureMode(), getLatestTimestamp(), groupByTreeName(), inferAgentName(), init(), registerBTManagerActions() (+7 more)
-
-### Community 226 - "Community 226"
 Cohesion: 0.12
 Nodes (10): ContentItem, InputSchema, Message, Property, RPCError, Server, sanitizeArg(), ToolDef (+2 more)
 
-### Community 227 - "Community 227"
+### Community 224 - "Community 224"
 Cohesion: 0.15
-Nodes (10): PatternSignature(), TestPatternSignature(), AutomationRecord, AutomationStore, HabitMiner, cosine(), jaccard(), keywordSet() (+2 more)
+Nodes (15): allDigits(), consecutiveFailures(), diagnoseFailureMode(), getLatestTimestamp(), groupByTreeName(), inferAgentName(), init(), registerBTManagerActions() (+7 more)
+
+### Community 225 - "Community 225"
+Cohesion: 0.15
+Nodes (18): gitOutput(), TestNoCommittedRootBinaries(), extractTaskID(), init(), nlmAuthNeedsRefresh(), nlmAuthUnhealthy(), registerNotebookLMActions(), writeString() (+10 more)
+
+### Community 226 - "Community 226"
+Cohesion: 0.1
+Nodes (13): AgentEndpoint, AgentExecutor, AgentResult, CircuitState, ConcurrencyLimiter, DeadLetterEntry, executorFailureState, ExecutorHealthDetail (+5 more)
+
+### Community 227 - "Community 227"
+Cohesion: 0.13
+Nodes (19): TestBTOptimizer_New(), collectSelectors(), conditionOverlap(), findMainSelector(), TestExtractCondition(), TestFindMainSelector(), TestMergeOverlappingPaths_MergeNode(), TestPathHitRatioExtras() (+11 more)
 
 ### Community 228 - "Community 228"
 Cohesion: 0.13
-Nodes (20): 8.10 Autonomous Landing Pipeline, 8.11 Observability, 8.12 A2A Auction Task Allocation, 8.13 Leaf-Node Structural Validation, 8.14 Fleet-Wide Node Description Coverage, 8.15 Validation-Gated Composition Activation, 8.16 Self-Extending Claude Error Recovery, 8.17 Composable Blocks and Expand-at-Build (+12 more)
+Nodes (15): DefaultBlockConfig(), NewMetaPromptEvolver(), NewMutationContext(), TestBlockConfig_FilterMutations(), TestBlockConfig_IsMutable(), TestCrisisDetector_LastDiversity(), TestDefaultBlockConfig(), TestExpert_MatchPattern() (+7 more)
 
 ### Community 229 - "Community 229"
-Cohesion: 0.16
-Nodes (16): CollectBlockIDs(), FitnessRanking(), RecordTaskBlockFitness(), ScoreFromBlackboard(), TestRecordTaskBlockFitness(), BlockFitnessRanking(), BlockFitnessSnapshot(), BlockMetricsSnapshot() (+8 more)
+Cohesion: 0.13
+Nodes (20): 8.10 Autonomous Landing Pipeline, 8.11 Observability, 8.12 A2A Auction Task Allocation, 8.13 Leaf-Node Structural Validation, 8.14 Fleet-Wide Node Description Coverage, 8.15 Validation-Gated Composition Activation, 8.16 Self-Extending Claude Error Recovery, 8.17 Composable Blocks and Expand-at-Build (+12 more)
 
 ### Community 230 - "Community 230"
+Cohesion: 0.15
+Nodes (7): DashboardRoutes(), TestDashboardRoutes_AgentsExecuteHasRequestBody(), TestDashboardRoutes_AllHaveOperationIDs(), TestDashboardRoutes_Completeness(), TestDashboardRoutes_OperationIDUniqueness(), TestDashboardRoutes_SwaggerRoute(), RouteBuilder
+
+### Community 231 - "Community 231"
 Cohesion: 0.16
 Nodes (13): ApprovalWaitResult, Pipeline, PipelineResult, Runner, Step, StepKind, StepResult, wfState (+5 more)
 
-### Community 231 - "Community 231"
-Cohesion: 0.15
-Nodes (5): Bucket(), TestBucket(), MAPElitesGrid, MAPElitesPopulation, materializeMutationOp()
-
 ### Community 232 - "Community 232"
-Cohesion: 0.22
-Nodes (17): activateAutomation(), automationAgentName(), considerAutomation(), finalizeAutomationApproval(), proposeAutomation(), registerAutomationTools(), suggestSchedule(), newAutopilotDeps() (+9 more)
+Cohesion: 0.14
+Nodes (18): isKnownActionName(), isKnownConditionName(), TestBuildNode_AbortOnEvent(), TestBuildNode_PlannerNode(), TestBuildNode_ReactiveParallel(), TestBuildNode_UtilitySelector(), TestIsKnownActionName_BuiltinOnly(), TestIsKnownActionName_Empty() (+10 more)
 
 ### Community 233 - "Community 233"
-Cohesion: 0.17
-Nodes (18): NewEventBus(), itoa(), TestEventBus_Close(), TestEventBus_CloseMultipleSubscribers(), TestEventBus_ConcurrentAccess(), TestEventBus_DropOnFullChannel(), TestEventBus_HasFired(), TestEventBus_HasFiredAfterReset() (+10 more)
+Cohesion: 0.12
+Nodes (16): collectNames(), contains(), TestBuildTree_Minimal(), TestBuildTree_UnknownType(), TestOutcome_EmptyTaskFails(), TestOutcome_Success(), TestRouting_CodeReview(), TestRouting_Finance() (+8 more)
 
 ### Community 234 - "Community 234"
-Cohesion: 0.18
-Nodes (16): apiFetch(), esc(), getCookie(), cbIcon(), createAgent(), deleteAgent(), loadAgents(), populateTreeDropdown() (+8 more)
+Cohesion: 0.16
+Nodes (14): circuitBreakerCmd, errorAwareCmd, init(), registerReliabilityNodes(), buildCircuitBreaker(), buildTimeout(), circuitBreakerFor(), cooldownFromNode() (+6 more)
 
 ### Community 235 - "Community 235"
+Cohesion: 0.16
+Nodes (12): HabitMiner, cosine(), jaccard(), keywordSet(), NewHabitMiner(), sortedByCount(), minerInput(), TestHabitMiner_BelowThresholdYieldsNothing() (+4 more)
+
+### Community 236 - "Community 236"
 Cohesion: 0.1
 Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
 
-### Community 236 - "Community 236"
-Cohesion: 0.17
-Nodes (14): encodeJSON(), HandleHITL(), HandleHITLPending(), TestHITLHandlers_PendingApproveReject(), writeHITLResult(), TestStoreSaveCompactsTerminalRecords(), TestApprove_FromEscalated(), TestApproveByTaskID_and_Escalate() (+6 more)
-
 ### Community 237 - "Community 237"
-Cohesion: 0.17
-Nodes (18): handleAgentsList(), AgentHistoryEntry, AgentInfo, agentStatus(), ListAgents(), ListAgentsWithCB(), listRegistryAgents(), loadCircuitBreakers() (+10 more)
+Cohesion: 0.2
+Nodes (8): sameJSONID(), scanJSONLines(), startScanJSONLines(), TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr(), writeACPMessage(), ACPClient, ACPConfig, syncBuffer
 
 ### Community 238 - "Community 238"
-Cohesion: 0.2
-Nodes (6): jaccardSimilarity(), TestJaccardSimilarity(), TestTokenize(), tokenize(), ExperienceBank, ExperienceEntry
+Cohesion: 0.12
+Nodes (3): consoleSpan, ConsoleTracer, RatioSampler
 
 ### Community 239 - "Community 239"
-Cohesion: 0.19
-Nodes (16): NewDefaultCompany(), CompanyState, Decision, QuarterResult, companySummary(), TestCompanySimulation_Quarter(), TestCompanySimulation_Sprint(), TestCompanySimulation_Summary() (+8 more)
-
-### Community 240 - "Community 240"
-Cohesion: 0.15
-Nodes (15): deepSearchGardener(), deepSearchV2Config(), TestEvolveTreeV2_DeepSearchMetrics_PopulatedWhenTTConfigured(), TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable(), TestMetricsTracker_CyclesForTree(), TestMetricsTracker_RecordAndSummary(), TestMetricsTracker_SaveAggregatesCrisisAndLastRun(), TestMetricsTracker_SaveAggregatesDeepSearchCoverage() (+7 more)
-
-### Community 241 - "Community 241"
 Cohesion: 0.23
 Nodes (15): bbTool, attachBlackboardTools(), bbToolAppend(), bbToolList(), bbToolRead(), bbToolRecent(), bbToolSessionAppend(), bbToolSessionList() (+7 more)
 
+### Community 240 - "Community 240"
+Cohesion: 0.23
+Nodes (10): TestLocalSearchMutableParamsAndTabu(), extractMutableParams(), getFloatMeta(), NewLocalSearcher(), setFloatMeta(), toFloat64(), LocalSearcher, LocalSearchStrategy (+2 more)
+
+### Community 241 - "Community 241"
+Cohesion: 0.19
+Nodes (4): BTOptimizer, extractCondition(), isDefaultPath(), DTAnalyzer
+
 ### Community 242 - "Community 242"
-Cohesion: 0.18
-Nodes (14): TestRunOnce_EmitsRunRootSpan(), TestRunJob_WebhookSpanJoinsRunTrace(), TestNestedActionSpansParentCorrectly(), TestPanickingActionRestoresTraceContextAndEndsSpan(), TestRegisteredActionEmitsSpan(), TestRegisteredConditionEmitsSpan(), withRecordingGlobalTracer(), NewTracedLLM() (+6 more)
+Cohesion: 0.23
+Nodes (17): registerDecisionTreeAction(), TestDecisionTreeRoutesByChainStateMatch(), TestDecisionTreeUsesDefaultBranchWhenNoMatch(), TestDecisionTreeValidatesAsKnownNodeType(), RouteHistory(), modelRouterTree(), TestCollectBranchLabels_SkipsDefault(), TestModelRouting_HighConfidenceRoutesToModelLabel() (+9 more)
 
 ### Community 243 - "Community 243"
-Cohesion: 0.19
-Nodes (17): MustNewBatchExporter(), NewBatchExporter(), TestBatchExporter_BuffersAndFlushes(), TestBatchExporter_CloseIsIdempotent(), TestBatchExporter_ConcurrentExports(), TestBatchExporter_DefaultBatchSizeAndInterval(), TestBatchExporter_ErrorInInnerIsReported(), TestBatchExporter_FlushCallback() (+9 more)
+Cohesion: 0.11
+Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
 
 ### Community 244 - "Community 244"
-Cohesion: 0.23
-Nodes (10): TestLocalSearchMutableParamsAndTabu(), randomMutation(), extractMutableParams(), getFloatMeta(), setFloatMeta(), toFloat64(), LocalSearcher, LocalSearchStrategy (+2 more)
+Cohesion: 0.11
+Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
 
 ### Community 245 - "Community 245"
 Cohesion: 0.11
@@ -2806,7 +2799,7 @@ Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agen
 
 ### Community 246 - "Community 246"
 Cohesion: 0.11
-Nodes (18): 1. Prerequisites, 2. Install, 3. Run tests, 4. Start the dashboard, 5. Run your first task, API Endpoints, Architecture, code:bash (git clone https://github.com/nico/go-bt-evolve.git) (+10 more)
+Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
 
 ### Community 247 - "Community 247"
 Cohesion: 0.11
@@ -3002,7 +2995,7 @@ Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agen
 
 ### Community 295 - "Community 295"
 Cohesion: 0.11
-Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
+Nodes (18): 1. Prerequisites, 2. Install, 3. Run tests, 4. Start the dashboard, 5. Run your first task, API Endpoints, Architecture, code:bash (git clone https://github.com/nico/go-bt-evolve.git) (+10 more)
 
 ### Community 296 - "Community 296"
 Cohesion: 0.11
@@ -3641,220 +3634,224 @@ Cohesion: 0.11
 Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
 
 ### Community 455 - "Community 455"
-Cohesion: 0.11
-Nodes (19): Agent Categories, Architecture, BT Agent Platform, code:block1 (Agent YAML → Registry → Scheduler → resolveTree() → BuildTre), code:bash (# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)), code:block3 (┌─────────────────────────────────────────────────────────┐), code:block4 (cmd/                          # Entrypoints (7 binaries)), code:block5 (Sequence "Main") (+11 more)
+Cohesion: 0.19
+Nodes (12): CleanupOldLogs(), NewRotatingWriter(), TestCleanupOldLogs(), TestCleanupOldLogs_NoBackups(), TestNewRotatingWriter_AppendToExisting(), TestNewRotatingWriter_CreatesFile(), TestRotatingWriter_Close(), TestRotatingWriter_MaxBackups() (+4 more)
 
 ### Community 456 - "Community 456"
-Cohesion: 0.22
-Nodes (7): sameJSONID(), scanJSONLines(), startScanJSONLines(), writeACPMessage(), ACPClient, ACPConfig, syncBuffer
-
-### Community 457 - "Community 457"
-Cohesion: 0.17
-Nodes (15): handlePipelineRun(), handlePipelines(), handlePipelineStatus(), newPipelineRunner(), newRunID(), resolveTree(), runPipelineAgentStep(), TestHandlePipelineRun_PanicRecoveredAsFailedStatus() (+7 more)
-
-### Community 458 - "Community 458"
 Cohesion: 0.21
 Nodes (12): TestGoalFactory(), errTest, NewHealthMonitor(), TestHealthMonitorDegradationError(), TestHealthMonitorNilSafety(), TestHealthMonitorProbe(), TestHealthMonitorProbeFailure(), TestHealthMonitorProbeUnreachable() (+4 more)
 
-### Community 459 - "Community 459"
-Cohesion: 0.19
-Nodes (12): CleanupOldLogs(), NewRotatingWriter(), TestCleanupOldLogs(), TestCleanupOldLogs_NoBackups(), TestNewRotatingWriter_AppendToExisting(), TestNewRotatingWriter_CreatesFile(), TestRotatingWriter_Close(), TestRotatingWriter_MaxBackups() (+4 more)
-
-### Community 460 - "Community 460"
-Cohesion: 0.12
-Nodes (8): agentNameInterceptor, agentNameKey, BTAgentExecutor, Server, failureEventMessage(), NewServer(), parseAnnouncement(), TestFailureEventMessage_CarryoverKeepsSentinel()
-
-### Community 461 - "Community 461"
+### Community 457 - "Community 457"
 Cohesion: 0.2
 Nodes (14): extractWorldState(), hasWorldState(), NewCheckpointVerifier(), readPostconditions(), restoreState(), snapshotState(), TestCheckpointVerifier_DefaultMaxRetries(), TestCheckpointVerifier_ExhaustsRetriesReturnsFailure() (+6 more)
 
-### Community 462 - "Community 462"
+### Community 458 - "Community 458"
 Cohesion: 0.19
 Nodes (12): CleanupOldLogs(), NewRotatingWriter(), TestCleanupOldLogs(), TestCleanupOldLogs_NoBackups(), TestNewRotatingWriter_AppendToExisting(), TestNewRotatingWriter_CreatesFile(), TestRotatingWriter_Close(), TestRotatingWriter_MaxBackups() (+4 more)
 
-### Community 463 - "Community 463"
-Cohesion: 0.18
-Nodes (5): NewNSGAIISorter(), TestNSGAII_FastNonDominatedSort(), NSGAIIFront, NSGAIIPopulation, NSGAIISorter
-
-### Community 464 - "Community 464"
+### Community 459 - "Community 459"
 Cohesion: 0.14
 Nodes (8): Definition, InputSpec, Instance, OutputSpec, QualitySpec, Registry, NewRegistry(), State
 
-### Community 465 - "Community 465"
-Cohesion: 0.2
-Nodes (14): toast(), approveHITL(), approveTask(), executeSprint(), pollSprintStatus(), refreshHITL(), refreshTasks(), rejectHITL() (+6 more)
+### Community 460 - "Community 460"
+Cohesion: 0.13
+Nodes (9): TestConfig_AllFields(), TestEvolvedAgent_Run(), TestEvolvedAgent_Run_WithAutoEvolve(), TestEvolvedAgent_StructFields(), TestNewEvolvedAgent_AllToolsRegistered(), newConfig(), TestNewEvolvedAgent(), mockLLM (+1 more)
 
-### Community 466 - "Community 466"
+### Community 461 - "Community 461"
+Cohesion: 0.18
+Nodes (17): handleAgentsList(), AgentHistoryEntry, AgentInfo, agentStatus(), ListAgents(), ListAgentsWithCB(), listRegistryAgents(), loadCircuitBreakers() (+9 more)
+
+### Community 462 - "Community 462"
+Cohesion: 0.16
+Nodes (6): enforceIslandCap(), mergeIslandPopulation(), islandArchive, IslandModel, IslandStats, materializeMutationOp()
+
+### Community 463 - "Community 463"
 Cohesion: 0.24
 Nodes (16): bbError(), bbManager(), parseBBScope(), registerBlackboardTools(), invokeBB(), newBBServer(), TestBBManagerRequiresAgentRunner(), TestBTBBDeleteMissingKeyErrors() (+8 more)
 
-### Community 467 - "Community 467"
+### Community 464 - "Community 464"
 Cohesion: 0.14
 Nodes (18): Added, Added, Added, Added, Added, Changed, Changelog, Chores (+10 more)
 
-### Community 468 - "Community 468"
+### Community 465 - "Community 465"
 Cohesion: 0.11
 Nodes (17): BT Agents — Operator Guide, code:block1 (Agent YAML  →  Registry  →  Scheduler (optional)  →  resolve), DoorMate (not a BT agent), Evolution and agents, Execution path comparison, Known limitations, MCP agent tools (quick reference), Mental model (+9 more)
 
-### Community 469 - "Community 469"
+### Community 466 - "Community 466"
 Cohesion: 0.11
 Nodes (16): code:bash (# 1. Get a runner token from GitHub), code:bash (# Check status), code:yaml (runs-on: [self-hosted, jetson, arm64]), code:bash (rm -rf ~/actions-runner/_work/_actions), Nightly tests failing with "Ollama not reachable", Prerequisites, Quick Setup, Runner appears offline (+8 more)
 
-### Community 470 - "Community 470"
+### Community 467 - "Community 467"
 Cohesion: 0.11
-Nodes (17): arc42 Docs Consolidation & Per-Section Sync Nodes — Implementation Plan, Canonical section layout (used by merge tasks, Go manifest, and drift script — keep all three in lockstep), code:bash (grep -F '## 10.1 Quality Tree' docs/arc42/10-quality.md && g), code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), code:bash (git add -A), code:bash (for f in 02-constraints 03-context-scope 04-solution-strateg), code:bash (for d in $(find internal -maxdepth 1 -type d ! -name interna), code:bash (grep -F '## 5.0 Composable Blocks' docs/arc42/05-building-bl) (+9 more)
+Nodes (17): arc42 Docs Consolidation & Per-Section Sync Nodes — Implementation Plan, Canonical section layout (used by merge tasks, Go manifest, and drift script — keep all three in lockstep), code:bash (cd <repo-root>), code:bash (grep -F '## 10.1 Quality Tree' docs/arc42/10-quality.md && g), code:bash (git status --short          # expect: empty), code:bash (for f in 02-constraints 03-context-scope 04-solution-strateg), code:bash (for d in $(find internal -maxdepth 1 -type d ! -name interna), code:bash (grep -F '## 5.0 Composable Blocks' docs/arc42/05-building-bl) (+9 more)
 
-### Community 471 - "Community 471"
+### Community 468 - "Community 468"
 Cohesion: 0.11
 Nodes (17): 10. Testing, 11. Known baseline caveat, 1. Node semantics, 2. Error signature, 3. Persistence (ADR-003), 4. Claude invocation, 5. Validation (strict, before any graft), 6. Guardrails (+9 more)
 
-### Community 472 - "Community 472"
+### Community 469 - "Community 469"
 Cohesion: 0.11
 Nodes (17): arc42 conformance restructures (from the official tips), arc42 Docs Consolidation & Per-Section Sync Nodes — Design, B1. Read-side repoint, B2. Section manifest + shared sync engine (new files in `internal/engine`), B3. Registered nodes + tree, B4. Pipeline integration, B5. Retirements & docgen, B6. Drift script (+9 more)
 
-### Community 473 - "Community 473"
-Cohesion: 0.25
-Nodes (17): saveRecordWithDelay(), TestEvolveTool_Call_NotEnoughFailures(), TestEvolveTool_Call_NoTree(), TestEvolveTool_Call_Success(), TestFitnessTool_Call(), TestFitnessTool_Call_NoData(), TestGetReflectionsTool_Call_NoRecords(), TestGetReflectionsTool_Call_Truncation() (+9 more)
-
-### Community 474 - "Community 474"
-Cohesion: 0.18
-Nodes (15): TestBuildIdentityStampedRevisionFallback(), BuildIdentityFromBuildInfo(), exposedBuildIdentity(), InstallBuildIdentity(), ReadBuildIdentity(), SetBuildIdentity(), scrapeMetrics(), TestAgentTaskDurationHistogramSeriesRendered() (+7 more)
-
-### Community 475 - "Community 475"
-Cohesion: 0.12
-Nodes (16): TestValidate_CBCooldownSecs_TooHigh(), TestValidate_CBCooldownSecs_TooLow(), TestValidate_CBThreshold_TooHigh(), TestValidate_CBThreshold_TooLow(), TestValidate_DLQMaxEntries_TooHigh(), TestValidate_DLQMaxEntries_TooLow(), TestValidate_RetryBaseDelayMs_TooHigh(), TestValidate_RetryBaseDelayMs_TooLow() (+8 more)
-
-### Community 477 - "Community 477"
-Cohesion: 0.15
-Nodes (15): TestDefaultDeepSeekConfig(), TestDefaultDeepSeekConfig_WithEnvKey(), DefaultDeepSeekConfig(), DeepSeekConfig, deepseekMsg, deepseekRequest, deepseekResponse, TestNewProvider_BuildsFallbackChainFromConfiguredModels() (+7 more)
-
-### Community 478 - "Community 478"
-Cohesion: 0.21
-Nodes (15): buildRunActivitySummary(), fencedItems(), isFactLine(), joinCapped(), salientOutputLines(), TestBuildRunActivitySummaryCapsLongFencedLists(), TestBuildRunActivitySummaryEmptyEverything(), TestBuildRunActivitySummaryFailureLeadsWithReason() (+7 more)
-
-### Community 479 - "Community 479"
+### Community 470 - "Community 470"
 Cohesion: 0.19
-Nodes (7): priorityWeight(), summarizeOutput(), TestPriorityWeight(), TestSummarizeOutput(), truncate(), MemoryEntry, MemoryStore
+Nodes (13): CollectBlockIDs(), FitnessRanking(), RecordTaskBlockFitness(), ScoreFromBlackboard(), BlockFitnessRanking(), BlockMetricsSnapshot(), NodeMetricsSnapshot(), ObserveBlockCompose() (+5 more)
 
-### Community 480 - "Community 480"
-Cohesion: 0.22
-Nodes (3): MultiFitness, ParetoFront, ParetoPopulation
-
-### Community 481 - "Community 481"
-Cohesion: 0.16
-Nodes (6): ActionFunc, ActionRegistry, Agent, AgentCallbacks, AgentRun, AgentState
-
-### Community 482 - "Community 482"
+### Community 471 - "Community 471"
 Cohesion: 0.22
 Nodes (14): requireOllamaFinanceTest(), runTeslaTree(), TestTeslaEarnings(), TestTeslaFullAnalysis(), TestTeslaMarket(), TestTeslaModel(), TestTeslaPitchAgent(), TestTeslaValuation() (+6 more)
 
-### Community 483 - "Community 483"
+### Community 472 - "Community 472"
+Cohesion: 0.12
+Nodes (16): TestValidate_CBCooldownSecs_TooHigh(), TestValidate_CBCooldownSecs_TooLow(), TestValidate_CBThreshold_TooHigh(), TestValidate_CBThreshold_TooLow(), TestValidate_DLQMaxEntries_TooHigh(), TestValidate_DLQMaxEntries_TooLow(), TestValidate_RetryBaseDelayMs_TooHigh(), TestValidate_RetryBaseDelayMs_TooLow() (+8 more)
+
+### Community 474 - "Community 474"
+Cohesion: 0.16
+Nodes (6): ActionFunc, ActionRegistry, Agent, AgentCallbacks, AgentRun, AgentState
+
+### Community 476 - "Community 476"
+Cohesion: 0.16
+Nodes (12): NewCatalog(), TestCatalog_Export(), TestCatalog_ListInstalled(), TestCatalog_ListTemplates(), TestCatalog_Search(), TestCatalog_SkillToAgent(), TestInferTree(), TestCatalog_EmptyTemplates() (+4 more)
+
+### Community 477 - "Community 477"
+Cohesion: 0.18
+Nodes (4): Bucket(), TestBucket(), MAPElitesGrid, MAPElitesPopulation
+
+### Community 478 - "Community 478"
+Cohesion: 0.2
+Nodes (6): TestPlanMultiple(), Planner, PlanMultiple(), plannerNode, plannerNodeHeap, PlannerStats
+
+### Community 479 - "Community 479"
 Cohesion: 0.12
 Nodes (17): Audit, code:go (type RateLimiter struct { ... }), code:go (func SanitizeMiddleware(next http.Handler) http.Handler), code:go (type SecurityHeadersConfig struct {), code:go (func CrossOriginMiddleware(allowedOrigins []string) func(htt), code:go (type IPFilterMode int  // FilterAllowlist | FilterBlocklist), code:go (func AuditSecurityEvent(ctx context.Context, eventType strin), code:go (func GenerateRequestID() string            // crypto/rand, 1) (+9 more)
 
-### Community 484 - "Community 484"
+### Community 480 - "Community 480"
 Cohesion: 0.12
 Nodes (17): Agent Executor, Circuit Breaker, code:go (type CircuitBreaker struct { ... }), code:go (func RetryWithBackoff(fn func() error, maxAttempts int, base), code:go (type DeadLetterQueue struct { ... }), code:go (type WorkerPool struct { ... }), code:go (type ConcurrencyLimiter struct { ... }), code:go (type Queue interface {) (+9 more)
 
-### Community 485 - "Community 485"
+### Community 481 - "Community 481"
 Cohesion: 0.12
 Nodes (16): code:block1 (┌──────────────────────────────────────────────┐), Idle assets that the vision needs (build on, don't rebuild), Part 1 — Review: Current State vs arc42 Goals, Part 2 — Target Architecture, Part 3 — Phased Roadmap, Part 4 — Sequencing, Risks, Metrics, Personalized Self-Evolving Agents — Strategy and Implementation Plan, Phase 0 — Close the creation→execution loop (prerequisite, small) (+8 more)
 
-### Community 486 - "Community 486"
+### Community 482 - "Community 482"
 Cohesion: 0.12
 Nodes (16): Alternatives considered, ApproveDesign HITL enrichment, Brainstorm Grill-Driven Design-Improvement Loop — Design, code:block1 (MemSequence BrainstormBranch), Design, Error handling, Goals, GrillDesignArtifact (modified — becomes the ReviewCycle reviewer) (+8 more)
 
-### Community 487 - "Community 487"
+### Community 483 - "Community 483"
 Cohesion: 0.12
 Nodes (17): 8.10 Autonomous Landing Pipeline, 8.11 Observability, 8.12 A2A Auction Task Allocation, 8.13 Leaf-Node Structural Validation, 8.14 Fleet-Wide Node Description Coverage, 8.15 Validation-Gated Composition Activation, 8.16 Self-Extending Claude Error Recovery, 8.1 Behavior Tree Execution Model (+9 more)
 
-### Community 488 - "Community 488"
-Cohesion: 0.28
-Nodes (14): TemplatesDir(), cmdCreate(), cmdDelete(), cmdInstallTemplates(), cmdList(), cmdLogs(), cmdRun(), cmdSchedule() (+6 more)
+### Community 484 - "Community 484"
+Cohesion: 0.29
+Nodes (12): cardSignatureValid(), SignAgentCard(), TestHandleGlobalAgentCard_ResponseIsSigned(), TestSignAgentCard(), TestSignAgentCard_Deterministic(), TestSignAgentCard_DifferentCards(), TestSignAgentCard_NilCard(), TestVerifyAgentCard_AfterModification() (+4 more)
 
-### Community 489 - "Community 489"
-Cohesion: 0.15
-Nodes (13): DiskInfo, GardenerMetrics, MemInfo, Metrics, loadGardenerMetrics(), rankTopWinners(), TestCollect_SurfacesTopEvolvedWinnersFromTrees(), TestLoadGardenerMetricsParsesAggregateDocument() (+5 more)
-
-### Community 490 - "Community 490"
+### Community 485 - "Community 485"
 Cohesion: 0.17
 Nodes (3): LLMInterface, MockLLM, retryMockLLM
 
-### Community 491 - "Community 491"
-Cohesion: 0.29
-Nodes (15): baselineCmd(), baselinePath(), checkCmd(), main(), printUsage(), resetCmd(), run(), showCmd() (+7 more)
+### Community 486 - "Community 486"
+Cohesion: 0.15
+Nodes (13): DiskInfo, GardenerMetrics, MemInfo, Metrics, loadGardenerMetrics(), rankTopWinners(), TestCollect_SurfacesTopEvolvedWinnersFromTrees(), TestLoadGardenerMetricsParsesAggregateDocument() (+5 more)
 
-### Community 492 - "Community 492"
-Cohesion: 0.14
-Nodes (9): BaselineStore, BenchmarkResult, HasRegressions(), HasWarnings(), NewComparator(), pctChange(), Comparator, ComparisonResult (+1 more)
+### Community 487 - "Community 487"
+Cohesion: 0.28
+Nodes (14): TemplatesDir(), cmdCreate(), cmdDelete(), cmdInstallTemplates(), cmdList(), cmdLogs(), cmdRun(), cmdSchedule() (+6 more)
 
-### Community 493 - "Community 493"
+### Community 488 - "Community 488"
 Cohesion: 0.16
 Nodes (13): Outcome, Record, FilterByTreeName(), NewRegistryWithUsers(), recordsForEntry(), TestBankFor_NoUserRootFallsBackToShared(), TestBankFor_PersonalTreesGetPerUserBank(), TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank() (+5 more)
 
-### Community 494 - "Community 494"
-Cohesion: 0.12
-Nodes (7): TestStore_CountFailures_MixedRecords(), TestStore_CountFailures_NoFailures(), TestStore_LoadAll_WithSubdirs(), TestStore_NewStore_MkdirAllError(), TestStore_RecentFailures_Ordering(), TestStore_Save_RenameCleanup(), TestStore_Save_WriteError()
-
-### Community 495 - "Community 495"
+### Community 489 - "Community 489"
 Cohesion: 0.23
 Nodes (6): NewGoalStore(), TestGoalStore_AddRemoveRoundtrip(), TestGoalStore_LoadEmpty(), TestGoalStore_Queue(), TestGoalStore_ValidatesInput(), GoalStore
 
-### Community 497 - "Community 497"
+### Community 490 - "Community 490"
 Cohesion: 0.12
 Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
 
-### Community 498 - "Community 498"
+### Community 491 - "Community 491"
 Cohesion: 0.12
 Nodes (15): Architecture, Background constraints, code:go (// LiveRunInfo names the run for registry listing and persis), code:go (type MutationOp struct {), code:go (// internal/engine — nil-checked, wired from cmd/bt-agent.), Decisions (from brainstorming), Error handling, Goal (+7 more)
 
-### Community 499 - "Community 499"
+### Community 492 - "Community 492"
 Cohesion: 0.2
 Nodes (11): evaluateCondition(), expandTemplate(), replaceAll(), trimQuotes(), Pipeline, PipelineResult, Runner, Step (+3 more)
 
-### Community 500 - "Community 500"
+### Community 493 - "Community 493"
 Cohesion: 0.13
 Nodes (15): LoadDotEnv(), stripInlineComment(), TestLoadDotEnv_Basic(), TestLoadDotEnv_CommentsAndBlanks(), TestLoadDotEnv_EmptyFile(), TestLoadDotEnv_ExportPrefix(), TestLoadDotEnv_InlineComments(), TestLoadDotEnv_MissingFile() (+7 more)
 
-### Community 501 - "Community 501"
+### Community 494 - "Community 494"
 Cohesion: 0.26
 Nodes (8): NewFallbackLLM(), TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel(), TestFallbackLLM_GenerateAllPanicReturnsAggregatedError(), TestFallbackLLM_GenerateRecoversPanicAndTriesNextModel(), TestFallbackLLM_GenerateReturnsAllFailures(), TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(), TestFallbackLLM_ValidationErrorsDoNotTripBreaker(), stubLLM
 
-### Community 502 - "Community 502"
-Cohesion: 0.23
+### Community 495 - "Community 495"
+Cohesion: 0.18
 Nodes (12): TestEligibleBidders(), TestEligibleBidders_NoRequiredTagsMatchesAll(), BuildCardRegistry(), cardCoversTags(), ConvertToAgentCard(), EligibleBidders(), TestBuildCardRegistry(), TestConvertToAgentCard_Basic() (+4 more)
 
-### Community 504 - "Community 504"
+### Community 496 - "Community 496"
 Cohesion: 0.23
 Nodes (13): autoApproveFromNode(), buildHumanApprovalGate(), childExecuted(), hitlPhase(), hitlStatus(), hitlStore(), init(), markChildExecuted() (+5 more)
 
-### Community 505 - "Community 505"
+### Community 497 - "Community 497"
 Cohesion: 0.43
 Nodes (12): partialLandingRunner, greenFail(), greenPass(), partialLandingRun(), redFail(), TestBatchFirstTaskFailureStaysAllOrNothing(), TestBatchFullSuccessUnwrapsSnapshots(), TestBatchMidBatchSnapshotDegradeStillUnwraps() (+4 more)
 
-### Community 506 - "Community 506"
-Cohesion: 0.18
-Nodes (11): TaskLogPath(), Entry, auditLogAction(), fitnessProbeAction(), fitnessScoreFromBB(), init(), pushToDLQAction(), registerOpsActions() (+3 more)
-
-### Community 507 - "Community 507"
+### Community 498 - "Community 498"
 Cohesion: 0.24
 Nodes (3): Registry, cloneTree(), NewRegistry()
 
-### Community 508 - "Community 508"
-Cohesion: 0.25
-Nodes (11): circuitBreakerCmd, errorAwareCmd, init(), registerReliabilityNodes(), buildCircuitBreaker(), buildTimeout(), circuitBreakerFor(), cooldownFromNode() (+3 more)
+### Community 499 - "Community 499"
+Cohesion: 0.18
+Nodes (11): TaskLogPath(), Entry, auditLogAction(), fitnessProbeAction(), fitnessScoreFromBB(), init(), pushToDLQAction(), registerOpsActions() (+3 more)
 
-### Community 509 - "Community 509"
+### Community 500 - "Community 500"
+Cohesion: 0.15
+Nodes (8): TestFallbackLLM_PreservesRateLimitErrorChain(), ErrorCategory, ExecuteWithPolicy(), RetryAfterFromError(), sleepWithContext(), TestErrorCategory_String(), TestRetryPolicy_ExecuteWithPolicy(), RetryPolicy
+
+### Community 501 - "Community 501"
 Cohesion: 0.18
 Nodes (6): saveBaseline(), TestRunCheckNoRegressionExitsClean(), TestRunCheckRejectsEmptyInput(), TestRunCheckSeverityExitCodes(), TestRunResetRemovesBaselineFile(), TestRunShowWithBaseline()
 
-### Community 510 - "Community 510"
+### Community 502 - "Community 502"
 Cohesion: 0.32
 Nodes (13): computeLayout(), countNodes(), hideNodeDetail(), loadMindMap(), nodeColors, pushDescendantsDown(), renderMindMap(), renderTree() (+5 more)
 
+### Community 503 - "Community 503"
+Cohesion: 0.22
+Nodes (11): toast(), approveTask(), executeSprint(), pollSprintStatus(), refreshTasks(), rejectTask(), renderKanban(), renderTaskList() (+3 more)
+
+### Community 504 - "Community 504"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 505 - "Community 505"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 506 - "Community 506"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 507 - "Community 507"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 508 - "Community 508"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 509 - "Community 509"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
+### Community 510 - "Community 510"
+Cohesion: 0.13
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+
 ### Community 511 - "Community 511"
 Cohesion: 0.13
-Nodes (14): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first, BT Agent Platform (+6 more)
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
 
 ### Community 512 - "Community 512"
 Cohesion: 0.13
@@ -4174,7 +4171,7 @@ Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_AP
 
 ### Community 591 - "Community 591"
 Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+Nodes (14): Binary Size Overview, code:block1 (Go version:), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	0.035s), code:block3 (-rwxrwxr-x 1 nico nico  13M Jun  2 08:32 /home/nico/go-bt-ev), code:block4 (bt-agent:), code:block5 (coverage: 100.0), code:block6 ({"packages":19,"status":"ok","trees":38,"uptime":"operationa), code:block7 (=== Doc Drift Validation ===) (+6 more)
 
 ### Community 592 - "Community 592"
 Cohesion: 0.13
@@ -4202,11 +4199,11 @@ Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_AP
 
 ### Community 598 - "Community 598"
 Cohesion: 0.13
-Nodes (15): code:go (type Store struct { ... }), code:go (func Itoa(i int) string), code:go (type Tool struct { ... }), code:go (type AgentCard struct { Name, Description, URL string }), code:go (type PlatformEvalResult struct { ... }), code:go (type BaselineStore struct { ... }), code:go (type WorkflowReport struct { ... }), code:go (type AgentInfo struct { Name, Status, Schedule string; Succe) (+7 more)
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
 
 ### Community 599 - "Community 599"
 Cohesion: 0.13
-Nodes (14): Binary Size Overview, code:block1 (Go version:), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	0.035s), code:block3 (-rwxrwxr-x 1 nico nico  13M Jun  2 08:32 /home/nico/go-bt-ev), code:block4 (bt-agent:), code:block5 (coverage: 100.0), code:block6 ({"packages":19,"status":"ok","trees":38,"uptime":"operationa), code:block7 (=== Doc Drift Validation ===) (+6 more)
+Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
 
 ### Community 600 - "Community 600"
 Cohesion: 0.13
@@ -4586,7 +4583,7 @@ Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_AP
 
 ### Community 694 - "Community 694"
 Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
+Nodes (14): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first, BT Agent Platform (+6 more)
 
 ### Community 695 - "Community 695"
 Cohesion: 0.13
@@ -4677,148 +4674,160 @@ Cohesion: 0.13
 Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
 
 ### Community 717 - "Community 717"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 718 - "Community 718"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 719 - "Community 719"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 720 - "Community 720"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 721 - "Community 721"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 722 - "Community 722"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 723 - "Community 723"
-Cohesion: 0.13
-Nodes (14): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Cursor Cloud specific instructions, Dependency refresh (automatic), Long-running services, MCP binaries (`bt-agent`, etc.) (+6 more)
-
-### Community 724 - "Community 724"
-Cohesion: 0.14
-Nodes (12): TestKnowledgeGraphRegistersAllDomainTrees(), TestConnect_GlobalGraph(), TestDiscover_GlobalGraphVariety(), TestKnowledgeGraph_GlobalConsistency(), TestListByCategory_All(), TestListByCategory_NonExistent(), TestQuery_ByAction(), TestQuery_ByDomain() (+4 more)
-
-### Community 725 - "Community 725"
 Cohesion: 0.31
 Nodes (12): TestClient_AnalyzeComplexity_High(), TestClient_Reflect_FallbackSections(), TestClient_Reflect_OnlyWentWell(), fakeTracer, mockOllamaServer(), newTestClient(), TestClient_AnalyzeComplexity(), TestClient_Generate() (+4 more)
 
-### Community 726 - "Community 726"
-Cohesion: 0.21
-Nodes (12): NewACPClient(), countCrashInvocations(), TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures(), TestACPClientGenerateCtx_StderrBufferRace(), TestACPClientGenerateReturnsErrorWhenSessionMissing(), TestACPClientGenerateTalksToACPServer(), TestACPClientGenerateTalksToHermesACP(), TestACPHelperProcess() (+4 more)
-
-### Community 727 - "Community 727"
+### Community 718 - "Community 718"
 Cohesion: 0.15
 Nodes (3): Milestone, Program, ProgramStore
 
-### Community 728 - "Community 728"
-Cohesion: 0.19
-Nodes (13): TestPlanStepsToStrings(), TestPlanStepsToStrings_Empty(), TestStringField_Exists(), TestStringField_Missing(), TestStringField_WrongType(), TestWorldStateFromMap(), getStepResults(), planStepsToStrings() (+5 more)
+### Community 719 - "Community 719"
+Cohesion: 0.23
+Nodes (12): handleFellows(), DebateTurn, Fellow, DefaultFellows(), Report, ResearchFinding, ReviewComment, Scenario (+4 more)
 
-### Community 729 - "Community 729"
-Cohesion: 0.21
-Nodes (5): LoadNotebookLMState(), loadNotebookLMStateAction(), QueryHash(), saveNotebookLMStateAction(), NotebookLMState
-
-### Community 731 - "Community 731"
+### Community 720 - "Community 720"
 Cohesion: 0.25
 Nodes (5): Catalog, extractYAMLField(), inferTree(), splitTags(), CatalogEntry
 
-### Community 732 - "Community 732"
-Cohesion: 0.22
-Nodes (3): Task, priorityRank(), TaskStore
+### Community 721 - "Community 721"
+Cohesion: 0.21
+Nodes (5): LoadNotebookLMState(), loadNotebookLMStateAction(), QueryHash(), saveNotebookLMStateAction(), NotebookLMState
 
-### Community 734 - "Community 734"
-Cohesion: 0.24
-Nodes (11): mcpErr(), registerBlockTools(), resolveStrategyTree(), blockOnHeldBBMu(), TestBTBlocksComposeRejectsUnknownStrategyTree(), TestBTBlocksComposeSaveGatesActivation(), TestBTBlocksComposeSaveHoldsBBMu(), TestBTHITLComposeTaskSaveHoldsBBMu() (+3 more)
+### Community 723 - "Community 723"
+Cohesion: 0.16
+Nodes (4): contains(), stringsContains(), TestGetSLOMetrics_SameInstance(), TestSLOMetrics_Summary()
 
-### Community 735 - "Community 735"
+### Community 724 - "Community 724"
+Cohesion: 0.29
+Nodes (12): TestDTAnalyzer_New(), NewDTAnalyzer(), pathStat(), TestBTOptimizer_ReorderSelectors(), TestConditionOverlap(), TestDTAnalyzer_BestSplit(), TestDTAnalyzer_EmptyStatsNoOp(), TestDTAnalyzer_Entropy() (+4 more)
+
+### Community 725 - "Community 725"
 Cohesion: 0.14
 Nodes (13): bookmarkBtn, camBtn, canvasBox, doormateTab, emptyState, inputEl, micBtn, pageContainer (+5 more)
 
-### Community 736 - "Community 736"
+### Community 726 - "Community 726"
 Cohesion: 0.18
 Nodes (14): Catalog, code:go (type Definition struct {), code:go (type Registry struct { ... }), code:go (type Catalog struct { ... }), code:go (type Scheduler struct { ... }), code:go (type History struct { ... }), History, Package: agent (+6 more)
 
-### Community 737 - "Community 737"
+### Community 727 - "Community 727"
 Cohesion: 0.19
 Nodes (13): 6.1 Task Execution Scenario, 6.2 Evolution Cycle, 6.3 Sprint Execution, 6.4 Error Recovery, 6.4 Self-Improvement Cycle (goap-fusion loop), 6.5 Error Recovery, 6. Runtime View, arc42 Section 6 — Runtime View (+5 more)
 
-### Community 738 - "Community 738"
+### Community 728 - "Community 728"
 Cohesion: 0.16
 Nodes (13): 7.1 Infrastructure Level 1, 7.2.1 Process Tree, 7.2.2 Storage Layout, 7.2.3 Network Topology, 7.2 Infrastructure Level 2, 7. Deployment View, arc42 Section 7 — Deployment View, code:block1 (systemd --user) (+5 more)
 
-### Community 739 - "Community 739"
+### Community 729 - "Community 729"
 Cohesion: 0.14
-Nodes (13): code:text (docs/superpowers/runs/<run-id>/), code:go (sel("Phase1_Design",), code:markdown (### Task N: Title), code:text (ApproveSuperpowersPRPush (HumanApprovalGate, side_effect_cla), code:yaml (name: superpowers-prod-runner), Current Stub Surface To Replace, Done Definition, Production Acceptance Criteria (+5 more)
+Nodes (13): code:text (docs/superpowers/runs/<run-id>/), code:go (sel("Phase1_Design",), code:go (func SuperpowersPipelineTree() *evolution.SerializableNode {), code:yaml (name: superpowers-prod-runner), code:go (// Deprecated: use ExecuteSuperpowersTaskBatch.), Current Stub Surface To Replace, Done Definition, Migration / Cleanup Notes (+5 more)
 
-### Community 740 - "Community 740"
+### Community 730 - "Community 730"
 Cohesion: 0.14
 Nodes (13): 1. Tree change (`internal/domains/goap_fusion_loop.go`), 2. Quota memory (`internal/engine/actions_goap_fusion_claude_review.go`), 3. New action `RunClaudeCodeReviewResearch`, code:go (sel("ResearchRouter",), code:go (const goapReviewAllowedTools = "Read,Glob,Grep," +), Decisions (defaults chosen during design), Design, Error handling summary (+5 more)
 
-### Community 741 - "Community 741"
-Cohesion: 0.15
-Nodes (7): DLQEscalateBlock(), FitnessProbeBlock(), AuditLogBlock(), TraceCheckpointBlock(), TestAuditLogAction(), TestFitnessProbeAction(), TestPushToDLQAction()
+### Community 731 - "Community 731"
+Cohesion: 0.24
+Nodes (10): Configured(), envEnabled(), IntegrationOptedIn(), OllamaReachable(), SkipIfUnavailable(), TestIntegrationOptedIn(), TestSkipIfUnavailable(), TestSkipUnlessIntegration_SkipsWithoutOptIn() (+2 more)
 
-### Community 742 - "Community 742"
-Cohesion: 0.17
-Nodes (12): hasToolEdge(), TestFeedbackFlush_ForceOnShutdown(), TestFeedbackFlush_ThrottlesWrites(), TestLoadFeedback_DoesNotClobberRegisteredStaticMetadata(), TestLoadFeedback_MissingFileNoError(), TestLoadFeedback_ResurrectedTreeIsDiscoverableWithoutReEvolution(), TestLoadFeedback_ResurrectsUnregisteredEvolvedTree(), TestRegisterEvolved_FillsMetadataForResurrectedTree() (+4 more)
-
-### Community 743 - "Community 743"
-Cohesion: 0.18
-Nodes (7): BaselineStore, BenchmarkResult, pctChange(), TestPctChange(), Comparator, ComparisonResult, RegressionConfig
-
-### Community 744 - "Community 744"
+### Community 732 - "Community 732"
 Cohesion: 0.23
 Nodes (9): TestVerifyGoapFusionEvidenceAcceptsDelegatedVerification(), TestVerifyGoapFusionEvidenceKeysOnNormalizedDelegationToken(), TestVerifyGoapFusionEvidenceRejectsBogusVerification(), writeGoapFusionCycleReport(), TestVerifyGoapFusionEvidenceClassifiesCommitted(), TestVerifyGoapFusionEvidenceClassifiesDegraded(), TestVerifyGoapFusionEvidenceClassifiesNoChange(), TestVerifyGoapFusionEvidenceClassifiesRedPassAsNoChange() (+1 more)
 
-### Community 745 - "Community 745"
+### Community 733 - "Community 733"
 Cohesion: 0.21
 Nodes (4): Clock, NewFakeClock(), FakeClock, RealClock
 
-### Community 746 - "Community 746"
+### Community 734 - "Community 734"
+Cohesion: 0.15
+Nodes (7): DLQEscalateBlock(), FitnessProbeBlock(), AuditLogBlock(), TraceCheckpointBlock(), TestAuditLogAction(), TestFitnessProbeAction(), TestPushToDLQAction()
+
+### Community 735 - "Community 735"
+Cohesion: 0.31
+Nodes (12): NewEvolvedAgent(), TestEvolvedAgent_Run_Error(), TestNewEvolvedAgent_MinimalConfig(), TestNewEvolvedAgent_NilBlackboard(), TestToolNames_And_Descriptions(), NewCreateAgentTool(), NewEvolveTool(), NewFitnessTool() (+4 more)
+
+### Community 736 - "Community 736"
+Cohesion: 0.17
+Nodes (12): GetCategory(), NewCategorizedError(), TestCategorizedError_Error(), TestCategorizedError_NilError(), TestCategorizedError_Unwrap(), TestClassifyError_CategorizedChain(), TestErrorContext_Chained(), TestGetCategory() (+4 more)
+
+### Community 737 - "Community 737"
+Cohesion: 0.18
+Nodes (7): BaselineStore, BenchmarkResult, pctChange(), TestPctChange(), Comparator, ComparisonResult, RegressionConfig
+
+### Community 738 - "Community 738"
 Cohesion: 0.28
 Nodes (10): escHTML(), formatDuration(), refreshTraces(), renderRecentSpans(), renderSpanTree(), renderTraceDetail(), renderTraceList(), selectTrace() (+2 more)
 
-### Community 747 - "Community 747"
+### Community 739 - "Community 739"
 Cohesion: 0.15
 Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
-### Community 748 - "Community 748"
+### Community 740 - "Community 740"
 Cohesion: 0.15
 Nodes (13): Algorithm Engines, code:go (type TreeStore struct { ... }), code:go (func DefaultTree() *SerializableNode           // 17-node ge), code:go (func PitchAgentTree() *SerializableNode), code:go (// ExpertKnowledge: 6 design patterns, 5 anti-patterns, 10 h), code:go (func ContainsWord(s, word string) bool      // case-insensit), code:go (func ApplyMutation(tree *SerializableNode, op string) *Seria), Finance Trees (10) (+5 more)
 
-### Community 749 - "Community 749"
+### Community 741 - "Community 741"
 Cohesion: 0.15
 Nodes (12): code:go (func TestParseClaudeRateLimitReset(t *testing.T) {), code:go (const claudeResetMargin = 2 * time.Minute), code:go (func isolateClaudeBackoffStore(t *testing.T) {), code:go (type sharedClaudeBackoff struct {), code:go (func saveClaudeBackoffState(bb *Blackboard, until time.Time)), code:go (// actions_superpowers_prod.go), Global Constraints, Shared Claude Rate-Limit Backoff Implementation Plan (+4 more)
 
-### Community 750 - "Community 750"
+### Community 742 - "Community 742"
+Cohesion: 0.31
+Nodes (12): NewEvolvedAgent(), TestEvolvedAgent_Run_Error(), TestNewEvolvedAgent_MinimalConfig(), TestNewEvolvedAgent_NilBlackboard(), TestToolNames_And_Descriptions(), NewCreateAgentTool(), NewEvolveTool(), NewFitnessTool() (+4 more)
+
+### Community 744 - "Community 744"
 Cohesion: 0.3
 Nodes (4): Client, Config, LLM, extractSection()
 
-### Community 751 - "Community 751"
-Cohesion: 0.26
-Nodes (10): BuildTaskFromInputs(), ParseInputParams(), TestBuildTaskFromInputs(), TestParseInputParams(), TestValidateInputs_Default(), TestValidateInputs_File(), TestValidateInputs_JSON(), TestValidateInputs_Required() (+2 more)
+### Community 745 - "Community 745"
+Cohesion: 0.3
+Nodes (10): TestValidate_OutputSchemaError(), TestValidateAgainstSchema_Number(), TestValidateAgainstSchema_Number_OutOfRange(), floatPtr(), intPtr(), TestAgentDefinition_JSON_MarshalRoundtrip(), TestAgentDefinition_Validate_MissingFields(), TestAgentDefinition_Validate_Valid() (+2 more)
 
-### Community 752 - "Community 752"
+### Community 746 - "Community 746"
 Cohesion: 0.35
 Nodes (9): docsyncRunner, syncDriftDocs(), docsyncTestRun(), TestDocDriftSyncFixesDriftViaClaudePass(), TestDocDriftSyncSkipsDryRunAndMissingScript(), TestDocDriftSyncSkipsWhenInSync(), TestDocDriftSyncStillFailingIsReported(), TestVerificationChecksIncludeDocDriftGate() (+1 more)
 
-### Community 757 - "Community 757"
+### Community 747 - "Community 747"
+Cohesion: 0.17
+Nodes (4): DefaultGoalAttemptsPath(), TestDefaultGoalAttemptsPath(), GoalAttempt, GoalAttemptStore
+
+### Community 748 - "Community 748"
 Cohesion: 0.21
 Nodes (4): appendLatency(), avgLatency(), nlmMetricsReportAction(), NotebookLMMetrics
 
+### Community 750 - "Community 750"
+Cohesion: 0.26
+Nodes (10): BuildTaskFromInputs(), ParseInputParams(), TestBuildTaskFromInputs(), TestParseInputParams(), TestValidateInputs_Default(), TestValidateInputs_File(), TestValidateInputs_JSON(), TestValidateInputs_Required() (+2 more)
+
+### Community 751 - "Community 751"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 752 - "Community 752"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 753 - "Community 753"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 754 - "Community 754"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 755 - "Community 755"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 756 - "Community 756"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
+### Community 757 - "Community 757"
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+
 ### Community 758 - "Community 758"
-Cohesion: 0.24
-Nodes (11): AgentMetric, Alert, AlertReport, MetricsJSON, evaluateAgentAlerts(), EvaluateAlerts(), EvaluateFromJSON(), evaluateGlobalAlerts() (+3 more)
+Cohesion: 0.17
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
 ### Community 759 - "Community 759"
 Cohesion: 0.17
@@ -5342,15 +5351,15 @@ Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneou
 
 ### Community 889 - "Community 889"
 Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+Nodes (11): Agent template, Blackboard outputs, code:yaml (params:), code:bash (export BT_LLM_PROVIDER=openrouter), code:bash (/usr/local/go/bin/go test ./internal/fusion ./internal/llm .), Configuration, Fusion BT Agent, Routing triggers (+3 more)
 
 ### Community 890 - "Community 890"
 Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+Nodes (12): code:go (// internal/domains/superpowers_workflow_test.go), code:bash (git add internal/domains/superpowers_workflow.go internal/do), code:bash (git add internal/engine/actions_superpowers_debug.go interna), code:bash (git add internal/engine/bandit_selector.go internal/engine/b), code:bash (git add docs/adr/ADR-010-superpowers-workflow-tree.md docs/a), Known deviations / follow-ups, Part E — Implementation Tasks, Self-Review (writing-plans checklist — executed 2026-07-02) (+4 more)
 
 ### Community 891 - "Community 891"
 Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+Nodes (11): Behavior matrix, code:json ({"until":"2026-07-14T22:44:33Z","set_by":"goap-fusion-loop-r), Design, Fleet-wide store (ADR-003), Goals, Non-goals, Ops, Problem (+3 more)
 
 ### Community 892 - "Community 892"
 Cohesion: 0.17
@@ -5374,15 +5383,15 @@ Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneou
 
 ### Community 897 - "Community 897"
 Cohesion: 0.17
-Nodes (11): Agent template, Blackboard outputs, code:yaml (params:), code:bash (export BT_LLM_PROVIDER=openrouter), code:bash (/usr/local/go/bin/go test ./internal/fusion ./internal/llm .), Configuration, Fusion BT Agent, Routing triggers (+3 more)
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
 ### Community 898 - "Community 898"
 Cohesion: 0.17
-Nodes (12): code:go (type Planner interface { Plan(world WorldState, goal Goal) (), code:go (type Agent struct { ... }), code:go (type Store struct { ... }), code:go (type TestSuite struct { ... }), code:go (type Workflow struct { ... }), code:go (type RotatingWriter struct { ... }), Package: langagent, Package: log (+4 more)
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
 ### Community 899 - "Community 899"
 Cohesion: 0.17
-Nodes (11): Behavior matrix, code:json ({"until":"2026-07-14T22:44:33Z","set_by":"goap-fusion-loop-r), Design, Fleet-wide store (ADR-003), Goals, Non-goals, Ops, Problem (+3 more)
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
 ### Community 900 - "Community 900"
 Cohesion: 0.17
@@ -5394,7 +5403,7 @@ Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneou
 
 ### Community 902 - "Community 902"
 Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
+Nodes (12): 5.1 Whitebox Overall System, 5.2 Level 2: Core Engine Whitebox, 5.3 Level 2: Evolution Engine Whitebox, 5.4 Level 2: Dashboard Whitebox, 5.5 Level 3: Chain Types Detail, arc42 Section 5 — Building Block View, code:block2 (┌───────────────────────────────────────────────────────────), code:block3 (internal/engine/) (+4 more)
 
 ### Community 903 - "Community 903"
 Cohesion: 0.17
@@ -5418,7 +5427,7 @@ Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneou
 
 ### Community 908 - "Community 908"
 Cohesion: 0.17
-Nodes (12): 5.1 Whitebox Overall System, 5.2 Level 2: Core Engine Whitebox, 5.3 Level 2: Evolution Engine Whitebox, 5.4 Level 2: Dashboard Whitebox, 5.5 Level 3: Chain Types Detail, arc42 Section 5 — Building Block View, code:block2 (┌───────────────────────────────────────────────────────────), code:block3 (internal/engine/) (+4 more)
+Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
 
 ### Community 909 - "Community 909"
 Cohesion: 0.17
@@ -5646,383 +5655,399 @@ Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneou
 
 ### Community 965 - "Community 965"
 Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 966 - "Community 966"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 967 - "Community 967"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 968 - "Community 968"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 969 - "Community 969"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 970 - "Community 970"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 971 - "Community 971"
-Cohesion: 0.17
-Nodes (12): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+4 more)
-
-### Community 972 - "Community 972"
-Cohesion: 0.17
 Nodes (11): Blackboard State Schema, code:block1 (User says "build X"), code:block2 (SuperpowersPipeline (Sequence, timeout=60m)), code:go (type SuperpowersBlackboard struct {), code:block9 (┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐), Complete Behavior Tree Structure, Decision Tree — Workflow Graph, Key Design Decisions (+3 more)
 
-### Community 973 - "Community 973"
-Cohesion: 0.2
-Nodes (3): TestNewEvolvedAgent(), mockLLM, mockModel
+### Community 966 - "Community 966"
+Cohesion: 0.29
+Nodes (8): foreachTaskLoop(), SuperpowersWorkflowTree(), systematicDebugging(), tddTask(), TestSuperpowersWorkflowTree_GrillLoopShape(), TestSuperpowersWorkflowTree_ValidatesAndCoversPhases(), withMatch(), TestSuperpowersWorkflowTree_BuildsAndValidates()
 
-### Community 975 - "Community 975"
-Cohesion: 0.31
-Nodes (9): Capability, Edge, blendedSelectionFitness(), coldStartConfidence(), coldStartWeightedFitness(), structuralGate(), Relation, RunSummary (+1 more)
-
-### Community 976 - "Community 976"
+### Community 969 - "Community 969"
 Cohesion: 0.35
 Nodes (7): fakeExecutor, fakeLLM, newTestApp(), TestAgentLifecycleCommands(), TestAskIncludesPlatformContext(), TestNaturalLanguageIntentParser(), TestRunTreeCommandDelegatesToExecutor()
 
-### Community 978 - "Community 978"
+### Community 970 - "Community 970"
 Cohesion: 0.29
 Nodes (5): Entry, Store, Key(), normalize(), truncateRunes()
 
-### Community 980 - "Community 980"
-Cohesion: 0.24
-Nodes (5): ParamAction, bindTemplate(), TestBindTemplate_NoPlaceholders(), TestBindTemplate_Simple(), ParamPlannerNode
-
-### Community 981 - "Community 981"
+### Community 972 - "Community 972"
 Cohesion: 0.22
 Nodes (7): docChangeContextFromBlackboard(), init(), registerArc42SyncNode(), TestArc42DocsyncNodesRegistered(), TestDocChangeContextFromBlackboardFallsBackToGit(), TestRegisteredNames_SortedAndComplete(), RegisteredActionNames()
 
-### Community 982 - "Community 982"
-Cohesion: 0.18
-Nodes (3): EvolutionMetadata, FitnessRecord, MutationLog
-
-### Community 983 - "Community 983"
-Cohesion: 0.31
-Nodes (9): extractJSONPayload(), TestValidateOutputs_Empty(), TestValidateOutputs_JSONDirect(), TestValidateOutputs_JSONFence(), TestValidateOutputs_JSONInvalid(), TestValidateOutputs_Markdown(), TestValidateOutputs_NoSpec(), validateOutputJSON() (+1 more)
-
-### Community 984 - "Community 984"
+### Community 973 - "Community 973"
 Cohesion: 0.22
 Nodes (4): ChildTick, DecisionTrace, TraceStep, TraceStore
 
-### Community 985 - "Community 985"
+### Community 974 - "Community 974"
+Cohesion: 0.18
+Nodes (3): EvolutionMetadata, FitnessRecord, MutationLog
+
+### Community 975 - "Community 975"
+Cohesion: 0.24
+Nodes (5): ParamAction, bindTemplate(), TestBindTemplate_NoPlaceholders(), TestBindTemplate_Simple(), ParamPlannerNode
+
+### Community 976 - "Community 976"
+Cohesion: 0.31
+Nodes (9): extractJSONPayload(), TestValidateOutputs_Empty(), TestValidateOutputs_JSONDirect(), TestValidateOutputs_JSONFence(), TestValidateOutputs_JSONInvalid(), TestValidateOutputs_Markdown(), TestValidateOutputs_NoSpec(), validateOutputJSON() (+1 more)
+
+### Community 977 - "Community 977"
 Cohesion: 0.27
 Nodes (9): initDoormateTab(), loadProfile(), ratePage(), renderBubbles(), renderDoormate(), renderGeneratedPage(), renderProfileTags(), sendPhrase() (+1 more)
 
-### Community 986 - "Community 986"
-Cohesion: 0.18
-Nodes (11): code:bash (export PATH=$PATH:/usr/local/go/bin), code:bash (# Check if Ollama is running), code:bash (# Find and kill the old process), code:bash (# Run only fast tests (no Ollama)), code:bash (# Verify Go version), Dashboard port already in use, "Failed to build", "go: command not found" (+3 more)
-
-### Community 987 - "Community 987"
+### Community 978 - "Community 978"
 Cohesion: 0.18
 Nodes (11): 3.1 Create the bin directory, 3.2 Build the core MCP servers, 3.3 Build the dashboard and gardener, 3.4 Build utility binaries, 3. Build All Binaries (2 min), code:bash (ls -lh bin/bt-*), code:bash (go build -o bin/bt-dashboard ./cmd/bt-dashboard/), code:bash (go build -o bin/benchcmp ./cmd/benchcmp/) (+3 more)
 
-### Community 988 - "Community 988"
+### Community 979 - "Community 979"
+Cohesion: 0.18
+Nodes (11): code:bash (export PATH=$PATH:/usr/local/go/bin), code:bash (# Check if Ollama is running), code:bash (# Find and kill the old process), code:bash (# Run only fast tests (no Ollama)), code:bash (# Verify Go version), Dashboard port already in use, "Failed to build", "go: command not found" (+3 more)
+
+### Community 980 - "Community 980"
 Cohesion: 0.29
 Nodes (11): code:go (type Config struct {), code:go (func Load() (*Config, error)                // priority: def), Functions, Functions, Functions, Functions, Package: config, Types (+3 more)
 
-### Community 989 - "Community 989"
-Cohesion: 0.29
-Nodes (11): code:go (type Server struct { ... }), code:go (func NewServer(name, version string) *Server), Functions, Functions, Functions, Functions, Package: mcp, Types (+3 more)
-
-### Community 990 - "Community 990"
+### Community 981 - "Community 981"
 Cohesion: 0.18
 Nodes (11): ActionFunc / ConditionFunc, Blackboard, Chain Types (ChainAction nodes), code:go (type Blackboard struct {), code:go (type SerializableNode struct {), code:go (type ActionFunc = func(ctx *btcore.BTContext[Blackboard]) in), code:go (// BuildTree constructs a go-bt Command from a SerializableN), Functions (+3 more)
 
-### Community 991 - "Community 991"
+### Community 982 - "Community 982"
+Cohesion: 0.18
+Nodes (11): code:go (type Planner interface { Plan(world WorldState, goal Goal) (), code:go (type Agent struct { ... }), code:go (type Store struct { ... }), code:go (type TestSuite struct { ... }), code:go (type Workflow struct { ... }), Package: goap, Package: langagent, Package: log (+3 more)
+
+### Community 983 - "Community 983"
+Cohesion: 0.29
+Nodes (11): code:go (type Server struct { ... }), code:go (func NewServer(name, version string) *Server), Functions, Functions, Functions, Functions, Package: mcp, Types (+3 more)
+
+### Community 984 - "Community 984"
+Cohesion: 0.18
+Nodes (10): code:go (package engine), code:go (// RegisterAction adds an action to the global registry, wra), code:bash (git add internal/engine/registry.go internal/engine/registry), code:go (engine.Init()), code:bash (git add internal/ cmd/), Global Constraints, Logging & Tracing Overhaul Implementation Plan, Self-Review Notes (+2 more)
+
+### Community 985 - "Community 985"
 Cohesion: 0.18
 Nodes (10): Architecture, Context, Error handling, Infra (`monitoring/`), Instrumentation, Log correlation & cleanup, Logging & Tracing Overhaul — Design, Staging (one commit each) (+2 more)
 
-### Community 992 - "Community 992"
-Cohesion: 0.18
-Nodes (11): 6.1 Task Execution Scenario, 6.2 Evolution Cycle, 6.3 Sprint Execution, 6.4 Self-Improvement Cycle (goap-fusion loop), 6.5 Error Recovery, arc42 Section 6 — Runtime View, code:block10 (Any goroutine                   SafeGo wrapper              ), code:block6 (Hermes Agent                    bt-agent (MCP)              ) (+3 more)
-
-### Community 993 - "Community 993"
+### Community 986 - "Community 986"
 Cohesion: 0.18
 Nodes (11): 7.1 Infrastructure Level 1, 7.2.1 Process Tree, 7.2.2 Storage Layout, 7.2.3 Network Topology, 7.2 Infrastructure Level 2, arc42 Section 7 — Deployment View, code:block11 (systemd --user), code:block12 (~/.go-bt-evolve/) (+3 more)
 
-### Community 995 - "Community 995"
-Cohesion: 0.22
-Nodes (3): TestInitEngineDelegate(), InitEngineDelegate(), TaskStateBridge
+### Community 987 - "Community 987"
+Cohesion: 0.18
+Nodes (11): 6.1 Task Execution Scenario, 6.2 Evolution Cycle, 6.3 Sprint Execution, 6.4 Self-Improvement Cycle (goap-fusion loop), 6.5 Error Recovery, arc42 Section 6 — Runtime View, code:block10 (Any goroutine                   SafeGo wrapper              ), code:block6 (Hermes Agent                    bt-agent (MCP)              ) (+3 more)
 
-### Community 996 - "Community 996"
-Cohesion: 0.4
-Nodes (8): TestValidate_OutputSchemaError(), floatPtr(), intPtr(), TestAgentDefinition_JSON_MarshalRoundtrip(), TestAgentDefinition_Validate_MissingFields(), TestAgentDefinition_Validate_Valid(), TestSchemaValidation(), TestValidateOutput()
-
-### Community 998 - "Community 998"
+### Community 988 - "Community 988"
 Cohesion: 0.2
-Nodes (9): Block, ChartDataPoint, DiagramEdge, DiagramNode, FeedbackEvent, GeneratedPage, IntentSession, PageSchema (+1 more)
+Nodes (8): TestConfig_AllFields(), TestEvolvedAgent_Run(), TestEvolvedAgent_Run_WithAutoEvolve(), TestEvolvedAgent_StructFields(), TestNewEvolvedAgent_AllToolsRegistered(), newConfig(), TestNewEvolvedAgent(), mockModel
 
-### Community 999 - "Community 999"
-Cohesion: 0.24
-Nodes (6): collectSelectorNames(), SelectorStatsFile(), RecordSelectorChildOutcomes(), TestRecordSelectorChildOutcomes_SkipsEmptyAndMalformed(), TestRecordSelectorChildOutcomes_WritesAndAccumulates(), SelectorChildOutcome
-
-### Community 1000 - "Community 1000"
-Cohesion: 0.2
-Nodes (9): ADR-008: Composable Behavior-Tree Building Blocks, Consequences, Context, Decision, References, Status, TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesLoopRunner(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesRunsWritable() (+1 more)
-
-### Community 1001 - "Community 1001"
-Cohesion: 0.24
-Nodes (8): Config, EvolvedAgent, buildEvolvedPrompt(), toolDescriptions(), toolNames(), TestBuildEvolvedPrompt(), TestToolDescriptions(), TestToolNames()
-
-### Community 1002 - "Community 1002"
-Cohesion: 0.36
-Nodes (8): DebateTurn, Fellow, Report, ResearchFinding, ReviewComment, Scenario, Synthesis, ThinkTank
-
-### Community 1003 - "Community 1003"
-Cohesion: 0.36
-Nodes (7): arc42SyncRunner, syncArc42Docs(), arc42TestRun(), TestArc42SyncNoImpactIsClean(), TestArc42SyncSkipsDryRunAndMainRepoModes(), TestArc42SyncSkipsWithoutProductionChanges(), TestArc42SyncUpdatesDocAndChangedFiles()
-
-### Community 1004 - "Community 1004"
-Cohesion: 0.24
-Nodes (4): Outcome, Record, Store, FilterByTreeName()
-
-### Community 1006 - "Community 1006"
-Cohesion: 0.27
-Nodes (6): TestExpertKnowledge_SeedSpecialistsCarryProvenance(), appendResurrectedTag(), firstSpecialistType(), itoa(), SpecialistArchetype, SpecialistRegistry
-
-### Community 1007 - "Community 1007"
-Cohesion: 0.33
-Nodes (6): GeneratedAgent, Generator, generatedFallbackChainAction(), generatedFallbackChainActionFromStep(), generatedSelfCorrectChainAction(), generatedStepChainAction()
-
-### Community 1008 - "Community 1008"
-Cohesion: 0.27
-Nodes (8): assertNoExecutePlanStubs(), containsNodeName(), minStr(), TestGoapFusion_DeterministicActions(), TestGoapFusion_FullTree_Direct(), TestGoapFusion_Structure(), containsNodeType(), TestSuperpowersPipeline_ProductionContract_NoPlaceholderPath()
-
-### Community 1010 - "Community 1010"
-Cohesion: 0.2
-Nodes (10): A2A (port 8686), `bt-agent-cli run`, code:json ({ "agent": "code-reviewer", "task": "Review this function fo), code:json ({ "tree": "domain:code_review", "task": "..." }), code:bash (go run ./cmd/bt-agent-cli/ run code-reviewer --input "Review), Dashboard “Run agent” / pipelines, Direct tree execution (no agent YAML), On-demand: MCP `bt_agent_run` (+2 more)
-
-### Community 1011 - "Community 1011"
-Cohesion: 0.2
-Nodes (10): All LLM-dependent services crash immediately, code:bash (# Check current value), code:bash (# 1. Verify the binary works), code:bash (ps aux | grep 'bin/bt-' | awk '{print $2, $9, $NF}' | sort -), code:bash (jq -r '(.candidates[0].operation // (.[0].operation // "none), Duplicate MCP processes, Gateway restart loop (hundreds of restarts), jq `.[0]` fails with exit code 5 on ev_order_mutations (+2 more)
-
-### Community 1012 - "Community 1012"
-Cohesion: 0.2
-Nodes (10): 9.1 Run with real Ollama (optional), 9.2 Start the evolution daemon, 9.3 Register with Hermes Agent, 9.4 Explore deeper, 9.5 Run continuous integration locally, 9. Next Steps, code:bash (# Pull the model), code:bash (./bin/bt-gardener &) (+2 more)
-
-### Community 1013 - "Community 1013"
-Cohesion: 0.2
-Nodes (9): Acceptance Criteria, code:go (package fusion), code:bash (cd /home/nico/go-bt-evolve), Current Codebase Anchors, Final Verification Checklist, Fusion-Style BT Agent Implementation Plan, Production Safety Notes, Proposed Data Model (+1 more)
-
-### Community 1014 - "Community 1014"
-Cohesion: 0.2
-Nodes (9): code:mermaid (flowchart TD), code:block2 (PersistentMemSequence "SuperpowersWorkflow_Main"          ← ), code:mermaid (flowchart TD), Global Constraints, Part A — Complete Superpowers Workflow Graph, Part B — The Same Graph as a Behavior Tree, Part C — Design Decision Tree, Part D — Grill-Me Record (gap analysis, branch by branch) (+1 more)
-
-### Community 1015 - "Community 1015"
-Cohesion: 0.2
-Nodes (10): code:yaml (server:), code:yaml (auth_enabled: false), code:yaml (name: bt-observability), code:yaml (apiVersion: 1), code:yaml (apiVersion: 1), code:json ({), code:make (observability-up:), code:bash (make observability-up && sleep 20) (+2 more)
-
-### Community 1016 - "Community 1016"
-Cohesion: 0.2
-Nodes (9): 1. Loop resilience — infra failures must not burn milestone attempts, 2. Duplicate work between the two runners — verified non-issue + staggering, 3. Doc-drift check validates the invoking worktree, 4. DLQ replay consumer (finishes program c8094002 ms1–3), 5. Selector telemetry + specialists: writer always on, consumers opt-in, 6. Small fixes, 7. Deployment & reconciliation (ops, after landing), Loop Resilience, Telemetry Wiring, and Fleet Streamlining — Design (+1 more)
-
-### Community 1017 - "Community 1017"
-Cohesion: 0.2
-Nodes (10): Anti-patterns to reject, Anti-patterns to reject, arc42 Section 8 (Crosscutting Concepts) — Conformance Checklist, arc42 Section 9 (Architecture Decisions) — Conformance Checklist, Do's, Do's, Does NOT belong here (lives elsewhere in arc42), Does NOT belong in section 9 (lives elsewhere in arc42) (+2 more)
-
-### Community 1018 - "Community 1018"
-Cohesion: 0.2
-Nodes (10): arc42 Section 1 (Introduction and Goals) — Conformance Checklist, arc42 Section 2 (Constraints) — Conformance Checklist, Belongs elsewhere in arc42 (move it out), Do's, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Don'ts / anti-patterns (+2 more)
-
-### Community 1019 - "Community 1019"
-Cohesion: 0.2
-Nodes (10): Anti-patterns (don'ts), arc42 Section 4 (Solution Strategy) — Conformance Checklist, arc42 Section 5 (Building Block View) — Conformance Checklist, Belongs elsewhere in arc42, Do's, Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content (per arc42 template) (+2 more)
-
-### Community 1020 - "Community 1020"
-Cohesion: 0.2
-Nodes (9): ADR-001: Behavior Trees as Core Execution Model, ADR-002: MCP as External Interface, ADR-003: File-Based Persistence over SQL, ADR-004: YAML-Defined Agent Platform, ADR-005: Stockfish-Adapted Evolution Engine, ADR-006: ChainAction — LLM Integration via BT Nodes, ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ, arc42 Section 9 — Architecture Decisions (+1 more)
-
-### Community 1021 - "Community 1021"
+### Community 989 - "Community 989"
 Cohesion: 0.4
 Nodes (8): NotebookLMTree(), findChildByName(), TestNotebookLMResearchPathUsesCurrentNLMCLIAndAntiFabricationGuard(), TestNotebookLMResearchPathUsesDeterministicToolsAndAntiFabricationGuard(), TestNotebookLMTreeIncludesIdempotencyStateActions(), TestNotebookLMTreeRoutesResearchBeforeIngestAndQuery(), TestNotebookLMTreeUsesDeterministicEvidenceGateBeforeSuccess(), TestNotebookLMTreeUsesSetupNotebookLMToolsNotUniversal()
 
-### Community 1022 - "Community 1022"
+### Community 990 - "Community 990"
+Cohesion: 0.27
+Nodes (8): assertNoExecutePlanStubs(), containsNodeName(), minStr(), TestGoapFusion_DeterministicActions(), TestGoapFusion_FullTree_Direct(), TestGoapFusion_Structure(), containsNodeType(), TestSuperpowersPipeline_ProductionContract_NoPlaceholderPath()
+
+### Community 992 - "Community 992"
+Cohesion: 0.22
+Nodes (3): TestInitEngineDelegate(), InitEngineDelegate(), TaskStateBridge
+
+### Community 993 - "Community 993"
+Cohesion: 0.2
+Nodes (9): Block, ChartDataPoint, DiagramEdge, DiagramNode, FeedbackEvent, GeneratedPage, IntentSession, PageSchema (+1 more)
+
+### Community 995 - "Community 995"
+Cohesion: 0.36
+Nodes (7): arc42SyncRunner, syncArc42Docs(), arc42TestRun(), TestArc42SyncNoImpactIsClean(), TestArc42SyncSkipsDryRunAndMainRepoModes(), TestArc42SyncSkipsWithoutProductionChanges(), TestArc42SyncUpdatesDocAndChangedFiles()
+
+### Community 996 - "Community 996"
+Cohesion: 0.33
+Nodes (6): GeneratedAgent, Generator, generatedFallbackChainAction(), generatedFallbackChainActionFromStep(), generatedSelfCorrectChainAction(), generatedStepChainAction()
+
+### Community 997 - "Community 997"
+Cohesion: 0.24
+Nodes (8): Config, EvolvedAgent, buildEvolvedPrompt(), toolDescriptions(), toolNames(), TestBuildEvolvedPrompt(), TestToolDescriptions(), TestToolNames()
+
+### Community 999 - "Community 999"
+Cohesion: 0.2
+Nodes (10): A2A (port 8686), `bt-agent-cli run`, code:json ({ "agent": "code-reviewer", "task": "Review this function fo), code:json ({ "tree": "domain:code_review", "task": "..." }), code:bash (go run ./cmd/bt-agent-cli/ run code-reviewer --input "Review), Dashboard “Run agent” / pipelines, Direct tree execution (no agent YAML), On-demand: MCP `bt_agent_run` (+2 more)
+
+### Community 1000 - "Community 1000"
+Cohesion: 0.2
+Nodes (10): All LLM-dependent services crash immediately, code:bash (# Check current value), code:bash (# 1. Verify the binary works), code:bash (ps aux | grep 'bin/bt-' | awk '{print $2, $9, $NF}' | sort -), code:bash (jq -r '(.candidates[0].operation // (.[0].operation // "none), Duplicate MCP processes, Gateway restart loop (hundreds of restarts), jq `.[0]` fails with exit code 5 on ev_order_mutations (+2 more)
+
+### Community 1001 - "Community 1001"
+Cohesion: 0.2
+Nodes (10): 9.1 Run with real Ollama (optional), 9.2 Start the evolution daemon, 9.3 Register with Hermes Agent, 9.4 Explore deeper, 9.5 Run continuous integration locally, 9. Next Steps, code:bash (# Pull the model), code:bash (./bin/bt-gardener &) (+2 more)
+
+### Community 1002 - "Community 1002"
+Cohesion: 0.2
+Nodes (8): 7.1 Check the metrics tracker, 7.2 Explore the evolution algorithms, 7.3 View quality gates, 7. Understand Tree Evolution (5 min), code:bash (# If gardener has been running:), code:bash (grep -n "QualityGate\|MinComposite\|MaxRegression\|Consecuti), Go BT Platform — Interactive Tutorial, Tutorial Complete! 🎉
+
+### Community 1003 - "Community 1003"
+Cohesion: 0.2
+Nodes (9): Acceptance Criteria, code:go (package fusion), code:bash (cd /home/nico/go-bt-evolve), Current Codebase Anchors, Final Verification Checklist, Fusion-Style BT Agent Implementation Plan, Production Safety Notes, Proposed Data Model (+1 more)
+
+### Community 1004 - "Community 1004"
+Cohesion: 0.2
+Nodes (9): code:mermaid (flowchart TD), code:block2 (PersistentMemSequence "SuperpowersWorkflow_Main"          ← ), code:mermaid (flowchart TD), Global Constraints, Part A — Complete Superpowers Workflow Graph, Part B — The Same Graph as a Behavior Tree, Part C — Design Decision Tree, Part D — Grill-Me Record (gap analysis, branch by branch) (+1 more)
+
+### Community 1005 - "Community 1005"
+Cohesion: 0.2
+Nodes (10): code:yaml (server:), code:yaml (auth_enabled: false), code:yaml (name: bt-observability), code:yaml (apiVersion: 1), code:yaml (apiVersion: 1), code:json ({), code:make (observability-up:), code:bash (make observability-up && sleep 20) (+2 more)
+
+### Community 1006 - "Community 1006"
+Cohesion: 0.2
+Nodes (9): 1. Loop resilience — infra failures must not burn milestone attempts, 2. Duplicate work between the two runners — verified non-issue + staggering, 3. Doc-drift check validates the invoking worktree, 4. DLQ replay consumer (finishes program c8094002 ms1–3), 5. Selector telemetry + specialists: writer always on, consumers opt-in, 6. Small fixes, 7. Deployment & reconciliation (ops, after landing), Loop Resilience, Telemetry Wiring, and Fleet Streamlining — Design (+1 more)
+
+### Community 1007 - "Community 1007"
+Cohesion: 0.2
+Nodes (10): Anti-patterns (don'ts), Anti-patterns to reject, arc42 Section 4 (Solution Strategy) — Conformance Checklist, arc42 Section 6 (Runtime View) — Conformance Checklist, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template) (+2 more)
+
+### Community 1008 - "Community 1008"
+Cohesion: 0.2
+Nodes (10): arc42 Section 1 (Introduction and Goals) — Conformance Checklist, arc42 Section 2 (Constraints) — Conformance Checklist, Belongs elsewhere in arc42 (move it out), Do's, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Don'ts / anti-patterns (+2 more)
+
+### Community 1009 - "Community 1009"
+Cohesion: 0.2
+Nodes (10): Anti-patterns / don'ts, Anti-patterns to reject, arc42 Section 11 (Risks & Technical Debt) — Conformance Checklist, arc42 Section 8 (Crosscutting Concepts) — Conformance Checklist, Do's, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Does NOT belong here (lives elsewhere in arc42) (+2 more)
+
+### Community 1010 - "Community 1010"
+Cohesion: 0.2
+Nodes (9): ADR-001: Behavior Trees as Core Execution Model, ADR-002: MCP as External Interface, ADR-003: File-Based Persistence over SQL, ADR-004: YAML-Defined Agent Platform, ADR-005: Stockfish-Adapted Evolution Engine, ADR-006: ChainAction — LLM Integration via BT Nodes, ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ, arc42 Section 9 — Architecture Decisions (+1 more)
+
+### Community 1011 - "Community 1011"
 Cohesion: 0.24
 Nodes (8): buildEvolvedPrompt(), toolDescriptions(), toolNames(), Config, TestBuildEvolvedPrompt(), TestToolDescriptions(), TestToolNames(), EvolvedAgent
 
-### Community 1023 - "Community 1023"
-Cohesion: 0.36
-Nodes (7): ClarifyGateBlock(), clarifyLeafNames(), clarifyNodeCount(), TestClarifyGateBlock_Branches(), TestClarifyGateBlock_LeafOrder(), TestClarifyGateBlock_NodeCount(), TestClarifyGateBlock_Root()
-
-### Community 1024 - "Community 1024"
+### Community 1012 - "Community 1012"
 Cohesion: 0.28
-Nodes (5): exportMemoryCategory(), exportPreviousRuns(), minInt(), TestExportPreviousRuns(), TestSeedMemoryToBlackboard_HistoryOffloaded()
+Nodes (6): fakeSuperpowersReviewRunner, fixedDiffRunner, TestParseSuperpowersReviewVerdict(), TestSuperpowersTaskGreenAction_InjectsReviewFeedbackWhenPresent(), TestSuperpowersTaskGreenAction_NoFeedback_PromptUnchanged(), TestSuperpowersTaskReviewAction_SetsChainStateFromVerdict()
 
-### Community 1025 - "Community 1025"
+### Community 1014 - "Community 1014"
 Cohesion: 0.36
 Nodes (6): resolveGraphifyBin(), TestResolveGraphifyBinErrorsWhenGenuinelyAbsent(), TestResolveGraphifyBinFallsBackWhenAbsentFromPATH(), TestResolveGraphifyBinPrefersPATH(), TestResolveGraphifyBinRejectsNonExecutableFallback(), writeExecutableGraphify()
 
-### Community 1026 - "Community 1026"
+### Community 1015 - "Community 1015"
+Cohesion: 0.36
+Nodes (7): ClarifyGateBlock(), clarifyLeafNames(), clarifyNodeCount(), TestClarifyGateBlock_Branches(), TestClarifyGateBlock_LeafOrder(), TestClarifyGateBlock_NodeCount(), TestClarifyGateBlock_Root()
+
+### Community 1016 - "Community 1016"
 Cohesion: 0.22
 Nodes (3): GetReflectionsTool, truncateStr(), RunTaskTool
 
-### Community 1028 - "Community 1028"
-Cohesion: 0.39
-Nodes (7): CEOTree(), CTOTree(), PMTree(), Roles(), TestCEOTree_Structure(), TestCTOTree_Structure(), TestPMTree_Structure()
-
-### Community 1029 - "Community 1029"
-Cohesion: 0.39
-Nodes (7): foreachTaskLoop(), SuperpowersWorkflowTree(), systematicDebugging(), tddTask(), TestSuperpowersWorkflowTree_GrillLoopShape(), TestSuperpowersWorkflowTree_ValidatesAndCoversPhases(), withMatch()
-
-### Community 1030 - "Community 1030"
+### Community 1017 - "Community 1017"
 Cohesion: 0.25
 Nodes (3): DocPlanner, DocPlannerWorldState, SectionMapping
 
-### Community 1032 - "Community 1032"
+### Community 1018 - "Community 1018"
 Cohesion: 0.22
 Nodes (9): code:bash (go run ./cmd/bt-agent-cli/ install-templates   # copy repo a), code:bash (cp ~/.go-bt-evolve/agents/templates/code-reviewer.yaml ~/.go), code:json ({), code:json ({ "from_template": "code-reviewer" }), Creating agents, Option A — Copy a template into the registry, Option B — MCP `bt_agent_create` (custom), Option C — MCP `bt_agent_create` (from template) (+1 more)
 
-### Community 1033 - "Community 1033"
+### Community 1019 - "Community 1019"
 Cohesion: 0.22
 Nodes (7): BT Platform Troubleshooting Guide, code:bash (# Is Ollama running?), Condition & Routing Issues, Domain tree silently fails (no LLM calls), Keyword overlap causing misrouting, Quick Diagnostics, See Also
 
-### Community 1034 - "Community 1034"
+### Community 1020 - "Community 1020"
 Cohesion: 0.22
 Nodes (9): 8.1 Overview tab, 8.2 ThinkTank tab, 8.3 Company tab, 8.4 Tasks tab, 8.5 Trees tab, 8.6 MindMap tab, 8.7 Evolution tab, 8.8 Chat panel (+1 more)
 
-### Community 1035 - "Community 1035"
+### Community 1021 - "Community 1021"
+Cohesion: 0.22
+Nodes (9): code:go (type RotatingWriter struct { ... }), code:go (type Store struct { ... }), code:go (func Itoa(i int) string), code:go (type Tool struct { ... }), code:go (type AgentCard struct { Name, Description, URL string }), Package: a2a, Package: persistence, Package: tools (+1 more)
+
+### Community 1022 - "Community 1022"
 Cohesion: 0.28
 Nodes (8): 3.1 Business Context, 3.2 Technical Context, 3. Context and Scope, arc42 Section 3 — Context and Scope, code:block1 (Hermes Agent ──(MCP tools via ─┐             ┌─(HTTP :9800)─), Communication Partners, External Interfaces, System Boundary
 
-### Community 1036 - "Community 1036"
-Cohesion: 0.31
-Nodes (8): 1.1 Requirements Overview, 1.1a Target Vision — Personalized Self-Evolving Agents (Roadmap), 1.2 Quality Goals, 1.2 Quality Goals (Top 3), 1.2 Quality Goals (Top 4), 1.3 Stakeholders, 1. Introduction and Goals, arc42 Section 1 — Introduction and Goals
-
-### Community 1037 - "Community 1037"
+### Community 1023 - "Community 1023"
 Cohesion: 0.22
 Nodes (8): code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), GOAP Fusion Superpowers Bridge Implementation Plan, Task 1: Restore and adapt dual-mode GOAP fusion tree, Task 2: Add Superpowers plan-writing action, Task 3: Add Claude implementation action using the Superpowers plan, Task 4: Harden shell and verification behavior, Task 5: Add regression tests, Task 6: Verified deployment
 
-### Community 1038 - "Community 1038"
-Cohesion: 0.22
-Nodes (9): code:bash (git add internal/engine/actions_superpowers_debug.go interna), code:bash (git add internal/engine/bandit_selector.go internal/engine/b), code:bash (git add docs/adr/ADR-010-superpowers-workflow-tree.md docs/a), Known deviations / follow-ups, Part E — Implementation Tasks, Self-Review (writing-plans checklist — executed 2026-07-02), Task 11: Debugging-phase + finish-option actions, Task 12: `BanditSelector` (flag-gated) + stats recorder (+1 more)
-
-### Community 1039 - "Community 1039"
+### Community 1024 - "Community 1024"
 Cohesion: 0.22
 Nodes (9): code:bash (grep -rn "ConsoleTracer\|ConfigureOTLPFromEnv\|NewTraceReade), code:bash (git rm internal/tracing/batcher.go internal/tracing/batcher_), code:go (// Package tracing is a thin facade over the OpenTelemetry S), code:go (// ── Tracing ──────────────────────────────────────────────), code:go (// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_END), code:go (traceCtx := context.Background()), code:go (package tracing), code:bash (git add -A internal/tracing/ cmd/ internal/engine/mcp_server) (+1 more)
 
-### Community 1040 - "Community 1040"
+### Community 1025 - "Community 1025"
 Cohesion: 0.22
 Nodes (9): code:go (func TestSyncArc42SectionsAndReadmeRunsClassifiedSubset(t *t), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// syncArc42SectionsAndReadme is the pipeline entry point re), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// Keep the architecture documentation in the same commit as), code:go (// Keep the architecture documentation in the same commit as), code:bash (git rm internal/engine/superpowers_arc42.go internal/engine/), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -sho) (+1 more)
 
-### Community 1041 - "Community 1041"
+### Community 1026 - "Community 1026"
+Cohesion: 0.31
+Nodes (8): 1.1 Requirements Overview, 1.1a Target Vision — Personalized Self-Evolving Agents (Roadmap), 1.2 Quality Goals, 1.2 Quality Goals (Top 3), 1.2 Quality Goals (Top 4), 1.3 Stakeholders, 1. Introduction and Goals, arc42 Section 1 — Introduction and Goals
+
+### Community 1027 - "Community 1027"
 Cohesion: 0.22
 Nodes (9): 1. Index-Based Sequence (IteratorNode), 2. RuleGate Node, 3. Spine Memory Context Slicer, 4. Reactive Selector, code:go (// internal/engine/iterator.go), code:go (// internal/engine/gating.go), code:go (// internal/engine/spine_memory.go), code:go (// internal/engine/reactive_selector.go) (+1 more)
 
-### Community 1042 - "Community 1042"
+### Community 1028 - "Community 1028"
 Cohesion: 0.22
 Nodes (8): Task 10: HITL Gate Actions, Task 11: Implementation Actions (Claude Code path), Task 12: Verification Actions, Task 13: Finishing Actions, Task 7: Brainstorming Actions, Task 8: Worktree Actions, Task 9: Planning Actions, Tier 2: Domain Tree + Actions
 
-### Community 1044 - "Community 1044"
-Cohesion: 0.39
-Nodes (7): TestWrapReliable_HasTimeoutAndFallbacks(), act(), ApplyReliability(), cond(), seqFallback(), WrapReliable(), ReliabilitySpec
+### Community 1030 - "Community 1030"
+Cohesion: 0.22
+Nodes (3): GetReflectionsTool, RunTaskTool, truncateStr()
 
-### Community 1045 - "Community 1045"
-Cohesion: 0.25
-Nodes (4): HistogramSnap, LabeledHistogram, init(), NewHistogram()
-
-### Community 1046 - "Community 1046"
-Cohesion: 0.5
-Nodes (7): structuralParent(), structuralTestFactory(), TestStructuralCrossover_CachesExtractedTemplates(), TestStructuralCrossover_ChildDoesNotAliasParent(), TestStructuralCrossover_SplicesRealSubtrees(), TestStructuralCrossover_UnregisteredParentsSkipped(), TestStructuralCrossover_ValidationGate()
-
-### Community 1047 - "Community 1047"
+### Community 1032 - "Community 1032"
 Cohesion: 0.25
 Nodes (3): EdgeType, NodeValidationInfo, TypedEdge
 
-### Community 1048 - "Community 1048"
-Cohesion: 0.5
-Nodes (6): LoadMutatedTreeOverride(), mutatedTreesDir(), sanitizeTreeID(), SaveMutatedTree(), TestMutatedTreeFilenameSanitized(), TestMutatedTreeOverrideRoundTrip()
-
-### Community 1049 - "Community 1049"
-Cohesion: 0.29
-Nodes (4): scriptedClaudeRunner, scriptedSuperpowersRunner, readFileForTest(), TestSuperpowersTaskExecutorRunsRedBeforeGreen()
-
-### Community 1050 - "Community 1050"
+### Community 1033 - "Community 1033"
 Cohesion: 0.29
 Nodes (5): observeNode(), TestBuildTree_ObservesNodes(), TestObserveNode_RecordsMetrics(), tickStatusLabel(), observedCommand
 
-### Community 1051 - "Community 1051"
-Cohesion: 0.46
-Nodes (6): fakeNlmAuth, runAuthAction(), TestNlmAuthExpiredRefreshesAndRecoversOnCleanRecheck(), TestNlmAuthHealthySkipsRefresh(), TestNlmAuthStillExpiredAfterRefreshFails(), withFakeNlmAuth()
+### Community 1034 - "Community 1034"
+Cohesion: 0.29
+Nodes (4): scriptedClaudeRunner, scriptedSuperpowersRunner, readFileForTest(), TestSuperpowersTaskExecutorRunsRedBeforeGreen()
 
-### Community 1052 - "Community 1052"
+### Community 1035 - "Community 1035"
 Cohesion: 0.43
 Nodes (4): registerScriptNodes(), TestRegisterScriptNodes_Failure(), TestRegisterScriptNodes_Success(), writeFakePython()
 
-### Community 1054 - "Community 1054"
+### Community 1036 - "Community 1036"
+Cohesion: 0.46
+Nodes (6): fakeNlmAuth, runAuthAction(), TestNlmAuthExpiredRefreshesAndRecoversOnCleanRecheck(), TestNlmAuthHealthySkipsRefresh(), TestNlmAuthStillExpiredAfterRefreshFails(), withFakeNlmAuth()
+
+### Community 1037 - "Community 1037"
+Cohesion: 0.39
+Nodes (7): TestWrapReliable_HasTimeoutAndFallbacks(), act(), ApplyReliability(), cond(), seqFallback(), WrapReliable(), ReliabilitySpec
+
+### Community 1038 - "Community 1038"
+Cohesion: 0.5
+Nodes (6): LoadMutatedTreeOverride(), mutatedTreesDir(), sanitizeTreeID(), SaveMutatedTree(), TestMutatedTreeFilenameSanitized(), TestMutatedTreeOverrideRoundTrip()
+
+### Community 1039 - "Community 1039"
+Cohesion: 0.39
+Nodes (7): distributedDispatch, appendDispatchErr(), driveDistributedDispatch(), main(), parseNodes(), run(), multiNodeReport
+
+### Community 1040 - "Community 1040"
 Cohesion: 0.29
 Nodes (5): okCommand, panicCommand, init(), TestBuildReactiveParallel_ChildPanicRecoveredAsFailure(), TestRunReactiveParallel_ChildPanicRecoveredAsFailure()
 
-### Community 1055 - "Community 1055"
+### Community 1041 - "Community 1041"
+Cohesion: 0.5
+Nodes (7): structuralParent(), structuralTestFactory(), TestStructuralCrossover_CachesExtractedTemplates(), TestStructuralCrossover_ChildDoesNotAliasParent(), TestStructuralCrossover_SplicesRealSubtrees(), TestStructuralCrossover_UnregisteredParentsSkipped(), TestStructuralCrossover_ValidationGate()
+
+### Community 1042 - "Community 1042"
 Cohesion: 0.25
 Nodes (8): Agent runs but quality always low, code:bash (# Verify tree ID in agent YAML), LLM errors on run, “no tree found for agent X”, Pipeline not found, Scheduled agent never runs, “template not found” on create, Troubleshooting
 
-### Community 1056 - "Community 1056"
+### Community 1043 - "Community 1043"
 Cohesion: 0.25
 Nodes (7): CI mapping, Environment, Gosec excludes, Implementation checklist (branch `cursor/reusable-tree-blocks-c122`), Quick reference, Security and linting — local checks vs CI, Tool versions
 
-### Community 1057 - "Community 1057"
+### Community 1044 - "Community 1044"
 Cohesion: 0.25
 Nodes (7): arc42 goal anchoring (commit 604b1e4), Chronic runner fixes, Landing procedure, NotebookLM corpus hygiene, Research Process Overhaul — 2026-07-08, Research quality findings (review that motivated the overhaul), The runaway-backstop deadlock
 
-### Community 1058 - "Community 1058"
-Cohesion: 0.25
-Nodes (8): 2.1 Fast test suite (no LLM needed), 2.2 Coverage snapshot, 2.3 Check for common issues, 2. Run Tests (3 min), code:bash (go test -short -count=1 -timeout 60s ./...), code:block5 (ok  	github.com/nico/go-bt-evolve/internal/engine	0.123s), code:bash (go test -short -count=1 -coverprofile=/tmp/bt-coverage.out .), code:bash (go vet ./...)
-
-### Community 1059 - "Community 1059"
+### Community 1045 - "Community 1045"
 Cohesion: 0.25
 Nodes (8): 6.1 Explore the knowledge graph, 6.2 Create a tree programmatically (Go code), 6.3 Register your tree, 6. Create Your First Custom Behavior Tree (10 min), code:bash (# View knowledge graph stats (via API)), code:go (package main), code:bash (go run ./cmd/my-tree/), code:go (// In cmd/bt-agent/main.go, add your tree to the resolveTree)
 
-### Community 1060 - "Community 1060"
+### Community 1046 - "Community 1046"
+Cohesion: 0.25
+Nodes (8): 2.1 Fast test suite (no LLM needed), 2.2 Coverage snapshot, 2.3 Check for common issues, 2. Run Tests (3 min), code:bash (go test -short -count=1 -timeout 60s ./...), code:block5 (ok  	github.com/nico/go-bt-evolve/internal/engine	0.123s), code:bash (go test -short -count=1 -coverprofile=/tmp/bt-coverage.out .), code:bash (go vet ./...)
+
+### Community 1047 - "Community 1047"
+Cohesion: 0.25
+Nodes (8): code:go (type PlatformEvalResult struct { ... }), code:go (type BaselineStore struct { ... }), code:go (type WorkflowReport struct { ... }), code:go (type AgentInfo struct { Name, Status, Schedule string; Succe), Package: benchreg, Package: cicd, Package: eval, Package: internal/dashboard
+
+### Community 1048 - "Community 1048"
 Cohesion: 0.25
 Nodes (8): code:go (type Tool interface {), code:text (Thought: ...), code:text (Final Answer: ...), code:go (func TestToolLoop_StopsAtMaxToolCalls(t *testing.T)), code:text (Web tools unavailable in this run; state uncertainty explici), code:bash (go test ./internal/fusion -run 'TestToolLoop|TestRunPanel|Te), code:bash (git add internal/fusion/tools.go internal/fusion/tools_test.), Task 5: Add Optional Web Search / Fetch Tool Loop
 
-### Community 1061 - "Community 1061"
+### Community 1049 - "Community 1049"
 Cohesion: 0.25
 Nodes (8): code:go (package domains), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/domains/ -ru), code:go (package domains), code:go ("arc42:docsync":             Arc42DocsyncTree(),), code:go ("arc42:docsync":             "Per-section arc42 + README doc), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/domains/ -co), code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Task 19: `arc42:docsync` tree + Commit 2
 
-### Community 1062 - "Community 1062"
+### Community 1050 - "Community 1050"
 Cohesion: 0.25
 Nodes (7): Before, GOAP Fusion Superpowers Implementation Plan, Improvement Gaps, NotebookLM Research, Prioritized Goals, Research/GAP Context, Vault Research Excerpt
+
+### Community 1051 - "Community 1051"
+Cohesion: 0.25
+Nodes (7): Before, GOAP Fusion Superpowers Implementation Plan, Improvement Gaps, NotebookLM Research, Prioritized Goals, Research/GAP Context, Vault Research Excerpt
+
+### Community 1059 - "Community 1059"
+Cohesion: 0.57
+Nodes (5): encodeJSON(), HandleHITL(), HandleHITLPending(), TestHITLHandlers_PendingApproveReject(), writeHITLResult()
+
+### Community 1062 - "Community 1062"
+Cohesion: 0.43
+Nodes (5): TestValidateQualitySpec_BlockedPattern(), TestValidateQualitySpec_MinLength(), TestValidateQualitySpec_NilSpecUsesHeuristic(), TestValidateQualitySpec_RequiredSections(), ValidateQualitySpec()
 
 ### Community 1063 - "Community 1063"
-Cohesion: 0.25
-Nodes (7): Before, GOAP Fusion Superpowers Implementation Plan, Improvement Gaps, NotebookLM Research, Prioritized Goals, Research/GAP Context, Vault Research Excerpt
+Cohesion: 0.57
+Nodes (5): degeneratePopulation(), runWithoutPanic(), TestEvolve_DegeneratePopulations(), TestEvolveWithExperience_DegeneratePopulations(), TestMemeticEvolve_DegeneratePopulations()
 
 ### Community 1064 - "Community 1064"
+Cohesion: 0.38
+Nodes (3): PriorityTaskQueue, Queue, QueueError
+
+### Community 1065 - "Community 1065"
+Cohesion: 0.52
+Nodes (6): assertRouteConds(), evalCond(), TestRouteConditions_ExactFallback(), TestRouteConditions_FellBackToDefault(), TestRouteConditions_ModelResolved(), TestRouteConditions_NoRouting()
+
+### Community 1066 - "Community 1066"
+Cohesion: 0.62
+Nodes (5): pollLiveData(), renderCategories(), renderOverview(), renderSystemStatus(), updateOverviewStats()
+
+### Community 1068 - "Community 1068"
 Cohesion: 0.43
 Nodes (5): NotebookLMFitness(), RegisterNotebookLMFitness(), TestRegisterNotebookLMFitness_DoesNotAffectOtherTrees(), TestRegisterNotebookLMFitness_WiresIntoKnowledgeGraph(), NotebookLMRunSummary
 
 ### Community 1069 - "Community 1069"
-Cohesion: 0.43
-Nodes (5): TestValidateQualitySpec_BlockedPattern(), TestValidateQualitySpec_MinLength(), TestValidateQualitySpec_NilSpecUsesHeuristic(), TestValidateQualitySpec_RequiredSections(), ValidateQualitySpec()
+Cohesion: 0.29
+Nodes (7): code:bash (AGENT_HOME="${BT_AGENT_HOME:-$HOME/.go-bt-evolve}"), code:powershell ($AgentHome = if ($env:BT_AGENT_HOME) { $env:BT_AGENT_HOME } ), code:bash (# Terminal 1 — MCP server + scheduler + A2A (port 8686)), First-time setup, Linux / macOS, Start the runtime, Windows (PowerShell)
+
+### Community 1070 - "Community 1070"
+Cohesion: 0.29
+Nodes (7): CLI `bt-agent-cli schedule`, code:json ({ "agent": "system-monitor", "schedule": "*/5 * * * *", "tim), code:bash (go run ./cmd/bt-agent-cli/ schedule system-monitor --every "), MCP `bt_agent_schedule`, Schedule syntax, Scheduler behavior, Scheduling
+
+### Community 1071 - "Community 1071"
+Cohesion: 0.29
+Nodes (7): code:bash (# Reset tree to default), code:go (ss := d.Stats[selectorName]), Decision tree optimizer crashes with SIGSEGV, Evolution & Gardener Issues, Gardener applies 0 mutations per cycle, Mutation death spiral (97.3% regression rate), Transposition Table always returns 0 entries
+
+### Community 1072 - "Community 1072"
+Cohesion: 0.29
+Nodes (7): Background test output flooded by zsh init, code:bash (go test -short -count=1 -timeout 60s ./...), code:bash (go test -count=1 -timeout 1200s ./...), code:bash (exec bash -c 'cd ~/go-bt-evolve && go test -v -run "TestName), Empty tool output = success, not error, Ollama-dependent tests timeout, Test & Benchmark Issues
+
+### Community 1073 - "Community 1073"
+Cohesion: 0.29
+Nodes (7): 1.1 Clone and enter the repo, 1.2 Verify Go version, 1.3 Download dependencies, 1. Setup (2 min), code:bash (git clone https://github.com/nico/go-bt-evolve.git), code:bash (go version), code:bash (go mod download)
+
+### Community 1074 - "Community 1074"
+Cohesion: 0.29
+Nodes (7): 4.1 Start the server, 4.2 Verify it's running, 4.3 Explore the API, 4. Start the Dashboard (3 min), code:bash (./bin/bt-dashboard &), code:bash (curl -s http://localhost:9800/api/health | head -c 200), code:bash (# Platform summary)
+
+### Community 1075 - "Community 1075"
+Cohesion: 0.29
+Nodes (7): 5.1 Explore available trees, 5.2 Run a task through the GoDev tree, 5.3 Try different task types, 5. Execute Tasks Through Behavior Trees (5 min), code:bash (# List all registered trees), code:bash (# Via mcporter (if installed):), code:bash (# Research task → deep_research tree)
+
+### Community 1076 - "Community 1076"
+Cohesion: 0.29
+Nodes (7): code:go (func TestConfig_DefaultsQualityPreset(t *testing.T)), code:bash (cd /home/nico/go-bt-evolve), code:go (func DefaultConfig() Config), code:go (var QualityPreset = []string{), code:bash (go test ./internal/fusion -run TestConfig -count=1), code:bash (git add internal/fusion/config.go internal/fusion/config_tes), Task 1: Add Fusion Config Validation
 
 ### Community 1077 - "Community 1077"
-Cohesion: 0.38
-Nodes (3): PriorityTaskQueue, Queue, QueueError
+Cohesion: 0.29
+Nodes (7): code:go (func TestJudge_ParsesStructuredJSON(t *testing.T)), code:text (You are the Fusion judge. Compare panel responses; do not me), code:go (func Judge(ctx context.Context, caller ModelCaller, cfg Conf), code:go (func parseAnalysisJSON(raw string) (Analysis, error)), code:bash (go test ./internal/fusion -run 'TestJudge|TestParseAnalysis'), code:bash (git add internal/fusion/judge.go internal/fusion/judge_test.), Task 4: Implement Judge Structured Analysis
+
+### Community 1078 - "Community 1078"
+Cohesion: 0.29
+Nodes (7): code:go (type OpenAICompatConfig struct {), code:go (OpenRouterHost  string `json:"openrouter_host" env:"OPENROUT), code:bash (go test ./internal/llm -run 'TestOpenAICompat|TestNewProvide), code:bash (git add internal/llm/openai_compat.go internal/llm/openai_co), code:go (func TestOpenAICompat_Generate_SendsChatCompletion(t *testin), code:json ({), Task 2: Add OpenRouter/OpenAI-Compatible Model Client
 
 ### Community 1079 - "Community 1079"
-Cohesion: 0.62
-Nodes (5): pollLiveData(), renderCategories(), renderOverview(), renderSystemStatus(), updateOverviewStats()
+Cohesion: 0.29
+Nodes (7): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package engine), code:go (package engine), code:go (var extraHandlers []slog.Handler), code:go (logShutdown := engine.InitLogExport("bt-agent")), code:bash (git add internal/engine/log_correlation.go internal/engine/l), Task 4: Log correlation — trace-aware slog handler + OTLP log bridge
 
 ### Community 1080 - "Community 1080"
 Cohesion: 0.29
-Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
+Nodes (6): arc42 Conformance Checklists (companion to 2026-07-16-arc42-docs-consolidation-design.md), arc42 Section 7 (Deployment View) — Conformance Checklist, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure
 
 ### Community 1081 - "Community 1081"
 Cohesion: 0.29
-Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
+Nodes (6): GOAP Runner: honest outcome signal, commit auto-fix, and build stamping, Item 1 — Honest outcome labels + authoritative quality, Item 2 — VCS build stamping (fix inert drift detection), Item 3 — Commit auto-fix loop (up to 10 Claude attempts), Out of scope, Verification
 
 ### Community 1082 - "Community 1082"
 Cohesion: 0.29
-Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
+Nodes (7): 3.1 Business Context, 3.2 Technical Context, arc42 Section 3 — Context and Scope, code:block1 (┌─────────────────────────────────────────────────────────┐), Communication Partners, External Interfaces, System Boundary
 
 ### Community 1083 - "Community 1083"
 Cohesion: 0.29
@@ -6846,379 +6871,375 @@ Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check
 
 ### Community 1288 - "Community 1288"
 Cohesion: 0.29
-Nodes (7): code:bash (AGENT_HOME="${BT_AGENT_HOME:-$HOME/.go-bt-evolve}"), code:powershell ($AgentHome = if ($env:BT_AGENT_HOME) { $env:BT_AGENT_HOME } ), code:bash (# Terminal 1 — MCP server + scheduler + A2A (port 8686)), First-time setup, Linux / macOS, Start the runtime, Windows (PowerShell)
+Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
 
 ### Community 1289 - "Community 1289"
 Cohesion: 0.29
-Nodes (7): CLI `bt-agent-cli schedule`, code:json ({ "agent": "system-monitor", "schedule": "*/5 * * * *", "tim), code:bash (go run ./cmd/bt-agent-cli/ schedule system-monitor --every "), MCP `bt_agent_schedule`, Schedule syntax, Scheduler behavior, Scheduling
+Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
 
 ### Community 1290 - "Community 1290"
 Cohesion: 0.29
-Nodes (7): code:bash (# Reset tree to default), code:go (ss := d.Stats[selectorName]), Decision tree optimizer crashes with SIGSEGV, Evolution & Gardener Issues, Gardener applies 0 mutations per cycle, Mutation death spiral (97.3% regression rate), Transposition Table always returns 0 entries
+Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
 
 ### Community 1291 - "Community 1291"
 Cohesion: 0.29
-Nodes (7): Background test output flooded by zsh init, code:bash (go test -short -count=1 -timeout 60s ./...), code:bash (go test -count=1 -timeout 1200s ./...), code:bash (exec bash -c 'cd ~/go-bt-evolve && go test -v -run "TestName), Empty tool output = success, not error, Ollama-dependent tests timeout, Test & Benchmark Issues
-
-### Community 1292 - "Community 1292"
-Cohesion: 0.29
-Nodes (7): 4.1 Start the server, 4.2 Verify it's running, 4.3 Explore the API, 4. Start the Dashboard (3 min), code:bash (./bin/bt-dashboard &), code:bash (curl -s http://localhost:9800/api/health | head -c 200), code:bash (# Platform summary)
+Nodes (7): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first
 
 ### Community 1293 - "Community 1293"
 Cohesion: 0.29
-Nodes (7): 1.1 Clone and enter the repo, 1.2 Verify Go version, 1.3 Download dependencies, 1. Setup (2 min), code:bash (git clone https://github.com/nico/go-bt-evolve.git), code:bash (go version), code:bash (go mod download)
+Nodes (6): Acceptance Criteria, Architecture, Goal, Risks, Superpowers Design, Test Strategy
 
 ### Community 1294 - "Community 1294"
 Cohesion: 0.29
-Nodes (7): 5.1 Explore available trees, 5.2 Run a task through the GoDev tree, 5.3 Try different task types, 5. Execute Tasks Through Behavior Trees (5 min), code:bash (# List all registered trees), code:bash (# Via mcporter (if installed):), code:bash (# Research task → deep_research tree)
-
-### Community 1295 - "Community 1295"
-Cohesion: 0.29
-Nodes (7): code:go (func TestConfig_DefaultsQualityPreset(t *testing.T)), code:bash (cd /home/nico/go-bt-evolve), code:go (func DefaultConfig() Config), code:go (var QualityPreset = []string{), code:bash (go test ./internal/fusion -run TestConfig -count=1), code:bash (git add internal/fusion/config.go internal/fusion/config_tes), Task 1: Add Fusion Config Validation
+Nodes (6): Acceptance Criteria, Architecture, Goal, Risks, Superpowers Design, Test Strategy
 
 ### Community 1296 - "Community 1296"
-Cohesion: 0.29
-Nodes (7): code:go (type OpenAICompatConfig struct {), code:go (OpenRouterHost  string `json:"openrouter_host" env:"OPENROUT), code:bash (go test ./internal/llm -run 'TestOpenAICompat|TestNewProvide), code:bash (git add internal/llm/openai_compat.go internal/llm/openai_co), code:go (func TestOpenAICompat_Generate_SendsChatCompletion(t *testin), code:json ({), Task 2: Add OpenRouter/OpenAI-Compatible Model Client
+Cohesion: 0.53
+Nodes (4): CompanyState, Decision, QuarterResult, SprintResult
 
 ### Community 1297 - "Community 1297"
-Cohesion: 0.29
-Nodes (7): code:go (func TestJudge_ParsesStructuredJSON(t *testing.T)), code:text (You are the Fusion judge. Compare panel responses; do not me), code:go (func Judge(ctx context.Context, caller ModelCaller, cfg Conf), code:go (func parseAnalysisJSON(raw string) (Analysis, error)), code:bash (go test ./internal/fusion -run 'TestJudge|TestParseAnalysis'), code:bash (git add internal/fusion/judge.go internal/fusion/judge_test.), Task 4: Implement Judge Structured Analysis
-
-### Community 1298 - "Community 1298"
-Cohesion: 0.29
-Nodes (6): code:go (engine.Init()), code:bash (git add internal/ cmd/), Global Constraints, Logging & Tracing Overhaul Implementation Plan, Self-Review Notes, Task 9: Migrate raw log.Printf files to structured logging
-
-### Community 1299 - "Community 1299"
-Cohesion: 0.29
-Nodes (7): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package engine), code:go (package engine), code:go (var extraHandlers []slog.Handler), code:go (logShutdown := engine.InitLogExport("bt-agent")), code:bash (git add internal/engine/log_correlation.go internal/engine/l), Task 4: Log correlation — trace-aware slog handler + OTLP log bridge
-
-### Community 1300 - "Community 1300"
-Cohesion: 0.29
-Nodes (6): arc42 Conformance Checklists (companion to 2026-07-16-arc42-docs-consolidation-design.md), arc42 Section 12 (Glossary) — Conformance Checklist, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure
-
-### Community 1301 - "Community 1301"
-Cohesion: 0.29
-Nodes (6): GOAP Runner: honest outcome signal, commit auto-fix, and build stamping, Item 1 — Honest outcome labels + authoritative quality, Item 2 — VCS build stamping (fix inert drift detection), Item 3 — Commit auto-fix loop (up to 10 Claude attempts), Out of scope, Verification
-
-### Community 1302 - "Community 1302"
-Cohesion: 0.29
-Nodes (7): 3.1 Business Context, 3.2 Technical Context, arc42 Section 3 — Context and Scope, code:block1 (┌─────────────────────────────────────────────────────────┐), Communication Partners, External Interfaces, System Boundary
-
-### Community 1304 - "Community 1304"
-Cohesion: 0.29
-Nodes (6): Acceptance Criteria, Architecture, Goal, Risks, Superpowers Design, Test Strategy
-
-### Community 1305 - "Community 1305"
-Cohesion: 0.29
-Nodes (6): Acceptance Criteria, Architecture, Goal, Risks, Superpowers Design, Test Strategy
-
-### Community 1306 - "Community 1306"
-Cohesion: 0.47
-Nodes (4): cmdStatus(), programStatusLines(), TestProgramStatusLines_AllDone(), TestProgramStatusLines_MidProgress()
-
-### Community 1307 - "Community 1307"
 Cohesion: 0.47
 Nodes (3): TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(), TestServer_ToolPanicRecovery(), mixedToolSharedLeaf
 
-### Community 1308 - "Community 1308"
+### Community 1298 - "Community 1298"
 Cohesion: 0.53
 Nodes (5): init(), registerSuperpowersDebugActions(), superpowersDebugPhase(), superpowersDebugPhaseAction(), debugPhaseSpec
 
-### Community 1310 - "Community 1310"
+### Community 1299 - "Community 1299"
+Cohesion: 0.47
+Nodes (4): TestVerifyNotebookLMEvidenceAcceptsRealNotebookPayload(), TestVerifyNotebookLMEvidenceRejectsEmptyOrUngroundedSuccess(), TestVerifyNotebookLMEvidenceRejectsFabricatedOutput(), verifyNotebookLMEvidenceAction()
+
+### Community 1301 - "Community 1301"
+Cohesion: 0.33
+Nodes (5): ADR-008: Composable Behavior-Tree Building Blocks, Consequences, Context, Decision, Status
+
+### Community 1303 - "Community 1303"
+Cohesion: 0.47
+Nodes (4): cmdStatus(), programStatusLines(), TestProgramStatusLines_AllDone(), TestProgramStatusLines_MidProgress()
+
+### Community 1304 - "Community 1304"
 Cohesion: 0.53
 Nodes (4): handleBlackboard(), handleBlackboardScopes(), parseBlackboardScope(), scopeError
 
-### Community 1311 - "Community 1311"
+### Community 1305 - "Community 1305"
 Cohesion: 0.6
 Nodes (4): addChatMsg(), agentNames, sendChat(), toggleChat()
 
-### Community 1312 - "Community 1312"
+### Community 1306 - "Community 1306"
 Cohesion: 0.47
 Nodes (4): noRunnerHome(), repoRoot(), TestRun_JSONOutput(), TestRun_TextOutput()
 
-### Community 1313 - "Community 1313"
+### Community 1307 - "Community 1307"
 Cohesion: 0.33
 Nodes (4): 1.1 Requirements Overview, 1.2 Quality Goals, 1.3 Stakeholders, 1. Introduction and Goals
 
-### Community 1314 - "Community 1314"
+### Community 1308 - "Community 1308"
 Cohesion: 0.33
 Nodes (6): Blackboard (context offloading), Chain templates, code:bash (go run ./cmd/bt-agent-cli/ bb list --scope agent --id code-r), Dashboard API, MCP tools, ReAct tools (in `agent:` chains)
 
-### Community 1315 - "Community 1315"
+### Community 1309 - "Community 1309"
 Cohesion: 0.33
 Nodes (6): code:bash (# Audit all ChainAction nodes for low max_tokens), Empty outcome with no error, OOM kill (exit 137), Runtime Issues, Tree reports "success" but produces garbage output, Tree times out at 600s without completing
 
-### Community 1316 - "Community 1316"
-Cohesion: 0.33
-Nodes (6): 7.1 Check the metrics tracker, 7.2 Explore the evolution algorithms, 7.3 View quality gates, 7. Understand Tree Evolution (5 min), code:bash (# If gardener has been running:), code:bash (grep -n "QualityGate\|MinComposite\|MaxRegression\|Consecuti)
-
-### Community 1317 - "Community 1317"
+### Community 1310 - "Community 1310"
 Cohesion: 0.47
 Nodes (5): 10.1 Quality Tree, 10.2 Quality Scenarios, 10. Quality Requirements, arc42 Section 10 — Quality Requirements, code:block1 (go-bt-evolve)
 
-### Community 1318 - "Community 1318"
+### Community 1311 - "Community 1311"
 Cohesion: 0.53
 Nodes (5): 2. Architecture Constraints, arc42 Section 2 — Architecture Constraints, Conventions, Organizational Constraints, Technical Constraints
 
-### Community 1319 - "Community 1319"
-Cohesion: 0.33
-Nodes (6): code:bash (graphify query "where are built-in agent trees registered an), code:text (search_files("allPlatformTrees|ResolveAgentName|AgentDefinit), code:go (func TestFusionAgent_Listed(t *testing.T)), code:bash (go test ./... -run 'TestFusionAgent|TestFusionDeliberationTr), code:bash (git add <registration files>), Task 11: Add Agent Template / CLI Registration
-
-### Community 1320 - "Community 1320"
-Cohesion: 0.33
-Nodes (6): code:go (type ModelCaller interface {), code:go (func TestRunPanel_RunsModelsConcurrently(t *testing.T)), code:go (func RunPanel(ctx context.Context, caller ModelCaller, cfg C), code:bash (go test ./internal/fusion -run TestRunPanel -count=1), code:bash (git add internal/fusion/panel.go internal/fusion/panel_test.), Task 3: Implement Parallel Panel Runner
-
-### Community 1321 - "Community 1321"
+### Community 1312 - "Community 1312"
 Cohesion: 0.33
 Nodes (6): code:go (func shouldUseFusionCond(b *Blackboard) bool), code:go (RegisterCondition("ShouldUseFusion", shouldUseFusionCond)), code:go (func TestShouldUseFusion_ResearchPrompt(t *testing.T)), code:bash (go test ./internal/engine -run 'TestShouldUseFusion|TestForc), code:bash (git add internal/engine/fusion_conditions.go internal/engine), Task 9: Add Fusion Routing Conditions
 
-### Community 1322 - "Community 1322"
+### Community 1313 - "Community 1313"
+Cohesion: 0.33
+Nodes (6): code:bash (graphify query "where are built-in agent trees registered an), code:text (search_files("allPlatformTrees|ResolveAgentName|AgentDefinit), code:go (func TestFusionAgent_Listed(t *testing.T)), code:bash (go test ./... -run 'TestFusionAgent|TestFusionDeliberationTr), code:bash (git add <registration files>), Task 11: Add Agent Template / CLI Registration
+
+### Community 1314 - "Community 1314"
 Cohesion: 0.33
 Nodes (6): code:go (const ChainFusion ChainKind = "fusion"), code:go (case ChainFusion:), code:go (func TestExecFusion_StoresAnalysisAndResponses(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/engine/chains.go internal/engine/chains_fus), Task 8: Add ChainKind `fusion` to BT Engine
 
-### Community 1323 - "Community 1323"
+### Community 1315 - "Community 1315"
 Cohesion: 0.33
-Nodes (6): code:go (// internal/engine/chain_state_util_test.go), code:go (// internal/engine/mem_nodes_test.go), code:go (// internal/engine/chain_state_util.go), code:go (case "MemSequence":), code:bash (git add internal/engine/chain_state_util.go internal/engine/), Task 1: `chainStateInt` helper + expose `MemSequence` node type
+Nodes (6): code:go (type ModelCaller interface {), code:go (func TestRunPanel_RunsModelsConcurrently(t *testing.T)), code:go (func RunPanel(ctx context.Context, caller ModelCaller, cfg C), code:bash (go test ./internal/fusion -run TestRunPanel -count=1), code:bash (git add internal/fusion/panel.go internal/fusion/panel_test.), Task 3: Implement Parallel Panel Runner
 
-### Community 1324 - "Community 1324"
+### Community 1316 - "Community 1316"
 Cohesion: 0.33
 Nodes (6): code:go (func TestPersistentMemSequence_ResumesFromPersistedCursor(t ), code:go (// internal/engine/persistent_mem_sequence.go), code:go (case "PersistentMemSequence":), code:go (case "MemSelector", "PersistentMemSequence", "ForEachTask":), code:bash (git add internal/engine/persistent_mem_sequence.go internal/), Task 3: `PersistentMemSequence` composite + unique-name validation
 
-### Community 1325 - "Community 1325"
+### Community 1317 - "Community 1317"
+Cohesion: 0.33
+Nodes (6): code:go (// internal/engine/chain_state_util_test.go), code:go (// internal/engine/mem_nodes_test.go), code:go (// internal/engine/chain_state_util.go), code:go (case "MemSequence":), code:bash (git add internal/engine/chain_state_util.go internal/engine/), Task 1: `chainStateInt` helper + expose `MemSequence` node type
+
+### Community 1318 - "Community 1318"
 Cohesion: 0.33
 Nodes (6): code:go (// internal/engine/foreach_task_test.go), code:go (// internal/engine/foreach_task.go), code:go (func superpowersTaskRed(ctx context.Context, run *Superpower), code:go (RegisterCondition("PlanHasIndependentTasks", func(bb *Blackb), code:bash (git add internal/engine/foreach_task.go internal/engine/fore), Task 6: `ForEachTask` composite + TDD phase-split actions + `PlanHasIndependentTasks`
 
-### Community 1326 - "Community 1326"
+### Community 1319 - "Community 1319"
 Cohesion: 0.33
 Nodes (6): code:bash (grep -rn "bt-otlp-collector\|otlp-collector\|BT_OTLP_COLLECT), code:bash (git rm -r cmd/bt-otlp-collector), code:markdown (### Added), code:bash (make observability-up && sleep 20), code:bash (make check-full), Task 10: Remove bt-otlp-collector, changelog, end-to-end verification
 
-### Community 1327 - "Community 1327"
-Cohesion: 0.33
-Nodes (6): code:go (package engine), code:go (Logger *slog.Logger `json:"-"` // run-scoped logger (run_id/), code:go (// Log returns the run-scoped logger when bound, else the gl), code:go (bb.Logger = engine.L().With("run_id", runID, "agent", agentN), code:bash (git add internal/engine/tree.go internal/engine/blackboard_l), Task 5: Run-scoped logger on the Blackboard
-
-### Community 1328 - "Community 1328"
+### Community 1320 - "Community 1320"
 Cohesion: 0.33
 Nodes (6): code:go (package agent), code:go (runCtx := ctx), code:go (_, whSpan := tracing.StartSpan(runCtx.Context, "agent.webhoo), code:go (if err != nil {), code:bash (git add internal/agent/ cmd/bt-agent/main.go), Task 7: Run root span + scheduler webhook span
 
-### Community 1329 - "Community 1329"
+### Community 1321 - "Community 1321"
+Cohesion: 0.33
+Nodes (6): code:go (package engine), code:go (Logger *slog.Logger `json:"-"` // run-scoped logger (run_id/), code:go (// Log returns the run-scoped logger when bound, else the gl), code:go (bb.Logger = engine.L().With("run_id", runID, "agent", agentN), code:bash (git add internal/engine/tree.go internal/engine/blackboard_l), Task 5: Run-scoped logger on the Blackboard
+
+### Community 1322 - "Community 1322"
 Cohesion: 0.33
 Nodes (6): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 18: The 13 registered nodes — TDD
 
-### Community 1330 - "Community 1330"
+### Community 1323 - "Community 1323"
 Cohesion: 0.33
 Nodes (5): ADR-009: Scoped Blackboard for Context Offloading, Consequences, Context, Decision, Related
 
-### Community 1331 - "Community 1331"
+### Community 1324 - "Community 1324"
 Cohesion: 0.33
 Nodes (4): ADR-007: Reliability Architecture — Circuit Breakers, Retry, and Dead Letter Queue, Consequences, Context, Decision
 
-### Community 1332 - "Community 1332"
+### Community 1325 - "Community 1325"
 Cohesion: 0.33
 Nodes (4): ADR-005: Stockfish-Adapted Evolution Engine, Consequences, Context, Decision
 
-### Community 1333 - "Community 1333"
+### Community 1326 - "Community 1326"
 Cohesion: 0.33
 Nodes (4): ADR-001: Behavior Trees as Core Execution Model, Consequences, Context, Decision
 
-### Community 1334 - "Community 1334"
+### Community 1327 - "Community 1327"
 Cohesion: 0.33
 Nodes (4): ADR-003: File-Based Persistence over SQL, Consequences, Context, Decision
 
-### Community 1335 - "Community 1335"
+### Community 1328 - "Community 1328"
 Cohesion: 0.33
 Nodes (4): ADR-004: YAML-Defined Agent Platform, Consequences, Context, Decision
 
-### Community 1336 - "Community 1336"
+### Community 1329 - "Community 1329"
 Cohesion: 0.33
 Nodes (4): ADR-002: MCP as External Interface, Consequences, Context, Decision
 
-### Community 1337 - "Community 1337"
+### Community 1330 - "Community 1330"
 Cohesion: 0.33
 Nodes (4): ADR-006: ChainAction — LLM Integration via Behavior Tree Nodes, Consequences, Context, Decision
 
-### Community 1338 - "Community 1338"
-Cohesion: 0.33
-Nodes (6): Task 1: IteratorNode (Index-Based Sequence), Task 2: RuleGate Node, Task 3: ReactiveSelector Node, Task 4: SpineMemoryManager, Task 5: Register New Nodes in Engine, Tier 1: Engine Extensions (blocking)
-
-### Community 1339 - "Community 1339"
+### Community 1331 - "Community 1331"
 Cohesion: 0.33
 Nodes (6): Task 18: Unit Tests (all new actions), Task 19: Domain Tree Test, Task 20: Full Simulation, Task 21: Edge Case Simulation, Task 22: Failure Mode Simulation, Tier 4: Testing + Simulation
 
-### Community 1340 - "Community 1340"
+### Community 1332 - "Community 1332"
+Cohesion: 0.33
+Nodes (6): Task 1: IteratorNode (Index-Based Sequence), Task 2: RuleGate Node, Task 3: ReactiveSelector Node, Task 4: SpineMemoryManager, Task 5: Register New Nodes in Engine, Tier 1: Engine Extensions (blocking)
+
+### Community 1333 - "Community 1333"
 Cohesion: 0.6
 Nodes (3): TestTaskStateBridge_A2AToBT(), TestTaskStateBridge_BTToA2A(), TestTaskStateBridge_IsTerminal()
 
-### Community 1341 - "Community 1341"
-Cohesion: 0.8
-Nodes (3): envDefault(), main(), run()
-
-### Community 1342 - "Community 1342"
+### Community 1335 - "Community 1335"
 Cohesion: 0.6
 Nodes (3): findChildTick(), registerTickTestAction(), TestRunRecordsTerminalChildTicksWithParents()
 
-### Community 1343 - "Community 1343"
-Cohesion: 0.6
-Nodes (3): TestContainsAnyStr(), TestItoa(), TestTruncate()
+### Community 1336 - "Community 1336"
+Cohesion: 0.8
+Nodes (3): envDefault(), main(), run()
 
-### Community 1346 - "Community 1346"
-Cohesion: 0.6
-Nodes (3): TestBuildPopulationStateWithGrid(), TestLLMSupervisor_ClassifyPhases(), TestLLMSupervisor_GuideRateWithinPhaseRange()
-
-### Community 1348 - "Community 1348"
+### Community 1339 - "Community 1339"
 Cohesion: 0.4
 Nodes (3): Bidder, RoutingStrategy, TestRoutingStrategy_String()
 
-### Community 1351 - "Community 1351"
+### Community 1340 - "Community 1340"
+Cohesion: 0.4
+Nodes (5): NewBaselineStore(), TestBaselineStore_EmptyFile(), TestBaselineStore_InvalidJSON(), TestBaselineStore_SaveLoad(), TestBaselineStore_UpdateBaseline()
+
+### Community 1342 - "Community 1342"
+Cohesion: 0.6
+Nodes (3): renderFellows(), renderThinkTank(), runThinkTank()
+
+### Community 1343 - "Community 1343"
 Cohesion: 0.4
 Nodes (5): code:bash (ollama pull qwen3.6:35b-a3b), Model not found, OLLAMA_HOST missing http:// scheme, Ollama-Specific Issues, Slow inference on Jetson
 
-### Community 1352 - "Community 1352"
-Cohesion: 0.4
-Nodes (5): code:bash (# Check if dashboard is alive), code:bash (# Step 1: Build), Dashboard Issues, Empty API responses, pkill kills the build process
-
-### Community 1353 - "Community 1353"
+### Community 1344 - "Community 1344"
 Cohesion: 0.4
 Nodes (5): Build & Compilation, code:bash (export PATH=$PATH:/usr/local/go/bin), Cross-file type collisions, Dashboard raw string literal issues, "package ... is not in GOROOT"
 
-### Community 1354 - "Community 1354"
+### Community 1345 - "Community 1345"
 Cohesion: 0.4
-Nodes (5): Belongs elsewhere in arc42, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure, Section 10 — Quality Requirements
+Nodes (5): code:bash (# Check if dashboard is alive), code:bash (# Step 1: Build), Dashboard Issues, Empty API responses, pkill kills the build process
 
-### Community 1355 - "Community 1355"
-Cohesion: 0.4
-Nodes (5): Anti-patterns (don'ts), Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template), Section 4 — Solution Strategy, Structure & style (do's)
-
-### Community 1356 - "Community 1356"
-Cohesion: 0.4
-Nodes (5): Anti-patterns to reject, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 8 — Crosscutting Concepts
-
-### Community 1357 - "Community 1357"
-Cohesion: 0.4
-Nodes (5): Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 7 — Deployment View
-
-### Community 1358 - "Community 1358"
-Cohesion: 0.4
-Nodes (5): Anti-patterns to reject, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure, Section 9 — Architecture Decisions
-
-### Community 1359 - "Community 1359"
-Cohesion: 0.4
-Nodes (5): Belongs elsewhere in arc42, Do's, Don'ts / anti-patterns, Required content & structure, Section 5 — Building Block View
-
-### Community 1360 - "Community 1360"
-Cohesion: 0.4
-Nodes (5): Anti-patterns to reject, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure, Section 6 — Runtime View
-
-### Community 1361 - "Community 1361"
-Cohesion: 0.4
-Nodes (5): Anti-patterns / don'ts, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 3 — Context and Scope
-
-### Community 1362 - "Community 1362"
+### Community 1346 - "Community 1346"
 Cohesion: 0.4
 Nodes (5): Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure, Section 12 — Glossary
 
-### Community 1363 - "Community 1363"
+### Community 1347 - "Community 1347"
 Cohesion: 0.4
 Nodes (5): Belongs elsewhere in arc42 (move it out), Do's, Don'ts / anti-patterns, Required structure (arc42 template), Section 1 — Introduction and Goals
 
-### Community 1364 - "Community 1364"
+### Community 1348 - "Community 1348"
 Cohesion: 0.4
-Nodes (5): Anti-patterns / don'ts, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 11 — Risks and Technical Debt
+Nodes (5): Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 7 — Deployment View
 
-### Community 1365 - "Community 1365"
+### Community 1349 - "Community 1349"
+Cohesion: 0.4
+Nodes (5): Belongs elsewhere in arc42, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure, Section 10 — Quality Requirements
+
+### Community 1350 - "Community 1350"
 Cohesion: 0.4
 Nodes (5): Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 2 — Architecture Constraints
 
-### Community 1366 - "Community 1366"
+### Community 1351 - "Community 1351"
+Cohesion: 0.4
+Nodes (5): Anti-patterns / don'ts, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 11 — Risks and Technical Debt
+
+### Community 1352 - "Community 1352"
+Cohesion: 0.4
+Nodes (5): Belongs elsewhere in arc42, Do's, Don'ts / anti-patterns, Required content & structure, Section 5 — Building Block View
+
+### Community 1353 - "Community 1353"
+Cohesion: 0.4
+Nodes (5): Anti-patterns to reject, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 8 — Crosscutting Concepts
+
+### Community 1354 - "Community 1354"
+Cohesion: 0.4
+Nodes (5): Anti-patterns / don'ts, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 3 — Context and Scope
+
+### Community 1355 - "Community 1355"
+Cohesion: 0.4
+Nodes (5): Anti-patterns to reject, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure, Section 6 — Runtime View
+
+### Community 1356 - "Community 1356"
+Cohesion: 0.4
+Nodes (5): Anti-patterns to reject, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure, Section 9 — Architecture Decisions
+
+### Community 1357 - "Community 1357"
+Cohesion: 0.4
+Nodes (5): Anti-patterns (don'ts), Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template), Section 4 — Solution Strategy, Structure & style (do's)
+
+### Community 1358 - "Community 1358"
 Cohesion: 0.6
 Nodes (4): 4. Solution Strategy, arc42 Section 4 — Solution Strategy, Key Technology Decisions, Quality Goals → Solution Approaches
 
-### Community 1367 - "Community 1367"
+### Community 1359 - "Community 1359"
 Cohesion: 0.6
 Nodes (4): 11. Risks and Technical Debt, arc42 Section 11 — Risks and Technical Debt, Known Technical Debt, Prioritized Risk Table
 
-### Community 1368 - "Community 1368"
+### Community 1360 - "Community 1360"
 Cohesion: 0.4
 Nodes (5): code:bash (timeout 180 /tmp/bt-agent-cli run superpowers-prod-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), code:bash (timeout 120 /tmp/bt-agent-cli run goap-fusion-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), Task 17: Live verification matrix
 
-### Community 1369 - "Community 1369"
-Cohesion: 0.4
-Nodes (5): code:go (func TestSynthesize_UsesAnalysisAndResponses(t *testing.T)), code:go (func Synthesize(ctx context.Context, caller ModelCaller, cfg), code:bash (go test ./internal/fusion -run TestSynthesize -count=1), code:bash (git add internal/fusion/synthesize.go internal/fusion/synthe), Task 6: Implement Final Synthesis
-
-### Community 1370 - "Community 1370"
-Cohesion: 0.4
-Nodes (5): code:go (func FusionDeliberationTree() *SerializableNode {), code:go (func TestFusionDeliberationTree_Validates(t *testing.T)), code:bash (go test ./internal/evolution -run TestFusionDeliberationTree), code:bash (git add internal/evolution/fusion_trees.go internal/evolutio), Task 10: Add Fusion BT Tree
-
-### Community 1371 - "Community 1371"
-Cohesion: 0.4
-Nodes (5): code:text (Compare the strongest arguments for and against carbon taxes), code:go (cmd := engine.BuildTree(evolution.FusionDeliberationTree(), ), code:bash (go test ./internal/evolution -run TestFusionDeliberation_End), code:bash (git add internal/evolution/fusion_integration_test.go), Task 13: Add End-to-End Fake-LLM BT Test
-
-### Community 1372 - "Community 1372"
+### Community 1361 - "Community 1361"
 Cohesion: 0.4
 Nodes (5): code:go (if os.Getenv("OPENROUTER_API_KEY") == "" || os.Getenv("BT_TE), code:text (~google/gemini-flash-latest), code:bash (BT_TEST_REAL_FUSION=1 OPENROUTER_API_KEY=$OPENROUTER_API_KEY), code:bash (git add internal/fusion/openrouter_integration_test.go), Task 14: Add Real-API Smoke Test Behind Env Gate
 
-### Community 1373 - "Community 1373"
+### Community 1362 - "Community 1362"
 Cohesion: 0.4
-Nodes (5): code:go (func Run(ctx context.Context, caller ModelCaller, cfg Config), code:go (func TestRun_EndToEnd(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/fusion/run.go internal/fusion/run_test.go), Task 7: Add End-to-End Fusion Runner
+Nodes (5): code:text (Compare the strongest arguments for and against carbon taxes), code:go (cmd := engine.BuildTree(evolution.FusionDeliberationTree(), ), code:bash (go test ./internal/evolution -run TestFusionDeliberation_End), code:bash (git add internal/evolution/fusion_integration_test.go), Task 13: Add End-to-End Fake-LLM BT Test
 
-### Community 1374 - "Community 1374"
+### Community 1363 - "Community 1363"
 Cohesion: 0.4
 Nodes (5): code:go (bb.ChainState["fusion_status"] = result.Status), code:go (func TestExecFusion_WritesChainState(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/engine/chains.go internal/engine/fusion_sta), Task 12: Add Metrics and Blackboard Persistence
 
-### Community 1375 - "Community 1375"
+### Community 1364 - "Community 1364"
+Cohesion: 0.4
+Nodes (5): code:go (func TestSynthesize_UsesAnalysisAndResponses(t *testing.T)), code:go (func Synthesize(ctx context.Context, caller ModelCaller, cfg), code:bash (go test ./internal/fusion -run TestSynthesize -count=1), code:bash (git add internal/fusion/synthesize.go internal/fusion/synthe), Task 6: Implement Final Synthesis
+
+### Community 1365 - "Community 1365"
+Cohesion: 0.4
+Nodes (5): code:go (func Run(ctx context.Context, caller ModelCaller, cfg Config), code:go (func TestRun_EndToEnd(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/fusion/run.go internal/fusion/run_test.go), Task 7: Add End-to-End Fusion Runner
+
+### Community 1366 - "Community 1366"
+Cohesion: 0.4
+Nodes (5): code:go (func FusionDeliberationTree() *SerializableNode {), code:go (func TestFusionDeliberationTree_Validates(t *testing.T)), code:bash (go test ./internal/evolution -run TestFusionDeliberationTree), code:bash (git add internal/evolution/fusion_trees.go internal/evolutio), Task 10: Add Fusion BT Tree
+
+### Community 1367 - "Community 1367"
 Cohesion: 0.4
 Nodes (5): code:go (// internal/engine/mem_selector.go), code:go (case "MemSelector":), code:bash (git add internal/engine/mem_selector.go internal/engine/mem_), code:go (func TestMemSelector_ResumesAtRunningChildAndSkipsFailed(t *), Task 2: `MemSelector` composite (blackboard-keyed)
 
-### Community 1376 - "Community 1376"
-Cohesion: 0.4
-Nodes (5): code:go (package llm), code:go (package llm), code:go (llmForRun = llm.NewTracedLLM(llmRecorder, "agent-llm")), code:bash (git add internal/llm/traced.go internal/llm/traced_test.go i), Task 8: LLM call spans
-
-### Community 1377 - "Community 1377"
+### Community 1368 - "Community 1368"
 Cohesion: 0.4
 Nodes (5): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package tracing), code:go (package tracing), code:bash (git add go.mod go.sum internal/tracing/otel.go internal/trac), Task 2: OTel SDK trace facade in internal/tracing
 
-### Community 1378 - "Community 1378"
+### Community 1369 - "Community 1369"
 Cohesion: 0.4
-Nodes (5): code:go (func TestClassifyAffectedArc42Sections(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// arc42ClassifierTimeout bounds the cheap which-sections-ch), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 20: Classifier prefilter — TDD
+Nodes (5): code:go (package llm), code:go (package llm), code:go (llmForRun = llm.NewTracedLLM(llmRecorder, "agent-llm")), code:bash (git add internal/llm/traced.go internal/llm/traced_test.go i), Task 8: LLM call spans
 
-### Community 1379 - "Community 1379"
-Cohesion: 0.4
-Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 15: Guideline slicer — TDD
-
-### Community 1380 - "Community 1380"
-Cohesion: 0.4
-Nodes (5): code:go (func TestSyncReadmeUpdates(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// syncReadme keeps the hand-written README.md honest after ), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 17: `syncReadme` — TDD
-
-### Community 1381 - "Community 1381"
-Cohesion: 0.4
-Nodes (5): code:go (type arc42SyncFakeClaude struct {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// docChangeContext describes the change a documentation pas), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 16: `docChangeContext` + `syncArc42Section` — TDD
-
-### Community 1382 - "Community 1382"
-Cohesion: 0.4
-Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 14: Section manifest (`arc42_sections.go`) — TDD
-
-### Community 1383 - "Community 1383"
+### Community 1370 - "Community 1370"
 Cohesion: 0.4
 Nodes (5): code:go (var arc42GoalsDocPaths = []string{), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (RegisterAction("ReadADRs", func(ctx *btcore.BTContext[Blackb), code:bash (PATH=/usr/local/go/bin:$PATH go build ./...), Task 11: Code repoints (goals reader, ReadADRs, tree prompts, bt-docgen)
 
-### Community 1384 - "Community 1384"
+### Community 1371 - "Community 1371"
 Cohesion: 0.4
-Nodes (5): arc42 Section 7 (Deployment View) — Conformance Checklist, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure
+Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 14: Section manifest (`arc42_sections.go`) — TDD
 
-### Community 1385 - "Community 1385"
+### Community 1372 - "Community 1372"
 Cohesion: 0.4
-Nodes (5): Anti-patterns / don'ts, arc42 Section 11 (Risks & Technical Debt) — Conformance Checklist, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure
+Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 15: Guideline slicer — TDD
 
-### Community 1386 - "Community 1386"
+### Community 1373 - "Community 1373"
 Cohesion: 0.4
-Nodes (5): Anti-patterns to reject, arc42 Section 6 (Runtime View) — Conformance Checklist, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure
+Nodes (5): code:go (func TestSyncReadmeUpdates(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// syncReadme keeps the hand-written README.md honest after ), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 17: `syncReadme` — TDD
 
-### Community 1387 - "Community 1387"
+### Community 1374 - "Community 1374"
+Cohesion: 0.4
+Nodes (5): code:go (func TestClassifyAffectedArc42Sections(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// arc42ClassifierTimeout bounds the cheap which-sections-ch), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 20: Classifier prefilter — TDD
+
+### Community 1375 - "Community 1375"
+Cohesion: 0.4
+Nodes (5): code:go (type arc42SyncFakeClaude struct {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// docChangeContext describes the change a documentation pas), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 16: `docChangeContext` + `syncArc42Section` — TDD
+
+### Community 1376 - "Community 1376"
+Cohesion: 0.4
+Nodes (5): Anti-patterns / don'ts, arc42 Section 3 (Context and Scope) — Conformance Checklist, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure
+
+### Community 1377 - "Community 1377"
 Cohesion: 0.4
 Nodes (5): arc42 Section 10 (Quality Requirements) — Conformance Checklist, Belongs elsewhere in arc42, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure
 
+### Community 1378 - "Community 1378"
+Cohesion: 0.4
+Nodes (5): arc42 Section 12 (Glossary) — Conformance Checklist, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure
+
+### Community 1379 - "Community 1379"
+Cohesion: 0.4
+Nodes (5): Anti-patterns to reject, arc42 Section 9 (Architecture Decisions) — Conformance Checklist, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure
+
+### Community 1380 - "Community 1380"
+Cohesion: 0.4
+Nodes (5): arc42 Section 5 (Building Block View) — Conformance Checklist, Belongs elsewhere in arc42, Do's, Don'ts / anti-patterns, Required content & structure
+
+### Community 1382 - "Community 1382"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1383 - "Community 1383"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1384 - "Community 1384"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1385 - "Community 1385"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1386 - "Community 1386"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1387 - "Community 1387"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
 ### Community 1388 - "Community 1388"
 Cohesion: 0.4
-Nodes (5): Anti-patterns / don'ts, arc42 Section 3 (Context and Scope) — Conformance Checklist, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1389 - "Community 1389"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1390 - "Community 1390"
 Cohesion: 0.4
@@ -7296,17 +7317,13 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1409 - "Community 1409"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
 ### Community 1410 - "Community 1410"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (5): code:bash (cd ~/go-bt-evolve && PATH="/usr/local/go/bin:$PATH" go build), Implementation Tasks, Task 23: Build + Deploy Binary, Task 24: Performance Test, Tier 5: Production Deployment
 
 ### Community 1411 - "Community 1411"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (5): Task 14: Agent YAML, Task 15: Domain Registration, Task 16: Action Registration, Task 17: Agent Registration, Tier 3: Agent YAML + Registration
 
 ### Community 1412 - "Community 1412"
 Cohesion: 0.4
@@ -7328,222 +7345,178 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
+### Community 1417 - "Community 1417"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
 ### Community 1418 - "Community 1418"
 Cohesion: 0.4
-Nodes (5): code:bash (cd ~/go-bt-evolve && PATH="/usr/local/go/bin:$PATH" go build), Implementation Tasks, Task 23: Build + Deploy Binary, Task 24: Performance Test, Tier 5: Production Deployment
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1419 - "Community 1419"
 Cohesion: 0.4
-Nodes (5): Task 14: Agent YAML, Task 15: Domain Registration, Task 16: Action Registration, Task 17: Agent Registration, Tier 3: Agent YAML + Registration
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1420 - "Community 1420"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1421 - "Community 1421"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1422 - "Community 1422"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1423 - "Community 1423"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1424 - "Community 1424"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1425 - "Community 1425"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1426 - "Community 1426"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1427 - "Community 1427"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1431 - "Community 1431"
-Cohesion: 0.5
-Nodes (3): feedbackPersistState, feedbackSnapshot, treeFeedback
-
-### Community 1439 - "Community 1439"
-Cohesion: 0.83
-Nodes (3): init(), registerAuctionDelegateNode(), registerIsAuctionTaskCondition()
-
-### Community 1441 - "Community 1441"
-Cohesion: 0.83
-Nodes (3): agentNameFromBB(), init(), registerDelegateNodes()
-
-### Community 1442 - "Community 1442"
 Cohesion: 0.83
 Nodes (3): consumerChainPrompts(), TestNotebookLMConsumerTreeDoesNotWatchRetiredGlobOrOwnOutput(), TestNotebookLMConsumerTreeWatchesCurrentResearchNaming()
 
-### Community 1444 - "Community 1444"
+### Community 1421 - "Community 1421"
+Cohesion: 0.5
+Nodes (3): feedbackPersistState, feedbackSnapshot, treeFeedback
+
+### Community 1425 - "Community 1425"
+Cohesion: 0.67
+Nodes (3): PreGateValidationOnly(), ToolProfileBlocks(), toolsProfileBlock()
+
+### Community 1436 - "Community 1436"
 Cohesion: 0.67
 Nodes (3): LoadPipeline(), RunPipeline(), RunPipelineWithID()
 
-### Community 1448 - "Community 1448"
+### Community 1438 - "Community 1438"
 Cohesion: 0.5
 Nodes (4): Boolean `false` in config file is ignored, code:bash (# Check the file exists), Config file not found, Configuration Issues
 
-### Community 1449 - "Community 1449"
+### Community 1439 - "Community 1439"
 Cohesion: 0.5
 Nodes (4): API key not working on dashboard, code:bash (# Check if BT_API_KEY is set), MCP rate limit exceeded, Security Issues
 
-### Community 1451 - "Community 1451"
-Cohesion: 0.5
-Nodes (4): code:go (type SuperpowersTaskExecutor struct {), code:text (FILES_CHANGED:), code:bash (git status --short --untracked-files=all), Task 9: Production task execution with Claude Code + TDD
-
-### Community 1452 - "Community 1452"
-Cohesion: 0.5
-Nodes (4): code:go (package domains), code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 1: Lock current stub behavior with failing tests
-
-### Community 1453 - "Community 1453"
+### Community 1440 - "Community 1440"
 Cohesion: 0.5
 Nodes (4): code:bash (/usr/local/go/bin/gofmt -w \), code:bash (systemctl --user stop bt-agent), code:bash (graphify update .), Task 16: Verified-patching deployment
 
-### Community 1454 - "Community 1454"
+### Community 1441 - "Community 1441"
+Cohesion: 0.5
+Nodes (4): code:go (type SuperpowersTaskExecutor struct {), code:text (FILES_CHANGED:), code:bash (git status --short --untracked-files=all), Task 9: Production task execution with Claude Code + TDD
+
+### Community 1442 - "Community 1442"
+Cohesion: 0.5
+Nodes (4): code:go (package domains), code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 1: Lock current stub behavior with failing tests
+
+### Community 1443 - "Community 1443"
 Cohesion: 0.5
 Nodes (4): code:bash (bt-agent run fusion-deliberation "Survey the strongest argum), code:bash (go build ./...), code:bash (git add docs/fusion-bt-agent.md README.md), Task 15: Documentation and Operator Notes
 
-### Community 1455 - "Community 1455"
-Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/cached_condition_test.go), code:go (// internal/engine/cached_condition.go), code:bash (git add internal/engine/cached_condition.go internal/engine/), Task 4: `CachedCondition` decorator
-
-### Community 1456 - "Community 1456"
-Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/review_cycle_test.go), code:go (// internal/engine/review_cycle.go), code:bash (git add internal/engine/review_cycle.go internal/engine/revi), Task 7: `ReviewCycle` decorator
-
-### Community 1457 - "Community 1457"
+### Community 1444 - "Community 1444"
 Cohesion: 0.5
 Nodes (4): code:go (// internal/engine/classify_task_kind_test.go), code:go (RegisterAction("ClassifyTaskKind", func(ctx *btcore.BTContex), code:bash (git add internal/engine/actions_superpowers_prod.go internal), Task 8: `ClassifyTaskKind` action (skill-dispatch router input)
 
-### Community 1458 - "Community 1458"
+### Community 1445 - "Community 1445"
 Cohesion: 0.5
 Nodes (4): code:go (// internal/engine/superpowers_grill_test.go), code:go (// internal/engine/superpowers_grill.go), code:bash (git add internal/engine/superpowers_grill.go internal/engine), Task 9: `GrillDesignArtifact` action (NotebookLM-answered design interrogation with graded fallback)
 
-### Community 1459 - "Community 1459"
+### Community 1446 - "Community 1446"
 Cohesion: 0.5
 Nodes (4): code:go (// internal/engine/semaphore_guard_test.go), code:go (// internal/engine/semaphore_guard.go), code:bash (git add internal/engine/semaphore_guard.go internal/engine/s), Task 5: `SemaphoreGuard` decorator
 
-### Community 1460 - "Community 1460"
+### Community 1447 - "Community 1447"
 Cohesion: 0.5
-Nodes (4): code:go (package engine), code:go (// RegisterAction adds an action to the global registry, wra), code:bash (git add internal/engine/registry.go internal/engine/registry), Task 6: Per-node spans at the registry seam
+Nodes (4): code:go (// internal/engine/cached_condition_test.go), code:go (// internal/engine/cached_condition.go), code:bash (git add internal/engine/cached_condition.go internal/engine/), Task 4: `CachedCondition` decorator
 
-### Community 1461 - "Community 1461"
+### Community 1448 - "Community 1448"
 Cohesion: 0.5
-Nodes (4): code:bash (grep -E '^### ADR-[0-9]+' docs/arc42/09-decisions.md | sed '), code:bash (H=$(grep -cE '^### ADR-[0-9]+' docs/arc42/09-decisions.md)), code:bash (for n in 001 002 003 004 005 006 007; do), Task 6: Merge §9 (canonical ADR log + docs/adr fold-in)
+Nodes (4): code:go (// internal/engine/review_cycle_test.go), code:go (// internal/engine/review_cycle.go), code:bash (git add internal/engine/review_cycle.go internal/engine/revi), Task 7: `ReviewCycle` decorator
 
-### Community 1462 - "Community 1462"
+### Community 1449 - "Community 1449"
 Cohesion: 0.5
 Nodes (4): code:bash (grep -rn 'assemble' internal/goap/), code:bash (grep -rn 'SaveDocument\|CollectAllSections\|GenerateTOC\|All), code:bash (PATH=/usr/local/go/bin:$PATH make test), Task 22: Assembly retirement + Commit 4
 
-### Community 1463 - "Community 1463"
+### Community 1450 - "Community 1450"
+Cohesion: 0.5
+Nodes (4): code:bash (grep -E '^### ADR-[0-9]+' docs/arc42/09-decisions.md | sed '), code:bash (H=$(grep -cE '^### ADR-[0-9]+' docs/arc42/09-decisions.md)), code:bash (for n in 001 002 003 004 005 006 007; do), Task 6: Merge §9 (canonical ADR log + docs/adr fold-in)
+
+### Community 1451 - "Community 1451"
 Cohesion: 0.5
 Nodes (3): Architecture Decision Records, Status Values, What is an ADR?
 
-### Community 1483 - "Community 1483"
-Cohesion: 0.67
-Nodes (3): Agent home directory, code:block2 (${AGENT_HOME}/), Layout
-
-### Community 1484 - "Community 1484"
-Cohesion: 0.67
-Nodes (3): Agent YAML schema, code:yaml (name: code-reviewer), Fields that matter today
-
-### Community 1485 - "Community 1485"
+### Community 1472 - "Community 1472"
 Cohesion: 0.67
 Nodes (3): History (`${AGENT_HOME}/history/<agent>.jsonl`), Memory (`${AGENT_HOME}/memory/<agent>/memory.json`), Memory and history
 
-### Community 1487 - "Community 1487"
+### Community 1473 - "Community 1473"
 Cohesion: 0.67
-Nodes (3): code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/engine -count=1 -run 'T), Task 2: Add typed production runtime model
+Nodes (3): Agent YAML schema, code:yaml (name: code-reviewer), Fields that matter today
 
-### Community 1488 - "Community 1488"
+### Community 1474 - "Community 1474"
 Cohesion: 0.67
-Nodes (3): code:bash (/home/nico/.local/bin/claude --print --dangerously-skip-perm), code:go (type CommandRunner interface {), Task 4: Extract a reusable command runner and Claude runner
+Nodes (3): Agent home directory, code:block2 (${AGENT_HOME}/), Layout
 
-### Community 1489 - "Community 1489"
-Cohesion: 0.67
-Nodes (3): code:bash (systemctl --user stop bt-agent), code:bash (python3 - <<'PY'), Rollback Plan
-
-### Community 1490 - "Community 1490"
-Cohesion: 0.67
-Nodes (3): code:go (func planSuperpowersWorktree(run *SuperpowersRun) (path stri), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 5: Production worktree manager
-
-### Community 1491 - "Community 1491"
+### Community 1476 - "Community 1476"
 Cohesion: 0.67
 Nodes (3): code:text (ReadVaultResearch → ReadGraphifyReport → AnalyzeImprovementG), code:text (WriteSuperpowersImplementationPlanFromGoapContext), Task 13: Integrate GOAP fusion with production Superpowers runtime
 
-### Community 1492 - "Community 1492"
-Cohesion: 0.67
-Nodes (3): code:go (type SuperpowersMode string), code:bash (/tmp/bt-agent-cli run superpowers-prod-smoke --input "dry_ru), Task 14: End-to-end dry-run mode
-
-### Community 1493 - "Community 1493"
+### Community 1477 - "Community 1477"
 Cohesion: 0.67
 Nodes (3): code:bash (/usr/local/go/bin/gofmt -w <changed-go-files>), code:bash (strings bin/bt-agent-cli | grep 'SuperpowersPipeline_Main'), Task 10: Production verification runner
 
-### Community 1494 - "Community 1494"
+### Community 1478 - "Community 1478"
+Cohesion: 0.67
+Nodes (3): code:go (type SuperpowersMode string), code:bash (/tmp/bt-agent-cli run superpowers-prod-smoke --input "dry_ru), Task 14: End-to-end dry-run mode
+
+### Community 1479 - "Community 1479"
+Cohesion: 0.67
+Nodes (3): code:bash (systemctl --user stop bt-agent), code:bash (python3 - <<'PY'), Rollback Plan
+
+### Community 1480 - "Community 1480"
+Cohesion: 0.67
+Nodes (3): code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/engine -count=1 -run 'T), Task 2: Add typed production runtime model
+
+### Community 1481 - "Community 1481"
+Cohesion: 0.67
+Nodes (3): code:go (func planSuperpowersWorktree(run *SuperpowersRun) (path stri), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 5: Production worktree manager
+
+### Community 1482 - "Community 1482"
+Cohesion: 0.67
+Nodes (3): code:bash (/home/nico/.local/bin/claude --print --dangerously-skip-perm), code:go (type CommandRunner interface {), Task 4: Extract a reusable command runner and Claude runner
+
+### Community 1483 - "Community 1483"
 Cohesion: 0.67
 Nodes (3): code:go (const superpowersRunsDir = "/home/nico/go-bt-evolve/docs/sup), code:go (func TestWriteArtifactOnce_Idempotent(t *testing.T) {), Task 3: Add artifact store and idempotent phase writes
 
-### Community 1495 - "Community 1495"
-Cohesion: 0.67
-Nodes (3): code:go (// internal/domains/superpowers_workflow_test.go), code:bash (git add internal/domains/superpowers_workflow.go internal/do), Task 10: `domain:superpowers_workflow` tree
-
-### Community 1496 - "Community 1496"
-Cohesion: 0.67
-Nodes (3): code:bash (grep -c 'RegisterAction(' internal/engine/*.go | awk -F: '{s), code:bash (grep -c '^| Q[0-9] | \*\*' docs/arc42/01-introduction-goals.), Task 2: Merge §1 (Introduction and Goals)
-
-### Community 1497 - "Community 1497"
-Cohesion: 0.67
-Nodes (3): code:bash (cd <repo-root>), code:bash (git status --short          # expect: empty), Task 1: Branch setup
-
-### Community 1498 - "Community 1498"
-Cohesion: 0.67
-Nodes (3): code:bash (grep -rn 'ADR-010' --include='*.go' internal/ cmd/), code:bash (PATH=/usr/local/go/bin:$PATH go build ./... && PATH=/usr/loc), Task 10: Go comment sweep (ADR-009 → ADR-132, ADR-010 → ADR-133)
-
-### Community 1499 - "Community 1499"
+### Community 1484 - "Community 1484"
 Cohesion: 0.67
 Nodes (3): code:markdown (# arc42 Section Guidelines), code:bash (grep -c '^## Section [0-9]' docs/arc42/GUIDELINES.md   # exp), Task 8: Create `docs/arc42/GUIDELINES.md`
 
-### Community 1500 - "Community 1500"
+### Community 1485 - "Community 1485"
+Cohesion: 0.67
+Nodes (3): code:bash (grep -c 'RegisterAction(' internal/engine/*.go | awk -F: '{s), code:bash (grep -c '^| Q[0-9] | \*\*' docs/arc42/01-introduction-goals.), Task 2: Merge §1 (Introduction and Goals)
+
+### Community 1486 - "Community 1486"
 Cohesion: 0.67
 Nodes (3): code:bash (# ----- 5. arc42 section files validation -----), code:bash (bash scripts/check-doc-drift.sh; echo "exit=$?"), Task 12: Drift script — replace check #5 with the arc42 block
 
-### Community 1501 - "Community 1501"
+### Community 1487 - "Community 1487"
 Cohesion: 0.67
 Nodes (3): code:bash (git rm docs/arc42/go-bt-evolve-arc42.md docs/arc42/09-test-s), code:bash (grep -rn 'docs/adr' README.md docs/*.md | grep -v 'docs/plan), Task 9: Deletions + cross-doc reference updates
 
-### Community 1788 - "Community 1788"
+### Community 1488 - "Community 1488"
 Cohesion: 0.67
-Nodes (3): TestReflectTool_Call_NoLLM(), TestReflectTool_Call_WithLLM(), NewReflectTool()
+Nodes (3): code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), code:bash (git add -A), Task 13: Gate + Commit 1
+
+### Community 1489 - "Community 1489"
+Cohesion: 0.67
+Nodes (3): code:bash (grep -rn 'ADR-010' --include='*.go' internal/ cmd/), code:bash (PATH=/usr/local/go/bin:$PATH go build ./... && PATH=/usr/loc), Task 10: Go comment sweep (ADR-009 → ADR-132, ADR-010 → ADR-133)
 
 ## Ambiguous Edges - Review These
 - `arc42 Goal Anchoring` → `Research Knowledge Store (knowledge.json)`  [AMBIGUOUS]
   docs/research-process-overhaul-2026-07-08.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **10405 isolated node(s):** `{ defineConfig }`, `{ chromium }`, `BenchmarkResult`, `ComparisonResult`, `RegressionConfig` (+10400 more)
+- **10444 isolated node(s):** `{ defineConfig }`, `{ chromium }`, `BenchmarkResult`, `ComparisonResult`, `RegressionConfig` (+10439 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **357 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **350 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `arc42 Goal Anchoring` and `Research Knowledge Store (knowledge.json)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Append()` connect `Community 69` to `Community 1024`, `Community 2`, `Community 1027`, `Community 1026`, `Community 4`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 11`, `Community 12`, `Community 15`, `Community 17`, `Community 19`, `Community 20`, `Community 21`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 33`, `Community 34`, `Community 35`, `Community 38`, `Community 39`, `Community 42`, `Community 43`, `Community 44`, `Community 1069`, `Community 45`, `Community 47`, `Community 48`, `Community 49`, `Community 1075`, `Community 51`, `Community 53`, `Community 54`, `Community 55`, `Community 56`, `Community 57`, `Community 58`, `Community 60`, `Community 61`, `Community 62`, `Community 63`, `Community 64`, `Community 66`, `Community 67`, `Community 70`, `Community 71`, `Community 73`, `Community 77`, `Community 78`, `Community 79`, `Community 81`, `Community 83`, `Community 84`, `Community 85`, `Community 86`, `Community 88`, `Community 89`, `Community 91`, `Community 92`, `Community 94`, `Community 96`, `Community 98`, `Community 101`, `Community 107`, `Community 108`, `Community 112`, `Community 114`, `Community 119`, `Community 121`, `Community 122`, `Community 124`, `Community 125`, `Community 130`, `Community 132`, `Community 137`, `Community 141`, `Community 142`, `Community 143`, `Community 148`, `Community 149`, `Community 152`, `Community 155`, `Community 159`, `Community 163`, `Community 168`, `Community 173`, `Community 178`, `Community 179`, `Community 183`, `Community 184`, `Community 185`, `Community 186`, `Community 189`, `Community 191`, `Community 201`, `Community 209`, `Community 210`, `Community 211`, `Community 212`, `Community 726`, `Community 215`, `Community 728`, `Community 218`, `Community 731`, `Community 732`, `Community 733`, `Community 223`, `Community 225`, `Community 229`, `Community 230`, `Community 231`, `Community 237`, `Community 238`, `Community 241`, `Community 756`, `Community 757`, `Community 758`, `Community 244`, `Community 1309`, `Community 1441`, `Community 456`, `Community 457`, `Community 460`, `Community 462`, `Community 463`, `Community 464`, `Community 982`, `Community 983`, `Community 984`, `Community 476`, `Community 477`, `Community 479`, `Community 480`, `Community 481`, `Community 994`, `Community 488`, `Community 491`, `Community 492`, `Community 1005`, `Community 493`, `Community 1007`, `Community 496`, `Community 1006`, `Community 502`, `Community 503`, `Community 506`, `Community 507`?**
-  _High betweenness centrality (0.089) - this node is a cross-community bridge._
-- **Why does `main()` connect `Community 28` to `Community 2`, `Community 4`, `Community 134`, `Community 9`, `Community 15`, `Community 16`, `Community 17`, `Community 19`, `Community 22`, `Community 150`, `Community 24`, `Community 1048`, `Community 25`, `Community 30`, `Community 158`, `Community 32`, `Community 33`, `Community 1064`, `Community 48`, `Community 50`, `Community 51`, `Community 182`, `Community 188`, `Community 61`, `Community 65`, `Community 457`, `Community 458`, `Community 75`, `Community 210`, `Community 724`, `Community 216`, `Community 474`, `Community 90`, `Community 477`, `Community 995`, `Community 102`, `Community 232`, `Community 236`, `Community 113`, `Community 120`?**
+- **Why does `Append()` connect `Community 38` to `Community 3`, `Community 4`, `Community 6`, `Community 7`, `Community 10`, `Community 11`, `Community 13`, `Community 14`, `Community 15`, `Community 1039`, `Community 17`, `Community 19`, `Community 20`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 26`, `Community 27`, `Community 29`, `Community 30`, `Community 33`, `Community 35`, `Community 37`, `Community 1062`, `Community 41`, `Community 44`, `Community 45`, `Community 47`, `Community 49`, `Community 51`, `Community 53`, `Community 55`, `Community 56`, `Community 57`, `Community 58`, `Community 62`, `Community 64`, `Community 65`, `Community 66`, `Community 67`, `Community 69`, `Community 70`, `Community 71`, `Community 72`, `Community 73`, `Community 74`, `Community 76`, `Community 79`, `Community 80`, `Community 83`, `Community 84`, `Community 86`, `Community 87`, `Community 89`, `Community 90`, `Community 91`, `Community 93`, `Community 94`, `Community 97`, `Community 98`, `Community 99`, `Community 104`, `Community 105`, `Community 106`, `Community 107`, `Community 109`, `Community 113`, `Community 118`, `Community 126`, `Community 127`, `Community 129`, `Community 131`, `Community 132`, `Community 136`, `Community 137`, `Community 139`, `Community 142`, `Community 143`, `Community 145`, `Community 148`, `Community 152`, `Community 153`, `Community 154`, `Community 163`, `Community 167`, `Community 169`, `Community 171`, `Community 172`, `Community 175`, `Community 178`, `Community 179`, `Community 186`, `Community 190`, `Community 195`, `Community 199`, `Community 201`, `Community 205`, `Community 206`, `Community 207`, `Community 720`, `Community 209`, `Community 208`, `Community 211`, `Community 719`, `Community 213`, `Community 214`, `Community 219`, `Community 222`, `Community 735`, `Community 224`, `Community 225`, `Community 227`, `Community 230`, `Community 231`, `Community 743`, `Community 233`, `Community 748`, `Community 237`, `Community 238`, `Community 239`, `Community 240`, `Community 241`, `Community 1299`, `Community 458`, `Community 459`, `Community 461`, `Community 973`, `Community 974`, `Community 976`, `Community 462`, `Community 470`, `Community 473`, `Community 474`, `Community 475`, `Community 477`, `Community 478`, `Community 991`, `Community 996`, `Community 487`, `Community 488`, `Community 498`, `Community 499`, `Community 1013`, `Community 1016`?**
+  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `main()` connect `Community 54` to `Community 128`, `Community 3`, `Community 133`, `Community 8`, `Community 136`, `Community 1038`, `Community 15`, `Community 14`, `Community 19`, `Community 21`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 156`, `Community 33`, `Community 36`, `Community 43`, `Community 44`, `Community 1068`, `Community 174`, `Community 47`, `Community 178`, `Community 55`, `Community 57`, `Community 188`, `Community 61`, `Community 62`, `Community 63`, `Community 68`, `Community 70`, `Community 456`, `Community 77`, `Community 205`, `Community 206`, `Community 79`, `Community 85`, `Community 219`, `Community 92`, `Community 992`, `Community 102`, `Community 111`, `Community 122`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `main()` connect `Community 145` to `Community 128`, `Community 130`, `Community 8`, `Community 138`, `Community 15`, `Community 17`, `Community 149`, `Community 23`, `Community 25`, `Community 156`, `Community 32`, `Community 33`, `Community 166`, `Community 167`, `Community 43`, `Community 44`, `Community 174`, `Community 47`, `Community 49`, `Community 51`, `Community 58`, `Community 188`, `Community 60`, `Community 61`, `Community 63`, `Community 68`, `Community 70`, `Community 77`, `Community 206`, `Community 79`, `Community 84`, `Community 471`, `Community 230`, `Community 104`, `Community 112`, `Community 126`?**
   _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Why does `main()` connect `Community 19` to `Community 134`, `Community 135`, `Community 138`, `Community 11`, `Community 17`, `Community 150`, `Community 24`, `Community 25`, `Community 28`, `Community 30`, `Community 159`, `Community 31`, `Community 167`, `Community 42`, `Community 172`, `Community 179`, `Community 182`, `Community 55`, `Community 188`, `Community 61`, `Community 457`, `Community 78`, `Community 210`, `Community 724`, `Community 90`, `Community 474`, `Community 96`, `Community 482`, `Community 104`, `Community 107`, `Community 236`, `Community 113`, `Community 503`, `Community 123`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
 - **Are the 391 inferred relationships involving `Append()` (e.g. with `.Compare()` and `ParseBenchOutput()`) actually correct?**
   _`Append()` has 391 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 151 inferred relationships involving `NewKnowledgeGraph()` (e.g. with `TestComputeAnalytics_EmptyGraph()` and `TestComputeAnalytics_Centrality()`) actually correct?**

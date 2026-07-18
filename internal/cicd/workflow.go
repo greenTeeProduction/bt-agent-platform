@@ -25,9 +25,10 @@ type WorkflowReport struct {
 
 // Check records one CI/CD maturity assertion.
 type Check struct {
-	Name    string `json:"name"`
-	Passed  bool   `json:"passed"`
-	Details string `json:"details"`
+	Name     string `json:"name"`
+	Passed   bool   `json:"passed"`
+	Details  string `json:"details"`
+	Advisory bool   `json:"advisory"`
 }
 
 // ValidateWorkflows validates repository CI/CD workflow readiness locally.
@@ -134,7 +135,7 @@ func (r *WorkflowReport) add(name string, passed bool, details string) {
 // addAdvisory records a check without affecting AllPassed status.
 // Used for environment-dependent checks (e.g., self-hosted runner presence).
 func (r *WorkflowReport) addAdvisory(name string, passed bool, details string) {
-	r.Checks = append(r.Checks, Check{Name: name, Passed: passed, Details: details})
+	r.Checks = append(r.Checks, Check{Name: name, Passed: passed, Details: details, Advisory: true})
 	if passed {
 		r.Passed++
 	}

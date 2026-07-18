@@ -86,13 +86,8 @@ func TestRun_TextOutput(t *testing.T) {
 				"✗ codeql workflow exists and parses",
 				"✗ dependabot config exists and parses",
 				"✗ self-hosted runner installed",
+				"1 advisory check(s) failed",
 			},
-			// Known current-behavior gap: addAdvisory's check name
-			// ("self-hosted runner installed") does not contain the
-			// substring "advisory" that main.go filters on, so the
-			// informational footnote never fires even though the check
-			// failed. Pinned here as-is; not fixed by this change.
-			wantNotContains: []string{"advisory check(s) failed"},
 		},
 		{
 			name:     "missing workflow files fail with explicit empty root",
