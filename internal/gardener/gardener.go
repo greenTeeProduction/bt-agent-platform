@@ -34,6 +34,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // TreeEntry is a named tree in the registry with its evolution state.
@@ -209,16 +210,11 @@ func (r *Registry) DeactivateAll() int {
 
 // SaveTree persists a tree to its file path.
 func (r *Registry) SaveTree(entry TreeEntry) error {
-	data, err := json.MarshalIndent(entry.Tree, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := entry.FilePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		_ = os.Remove(tmp)
+	if err := util.SaveJSONAtomic(entry.FilePath, entry.Tree); err != nil {
+		_ = os.Remove(entry.FilePath + ".tmp")
 		return fmt.Errorf("write tree %q: %w", entry.FilePath, err)
 	}
-	return os.Rename(tmp, entry.FilePath)
+	return nil
 }
 
 // RollbackTree restores name's tree from its milestone-1 pre-mutation

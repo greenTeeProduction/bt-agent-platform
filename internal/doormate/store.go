@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Store implements a thread-safe JSON file-based storage persistence layer.
@@ -30,21 +32,13 @@ func NewStore(dir string) (*Store, error) {
 // atomicWrite writes data to path using the atomic-rename pattern to prevent data corruption.
 // It assumes the caller holds the appropriate write lock.
 func (s *Store) atomicWrite(path string, data interface{}) error {
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %w", err)
+	if err := util.SaveJSONAtomic(path, data); err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
-
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, bytes, 0640); err != nil {
-		return fmt.Errorf("failed to write temporary file: %w", err)
+	// Tighten from SaveJSONAtomic's 0644 default to the store's original 0640.
+	if err := os.Chmod(path, 0640); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %w", path, err)
 	}
-
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("failed to rename temporary file to destination: %w", err)
-	}
-
 	return nil
 }
 

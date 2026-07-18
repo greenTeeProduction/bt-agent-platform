@@ -742,6 +742,35 @@ func TestTaskQueue_Persistence(t *testing.T) {
 	}
 }
 
+// TestTaskQueue_SaveAtomicReplace asserts save() follows the same ADR-003
+// temp-file-then-rename discipline as DeadLetterQueue.save (see
+// TestDeadLetterQueue_SaveAtomicReplace): an in-place os.WriteFile keeps the
+// same inode, so a crash mid-write leaves a truncated queue on disk. Rename
+// swaps a complete file in one atomic step. os.SameFile detects the in-place
+// rewrite.
+func TestTaskQueue_SaveAtomicReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/queue.json"
+
+	tq := NewTaskQueue(path)
+	tq.Enqueue("first")
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after first save: %v", err)
+	}
+
+	tq.Enqueue("second")
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after second save: %v", err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("save() rewrote the task queue file in place; a crash mid-write can truncate the queue — must write a temp file and rename it over the destination")
+	}
+}
+
 // ─── Scheduler Persistence Tests ────────────────────────────────────────────
 
 func TestSchedulerState_SaveLoad(t *testing.T) {
@@ -783,6 +812,35 @@ func TestNewSchedulerState_NonexistentPath(t *testing.T) {
 	// should not panic; just empty
 	if len(ss.List()) != 0 {
 		t.Error("should be empty")
+	}
+}
+
+// TestSchedulerState_PersistAtomicReplace asserts persist() follows the same
+// ADR-003 temp-file-then-rename discipline as DeadLetterQueue.save (see
+// TestDeadLetterQueue_SaveAtomicReplace): an in-place os.WriteFile keeps the
+// same inode, so a crash mid-write leaves truncated job state on disk. Rename
+// swaps a complete file in one atomic step. os.SameFile detects the in-place
+// rewrite.
+func TestSchedulerState_PersistAtomicReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/scheduler.json"
+
+	ss := NewSchedulerState(path)
+	ss.Save(JobState{ID: "job-1", Name: "first"})
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after first save: %v", err)
+	}
+
+	ss.Save(JobState{ID: "job-2", Name: "second"})
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after second save: %v", err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("persist() rewrote the scheduler state file in place; a crash mid-write can truncate job state — must write a temp file and rename it over the destination")
 	}
 }
 
@@ -882,6 +940,35 @@ func TestPriorityQueue_Persistence(t *testing.T) {
 	task := pq2.Dequeue()
 	if task.Priority != PriorityCritical {
 		t.Errorf("expected critical after reload, got %s", task.Priority)
+	}
+}
+
+// TestPriorityQueue_SaveAtomicReplace asserts save() follows the same
+// ADR-003 temp-file-then-rename discipline as DeadLetterQueue.save (see
+// TestDeadLetterQueue_SaveAtomicReplace): an in-place os.WriteFile keeps the
+// same inode, so a crash mid-write leaves a truncated heap on disk. Rename
+// swaps a complete file in one atomic step. os.SameFile detects the in-place
+// rewrite.
+func TestPriorityQueue_SaveAtomicReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := tmpDir + "/priority_queue.json"
+
+	pq := NewPriorityQueue(path)
+	pq.Enqueue("first", "agent-a", PriorityMedium)
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after first save: %v", err)
+	}
+
+	pq.Enqueue("second", "agent-b", PriorityHigh)
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after second save: %v", err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("save() rewrote the priority queue file in place; a crash mid-write can truncate the heap — must write a temp file and rename it over the destination")
 	}
 }
 

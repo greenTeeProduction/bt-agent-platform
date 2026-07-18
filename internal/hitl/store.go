@@ -9,6 +9,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Status of an approval request.
@@ -120,16 +122,12 @@ func (s *Store) save() error {
 		terminal = terminal[:hitlMaxStoredTerminal]
 	}
 	list = append(list, terminal...)
-	// Compact JSON: the store is machine-read; indentation tripled its size.
-	data, err := json.Marshal(list)
-	if err != nil {
+	if err := util.SaveJSONAtomic(s.path, list); err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	// Requests can carry sensitive review context; tighten from
+	// SaveJSONAtomic's 0644 default to the store's original 0600.
+	return os.Chmod(s.path, 0600)
 }
 
 // Create adds a new pending request.

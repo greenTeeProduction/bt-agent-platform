@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── Circuit Breaker ────────────────────────────────────────────────────────
@@ -585,16 +586,15 @@ func (dlq *DeadLetterQueue) mergeFromDisk() {
 	}
 }
 
-// save persists the queue per ADR-003: write a complete temp file in the same
-// directory, then rename it over the destination. An in-place rewrite would let
-// a crash mid-write leave a truncated queue at dlq.path; rename swaps a fully
-// written file in one atomic step.
+// save persists the queue per ADR-003 via the canonical util.SaveJSONAtomic
+// helper: it writes a complete temp file in the same directory, then renames
+// it over the destination. An in-place rewrite would let a crash mid-write
+// leave a truncated queue at dlq.path; rename swaps a fully written file in
+// one atomic step.
 func (dlq *DeadLetterQueue) save() {
 	if dlq.path == "" {
 		return
 	}
-	dir := filepath.Dir(dlq.path)
-	_ = os.MkdirAll(dir, 0755)
 	// Serialize the read-merge-write against sibling processes sharing this
 	// file, then fold their newer per-entry state into memory before writing
 	// (see mergeFromDisk). A lock failure degrades to the merged-but-
@@ -607,27 +607,7 @@ func (dlq *DeadLetterQueue) save() {
 		slog.Error("dlq: lock for merged save (writing unserialized)", "path", dlq.path, "error", err)
 	}
 	dlq.mergeFromDisk()
-	data, err := json.Marshal(dlq.entries)
-	if err != nil {
-		slog.Error("dlq: marshal queue for save", "path", dlq.path, "error", err)
-		return
-	}
-	tmp, err := os.CreateTemp(dir, filepath.Base(dlq.path)+".tmp*")
-	if err != nil {
-		slog.Error("dlq: create temp save file", "path", dlq.path, "error", err)
-		return
-	}
-	if _, err = tmp.Write(data); err == nil {
-		err = tmp.Chmod(0644)
-	}
-	if closeErr := tmp.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(tmp.Name(), dlq.path)
-	}
-	if err != nil {
-		_ = os.Remove(tmp.Name())
+	if err := util.SaveJSONAtomic(dlq.path, dlq.entries); err != nil {
 		slog.Error("dlq: atomic save failed", "path", dlq.path, "error", err)
 	}
 }
@@ -795,9 +775,9 @@ func (tq *TaskQueue) save() {
 	if tq.path == "" {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(tq.path), 0755)
-	data, _ := json.Marshal(tq.items)
-	_ = os.WriteFile(tq.path, data, 0644)
+	if err := util.SaveJSONAtomic(tq.path, tq.items); err != nil {
+		slog.Error("task queue: atomic save failed", "path", tq.path, "error", err)
+	}
 }
 
 func (tq *TaskQueue) load() {
@@ -879,9 +859,9 @@ func (ss *SchedulerState) persist() {
 	if ss.path == "" {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(ss.path), 0755)
-	data, _ := json.Marshal(ss.jobs)
-	_ = os.WriteFile(ss.path, data, 0644)
+	if err := util.SaveJSONAtomic(ss.path, ss.jobs); err != nil {
+		slog.Error("scheduler state: atomic persist failed", "path", ss.path, "error", err)
+	}
 }
 
 func (ss *SchedulerState) load() {
@@ -1073,9 +1053,9 @@ func (pq *PriorityQueue) save() {
 	if pq.path == "" {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(pq.path), 0755)
-	data, _ := json.Marshal(pq.heap)
-	_ = os.WriteFile(pq.path, data, 0644)
+	if err := util.SaveJSONAtomic(pq.path, pq.heap); err != nil {
+		slog.Error("priority queue: atomic save failed", "path", pq.path, "error", err)
+	}
 }
 
 func (pq *PriorityQueue) load() {

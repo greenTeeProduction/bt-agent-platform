@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // excerptLimit bounds the stored excerpt per entry; the vault keeps full text.
@@ -106,18 +108,7 @@ func (s *Store) Len() int { return len(s.Entries) }
 
 // Save writes the index atomically (tmp+rename) per ADR-003.
 func (s *Store) Save() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return util.SaveJSONAtomic(s.path, s)
 }
 
 func normalize(content string) string {
