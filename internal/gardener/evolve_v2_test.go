@@ -1965,3 +1965,106 @@ func TestEvolveTreeV2_UnregisteredTreeID_KnowledgeGraphWriteBackIsNoOp(t *testin
 		t.Errorf("KnowledgeGraph gained a phantom entry for unregistered tree %q", entry.Name)
 	}
 }
+
+// ============================================================================
+// DT-optimizer read-only diagnostic entry point (evolve_v2.go) — milestone
+// 4/4 of the "wire the entropy/Gini-based BTOptimizer/DTAnalyzer decision-tree
+// engine into the same production telemetry and mutation paths its sibling
+// SelectorOptimizer already uses" program. Unlike applyDTOptimizerOrdering
+// (which mutates the live tree in place before persistence), this entry
+// point must run evolution.BTOptimizer.AnalyzeTree — which destructively
+// reorders/prunes via OptimizeSelectors/PruneDeadPaths — on a clone, so HITL
+// reviewers can see the report without any risk of the live production tree
+// changing underneath them.
+// ============================================================================
+
+// TestAnalyzeTreeDiagnostics_DoesNotMutateLiveTree pins milestone 4/4: the
+// diagnostic entry point must clone entry.Tree (via cloneTreeForGardener)
+// before calling evolution.BTOptimizer.AnalyzeTree, so the resulting
+// DTImprovementReport's destructive-analysis counts land on the clone and the
+// live production tree stays byte-for-byte unchanged. Reusing
+// dtOrderingTree/seedDTStats from the milestone-3 tests above deterministically
+// makes B's condition the highest-information-gain path, so an unprotected
+// AnalyzeTree call would reorder Router's live children — proving this test
+// is non-vacuous (it would catch an implementation that analyzes entry.Tree
+// directly instead of a clone).
+func TestAnalyzeTreeDiagnostics_DoesNotMutateLiveTree(t *testing.T) {
+	statsPath := filepath.Join(t.TempDir(), "dt_stats.json")
+	seedDTStats(t, statsPath)
+
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	tree := dtOrderingTree()
+	entry := TreeEntry{Name: "dt_tree", Tree: tree, Active: true}
+
+	cfg := Config{
+		Registry:       &Registry{dir: dir},
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		DTStatsPath:    statsPath,
+	}
+	g := NewGardener(cfg)
+
+	before, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatalf("marshal original tree: %v", err)
+	}
+
+	report := g.AnalyzeTreeDiagnostics(entry)
+
+	if report == nil {
+		t.Fatal("AnalyzeTreeDiagnostics returned a nil report")
+	}
+	if report.TreeName != entry.Name {
+		t.Errorf("report.TreeName = %q, want %q", report.TreeName, entry.Name)
+	}
+	if report.NodeCount != evolution.CountNodes(tree) {
+		t.Errorf("report.NodeCount = %d, want %d", report.NodeCount, evolution.CountNodes(tree))
+	}
+	if report.ReorderChanges == 0 {
+		t.Fatal("setup produced zero ReorderChanges on the clone — analysis must find the B-ahead-of-A reorder, otherwise this test cannot prove clone-isolation")
+	}
+
+	after, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatalf("marshal tree after AnalyzeTreeDiagnostics: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("AnalyzeTreeDiagnostics mutated the live production tree:\nbefore: %s\nafter:  %s", before, after)
+	}
+
+	got := routerChildNames(t, tree)
+	want := []string{"A", "B", "C", "Fallback"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("live tree's Router child order changed: got %v, want %v (original order)", got, want)
+	}
+}
+
+// TestAnalyzeTreeDiagnostics_NilTree pins the degradation contract: a nil
+// entry.Tree must not panic and must report no findings, mirroring the nil
+// guards already used by cloneTreeForGardener and applyDTOptimizerOrdering.
+func TestAnalyzeTreeDiagnostics_NilTree(t *testing.T) {
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	cfg := Config{Registry: &Registry{dir: dir}, MetricsTracker: mt, RefStore: refStore}
+	g := NewGardener(cfg)
+
+	report := g.AnalyzeTreeDiagnostics(TreeEntry{Name: "nil_tree", Tree: nil, Active: true})
+	if report != nil {
+		t.Errorf("expected nil report for nil tree, got %+v", report)
+	}
+}

@@ -549,6 +549,31 @@ func (g *Gardener) applyDTOptimizerOrdering(tree *evolution.SerializableNode, cf
 	return bo.OptimizeSelectors(tree)
 }
 
+// AnalyzeTreeDiagnostics runs evolution.BTOptimizer.AnalyzeTree — milestone
+// 4/4 of the DTAnalyzer/BTOptimizer wiring program — against a clone of
+// entry.Tree so its destructive OptimizeSelectors/PruneDeadPaths/
+// MergeOverlappingPaths passes never touch the live production tree. The
+// resulting DTImprovementReport surfaces those counts for HITL review only;
+// callers must not treat it as an in-place mutation like
+// applyDTOptimizerOrdering above. Seeds the same durable DTAnalyzer telemetry
+// at Config.DTStatsPath used by applyDTOptimizerOrdering; a missing or
+// unreadable stats file degrades to an unseeded BTOptimizer rather than
+// failing the diagnostic. Returns nil for a nil entry.Tree.
+func (g *Gardener) AnalyzeTreeDiagnostics(entry TreeEntry) *evolution.DTImprovementReport {
+	if entry.Tree == nil {
+		return nil
+	}
+	clone := cloneTreeForGardener(entry.Tree)
+	bo := evolution.NewBTOptimizer()
+	if g.cfg.DTStatsPath != "" {
+		if err := bo.Analyzer.Load(g.cfg.DTStatsPath); err != nil {
+			slog.Warn("gardener/v2: loading decision-tree stats failed, analyzing unseeded",
+				"path", g.cfg.DTStatsPath, "error", err)
+		}
+	}
+	return bo.AnalyzeTree(clone, entry.Name)
+}
+
 const (
 	// experienceBiasTopK bounds how many prior experiences candidate biasing
 	// retrieves per cycle.
