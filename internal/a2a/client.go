@@ -8,12 +8,28 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // BTAgentClient is an A2A client that BT trees use to delegate to external agents.
 type BTAgentClient struct {
 	Timeout time.Duration
 }
+
+// sendTaskRetries/sendTaskBaseDelay/sendTaskMaxDelay bound how hard SendTask
+// retries a transient client.SendMessage failure before giving up on the
+// delegation — the same shape as RunAuction's winner-dispatch retry
+// (auction.go:376-397) one level down, at the raw transport call every
+// dispatch (auction winner or otherwise) ultimately goes through. Unlike the
+// winner dispatch retry, delays here are jittered (JitterStrategy) so that a
+// burst of SendTask calls racing the same flaky agent don't all retry in
+// lockstep. Non-retryable categories (validation, auth) fail immediately
+// regardless of these bounds.
+const (
+	sendTaskRetries   = 3
+	sendTaskBaseDelay = 50 * time.Millisecond
+	sendTaskMaxDelay  = 500 * time.Millisecond
+)
 
 // BTAgentClient is the production transport an Auctioneer fans announcements out
 // over; its SendTask satisfies BidCollector.
@@ -48,9 +64,20 @@ func (c *BTAgentClient) SendTask(ctx context.Context, agentURL, taskText string)
 	timeoutCtx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
 
-	resp, err := client.SendMessage(timeoutCtx, req)
-	if err != nil {
-		return "", fmt.Errorf("send message: %w", err)
+	policy := &reliability.RetryPolicy{
+		MaxRetries: sendTaskRetries,
+		Base:       sendTaskBaseDelay,
+		MaxDelay:   sendTaskMaxDelay,
+		Jitter:     reliability.FullJitterStrategy,
+	}
+	var resp a2a.SendMessageResult
+	sendErr := policy.ExecuteContext(timeoutCtx, func() error {
+		var err error
+		resp, err = client.SendMessage(timeoutCtx, req)
+		return err
+	})
+	if sendErr != nil {
+		return "", fmt.Errorf("send message: %w", sendErr)
 	}
 
 	return interpretSendResult(resp)

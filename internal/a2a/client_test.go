@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sort"
 	"sync"
@@ -509,5 +512,94 @@ func TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts(t *t
 	}
 	if entry.Status != "open" {
 		t.Errorf("persisted bad-winner breaker status = %q, want %q", entry.Status, "open")
+	}
+}
+
+// ---- resilience: SendTask must retry a transient client.SendMessage failure -
+//
+// BTAgentClient.SendTask (client.go) calls client.SendMessage exactly once
+// today: any transient failure — even a momentary 503 from the target agent,
+// no different in kind from the winner-dispatch failures RunAuction already
+// retries around its own client.SendTask call (auction.go:376-397) — fails
+// the whole delegation immediately. This test pins the mirrored contract for
+// the transport call one level down: a jittered reliability.RetryPolicy must
+// wrap client.SendMessage so a transient failure is retried before SendTask
+// gives up, exactly like the winner dispatch retry already does.
+
+// TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds drives
+// SendTask against a real local A2A JSON-RPC endpoint (agent card resolution
+// plus the JSON-RPC transport a2aclient.NewFromCard builds) whose first
+// SendMessage call fails with a transient 503 and whose second call succeeds
+// — proving the retry happens around client.SendMessage itself, not around
+// card resolution or client construction (which only ever happen once).
+func TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+
+	// rpcURL is filled in once, right after the server starts and before any
+	// request can land — the well-known card handler below only reads it
+	// once an actual HTTP request arrives.
+	var rpcURL string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/agent-card.json", func(w http.ResponseWriter, _ *http.Request) {
+		card := &a2a.AgentCard{
+			Name:                "flaky",
+			SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(rpcURL, a2a.TransportProtocolJSONRPC)},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(card)
+	})
+	mux.HandleFunc("/rpc", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+
+		var req struct {
+			ID string `json:"id"`
+		}
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &req)
+
+		// The first SendMessage call fails transiently (a momentary 503 —
+		// ClassifyError buckets "503"/"service unavailable" as a retryable
+		// LLM-category error, the same bucket auction.go's winner dispatch
+		// retry already tolerates); every call after that succeeds.
+		if n == 1 {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		result, _ := json.Marshal(a2a.StreamResponse{
+			Event: a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("done after retry")),
+		})
+		resp := struct {
+			JSONRPC string          `json:"jsonrpc"`
+			ID      string          `json:"id"`
+			Result  json.RawMessage `json:"result"`
+		}{JSONRPC: "2.0", ID: req.ID, Result: result}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	rpcURL = ts.URL + "/rpc"
+
+	c := NewBTAgentClient()
+	text, err := c.SendTask(context.Background(), ts.URL, "do the work")
+	if err != nil {
+		t.Fatalf("SendTask failed despite the transient failure being retryable: %v", err)
+	}
+	if text != "done after retry" {
+		t.Errorf("SendTask result = %q, want %q", text, "done after retry")
+	}
+
+	mu.Lock()
+	got := calls
+	mu.Unlock()
+	if got < 2 {
+		t.Errorf("client.SendMessage was attempted %d time(s), want at least 2 (a retry after the transient failure)", got)
 	}
 }
