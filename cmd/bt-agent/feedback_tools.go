@@ -107,14 +107,10 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	return result
 }
 
-// automationFlaggedStatus pauses an automation pending human review: unlike
-// persona.AutomationPending/Approved/Rejected, this state is entered only via
-// repeated negative feedback (never via the autopilot proposal flow), but it
-// is still a plain string status so Milestone 1's automationApproved guard
-// (internal/agentexec/wiring.go) — which allows execution only when
-// Status == persona.AutomationApproved — treats it as non-executable without
-// any change on that side.
-const automationFlaggedStatus = "flagged"
+// automationFlaggedStatus aliases the shared persona.AutomationFlagged status
+// (see its doc comment for the invariant); kept as a local name since
+// escalateFlaggedTreeForReview below is still cmd/bt-agent-local.
+const automationFlaggedStatus = persona.AutomationFlagged
 
 // escalateFlaggedTreeForReview raises a HITL escalation for a tree that just
 // crossed feedbackReviewThreshold negatives and pauses the automation
@@ -171,45 +167,6 @@ func escalateFlaggedTreeForReview(deps *mcpDeps, user, treeID string, negatives 
 			"tree", treeID, "user", user, "error", err)
 	}
 	return req.ID
-}
-
-// finalizeFeedbackEscalation is the resume half of the feedback-escalation
-// loop (Q4 Personalization & Self-Growth milestone 2/2): a human reviewing
-// the HITL request raised by escalateFlaggedTreeForReview must be able to
-// actually reactivate the paused automation, not just leave it flagged
-// forever. Approving flips the persona.AutomationRecord back to
-// persona.AutomationApproved so automationApproved (internal/agentexec/
-// wiring.go) lets the engine's execution gate resolve the tree again;
-// rejecting leaves the record in automationFlaggedStatus so the automation
-// stays paused. No-ops for HITL requests that aren't one of these
-// feedback-review escalations (e.g. automation-proposal approvals, handled
-// separately by finalizeAutomationApproval).
-func finalizeFeedbackEscalation(deps *mcpDeps, req *hitl.Request, approved bool) {
-	if req == nil || req.NodeName != "FeedbackReviewEscalation" {
-		return
-	}
-	user := req.Context["user"]
-	signature := req.Context["signature"]
-	if deps.personaStore == nil || user == "" || signature == "" {
-		return
-	}
-	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
-	if err != nil {
-		return
-	}
-	rec, exists, err := ledger.Get(signature)
-	if err != nil || !exists || rec.Status != automationFlaggedStatus {
-		return
-	}
-	if !approved {
-		// Rejected — the automation stays paused; nothing further to do.
-		return
-	}
-	rec.Status = persona.AutomationApproved
-	if err := ledger.Upsert(*rec); err != nil {
-		engine.Warn("failed to resume automation after feedback-review approval",
-			"tree", rec.TreeID, "user", user, "error", err)
-	}
 }
 
 // registerFeedbackTools registers the user-feedback MCP surface.

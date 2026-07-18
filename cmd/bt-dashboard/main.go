@@ -27,6 +27,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/persona"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/security"
 	"github.com/nico/go-bt-evolve/internal/startup"
@@ -40,6 +41,15 @@ var staticFS embed.FS
 var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
 var dashAgentRunner *agent.RunDeps
+
+// dashPersonaStore is the shared per-user personalization store, loaded once
+// at startup from agent.UsersDir(). It backs dashboard.PersonaStore/
+// dashboard.AgentRegistry (set from dashAgentRunner.Registry below) so
+// HandleHITL's approve/reject cases can finalize dashboard-surfaced
+// automation proposals and feedback escalations exactly like the MCP
+// bt_hitl_approve/bt_hitl_reject path does (Q4 Personalization & Self-Growth
+// milestone 3/3).
+var dashPersonaStore *persona.Store
 
 // dashCBStore is the shared per-agent circuit breaker store, loaded once at
 // startup from agent.CircuitBreakersFile() so dashboard-dispatched runs honor
@@ -272,7 +282,16 @@ func main() {
 		slog.Warn("In-process agent runner unavailable (pipelines will fail)", "error", err)
 	} else {
 		dashAgentRunner = runner
+		dashboard.AgentRegistry = runner.Registry
 		slog.Info("In-process agent runner initialized")
+	}
+
+	if store, err := persona.NewStore(agent.UsersDir()); err != nil {
+		slog.Warn("Persona store unavailable (HITL finalization will be a no-op)", "error", err)
+	} else {
+		dashPersonaStore = store
+		dashboard.PersonaStore = store
+		slog.Info("Persona store initialized", "path", agent.UsersDir())
 	}
 
 	getDashCBStore()

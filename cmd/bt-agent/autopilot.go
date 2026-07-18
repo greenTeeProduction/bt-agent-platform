@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -221,26 +220,10 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 }
 
 // activateAutomation writes the approved automation into the agent registry
-// as a scheduled agent definition.
+// as a scheduled agent definition, delegating the binary-agnostic part to
+// persona.ActivateAutomation and refreshing A2A cards on success.
 func activateAutomation(deps *mcpDeps, user, agentName, treeID, signature, schedule, representative string) error {
-	if deps.agentReg == nil {
-		return fmt.Errorf("agent registry not configured")
-	}
-	_, err := deps.agentReg.Create(agent.Definition{
-		Name:        agentName,
-		Description: "Auto-created automation for recurring task: " + representative,
-		Tree:        treeID,
-		Schedule:    schedule,
-		Metadata: map[string]string{
-			"auto_created":      "true",
-			"user":              user,
-			"pattern_signature": signature,
-		},
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
-			return nil // idempotent: re-approval of an existing agent is fine
-		}
+	if err := persona.ActivateAutomation(deps.agentReg, user, agentName, treeID, signature, schedule, representative); err != nil {
 		return err
 	}
 	if deps.refreshA2ACards != nil {
@@ -252,49 +235,18 @@ func activateAutomation(deps *mcpDeps, user, agentName, treeID, signature, sched
 }
 
 // finalizeAutomationApproval activates an approved automation proposal and
-// updates the user's ledger. Called from bt_hitl_approve/bt_hitl_reject for
-// requests carrying the automation context.
+// updates the user's ledger, or quarantines its tree on rejection. Called
+// from bt_hitl_approve/bt_hitl_reject for requests carrying the automation
+// context. Delegates the binary-agnostic finalization to
+// persona.FinalizeAutomationApproval and refreshes A2A cards on activation.
 func finalizeAutomationApproval(deps *mcpDeps, req *hitl.Request, approved bool) map[string]interface{} {
-	if req == nil || req.Context["automation"] != "true" {
-		return nil
-	}
-	user := req.Context["user"]
-	out := map[string]interface{}{"automation": true, "user": user}
-	var ledger *persona.AutomationStore
-	if deps.personaStore != nil && user != "" {
-		ledger, _ = persona.NewAutomationStore(deps.personaStore.Workspace(user))
-	}
-
-	if !approved {
-		if ledger != nil {
-			_, _, _ = ledger.SetStatus(req.ID, persona.AutomationRejected, "")
+	out := persona.FinalizeAutomationApproval(deps.agentReg, deps.personaStore, req, approved)
+	if out != nil && out["activated"] == true && deps.refreshA2ACards != nil {
+		agentName, _ := out["agent"].(string)
+		if rerr := deps.refreshA2ACards(); rerr != nil {
+			engine.Warn("a2a: card refresh after activateAutomation failed", "agent", agentName, "error", rerr)
 		}
-		// Quarantine the compiled tree so a rejected automation can't be
-		// resolved by direct tree-ID even before per-request tree isolation
-		// (Milestone 1) lands.
-		if deps.personaStore != nil && user != "" {
-			ws := deps.personaStore.Workspace(user)
-			if qerr := evolution.QuarantineNamedTree(ws.TreesDir(), req.Context["tree_id"]); qerr != nil {
-				engine.Warn("finalizeAutomationApproval: tree quarantine failed", "tree", req.Context["tree_id"], "error", qerr)
-			}
-		}
-		out["activated"] = false
-		return out
 	}
-
-	agentName := req.Context["agent_name"]
-	if err := activateAutomation(deps, user, agentName, req.Context["tree_id"],
-		req.Context["pattern_signature"], req.Context["schedule"], req.Task); err != nil {
-		out["activated"] = false
-		out["activation_error"] = err.Error()
-		return out
-	}
-	if ledger != nil {
-		_, _, _ = ledger.SetStatus(req.ID, persona.AutomationApproved, agentName)
-	}
-	out["activated"] = true
-	out["agent"] = agentName
-	out["schedule"] = req.Context["schedule"]
 	return out
 }
 

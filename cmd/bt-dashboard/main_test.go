@@ -22,6 +22,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/persona"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/startup"
 	"github.com/nico/go-bt-evolve/internal/thinktank"
@@ -1605,5 +1606,216 @@ func TestDashboardJS_EscapesUserInfluencedInterpolations(t *testing.T) {
 	agentsJS, _ := staticFS.ReadFile("static/js/tabs/agents.js")
 	if strings.Contains(string(agentsJS), "'    <span class=\"task-title\">' + a.name +") {
 		t.Error("agents.js interpolates a.name raw into the task-title markup; wrap it in esc()")
+	}
+}
+
+// setupHITLFinalizationTest wires dashboard.AgentRegistry and
+// dashboard.PersonaStore (the Q4 Personalization milestone 3/3 injection
+// hooks, mirroring the existing dashboard.DiscoverTreeFn pattern) to an
+// isolated agent registry and persona store for the duration of the test,
+// and installs an isolated hitl.DefaultStore. Restores all three on cleanup.
+func setupHITLFinalizationTest(t *testing.T) (*hitl.Store, *agent.Registry, *persona.Store) {
+	t.Helper()
+	dir := t.TempDir()
+
+	hitlStore, err := hitl.InitStore(filepath.Join(dir, "hitl"))
+	if err != nil {
+		t.Fatalf("hitl store: %v", err)
+	}
+	reg, err := agent.NewRegistry(filepath.Join(dir, "registry"))
+	if err != nil {
+		t.Fatalf("agent registry: %v", err)
+	}
+	pStore, err := persona.NewStore(filepath.Join(dir, "users"))
+	if err != nil {
+		t.Fatalf("persona store: %v", err)
+	}
+
+	prevHITL := hitl.DefaultStore
+	prevReg := dashboard.AgentRegistry
+	prevStore := dashboard.PersonaStore
+	hitl.DefaultStore = hitlStore
+	dashboard.AgentRegistry = reg
+	dashboard.PersonaStore = pStore
+	t.Cleanup(func() {
+		hitl.DefaultStore = prevHITL
+		dashboard.AgentRegistry = prevReg
+		dashboard.PersonaStore = prevStore
+	})
+
+	return hitlStore, reg, pStore
+}
+
+// TestHandleHITL_ApproveActivatesAutomation pins milestone 3/3 of the Q4
+// Personalization & Self-Growth dashboard HITL approval-finalization
+// program: approving a dashboard-surfaced automation-proposal HITL request
+// must actually activate the automation as a scheduled agent — the same
+// outcome persona.FinalizeAutomationApproval already gives the MCP
+// bt_hitl_approve path (milestone 1/2) — instead of merely flipping the HITL
+// request's status and leaving the automation dormant.
+func TestHandleHITL_ApproveActivatesAutomation(t *testing.T) {
+	hitlStore, reg, pStore := setupHITLFinalizationTest(t)
+
+	const user = "nico"
+	const treeID = "goal:demo"
+	const agentName = "auto-nico-sig-approve"
+	const signature = "sig-approve"
+
+	ledger, err := persona.NewAutomationStore(pStore.Workspace(user))
+	if err != nil {
+		t.Fatalf("automation ledger: %v", err)
+	}
+	req := hitl.NewRequest("AutomationProposal", "AutomationGate", "demo task", "", "", "please review", map[string]any{
+		"automation":        "true",
+		"tree_id":           treeID,
+		"agent_name":        agentName,
+		"user":              user,
+		"pattern_signature": signature,
+		"schedule":          "0 9 * * *",
+	})
+	if err := hitlStore.Create(req); err != nil {
+		t.Fatalf("create hitl request: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: signature,
+		Status:    persona.AutomationPending,
+		HITLID:    req.ID,
+		TreeID:    treeID,
+	}); err != nil {
+		t.Fatalf("seed ledger: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/hitl/"+req.ID+"/approve", bytes.NewReader([]byte(`{"reviewer":"tester"}`)))
+	dashboard.HandleHITL(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("approve: status %d body %s", rr.Code, rr.Body.String())
+	}
+
+	if _, err := reg.Get(agentName); err != nil {
+		t.Errorf("dashboard-approved automation must activate an agent in the registry (like the MCP path); reg.Get(%q) failed: %v", agentName, err)
+	}
+	rec, ok, err := ledger.Get(signature)
+	if err != nil || !ok {
+		t.Fatalf("ledger record missing after approval: ok=%v err=%v", ok, err)
+	}
+	if rec.Status != persona.AutomationApproved {
+		t.Errorf("ledger status = %q, want %q after dashboard approval", rec.Status, persona.AutomationApproved)
+	}
+}
+
+// TestHandleHITL_RejectQuarantinesAutomationTree pins the reject half of the
+// same milestone: rejecting a dashboard-surfaced automation proposal must
+// quarantine its compiled tree and mark the ledger record rejected, exactly
+// like the MCP bt_hitl_reject path already does via
+// persona.FinalizeAutomationApproval(..., approved=false).
+func TestHandleHITL_RejectQuarantinesAutomationTree(t *testing.T) {
+	hitlStore, reg, pStore := setupHITLFinalizationTest(t)
+
+	const user = "nico"
+	const treeID = "goal:reject-me"
+	const agentName = "auto-nico-sig-reject"
+	const signature = "sig-reject"
+
+	ws := pStore.Workspace(user)
+	ledger, err := persona.NewAutomationStore(ws)
+	if err != nil {
+		t.Fatalf("automation ledger: %v", err)
+	}
+	treePath, err := evolution.SaveNamedTree(ws.TreesDir(), treeID, &evolution.SerializableNode{Type: "action", Name: "noop"})
+	if err != nil {
+		t.Fatalf("save tree: %v", err)
+	}
+	req := hitl.NewRequest("AutomationProposal", "AutomationGate", "reject task", "", "", "please review", map[string]any{
+		"automation":        "true",
+		"tree_id":           treeID,
+		"agent_name":        agentName,
+		"user":              user,
+		"pattern_signature": signature,
+		"schedule":          "0 9 * * 1",
+	})
+	if err := hitlStore.Create(req); err != nil {
+		t.Fatalf("create hitl request: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: signature,
+		Status:    persona.AutomationPending,
+		HITLID:    req.ID,
+		TreeID:    treeID,
+	}); err != nil {
+		t.Fatalf("seed ledger: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/hitl/"+req.ID+"/reject", bytes.NewReader([]byte(`{"reviewer":"tester","reason":"no"}`)))
+	dashboard.HandleHITL(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reject: status %d body %s", rr.Code, rr.Body.String())
+	}
+
+	if _, err := reg.Get(agentName); err == nil {
+		t.Error("dashboard-rejected automation must not activate an agent")
+	}
+	if _, err := os.Stat(treePath); err == nil {
+		t.Errorf("dashboard-rejected automation's tree file must be quarantined, still present at %s", treePath)
+	}
+	if _, err := os.Stat(treePath + ".rejected"); err != nil {
+		t.Errorf("expected quarantined tree file at %s.rejected: %v", treePath, err)
+	}
+	rec, ok, err := ledger.Get(signature)
+	if err != nil || !ok {
+		t.Fatalf("ledger record missing after rejection: ok=%v err=%v", ok, err)
+	}
+	if rec.Status != persona.AutomationRejected {
+		t.Errorf("ledger status = %q, want %q after dashboard rejection", rec.Status, persona.AutomationRejected)
+	}
+}
+
+// TestHandleHITL_ApproveResumesFeedbackEscalation pins the other shared
+// finalization function (persona.FinalizeFeedbackEscalation, milestone
+// 2/3): approving a dashboard-surfaced FeedbackReviewEscalation request must
+// resume the paused automation (AutomationFlagged -> AutomationApproved),
+// exactly like the MCP bt_hitl_approve path already does.
+func TestHandleHITL_ApproveResumesFeedbackEscalation(t *testing.T) {
+	hitlStore, _, pStore := setupHITLFinalizationTest(t)
+
+	const user = "nico"
+	const treeID = "goal:automate_reports"
+	const signature = "weekly_sales_report"
+
+	ledger, err := persona.NewAutomationStore(pStore.Workspace(user))
+	if err != nil {
+		t.Fatalf("automation ledger: %v", err)
+	}
+	if err := ledger.Upsert(persona.AutomationRecord{
+		Signature: signature,
+		Status:    persona.AutomationFlagged,
+		TreeID:    treeID,
+		AgentName: "auto-nico-" + signature,
+	}); err != nil {
+		t.Fatalf("seed flagged ledger record: %v", err)
+	}
+
+	req := hitl.NewRequest("FeedbackReviewEscalation", "FeedbackReviewEscalation", "review escalation", "", "", "please review", map[string]any{
+		"user":      user,
+		"signature": signature,
+	})
+	if err := hitlStore.Create(req); err != nil {
+		t.Fatalf("create hitl request: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/hitl/"+req.ID+"/approve", bytes.NewReader([]byte(`{"reviewer":"tester"}`)))
+	dashboard.HandleHITL(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("approve: status %d body %s", rr.Code, rr.Body.String())
+	}
+
+	rec, ok, err := ledger.Get(signature)
+	if err != nil || !ok {
+		t.Fatalf("ledger record missing after approval: ok=%v err=%v", ok, err)
+	}
+	if rec.Status != persona.AutomationApproved {
+		t.Errorf("ledger status = %q, want %q after dashboard approval resumes the escalation", rec.Status, persona.AutomationApproved)
 	}
 }

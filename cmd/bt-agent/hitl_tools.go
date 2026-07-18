@@ -8,6 +8,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
 func registerHITLTools(server *engine.Server, deps *mcpDeps) {
@@ -88,10 +89,11 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]any{"request": req, "automation": activation})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			// Feedback-escalation resume (Q4 Personalization milestone 2):
+			// Feedback-escalation resume (Q4 Personalization milestone 2/3):
 			// approving a FeedbackReviewEscalation reactivates the automation
-			// that escalateFlaggedTreeForReview paused.
-			finalizeFeedbackEscalation(deps, req, true)
+			// that escalateFlaggedTreeForReview paused. Shared with the
+			// dashboard's HITL resolution path.
+			persona.FinalizeFeedbackEscalation(deps.personaStore, req, true)
 			data, _ := json.Marshal(req)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -126,8 +128,8 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
 			// Rejected FeedbackReviewEscalations leave the automation paused —
-			// finalizeFeedbackEscalation no-ops here, called for symmetry.
-			finalizeFeedbackEscalation(deps, req, false)
+			// FinalizeFeedbackEscalation no-ops here, called for symmetry.
+			persona.FinalizeFeedbackEscalation(deps.personaStore, req, false)
 			data, _ := json.Marshal(req)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})

@@ -17,6 +17,13 @@ const (
 	AutomationPending  = "pending"
 	AutomationApproved = "approved"
 	AutomationRejected = "rejected"
+	// AutomationFlagged pauses an automation pending human review: unlike
+	// Pending/Approved/Rejected, this state is entered only via repeated
+	// negative user feedback (Q4 Personalization milestone 2/3), never via
+	// the autopilot proposal flow — but it is still a plain status string so
+	// the engine's execution gate (Status == AutomationApproved) treats it as
+	// non-executable without any change on that side.
+	AutomationFlagged = "flagged"
 )
 
 // AutomationRecord tracks one automation proposal derived from a recurring

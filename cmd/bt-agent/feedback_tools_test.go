@@ -395,15 +395,18 @@ func TestRecordUserFeedback_FlaggedForReviewNoAutomationTracked(t *testing.T) {
 	}
 }
 
-// Q4 Personalization & Self-Growth milestone 2/2: the feedback-escalation loop
-// must actually resume, not just pause forever. This is the true end-to-end
-// path: escalateFlaggedTreeForReview (via recordUserFeedback) pauses the
-// automation and the engine's execution gate (domains.ResolveTreeIDForUser,
-// wired here as resolveTreeForUser) must refuse to resolve the tree while
-// flagged; once a human approves the HITL escalation, finalizeFeedbackEscalation
-// must flip the persona.AutomationRecord back to persona.AutomationApproved so
-// the SAME execution gate resolves the tree again — proving the automation
-// genuinely recovers instead of staying dead forever after one bad streak.
+// Q4 Personalization & Self-Growth milestone 2/3: the feedback-escalation
+// resume logic must be binary-agnostic, like persona.FinalizeAutomationApproval
+// (milestone 1), so the dashboard's HITL resolution path can finalize
+// FeedbackReviewEscalation requests identically to the MCP bt_hitl_approve
+// path. This is the true end-to-end path: escalateFlaggedTreeForReview (via
+// recordUserFeedback) pauses the automation and the engine's execution gate
+// (domains.ResolveTreeIDForUser, wired here as resolveTreeForUser) must
+// refuse to resolve the tree while flagged; once a human approves the HITL
+// escalation, the shared persona.FinalizeFeedbackEscalation must flip the
+// persona.AutomationRecord back to persona.AutomationApproved so the SAME
+// execution gate resolves the tree again — proving the automation genuinely
+// recovers instead of staying dead forever after one bad streak.
 func TestFinalizeFeedbackEscalation_ResumesAutomationAfterHumanApproval(t *testing.T) {
 	t.Setenv("BT_AGENT_HOME", t.TempDir())
 
@@ -484,21 +487,25 @@ func TestFinalizeFeedbackEscalation_ResumesAutomationAfterHumanApproval(t *testi
 		t.Fatalf("approve escalation: %v", err)
 	}
 
-	// finalizeFeedbackEscalation is the resume half of the loop: a human
-	// approving the escalation must resume the paused automation.
-	finalizeFeedbackEscalation(deps, req, true)
+	// persona.FinalizeFeedbackEscalation is the resume half of the loop: a
+	// human approving the escalation must resume the paused automation. It is
+	// the shared, binary-agnostic version of the old cmd/bt-agent-local
+	// finalizeFeedbackEscalation (Q4 Personalization milestone 2/3) — hitl_tools.go's
+	// bt_hitl_approve/bt_hitl_reject call this same function, so the dashboard's
+	// HITL resolution path finalizes identically.
+	persona.FinalizeFeedbackEscalation(deps.personaStore, req, true)
 
 	rec, exists, err := ledger.Get("weekly_sales_report")
 	if err != nil || !exists {
 		t.Fatalf("automation record missing after resume: exists=%v err=%v", exists, err)
 	}
 	if rec.Status != persona.AutomationApproved {
-		t.Errorf("automation status = %q, want %q after finalizeFeedbackEscalation resumes it", rec.Status, persona.AutomationApproved)
+		t.Errorf("automation status = %q, want %q after persona.FinalizeFeedbackEscalation resumes it", rec.Status, persona.AutomationApproved)
 	}
 
 	// automationApproved must return true again: the engine's execution gate
 	// resolves the tree once more, closing the loop end-to-end.
 	if got := resolveTreeForUser(user, treeID); got == nil {
-		t.Fatal("expected tree to resolve again after finalizeFeedbackEscalation resumed the automation")
+		t.Fatal("expected tree to resolve again after persona.FinalizeFeedbackEscalation resumed the automation")
 	}
 }
