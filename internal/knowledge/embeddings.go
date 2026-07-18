@@ -136,15 +136,29 @@ func CosineSimilarity(a, b Embedding) float64 {
 }
 
 // BuildIndex generates embeddings for all trees in the graph concurrently.
+//
+// The tree set is snapshotted under a single RLock up front: kg.Trees is
+// otherwise read without synchronization below (both to size the result
+// channel and to bound the receive loop), which raced Register et al. under
+// -race and, worse, could hang the receive loop if the map grew between the
+// two unsynchronized len() reads.
 func (kg *KnowledgeGraph) BuildIndex() error {
 	type result struct {
 		id  string
 		emb Embedding
 		err error
 	}
-	ch := make(chan result, len(kg.Trees))
 
+	kg.mu.RLock()
+	trees := make(map[string]*TreeMeta, len(kg.Trees))
 	for id, tree := range kg.Trees {
+		trees[id] = tree
+	}
+	kg.mu.RUnlock()
+
+	ch := make(chan result, len(trees))
+
+	for id, tree := range trees {
 		reliability.SafeGo(fmt.Sprintf("knowledge.BuildIndex tree %s", id), func() {
 			text := tree.Name + " " + tree.Description
 			for _, cap := range tree.Capabilities {
@@ -163,7 +177,7 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 	}
 
 	var firstErr error
-	for i := 0; i < len(kg.Trees); i++ {
+	for i := 0; i < len(trees); i++ {
 		r := <-ch
 		if r.err != nil && firstErr == nil {
 			firstErr = r.err

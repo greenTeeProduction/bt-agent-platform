@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -30,10 +31,31 @@ type BTAgentExecutor struct {
 	// (and re-signing) a fresh one from the tree definition on every request.
 	CardCache map[string]*a2a.AgentCard
 
+	// cardMu guards CardCache: Server.RefreshCards reassigns it from a
+	// goroutine handling a registry mutation (bt_agent_create,
+	// activateAutomation) while Execute's auction-bid branch reads it
+	// concurrently from every inbound request's goroutine.
+	cardMu sync.RWMutex
+
 	// History is the platform's shared run-history store. Cancel records a
 	// "cancelled" RunRecord here so cancelled tasks leave a trace instead of
 	// vanishing silently. Nil is tolerated (e.g. in tests that don't need it).
 	History *agent.History
+}
+
+// cachedCard returns the cached agent card for name, safe for concurrent use
+// with setCardCache reassigning CardCache from another goroutine.
+func (e *BTAgentExecutor) cachedCard(name string) *a2a.AgentCard {
+	e.cardMu.RLock()
+	defer e.cardMu.RUnlock()
+	return e.CardCache[name]
+}
+
+// setCardCache atomically replaces CardCache.
+func (e *BTAgentExecutor) setCardCache(cards map[string]*a2a.AgentCard) {
+	e.cardMu.Lock()
+	e.CardCache = cards
+	e.cardMu.Unlock()
 }
 
 // Execute runs the BT agent for the given A2A task.
@@ -97,7 +119,7 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 			// (Server.CardCache, mirrored here) over re-deriving one from the
 			// tree definition on every inbound request; fall back to a fresh
 			// conversion only when no cached card exists.
-			card := e.CardCache[agentName]
+			card := e.cachedCard(agentName)
 			if card == nil {
 				card, _ = ConvertToAgentCard(inst.Definition, "")
 			}
@@ -312,6 +334,11 @@ type Server struct {
 	CardCache map[string]*a2a.AgentCard
 	httpSrv   *http.Server
 
+	// cardMu guards CardCache against the same writer/reader race as
+	// BTAgentExecutor.cardMu: RefreshCards reassigns it while every HTTP
+	// handler below reads it concurrently.
+	cardMu sync.RWMutex
+
 	// rpcHandler is the single shared A2A JSON-RPC request handler — and,
 	// critically, its single shared in-memory task store — reused across
 	// every per-agent HTTP request. It used to be rebuilt from scratch inside
@@ -361,11 +388,29 @@ func (s *Server) RefreshCards() error {
 	if err != nil {
 		return fmt.Errorf("refresh card registry: %w", err)
 	}
-	s.CardCache = cards
+	s.setCardCache(cards)
 	if s.Executor != nil {
-		s.Executor.CardCache = cards
+		s.Executor.setCardCache(cards)
 	}
 	return nil
+}
+
+// cardCacheSnapshot returns the current CardCache, safe for concurrent use
+// with setCardCache reassigning it from another goroutine. BuildCardRegistry
+// always produces a brand new map rather than mutating an existing one, so
+// the returned map is safe for the caller to range over after the lock is
+// released.
+func (s *Server) cardCacheSnapshot() map[string]*a2a.AgentCard {
+	s.cardMu.RLock()
+	defer s.cardMu.RUnlock()
+	return s.CardCache
+}
+
+// setCardCache atomically replaces CardCache.
+func (s *Server) setCardCache(cards map[string]*a2a.AgentCard) {
+	s.cardMu.Lock()
+	s.CardCache = cards
+	s.cardMu.Unlock()
 }
 
 // AuctionCardSource returns a closure yielding this server's live card registry,
@@ -374,7 +419,7 @@ func (s *Server) RefreshCards() error {
 // (rather than the map) lets callers wire the seam without importing the a2a-go
 // AgentCard type.
 func (s *Server) AuctionCardSource() func() map[string]*a2a.AgentCard {
-	return func() map[string]*a2a.AgentCard { return s.CardCache }
+	return s.cardCacheSnapshot
 }
 
 // Start begins listening on the configured port.
@@ -409,7 +454,7 @@ func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, _ *http.Request) {
 		},
 	}
 
-	for _, c := range s.CardCache {
+	for _, c := range s.cardCacheSnapshot() {
 		card.Skills = append(card.Skills, c.Skills...)
 	}
 
@@ -440,9 +485,11 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/agents/")
 	agentName := strings.Split(path, "/")[0]
 
+	cards := s.cardCacheSnapshot()
+
 	if agentName == "" {
-		names := make([]string, 0, len(s.CardCache))
-		for name := range s.CardCache {
+		names := make([]string, 0, len(cards))
+		for name := range cards {
 			names = append(names, name)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -450,7 +497,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := s.CardCache[agentName]; !ok {
+	if _, ok := cards[agentName]; !ok {
 		http.Error(w, fmt.Sprintf(`{"error":"agent %q not found"}`, agentName), http.StatusNotFound)
 		return
 	}
@@ -465,7 +512,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "healthy",
 		"server": "a2a",
-		"agents": len(s.CardCache),
+		"agents": len(s.cardCacheSnapshot()),
 		"port":   s.Port,
 	})
 }

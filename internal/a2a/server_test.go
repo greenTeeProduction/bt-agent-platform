@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -528,6 +529,100 @@ func TestServer_RefreshCards_PicksUpAgentCreatedAfterStartup(t *testing.T) {
 	if _, ok := srv.AuctionCardSource()()["newcomer"]; !ok {
 		t.Error("AuctionCardSource() candidate pool missing agent created after startup even after RefreshCards")
 	}
+}
+
+// ---- CardCache needs mutex protection: RefreshCards races with every
+// concurrent reader ---------------------------------------------------------
+//
+// RefreshCards (called from bt_agent_create and autopilot's
+// activateAutomation, per the doc comment above) reassigns Server.CardCache
+// and Executor.CardCache with no synchronization at all. Meanwhile every
+// inbound HTTP request reads those same fields concurrently: the per-agent
+// endpoint routing table, the global agent card aggregation, the health
+// check counter, and the auction-bid scoring branch of Execute. Under
+// go test -race, a goroutine calling RefreshCards concurrently with
+// goroutines reading srv.CardCache / srv.Executor.CardCache must not trip
+// the race detector — it currently does, because neither field is guarded
+// by a mutex.
+func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
+	reg, err := agent.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if _, err := reg.Create(agent.Definition{Name: "seed", Tree: "domain:code_review", Description: "seed agent"}); err != nil {
+		t.Fatalf("Create seed agent: %v", err)
+	}
+
+	srv, err := NewServer(reg, nil, 0, "http://localhost:0")
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+
+	// Writer: repeatedly rebuilds CardCache, as production code does after
+	// every registry mutation.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			if err := srv.RefreshCards(); err != nil {
+				t.Errorf("RefreshCards: %v", err)
+				return
+			}
+		}
+		close(done)
+	}()
+
+	// Readers: exercise every path that touches CardCache without holding
+	// any lock — HTTP handlers and the auction-bid scoring branch of Execute.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			rec := httptest.NewRecorder()
+			srv.handleAgentEndpoint(rec, httptest.NewRequest(http.MethodGet, "/agents/seed", nil))
+
+			rec2 := httptest.NewRecorder()
+			srv.handleGlobalAgentCard(rec2, httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil))
+
+			rec3 := httptest.NewRecorder()
+			srv.handleHealth(rec3, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+			_ = srv.AuctionCardSource()()
+		}
+	}()
+
+	// Second reader: the auction-bid scoring branch inside Execute reads
+	// e.CardCache directly (server.go:100), independent of the HTTP handlers.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		announcement := `{"kind":"task_announcement","task_id":"t1","required_tags":["domain"],"min_confidence":0}`
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			execCtx := &a2asrv.ExecutorContext{ContextID: "seed", Message: a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(announcement))}
+			for _, err := range srv.Executor.Execute(context.Background(), execCtx) {
+				if err != nil {
+					t.Errorf("Execute: %v", err)
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
 }
 
 // ---- handleAgentEndpoint must reuse one shared task store across requests --

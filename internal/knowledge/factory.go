@@ -80,15 +80,21 @@ func NewFactory(kg *KnowledgeGraph) *Factory {
 
 // extractTemplates learns structural patterns from all registered trees.
 func (f *Factory) extractTemplates() {
-	// Collect and sort IDs for deterministic template selection.
+	// Snapshot f.Graph.Trees under a single RLock: reading it unprotected here
+	// raced concurrent Register/RegisterEvolved writers (kg.mu.Lock) under
+	// -race, up to a "concurrent map iteration and map write" fatal crash.
+	f.Graph.mu.RLock()
+	metas := make(map[string]*TreeMeta, len(f.Graph.Trees))
 	ids := make([]string, 0, len(f.Graph.Trees))
-	for id := range f.Graph.Trees {
+	for id, meta := range f.Graph.Trees {
+		metas[id] = meta
 		ids = append(ids, id)
 	}
+	f.Graph.mu.RUnlock()
 	sort.Strings(ids)
 
 	for _, id := range ids {
-		meta := f.Graph.Trees[id]
+		meta := metas[id]
 		// For now we store metadata only — trees are resolved at breed time
 		tmpl := &TreeTemplate{
 			SourceID: id,
@@ -262,7 +268,10 @@ func (f *Factory) structuralCrossover(category string, parentIDs []string, task 
 		if len(parents) == 2 {
 			break
 		}
-		if _, registered := f.Graph.Trees[pid]; !registered {
+		f.Graph.mu.RLock()
+		_, registered := f.Graph.Trees[pid]
+		f.Graph.mu.RUnlock()
+		if !registered {
 			continue
 		}
 		if tree := f.Resolve(pid); tree != nil && len(tree.Children) > 0 {
@@ -516,7 +525,9 @@ func (f *Factory) refreshTemplateFitness(tmpl *TreeTemplate) {
 	if tmpl == nil || f.Graph == nil {
 		return
 	}
+	f.Graph.mu.RLock()
 	meta, ok := f.Graph.Trees[tmpl.SourceID]
+	f.Graph.mu.RUnlock()
 	if !ok || meta == nil {
 		return
 	}

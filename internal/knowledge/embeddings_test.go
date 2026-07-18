@@ -1,13 +1,16 @@
 package knowledge
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -381,4 +384,133 @@ func TestDiscoverWithEmbeddings_FallsBackWhenBreakerOpen(t *testing.T) {
 	if id != "" || score != 0 {
 		t.Errorf("expected clean fallback (empty id, zero score) while the embeddings backend is circuit-broken, got id=%q score=%.2f", id, score)
 	}
+}
+
+// =============================================================================
+// Unsynchronized kg.Trees map access (BuildIndex + factory.go read sites)
+// =============================================================================
+//
+// BuildIndex (embeddings.go) reads kg.Trees via len()+range without holding
+// kg.mu, and factory.go's extractTemplates, structuralCrossover, and
+// refreshTemplateFitness read f.Graph.Trees the same unprotected way. Every
+// concurrent writer (Register, RegisterEvolved, ...) mutates kg.Trees under
+// kg.mu.Lock. A concurrent unprotected read racing one of those writes can hit
+// Go's runtime "concurrent map iteration and map write" fatal error — an
+// unrecoverable process crash, not a graceful test failure — independent of
+// whether -race is enabled.
+
+// hammerRegisterCap bounds the distinct IDs hammerRegister cycles through: a
+// completely unthrottled tight loop can drive kg.Trees into the tens of
+// thousands of entries within a couple hundred milliseconds, which would make
+// BuildIndex's per-tree HTTP round trip legitimately exceed a test's timeout
+// budget regardless of correctness. Wrapping the ID space keeps the map size
+// bounded while still continuously writing (fresh inserts up to the cap, then
+// overwrites) for the full hammering duration, so callers still race a
+// concurrent reader against real writes throughout.
+const hammerRegisterCap = 300
+
+// hammerRegister repeatedly registers freshly-IDed trees into kg until stop
+// is closed, racing against whatever concurrent kg.Trees readers the caller
+// is also driving on the calling goroutine. The caller must close(stop) and
+// then Wait() on the returned WaitGroup.
+func hammerRegister(kg *KnowledgeGraph, prefix string, stop <-chan struct{}) *sync.WaitGroup {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		i := 0
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				kg.Register(&TreeMeta{ID: fmt.Sprintf("%s:%d", prefix, i%hammerRegisterCap), Name: "T", Category: "domain"})
+				i++
+			}
+		}
+	}()
+	return &wg
+}
+
+// TestBuildIndex_ConcurrentRegisterNoRace verifies BuildIndex's read of
+// kg.Trees is safe against a concurrent Register call. Each BuildIndex call
+// runs with a bounded per-call timeout: BuildIndex reads len(kg.Trees) twice
+// unsynchronized (once to size its result channel, once as the receive
+// loop's re-evaluated bound), so a concurrent Register growing the map
+// between those two reads can make the receive loop wait for more results
+// than were ever sent — a hang, not just a crash. A bounded per-call timeout
+// surfaces that hang as a fast, clear test failure instead of blocking until
+// the outer `go test -timeout`.
+func TestBuildIndex_ConcurrentRegisterNoRace(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"embedding":[0.1,0.2,0.3]}`))
+	}))
+	defer srv.Close()
+
+	orig := defaultEmbeddingClient
+	defer func() { defaultEmbeddingClient = orig }()
+	defaultEmbeddingClient = &EmbeddingClient{BaseURL: srv.URL, Model: "test"}
+
+	kg := NewKnowledgeGraph()
+	for i := 0; i < 200; i++ {
+		kg.Register(&TreeMeta{ID: fmt.Sprintf("seed:%d", i), Name: "T", Category: "domain"})
+	}
+
+	stop := make(chan struct{})
+	wg := hammerRegister(kg, "added", stop)
+	defer func() {
+		close(stop)
+		wg.Wait()
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		done := make(chan struct{})
+		go func() {
+			_ = kg.BuildIndex()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("BuildIndex hung while Register ran concurrently — unsynchronized kg.Trees length reads let the map grow between BuildIndex's channel-size read and its receive-loop bound")
+		}
+	}
+}
+
+// TestFactory_ConcurrentRegisterNoRace verifies the three unsynchronized
+// f.Graph.Trees reads in factory.go — extractTemplates (via NewFactory),
+// refreshTemplateFitness, and structuralCrossover (both via Breed with
+// caller-supplied parents) — are safe against a concurrent kg.Register call.
+func TestFactory_ConcurrentRegisterNoRace(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	for i := 0; i < 200; i++ {
+		kg.Register(&TreeMeta{ID: fmt.Sprintf("domain:seed%d", i), Name: "T", Category: "domain"})
+	}
+
+	f := NewFactory(kg)
+	f.Resolve = func(id string) *evolution.SerializableNode {
+		return &evolution.SerializableNode{
+			Type: "Sequence",
+			Name: "PreGate",
+			Children: []evolution.SerializableNode{
+				{Type: "Selector", Name: "StrategyRouter", Children: []evolution.SerializableNode{
+					{Type: "Action", Name: "a"},
+					{Type: "Action", Name: "b"},
+				}},
+			},
+		}
+	}
+
+	stop := make(chan struct{})
+	wg := hammerRegister(kg, "domain:added", stop)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = NewFactory(kg) // extractTemplates
+		f.Breed("task", "domain", []string{"domain:seed0", "domain:seed1"})
+	}
+	close(stop)
+	wg.Wait()
 }
