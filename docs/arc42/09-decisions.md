@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-165. Early entries (001–007) record the founding decisions; the rest is
+ADR-166. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -188,6 +188,7 @@ Consolidation notes (2026-07-16):
 | ADR-163 | `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-164 | `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-165 | `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research) | Accepted | 2026-07-18 |
+| ADR-166 | `DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2964,6 +2965,22 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ The fix is metadata-only, mirroring ADR-122's blast radius: no change to `HumanApprovalGate`'s engine semantics, `DelegateToA2A`'s execution, or the HITL store.
 - ⚠️ Any tree or test that previously relied on `core:a2a_handoff` auto-proceeding when `hitl.Policy.Enabled == false` now blocks on a pending HITL request instead — the block's runtime behavior changes for that configuration, not just its metadata shape.
 - Pinned by the two tests named above.
+
+---
+
+## ADR-166: `DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability)
+
+**Context (2026-07-18):** `engine.DelegateToA2AFn` (`internal/engine/a2a_nodes.go`), the function the `a2a` package injects at startup for the `DelegateToA2A` action node to call, took only `(targetURL, task string)`. `InitEngineDelegate` (`internal/a2a/task_bridge.go`) wired it to `client.SendTask(context.Background(), targetURL, task)` — even though `BTAgentClient.SendTask` (`internal/a2a/client.go:31`) already accepted a `context.Context` and the tree's own `*btcore.BTContext[Blackboard]` (which embeds `context.Context`) was available at the `DelegateToA2A` call site and simply discarded. Any cancellation, deadline, or trace value set on the running tree's context — by a caller's timeout, a parent `context.WithCancel`, or future request-scoped tracing — stopped propagating at the delegation boundary, and every remote A2A call ran under a fresh, uncancellable background context regardless of what the tree above it was doing. This is milestone 1 of the 5-milestone Q3 Reliability program to harden the direct A2A delegation path with context propagation, retry, and a circuit breaker; the retry and circuit-breaker milestones that follow need a live, cancellable context to bound their own backoff/retry loops, so threading the context through is the load-bearing first step the rest of the program builds on.
+
+**Decision:** `engine.DelegateToA2AFn`'s signature becomes `func(ctx context.Context, targetURL, task string) (string, error)`. The `DelegateToA2A` action passes `ctx` — the `*btcore.BTContext[Blackboard]` already in scope — directly as the first argument instead of dropping it, and `InitEngineDelegate` forwards that same `ctx` into `client.SendTask(ctx, ...)` instead of substituting `context.Background()`. `TestDelegateToA2A_ContextPropagates` (`internal/engine/a2a_nodes_test.go`) pins the contract end-to-end: it attaches a context value to a `context.Background()`-derived context, wraps it in a `*btcore.BTContext[Blackboard]`, invokes the registered `DelegateToA2A` action, and asserts the injected `DelegateToA2AFn` receives a context carrying that same value — proving propagation rather than mere signature compatibility. `TestInitEngineDelegate` (`internal/a2a/init_test.go`) and the five other `internal/engine/a2a_nodes_test.go` cases that stub `DelegateToA2AFn` were updated to the new signature.
+
+**Status:** Accepted (2026-07-18) — pinned by `TestDelegateToA2A_ContextPropagates` (`internal/engine/a2a_nodes_test.go`).
+
+**Consequences:**
+- ✅ Cancellation, deadlines, and context values set on a running tree now reach the A2A client's `SendTask` call instead of being silently replaced by an uncancellable `context.Background()`.
+- ✅ Establishes the `ctx`-carrying call shape milestones 2–5 of the DelegateToA2A hardening program (retry and circuit breaker) depend on to bound their own timing against the caller's context.
+- ⚠️ `engine.DelegateToA2AFn` is a breaking signature change for any other injector of this package-level var; the only production injector (`InitEngineDelegate`) and all test stubs in this repo were updated in the same change.
+- Pinned by `TestDelegateToA2A_ContextPropagates`; the pre-existing `DelegateToA2A` test suite (`internal/engine/a2a_nodes_test.go`) and `TestInitEngineDelegate` (`internal/a2a/init_test.go`) continue to pass against the new signature.
 
 ---
 

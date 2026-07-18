@@ -57,7 +57,7 @@ func (b *TaskStateBridge) IsTerminal(state a2a.TaskState) bool {
 // Must be called before any BT tree executes a DelegateToA2A node.
 func InitEngineDelegate() {
 	client := NewBTAgentClient()
-	engine.DelegateToA2AFn = func(targetURL, task string) (string, error) {
-		return client.SendTask(context.Background(), targetURL, task)
+	engine.DelegateToA2AFn = func(ctx context.Context, targetURL, task string) (string, error) {
+		return client.SendTask(ctx, targetURL, task)
 	}
 }

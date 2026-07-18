@@ -1,11 +1,14 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
+
+type a2aTestCtxKey struct{}
 
 // ─── DelegateToA2A Tests ────────────────────────────────────────────────────
 
@@ -18,7 +21,7 @@ func TestDelegateToA2A_MissingURL(t *testing.T) {
 
 	// Save and restore DelegateToA2AFn
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, _ string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, _ string) (string, error) {
 		return "ok", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -37,6 +40,44 @@ func TestDelegateToA2A_MissingURL(t *testing.T) {
 	}
 }
 
+// TestDelegateToA2A_ContextPropagates pins the contract that DelegateToA2A
+// forwards the tree's context (the *btcore.BTContext, which embeds
+// context.Context) into DelegateToA2AFn instead of dropping it — so
+// cancellation/deadlines/trace values set on the running tree reach the A2A
+// client call.
+func TestDelegateToA2A_ContextPropagates(t *testing.T) {
+	registerA2ANodes()
+	action, ok := actionRegistry["DelegateToA2A"]
+	if !ok {
+		t.Fatal("DelegateToA2A not registered")
+	}
+
+	origFn := DelegateToA2AFn
+	var capturedCtx context.Context
+	DelegateToA2AFn = func(ctx context.Context, _, _ string) (string, error) {
+		capturedCtx = ctx
+		return "ok", nil
+	}
+	defer func() { DelegateToA2AFn = origFn }()
+
+	wantCtx := context.WithValue(context.Background(), a2aTestCtxKey{}, "trace-id-123")
+	bb := &Blackboard{
+		Task:       "do task",
+		ChainState: map[string]any{"a2a_target_url": "http://example.com"},
+	}
+	ctx := &btcore.BTContext[Blackboard]{Context: wantCtx, Blackboard: bb}
+	status := action(ctx)
+	if status != 1 {
+		t.Errorf("expected success (1), got %d", status)
+	}
+	if capturedCtx == nil {
+		t.Fatal("expected DelegateToA2AFn to receive a non-nil context")
+	}
+	if got := capturedCtx.Value(a2aTestCtxKey{}); got != "trace-id-123" {
+		t.Errorf("expected the tree's context to propagate to DelegateToA2AFn, got value %v", got)
+	}
+}
+
 // TestDelegateToA2A_RateLimitCarryoverPropagates pins the carryover contract
 // across the A2A boundary: when the remote agent's run ended in the rate-limit
 // carryover (the A2A server reports the task failed with the sentinel in the
@@ -49,7 +90,7 @@ func TestDelegateToA2A_RateLimitCarryoverPropagates(t *testing.T) {
 	action := actionRegistry["DelegateToA2A"]
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, _ string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, _ string) (string, error) {
 		return "", fmt.Errorf("A2A task failed: goap_fusion_rate_limited: Claude rate-limit backoff active")
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -75,7 +116,7 @@ func TestDelegateToA2A_MissingTaskEmptyChainState(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, _ string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, _ string) (string, error) {
 		return "ok", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -103,7 +144,7 @@ func TestDelegateToA2A_UsesTaskFromChainState(t *testing.T) {
 
 	var capturedTask string
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, task string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, task string) (string, error) {
 		capturedTask = task
 		return "ok", nil
 	}
@@ -164,7 +205,7 @@ func TestDelegateToA2A_FnReturnsError(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, _ string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, _ string) (string, error) {
 		return "", fmt.Errorf("connection refused")
 	}
 	defer func() { DelegateToA2AFn = origFn }()
@@ -194,7 +235,7 @@ func TestDelegateToA2A_Success(t *testing.T) {
 	}
 
 	origFn := DelegateToA2AFn
-	DelegateToA2AFn = func(_, _ string) (string, error) {
+	DelegateToA2AFn = func(_ context.Context, _, _ string) (string, error) {
 		return "A2A response: task completed", nil
 	}
 	defer func() { DelegateToA2AFn = origFn }()

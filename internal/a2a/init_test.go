@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"context"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -13,7 +14,7 @@ func TestInitEngineDelegate(t *testing.T) {
 	InitEngineDelegate()
 
 	// After init, DelegateToA2AFn should be set and callable
-	result, err := engine.DelegateToA2AFn("http://127.0.0.1:19899/unreachable", "test task")
+	result, err := engine.DelegateToA2AFn(context.Background(), "http://127.0.0.1:19899/unreachable", "test task")
 	if err == nil {
 		t.Error("expected error when delegating to unreachable A2A server")
 	}

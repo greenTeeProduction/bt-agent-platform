@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 
 // DelegateToA2AFn is injected by the a2a package at startup.
 // When set, the DelegateToA2A action node uses this to send tasks to external A2A agents.
-var DelegateToA2AFn func(targetURL, task string) (string, error)
+var DelegateToA2AFn func(ctx context.Context, targetURL, task string) (string, error)
 
 // registerA2ANodes registers A2A delegation as behavior tree actions and conditions.
 func registerA2ANodes() {
@@ -44,7 +45,7 @@ func registerA2ANodes() {
 			return -1
 		}
 
-		result, err := DelegateToA2AFn(targetURL, task)
+		result, err := DelegateToA2AFn(ctx, targetURL, task)
 		if err != nil {
 			// A remote rate-limit carryover is a healthy, expected pause, not
 			// a delegation failure: the A2A server keeps the sentinel in the
