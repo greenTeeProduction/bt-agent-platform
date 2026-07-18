@@ -3,14 +3,17 @@ package engine
 // arc42 goal anchoring: the platform's architecture documentation
 // (docs/arc42/01-introduction-goals.md, §1.2 "Quality Goals") is the single
 // authoritative statement of WHAT the platform is trying to be good at —
-// Q1 Correctness, Q2 Evolvability, Q3 Reliability, Q4 Personalization as of 2026-07. Research
+// Q1 Correctness, Q2 Evolvability, Q3 Reliability, Q4 Personalization,
+// Q5 Consistency & Reuse as of 2026-07. Research
 // direction used to come from static hardcoded topic lists with no tie to
 // those goals, so scheduled research could drift into paper-chasing while
 // the documented goals went unserved. Every research entry point (the
 // scheduled researcher's query rotation, the goap-fusion grill, the Claude
 // review fallback, the program seeder, and bt_fusion pattern research) now
 // frames its work with the parsed goals and asks proposals to name the goal
-// they advance.
+// they advance. Q5's reuse-anchoring companion is the graphify components
+// block (graphify_components.go), which surfaces existing canonical
+// components from the knowledge graph next to this goals block.
 //
 // Parsing is best-effort by design: when the doc is missing or the table
 // format drifts, everything degrades to the pre-anchoring behavior rather

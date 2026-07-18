@@ -370,11 +370,18 @@ func recordImplementedGoals(run *SuperpowersRun) {
 		if task.Status != "done" && task.Status != "completed" {
 			continue
 		}
-		title := task.Title
+		// The task text is parsed back from the composed plan, which carries
+		// the TRANSIENT scoping/reuse annotations (failure notes; graphify
+		// REUSE-EXISTING hits whose loc=L<n> coordinates shift on every graph
+		// rebuild). Persist the STRIPPED objective: the store keys on content
+		// (research.Key), so recording enriched text would give the same
+		// landed goal a different key per rebuild — breaking SeenCount dedup
+		// and flooding the newest-N "already done" prompt window.
+		title := stripGoapGoalTransientNotes(task.Title)
 		if len(title) > 120 {
 			title = title[:120]
 		}
-		store.Record("goap:implemented", title, task.Objective)
+		store.Record("goap:implemented", title, stripGoapGoalTransientNotes(task.Objective))
 		// The goal landed: clear its failure budget so a later re-proposal
 		// starts fresh instead of inheriting stale abandon state.
 		if budget != nil && budget.Clear(goapResearchGoalKey(task.Objective)) {
@@ -400,7 +407,10 @@ func superpowersPlanAlreadyImplemented(activePlan string) bool {
 		return false
 	}
 	for _, task := range tasks {
-		if !store.Known(task.Objective) {
+		// Match recordImplementedGoals: objectives are recorded stripped of
+		// their transient annotations, so the lookup must strip identically or
+		// a re-enriched carryover plan never matches its own recorded landing.
+		if !store.Known(stripGoapGoalTransientNotes(task.Objective)) {
 			return false
 		}
 	}

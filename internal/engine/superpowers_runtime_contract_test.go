@@ -487,6 +487,18 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionBuildTreeMateri
 	if err != nil || strings.TrimSpace(out) != "true" {
 		t.Skipf("goapFusionRepo is not a bare repo here (out=%q err=%v)", strings.TrimSpace(out), err)
 	}
+	// SAFETY GUARD (2026-07-18): the pinned action materializes the REAL repo
+	// tree to HEAD (`git checkout -f HEAD -- .`) — on a dirty tracked tree that
+	// is destructive: every uncommitted tracked change is wiped. A plain
+	// `go test ./internal/engine -short` from a clean shell in this bare
+	// checkout did exactly that once mid-implementation. Refuse to exercise the
+	// materializer unless the tracked tree already matches HEAD; the pin still
+	// runs on the clean tree it was designed for. Skip too when cleanliness
+	// cannot be proven — never destroy what we cannot verify.
+	dirty, derr := runGoapShell("git --git-dir=.git --work-tree=. diff --name-only HEAD --")
+	if derr != nil || strings.TrimSpace(dirty) != "" {
+		t.Skipf("uncommitted tracked changes present (or undeterminable, err=%v); running the materializer would destroy them:\n%s", derr, truncateGoap(strings.TrimSpace(dirty), 500))
+	}
 	fn := GetAction("VerifyScheduledGoapFusionBuildTreeMaterialized")
 	if fn == nil {
 		t.Fatalf("missing production Superpowers action %q", "VerifyScheduledGoapFusionBuildTreeMaterialized")

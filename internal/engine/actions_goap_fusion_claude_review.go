@@ -271,7 +271,7 @@ Task context: %s
 
 %s
 %s
-%s
+%s%s
 Return EXACTLY this format, with up to THREE ranked targets:
 GOAL1: <the highest-impact concrete code change the next automated Superpowers/Claude run should implement>
 GAP1: <why the codebase needs it — cite the commit, file, or failure record you reviewed>
@@ -290,7 +290,8 @@ Rules:
 - Prefer one coherent larger change over several trivial ones.
 - Each GAPn must name the arc42 quality goal (e.g. Q1/Q2/Q3) the goal advances.
 - If the reviewed code is clean, say so in FINDINGS and put the best
-  code-level next step in GOAL1.`, task, focus, arc42GoalsPromptBlock(), implementedGoalsPromptBlock())
+  code-level next step in GOAL1.`,
+		task, focus, arc42GoalsPromptBlock(), implementedGoalsPromptBlock(), graphifyComponentsPromptBlock(task))
 }
 
 // goapReviewAllowedTools keeps the review run read-only: the review must not

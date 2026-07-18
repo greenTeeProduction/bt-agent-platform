@@ -40,7 +40,14 @@ func buildGoalDrivenImplementationPlan(task string) string {
 	var sections []string
 	var fileScoped []string
 	for _, goal := range goals {
-		files := extractGoFilePaths(goal)
+		// File scope comes from the goal text and grep "(files: …)" scoping
+		// ONLY. The transient annotations are stripped first: the graphify
+		// REUSE-EXISTING suffix carries advisory .go hit paths (lexical
+		// matches, sometimes pure boilerplate noise) that must never expand —
+		// or, for a formerly pathless goal, entirely define — the task's
+		// modify scope; likewise a failure note quoting a path must not
+		// re-scope the retry.
+		files := extractGoFilePaths(stripGoapGoalTransientNotes(goal))
 		if len(files) == 0 {
 			continue
 		}

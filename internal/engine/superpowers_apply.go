@@ -338,13 +338,20 @@ func captureSuperpowersWorktreePatch(ctx context.Context, runner CommandRunner, 
 // when the main repo is bare (the worktree then holds exactly the tree master
 // is about to fast-forward to).
 func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, run *SuperpowersRun, dir string) error {
+	// Prefer the canonical PATH-robust resolver (arc42 Q5: one owner) for the
+	// graphify check; on resolve failure keep the historical bare-name command
+	// so the apply verify's failure semantics are unchanged.
+	graphifyCmd := goapFusionGraphifyTool + " update ."
+	if bin, err := resolveGraphifyBin(); err == nil {
+		graphifyCmd = bin + " update ."
+	}
 	checks := []struct {
 		name string
 		cmd  string
 	}{
 		{"main-focused-tests", "/usr/local/go/bin/go test ./internal/domains ./internal/engine -count=1 -run 'TestSuperpowersPipeline_ProductionContract|TestSuperpowersRuntime_ActionsRegistered|TestGoapFusion_Structure|TestValidateOutputQuality' -timeout 180s"},
 		{"main-build", "/usr/local/go/bin/go build ./cmd/bt-agent ./cmd/bt-agent-cli"},
-		{"graphify-update", "graphify update ."},
+		{"graphify-update", graphifyCmd},
 	}
 	for _, check := range checks {
 		res := runShellCommand(ctx, runner, dir, check.cmd)

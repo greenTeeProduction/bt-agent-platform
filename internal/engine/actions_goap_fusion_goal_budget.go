@@ -28,15 +28,38 @@ var goapGoalAttemptsPath = research.DefaultGoalAttemptsPath()
 // identically to its clean form.
 const goapGoalFailureNoteMarker = "[PREVIOUS-ATTEMPT-FAILURE:"
 
-// goapResearchGoalKey normalizes a research goal line to its budget key: the
-// queue prefixes ("[Pn] ", "NotebookLM research: ") and any failure note are
-// stripped so the gaps list, the queue, the plan, and the landed objective all
-// key the same goal identically.
-func goapResearchGoalKey(line string) string {
-	t := strings.TrimSpace(line)
+// stripGoapGoalTransientNotes cuts the transient, machine-appended goal-line
+// annotations — the failure note and the graphify REUSE-EXISTING suffix — from
+// s. It is the single owner of "unenrich this goal text" (arc42 Q5):
+// goapResearchGoalKey uses it for budget/dedup identity;
+// recordImplementedGoals and superpowersPlanAlreadyImplemented use it so the
+// durable goap:implemented store keys on the STABLE goal text (the reuse
+// suffix carries graph loc=L<n> coordinates that shift on every graphify
+// rebuild — persisting them would give the same landed goal a new
+// research.Key per rebuild, breaking SeenCount dedup and crowding the
+// newest-N "already done" prompt window with duplicates); and the plan
+// builder uses it so advisory reuse hints never leak .go paths into a task's
+// modify scope.
+func stripGoapGoalTransientNotes(s string) string {
+	t := strings.TrimSpace(s)
 	if i := strings.Index(t, goapGoalFailureNoteMarker); i >= 0 {
 		t = strings.TrimSpace(t[:i])
 	}
+	if i := strings.Index(t, goapGoalReuseNoteMarker); i >= 0 {
+		t = strings.TrimSpace(t[:i])
+	}
+	return t
+}
+
+// goapResearchGoalKey normalizes a research goal line to its budget key: the
+// queue prefixes ("[Pn] ", "NotebookLM research: ") and any failure or
+// reuse-anchoring note are stripped so the gaps list, the queue, the plan, and
+// the landed objective all key the same goal identically. Stripping the
+// transient graphify REUSE-EXISTING suffix is defense in depth: enrichment is
+// applied only to composed plan text, but even a leaked enriched line must
+// never shift a goal's budget/dedup identity.
+func goapResearchGoalKey(line string) string {
+	t := stripGoapGoalTransientNotes(line)
 	for _, p := range []string{"[P0]", "[P1]", "[P2]"} {
 		if strings.HasPrefix(t, p) {
 			t = strings.TrimSpace(strings.TrimPrefix(t, p))

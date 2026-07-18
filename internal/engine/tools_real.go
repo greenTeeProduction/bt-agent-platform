@@ -375,7 +375,14 @@ func newGraphifyTool() *realTool {
 				// Treat bare input as a query
 				args = []string{"query", input}
 			}
-			cmd := exec.CommandContext(ctx, "graphify", args...)
+			// Resolve via the canonical PATH-robust resolver (arc42 Q5: one
+			// owner — a bare "graphify" exec re-introduced the 2026-07-13
+			// reboot PATH-loss fragility the resolver exists to fix).
+			bin, resolveErr := resolveGraphifyBin()
+			if resolveErr != nil {
+				return fmt.Sprintf("graphify error: %v", resolveErr)
+			}
+			cmd := exec.CommandContext(ctx, bin, args...)
 			cmd.Dir = goModuleRoot()
 			out, err := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))

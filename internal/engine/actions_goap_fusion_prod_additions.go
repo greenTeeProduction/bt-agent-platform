@@ -82,8 +82,13 @@ func registerGoapFusionProductionAdditions() {
 		for _, line := range strings.Split(goals, "\n") {
 			scopedLines = append(scopedLines, scopeGoapGoalLine(line))
 		}
-		goals = strings.Join(scopedLines, "\n")
-		task := fmt.Sprintf("%s\n\nGOAP goals:\n%s\n\nGaps:\n%s", bb.Task, goals, gaps)
+		// The saturation check hashes the grep-scoped but NOT graphify-enriched
+		// task text: the reuse suffix carries volatile graph loc=L<n>
+		// coordinates, so hashing it would hand the same stuck goal a fresh
+		// task hash after every graphify rebuild — defeating the two-strikes
+		// refusal below. Checking BEFORE enrichment also keeps refused cycles
+		// from paying the per-goal-line graphify exec cost.
+		task := fmt.Sprintf("%s\n\nGOAP goals:\n%s\n\nGaps:\n%s", bb.Task, strings.Join(scopedLines, "\n"), gaps)
 		// Two failed attempts at the same task hash are signal enough — the
 		// old default of 12 burned half a day of cycles on a stuck goal.
 		maxAttempts := 3
@@ -98,6 +103,20 @@ func registerGoapFusionProductionAdditions() {
 			bb.Outcome = "goap_fusion_plan_saturated"
 			return -1
 		}
+		// After the lexical grep scoping, append knowledge-graph reuse hits
+		// (graphifyScopeGoalLine, arc42 Q5) pointing each goal at existing
+		// canonical components. Both suffixes are TRANSIENT and the reuse hits
+		// ADVISORY: they exist only in this composed plan/task text — the
+		// ChainState goal queue, everything goapResearchGoalKey hashes, the
+		// saturation hash above, and the durable goap:implemented store (which
+		// records stripped objectives) stay untouched. A wedged graphify costs
+		// at most one query timeout here: the first failure latches a cooldown
+		// and the remaining lines fail fast (see graphify_components.go).
+		for i, line := range scopedLines {
+			scopedLines[i] = graphifyScopeGoalLine(line)
+		}
+		goals = strings.Join(scopedLines, "\n")
+		task = fmt.Sprintf("%s\n\nGOAP goals:\n%s\n\nGaps:\n%s", bb.Task, goals, gaps)
 		plan := buildGoalDrivenImplementationPlan(task)
 		dir := filepath.Join(goapFusionRepo, "docs", "superpowers", "plans")
 		path := filepath.Join(dir, fmt.Sprintf("goap-fusion-%s-%s.md", time.Now().Format("20060102T150405"), safeSlug(goals)))

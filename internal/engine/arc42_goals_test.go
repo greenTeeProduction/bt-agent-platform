@@ -88,9 +88,28 @@ func TestLoadArc42QualityGoalsMissingDocReturnsNil(t *testing.T) {
 func TestLoadArc42QualityGoalsAgainstRealRepoDoc(t *testing.T) {
 	// The production doc must stay parseable: if the arc42 §1.2 table format
 	// drifts, goal anchoring silently degrades — fail loudly here instead.
-	path := filepath.Join("..", "..", "docs", "arc42", "go-bt-evolve-arc42.md")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("repo doc not present: %v", err)
+	// The doc location derives from the arc42GoalsDocPaths production var (a
+	// hardcoded second literal here rotted silently when the doc moved to
+	// 01-introduction-goals.md, leaving this pin skipping — inert — for days);
+	// relative entries resolve against the repo root two levels up.
+	var path string
+	for _, p := range arc42GoalsDocPaths {
+		candidates := []string{p}
+		if !filepath.IsAbs(p) {
+			candidates = append(candidates, filepath.Join("..", "..", p))
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				path = c
+				break
+			}
+		}
+		if path != "" {
+			break
+		}
+	}
+	if path == "" {
+		t.Fatalf("no production arc42 doc found at any of %v — goal anchoring is silently degraded", arc42GoalsDocPaths)
 	}
 	old := arc42GoalsDocPaths
 	arc42GoalsDocPaths = []string{path}
@@ -98,6 +117,15 @@ func TestLoadArc42QualityGoalsAgainstRealRepoDoc(t *testing.T) {
 	goals := loadArc42QualityGoals()
 	if len(goals) < 3 {
 		t.Fatalf("production arc42 doc must yield >= 3 quality goals, got %d", len(goals))
+	}
+	var hasQ5 bool
+	for _, g := range goals {
+		if g.ID == "Q5" && strings.Contains(g.Name, "Consistency") {
+			hasQ5 = true
+		}
+	}
+	if !hasQ5 {
+		t.Fatalf("production arc42 doc must include Q5 Consistency & Reuse, got %+v", goals)
 	}
 }
 
@@ -160,7 +188,7 @@ func TestBuildSeedProgramPromptIncludesArc42Goals(t *testing.T) {
 
 func TestBuildGrillRound1QueryIncludesArc42Goals(t *testing.T) {
 	withArc42Doc(t, arc42GoalsTestDoc)
-	q := buildGrillRound1Query("graph snippet here")
+	q := buildGrillRound1Query("graph snippet here", "")
 	if !strings.Contains(q, "graph snippet here") {
 		t.Fatal("grill query must keep the graph snippet")
 	}

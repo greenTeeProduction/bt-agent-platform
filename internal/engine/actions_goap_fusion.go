@@ -540,7 +540,7 @@ func registerGoapFusionActions() {
 		var query string
 		switch grillRound {
 		case 1:
-			query = buildGrillRound1Query(graphSnippet)
+			query = buildGrillRound1Query(graphSnippet, deriveGraphifyReuseTopic(bb.Task))
 		case 2:
 			query = `Push harder. Your previous answer identified gaps — now get CONCRETE.
 
@@ -892,7 +892,7 @@ Task: %s
 Current graphify/codebase context:
 %s
 
-%s
+%s%s
 Return EXACTLY this format, with up to THREE ranked implementation targets and citations in the text where possible:
 GOAL1: <the highest-impact concrete code change the next automated Superpowers/Claude run should implement>
 GAP1: <why the current go-bt-evolve codebase needs it>
@@ -917,7 +917,8 @@ Rules:
 - Each goal must be scoped to the named files/packages; multi-file and multi-package changes are welcome and preferred over trivial single-line edits.
 - Prefer one coherent larger change over several trivial ones.
 - Do not repeat these stale goals unless you have a new concrete variant: "Unblock engine tests" or "Ensure all domain trees have smoke tests".
-- If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`, task, graphReport, implementedGoalsPromptBlock())
+- If no new research-backed implementation exists, still provide the best code-level next step from notebook evidence.`,
+		task, graphReport, implementedGoalsPromptBlock(), graphifyComponentsPromptBlock(task))
 }
 
 // implementedGoalsPromptBlock renders the "already done" list injected into
@@ -1100,14 +1101,17 @@ func extractConversationID(out string) string {
 // buildGrillRound1Query opens the grill conversation: a brutal gap review of
 // the platform, judged against the arc42 quality goals so "missing" means
 // "missing for what the platform is documented to be good at", not missing
-// relative to whatever the research corpus happens to discuss.
-func buildGrillRound1Query(graphSnippet string) string {
+// relative to whatever the research corpus happens to discuss. reuseTopic
+// seeds the graphify components block that answers the grill's own "What
+// existing platform components can we leverage?" question; empty is fine —
+// the block degrades to nothing.
+func buildGrillRound1Query(graphSnippet, reuseTopic string) string {
 	return fmt.Sprintf(`You are a critical reviewer / coach grilling the go-bt-evolve behavior tree agent platform team.
 
 		Current codebase structure (from graphify):
 		%s
 
-		%s
+		%s%s
 		Your job: Be brutally honest. What is this BT framework MISSING to achieve the quality goals above?
 
 		For EACH gap you identify, push hard:
@@ -1123,5 +1127,6 @@ func buildGrillRound1Query(graphSnippet string) string {
 		Rules:
 		- No vague advice. Demand exact tree types, node names, metric thresholds.
 		- Prefer implementation work over documentation.
-		- Return in format: GAP n: <gap> | GOAL: <arc42 quality goal advanced> | FIX: <concrete fix> | FILES: <likely files> | TESTS: <test commands>`, graphSnippet, arc42GoalsPromptBlock())
+		- Return in format: GAP n: <gap> | GOAL: <arc42 quality goal advanced> | FIX: <concrete fix> | FILES: <likely files> | TESTS: <test commands>`,
+		graphSnippet, arc42GoalsPromptBlock(), graphifyComponentsPromptBlock(reuseTopic))
 }
