@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-164. Early entries (001–007) record the founding decisions; the rest is
+ADR-165. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -187,6 +187,7 @@ Consolidation notes (2026-07-16):
 | ADR-162 | `recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
 | ADR-163 | `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-164 | `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research) | Accepted | 2026-07-18 |
+| ADR-165 | `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research) | Accepted | 2026-07-18 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -2946,6 +2947,22 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ An auction whose winner is circuit-broken or whose dispatch retries are exhausted on a transient failure now falls back to the tree's configured delegate instead of hard-failing the whole engine tick — matching how "no eligible bids" was already handled.
 - ✅ A non-retryable dispatch failure (validation, auth — never wrapped with `ErrWinnerDispatchExhausted`) still surfaces as a hard error, since it signals a real problem with the dispatch itself rather than transient unavailability a fallback should paper over.
 - Rejected alternative: implementing ADR-064's flagged runner-up fallback (retrying the next-best bid inside `RunAuction` itself) was not pursued here — this change instead widens the existing delegate-tree fallback at the `AuctionDelegate` seam, which is smaller in scope and reuses machinery already in place. Trying the next-best bid before giving up on the auction remains open, tracked by ADR-064's own flagged gap.
+- Pinned by the two tests named above.
+
+---
+
+## ADR-165: `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research)
+
+**Context (2026-07-18):** NotebookLM characterization-test research on `A2AHandoffBlock()` (`internal/blocks/a2a.go`, registered as the `core:a2a_handoff` composable block in `internal/blocks/builtin.go`) surfaced that `"side_effect_class": "external"` was set on the block's root `Sequence` node's `Metadata`, not on `A2AApproval`, the `HumanApprovalGate` node three levels down that actually gates `DelegateToA2A`. Per `sideEffectRequiresHITL` (`internal/engine/hitl_gate.go:253`), only the `HumanApprovalGate` node's own `Metadata` is consulted — a `Sequence`'s metadata is never read for HITL classification, exactly the gap ADR-122 diagnosed in the opposite direction for `bt_fusion`'s write gate. With no `side_effect_class` on `A2AApproval` itself, `sideEffectRequiresHITL` returned `false` for it, so per `humanApprovalGateCmd.Run` (`hitl_gate.go:132`), whenever the global `hitl.Policy.Enabled` was `false` the gate skipped straight to `DelegateToA2A` with no request ever created — a task could be handed off to an external, untrusted A2A agent with no human approval, though `ADR-008`'s auction path and any HITL-enabled deployment were unaffected since `pol.Enabled` or auction dispatch bypasses this block entirely.
+
+**Decision:** `A2AHandoffBlock`'s root `Sequence.Metadata` (carrying only the dead `side_effect_class` key) is removed, and `"side_effect_class": "external"` is added to `A2AApproval`'s own `Metadata` alongside its existing `"prompt"` key. `sideEffectRequiresHITL(A2AApproval)` now returns `true`, so per `hitl_gate.go:132` the gate always requires resolution through the `hitl.Store` regardless of `pol.Enabled` — matching `"destroy"`-classified gates and the mandatory-human path `bt_fusion`'s `ApproveFusionReportWrite` was moved *off* of by ADR-122 (that gate guards a local, reversible write; this one guards a genuinely external handoff, so the two decisions classify correctly in opposite directions). Pinned by `TestA2AHandoffBlock_Structure` (`internal/blocks/a2a_test.go`), which asserts `side_effect_class == "external"` and a non-empty `prompt` on the gate node directly (not the root), plus `TestA2AHandoffBlock_BuildAndValidate` confirming the tree still builds against the live action/condition registries. Companion characterization tests for the `PrepareA2AHandoff` action (registered `internal/agent/delegate_nodes.go:124`) pin its `a2a_url`→`a2a_target_url` mapping and failure-without-either-URL behavior in `internal/agent/delegate_nodes_test.go`, unchanged by this fix.
+
+**Status:** Accepted (2026-07-18) — pinned by `TestA2AHandoffBlock_Structure` and `TestA2AHandoffBlock_BuildAndValidate` (`internal/blocks/a2a_test.go`).
+
+**Consequences:**
+- ✅ Handing a task off to an external A2A agent through `core:a2a_handoff` now always requires resolution via the HITL store, closing a gap where a disabled global HITL policy (`hitl.Policy.Enabled == false`) let the handoff proceed with no human approval at all.
+- ✅ The fix is metadata-only, mirroring ADR-122's blast radius: no change to `HumanApprovalGate`'s engine semantics, `DelegateToA2A`'s execution, or the HITL store.
+- ⚠️ Any tree or test that previously relied on `core:a2a_handoff` auto-proceeding when `hitl.Policy.Enabled == false` now blocks on a pending HITL request instead — the block's runtime behavior changes for that configuration, not just its metadata shape.
 - Pinned by the two tests named above.
 
 ---
