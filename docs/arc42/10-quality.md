@@ -1,6 +1,6 @@
 # 10. Quality Requirements
 
-Refines the top-level quality goals Q1–Q4 in
+Refines the top-level quality goals Q1–Q5 in
 [§1.2](01-introduction-goals.md); how each goal is achieved is in
 [§4](04-solution-strategy.md).
 
@@ -43,13 +43,20 @@ go-bt-evolve
 │   ├── 21-path merged main tree
 │   ├── Declarative chain types (inventory in §5.5)
 │   └── YAML-defined agents: Easy creation, templating, import/export
-└── #personalized (→ ADR-133)
-    ├── Persona layer: per-user profile, interaction log, habit mining
-    ├── Goal factory: intent/pattern → grounded goap.Goal, persistent GoalQueue
-    ├── Tree factory v2: plan→BT compiler, real structural crossover
-    ├── Executable-by-construction: dynamic resolver + KG registration for every generated tree
-    ├── HITL automation proposals: approval before scheduling auto-created agents
-    └── Feedback-as-fitness: user_satisfaction dimension, per-user gardener + experience bank
+├── #personalized (→ ADR-133)
+│   ├── Persona layer: per-user profile, interaction log, habit mining
+│   ├── Goal factory: intent/pattern → grounded goap.Goal, persistent GoalQueue
+│   ├── Tree factory v2: plan→BT compiler, real structural crossover
+│   ├── Executable-by-construction: dynamic resolver + KG registration for every generated tree
+│   ├── HITL automation proposals: approval before scheduling auto-created agents
+│   └── Feedback-as-fitness: user_satisfaction dimension, per-user gardener + experience bank
+└── #reusable-consistent (→ Q5)
+    ├── One owner per concept: canonical outcome classifier, single retry/backoff, single persistence path
+    ├── Framework-first features: new capabilities become engine actions/composed blocks (KG-registered), not tree-local logic
+    ├── Tree catalog hygiene: knowledge-graph similarity flags semantic duplicates for merge or explicit distinction
+    ├── Action registry hygiene: self-extension grafts get promoted into the canonical registry or pruned
+    ├── Convention uniformity: project-conventions rules enforced on every autonomous merge (go-conventions-reviewer)
+    └── Graphify-anchored planning: GOAP runners consult the graphify knowledge graph before proposing work, so proposals reuse existing components instead of duplicating them
 ```
 
 ## 10.2 Quality Scenarios
@@ -69,6 +76,10 @@ go-bt-evolve
 | QS11 | Plan compilation quality (personalization — ADR-133) | Goal Factory goal → A* plan → CompilePlanToTree | Compiled tree passes ValidateTreeFull + benchmark.QuickValidate on first compile | ≥80% first-compile pass rate |
 | QS12 | Personal tree evolution safety (personalization — ADR-133) | 10 gardener cycles on a personal tree with user feedback | `user_satisfaction` fitness non-decreasing; regressions roll back from snapshots | Quality gate: ≤20% regression, floor 30 |
 | QS13 | Automation spam guard (personalization — ADR-133) | Agent detects many candidate patterns | Only patterns ≥3 occurrences proposed; per-user cap on active auto-created agents; HITL default-on | 0 unapproved scheduled automations |
+| QS14 | Duplicated functionality (reuse — Q5) | A concern gains a second implementation (e.g. a daemon re-implements outcome classification) | Fleet review or lint flags it; a consolidation program is seeded within one review cycle | Zero concepts with more than one owner package; no "same bug fixed twice" recurrences |
+| QS15 | Tree-specific one-off (consistency — Q5) | A capability needed by ≥2 trees is proposed inline in one tree | Proposal is reframed as an engine action/composed block and registered in the knowledge graph | KG capability query returns exactly one canonical provider |
+| QS16 | Duplicate tree (reuse — Q5) | Factory/breeding/auto-create produces a tree semantically matching an existing catalog tree | Creation blocked or a merge proposal raised via KG similarity check | No catalog pairs above the similarity threshold without a documented distinction |
+| QS17 | Code clones (reuse — Q5) | New Go code introduces a clone of existing code | Pre-commit/verify gate fails; the clone is consolidated before landing | No new clone groups above the lint threshold land |
 
 ---
 
