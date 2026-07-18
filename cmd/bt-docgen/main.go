@@ -213,11 +213,13 @@ func main() {
 		fmt.Printf("\n  Section %d/%d: %s\n", sm.Number, 12, sm.TreeID)
 
 		// Check dependencies
-		for _, dep := range sm.DependsOn {
-			if !isSectionDone(worldState, dep) {
-				fmt.Printf("    ⚠ Dependency section %d not done — skipping\n", dep)
-				continue
+		if !sectionReady(worldState, sm) {
+			for _, dep := range sm.DependsOn {
+				if !isSectionDone(worldState, dep) {
+					fmt.Printf("    ⚠ Dependency section %d not done — skipping\n", dep)
+				}
 			}
+			continue
 		}
 
 		tree, ok := allTrees[sm.TreeID]
@@ -385,6 +387,16 @@ func isSectionDone(ws goap.DocPlannerWorldState, section int) bool {
 		return ws.Section12Done
 	}
 	return false
+}
+
+// sectionReady reports whether every section sm.DependsOn is already done.
+func sectionReady(ws goap.DocPlannerWorldState, sm goap.SectionMapping) bool {
+	for _, dep := range sm.DependsOn {
+		if !isSectionDone(ws, dep) {
+			return false
+		}
+	}
+	return true
 }
 
 func contains(slice []int, n int) bool {

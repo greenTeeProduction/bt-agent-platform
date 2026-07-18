@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,37 +12,48 @@ import (
 )
 
 func main() {
-	root := flag.String("root", ".", "repository root to validate")
-	jsonOut := flag.Bool("json", false, "print the full report as JSON")
-	flag.Parse()
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// run executes the bt-ci-doctor CLI against args, writing human/JSON output
+// to out and error output to errOut, and returns the process exit code.
+func run(args []string, out, errOut io.Writer) int {
+	fs := flag.NewFlagSet("bt-ci-doctor", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	root := fs.String("root", ".", "repository root to validate")
+	jsonOut := fs.Bool("json", false, "print the full report as JSON")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	report, err := cicd.ValidateWorkflows(*root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bt-ci-doctor: %v\n", err)
-		os.Exit(2)
+		fmt.Fprintf(errOut, "bt-ci-doctor: %v\n", err)
+		return 2
 	}
 	if *jsonOut {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(report)
 	} else {
-		fmt.Println(report.Summary)
+		fmt.Fprintln(out, report.Summary)
 		var advisoryCount int
 		for _, check := range report.Checks {
 			mark := "✓"
 			if !check.Passed {
 				mark = "✗"
 			}
-			fmt.Printf("%s %s — %s\n", mark, check.Name, check.Details)
+			fmt.Fprintf(out, "%s %s — %s\n", mark, check.Name, check.Details)
 			if strings.Contains(check.Name, "advisory") && !check.Passed {
 				advisoryCount++
 			}
 		}
 		if advisoryCount > 0 {
-			fmt.Printf("\nℹ  %d advisory check(s) failed (environment-dependent, not workflow structure issues)\n", advisoryCount)
+			fmt.Fprintf(out, "\nℹ  %d advisory check(s) failed (environment-dependent, not workflow structure issues)\n", advisoryCount)
 		}
 	}
 	if !report.AllPassed {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
