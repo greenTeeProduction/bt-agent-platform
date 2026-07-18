@@ -51,6 +51,22 @@ func ensureSuperpowersTaskSetup(run *SuperpowersRun, task *SuperpowersTask) (dry
 	return false, nil
 }
 
+// superpowersBudgetKillError converts a claude-phase failure that happened
+// after the run's budget context died into the "cycle budget exhausted"
+// infrastructure marker goapInfraResultMarkers refunds — the subprocess was
+// SIGKILLed by the deadline, which is no evidence against the milestone.
+// Returns nil while the context is alive: the failure is then the phase's own
+// and the caller reports its genuine error. (2026-07-18: nine consecutive
+// cycles were killed mid GREEN-claude at the run budget, the generic
+// "green-phase claude failed: signal: killed" classified genuine, and
+// milestones 8e47518e:0-2 were wrongly blocked.)
+func superpowersBudgetKillError(ctx context.Context, phase string, err error, output string) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	return fmt.Errorf("%s aborted: cycle budget exhausted (%v)\nerror: %v\n%s", phase, ctx.Err(), err, output)
+}
+
 // superpowersTaskRed executes the RED phase: it captures the pre-change
 // worktree status (baseline for later drift checks) and asks Claude Code to
 // add/update only the failing regression test for the task.
@@ -63,6 +79,9 @@ func superpowersTaskRed(ctx context.Context, runner CommandRunner, claude Claude
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red-claude-output.md"), []byte(redClaudeRes.Output), 0o644)
 	if redClaudeRes.Err != nil {
 		task.Status = "failed"
+		if kill := superpowersBudgetKillError(ctx, "red-phase claude", redClaudeRes.Err, redClaudeRes.Output); kill != nil {
+			return kill
+		}
 		return fmt.Errorf("red-phase claude failed: %v\n%s", redClaudeRes.Err, redClaudeRes.Output)
 	}
 	return nil
@@ -76,6 +95,13 @@ func superpowersTaskVerifyRed(ctx context.Context, runner CommandRunner, run *Su
 	redRes := runShellCommand(ctx, runner, run.WorktreePath, redCmd)
 	redEvidence := formatCommandResult(redRes)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "red.txt"), []byte(redEvidence), 0o644)
+	// A RED command killed by the dead cycle budget looks exactly like the
+	// legit "RED correctly failed" outcome (non-nil Err) — without this guard
+	// the executor marches into a doomed GREEN claude call on a dead context.
+	if redRes.Err != nil && ctx.Err() != nil {
+		task.Status = "failed"
+		return fmt.Errorf("task RED verification aborted: cycle budget exhausted (%v) during: %s\nerror: %v\n%s", ctx.Err(), redCmd, redRes.Err, redRes.Output)
+	}
 	if redRes.Err == nil {
 		task.Status = "failed"
 		return fmt.Errorf("RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: %s", redCmd)
@@ -106,6 +132,9 @@ func superpowersTaskGreen(ctx context.Context, runner CommandRunner, claude Clau
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "claude-output.md"), []byte("# RED phase\n\n"+string(redClaudeOutput)+"\n\n# GREEN phase\n\n"+greenClaudeRes.Output), 0o644)
 	if greenClaudeRes.Err != nil {
 		task.Status = "failed"
+		if kill := superpowersBudgetKillError(ctx, "green-phase claude", greenClaudeRes.Err, greenClaudeRes.Output); kill != nil {
+			return kill
+		}
 		return fmt.Errorf("green-phase claude failed: %v\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
 	}
 	return nil
@@ -345,6 +374,11 @@ func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error
 				}
 				res = finalRes
 			}
+		}
+		// A check killed by the dead cycle budget (not by its own findings)
+		// carries the refund marker, mirroring superpowersTaskVerifyGreen.
+		if ctx.Err() != nil {
+			return fmt.Errorf("verification %s aborted: cycle budget exhausted (%v) during: %s\nerror: %v\n%s", check.name, ctx.Err(), check.cmd, res.Err, res.Output)
 		}
 		return fmt.Errorf("verification %s failed: %v\n%s", check.name, res.Err, res.Output)
 	}

@@ -70,6 +70,9 @@ func TestIsGoapInfraCycleFailure(t *testing.T) {
 		{"claude usage limit is model-agnostic", "failure", "## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nClaude usage limit reached — run /usage-credits to continue.", true},
 		{"plain success", "success", "## GOAP Superpowers Runtime Complete", false},
 		{"cycle-deadline kill during GREEN verification is infra", "failure", "## GOAP Superpowers Execution Failed\n\ntask GREEN verification aborted: cycle budget exhausted (context deadline exceeded) during: go test ./internal/engine -short\nerror: signal: killed", true},
+		{"cycle-deadline kill during GREEN claude is infra (2026-07-18 nine-cycle treadmill)", "failure", "## GOAP Superpowers Execution Failed\n\ngreen-phase claude aborted: cycle budget exhausted (context deadline exceeded)\nerror: signal: killed", true},
+		{"claude killed with live budget (OOM-class) stays genuine", "failure", "## GOAP Superpowers Execution Failed\n\ngreen-phase claude failed: signal: killed", false},
+		{"cycle-deadline kill during run verification is infra", "failure", "## GOAP Superpowers Verification Failed\n\nverification focused-tests aborted: cycle budget exhausted (context deadline exceeded) during: go test ./internal/domains ./internal/engine\nerror: signal: killed", true},
 		{"plain GREEN test failure stays genuine", "failure", "## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine -short\nerror: exit status 1\n--- FAIL: TestFoo", false},
 	}
 	for _, c := range cases {

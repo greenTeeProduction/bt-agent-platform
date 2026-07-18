@@ -877,6 +877,16 @@ func markGoapFusionImplDegraded(bb *Blackboard, reason string) {
 	}
 }
 
+// superpowersRuntimeRunBudget bounds one ClaudeSuperpowersPath run end-to-end
+// (task batch, verification, review, apply). The legacy 45 minutes fit only
+// the single-task template: on 2026-07-18 nine consecutive cycles finished a
+// goal-driven batch's tasks 1-2 green in ~40 minutes, were SIGKILLed
+// mid-task-3 at exactly 45:00, and landed nothing while wrongly charging the
+// milestone-abandon budget. Matches ExecuteSuperpowersTaskBatch's 90-minute
+// batch budget; the goap runners' cron ticks skip while a cycle is live, so a
+// longer run stretches cadence instead of overlapping.
+const superpowersRuntimeRunBudget = 90 * time.Minute
+
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) (result int) {
 	bb := ctx.Blackboard
 	// Restore durable charge stamps BEFORE the deferred failure handler below
@@ -935,7 +945,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		return -1
 	}
 	// Honor a durable rate-limit backoff BEFORE creating a worktree or spending
-	// the 45-minute batch attempt: a quota known to be closed makes the whole
+	// the superpowersRuntimeRunBudget attempt: a quota known to be closed makes the whole
 	// run doomed, so degrade to ScheduledAnalysisPath instantly with the exact
 	// rate-limited Result/Outcome shape — the deferred clearSuperpowersPlanState
 	// guard then preserves the plan carryover for the tick after the window
@@ -973,7 +983,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			return -1
 		}
 	}
-	c, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	c, cancel := context.WithTimeout(context.Background(), superpowersRuntimeRunBudget)
 	defer cancel()
 	// Reap worktrees leaked by earlier crashed/abandoned cycles before doing
 	// new work; failure paths below intentionally keep their worktree for

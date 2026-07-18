@@ -23,6 +23,9 @@ func superpowersTaskReview(ctx context.Context, runner CommandRunner, claude Cla
 	reviewClaudeRes := claude.RunClaude(ctx, run.WorktreePathOrRepo(), reviewPrompt)
 	_ = os.WriteFile(filepath.Join(task.ArtifactDir, "review-output.md"), []byte(reviewClaudeRes.Output), 0o644)
 	if reviewClaudeRes.Err != nil {
+		if kill := superpowersBudgetKillError(ctx, "review-phase claude", reviewClaudeRes.Err, reviewClaudeRes.Output); kill != nil {
+			return "needs_work", "", kill
+		}
 		return "needs_work", "", fmt.Errorf("review-phase claude failed: %v\n%s", reviewClaudeRes.Err, reviewClaudeRes.Output)
 	}
 	verdict, feedback = parseSuperpowersReviewVerdict(reviewClaudeRes.Output)

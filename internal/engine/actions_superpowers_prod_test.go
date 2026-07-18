@@ -1149,3 +1149,16 @@ func TestFusionAnalysis_RateLimitCarryoverNotConflatedAsDegradation(t *testing.T
 		t.Fatalf("no impl-degraded signal must yield an empty section; got:\n%s", section)
 	}
 }
+
+// superpowersRuntimeRunBudget must fit a full goal-driven batch (up to three
+// RED→GREEN claude executions plus verification, review, and apply). The
+// legacy 45-minute budget fit only the single-task template: on 2026-07-18
+// nine consecutive cycles (20260718T164339 … 20260718T232740) finished tasks
+// 1-2 green in ~40 minutes and were SIGKILLed mid-task-3 at exactly 45:00,
+// landing nothing. 90 minutes matches ExecuteSuperpowersTaskBatch's budget
+// for the same batch shape.
+func TestSuperpowersRuntimeRunBudgetCoversGoalDrivenBatch(t *testing.T) {
+	if superpowersRuntimeRunBudget != 90*time.Minute {
+		t.Fatalf("superpowersRuntimeRunBudget = %v, want 90m (a 3-milestone batch needs ~55-70m; 45m treadmilled 2026-07-18)", superpowersRuntimeRunBudget)
+	}
+}

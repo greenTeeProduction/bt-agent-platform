@@ -220,3 +220,112 @@ func TestSuperpowersTaskVerifyGreenBudgetExhaustedMarker(t *testing.T) {
 		t.Fatalf("live ctx: must report the failure with the underlying error, got %v", err2)
 	}
 }
+
+// killedClaudeRunner simulates a claude subprocess that died with the given
+// error before producing a verdict — the exact shape a run-budget SIGKILL
+// produces ("signal: killed", empty output).
+type killedClaudeRunner struct{ err error }
+
+func (r killedClaudeRunner) RunClaude(context.Context, string, string) CommandResult {
+	return CommandResult{Command: "claude <prompt>", Err: r.err, Duration: time.Millisecond}
+}
+
+// A GREEN-phase claude call killed by the cycle deadline is no evidence
+// against the milestone: without the budget marker the kill classifies as a
+// genuine implementation failure and charges the milestone-abandon budget.
+// On 2026-07-18 nine consecutive cycles (20260718T164339 … 20260718T232740)
+// re-implemented the same program, were SIGKILLed mid-task-3 GREEN at exactly
+// the 45-minute run budget, and wrongly blocked milestones 8e47518e:0-2.
+func TestSuperpowersTaskGreenBudgetExhaustedMarker(t *testing.T) {
+	run := &SuperpowersRun{WorktreePath: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	task := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	err := superpowersTaskGreen(expired, &scriptedSuperpowersRunner{t: t}, killedClaudeRunner{errors.New("signal: killed")}, run, task, "")
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+	if task.Status != "failed" {
+		t.Fatalf("task status = %q, want failed", task.Status)
+	}
+
+	task2 := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	err2 := superpowersTaskGreen(context.Background(), &scriptedSuperpowersRunner{t: t}, killedClaudeRunner{errors.New("exit status 1")}, run, task2, "")
+	if err2 == nil || strings.Contains(err2.Error(), "cycle budget exhausted") {
+		t.Fatalf("live ctx: must stay a plain claude failure, got %v", err2)
+	}
+	if !strings.Contains(err2.Error(), "green-phase claude failed") {
+		t.Fatalf("live ctx: must keep the legacy green failure message, got %v", err2)
+	}
+}
+
+// Same contract for the RED-phase claude call: a deadline SIGKILL must carry
+// the budget marker, a live-ctx claude failure must keep its legacy message.
+func TestSuperpowersTaskRedBudgetExhaustedMarker(t *testing.T) {
+	run := &SuperpowersRun{WorktreePath: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	task := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	err := superpowersTaskRed(expired, &scriptedSuperpowersRunner{t: t}, killedClaudeRunner{errors.New("signal: killed")}, run, task)
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+	if task.Status != "failed" {
+		t.Fatalf("task status = %q, want failed", task.Status)
+	}
+
+	task2 := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	err2 := superpowersTaskRed(context.Background(), &scriptedSuperpowersRunner{t: t}, killedClaudeRunner{errors.New("exit status 1")}, run, task2)
+	if err2 == nil || strings.Contains(err2.Error(), "cycle budget exhausted") {
+		t.Fatalf("live ctx: must stay a plain claude failure, got %v", err2)
+	}
+	if !strings.Contains(err2.Error(), "red-phase claude failed") {
+		t.Fatalf("live ctx: must keep the legacy red failure message, got %v", err2)
+	}
+}
+
+// A RED verification command killed by the dead cycle budget looks exactly
+// like the legit "RED correctly failed" outcome (non-nil Err), so without a
+// ctx guard the executor marches into a doomed GREEN claude call on a dead
+// context. The kill must surface as the budget marker instead.
+func TestSuperpowersTaskVerifyRedBudgetExhaustedMarker(t *testing.T) {
+	run := &SuperpowersRun{WorktreePath: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	task := &SuperpowersTask{ArtifactDir: t.TempDir(), Tests: []string{"go test ./internal/engine -run TestGuard"}}
+	runner := &scriptedSuperpowersRunner{t: t, testResults: []CommandResult{{Err: errors.New("signal: killed")}}}
+	err := superpowersTaskVerifyRed(expired, runner, run, task)
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+	if task.Status != "failed" {
+		t.Fatalf("task status = %q, want failed", task.Status)
+	}
+
+	task2 := &SuperpowersTask{ArtifactDir: t.TempDir(), Tests: []string{"go test ./internal/engine -run TestGuard"}}
+	runner2 := &scriptedSuperpowersRunner{t: t, testResults: []CommandResult{{Err: errors.New("exit status 1"), Output: "--- FAIL: TestGuard"}}}
+	if err2 := superpowersTaskVerifyRed(context.Background(), runner2, run, task2); err2 != nil {
+		t.Fatalf("live ctx: a genuinely failing RED command must stay the good path, got %v", err2)
+	}
+}
+
+// A run-level verification check killed by the dead cycle budget must carry
+// the budget marker too — "verification focused-tests failed: signal: killed"
+// classifies as genuine and charges the abandon budget otherwise.
+func TestVerifySuperpowersRunBudgetExhaustedMarker(t *testing.T) {
+	runner := &autofixScriptRunner{t: t, steps: []autofixScriptStep{
+		{match: "go test", res: CommandResult{Err: errors.New("signal: killed")}},
+	}}
+	withAutofixVerifyEnv(t, runner)
+	run := &SuperpowersRun{RepoDir: t.TempDir(), ArtifactDir: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := VerifySuperpowersRunRuntime(expired, run)
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+}

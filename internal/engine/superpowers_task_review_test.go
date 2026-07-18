@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -234,5 +235,33 @@ func TestSuperpowersTaskGreenAction_NoFeedback_PromptUnchanged(t *testing.T) {
 	}
 	if strings.Contains(claude.prompts[0], "Address this review feedback:") {
 		t.Fatalf("GREEN prompt should not inject feedback when none is set: %s", claude.prompts[0])
+	}
+}
+
+// A review-phase claude call killed by the dead cycle budget must carry the
+// "cycle budget exhausted" marker (goapInfraResultMarkers refunds it); a
+// live-ctx claude failure keeps the legacy message. The verdict stays
+// needs_work either way — a killed review must never approve.
+func TestSuperpowersTaskReviewBudgetExhaustedMarker(t *testing.T) {
+	run := &SuperpowersRun{WorktreePath: t.TempDir()}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	task := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	verdict, _, err := superpowersTaskReview(expired, &fixedDiffRunner{diff: "diff --git a/x b/x"}, killedClaudeRunner{errors.New("signal: killed")}, run, task)
+	if err == nil || !strings.Contains(err.Error(), "cycle budget exhausted") {
+		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
+	}
+	if verdict != "needs_work" {
+		t.Fatalf("verdict = %q, want needs_work", verdict)
+	}
+
+	task2 := &SuperpowersTask{ArtifactDir: t.TempDir()}
+	verdict2, _, err2 := superpowersTaskReview(context.Background(), &fixedDiffRunner{diff: "diff --git a/x b/x"}, killedClaudeRunner{errors.New("exit status 1")}, run, task2)
+	if err2 == nil || strings.Contains(err2.Error(), "cycle budget exhausted") {
+		t.Fatalf("live ctx: must stay a plain claude failure, got %v", err2)
+	}
+	if !strings.Contains(err2.Error(), "review-phase claude failed") || verdict2 != "needs_work" {
+		t.Fatalf("live ctx: legacy message + needs_work verdict required, got verdict=%q err=%v", verdict2, err2)
 	}
 }
