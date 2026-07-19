@@ -1091,7 +1091,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// The per-worktree sweep above only deletes branches whose worktree dir is
 	// still present; branches orphaned after their dir is gone accumulate
 	// unbounded (89 leaked as of 2026-07-13). Reap the merged ones here.
-	if reaped := reapOrphanedSuperpowersBranches(c, defaultSuperpowersCommandRunner, run.RepoDir); len(reaped) > 0 {
+	if reaped := reapOrphanedSuperpowersBranches(c, defaultSuperpowersCommandRunner, run.RepoDir, superpowersRunsDir); len(reaped) > 0 {
 		Info("reaped orphaned superpowers branches", "count", len(reaped), "branches", strings.Join(reaped, ", "))
 	}
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {

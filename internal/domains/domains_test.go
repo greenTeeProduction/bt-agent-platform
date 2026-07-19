@@ -480,6 +480,26 @@ func TestAllDomainTreesHaveDescriptions(t *testing.T) {
 	}
 }
 
+// conditionDescriptionGaps walks node and its descendants and returns the Name
+// of every Condition node whose Description is empty (after trimming
+// whitespace). It is the shared implementation behind every "Condition nodes
+// must be described" coverage guard in this file. Centralizing it here means
+// TestConditionDescriptionWalkerDetectsBlankDescriptions can exercise the
+// walker's violation-detection branch directly — the per-tree guards below
+// only ever walk already-clean production trees, so without that dedicated
+// test a walker that silently stopped recursing or checked the wrong field
+// would never be caught.
+func conditionDescriptionGaps(node evolution.SerializableNode) []string {
+	var gaps []string
+	if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
+		gaps = append(gaps, node.Name)
+	}
+	for _, child := range node.Children {
+		gaps = append(gaps, conditionDescriptionGaps(child)...)
+	}
+	return gaps
+}
+
 // TestAllDomainTreeConditionsHaveDescriptions guards condition coverage: every
 // Condition node in every registered curated (non-arc42) domain tree must carry
 // a non-empty Description. The bt-agent switch_tree tool and the gardener surface
@@ -490,21 +510,13 @@ func TestAllDomainTreesHaveDescriptions(t *testing.T) {
 // whose semantics live in the section name, so they are exempt, consistent with
 // the other curated-only guards in this file.
 func TestAllDomainTreeConditionsHaveDescriptions(t *testing.T) {
-	var walk func(treeName string, node evolution.SerializableNode)
-	walk = func(treeName string, node evolution.SerializableNode) {
-		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
-			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
-		}
-		for _, child := range node.Children {
-			walk(treeName, child)
-		}
-	}
-
 	for name, tree := range AllDomainTrees() {
 		if strings.HasPrefix(name, "arc42:") {
 			continue
 		}
-		walk(name, *tree)
+		for _, gap := range conditionDescriptionGaps(*tree) {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", name, gap)
+		}
 	}
 }
 
@@ -535,23 +547,51 @@ func TestSmokeTestedDomainTreesHaveConditionDescriptions(t *testing.T) {
 		"kanban_autopilot":    KanbanAutoPilotTree,
 	}
 
-	var walk func(treeName string, node evolution.SerializableNode)
-	walk = func(treeName string, node evolution.SerializableNode) {
-		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
-			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
-		}
-		for _, child := range node.Children {
-			walk(treeName, child)
-		}
-	}
-
 	for name, fn := range extraSmokeTrees {
 		tree := fn()
 		if tree == nil {
 			t.Errorf("smoke-tested tree %q returned nil", name)
 			continue
 		}
-		walk(name, *tree)
+		for _, gap := range conditionDescriptionGaps(*tree) {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", name, gap)
+		}
+	}
+}
+
+// TestConditionDescriptionWalkerDetectsBlankDescriptions is a meta-regression
+// guard for the condition-description walker itself. TestAllDomainTreeConditionsHaveDescriptions,
+// TestSmokeTestedDomainTreesHaveConditionDescriptions, and
+// TestResolverReachableDomainTreesHaveConditionDescriptions only ever walk
+// production trees that are already clean at HEAD, so none of them ever
+// exercises the walker's "found a violation" branch — a walker that stopped
+// recursing into children, or checked the wrong field, would silently pass
+// forever without ever being caught. This test feeds the shared walker a
+// synthetic tree with a deliberately blank Condition Description and asserts
+// it is caught, protecting the condition-coverage invariant going forward
+// even though every real domain tree is already covered.
+func TestConditionDescriptionWalkerDetectsBlankDescriptions(t *testing.T) {
+	synthetic := evolution.SerializableNode{
+		Type: "Selector",
+		Name: "SyntheticRoot",
+		Children: []evolution.SerializableNode{
+			{
+				Type:        "Condition",
+				Name:        "SyntheticBlankCondition",
+				Description: "",
+			},
+			{
+				Type:        "Condition",
+				Name:        "SyntheticDescribedCondition",
+				Description: "has a description",
+			},
+		},
+	}
+
+	gaps := conditionDescriptionGaps(synthetic)
+
+	if len(gaps) != 1 || gaps[0] != "SyntheticBlankCondition" {
+		t.Fatalf("conditionDescriptionGaps did not catch the blank-description Condition: got %v, want [SyntheticBlankCondition]", gaps)
 	}
 }
 
@@ -1019,23 +1059,15 @@ func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
 // switch_tree tool surface these per-node descriptions as the human-readable
 // routing rationale, and a blank one advertises an unexplained gate to operators.
 func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
-	var walk func(treeName string, node evolution.SerializableNode)
-	walk = func(treeName string, node evolution.SerializableNode) {
-		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
-			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", treeName, node.Name)
-		}
-		for _, child := range node.Children {
-			walk(treeName, child)
-		}
-	}
-
 	for name, fn := range resolverReachableExtraDomainTrees() {
 		tree := fn()
 		if tree == nil {
 			t.Errorf("resolver-reachable tree %q returned nil", name)
 			continue
 		}
-		walk(name, *tree)
+		for _, gap := range conditionDescriptionGaps(*tree) {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", name, gap)
+		}
 	}
 }
 
@@ -1077,16 +1109,6 @@ func TestSuperpowersPipelineIsGuarded(t *testing.T) {
 // advertises an unexplained gate to operators. Every arc42 Condition node must carry a
 // non-empty Description, just like every other registered domain tree.
 func TestArc42DomainTreeConditionsHaveDescriptions(t *testing.T) {
-	var walk func(treeName string, node evolution.SerializableNode)
-	walk = func(treeName string, node evolution.SerializableNode) {
-		if node.Type == "Condition" && strings.TrimSpace(node.Description) == "" {
-			t.Errorf("tree %q: Condition node %q has an empty Description (arc42 condition coverage gap)", treeName, node.Name)
-		}
-		for _, child := range node.Children {
-			walk(treeName, child)
-		}
-	}
-
 	arc42 := Arc42Trees()
 	if len(arc42) == 0 {
 		t.Fatal("Arc42Trees() returned no trees")
@@ -1100,7 +1122,9 @@ func TestArc42DomainTreeConditionsHaveDescriptions(t *testing.T) {
 			t.Errorf("arc42 tree %q is nil", name)
 			continue
 		}
-		walk(name, *tree)
+		for _, gap := range conditionDescriptionGaps(*tree) {
+			t.Errorf("tree %q: Condition node %q has an empty Description (arc42 condition coverage gap)", name, gap)
+		}
 	}
 }
 

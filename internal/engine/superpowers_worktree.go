@@ -232,10 +232,16 @@ func sweepStaleSuperpowersWorktrees(ctx context.Context, runner CommandRunner, r
 // worktree dir, so once the dir is gone (landed-run cleanup, an earlier sweep,
 // or an OS /tmp wipe) the branch is orphaned forever and accumulates unbounded.
 // `git branch -d` deletes only branches merged into HEAD (master in the bare
-// repo), so an unmerged orphan holding un-landed work survives for manual
-// triage; a branch still attached to a worktree is skipped. Best-effort by
-// design: returns the reaped branch names and never fails the calling run.
-func reapOrphanedSuperpowersBranches(ctx context.Context, runner CommandRunner, repoDir string) []string {
+// repo); a branch still attached to a worktree is skipped entirely. An
+// unmerged orphan (`-d` fails) is only force-reaped via
+// archiveAndDeleteSuperpowersBranch once it is both older than
+// staleSuperpowersBranchMaxAge and either an abandoned pending_patch run
+// (recovery attempts exhausted, per superpowersBranchRunAbandoned) or missing
+// its worktree.patch landing artifact (superpowersBranchPatchArtifactMissing)
+// — a branch that is merely young, or that still has recovery attempts
+// remaining with its patch present, is never touched. Best-effort by design:
+// returns the reaped branch names and never fails the calling run.
+func reapOrphanedSuperpowersBranches(ctx context.Context, runner CommandRunner, repoDir, runsDir string) []string {
 	if runner == nil {
 		runner = defaultSuperpowersCommandRunner
 	}
@@ -243,21 +249,102 @@ func reapOrphanedSuperpowersBranches(ctx context.Context, runner CommandRunner, 
 	for _, b := range superpowersWorktreeBranches(ctx, runner, repoDir) {
 		held[b] = true
 	}
-	list := runner.Run(ctx, repoDir, "git", "branch", "--list", "superpowers/*", "--format=%(refname:short)")
+	list := runner.Run(ctx, repoDir, "git", "branch", "--list", "superpowers/*", "--format=%(refname:short)^%(committerdate:iso-strict)")
 	if list.Err != nil {
 		return nil
 	}
 	var reaped []string
 	for _, line := range strings.Split(list.Output, "\n") {
-		branch := strings.TrimSpace(line)
+		raw := strings.TrimSpace(line)
+		if raw == "" {
+			continue
+		}
+		branch, committerDate, _ := strings.Cut(raw, "^")
 		if branch == "" || held[branch] {
 			continue
 		}
 		if res := runner.Run(ctx, repoDir, "git", "branch", "-d", branch); res.Err == nil {
 			reaped = append(reaped, branch)
+			continue
+		}
+		if !superpowersBranchOlderThanCutoff(committerDate, staleSuperpowersBranchMaxAge) {
+			continue
+		}
+		runID := strings.TrimPrefix(branch, "superpowers/")
+		if !superpowersBranchRunAbandoned(runsDir, runID) && !superpowersBranchPatchArtifactMissing(runsDir, runID) {
+			continue
+		}
+		if err := archiveAndDeleteSuperpowersBranch(ctx, runner, repoDir, runsDir, branch); err == nil {
+			reaped = append(reaped, branch)
 		}
 	}
 	return reaped
+}
+
+// staleSuperpowersBranchMaxAge is the grace period before an orphaned
+// superpowers/* branch becomes eligible for age-based reaping, once it is
+// also confirmed abandoned or missing its landing patch artifact.
+const staleSuperpowersBranchMaxAge = 7 * 24 * time.Hour
+
+// superpowersBranchOlderThanCutoff reports whether committerDate (expected in
+// RFC3339, as produced by `git log -1 --format=%cI`) is older than maxAge. An
+// empty or unparseable date is never reapable — unknown age must not be
+// treated as old age.
+func superpowersBranchOlderThanCutoff(committerDate string, maxAge time.Duration) bool {
+	t, err := time.Parse(time.RFC3339, committerDate)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) > maxAge
+}
+
+// superpowersBranchRunAbandoned reports whether the run recorded at
+// <runsDir>/<runID>/run.json is a parked pending_patch run that has
+// exhausted its pendingPatchRecoveryCheckName recovery attempts (see
+// actions_superpowers_prod.go). A missing run.json, a below-max attempt
+// count, or any non-pending_patch ApplyStatus all report not abandoned.
+func superpowersBranchRunAbandoned(runsDir, runID string) bool {
+	run, err := readSuperpowersRunJSON(filepath.Join(runsDir, runID, "run.json"))
+	if err != nil {
+		return false
+	}
+	return run.ApplyStatus == "pending_patch" && pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts
+}
+
+// superpowersBranchPatchArtifactMissing reports whether the run's landing
+// patch artifact, <runsDir>/<runID>/verification/worktree.patch, is absent —
+// the same path convention applySuperpowersRunToMainRepo writes to in
+// superpowers_apply.go.
+func superpowersBranchPatchArtifactMissing(runsDir, runID string) bool {
+	_, err := os.Stat(filepath.Join(runsDir, runID, "verification", "worktree.patch"))
+	return err != nil
+}
+
+// archiveAndDeleteSuperpowersBranch captures `git diff --binary
+// master...branch` into the run's <runsDir>/<runID>/verification/reaped-branch.patch
+// archive, then force-deletes branch with `git branch -D`. The archive is
+// written before the delete so a reaped branch's changes are never lost even
+// when they were never merged.
+func archiveAndDeleteSuperpowersBranch(ctx context.Context, runner CommandRunner, repoDir, runsDir, branch string) error {
+	if runner == nil {
+		runner = defaultSuperpowersCommandRunner
+	}
+	runID := strings.TrimPrefix(branch, "superpowers/")
+	diff := runner.Run(ctx, repoDir, "git", "diff", "--binary", "master..."+branch)
+	if diff.Err != nil {
+		return fmt.Errorf("git diff --binary master...%s failed: %v\n%s", branch, diff.Err, diff.Output)
+	}
+	archivePath := filepath.Join(runsDir, runID, "verification", "reaped-branch.patch")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(archivePath, []byte(diff.Output), 0o644); err != nil {
+		return err
+	}
+	if res := runner.Run(ctx, repoDir, "git", "branch", "-D", branch); res.Err != nil {
+		return fmt.Errorf("git branch -D %s failed: %v\n%s", branch, res.Err, res.Output)
+	}
+	return nil
 }
 
 // superpowersWorktreeBranches maps registered worktree paths to their branch

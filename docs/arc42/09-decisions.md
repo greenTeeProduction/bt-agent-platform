@@ -199,6 +199,7 @@ Consolidation notes (2026-07-16):
 | ADR-174 | `internal/llm.Client` and Its `ErrorRecorder`/`TracedLLM`/`FallbackLLM` Decorators Implement `GenerateWithMaxTokens`, Closing ADR-167's Flagged Production-Stack Gap (NotebookLM Research) | Accepted | 2026-07-18 |
 | ADR-175 | `internal/persona.FinalizeAutomationApproval`/`FinalizeFeedbackEscalation` Are Extracted as Binary-Agnostic Functions and Wired into `bt-dashboard`'s `HandleHITL`, Closing the Dashboard/MCP HITL-Finalization Parity Gap (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
 | ADR-176 | `util.SaveJSONAtomic`/`LoadJSON` Become the One Canonical Implementation of ADR-003's Atomic-Write Pattern, Fixing Three Sites That Had Silently Drifted from It (Q5 Consistency & Reuse) | Accepted | 2026-07-18 |
+| ADR-177 | `reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability) | Accepted | 2026-07-19 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3178,6 +3179,23 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ `hitl.Store.save` previously wrote compact JSON (`json.Marshal`) specifically because, per its own removed comment, "indentation tripled its size" for a machine-only file; migrating to `util.SaveJSONAtomic`'s hardcoded `json.MarshalIndent` reintroduces that size cost for human readability the store doesn't need. Accepted as the cost of one canonical helper rather than special-casing compact output; pinned (not just permitted) by `TestStoreSave_UsesCanonicalAtomicJSONFormatAndPermission`.
 - Rejected alternative: giving `SaveJSONAtomic` options for indentation/permissions/locking — rejected to keep the helper's surface minimal; six call sites' worth of variation behind an options struct would recreate the duplication it was meant to remove. Callers that need something other than the 0644/indented default restore it themselves with one extra line.
 - Cross-process locking remains deliberately out of scope — see `DeadLetterQueue`'s `acquireExperienceLock` (→ §8) for the pattern call sites should follow when they need it.
+
+---
+
+## ADR-177: `reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability)
+
+**Context (2026-07-19):** Commit `8f4af50` (2026-07-13, never separately logged here) introduced `reapOrphanedSuperpowersBranches`, which reclaims orphaned `superpowers/*` branches — ones whose worktree directory is gone but whose branch ref lingers — via `git branch -d`, a delete that only succeeds for branches already merged into `master`. That was intentionally conservative: an unmerged orphan (un-landed work whose worktree dir was already cleaned up) simply survived forever for manual triage. In practice no manual triage was happening, so the conservatism just became a slower leak alongside the one the original sweep fixed.
+
+**Decision:** When `git branch -d` fails (branch is unmerged), `reapOrphanedSuperpowersBranches` now applies three gates, all of which must clear before the branch is touched: (1) age — the branch's `%(committerdate:iso-strict)` must be more than `staleSuperpowersBranchMaxAge` (7 days) old, via `superpowersBranchOlderThanCutoff`, which treats an empty/unparseable date as *not* old rather than risk an unintended sweep; (2) it must be either an abandoned `pending_patch` run — `superpowersBranchRunAbandoned` reuses the existing `pendingPatchRecoveryAttempts`/`pendingPatchRecoveryMaxAttempts` bookkeeping (`actions_superpowers_prod.go`) that already gates a related recovery loop, rather than inventing a second abandonment signal — or missing its `verification/worktree.patch` landing artifact (`superpowersBranchPatchArtifactMissing`, same path convention `superpowers_apply.go` writes to). Only then does `archiveAndDeleteSuperpowersBranch` run: it captures `git diff --binary master...<branch>` to `docs/superpowers/runs/<id>/verification/reaped-branch.patch` *before* force-deleting with `git branch -D`, so a reaped branch's un-landed changes are archived, never silently discarded. `reapOrphanedSuperpowersBranches` gained a `runsDir` parameter (matching the existing `recoverGoapFusionPendingPatchesInDir(ctx, runner, runsDir)` convention) so tests can point the gates at a temp dir instead of the hardcoded `superpowersRunsDir` constant; the one production call site (`actions_superpowers_prod.go`) now passes it through.
+- Rejected alternative: reap any unmerged orphan branch older than the age cutoff, without the abandonment/patch-missing check — rejected because "orphaned" only means the worktree dir is gone, not that the run failed; a young-but-orphaned run mid-recovery would lose work if age alone were sufficient.
+- Rejected alternative: skip the archive step and rely on git reflog / `git branch -D`'s dangling-commit recovery — rejected as too fragile for unattended, best-effort cleanup; the reflog expires and dangling commits are eventually gc'd, whereas the `.patch` archive is a durable, run-scoped artifact.
+
+**Status:** Accepted (2026-07-19). Pinned by `TestReapOrphanedSuperpowersBranchesAppliesAgeAndAbandonmentGates`, `TestSuperpowersBranchOlderThanCutoff`, `TestSuperpowersBranchRunAbandoned`, `TestSuperpowersBranchPatchArtifactMissing`, and `TestArchiveAndDeleteSuperpowersBranch` (`internal/engine/superpowers_worktree_sweep_test.go`).
+
+**Consequences:**
+- ✅ Unmerged orphaned branches no longer accumulate unbounded — the population previously "never touched" now drains once a run is confirmed either abandoned or already fully landed elsewhere.
+- ✅ Best-effort by design is preserved: a branch that is merely young, or that still has recovery attempts remaining with its patch artifact present, is never force-deleted — matching the function's existing never-fails-the-calling-run contract.
+- ⚠️ The archive write and the branch delete are two separate git/filesystem operations with no shared transaction; a crash between them would leave the archive written but the branch not yet deleted (harmless — the next sweep re-evaluates and re-archives) rather than the reverse (branch gone, no archive), since delete only runs after the archive write succeeds.
 
 ---
 
