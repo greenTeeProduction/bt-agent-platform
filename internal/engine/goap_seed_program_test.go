@@ -1,15 +1,31 @@
 package engine
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/research"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
+
+// syntheticGraphifyReportDeep builds a GRAPH_REPORT.md-shaped document whose
+// analytical sections (God Nodes, Community Hubs, Surprising Connections,
+// Low-Cohesion Files) sit well past the 2500-3500 char head-truncation limits
+// the goap_seed_program.go / actions_goap_fusion.go prompt builders used to
+// apply to the raw report — mirroring how, in a real ~900KB GRAPH_REPORT.md,
+// only the header ever survives a head truncation. deepMarker is placed
+// inside the God Nodes section so tests can assert it reached a built prompt.
+func syntheticGraphifyReportDeep(deepMarker string) string {
+	pad := strings.Repeat("filler filler filler filler filler filler filler filler filler filler ", 100) // ~7300 chars
+	return "## Summary\nshort summary\n\n## Graph Freshness\n" + pad +
+		"\n\n## God Nodes\n" + deepMarker + "\n\n## Community Hubs\nhub body\n\n" +
+		"## Surprising Connections\nsurprising body\n\n## Low-Cohesion Files\nlowcohesion body\n\n## Isolated Nodes\nisolated body\n"
+}
 
 func withSeedFetch(t *testing.T, answer string) {
 	t.Helper()
@@ -250,5 +266,102 @@ MILESTONE2: Build the Distiller in internal/evolution/distiller.go`)
 	}
 	if !strings.Contains(bb.Result, "ungrounded") {
 		t.Fatalf("rejection must explain ungrounded: %s", bb.Result)
+	}
+}
+
+// buildSeedProgramPrompt must carry section-aware graph context (the God
+// Nodes / Community Hubs / Surprising Connections / Low-Cohesion Files slices
+// ReadGraphifyReport already extracts) instead of a raw head truncation of
+// GRAPH_REPORT.md — a report-scale document buries its analytical sections
+// well past the 2500-char head the prompt used to keep, so only the report's
+// header ever reached the LLM.
+func TestBuildSeedProgramPrompt_CarriesSectionAwareGraphContext(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "GRAPH_REPORT.md")
+	if err := os.WriteFile(reportPath, []byte(syntheticGraphifyReportDeep("GodNodeAlphaMarker")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := goapFusionGraphReport
+	goapFusionGraphReport = reportPath
+	t.Cleanup(func() { goapFusionGraphReport = old })
+
+	ps, err := research.OpenPrograms(filepath.Join(dir, "programs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := buildSeedProgramPrompt(ps)
+
+	if !strings.Contains(prompt, "GodNodeAlphaMarker") {
+		t.Fatalf("buildSeedProgramPrompt must carry the God Nodes section instead of a raw head truncation of the report; got:\n%s", prompt)
+	}
+}
+
+// RunGoapFusionNotebookLMResearch's query must carry section-aware graph
+// context for the same reason as buildSeedProgramPrompt above.
+func TestRunGoapFusionNotebookLMResearch_QueryCarriesSectionAwareGraphContext(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "GRAPH_REPORT.md")
+	if err := os.WriteFile(reportPath, []byte(syntheticGraphifyReportDeep("GodNodeBetaMarker")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldReport := goapFusionGraphReport
+	goapFusionGraphReport = reportPath
+	t.Cleanup(func() { goapFusionGraphReport = oldReport })
+
+	var capturedQuery string
+	oldRun := nlmRun
+	nlmRun = func(timeout time.Duration, args ...string) string {
+		if len(args) > 0 {
+			capturedQuery = args[len(args)-1]
+		}
+		// A fail-fast nlm error short-circuits the action right after the
+		// query is built, before it touches the shared vault directory.
+		return "Error: test-induced stop, do not proceed"
+	}
+	t.Cleanup(func() { nlmRun = oldRun })
+
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{}}
+	fn := GetAction("RunGoapFusionNotebookLMResearch")
+	if fn == nil {
+		t.Fatal("RunGoapFusionNotebookLMResearch action is not registered")
+	}
+	fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+
+	if !strings.Contains(capturedQuery, "GodNodeBetaMarker") {
+		t.Fatalf("NotebookLM research query must carry section-aware graph context instead of a raw head truncation of the report; got:\n%s", capturedQuery)
+	}
+}
+
+// GrillMeNotebookLM's round-1 query must carry section-aware graph context
+// for the same reason as buildSeedProgramPrompt above.
+func TestGrillMeNotebookLM_QueryCarriesSectionAwareGraphContext(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "GRAPH_REPORT.md")
+	if err := os.WriteFile(reportPath, []byte(syntheticGraphifyReportDeep("GodNodeGammaMarker")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldReport := goapFusionGraphReport
+	goapFusionGraphReport = reportPath
+	t.Cleanup(func() { goapFusionGraphReport = oldReport })
+
+	var capturedQuery string
+	oldRun := nlmRun
+	nlmRun = func(timeout time.Duration, args ...string) string {
+		if len(args) > 0 {
+			capturedQuery = args[len(args)-1]
+		}
+		return "Error: test-induced stop, do not proceed"
+	}
+	t.Cleanup(func() { nlmRun = oldRun })
+
+	bb := &Blackboard{Task: "improve", ChainState: map[string]any{}}
+	fn := GetAction("GrillMeNotebookLM")
+	if fn == nil {
+		t.Fatal("GrillMeNotebookLM action is not registered")
+	}
+	fn(&btcore.BTContext[Blackboard]{Blackboard: bb})
+
+	if !strings.Contains(capturedQuery, "GodNodeGammaMarker") {
+		t.Fatalf("GrillMe query must carry section-aware graph context instead of a raw head truncation of the report; got:\n%s", capturedQuery)
 	}
 }

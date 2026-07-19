@@ -3,10 +3,13 @@ package engine
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 type applyScriptRunner struct {
@@ -164,5 +167,105 @@ func TestApplySuperpowersRunToMainRepoAppliesVerifiesGraphifiesAndCommits(t *tes
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected command containing %q; calls:\n%s", want, joined)
 		}
+	}
+}
+
+// TestGitStageArgsExcludesGeneratedSuperpowersAndGraphifyPaths pins Q5
+// milestone 1/5: gitStageArgs (the apply-stage landing commit's `git add -A`
+// pathspec, superpowers_commit_autofix.go) must exclude every prefix in
+// superpowersGeneratedPathPrefixes, exactly like superpowersGeneratedCommitExclusions
+// already does for the per-task commit. Today gitStageArgs only excludes
+// docs/superpowers/runs/** and docs/superpowers/plans/** — graphify-out/** is
+// missing, so the landing commit stages and commits graphify-out's heavy
+// regenerated files (55k-line graph.json diffs) even though
+// isGeneratedSuperpowersOrGraphifyPath treats graphify-out as generated and
+// excludes it from dirty-repo gating and per-task commits. That contradiction
+// is exactly what bloated .git to 781MB.
+func TestGitStageArgsExcludesGeneratedSuperpowersAndGraphifyPaths(t *testing.T) {
+	args := gitStageArgs()
+	joined := strings.Join(args, " ")
+	for _, prefix := range superpowersGeneratedPathPrefixes {
+		want := ":(exclude)" + strings.TrimSuffix(prefix, "/") + "/**"
+		if !strings.Contains(joined, want) {
+			t.Fatalf("gitStageArgs() = %v missing exclusion %q for generated path prefix %q; the apply-stage landing commit must exclude the same generated paths as isGeneratedSuperpowersOrGraphifyPath/superpowersGeneratedCommitExclusions or they drift apart", args, want, prefix)
+		}
+	}
+}
+
+// TestCleanupGraphifyOutRemovesUntrackedRegeneratedArtifacts pins Q5
+// milestone 1/5: once graphify-out/graph.json, manifest.json, and cache/ are
+// untracked (git rm --cached) and gitignored, `git checkout -- graphify-out/`
+// — CleanupGraphifyOut's only cleanup step today — is a silent no-op against
+// them, since checkout only restores tracked paths. A cycle's `graphify
+// update .` regenerates these as untracked, gitignored files that then never
+// get cleaned up between cycles. CleanupGraphifyOut must be adjusted to also
+// remove the untracked regenerated outputs, while leaving the still-tracked
+// GRAPH_REPORT.md alone.
+func TestCleanupGraphifyOutRemovesUntrackedRegeneratedArtifacts(t *testing.T) {
+	// The pre-commit hook exports GIT_DIR/GIT_INDEX_FILE while running tests;
+	// inherited here, git commands would silently operate on the OUTER
+	// repository instead of this throwaway one. Scrub for the test's duration.
+	for _, k := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX", "GIT_COMMON_DIR"} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Setenv(k, v)
+			os.Unsetenv(k)
+		}
+	}
+
+	dir := t.TempDir()
+	runInDir(t, dir, "git init -q . && git config user.email t@t.local && git config user.name t")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("graphify-out/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "graphify-out"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "GRAPH_REPORT.md"), []byte("# report\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// GRAPH_REPORT.md stays tracked (force-added past the blanket ignore rule),
+	// mirroring the milestone's "keep GRAPH_REPORT.md tracked" requirement.
+	runInDir(t, dir, "git add -A && git add -f graphify-out/GRAPH_REPORT.md && git commit -qm base")
+
+	// Simulate a cycle's `graphify update .` regenerating outputs that are now
+	// untracked+gitignored (post milestone-1 git rm --cached).
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "graph.json"), []byte(`{"nodes":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "manifest.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "graphify-out", "cache", "ast"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "cache", "ast", "x.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prev := goapFusionRepo
+	goapFusionRepo = dir
+	t.Cleanup(func() { goapFusionRepo = prev })
+
+	fn := GetAction("CleanupGraphifyOut")
+	if fn == nil {
+		t.Fatal("missing action CleanupGraphifyOut")
+	}
+	bb := &Blackboard{Task: "cleanup graphify-out after cycle"}
+	code := fn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("CleanupGraphifyOut = %d, want 1", code)
+	}
+
+	for _, stale := range []string{
+		filepath.Join(dir, "graphify-out", "graph.json"),
+		filepath.Join(dir, "graphify-out", "manifest.json"),
+		filepath.Join(dir, "graphify-out", "cache", "ast", "x.json"),
+	} {
+		if _, err := os.Stat(stale); !os.IsNotExist(err) {
+			t.Fatalf("expected untracked regenerated graphify artifact %s to be removed by CleanupGraphifyOut now that graph.json/manifest.json/cache are untracked (git checkout -- only restores tracked paths); stat err=%v", stale, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "graphify-out", "GRAPH_REPORT.md")); err != nil {
+		t.Fatalf("tracked GRAPH_REPORT.md must survive cleanup: %v", err)
 	}
 }

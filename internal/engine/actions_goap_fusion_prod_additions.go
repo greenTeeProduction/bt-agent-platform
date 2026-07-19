@@ -362,6 +362,16 @@ func registerGoapFusionProductionAdditions() {
 		if out, err := runGoapShell("git checkout -- graphify-out/"); err != nil {
 			setGoapState(bb, "graphify_cleanup_warning", fmt.Sprintf("git checkout -- graphify-out/ failed: %s", truncateGoap(out, 200)))
 		}
+		// graph.json, manifest.json, and cache/ are untracked+gitignored (Q5
+		// milestone 1/5: git rm --cached'd out of the heavy graphify artifacts),
+		// so `git checkout --` above — which only restores TRACKED paths — is a
+		// silent no-op against the regenerated copies a cycle's `graphify update .`
+		// leaves behind. `git clean -x` also removes gitignored files; still
+		// scoped to graphify-out/ so GRAPH_REPORT.md and the other still-tracked
+		// files there are untouched (clean never removes tracked paths).
+		if out, err := runGoapShell("git clean -fdx -- graphify-out/"); err != nil {
+			setGoapState(bb, "graphify_cleanup_warning", fmt.Sprintf("git clean -fdx -- graphify-out/ failed: %s", truncateGoap(out, 200)))
+		}
 		return 1
 	})
 }

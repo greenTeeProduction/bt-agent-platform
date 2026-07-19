@@ -10,7 +10,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -175,7 +174,7 @@ func buildSeedProgramPrompt(ps *research.ProgramStore) string {
 		past = append(past, "- "+p.Title)
 	}
 	done := recentImplementedGoals(10)
-	graph, _ := os.ReadFile(goapFusionGraphReport)
+	graph := readSectionAwareGraphContext()
 	return fmt.Sprintf(`You plan the next multi-cycle improvement program for the go-bt-evolve
 behavior-tree agent platform (Go, packages under internal/).
 
@@ -206,5 +205,5 @@ open with an imperative verb; milestones must be landable one per task with
 tests; no documentation-only milestones; the PROGRAM must advance at least
 one of the platform quality goals listed above and name it (e.g. Q2) in its
 title or first milestone.`,
-		arc42GoalsPromptBlock(), strings.Join(past, "\n"), strings.Join(done, "\n- "), truncateGoap(string(graph), 2500))
+		arc42GoalsPromptBlock(), strings.Join(past, "\n"), strings.Join(done, "\n- "), graph)
 }

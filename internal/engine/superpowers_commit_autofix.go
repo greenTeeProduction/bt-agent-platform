@@ -31,10 +31,13 @@ func commitFixMaxAttempts() int {
 }
 
 // gitStageArgs is the `git add` argument vector that stages everything except
-// the generated run/plan bookkeeping. Shared by the initial stage and every
-// re-stage so they cannot drift.
+// the generated Superpowers/graphify artifacts (superpowersGeneratedPathPrefixes,
+// superpowers_apply.go). Shared by the initial stage and every re-stage so
+// they cannot drift, and derived from the same exclusion list as
+// superpowersGeneratedCommitExclusions so the apply-stage landing commit and
+// the per-task commit can never diverge on what counts as generated.
 func gitStageArgs() []string {
-	return []string{"add", "-A", "--", ".", ":(exclude)docs/superpowers/runs/**", ":(exclude)docs/superpowers/plans/**"}
+	return append([]string{"add", "-A", "--", "."}, superpowersGeneratedCommitExclusions()...)
 }
 
 // withToolPath prefixes a shell command with the toolchain PATH the daemon does

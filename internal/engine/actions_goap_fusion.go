@@ -28,10 +28,13 @@ var goapFusionRepo = "/home/nico/go-bt-evolve"
 // at an isolated temp dir instead of the live research vault.
 var goapFusionVaultDir = "/mnt/ssd/clawd/wiki/bt-research"
 
+// goapFusionGraphReport is a var (not const) so tests can point it at a
+// synthetic GRAPH_REPORT.md instead of the live ~900KB report.
+var goapFusionGraphReport = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
+
 const (
 	goapFusionSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
 	goapFusionPlansDir     = "/mnt/ssd/clawd/wiki/bt-research/plans"
-	goapFusionGraphReport  = "/home/nico/go-bt-evolve/graphify-out/GRAPH_REPORT.md"
 	goapFusionClaudeBin    = "/home/nico/.local/bin/claude"
 	goapFusionGoBin        = "/usr/local/go/bin/go"
 	goapFusionGraphifyTool = "graphify"
@@ -131,8 +134,7 @@ func registerGoapFusionActions() {
 			bb.Outcome = "goap_fusion_notebooklm_quota_cached"
 			return -1 // fail fast so ResearchRouter runs the Claude review fallback
 		}
-		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
-		query := buildGoapFusionNotebookLMQuery(bb.Task, truncateGoap(string(graphBytes), 3500))
+		query := buildGoapFusionNotebookLMQuery(bb.Task, readSectionAwareGraphContext())
 		out := nlmRun(180*time.Second, "notebook", "query", defaultNotebook, query)
 		if isGoapNotebookLMFailure(out) {
 			if isGoapNotebookLMQuotaError(out) {
@@ -214,21 +216,7 @@ func registerGoapFusionActions() {
 			return -1
 		}
 		// Extract the most useful sections: summary, god nodes, community hubs
-		report := string(b)
-		summary := extractSection(report, "## Summary", "## Graph Freshness")
-		godNodes := extractSection(report, "## God Nodes", "## Community Hubs")
-		communityHubs := extractSection(report, "## Community Hubs", "## Surprising Connections")
-		surprising := extractSection(report, "## Surprising Connections", "## Low-Cohesion Files")
-		lowCohesion := extractSection(report, "## Low-Cohesion Files", "## Isolated Nodes")
-
-		extracted := fmt.Sprintf("### Summary\n%s\n\n### God Nodes\n%s\n\n### Community Hubs (first 20)\n%s",
-			summary, godNodes, truncateGoap(communityHubs, 3000))
-		if surprising != "" {
-			extracted += fmt.Sprintf("\n\n### Surprising Connections\n%s", truncateGoap(surprising, 2000))
-		}
-		if lowCohesion != "" {
-			extracted += fmt.Sprintf("\n\n### Low-Cohesion Files\n%s", truncateGoap(lowCohesion, 2000))
-		}
+		extracted := sectionAwareGraphContext(string(b))
 
 		setGoapState(bb, "graphify_report", extracted)
 		bb.Result = fmt.Sprintf("## Graphify Report Loaded\n\n%d bytes extracted from %s", len(extracted), goapFusionGraphReport)
@@ -529,8 +517,7 @@ func registerGoapFusionActions() {
 			// whose Claude review fallback exists exactly for this quota case.
 			return 1
 		}
-		graphBytes, _ := os.ReadFile(goapFusionGraphReport)
-		graphSnippet := truncateGoap(string(graphBytes), 3500)
+		graphSnippet := readSectionAwareGraphContext()
 
 		// Read grill round tracking from the agent-scope blackboard — it must
 		// survive across scheduled runs (ChainState dies with each run).
@@ -882,6 +869,60 @@ func extractSection(text, startMarker, endMarker string) string {
 		return strings.TrimSpace(text[start:])
 	}
 	return strings.TrimSpace(text[start : start+end])
+}
+
+// sectionAwareGraphContext extracts a GRAPH_REPORT.md's analytical sections
+// (Summary, God Nodes, Community Hubs, Surprising Connections, Low-Cohesion
+// Files) instead of a raw head truncation. On a report-scale (hundreds of KB)
+// document, a head truncation only ever keeps the header — every research
+// prompt that grounds itself in the graph shares this extraction so the
+// sections that actually matter reach the LLM.
+func sectionAwareGraphContext(report string) string {
+	summary := extractSection(report, "## Summary", "## Graph Freshness")
+	godNodes := extractSection(report, "## God Nodes", "## Community Hubs")
+	communityHubs := extractSection(report, "## Community Hubs", "## Surprising Connections")
+	surprising := extractSection(report, "## Surprising Connections", "## Low-Cohesion Files")
+	lowCohesion := extractSection(report, "## Low-Cohesion Files", "## Isolated Nodes")
+
+	extracted := fmt.Sprintf("### Summary\n%s\n\n### God Nodes\n%s\n\n### Community Hubs (first 20)\n%s",
+		summary, godNodes, truncateGoap(communityHubs, 3000))
+	if surprising != "" {
+		extracted += fmt.Sprintf("\n\n### Surprising Connections\n%s", truncateGoap(surprising, 2000))
+	}
+	if lowCohesion != "" {
+		extracted += fmt.Sprintf("\n\n### Low-Cohesion Files\n%s", truncateGoap(lowCohesion, 2000))
+	}
+	return extracted
+}
+
+// graphReportBuiltCommit extracts the short SHA from a GRAPH_REPORT.md's
+// "## Graph Freshness" section line ("- Built from commit: `<sha>`"). Returns
+// "" if the report has no such line — the real freshness signal GraphIsFresh
+// compares against goapFusionRepo's current HEAD, instead of merely checking
+// that the report file exists on disk.
+func graphReportBuiltCommit(report string) string {
+	const marker = "Built from commit: `"
+	idx := strings.Index(report, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := report[idx+len(marker):]
+	end := strings.Index(rest, "`")
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
+}
+
+// readSectionAwareGraphContext reads goapFusionGraphReport and extracts its
+// analytical sections via sectionAwareGraphContext. Callers get an empty
+// string on a read error, same as the prior raw-read-then-truncate callers.
+func readSectionAwareGraphContext() string {
+	b, err := os.ReadFile(goapFusionGraphReport)
+	if err != nil {
+		return ""
+	}
+	return sectionAwareGraphContext(string(b))
 }
 
 func buildGoapFusionNotebookLMQuery(task, graphReport string) string {

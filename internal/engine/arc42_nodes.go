@@ -45,12 +45,12 @@ func registerArc42Nodes() {
 
 	RegisterAction("ReadGraphReport", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		data, err := os.ReadFile("graphify-out/GRAPH_REPORT.md")
+		data, err := os.ReadFile(goapFusionGraphReport)
 		if err != nil {
 			bb.CachedResult = fmt.Sprintf("graphify not available: %v", err)
 			return 1 // non-fatal: use fallback
 		}
-		bb.CachedResult = string(data)
+		bb.CachedResult = sectionAwareGraphContext(string(data))
 		return 1
 	})
 
@@ -297,8 +297,19 @@ func registerArc42Nodes() {
 		if getBoolChainState(bb, "graph_fresh") {
 			return true
 		}
-		_, err := os.Stat("graphify-out/GRAPH_REPORT.md")
-		return err == nil
+		data, err := os.ReadFile(goapFusionGraphReport)
+		if err != nil {
+			return false
+		}
+		builtSHA := graphReportBuiltCommit(string(data))
+		if builtSHA == "" {
+			return false
+		}
+		headOut, err := runGoapGit(goapFusionRepo, 5*time.Second, "rev-parse", "HEAD")
+		if err != nil {
+			return false
+		}
+		return strings.HasPrefix(strings.TrimSpace(headOut), builtSHA)
 	})
 
 	RegisterCondition("Section1Done", func(bb *Blackboard) bool {

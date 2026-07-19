@@ -1,11 +1,22 @@
 package engine
 
 import (
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
 )
+
+// isolateGoapFusionGraphReport points goapFusionGraphReport at a nonexistent
+// path in a temp dir so GraphIsFresh / ReadGraphReport tests don't
+// accidentally read the live developer machine's real GRAPH_REPORT.md.
+func isolateGoapFusionGraphReport(t *testing.T) {
+	t.Helper()
+	old := goapFusionGraphReport
+	goapFusionGraphReport = filepath.Join(t.TempDir(), "GRAPH_REPORT.md")
+	t.Cleanup(func() { goapFusionGraphReport = old })
+}
 
 // ─── arc42 Registered Actions ────────────────────────────────────────────────
 
@@ -21,6 +32,7 @@ func callArc42Action(t *testing.T, name string, bb *Blackboard) int {
 }
 
 func TestArc42Action_ReadGraphReport_NoFile(t *testing.T) {
+	isolateGoapFusionGraphReport(t)
 	bb := &Blackboard{}
 	status := callArc42Action(t, "ReadGraphReport", bb)
 	if status != 1 {
@@ -354,6 +366,7 @@ func TestArc42Condition_GraphIsFresh_ChainStateTrue(t *testing.T) {
 }
 
 func TestArc42Condition_GraphIsFresh_ChainStateFalse(t *testing.T) {
+	isolateGoapFusionGraphReport(t)
 	cond, ok := conditionRegistry["GraphIsFresh"]
 	if !ok {
 		t.Fatal("GraphIsFresh not registered")
@@ -365,12 +378,14 @@ func TestArc42Condition_GraphIsFresh_ChainStateFalse(t *testing.T) {
 }
 
 func TestArc42Condition_GraphIsFresh_NoFile(t *testing.T) {
+	isolateGoapFusionGraphReport(t)
 	cond, ok := conditionRegistry["GraphIsFresh"]
 	if !ok {
 		t.Fatal("GraphIsFresh not registered")
 	}
 	bb := &Blackboard{ChainState: map[string]any{}}
-	// Should check for graphify-out/GRAPH_REPORT.md which doesn't exist
+	// Should check the canonical goapFusionGraphReport path, isolated above to
+	// a nonexistent file.
 	if cond(bb) {
 		t.Error("GraphIsFresh should be false when no chain state and no file")
 	}

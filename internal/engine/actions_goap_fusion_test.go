@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -377,5 +379,93 @@ func TestLoadGoapChargeStampsDurable_DoesNotClobberFresherChainState(t *testing.
 
 	if got := fresh.ChainState["goap_fusion_program_milestone_charged"]; got != "prog-2:5" {
 		t.Errorf("ChainState[\"goap_fusion_program_milestone_charged\"] after loadGoapChargeStampsDurable = %q, want the pre-existing %q left untouched: an in-flight tick's fresher value must never be clobbered by a stale durable stamp", got, "prog-2:5")
+	}
+}
+
+// TestArc42ReadGraphReport_UsesCanonicalGoapFusionReportPath proves the arc42
+// "ReadGraphReport" action reads the same canonical report source as
+// actions_goap_fusion.go's "ReadGraphifyReport" action — the overridable,
+// absolute goapFusionGraphReport path — instead of its own hardcoded
+// cwd-relative "graphify-out/GRAPH_REPORT.md". It also proves ReadGraphReport
+// applies the same section-aware extraction (sectionAwareGraphContext)
+// instead of dumping the full untruncated report into bb.CachedResult.
+// Regression context: Q5 Consistency & Reuse milestone 3/5 — one canonical
+// graphify-report reader.
+func TestArc42ReadGraphReport_UsesCanonicalGoapFusionReportPath(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "GRAPH_REPORT.md")
+	const marker = "CANONICAL_READER_MARKER_9f3a"
+	if err := os.WriteFile(reportPath, []byte(syntheticGraphifyReportDeep(marker)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	old := goapFusionGraphReport
+	goapFusionGraphReport = reportPath
+	t.Cleanup(func() { goapFusionGraphReport = old })
+
+	bb := &Blackboard{}
+	status := callArc42Action(t, "ReadGraphReport", bb)
+	if status != 1 {
+		t.Fatalf("ReadGraphReport status = %d, want 1", status)
+	}
+
+	if !strings.Contains(bb.CachedResult, marker) {
+		t.Fatalf("ReadGraphReport must read the canonical, overridable goapFusionGraphReport path "+
+			"(same one actions_goap_fusion.go uses) instead of the hardcoded cwd-relative "+
+			"\"graphify-out/GRAPH_REPORT.md\"; CachedResult = %.200q", bb.CachedResult)
+	}
+	if strings.Contains(bb.CachedResult, "filler filler filler") {
+		t.Fatalf("ReadGraphReport must apply the same section-aware extraction " +
+			"(sectionAwareGraphContext) actions_goap_fusion.go uses, not an untruncated raw dump " +
+			"of the whole report")
+	}
+}
+
+// TestGraphIsFresh_ChecksBuiltCommitAgainstHEAD proves GraphIsFresh has a real
+// freshness signal — the report's "Built from commit: `<sha>`" line (under
+// "## Graph Freshness") compared against the current HEAD of goapFusionRepo —
+// instead of merely checking that a report file exists on disk. A report
+// built from a stale commit must read as NOT fresh even though the file is
+// present; a report built from the current HEAD must read as fresh.
+// Regression context: Q5 Consistency & Reuse milestone 3/5.
+func TestGraphIsFresh_ChecksBuiltCommitAgainstHEAD(t *testing.T) {
+	repo, firstSHA := newReviewTestRepo(t) // two commits; firstSHA = first (now stale) commit
+	headOut, err := runGoapGit(repo, 5*time.Second, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	head := strings.TrimSpace(headOut)
+
+	oldRepo := goapFusionRepo
+	goapFusionRepo = repo
+	t.Cleanup(func() { goapFusionRepo = oldRepo })
+
+	reportPath := filepath.Join(t.TempDir(), "GRAPH_REPORT.md")
+	oldReport := goapFusionGraphReport
+	goapFusionGraphReport = reportPath
+	t.Cleanup(func() { goapFusionGraphReport = oldReport })
+
+	fresh := GetCondition("GraphIsFresh")
+	if fresh == nil {
+		t.Fatal("GraphIsFresh not registered")
+	}
+
+	staleReport := "## Summary\nx\n\n## Graph Freshness\n- Built from commit: `" + firstSHA[:8] +
+		"`\n\n## Community Hubs\n"
+	if err := os.WriteFile(reportPath, []byte(staleReport), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fresh(&Blackboard{}) {
+		t.Fatal("GraphIsFresh must be false when the report's built-from commit predates goapFusionRepo's " +
+			"current HEAD — file existence alone is not a freshness signal")
+	}
+
+	currentReport := "## Summary\nx\n\n## Graph Freshness\n- Built from commit: `" + head[:8] +
+		"`\n\n## Community Hubs\n"
+	if err := os.WriteFile(reportPath, []byte(currentReport), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh(&Blackboard{}) {
+		t.Fatal("GraphIsFresh must be true when the report's built-from commit matches goapFusionRepo's current HEAD")
 	}
 }
