@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -31,5 +33,17 @@ func TestMutatedTreeFilenameSanitized(t *testing.T) {
 	}
 	if LoadMutatedTreeOverride("../../etc/passwd") == nil {
 		t.Fatal("sanitized ID must still round-trip")
+	}
+}
+
+func TestLoadMutatedTreeOverride_CorruptFileReturnsNil(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BT_MUTATED_TREES_DIR", dir)
+	path := filepath.Join(dir, sanitizeTreeID("goal:corrupt")+".json")
+	if err := os.WriteFile(path, []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadMutatedTreeOverride("goal:corrupt"); got != nil {
+		t.Fatalf("corrupt override must return nil, got %+v", got)
 	}
 }

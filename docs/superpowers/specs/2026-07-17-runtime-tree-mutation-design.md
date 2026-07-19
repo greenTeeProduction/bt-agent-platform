@@ -171,6 +171,11 @@ style growth persists; planner scratch stays ephemeral). Persist failure is
 journaled but fails neither the mutation nor the run — the live tree keeps the
 change.
 
+**Override load path:** unscoped `resolveTree` is override-first. User-scoped
+`resolveTreeForUser` intentionally skips overrides — snapshots are keyed by
+tree ID only; loading them on personal automations would cross-shadow
+same-slug trees across users.
+
 ## Error handling
 
 - Rejected op → journal entry with error; run continues on the old tree.

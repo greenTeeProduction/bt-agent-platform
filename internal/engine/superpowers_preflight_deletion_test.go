@@ -60,7 +60,7 @@ func TestScheduledGoapFusionBuildTreeMaterialized_HandlesDeletedTrackedFiles(t *
 	// The deleting commit lands ELSEWHERE (a clone plays the run worktree) and
 	// reaches this repo as a pure ref update — exactly how the daemon's apply
 	// moves the bare master. Index and on-disk tree stay frozen at commit one.
-	runInDir(t, dir, "git clone -q . clone && cd clone && git rm -q doomed.txt && git commit -qm two")
+	runInDir(t, dir, "git clone -q . clone && cd clone && git config user.email t@t.local && git config user.name t && git rm -q doomed.txt && git commit -qm two")
 	runInDir(t, dir, "git config core.bare true && git fetch -q ./clone master:master")
 
 	prev := goapFusionRepo

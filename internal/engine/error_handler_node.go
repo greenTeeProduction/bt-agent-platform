@@ -142,7 +142,12 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			return -1
 		}
 		if entry, ok := errorHandlerLedgerGet(sig); ok && time.Since(entry.LastAttempt) < errorHandlerCooldown() {
-			return -1
+			// escalate_failed is a transient seed miss (store busy / write error):
+			// do not cool out — retry Claude+seed. escalated and escalate_deferred
+			// cool out normally (successful seed, or policy block like kill-switch).
+			if entry.LastVerdict != "escalate_failed" {
+				return -1
+			}
 		}
 		release, ok := acquireErrorHandlerClaudeLock()
 		if !ok {
@@ -164,15 +169,14 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			// Self-fixing fleet Part A: an unresolvable failure that is a genuine
 			// source-code bug escalates — seed a code-fix program so the goap loop
 			// implements the fix (async). The tree failure still passes through
-			// immediately below. The ledger verdict was already stamped "escalated"
-			// by requestErrorHandlerProposal for the same valid-code_fix condition,
-			// so a re-firing within cooldown never reaches this call again. Seeding
-			// is further bounded by seedCodeFixProgram's own dedup/cap/kill-switch;
-			// that double-bound is intentional.
+			// immediately below. Ledger stamps happen HERE after seed:
+			//   escalated         — seed succeeded (cool out)
+			//   escalate_deferred — policy block (kill-switch/cap/cooldown/title
+			//                       collision); cool out so we don't re-call Claude
+			//                       every tick while seeding is intentionally off
+			//   escalate_failed   — transient store/IO miss; does NOT cool out
 			if prop.CodeFix != nil && validateCodeFix(prop.CodeFix) == nil {
-				seeded, reason := seedCodeFixProgram(sig, prop.CodeFix.Title, prop.CodeFix.Milestone, "self-fix:error-handler:"+sig)
-				Info("claude error handler: escalated unresolvable failure to a code-fix program",
-					"handler", handlerName, "signature", sig, "title", prop.CodeFix.Title, "seeded", seeded, "reason", reason)
+				stampErrorHandlerCodeFixSeed(handlerName, sig, prop.CodeFix)
 			}
 			return -1
 		}
@@ -199,4 +203,34 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 		recordErrorHandlerResult(handlerName, r.name, false)
 		return -1
 	})
+}
+
+// stampErrorHandlerCodeFixSeed runs seedCodeFixProgram for an EH code_fix
+// escalation and stamps the ledger with a verdict that matches seed outcome:
+//
+//   - escalated — program queued; cool out Claude+seed for the EH cooldown
+//   - escalate_deferred — policy intentionally blocked seeding (kill switch,
+//     self-fix cooldown, backlog cap, title collision); cool out so a flipped
+//     kill switch or full backlog does not re-call Claude every tick
+//   - escalate_failed — transient miss (store busy/IO); does NOT cool out, so
+//     the next firing retries
+func stampErrorHandlerCodeFixSeed(handlerName, sig string, cf *errorHandlerCodeFix) {
+	seeded, reason := seedCodeFixProgram(sig, cf.Title, cf.Milestone, "self-fix:error-handler:"+sig)
+	switch {
+	case seeded:
+		errorHandlerLedgerStamp(sig, "escalated")
+		Info("claude error handler: escalated unresolvable failure to a code-fix program",
+			"handler", handlerName, "signature", sig, "title", cf.Title, "seeded", true, "reason", reason)
+	case reason == "self-fix disabled",
+		reason == "within cooldown",
+		reason == "self-fix backlog cap reached",
+		strings.HasPrefix(reason, "title collides"):
+		errorHandlerLedgerStamp(sig, "escalate_deferred")
+		Warn("claude error handler: code_fix seed deferred by policy",
+			"handler", handlerName, "signature", sig, "title", cf.Title, "reason", reason)
+	default:
+		errorHandlerLedgerStamp(sig, "escalate_failed")
+		Warn("claude error handler: code_fix seed failed; will retry on next firing",
+			"handler", handlerName, "signature", sig, "title", cf.Title, "reason", reason)
+	}
 }

@@ -62,6 +62,11 @@ func TestSeedNextProgramPersistsValidProposal(t *testing.T) {
 	oldP := goapProgramsPath
 	goapProgramsPath = path
 	t.Cleanup(func() { goapProgramsPath = oldP })
+	// CI runners lack the production goapFusionRepo checkout; grounding must
+	// not depend on /home/nico/go-bt-evolve existing.
+	oldEx := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(string) bool { return true }
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = oldEx })
 	withSeedFetch(t, `PROGRAM: Knowledge-graph freshness pipeline
 MILESTONE1: Add incremental graph updates in internal/knowledge/graph.go with tests
 MILESTONE2: Wire freshness checks into internal/domains/trees.go gating
@@ -150,6 +155,9 @@ func TestBacklogReplenishSubtreeActuallyExecutes(t *testing.T) {
 	oldP := goapProgramsPath
 	goapProgramsPath = path
 	t.Cleanup(func() { goapProgramsPath = oldP })
+	oldEx := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(string) bool { return true }
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = oldEx })
 	withSeedFetch(t, `PROGRAM: Subtree proof
 MILESTONE1: Add coverage in internal/knowledge/graph.go
 MILESTONE2: Wire checks into internal/domains/trees.go`)

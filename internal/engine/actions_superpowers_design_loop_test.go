@@ -251,6 +251,9 @@ MILESTONE1: Answer the fsync question and harden internal/engine/superpowers_art
 
 func TestSplitDesign_WritesArtifactsAndPersistsProgram(t *testing.T) {
 	isolateGoapProgramStore(t)
+	oldEx := goapFusionRepoFileExistsFn
+	goapFusionRepoFileExistsFn = func(string) bool { return true }
+	t.Cleanup(func() { goapFusionRepoFileExistsFn = oldEx })
 	bb, run := newGrillLoopTestRun(t)
 	run.OpenCriticalBranches = []string{"persistence"}
 	run.GrillRound = 10
