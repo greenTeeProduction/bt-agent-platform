@@ -63,6 +63,7 @@ func LoadMutatedTreeOverride(treeID string) *evolution.SerializableNode {
 		return nil
 	}
 	path := filepath.Join(dir, sanitizeTreeID(treeID)+".json")
+	// #nosec G304 -- path is under mutatedTreesDir with sanitizeTreeID (alphanumeric/_/- only); no user path traversal
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
