@@ -229,7 +229,7 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -o bin/bt-scalability-probe-linux-arm64 ./cmd/bt-scalability-probe/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: bin/*
           body_path: /tmp/release-notes.md
