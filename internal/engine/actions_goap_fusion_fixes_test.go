@@ -101,6 +101,12 @@ func TestReadNewestVaultDocs_MissingDir(t *testing.T) {
 }
 
 func TestRunGoapShellTimeout_ReportsTimeout(t *testing.T) {
+	// runGoapShellTimeout always cds into goapFusionRepo; the production
+	// default (/home/nico/go-bt-evolve) does not exist on CI runners.
+	prev := goapFusionRepo
+	goapFusionRepo = t.TempDir()
+	t.Cleanup(func() { goapFusionRepo = prev })
+
 	_, err := runGoapShellTimeout("sleep 2", 100*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "shell timeout") {
 		t.Fatalf("expected shell-timeout error, got %v", err)

@@ -1,11 +1,15 @@
 // Persisted runtime tree mutations (ADR-003): the full mutated tree is
 // snapshotted per tree ID under ~/.go-bt-evolve/mutated_trees/ and consulted
-// override-first by cmd/bt-agent's tree resolution, so persisted runtime
-// mutations survive restarts even for code-defined domain trees.
+// override-first by cmd/bt-agent's unscoped resolveTree, so persisted runtime
+// mutations survive restarts for domain/unowned trees. User-scoped
+// resolveTreeForUser intentionally skips these overrides (snapshots are
+// keyed by tree ID only — loading them on the personal-automation path would
+// cross-shadow same-slug trees across users).
 package agent
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,18 +55,22 @@ func SaveMutatedTree(treeID string, tree *evolution.SerializableNode) error {
 }
 
 // LoadMutatedTreeOverride returns the persisted override for treeID, or nil
-// when none exists (callers fall through to normal resolution).
+// when none exists (callers fall through to normal resolution). Corrupt or
+// unreadable files are ignored with a warning — never returned partially.
 func LoadMutatedTreeOverride(treeID string) *evolution.SerializableNode {
 	dir := mutatedTreesDir()
 	if dir == "" {
 		return nil
 	}
-	data, err := os.ReadFile(filepath.Join(dir, sanitizeTreeID(treeID)+".json"))
+	path := filepath.Join(dir, sanitizeTreeID(treeID)+".json")
+	// #nosec G304 -- path is under mutatedTreesDir with sanitizeTreeID (alphanumeric/_/- only); no user path traversal
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
 	var tree evolution.SerializableNode
 	if err := json.Unmarshal(data, &tree); err != nil {
+		slog.Warn("mutated tree override unreadable; ignoring", "tree", treeID, "path", path, "err", err)
 		return nil
 	}
 	return &tree

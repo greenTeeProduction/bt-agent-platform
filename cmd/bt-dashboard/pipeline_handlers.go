@@ -243,27 +243,36 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 
 	pipelineRunsMu.RLock()
 	rec, ok := pipelineRuns[runID]
-	pipelineRunsMu.RUnlock()
 	if !ok {
+		pipelineRunsMu.RUnlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "pipeline run not found: " + runID})
 		return
 	}
+	// Snapshot fields under the read lock — returning the pointer then
+	// unlocking would race with the SafeGo completion/panic writers that
+	// mutate Status/Error/Result under pipelineRunsMu.
+	runIDOut := rec.RunID
+	status := rec.Status
+	startedAt := rec.StartedAt
+	errMsg := rec.Error
+	result := rec.Result
+	pipelineRunsMu.RUnlock()
 
 	resp := map[string]interface{}{
-		"run_id":     rec.RunID,
-		"status":     rec.Status,
-		"started_at": rec.StartedAt.Format(time.RFC3339),
+		"run_id":     runIDOut,
+		"status":     status,
+		"started_at": startedAt.Format(time.RFC3339),
 	}
-	if rec.Error != "" {
-		resp["error"] = rec.Error
+	if errMsg != "" {
+		resp["error"] = errMsg
 	}
-	if rec.Result != nil {
-		resp["workflow"] = rec.Result.Workflow
-		resp["outcome"] = rec.Result.Outcome
-		resp["duration"] = rec.Result.Duration.String()
-		resp["steps"] = rec.Result.Steps
+	if result != nil {
+		resp["workflow"] = result.Workflow
+		resp["outcome"] = result.Outcome
+		resp["duration"] = result.Duration.String()
+		resp["steps"] = result.Steps
 	}
 
 	w.Header().Set("Content-Type", "application/json")

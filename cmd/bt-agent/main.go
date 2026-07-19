@@ -54,6 +54,11 @@ func resolveTree(id string) *evolution.SerializableNode {
 // automation exists but is gated." Checking the gate here first ensures a
 // pending/rejected/flagged automation refuses execution outright instead of
 // silently running the default tree (Q4 Personalization milestone 2).
+//
+// Intentionally does NOT consult agent.LoadMutatedTreeOverride: persisted
+// mutations are keyed by tree ID only (unscoped). Loading them here would let
+// one user's persist:true snapshot shadow another user's same-slug automation.
+// Unscoped resolveTree (daemon/domain paths) remains override-first.
 func resolveTreeForUser(user, id string) *evolution.SerializableNode {
 	if agentexec.AutomationBlocked(user, id) {
 		return nil

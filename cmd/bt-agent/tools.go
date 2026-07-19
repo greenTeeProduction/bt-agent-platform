@@ -2953,7 +2953,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			"path":        {Type: "string", Description: "remove: index path of the node to remove"},
 			"expect_name": {Type: "string", Description: "optional: resolved node's Name must match"},
 			"subtree":     {Type: "string", Description: "add: SerializableNode JSON to graft"},
-			"persist":     {Type: "boolean", Description: "snapshot the mutated tree so future runs inherit it"},
+			"persist":     {Type: "boolean", Description: "snapshot the mutated tree under ~/.go-bt-evolve/mutated_trees/ for unscoped resolveTree (override-first). User-owned RunOnce paths (resolveTreeForUser) intentionally skip overrides — snapshots are keyed by tree ID only"},
 		}, []string{"run_id", "kind"},
 		func(args json.RawMessage) *engine.ToolResult {
 			var in struct {

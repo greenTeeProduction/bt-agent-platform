@@ -3,6 +3,8 @@ package engine
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -398,8 +400,8 @@ func ehTestCodeFixJSON() string {
 
 // Part A escalation: an unresolvable verdict with a valid code_fix seeds a
 // self-fix:error-handler:* program, still passes the tree failure through (-1),
-// stamps the ledger verdict "escalated", and re-firing within cooldown does not
-// re-call Claude or re-seed (double-bounded by the eh cooldown).
+// stamps the ledger verdict "escalated" only AFTER a successful seed, and
+// re-firing within cooldown does not re-call Claude or re-seed.
 func TestClaudeErrorHandler_UnresolvableWithCodeFixEscalates(t *testing.T) {
 	withTempErrorHandlerDir(t)
 	_, programsPath := withTempSelfFix(t)
@@ -444,6 +446,81 @@ func TestClaudeErrorHandler_UnresolvableWithCodeFixEscalates(t *testing.T) {
 	}
 	if n := countSelfFixPrograms(t, programsPath); n != 1 {
 		t.Fatalf("cooldown must suppress a second seed, got %d programs", n)
+	}
+}
+
+// Kill switch: a valid code_fix must NOT stamp "escalated" when seeding is
+// disabled — that would cool out Claude+seed under a false success. Stamp
+// escalate_deferred instead (policy cool-out; no program queued).
+func TestClaudeErrorHandler_CodeFixKillSwitchDefersNotEscalates(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	_, programsPath := withTempSelfFix(t)
+	t.Setenv("BT_SELF_FIX", "off")
+	fake := &fakeClaudeRunner{output: ehTestCodeFixJSON()}
+	swapErrorHandlerRunner(t, fake)
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("must pass failure through; got %d", code)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("kill switch must seed nothing, got %d", n)
+	}
+	sig := errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "escalate_deferred" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want escalate_deferred", entry, ok)
+	}
+
+	// Deferred cools out: no second Claude call within EH cooldown.
+	bb2 := &Blackboard{ChainState: map[string]any{}}
+	_ = runHandler(t, bb2)
+	if fake.calls.Load() != 1 {
+		t.Fatalf("escalate_deferred must cool out Claude, got %d calls", fake.calls.Load())
+	}
+}
+
+// Transient seed failure (store busy) stamps escalate_failed and does NOT cool
+// out — the next firing retries. Simulated by holding the self-fix store lock.
+func TestClaudeErrorHandler_CodeFixTransientSeedFailureRetries(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	dir, programsPath := withTempSelfFix(t)
+	fake := &fakeClaudeRunner{output: ehTestCodeFixJSON()}
+	swapErrorHandlerRunner(t, fake)
+
+	// Hold the cross-process self-fix store lock so seedCodeFixProgram returns
+	// "self-fix store busy" without waiting.
+	lockPath := filepath.Join(dir, "store.lock")
+	if err := os.WriteFile(lockPath, []byte("held"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lockPath) })
+
+	bb := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb); code != -1 {
+		t.Fatalf("must pass failure through; got %d", code)
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("busy store must seed nothing, got %d", n)
+	}
+	sig := errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "escalate_failed" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want escalate_failed", entry, ok)
+	}
+
+	// Release the lock and re-fire: escalate_failed must NOT cool out.
+	_ = os.Remove(lockPath)
+	bb2 := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bb2); code != -1 {
+		t.Fatal("retry must still pass through")
+	}
+	if fake.calls.Load() != 2 {
+		t.Fatalf("escalate_failed must allow a second Claude call, got %d", fake.calls.Load())
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 1 {
+		t.Fatalf("retry after lock release must seed, got %d", n)
+	}
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "escalated" {
+		t.Fatalf("after successful retry: %+v ok=%v, want escalated", entry, ok)
 	}
 }
 

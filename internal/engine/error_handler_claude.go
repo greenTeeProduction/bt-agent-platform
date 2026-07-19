@@ -448,18 +448,18 @@ func requestErrorHandlerProposal(ctx context.Context, handlerName string, failin
 		return errorHandlerProposal{}, err
 	}
 	if !p.Resolvable {
-		// A valid code_fix escalates: stamp "escalated" (distinct from
-		// "unresolvable") so a re-firing within cooldown reads as an escalation and
-		// doesn't re-call Claude. This is the single ledger write for the Claude-call
-		// outcome; the node seeds the program using the same condition (no double
-		// stamp). Invalid/absent code_fix stays "unresolvable" (today's behavior).
-		verdict := "unresolvable"
+		// Valid code_fix: do NOT stamp here. The node seeds then stamps
+		// escalated | escalate_deferred | escalate_failed so a failed seed
+		// cannot cool out under a false "escalated" verdict. Invalid/absent
+		// code_fix stays "unresolvable" (today's behavior).
 		if p.CodeFix != nil && validateCodeFix(p.CodeFix) == nil {
-			verdict = "escalated"
+			Warn("claude error handler: error judged unresolvable; code_fix pending seed",
+				"handler", handlerName, "signature", sig, "reason", p.Reason)
+			return p, nil
 		}
-		errorHandlerLedgerStamp(sig, verdict)
+		errorHandlerLedgerStamp(sig, "unresolvable")
 		Warn("claude error handler: error judged unresolvable with registered vocabulary",
-			"handler", handlerName, "signature", sig, "reason", p.Reason, "verdict", verdict)
+			"handler", handlerName, "signature", sig, "reason", p.Reason, "verdict", "unresolvable")
 		return p, nil
 	}
 	errorHandlerLedgerStamp(sig, "proposed")

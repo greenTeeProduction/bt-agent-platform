@@ -113,6 +113,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Configure git identity for tests
+        run: |
+          git config --global user.email "ci@bt-agent-platform.test"
+          git config --global user.name "BT CI"
+
       - name: Run tests
         env:
           BT_SKIP_LLM_TESTS: "1"
