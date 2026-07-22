@@ -161,12 +161,7 @@ func ffLandRunBranchAndPush(ctx context.Context, runner CommandRunner, run *Supe
 		run.AppliedCommit = strings.TrimSpace(head.Output)
 	}
 	run.ApplyStatus = "committed"
-	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
-	if push.Err != nil {
-		run.ApplyStatus = "committed_unpushed"
-		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
-	}
-	return nil
+	return pushLandingMasterToOrigin(ctx, runner, run)
 }
 
 // reapplyRunBranchOntoMaster fast-forwards the bare repo's master to the run
@@ -436,12 +431,7 @@ func commitAppliedSuperpowersRun(ctx context.Context, runner CommandRunner, run 
 	}
 	run.ApplyStatus = "committed"
 
-	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
-	if push.Err != nil {
-		run.ApplyStatus = "committed_unpushed"
-		return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
-	}
-	return nil
+	return pushLandingMasterToOrigin(ctx, runner, run)
 }
 
 func hasBlockingMainRepoDirty(status string) bool {

@@ -1,0 +1,660 @@
+package engine
+
+// PR pipeline shepherd (spec: docs/superpowers/specs/2026-07-22-pr-pipeline-
+// shepherd-design.md). origin/master is branch-protected (PR #13), so fleet
+// landings accrue on LOCAL master. The ShepherdFleetPR action — inserted
+// after SetupFusionTools in both goap fusion trees — ships that work in one
+// NON-BLOCKING pass per cycle: ff local master when a merge landed upstream;
+// push the fleet branch + open a PR when local master is ahead; skip while CI
+// runs; run ONE bounded Claude fix attempt when CI is red; merge when CI is
+// green. It never waits on CI (the 90-minute run budget killed cycles before,
+// dfffeb1) — CI progresses between tree touches, so a green PR merges at the
+// next touch. Per the SelfReviewTree lesson the action returns SUCCESS on
+// every path: an early failure would bubble into the ClaudeErrorHandler
+// wrapper and trigger spurious recovery for routine steady states.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	btcore "github.com/rvitorper/go-bt/core"
+)
+
+// prShepherdMu serializes shepherd passes: both goap fusion agents run in the
+// one daemon process and their cycles can overlap; two concurrent passes
+// could double-create PRs or race the branch push.
+var prShepherdMu sync.Mutex
+
+func prShepherdEnabled() bool {
+	return getenvDefault("BT_PR_SHEPHERD", "on") != "off"
+}
+
+func fleetPRBranch() string {
+	return getenvDefault("BT_FLEET_PR_BRANCH", "fleet/landing")
+}
+
+// prShepherdTokenVars is the lookup order for the GitHub API token. The
+// daemon inherits its environment from the unit's EnvironmentFile.
+var prShepherdTokenVars = []string{"BT_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"}
+
+func prShepherdToken() string {
+	for _, k := range prShepherdTokenVars {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func prShepherdMaxFixAttempts() int {
+	if n, err := strconv.Atoi(getenvDefault("BT_PR_SHEPHERD_MAX_FIX_ATTEMPTS", "3")); err == nil && n > 0 {
+		return n
+	}
+	return 3
+}
+
+// ---------------------------------------------------------------------------
+// Durable state
+
+type prShepherdState struct {
+	PRNumber int `json:"pr_number,omitempty"`
+	// FixAttempts counts Claude fix attempts per PR-head SHA so one broken
+	// head cannot burn Claude forever. TotalFixAttempts additionally bounds
+	// an evolving-SHA ping-pong (each fix changes the head); both reset when
+	// a merge or upstream sync succeeds.
+	FixAttempts      map[string]int `json:"fix_attempts,omitempty"`
+	TotalFixAttempts int            `json:"total_fix_attempts,omitempty"`
+}
+
+// prShepherdDirOverride redirects durable state in tests (mirrors
+// selfReviewDirOverride). Empty in production.
+var prShepherdDirOverride string
+
+func prShepherdDir() string {
+	if prShepherdDirOverride != "" {
+		return prShepherdDirOverride
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".go-bt-evolve", "pr_shepherd")
+}
+
+func prShepherdStatePath(dir string) string { return filepath.Join(dir, "state.json") }
+
+func loadPRShepherdState(dir string) prShepherdState {
+	var s prShepherdState
+	readErrorHandlerJSON(prShepherdStatePath(dir), &s)
+	if s.FixAttempts == nil {
+		s.FixAttempts = map[string]int{}
+	}
+	return s
+}
+
+func savePRShepherdState(dir string, s prShepherdState) error {
+	return writeErrorHandlerJSON(prShepherdStatePath(dir), s)
+}
+
+// ---------------------------------------------------------------------------
+// Minimal GitHub API client (net/http only — no gh CLI on this host)
+
+type githubPRClient struct {
+	base  string // https://api.github.com, or a test server
+	owner string
+	repo  string
+	token string
+	hc    *http.Client
+}
+
+type githubPR struct {
+	Number int `json:"number"`
+	Head   struct {
+		SHA string `json:"sha"`
+		Ref string `json:"ref"`
+	} `json:"head"`
+}
+
+type githubCheckRun struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`     // queued | in_progress | completed
+	Conclusion string `json:"conclusion"` // success | failure | neutral | cancelled | timed_out | action_required | skipped | stale
+}
+
+func (c *githubPRClient) do(ctx context.Context, method, path string, body any, out any) (int, error) {
+	var reader *strings.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return 0, err
+		}
+		reader = strings.NewReader(string(b))
+	} else {
+		reader = strings.NewReader("")
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if out != nil && resp.StatusCode < 300 {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return resp.StatusCode, err
+		}
+		return resp.StatusCode, nil
+	}
+	if resp.StatusCode >= 300 {
+		var apiErr struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&apiErr)
+		return resp.StatusCode, fmt.Errorf("github api %s %s: HTTP %d: %s", method, path, resp.StatusCode, apiErr.Message)
+	}
+	return resp.StatusCode, nil
+}
+
+func (c *githubPRClient) findOpenPR(ctx context.Context, branch string) (*githubPR, error) {
+	var prs []githubPR
+	path := fmt.Sprintf("/repos/%s/%s/pulls?state=open&head=%s:%s", c.owner, c.repo, c.owner, branch)
+	if _, err := c.do(ctx, http.MethodGet, path, nil, &prs); err != nil {
+		return nil, err
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	return &prs[0], nil
+}
+
+func (c *githubPRClient) createPR(ctx context.Context, branch, title, body string) (*githubPR, error) {
+	var pr githubPR
+	payload := map[string]string{"title": title, "head": branch, "base": "master", "body": body}
+	status, err := c.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/%s/pulls", c.owner, c.repo), payload, &pr)
+	if err != nil {
+		// 422 "A pull request already exists" — a concurrent pass won the
+		// race; adopt the existing PR instead of failing.
+		if status == 422 {
+			if existing, findErr := c.findOpenPR(ctx, branch); findErr == nil && existing != nil {
+				return existing, nil
+			}
+		}
+		return nil, err
+	}
+	return &pr, nil
+}
+
+func (c *githubPRClient) listCheckRuns(ctx context.Context, sha string) ([]githubCheckRun, error) {
+	var out struct {
+		CheckRuns []githubCheckRun `json:"check_runs"`
+	}
+	path := fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs", c.owner, c.repo, sha)
+	if _, err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.CheckRuns, nil
+}
+
+func (c *githubPRClient) listAnnotations(ctx context.Context, checkRunID int64, limit int) []string {
+	var anns []struct {
+		Path      string `json:"path"`
+		StartLine int    `json:"start_line"`
+		Level     string `json:"annotation_level"`
+		Message   string `json:"message"`
+	}
+	path := fmt.Sprintf("/repos/%s/%s/check-runs/%d/annotations", c.owner, c.repo, checkRunID)
+	if _, err := c.do(ctx, http.MethodGet, path, nil, &anns); err != nil {
+		return nil // annotations are best-effort evidence
+	}
+	out := make([]string, 0, len(anns))
+	for _, a := range anns {
+		if len(out) >= limit {
+			break
+		}
+		out = append(out, fmt.Sprintf("%s:%d [%s] %s", a.Path, a.StartLine, a.Level, a.Message))
+	}
+	return out
+}
+
+func (c *githubPRClient) mergePR(ctx context.Context, number int) error {
+	payload := map[string]string{"merge_method": "merge"}
+	_, err := c.do(ctx, http.MethodPut, fmt.Sprintf("/repos/%s/%s/pulls/%d/merge", c.owner, c.repo, number), payload, nil)
+	return err
+}
+
+func (c *githubPRClient) deleteBranch(ctx context.Context, branch string) {
+	// Best-effort cleanup; a failure only leaves a stale remote branch.
+	_, _ = c.do(ctx, http.MethodDelete, fmt.Sprintf("/repos/%s/%s/git/refs/heads/%s", c.owner, c.repo, branch), nil, nil)
+}
+
+// parseGitHubRemote extracts owner/repo from an origin URL in either the
+// https://github.com/owner/repo(.git) or git@github.com:owner/repo(.git) form.
+func parseGitHubRemote(url string) (owner, repo string, err error) {
+	url = strings.TrimSpace(url)
+	url = strings.TrimSuffix(url, ".git")
+	var tail string
+	switch {
+	case strings.Contains(url, "github.com/"):
+		tail = url[strings.Index(url, "github.com/")+len("github.com/"):]
+	case strings.Contains(url, "github.com:"):
+		tail = url[strings.Index(url, "github.com:")+len("github.com:"):]
+	default:
+		return "", "", fmt.Errorf("origin %q is not a github.com remote", url)
+	}
+	parts := strings.Split(tail, "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("cannot parse owner/repo from origin %q", url)
+	}
+	return parts[0], parts[1], nil
+}
+
+func newGitHubPRClientFromEnv(ctx context.Context, runner CommandRunner, repoDir string) (*githubPRClient, error) {
+	token := prShepherdToken()
+	if token == "" {
+		return nil, fmt.Errorf("no GitHub token in env (checked %s)", strings.Join(prShepherdTokenVars, ", "))
+	}
+	remote := runner.Run(ctx, repoDir, "git", "remote", "get-url", "origin")
+	if remote.Err != nil {
+		return nil, fmt.Errorf("git remote get-url origin: %v", remote.Err)
+	}
+	owner, repo, err := parseGitHubRemote(remote.Output)
+	if err != nil {
+		return nil, err
+	}
+	return &githubPRClient{
+		base: "https://api.github.com", owner: owner, repo: repo, token: token,
+		hc: &http.Client{Timeout: 15 * time.Second},
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Deps + action registration
+
+type prShepherdDeps struct {
+	runner   CommandRunner
+	claude   ClaudeRunner
+	repoDir  string
+	stateDir string
+	// api, when nil, is built from the environment at run time (token env
+	// vars + origin remote). Tests inject an httptest-backed client.
+	api           *githubPRClient
+	now           func() time.Time
+	claudeTimeout time.Duration
+}
+
+var prShepherdDepsOverride *prShepherdDeps
+
+func defaultPRShepherdDeps() prShepherdDeps {
+	return prShepherdDeps{
+		runner: defaultSuperpowersCommandRunner,
+		claude: execClaudeRunner{
+			AllowedTools: getenvDefault("BT_PR_SHEPHERD_ALLOWED_TOOLS",
+				defaultSuperpowersAllowedTools+
+					",Bash(go mod tidy:*),Bash(/usr/local/go/bin/go mod tidy:*),Bash(make check-quick:*)"),
+		},
+		repoDir:       goapFusionRepo,
+		stateDir:      prShepherdDir(),
+		now:           time.Now,
+		claudeTimeout: 20 * time.Minute,
+	}
+}
+
+func init() {
+	RegisterAction("ShepherdFleetPR", func(ctx *btcore.BTContext[Blackboard]) int {
+		deps := defaultPRShepherdDeps()
+		if prShepherdDepsOverride != nil {
+			deps = *prShepherdDepsOverride
+		}
+		return runPRShepherd(ctx.Blackboard, deps)
+	})
+}
+
+// prShepherdSkip records a healthy skip: the shepherd NEVER fails the cycle.
+func prShepherdSkip(bb *Blackboard, outcome, format string, args ...any) int {
+	bb.Outcome = outcome
+	bb.Result = fmt.Sprintf(format, args...)
+	return 1
+}
+
+// ---------------------------------------------------------------------------
+// The one non-blocking pass
+
+func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
+	if !prShepherdEnabled() {
+		return prShepherdSkip(bb, "pr_shepherd_disabled", "## PR Shepherd Disabled\n\nBT_PR_SHEPHERD=off.")
+	}
+	now := deps.now
+	if now == nil {
+		now = time.Now
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	api := deps.api
+	if api == nil {
+		built, err := newGitHubPRClientFromEnv(ctx, deps.runner, deps.repoDir)
+		if err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_no_token",
+				"## PR Shepherd Skipped\n\n%v — add one of %s to the daemon environment (unit EnvironmentFile).",
+				err, strings.Join(prShepherdTokenVars, ", "))
+		}
+		api = built
+	}
+	branch := fleetPRBranch()
+
+	prShepherdMu.Lock()
+	defer prShepherdMu.Unlock()
+
+	if fetch := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin"); fetch.Err != nil {
+		return prShepherdSkip(bb, "pr_shepherd_fetch_failed",
+			"## PR Shepherd Skipped\n\ngit fetch origin failed (offline?):\n```\n%s\n```", truncateGoap(fetch.Output, 800))
+	}
+	localSHA := strings.TrimSpace(deps.runner.Run(ctx, deps.repoDir, "git", "rev-parse", "refs/heads/master").Output)
+	originSHA := strings.TrimSpace(deps.runner.Run(ctx, deps.repoDir, "git", "rev-parse", "refs/remotes/origin/master").Output)
+	if localSHA == "" || originSHA == "" {
+		return prShepherdSkip(bb, "pr_shepherd_fetch_failed", "## PR Shepherd Skipped\n\nCould not resolve master/origin-master SHAs.")
+	}
+
+	state := loadPRShepherdState(deps.stateDir)
+
+	if localSHA == originSHA {
+		if state.PRNumber != 0 {
+			api.deleteBranch(ctx, branch)
+			_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+		}
+		bb.OutcomeRefinement = "no_change"
+		bb.QualityScore = 0.5
+		bb.QualityAuthoritative = true
+		return prShepherdSkip(bb, "pr_shepherd_idle", "## PR Shepherd Idle\n\nLocal master is in sync with origin (%s).", localSHA[:min(12, len(localSHA))])
+	}
+
+	localBehind := deps.runner.Run(ctx, deps.repoDir, "git", "merge-base", "--is-ancestor", "refs/heads/master", "refs/remotes/origin/master").Err == nil
+	if localBehind {
+		// A merge landed upstream (ours or someone else's): adopt it with the
+		// fleet's invariant-safe non-forced ff primitive; the goap preflight
+		// materializer syncs the working tree on the next cycle.
+		if ff := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", ".", "refs/remotes/origin/master:master"); ff.Err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_sync_failed",
+				"## PR Shepherd Skipped\n\nNon-forced ff of local master refused:\n```\n%s\n```", truncateGoap(ff.Output, 800))
+		}
+		api.deleteBranch(ctx, branch)
+		_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+		return prShepherdSkip(bb, "pr_shepherd_synced_master",
+			"## PR Shepherd Synced\n\nFast-forwarded local master to origin (%s).", originSHA[:min(12, len(originSHA))])
+	}
+	originBehind := deps.runner.Run(ctx, deps.repoDir, "git", "merge-base", "--is-ancestor", "refs/remotes/origin/master", "refs/heads/master").Err == nil
+	if !originBehind {
+		return prShepherdSkip(bb, "pr_shepherd_diverged",
+			"## PR Shepherd Needs Operator\n\nLocal master (%s) and origin/master (%s) have DIVERGED; refusing any autonomous rewrite. Reconcile manually.",
+			localSHA[:min(12, len(localSHA))], originSHA[:min(12, len(originSHA))])
+	}
+
+	// Local master is strictly ahead: make sure the fleet branch + PR track it.
+	pr, err := api.findOpenPR(ctx, branch)
+	if err != nil {
+		return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\n%v", err)
+	}
+	if pr == nil || pr.Head.SHA != localSHA {
+		// The branch is ALWAYS pushed from local master (fix commits land on
+		// master first), so force-with-lease can never destroy work.
+		push := deps.runner.Run(ctx, deps.repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch)
+		if push.Err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_push_failed",
+				"## PR Shepherd Skipped\n\nBranch push failed:\n```\n%s\n```", truncateGoap(push.Output, 800))
+		}
+	}
+	if pr == nil {
+		title, body := fleetPRTitleAndBody(ctx, deps.runner, deps.repoDir)
+		created, err := api.createPR(ctx, branch, title, body)
+		if err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\nPR creation failed: %v", err)
+		}
+		state.PRNumber = created.Number
+		_ = savePRShepherdState(deps.stateDir, state)
+		return prShepherdSkip(bb, "pr_shepherd_pr_opened",
+			"## PR Shepherd Opened PR #%d\n\nBranch `%s` at %s; CI will be checked next cycle.", created.Number, branch, localSHA[:min(12, len(localSHA))])
+	}
+	if state.PRNumber != pr.Number {
+		state.PRNumber = pr.Number
+		_ = savePRShepherdState(deps.stateDir, state)
+	}
+
+	runs, err := api.listCheckRuns(ctx, localSHA)
+	if err != nil {
+		return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\ncheck-runs query failed: %v", err)
+	}
+	var failed []githubCheckRun
+	pending := len(runs) == 0
+	for _, r := range runs {
+		if r.Status != "completed" {
+			pending = true
+			continue
+		}
+		switch r.Conclusion {
+		case "failure", "timed_out", "cancelled", "action_required", "stale":
+			failed = append(failed, r)
+		}
+	}
+	if len(failed) == 0 && pending {
+		return prShepherdSkip(bb, "pr_shepherd_ci_pending",
+			"## PR Shepherd Waiting\n\nPR #%d CI still running for %s (%d check runs); checked again next cycle.", pr.Number, localSHA[:min(12, len(localSHA))], len(runs))
+	}
+
+	if len(failed) == 0 {
+		if err := api.mergePR(ctx, pr.Number); err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_merge_blocked",
+				"## PR Shepherd Merge Blocked\n\nPR #%d is green but the merge was refused: %v", pr.Number, err)
+		}
+		_ = deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin")
+		if ff := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", ".", "refs/remotes/origin/master:master"); ff.Err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_merged",
+				"## PR Shepherd Merged PR #%d\n\nMerged, but the local master ff was refused (will sync next cycle):\n```\n%s\n```", pr.Number, truncateGoap(ff.Output, 400))
+		}
+		api.deleteBranch(ctx, branch)
+		_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+		return prShepherdSkip(bb, "pr_shepherd_merged",
+			"## PR Shepherd Merged PR #%d\n\nPipeline green; merged and fast-forwarded local master.", pr.Number)
+	}
+
+	return runPRShepherdFix(ctx, bb, deps, api, state, branch, localSHA, pr.Number, failed, now)
+}
+
+// runPRShepherdFix runs ONE bounded Claude fix attempt for a red pipeline:
+// evidence from check-run annotations, Claude edits in a fresh worktree, a
+// DETERMINISTIC commit (Claude has no git-write tools, mirroring the
+// superpowers apply step), landing on local master via the non-forced ff
+// primitive, then re-pushing the fleet branch.
+func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, api *githubPRClient, state prShepherdState, branch, headSHA string, prNumber int, failed []githubCheckRun, now func() time.Time) int {
+	maxAttempts := prShepherdMaxFixAttempts()
+	if state.FixAttempts[headSHA] >= maxAttempts || state.TotalFixAttempts >= 2*maxAttempts {
+		return prShepherdSkip(bb, "pr_shepherd_fix_exhausted",
+			"## PR Shepherd Fix Budget Exhausted\n\nPR #%d head %s: %d/%d attempts for this head, %d total since the last merge. Operator attention needed.",
+			prNumber, headSHA[:min(12, len(headSHA))], state.FixAttempts[headSHA], maxAttempts, state.TotalFixAttempts)
+	}
+	if claudeBackoffActive(bb, now()) {
+		until, _ := loadClaudeBackoffState(bb)
+		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
+			"## PR Shepherd Skipped\n\nClaude backoff active until %s; fix deferred.", until.Format(time.RFC3339))
+	}
+
+	var evidence strings.Builder
+	for _, f := range failed {
+		fmt.Fprintf(&evidence, "- check %q concluded %s\n", f.Name, f.Conclusion)
+		for _, a := range api.listAnnotations(ctx, f.ID, 50) {
+			fmt.Fprintf(&evidence, "  %s\n", a)
+		}
+	}
+
+	chargeAttempt := func() {
+		state.FixAttempts[headSHA]++
+		state.TotalFixAttempts++
+		_ = savePRShepherdState(deps.stateDir, state)
+	}
+
+	short := headSHA[:min(8, len(headSHA))]
+	fixBranch := "pr-fix-" + short
+	wtPath := filepath.Join("/tmp/worktrees", fixBranch)
+	if wt := deps.runner.Run(ctx, deps.repoDir, "git", "worktree", "add", "-b", fixBranch, wtPath, "refs/heads/master"); wt.Err != nil {
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
+			"## PR Shepherd Fix Failed\n\nWorktree setup failed:\n```\n%s\n```", truncateGoap(wt.Output, 800))
+	}
+	cleanup := func() {
+		_ = deps.runner.Run(ctx, deps.repoDir, "git", "worktree", "remove", "--force", wtPath)
+		_ = deps.runner.Run(ctx, deps.repoDir, "git", "branch", "-D", fixBranch)
+	}
+
+	prompt := buildPRFixPrompt(branch, headSHA, prNumber, evidence.String())
+	claudeCtx, cancel := context.WithTimeout(ctx, deps.claudeTimeout)
+	res := deps.claude.RunClaude(claudeCtx, wtPath, prompt)
+	cancel()
+	combined := res.Output
+	if res.Err != nil {
+		combined += " " + res.Err.Error()
+	}
+	if isClaudeRateLimit(combined) {
+		cleanup()
+		saveClaudeBackoffState(bb, claudeBackoffDeadline(combined, now(), goapClaudeBackoffWindow))
+		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
+			"## PR Shepherd Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 1200))
+	}
+
+	status := deps.runner.Run(ctx, wtPath, "git", "status", "--porcelain")
+	if strings.TrimSpace(status.Output) == "" {
+		cleanup()
+		chargeAttempt()
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
+			"## PR Shepherd Fix Produced No Changes\n\nAttempt %d/%d for head %s:\n```\n%s\n```",
+			state.FixAttempts[headSHA], prShepherdMaxFixAttempts(), short, truncateGoap(combined, 1200))
+	}
+	if add := stageAllExceptGenerated(ctx, deps.runner, wtPath); add.Err != nil {
+		cleanup()
+		chargeAttempt()
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed", "## PR Shepherd Fix Failed\n\nStaging failed:\n```\n%s\n```", truncateGoap(add.Output, 800))
+	}
+	msg := fmt.Sprintf("fleet: fix CI for PR #%d head %s (attempt %d)", prNumber, short, state.FixAttempts[headSHA]+1)
+	if commit := deps.runner.Run(ctx, wtPath, "git", "commit", "-m", msg); commit.Err != nil {
+		cleanup()
+		chargeAttempt()
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
+			"## PR Shepherd Fix Rejected By Hook\n\n```\n%s\n```", truncateGoap(commit.Output, 1200))
+	}
+	if ff := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", ".", "refs/heads/"+fixBranch+":master"); ff.Err != nil {
+		cleanup()
+		chargeAttempt()
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
+			"## PR Shepherd Fix Landed Nowhere\n\nNon-forced ff of the fix onto local master refused (master moved mid-fix):\n```\n%s\n```", truncateGoap(ff.Output, 800))
+	}
+	cleanup()
+	if push := deps.runner.Run(ctx, deps.repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch); push.Err != nil {
+		chargeAttempt()
+		return prShepherdSkip(bb, "pr_shepherd_push_failed",
+			"## PR Shepherd Fix Landed Locally, Push Failed\n\n```\n%s\n```", truncateGoap(push.Output, 800))
+	}
+	chargeAttempt()
+	return prShepherdSkip(bb, "pr_shepherd_fix_pushed",
+		"## PR Shepherd Pushed CI Fix\n\nPR #%d: fix for head %s landed on master and re-pushed to `%s` (attempt %d/%d); CI re-runs.",
+		prNumber, short, branch, state.FixAttempts[headSHA], prShepherdMaxFixAttempts())
+}
+
+func buildPRFixPrompt(branch, headSHA string, prNumber int, evidence string) string {
+	return fmt.Sprintf(`You are fixing a FAILING GitHub Actions pipeline for PR #%d (branch %s, head %s) of this Go repository. You are in a dedicated git worktree at the branch's current code.
+
+CI failure evidence (check runs and their annotations):
+%s
+
+Instructions:
+- Reproduce locally first: PATH=/usr/local/go/bin:$PATH go vet ./..., gofmt -l ., and the focused tests for the files named above. 'make check-quick' mirrors the CI lint job.
+- Fix the ROOT CAUSE in the source; do not weaken or skip tests to get green.
+- Known-environmental on THIS host only: TestNewGoBuildTool_* fail here with buildvcs errors but PASS in CI — do not "fix" those.
+- Do NOT run any git write commands (no add/commit/push) — the caller stages and commits deterministically after you finish.
+- When done, summarize what was broken and what you changed.`, prNumber, branch, headSHA, evidence)
+}
+
+// fleetPRTitleAndBody derives the PR title/body from the commits local master
+// is ahead by.
+func fleetPRTitleAndBody(ctx context.Context, runner CommandRunner, repoDir string) (string, string) {
+	subject := strings.TrimSpace(runner.Run(ctx, repoDir, "git", "log", "-1", "--format=%s", "refs/heads/master").Output)
+	if subject == "" {
+		subject = "fleet landings"
+	}
+	count := strings.TrimSpace(runner.Run(ctx, repoDir, "git", "rev-list", "--count", "refs/remotes/origin/master..refs/heads/master").Output)
+	title := subject
+	if n, err := strconv.Atoi(count); err == nil && n > 1 {
+		title = fmt.Sprintf("%s (+%d more)", subject, n-1)
+	}
+	body := fmt.Sprintf("Automated fleet landing PR: %s commits accrued on the daemon's local master (origin/master is branch-protected). The PR shepherd fixes CI failures and merges on green.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)", count)
+	return title, body
+}
+
+// ---------------------------------------------------------------------------
+// Landing tail: ship a landed run to origin — direct push when allowed,
+// fleet-PR fallback when master is protected.
+
+// landingPRClientFactory builds the GitHub client for the landing-tail PR
+// fallback; a package var so tests can inject an httptest-backed client.
+var landingPRClientFactory = newGitHubPRClientFromEnv
+
+// pushLandingMasterToOrigin replaces the bare `git push origin master` step of
+// the landing commit: on a protected-branch rejection it ships local master
+// to the fleet PR branch instead (ApplyStatus committed_pr_opened, SUCCESS) —
+// the shepherd drives that PR to merge on subsequent cycles. Any other
+// failure keeps the committed_unpushed contract (refunded infra, caefb02).
+func pushLandingMasterToOrigin(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
+	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
+	if push.Err == nil {
+		return nil
+	}
+	if strings.Contains(push.Output, "protected branch") {
+		if err := shipLandingToPR(ctx, runner, run.RepoDir); err == nil {
+			run.ApplyStatus = "committed_pr_opened"
+			return nil
+		} else {
+			writeApplyCommitEvidence(run, "fleet PR fallback failed", CommandResult{Command: "shipLandingToPR", Output: err.Error(), Err: err})
+		}
+	}
+	run.ApplyStatus = "committed_unpushed"
+	return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
+}
+
+func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) error {
+	api, err := landingPRClientFactory(ctx, runner, repoDir)
+	if err != nil {
+		return err
+	}
+	branch := fleetPRBranch()
+	if push := runner.Run(ctx, repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch); push.Err != nil {
+		return fmt.Errorf("fleet branch push failed: %v\n%s", push.Err, push.Output)
+	}
+	pr, err := api.findOpenPR(ctx, branch)
+	if err != nil {
+		return err
+	}
+	if pr == nil {
+		title, body := fleetPRTitleAndBody(ctx, runner, repoDir)
+		if pr, err = api.createPR(ctx, branch, title, body); err != nil {
+			return err
+		}
+	}
+	st := loadPRShepherdState(prShepherdDir())
+	if st.PRNumber != pr.Number {
+		st.PRNumber = pr.Number
+		_ = savePRShepherdState(prShepherdDir(), st)
+	}
+	return nil
+}

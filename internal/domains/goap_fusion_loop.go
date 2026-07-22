@@ -42,6 +42,17 @@ func rawGoapFusionLoopTree() evolution.SerializableNode {
 			act("SetupFusionTools",
 				"Give loop actions access to vault, graphify, git, and NotebookLM runtime tools"),
 
+			// ── Phase 0.2: Fleet PR shepherd ──
+			// One NON-BLOCKING pass over the fleet's landing PR before any
+			// new work: adopt upstream merges (ff local master), ship
+			// accrued local-master commits (push fleet branch + open PR),
+			// fix a red pipeline (one bounded Claude attempt), merge a green
+			// one. Never waits on CI — progress happens between cycles. The
+			// action returns SUCCESS on every path so a quiet steady state
+			// cannot fail the Sequence into the ClaudeErrorHandler wrapper.
+			act("ShepherdFleetPR",
+				"One non-blocking fleet-PR pass: sync upstream merges, open/refresh the landing PR, fix red CI (bounded), merge green CI"),
+
 			// ── Phase 0.5: Self-seeding backlog ──
 			// Runs FIRST (before research/grill can fail) so the loop always
 			// has a program to work on. Placed after Phase 4 earlier, a cycle
