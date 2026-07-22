@@ -99,7 +99,7 @@ alphabetical within each layer (matching the diagram order):
 | Infrastructure | `internal/goap` | GOAP A* planner — the single search implementation (→ ADR-133) |
 | Infrastructure | `internal/llm` | LLM providers: Ollama client + DeepSeek escalation; `Client.GenerateWithMaxTokens` threads a `ChainConfig.MaxTokens` budget (5.5) through to the Ollama call (`num_predict`), forwarded by the `ErrorRecorder`/`TracedLLM`/`FallbackLLM` decorators via a `maxTokensCapable` type-assertion (mirroring `internal/engine/chains.go`'s `maxTokensLLM`) so the cap survives wrapping instead of being silently discarded on every real call |
 | Infrastructure | `internal/persona` | Per-user personalization layer (→ ADR-133, 5.6) |
-| Infrastructure | `internal/reliability` | Circuit breakers, retry, DLQ, error categorization |
+| Infrastructure | `internal/reliability` | Circuit breakers, retry, DLQ, error categorization; canonical block-fitness outcome scoring (`ScoreOutcome`), reused by `internal/blocks`' `ScoreFromBlackboard` and `internal/engine`'s `fitnessScoreFromBB` in place of the formula previously duplicated in each |
 | Infrastructure | `internal/security` | Auth, rate limiting, production security primitives |
 | Infrastructure | `internal/tracing` | OpenTelemetry facade (local Grafana/Tempo/Loki via `make observability-up`) |
 | Infrastructure | `internal/util` | Shared utility functions |

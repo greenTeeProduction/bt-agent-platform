@@ -202,6 +202,7 @@ Consolidation notes (2026-07-16):
 | ADR-177 | `reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability) | Accepted | 2026-07-19 |
 | ADR-178 | `gitStageArgs` Stops Re-Staging `graphify-out/`'s Regenerated Artifacts and `sectionAwareGraphContext` Becomes the One Canonical Graphify-Report Reader (Q5 Consistency & Reuse, Milestones 1–3/5) | Accepted | 2026-07-19 |
 | ADR-179 | `goapResearchGoalKey` Strips a Scoped Goal Line's `(files: …)` Suffix and `executeSuperpowersTaskBatch` Gates Each Task's RED Phase on Remaining Cycle Budget, Closing Milestones 4–5/5 of the ADR-178 Q5 Program | Accepted | 2026-07-22 |
+| ADR-180 | `reliability.ScoreOutcome` Becomes the One Canonical Block-Fitness Scoring Formula, Replacing Two of Its Three Copy-Pasted Sites (Q5 Consistency & Reuse, Milestones 1–3/4) | Accepted | 2026-07-22 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3230,6 +3231,21 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ A batch whose remaining cycle budget can no longer safely cover a task's own verification commands now stops cleanly before starting that task's RED phase, converting an after-the-fact SIGKILL classification (`superpowersBudgetKillError`) into a before-the-fact skip, and preserving already-completed tasks' verified work via the existing snapshot/mixed-reset carry-forward path instead of risking it to a kill.
 - ⚠️ The 2x `-timeout` margin (`superpowersTaskBudgetMultiplier`) is a static heuristic, not derived from measured process-startup/teardown overhead; a verification command whose true startup cost exceeds the margin could still be gated too late, while an unusually fast machine gates somewhat earlier than strictly necessary. Not measured in this change.
 - Rejected alternative: keep classifying budget kills only after the fact via `superpowersBudgetKillError` — rejected because reclassification cannot recover a mid-flight SIGKILL's lost verification work; only refusing to start a task protects an already-green milestone.
+
+---
+
+## ADR-180: `reliability.ScoreOutcome` Becomes the One Canonical Block-Fitness Scoring Formula, Replacing Two of Its Three Copy-Pasted Sites (Q5 Consistency & Reuse, Milestones 1–3/4)
+
+**Context (2026-07-22):** The block-fitness scoring formula — scale `qualityScore` to a 0–100 percentage; if that's zero or below, fall back to 75 when `success` is true or `outcome` case-insensitively matches "success"/"completed", else 25; clamp to `[0,100]` — was hand-copied identically at three sites: `internal/blocks/fitness.go`'s `ScoreFromBlackboard`, `internal/engine/ops_actions.go`'s `fitnessScoreFromBB`, and an inline block in `internal/dashboard/executor.go`'s `recordBlockFitnessMetric`. A future change to the formula (e.g. a different fallback split, or an additional outcome keyword) would need three coordinated edits, with no test tying them together to catch drift.
+
+**Decision:** `internal/reliability/reliability.go` gains `ScoreOutcome(outcome string, qualityScore float64, success bool) float64`, the one canonical implementation of the formula, alongside the package's existing circuit-breaker/retry/DLQ reliability primitives — a defensible home since block fitness is itself a reliability signal, and the package already has no import-cycle path back to `internal/blocks`, `internal/engine`, or `internal/dashboard`. `blocks.ScoreFromBlackboard` and `engine.fitnessScoreFromBB` are now one-line delegations to it, each pinned by a source-inspection test (`TestScoreFromBlackboard_DelegatesToReliabilityScoreOutcome`, `TestFitnessScoreFromBB_DelegatesToReliabilityScoreOutcome`) that fails if the duplicated inline formula ever reappears in either file, rather than only checking input/output equivalence. `internal/dashboard/executor.go`'s inline copy is deliberately left in place for this pass.
+
+**Status:** Accepted (2026-07-22) — milestones 1–3/4 of the Q5 Consistency & Reuse program; milestone 4/4 (replacing `internal/dashboard/executor.go`'s `recordBlockFitnessMetric` copy) remains open. Pinned by `TestScoreOutcome_*` (`internal/reliability/reliability_test.go`, covering the positive-quality-score, clamp-above-100, both zero-quality fallback branches, no-success-signal, and negative-quality-clamps-to-zero cases) and the two delegation-guard tests above (`internal/engine/ops_actions_test.go`, `internal/blocks/phase5_test.go`).
+
+**Consequences:**
+- ✅ Two of the formula's three copies now share one tested implementation; a future formula change lands once in `reliability.ScoreOutcome` instead of needing coordinated edits across `blocks` and `engine`.
+- ✅ `ScoreFromBlackboard`'s and `fitnessScoreFromBB`'s exported signatures are unchanged, so `RecordTaskBlockFitness` and other existing callers are unaffected by the consolidation.
+- ⚠️ `internal/dashboard/executor.go`'s copy (milestone 4/4) is not part of this change — the formula still has two independent implementations in the codebase (`reliability.ScoreOutcome` and the dashboard's inline block) until that milestone lands.
 
 ---
 

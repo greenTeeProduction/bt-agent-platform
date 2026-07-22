@@ -641,12 +641,12 @@ func pushLandingMasterToOrigin(ctx context.Context, runner CommandRunner, run *S
 		return nil
 	}
 	if strings.Contains(push.Output, "protected branch") {
-		if err := shipLandingToPR(ctx, runner, run.RepoDir); err == nil {
+		err := shipLandingToPR(ctx, runner, run.RepoDir)
+		if err == nil {
 			run.ApplyStatus = "committed_pr_opened"
 			return nil
-		} else {
-			writeApplyCommitEvidence(run, "fleet PR fallback failed", CommandResult{Command: "shipLandingToPR", Output: err.Error(), Err: err})
 		}
+		writeApplyCommitEvidence(run, "fleet PR fallback failed", CommandResult{Command: "shipLandingToPR", Output: err.Error(), Err: err})
 	}
 	run.ApplyStatus = "committed_unpushed"
 	return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)

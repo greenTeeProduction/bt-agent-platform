@@ -397,7 +397,9 @@ func TestPRShepherd_FixAttemptsExhausted(t *testing.T) {
 	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
 	bb := newTestBlackboard()
 	deps := prTestDeps(t, gh, runner, claude)
-	savePRShepherdState(deps.stateDir, prShepherdState{PRNumber: 77, FixAttempts: map[string]int{"localsha": 3}})
+	if err := savePRShepherdState(deps.stateDir, prShepherdState{PRNumber: 77, FixAttempts: map[string]int{"localsha": 3}}); err != nil {
+		t.Fatalf("savePRShepherdState: %v", err)
+	}
 	if got := runPRShepherd(bb, deps); got != 1 {
 		t.Fatalf("result = %d, want 1", got)
 	}
