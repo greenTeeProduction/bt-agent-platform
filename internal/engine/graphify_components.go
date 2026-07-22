@@ -347,6 +347,10 @@ func deriveGraphifyReuseTopic(task string) string {
 	if !isBoilerplateResearchTopic(t) {
 		return t
 	}
+	// Read-only lookup — nothing is persisted here, so there is no
+	// lost-update risk and no need for research.UpdatePrograms' shared flock
+	// (see self_fix_seed.go's file doc comment for the writer-side gap this
+	// program closed).
 	if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
 		if p := ps.Active(); p != nil {
 			if _, m := p.NextMilestone(); m != nil && !isBoilerplateResearchTopic(m.Goal) {

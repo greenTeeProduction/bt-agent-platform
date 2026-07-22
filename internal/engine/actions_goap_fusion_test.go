@@ -1,13 +1,16 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -118,6 +121,74 @@ func TestPrioritizeGoapGoals_AffirmativeBlockerProducesEngineTestGoal(t *testing
 	if !strings.Contains(goals, "Unblock engine tests") {
 		t.Fatalf("prioritization dropped the P0 engine-test goal for a genuine, affirmative "+
 			"build blocker:\n%s", goals)
+	}
+}
+
+// PrioritizeGoapGoals charges the active program's head milestone via a bare
+// OpenPrograms + RecordAttemptAndMaybeBlock + Save — ADR-183 migrated the
+// milestone-attempt refund/red-pass paths (actions_goap_fusion_refund.go) and
+// program registration (persistGoapProgram) onto research.UpdatePrograms'
+// flock-held read-modify-write, but explicitly left this charge site
+// unmigrated (see its "remaining milestones 4-5/5" consequence). Because this
+// call site never takes the shared lock, its raw Save can land between any
+// OTHER writer's flock-protected open and save — including already-migrated
+// ones — silently clobbering that writer's durably-persisted change with this
+// call's stale in-memory copy. This test hammers the real call site: many
+// concurrent persistGoapProgram registrations (flock-protected, each adding a
+// distinct new program) race against many concurrent PrioritizeGoapGoals
+// charges against a pre-seeded active program, sharing one programs.json.
+// Every registered program must survive.
+func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testing.T) {
+	isolateGoapProgramStore(t)
+
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps.Add("Active head program", "test", []string{"head milestone", "tail milestone"})
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	prioritize := GetAction("PrioritizeGoapGoals")
+	if prioritize == nil {
+		t.Fatal("action \"PrioritizeGoapGoals\" not registered")
+	}
+
+	const writers = 30
+	const chargers = 30
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{}}
+			spec := &goapProgramSpec{
+				Title:      fmt.Sprintf("Concurrent registered program %d", i),
+				Milestones: []string{"m1"},
+			}
+			persistGoapProgram(bb, spec, "test")
+		}()
+	}
+	for i := 0; i < chargers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{}}
+			prioritize(&btcore.BTContext[Blackboard]{Blackboard: bb})
+		}()
+	}
+	wg.Wait()
+
+	final, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// +1 for the pre-seeded "Active head program".
+	if got, want := len(final.Programs), writers+1; got != want {
+		t.Fatalf("lost %d registered program(s) to PrioritizeGoapGoals's unlocked charge-and-save race "+
+			"(no flock coordination): want %d programs, got %d", want-got, want, got)
 	}
 }
 

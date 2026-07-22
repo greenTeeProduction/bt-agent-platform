@@ -313,25 +313,42 @@ func registerGoapFusionActions() {
 		// of the queue — up to the plan builder's task capacity per cycle, so
 		// a program no longer costs one full cycle per milestone (the 5-
 		// milestone auction program took 5 cycles ≈ 5 hours at 1/cycle).
-		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
-			if p := ps.Active(); p != nil {
-				// Record an attempt on the head pending milestone; if it has
-				// now failed too many times it is marked blocked (and skipped
-				// below), so an unbuildable/fabricated milestone the agent
-				// keeps declining stops freezing the program forever.
-				if idx, m := p.NextMilestone(); m != nil {
-					ps.RecordAttemptAndMaybeBlock(p.ID, idx, goapProgramMaxMilestoneAttempts)
-					_ = ps.Save()
-					// Stamp WHICH milestone was charged so an infrastructure
-					// failure later in this cycle can refund exactly this
-					// charge — the queued refs below are re-read after the
-					// store re-open and may start past a just-blocked one.
-					setGoapStateDurable(bb, "program_milestone_charged", fmt.Sprintf("%s:%d", p.ID, idx))
-					// Re-open so a just-blocked milestone is reflected in the
-					// queueing pass below (which re-reads ps.Active()).
-					ps, _ = research.OpenPrograms(goapProgramsPath)
-				}
+		// Charging the head milestone's attempt (RecordAttemptAndMaybeBlock +
+		// save) is a read-modify-write against the shared program store, so it
+		// must go through UpdatePrograms' flock like every other program-store
+		// writer (persistGoapProgram, RefundAttempt, RecordRedPass, MarkDone) —
+		// a bare OpenPrograms+Save here could clobber a concurrent writer's
+		// already-persisted change with this call's stale in-memory copy.
+		var chargedProgramID string
+		var chargedIdx int
+		var charged bool
+		if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+			p := ps.Active()
+			if p == nil {
+				return nil
 			}
+			// Record an attempt on the head pending milestone; if it has now
+			// failed too many times it is marked blocked (and skipped below),
+			// so an unbuildable/fabricated milestone the agent keeps
+			// declining stops freezing the program forever.
+			idx, m := p.NextMilestone()
+			if m == nil {
+				return nil
+			}
+			ps.RecordAttemptAndMaybeBlock(p.ID, idx, goapProgramMaxMilestoneAttempts)
+			chargedProgramID, chargedIdx, charged = p.ID, idx, true
+			return nil
+		}); err == nil && charged {
+			// Stamp WHICH milestone was charged so an infrastructure failure
+			// later in this cycle can refund exactly this charge — the
+			// queued refs below are re-read after the store re-open and may
+			// start past a just-blocked one.
+			setGoapStateDurable(bb, "program_milestone_charged", fmt.Sprintf("%s:%d", chargedProgramID, chargedIdx))
+		}
+
+		// Re-open (read-only) so a just-blocked milestone is reflected in the
+		// queueing pass below.
+		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
 			if p := ps.Active(); p != nil {
 				var refs []string
 				for idx := range p.Milestones {

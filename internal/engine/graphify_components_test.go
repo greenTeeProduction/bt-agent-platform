@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -284,6 +285,58 @@ func TestWriteSuperpowersImplementationPlanGraphifyEnrichmentIsTransient(t *test
 	// must survive the whole composition unchanged.
 	if goapResearchGoalKey(queue) != goapResearchGoalKey(graphifyScopeGoalLine(scopeGoapGoalLine(queue))) {
 		t.Fatal("goal key drifted through the scope+graphify enrichment pipeline")
+	}
+}
+
+// TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive pins the
+// LAST call site of the engine-wide research.ProgramStore concurrent-writer
+// lost-update gap (see research.UpdatePrograms's doc comment, and the sibling
+// migrations already covered by TestPersistGoapProgram_ConcurrentCallersAllSurvive
+// / TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive in
+// goap_research_goals_test.go and TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive
+// in actions_goap_fusion_refund_test.go). seedCodeFixProgram
+// (self_fix_seed.go) still does a bare research.OpenPrograms + ps.Save(),
+// serialized only against OTHER self-fix seeds via selfFixStoreMu and its own
+// on-disk self_fix/store.lock — it never takes research.UpdatePrograms' shared
+// flock on programs.json itself. So a genuinely concurrent, already-migrated
+// writer (persistGoapProgram, guarded only by that shared flock) can load its
+// in-memory copy, get pre-empted by a self-fix seed's full
+// read→ledger-write→save cycle that lands its own program to disk, and then
+// Save its own stale copy — silently clobbering the self-fix program the
+// other writer's load never saw (or vice versa).
+func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testing.T) {
+	_, programsPath := withTempSelfFix(t)
+	t.Setenv("BT_SELF_FIX_MAX_OPEN", "1000")
+
+	const workers = 20
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sig := fmt.Sprintf("cross-sig-%d", i)
+			seedCodeFixProgram(sig, fmt.Sprintf("Cross fix %d", i), fmt.Sprintf("fix cross_%d.go: defect", i), "self-fix:test:"+sig)
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{}}
+			spec := &goapProgramSpec{
+				Title:      fmt.Sprintf("Cross persist %d", i),
+				Milestones: []string{"m1"},
+			}
+			persistGoapProgram(bb, spec, "test")
+		}()
+	}
+	wg.Wait()
+
+	ps, err := research.OpenPrograms(programsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(ps.Programs), workers*2; got != want {
+		t.Fatalf("lost programs under concurrent seedCodeFixProgram + persistGoapProgram (self-fix's own write bypasses the shared programs.json flock): got %d, want %d", got, want)
 	}
 }
 
