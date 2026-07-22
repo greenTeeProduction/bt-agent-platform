@@ -35,17 +35,18 @@ type RebuildTarget struct {
 // bt-dashboard's own watcher; OutPath matches bin/bt-gardener above (not the
 // repo root) since that is where the production systemd unit's drop-in
 // ExecStart override (2026-07-15) actually runs bt-dashboard from.
-// bt-agent-mcp (Q3 Reliability milestone 3) is the MCP server binary
-// bin/bt-agent that .mcp.json boots per cycle-session — it is unit-less
-// since MCP client sessions spawn a fresh process per session rather than
-// running under a long-lived systemd unit, so it needs no restart handoff.
+// bt-agent's own OutPath is bin/bt-agent too (2026-07-22): the unit's
+// ExecStart was repointed there — the repo-root copy the unit previously ran
+// was the reason self-drift adoption never reached the daemon — and
+// bin/bt-agent doubles as the MCP server binary .mcp.json boots per
+// cycle-session, so the former separate unit-less "bt-agent-mcp" target
+// collapsed into it.
 func DefaultRebuildTargets(repoDir string) []RebuildTarget {
 	return []RebuildTarget{
-		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bt-agent"), Unit: "bt-agent"},
+		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bin", "bt-agent"), Unit: "bt-agent"},
 		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join(repoDir, "bt-agent-cli")},
 		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener"), Unit: "bt-gardener"},
 		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join(repoDir, "bin", "bt-dashboard"), Unit: "bt-dashboard"},
-		{Name: "bt-agent-mcp", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bin", "bt-agent")},
 	}
 }
 
