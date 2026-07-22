@@ -429,7 +429,11 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	prShepherdMu.Lock()
 	defer prShepherdMu.Unlock()
 
-	if fetch := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin"); fetch.Err != nil {
+	// --prune is load-bearing: after a merge the fleet branch is deleted via
+	// the API, which leaves the LOCAL remote-tracking ref stale — the next
+	// `push --force-with-lease` then fails its lease with "stale info"
+	// forever (live 2026-07-22 16:52). Pruning keeps tracking refs truthful.
+	if fetch := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune"); fetch.Err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_fetch_failed",
 			"## PR Shepherd Skipped\n\ngit fetch origin failed (offline?):\n```\n%s\n```", truncateGoap(fetch.Output, 800))
 	}
@@ -523,7 +527,7 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 			return prShepherdSkip(bb, "pr_shepherd_merge_blocked",
 				"## PR Shepherd Merge Blocked\n\nPR #%d is green but the merge was refused: %v", pr.Number, err)
 		}
-		_ = deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin")
+		_ = deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune")
 		if ff := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", ".", "refs/remotes/origin/master:master"); ff.Err != nil {
 			return prShepherdSkip(bb, "pr_shepherd_merged",
 				"## PR Shepherd Merged PR #%d\n\nMerged, but the local master ff was refused (will sync next cycle):\n```\n%s\n```", pr.Number, truncateGoap(ff.Output, 400))
@@ -702,6 +706,9 @@ func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) 
 		return err
 	}
 	branch := fleetPRBranch()
+	// Best-effort prune first: a remote-tracking ref left behind by a merged
+	// branch's API deletion would fail the lease below with "stale info".
+	_ = runner.Run(ctx, repoDir, "git", "fetch", "origin", "--prune")
 	if push := runner.Run(ctx, repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch); push.Err != nil {
 		return fmt.Errorf("fleet branch push failed: %v\n%s", push.Err, push.Output)
 	}

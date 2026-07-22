@@ -339,6 +339,12 @@ func TestPRShepherd_GreenMergesAndSyncs(t *testing.T) {
 	if !gh.requested("DELETE") {
 		t.Fatalf("expected branch cleanup, requests: %v", gh.requests)
 	}
+	// The API branch deletion leaves the LOCAL remote-tracking ref behind;
+	// only pruning fetches keep the next push's --force-with-lease from
+	// failing with "stale info" (live 2026-07-22 16:52).
+	if !runner.called("fetch origin --prune") {
+		t.Fatalf("fetches must prune stale remote-tracking refs, calls: %v", runner.calls)
+	}
 	if st := loadPRShepherdState(deps.stateDir); st.PRNumber != 0 || len(st.FixAttempts) != 0 {
 		t.Fatalf("state should be cleared after merge: %+v", st)
 	}
