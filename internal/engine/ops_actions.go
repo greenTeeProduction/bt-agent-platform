@@ -134,21 +134,7 @@ func pushToDLQAction(ctx *btcore.BTContext[Blackboard]) int {
 }
 
 func fitnessScoreFromBB(outcome string, qualityScore float64, success bool) float64 {
-	score := qualityScore * 100
-	if score <= 0 {
-		if success || strings.EqualFold(outcome, "success") || strings.EqualFold(outcome, "completed") {
-			score = 75
-		} else {
-			score = 25
-		}
-	}
-	if score > 100 {
-		score = 100
-	}
-	if score < 0 {
-		score = 0
-	}
-	return score
+	return reliability.ScoreOutcome(outcome, qualityScore, success)
 }
 
 func truncateStr(s string, maxLen int) string {

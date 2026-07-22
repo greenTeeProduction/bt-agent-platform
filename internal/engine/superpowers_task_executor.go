@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -248,6 +249,26 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 	}
 	completed := 0
 	for i := range run.Tasks {
+		if reason, insufficient := superpowersTaskBudgetInsufficient(ctx, run.Tasks[i]); insufficient {
+			// The remaining cycle budget can no longer safely cover this
+			// task's own verification commands: starting its RED phase now
+			// risks the cycle's outer deadline SIGKILLing a test process
+			// mid-run, which only gets classified as a kill AFTER the fact
+			// (superpowersBudgetKillError). Stop cleanly instead — mark this
+			// and every later task skipped, and unwrap any snapshots already
+			// committed so completed work still lands. Regression: run
+			// 20260718T164339 lost a green milestone to exactly this
+			// mid-flight SIGKILL.
+			for j := i; j < len(run.Tasks); j++ {
+				run.Tasks[j].Status = "skipped"
+			}
+			run.PartialFailure = fmt.Sprintf("task %d %q stopped before RED phase: batch-stopped-insufficient-budget (%s)", run.Tasks[i].Index, run.Tasks[i].Title, reason)
+			if base != "" {
+				executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
+			}
+			_ = writeSuperpowersRunJSON(run)
+			return nil
+		}
 		task, err := executor.ExecuteTask(ctx, run, run.Tasks[i])
 		run.Tasks[i] = task
 		_ = writeSuperpowersRunJSON(run)
@@ -302,6 +323,65 @@ func executeSuperpowersTaskBatch(ctx context.Context, executor SuperpowersTaskEx
 		executor.Runner.Run(ctx, run.WorktreePath, "git", "reset", base)
 	}
 	return nil
+}
+
+// superpowersTaskBudgetMultiplier is the safety margin applied to a task's
+// own largest -timeout value when checking whether the remaining
+// cycle-context budget can still safely cover its verification commands.
+// 2x leaves room for process startup and the difference between a test
+// binary's own -timeout expiring cleanly and the outer cycle deadline
+// SIGKILLing it mid-run — a close call is treated as insufficient rather
+// than gambling on that race (2026-07-18 run 20260718T164339 lost a green
+// milestone to exactly that SIGKILL).
+const superpowersTaskBudgetMultiplier = 2
+
+var superpowersTestTimeoutPattern = regexp.MustCompile(`-timeout[= ](\S+)`)
+
+// superpowersTaskMinBudget derives the minimum context budget required to
+// safely start task's RED phase from its own verification commands:
+// superpowersTaskBudgetMultiplier x the largest -timeout found among them.
+// Returns 0 when no command carries a parseable -timeout — there is then
+// nothing safe to compare the remaining budget against, so the task is not
+// gated.
+func superpowersTaskMinBudget(task SuperpowersTask) time.Duration {
+	var maxTimeout time.Duration
+	for _, cmd := range task.Tests {
+		m := superpowersTestTimeoutPattern.FindStringSubmatch(cmd)
+		if m == nil {
+			continue
+		}
+		d, err := time.ParseDuration(m[1])
+		if err != nil || d <= maxTimeout {
+			continue
+		}
+		maxTimeout = d
+	}
+	if maxTimeout <= 0 {
+		return 0
+	}
+	return superpowersTaskBudgetMultiplier * maxTimeout
+}
+
+// superpowersTaskBudgetInsufficient reports whether the remaining
+// cycle-context budget can no longer safely cover task's own verification
+// commands, so its RED phase must never be STARTED. A context with no
+// deadline, or a task whose commands carry no parseable -timeout, is never
+// gated (superpowersTaskMinBudget returns 0). When insufficient, the
+// returned string names the shortfall for the batch's PartialFailure note.
+func superpowersTaskBudgetInsufficient(ctx context.Context, task SuperpowersTask) (string, bool) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return "", false
+	}
+	required := superpowersTaskMinBudget(task)
+	if required <= 0 {
+		return "", false
+	}
+	remaining := time.Until(deadline)
+	if remaining >= required {
+		return "", false
+	}
+	return fmt.Sprintf("remaining budget %s < required %s", remaining.Round(time.Second), required.Round(time.Second)), true
 }
 
 // superpowersVerificationCheck is one named verification command; the run

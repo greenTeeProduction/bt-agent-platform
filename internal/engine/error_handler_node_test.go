@@ -524,6 +524,60 @@ func TestClaudeErrorHandler_CodeFixTransientSeedFailureRetries(t *testing.T) {
 	}
 }
 
+// A PERSISTENT (not merely transient) self-fix seed failure must not be able
+// to retry Claude+seed forever. escalate_failed only bypasses the cooldown for
+// a bounded number of CONSECUTIVE misses (matches the errorHandlerDisableAfter
+// 3-window convention used elsewhere in this store). Once that streak is
+// reached, escalate_failed must cool out like any other verdict — otherwise a
+// permanently broken self-fix store (not a one-off transient blip) spams
+// Claude every tick for the life of the process, bypassing the 6-hour cooldown
+// forever.
+func TestClaudeErrorHandler_ConsecutiveEscalateFailedCapsCooldownBypass(t *testing.T) {
+	withTempErrorHandlerDir(t)
+	dir, programsPath := withTempSelfFix(t)
+	fake := &fakeClaudeRunner{output: ehTestCodeFixJSON()}
+	swapErrorHandlerRunner(t, fake)
+
+	// Hold the cross-process self-fix store lock for the ENTIRE test so every
+	// seed attempt returns "self-fix store busy" -> escalate_failed. Unlike
+	// TestClaudeErrorHandler_CodeFixTransientSeedFailureRetries (which releases
+	// the lock after one miss to prove a genuinely transient blip retries),
+	// this simulates a persistently broken store that never recovers.
+	const consecutiveEscalateFailedCap = 3
+	lockPath := filepath.Join(dir, "store.lock")
+	if err := os.WriteFile(lockPath, []byte("held"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lockPath) })
+
+	var sig string
+	for i := 0; i < consecutiveEscalateFailedCap+2; i++ {
+		bb := &Blackboard{ChainState: map[string]any{}}
+		if code := runHandler(t, bb); code != -1 {
+			t.Fatalf("iteration %d: must pass failure through; got %d", i, code)
+		}
+		sig = errorHandlerSignatureFromBB(bb, "eh_test_tree_ErrorHandler", "eh_test_failing_action")
+	}
+	if n := countSelfFixPrograms(t, programsPath); n != 0 {
+		t.Fatalf("permanently busy store must never seed, got %d", n)
+	}
+	if got, want := fake.calls.Load(), int64(consecutiveEscalateFailedCap); got != want {
+		t.Fatalf("consecutive escalate_failed must cap Claude retries at %d, got %d calls (cooldown bypass is unbounded)", want, got)
+	}
+	if entry, ok := errorHandlerLedgerGet(sig); !ok || entry.LastVerdict != "escalate_failed" {
+		t.Fatalf("ledger verdict = %+v ok=%v, want escalate_failed", entry, ok)
+	}
+
+	// One more firing, still within the 6h cooldown: must remain suppressed.
+	bbFinal := &Blackboard{ChainState: map[string]any{}}
+	if code := runHandler(t, bbFinal); code != -1 {
+		t.Fatal("must still pass failure through while capped")
+	}
+	if got := fake.calls.Load(); got != int64(consecutiveEscalateFailedCap) {
+		t.Fatalf("capped escalate_failed must stay cooled out, got %d calls", got)
+	}
+}
+
 // An unresolvable verdict WITHOUT code_fix (a transient failure) seeds nothing
 // and keeps today's "unresolvable" ledger verdict.
 func TestClaudeErrorHandler_UnresolvableWithoutCodeFixSeedsNothing(t *testing.T) {

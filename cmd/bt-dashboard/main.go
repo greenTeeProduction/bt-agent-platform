@@ -204,6 +204,16 @@ func main() {
 	kg = buildDashboardKnowledgeGraph(agent.FeedbackFile())
 	dashboard.DiscoverTreeFn = kg.Discover
 
+	// NotebookLM research goal: refresh KG analytics gauges from this process's
+	// own in-process knowledge graph on every /api/metrics scrape, instead of
+	// depending on the separate bt-agent process's bt_kg_analytics MCP tool
+	// handler (whose dashboard.RecordKGAnalytics call only ever updates that
+	// other process's own in-memory gauges).
+	dashboard.KGAnalyticsRefreshFn = func() {
+		a := kg.ComputeAnalytics()
+		dashboard.RecordKGAnalytics(len(a.CoverageGaps), len(a.Bottlenecks), len(a.SelectionPressure))
+	}
+
 	// Dead letter queue — persisted alongside other agent state
 	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"
 	dlq = reliability.NewDeadLetterQueue(dlqPath)

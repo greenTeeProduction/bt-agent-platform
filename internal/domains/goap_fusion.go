@@ -11,6 +11,7 @@ func GoapFusionTree(withCheckpointVerifier bool) *evolution.SerializableNode {
 		Description: "GOAP fusion cycle: research → read context → prioritize goals → implement via Superpowers or fall back to deterministic analysis → verify evidence",
 		Children: []evolution.SerializableNode{
 			act("SetupFusionTools", "Give GOAP fusion actions access to vault, graphify, git, and Superpowers runtime tools"),
+			act("ShepherdFleetPR", "One non-blocking fleet-PR pass: ff local master when a merge landed upstream, push the fleet branch and open a PR when local master is ahead, skip while CI runs, run one bounded Claude fix when CI is red, merge when CI is green — always a healthy success"),
 			seq("PreGate", "Validate the task is non-empty and fusion-related before the cycle",
 				cond("ValidateInput", "Task must be non-empty"),
 				cond("IsFusionTask", "Detect fusion/improve/expand/capability/research/evolve keywords"),

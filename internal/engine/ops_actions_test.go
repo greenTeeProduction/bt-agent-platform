@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -36,5 +38,28 @@ func TestPushToDLQAction_StampsBuildRevision(t *testing.T) {
 	}
 	if entries[0].BuildRevision != "test-revision-abc123" {
 		t.Errorf("BuildRevision = %q, want %q", entries[0].BuildRevision, "test-revision-abc123")
+	}
+}
+
+// fitnessScoreFromBB duplicates reliability.ScoreOutcome's formula (Q5
+// Consistency & Reuse milestone 1 extracted the canonical version). Scanning
+// the source directly — rather than calling fitnessScoreFromBB and comparing
+// outputs — is necessary because the duplicated formula is byte-for-byte
+// identical to reliability.ScoreOutcome, so every input/output pair matches
+// whether or not the delegation exists. This test fails until
+// fitnessScoreFromBB's body is replaced with a call to
+// reliability.ScoreOutcome and the duplicated inline formula is deleted.
+func TestFitnessScoreFromBB_DelegatesToReliabilityScoreOutcome(t *testing.T) {
+	src, err := os.ReadFile("ops_actions.go")
+	if err != nil {
+		t.Fatalf("reading ops_actions.go: %v", err)
+	}
+	body := string(src)
+
+	if !strings.Contains(body, "reliability.ScoreOutcome(") {
+		t.Error("fitnessScoreFromBB must call reliability.ScoreOutcome instead of duplicating its formula")
+	}
+	if strings.Contains(body, "score := qualityScore * 100") {
+		t.Error("ops_actions.go still contains the duplicated inline scoring formula; delete it now that reliability.ScoreOutcome is canonical")
 	}
 }

@@ -170,25 +170,64 @@ func TestApplySuperpowersRunToMainRepoAppliesVerifiesGraphifiesAndCommits(t *tes
 	}
 }
 
-// TestGitStageArgsExcludesGeneratedSuperpowersAndGraphifyPaths pins Q5
-// milestone 1/5: gitStageArgs (the apply-stage landing commit's `git add -A`
-// pathspec, superpowers_commit_autofix.go) must exclude every prefix in
-// superpowersGeneratedPathPrefixes, exactly like superpowersGeneratedCommitExclusions
-// already does for the per-task commit. Today gitStageArgs only excludes
-// docs/superpowers/runs/** and docs/superpowers/plans/** — graphify-out/** is
-// missing, so the landing commit stages and commits graphify-out's heavy
-// regenerated files (55k-line graph.json diffs) even though
-// isGeneratedSuperpowersOrGraphifyPath treats graphify-out as generated and
-// excludes it from dirty-repo gating and per-task commits. That contradiction
-// is exactly what bloated .git to 781MB.
-func TestGitStageArgsExcludesGeneratedSuperpowersAndGraphifyPaths(t *testing.T) {
-	args := gitStageArgs()
-	joined := strings.Join(args, " ")
-	for _, prefix := range superpowersGeneratedPathPrefixes {
-		want := ":(exclude)" + strings.TrimSuffix(prefix, "/") + "/**"
-		if !strings.Contains(joined, want) {
-			t.Fatalf("gitStageArgs() = %v missing exclusion %q for generated path prefix %q; the apply-stage landing commit must exclude the same generated paths as isGeneratedSuperpowersOrGraphifyPath/superpowersGeneratedCommitExclusions or they drift apart", args, want, prefix)
+// TestStageAllExceptGeneratedSucceedsWithIgnoredGraphifyOut pins the fix for
+// the 2026-07-21 23:30 fleet-wide degraded streak: git 2.25.1 aborts
+// `git add -A -- .` with "The following paths are ignored by one of your
+// .gitignore files" (exit 1) as soon as ANY ":(exclude)" pathspec is appended
+// and the worktree holds an ignored directory with untracked content — which
+// every run worktree has once the in-run `graphify update .` writes
+// graphify-out/cache. Every landing then fell back to applied_uncommitted and
+// the program treadmilled. Staging must therefore be the two-step
+// add-everything-then-reset-generated-prefixes form, succeed in exactly that
+// worktree shape, and stage the source change but nothing generated.
+func TestStageAllExceptGeneratedSucceedsWithIgnoredGraphifyOut(t *testing.T) {
+	// The pre-commit hook exports GIT_DIR/GIT_INDEX_FILE while running tests;
+	// inherited here, git commands would silently operate on the OUTER
+	// repository instead of this throwaway one. Scrub for the test's duration.
+	for _, k := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX", "GIT_COMMON_DIR"} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Setenv(k, v)
+			os.Unsetenv(k)
 		}
+	}
+
+	dir := t.TempDir()
+	runInDir(t, dir, "git init -q . && git config user.email t@t.local && git config user.name t")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("graphify-out/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "code.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "graphify-out"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "GRAPH_REPORT.md"), []byte("# report\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// GRAPH_REPORT.md stays tracked past the blanket ignore, mirroring the
+	// production worktree shape.
+	runInDir(t, dir, "git add -A && git add -f graphify-out/GRAPH_REPORT.md && git commit -qm base")
+
+	// A cycle's `graphify update .` regenerates untracked, gitignored output.
+	if err := os.MkdirAll(filepath.Join(dir, "graphify-out", "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "graphify-out", "cache", "c.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The run's actual source change that must land.
+	if err := os.WriteFile(filepath.Join(dir, "code.go"), []byte("package x // changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := stageAllExceptGenerated(context.Background(), execCommandRunner{}, dir)
+	if res.Err != nil {
+		t.Fatalf("stageAllExceptGenerated failed: %v\n%s", res.Err, res.Output)
+	}
+	staged := strings.TrimSpace(runInDir(t, dir, "git diff --cached --name-only"))
+	if staged != "code.go" {
+		t.Fatalf("staged paths = %q, want only code.go (generated graphify-out content must stay unstaged)", staged)
 	}
 }
 

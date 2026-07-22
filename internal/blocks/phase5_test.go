@@ -3,6 +3,7 @@ package blocks
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/audit"
@@ -123,6 +124,29 @@ func TestRecordTaskBlockFitness(t *testing.T) {
 	snap := dashboard.BlockFitnessSnapshot()
 	if len(snap) == 0 {
 		t.Fatal("expected fitness metrics recorded")
+	}
+}
+
+// ScoreFromBlackboard duplicates reliability.ScoreOutcome's formula (Q5
+// Consistency & Reuse milestone 1 extracted the canonical version). Scanning
+// the source directly — rather than calling ScoreFromBlackboard and comparing
+// outputs — is necessary because the duplicated formula is byte-for-byte
+// identical to reliability.ScoreOutcome, so every input/output pair matches
+// whether or not the delegation exists. This test fails until
+// ScoreFromBlackboard's body is replaced with a call to
+// reliability.ScoreOutcome and the duplicated inline formula is deleted.
+func TestScoreFromBlackboard_DelegatesToReliabilityScoreOutcome(t *testing.T) {
+	src, err := os.ReadFile("fitness.go")
+	if err != nil {
+		t.Fatalf("reading fitness.go: %v", err)
+	}
+	body := string(src)
+
+	if !strings.Contains(body, "reliability.ScoreOutcome(") {
+		t.Error("ScoreFromBlackboard must call reliability.ScoreOutcome instead of duplicating its formula")
+	}
+	if strings.Contains(body, "score := qualityScore * 100") {
+		t.Error("fitness.go still contains the duplicated inline scoring formula; delete it now that reliability.ScoreOutcome is canonical")
 	}
 }
 

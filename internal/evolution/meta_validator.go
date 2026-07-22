@@ -69,7 +69,10 @@ func NewMetaValidator(config MetaValidatorConfig) *MetaValidator {
 		config.WarnScore = 0.85
 	}
 	if config.MinComposite == 0 {
-		config.MinComposite = 0.30
+		// Composite scores are 0-100 scale (see evaluator.FitnessScore.Composite
+		// and QualityGate.MinComposite), not 0-1 — keep this in sync with
+		// QualityGate's default floor.
+		config.MinComposite = 30.0
 	}
 	if config.MaxRegression == 0 {
 		config.MaxRegression = 0.20

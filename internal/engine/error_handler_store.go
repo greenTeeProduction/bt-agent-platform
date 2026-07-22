@@ -29,6 +29,13 @@ type errorHandlerLedgerEntry struct {
 	LastAttempt time.Time `json:"last_attempt"`
 	Attempts    int       `json:"attempts"`
 	LastVerdict string    `json:"last_verdict"`
+	// ConsecutiveEscalateFailed counts back-to-back "escalate_failed" stamps.
+	// escalate_failed is the only verdict that bypasses the cooldown (it means
+	// a transient seed miss, not a real Claude verdict), but a PERSISTENTLY
+	// broken self-fix store would otherwise bypass the cooldown forever. Reset
+	// to 0 on any other verdict; capped against errorHandlerDisableAfter in
+	// the cooldown check.
+	ConsecutiveEscalateFailed int `json:"consecutive_escalate_failed"`
 }
 
 // errorHandlerDisableAfter is the consecutive-failure streak that disables a
@@ -240,6 +247,11 @@ func errorHandlerLedgerStamp(sig, verdict string) {
 	entry.LastAttempt = time.Now()
 	entry.Attempts++
 	entry.LastVerdict = verdict
+	if verdict == "escalate_failed" {
+		entry.ConsecutiveEscalateFailed++
+	} else {
+		entry.ConsecutiveEscalateFailed = 0
+	}
 	ledger[sig] = entry
 	// Cap the ledger: without reliability wiring, signatures can churn — evict
 	// the oldest attempts deterministically so ledger.json cannot grow forever.

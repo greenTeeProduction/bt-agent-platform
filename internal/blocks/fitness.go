@@ -1,10 +1,9 @@
 package blocks
 
 import (
-	"strings"
-
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // CollectBlockIDs walks a tree and returns unique block_id metadata values.
@@ -37,21 +36,7 @@ func CollectBlockIDs(tree *evolution.SerializableNode) []string {
 
 // ScoreFromBlackboard derives a 0–100 fitness score from execution state.
 func ScoreFromBlackboard(outcome string, qualityScore float64, success bool) float64 {
-	score := qualityScore * 100
-	if score <= 0 {
-		if success || strings.EqualFold(outcome, "success") || strings.EqualFold(outcome, "completed") {
-			score = 75
-		} else {
-			score = 25
-		}
-	}
-	if score > 100 {
-		score = 100
-	}
-	if score < 0 {
-		score = 0
-	}
-	return score
+	return reliability.ScoreOutcome(outcome, qualityScore, success)
 }
 
 // RecordTaskBlockFitness records per-block fitness gauges after a task run.

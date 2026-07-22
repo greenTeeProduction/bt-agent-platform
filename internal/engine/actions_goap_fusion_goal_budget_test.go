@@ -303,6 +303,34 @@ func TestBuildGoalDrivenPlan_InjectsPreviousFailureNote(t *testing.T) {
 	}
 }
 
+// WriteSuperpowersImplementationPlan scopes a pathless goal via
+// scopeGoapGoalLine BEFORE buildGoalDrivenImplementationPlan ever sees the
+// task text, appending a "(files: …)" suffix the goal never had when
+// PrioritizeGoapGoals stamped its failure-charge key (chargeGoapResearchGoalFailure
+// keys off the goal as queued, pre-scoping). The failure-note lookup inside
+// buildGoalDrivenImplementationPlan must strip that scope suffix the same way
+// it strips the failure-note and reuse-note markers, or a scoped retry's
+// steering note goes missing because the key shifted.
+func TestBuildGoalDrivenPlan_InjectsPreviousFailureNoteThroughScopeSuffix(t *testing.T) {
+	store := seedGoalBudget(t)
+	rawGoal := "Fix the flaky frobnicator"
+	store.RecordFailure(goapResearchGoalKey(rawGoal), "golangci-lint: nilerr — error is not nil but it returns nil")
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulates WriteSuperpowersImplementationPlan: scopeGoapGoalLine appended
+	// "(files: …)" to the originally-pathless goal before this task text ever
+	// reached the plan builder.
+	scopedGoal := "[P0] " + rawGoal + " (files: internal/engine/tree.go)"
+	task := "Improve platform\n" + scopedGoal
+
+	steered := buildGoalDrivenImplementationPlan(task)
+	if !strings.Contains(steered, "PREVIOUS-ATTEMPT-FAILURE") || !strings.Contains(steered, "nilerr") {
+		t.Fatalf("retry plan must carry the previous failure note even though the goal line carries scopeGoapGoalLine's scope suffix:\n%s", steered)
+	}
+}
+
 // goapGoalFailureNote must preserve the actionable END of the recorded
 // failure tail. RecordFailure already keeps the TAIL of the raw output (the
 // actionable lint/test lines of a commit-gate transcript come last), but

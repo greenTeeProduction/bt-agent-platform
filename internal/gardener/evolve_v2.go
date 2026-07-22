@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -37,10 +38,11 @@ type EvolveV2Config struct {
 	UseRealLLM bool
 
 	// SelectorOrdering, when true, applies learned Selector child ordering from
-	// the durable telemetry at Config.SelectorStatsPath before an evolved tree
-	// is persisted (Selector-ordering optimizer milestone 4). Fallback and
-	// AlwaysSucceed children stay last, preserving short-circuit semantics.
-	// Off by default so the pass is a no-op until explicitly enabled.
+	// the durable per-tree telemetry (agent.SelectorStatsFile, falling back to
+	// Config.SelectorStatsPath) before an evolved tree is persisted
+	// (Selector-ordering optimizer milestone 4). Fallback and AlwaysSucceed
+	// children stay last, preserving short-circuit semantics. Off by default so
+	// the pass is a no-op until explicitly enabled.
 	SelectorOrdering bool
 
 	// DTOrdering, when true, applies entropy/Gini-based BTOptimizer reordering
@@ -377,7 +379,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// seeded from the durable stats; fallback/AlwaysSucceed children stay last
 	// so Selector short-circuit semantics are preserved. A reorder is itself a
 	// persistable change, so it forces a save even when no mutation applied.
-	reordered := g.applyLearnedSelectorOrdering(tree, cfg)
+	reordered := g.applyLearnedSelectorOrdering(tree, entry.Name, cfg)
 	// ── DT-optimizer ordering (Q2 Evolvability milestone 3) — the
 	// entropy/Gini-based sibling of the Selector-ordering pass above, applied
 	// to the same tree just before persistence.
@@ -512,21 +514,51 @@ func (g *Gardener) recordEvolvedRun(treeID string, fitness float64) {
 }
 
 // applyLearnedSelectorOrdering seeds a SelectorOptimizer from the durable
-// telemetry at Config.SelectorStatsPath and reorders every Selector's children
-// in tree by their learned success rate, keeping fallback/AlwaysSucceed children
-// last. It is a no-op (returns 0) unless the pass is enabled and a stats path is
-// configured. Returns the number of Selector nodes whose ordering changed.
-func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode, cfg EvolveV2Config) int {
-	if !cfg.SelectorOrdering || g.cfg.SelectorStatsPath == "" || tree == nil {
+// per-tree telemetry the real production writer
+// (agent.RunDeps.flushSelectorTelemetry) produces — agent.SelectorStatsFile(treeID),
+// under agent.HomeDir()/selector-stats/ — and reorders every Selector's
+// children in tree by their learned success rate, keeping fallback/
+// AlwaysSucceed children last. Falls back to the single shared
+// Config.SelectorStatsPath when no per-tree file exists yet, so callers that
+// seed that path directly (tests, or trees with no per-tree telemetry) keep
+// working. It is a no-op (returns 0) unless the pass is enabled and a stats
+// path resolves. Returns the number of Selector nodes whose ordering changed.
+func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode, treeID string, cfg EvolveV2Config) int {
+	if !cfg.SelectorOrdering || tree == nil {
+		return 0
+	}
+	path := g.selectorStatsPathFor(treeID)
+	if path == "" {
 		return 0
 	}
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
-	if err := so.LoadSelectorStats(g.cfg.SelectorStatsPath); err != nil {
+	if err := so.LoadSelectorStats(path); err != nil {
 		slog.Warn("gardener/v2: loading selector stats failed, skipping ordering",
-			"path", g.cfg.SelectorStatsPath, "error", err)
+			"path", path, "error", err)
 		return 0
 	}
 	return so.ApplyLearnedOrdering(tree)
+}
+
+// selectorStatsPathFor resolves the durable Selector telemetry path for
+// treeID, preferring the real per-tree file over Config.SelectorStatsPath — a
+// single global path no writer in the repo ever produces (the real writer,
+// agent.RunDeps.flushSelectorTelemetry, only ever writes per-tree files keyed
+// by tree ID). Falls back to Config.SelectorStatsPath when the per-tree file
+// does not exist yet, or when treeID is empty.
+func (g *Gardener) selectorStatsPathFor(treeID string) string {
+	if treeID != "" {
+		if perTree := agent.SelectorStatsFile(treeID); fileExists(perTree) {
+			return perTree
+		}
+	}
+	return g.cfg.SelectorStatsPath
+}
+
+// fileExists reports whether path names a regular, readable file.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // applyDTOptimizerOrdering seeds a BTOptimizer from the durable DTAnalyzer

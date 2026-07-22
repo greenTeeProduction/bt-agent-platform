@@ -1913,3 +1913,56 @@ func TestNewRouterFromEndpoints_EmptyRoutesToLocal(t *testing.T) {
 		t.Errorf("expected local execution, got %q", res.Output)
 	}
 }
+
+// ─── ScoreOutcome Tests ─────────────────────────────────────────────────────
+//
+// ScoreOutcome is the canonical formula behind the three copies at
+// internal/blocks/fitness.go:ScoreFromBlackboard,
+// internal/engine/ops_actions.go:fitnessScoreFromBB, and
+// internal/dashboard/executor.go's inline block. All three implement the same
+// logic: score := qualityScore*100, falling back to 75/25 on a zero-or-below
+// score depending on success/outcome, then clamped to [0,100].
+
+func TestScoreOutcome_UsesQualityScoreWhenPositive(t *testing.T) {
+	if got := ScoreOutcome("success", 0.42, true); got != 42 {
+		t.Errorf("ScoreOutcome(success, 0.42, true) = %v, want 42", got)
+	}
+}
+
+func TestScoreOutcome_ClampsAboveHundred(t *testing.T) {
+	if got := ScoreOutcome("success", 1.5, true); got != 100 {
+		t.Errorf("ScoreOutcome(success, 1.5, true) = %v, want 100 (clamped)", got)
+	}
+}
+
+func TestScoreOutcome_ZeroQualityWithSuccessTrueFallsBackTo75(t *testing.T) {
+	if got := ScoreOutcome("anything", 0, true); got != 75 {
+		t.Errorf("ScoreOutcome(anything, 0, true) = %v, want 75", got)
+	}
+}
+
+func TestScoreOutcome_ZeroQualityOutcomeSuccessCaseInsensitiveFallsBackTo75(t *testing.T) {
+	if got := ScoreOutcome("SUCCESS", 0, false); got != 75 {
+		t.Errorf("ScoreOutcome(SUCCESS, 0, false) = %v, want 75", got)
+	}
+}
+
+func TestScoreOutcome_ZeroQualityOutcomeCompletedCaseInsensitiveFallsBackTo75(t *testing.T) {
+	if got := ScoreOutcome("Completed", 0, false); got != 75 {
+		t.Errorf("ScoreOutcome(Completed, 0, false) = %v, want 75", got)
+	}
+}
+
+func TestScoreOutcome_ZeroQualityNoSuccessSignalFallsBackTo25(t *testing.T) {
+	if got := ScoreOutcome("failure", 0, false); got != 25 {
+		t.Errorf("ScoreOutcome(failure, 0, false) = %v, want 25", got)
+	}
+}
+
+func TestScoreOutcome_NegativeQualityClampsToZeroFloor(t *testing.T) {
+	// Negative score with no success signal falls back to 25, not clamped to 0 —
+	// the fallback only fires on score <= 0, and 25 is already within [0,100].
+	if got := ScoreOutcome("failure", -0.5, false); got != 25 {
+		t.Errorf("ScoreOutcome(failure, -0.5, false) = %v, want 25", got)
+	}
+}

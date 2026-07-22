@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -1686,4 +1687,29 @@ func (cb *CircuitBreaker) LastFailureTime() time.Time {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	return cb.lastFailureTime
+}
+
+// ─── Outcome Scoring ────────────────────────────────────────────────────────
+
+// ScoreOutcome derives a 0-100 fitness score from execution state: the
+// quality score scaled to a percentage, falling back to 75 (success) or 25
+// (failure) when that scaled score is zero or below, then clamped to
+// [0,100]. This is the canonical formula behind the block-fitness scoring
+// duplicated across internal/blocks, internal/engine, and internal/dashboard.
+func ScoreOutcome(outcome string, qualityScore float64, success bool) float64 {
+	score := qualityScore * 100
+	if score <= 0 {
+		if success || strings.EqualFold(outcome, "success") || strings.EqualFold(outcome, "completed") {
+			score = 75
+		} else {
+			score = 25
+		}
+	}
+	if score > 100 {
+		score = 100
+	}
+	if score < 0 {
+		score = 0
+	}
+	return score
 }

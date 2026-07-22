@@ -632,14 +632,12 @@ func registerSuperpowersProductionActions() {
 		c, cancel := superpowersCommandTimeout()
 		defer cancel()
 		dir := run.WorktreePathOrRepo()
-		// Scope `git add -A` away from generated Superpowers/graphify
-		// artifacts (task evidence dirs, graphify-out/, docs/superpowers/**),
-		// mirroring the exclusion pathspecs commitAppliedSuperpowersRun uses
-		// for the whole-run apply commit (superpowers_apply.go) — otherwise a
-		// per-task commit in the run worktree would also stage those
-		// generated paths.
-		addArgs := append([]string{"add", "-A", "--", "."}, superpowersGeneratedCommitExclusions()...)
-		add := defaultSuperpowersCommandRunner.Run(c, dir, "git", addArgs...)
+		// Scope staging away from generated Superpowers/graphify artifacts
+		// (task evidence dirs, graphify-out/, docs/superpowers/**), via the
+		// same staging helper the whole-run apply commit uses
+		// (superpowers_apply.go) — otherwise a per-task commit in the run
+		// worktree would also stage those generated paths.
+		add := stageAllExceptGenerated(c, defaultSuperpowersCommandRunner, dir)
 		if add.Err != nil {
 			bb.Result = "## Superpowers Task Commit Failed\n\n" + add.Output
 			return -1
@@ -905,6 +903,8 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 			continue
 		}
 		if pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts {
+			Warn(fmt.Sprintf("goap fusion: parked run %s abandoned — pending-patch recovery attempts exhausted", run.ID),
+				"attempts", pendingPatchRecoveryAttempts(run))
 			continue // abandoned: attempt budget exhausted, never retried again
 		}
 		branch := strings.TrimSpace(run.WorktreeBranch)
