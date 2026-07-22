@@ -115,6 +115,60 @@ func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
 	}
 }
 
+// TestSave_ConcurrentWritersDoNotCorruptStore above only proves the FILE stays
+// parseable under concurrent Save — it never proves updates survive, because
+// each goroutine there starts from a blank in-memory ProgramStore instead of
+// reading the shared file first. That is the lost-update gap: a real
+// read-modify-write caller (load → mutate → Save) racing a sibling can have
+// its own Save clobber the sibling's already-persisted change, because
+// ProgramStore.Save (unlike reliability.DeadLetterQueue.save) never merges
+// against what is currently on disk. UpdatePrograms must close that gap by
+// holding one exclusive lock across open→fn→save so no writer's save can land
+// between another writer's open and save.
+func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+
+	seed, err := OpenPrograms(path)
+	if err != nil {
+		t.Fatalf("seed open: %v", err)
+	}
+	seed.Add("Base", "test", []string{"m1"})
+	if err := seed.Save(); err != nil {
+		t.Fatalf("seed save: %v", err)
+	}
+
+	const workers = 30
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := UpdatePrograms(path, func(ps *ProgramStore) error {
+				ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
+				return nil
+			})
+			if err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("UpdatePrograms failed: %v", err)
+	}
+
+	final, err := OpenPrograms(path)
+	if err != nil {
+		t.Fatalf("reopen after concurrent updates: %v", err)
+	}
+	if got, want := len(final.Programs), workers+1; got != want {
+		t.Fatalf("lost updates under concurrent UpdatePrograms: got %d programs, want %d (base + %d workers)", got, want, workers)
+	}
+}
+
 func TestAddDeduplicatesByTitle(t *testing.T) {
 	ps, _ := OpenPrograms(filepath.Join(t.TempDir(), "programs.json"))
 	ps.Add("Same program", "nlm", []string{"m1"})

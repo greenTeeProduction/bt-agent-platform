@@ -165,14 +165,12 @@ func refundGoapMilestoneAttemptForInfraFailure(bb *Blackboard) bool {
 	if !ok {
 		return false
 	}
-	ps, err := research.OpenPrograms(goapProgramsPath)
-	if err != nil {
-		return false
-	}
-	if !ps.RefundAttempt(programID, idx, goapProgramMaxMilestoneAttempts) {
-		return false
-	}
-	if err := ps.Save(); err != nil {
+	var refunded bool
+	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		refunded = ps.RefundAttempt(programID, idx, goapProgramMaxMilestoneAttempts)
+		return nil
+	})
+	if err != nil || !refunded {
 		return false
 	}
 	setGoapState(bb, "program_milestone_refunded", "true")
@@ -254,16 +252,15 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 		recordGoapResearchGoalRedPass(bb)
 		return
 	}
-	ps, err := research.OpenPrograms(goapProgramsPath)
-	if err != nil {
-		return
-	}
-	streak := ps.RecordRedPass(programID, idx)
-	completed := false
-	if streak >= goapRedPassCompleteStreak {
-		completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
-	}
-	if err := ps.Save(); err != nil {
+	var streak int
+	var completed bool
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		streak = ps.RecordRedPass(programID, idx)
+		if streak >= goapRedPassCompleteStreak {
+			completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
+		}
+		return nil
+	}); err != nil {
 		return
 	}
 	ref := fmt.Sprintf("%s:%d", programID, idx)
@@ -284,12 +281,10 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	if !ok {
 		return
 	}
-	ps, err := research.OpenPrograms(goapProgramsPath)
-	if err != nil {
-		return
-	}
-	ps.ResetRedPassStreak(programID, idx)
-	if err := ps.Save(); err != nil {
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		ps.ResetRedPassStreak(programID, idx)
+		return nil
+	}); err != nil {
 		Info("goap fusion: red-pass streak reset not persisted", "error", err.Error())
 	}
 }
