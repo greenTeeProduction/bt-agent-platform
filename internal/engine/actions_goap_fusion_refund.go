@@ -49,6 +49,12 @@ var goapInfraResultMarkers = []string{
 	// verification commands — a deliberate, clean stop to avoid the same
 	// deadline-SIGKILL risk above, not evidence the milestone is unbuildable.
 	"batch-stopped-insufficient-budget",
+	// The landing already fast-forwarded local master; only the sync to the
+	// GitHub remote was refused (origin/master became a protected branch with
+	// PR #13, 2026-07-19 — the first rejected push was 2026-07-22). The work
+	// IS landed and verifiable locally, so charging the milestone would
+	// treadmill every future landing against an external push gate.
+	"committed_unpushed",
 }
 
 // goapImplGateFailureMarkers identify a commit-gate rejection caused by the
