@@ -13,6 +13,19 @@ import (
 	"time"
 )
 
+// captureFleetNotifications stubs NotifyFleetEventFn for a test and returns
+// the recorded calls; restored on cleanup.
+func captureFleetNotifications(t *testing.T) *[][3]string {
+	t.Helper()
+	var calls [][3]string
+	prev := NotifyFleetEventFn
+	t.Cleanup(func() { NotifyFleetEventFn = prev })
+	NotifyFleetEventFn = func(source, outcome, summary string) {
+		calls = append(calls, [3]string{source, outcome, summary})
+	}
+	return &calls
+}
+
 // TestGithubTokenFromCredentialStore pins the credential-store token fallback:
 // the host authenticates git pushes via credential.helper=store, so the
 // github.com PAT there must be usable for the API without duplicating the
@@ -268,6 +281,7 @@ func TestPRShepherd_DivergedSkips(t *testing.T) {
 }
 
 func TestPRShepherd_AheadOpensPR(t *testing.T) {
+	notes := captureFleetNotifications(t)
 	gh := &fakeGitHub{t: t} // no open PRs
 	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
 	bb := newTestBlackboard()
@@ -287,6 +301,9 @@ func TestPRShepherd_AheadOpensPR(t *testing.T) {
 	if st := loadPRShepherdState(deps.stateDir); st.PRNumber != 77 {
 		t.Fatalf("state PRNumber = %d, want 77", st.PRNumber)
 	}
+	if len(*notes) != 1 || (*notes)[0][1] != "pr_opened" {
+		t.Fatalf("expected one pr_opened fleet notification, got %v", *notes)
+	}
 }
 
 func openPR(headSHA string) []map[string]any {
@@ -297,6 +314,7 @@ func openPR(headSHA string) []map[string]any {
 }
 
 func TestPRShepherd_PendingCISkips(t *testing.T) {
+	notes := captureFleetNotifications(t)
 	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"), checkRuns: map[string][]map[string]any{
 		"localsha": {{"id": int64(1), "name": "Lint", "status": "in_progress", "conclusion": ""}},
 	}}
@@ -312,9 +330,13 @@ func TestPRShepherd_PendingCISkips(t *testing.T) {
 	if gh.requested("PUT") || len(claude.prompts) != 0 {
 		t.Fatalf("pending CI must neither merge nor invoke Claude")
 	}
+	if len(*notes) != 0 {
+		t.Fatalf("routine ci_pending pass must not notify, got %v", *notes)
+	}
 }
 
 func TestPRShepherd_GreenMergesAndSyncs(t *testing.T) {
+	notes := captureFleetNotifications(t)
 	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"), checkRuns: map[string][]map[string]any{
 		"localsha": {
 			{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"},
@@ -347,6 +369,11 @@ func TestPRShepherd_GreenMergesAndSyncs(t *testing.T) {
 	}
 	if st := loadPRShepherdState(deps.stateDir); st.PRNumber != 0 || len(st.FixAttempts) != 0 {
 		t.Fatalf("state should be cleared after merge: %+v", st)
+	}
+	// The merge is operator-facing news: it must go out as its own Telegram
+	// notification instead of dying with the cycle's routine outcome.
+	if len(*notes) != 1 || (*notes)[0][0] != "pr-shepherd" || (*notes)[0][1] != "merged" {
+		t.Fatalf("expected one pr-shepherd 'merged' fleet notification, got %v", *notes)
 	}
 }
 
@@ -446,6 +473,7 @@ func TestPRShepherd_FixAttemptsExhausted(t *testing.T) {
 // branch (ApplyStatus committed_pr_opened, nil error) instead of erroring
 // committed_unpushed.
 func TestPushLandingFallsBackToPROnProtectedBranch(t *testing.T) {
+	notes := captureFleetNotifications(t)
 	gh := &fakeGitHub{t: t}
 	srv := gh.server()
 	t.Cleanup(srv.Close)
@@ -481,6 +509,24 @@ func TestPushLandingFallsBackToPROnProtectedBranch(t *testing.T) {
 	}
 	if !gh.requested("POST") {
 		t.Fatalf("expected PR creation, requests: %v", gh.requests)
+	}
+	if len(*notes) != 1 || (*notes)[0][0] != "fleet-landing" || (*notes)[0][1] != "landed" || !strings.Contains((*notes)[0][2], "PR #77") {
+		t.Fatalf("expected one fleet-landing 'landed' notification naming PR #77, got %v", *notes)
+	}
+}
+
+// TestPushLandingNotifiesOnDirectPush pins the landed notification for the
+// unprotected-master path: a landing that pushes origin/master directly is
+// news too.
+func TestPushLandingNotifiesOnDirectPush(t *testing.T) {
+	notes := captureFleetNotifications(t)
+	runner := &prShepherdScriptRunner{}
+	run := &SuperpowersRun{ID: "run-direct", RepoDir: t.TempDir(), ArtifactDir: t.TempDir(), AppliedCommit: "abc1234"}
+	if err := pushLandingMasterToOrigin(context.Background(), runner, run); err != nil {
+		t.Fatalf("direct push should succeed, got %v", err)
+	}
+	if len(*notes) != 1 || (*notes)[0][0] != "fleet-landing" || (*notes)[0][1] != "landed" || !strings.Contains((*notes)[0][2], "origin/master") {
+		t.Fatalf("expected one landed notification naming origin/master, got %v", *notes)
 	}
 }
 

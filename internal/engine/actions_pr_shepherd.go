@@ -412,6 +412,13 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 		default:
 			Warn("pr shepherd: pass needs attention", "outcome", bb.Outcome, "detail", truncateGoap(bb.Result, 300))
 		}
+		// Noteworthy PR lifecycle changes notify the operator directly —
+		// routine passes (idle, pending, synced, healthy skips) stay quiet.
+		switch bb.Outcome {
+		case "pr_shepherd_pr_opened", "pr_shepherd_merged", "pr_shepherd_fix_pushed",
+			"pr_shepherd_merge_blocked", "pr_shepherd_fix_exhausted", "pr_shepherd_diverged":
+			notifyFleetEvent("pr-shepherd", strings.TrimPrefix(bb.Outcome, "pr_shepherd_"), truncateGoap(bb.Result, 500))
+		}
 	}()
 
 	api := deps.api
@@ -686,12 +693,17 @@ var landingPRClientFactory = newGitHubPRClientFromEnv
 func pushLandingMasterToOrigin(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
 	push := runner.Run(ctx, run.RepoDir, "git", "push", "origin", "master")
 	if push.Err == nil {
+		notifyFleetEvent("fleet-landing", "landed",
+			fmt.Sprintf("Landed %s (run %s) — pushed straight to origin/master.", run.AppliedCommit, run.ID))
 		return nil
 	}
 	if strings.Contains(push.Output, "protected branch") {
-		err := shipLandingToPR(ctx, runner, run.RepoDir)
+		prNumber, err := shipLandingToPR(ctx, runner, run.RepoDir)
 		if err == nil {
 			run.ApplyStatus = "committed_pr_opened"
+			notifyFleetEvent("fleet-landing", "landed",
+				fmt.Sprintf("Landed %s (run %s) — origin/master is protected; shipped to PR #%d (%s). The PR shepherd merges on green CI.",
+					run.AppliedCommit, run.ID, prNumber, fleetPRBranch()))
 			return nil
 		}
 		writeApplyCommitEvidence(run, "fleet PR fallback failed", CommandResult{Command: "shipLandingToPR", Output: err.Error(), Err: err})
@@ -700,26 +712,26 @@ func pushLandingMasterToOrigin(ctx context.Context, runner CommandRunner, run *S
 	return fmt.Errorf("committed_unpushed: git push origin master failed: %v\n%s", push.Err, push.Output)
 }
 
-func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) error {
+func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) (int, error) {
 	api, err := landingPRClientFactory(ctx, runner, repoDir)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	branch := fleetPRBranch()
 	// Best-effort prune first: a remote-tracking ref left behind by a merged
 	// branch's API deletion would fail the lease below with "stale info".
 	_ = runner.Run(ctx, repoDir, "git", "fetch", "origin", "--prune")
 	if push := runner.Run(ctx, repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch); push.Err != nil {
-		return fmt.Errorf("fleet branch push failed: %v\n%s", push.Err, push.Output)
+		return 0, fmt.Errorf("fleet branch push failed: %v\n%s", push.Err, push.Output)
 	}
 	pr, err := api.findOpenPR(ctx, branch)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if pr == nil {
 		title, body := fleetPRTitleAndBody(ctx, runner, repoDir)
 		if pr, err = api.createPR(ctx, branch, title, body); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	st := loadPRShepherdState(prShepherdDir())
@@ -727,5 +739,5 @@ func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) 
 		st.PRNumber = pr.Number
 		_ = savePRShepherdState(prShepherdDir(), st)
 	}
-	return nil
+	return pr.Number, nil
 }

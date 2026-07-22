@@ -368,6 +368,24 @@ func main() {
 		}
 		return engine.RunTask(bb, cmd), nil
 	}
+	// Fleet lifecycle notifications (landings, PR opens/merges) ride the
+	// existing bt-task-complete webhook → Hermes → Telegram path as
+	// task_complete events with their own Source. Published mid-cycle, when
+	// the news actually happens — the scheduler's completion event can lag
+	// hours behind a long implementation run and its routine outcome is
+	// throttled anyway (engine injection-hook pattern; nil-checked in engine).
+	engine.NotifyFleetEventFn = func(source, outcome, summary string) {
+		if agent.GlobalAgentBus == nil {
+			return
+		}
+		agent.GlobalAgentBus.Publish(agent.AgentEvent{
+			Type:      "task_complete",
+			Source:    source,
+			Message:   fmt.Sprintf("%s: %s", source, outcome),
+			Data:      map[string]interface{}{"outcome": outcome, "summary": summary},
+			Timestamp: time.Now(),
+		})
+	}
 	platformHome := agent.HomeDir()
 	if _, err := hitl.InitStore(platformHome); err != nil {
 		engine.Warn("hitl store init failed", "error", err)
