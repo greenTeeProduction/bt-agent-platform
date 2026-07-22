@@ -215,7 +215,8 @@ func registerGoapFusionProductionAdditions() {
 		}
 
 		if strings.Contains(out, "## Superpowers Implementation Complete") {
-			if !strings.Contains(out, "Run: `") || !strings.Contains(out, "Artifacts: `") || !strings.Contains(out, "Apply status: `committed`") || !strings.Contains(out, "Commit: `") {
+			applyStatusEvidence := strings.Contains(out, "Apply status: `committed`") || strings.Contains(out, "Apply status: `committed_pr_opened`")
+			if !strings.Contains(out, "Run: `") || !strings.Contains(out, "Artifacts: `") || !applyStatusEvidence || !strings.Contains(out, "Commit: `") {
 				return fail("Superpowers completion missing run/artifact/committed/commit evidence")
 			}
 			artifactPath := goapBacktickValueAfter(out, "Artifacts: `")
@@ -345,7 +346,7 @@ func registerGoapFusionProductionAdditions() {
 			status = "not_applied"
 		}
 		heading := "## Superpowers Implementation Pending Patch"
-		if status == "committed" || status == "applied" || status == "applied_no_commit" || status == "main_repo" || status == "dry_run" {
+		if status == "committed" || status == "applied" || status == "applied_no_commit" || status == "main_repo" || status == "dry_run" || status == "committed_pr_opened" {
 			heading = "## Superpowers Implementation Complete"
 		}
 		bb.Result = fmt.Sprintf("%s\n\nRun: `%s`\nArtifacts: `%s`\nApply status: `%s`\nPatch: `%s`\nCommit: `%s`\nChanged files:\n```\n%s\n```", heading, run.ID, run.ArtifactDir, status, run.PatchPath, run.AppliedCommit, changed)

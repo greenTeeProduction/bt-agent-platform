@@ -124,20 +124,15 @@ func TestPrioritizeGoapGoals_AffirmativeBlockerProducesEngineTestGoal(t *testing
 	}
 }
 
-// PrioritizeGoapGoals charges the active program's head milestone via a bare
-// OpenPrograms + RecordAttemptAndMaybeBlock + Save — ADR-183 migrated the
-// milestone-attempt refund/red-pass paths (actions_goap_fusion_refund.go) and
-// program registration (persistGoapProgram) onto research.UpdatePrograms'
-// flock-held read-modify-write, but explicitly left this charge site
-// unmigrated (see its "remaining milestones 4-5/5" consequence). Because this
-// call site never takes the shared lock, its raw Save can land between any
-// OTHER writer's flock-protected open and save — including already-migrated
-// ones — silently clobbering that writer's durably-persisted change with this
-// call's stale in-memory copy. This test hammers the real call site: many
-// concurrent persistGoapProgram registrations (flock-protected, each adding a
-// distinct new program) race against many concurrent PrioritizeGoapGoals
-// charges against a pre-seeded active program, sharing one programs.json.
-// Every registered program must survive.
+// PrioritizeGoapGoals charges the active program's head milestone
+// (RecordAttemptAndMaybeBlock) through research.UpdatePrograms' flock-held
+// read-modify-write, the same primitive every other program-store writer
+// (persistGoapProgram, RefundAttempt, RecordRedPass, MarkDone) uses. This
+// test hammers the real call site: many concurrent persistGoapProgram
+// registrations (flock-protected, each adding a distinct new program) race
+// against many concurrent PrioritizeGoapGoals charges against a pre-seeded
+// active program, sharing one programs.json. Every registered program must
+// survive.
 func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testing.T) {
 	isolateGoapProgramStore(t)
 
@@ -187,8 +182,43 @@ func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testi
 	}
 	// +1 for the pre-seeded "Active head program".
 	if got, want := len(final.Programs), writers+1; got != want {
-		t.Fatalf("lost %d registered program(s) to PrioritizeGoapGoals's unlocked charge-and-save race "+
-			"(no flock coordination): want %d programs, got %d", want-got, want, got)
+		t.Fatalf("lost %d registered program(s) under concurrent PrioritizeGoapGoals charges "+
+			"and persistGoapProgram registrations: want %d programs, got %d", want-got, want, got)
+	}
+}
+
+// TestActionsGoapFusionTestFile_ChargeRaceCommentNotStale pins that this
+// file's own doc comment on TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive
+// no longer describes PrioritizeGoapGoals' program-store charge as an
+// unmigrated, lock-free race. actions_goap_fusion.go's charge site now goes
+// through research.UpdatePrograms' shared flock (see its own comment there),
+// so language here claiming the call site "never takes the shared lock" or
+// has "no flock coordination" is stale and misleads a reader into believing
+// the race is still open. Scanning the source directly — rather than
+// asserting on test behavior — is necessary because the stale prose doesn't
+// affect what the test above actually exercises, which already passes.
+func TestActionsGoapFusionTestFile_ChargeRaceCommentNotStale(t *testing.T) {
+	src, err := os.ReadFile("actions_goap_fusion_test.go")
+	if err != nil {
+		t.Fatalf("reading actions_goap_fusion_test.go: %v", err)
+	}
+	body := string(src)
+	// Only scan the prose that precedes this check: the check's own doc
+	// comment and stale-phrase list below necessarily quote those phrases,
+	// which would otherwise trip the check on itself.
+	if idx := strings.Index(body, "TestActionsGoapFusionTestFile_ChargeRaceCommentNotStale"); idx >= 0 {
+		body = body[:idx]
+	}
+	for _, stale := range []string{
+		"explicitly left this charge site",
+		"call site never takes the shared lock",
+		"unlocked charge-and-save race",
+		"no flock coordination",
+	} {
+		if strings.Contains(body, stale) {
+			t.Errorf("actions_goap_fusion_test.go still claims the charge race is open (contains %q); "+
+				"PrioritizeGoapGoals' charge now goes through research.UpdatePrograms' shared flock", stale)
+		}
 	}
 }
 

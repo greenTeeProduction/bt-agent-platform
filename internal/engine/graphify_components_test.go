@@ -288,22 +288,18 @@ func TestWriteSuperpowersImplementationPlanGraphifyEnrichmentIsTransient(t *test
 	}
 }
 
-// TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive pins the
-// LAST call site of the engine-wide research.ProgramStore concurrent-writer
-// lost-update gap (see research.UpdatePrograms's doc comment, and the sibling
-// migrations already covered by TestPersistGoapProgram_ConcurrentCallersAllSurvive
-// / TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive in
-// goap_research_goals_test.go and TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive
-// in actions_goap_fusion_refund_test.go). seedCodeFixProgram
-// (self_fix_seed.go) still does a bare research.OpenPrograms + ps.Save(),
-// serialized only against OTHER self-fix seeds via selfFixStoreMu and its own
-// on-disk self_fix/store.lock — it never takes research.UpdatePrograms' shared
-// flock on programs.json itself. So a genuinely concurrent, already-migrated
-// writer (persistGoapProgram, guarded only by that shared flock) can load its
-// in-memory copy, get pre-empted by a self-fix seed's full
-// read→ledger-write→save cycle that lands its own program to disk, and then
-// Save its own stale copy — silently clobbering the self-fix program the
-// other writer's load never saw (or vice versa).
+// TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive covers
+// seedCodeFixProgram (self_fix_seed.go), which now goes through
+// research.UpdatePrograms' shared flock on programs.json like every other
+// program-store writer (persistGoapProgram, RefundAttempt, RecordRedPass,
+// MarkDone) — see the sibling migrations covered by
+// TestPersistGoapProgram_ConcurrentCallersAllSurvive /
+// TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive in
+// goap_research_goals_test.go and
+// TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive in
+// actions_goap_fusion_refund_test.go. This test hammers the real call site:
+// many concurrent seedCodeFixProgram seeds race against many concurrent
+// persistGoapProgram registrations, sharing one programs.json.
 func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testing.T) {
 	_, programsPath := withTempSelfFix(t)
 	t.Setenv("BT_SELF_FIX_MAX_OPEN", "1000")
@@ -336,7 +332,43 @@ func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testin
 		t.Fatal(err)
 	}
 	if got, want := len(ps.Programs), workers*2; got != want {
-		t.Fatalf("lost programs under concurrent seedCodeFixProgram + persistGoapProgram (self-fix's own write bypasses the shared programs.json flock): got %d, want %d", got, want)
+		t.Fatalf("lost programs under concurrent seedCodeFixProgram + persistGoapProgram: got %d, want %d", got, want)
+	}
+}
+
+// TestGraphifyComponentsTestFile_SeedCodeFixRaceCommentNotStale pins that this
+// file's own doc comment on TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive
+// no longer describes seedCodeFixProgram as bypassing the shared
+// programs.json flock. self_fix_seed.go's seedCodeFixProgram now goes through
+// research.UpdatePrograms' shared flock like every other program-store
+// writer, so language here claiming it "still does a bare
+// research.OpenPrograms + ps.Save()", "never takes research.UpdatePrograms'
+// shared" flock, or "bypasses the shared programs.json flock" is stale and
+// misleads a reader into believing the race is still open. Scanning the
+// source directly is necessary because the stale prose doesn't affect what
+// the test above actually exercises, which already passes.
+func TestGraphifyComponentsTestFile_SeedCodeFixRaceCommentNotStale(t *testing.T) {
+	src, err := os.ReadFile("graphify_components_test.go")
+	if err != nil {
+		t.Fatalf("reading graphify_components_test.go: %v", err)
+	}
+	body := string(src)
+	// Only scan the prose that precedes this check: the check's own doc
+	// comment and stale-phrase list below necessarily quote those phrases,
+	// which would otherwise trip the check on itself.
+	if idx := strings.Index(body, "TestGraphifyComponentsTestFile_SeedCodeFixRaceCommentNotStale"); idx >= 0 {
+		body = body[:idx]
+	}
+	for _, stale := range []string{
+		"LAST call site of the engine-wide research.ProgramStore concurrent-writer",
+		"still does a bare research.OpenPrograms + ps.Save()",
+		"never takes research.UpdatePrograms' shared",
+		"bypasses the shared programs.json flock",
+	} {
+		if strings.Contains(body, stale) {
+			t.Errorf("graphify_components_test.go still claims the seedCodeFixProgram race is open (contains %q); "+
+				"seedCodeFixProgram now goes through research.UpdatePrograms' shared flock", stale)
+		}
 	}
 }
 

@@ -207,6 +207,7 @@ Consolidation notes (2026-07-16):
 | ADR-182 | `bt-dashboard` Refreshes Its Own KG Analytics Gauges on Every `/api/metrics` Scrape Instead of Depending on `bt-agent`'s Separate-Process `bt_kg_analytics` Tool (NotebookLM Research) | Accepted | 2026-07-22 |
 | ADR-183 | `reliability.AcquireFileLock` Is Exported and `research.UpdatePrograms` Wraps Every `ProgramStore` Read-Modify-Write Under It, Closing Milestones 1–3/5 of the ProgramStore Concurrent-Writer Lost-Update Program (Q3 Reliability) | Accepted | 2026-07-22 |
 | ADR-184 | `PrioritizeGoapGoals`'s Milestone-Attempt Charge and `seedCodeFixProgram`'s Program-Store Write Move onto `research.UpdatePrograms`, Closing Milestones 4–5/5 of the ADR-183 ProgramStore Lost-Update Program (Q3 Reliability) | Accepted | 2026-07-22 |
+| ADR-185 | `ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3312,6 +3313,20 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ Closes the ProgramStore Concurrent-Writer Lost-Update Program (Q3 Reliability) end to end: every `programs.json` write call site in the engine — milestone charge/refund/block, red-pass completion, program registration/completion, and self-fix seeding — now holds `reliability.AcquireFileLock` across its full read-modify-write, and the five remaining `OpenPrograms` call sites are confirmed read-only.
 - ✅ `self_fix_seed.go`'s on-disk `store.lock` and `selfFixStoreMu` keep exactly one job each (ledger serialization across self-fix producers), with the now-redundant claim that they also guard the program-store write against the rest of the engine removed from both comments.
 - ⚠️ Like ADR-183 and ADR-024, `AcquireFileLock` remains advisory Linux flock with no timeout; a wedged holder still stalls every migrated writer, now including `PrioritizeGoapGoals` and `seedCodeFixProgram`.
+
+---
+
+## ADR-185: `ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability)
+
+**Context (2026-07-23):** `pushLandingMasterToOrigin` (`internal/engine/actions_pr_shepherd.go`) sets `run.ApplyStatus = "committed_pr_opened"` when a bare-repo landing's direct `git push origin master` is rejected for a protected branch and it ships the commit to a fleet PR branch instead — a genuine success the PR shepherd drives to merge on later cycles. But `ReportSuperpowersImplementation` (`internal/engine/actions_goap_fusion_prod_additions.go`, ~line 348) only emitted the `## Superpowers Implementation Complete` heading for a fixed status list (`committed`, `applied`, `applied_no_commit`, `main_repo`, `dry_run`) that omitted `committed_pr_opened`, so the report fell back to `## Superpowers Implementation Pending Patch`. `VerifyGoapFusionEvidence`'s Complete-branch check (~line 218) compounded this with its own false negative: it tested for the exact substring `` Apply status: `committed` `` — which never matches `` Apply status: `committed_pr_opened` `` (no backtick immediately follows `committed`) — so even a corrected heading would still fail evidence verification. Together the two gaps meant a real fleet-PR landing success was reported and verified as an unrecognized/pending run.
+
+**Decision:** `ReportSuperpowersImplementation`'s heading condition adds `|| status == "committed_pr_opened"` alongside the existing five recognized statuses. `VerifyGoapFusionEvidence`'s Complete-branch check replaces its single `` Apply status: `committed` `` substring test with `applyStatusEvidence := strings.Contains(out, "Apply status: `committed`") || strings.Contains(out, "Apply status: `committed_pr_opened`")`, used in place of the old single check alongside the existing `Run:`/`Artifacts:`/`Commit:` evidence requirements.
+
+**Status:** Accepted (2026-07-23).
+
+**Consequences:**
+- ✅ A fleet-PR landing success (`ApplyStatus: "committed_pr_opened"`) now emits the `Complete` heading and passes `VerifyGoapFusionEvidence` with `bb.QualityAuthoritative` set, instead of being misreported as pending. Pinned by `TestVerifyGoapFusionEvidenceAcceptsCommittedPROpened` (`internal/engine/actions_goap_fusion_prod_additions_test.go`), which drives a `SuperpowersRun` with `ApplyStatus: "committed_pr_opened"` through both actions and asserts a `1` return and `QualityAuthoritative` from `VerifyGoapFusionEvidence`.
+- ⚠️ Both fixes are a status-list/substring-match extension, not a structural change to the evidence gate (§8) — any future `ApplyStatus` value added to `pushLandingMasterToOrigin` or its siblings must be added to both call sites by hand, as this one was; nothing enforces the two lists stay in sync.
 
 ---
 
