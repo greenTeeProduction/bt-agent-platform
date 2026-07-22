@@ -329,3 +329,52 @@ func TestVerifySuperpowersRunBudgetExhaustedMarker(t *testing.T) {
 		t.Fatalf("expired ctx: want budget-exhausted marker, got %v", err)
 	}
 }
+
+// A later task's RED phase must never be STARTED once the remaining
+// cycle-context budget can no longer cover that task's own verification
+// commands (2x each command's own -timeout, e.g. -timeout 300s needs 600s
+// remaining) — starting it anyway risks the cycle's outer deadline SIGKILLing
+// a test process mid-run, which only gets classified as a kill AFTER the
+// fact. The batch must instead stop cleanly before that task, recording a
+// distinct "batch-stopped-insufficient-budget" result, while preserving
+// already-completed tasks via the existing partial-landing snapshot unwrap.
+// Regression: run 20260718T164339 lost a green milestone to exactly this
+// mid-flight SIGKILL.
+func TestExecuteSuperpowersTaskBatchStopsCleanlyOnInsufficientBudget(t *testing.T) {
+	runner := &partialLandingRunner{t: t, testResults: []CommandResult{
+		redFail(), greenPass(), // task 1: done
+		// No results scripted for task 2 — it must never reach a test command.
+	}}
+	run := partialLandingRun(t, 2)
+	run.Tasks[0].Tests = []string{"go test ./internal/engine -count=1 -timeout 10s"}
+	run.Tasks[1].Tests = []string{"go test ./internal/engine -count=1 -timeout 300s"}
+	executor := SuperpowersTaskExecutor{Runner: runner, Claude: &scriptedClaudeRunner{}}
+
+	// 60s remaining covers task 1's 20s requirement (2x its 10s timeout) but
+	// not task 2's 600s requirement (2x its 300s timeout).
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(60*time.Second))
+	defer cancel()
+
+	if err := executeSuperpowersTaskBatch(ctx, executor, run); err != nil {
+		t.Fatalf("insufficient-budget stop must not fail the batch: %v", err)
+	}
+	if run.Tasks[0].Status != "done" {
+		t.Fatalf("task 1 status = %q, want done", run.Tasks[0].Status)
+	}
+	if run.Tasks[1].Status != "skipped" {
+		t.Fatalf("task 2 status = %q, want skipped (insufficient budget)", run.Tasks[1].Status)
+	}
+	if !strings.Contains(run.PartialFailure, "batch-stopped-insufficient-budget") {
+		t.Fatalf("PartialFailure must carry the distinct batch-stopped-insufficient-budget marker: %q", run.PartialFailure)
+	}
+	if !strings.Contains(run.PartialFailure, "task 2") {
+		t.Fatalf("PartialFailure must name the stopped task: %q", run.PartialFailure)
+	}
+	joined := runner.joined()
+	if !strings.Contains(joined, "git commit --no-verify -m superpowers snapshot: task 1") {
+		t.Fatalf("task 1 must still be snapshot-committed; calls:\n%s", joined)
+	}
+	if !strings.Contains(joined, "git reset basesha") {
+		t.Fatalf("stopping must still unwrap task 1's snapshot to base; calls:\n%s", joined)
+	}
+}

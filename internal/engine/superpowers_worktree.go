@@ -344,6 +344,7 @@ func archiveAndDeleteSuperpowersBranch(ctx context.Context, runner CommandRunner
 	if res := runner.Run(ctx, repoDir, "git", "branch", "-D", branch); res.Err != nil {
 		return fmt.Errorf("git branch -D %s failed: %v\n%s", branch, res.Err, res.Output)
 	}
+	Warn(fmt.Sprintf("goap fusion: force-reaped orphaned branch %s (diff archived before delete)", branch))
 	return nil
 }
 

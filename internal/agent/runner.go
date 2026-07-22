@@ -20,6 +20,19 @@ type TreeResolver func(treeID string) *evolution.SerializableNode
 // scoped to one requesting user's own workspace.
 type UserTreeResolver func(user, treeID string) *evolution.SerializableNode
 
+// AuctionWinnerNameFn extracts the winning bidder's name from a run's
+// ChainState, when the run culminated in an auction award (AuctionDelegate
+// writes the winning Award into bb.ChainState["auction_award"] — RunAuction
+// dispatches only the real work to the winner, never the losing candidates).
+// Returns "" when no such award is present.
+//
+// internal/agent cannot import internal/a2a (a2a already imports agent, and
+// agent importing a2a back would cycle), so this is a cycle-safe extraction
+// seam wired from internal/a2a at startup (internal/agentexec/wiring.go) the
+// same way engine.AuctionDelegateFn already is. Nil means no such wiring is
+// present, in which case RunOnce always attributes History to agentName.
+var AuctionWinnerNameFn func(chainState map[string]any) string
+
 // RunDeps holds shared dependencies for agent execution.
 type RunDeps struct {
 	Registry    *Registry
@@ -280,6 +293,11 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		historyName := agentName
 		if opts.DisplayName != "" {
 			historyName = opts.DisplayName
+		}
+		if AuctionWinnerNameFn != nil {
+			if winner := AuctionWinnerNameFn(bb.ChainState); winner != "" {
+				historyName = winner
+			}
 		}
 		_ = d.History.Record(RunRecord{
 			AgentName: historyName,

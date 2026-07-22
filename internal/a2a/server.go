@@ -179,8 +179,8 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 
 		if e.History != nil {
 			historyAgent := agentName
-			if award, ok := bb.ChainState["auction_award"].(Award); ok && award.WinnerName != "" {
-				historyAgent = award.WinnerName
+			if winner := AuctionWinnerName(bb.ChainState); winner != "" {
+				historyAgent = winner
 			}
 			_ = e.History.Record(agent.RunRecord{
 				AgentName: historyAgent,

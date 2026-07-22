@@ -114,6 +114,21 @@ type Award struct {
 // Kind identifies this message as an award.
 func (Award) Kind() MessageKind { return KindAward }
 
+// AuctionWinnerName extracts the winning bidder's name from chainState's
+// "auction_award" entry (written by AuctionDelegate when a tree delegates a
+// subtask through an auction), or "" when no award is present. Used by
+// server.go's Execute directly, and wired into
+// internal/agent.AuctionWinnerNameFn (internal/agentexec/wiring.go) as the
+// cycle-safe seam RunOnce consults, since internal/agent cannot import
+// internal/a2a.
+func AuctionWinnerName(chainState map[string]any) string {
+	award, ok := chainState["auction_award"].(Award)
+	if !ok {
+		return ""
+	}
+	return award.WinnerName
+}
+
 // BidEvaluator selects the winning bid for an announced task.
 type BidEvaluator interface {
 	Evaluate(ann TaskAnnouncement, bids []Bid) (Award, error)

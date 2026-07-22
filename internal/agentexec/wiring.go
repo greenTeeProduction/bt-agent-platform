@@ -29,6 +29,10 @@ import (
 func init() {
 	domains.GoapFusionLoopWireFn = engine.WireGoapFusionLoopTree
 	engine.AuctionDelegateFn = a2a.AuctionDelegate
+	// Auction-winner History attribution (mirrors internal/a2a/server.go's
+	// Execute check): RunOnce cannot import internal/a2a directly (import
+	// cycle), so it consults this cycle-safe seam instead.
+	agent.AuctionWinnerNameFn = a2a.AuctionWinnerName
 	// LLM plan-expansion (brainstorming): decompose substantial goals into
 	// deeper multi-task plans. Wired here (not in an engine init) so engine
 	// tests stay offline and deterministic.

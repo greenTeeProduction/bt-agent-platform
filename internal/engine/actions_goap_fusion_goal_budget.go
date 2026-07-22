@@ -51,15 +51,36 @@ func stripGoapGoalTransientNotes(s string) string {
 	return t
 }
 
+// goapGoalScopeSuffixPrefix introduces the deterministic "(files: …)"
+// annotation scopeGoapGoalLine (goap_research_goals.go) appends to a goal line
+// that names no Go files. It is transient exactly like the failure and reuse
+// notes above: the grep hits it carries are advisory scoping, computed AFTER
+// a goal is charged, so they must never shift the goal's budget/dedup key —
+// only stripGoapGoalTransientNotes cannot own this one, because the plan
+// builder's file-scope extraction deliberately reads the scope suffix
+// (superpowers_plan_builder.go); a shared strip would blind that path too.
+const goapGoalScopeSuffixPrefix = " (files: "
+
+// stripGoapGoalScopeSuffix removes a trailing scopeGoapGoalLine annotation so
+// a goal keys identically whether or not scopeGoapGoalLine had to synthesize
+// file scope for it.
+func stripGoapGoalScopeSuffix(s string) string {
+	t := s
+	if strings.HasSuffix(t, ")") {
+		if i := strings.LastIndex(t, goapGoalScopeSuffixPrefix); i >= 0 {
+			t = strings.TrimSpace(t[:i])
+		}
+	}
+	return t
+}
+
 // goapResearchGoalKey normalizes a research goal line to its budget key: the
-// queue prefixes ("[Pn] ", "NotebookLM research: ") and any failure or
-// reuse-anchoring note are stripped so the gaps list, the queue, the plan, and
-// the landed objective all key the same goal identically. Stripping the
-// transient graphify REUSE-EXISTING suffix is defense in depth: enrichment is
-// applied only to composed plan text, but even a leaked enriched line must
-// never shift a goal's budget/dedup identity.
+// queue prefixes ("[Pn] ", "NotebookLM research: "), any failure or
+// reuse-anchoring note, and scopeGoapGoalLine's synthesized "(files: …)" scope
+// suffix are all stripped so the gaps list, the queue, a scoped/annotated
+// retry plan, and the landed objective all key the same goal identically.
 func goapResearchGoalKey(line string) string {
-	t := stripGoapGoalTransientNotes(line)
+	t := stripGoapGoalScopeSuffix(stripGoapGoalTransientNotes(line))
 	for _, p := range []string{"[P0]", "[P1]", "[P2]"} {
 		if strings.HasPrefix(t, p) {
 			t = strings.TrimSpace(strings.TrimPrefix(t, p))

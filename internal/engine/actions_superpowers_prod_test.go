@@ -3,9 +3,11 @@ package engine
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1369,5 +1371,119 @@ func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T
 	}
 	if len(runner.calls) != callsAfterCycle2 {
 		t.Fatalf("a run with 2 recorded attempts must be abandoned: no new commands may run on cycle 3; calls before=%d after=%d", callsAfterCycle2, len(runner.calls))
+	}
+}
+
+// superpowersLogRecorder is a minimal slog.Handler that records the level and
+// message of every record it receives, used to assert the abandonment/reap
+// paths actually emit an operator-visible log line instead of silently
+// swallowing the event (both are currently untested and, per this task,
+// unimplemented).
+type superpowersLogRecorder struct {
+	mu      sync.Mutex
+	records []struct {
+		level slog.Level
+		msg   string
+	}
+}
+
+func (h *superpowersLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *superpowersLogRecorder) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, struct {
+		level slog.Level
+		msg   string
+	}{level: r.Level, msg: r.Message})
+	return nil
+}
+
+func (h *superpowersLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *superpowersLogRecorder) WithGroup(string) slog.Handler      { return h }
+
+func (h *superpowersLogRecorder) hasRecord(level slog.Level, substr string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, r := range h.records {
+		if r.level == level && strings.Contains(r.msg, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// attachSuperpowersLogRecorder wires rec into the global engine logger's
+// fanout for the duration of the test, restoring the pre-test handler chain
+// on cleanup — mirrors app_logger_test.go's TestSetAsDefaultFollowsHandlerRebuild
+// setup/teardown for attachLogHandler.
+func attachSuperpowersLogRecorder(t *testing.T, rec *superpowersLogRecorder) {
+	t.Helper()
+	t.Cleanup(func() {
+		mu.Lock()
+		extraHandlers = nil
+		buildLogger()
+		mu.Unlock()
+	})
+	attachLogHandler(rec)
+}
+
+// TestRecoverGoapFusionPendingPatches_WarnsWhenAbandoned extends the
+// bounds-then-abandons contract pinned above with an operator-visibility
+// requirement: the cycle that first discovers a run has exhausted its
+// pendingPatchRecoveryMaxAttempts budget (and therefore skips it forever,
+// silently per the current implementation) must emit a Warn-level log
+// mentioning the abandoned run's ID. Without this, a permanently stuck
+// parked run produces no signal anywhere an operator would see it.
+func TestRecoverGoapFusionPendingPatches_WarnsWhenAbandoned(t *testing.T) {
+	runsDir := t.TempDir()
+	planText := buildDeterministicImplementationPlan("unknown fix")
+	run := writeParkedSuperpowersRun(t, runsDir, "run-abandon", planText)
+
+	prevKnowledge := btFusionKnowledgePath
+	btFusionKnowledgePath = filepath.Join(t.TempDir(), "knowledge.json")
+	t.Cleanup(func() { btFusionKnowledgePath = prevKnowledge })
+
+	runner := &recoveryScriptRunner{branchExists: true, headBranch: run.WorktreeBranch, alwaysFailReapply: true}
+
+	rec := &superpowersLogRecorder{}
+	attachSuperpowersLogRecorder(t, rec)
+
+	// Cycles 1 and 2 accumulate the 2 allowed attempts; neither abandons the
+	// run, so neither should warn yet.
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	if rec.hasRecord(slog.LevelWarn, run.ID) {
+		t.Fatalf("run %s must not be warned about before its recovery attempt budget is exhausted", run.ID)
+	}
+
+	// Cycle 3: the run now has 2 recorded attempts and is abandoned outright.
+	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
+	if !rec.hasRecord(slog.LevelWarn, run.ID) {
+		t.Fatalf("expected a Warn log mentioning abandoned run %s once its recovery attempts are exhausted; records: %+v", run.ID, rec.records)
+	}
+}
+
+// TestArchiveAndDeleteSuperpowersBranch_LogsForceReap pins the operator-
+// visibility half of archiveAndDeleteSuperpowersBranch's contract: force-
+// deleting an orphaned superpowers/* branch (git branch -D, after archiving
+// its diff) is a destructive, hard-to-reverse action from the branch's point
+// of view, so it must leave a log line naming the branch — currently it
+// deletes silently.
+func TestArchiveAndDeleteSuperpowersBranch_LogsForceReap(t *testing.T) {
+	runsDir := t.TempDir()
+	branch := "superpowers/reap-log-1"
+
+	runner := &sweepRunner{diffOutput: "diff --git a/foo b/foo\n+archived change\n"}
+
+	rec := &superpowersLogRecorder{}
+	attachSuperpowersLogRecorder(t, rec)
+
+	if err := archiveAndDeleteSuperpowersBranch(context.Background(), runner, "/tmp/repo", runsDir, branch); err != nil {
+		t.Fatalf("archiveAndDeleteSuperpowersBranch returned error: %v", err)
+	}
+
+	if !rec.hasRecord(slog.LevelInfo, branch) && !rec.hasRecord(slog.LevelWarn, branch) {
+		t.Fatalf("expected an Info or Warn log naming force-reaped branch %s; records: %+v", branch, rec.records)
 	}
 }

@@ -145,7 +145,12 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 			// escalate_failed is a transient seed miss (store busy / write error):
 			// do not cool out — retry Claude+seed. escalated and escalate_deferred
 			// cool out normally (successful seed, or policy block like kill-switch).
-			if entry.LastVerdict != "escalate_failed" {
+			// But only up to errorHandlerDisableAfter CONSECUTIVE misses: beyond
+			// that the failure is not transient anymore, and must cool out like
+			// any other verdict — else a permanently broken self-fix store spams
+			// Claude every tick for the life of the process, bypassing the
+			// cooldown forever.
+			if entry.LastVerdict != "escalate_failed" || entry.ConsecutiveEscalateFailed >= errorHandlerDisableAfter {
 				return -1
 			}
 		}

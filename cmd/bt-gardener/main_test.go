@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 )
@@ -256,6 +257,82 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 	want := []string{"Reliable", "Cheap", "Fallback"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("gardener_run_cycle tool did not apply learned Selector ordering: Router children = %v, want %v", names, want)
+	}
+}
+
+// TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering above pins the
+// mechanism by seeding stats directly at cfg.SelectorStatsPath — the exact
+// single global file wireSelectorOrdering points at
+// (metricsDir/selector-stats.json). In production, no writer in the repo ever
+// produces that file: the real telemetry writer, RunDeps.flushSelectorTelemetry
+// (internal/agent/selector_flush.go), only ever writes PER-TREE files via
+// agent.SelectorStatsFile(treeID) under agent.HomeDir()/selector-stats/ — a
+// different directory tree entirely (metricsDir is ~/.go-bt-gardener,
+// agent.HomeDir() is ~/.go-bt-evolve). So applyLearnedSelectorOrdering's single
+// shared g.cfg.SelectorStatsPath can never resolve to a file the real writer
+// populates, and the pass is a permanent no-op outside tests that hand-seed
+// the global path. This test seeds telemetry only at the real per-tree
+// location (mirroring the actual production writer) and leaves
+// cfg.SelectorStatsPath unseeded, pinning the requirement that the gardener
+// read real per-tree telemetry instead.
+func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetryFile(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+
+	treeDir := t.TempDir()
+	tree := selectorOrderingTree()
+	data, err := json.MarshalIndent(tree, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal tree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(treeDir, "tree-selector_tree.json"), data, 0644); err != nil {
+		t.Fatalf("write tree file: %v", err)
+	}
+
+	refDir := t.TempDir()
+	metricsDir := t.TempDir()
+	snapDir := t.TempDir()
+	cfg, err := buildGardenerConfig(refDir, metricsDir, snapDir, "/tmp/slo-evidence.json")
+	if err != nil {
+		t.Fatalf("buildGardenerConfig: %v", err)
+	}
+	cfg.Registry = gardener.NewRegistry(treeDir)
+	cfg.MaxMutations = 0 // isolate the reorder — no structural mutations this cycle
+	cfg.EvolveWithoutReflections = true
+
+	cfg, v2Cfg := wireSelectorOrdering(cfg, metricsDir)
+
+	// Seed telemetry only where the real production writer
+	// (agent.RunDeps.flushSelectorTelemetry) actually puts it — a per-tree file
+	// under agent.HomeDir()/selector-stats/, resolved by agent.SelectorStatsFile.
+	// cfg.SelectorStatsPath (the global metricsDir file) is deliberately left
+	// unseeded, since no writer in the repo ever produces it.
+	perTreePath := agent.SelectorStatsFile("selector_tree")
+	if err := os.MkdirAll(filepath.Dir(perTreePath), 0o755); err != nil {
+		t.Fatalf("mkdir per-tree stats dir: %v", err)
+	}
+	seedSelectorStats(t, perTreePath)
+
+	g := gardener.NewGardener(cfg)
+	tool := newGardenerRunCycleTool(g, v2Cfg)
+
+	if _, err := tool.Call(context.Background(), ""); err != nil {
+		t.Fatalf("tool.Call: %v", err)
+	}
+
+	var got *evolution.SerializableNode
+	for _, e := range cfg.Registry.List() {
+		if e.Name == "selector_tree" {
+			got = e.Tree
+		}
+	}
+	if got == nil {
+		t.Fatal("selector_tree not found in registry after cycle")
+	}
+
+	names := routerChildNames(t, got)
+	want := []string{"Reliable", "Cheap", "Fallback"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("gardener_run_cycle tool did not apply learned Selector ordering from the real per-tree telemetry file %q: Router children = %v, want %v", perTreePath, names, want)
 	}
 }
 

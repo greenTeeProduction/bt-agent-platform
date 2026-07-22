@@ -88,6 +88,23 @@ func TestMetaValidator_WarnsOnArchetypeMismatch(t *testing.T) {
 	}
 }
 
+// TestMetaValidator_DefaultMinCompositeMatchesRealCallerScale guards against
+// the default MinComposite being expressed on a 0-1 scale while every real
+// caller (evaluator.FitnessScore.Composite, see internal/evaluator/stockfish.go)
+// feeds 0-100 "centipawns-like" composite scores. Production wires the
+// MetaValidator with a zero-value MetaValidatorConfig (cmd/bt-gardener/config.go),
+// so a badly-scaled default silently disables the fitness-floor safety check.
+func TestMetaValidator_DefaultMinCompositeMatchesRealCallerScale(t *testing.T) {
+	validator := NewMetaValidator(MetaValidatorConfig{})
+
+	// A composite of 5.0 on the real 0-100 scale is far below any reasonable
+	// safety floor, but is nowhere near the buggy 0-1 scale default of 0.30.
+	report := validator.Validate(DefaultTree(), 5.0)
+	if !hasMetaIssue(report, "fitness_floor") {
+		t.Fatalf("expected fitness_floor issue for a low 0-100 scale composite under the default config, got %#v", report)
+	}
+}
+
 func hasMetaIssue(report MetaValidationReport, check string) bool {
 	for _, issue := range report.Issues {
 		if issue.Check == check {

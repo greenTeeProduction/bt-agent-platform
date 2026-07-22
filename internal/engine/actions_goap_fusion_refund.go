@@ -44,6 +44,11 @@ var goapInfraResultMarkers = []string{
 	// kill was charged to a milestone whose implementation had already
 	// verified green earlier in the same run).
 	"cycle budget exhausted",
+	// executeSuperpowersTaskBatch stops cleanly, before starting a task's RED
+	// phase, when the cycle's remaining budget cannot cover that task's own
+	// verification commands — a deliberate, clean stop to avoid the same
+	// deadline-SIGKILL risk above, not evidence the milestone is unbuildable.
+	"batch-stopped-insufficient-budget",
 }
 
 // goapImplGateFailureMarkers identify a commit-gate rejection caused by the

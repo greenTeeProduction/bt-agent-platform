@@ -903,6 +903,8 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 			continue
 		}
 		if pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts {
+			Warn(fmt.Sprintf("goap fusion: parked run %s abandoned — pending-patch recovery attempts exhausted", run.ID),
+				"attempts", pendingPatchRecoveryAttempts(run))
 			continue // abandoned: attempt budget exhausted, never retried again
 		}
 		branch := strings.TrimSpace(run.WorktreeBranch)

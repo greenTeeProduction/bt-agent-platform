@@ -485,10 +485,14 @@ type Config struct {
 	// trees per-user experience banks at <root>/<user>/experience (ADR-133
 	// Phase 5); empty means every tree shares ExperienceBank.
 	UserExperienceRoot string
-	// SelectorStatsPath, when set, is the durable Selector telemetry file
-	// (written by SelectorOptimizer.SaveSelectorStats) that seeds the
+	// SelectorStatsPath, when set, is a fallback durable Selector telemetry
+	// file (written by SelectorOptimizer.SaveSelectorStats) that seeds the
 	// learned-ordering pass in evolveTreeV2 when EvolveV2Config.SelectorOrdering
-	// is enabled. Empty disables the pass regardless of the flag.
+	// is enabled and no per-tree telemetry file exists yet at
+	// agent.SelectorStatsFile(treeID) — the real production writer
+	// (agent.RunDeps.flushSelectorTelemetry) only ever populates the latter, per
+	// tree. Leaving this empty is fine once per-tree telemetry exists; it only
+	// disables the pass for trees with neither.
 	SelectorStatsPath string
 	// DTStatsPath, when set, is the durable DTAnalyzer telemetry file (written
 	// by DTAnalyzer.Save, e.g. agent.DecisionTreeStatsFile) that seeds the
