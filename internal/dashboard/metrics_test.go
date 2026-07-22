@@ -160,6 +160,55 @@ func TestCollect_SurfacesTopEvolvedWinnersFromTrees(t *testing.T) {
 	}
 }
 
+// TestCollect_IncludesDLQCategoriesFromHook pins that Collect surfaces a
+// lightweight DLQ health rollup, mirroring the existing DiscoverTreeFn /
+// KGAnalyticsRefreshFn package-var injection-hook pattern (see executor.go
+// and metrics_utils.go) instead of widening Collect's positional signature
+// and breaking every call site. main.go is expected to wire
+// DLQCategoriesFn = dlq.CategoryCounts at startup so the dashboard can
+// render a DLQ category breakdown without a separate round-trip to
+// /api/dlq. Today DLQCategoriesFn does not exist and Metrics carries no DLQ
+// field, so this fails to compile until both land.
+func TestCollect_IncludesDLQCategoriesFromHook(t *testing.T) {
+	origFn := DLQCategoriesFn
+	t.Cleanup(func() { DLQCategoriesFn = origFn })
+
+	DLQCategoriesFn = func() map[string]int {
+		return map[string]int{"network": 2, "timeout": 1}
+	}
+
+	// Collect memoizes its snapshot for 2s; bypass the cache so this test
+	// isn't order-dependent on other Collect() calls in this package's suite.
+	mu.Lock()
+	lastSnap = nil
+	mu.Unlock()
+
+	m := Collect(0, map[string]int{}, nil)
+
+	if m.DLQCategories == nil {
+		t.Fatal("Metrics.DLQCategories is nil; DLQCategoriesFn hook result was dropped")
+	}
+	if got, want := m.DLQCategories["network"], 2; got != want {
+		t.Errorf("DLQCategories[\"network\"] = %d, want %d", got, want)
+	}
+	if got, want := m.DLQCategories["timeout"], 1; got != want {
+		t.Errorf("DLQCategories[\"timeout\"] = %d, want %d", got, want)
+	}
+
+	var wire map[string]any
+	if err := json.Unmarshal(m.ToJSON(), &wire); err != nil {
+		t.Fatalf("round-tripping Metrics JSON: %v", err)
+	}
+	rawCats, ok := wire["dlq_categories"]
+	if !ok {
+		t.Fatalf("dashboard JSON has no dlq_categories field; wire=%v", wire)
+	}
+	cats, ok := rawCats.(map[string]any)
+	if !ok || cats["network"] != float64(2) {
+		t.Errorf("wire dlq_categories = %v, want network=2", rawCats)
+	}
+}
+
 // TestLoadGardenerMetricsParsesRollbacks verifies milestone 3/3 of the
 // "Q2 Evolvability — Make gardener mutation rollback automatic,
 // multi-revision, and observable" program: loadGardenerMetrics must surface

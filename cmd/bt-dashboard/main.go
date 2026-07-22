@@ -218,6 +218,7 @@ func main() {
 	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"
 	dlq = reliability.NewDeadLetterQueue(dlqPath)
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
+	dashboard.DLQCategoriesFn = dlq.CategoryCounts
 
 	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
 	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
@@ -1402,8 +1403,9 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 	dlq.Reload()
 	entries := dlq.List()
 	resp := map[string]interface{}{
-		"count":   len(entries),
-		"entries": entries,
+		"count":      len(entries),
+		"entries":    entries,
+		"categories": dlq.CategoryCounts(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, resp)
