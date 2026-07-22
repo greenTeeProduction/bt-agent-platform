@@ -373,6 +373,31 @@ func TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier(t *t
 	}
 }
 
+// recordBlockFitnessMetric duplicates reliability.ScoreOutcome's formula (Q5
+// Consistency & Reuse milestone 1 extracted the canonical version; milestones
+// 2-3 already delegated internal/blocks.ScoreFromBlackboard and
+// internal/engine.fitnessScoreFromBB). Scanning the source directly — rather
+// than calling recordBlockFitnessMetric and comparing outputs — is necessary
+// because the duplicated formula is byte-for-byte identical to
+// reliability.ScoreOutcome, so every input/output pair matches whether or not
+// the delegation exists. This test fails until recordBlockFitnessMetric's
+// body is replaced with a call to reliability.ScoreOutcome and the
+// duplicated inline formula is deleted.
+func TestRecordBlockFitnessMetric_DelegatesToReliabilityScoreOutcome(t *testing.T) {
+	src, err := os.ReadFile("executor.go")
+	if err != nil {
+		t.Fatalf("reading executor.go: %v", err)
+	}
+	body := string(src)
+
+	if !strings.Contains(body, "reliability.ScoreOutcome(") {
+		t.Error("recordBlockFitnessMetric must call reliability.ScoreOutcome instead of duplicating its formula")
+	}
+	if strings.Contains(body, "score := res.Quality * 100") {
+		t.Error("executor.go still contains the duplicated inline scoring formula; delete it now that reliability.ScoreOutcome is canonical")
+	}
+}
+
 // TestPickTreeForTask_RoutesAuctionShapedTasksToAuctionDemo verifies that
 // tasks whose text signals auction/delegation intent (mirroring
 // engine.AuctionTaskKeywords, the same keyword set that gates the

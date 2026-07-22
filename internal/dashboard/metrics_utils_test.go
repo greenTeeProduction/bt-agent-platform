@@ -262,6 +262,43 @@ func TestKGAnalyticsGaugesRenderedAndUpdated(t *testing.T) {
 	}
 }
 
+// TestPrometheusHandler_InvokesKGAnalyticsRefreshFn pins the fix for the
+// NotebookLM research goal: cmd/bt-dashboard must itself periodically call
+// knowledge.ComputeAnalytics() + RecordKGAnalytics() instead of depending on
+// the separate bt-agent process's bt_kg_analytics MCP tool handler to
+// populate the KG analytics gauges. cmd/bt-agent/tools.go's bt_kg_analytics
+// handler does call dashboard.RecordKGAnalytics today, but bt-agent and
+// bt-dashboard are separate binaries/processes with separate memory, so that
+// call only ever updates bt-agent's own in-process gauges — bt-dashboard's
+// own /api/metrics scrape (backed by PrometheusHandler) never reflects it.
+//
+// The fix: PrometheusHandler must invoke a package-level KGAnalyticsRefreshFn
+// hook, if set, on every scrape — mirroring the DiscoverTreeFn hook pattern
+// already used to let cmd/bt-dashboard wire its own in-process
+// knowledge.KnowledgeGraph into internal/dashboard without an import cycle
+// (internal/knowledge depends on internal/dashboard's sibling packages, not
+// the other way around; see PickTreeForTask's DiscoverTreeFn in
+// executor.go). main.go can then wire KGAnalyticsRefreshFn to call
+// kg.ComputeAnalytics() + RecordKGAnalytics() against its own in-process kg,
+// so every /api/metrics scrape reflects current graph health.
+func TestPrometheusHandler_InvokesKGAnalyticsRefreshFn(t *testing.T) {
+	origFn := KGAnalyticsRefreshFn
+	t.Cleanup(func() { KGAnalyticsRefreshFn = origFn })
+
+	called := false
+	KGAnalyticsRefreshFn = func() { called = true }
+
+	scrapeMetrics(t)
+
+	if !called {
+		t.Error("PrometheusHandler did not invoke KGAnalyticsRefreshFn on scrape; " +
+			"cmd/bt-dashboard's /api/metrics route must refresh KG analytics gauges " +
+			"itself on every scrape instead of depending on the separate bt-agent " +
+			"process's bt_kg_analytics MCP tool handler, whose dashboard.RecordKGAnalytics " +
+			"call only ever updates that other process's own in-memory gauges")
+	}
+}
+
 // TestRunTaskResult_EndToEnd_EmitsTaskAndBlockFitnessMetrics drives a real
 // task through AgentExecutor.RunTaskResult (the dashboard's own single-task
 // dispatch path) and asserts the /metrics Prometheus handler reflects it —

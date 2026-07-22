@@ -150,6 +150,17 @@ func RecordKGAnalytics(coverageGaps, bottlenecks, selectionPressureTrees int) {
 	kgSelectionPressureTreesGauge.Set(int64(selectionPressureTrees))
 }
 
+// KGAnalyticsRefreshFn, if set, is invoked on every PrometheusHandler scrape
+// to recompute and republish the KG analytics gauges from cmd/bt-dashboard's
+// own in-process knowledge graph. This mirrors the DiscoverTreeFn hook
+// pattern (see PickTreeForTask) that lets cmd/bt-dashboard wire its own
+// knowledge.KnowledgeGraph into internal/dashboard without an import cycle.
+// Before this hook existed, the only caller of RecordKGAnalytics was
+// cmd/bt-agent's bt_kg_analytics MCP tool handler — which only ever updates
+// bt-agent's own separate process's gauges, never bt-dashboard's, since the
+// two are independent binaries with independent memory.
+var KGAnalyticsRefreshFn func()
+
 // GetAgentMetrics returns a copy of all agent metrics.
 func GetAgentMetrics() []AgentStats {
 	globalMetrics.mu.RLock()
@@ -511,6 +522,9 @@ func (rw *responseWriter) Flush() {
 // PrometheusHandler returns an http.Handler that serves metrics in Prometheus text format.
 func PrometheusHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if KGAnalyticsRefreshFn != nil {
+			KGAnalyticsRefreshFn()
+		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		writePrometheusMetrics(w)
 	})

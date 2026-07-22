@@ -101,6 +101,49 @@ func TestMainWiresKnowledgeGraphDiscoverIntoDashboard(t *testing.T) {
 	}
 }
 
+// TestMainWiresKGAnalyticsRefreshFn pins the NotebookLM research goal: make
+// cmd/bt-dashboard itself periodically call knowledge.ComputeAnalytics() +
+// dashboard.RecordKGAnalytics() (e.g. on a background ticker or on each
+// /api/metrics scrape) instead of depending on the separate bt-agent
+// process's bt_kg_analytics MCP tool handler to populate the gauges.
+// bt-agent and bt-dashboard are separate binaries with separate memory, so
+// cmd/bt-agent/tools.go's existing dashboard.RecordKGAnalytics call (inside
+// the bt_kg_analytics MCP tool handler) only ever updates bt-agent's own
+// in-process gauges — never bt-dashboard's, which is the process that
+// actually serves /api/metrics to Prometheus.
+//
+// This audits main.go at the source level (same style as
+// TestMainWiresKnowledgeGraphDiscoverIntoDashboard above) because the
+// wiring happens inline during dashboard startup setup, not inside a
+// separately callable function: main.go must set
+// dashboard.KGAnalyticsRefreshFn to a closure that calls kg.ComputeAnalytics()
+// against the dashboard's own in-process knowledge graph and republishes the
+// result via dashboard.RecordKGAnalytics, so every /api/metrics scrape
+// (internal/dashboard.PrometheusHandler, which invokes KGAnalyticsRefreshFn
+// per TestPrometheusHandler_InvokesKGAnalyticsRefreshFn) reflects live graph
+// health computed in-process.
+func TestMainWiresKGAnalyticsRefreshFn(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	source := string(src)
+
+	if !strings.Contains(source, "dashboard.KGAnalyticsRefreshFn") {
+		t.Error("main.go must wire dashboard.KGAnalyticsRefreshFn so /api/metrics scrapes " +
+			"refresh KG analytics gauges from the dashboard's own in-process knowledge graph " +
+			"instead of depending on the separate bt-agent process's bt_kg_analytics MCP tool handler")
+	}
+	if !strings.Contains(source, "kg.ComputeAnalytics()") {
+		t.Error("main.go's KGAnalyticsRefreshFn wiring must call kg.ComputeAnalytics() against " +
+			"the dashboard's own in-process knowledge graph, not rely on bt-agent's separate process")
+	}
+	if !strings.Contains(source, "dashboard.RecordKGAnalytics(") {
+		t.Error("main.go must call dashboard.RecordKGAnalytics(...) itself with the freshly " +
+			"computed analytics counts, not only read them from a remote process")
+	}
+}
+
 // TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness pins milestone 4/4 of
 // the Q2 Evolvability KG-adoption program: buildDashboardKnowledgeGraph must
 // register the static catalog (via knowledge.BuildKnowledgeGraph) and then

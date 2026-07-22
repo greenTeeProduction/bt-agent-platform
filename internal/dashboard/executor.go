@@ -12,6 +12,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // AgentExecutor runs tasks in-process when Runner is set, else falls back to Hermes CLI.
@@ -136,21 +137,7 @@ func (e *AgentExecutor) recordBlockFitnessMetric(agentName, treeID string, res *
 		return
 	}
 	success := agent.IsBreakerSuccess(res.Outcome, runErr)
-	score := res.Quality * 100
-	if score <= 0 {
-		// The shared classifier already treats the Hermes-fallback "completed"
-		// outcome as healthy, so no per-outcome special case is needed here.
-		if success {
-			score = 75
-		} else {
-			score = 25
-		}
-	}
-	if score > 100 {
-		score = 100
-	} else if score < 0 {
-		score = 0
-	}
+	score := reliability.ScoreOutcome(res.Outcome, res.Quality, success)
 	RecordBlockFitness(treeID, agentName, score)
 }
 
