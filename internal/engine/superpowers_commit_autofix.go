@@ -30,16 +30,6 @@ func commitFixMaxAttempts() int {
 	return 10
 }
 
-// gitStageArgs is the `git add` argument vector that stages everything except
-// the generated Superpowers/graphify artifacts (superpowersGeneratedPathPrefixes,
-// superpowers_apply.go). Shared by the initial stage and every re-stage so
-// they cannot drift, and derived from the same exclusion list as
-// superpowersGeneratedCommitExclusions so the apply-stage landing commit and
-// the per-task commit can never diverge on what counts as generated.
-func gitStageArgs() []string {
-	return append([]string{"add", "-A", "--", "."}, superpowersGeneratedCommitExclusions()...)
-}
-
 // withToolPath prefixes a shell command with the toolchain PATH the daemon does
 // not carry by default (Go + $HOME/go/bin), so gofmt/golangci-lint resolve.
 func withToolPath(cmd string) string {
@@ -178,7 +168,7 @@ func commitWithAutoFix(ctx context.Context, runner CommandRunner, claude ClaudeR
 			}
 		}
 
-		reAdd := runner.Run(ctx, dir, "git", gitStageArgs()...)
+		reAdd := stageAllExceptGenerated(ctx, runner, dir)
 		if reAdd.Err != nil {
 			run.ApplyStatus = "applied_uncommitted"
 			writeApplyCommitEvidence(run, fmt.Sprintf("git add failed during auto-fix attempt %d/%d", attempt, maxAttempts), reAdd)

@@ -139,11 +139,12 @@ func (r *commitScopeFakeRunner) Run(_ context.Context, dir string, name string, 
 }
 
 // TestSuperpowersTaskCommitAction_ExcludesGeneratedPaths proves the per-task
-// commit scopes `git add -A` away from generated Superpowers/graphify
-// artifacts (task evidence dirs, graphify-out/, docs/superpowers/**),
-// mirroring the exclusion pathspecs commitAppliedSuperpowersRun already uses
-// for the whole-run apply commit. Before the fix, the action ran a bare
-// `git add -A` with no pathspec at all.
+// commit scopes staging away from generated Superpowers/graphify artifacts
+// (task evidence dirs, graphify-out/, docs/superpowers/**) via
+// stageAllExceptGenerated: a plain `git add -A -- .` (":(exclude)" pathspecs
+// abort git 2.25.1 whenever an ignored dir with untracked content exists)
+// followed by a `git reset` that unstages every generated prefix, both before
+// the commit.
 func TestSuperpowersTaskCommitAction_ExcludesGeneratedPaths(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -174,19 +175,27 @@ func TestSuperpowersTaskCommitAction_ExcludesGeneratedPaths(t *testing.T) {
 		t.Fatalf("SuperpowersTaskCommit result = %d, want SUCCESS; bb.Result=%s", result, bb.Result)
 	}
 
-	var addCall string
+	var addCall, resetCall string
 	for _, c := range runner.calls {
-		if strings.Contains(c, "git add") {
+		if addCall == "" && strings.Contains(c, "git add") {
 			addCall = c
-			break
+		}
+		if resetCall == "" && strings.Contains(c, "git reset") {
+			resetCall = c
 		}
 	}
 	if addCall == "" {
 		t.Fatalf("expected a git add call, calls=%v", runner.calls)
 	}
+	if strings.Contains(addCall, ":(exclude)") {
+		t.Fatalf("git add must not carry exclude pathspecs (they abort git 2.25.1 on ignored dirs): %s", addCall)
+	}
+	if resetCall == "" {
+		t.Fatalf("expected a git reset call unstaging generated prefixes, calls=%v", runner.calls)
+	}
 	for _, want := range []string{"graphify-out", "docs/superpowers/runs", "docs/superpowers/plans"} {
-		if !strings.Contains(addCall, want) {
-			t.Fatalf("git add call missing exclusion for %q: %s", want, addCall)
+		if !strings.Contains(resetCall, want) {
+			t.Fatalf("git reset call missing generated prefix %q: %s", want, resetCall)
 		}
 	}
 

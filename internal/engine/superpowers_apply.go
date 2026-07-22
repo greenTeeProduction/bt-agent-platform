@@ -385,7 +385,7 @@ func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, ru
 // dir with the standard artifact-path exclusions. It reports whether a commit
 // was created; "nothing staged" is (false, nil), not an error.
 func stageAndCommitSuperpowersRunInDir(ctx context.Context, runner CommandRunner, claude ClaudeRunner, run *SuperpowersRun, dir string) (bool, error) {
-	add := runner.Run(ctx, dir, "git", gitStageArgs()...)
+	add := stageAllExceptGenerated(ctx, runner, dir)
 	if add.Err != nil {
 		run.ApplyStatus = "applied_uncommitted"
 		writeApplyCommitEvidence(run, "git add failed", add)
@@ -487,19 +487,32 @@ func isGeneratedSuperpowersOrGraphifyPath(path string) bool {
 	return false
 }
 
-// superpowersGeneratedCommitExclusions returns the git pathspec exclusion
-// arguments (":(exclude)<prefix>**") for `git add -A`, scoped away from the
-// generated paths in superpowersGeneratedPathPrefixes. Used by the per-task
-// commit (SuperpowersTaskCommit action, actions_superpowers_prod.go) so it
-// never stages generated Superpowers/graphify artifacts — mirroring the
-// exclusion pathspecs the whole-run apply commit (commitAppliedSuperpowersRun
-// below) already applies.
-func superpowersGeneratedCommitExclusions() []string {
-	out := make([]string, 0, len(superpowersGeneratedPathPrefixes))
-	for _, prefix := range superpowersGeneratedPathPrefixes {
-		out = append(out, ":(exclude)"+strings.TrimSuffix(prefix, "/")+"/**")
+// stageAllExceptGenerated stages a run's changes for commit: everything in
+// the worktree except the generated Superpowers/graphify prefixes
+// (superpowersGeneratedPathPrefixes). Shared by the apply-stage landing
+// commit, the commit auto-fix re-stage, and the per-task commit so they can
+// never drift on what counts as generated.
+//
+// It is deliberately two commands — `git add -A -- .` then `git reset -q --
+// <prefixes>` — NOT a single add with ":(exclude)" pathspecs: git 2.25.1
+// (this host) aborts `git add` with exit 1 ("The following paths are ignored
+// by one of your .gitignore files") whenever ANY exclude pathspec is present
+// and the worktree holds an ignored directory with untracked content, which
+// every run worktree has once the in-run `graphify update .` writes
+// graphify-out/cache. That failure made every landing from 2026-07-21 23:30
+// onward fall back to applied_uncommitted and treadmill. Plain `git add -A`
+// skips ignored paths silently; the reset scopes the index back off the
+// generated prefixes and is a quiet no-op for prefixes with no matches. Side
+// effect: index-only changes under generated prefixes (e.g. a pre-staged
+// `git rm --cached graphify-out/...`) are reverted — landing an untracking
+// has to be done outside the runner's commit path.
+func stageAllExceptGenerated(ctx context.Context, runner CommandRunner, dir string) CommandResult {
+	add := runner.Run(ctx, dir, "git", "add", "-A", "--", ".")
+	if add.Err != nil {
+		return add
 	}
-	return out
+	resetArgs := append([]string{"reset", "-q", "--"}, superpowersGeneratedPathPrefixes...)
+	return runner.Run(ctx, dir, "git", resetArgs...)
 }
 
 // writeApplyCommitEvidence persists a failed stage/commit's full output as a
