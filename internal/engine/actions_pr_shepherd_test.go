@@ -196,7 +196,8 @@ func TestPRShepherd_IdleWhenInSync(t *testing.T) {
 	gh := &fakeGitHub{t: t}
 	runner := &prShepherdScriptRunner{script: gitAncestryScript("samesha", "samesha", true, true)}
 	bb := newTestBlackboard()
-	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+	deps := prTestDeps(t, gh, runner, nil)
+	if got := runPRShepherd(bb, deps); got != 1 {
 		t.Fatalf("result = %d, want 1", got)
 	}
 	if bb.Outcome != "pr_shepherd_idle" || bb.OutcomeRefinement != "no_change" {
@@ -204,6 +205,11 @@ func TestPRShepherd_IdleWhenInSync(t *testing.T) {
 	}
 	if runner.called("push") {
 		t.Fatalf("in-sync pass must not push: %v", runner.calls)
+	}
+	// Every pass must leave a durable trace: bb.Outcome is overwritten by
+	// later tree nodes, so state.LastOutcome is the only reliable record.
+	if st := loadPRShepherdState(deps.stateDir); st.LastOutcome != "pr_shepherd_idle" || st.LastPassAt == "" {
+		t.Fatalf("durable pass record missing: %+v", st)
 	}
 }
 

@@ -72,6 +72,13 @@ type prShepherdState struct {
 	// a merge or upstream sync succeeds.
 	FixAttempts      map[string]int `json:"fix_attempts,omitempty"`
 	TotalFixAttempts int            `json:"total_fix_attempts,omitempty"`
+	// LastOutcome/LastPassAt are the durable observability record: the
+	// action's blackboard outcome is overwritten by later tree nodes and the
+	// cycle-complete log line only carries the FINAL outcome, so without
+	// these every shepherd pass is invisible (cost 70 blind minutes on
+	// 2026-07-22 before this field existed).
+	LastOutcome string `json:"last_outcome,omitempty"`
+	LastPassAt  string `json:"last_pass_at,omitempty"`
 }
 
 // prShepherdDirOverride redirects durable state in tests (mirrors
@@ -346,6 +353,23 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	// Single durable save + log line per pass: the ONLY reliable trace of
+	// what the shepherd decided (bb.Outcome is overwritten by later nodes).
+	state := loadPRShepherdState(deps.stateDir)
+	defer func() {
+		state.LastOutcome = bb.Outcome
+		state.LastPassAt = now().Format(time.RFC3339)
+		if deps.stateDir != "" {
+			_ = savePRShepherdState(deps.stateDir, state)
+		}
+		switch bb.Outcome {
+		case "pr_shepherd_idle", "pr_shepherd_ci_pending", "pr_shepherd_synced_master", "pr_shepherd_pr_opened", "pr_shepherd_merged", "pr_shepherd_fix_pushed":
+			Info("pr shepherd: pass complete", "outcome", bb.Outcome)
+		default:
+			Warn("pr shepherd: pass needs attention", "outcome", bb.Outcome, "detail", truncateGoap(bb.Result, 300))
+		}
+	}()
+
 	api := deps.api
 	if api == nil {
 		built, err := newGitHubPRClientFromEnv(ctx, deps.runner, deps.repoDir)
@@ -371,12 +395,10 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 		return prShepherdSkip(bb, "pr_shepherd_fetch_failed", "## PR Shepherd Skipped\n\nCould not resolve master/origin-master SHAs.")
 	}
 
-	state := loadPRShepherdState(deps.stateDir)
-
 	if localSHA == originSHA {
 		if state.PRNumber != 0 {
 			api.deleteBranch(ctx, branch)
-			_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+			state = prShepherdState{}
 		}
 		bb.OutcomeRefinement = "no_change"
 		bb.QualityScore = 0.5
@@ -394,7 +416,7 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 				"## PR Shepherd Skipped\n\nNon-forced ff of local master refused:\n```\n%s\n```", truncateGoap(ff.Output, 800))
 		}
 		api.deleteBranch(ctx, branch)
-		_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+		state = prShepherdState{}
 		return prShepherdSkip(bb, "pr_shepherd_synced_master",
 			"## PR Shepherd Synced\n\nFast-forwarded local master to origin (%s).", originSHA[:min(12, len(originSHA))])
 	}
@@ -426,14 +448,10 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 			return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\nPR creation failed: %v", err)
 		}
 		state.PRNumber = created.Number
-		_ = savePRShepherdState(deps.stateDir, state)
 		return prShepherdSkip(bb, "pr_shepherd_pr_opened",
 			"## PR Shepherd Opened PR #%d\n\nBranch `%s` at %s; CI will be checked next cycle.", created.Number, branch, localSHA[:min(12, len(localSHA))])
 	}
-	if state.PRNumber != pr.Number {
-		state.PRNumber = pr.Number
-		_ = savePRShepherdState(deps.stateDir, state)
-	}
+	state.PRNumber = pr.Number
 
 	runs, err := api.listCheckRuns(ctx, localSHA)
 	if err != nil {
@@ -467,12 +485,12 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 				"## PR Shepherd Merged PR #%d\n\nMerged, but the local master ff was refused (will sync next cycle):\n```\n%s\n```", pr.Number, truncateGoap(ff.Output, 400))
 		}
 		api.deleteBranch(ctx, branch)
-		_ = savePRShepherdState(deps.stateDir, prShepherdState{})
+		state = prShepherdState{}
 		return prShepherdSkip(bb, "pr_shepherd_merged",
 			"## PR Shepherd Merged PR #%d\n\nPipeline green; merged and fast-forwarded local master.", pr.Number)
 	}
 
-	return runPRShepherdFix(ctx, bb, deps, api, state, branch, localSHA, pr.Number, failed, now)
+	return runPRShepherdFix(ctx, bb, deps, api, &state, branch, localSHA, pr.Number, failed, now)
 }
 
 // runPRShepherdFix runs ONE bounded Claude fix attempt for a red pipeline:
@@ -480,7 +498,7 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 // DETERMINISTIC commit (Claude has no git-write tools, mirroring the
 // superpowers apply step), landing on local master via the non-forced ff
 // primitive, then re-pushing the fleet branch.
-func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, api *githubPRClient, state prShepherdState, branch, headSHA string, prNumber int, failed []githubCheckRun, now func() time.Time) int {
+func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, api *githubPRClient, state *prShepherdState, branch, headSHA string, prNumber int, failed []githubCheckRun, now func() time.Time) int {
 	maxAttempts := prShepherdMaxFixAttempts()
 	if state.FixAttempts[headSHA] >= maxAttempts || state.TotalFixAttempts >= 2*maxAttempts {
 		return prShepherdSkip(bb, "pr_shepherd_fix_exhausted",
@@ -502,9 +520,11 @@ func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, 
 	}
 
 	chargeAttempt := func() {
+		if state.FixAttempts == nil {
+			state.FixAttempts = map[string]int{}
+		}
 		state.FixAttempts[headSHA]++
 		state.TotalFixAttempts++
-		_ = savePRShepherdState(deps.stateDir, state)
 	}
 
 	short := headSHA[:min(8, len(headSHA))]
