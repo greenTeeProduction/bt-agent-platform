@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -233,30 +234,29 @@ func TestAutoRestartEnabled(t *testing.T) {
 	}
 }
 
-// TestDefaultRebuildTargets_PinsFullListIncludingMCPBinary pins the complete
-// DefaultRebuildTargets list (Q3 Reliability, "close the deploy-drift
-// restart-handoff gap" milestone 3/3). bin/bt-agent is the MCP server binary
-// .mcp.json boots per cycle-session (`"command": "bin/bt-agent"`) — it was
-// nobody's rebuild target and required two manual rebuilds on 2026-07-16
-// (30+ commits stale at b2a318a). It is unit-less (empty Unit): MCP client
-// sessions spawn a fresh bt-agent process per cycle-session rather than
-// running under a long-lived systemd unit, so DriftWatchOnce's sibling-unit
-// restart loop (which skips t.Unit == "") must never attempt to restart it.
-func TestDefaultRebuildTargets_PinsFullListIncludingMCPBinary(t *testing.T) {
+// TestDefaultRebuildTargets_PinsFullList pins the complete
+// DefaultRebuildTargets list. The self target's OutPath is bin/bt-agent
+// (2026-07-22): the unit's ExecStart runs from bin/ — the repo-root copy the
+// unit previously ran was exactly why self-drift adoption never reached the
+// daemon (rebuilds swapped a binary nothing executed) — and bin/bt-agent
+// doubles as the MCP server binary .mcp.json boots per cycle-session, so the
+// former separate unit-less "bt-agent-mcp" target collapsed into the self
+// target. NO target may point at the repo root except bt-agent-cli (the CLI
+// tool's canonical path, no owning unit).
+func TestDefaultRebuildTargets_PinsFullList(t *testing.T) {
 	got := DefaultRebuildTargets("/repo")
 	want := []RebuildTarget{
-		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join("/repo", "bt-agent"), Unit: "bt-agent"},
+		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join("/repo", "bin", "bt-agent"), Unit: "bt-agent"},
 		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join("/repo", "bt-agent-cli")},
 		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join("/repo", "bin", "bt-gardener"), Unit: "bt-gardener"},
 		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join("/repo", "bin", "bt-dashboard"), Unit: "bt-dashboard"},
-		{Name: "bt-agent-mcp", Pkg: "./cmd/bt-agent", OutPath: filepath.Join("/repo", "bin", "bt-agent")},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("DefaultRebuildTargets(\"/repo\") =\n%#v\nwant\n%#v", got, want)
 	}
 	for _, tg := range got {
-		if tg.Name == "bt-agent-mcp" && tg.Unit != "" {
-			t.Fatalf("bt-agent-mcp target Unit = %q, want empty (unit-less: MCP instances spawn per session, no restart handoff needed)", tg.Unit)
+		if tg.Unit != "" && !strings.Contains(tg.OutPath, filepath.Join("/repo", "bin")) {
+			t.Fatalf("unit-owning target %q OutPath = %q, want under /repo/bin — a unit must exec the same path drift swaps or adoption is inert", tg.Name, tg.OutPath)
 		}
 	}
 }

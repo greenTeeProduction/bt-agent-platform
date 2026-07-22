@@ -491,9 +491,9 @@ func (dlq *DeadLetterQueue) Len() int {
 	return len(dlq.entries)
 }
 
-// acquireFileLock takes an exclusive advisory flock on the sidecar
+// AcquireFileLock takes an exclusive advisory flock on the sidecar
 // `<path>.lock`, blocking until the lock is available, and unlinks the sidecar
-// on release so no stray artifact is left beside the queue file. flock
+// on release so no stray artifact is left beside the guarded file. flock
 // attaches to the open file description, so two separate opens of the same
 // sidecar exclude each other even within one process — the same shape as the
 // daemon/dashboard cross-process case. The lock is advisory and relies on
@@ -501,26 +501,28 @@ func (dlq *DeadLetterQueue) Len() int {
 // safe to call more than once.
 //
 // This replicates the internal/evolution file-lock idiom locally: reliability
-// imports zero internal packages, so it cannot borrow that helper. The
+// imports zero internal packages, so it cannot borrow that helper. Exported so
+// other packages guarding their own sidecar files (e.g. research.ProgramStore)
+// can share one flock idiom instead of re-implementing it. The
 // unlink-on-release variant must re-verify the sidecar after acquisition: a
 // waiter can acquire the flock on an inode the previous holder already
 // unlinked, and that lock excludes nobody (a fresh open of the path creates a
 // new inode), so it retries on the live path instead.
-func acquireFileLock(path string) (func(), error) {
+func AcquireFileLock(path string) (func(), error) {
 	lockPath := path + ".lock"
 	for {
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
-			return nil, fmt.Errorf("open dlq lock %s: %w", lockPath, err)
+			return nil, fmt.Errorf("open lock %s: %w", lockPath, err)
 		}
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 			f.Close()
-			return nil, fmt.Errorf("flock dlq lock %s: %w", lockPath, err)
+			return nil, fmt.Errorf("flock lock %s: %w", lockPath, err)
 		}
 		held, err := f.Stat()
 		if err != nil {
 			f.Close()
-			return nil, fmt.Errorf("stat dlq lock %s: %w", lockPath, err)
+			return nil, fmt.Errorf("stat lock %s: %w", lockPath, err)
 		}
 		if current, err := os.Stat(lockPath); err != nil || !os.SameFile(held, current) {
 			_ = f.Close() // locked an orphaned inode; retry on the live path
@@ -602,7 +604,7 @@ func (dlq *DeadLetterQueue) save() {
 	// unserialized write rather than dropping the save: an unserialized write
 	// can still lose a concurrent sibling stamp, but an unsaved queue loses
 	// this process's own entries for certain.
-	if release, err := acquireFileLock(dlq.path); err == nil {
+	if release, err := AcquireFileLock(dlq.path); err == nil {
 		defer release()
 	} else {
 		slog.Error("dlq: lock for merged save (writing unserialized)", "path", dlq.path, "error", err)

@@ -17,6 +17,7 @@ testdata/arc42/*.md
 /bt-agent~
 /bt-dashboard
 /bt-agent-cli
+/bt-agent-cli.previous
 /bt-docgen
 /bt-evaluator
 /bt-gardener

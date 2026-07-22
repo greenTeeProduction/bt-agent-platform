@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/research"
@@ -580,5 +582,104 @@ func TestActiveProgramMilestoneNeverRoutesToAnalysisOnUnchangedGoals(t *testing.
 		if ref, _ := bb.ChainState["goap_fusion_program_milestone"].(string); ref == "" {
 			t.Fatalf("run %d: active milestone must be queued", i)
 		}
+	}
+}
+
+// persistGoapProgram and completeGoapProgramMilestone both do a bare
+// OpenPrograms + mutate + Save with no cross-writer coordination — the same
+// lost-update gap research.UpdatePrograms exists to close (see its doc
+// comment, and TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive in
+// actions_goap_fusion_refund_test.go for the sibling call sites already
+// migrated). persistGoapProgram in particular is reached from many distinct
+// sources in the same running fleet — notebooklm/grill research proposals,
+// claude_review, design-followup, arc42-seeder, and auto-seed coverage — so
+// two of those firing around the same moment against the SAME programs.json
+// race: whichever Save's in-memory copy was loaded before a sibling's Save
+// landed clobbers that sibling's already-persisted program registration with
+// its own stale copy, silently dropping it.
+func TestPersistGoapProgram_ConcurrentCallersAllSurvive(t *testing.T) {
+	path := withGoapPrograms(t)
+
+	const workers = 30
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{}}
+			spec := &goapProgramSpec{
+				Title:      fmt.Sprintf("Concurrent program %d", i),
+				Milestones: []string{"m1"},
+			}
+			persistGoapProgram(bb, spec, "test")
+		}()
+	}
+	wg.Wait()
+
+	ps, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(ps.Programs), workers; got != want {
+		t.Fatalf("lost programs under concurrent persistGoapProgram (no flock coordination): got %d, want %d", got, want)
+	}
+}
+
+// Sibling to the persist race above: completeGoapProgramMilestone's own
+// OpenPrograms+Save (marking a DIFFERENT program's milestone done per
+// goroutine, sharing one store) must not let concurrent completions clobber
+// each other.
+func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) {
+	path := withGoapPrograms(t)
+	ps, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workers = 30
+	ids := make([]string, workers)
+	anchors := make([]string, workers)
+	for i := 0; i < workers; i++ {
+		anchor := fmt.Sprintf("internal/engine/complete_race_%d.go", i)
+		anchors[i] = anchor
+		p := ps.Add(fmt.Sprintf("Complete race program %d", i), "test", []string{"Wire work in " + anchor})
+		ids[i] = p.ID
+	}
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{
+				"goap_fusion_program_milestone": ids[i] + ":0",
+			}}
+			run := &SuperpowersRun{ID: fmt.Sprintf("run-%d", i), ChangedFiles: []string{anchors[i]}}
+			completeGoapProgramMilestone(bb, run)
+		}()
+	}
+	wg.Wait()
+
+	final, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lost := 0
+	for _, id := range ids {
+		for _, p := range final.Programs {
+			if p.ID != id {
+				continue
+			}
+			if p.Milestones[0].Status != "done" {
+				lost++
+			}
+		}
+	}
+	if lost != 0 {
+		t.Fatalf("lost %d/%d milestone completions under concurrent OpenPrograms+Save (no flock coordination): want 0 lost", lost, workers)
 	}
 }

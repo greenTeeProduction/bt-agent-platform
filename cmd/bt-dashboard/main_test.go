@@ -283,6 +283,51 @@ func TestHandleDLQReplay_RequeuesInsteadOfDropping(t *testing.T) {
 	}
 }
 
+// TestHandleDLQ_IncludesCategoryCounts pins that the /api/dlq response
+// surfaces a per-error-category rollup (reliability.DeadLetterQueue's
+// existing CategoryCounts method) alongside the flat entry list, so the
+// dashboard panel can render a breakdown without re-deriving it client-side
+// from raw entries. Today handleDLQ's response map only has "count" and
+// "entries" — "categories" is silently omitted.
+func TestHandleDLQ_IncludesCategoryCounts(t *testing.T) {
+	origDLQ := dlq
+	t.Cleanup(func() { dlq = origDLQ })
+
+	dlqPath := filepath.Join(t.TempDir(), "dead_letter_queue.json")
+	dlq = reliability.NewDeadLetterQueue(dlqPath)
+	dlq.Push(reliability.DeadLetterEntry{ID: "e1", Error: "connection refused"})
+	dlq.Push(reliability.DeadLetterEntry{ID: "e2", Error: "timeout"})
+	dlq.Push(reliability.DeadLetterEntry{ID: "e3", Error: "connection refused"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/dlq", nil)
+	rr := httptest.NewRecorder()
+	handleDLQ(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshaling response: %v; body=%s", err, rr.Body.String())
+	}
+
+	rawCats, ok := resp["categories"]
+	if !ok {
+		t.Fatalf("response has no \"categories\" field; body=%s", rr.Body.String())
+	}
+	cats, ok := rawCats.(map[string]interface{})
+	if !ok {
+		t.Fatalf("categories = %v (%T), want a map", rawCats, rawCats)
+	}
+	if got, want := cats["network"], float64(2); got != want {
+		t.Errorf("categories[\"network\"] = %v, want %v (dlq.CategoryCounts() rollup)", got, want)
+	}
+	if got, want := cats["timeout"], float64(1); got != want {
+		t.Errorf("categories[\"timeout\"] = %v, want %v (dlq.CategoryCounts() rollup)", got, want)
+	}
+}
+
 // TestHandleTaskApproveReject_EscalatedVsPending pins milestone 4/4 of the
 // stop-HITL-escalation-from-silently-auto-approving program. handleTaskApprove
 // and handleTaskReject call hitl.DefaultStore.ApproveByTaskID/RejectByTaskID,

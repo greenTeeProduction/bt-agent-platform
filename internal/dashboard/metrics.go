@@ -16,12 +16,20 @@ import (
 
 // Metrics holds a snapshot of live dashboard data.
 type Metrics struct {
-	Timestamp  int64            `json:"timestamp"`
-	System     SystemMetrics    `json:"system"`
-	Trees      TreeMetrics      `json:"trees"`
-	Gardener   *GardenerMetrics `json:"gardener,omitempty"`
-	TopWinners []TreeSnapshot   `json:"top_winners,omitempty"`
+	Timestamp     int64            `json:"timestamp"`
+	System        SystemMetrics    `json:"system"`
+	Trees         TreeMetrics      `json:"trees"`
+	Gardener      *GardenerMetrics `json:"gardener,omitempty"`
+	TopWinners    []TreeSnapshot   `json:"top_winners,omitempty"`
+	DLQCategories map[string]int   `json:"dlq_categories,omitempty"`
 }
+
+// DLQCategoriesFn, when set, is consulted by Collect to surface a per-error-
+// category dead-letter-queue rollup in dashboard metrics, mirroring the
+// DiscoverTreeFn / KGAnalyticsRefreshFn package-var injection-hook pattern
+// (see executor.go and metrics_utils.go). main.go wires this to
+// dlq.CategoryCounts at startup.
+var DLQCategoriesFn func() map[string]int
 
 // TreeSnapshot is a lightweight per-tree view of live KnowledgeGraph state
 // (structural fitness, evolution lineage, evolved count) used to rank the
@@ -108,6 +116,10 @@ func Collect(treeCount int, categories map[string]int, trees []TreeSnapshot) Met
 
 	// Gardener metrics from file
 	m.Gardener = loadGardenerMetrics()
+
+	if DLQCategoriesFn != nil {
+		m.DLQCategories = DLQCategoriesFn()
+	}
 
 	mu.Lock()
 	lastSnap = &m

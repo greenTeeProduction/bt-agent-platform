@@ -155,6 +155,60 @@ func TestVerifyGoapFusionEvidenceRejectsBogusVerification(t *testing.T) {
 	}
 }
 
+// TestVerifyGoapFusionEvidenceAcceptsCommittedPROpened pins the fix for a false
+// negative in the evidence gate for fleet-PR successes: ApplyStatus
+// "committed_pr_opened" (set by pushLandingMasterToOrigin when a bare-repo
+// landing pushes to a fleet PR branch instead of main) must be treated as a
+// completed run by both ReportSuperpowersImplementation (which currently only
+// emits the "## Superpowers Implementation Complete" heading for a fixed list
+// of statuses that omits committed_pr_opened) and VerifyGoapFusionEvidence's
+// Complete-branch check (which currently only accepts the exact string
+// "Apply status: `committed`" — a false negative for
+// "Apply status: `committed_pr_opened`", since there is no backtick directly
+// after "committed").
+func TestVerifyGoapFusionEvidenceAcceptsCommittedPROpened(t *testing.T) {
+	reportFn := GetAction("ReportSuperpowersImplementation")
+	if reportFn == nil {
+		t.Fatal("ReportSuperpowersImplementation not registered")
+	}
+	verifyFn := GetAction("VerifyGoapFusionEvidence")
+	if verifyFn == nil {
+		t.Fatal("VerifyGoapFusionEvidence not registered")
+	}
+
+	artifactDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(artifactDir, "run.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write run.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "finish.md"), []byte("# finish\n"), 0o644); err != nil {
+		t.Fatalf("write finish.md: %v", err)
+	}
+
+	run := &SuperpowersRun{
+		ID:          "20260723T000000",
+		ArtifactDir: artifactDir,
+		ApplyStatus: "committed_pr_opened",
+	}
+	bb := &Blackboard{ChainState: map[string]any{}}
+	setSuperpowersRun(bb, run)
+
+	if code := reportFn(btcore.NewBTContext(context.Background(), bb)); code != 1 {
+		t.Fatalf("ReportSuperpowersImplementation = %d, want 1", code)
+	}
+	if !strings.Contains(bb.Result, "## Superpowers Implementation Complete") {
+		t.Fatalf("ReportSuperpowersImplementation with ApplyStatus=committed_pr_opened did not emit the Complete heading; got:\n%s", bb.Result)
+	}
+
+	code := verifyFn(btcore.NewBTContext(context.Background(), bb))
+	if code != 1 {
+		t.Fatalf("VerifyGoapFusionEvidence for committed_pr_opened = %d, want 1; result: %s",
+			code, bb.Result[:min(len(bb.Result), 400)])
+	}
+	if !bb.QualityAuthoritative {
+		t.Fatal("VerifyGoapFusionEvidence did not set QualityAuthoritative for committed_pr_opened")
+	}
+}
+
 // reportFusionCycleBaseChainState returns the minimal ChainState ReportFusionCycle
 // needs for a genuinely-verified, non-degraded cycle, shared by the
 // materializer-wipe and parked-branch visibility tests below.

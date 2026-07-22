@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -247,6 +249,74 @@ func TestPrioritizeGoapGoals_StampsChargedMilestone(t *testing.T) {
 	}
 	if m := refundProbeHeadMilestone(t); m.Attempts != 1 {
 		t.Fatalf("charge not recorded: attempts=%d, want 1", m.Attempts)
+	}
+}
+
+// refundGoapMilestoneAttemptForInfraFailure (like handleGoapRedPassCycleFailure
+// and resetGoapMilestoneRedPassStreak below it) does a bare OpenPrograms +
+// mutate + Save with no cross-writer coordination — the exact lost-update gap
+// research.UpdatePrograms exists to close (see its doc comment). Two fleet
+// cycles that finish around the same moment and each refund a DIFFERENT
+// milestone of the SAME programs.json race: whichever Save's in-memory copy
+// was loaded before a sibling's Save landed clobbers that sibling's
+// already-persisted refund with its own stale copy, silently dropping it —
+// exactly the "mis-abandons or wrongly un-abandons a milestone" risk this
+// call site carries. This test hammers the real call site (not the
+// research-package primitive, which is already covered) from many goroutines
+// refunding distinct milestones of one shared store and requires every
+// refund to survive.
+func TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+	ps, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workers = 30
+	ids := make([]string, workers)
+	for i := 0; i < workers; i++ {
+		p := ps.Add(fmt.Sprintf("Refund race program %d", i), "test", []string{"head milestone"})
+		ps.Programs[i].Milestones[0].Attempts = 1
+		ps.Programs[i].Milestones[0].Status = "pending"
+		ids[i] = p.ID
+	}
+	if err := ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	prev := goapProgramsPath
+	goapProgramsPath = path
+	t.Cleanup(func() { goapProgramsPath = prev })
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bb := &Blackboard{ChainState: map[string]any{
+				"goap_fusion_program_milestone_charged": ids[i] + ":0",
+			}}
+			refundGoapMilestoneAttemptForInfraFailure(bb)
+		}()
+	}
+	wg.Wait()
+
+	final, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lost := 0
+	for _, id := range ids {
+		for _, p := range final.Programs {
+			if p.ID != id {
+				continue
+			}
+			if p.Milestones[0].Attempts != 0 {
+				lost++
+			}
+		}
+	}
+	if lost != 0 {
+		t.Fatalf("lost %d/%d refunds under concurrent OpenPrograms+Save (no flock coordination): want 0 lost", lost, workers)
 	}
 }
 

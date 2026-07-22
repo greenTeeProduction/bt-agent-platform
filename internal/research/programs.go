@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // Programs are research-proposed multi-cycle changes: work too large for one
@@ -142,6 +144,32 @@ func OpenPrograms(path string) (*ProgramStore, error) {
 		return nil, fmt.Errorf("program store %s is corrupt: %w", path, err)
 	}
 	return ps, nil
+}
+
+// UpdatePrograms performs one read-modify-write cycle against the store at
+// path under an exclusive cross-process flock: open, run fn against the
+// loaded store, then save — all while holding the lock. Plain OpenPrograms +
+// Save (as most callers still do) never merges against what is currently on
+// disk, so two concurrent read-modify-write callers can race: the second
+// Save silently clobbers the first's already-persisted change with a stale
+// in-memory copy. Holding one lock across the whole open→fn→save sequence
+// closes that gap by serializing writers, the same idiom
+// reliability.DeadLetterQueue.save uses for its own sidecar file.
+func UpdatePrograms(path string, fn func(*ProgramStore) error) error {
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		return fmt.Errorf("update programs %s: %w", path, err)
+	}
+	defer release()
+
+	ps, err := OpenPrograms(path)
+	if err != nil {
+		return err
+	}
+	if err := fn(ps); err != nil {
+		return err
+	}
+	return ps.Save()
 }
 
 // Active returns the oldest program that still has a pending milestone.
