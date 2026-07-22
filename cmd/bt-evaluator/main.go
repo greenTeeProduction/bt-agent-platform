@@ -14,6 +14,155 @@ import (
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
+// evaluatorServer holds the stores backing the ev_* tool handlers so they can
+// be exercised directly in tests without going through the MCP transport.
+type evaluatorServer struct {
+	refStore  *evolution.Store
+	treeStore *evolution.TreeStore
+	tt        *evaluator.TranspositionTable
+}
+
+// newEvaluatorServer opens/creates the reflection store, tree store, and
+// transposition table rooted at refDir.
+func newEvaluatorServer(refDir string) (*evaluatorServer, error) {
+	refStore, err := evolution.NewStore(refDir)
+	if err != nil {
+		return nil, err
+	}
+	treeStore, err := evolution.NewTreeStore(refDir)
+	if err != nil {
+		return nil, err
+	}
+	tt, err := evaluator.NewTranspositionTable(refDir, 1000)
+	if err != nil {
+		return nil, err
+	}
+	return &evaluatorServer{refStore: refStore, treeStore: treeStore, tt: tt}, nil
+}
+
+// handleEvaluate implements ev_evaluate: multi-dimensional fitness evaluation
+// of the current behavior tree (Stockfish-style).
+func (s *evaluatorServer) handleEvaluate(args json.RawMessage) *engine.ToolResult {
+	tree, err := s.treeStore.Load()
+	if err != nil || tree == nil {
+		return &engine.ToolResult{Content: []engine.ContentItem{{
+			Type: "text", Text: `{"error": "no tree loaded"}`,
+		}}}
+	}
+	records, _ := s.refStore.LoadAll()
+	fitness := evaluator.EvaluateTree(tree, records)
+
+	result := map[string]interface{}{
+		"success_rate":    fmt.Sprintf("%.1f%%", fitness.SuccessRate*100),
+		"avg_duration_ms": fitness.AvgDurationMs,
+		"node_count":      fitness.NodeCount,
+		"stability":       fmt.Sprintf("%.2f", fitness.Stability),
+		"path_coverage":   fmt.Sprintf("%.2f", fitness.PathCoverage),
+		"composite":       fmt.Sprintf("%.1f", fitness.Composite),
+		"total_tasks":     len(records),
+	}
+	data, _ := json.Marshal(result)
+	return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+}
+
+// handleOrderMutations implements ev_order_mutations: rank mutation
+// candidates using Stockfish-style move ordering.
+func (s *evaluatorServer) handleOrderMutations(args json.RawMessage) *engine.ToolResult {
+	tree, _ := s.treeStore.Load()
+	records, _ := s.refStore.LoadAll()
+	fitness := evaluator.EvaluateTree(tree, records)
+
+	candidates := evaluator.OrderMutations(tree, records, fitness)
+
+	type cand struct {
+		Operation string  `json:"operation"`
+		Target    string  `json:"target"`
+		Score     float64 `json:"score"`
+		Reason    string  `json:"reason"`
+	}
+	items := make([]cand, 0, len(candidates))
+	for _, c := range candidates {
+		items = append(items, cand{
+			Operation: c.Op.Operation,
+			Target:    c.Op.Target,
+			Score:     c.Score,
+			Reason:    c.Reason,
+		})
+	}
+
+	result := map[string]interface{}{
+		"candidates": items,
+		"total":      len(items),
+	}
+	data, _ := json.Marshal(result)
+	return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+}
+
+// handleDeepen implements ev_deepen: iterative deepening search for the best
+// mutation, auto-saving the transposition table after every call.
+func (s *evaluatorServer) handleDeepen(args json.RawMessage) *engine.ToolResult {
+	var params struct {
+		MaxDepth int `json:"max_depth"`
+	}
+	_ = json.Unmarshal(args, &params)
+	if params.MaxDepth == 0 {
+		params.MaxDepth = 2
+	}
+
+	tree, _ := s.treeStore.Load()
+	records, _ := s.refStore.LoadAll()
+
+	result := evaluator.IterativeDeepening(tree, records, s.tt, params.MaxDepth)
+
+	// Auto-save TT after every deepen so cache survives restarts
+	if err := s.tt.Save(); err != nil {
+		engine.Info("tt auto-save failed", "error", err)
+	}
+
+	out := map[string]interface{}{
+		"depth":            result.Depth,
+		"base_composite":   fmt.Sprintf("%.1f", result.BaseFitness.Composite),
+		"candidates_total": len(result.Candidates),
+		"pruned":           result.PrunedCount,
+		"tt_probes":        result.TTProbes,
+		"tt_hits":          result.TTProbeHits,
+	}
+	if result.BestMutation != nil {
+		out["best_op"] = result.BestMutation.Op.Operation
+		out["best_target"] = result.BestMutation.Op.Target
+		out["best_reason"] = result.BestMutation.Reason
+	}
+	if result.BestFitness != nil {
+		out["best_composite"] = fmt.Sprintf("%.1f", result.BestFitness.Composite)
+	}
+
+	data, _ := json.Marshal(out)
+	return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+}
+
+// handleTTStats implements ev_tt_stats: transposition table statistics.
+func (s *evaluatorServer) handleTTStats(args json.RawMessage) *engine.ToolResult {
+	stats := map[string]interface{}{
+		"entries":  s.tt.Stats(),
+		"max_size": 1000,
+		"path":     s.tt.Path(),
+	}
+	data, _ := json.Marshal(stats)
+	return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+}
+
+// handleTTSave implements ev_tt_save: persist the transposition table to disk.
+func (s *evaluatorServer) handleTTSave(args json.RawMessage) *engine.ToolResult {
+	if err := s.tt.Save(); err != nil {
+		return &engine.ToolResult{Content: []engine.ContentItem{{
+			Type: "text", Text: fmt.Sprintf(`{"saved": false, "error": %q}`, err.Error()),
+		}}}
+	}
+	return &engine.ToolResult{Content: []engine.ContentItem{{
+		Type: "text", Text: fmt.Sprintf(`{"saved": true, "entries": %d}`, s.tt.Stats()),
+	}}}
+}
+
 func main() {
 	engine.Init()
 	engine.SetAsDefault()
@@ -22,9 +171,12 @@ func main() {
 	home, _ := os.UserHomeDir()
 	refDir := filepath.Join(home, ".go-bt-reflections")
 
-	refStore, _ := evolution.NewStore(refDir)
-	treeStore, _ := evolution.NewTreeStore(refDir)
-	tt, _ := evaluator.NewTranspositionTable(refDir, 1000)
+	s, err := newEvaluatorServer(refDir)
+	if err != nil {
+		engine.Error("bt-evaluator: failed to initialize stores", "error", err)
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
 
 	server := engine.NewServer("go-bt-evaluator")
 
@@ -32,63 +184,13 @@ func main() {
 	server.RegisterTool("ev_evaluate", "Multi-dimensional fitness evaluation of the behavior tree (Stockfish-style)",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, err := treeStore.Load()
-			if err != nil || tree == nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{
-					Type: "text", Text: `{"error": "no tree loaded"}`,
-				}}}
-			}
-			records, _ := refStore.LoadAll()
-			fitness := evaluator.EvaluateTree(tree, records)
-
-			result := map[string]interface{}{
-				"success_rate":    fmt.Sprintf("%.1f%%", fitness.SuccessRate*100),
-				"avg_duration_ms": fitness.AvgDurationMs,
-				"node_count":      fitness.NodeCount,
-				"stability":       fmt.Sprintf("%.2f", fitness.Stability),
-				"path_coverage":   fmt.Sprintf("%.2f", fitness.PathCoverage),
-				"composite":       fmt.Sprintf("%.1f", fitness.Composite),
-				"total_tasks":     len(records),
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+		s.handleEvaluate)
 
 	// Tool 2: Order mutations by priority (killer moves first)
 	server.RegisterTool("ev_order_mutations", "Rank mutation candidates using Stockfish-style move ordering",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, _ := treeStore.Load()
-			records, _ := refStore.LoadAll()
-			fitness := evaluator.EvaluateTree(tree, records)
-
-			candidates := evaluator.OrderMutations(tree, records, fitness)
-
-			type cand struct {
-				Operation string  `json:"operation"`
-				Target    string  `json:"target"`
-				Score     float64 `json:"score"`
-				Reason    string  `json:"reason"`
-			}
-			items := make([]cand, 0, len(candidates))
-			for _, c := range candidates {
-				items = append(items, cand{
-					Operation: c.Op.Operation,
-					Target:    c.Op.Target,
-					Score:     c.Score,
-					Reason:    c.Reason,
-				})
-			}
-
-			result := map[string]interface{}{
-				"candidates": items,
-				"total":      len(items),
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+		s.handleOrderMutations)
 
 	// Tool 3: Iterative deepening search for best mutation
 	server.RegisterTool("ev_deepen", "Iterative deepening: progressively search deeper mutation combinations",
@@ -96,74 +198,19 @@ func main() {
 			"max_depth": {Type: "integer", Description: "Maximum search depth (default: 2)"},
 		},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				MaxDepth int `json:"max_depth"`
-			}
-			_ = json.Unmarshal(args, &params)
-			if params.MaxDepth == 0 {
-				params.MaxDepth = 2
-			}
-
-			tree, _ := treeStore.Load()
-			records, _ := refStore.LoadAll()
-
-			result := evaluator.IterativeDeepening(tree, records, tt, params.MaxDepth)
-
-			// Auto-save TT after every deepen so cache survives restarts
-			if err := tt.Save(); err != nil {
-				engine.Info("tt auto-save failed", "error", err)
-			}
-
-			out := map[string]interface{}{
-				"depth":            result.Depth,
-				"base_composite":   fmt.Sprintf("%.1f", result.BaseFitness.Composite),
-				"candidates_total": len(result.Candidates),
-				"pruned":           result.PrunedCount,
-				"tt_probes":        result.TTProbes,
-				"tt_hits":          result.TTProbeHits,
-			}
-			if result.BestMutation != nil {
-				out["best_op"] = result.BestMutation.Op.Operation
-				out["best_target"] = result.BestMutation.Op.Target
-				out["best_reason"] = result.BestMutation.Reason
-			}
-			if result.BestFitness != nil {
-				out["best_composite"] = fmt.Sprintf("%.1f", result.BestFitness.Composite)
-			}
-
-			data, _ := json.Marshal(out)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+		s.handleDeepen)
 
 	// Tool 4: Transposition table stats
 	server.RegisterTool("ev_tt_stats", "Transposition table statistics (cache hits, size)",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			stats := map[string]interface{}{
-				"entries":  tt.Stats(),
-				"max_size": 1000,
-				"path":     filepath.Join(refDir, "transposition.json"),
-			}
-			data, _ := json.Marshal(stats)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+		s.handleTTStats)
 
 	// Tool 5: Save TT to disk
 	server.RegisterTool("ev_tt_save", "Persist transposition table to disk",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			if err := tt.Save(); err != nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{
-					Type: "text", Text: fmt.Sprintf(`{"saved": false, "error": %q}`, err.Error()),
-				}}}
-			}
-			return &engine.ToolResult{Content: []engine.ContentItem{{
-				Type: "text", Text: fmt.Sprintf(`{"saved": true, "entries": %d}`, tt.Stats()),
-			}}}
-		})
+		s.handleTTSave)
 
 	engine.Info("bt-evaluator: 5 tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))

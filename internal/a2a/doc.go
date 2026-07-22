@@ -7,6 +7,7 @@
 //   - task_bridge.go — maps A2A task lifecycle to BT Blackboard outcomes
 //
 // The A2A server runs alongside the existing MCP stdio server on a configurable
-// HTTP port (default: 8686). Every registered BT agent is exposed as an A2A endpoint
-// reachable at /.well-known/agent-card.json.
+// HTTP port (default: 8686). It exposes an aggregated Agent Card at
+// /.well-known/agent-card.json, and each registered BT agent is reachable
+// individually for task requests under /agents/.
 package a2a

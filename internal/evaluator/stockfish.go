@@ -324,6 +324,9 @@ func (tt *TranspositionTable) Stats() int {
 	return len(tt.entries)
 }
 
+// Path returns the on-disk path the TT persists to.
+func (tt *TranspositionTable) Path() string { return tt.path }
+
 // Save persists the TT to disk.
 func (tt *TranspositionTable) Save() error {
 	tt.mu.RLock()

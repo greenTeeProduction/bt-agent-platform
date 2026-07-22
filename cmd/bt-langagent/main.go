@@ -15,8 +15,172 @@ import (
 	"github.com/nico/go-bt-evolve/internal/llm"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 
+	btcore "github.com/rvitorper/go-bt/core"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
 )
+
+// langAgentServer holds the stores and evolved agent backing the la_* tool
+// handlers so they can be exercised directly in tests without going through
+// the MCP transport.
+type langAgentServer struct {
+	refStore  *evolution.Store
+	treeStore *evolution.TreeStore
+	bb        *engine.Blackboard
+	bt        btcore.Command[engine.Blackboard]
+	evolved   *agent.EvolvedAgent
+}
+
+// newLangAgentServer wires up the reflection store, tree store, blackboard,
+// behavior tree, and evolved langchain agent rooted at home. It loads the
+// existing tree if one is persisted, otherwise seeds and persists the
+// default tree.
+func newLangAgentServer(home string, llmClient llm.LLM, langLLM llms.Model) (*langAgentServer, error) {
+	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
+	if err != nil {
+		return nil, err
+	}
+	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
+	if err != nil {
+		return nil, err
+	}
+
+	agentFactory, _ := factory.NewAgentFactory(llmClient, home)
+
+	tree, err := treeStore.Load()
+	if err != nil || tree == nil {
+		tree = evolution.DefaultTree()
+		if err := treeStore.Save(tree); err != nil {
+			return nil, err
+		}
+	}
+
+	bb := &engine.Blackboard{
+		Reflections: refStore,
+		TreeStore:   treeStore,
+		LLM:         llmClient,
+	}
+
+	bt := engine.BuildTree(tree, bb)
+
+	runTaskFn := func(task string) string {
+		bb.Task = task
+		bb.Complexity = ""
+		bb.Plan = ""
+		bb.Result = ""
+		bb.Outcome = ""
+		bb.KgResults = ""
+		bb.CachedResult = ""
+		return engine.RunTask(bb, bt)
+	}
+
+	evolved, err := agent.NewEvolvedAgent(agent.Config{
+		LLMClient:    llmClient,
+		LangLLM:      langLLM,
+		RefStore:     refStore,
+		TreeStore:    treeStore,
+		AgentFactory: agentFactory,
+		RunTaskFn:    runTaskFn,
+		BB:           bb,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &langAgentServer{
+		refStore:  refStore,
+		treeStore: treeStore,
+		bb:        bb,
+		bt:        bt,
+		evolved:   evolved,
+	}, nil
+}
+
+// handleRun implements la_run: run a task through the evolved langchain agent.
+func (s *langAgentServer) handleRun(args json.RawMessage) *engine.ToolResult {
+	var params struct {
+		Task string `json:"task"`
+	}
+	if err := json.Unmarshal(args, &params); err != nil {
+		return &engine.ToolResult{
+			Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}},
+		}
+	}
+
+	result, err := s.evolved.Run(context.Background(), params.Task)
+	if err != nil {
+		return &engine.ToolResult{
+			Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}},
+		}
+	}
+
+	response := map[string]interface{}{
+		"result":  result,
+		"outcome": s.bb.Outcome,
+	}
+	data, _ := json.Marshal(response)
+	return &engine.ToolResult{
+		Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
+	}
+}
+
+// handleFitness implements la_fitness: evolved agent fitness and tree stats.
+func (s *langAgentServer) handleFitness(args json.RawMessage) *engine.ToolResult {
+	tree, _ := s.treeStore.Load()
+	records, _ := s.refStore.LoadAll()
+	failures := s.refStore.CountFailures()
+	successes := len(records) - failures
+	rate := 0.0
+	if len(records) > 0 {
+		rate = float64(successes) / float64(len(records))
+	}
+	nodeCount := 0
+	if tree != nil {
+		nodeCount = evolution.CountNodes(tree)
+	}
+	result := map[string]interface{}{
+		"total_tasks":  len(records),
+		"successes":    successes,
+		"failures":     failures,
+		"success_rate": fmt.Sprintf("%.1f%%", rate*100),
+		"node_count":   nodeCount,
+		"tools":        len(s.evolved.Tools),
+	}
+	data, _ := json.Marshal(result)
+	return &engine.ToolResult{
+		Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
+	}
+}
+
+// handleEvolve implements la_evolve: force evolution of the behavior tree.
+func (s *langAgentServer) handleEvolve(args json.RawMessage) *engine.ToolResult {
+	tree, err := s.treeStore.Load()
+	if err != nil || tree == nil {
+		return &engine.ToolResult{
+			Content: []engine.ContentItem{{Type: "text", Text: `{"error": "no tree"}`}},
+		}
+	}
+	ops := []evolution.MutationOp{
+		{Operation: "wrap_retry", Target: "AnalyzeTask"},
+		{Operation: "increase_retries", Target: "RetrySelfCorrect"},
+	}
+	before := evolution.CountNodes(tree)
+	applied := evolution.ApplyMutations(tree, ops)
+	after := evolution.CountNodes(tree)
+	if applied > 0 {
+		_ = s.treeStore.Save(tree)
+	}
+	result := map[string]interface{}{
+		"evolved":      applied > 0,
+		"mutations":    applied,
+		"nodes_before": before,
+		"nodes_after":  after,
+	}
+	data, _ := json.Marshal(result)
+	return &engine.ToolResult{
+		Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
+	}
+}
 
 func main() {
 	engine.Init()
@@ -30,11 +194,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Stores
-	refStore, _ := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
-	treeStore, _ := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
-
-	// LLM clients (both our wrapper and langchaingo's native)
 	llmCfg := llm.DefaultConfig()
 	llmClient, err := llm.NewClient(llmCfg)
 	if err != nil {
@@ -51,54 +210,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Factory
-	agentFactory, _ := factory.NewAgentFactory(llmClient, home)
-
-	// Load or create tree
-	tree, err := treeStore.Load()
-	if err != nil || tree == nil {
-		tree = evolution.DefaultTree()
-		_ = treeStore.Save(tree)
-	}
-
-	// Blackboard
-	bb := &engine.Blackboard{
-		Reflections: refStore,
-		TreeStore:   treeStore,
-		LLM:         llmClient,
-	}
-
-	// Build BT
-	bt := engine.BuildTree(tree, bb)
-
-	// Run function closure
-	runTaskFn := func(task string) string {
-		bb.Task = task
-		bb.Complexity = ""
-		bb.Plan = ""
-		bb.Result = ""
-		bb.Outcome = ""
-		bb.KgResults = ""
-		bb.CachedResult = ""
-		return engine.RunTask(bb, bt)
-	}
-
-	// Create evolved agent
-	evolved, err := agent.NewEvolvedAgent(agent.Config{
-		LLMClient:    llmClient,
-		LangLLM:      langLLM,
-		RefStore:     refStore,
-		TreeStore:    treeStore,
-		AgentFactory: agentFactory,
-		RunTaskFn:    runTaskFn,
-		BB:           bb,
-	})
+	s, err := newLangAgentServer(home, llmClient, langLLM)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: agent: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		engine.Error("bt-langagent: failed to initialize", "error", err)
 		os.Exit(1)
 	}
 
-	// MCP server
 	server := engine.NewServer("go-bt-langagent")
 
 	server.RegisterTool("la_run", "Run a task through the evolved langchain agent (ReAct loop with BT tools)",
@@ -106,94 +224,17 @@ func main() {
 			"task": {Type: "string", Description: "The task to execute"},
 		},
 		[]string{"task"},
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				Task string `json:"task"`
-			}
-			if err := json.Unmarshal(args, &params); err != nil {
-				return &engine.ToolResult{
-					Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}},
-				}
-			}
-
-			result, err := evolved.Run(context.Background(), params.Task)
-			if err != nil {
-				return &engine.ToolResult{
-					Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}},
-				}
-			}
-
-			response := map[string]interface{}{
-				"result":  result,
-				"outcome": bb.Outcome,
-			}
-			data, _ := json.Marshal(response)
-			return &engine.ToolResult{
-				Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
-			}
-		})
+		s.handleRun)
 
 	server.RegisterTool("la_fitness", "Get evolved agent fitness and tree stats",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, _ := treeStore.Load()
-			records, _ := refStore.LoadAll()
-			failures := refStore.CountFailures()
-			successes := len(records) - failures
-			rate := 0.0
-			if len(records) > 0 {
-				rate = float64(successes) / float64(len(records))
-			}
-			nodeCount := 0
-			if tree != nil {
-				nodeCount = evolution.CountNodes(tree)
-			}
-			result := map[string]interface{}{
-				"total_tasks":  len(records),
-				"successes":    successes,
-				"failures":     failures,
-				"success_rate": fmt.Sprintf("%.1f%%", rate*100),
-				"node_count":   nodeCount,
-				"tools":        len(evolved.Tools),
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{
-				Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
-			}
-		})
+		s.handleFitness)
 
 	server.RegisterTool("la_evolve", "Force evolution of the behavior tree",
 		map[string]engine.Property{},
 		nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, err := treeStore.Load()
-			if err != nil || tree == nil {
-				return &engine.ToolResult{
-					Content: []engine.ContentItem{{Type: "text", Text: `{"error": "no tree"}`}},
-				}
-			}
-			ops := []evolution.MutationOp{
-				{Operation: "wrap_retry", Target: "AnalyzeTask"},
-				{Operation: "increase_retries", Target: "RetrySelfCorrect"},
-			}
-			before := evolution.CountNodes(tree)
-			applied := evolution.ApplyMutations(tree, ops)
-			after := evolution.CountNodes(tree)
-			if applied > 0 {
-				_ = treeStore.Save(tree)
-			}
-			result := map[string]interface{}{
-				"evolved":      applied > 0,
-				"mutations":    applied,
-				"nodes_before": before,
-				"nodes_after":  after,
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{
-				Content: []engine.ContentItem{{Type: "text", Text: string(data)}},
-			}
-		})
+		s.handleEvolve)
 
 	engine.Info("bt-langagent: 3 MCP tools ready, listening on stdin")
 	server.SetSecurity(true, os.Getenv("BT_API_KEY"))
