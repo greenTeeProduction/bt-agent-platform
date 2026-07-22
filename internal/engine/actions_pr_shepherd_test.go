@@ -6,10 +6,31 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TestGithubTokenFromCredentialStore pins the credential-store token fallback:
+// the host authenticates git pushes via credential.helper=store, so the
+// github.com PAT there must be usable for the API without duplicating the
+// secret into an env file.
+func TestGithubTokenFromCredentialStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "git-credentials")
+	content := "https://other.example.com/x\nhttp://insecure:nope@github.com\nhttps://nico:ghp_testtoken123@github.com\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := githubTokenFromCredentialStore(path); got != "ghp_testtoken123" {
+		t.Fatalf("token = %q, want ghp_testtoken123", got)
+	}
+	if got := githubTokenFromCredentialStore(filepath.Join(dir, "missing")); got != "" {
+		t.Fatalf("missing file must yield empty token, got %q", got)
+	}
+}
 
 // prShepherdScriptRunner scripts git command results by substring match and
 // records every call, mirroring applyScriptRunner/commitScopeFakeRunner.
@@ -178,6 +199,9 @@ func TestPRShepherd_NoTokenSkips(t *testing.T) {
 	for _, k := range []string{"BT_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"} {
 		t.Setenv(k, "")
 	}
+	prevCreds := prShepherdGitCredentialsPath
+	t.Cleanup(func() { prShepherdGitCredentialsPath = prevCreds })
+	prShepherdGitCredentialsPath = func() string { return filepath.Join(t.TempDir(), "absent-credentials") }
 	runner := &prShepherdScriptRunner{}
 	bb := newTestBlackboard()
 	deps := prShepherdDeps{runner: runner, repoDir: t.TempDir(), stateDir: t.TempDir()}

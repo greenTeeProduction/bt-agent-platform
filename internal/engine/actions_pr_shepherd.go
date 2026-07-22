@@ -45,10 +45,54 @@ func fleetPRBranch() string {
 // daemon inherits its environment from the unit's EnvironmentFile.
 var prShepherdTokenVars = []string{"BT_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"}
 
+// prShepherdGitCredentialsPath locates the git credential store consulted as
+// the token fallback; a var so tests can redirect it away from the real file.
+var prShepherdGitCredentialsPath = func() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".git-credentials")
+}
+
 func prShepherdToken() string {
 	for _, k := range prShepherdTokenVars {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 			return v
+		}
+	}
+	// Fallback: credential.helper=store already authenticates every git push
+	// from this host, and a github.com PAT from that store works for the API
+	// too — zero-config, no secret duplicated into an env file.
+	return githubTokenFromCredentialStore(prShepherdGitCredentialsPath())
+}
+
+// githubTokenFromCredentialStore parses the first github.com entry of a
+// git-credentials file (https://<user>:<token>@github.com) and returns the
+// token. Tokens are stored verbatim (PATs contain no URL-reserved characters),
+// so no percent-decoding is attempted.
+func githubTokenFromCredentialStore(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path) // #nosec G304 -- fixed user-owned credential-store path, no user traversal
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "github.com") || !strings.HasPrefix(line, "https://") {
+			continue
+		}
+		rest := strings.TrimPrefix(line, "https://")
+		at := strings.LastIndex(rest, "@")
+		if at < 0 {
+			continue
+		}
+		if c := strings.Index(rest[:at], ":"); c >= 0 {
+			if tok := rest[c+1 : at]; tok != "" {
+				return tok
+			}
 		}
 	}
 	return ""
@@ -274,7 +318,7 @@ func parseGitHubRemote(url string) (owner, repo string, err error) {
 func newGitHubPRClientFromEnv(ctx context.Context, runner CommandRunner, repoDir string) (*githubPRClient, error) {
 	token := prShepherdToken()
 	if token == "" {
-		return nil, fmt.Errorf("no GitHub token in env (checked %s)", strings.Join(prShepherdTokenVars, ", "))
+		return nil, fmt.Errorf("no GitHub token in env (checked %s) and no github.com entry in the git credential store", strings.Join(prShepherdTokenVars, ", "))
 	}
 	remote := runner.Run(ctx, repoDir, "git", "remote", "get-url", "origin")
 	if remote.Err != nil {
