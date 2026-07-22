@@ -347,6 +347,9 @@ type prShepherdDeps struct {
 	api           *githubPRClient
 	now           func() time.Time
 	claudeTimeout time.Duration
+	// fetchRetryDelay is the pause before the single fetch retry; zero in
+	// tests so they run instantly.
+	fetchRetryDelay time.Duration
 }
 
 var prShepherdDepsOverride *prShepherdDeps
@@ -359,10 +362,11 @@ func defaultPRShepherdDeps() prShepherdDeps {
 				defaultSuperpowersAllowedTools+
 					",Bash(go mod tidy:*),Bash(/usr/local/go/bin/go mod tidy:*),Bash(make check-quick:*)"),
 		},
-		repoDir:       goapFusionRepo,
-		stateDir:      prShepherdDir(),
-		now:           time.Now,
-		claudeTimeout: 20 * time.Minute,
+		repoDir:         goapFusionRepo,
+		stateDir:        prShepherdDir(),
+		now:             time.Now,
+		claudeTimeout:   20 * time.Minute,
+		fetchRetryDelay: 10 * time.Second,
 	}
 }
 
@@ -440,9 +444,19 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	// the API, which leaves the LOCAL remote-tracking ref stale — the next
 	// `push --force-with-lease` then fails its lease with "stale info"
 	// forever (live 2026-07-22 16:52). Pruning keeps tracking refs truthful.
-	if fetch := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune"); fetch.Err != nil {
+	fetch := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune")
+	if fetch.Err != nil {
+		// One retry after a short pause: transient host network flakes ("No
+		// route to host", twice on 2026-07-22) each cost a whole pass, and
+		// the next touch can be 30-60 minutes away behind a long
+		// implementation cycle. A single retry recovers the blip without
+		// looping on a genuinely dead network.
+		time.Sleep(deps.fetchRetryDelay)
+		fetch = deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune")
+	}
+	if fetch.Err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_fetch_failed",
-			"## PR Shepherd Skipped\n\ngit fetch origin failed (offline?):\n```\n%s\n```", truncateGoap(fetch.Output, 800))
+			"## PR Shepherd Skipped\n\ngit fetch origin failed twice (offline?):\n```\n%s\n```", truncateGoap(fetch.Output, 800))
 	}
 	localSHA := strings.TrimSpace(deps.runner.Run(ctx, deps.repoDir, "git", "rev-parse", "refs/heads/master").Output)
 	originSHA := strings.TrimSpace(deps.runner.Run(ctx, deps.repoDir, "git", "rev-parse", "refs/remotes/origin/master").Output)

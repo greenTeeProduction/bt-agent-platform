@@ -250,6 +250,61 @@ func TestPRShepherd_IdleWhenInSync(t *testing.T) {
 	}
 }
 
+// TestPRShepherd_FetchRetriesOnceOnTransientFailure pins the fetch retry:
+// transient host network flakes ("No route to host", twice on 2026-07-22)
+// each cost a whole pass, and the next touch can be 30-60 minutes away
+// behind a long implementation cycle. One retry recovers the pass; a
+// persistent failure still skips as fetch_failed.
+func TestPRShepherd_FetchRetriesOnceOnTransientFailure(t *testing.T) {
+	gh := &fakeGitHub{t: t}
+	base := gitAncestryScript("samesha", "samesha", true, true)
+	fetches := 0
+	runner := &prShepherdScriptRunner{}
+	runner.script = func(dir, cmd string) (CommandResult, bool) {
+		if strings.Contains(cmd, "fetch origin --prune") {
+			fetches++
+			if fetches == 1 {
+				return CommandResult{Err: fmt.Errorf("exit status 128"), Output: "fatal: unable to access: No route to host"}, true
+			}
+			return CommandResult{}, true
+		}
+		return base(dir, cmd)
+	}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1", got)
+	}
+	if bb.Outcome != "pr_shepherd_idle" {
+		t.Fatalf("Outcome = %q, want pr_shepherd_idle after a recovered fetch; result=%s", bb.Outcome, bb.Result)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetch attempts = %d, want 2 (one retry)", fetches)
+	}
+}
+
+func TestPRShepherd_FetchFailsAfterRetry(t *testing.T) {
+	gh := &fakeGitHub{t: t}
+	fetches := 0
+	runner := &prShepherdScriptRunner{}
+	runner.script = func(_ string, cmd string) (CommandResult, bool) {
+		if strings.Contains(cmd, "fetch origin --prune") {
+			fetches++
+			return CommandResult{Err: fmt.Errorf("exit status 128"), Output: "fatal: No route to host"}, true
+		}
+		return CommandResult{}, false
+	}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1", got)
+	}
+	if bb.Outcome != "pr_shepherd_fetch_failed" {
+		t.Fatalf("Outcome = %q, want pr_shepherd_fetch_failed", bb.Outcome)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetch attempts = %d, want exactly 2 (single retry, no loop)", fetches)
+	}
+}
+
 func TestPRShepherd_SyncsMasterWhenOriginAhead(t *testing.T) {
 	gh := &fakeGitHub{t: t}
 	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", true, false)}
