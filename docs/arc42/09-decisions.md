@@ -228,6 +228,7 @@ Consolidation notes (2026-07-16):
 | ADR-203 | `dtStatsPathFor` Resolves DT-Reordering Telemetry from the Real Per-Tree `agent.DecisionTreeStatsFile`, Not Only the Producer-less `Config.DTStatsPath`, Closing ADR-191's Inert-Activation Gap (Q2 Evolvability, Milestones 1–2/2) | Accepted | 2026-07-23 |
 | ADR-204 | `RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research) | Accepted | 2026-07-23 |
 | ADR-205 | A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-24 |
+| ADR-206 | `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3674,6 +3675,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ A claim from a crashed cycle (no deferred handler ever runs) still self-heals: once `lease` elapses, `ClaimActiveForCycle` treats it as stale and lets a different agent take over — the queue can never wedge permanently on a dead claim.
 - ⚠️ The successful-completion path (`ProgramStore.MarkDone`, reached via `goap_research_goals.go` and the red-evidence pre-check paths in `actions_goap_fusion.go`/`actions_goap_fusion_refund.go`) does not yet call `ReleaseClaim` — a cycle that lands its milestone cleanly still leaves the claim in place until the lease expires, so a sibling cycle can be blocked from picking up the program's *next* milestone for up to `goapProgramClaimLease` after a successful landing. Closing that gap is milestone 3/3.
 - Pinned by the tests named above.
+
+---
+
+## ADR-206: `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2)
+
+**Context (2026-07-23):** `runPRShepherd` (`internal/engine/actions_pr_shepherd.go`) previously force-pushed `refs/heads/master` onto the open `fleet/landing` PR branch whenever `pr.Head.SHA != localSHA` — i.e. on *every* shepherd pass where any new commit had landed on local master since the PR's branch was last updated, not only when opening a fresh PR. Because new landings accrue continuously while a PR's CI is still running, this restarted CI on every pass, and a PR could never accumulate enough consecutive green cycles to be seen as mergeable. PR #25 sat in `ci_pending` for multiple hours on 2026-07-23 as a direct result — a batch that could otherwise have merged in one CI run was repeatedly restarted by unrelated new landings.
+
+**Decision:** The push-and-recreate branch is now gated on `pr == nil` only (a genuinely fresh batch with no open PR), not on a head/local SHA mismatch. Once a PR is open, its head SHA is captured once as `pinnedSHA := pr.Head.SHA` and used for the rest of the pass — the check-runs query (`listCheckRuns`), the `ci_pending` skip message, and the eventual fix-attempt handoff (`runPRShepherdFix`) all key off `pinnedSHA`, never off `localSHA`. New commits that land on local master while the pinned head's CI is still in flight are left untouched on master; they are not pushed onto the open PR's branch and instead accumulate to be picked up as the *next* batch once the current PR merges. The one exception is `runPRShepherdFix`, which still legitimately updates the pinned head — an in-place Claude-authored fix-red commit for a failing check run, not a new unrelated landing.
+
+**Status:** Accepted (2026-07-23) — milestone 1/2 of program "Q3 Reliability — ShepherdFleetPR merges a pinned batch head." Pinned by `TestPRShepherd_PinnedPRDoesNotPushNewLocalCommits` (`internal/engine/actions_pr_shepherd_test.go`), which puts local master ahead of an open PR's pinned head while its sole check run is `in_progress` and asserts no `push` call is made and check-run status is queried against the pinned head, never against the new local-master SHA.
+
+**Consequences:**
+- ✅ An open PR's CI can no longer be restarted by unrelated landings arriving on local master while it is pending — closing the root cause of PR #25's multi-hour `ci_pending` stall.
+- ✅ Fix-red commits (`runPRShepherdFix`) are still applied directly to the pinned head, since that push is targeted at making the *current* batch pass, not folding in new unrelated work.
+- ⚠️ New landings that accrue while a PR is pinned sit on local master, unshipped, until the pinned PR merges and a fresh batch opens — deferred, not lost, but milestone 2/2 (not yet scoped in code as of this ADR) is expected to address any follow-on batching/ordering concern this raises.
+- Pinned by the test named above.
 
 ---
 

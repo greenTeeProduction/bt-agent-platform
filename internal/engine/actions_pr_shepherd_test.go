@@ -390,6 +390,39 @@ func TestPRShepherd_PendingCISkips(t *testing.T) {
 	}
 }
 
+// TestPRShepherd_PinnedPRDoesNotPushNewLocalCommits pins milestone 1 of the
+// PR-batch-pinning fix (2026-07-23 incident: PR #25 sat ci_pending for
+// multiple hours because every shepherd pass force-pushed whatever new local
+// master commits had landed onto the open PR's branch, restarting CI each
+// time and starving the merge). While the open PR's pinned head still has CI
+// pending, new local-master commits accrued since must NOT be pushed onto
+// the branch — they accumulate for the NEXT batch once this PR merges — and
+// the CI status checked must be for the PINNED head, not the new local SHA.
+func TestPRShepherd_PinnedPRDoesNotPushNewLocalCommits(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("oldsha"), checkRuns: map[string][]map[string]any{
+		"oldsha": {{"id": int64(1), "name": "Lint", "status": "in_progress", "conclusion": ""}},
+	}}
+	// Local master has moved ahead of the PR's pinned head since it opened —
+	// a new landing accrued while CI was still running on the pinned head.
+	runner := &prShepherdScriptRunner{script: gitAncestryScript("newsha", "originsha", false, true)}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1", got)
+	}
+	if bb.Outcome != "pr_shepherd_ci_pending" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
+	}
+	if runner.called("push") {
+		t.Fatalf("shepherd must NOT push new local-master commits onto an open PR whose pinned head still has CI pending, calls: %v", runner.calls)
+	}
+	if !gh.requested("commits/oldsha/check-runs") {
+		t.Fatalf("must check CI on the PINNED head (oldsha), not the new local master; requests: %v", gh.requests)
+	}
+	if gh.requested("commits/newsha/check-runs") {
+		t.Fatalf("must not check CI on the new unpinned local-master SHA while the batch is pinned; requests: %v", gh.requests)
+	}
+}
+
 func TestPRShepherd_GreenMergesAndSyncs(t *testing.T) {
 	notes := captureFleetNotifications(t)
 	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"), checkRuns: map[string][]map[string]any{
