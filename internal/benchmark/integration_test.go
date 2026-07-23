@@ -313,6 +313,113 @@ func hasNodeName(node *evolution.SerializableNode, name string) bool {
 	return false
 }
 
+// TestAllRegisteredSuites_BaselinePathMatchRate closes the loop the 5-milestone
+// SuiteForTree curation program left open: TestSuiteForTree_CoversAllRegisteredTrees
+// above only checks that ExpectedPath strings are real node names statically
+// via hasNodeName — it never runs the suite and never checks the runtime
+// PathMatchRate signal RunSuite now computes. A tree/suite pair can pass that
+// static check yet still fail to route at runtime (e.g. a StrategyRouter
+// condition that never selects the expected branch for the mock LLM's
+// output), and that regression would only surface in ad-hoc unit tests on
+// GoDev, not here. This test runs every registered suite through RunSuite
+// with the shared mock LLM and asserts a real baseline PathMatchRate for any
+// suite that declares at least one non-empty ExpectedPath.
+func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
+	type namedTree struct {
+		name string
+		tree *evolution.SerializableNode
+	}
+	allTrees := make([]namedTree, 0, 2+len(evolution.AllFinanceTrees())+len(evolution.ResearchTrees())+len(domains.AllDomainTrees()))
+	allTrees = append(allTrees,
+		namedTree{"default", evolution.DefaultTree()},
+		namedTree{"godev", evolution.GoDeveloperTree()},
+	)
+	for name, tree := range evolution.AllFinanceTrees() {
+		allTrees = append(allTrees, namedTree{"finance_" + name, tree})
+	}
+	for name, tree := range evolution.ResearchTrees() {
+		allTrees = append(allTrees, namedTree{"research_" + name, tree})
+	}
+	for name, tree := range domains.AllDomainTrees() {
+		allTrees = append(allTrees, namedTree{"domain_" + name, tree})
+	}
+
+	mock := DefaultMock()
+
+	failures := []string{}
+	for _, nt := range allTrees {
+		if nt.tree == nil {
+			continue
+		}
+		// These trees require real external runtime state that RunSuite's
+		// mock/sandboxed environment can never provide — the exact same set
+		// TestAllDomainTrees in internal/domains/domains_test.go already
+		// carves out as "structure OK (skip runtime)": the arc42 section/
+		// docsync/seeder generators need graphify + a real LLM; goap_fusion,
+		// goap_fusion_loop, and bt_manager gate routing on a reflection store
+		// RunSuite never seeds; hermes_update and self_review shell out to
+		// the real git/claude binaries; superpowers_workflow needs a live
+		// git worktree/HITL/Claude Code session; auction_demo's award stage
+		// needs a live A2A transport. None of these ever reach a
+		// StrategyRouter branch under the mock, so PathMatchRate is
+		// structurally unmeasurable here, not a routing regression.
+		if isStructuralOnlyPathTree(nt.name) {
+			continue
+		}
+		suite := SuiteForTree(nt.name)
+		if suite.Name == "" || len(suite.Tasks) == 0 {
+			continue
+		}
+
+		hasExpectedPath := false
+		for _, tc := range suite.Tasks {
+			if tc.ExpectedPath != "" || len(tc.PossiblePaths) > 0 {
+				hasExpectedPath = true
+				break
+			}
+		}
+		if !hasExpectedPath {
+			continue
+		}
+
+		metrics := RunSuite(nt.tree, suite, mock)
+		if metrics == nil {
+			failures = append(failures, fmt.Sprintf("%s: RunSuite returned nil metrics (suite=%s)", nt.name, suite.Name))
+			continue
+		}
+		if metrics.PathMatchRate < 0.5 {
+			failures = append(failures, fmt.Sprintf(
+				"%s: PathMatchRate=%.2f below baseline 0.5 (suite=%s, tasks=%d)",
+				nt.name, metrics.PathMatchRate, suite.Name, metrics.TotalTasks))
+		}
+	}
+
+	if len(failures) > 0 {
+		sort.Strings(failures)
+		t.Errorf("%d tree/suite pairs failed to reach baseline PathMatchRate at runtime:", len(failures))
+		for _, f := range failures {
+			t.Errorf("  %s", f)
+		}
+	}
+}
+
+// isStructuralOnlyPathTree reports whether name (as built by the "domain_"/
+// "finance_"/"research_" prefixing above) names a tree whose routing can
+// never be exercised by RunSuite's offline mock — mirrors the skip list in
+// internal/domains/domains_test.go's TestAllDomainTrees.
+func isStructuralOnlyPathTree(name string) bool {
+	if strings.HasPrefix(name, "domain_arc42:") || name == "domain_arc42_seeder" {
+		return true
+	}
+	switch name {
+	case "domain_goap_fusion", "domain_goap_fusion_loop", "domain_bt_manager",
+		"domain_hermes_update", "domain_auction_demo", "domain_self_review",
+		"domain_superpowers_workflow":
+		return true
+	}
+	return false
+}
+
 // TestFullTreeIntegration_SmokeCheck validates all trees build and run the
 // first task of their suite without panic using llmBackend LLM. Fast — under 5s.
 func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
