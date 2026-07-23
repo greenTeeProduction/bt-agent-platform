@@ -133,5 +133,10 @@ func wireSelectorOrdering(cfg gardener.Config, metricsDir string) (gardener.Conf
 
 	v2Cfg := gardener.DefaultEvolveV2Config()
 	v2Cfg.SelectorOrdering = true
+	// BT_SELECTOR_ORDERING_STRATEGY lets operators opt into
+	// OrderByIG/OrderByGini/OrderByHybrid; unset or unrecognized values keep
+	// today's OrderBySuccessRate behavior (Selector-reordering consolidation
+	// milestone 4).
+	v2Cfg.SelectorOrderingStrategy = evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY"))
 	return cfg, v2Cfg
 }

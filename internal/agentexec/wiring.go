@@ -58,10 +58,16 @@ func init() {
 // research trees), so it must never become an ambient default. When enabled,
 // every resolved tree reorders from its OWN per-tree telemetry file
 // (agent.SelectorStatsFile), which the agent runner populates on every run.
+//
+// BT_SELECTOR_ORDERING_STRATEGY additionally lets operators opt into
+// evolution.OrderByIG/OrderByGini/OrderByHybrid instead of the default
+// OrderBySuccessRate (Selector-reordering consolidation milestone 4); unset
+// or unrecognized values keep today's behavior.
 func wireSelectorReorder() {
 	if os.Getenv("BT_SELECTOR_REORDER") == "1" {
 		domains.SelectorStatsPathFn = agent.SelectorStatsFile
 	}
+	domains.SelectorOrderingStrategy = evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY"))
 }
 
 // generatedTreeDir is the directory scanned for runtime-generated trees.

@@ -151,6 +151,21 @@ const (
 	OrderByHybrid SelectorOrderingStrategy = "hybrid"
 )
 
+// ParseSelectorOrderingStrategy validates s against the known ordering
+// strategy constants, returning OrderBySuccessRate — today's production
+// default — for an empty or unrecognized value. Shared by every production
+// wiring site (cmd/bt-gardener/config.go, internal/agentexec/wiring.go) that
+// reads BT_SELECTOR_ORDERING_STRATEGY from the environment, so an unset or
+// typo'd value can never silently change existing behavior.
+func ParseSelectorOrderingStrategy(s string) SelectorOrderingStrategy {
+	switch SelectorOrderingStrategy(s) {
+	case OrderByIG, OrderByGini, OrderByKiller, OrderByHybrid:
+		return SelectorOrderingStrategy(s)
+	default:
+		return OrderBySuccessRate
+	}
+}
+
 // SelectorOptimizer reorders Selector children based on execution history.
 type SelectorOptimizer struct {
 	Stats      map[string]*SelectorStats // selector name → stats

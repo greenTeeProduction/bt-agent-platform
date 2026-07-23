@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/gardener"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
@@ -146,6 +148,40 @@ func TestBuildGardenerConfig_TranspositionTableWired(t *testing.T) {
 
 	if cfg.TranspositionTablePath == "" {
 		t.Error("TranspositionTablePath is empty — transpositionTable() always returns nil, so the Stockfish-style deep-search apply path (evaluator.IterativeDeepening) never runs in production")
+	}
+}
+
+// TestWireSelectorOrdering_SelectsStrategyFromEnv pins milestone 4/5 of the
+// Selector-reordering consolidation program ("Consolidate the two competing
+// Selector-reordering subsystems in internal/evolution into one canonical
+// implementation"): evolution.OrderByIG/OrderByGini/OrderByHybrid
+// (internal/evolution/selector_optimizer.go) have zero production callers —
+// both real wiring sites (this function and
+// internal/domains/tree_resolver.go's applyLearnedSelectorOrdering) hardcode
+// evolution.OrderBySuccessRate — so they are pure dead code despite being
+// fully implemented and unit-tested. wireSelectorOrdering must read
+// BT_SELECTOR_ORDERING_STRATEGY and thread a real evolution.SelectorOrderingStrategy
+// through EvolveV2Config so operators can actually select IG/Gini/Hybrid
+// ordering in production. An unset (or unrecognized) env var must keep
+// today's OrderBySuccessRate behavior — this pass already ships production
+// telemetry (see TestWireSelectorOrdering_EnablesLearnedOrderingPass above),
+// so silently changing its default ranking would be a behavior change for
+// every existing opted-in deployment, not just an activation of dead code.
+func TestWireSelectorOrdering_SelectsStrategyFromEnv(t *testing.T) {
+	metricsDir := t.TempDir()
+
+	t.Setenv("BT_SELECTOR_ORDERING_STRATEGY", "")
+	_, v2Cfg := wireSelectorOrdering(gardener.Config{}, metricsDir)
+	if v2Cfg.SelectorOrderingStrategy != evolution.OrderBySuccessRate {
+		t.Errorf("default SelectorOrderingStrategy = %q, want %q (unset env must not change existing behavior)",
+			v2Cfg.SelectorOrderingStrategy, evolution.OrderBySuccessRate)
+	}
+
+	t.Setenv("BT_SELECTOR_ORDERING_STRATEGY", "hybrid")
+	_, v2Cfg = wireSelectorOrdering(gardener.Config{}, metricsDir)
+	if v2Cfg.SelectorOrderingStrategy != evolution.OrderByHybrid {
+		t.Errorf("SelectorOrderingStrategy = %q, want %q when BT_SELECTOR_ORDERING_STRATEGY=hybrid — OrderByHybrid is otherwise unreachable in production",
+			v2Cfg.SelectorOrderingStrategy, evolution.OrderByHybrid)
 	}
 }
 

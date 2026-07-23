@@ -45,6 +45,14 @@ type EvolveV2Config struct {
 	// the pass is a no-op until explicitly enabled.
 	SelectorOrdering bool
 
+	// SelectorOrderingStrategy picks the ranking algorithm applyLearnedSelectorOrdering
+	// uses when SelectorOrdering is enabled — evolution.OrderByIG/OrderByGini/
+	// OrderByHybrid were otherwise unreachable in production despite being
+	// fully implemented (Selector-reordering consolidation milestone 4). A
+	// zero value falls back to evolution.OrderBySuccessRate, preserving the
+	// pass's original behavior.
+	SelectorOrderingStrategy evolution.SelectorOrderingStrategy
+
 	// DTOrdering, when true, applies entropy/Gini-based BTOptimizer reordering
 	// from the durable DTAnalyzer telemetry at Config.DTStatsPath before an
 	// evolved tree is persisted — the sibling of SelectorOrdering above, using
@@ -57,10 +65,11 @@ type EvolveV2Config struct {
 // DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
 func DefaultEvolveV2Config() EvolveV2Config {
 	return EvolveV2Config{
-		CascadeCfg:    evaluator.DefaultCascadeConfig(),
-		BlocksEnabled: true,
-		BlockConfig:   evolution.DefaultBlockConfig(),
-		UseRealLLM:    false, // use mock by default for speed
+		CascadeCfg:               evaluator.DefaultCascadeConfig(),
+		BlocksEnabled:            true,
+		BlockConfig:              evolution.DefaultBlockConfig(),
+		UseRealLLM:               false, // use mock by default for speed
+		SelectorOrderingStrategy: evolution.OrderBySuccessRate,
 	}
 }
 
@@ -531,7 +540,11 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 	if path == "" {
 		return 0
 	}
-	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	strategy := cfg.SelectorOrderingStrategy
+	if strategy == "" {
+		strategy = evolution.OrderBySuccessRate
+	}
+	so := evolution.NewSelectorOptimizer(strategy)
 	if err := so.LoadSelectorStats(path); err != nil {
 		slog.Warn("gardener/v2: loading selector stats failed, skipping ordering",
 			"path", path, "error", err)
