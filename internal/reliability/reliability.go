@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -1698,10 +1697,17 @@ func (cb *CircuitBreaker) LastFailureTime() time.Time {
 // (failure) when that scaled score is zero or below, then clamped to
 // [0,100]. This is the canonical formula behind the block-fitness scoring
 // duplicated across internal/blocks, internal/engine, and internal/dashboard.
+//
+// The fallback trusts success exclusively — it must not be overridden by
+// outcome, since callers (e.g. internal/dashboard's recordBlockFitnessMetric)
+// derive success from agent.IsBreakerSuccess, which already folds runErr
+// into the classification. Re-deriving healthiness from outcome here let a
+// non-nil runErr with a stale outcome string of "success"/"completed" score
+// 75 instead of 25 (2026-07-22 fleet review).
 func ScoreOutcome(outcome string, qualityScore float64, success bool) float64 {
 	score := qualityScore * 100
 	if score <= 0 {
-		if success || strings.EqualFold(outcome, "success") || strings.EqualFold(outcome, "completed") {
+		if success {
 			score = 75
 		} else {
 			score = 25
