@@ -209,6 +209,7 @@ Consolidation notes (2026-07-16):
 | ADR-184 | `PrioritizeGoapGoals`'s Milestone-Attempt Charge and `seedCodeFixProgram`'s Program-Store Write Move onto `research.UpdatePrograms`, Closing Milestones 4–5/5 of the ADR-183 ProgramStore Lost-Update Program (Q3 Reliability) | Accepted | 2026-07-22 |
 | ADR-185 | `ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability) | Accepted | 2026-07-23 |
 | ADR-186 | `BT_SELECTOR_ORDERING_STRATEGY` Wires `OrderByIG`/`OrderByGini`/`OrderByHybrid`/`OrderByKiller` into Both Production Selector-Ordering Call Sites Instead of Deleting Them, Closing Milestone 4/5 of the Selector-Reordering Consolidation Program (Q2 Evolvability) | Accepted | 2026-07-23 |
+| ADR-187 | `NewRunDeps`'s Config-Load-Failure Fallback Adopts `config.DefaultConfig()` Instead of a Zero-Value `Config`, Closing Milestone 1/3 of the agentexec Characterization Program (Q1 Correctness) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3344,6 +3345,19 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ An unset or unrecognized `BT_SELECTOR_ORDERING_STRATEGY` is guaranteed, by the shared `ParseSelectorOrderingStrategy` validator and its dedicated tests, to preserve `OrderBySuccessRate` — the pass already ships production telemetry for existing opt-in deployments (ADR-079), so this activation could not be allowed to silently change their ranking as a side effect.
 - Rejected alternative: delete the four unused strategies as inert options (the fallback this milestone's own goal text offered) — rejected because they read the same already-collected `SelectorStats` store as `OrderBySuccessRate`, making the opt-in wiring cheap, and the sibling "delete the redundant subsystem" milestone of this same program was independently found to rest on a false premise when tried against `DTAnalyzer`/`BTOptimizer`.
 - ⚠️ A third `SelectorOptimizer` construction site, `cmd/bt-agent/tools.go`'s `bt_evolve_selectors` MCP tool (~line 2018), still hardcodes `evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)` directly and does not read `BT_SELECTOR_ORDERING_STRATEGY` — an operator-invoked one-shot reorder through that tool cannot yet select an alternate strategy, unlike the two continuously-running production passes this change wires.
+
+## ADR-187: `NewRunDeps`'s Config-Load-Failure Fallback Adopts `config.DefaultConfig()` Instead of a Zero-Value `Config`, Closing Milestone 1/3 of the agentexec Characterization Program (Q1 Correctness)
+
+**Context (2026-07-23):** Program "Deterministic coverage backlog: characterization tests for `internal/agentexec/deps.go` and 2 more (Q1 Correctness)," milestone 1 of 3. `deps.go` had no direct test file of its own; the milestone's mandate was to pin `NewRunDeps`'s currently-observed behavior with a new `deps_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing the config-load-failure case exposed one: on a `config.Load()` error (e.g. an unreadable `BT_CONFIG_FILE`), `NewRunDeps` fell back to `&config.Config{}` — an all-zero-value struct with an empty `LLMProvider`, no host/model, and a zero timeout — rather than the platform's actual documented defaults (`config.DefaultConfig()`: `ollama` provider, `http://localhost:11434`, `qwen3.6:35b-a3b`, a 300s LLM timeout, etc.). A broken or transiently-unreadable config file silently downgraded a fresh `RunDeps` build to this crippled provider config instead of the same sane defaults every other config-load path in the platform already falls back to.
+
+**Decision:** Fix minimally, in place, with no other behavior change: `NewRunDeps`'s `config.Load()` error branch (`internal/agentexec/deps.go:16-19`) now sets `cfg = config.DefaultConfig()` instead of `cfg = &config.Config{}`.
+
+**Status:** Accepted (2026-07-23) — milestone 1 of 3; milestones 2–3 (the program's other 2 files) covered separately.
+
+**Consequences:**
+- ✅ A missing or unreadable config file no longer produces an all-zero-value `Config` — `llm.NewProvider(cfg)` now receives the platform's real default provider/host/model/timeout, the same defaults every other successful `config.Load()` path effectively starts from, instead of a provider config that was empty and effectively non-functional.
+- ⚠️ `TestNewRunDeps_ConfigLoadFailure_FallsBackToZeroConfig` (`internal/agentexec/deps_test.go`) keeps its pre-fix name and an inline comment still describing the old `&config.Config{}` fallback, even though it now asserts and pins the `DefaultConfig()` behavior — a future reader grepping the test name alone would infer the wrong fallback value.
+- Pinned by `TestNewRunDeps_ConfigLoadFailure_FallsBackToZeroConfig`, plus `TestNewRunDeps_PopulatesAllFields`, `TestNewRunDeps_SharedReflectionsRoot`, `TestNewRunDeps_ResolveTree_MatchesDomainsResolver`, and `TestNewRunDeps_ResolveTreeForUser_MatchesDomainsResolver` (all `internal/agentexec/deps_test.go`), which otherwise characterize `NewRunDeps`'s pre-existing behavior with no further production changes.
 
 ---
 
