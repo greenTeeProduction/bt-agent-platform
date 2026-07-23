@@ -722,16 +722,34 @@ Statistical mutation quality testing with external benchmark suites.
 
 ```go
 type Suite struct {
-    Name  string
-    Tasks []SuiteTask
+    Name    string
+    Tasks   []TaskCase
+    LLMMode bool // true = use real LLM, false = use mock
 }
-type SuiteTask struct {
-    Task           string
-    ExpectedRoute  string
-    ExpectedOutcome string
+type TaskCase struct {
+    Task          string
+    ExpectedPath  string   // real StrategyRouter branch/node name the task should route to
+    PossiblePaths []string // multiple acceptable paths for ambiguous tasks
+    MinResultLen  int
+    ShouldSucceed bool
+    ShouldReject  bool // PreGate should reject this
 }
 
-func SuiteForTree(name string) *Suite
+// SuiteForTree resolves a tree name (e.g. "domain_alert_router") to its
+// benchmark suite via substring match, falling back to GoDevSuite() when no
+// case matches. Every domain_* tree's suite must declare ExpectedPath values
+// that are real node names occurring somewhere in that tree — not just
+// non-empty strings — or RunSuite/ScoreMutation can never register a
+// path-matched success for it during evolution, silently starving that
+// tree's mutation scoring of signal. Enforced by
+// TestSuiteForTree_CoversAllRegisteredTrees (internal/benchmark) and
+// TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes
+// (internal/gardener). Trees whose real node names diverge from a
+// same-family sibling (e.g. arc42:docsync and arc42_seeder vs. the 12
+// arc42:sectionN generator trees; goap_fusion/goap_fusion_loop vs.
+// goap_planning/research/devops) get their own dedicated suite rather than
+// sharing one by loose substring match.
+func SuiteForTree(treeName string) Suite
 func DefaultLLM() llm.LLM      // real Ollama, falls back to mock
 func QuickValidate(suite *Suite, baseline, candidate *SerializableNode) *BenchmarkResult
 

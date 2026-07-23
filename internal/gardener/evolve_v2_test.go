@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/benchmark"
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
@@ -1211,26 +1213,42 @@ func crisisV2Config() EvolveV2Config {
 }
 
 // TestEvolveTreeV2_CrisisIntervention_SetsMetrics pins Q3 Reliability
-// milestone 1: once CrisisDetector.Detect reports stagnation (the detector's
-// default StagnationLimit is 5, so the counter must exceed it — the 7th
-// non-improving cycle, since Detect's first call only seeds the baseline),
-// the CycleMetrics returned by evolveTreeV2 for that cycle must report
+// milestone 1: once CrisisDetector.Detect reports stagnation, the
+// CycleMetrics returned by evolveTreeV2 for that cycle must report
 // CrisisIntervened == true and a MutationBudget boosted above the configured
 // MaxMutations (0 boosted to the floor of 1, per evolveTreeV2's `<1` guard).
+//
+// Stagnation now means strict DECLINE (flat fitness is a plateau, 2026-07-23
+// review gap 6), and the zero-record harness fitness is a constant 0 — so the
+// decline evidence is pre-seeded on the detector directly, ending above 0 so
+// the cycle's flat-0 observation lands as the final decline that crosses the
+// default StagnationLimit of 5.
 func TestEvolveTreeV2_CrisisIntervention_SetsMetrics(t *testing.T) {
 	g, entry, cfg := crisisMetricsGardener(t, "crisis_tree", 0)
 	v2cfg := crisisV2Config()
 
-	var last CycleMetrics
-	for i := 0; i < 7; i++ {
-		last = g.evolveTreeV2(entry, v2cfg)
+	for _, fit := range []float64{0.6, 0.5, 0.4, 0.3, 0.2, 0.1} {
+		g.cfg.CrisisDetector.Detect(evolution.CrisisState{TreeName: "crisis_tree", CurrentFitness: fit})
 	}
 
+	last := g.evolveTreeV2(entry, v2cfg)
+
 	if !last.CrisisIntervened {
-		t.Fatalf("expected CrisisIntervened == true after sustained stagnation, got false (metrics=%+v)", last)
+		t.Fatalf("expected CrisisIntervened == true after sustained decline, got false (metrics=%+v)", last)
 	}
 	if last.MutationBudget <= cfg.MaxMutations {
 		t.Errorf("expected MutationBudget boosted above configured MaxMutations (%d) during crisis, got %d", cfg.MaxMutations, last.MutationBudget)
+	}
+
+	// A crisis is a transition, not a state: the intervention consumed the
+	// stagnation evidence, so the immediately following (flat) cycle must not
+	// re-fire — the permanent latch was gap 6 of the 2026-07-23 review.
+	next := g.evolveTreeV2(entry, v2cfg)
+	if next.CrisisIntervened {
+		t.Fatalf("cycle after an intervention re-fired (metrics=%+v); interventions must consume the evidence", next)
+	}
+	if next.MutationBudget != cfg.MaxMutations {
+		t.Errorf("post-intervention budget = %d, want configured %d", next.MutationBudget, cfg.MaxMutations)
 	}
 }
 
@@ -1270,13 +1288,16 @@ func TestEvolveTreeV2_CrisisIntervention_UsesCalibratedEmergencyRate(t *testing.
 	g.cfg.CrisisDetector.EmergencyRate = 0.75
 	v2cfg := crisisV2Config()
 
-	var last CycleMetrics
-	for i := 0; i < 7; i++ {
-		last = g.evolveTreeV2(entry, v2cfg)
+	// Pre-seed decline evidence (flat fitness no longer counts; see
+	// TestEvolveTreeV2_CrisisIntervention_SetsMetrics).
+	for _, fit := range []float64{0.6, 0.5, 0.4, 0.3, 0.2, 0.1} {
+		g.cfg.CrisisDetector.Detect(evolution.CrisisState{TreeName: "calibrated_crisis_tree", CurrentFitness: fit})
 	}
 
+	last := g.evolveTreeV2(entry, v2cfg)
+
 	if !last.CrisisIntervened {
-		t.Fatalf("expected CrisisIntervened == true after sustained stagnation, got false (metrics=%+v)", last)
+		t.Fatalf("expected CrisisIntervened == true after sustained decline, got false (metrics=%+v)", last)
 	}
 
 	wantBudget := int(math.Ceil(float64(cfg.MaxMutations) / (1 - 0.75)))
@@ -2067,4 +2088,47 @@ func TestAnalyzeTreeDiagnostics_NilTree(t *testing.T) {
 	if report != nil {
 		t.Errorf("expected nil report for nil tree, got %+v", report)
 	}
+}
+
+// TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes guards the
+// production call site at evolve_v2.go's "suite :=
+// benchmark.SuiteForTree(entry.Name)" — milestone 5/5 of the SuiteForTree
+// benchmark-gating fix. Registry.addBuiltin names every domain tree
+// "domain_"+name (gardener.go), exactly what entry.Name holds during a real
+// evolution cycle, so this test mirrors the production lookup precisely. A
+// suite whose ExpectedPath values don't occur anywhere in the tree it's
+// scoring can never register a path-matched success during
+// RunSuite/ScoreMutation, silently starving that tree's mutation scoring of
+// signal during evolution.
+func TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes(t *testing.T) {
+	for name, tree := range domains.AllDomainTrees() {
+		entryName := "domain_" + name
+		suite := benchmark.SuiteForTree(entryName)
+		for _, tc := range suite.Tasks {
+			if tc.ExpectedPath == "" {
+				continue
+			}
+			if !hasNodeNamed(tree, tc.ExpectedPath) {
+				t.Errorf("%s: task %q declares ExpectedPath %q, which is not a real node anywhere in its tree (suite=%s)",
+					entryName, tc.Task, tc.ExpectedPath, suite.Name)
+			}
+		}
+	}
+}
+
+// hasNodeNamed reports whether name occurs anywhere in tree (root or any
+// descendant).
+func hasNodeNamed(node *evolution.SerializableNode, name string) bool {
+	if node == nil {
+		return false
+	}
+	if node.Name == name {
+		return true
+	}
+	for i := range node.Children {
+		if hasNodeNamed(&node.Children[i], name) {
+			return true
+		}
+	}
+	return false
 }

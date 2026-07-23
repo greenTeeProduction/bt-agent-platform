@@ -863,13 +863,19 @@ func (qt *QTable) LearnedActions() map[string]string {
 // mutation-category selection through the QTable's reinforcement loop: each
 // offspring mutation encodes the child via GetState, picks its mutation
 // category via epsilon-greedy SelectAction, and feeds the fitness delta back
-// through Update. With epsilon=0 selection is pure greedy once a state has
-// Q-values. The caller owns the QTable and reads the learned policy
-// afterwards via LearnedActions. ek is an optional *ExpertKnowledge that
-// observes every genuinely-improving mutation via Observe, growing its
-// learned archive from this run; a nil ek is a no-op.
-func (p *Population) EvolveQLearning(generations int, fitnessFn func(*SerializableNode) float64, qt *QTable, category string, epsilon, learningRate float64, ek *ExpertKnowledge) *SerializableNode {
-	if len(p.Individuals) == 0 || qt == nil {
+// through Update. rl supplies both the epsilon-greedy rate and learning rate
+// for every generation's mutations, and rl.DecayEpsilon is called once per
+// generation so exploration anneals toward greedy exploitation as the run
+// progresses instead of staying static — the caller configures the schedule
+// up front via rl.ConfigureEpsilonSchedule (or accepts NewReinforcementLearner's
+// defaults) and can read the final annealed rl.Epsilon back afterwards. With
+// epsilon=0 selection is pure greedy once a state has Q-values. The caller
+// owns the QTable and reads the learned policy afterwards via LearnedActions.
+// ek is an optional *ExpertKnowledge that observes every genuinely-improving
+// mutation via Observe, growing its learned archive from this run; a nil ek
+// is a no-op.
+func (p *Population) EvolveQLearning(generations int, fitnessFn func(*SerializableNode) float64, qt *QTable, category string, rl *ReinforcementLearner, ek *ExpertKnowledge) *SerializableNode {
+	if len(p.Individuals) == 0 || qt == nil || rl == nil {
 		return nil
 	}
 	p.Evaluate(fitnessFn)
@@ -898,7 +904,7 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 			for i := eliteCount; i < len(p.Individuals); i++ {
 				parents := p.Select()
 				child := Crossover(parents[0], parents[1])
-				newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, epsilon, learningRate, mutator, ek)}
+				newPop[i] = Individual{Tree: p.qLearnMutate(child, fitnessFn, qt, category, rl.Epsilon, rl.LearningRate, mutator, ek)}
 				newPop[i].Genome = hashTree(newPop[i].Tree)
 			}
 
@@ -908,6 +914,7 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 		if p.BestFitness > p.PrevBestFitness {
 			p.PrevBestFitness = p.BestFitness
 		}
+		rl.DecayEpsilon()
 	}
 	return p.BestTree
 }

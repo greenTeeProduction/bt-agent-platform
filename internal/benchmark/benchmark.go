@@ -570,14 +570,18 @@ func AgentMonitorSuite() Suite {
 }
 
 // SecuritySuite tests security audit tree routing.
+// SecuritySuite tests security audit tree routing (domain_security_audit,
+// internal/domains/trees.go's SecurityAuditTree). ExpectedPath reflects the
+// tree's real StrategyRouter branch names (SASTPath/ExecutionPath) instead
+// of the keyword-guessed, non-existent "SecurityPath".
 func SecuritySuite() Suite {
 	return Suite{
 		Name: "security_audit",
 		Tasks: []TaskCase{
-			{Task: "audit the codebase for security vulnerabilities", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "scan for XSS and SQL injection risks", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "review authentication and authorization patterns", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "check for OWASP top 10 vulnerabilities", ExpectedPath: "SecurityPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "audit the codebase for security vulnerabilities", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "scan for XSS and SQL injection risks", ExpectedPath: "SASTPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "review authentication and authorization patterns", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check for OWASP top 10 vulnerabilities", ExpectedPath: "SASTPath", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
@@ -598,115 +602,342 @@ func ResearchSuite() Suite {
 	}
 }
 
-// DataPipelineSuite tests data pipeline tree routing.
+// DataPipelineSuite tests data pipeline tree routing (domain_data_pipeline,
+// internal/domains/trees.go's DataPipelineTree). ExpectedPath reflects the
+// tree's real StrategyRouter branch names (ExtractPath/TransformPath/
+// ExecutionPath) instead of the keyword-guessed, non-existent "PipelinePath".
 func DataPipelineSuite() Suite {
 	return Suite{
 		Name: "data_pipeline",
 		Tasks: []TaskCase{
-			{Task: "build an ETL pipeline for log processing", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "set up data transformation for CSV to Parquet", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "configure streaming data ingestion from Kafka", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "monitor data quality and validation checks", ExpectedPath: "PipelinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "build an ETL pipeline for log processing", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "set up data transformation for CSV to Parquet", ExpectedPath: "TransformPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "configure streaming data ingestion from Kafka", ExpectedPath: "ExtractPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "monitor data quality and validation checks", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// GameAISuite tests game AI tree routing.
+// GameAISuite tests game AI tree routing (domain_game_ai,
+// internal/domains/trees.go's GameAITree). ExpectedPath reflects the tree's
+// real StrategyRouter branch names (PatrolPath/ChasePath/ExecutionPath)
+// instead of the keyword-guessed, non-existent "GameAIPath".
 func GameAISuite() Suite {
 	return Suite{
 		Name: "game_ai",
 		Tasks: []TaskCase{
-			{Task: "implement enemy behavior state machine", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "design NPC patrol and combat routines", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "build a decision tree for AI opponent strategy", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "optimize pathfinding with A-star algorithm", ExpectedPath: "GameAIPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "implement enemy behavior state machine", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "design NPC patrol and combat routines", ExpectedPath: "PatrolPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "build a decision tree for AI opponent strategy", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "optimize pathfinding with A-star algorithm", ExpectedPath: "ChasePath", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// RefactoringSuite tests code refactoring tree routing.
+// RefactoringSuite tests code refactoring tree routing (domain_refactoring,
+// internal/domains/trees.go's RefactoringTree). ExpectedPath reflects the
+// tree's real StrategyRouter branch names (SmellDetection/PatternApplication/
+// ExecutionPath) instead of the keyword-guessed, non-existent "RefactoringPath".
 func RefactoringSuite() Suite {
 	return Suite{
 		Name: "refactoring",
 		Tasks: []TaskCase{
-			{Task: "refactor the legacy service layer to clean architecture", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "migrate from monolithic to microservices pattern", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "extract reusable components from duplicated code", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "modernize deprecated API endpoints to RESTful design", ExpectedPath: "RefactoringPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "refactor the legacy service layer to clean architecture", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "migrate from monolithic to microservices pattern", ExpectedPath: "PatternApplication", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "extract reusable components from duplicated code", ExpectedPath: "SmellDetection", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "modernize deprecated API endpoints to RESTful design", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// CrashInvestigatorSuite tests crash investigation tree routing.
+// CrashInvestigatorSuite tests crash investigation tree routing
+// (domain_crash_investigator, internal/domains/trees.go's
+// CrashInvestigatorTree). ExpectedPath reflects the tree's real
+// StrategyRouter branch names (RootCauseAnalysis/ExecutionPath) instead of
+// the keyword-guessed, non-existent "CrashPath".
 func CrashInvestigatorSuite() Suite {
 	return Suite{
 		Name: "crash_investigator",
 		Tasks: []TaskCase{
-			{Task: "investigate the production crash from the latest deployment", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "analyze the core dump for null pointer dereference", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "find the root cause of the memory leak in the agent scheduler", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "diagnose the race condition in the goroutine pool", ExpectedPath: "CrashPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "investigate the production crash from the latest deployment", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "analyze the core dump for null pointer dereference", ExpectedPath: "RootCauseAnalysis", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "find the root cause of the memory leak in the agent scheduler", ExpectedPath: "RootCauseAnalysis", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "diagnose the race condition in the goroutine pool", ExpectedPath: "RootCauseAnalysis", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// MeetingNotesSuite tests meeting notes tree routing.
+// MeetingNotesSuite tests meeting notes tree routing (domain_meeting_notes,
+// internal/domains/trees.go's MeetingNotesTree). ExpectedPath reflects the
+// tree's real StrategyRouter branch names (GenerateNotes/ExtractActions)
+// instead of the keyword-guessed, non-existent "MeetingPath".
 func MeetingNotesSuite() Suite {
 	return Suite{
 		Name: "meeting_notes",
 		Tasks: []TaskCase{
-			{Task: "summarize the sprint planning meeting notes", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "extract action items from the architecture review", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "document the decision log from the quarterly review", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "create meeting minutes with key discussion points", ExpectedPath: "MeetingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "summarize the sprint planning meeting notes", ExpectedPath: "GenerateNotes", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "extract action items from the architecture review", ExpectedPath: "ExtractActions", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the decision log from the quarterly review", ExpectedPath: "GenerateNotes", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "create meeting minutes with key discussion points", ExpectedPath: "GenerateNotes", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// AlertRouterSuite tests alert routing tree.
+// AlertRouterSuite tests alert routing tree (domain_alert_router,
+// internal/domains/alert_router.go). ExpectedPath reflects the tree's real
+// StrategyRouter branch names (CriticalAlert/HealthAlert) instead of the
+// keyword-guessed, non-existent "AlertPath".
 func AlertRouterSuite() Suite {
 	return Suite{
 		Name: "alert_router",
 		Tasks: []TaskCase{
-			{Task: "route the critical production alert to the on-call engineer", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "escalate the P0 incident to the senior team", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "send warning notification for high memory usage", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "dispatch the database failure alert to DBA rotation", ExpectedPath: "AlertPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "route the critical production alert to the on-call engineer", ExpectedPath: "CriticalAlert", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "escalate the P0 incident to the senior team", ExpectedPath: "CriticalAlert", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "send warning notification for high memory usage", ExpectedPath: "HealthAlert", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "dispatch the database failure alert to DBA rotation", ExpectedPath: "HealthAlert", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
-// TradingSignalSuite tests trading signal tree routing.
+// TradingSignalSuite tests trading signal tree routing (domain_trading_signal,
+// internal/domains/trees.go's TradingSignalTree). ExpectedPath reflects the
+// tree's real StrategyRouter branch names (SignalGeneration/
+// TechnicalAnalysis/ExecutionPath) instead of the keyword-guessed,
+// non-existent "TradingPath".
 func TradingSignalSuite() Suite {
 	return Suite{
 		Name: "trading_signal",
 		Tasks: []TaskCase{
-			{Task: "analyze the trading signal for Bitcoin cross-arbitrage", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "evaluate the moving average crossover signal", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "assess the RSI divergence trading opportunity", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "backtest the mean reversion strategy on hourly data", ExpectedPath: "TradingPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "analyze the trading signal for Bitcoin cross-arbitrage", ExpectedPath: "SignalGeneration", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "evaluate the moving average crossover signal", ExpectedPath: "TechnicalAnalysis", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "assess the RSI divergence trading opportunity", ExpectedPath: "TechnicalAnalysis", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "backtest the mean reversion strategy on hourly data", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// NotebookLMSuite tests the zero-LLM NotebookLM tree (domain_notebooklm,
+// internal/domains/notebooklm.go). Its StrategyRouter dispatches to the
+// tree's own ResearchPath/QueryPath/DefaultPath Sequence nodes, so
+// ExpectedPath reflects those real node names instead of the
+// keyword-guessed "NotebookLMPath" fallback.
+func NotebookLMSuite() Suite {
+	return Suite{
+		Name: "notebooklm",
+		Tasks: []TaskCase{
+			{Task: "run deep research on BT optimization and save sources to the vault", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "ask the notebook what the key findings are across its sources", ExpectedPath: "QueryPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check notebooklm auth and refresh the session before querying", ExpectedPath: "DefaultPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// NotebookLMConsumerSuite tests the NotebookLM consumer tree
+// (domain_notebooklm_consumer, internal/domains/notebooklm_consumer.go).
+// It is a linear PreGate → ChainAction → ReflectOnOutcome → OutcomeSelector
+// pipeline reading synthesis files from the vault — it has no StrategyRouter,
+// so it is scored by success/output rather than a fabricated strategy path.
+func NotebookLMConsumerSuite() Suite {
+	return Suite{
+		Name: "notebooklm_consumer",
+		Tasks: []TaskCase{
+			{Task: "consume the latest notebooklm synthesis and report on source trends", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check whether the newest nlm-research synthesis file is stale and needs regeneration", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// NotebookLMPlanImplementSuite tests the research→grill→plan→implement→
+// verify→deploy pipeline (domain_notebooklm_plan_implement,
+// internal/evolution/notebooklm_workflow.go). It is a linear Sequence with
+// no StrategyRouter, so it is scored by success/output rather than a
+// fabricated strategy path.
+func NotebookLMPlanImplementSuite() Suite {
+	return Suite{
+		Name: "notebooklm_plan_implement",
+		Tasks: []TaskCase{
+			{Task: "run the research, grill, plan, implement, verify, deploy pipeline for the new algorithm", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// HermesUpdateSuite tests the daily Hermes update tree routing. HermesUpdateTree
+// (internal/domains/trees.go) is a plain linear Sequence with no
+// StrategyRouter branching, so ExpectedPath reflects the tree's real node
+// names (HermesUpdate_Main/IsUpdateTask/HermesUpdateAgent) instead of the
+// keyword-guessed, non-existent "UpdatePath".
+func HermesUpdateSuite() Suite {
+	return Suite{
+		Name: "hermes_update",
+		Tasks: []TaskCase{
+			{Task: "check for a new hermes version and update if available", ExpectedPath: "IsUpdateTask", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "fetch the latest git changes and report the update status", ExpectedPath: "HermesUpdateAgent", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the daily hermes update routine", ExpectedPath: "HermesUpdate_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// AuctionDemoSuite tests the announce-bid-award auction delegation tree
+// routing. AuctionDemoTree (internal/domains/trees.go) is a plain linear
+// Sequence with no StrategyRouter branching, so ExpectedPath reflects the
+// tree's real node names (AuctionDemo_Main/IsAuctionTask/AuctionDelegate)
+// instead of the keyword-guessed, non-existent "AuctionPath".
+func AuctionDemoSuite() Suite {
+	return Suite{
+		Name: "auction_demo",
+		Tasks: []TaskCase{
+			{Task: "announce the task to candidate agents and collect bids", ExpectedPath: "IsAuctionTask", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "award the task to the winning bidder in the auction", ExpectedPath: "AuctionDelegate", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "delegate the task through the auction allocation process", ExpectedPath: "AuctionDemo_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// BTFusionSuite tests the BT fusion research-and-apply cycle tree routing
+// (domain_bt_fusion, internal/domains/bt_fusion.go). Its StrategyRouter
+// dispatches to the tree's own BTFusion_NoNewResearch/BTFusion_NewResearch
+// Sequence nodes, so ExpectedPath reflects those real node names instead of
+// the keyword-guessed, non-existent "FusionPath" fallback. Benchmark scoring
+// runs actions in Sandbox mode, which stubs SearchForBTPatterns and
+// QueryNotebookLMResearch — the actions that would record new knowledge-store
+// entries — so bt_fusion_research_new_count always reads 0 and every task
+// below reaches BTFusion_NoNewResearch, the only strategy branch a benchmark
+// run can ever take.
+func BTFusionSuite() Suite {
+	return Suite{
+		Name: "bt_fusion",
+		Tasks: []TaskCase{
+			{Task: "gather new research knowledge and synthesize fusion candidates", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the gated fusion apply path with verification", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "scan vault research notes for new BT pattern candidates", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// BTManagerSuite tests the post-execution agent-repair/bootstrap meta-agent
+// tree routing (domain_bt_manager, internal/domains/bt_manager.go). Its
+// StrategyRouter dispatches to the tree's own DegradedPerformancePath/
+// NewAgentBootstrapPath/HealthyReportPath Sequence nodes, so ExpectedPath
+// reflects those real node names instead of the keyword-guessed,
+// non-existent "ManagerPath" fallback. Unlike BTFusion, BTManager's routing
+// conditions (IsDegradedAgent/IsNewAgent/IsHealthy) read directly from the
+// reflection store rather than from Sandboxed action output, but RunSuite
+// never seeds bb.Reflections, so an empty store always routes new-agent
+// bootstrapping.
+func BTManagerSuite() Suite {
+	return Suite{
+		Name: "bt_manager",
+		Tasks: []TaskCase{
+			{Task: "diagnose the degraded agent and apply a targeted mutation", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "bootstrap a new agent instance from the registry", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "report the health of all managed agents", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// SuperpowersWorkflowSuite tests the brainstorm/design/grill-loop/HITL
+// workflow tree routing. SuperpowersWorkflowTree
+// (internal/domains/superpowers_workflow.go) does branch via StrategyRouter-
+// style Selector nodes, but its real Sequence node names are ParallelPath
+// (independent-task dispatch) and VerifyPath (post-implementation
+// verification), not the keyword-guessed, non-existent "WorkflowPath".
+func SuperpowersWorkflowSuite() Suite {
+	return Suite{
+		Name: "superpowers_workflow",
+		Tasks: []TaskCase{
+			{Task: "brainstorm a design and validate it through the grill loop", ExpectedPath: "VerifyPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "split the plan into independently gradable tasks", ExpectedPath: "ParallelPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "escalate the design to human-in-the-loop review", ExpectedPath: "VerifyPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// SelfReviewSuite tests the autonomous-commit self-review tree routing.
+// SelfReviewTree (internal/domains/self_review.go) is a plain linear
+// Sequence with no StrategyRouter branching, so ExpectedPath reflects the
+// tree's real node names (SelfReview_Main/TaskIsNotEmpty) instead of the
+// keyword-guessed, non-existent "SelfReviewPath".
+func SelfReviewSuite() Suite {
+	return Suite{
+		Name: "self_review",
+		Tasks: []TaskCase{
+			{Task: "review autonomous commits since the last self-review", ExpectedPath: "SelfReview_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "seed a code-fix program for the confirmed defect", ExpectedPath: "SelfReview_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "advance the self-review state to the latest commit SHA", ExpectedPath: "TaskIsNotEmpty", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
 }
 
 // Arc42Suite tests arc42 architecture documentation tree routing.
+// Arc42Suite tests the 12 arc42 section-generator trees' routing
+// (domain_arc42:section1..12, internal/domains/arc42_trees.go). Every
+// section shares the same PreGate/StrategyRouter/ValidateSection/
+// SaveSection/MarkSectionDone node names regardless of which section it
+// generates, so ExpectedPath reflects those shared real names instead of
+// the keyword-guessed, non-existent "Arc42Path". The structurally distinct
+// arc42:docsync and arc42_seeder trees get their own suites below —
+// Arc42DocsyncSuite and Arc42SeederSuite — since neither shares these node
+// names.
 func Arc42Suite() Suite {
 	return Suite{
 		Name: "arc42",
 		Tasks: []TaskCase{
-			{Task: "document the system architecture overview", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "describe the component decomposition and dependencies", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "create the runtime view for the MCP request flow", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "document the deployment topology and infrastructure", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "describe the cross-cutting security architecture", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "document the quality requirements and tradeoffs", ExpectedPath: "Arc42Path", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the system architecture overview", ExpectedPath: "SaveSection", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "describe the component decomposition and dependencies", ExpectedPath: "StrategyRouter", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "create the runtime view for the MCP request flow", ExpectedPath: "ValidateSection", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the deployment topology and infrastructure", ExpectedPath: "SaveSection", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "describe the cross-cutting security architecture", ExpectedPath: "MarkSectionDone", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "document the quality requirements and tradeoffs", ExpectedPath: "PreGate", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// Arc42DocsyncSuite tests the arc42:docsync tree routing (domain_arc42:docsync,
+// internal/domains/arc42_docsync.go). Its per-section sync is a plain
+// Sequence of SyncArc42SectionNN actions plus SyncReadme — no StrategyRouter
+// branching — so ExpectedPath reflects those real node names instead of the
+// ValidateSection/SaveSection names the section-generator Arc42Suite uses.
+func Arc42DocsyncSuite() Suite {
+	return Suite{
+		Name: "arc42_docsync",
+		Tasks: []TaskCase{
+			{Task: "sync arc42 section 1 documentation after a recent code change", ExpectedPath: "SyncArc42Section01", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "update the README counts and links after a change", ExpectedPath: "SyncReadme", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the full arc42 documentation sync pass", ExpectedPath: "Arc42Docsync_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// Arc42SeederSuite tests the arc42_seeder tree routing (domain_arc42_seeder,
+// internal/domains/arc42_seeder.go). It is a plain linear Sequence with no
+// StrategyRouter branching, so ExpectedPath reflects the tree's real node
+// names (Arc42Seeder_Main/TaskIsNotEmpty/SeedProgramFromArc42Goals) instead
+// of the section-generator names the shared Arc42Suite uses.
+func Arc42SeederSuite() Suite {
+	return Suite{
+		Name: "arc42_seeder",
+		Tasks: []TaskCase{
+			{Task: "seed the next improvement program from the live arc42 quality goals", ExpectedPath: "SeedProgramFromArc42Goals", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check that the scheduled seeding task is non-empty before seeding", ExpectedPath: "TaskIsNotEmpty", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the arc42 program-seeder cycle end to end", ExpectedPath: "Arc42Seeder_Main", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
@@ -726,15 +957,45 @@ func DefaultSuite() Suite {
 	}
 }
 
-// GOAPSuite tests GOAP (Goal-Oriented Action Planning) tree routing.
+// GOAPSuite tests GOAP (Goal-Oriented Action Planning) tree routing for the
+// goap_planning, goap_research, and goap_devops trees
+// (internal/domains/trees.go's GoapPlanningTree/GoapResearchTree/
+// GoapDevopsTree). Each of the three trees has its own keyword-routed
+// branches (AssessPath/SyncPath, ResearchPath/GraphifyPath, BuildPath/
+// ImplementPath) that aren't shared across all three, but all three share
+// the same PreGate/StrategyRouter/ExecutionPath wrapper node names, so
+// ExpectedPath reflects those shared real names instead of the
+// keyword-guessed, non-existent "GOAPPath". The structurally distinct
+// goap_fusion and goap_fusion_loop trees get their own GOAPFusionSuite below.
 func GOAPSuite() Suite {
 	return Suite{
 		Name: "goap",
 		Tasks: []TaskCase{
-			{Task: "plan a deployment pipeline with rollback steps", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "optimize the resource allocation for the microservices", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "schedule the research tasks with dependency resolution", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
-			{Task: "plan the incident response escalation path", ExpectedPath: "GOAPPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "plan a deployment pipeline with rollback steps", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "optimize the resource allocation for the microservices", ExpectedPath: "StrategyRouter", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "schedule the research tasks with dependency resolution", ExpectedPath: "ExecutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "plan the incident response escalation path", ExpectedPath: "PreGate", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// GOAPFusionSuite tests the goap_fusion and goap_fusion_loop tree routing
+// (domain_goap_fusion, internal/domains/goap_fusion.go; domain_goap_fusion_loop,
+// internal/domains/goap_fusion_loop.go). Both trees share the same
+// ExecutionRouter → ClaudeSuperpowersPath/ScheduledAnalysisPath →
+// VerifyGoapFusionEvidence shape (the loop tree adds backlog-seeding and
+// grill phases in front, but keeps these node names), so ExpectedPath
+// reflects those shared real names instead of the keyword-guessed,
+// non-existent "GOAPPath" the generic GOAPSuite previously fell back to for
+// both trees.
+func GOAPFusionSuite() Suite {
+	return Suite{
+		Name: "goap_fusion",
+		Tasks: []TaskCase{
+			{Task: "implement the research-backed goal via the Superpowers runtime", ExpectedPath: "ClaudeSuperpowersPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the deterministic fusion analysis when no new goals are found", ExpectedPath: "ScheduledAnalysisPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "verify the fusion cycle produced concrete evidence before marking success", ExpectedPath: "VerifyGoapFusionEvidence", ShouldSucceed: true, MinResultLen: 20},
 			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
 		},
 	}
@@ -743,6 +1004,8 @@ func GOAPSuite() Suite {
 // SuiteForTree returns the best benchmark suite for a given tree name.
 func SuiteForTree(treeName string) Suite {
 	switch {
+	case containsStr(treeName, "goap_fusion"):
+		return GOAPFusionSuite()
 	case containsStr(treeName, "goap"):
 		return GOAPSuite()
 	case containsStr(treeName, "godev"):
@@ -773,8 +1036,30 @@ func SuiteForTree(treeName string) Suite {
 		return AlertRouterSuite()
 	case containsStr(treeName, "trading_signal") || containsStr(treeName, "domain_trading"):
 		return TradingSignalSuite()
+	case containsStr(treeName, "arc42:docsync"):
+		return Arc42DocsyncSuite()
+	case containsStr(treeName, "arc42_seeder"):
+		return Arc42SeederSuite()
 	case containsStr(treeName, "arc42"):
 		return Arc42Suite()
+	case containsStr(treeName, "notebooklm_plan_implement"):
+		return NotebookLMPlanImplementSuite()
+	case containsStr(treeName, "notebooklm_consumer"):
+		return NotebookLMConsumerSuite()
+	case containsStr(treeName, "notebooklm"):
+		return NotebookLMSuite()
+	case containsStr(treeName, "hermes_update"):
+		return HermesUpdateSuite()
+	case containsStr(treeName, "auction_demo"):
+		return AuctionDemoSuite()
+	case containsStr(treeName, "bt_fusion"):
+		return BTFusionSuite()
+	case containsStr(treeName, "bt_manager"):
+		return BTManagerSuite()
+	case containsStr(treeName, "superpowers_workflow"):
+		return SuperpowersWorkflowSuite()
+	case containsStr(treeName, "self_review"):
+		return SelfReviewSuite()
 	case treeName == "default":
 		return DefaultSuite()
 	default:

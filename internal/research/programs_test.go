@@ -307,3 +307,71 @@ func TestRecordAttemptAndMaybeBlock(t *testing.T) {
 		t.Fatal("a program with all milestones done-or-blocked must not be Active (frees the self-seeder)")
 	}
 }
+
+// RecordRedPass persists the RED command alongside the streak so the next
+// cycle's charge-time pre-check can re-run it without a Claude plan phase
+// (2026-07-23 review gap 5); an empty command keeps the previous one, and
+// ResetRedPassStreak clears BOTH — a genuine failure kills the whole
+// already-landed hypothesis, command included.
+func TestRecordRedPass_PersistsLastRedCmd(t *testing.T) {
+	ps, err := OpenPrograms(filepath.Join(t.TempDir(), "programs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := ps.Add("Red cmd program", "test", []string{"m0"})
+
+	if streak := ps.RecordRedPass(p.ID, 0, "go test ./x -run TestY"); streak != 1 {
+		t.Fatalf("streak = %d, want 1", streak)
+	}
+	if got := ps.Programs[0].Milestones[0].LastRedCmd; got != "go test ./x -run TestY" {
+		t.Fatalf("LastRedCmd = %q", got)
+	}
+
+	// Empty command (extraction failed) keeps the recorded one.
+	if streak := ps.RecordRedPass(p.ID, 0, ""); streak != 2 {
+		t.Fatalf("streak = %d, want 2", streak)
+	}
+	if got := ps.Programs[0].Milestones[0].LastRedCmd; got != "go test ./x -run TestY" {
+		t.Fatalf("LastRedCmd after empty record = %q, want previous kept", got)
+	}
+
+	ps.ResetRedPassStreak(p.ID, 0)
+	m := ps.Programs[0].Milestones[0]
+	if m.RedPassStreak != 0 || m.LastRedCmd != "" {
+		t.Fatalf("reset must clear streak AND command, got streak=%d cmd=%q", m.RedPassStreak, m.LastRedCmd)
+	}
+}
+
+// TestActive_SelfFixProgramsPreemptGeneralQueue pins fixes-first scheduling:
+// a program whose Source carries SelfFixSourcePrefix must be picked by
+// Active() ahead of every general program, regardless of array position —
+// the platform repairs itself before building more. Among self-fix programs
+// (and again in the general fallback) array order still decides, and a
+// self-fix program with no pending milestone left never shadows the queue.
+func TestActive_SelfFixProgramsPreemptGeneralQueue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "programs.json")
+	ps, err := OpenPrograms(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	general := ps.Add("General feature work", "auto-seed", []string{"Build X in internal/engine/x.go"})
+	fixA := ps.Add("Fix broken gate", SelfFixSourcePrefix+"review:sig-a", []string{"Repair internal/engine/gate.go"})
+	fixB := ps.Add("Fix race", SelfFixSourcePrefix+"error-handler:sig-b", []string{"Lock internal/engine/race.go"})
+
+	if got := ps.Active(); got == nil || got.ID != fixA.ID {
+		t.Fatalf("Active() = %v, want first self-fix program %s ahead of earlier general program", got, fixA.ID)
+	}
+
+	// Drain fixA: the NEXT self-fix program wins, still ahead of the general one.
+	fixA.Milestones[0].Status = "done"
+	if got := ps.Active(); got == nil || got.ID != fixB.ID {
+		t.Fatalf("Active() after fixA done = %v, want %s", got, fixB.ID)
+	}
+
+	// Drain fixB too: the general queue resumes in array order.
+	fixB.Milestones[0].Status = "blocked"
+	if got := ps.Active(); got == nil || got.ID != general.ID {
+		t.Fatalf("Active() after self-fix drained = %v, want general %s", got, general.ID)
+	}
+}

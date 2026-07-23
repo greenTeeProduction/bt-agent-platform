@@ -18,6 +18,8 @@ func TestDriftWatchOnceRestartHandoff(t *testing.T) {
 		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
 		driftRestartFn, driftSmokeTestFn, restorePreviousBinaryFn = prevRestart, prevSmoke, prevRestore
 	})
+	adoptionStampDir = t.TempDir()
+	t.Cleanup(func() { adoptionStampDir = "" })
 
 	targets := []RebuildTarget{{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/bin/bt-agent"}}
 	// Always stale so the rebuild path runs.
@@ -93,6 +95,8 @@ func TestDriftWatchOnceRestartsSwappedSiblingUnits(t *testing.T) {
 		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
 		driftRestartFn, driftSmokeTestFn, restorePreviousBinaryFn = prevRestart, prevSmoke, prevRestore
 	})
+	adoptionStampDir = t.TempDir()
+	t.Cleanup(func() { adoptionStampDir = "" })
 
 	targets := []RebuildTarget{
 		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/repo/bt-agent", Unit: "bt-agent"},
@@ -141,6 +145,8 @@ func TestDriftWatchOnce_SiblingRestartRequiresOptIn(t *testing.T) {
 		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
 		driftRestartFn, driftSmokeTestFn = prevRestart, prevSmoke
 	})
+	adoptionStampDir = t.TempDir()
+	t.Cleanup(func() { adoptionStampDir = "" })
 
 	targets := []RebuildTarget{
 		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/repo/bt-agent", Unit: "bt-agent"},
@@ -181,6 +187,8 @@ func TestDriftWatchOnce_SiblingSmokeFailureRollsBackAndSkipsRestart(t *testing.T
 		driftHeadFn, driftRebuildFn = prevHead, prevRebuild
 		driftRestartFn, driftSmokeTestFn, restorePreviousBinaryFn = prevRestart, prevSmoke, prevRestore
 	})
+	adoptionStampDir = t.TempDir()
+	t.Cleanup(func() { adoptionStampDir = "" })
 
 	targets := []RebuildTarget{
 		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: "/repo/bt-agent", Unit: "bt-agent"},

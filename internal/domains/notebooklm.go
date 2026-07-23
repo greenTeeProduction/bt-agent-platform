@@ -26,7 +26,7 @@ func NotebookLMTree() *evolution.SerializableNode {
 			),
 
 			// Strategy router
-			sel("NotebookLM_Router", "Route to research, query, or the default auth/info path by task keywords",
+			sel("StrategyRouter", "Route to research, query, or the default auth/info path by task keywords",
 				// Path 1: Research
 				seq("ResearchPath", "Run the full research→import→save pipeline and persist idempotency state",
 					cond("IsResearchTask", "Task mentions research, web search, discover, find sources"),

@@ -714,7 +714,10 @@ func TestExpertKnowledge_ObservesLearnedPatternFromQLearning(t *testing.T) {
 		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
 		pop := NewPopulation(8, DefaultTree())
 		qt := NewQTable()
-		best := pop.EvolveQLearning(4, growthFitness, qt, "learn_test", 0.5, 0.5, ek)
+		rl := NewReinforcementLearner()
+		rl.Epsilon = 0.5
+		rl.LearningRate = 0.5
+		best := pop.EvolveQLearning(4, growthFitness, qt, "learn_test", rl, ek)
 		if best == nil {
 			t.Fatal("EvolveQLearning returned nil best tree")
 		}
@@ -741,13 +744,60 @@ func TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp(t *testing.T) {
 	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
 	pop := NewPopulation(6, DefaultTree())
 	qt := NewQTable()
+	rl := NewReinforcementLearner()
+	rl.Epsilon = 0.5
+	rl.LearningRate = 0.5
 
-	best := pop.EvolveQLearning(3, growthFitness, qt, "nilsafe_category", 0.5, 0.5, nil)
+	best := pop.EvolveQLearning(3, growthFitness, qt, "nilsafe_category", rl, nil)
 	if best == nil {
 		t.Fatal("EvolveQLearning(nil ExpertKnowledge) must still evolve and return a winner")
 	}
 	if pop.Generation != 3 {
 		t.Errorf("expected 3 generations to run, got %d", pop.Generation)
+	}
+}
+
+// TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations pins the
+// NotebookLM research finding that ReinforcementLearner's epsilon-decay
+// schedule (DecayEpsilon/ConfigureEpsilonSchedule, learning.go:822-836) is
+// never threaded into the Q-learning-guided evolution loop: EvolveQLearning
+// takes a raw epsilon float64 and holds it static for every generation, so
+// bt_evolve_qlearning explores at the same fixed rate in generation 1 as in
+// generation N. This milestone replaces the separate epsilon/learningRate
+// float64 params with the *ReinforcementLearner itself, calling
+// rl.DecayEpsilon() once per generation so later generations anneal toward
+// greedy exploitation instead of staying static. EvolveQLearning's new
+// signature does not exist yet, so this test fails to compile until the
+// change lands.
+func TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations(t *testing.T) {
+	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	pop := NewPopulation(6, DefaultTree())
+	qt := NewQTable()
+
+	rl := NewReinforcementLearner()
+	rl.ConfigureEpsilonSchedule(1.0, 0.5, 0.01)
+
+	const generations = 4
+	best := pop.EvolveQLearning(generations, growthFitness, qt, "anneal_test", rl, nil)
+	if best == nil {
+		t.Fatal("EvolveQLearning returned nil best tree")
+	}
+
+	// The expected epsilon after `generations` generations is whatever an
+	// identically-configured ReinforcementLearner reaches after calling
+	// DecayEpsilon() once per generation — pinning "once per generation",
+	// not a specific hardcoded float, so the test doesn't encode the decay
+	// math twice.
+	want := NewReinforcementLearner()
+	want.ConfigureEpsilonSchedule(1.0, 0.5, 0.01)
+	for i := 0; i < generations; i++ {
+		want.DecayEpsilon()
+	}
+	if rl.Epsilon != want.Epsilon {
+		t.Errorf("expected EvolveQLearning to call rl.DecayEpsilon() exactly once per generation (%d generations -> epsilon %v), got %v: epsilon is never annealed", generations, want.Epsilon, rl.Epsilon)
+	}
+	if rl.Epsilon >= 1.0 {
+		t.Errorf("rl.Epsilon must decay below its initial value 1.0 after %d generations, got %v", generations, rl.Epsilon)
 	}
 }
 

@@ -27,7 +27,7 @@ func BTFusionTree() *evolution.SerializableNode {
 			act("SearchForBTPatterns", "Record candidate BT/self-improving-agent patterns in the research knowledge store; surface only unrecorded ones"),
 			act("QueryNotebookLMResearch", "Scan vault research notes against the knowledge store and surface only new-since-last-cycle notes"),
 			act("SynthesizeFindings", "Summarize this cycle's new knowledge entries as concrete fusion targets"),
-			sel("BTFusion_Route", "Report a brief no-op when this cycle recorded no new research, else run the gated fusion apply path",
+			sel("StrategyRouter", "Report a brief no-op when this cycle recorded no new research, else run the gated fusion apply path",
 				// Zero new knowledge → report the no-op briefly instead of
 				// rewriting and re-broadcasting the previous fusion report.
 				seq("BTFusion_NoNewResearch", "Report a brief no-op when this cycle recorded no new research knowledge",

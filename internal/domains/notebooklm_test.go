@@ -3,6 +3,7 @@ package domains
 import (
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
@@ -22,9 +23,18 @@ func TestNotebookLMTreeRoutesResearchBeforeIngestAndQuery(t *testing.T) {
 		t.Fatal("NotebookLMTree returned nil")
 	}
 
-	router := findChildByName(tree, "NotebookLM_Router")
+	// The router Selector must be literally named "StrategyRouter" — the
+	// platform-wide convention every other domain tree uses (see e.g.
+	// CodeReviewTree/DevOpsCITree/SecurityAuditTree in trees.go). The engine's
+	// buildNodeInner only records bb.CurrentPath/VisitedPaths for a Sequence
+	// child whose parent Selector is named exactly "StrategyRouter" (see
+	// internal/engine/tree.go). A differently-named router (previously
+	// "NotebookLM_Router") silently disables real path attribution: benchmark
+	// suites then fall back to keyword-guessed paths instead of the tree's
+	// actual ResearchPath/QueryPath/DefaultPath nodes.
+	router := findChildByName(tree, "StrategyRouter")
 	if router == nil {
-		t.Fatal("NotebookLM_Router not found in tree children")
+		t.Fatal("StrategyRouter not found in tree children — NotebookLM router must use the platform-wide StrategyRouter naming convention for path tracking to work")
 	}
 	if len(router.Children) < 2 {
 		t.Fatalf("expected router paths, got %d", len(router.Children))
@@ -35,6 +45,34 @@ func TestNotebookLMTreeRoutesResearchBeforeIngestAndQuery(t *testing.T) {
 	}
 	if got := router.Children[1].Name; got != "QueryPath" {
 		t.Fatalf("second router path = %q, want QueryPath", got)
+	}
+}
+
+// TestNotebookLMTreeRecordsRealPathDuringExecution guards the actual production
+// defect behind milestone 2 of the SuiteForTree benchmark-gating fix: running
+// NotebookLMTree() end-to-end (the same engine.BuildTree/engine.RunTask path
+// benchmark.RunSuite uses to score mutations) must set bb.CurrentPath to the
+// tree's real Sequence node name for the strategy that fired — "ResearchPath"
+// or "QueryPath" — not leave it empty (which forces benchmark scoring to fall
+// back to a keyword-guessed, non-existent "NotebookLMPath").
+func TestNotebookLMTreeRecordsRealPathDuringExecution(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     string
+		wantPath string
+	}{
+		{"research task", "run deep research on BT optimization and save sources", "ResearchPath"},
+		{"query task", "ask the notebook what the key findings are", "QueryPath"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bb := &engine.Blackboard{Task: tt.task, LLM: &engine.MockLLM{}, Sandbox: true}
+			bt := engine.BuildTree(NotebookLMTree(), bb)
+			engine.RunTask(bb, bt)
+			if bb.CurrentPath != tt.wantPath {
+				t.Fatalf("bb.CurrentPath = %q, want %q (real NotebookLMTree node name)", bb.CurrentPath, tt.wantPath)
+			}
+		})
 	}
 }
 

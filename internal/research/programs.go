@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -26,6 +27,12 @@ type Milestone struct {
 	// passed for this milestone — evidence the work already exists at HEAD
 	// rather than an unbuildable goal. Reset on any genuine failure.
 	RedPassStreak int `json:"red_pass_streak,omitempty"`
+	// LastRedCmd is the RED command whose unexpected pass produced the
+	// streak. The next cycle re-runs it at charge time (the red pre-check,
+	// 2026-07-23 review gap 5): a second pass completes the milestone
+	// without burning a Claude plan phase, a failure kills the
+	// already-landed hypothesis. Cleared with the streak.
+	LastRedCmd string `json:"last_red_cmd,omitempty"`
 }
 
 type Program struct {
@@ -172,8 +179,28 @@ func UpdatePrograms(path string, fn func(*ProgramStore) error) error {
 	return ps.Save()
 }
 
-// Active returns the oldest program that still has a pending milestone.
+// SelfFixSourcePrefix tags programs seeded to repair the platform's own
+// defects (error-handler escalations, self-review findings, operator review
+// seeds). It is the canonical spelling — the engine's seeding cap and source
+// normalization key on it too — and Active() gives programs carrying it
+// absolute scheduling priority.
+const SelfFixSourcePrefix = "self-fix:"
+
+// Active returns the program the next cycle should work: self-fix programs
+// FIRST (fixes-first — the platform repairs itself before building more;
+// before 2026-07-23 self-fix seeds competed in plain array order and could
+// starve behind a continuously refilling feature backlog, ADR-197), then the
+// oldest general program that still has a pending milestone. Within each
+// class, array order (seed order) decides.
 func (ps *ProgramStore) Active() *Program {
+	for _, p := range ps.Programs {
+		if !strings.HasPrefix(p.Source, SelfFixSourcePrefix) {
+			continue
+		}
+		if _, m := p.NextMilestone(); m != nil {
+			return p
+		}
+	}
 	for _, p := range ps.Programs {
 		if _, m := p.NextMilestone(); m != nil {
 			return p
@@ -279,7 +306,7 @@ func (ps *ProgramStore) Save() error {
 // RecordRedPass increments the milestone's consecutive red-pass counter and
 // returns the new streak. A red-pass (the plan's RED command passing before
 // GREEN) is evidence the milestone's work already exists at HEAD.
-func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int) int {
+func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int, redCmd string) int {
 	for _, p := range ps.Programs {
 		if p.ID != programID {
 			continue
@@ -292,14 +319,22 @@ func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int) int {
 			return m.RedPassStreak
 		}
 		m.RedPassStreak++
+		// Persist the passing RED command for the next cycle's charge-time
+		// pre-check; an empty command (extraction failed) keeps the previous
+		// record so the evidence never degrades.
+		if cmd := strings.TrimSpace(redCmd); cmd != "" {
+			m.LastRedCmd = cmd
+		}
 		p.Updated = time.Now().UTC()
 		return m.RedPassStreak
 	}
 	return 0
 }
 
-// ResetRedPassStreak clears the milestone's red-pass streak — called when a
-// genuine implementation failure proves the milestone's tests can still fail.
+// ResetRedPassStreak clears the milestone's red-pass evidence — streak AND
+// recorded command — called when a genuine implementation failure (or a
+// failing charge-time pre-check) proves the milestone's tests can still
+// fail, killing the already-landed hypothesis outright.
 func (ps *ProgramStore) ResetRedPassStreak(programID string, milestoneIdx int) {
 	for _, p := range ps.Programs {
 		if p.ID != programID {
@@ -309,10 +344,11 @@ func (ps *ProgramStore) ResetRedPassStreak(programID string, milestoneIdx int) {
 			return
 		}
 		m := &p.Milestones[milestoneIdx]
-		if m.RedPassStreak == 0 {
+		if m.RedPassStreak == 0 && m.LastRedCmd == "" {
 			return
 		}
 		m.RedPassStreak = 0
+		m.LastRedCmd = ""
 		p.Updated = time.Now().UTC()
 		return
 	}

@@ -25,7 +25,7 @@ func BTManagerTree() *evolution.SerializableNode {
 			),
 
 			// ── Strategy Router ──
-			sel("BTManager_StrategyRouter", "Route to degraded-performance repair, new-agent bootstrap, or the healthy report path",
+			sel("StrategyRouter", "Route to degraded-performance repair, new-agent bootstrap, or the healthy report path",
 				// Path 1: Degraded Performance — success rate below threshold
 				seq("DegradedPerformancePath", "Diagnose a degraded agent's failure pattern, apply a targeted mutation, and log the intervention",
 					cond("IsDegradedAgent", "Success rate < 0.7 OR 3+ consecutive failures OR circuit breaker open"),
