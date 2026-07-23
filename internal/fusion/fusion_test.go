@@ -3,6 +3,7 @@ package fusion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -266,6 +267,96 @@ func TestRun_RespectsTimeout(t *testing.T) {
 	}
 	if len(result.Responses) != 1 || !strings.Contains(result.Responses[0].Error, "context deadline exceeded") {
 		t.Fatalf("expected panel response to fail with context deadline exceeded, got %#v", result.Responses)
+	}
+}
+
+// stageDeadlineCaller records the ctx deadline remaining at the moment Judge
+// and Synthesize issue their LLM call, and stalls the panel-stage call long
+// enough to nearly exhaust the shared cfg.Timeout budget. It distinguishes
+// stages by system-prompt content rather than by model name, since Judge and
+// Synthesize both use cfg.JudgeModel.
+type stageDeadlineCaller struct {
+	mu         sync.Mutex
+	panelDelay time.Duration
+	sawJudge   bool
+	sawSynth   bool
+	judgeRem   time.Duration
+	synthRem   time.Duration
+}
+
+func remainingDeadline(ctx context.Context) time.Duration {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return time.Hour
+	}
+	return time.Until(dl)
+}
+
+func (c *stageDeadlineCaller) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
+	switch {
+	case strings.Contains(system, "independent Fusion panel model"):
+		select {
+		case <-time.After(c.panelDelay):
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		return "panel response", nil
+	case strings.Contains(system, "Fusion judge"):
+		rem := remainingDeadline(ctx)
+		c.mu.Lock()
+		c.sawJudge, c.judgeRem = true, rem
+		c.mu.Unlock()
+		return `{"consensus":["agree"],"contradictions":[],"partial_coverage":[],"unique_insights":[],"blind_spots":[]}`, nil
+	case strings.Contains(system, "synthesize final answers"):
+		rem := remainingDeadline(ctx)
+		c.mu.Lock()
+		c.sawSynth, c.synthRem = true, rem
+		c.mu.Unlock()
+		return "final synthesized answer", nil
+	}
+	return "", fmt.Errorf("stageDeadlineCaller: unexpected system prompt %q", system)
+}
+
+// TestRun_JudgeAndSynthesizeGetOwnTimeoutBudget verifies that a slow RunPanel
+// stage cannot starve Judge/Synthesize's retry policies. Judge and Synthesize
+// must derive their timeout from the original caller ctx (a fresh budget),
+// not from the already-shrinking panel ctx that RunPanel consumed most of.
+func TestRun_JudgeAndSynthesizeGetOwnTimeoutBudget(t *testing.T) {
+	withFreshFusionBreaker(t, 3, time.Minute)
+
+	caller := &stageDeadlineCaller{panelDelay: 400 * time.Millisecond}
+	cfg := DefaultConfig()
+	cfg.AnalysisModels = []string{"a"}
+	cfg.JudgeModel = "judge"
+	cfg.Timeout = 500 * time.Millisecond
+
+	result, err := Run(context.Background(), caller, cfg, "prompt", nil)
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if result.Status != "ok" {
+		t.Fatalf("expected ok status, got %#v", result)
+	}
+
+	caller.mu.Lock()
+	defer caller.mu.Unlock()
+	if !caller.sawJudge {
+		t.Fatal("Judge was never called")
+	}
+	if !caller.sawSynth {
+		t.Fatal("Synthesize was never called")
+	}
+
+	// The panel stage consumed 400ms of the 500ms shared cfg.Timeout, leaving
+	// only ~100ms on that context. Judge and Synthesize must instead observe a
+	// fresh budget derived from the original ctx (~cfg.Timeout), not the ~100ms
+	// remainder of the panel's already-shrunk context.
+	const minFreshBudget = 250 * time.Millisecond
+	if caller.judgeRem < minFreshBudget {
+		t.Errorf("Judge got a starved context: %s remaining, want a fresh budget close to cfg.Timeout=%s derived from the original ctx, not the shrunk panel ctx", caller.judgeRem, cfg.Timeout)
+	}
+	if caller.synthRem < minFreshBudget {
+		t.Errorf("Synthesize got a starved context: %s remaining, want a fresh budget close to cfg.Timeout=%s derived from the original ctx, not the shrunk panel ctx", caller.synthRem, cfg.Timeout)
 	}
 }
 
