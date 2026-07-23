@@ -3523,6 +3523,7 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ A stale milestone costs one bounded test run instead of two Claude plan cycles; the freed slot plans real work the same cycle. The research-goal red-pass path (`recordGoapResearchGoalRedPass`) keeps its existing 2-cycle streak — extending the pre-check to goals is open follow-up.
 - ✅ The 2026-07-22 REUSE-anchoring regression was diagnosed, not patched: a live graphify probe answers in seconds with real hits, so the enrichment machinery is healthy — the 0/15 citations trace to the rotated programs' goal lines producing no strong lexical hits, which is the designed silent degradation, not a defect.
 - ⚠️ Adoption stamps are best-effort files: a stamp write failure or a unit crash after stamping costs at most one extra (or one deferred) restart. The 07-22 churn-gate recommendation (skip research/plan when the goal state is unchanged since the last no-op) remains unimplemented — the red pre-check removes the dominant treadmill but not the research-phase churn class.
+- ⚠️ Amendment (2026-07-23 ~17:15): the original landing (`d41a902`) shipped with an order-dependent test defect — the stamps' process-shared under-test fallback dir let one restart test's stamps leak into `TestDriftWatchOnce_SiblingSmokeFailureRollsBackAndSkipsRestart`. That failing test triggered the `01d8dcf` stale-index revert cascade (diagnosed and restored by `d96d430`/`9d936a2`, per-test isolation added in the 20260723T164706 landing). The hardening commit on top makes stamps INERT under `go test` unless a test opts in via `adoptionStampDir` (pinned by `TestAdoptionStamps_InertUnderTestWithoutOptIn`), so a future test that forgets isolation can neither leak stamps across tests nor touch live state.
 
 ---
 
@@ -3532,7 +3533,7 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 **Decision:** `Active()` scans in two passes — self-fix-sourced programs with a pending milestone first, then the general queue — with array (seed) order deciding within each class. The prefix is canonicalized as `research.SelfFixSourcePrefix`; the engine's seeding cap counter and source normalization key on the same constant, so the scheduling class and the backlog cap can never drift apart on spelling.
 
-**Status:** Accepted (2026-07-23) — operator-landed. Pinned by `TestActive_SelfFixProgramsPreemptGeneralQueue` (`internal/research/programs_test.go`).
+**Status:** Accepted (2026-07-23) — landed by goap cycle run 20260723T153037-be661b36 as `01d8dcf` (originally numbered ADR-196 while the `01d8dcf` stale-index race simultaneously reverted the real ADR-196; renumbered to 197 by the `d96d430` restore). Pinned by `TestActive_SelfFixProgramsPreemptGeneralQueue` (`internal/research/programs_test.go`).
 
 **Consequences:**
 - ✅ A defect the platform found in itself is always the next thing a goap cycle works on; feature programs resume automatically once the self-fix backlog drains (done or blocked).

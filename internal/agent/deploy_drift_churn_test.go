@@ -158,3 +158,18 @@ func TestDriftWatchOnce_SiblingRestartSkippedWhenAlreadyAdopted(t *testing.T) {
 		}
 	}
 }
+
+// An unstubbed test process must see inert stamps: the resolver returns ""
+// under go test unless a test sets adoptionStampDir, so neither cross-test
+// stamp leakage (the order-dependent restart-test failure that triggered the
+// 01d8dcf stale-index revert cascade, 2026-07-23) nor live-home writes are
+// possible from tests that forget isolation.
+func TestAdoptionStamps_InertUnderTestWithoutOptIn(t *testing.T) {
+	if adoptionStampDir != "" {
+		t.Fatalf("precondition: adoptionStampDir override unexpectedly set: %q", adoptionStampDir)
+	}
+	writeAdoptionStamp("bt-gardener", "somehead")
+	if got := adoptionStampHead("bt-gardener"); got != "" {
+		t.Fatalf("unstubbed stamps must be inert under go test, read back %q", got)
+	}
+}

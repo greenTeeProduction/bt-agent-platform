@@ -224,8 +224,14 @@ func resolveAdoptionStampDir() string {
 		return adoptionStampDir
 	}
 	if testing.Testing() {
-		adoptionStampDir = filepath.Join(os.TempDir(), fmt.Sprintf("bt-adoption-stamps-test-%d", os.Getpid()))
-		return adoptionStampDir
+		// Stamps are DISABLED under go test unless a test opts in by setting
+		// adoptionStampDir: the previous process-shared fallback dir let one
+		// test's successful-restart stamps leak into the next test's
+		// sibling-skip decision — the order-dependent restart-test failure
+		// whose hook rejection triggered the 01d8dcf stale-index revert
+		// cascade (2026-07-23). Restart tests isolate via t.TempDir(); an
+		// unisolated future test now sees inert stamps instead of a leak.
+		return ""
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -248,6 +254,9 @@ type adoptionStamp struct {
 // failure only costs an extra restart later.
 func writeAdoptionStamp(unit, head string) {
 	dir := resolveAdoptionStampDir()
+	if dir == "" {
+		return // stamps disabled (unstubbed under go test)
+	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return
 	}
@@ -256,10 +265,14 @@ func writeAdoptionStamp(unit, head string) {
 
 // adoptionStampHead returns the head unit last adopted, or "" when unknown.
 func adoptionStampHead(unit string) string {
+	dir := resolveAdoptionStampDir()
+	if dir == "" {
+		return "" // stamps disabled (unstubbed under go test)
+	}
 	// #nosec G304 -- unit is always one of the fixed RebuildTarget.Unit literals
 	// declared in rebuild.go ("bt-agent", "bt-gardener", "bt-dashboard"), never
 	// user/network input.
-	b, err := os.ReadFile(filepath.Join(resolveAdoptionStampDir(), unit+".json"))
+	b, err := os.ReadFile(filepath.Join(dir, unit+".json"))
 	if err != nil {
 		return ""
 	}
