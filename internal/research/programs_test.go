@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestProgramLifecycle(t *testing.T) {
@@ -373,5 +374,52 @@ func TestActive_SelfFixProgramsPreemptGeneralQueue(t *testing.T) {
 	fixB.Milestones[0].Status = "blocked"
 	if got := ps.Active(); got == nil || got.ID != general.ID {
 		t.Fatalf("Active() after self-fix drained = %v, want general %s", got, general.ID)
+	}
+}
+
+// ClaimActiveForCycle is how PrioritizeGoapGoals selects (and claims) the
+// program to charge each cycle. A sibling cycle's overlapping cron tick must
+// not also plan/charge the SAME program while this one is still landing it —
+// the loop-runner burned 3 cycles 2026-07-23 12:38-14:55 doing exactly that.
+// The claim records which agent (cycle) holds it and when, so a later cycle
+// for a DIFFERENT agent is turned away until the lease (default: the cycle
+// budget) expires; the SAME agent may always re-claim (e.g. a retried cycle
+// reuses its own RunID).
+func TestClaimActiveForCycle_SkipsProgramClaimedBySiblingCycle(t *testing.T) {
+	ps, _ := OpenPrograms(filepath.Join(t.TempDir(), "p.json"))
+	p := ps.Add("Shared program", "test", []string{"m1"})
+
+	got := ps.ClaimActiveForCycle("cycle-a", time.Hour)
+	if got == nil || got.ID != p.ID {
+		t.Fatalf("first claim must succeed and return the active program, got %v", got)
+	}
+	if ps.Programs[0].ClaimedBy != "cycle-a" || ps.Programs[0].ClaimedAt.IsZero() {
+		t.Fatalf("claim must stamp agent+timestamp, got %+v", ps.Programs[0])
+	}
+
+	if got := ps.ClaimActiveForCycle("cycle-b", time.Hour); got != nil {
+		t.Fatalf("a program claimed by another agent within the lease window must not be re-claimed, got %v", got)
+	}
+
+	if got := ps.ClaimActiveForCycle("cycle-a", time.Hour); got == nil {
+		t.Fatal("the claiming agent must be able to re-claim its own program")
+	}
+}
+
+// A claim older than the lease window is stale — evidence the claiming cycle
+// is no longer in flight (crashed, or simply long done) — so a different
+// agent must be able to take it over rather than starving the program forever.
+func TestClaimActiveForCycle_ExpiredLeaseIsReclaimable(t *testing.T) {
+	ps, _ := OpenPrograms(filepath.Join(t.TempDir(), "p.json"))
+	p := ps.Add("Stale claim", "test", []string{"m1"})
+	ps.Programs[0].ClaimedBy = "cycle-a"
+	ps.Programs[0].ClaimedAt = time.Now().Add(-2 * time.Hour)
+
+	got := ps.ClaimActiveForCycle("cycle-b", time.Hour)
+	if got == nil || got.ID != p.ID {
+		t.Fatalf("an expired claim must be reclaimable by a different agent, got %v", got)
+	}
+	if ps.Programs[0].ClaimedBy != "cycle-b" {
+		t.Fatalf("reclaim must overwrite the stale ClaimedBy, got %q", ps.Programs[0].ClaimedBy)
 	}
 }

@@ -142,8 +142,12 @@ func (q *QualityGate) ResetFailCount() {
 // snapshotIndex tracks the ordered revision history for one tree's snapshots,
 // oldest first, so a regression discovered several cycles after it was
 // introduced can still roll back past just the immediately-preceding cycle.
+// Fitness records each revision's composite score when known (via
+// SnapshotTreeWithFitness), letting RestoreTreeBeforeRegressionStreak walk
+// back past a multi-cycle regression streak to the last known-good peak.
 type snapshotIndex struct {
-	Revisions []int `json:"revisions"`
+	Revisions []int           `json:"revisions"`
+	Fitness   map[int]float64 `json:"fitness,omitempty"`
 }
 
 func snapshotIndexPath(treeName, snapshotDir string) string {
@@ -194,6 +198,17 @@ func saveSnapshotIndex(treeName, snapshotDir string, idx snapshotIndex) error {
 // RestoreTreeRevision can recover any prior cycle's state, not just the one
 // immediately before the latest.
 func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string, error) {
+	return snapshotTree(tree, treeName, snapshotDir, nil)
+}
+
+// SnapshotTreeWithFitness is SnapshotTree plus the revision's composite
+// fitness score, which RestoreTreeBeforeRegressionStreak needs to identify
+// where a regression streak began.
+func SnapshotTreeWithFitness(tree *SerializableNode, treeName, snapshotDir string, fitness float64) (string, error) {
+	return snapshotTree(tree, treeName, snapshotDir, &fitness)
+}
+
+func snapshotTree(tree *SerializableNode, treeName, snapshotDir string, fitness *float64) (string, error) {
 	if err := os.MkdirAll(snapshotDir, 0700); err != nil {
 		return "", fmt.Errorf("create snapshot dir: %w", err)
 	}
@@ -224,6 +239,12 @@ func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string,
 	}
 
 	idx.Revisions = append(idx.Revisions, revision)
+	if fitness != nil {
+		if idx.Fitness == nil {
+			idx.Fitness = make(map[int]float64)
+		}
+		idx.Fitness[revision] = *fitness
+	}
 	if err := saveSnapshotIndex(treeName, snapshotDir, idx); err != nil {
 		return "", err
 	}
@@ -271,4 +292,32 @@ func RestoreTree(treeName, snapshotDir string) (*SerializableNode, error) {
 	}
 
 	return RestoreTreeRevision(treeName, snapshotDir, idx.Revisions[len(idx.Revisions)-1])
+}
+
+// RestoreTreeBeforeRegressionStreak walks back past a multi-cycle regression
+// streak to the last known-good (peak) snapshot, instead of restoring only
+// the single most-recent revision (which RestoreTree does, and which may
+// itself be mid-streak — already regressed relative to an earlier peak).
+//
+// Starting at the newest revision, it steps backward for as long as each
+// revision's fitness is strictly lower than the one before it — i.e. for as
+// long as it's still inside an unbroken decline — and returns the first
+// revision where that's no longer true. Revisions snapshotted via plain
+// SnapshotTree (no recorded fitness) compare as 0, so an all-zero history
+// degrades to returning the latest revision, matching RestoreTree.
+func RestoreTreeBeforeRegressionStreak(treeName, snapshotDir string) (*SerializableNode, error) {
+	idx, err := loadSnapshotIndex(treeName, snapshotDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(idx.Revisions) == 0 {
+		return nil, fmt.Errorf("no snapshot found for tree %q in %s", treeName, snapshotDir)
+	}
+
+	i := len(idx.Revisions) - 1
+	for i > 0 && idx.Fitness[idx.Revisions[i]] < idx.Fitness[idx.Revisions[i-1]] {
+		i--
+	}
+
+	return RestoreTreeRevision(treeName, snapshotDir, idx.Revisions[i])
 }

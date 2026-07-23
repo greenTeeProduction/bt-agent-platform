@@ -87,6 +87,24 @@ const (
 	goapFusionMaxNoopPatchStreak = 3
 )
 
+// goapProgramClaimLease bounds how long a program-store claim recorded by
+// research.ProgramStore.ClaimActiveForCycle blocks a sibling cycle's
+// PrioritizeGoapGoals from also charging or planning the SAME program —
+// default: the cycle budget, so a claim outlives one cycle's typical
+// wall-clock but a crashed/abandoned cycle's stale claim is reclaimable well
+// before the next tick (the loop-runner burned 3 cycles 2026-07-23
+// 12:38-14:55 on milestones a sibling cycle was already landing).
+const goapProgramClaimLease = time.Hour
+
+// goapProgramClaimedBySibling reports whether p is currently claimed by a
+// DIFFERENT agent within the lease window — evidence a sibling cycle is
+// still landing it, so this cycle's queueing pass must not advertise its
+// milestones as available plan work either (it already declined to charge
+// it in PrioritizeGoapGoals' claim step above).
+func goapProgramClaimedBySibling(p *research.Program, agentID string) bool {
+	return p.ClaimedBy != "" && p.ClaimedBy != agentID && time.Since(p.ClaimedAt) < goapProgramClaimLease
+}
+
 func init() {
 	registerGoapFusionActions()
 }
@@ -332,7 +350,11 @@ func registerGoapFusionActions() {
 		var chargedIdx int
 		var charged bool
 		if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-			p := ps.Active()
+			// ClaimActiveForCycle (rather than plain Active()) refuses the
+			// program when it is still claimed by a DIFFERENT, in-lease
+			// sibling cycle — a sibling agent must not plan/charge a program
+			// another cycle is actively landing.
+			p := ps.ClaimActiveForCycle(bb.RunID, goapProgramClaimLease)
 			if p == nil {
 				return nil
 			}
@@ -358,7 +380,7 @@ func registerGoapFusionActions() {
 		// Re-open (read-only) so a just-blocked milestone is reflected in the
 		// queueing pass below.
 		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
-			if p := ps.Active(); p != nil {
+			if p := ps.Active(); p != nil && !goapProgramClaimedBySibling(p, bb.RunID) {
 				var refs []string
 				for idx := range p.Milestones {
 					m := &p.Milestones[idx]

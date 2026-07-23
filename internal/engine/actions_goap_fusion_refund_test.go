@@ -227,6 +227,113 @@ func TestRefundGoapMilestoneAttempt_HeadRefFallbackAndNoop(t *testing.T) {
 	}
 }
 
+// ClaimActiveForCycle (research/programs.go) stamps ClaimedBy/ClaimedAt so a
+// sibling cycle cannot plan/charge the SAME program while this one is still
+// landing it (2026-07-23 loop-runner treadmill: 3 cycles burned on
+// milestones a sibling cycle was actively landing). The claim must not
+// outlive the charging cycle: a refund (infra-classified failure) means this
+// cycle gave up on the milestone, so it must also release the program claim
+// — otherwise a sibling stays locked out for up to the full lease window
+// even though nothing is landing anymore.
+func TestRefundGoapMilestoneAttempt_ReleasesProgramClaim(t *testing.T) {
+	id := seedRefundProgram(t, 1, "pending")
+	const agentID = "cycle-refund-probe"
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		ps.Programs[0].ClaimedBy = agentID
+		ps.Programs[0].ClaimedAt = time.Now().UTC()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{
+		RunID: agentID,
+		ChainState: map[string]any{
+			"goap_fusion_program_milestone_charged": id + ":0",
+		},
+	}
+	if !refundGoapMilestoneAttemptForInfraFailure(bb) {
+		t.Fatal("refund must fire")
+	}
+
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps.Programs[0].ClaimedBy != "" || !ps.Programs[0].ClaimedAt.IsZero() {
+		t.Fatalf("refund must release the claiming cycle's program claim, got ClaimedBy=%q ClaimedAt=%v",
+			ps.Programs[0].ClaimedBy, ps.Programs[0].ClaimedAt)
+	}
+}
+
+// A refund must never release a DIFFERENT agent's claim: if this cycle's own
+// lease already expired mid-flight and a sibling reclaimed the program, this
+// cycle's belated refund must not steal it back out from under the sibling
+// that is now actively landing it.
+func TestRefundGoapMilestoneAttempt_DoesNotReleaseAnotherAgentsClaim(t *testing.T) {
+	id := seedRefundProgram(t, 1, "pending")
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		ps.Programs[0].ClaimedBy = "sibling-cycle"
+		ps.Programs[0].ClaimedAt = time.Now().UTC()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{
+		RunID: "this-cycle",
+		ChainState: map[string]any{
+			"goap_fusion_program_milestone_charged": id + ":0",
+		},
+	}
+	if !refundGoapMilestoneAttemptForInfraFailure(bb) {
+		t.Fatal("refund must fire")
+	}
+
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps.Programs[0].ClaimedBy != "sibling-cycle" {
+		t.Fatalf("refund must not clobber a different agent's claim, got ClaimedBy=%q", ps.Programs[0].ClaimedBy)
+	}
+}
+
+// resetGoapMilestoneRedPassStreak is the deferred handler's "genuine
+// failure" (abandon-budget-consuming) branch — the milestone may be one
+// attempt from "blocked". That must also release the program claim: a
+// milestone circling the abandon budget must not ALSO wedge a sibling agent
+// out of the whole program for up to the full lease window.
+func TestResetGoapMilestoneRedPassStreak_ReleasesProgramClaim(t *testing.T) {
+	id := seedRefundProgram(t, 1, "pending")
+	const agentID = "cycle-genuine-probe"
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		ps.Programs[0].ClaimedBy = agentID
+		ps.Programs[0].ClaimedAt = time.Now().UTC()
+		ps.Programs[0].Milestones[0].RedPassStreak = 1
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{
+		RunID: agentID,
+		ChainState: map[string]any{
+			"goap_fusion_program_milestone_charged": id + ":0",
+		},
+	}
+	resetGoapMilestoneRedPassStreak(bb)
+
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps.Programs[0].ClaimedBy != "" || !ps.Programs[0].ClaimedAt.IsZero() {
+		t.Fatalf("genuine-failure reset must release the claiming cycle's program claim, got ClaimedBy=%q ClaimedAt=%v",
+			ps.Programs[0].ClaimedBy, ps.Programs[0].ClaimedAt)
+	}
+}
+
 // PrioritizeGoapGoals must stamp WHICH milestone it charged: when the charge
 // blocks the milestone, the queued refs (re-read after re-opening the store)
 // start at the NEXT pending milestone, so the head queued ref no longer names

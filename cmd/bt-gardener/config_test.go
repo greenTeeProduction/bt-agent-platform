@@ -195,6 +195,21 @@ func TestWireSelectorOrdering_SelectsStrategyFromEnv(t *testing.T) {
 // applyDTOptimizerOrdering (internal/gardener/evolve_v2.go) only ever runs
 // inside evolve_v2_test.go, never in the daemon or the langchain
 // gardener_run_cycle tool.
+//
+// The three field-shape checks above would keep passing even if the DT
+// telemetry the wired Config points at were entirely unreachable in
+// production — Config.DTStatsPath (metricsDir/dt-stats.json) has no
+// production writer (the program's own title: "producer-less
+// ~/.go-bt-gardener/dt-stats.json"); the real per-tree telemetry the daemon
+// writes lives at agent.DecisionTreeStatsFile(treeID) instead
+// (internal/agent/selector_flush.go's flushSelectorTelemetry). The rest of
+// this test proves the wiring behaviorally: build a real *gardener.Gardener
+// from the wired Config and run the exported DT-diagnostics entry point
+// (Gardener.AnalyzeTreeDiagnostics) against a tree whose real per-tree stats
+// file — not Config.DTStatsPath — has telemetry favoring path "B". If the
+// pass cannot see that per-tree file, BTOptimizer.AnalyzeTree's embedded
+// OptimizeSelectors reorder is a no-op (ReorderChanges stays 0) even though
+// the three checks above still report the wiring as "enabled".
 func TestWireDTOrdering_EnablesDTStatsPath(t *testing.T) {
 	metricsDir := t.TempDir()
 
@@ -210,6 +225,53 @@ func TestWireDTOrdering_EnablesDTStatsPath(t *testing.T) {
 	}
 	if !v2Cfg.SelectorOrdering {
 		t.Error("SelectorOrdering = false — wireDTOrdering must not clobber the existing Selector-ordering wiring already present in the EvolveV2Config it's handed")
+	}
+
+	agentHome := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", agentHome)
+
+	perTreePath := agent.DecisionTreeStatsFile("dt_tree")
+	if err := os.MkdirAll(filepath.Dir(perTreePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	da := evolution.NewDTAnalyzer()
+	da.RecordHit("Router", "A", "CondA", true)
+	for i := 0; i < 8; i++ {
+		da.RecordHit("Router", "B", "CondB", true)
+	}
+	da.RecordHit("Router", "C", "CondC", true)
+	if err := da.Save(perTreePath); err != nil {
+		t.Fatalf("Save DT stats: %v", err)
+	}
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Selector", Name: "Router",
+				Children: []evolution.SerializableNode{
+					{Type: "Sequence", Name: "A", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondA"},
+					}},
+					{Type: "Sequence", Name: "B", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondB"},
+					}},
+					{Type: "Sequence", Name: "C", Children: []evolution.SerializableNode{
+						{Type: "Condition", Name: "CondC"},
+					}},
+					{Type: "AlwaysSucceed", Name: "Fallback"},
+				},
+			},
+		},
+	}
+
+	g := gardener.NewGardener(cfg)
+	report := g.AnalyzeTreeDiagnostics(gardener.TreeEntry{Name: "dt_tree", Tree: tree})
+	if report == nil {
+		t.Fatal("AnalyzeTreeDiagnostics returned a nil report")
+	}
+	if report.ReorderChanges == 0 {
+		t.Error("ReorderChanges = 0 — AnalyzeTreeDiagnostics could not see the real per-tree DT stats the daemon writes (agent.DecisionTreeStatsFile), only the producer-less Config.DTStatsPath wireDTOrdering points at; the DT-ordering pass is inert in production despite the wiring looking enabled above")
 	}
 }
 

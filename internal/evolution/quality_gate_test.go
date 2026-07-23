@@ -265,6 +265,112 @@ func TestSnapshotTreeMultiRevision(t *testing.T) {
 	}
 }
 
+// TestRestoreTreeBeforeRegressionStreak_WalksBackPastMultiCycleStreak
+// verifies the NotebookLM-research fix: when a tree has regressed for
+// several consecutive cycles, rollback must walk back past the whole streak
+// to the last known-good (peak) snapshot, not just restore the single
+// most-recent one (which RestoreTree does, and which is itself already
+// regressed partway through the streak).
+//
+// Revision history (oldest to newest), recorded via SnapshotTreeWithFitness:
+//
+//	gen1  fitness=80  (baseline)
+//	gen2  fitness=82  (improvement — this is the peak)
+//	gen3  fitness=70  (regression cycle 1 of the streak)
+//	gen4  fitness=60  (regression cycle 2 of the streak)
+//
+// Plain RestoreTree("streak_tree", ...) would return gen4 — the newest
+// snapshot, but also the worst. RestoreTreeBeforeRegressionStreak must walk
+// back past both regressed cycles to gen2, the last snapshot before the
+// decline began.
+func TestRestoreTreeBeforeRegressionStreak_WalksBackPastMultiCycleStreak(t *testing.T) {
+	tmpDir := t.TempDir()
+	snapshotDir := filepath.Join(tmpDir, "snapshots")
+
+	gen1 := &SerializableNode{Type: "Sequence", Name: "gen1"}
+	gen2 := &SerializableNode{Type: "Sequence", Name: "gen2"}
+	gen3 := &SerializableNode{Type: "Sequence", Name: "gen3"}
+	gen4 := &SerializableNode{Type: "Sequence", Name: "gen4"}
+
+	if _, err := SnapshotTreeWithFitness(gen1, "streak_tree", snapshotDir, 80.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen1) error: %v", err)
+	}
+	if _, err := SnapshotTreeWithFitness(gen2, "streak_tree", snapshotDir, 82.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen2) error: %v", err)
+	}
+	if _, err := SnapshotTreeWithFitness(gen3, "streak_tree", snapshotDir, 70.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen3) error: %v", err)
+	}
+	if _, err := SnapshotTreeWithFitness(gen4, "streak_tree", snapshotDir, 60.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen4) error: %v", err)
+	}
+
+	restored, err := RestoreTreeBeforeRegressionStreak("streak_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("RestoreTreeBeforeRegressionStreak() error: %v", err)
+	}
+	if restored.Name != "gen2" {
+		t.Errorf("RestoreTreeBeforeRegressionStreak().Name = %s, want gen2 (the peak before the 2-cycle regression streak); restoring gen4 would only undo the latest cycle, not the whole streak", restored.Name)
+	}
+
+	// Sanity check the premise: plain RestoreTree must still return the
+	// worst, most-recent revision, since it has no notion of the streak.
+	latest, err := RestoreTree("streak_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("RestoreTree() error: %v", err)
+	}
+	if latest.Name != "gen4" {
+		t.Errorf("RestoreTree().Name = %s, want gen4 (confirms RestoreTree alone cannot walk back a streak)", latest.Name)
+	}
+}
+
+// TestRestoreTreeBeforeRegressionStreak_NoStreakReturnsLatest verifies that
+// when the latest snapshot is itself an improvement (no active regression
+// streak), RestoreTreeBeforeRegressionStreak does not over-correct — it
+// returns the same revision RestoreTree would.
+func TestRestoreTreeBeforeRegressionStreak_NoStreakReturnsLatest(t *testing.T) {
+	tmpDir := t.TempDir()
+	snapshotDir := filepath.Join(tmpDir, "snapshots")
+
+	gen1 := &SerializableNode{Type: "Sequence", Name: "gen1"}
+	gen2 := &SerializableNode{Type: "Sequence", Name: "gen2"}
+
+	if _, err := SnapshotTreeWithFitness(gen1, "improving_tree", snapshotDir, 50.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen1) error: %v", err)
+	}
+	if _, err := SnapshotTreeWithFitness(gen2, "improving_tree", snapshotDir, 60.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen2) error: %v", err)
+	}
+
+	restored, err := RestoreTreeBeforeRegressionStreak("improving_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("RestoreTreeBeforeRegressionStreak() error: %v", err)
+	}
+	if restored.Name != "gen2" {
+		t.Errorf("RestoreTreeBeforeRegressionStreak().Name = %s, want gen2 (no regression streak active, so no walk-back needed)", restored.Name)
+	}
+}
+
+// TestRestoreTreeBeforeRegressionStreak_SingleRevision verifies the boundary
+// case of only one snapshot on record: there is nothing to walk back past.
+func TestRestoreTreeBeforeRegressionStreak_SingleRevision(t *testing.T) {
+	tmpDir := t.TempDir()
+	snapshotDir := filepath.Join(tmpDir, "snapshots")
+
+	gen1 := &SerializableNode{Type: "Sequence", Name: "gen1"}
+	if _, err := SnapshotTreeWithFitness(gen1, "single_tree", snapshotDir, 50.0); err != nil {
+		t.Fatalf("SnapshotTreeWithFitness(gen1) error: %v", err)
+	}
+
+	restored, err := RestoreTreeBeforeRegressionStreak("single_tree", snapshotDir)
+	if err != nil {
+		t.Fatalf("RestoreTreeBeforeRegressionStreak() error: %v", err)
+	}
+	if restored.Name != "gen1" {
+		t.Errorf("RestoreTreeBeforeRegressionStreak().Name = %s, want gen1 (only revision on record)", restored.Name)
+	}
+}
+
 // TestListRevisionsEmpty verifies ListRevisions returns no error and no
 // revisions for a tree with no snapshots.
 func TestListRevisionsEmpty(t *testing.T) {

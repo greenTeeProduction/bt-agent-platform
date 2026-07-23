@@ -89,7 +89,7 @@ type GardenerRollbackTool struct {
 
 func (t *GardenerRollbackTool) Name() string { return "gardener_rollback" }
 func (t *GardenerRollbackTool) Description() string {
-	return "Rollback a tree to its pre-mutation snapshot. Input: the tree name."
+	return "Rollback a tree to its last known-good pre-mutation snapshot, walking back past any multi-cycle regression streak. Input: the tree name."
 }
 func (t *GardenerRollbackTool) Call(_ context.Context, input string) (string, error) {
 	name := strings.TrimSpace(input)
