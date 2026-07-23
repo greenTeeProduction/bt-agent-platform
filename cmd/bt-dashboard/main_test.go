@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -313,7 +314,7 @@ func TestHandleScalability_ReflectsInjectedQueueAndRouter(t *testing.T) {
 	dashTaskQueue = q
 
 	// Inject an agent router holding a single healthy local executor.
-	local := reliability.NewLocalExecutor("local-test", func(agent, task string) (*reliability.AgentResult, error) {
+	local := reliability.NewLocalExecutor("local-test", func(_ context.Context, agent, task string) (*reliability.AgentResult, error) {
 		return &reliability.AgentResult{Agent: agent, Success: true}, nil
 	})
 	dashAgentRouter = reliability.NewAgentRouter(local)

@@ -563,6 +563,14 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	} else {
 		bb.Outcome = "self_review_seeded"
 	}
+	// A Complete review is authoritative, finished work. Without this stamp
+	// the runner's quality gate re-scored the terse report and quality-retried
+	// the tick; the retry saw no new commits (the SHA advanced above) and
+	// overwrote "Complete, N seeded" with "Skipped" — run history showed
+	// eternal skips while the real find lived only in the seed ledger
+	// (2026-07-23 03:50).
+	bb.QualityScore = 0.9
+	bb.QualityAuthoritative = true
 	summary := "(no findings)"
 	if len(lines) > 0 {
 		summary = strings.Join(lines, "\n")

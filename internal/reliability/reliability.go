@@ -3,6 +3,7 @@
 package reliability
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -1093,8 +1094,13 @@ type AgentResult struct {
 // Implementations can be local (in-process), HTTP remote, or gRPC remote,
 // enabling horizontal scaling and distributed execution.
 type AgentExecutor interface {
-	// Execute runs a task on the named agent and returns the result.
-	Execute(agent, task string) (*AgentResult, error)
+	// Execute runs a task on the named agent and returns the result. The
+	// caller's context bounds the whole attempt: executors must propagate it
+	// into the work they dispatch (in-process runs, remote calls) so a
+	// scheduler job deadline actually limits its attempts — the seam
+	// previously dropped the context and a routed attempt ran 2h29m against
+	// a 2h job ctx (2026-07-22, DLQ #239).
+	Execute(ctx context.Context, agent, task string) (*AgentResult, error)
 
 	// Health checks whether the executor backend is reachable and healthy.
 	Health() error
@@ -1107,12 +1113,12 @@ type AgentExecutor interface {
 // This is the default executor for single-node deployments.
 type LocalExecutor struct {
 	name    string
-	execute func(agent, task string) (*AgentResult, error)
+	execute func(ctx context.Context, agent, task string) (*AgentResult, error)
 	healthy func() error
 }
 
 // NewLocalExecutor creates a local executor with the given execute callback.
-func NewLocalExecutor(name string, executeFn func(agent, task string) (*AgentResult, error)) *LocalExecutor {
+func NewLocalExecutor(name string, executeFn func(ctx context.Context, agent, task string) (*AgentResult, error)) *LocalExecutor {
 	return &LocalExecutor{
 		name:    name,
 		execute: executeFn,
@@ -1127,8 +1133,8 @@ func (le *LocalExecutor) WithHealthCheck(fn func() error) *LocalExecutor {
 }
 
 // Execute runs the agent task via the local callback.
-func (le *LocalExecutor) Execute(agent, task string) (*AgentResult, error) {
-	return le.execute(agent, task)
+func (le *LocalExecutor) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
+	return le.execute(ctx, agent, task)
 }
 
 // Health checks the local executor's health.
@@ -1288,7 +1294,7 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 // increment a counter. When it exceeds failureThreshold, the executor enters
 // a cooldown period and is skipped for failureCooldown duration. A successful
 // Execute() resets the counter and clears any cooldown.
-func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
+func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
 	// Snapshot router state under lock, then release before Health() calls.
 	r.mu.Lock()
 	executors := make([]AgentExecutor, len(r.executors))
@@ -1315,7 +1321,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		}
 		if start < 0 {
 			if r.local != nil {
-				return r.local.Execute(agent, task)
+				return r.local.Execute(ctx, agent, task)
 			}
 			return nil, fmt.Errorf("no healthy executor available for agent %q", agent)
 		}
@@ -1358,6 +1364,12 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 	var lastResult *AgentResult
 	tried := 0
 	for i := 0; i < len(executors) && tried < maxFailover; i++ {
+		// The caller's context bounds the whole routed call: once it is
+		// done, starting another executor attempt just burns a full run the
+		// scheduler will already classify as failed.
+		if ctx.Err() != nil {
+			break
+		}
 		idx := (start + i) % len(executors)
 		e := executors[idx]
 
@@ -1370,7 +1382,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 			continue // skip unhealthy executors
 		}
 		tried++
-		result, err := e.Execute(agent, task)
+		result, err := e.Execute(ctx, agent, task)
 		if err == nil {
 			// Success resets failure counter and clears cooldown.
 			r.recordSuccess(idx)
@@ -1386,11 +1398,21 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 		}
 	}
 
+	// Context done: no more attempts of any kind — return what the tried
+	// executors produced (result preserved for outcome classification), or
+	// the context error if nothing ran at all.
+	if ctx.Err() != nil {
+		if lastErr != nil {
+			return lastResult, lastErr
+		}
+		return nil, fmt.Errorf("agent router: context done before any executor attempt for agent %q: %w", agent, ctx.Err())
+	}
+
 	// If we have a specific error, include it; otherwise fall back to local
 	if lastErr != nil {
 		// Try local as last resort
 		if r.local != nil {
-			result, localErr := r.local.Execute(agent, task)
+			result, localErr := r.local.Execute(ctx, agent, task)
 			if localErr == nil {
 				return result, nil
 			}
@@ -1404,7 +1426,7 @@ func (r *AgentRouter) Execute(agent, task string) (*AgentResult, error) {
 
 	// No remote executor was healthy — fall back to local
 	if r.local != nil {
-		return r.local.Execute(agent, task)
+		return r.local.Execute(ctx, agent, task)
 	}
 
 	return nil, fmt.Errorf("no healthy executor available for agent %q", agent)

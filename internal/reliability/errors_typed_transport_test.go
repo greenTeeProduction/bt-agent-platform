@@ -83,7 +83,7 @@ type failingResultExecutor struct {
 	calls int
 }
 
-func (f *failingResultExecutor) Execute(agent, task string) (*AgentResult, error) {
+func (f *failingResultExecutor) Execute(_ context.Context, agent, task string) (*AgentResult, error) {
 	f.calls++
 	return f.res, f.err
 }
@@ -98,7 +98,7 @@ func TestAgentRouterPreservesResultFromFailedExecutor(t *testing.T) {
 		err: errors.New("agent outcome: goap_fusion_rate_limited: paused"),
 	}
 	r := NewAgentRouter(exec)
-	res, err := r.Execute("a", "task")
+	res, err := r.Execute(context.Background(), "a", "task")
 	if err == nil {
 		t.Fatal("executor error must propagate")
 	}

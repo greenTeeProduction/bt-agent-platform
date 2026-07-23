@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +50,7 @@ func TestRemoteExecutor_Execute_Success(t *testing.T) {
 		BaseURL: server.URL,
 	})
 
-	result, err := exec.Execute("hermes-monitor", "Check system health")
+	result, err := exec.Execute(context.Background(), "hermes-monitor", "Check system health")
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestRemoteExecutor_Execute_FailureResponse(t *testing.T) {
 		BaseURL: server.URL,
 	})
 
-	result, err := exec.Execute("bad-agent", "bad task")
+	result, err := exec.Execute(context.Background(), "bad-agent", "bad task")
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestRemoteExecutor_Execute_HTTPError(t *testing.T) {
 		BaseURL: server.URL,
 	})
 
-	_, err := exec.Execute("any-agent", "any task")
+	_, err := exec.Execute(context.Background(), "any-agent", "any task")
 	if err == nil {
 		t.Fatal("expected error for 500 status")
 	}
@@ -132,7 +133,7 @@ func TestRemoteExecutor_Execute_InvalidJSON(t *testing.T) {
 		BaseURL: server.URL,
 	})
 
-	_, err := exec.Execute("agent", "task")
+	_, err := exec.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -273,7 +274,7 @@ func TestRemoteExecutor_WithPoolTimeoutsExecuteAndHealth(t *testing.T) {
 	})
 
 	start := time.Now()
-	_, err := exec.Execute("agent", "task")
+	_, err := exec.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected Execute to respect RemoteExecutor timeout even with pooled HTTP client")
 	}
@@ -333,7 +334,7 @@ func TestAgentRouter_RemoteExecutorMultiNodeDistribution(t *testing.T) {
 
 	seen := map[string]bool{}
 	for i := 0; i < 6; i++ {
-		result, err := router.Execute("distributed-agent", "validate multi-node routing")
+		result, err := router.Execute(context.Background(), "distributed-agent", "validate multi-node routing")
 		if err != nil {
 			t.Fatalf("router.Execute #%d: %v", i, err)
 		}
@@ -416,7 +417,7 @@ func TestAgentRouter_WithRemoteExecutor(t *testing.T) {
 	})
 
 	// Local executor as fallback
-	local := NewLocalExecutor("local", func(agent, task string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{
 			Agent:   agent,
 			Task:    task,
@@ -428,7 +429,7 @@ func TestAgentRouter_WithRemoteExecutor(t *testing.T) {
 	router := NewAgentRouter(remote)
 	router.SetLocal(local)
 
-	result, err := router.Execute("test-agent", "hello")
+	result, err := router.Execute(context.Background(), "test-agent", "hello")
 	if err != nil {
 		t.Fatalf("router.Execute(): %v", err)
 	}
@@ -454,7 +455,7 @@ func TestAgentRouter_FallsBackToLocal_WhenRemoteUnhealthy(t *testing.T) {
 		Timeout: 50 * time.Millisecond,
 	})
 
-	local := NewLocalExecutor("local-fallback", func(agent, task string) (*AgentResult, error) {
+	local := NewLocalExecutor("local-fallback", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{
 			Agent:   agent,
 			Task:    task,
@@ -466,7 +467,7 @@ func TestAgentRouter_FallsBackToLocal_WhenRemoteUnhealthy(t *testing.T) {
 	router := NewAgentRouter(remote)
 	router.SetLocal(local)
 
-	result, err := router.Execute("test-agent", "fallback test")
+	result, err := router.Execute(context.Background(), "test-agent", "fallback test")
 	if err != nil {
 		t.Fatalf("router.Execute() should succeed via fallback: %v", err)
 	}

@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -1101,11 +1102,11 @@ func TestLocalExecutor_Execute(t *testing.T) {
 		Success:      true,
 		QualityScore: 0.95,
 	}
-	exec := NewLocalExecutor("local-1", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("local-1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return expected, nil
 	})
 
-	result, err := exec.Execute("test-agent", "echo hello")
+	result, err := exec.Execute(context.Background(), "test-agent", "echo hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1121,7 +1122,7 @@ func TestLocalExecutor_Execute(t *testing.T) {
 }
 
 func TestLocalExecutor_Health(t *testing.T) {
-	exec := NewLocalExecutor("local-1", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("local-1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	if err := exec.Health(); err != nil {
@@ -1147,7 +1148,7 @@ func TestLocalExecutor_String(t *testing.T) {
 func TestAgentRouter_RoundRobinRouting(t *testing.T) {
 	callCount := map[string]int{}
 	makeExec := func(name string) *LocalExecutor {
-		return NewLocalExecutor(name, func(agent, task string) (*AgentResult, error) {
+		return NewLocalExecutor(name, func(_ context.Context, agent, task string) (*AgentResult, error) {
 			callCount[name]++
 			return &AgentResult{Agent: agent, Task: task, Success: true}, nil
 		})
@@ -1160,7 +1161,7 @@ func TestAgentRouter_RoundRobinRouting(t *testing.T) {
 
 	// Execute 6 tasks — each executor should get 2 (round-robin)
 	for i := 0; i < 6; i++ {
-		_, err := router.Execute("agent", "task")
+		_, err := router.Execute(context.Background(), "agent", "task")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1173,19 +1174,19 @@ func TestAgentRouter_RoundRobinRouting(t *testing.T) {
 }
 
 func TestAgentRouter_FallbackToLocalWhenUnhealthy(t *testing.T) {
-	healthy := NewLocalExecutor("healthy", func(_, _ string) (*AgentResult, error) {
+	healthy := NewLocalExecutor("healthy", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "remote"}, nil
 	})
 	unhealthy := NewLocalExecutor("unhealthy", nil).
 		WithHealthCheck(func() error { return errors.New("down") })
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local"}, nil
 	})
 
 	router := NewAgentRouter(unhealthy)
 	router.SetLocal(local)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1195,7 +1196,7 @@ func TestAgentRouter_FallbackToLocalWhenUnhealthy(t *testing.T) {
 
 	// Now add a healthy executor
 	router.Add(healthy)
-	result2, err := router.Execute("agent", "task2")
+	result2, err := router.Execute(context.Background(), "agent", "task2")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1206,7 +1207,7 @@ func TestAgentRouter_FallbackToLocalWhenUnhealthy(t *testing.T) {
 
 func TestAgentRouter_NoExecutorsWhenEmpty(t *testing.T) {
 	router := NewAgentRouter()
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Error("expected error when no executors available")
 	}
@@ -1280,14 +1281,14 @@ func TestAgentRouter_GracefulDegradation(t *testing.T) {
 		WithHealthCheck(func() error { return errors.New("network timeout") })
 	remote2 := NewLocalExecutor("remote-2", nil).
 		WithHealthCheck(func() error { return errors.New("connection refused") })
-	local := NewLocalExecutor("local-fallback", func(agent, task string) (*AgentResult, error) {
+	local := NewLocalExecutor("local-fallback", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "degraded but working"}, nil
 	})
 
 	router := NewAgentRouter(remote1, remote2)
 	router.SetLocal(local)
 
-	result, err := router.Execute("agent", "critical-task")
+	result, err := router.Execute(context.Background(), "agent", "critical-task")
 	if err != nil {
 		t.Fatalf("graceful degradation should not error: %v", err)
 	}
@@ -1318,15 +1319,15 @@ func TestAgentExecutor_AgentResultFields(t *testing.T) {
 
 func TestAgentRouter_FailoverOnExecuteError(t *testing.T) {
 	// Executor passes Health() but Execute() fails → router tries next executor
-	failing := NewLocalExecutor("failing", func(_, _ string) (*AgentResult, error) {
+	failing := NewLocalExecutor("failing", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("transient error")
 	})
-	working := NewLocalExecutor("working", func(agent, task string) (*AgentResult, error) {
+	working := NewLocalExecutor("working", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "from working"}, nil
 	})
 
 	router := NewAgentRouter(failing, working)
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected failover to working executor, got error: %v", err)
 	}
@@ -1337,15 +1338,15 @@ func TestAgentRouter_FailoverOnExecuteError(t *testing.T) {
 
 func TestAgentRouter_AllExecutorsFail(t *testing.T) {
 	// All executors pass Health() but Execute() fails → error returned
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("error from e1")
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("error from e2")
 	})
 
 	router := NewAgentRouter(e1, e2)
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected error when all executors fail")
 	}
@@ -1353,20 +1354,20 @@ func TestAgentRouter_AllExecutorsFail(t *testing.T) {
 
 func TestAgentRouter_FailoverThenLocalFallback(t *testing.T) {
 	// All remote executors fail Execute(), local fallback succeeds
-	remote1 := NewLocalExecutor("remote-1", func(_, _ string) (*AgentResult, error) {
+	remote1 := NewLocalExecutor("remote-1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("remote-1 failed")
 	})
-	remote2 := NewLocalExecutor("remote-2", func(_, _ string) (*AgentResult, error) {
+	remote2 := NewLocalExecutor("remote-2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("remote-2 failed")
 	})
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local fallback"}, nil
 	})
 
 	router := NewAgentRouter(remote1, remote2)
 	router.SetLocal(local)
 
-	result, err := router.Execute("agent", "critical-task")
+	result, err := router.Execute(context.Background(), "agent", "critical-task")
 	if err != nil {
 		t.Fatalf("expected local fallback after remote failures, got error: %v", err)
 	}
@@ -1377,17 +1378,17 @@ func TestAgentRouter_FailoverThenLocalFallback(t *testing.T) {
 
 func TestAgentRouter_FailoverThenLocalFailsToo(t *testing.T) {
 	// All remote + local fail → combined error
-	remote := NewLocalExecutor("remote", func(_, _ string) (*AgentResult, error) {
+	remote := NewLocalExecutor("remote", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("remote down")
 	})
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local down")
 	})
 
 	router := NewAgentRouter(remote)
 	router.SetLocal(local)
 
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected error when all executors including local fail")
 	}
@@ -1397,12 +1398,12 @@ func TestAgentRouter_FailoverNonFailoverExecutorSkipped(t *testing.T) {
 	// Unhealthy executor is skipped even during failover
 	unhealthy := NewLocalExecutor("unhealthy", nil).
 		WithHealthCheck(func() error { return errors.New("unhealthy") })
-	healthy := NewLocalExecutor("healthy", func(_, _ string) (*AgentResult, error) {
+	healthy := NewLocalExecutor("healthy", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "ok"}, nil
 	})
 
 	router := NewAgentRouter(unhealthy, healthy)
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected skip unhealthy and use healthy, got error: %v", err)
 	}
@@ -1413,17 +1414,17 @@ func TestAgentRouter_FailoverNonFailoverExecutorSkipped(t *testing.T) {
 
 func TestAgentRouter_MaxFailoverLimit(t *testing.T) {
 	// MaxFailover=1 → only try first healthy executor, even if it fails
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "e2 would work but not tried"}, nil
 	})
 
 	router := NewAgentRouter(e1, e2)
 	router.MaxFailover = 1
 
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected error because MaxFailover=1 prevents trying e2")
 	}
@@ -1433,19 +1434,19 @@ func TestAgentRouter_MaxFailoverRespected(t *testing.T) {
 	// MaxFailover=2 with 3 remote executors → only tries first 2 healthy ones,
 	// then falls back to local (which is separate, not counted in failover cap)
 	callCount := 0
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callCount++
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callCount++
 		return nil, errors.New("e2 failed")
 	})
-	e3 := NewLocalExecutor("e3", func(_, _ string) (*AgentResult, error) {
+	e3 := NewLocalExecutor("e3", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callCount++
 		return &AgentResult{Success: true}, nil
 	})
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local"}, nil
 	})
 
@@ -1455,7 +1456,7 @@ func TestAgentRouter_MaxFailoverRespected(t *testing.T) {
 
 	// e1 and e2 are tried (both fail), e3 is NOT tried (MaxFailover=2),
 	// then fallback to local which succeeds.
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected local fallback to succeed, got error: %v", err)
 	}
@@ -1471,15 +1472,15 @@ func TestAgentRouter_FailoverMixedHealthyAndErrors(t *testing.T) {
 	// Mixed: unhealthy, error-after-Execute, and working executor
 	unhealthy := NewLocalExecutor("unhealthy", nil).
 		WithHealthCheck(func() error { return errors.New("down") })
-	flaky := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	flaky := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("flaky crashed")
 	})
-	working := NewLocalExecutor("working", func(_, _ string) (*AgentResult, error) {
+	working := NewLocalExecutor("working", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "finally"}, nil
 	})
 
 	router := NewAgentRouter(unhealthy, flaky, working)
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected failover through unhealthy→flaky→working, got: %v", err)
 	}
@@ -1491,10 +1492,10 @@ func TestAgentRouter_FailoverMixedHealthyAndErrors(t *testing.T) {
 // ─── Per-Executor Failure Tracking (Zombie Detection) ────────────────────
 
 func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
-	exec := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("simulated failure")
 	})
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	})
 	router := NewAgentRouter(exec)
@@ -1504,7 +1505,7 @@ func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
 
 	// Execute 3 times — should all fail but not yet in cooldown.
 	for i := 0; i < 3; i++ {
-		_, err := router.Execute("agent", "task")
+		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d: expected error", i)
 		}
@@ -1520,7 +1521,7 @@ func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
 	}
 
 	// 4th attempt: executor is cooling down, fallback to local (which also fails).
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Fatal("expected error when all executors in cooldown")
 	}
@@ -1533,13 +1534,13 @@ func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
 
 func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 	shouldFail := true
-	exec := NewLocalExecutor("recoverable", func(agent, task string) (*AgentResult, error) {
+	exec := NewLocalExecutor("recoverable", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		if shouldFail {
 			return nil, errors.New("transient error")
 		}
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "recovered"}, nil
 	})
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	})
 	router := NewAgentRouter(exec)
@@ -1548,7 +1549,7 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 
 	// Fail 2 times (below threshold).
 	for i := 0; i < 2; i++ {
-		_, err := router.Execute("agent", "task")
+		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d: expected error", i)
 		}
@@ -1560,7 +1561,7 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 
 	// Now succeed — should reset counter.
 	shouldFail = false
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
@@ -1577,7 +1578,7 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 	// Failing again should start from 0.
 	shouldFail = true
 	for i := 0; i < 3; i++ {
-		_, err := router.Execute("agent", "task")
+		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d after reset: expected error", i)
 		}
@@ -1592,11 +1593,11 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 }
 
 func TestAgentRouter_FailureTracking_CoolDownExpiry(t *testing.T) {
-	exec := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("failure")
 	})
 	router := NewAgentRouter(exec)
-	router.SetLocal(NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	}))
 	router.SetFailureThreshold(2)
@@ -1604,7 +1605,7 @@ func TestAgentRouter_FailureTracking_CoolDownExpiry(t *testing.T) {
 
 	// Fail twice to trigger cooldown.
 	for i := 0; i < 2; i++ {
-		_, _ = router.Execute("agent", "task")
+		_, _ = router.Execute(context.Background(), "agent", "task")
 	}
 
 	// Executor should be cooling down.
@@ -1628,10 +1629,10 @@ func TestAgentRouter_FailureTracking_CoolDownExpiry(t *testing.T) {
 }
 
 func TestAgentRouter_FailureTracking_HealthyExecutorsExcludesCooling(t *testing.T) {
-	healthy := NewLocalExecutor("healthy", func(agent, task string) (*AgentResult, error) {
+	healthy := NewLocalExecutor("healthy", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true}, nil
 	})
-	flaky := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	flaky := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("failure")
 	})
 
@@ -1639,12 +1640,12 @@ func TestAgentRouter_FailureTracking_HealthyExecutorsExcludesCooling(t *testing.
 	router.SetFailureThreshold(1)
 
 	// Fail once on flaky to trigger cooldown.
-	_, _ = router.Execute("agent", "task") // this hits healthy, succeeds
+	_, _ = router.Execute(context.Background(), "agent", "task") // this hits healthy, succeeds
 	// Need to route specifically to flaky. We'll use Execute with failover.
 	// Create a router with only flaky to test HealthyExecutors.
 	router2 := NewAgentRouter(flaky)
 	router2.SetFailureThreshold(1)
-	_, _ = router2.Execute("agent", "task") // triggers cooldown on flaky
+	_, _ = router2.Execute(context.Background(), "agent", "task") // triggers cooldown on flaky
 
 	healthyExecs := router2.HealthyExecutors()
 	if len(healthyExecs) != 0 {
@@ -1653,24 +1654,24 @@ func TestAgentRouter_FailureTracking_HealthyExecutorsExcludesCooling(t *testing.
 }
 
 func TestAgentRouter_FailureTracking_ExecutorHealthStatus(t *testing.T) {
-	exec1 := NewLocalExecutor("worker-1", func(_, _ string) (*AgentResult, error) {
+	exec1 := NewLocalExecutor("worker-1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("worker-1 failure")
 	})
-	exec2 := NewLocalExecutor("worker-2", func(agent, task string) (*AgentResult, error) {
+	exec2 := NewLocalExecutor("worker-2", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "ok"}, nil
 	})
 
 	router := NewAgentRouter(exec1, exec2)
 	// Separate local to avoid double-counting on fallback.
-	router.SetLocal(NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	}))
 	router.SetFailureThreshold(2)
 
 	// worker-1: fail twice → cooldown
-	_, _ = router.Execute("agent", "task1") // round-robin: hits exec1, fails → failover to exec2 (success)
-	_, _ = router.Execute("agent", "task2") // round-robin: hits exec2 → success
-	_, _ = router.Execute("agent", "task3") // round-robin: hits exec1, fails → failover to exec2 (success)
+	_, _ = router.Execute(context.Background(), "agent", "task1") // round-robin: hits exec1, fails → failover to exec2 (success)
+	_, _ = router.Execute(context.Background(), "agent", "task2") // round-robin: hits exec2 → success
+	_, _ = router.Execute(context.Background(), "agent", "task3") // round-robin: hits exec1, fails → failover to exec2 (success)
 
 	status := router.ExecutorHealthStatus()
 	if len(status) != 2 {
@@ -1702,18 +1703,18 @@ func TestAgentRouter_FailureTracking_ExecutorHealthStatus(t *testing.T) {
 }
 
 func TestAgentRouter_FailureTracking_ResetExecutor(t *testing.T) {
-	exec := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("failure")
 	})
 	router := NewAgentRouter(exec)
-	router.SetLocal(NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	}))
 	router.SetFailureThreshold(2)
 
 	// Trigger cooldown.
-	_, _ = router.Execute("agent", "task")
-	_, _ = router.Execute("agent", "task")
+	_, _ = router.Execute(context.Background(), "agent", "task")
+	_, _ = router.Execute(context.Background(), "agent", "task")
 
 	status := router.ExecutorHealthStatus()
 	if !status[0].CoolingDown {
@@ -1743,17 +1744,17 @@ func TestAgentRouter_FailureTracking_DefaultThreshold(t *testing.T) {
 }
 
 func TestAgentRouter_FailureTracking_String_WithFailures(t *testing.T) {
-	exec := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("failure")
 	})
 	router := NewAgentRouter(exec)
-	router.SetLocal(NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	}))
 	router.SetFailureThreshold(1)
 
 	// Trigger a failure.
-	_, _ = router.Execute("agent", "task")
+	_, _ = router.Execute(context.Background(), "agent", "task")
 
 	s := router.String()
 	if !strings.Contains(s, "failures=1") {
@@ -1767,11 +1768,11 @@ func TestAgentRouter_FailureTracking_String_WithFailures(t *testing.T) {
 func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
 	// Two executors: flaky (will cool down) and working.
 	flakyCount := 0
-	flaky := NewLocalExecutor("flaky", func(_, _ string) (*AgentResult, error) {
+	flaky := NewLocalExecutor("flaky", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		flakyCount++
 		return nil, errors.New("flaky failure")
 	})
-	working := NewLocalExecutor("working", func(agent, task string) (*AgentResult, error) {
+	working := NewLocalExecutor("working", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "worked"}, nil
 	})
 
@@ -1779,7 +1780,7 @@ func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
 	router.SetFailureThreshold(2)
 
 	// First attempt hits flaky (round-robin), fails. Failover to working succeeds.
-	result, err := router.Execute("agent", "task1")
+	result, err := router.Execute(context.Background(), "agent", "task1")
 	if err != nil {
 		t.Fatalf("expected failover to working, got: %v", err)
 	}
@@ -1792,7 +1793,7 @@ func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
 
 	// Second attempt: flaky fails again (2nd consecutive → cooldown).
 	// Then failover to working.
-	result, err = router.Execute("agent", "task2")
+	result, err = router.Execute(context.Background(), "agent", "task2")
 	if err != nil {
 		t.Fatalf("expected failover to working (attempt 2), got: %v", err)
 	}
@@ -1802,7 +1803,7 @@ func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
 
 	// Third attempt: flaky is now in cooldown → skipped entirely.
 	// Working handles it directly.
-	_, err = router.Execute("agent", "task3")
+	_, err = router.Execute(context.Background(), "agent", "task3")
 	if err != nil {
 		t.Fatalf("expected working to handle after flaky cooldown, got: %v", err)
 	}
@@ -1813,11 +1814,11 @@ func TestAgentRouter_FailureTracking_FailoverSkipsCooling(t *testing.T) {
 }
 
 func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
-	exec := NewLocalExecutor("shared", func(_, _ string) (*AgentResult, error) {
+	exec := NewLocalExecutor("shared", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("failure")
 	})
 	router := NewAgentRouter(exec)
-	router.SetLocal(NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("local fail")
 	}))
 	router.SetFailureThreshold(200) // high threshold so we test counter safety
@@ -1827,7 +1828,7 @@ func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = router.Execute("agent", "task")
+			_, _ = router.Execute(context.Background(), "agent", "task")
 		}()
 	}
 	wg.Wait()
@@ -1849,7 +1850,7 @@ func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
 // installed as the fallback. Without this constructor the RemoteExecutor +
 // AgentRouter substrate stays wired by zero production binaries.
 func TestNewRouterFromEndpoints_BuildsRemoteExecutorsWithLocalFallback(t *testing.T) {
-	local := NewLocalExecutor("local-node", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local-node", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local"}, nil
 	})
 	endpoints := []AgentEndpoint{
@@ -1893,7 +1894,7 @@ func TestNewRouterFromEndpoints_BuildsRemoteExecutorsWithLocalFallback(t *testin
 // working router that routes every task to the local executor, so single-node
 // deployments behave exactly as before adopting the substrate.
 func TestNewRouterFromEndpoints_EmptyRoutesToLocal(t *testing.T) {
-	local := NewLocalExecutor("solo", func(agent, task string) (*AgentResult, error) {
+	local := NewLocalExecutor("solo", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true, Output: "local-only"}, nil
 	})
 
@@ -1905,7 +1906,7 @@ func TestNewRouterFromEndpoints_EmptyRoutesToLocal(t *testing.T) {
 		t.Fatalf("expected 0 remote executors for empty endpoints, got %d", n)
 	}
 
-	res, err := router.Execute("agent", "task")
+	res, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("empty router must route to local without error, got %v", err)
 	}

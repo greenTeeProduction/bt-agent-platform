@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -55,7 +56,7 @@ type biddingExecutor struct {
 
 func (b *biddingExecutor) Bid(_, _ string) float64 { return b.bid }
 
-func newBiddingExecutor(name string, bid float64, fn func(agent, task string) (*AgentResult, error)) *biddingExecutor {
+func newBiddingExecutor(name string, bid float64, fn func(_ context.Context, agent, task string) (*AgentResult, error)) *biddingExecutor {
 	return &biddingExecutor{LocalExecutor: NewLocalExecutor(name, fn), bid: bid}
 }
 
@@ -73,8 +74,8 @@ func TestAuction_SetAndGetStrategy(t *testing.T) {
 
 func TestAuction_LowestBidderWins(t *testing.T) {
 	var got string
-	mark := func(name string) func(string, string) (*AgentResult, error) {
-		return func(agent, task string) (*AgentResult, error) {
+	mark := func(name string) func(context.Context, string, string) (*AgentResult, error) {
+		return func(_ context.Context, agent, task string) (*AgentResult, error) {
 			got = name
 			return &AgentResult{Agent: agent, Task: task, Success: true, Output: name}, nil
 		}
@@ -86,7 +87,7 @@ func TestAuction_LowestBidderWins(t *testing.T) {
 	router := NewAgentRouter(high, low, mid)
 	router.SetStrategy(RoutingAuction)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,17 +99,17 @@ func TestAuction_LowestBidderWins(t *testing.T) {
 func TestAuction_AbstainingExecutorExcluded(t *testing.T) {
 	// A negative bid means the executor declines; it must not be selected even
 	// though it appears first.
-	abstain := newBiddingExecutor("abstain", -1.0, func(_, _ string) (*AgentResult, error) {
+	abstain := newBiddingExecutor("abstain", -1.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "abstain"}, nil
 	})
-	willing := newBiddingExecutor("willing", 3.0, func(_, _ string) (*AgentResult, error) {
+	willing := newBiddingExecutor("willing", 3.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "willing"}, nil
 	})
 
 	router := NewAgentRouter(abstain, willing)
 	router.SetStrategy(RoutingAuction)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestAuction_AbstainingExecutorExcluded(t *testing.T) {
 func TestAuction_AllAbstainFallsBackToLocal(t *testing.T) {
 	a1 := newBiddingExecutor("a1", -1.0, nil)
 	a2 := newBiddingExecutor("a2", -1.0, nil)
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local-fallback"}, nil
 	})
 
@@ -128,7 +129,7 @@ func TestAuction_AllAbstainFallsBackToLocal(t *testing.T) {
 	router.SetStrategy(RoutingAuction)
 	router.SetLocal(local)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected local fallback, got error: %v", err)
 	}
@@ -141,11 +142,11 @@ func TestAuction_DefaultBidUsesLoadAndFailures(t *testing.T) {
 	// Plain LocalExecutors (no Bidder) get a default bid. With equal zero load
 	// and no failures, all bids tie at 0 and the first healthy executor wins.
 	var got string
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		got = "e1"
 		return &AgentResult{Success: true}, nil
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		got = "e2"
 		return &AgentResult{Success: true}, nil
 	})
@@ -153,7 +154,7 @@ func TestAuction_DefaultBidUsesLoadAndFailures(t *testing.T) {
 	router := NewAgentRouter(e1, e2)
 	router.SetStrategy(RoutingAuction)
 
-	if _, err := router.Execute("agent", "task"); err != nil {
+	if _, err := router.Execute(context.Background(), "agent", "task"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != "e1" {
@@ -163,18 +164,18 @@ func TestAuction_DefaultBidUsesLoadAndFailures(t *testing.T) {
 
 func TestAuction_SkipsUnhealthyBidder(t *testing.T) {
 	// Lowest bidder is unhealthy and must be skipped despite the better bid.
-	unhealthy := newBiddingExecutor("unhealthy", 1.0, func(_, _ string) (*AgentResult, error) {
+	unhealthy := newBiddingExecutor("unhealthy", 1.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "unhealthy"}, nil
 	})
 	unhealthy.WithHealthCheck(func() error { return errors.New("down") })
-	healthy := newBiddingExecutor("healthy", 9.0, func(_, _ string) (*AgentResult, error) {
+	healthy := newBiddingExecutor("healthy", 9.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "healthy"}, nil
 	})
 
 	router := NewAgentRouter(unhealthy, healthy)
 	router.SetStrategy(RoutingAuction)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,17 +187,17 @@ func TestAuction_SkipsUnhealthyBidder(t *testing.T) {
 func TestAuction_FailoverFromWinner(t *testing.T) {
 	// The auction winner's Execute() fails; the router should fail over to the
 	// next healthy executor.
-	winner := newBiddingExecutor("winner", 1.0, func(_, _ string) (*AgentResult, error) {
+	winner := newBiddingExecutor("winner", 1.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("winner failed")
 	})
-	backup := newBiddingExecutor("backup", 5.0, func(_, _ string) (*AgentResult, error) {
+	backup := newBiddingExecutor("backup", 5.0, func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "backup"}, nil
 	})
 
 	router := NewAgentRouter(winner, backup)
 	router.SetStrategy(RoutingAuction)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected failover to backup, got error: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 	var mu sync.Mutex
 	callCount := map[string]int{}
 	makeExec := func(name string) *LocalExecutor {
-		return NewLocalExecutor(name, func(agent, task string) (*AgentResult, error) {
+		return NewLocalExecutor(name, func(_ context.Context, agent, task string) (*AgentResult, error) {
 			mu.Lock()
 			callCount[name]++
 			mu.Unlock()
@@ -237,7 +238,7 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = router.Execute("agent", "task")
+			_, _ = router.Execute(context.Background(), "agent", "task")
 		}()
 	}
 	wg.Wait()
@@ -273,7 +274,7 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 
 func TestLeastConnections_SkipsUnhealthy(t *testing.T) {
 	callCount := map[string]int{}
-	healthy := NewLocalExecutor("healthy", func(_, _ string) (*AgentResult, error) {
+	healthy := NewLocalExecutor("healthy", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callCount["healthy"]++
 		return &AgentResult{Success: true}, nil
 	})
@@ -283,7 +284,7 @@ func TestLeastConnections_SkipsUnhealthy(t *testing.T) {
 	router := NewAgentRouter(unhealthy, healthy)
 	router.SetStrategy(RoutingLeastConnections)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -303,7 +304,7 @@ func TestLeastConnections_AllUnhealthyFallsBackToLocal(t *testing.T) {
 		WithHealthCheck(func() error { return errors.New("down") })
 	unhealthy2 := NewLocalExecutor("u2", nil).
 		WithHealthCheck(func() error { return errors.New("down") })
-	local := NewLocalExecutor("local", func(_, _ string) (*AgentResult, error) {
+	local := NewLocalExecutor("local", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "local-fallback"}, nil
 	})
 
@@ -311,7 +312,7 @@ func TestLeastConnections_AllUnhealthyFallsBackToLocal(t *testing.T) {
 	router.SetStrategy(RoutingLeastConnections)
 	router.SetLocal(local)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected local fallback, got error: %v", err)
 	}
@@ -334,10 +335,10 @@ func TestLeastConnections_ActiveCounts(t *testing.T) {
 		t.Errorf("expected empty activeCounts with no executors, got %v", counts)
 	}
 
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e1)
@@ -355,12 +356,12 @@ func TestLeastConnections_ActiveCounts(t *testing.T) {
 func TestLeastConnections_TieGoesToFirst(t *testing.T) {
 	// When all executors have equal active counts, the first healthy one should win.
 	callOrder := []string{}
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callOrder = append(callOrder, "e1")
 		time.Sleep(20 * time.Millisecond) // hold the connection
 		return &AgentResult{Success: true}, nil
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		callOrder = append(callOrder, "e2")
 		time.Sleep(20 * time.Millisecond)
 		return &AgentResult{Success: true}, nil
@@ -372,14 +373,14 @@ func TestLeastConnections_TieGoesToFirst(t *testing.T) {
 	// Sequential calls should alternate because each call holds a connection.
 	// First call: both have 0 active → picks e1 (first). e1 active=1.
 	// Second call: e1 active=1, e2 active=0 → picks e2.
-	_, err := router.Execute("agent", "task1")
+	_, err := router.Execute(context.Background(), "agent", "task1")
 	if err != nil {
 		t.Fatalf("call 1: %v", err)
 	}
 	// Wait for the first request to complete (active count decremented).
 	time.Sleep(30 * time.Millisecond)
 
-	_, err = router.Execute("agent", "task2")
+	_, err = router.Execute(context.Background(), "agent", "task2")
 	if err != nil {
 		t.Fatalf("call 2: %v", err)
 	}
@@ -396,17 +397,17 @@ func TestLeastConnections_TieGoesToFirst(t *testing.T) {
 func TestLeastConnections_FailoverToNextHealthy(t *testing.T) {
 	// When the least-connections executor's Execute() fails, router should
 	// failover to the next healthy executor (second-least connections).
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "from e2"}, nil
 	})
 
 	router := NewAgentRouter(e1, e2)
 	router.SetStrategy(RoutingLeastConnections)
 
-	result, err := router.Execute("agent", "task")
+	result, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("expected failover to e2, got error: %v", err)
 	}
@@ -416,13 +417,13 @@ func TestLeastConnections_FailoverToNextHealthy(t *testing.T) {
 }
 
 func TestLeastConnections_RespectsMaxFailover(t *testing.T) {
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("e1 failed")
 	})
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return nil, errors.New("e2 failed")
 	})
-	e3 := NewLocalExecutor("e3", func(_, _ string) (*AgentResult, error) {
+	e3 := NewLocalExecutor("e3", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true, Output: "from e3"}, nil
 	})
 
@@ -433,7 +434,7 @@ func TestLeastConnections_RespectsMaxFailover(t *testing.T) {
 	// Start is least-connections → e1 (both at 0).
 	// e1 fails → tries e2 (failover).
 	// e2 fails → MaxFailover=2 reached, so e3 is NOT tried.
-	_, err := router.Execute("agent", "task")
+	_, err := router.Execute(context.Background(), "agent", "task")
 	if err == nil {
 		t.Error("expected error when MaxFailover exhausted before reaching healthy executor")
 	}
@@ -443,7 +444,7 @@ func TestLeastConnections_DynamicExecutorAddition(t *testing.T) {
 	router := NewAgentRouter()
 	router.SetStrategy(RoutingLeastConnections)
 
-	e1 := NewLocalExecutor("e1", func(_, _ string) (*AgentResult, error) {
+	e1 := NewLocalExecutor("e1", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e1)
@@ -451,7 +452,7 @@ func TestLeastConnections_DynamicExecutorAddition(t *testing.T) {
 		t.Errorf("expected 1 active count after adding executor, got %d", len(router.ActiveCounts()))
 	}
 
-	e2 := NewLocalExecutor("e2", func(_, _ string) (*AgentResult, error) {
+	e2 := NewLocalExecutor("e2", func(_ context.Context, _, _ string) (*AgentResult, error) {
 		return &AgentResult{Success: true}, nil
 	})
 	router.Add(e2)

@@ -251,7 +251,7 @@ func main() {
 	dashTaskQueue = reliability.NewTaskQueue(getHomeDir() + "/.go-bt-evolve/task_queue.json")
 	dashAgentRouter = reliability.NewAgentRouter(reliability.NewLocalExecutor(
 		"dashboard-local",
-		func(agentName, task string) (*reliability.AgentResult, error) {
+		func(_ context.Context, agentName, task string) (*reliability.AgentResult, error) {
 			res, err := newAgentExecutor().RunTaskResult(agentName, task, "")
 			return dashboardLocalAgentResult(agentName, task, res, err)
 		},

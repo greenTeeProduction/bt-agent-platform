@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -182,7 +183,7 @@ func TestRemoteExecutor_WithConnPool(t *testing.T) {
 		Pool:    pool,
 	})
 
-	result, err := exec.Execute("test-agent", "test task")
+	result, err := exec.Execute(context.Background(), "test-agent", "test task")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -231,7 +232,7 @@ func TestRemoteExecutor_SharedPoolAcrossExecutors(t *testing.T) {
 
 	// Execute on all three
 	for _, exec := range []*RemoteExecutor{exec1, exec2, exec3} {
-		result, err := exec.Execute("shared", "task")
+		result, err := exec.Execute(context.Background(), "shared", "task")
 		if err != nil {
 			t.Errorf("%s: Execute failed: %v", exec.name, err)
 		}
@@ -253,7 +254,7 @@ func TestRemoteExecutor_WithoutConnPool_UsesPrivateClient(t *testing.T) {
 		BaseURL: server.URL,
 	})
 
-	result, err := exec.Execute("agent", "task")
+	result, err := exec.Execute(context.Background(), "agent", "task")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -532,7 +533,7 @@ func TestAgentRouter_WithSharedPool(t *testing.T) {
 	router.Add(e2)
 	router.Add(e3)
 
-	result, err := router.Execute("pooled-agent", "shared task")
+	result, err := router.Execute(context.Background(), "pooled-agent", "shared task")
 	if err != nil {
 		t.Fatalf("router.Execute failed: %v", err)
 	}
@@ -581,7 +582,7 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := router.Execute("lc", "task")
+			_, err := router.Execute(context.Background(), "lc", "task")
 			if err != nil {
 				errs <- err
 			}
@@ -611,7 +612,7 @@ func TestRemoteExecutor_BackwardCompat_NilPool(t *testing.T) {
 		Timeout: 5 * time.Second,
 	})
 
-	result, err := exec.Execute("bc-agent", "bc task")
+	result, err := exec.Execute(context.Background(), "bc-agent", "bc task")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}

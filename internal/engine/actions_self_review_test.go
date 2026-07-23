@@ -122,6 +122,37 @@ func TestRunSelfReview_SeedsProgramsForConfirmedFindings(t *testing.T) {
 	}
 }
 
+// A Complete review — seeded or clean — is authoritative, finished work.
+// Without the quality stamp the runner's quality gate re-scored the terse
+// report, quality-retried the tick, and the retry found no new commits (the
+// SHA had already advanced) — OVERWRITING "Complete, 1 seeded" with
+// "Skipped", so run history showed eternal skips while the real find lived
+// only in the seed ledger (2026-07-23 03:50).
+func TestRunSelfReview_CompleteStampsAuthoritativeQuality(t *testing.T) {
+	scanner := func(repoDir, lastSHA string) (string, string, string, string, error) {
+		return "abc1234 superpowers: apply verified run x", "diff body", "abc123", "beginning..HEAD", nil
+	}
+
+	for name, output := range map[string]string{
+		"seeded": "[" + validFinding1 + "]",
+		"clean":  "[]",
+	} {
+		stateDir, _ := withTempSelfReview(t)
+		deps := selfReviewTestDeps(stateDir, &fakeReviewClaudeRunner{output: output}, scanner)
+		bb := &Blackboard{Task: "self-review"}
+
+		if got := runSelfReview(bb, deps); got != 1 {
+			t.Fatalf("%s: status = %d, want 1; result=%s", name, got, bb.Result)
+		}
+		if !bb.QualityAuthoritative {
+			t.Fatalf("%s: QualityAuthoritative unset — the quality gate re-scores the result and a quality retry overwrites the Complete report with a Skip", name)
+		}
+		if bb.QualityScore < 0.5 {
+			t.Fatalf("%s: QualityScore = %v, want >= 0.5 so the authoritative result passes the gate", name, bb.QualityScore)
+		}
+	}
+}
+
 func TestRunSelfReview_ReviewFailureDoesNotAdvanceSHA(t *testing.T) {
 	stateDir, _ := withTempSelfReview(t)
 	if err := saveSelfReviewState(stateDir, selfReviewState{LastReviewedSHA: "prevsha"}); err != nil {

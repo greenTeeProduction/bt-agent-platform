@@ -132,7 +132,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	// ----------------------------------------------------------------
 	seenOutputs := make(map[string]bool)
 	for i := 0; i < 6; i++ {
-		result, err := router.Execute("test-agent", "round-robin validation")
+		result, err := router.Execute(context.Background(), "test-agent", "round-robin validation")
 		if err != nil {
 			t.Fatalf("phase 2: router.Execute #%d failed: %v", i, err)
 		}
@@ -177,7 +177,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 
 	// Run 3 more tasks — they should all hit node-beta and node-gamma
 	for i := 0; i < 3; i++ {
-		result, err := router.Execute("test-agent", "fallback validation")
+		result, err := router.Execute(context.Background(), "test-agent", "fallback validation")
 		if err != nil {
 			// Router should fallback, but if ALL are unhealthy it might error
 			t.Logf("phase 3: router.Execute #%d got error (may be fallback race): %v", i, err)
@@ -321,7 +321,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
-			_, err := router.Execute("concurrent-agent", "concurrent execution task")
+			_, err := router.Execute(context.Background(), "concurrent-agent", "concurrent execution task")
 			if err != nil {
 				errs <- err
 			}
@@ -356,7 +356,7 @@ func TestMultiNode_ScalabilityStatusRouterReporting(t *testing.T) {
 	})
 
 	router := NewAgentRouter(unreachable)
-	router.SetLocal(NewLocalExecutor("local-fallback", func(agent, task string) (*AgentResult, error) {
+	router.SetLocal(NewLocalExecutor("local-fallback", func(_ context.Context, agent, task string) (*AgentResult, error) {
 		return &AgentResult{Agent: agent, Task: task, Success: true}, nil
 	}))
 

@@ -55,7 +55,7 @@ func NewRemoteExecutor(cfg RemoteExecutorConfig) *RemoteExecutor {
 
 // Execute sends the agent task to the remote dashboard's execution endpoint.
 // POST {baseURL}/api/agents/execute with JSON body {"agent":"...", "task":"..."}
-func (re *RemoteExecutor) Execute(agent, task string) (*AgentResult, error) {
+func (re *RemoteExecutor) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
 	body := map[string]string{
 		"agent": agent,
 		"task":  task,
@@ -65,7 +65,10 @@ func (re *RemoteExecutor) Execute(agent, task string) (*AgentResult, error) {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), re.timeout)
+	// Derive the per-call timeout from the caller's context so an outer job
+	// deadline caps the remote call; re.timeout still bounds a call whose
+	// caller context has no (or a later) deadline.
+	ctx, cancel := context.WithTimeout(ctx, re.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, re.baseURL+"/api/agents/execute", bytes.NewReader(data))
 	if err != nil {
