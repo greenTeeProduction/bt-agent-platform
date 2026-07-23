@@ -96,18 +96,28 @@ func Run(ctx context.Context, caller ModelCaller, cfg Config, prompt string, too
 	if !cfg.Enabled {
 		return Result{Status: "disabled"}, fmt.Errorf("fusion disabled")
 	}
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
-	responses, err := RunPanel(ctx, caller, cfg, prompt, tools)
+
+	panelCtx, panelCancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer panelCancel()
+	responses, err := RunPanel(panelCtx, caller, cfg, prompt, tools)
 	if err != nil {
 		return Result{Status: "error", Responses: responses}, err
 	}
-	analysis, err := Judge(ctx, caller, cfg, prompt, successfulResponses(responses))
+
+	// Judge and Synthesize each get their own cfg.Timeout budget derived from
+	// the original caller ctx, not the panel's already-shrunk context — a slow
+	// RunPanel stage must not starve their own retry policies.
+	judgeCtx, judgeCancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer judgeCancel()
+	analysis, err := Judge(judgeCtx, caller, cfg, prompt, successfulResponses(responses))
 	if err != nil {
 		return Result{Status: "error", Responses: responses}, err
 	}
 	result := Result{Status: "ok", Analysis: analysis, Responses: responses}
-	final, err := Synthesize(ctx, caller, cfg, prompt, result)
+
+	synthCtx, synthCancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer synthCancel()
+	final, err := Synthesize(synthCtx, caller, cfg, prompt, result)
 	if err != nil {
 		final = fallbackFinal(prompt, result)
 	}

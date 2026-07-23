@@ -20,7 +20,11 @@ type Config struct {
 	MaxToolCalls        int      `json:"max_tool_calls"`
 	MaxCompletionTokens int      `json:"max_completion_tokens"`
 	Temperature         *float64 `json:"temperature,omitempty"`
-	Timeout             time.Duration
+	// Timeout is a per-stage budget: Run derives a fresh context.WithTimeout
+	// from the original caller ctx for each of RunPanel, Judge, and
+	// Synthesize, so a slow panel stage can never starve the deadline
+	// available to Judge/Synthesize's own retry policies.
+	Timeout time.Duration
 }
 
 func DefaultConfig() Config {
