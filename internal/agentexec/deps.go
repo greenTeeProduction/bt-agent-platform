@@ -15,7 +15,7 @@ import (
 func NewRunDeps() (*agent.RunDeps, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		cfg = &config.Config{}
+		cfg = config.DefaultConfig()
 	}
 
 	refPath, err := ReflectionsPath()
