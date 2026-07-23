@@ -34,6 +34,9 @@ var driftTreeFn = defaultDriftTree
 // defaultDriftTree shells `git -C <repoDir> rev-parse <rev>^{tree}` with the
 // same env scrubbing as defaultDriftHead.
 func defaultDriftTree(repoDir, rev string) (string, error) {
+	// #nosec G204 -- repoDir is internal deploy config and rev is a git-resolved
+	// SHA (from driftHeadFn or a build-time stamp), never user/network input;
+	// exec.Command takes an argument list, so there is no shell to inject into.
 	cmd := exec.Command("git", "-C", repoDir, "rev-parse", rev+"^{tree}")
 	cmd.Env = scrubGitEnv()
 	out, err := cmd.Output()
@@ -245,7 +248,7 @@ type adoptionStamp struct {
 // failure only costs an extra restart later.
 func writeAdoptionStamp(unit, head string) {
 	dir := resolveAdoptionStampDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return
 	}
 	_ = util.SaveJSONAtomic(filepath.Join(dir, unit+".json"), adoptionStamp{Head: head, AdoptedAt: time.Now().UTC()})
@@ -253,6 +256,9 @@ func writeAdoptionStamp(unit, head string) {
 
 // adoptionStampHead returns the head unit last adopted, or "" when unknown.
 func adoptionStampHead(unit string) string {
+	// #nosec G304 -- unit is always one of the fixed RebuildTarget.Unit literals
+	// declared in rebuild.go ("bt-agent", "bt-gardener", "bt-dashboard"), never
+	// user/network input.
 	b, err := os.ReadFile(filepath.Join(resolveAdoptionStampDir(), unit+".json"))
 	if err != nil {
 		return ""
