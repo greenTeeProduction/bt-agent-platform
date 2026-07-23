@@ -51,6 +51,47 @@ func TestCodeReviewSuite_Routing(t *testing.T) {
 	}
 }
 
+// TestRunSuite_PathMatchRate_ReflectsExpectedPath pins the not-yet-existing
+// path-match wiring: RunSuite must compare the detected path (Result.Path)
+// against each TaskCase's declared ExpectedPath/PossiblePaths and surface
+// both a per-result PathMatched bool and a suite-level PathMatchRate,
+// mirroring the existing PathCoverage field.
+func TestRunSuite_PathMatchRate_ReflectsExpectedPath(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	mock := DefaultMock()
+	metrics := RunSuite(tree, GoDevSuite(), mock)
+
+	if metrics.PathMatchRate <= 0 {
+		t.Errorf("PathMatchRate = %.2f, want > 0", metrics.PathMatchRate)
+	}
+
+	var found bool
+	for _, r := range metrics.Results {
+		if r.Task == "build and compile the Go project" {
+			found = true
+			if r.Path != "BuildPath" {
+				t.Errorf("Path = %q, want %q", r.Path, "BuildPath")
+			}
+			if !r.PathMatched {
+				t.Errorf("PathMatched = false for task with matching ExpectedPath %q and actual Path %q", "BuildPath", r.Path)
+			}
+		}
+	}
+	if !found {
+		t.Fatal(`expected a result for task "build and compile the Go project"`)
+	}
+
+	// Direct unit check on pathMatches: a PossiblePaths hit should match, an
+	// unrelated path should not.
+	tc := TaskCase{Task: "x", ExpectedPath: "A", PossiblePaths: []string{"A", "B"}}
+	if !pathMatches(tc, "B") {
+		t.Error("pathMatches(tc, \"B\") = false, want true (B is in PossiblePaths)")
+	}
+	if pathMatches(tc, "C") {
+		t.Error("pathMatches(tc, \"C\") = true, want false (C is not ExpectedPath or in PossiblePaths)")
+	}
+}
+
 func TestABTest_IncreaseRetries_ImprovesSuccessRate(t *testing.T) {
 	tree := evolution.GoDeveloperTree()
 	suite := GoDevSuite()
@@ -162,6 +203,82 @@ func TestScoreMutation_BadMutation_ScoresNegative(t *testing.T) {
 	}
 }
 
+// TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression
+// pins the routing-regression that plain SuccessRate/PathCoverage scoring
+// blindly rewards today: pruning NeedsCompilation (BuildPath's gating
+// Condition) removes the guard, so StrategyRouter's Selector semantics
+// swallow every task that should have reached GoKnowledgePath/TestPath/
+// ExecutionPath into BuildPath's CompileGoCode/FixBuildErrors instead — whose
+// mocked actions still report success, so SuccessRate barely moves even
+// though routing genuinely broke. ScoreMutation must catch this via
+// PathMatchRate, not SuccessRate alone.
+func TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	suite := GoDevSuite()
+	mock := DefaultMock()
+
+	ops := []evolution.MutationOp{
+		{Operation: "prune_node", Target: "NeedsCompilation"},
+	}
+
+	ab := RunABTest(tree, suite, mock, ops)
+	if ab.Delta.SuccessRate < -0.01 {
+		t.Fatalf("expected success rate roughly unchanged (mock actions still report success), got delta=%.3f", ab.Delta.SuccessRate)
+	}
+	if ab.Delta.PathMatchRate >= 0 {
+		t.Errorf("PathMatchRate delta = %.3f, want < 0 (routing broke: tasks got swallowed into BuildPath)", ab.Delta.PathMatchRate)
+	}
+
+	score := ScoreMutation(tree, suite, mock, ops)
+	if score > 0 {
+		t.Errorf("ScoreMutation = %.2f, want <= 0 (routing regression must never score as an improvement)", score)
+	}
+}
+
+// TestScoreMutation_PathMatchWeight_BothImprovementsOutrankSuccessOnly is a
+// regression guard for the PathMatchRate weight term in ScoreMutation: pruning
+// IsGoRelated (the PreGate condition that currently rejects Go-development
+// tasks with no Go-flavored keywords) improves both SuccessRate and
+// PathMatchRate on GoDevSuite. Scoring the identical mutation against a copy
+// of the suite with every ExpectedPath/PossiblePaths cleared holds
+// SuccessRate's improvement constant (bb.Outcome doesn't depend on a suite's
+// path expectations) while pinning PathMatchRate at a constant 1.0 — so any
+// score difference between the two runs is attributable only to the added
+// PathMatchRate term, and the "both improved" run must score strictly higher.
+func TestScoreMutation_PathMatchWeight_BothImprovementsOutrankSuccessOnly(t *testing.T) {
+	tree := evolution.GoDeveloperTree()
+	suite := GoDevSuite()
+	mock := DefaultMock()
+
+	ops := []evolution.MutationOp{
+		{Operation: "prune_node", Target: "IsGoRelated"},
+	}
+
+	// Sanity: this mutation must genuinely move both signals on the real
+	// suite, otherwise the comparison below would be vacuous.
+	abBoth := RunABTest(tree, suite, mock, ops)
+	if abBoth.Delta.SuccessRate <= 0 {
+		t.Fatalf("expected prune_node(IsGoRelated) to improve success rate, got delta=%.3f", abBoth.Delta.SuccessRate)
+	}
+	if abBoth.Delta.PathMatchRate <= 0 {
+		t.Fatalf("expected prune_node(IsGoRelated) to improve path match rate, got delta=%.3f", abBoth.Delta.PathMatchRate)
+	}
+
+	successOnlySuite := Suite{Name: suite.Name + "_noexpectedpath"}
+	for _, tc := range suite.Tasks {
+		tc.ExpectedPath = ""
+		tc.PossiblePaths = nil
+		successOnlySuite.Tasks = append(successOnlySuite.Tasks, tc)
+	}
+
+	scoreBoth := ScoreMutation(tree, suite, mock, ops)
+	scoreSuccessOnly := ScoreMutation(tree, successOnlySuite, mock, ops)
+
+	if scoreBoth <= scoreSuccessOnly {
+		t.Errorf("mutation improving both success rate and path match (score=%.2f) should outscore the identical mutation scored where path match can't move (score=%.2f)", scoreBoth, scoreSuccessOnly)
+	}
+}
+
 func TestAllSuites_Complete(t *testing.T) {
 	suites := AllSuites()
 	if len(suites) < 4 {
@@ -179,8 +296,8 @@ func TestSuiteForTree_Matching(t *testing.T) {
 		{"godev", "godev"},
 		{"domain_code_review", "code_review"},
 		{"domain_devops_ci", "devops_ci"},
-		{"finance_pitch_agent", "finance"},
-		{"finance_kyc_screener", "finance"},
+		{"finance_pitch_agent", "pitch_agent"},
+		{"finance_kyc_screener", "kyc_screener"},
 		{"domain_agent_monitor", "agent_monitor"},
 		{"domain_security_audit", "security_audit"},
 		{"research_deep_research", "research"},

@@ -2,6 +2,24 @@ package benchmark
 
 import "github.com/nico/go-bt-evolve/internal/engine"
 
+// pathMatches reports whether actual matches the path a TaskCase declared it
+// expects. A task with no ExpectedPath/PossiblePaths declared (e.g. the
+// ShouldReject adversarial cases) counts as matched — there's nothing to check.
+func pathMatches(tc TaskCase, actual string) bool {
+	if tc.ExpectedPath == "" && len(tc.PossiblePaths) == 0 {
+		return true
+	}
+	if actual == tc.ExpectedPath {
+		return true
+	}
+	for _, p := range tc.PossiblePaths {
+		if actual == p {
+			return true
+		}
+	}
+	return false
+}
+
 // detectPath returns the strategy path that was actually executed by the tree.
 // Priority: 1) bb.CurrentPath (set by tree traversal during execution)
 //  2. First entry in bb.VisitedPaths
