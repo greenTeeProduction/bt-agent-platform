@@ -217,12 +217,15 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 	return nil
 }
 
-// RollbackTree restores name's tree from its milestone-1 pre-mutation
-// snapshot in snapshotDir (evolution.RestoreTree) and durably persists the
-// restored state via SaveTree, recovering a bad mutation without rerunning a
-// full evolution cycle.
+// RollbackTree restores name's tree from its last known-good pre-mutation
+// snapshot in snapshotDir (evolution.RestoreTreeBeforeRegressionStreak) and
+// durably persists the restored state via SaveTree, recovering a bad
+// mutation without rerunning a full evolution cycle. Walking back past a
+// multi-cycle regression streak (rather than just the single most-recent
+// snapshot) matters because a disabled gate can trip several regressed
+// cycles after the tree was last actually good.
 func (r *Registry) RollbackTree(name, snapshotDir string) error {
-	restored, err := evolution.RestoreTree(name, snapshotDir)
+	restored, err := evolution.RestoreTreeBeforeRegressionStreak(name, snapshotDir)
 	if err != nil {
 		return fmt.Errorf("rollback tree %q: %w", name, err)
 	}

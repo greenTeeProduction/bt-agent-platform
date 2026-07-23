@@ -54,11 +54,12 @@ type EvolveV2Config struct {
 	SelectorOrderingStrategy evolution.SelectorOrderingStrategy
 
 	// DTOrdering, when true, applies entropy/Gini-based BTOptimizer reordering
-	// from the durable DTAnalyzer telemetry at Config.DTStatsPath before an
-	// evolved tree is persisted — the sibling of SelectorOrdering above, using
-	// information gain instead of raw success rate. Fallback and AlwaysSucceed
-	// children stay last, preserving short-circuit semantics. Off by default so
-	// the pass is a no-op until explicitly enabled.
+	// from the durable per-tree DTAnalyzer telemetry (agent.DecisionTreeStatsFile,
+	// falling back to Config.DTStatsPath) before an evolved tree is persisted —
+	// the sibling of SelectorOrdering above, using information gain instead of
+	// raw success rate. Fallback and AlwaysSucceed children stay last,
+	// preserving short-circuit semantics. Off by default so the pass is a
+	// no-op until explicitly enabled.
 	DTOrdering bool
 }
 
@@ -290,9 +291,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// Durable pre-mutation snapshot (Q2 Evolvability milestone 1): originalTree
 	// below only lives in-memory for this cycle, so a process crash mid-cycle
 	// loses the pre-mutation state entirely. Persist it to g.cfg.SnapshotDir
-	// (when configured) so RestoreTree can recover it after a crash.
+	// (when configured) so RestoreTree can recover it after a crash. Recording
+	// baseFitness alongside each revision (SnapshotTreeWithFitness) is what
+	// lets RestoreTreeBeforeRegressionStreak later walk back past a
+	// multi-cycle regression streak instead of just the latest cycle.
 	if g.cfg.SnapshotDir != "" {
-		if _, err := evolution.SnapshotTree(tree, entry.Name, g.cfg.SnapshotDir); err != nil {
+		if _, err := evolution.SnapshotTreeWithFitness(tree, entry.Name, g.cfg.SnapshotDir, baseFitness.Composite); err != nil {
 			slog.Warn("gardener/v2: pre-mutation snapshot failed", "tree", entry.Name, "error", err)
 		}
 	}
@@ -397,7 +401,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// ── DT-optimizer ordering (Q2 Evolvability milestone 3) — the
 	// entropy/Gini-based sibling of the Selector-ordering pass above, applied
 	// to the same tree just before persistence.
-	reordered += g.applyDTOptimizerOrdering(tree, cfg)
+	reordered += g.applyDTOptimizerOrdering(tree, entry.Name, cfg)
 	saveFailed := false
 	if applied > 0 || reordered > 0 {
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
@@ -580,23 +584,46 @@ func fileExists(path string) bool {
 }
 
 // applyDTOptimizerOrdering seeds a BTOptimizer from the durable DTAnalyzer
-// telemetry at Config.DTStatsPath and reorders every Selector's children in
-// tree by information gain (entropy/Gini), keeping fallback/AlwaysSucceed
-// children last. It is a no-op (returns 0) unless the pass is enabled and a
-// stats path is configured. Returns the number of Selector nodes whose
-// ordering changed — the DTAnalyzer/BTOptimizer sibling of
-// applyLearnedSelectorOrdering above.
-func (g *Gardener) applyDTOptimizerOrdering(tree *evolution.SerializableNode, cfg EvolveV2Config) int {
-	if !cfg.DTOrdering || g.cfg.DTStatsPath == "" || tree == nil {
+// telemetry for treeID and reorders every Selector's children in tree by
+// information gain (entropy/Gini), keeping fallback/AlwaysSucceed children
+// last. It is a no-op (returns 0) unless the pass is enabled and a stats path
+// resolves. Returns the number of Selector nodes whose ordering changed — the
+// DTAnalyzer/BTOptimizer sibling of applyLearnedSelectorOrdering above.
+func (g *Gardener) applyDTOptimizerOrdering(tree *evolution.SerializableNode, treeID string, cfg EvolveV2Config) int {
+	if !cfg.DTOrdering || tree == nil {
+		return 0
+	}
+	path := g.dtStatsPathFor(treeID)
+	if path == "" {
 		return 0
 	}
 	bo := evolution.NewBTOptimizer()
-	if err := bo.Analyzer.Load(g.cfg.DTStatsPath); err != nil {
+	if err := bo.Analyzer.Load(path); err != nil {
 		slog.Warn("gardener/v2: loading decision-tree stats failed, skipping ordering",
-			"path", g.cfg.DTStatsPath, "error", err)
+			"path", path, "error", err)
 		return 0
 	}
 	return bo.OptimizeSelectors(tree)
+}
+
+// dtStatsPathFor resolves the durable DTAnalyzer telemetry path for treeID,
+// preferring the real per-tree file the daemon writes —
+// agent.DecisionTreeStatsFile(treeID), the sidecar
+// agent.RunDeps.flushSelectorTelemetry produces alongside SelectorStatsFile —
+// over the single shared Config.DTStatsPath, mirroring
+// selectorStatsPathFor's per-tree-first resolution for Selector stats above.
+// ADR-191's activation was inert without this: Config.DTStatsPath (e.g.
+// ~/.go-bt-gardener/dt-stats.json) has no production writer, so
+// applyDTOptimizerOrdering silently no-opped forever until this per-tree
+// preference was added. Falls back to Config.DTStatsPath when the per-tree
+// file does not exist yet, or when treeID is empty.
+func (g *Gardener) dtStatsPathFor(treeID string) string {
+	if treeID != "" {
+		if perTree := agent.DecisionTreeStatsFile(treeID); fileExists(perTree) {
+			return perTree
+		}
+	}
+	return g.cfg.DTStatsPath
 }
 
 // AnalyzeTreeDiagnostics runs evolution.BTOptimizer.AnalyzeTree — milestone
@@ -605,20 +632,24 @@ func (g *Gardener) applyDTOptimizerOrdering(tree *evolution.SerializableNode, cf
 // MergeOverlappingPaths passes never touch the live production tree. The
 // resulting DTImprovementReport surfaces those counts for HITL review only;
 // callers must not treat it as an in-place mutation like
-// applyDTOptimizerOrdering above. Seeds the same durable DTAnalyzer telemetry
-// at Config.DTStatsPath used by applyDTOptimizerOrdering; a missing or
-// unreadable stats file degrades to an unseeded BTOptimizer rather than
-// failing the diagnostic. Returns nil for a nil entry.Tree.
+// applyDTOptimizerOrdering above. Loads the BTOptimizer's Analyzer from
+// dtStatsPathFor(entry.Name) — the same per-tree-first resolution
+// applyDTOptimizerOrdering uses — rather than Config.DTStatsPath directly, so
+// this sees the real per-tree telemetry the daemon writes at
+// agent.DecisionTreeStatsFile(treeID) instead of only the producer-less
+// shared path; a missing or unreadable stats file degrades to an unseeded
+// BTOptimizer rather than failing the diagnostic. Returns nil for a nil
+// entry.Tree.
 func (g *Gardener) AnalyzeTreeDiagnostics(entry TreeEntry) *evolution.DTImprovementReport {
 	if entry.Tree == nil {
 		return nil
 	}
 	clone := cloneTreeForGardener(entry.Tree)
 	bo := evolution.NewBTOptimizer()
-	if g.cfg.DTStatsPath != "" {
-		if err := bo.Analyzer.Load(g.cfg.DTStatsPath); err != nil {
+	if path := g.dtStatsPathFor(entry.Name); path != "" {
+		if err := bo.Analyzer.Load(path); err != nil {
 			slog.Warn("gardener/v2: loading decision-tree stats failed, analyzing unseeded",
-				"path", g.cfg.DTStatsPath, "error", err)
+				"path", path, "error", err)
 		}
 	}
 	return bo.AnalyzeTree(clone, entry.Name)

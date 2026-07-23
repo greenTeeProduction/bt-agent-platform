@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -1150,6 +1151,93 @@ func TestEvolveTreeV2_AppliesDTOptimizerOrderingBeforePersist(t *testing.T) {
 			t.Fatalf("DT-optimizer ordering ran while disabled: Router children = %v, want %v", got, want)
 		}
 	})
+}
+
+// seedDTStatsPromotingC writes durable DTAnalyzer telemetry to path so that
+// under "Router" the C path (hit 8x) has far higher information gain than the
+// A and B paths (hit 1x each, tied with one another) — the mirror image of
+// seedDTStats, used to prove which of two candidate stats files was actually
+// read.
+func seedDTStatsPromotingC(t *testing.T, path string) {
+	t.Helper()
+	da := evolution.NewDTAnalyzer()
+	da.RecordHit("Router", "A", "CondA", true)
+	da.RecordHit("Router", "B", "CondB", true)
+	for i := 0; i < 8; i++ {
+		da.RecordHit("Router", "C", "CondC", true)
+	}
+	if err := da.Save(path); err != nil {
+		t.Fatalf("Save DT stats: %v", err)
+	}
+}
+
+// TestEvolveTreeV2_DTOptimizerOrderingPrefersPerTreeStatsOverConfigPath pins
+// milestone 1/2 of the "DT-ordering pass reads the per-tree DT stats the
+// daemon actually writes; ADR-191's activation is currently inert" program:
+// applyDTOptimizerOrdering must prefer the real per-tree DT stats file the
+// daemon writes — agent.DecisionTreeStatsFile(treeID), under
+// BT_AGENT_HOME/selector-stats/<tree>-dt.json, the sidecar
+// RunDeps.flushSelectorTelemetry produces alongside SelectorStatsFile — over
+// the configured Config.DTStatsPath, mirroring how selectorStatsPathFor
+// prefers agent.SelectorStatsFile over Config.SelectorStatsPath. The per-tree
+// file is seeded to promote B; Config.DTStatsPath (fallback) is seeded to
+// promote C instead, so only a correct per-tree preference reorders to B.
+func TestEvolveTreeV2_DTOptimizerOrderingPrefersPerTreeStatsOverConfigPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", home)
+
+	perTreePath := agent.DecisionTreeStatsFile("dt_tree")
+	if err := os.MkdirAll(filepath.Dir(perTreePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	seedDTStats(t, perTreePath)
+
+	fallbackPath := filepath.Join(t.TempDir(), "dt_stats.json")
+	seedDTStatsPromotingC(t, fallbackPath)
+
+	refStore, err := evolution.NewStore(filepath.Join(t.TempDir(), "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	treeDir := t.TempDir()
+	tree := dtOrderingTree()
+	reg := &Registry{dir: treeDir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "dt_tree", Description: "dt ordering", Tree: tree, FilePath: treeDir + "/tree-dt_tree.json", Active: true},
+	}
+	reg.mu.Unlock()
+	cfg := Config{
+		Registry:                 reg,
+		MetricsTracker:           mt,
+		RefStore:                 refStore,
+		MaxMutations:             0, // isolate the reorder — no structural mutations this cycle
+		EvolveWithoutReflections: true,
+		DTStatsPath:              fallbackPath,
+	}
+	g := NewGardener(cfg)
+	entry := reg.List()[0]
+
+	if got, want := routerChildNames(t, tree), []string{"A", "B", "C", "Fallback"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("precondition: Router children = %v, want %v", got, want)
+	}
+
+	g.evolveTreeV2(entry, EvolveV2Config{
+		CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled: false,
+		UseRealLLM:    false,
+		DTOrdering:    true,
+	})
+
+	got := routerChildNames(t, tree)
+	want := []string{"B", "A", "C", "Fallback"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DT-optimizer ordering did not prefer per-tree stats over Config.DTStatsPath: Router children = %v, want %v", got, want)
+	}
 }
 
 // ============================================================================
