@@ -990,6 +990,19 @@ func markGoapFusionImplDegraded(bb *Blackboard, reason string) {
 	}
 }
 
+// goapFusionApplyAlreadyLanded reports whether the run currently tracked on
+// bb already committed its work to the target branch. apply_status is
+// authoritative over any trailing failure within the same cycle: once it
+// reads committed or committed_pr_opened, the code has landed regardless of
+// what a later step in this cycle does.
+func goapFusionApplyAlreadyLanded(bb *Blackboard) bool {
+	run, ok := getSuperpowersRun(bb)
+	if !ok || run == nil {
+		return false
+	}
+	return run.ApplyStatus == "committed" || run.ApplyStatus == "committed_pr_opened"
+}
+
 // superpowersRuntimeRunBudget bounds one ClaudeSuperpowersPath run end-to-end
 // (task batch, verification, review, apply). The legacy 45 minutes fit only
 // the single-task template: on 2026-07-18 nine consecutive cycles finished a
@@ -1054,6 +1067,19 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		planPath, _ = bb.ChainState["plan_path"].(string)
 	}
 	if planPath == "" {
+		// A prior invocation earlier in this same cycle may have already landed
+		// code and cleared the plan on success (see the `return 1` path below,
+		// which calls clearSuperpowersPlanState before returning). If this is a
+		// trailing re-invocation hitting the no-plan guard afterward, the
+		// tracked run's apply_status is authoritative: committed/
+		// committed_pr_opened means code already landed, so this is a partial
+		// LANDING, not a Claude-path failure. Return success and leave bb.Result
+		// as the landing report already written by the earlier invocation
+		// instead of clobbering it with a failure message (run 20260723T091452
+		// landed 3d6a13b yet the cycle logged "no code landed"/no_change).
+		if goapFusionApplyAlreadyLanded(bb) {
+			return 1
+		}
 		bb.Result = "## GOAP Superpowers Runtime Failed\n\nNo existing plan path found."
 		return -1
 	}

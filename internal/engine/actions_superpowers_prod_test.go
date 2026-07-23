@@ -557,6 +557,51 @@ func TestRunSuperpowersRuntime_NonRateLimitFailureSetsImplDegraded(t *testing.T)
 	}
 }
 
+// TestRunSuperpowersRuntime_NoPlanAfterCommittedApplyDoesNotDegrade proves the
+// Q3 Reliability contract: run 20260723T091452 landed commit 3d6a13b (tasks
+// 1-2 committed via partial-landing, ApplyStatus=committed_pr_opened) yet the
+// cycle's final logged outcome was "no_change" because a LATER invocation of
+// this same action within the same cycle (after the plan was cleared on
+// success) hit the top-of-function "no existing plan path" guard, which
+// unconditionally called markGoapFusionImplDegraded and overwrote bb.Result
+// with the failure text — destroying the evidence that code had already
+// landed. ApplyStatus is authoritative: once the tracked run shows
+// committed/committed_pr_opened, a trailing no-plan (or any other) failure in
+// the SAME cycle must not warn "no code landed", must not flip the
+// goals-unchanged fast path, and must not clobber the landing report already
+// sitting in bb.Result.
+func TestRunSuperpowersRuntime_NoPlanAfterCommittedApplyDoesNotDegrade(t *testing.T) {
+	landedResult := "## GOAP Superpowers Runtime Complete\n\nRun: `run-landed`\nFinish: `/tmp/finish.md`\nApply status: `committed_pr_opened`\nCommit: `3d6a13b`"
+	bb := &Blackboard{ChainState: map[string]any{}}
+	bb.Result = landedResult
+	setSuperpowersRun(bb, &SuperpowersRun{
+		ID:            "run-landed",
+		Phase:         SuperpowersPhaseFinish,
+		ApplyStatus:   "committed_pr_opened",
+		AppliedCommit: "3d6a13b",
+	})
+
+	// No plan_path anywhere (ChainState nor durable store) — the exact shape of
+	// a trailing invocation after clearSuperpowersPlanState ran on success.
+	result := runSuperpowersRuntimeFromExistingPlanAction(&btcore.BTContext[Blackboard]{Blackboard: bb})
+
+	if result != 1 {
+		t.Fatalf("result = %d, want SUCCESS(1): a trailing no-plan failure must not override an already-committed partial landing in this cycle; bb.Result=%s", result, bb.Result)
+	}
+	if got, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); got == "true" {
+		t.Fatalf("goap_fusion_impl_degraded must not be set once the tracked run already shows apply_status=committed_pr_opened; a trailing no-plan check is not a Claude-path failure")
+	}
+	if got, _ := bb.ChainState["goap_fusion_goals_unchanged"].(string); got == "true" {
+		t.Fatalf("goap_fusion_goals_unchanged must not be set once the tracked run already committed; that fast path overwrites the landing report with a no-op analysis note")
+	}
+	if !strings.Contains(bb.Result, "committed_pr_opened") || !strings.Contains(bb.Result, "3d6a13b") {
+		t.Fatalf("bb.Result must preserve the landing report evidence (apply status, commit) instead of being overwritten, got %q", bb.Result)
+	}
+	if strings.Contains(bb.Result, "No existing plan path found") {
+		t.Fatalf("bb.Result must not be overwritten with the no-plan failure message once the run already committed code; got %q", bb.Result)
+	}
+}
+
 // TestSuperpowersPlanState_PersistsAcrossRuns proves the core contract of this
 // task: the Superpowers plan path AND active plan body must survive across
 // scheduled runs. Each cron tick builds a FRESH Blackboard (RunOnce) whose
