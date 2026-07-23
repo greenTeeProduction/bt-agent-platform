@@ -1629,7 +1629,15 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			pop := newProductionPopulation(population, baseTree)
-			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, epsilon, params.LearningRate, ek)
+			// A dedicated ReinforcementLearner carries the per-run epsilon and
+			// learning rate through EvolveQLearning's generation loop, which
+			// calls rl.DecayEpsilon() once per generation so exploration
+			// anneals across the run instead of staying static at the
+			// requested epsilon for every generation.
+			rl := evolution.NewReinforcementLearner()
+			rl.Epsilon = epsilon
+			rl.LearningRate = params.LearningRate
+			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, rl, ek)
 			learned := qt.LearnedActions()
 			result := map[string]interface{}{
 				"tree": params.Tree, "generations": pop.Generation,

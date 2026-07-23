@@ -632,3 +632,41 @@ func TestDriftConfigs_FleetOwnerSetsRestartSiblings(t *testing.T) {
 		t.Fatalf("found %d 'RestartSiblings: true' in cmd/bt-agent/main.go, want >= 2 (both the periodic watcher config and idleDriftCfg must opt in as fleet owner)", got)
 	}
 }
+
+// TestShutdownStopsA2AServer pins a NotebookLM research finding: neither of
+// main.go's two shutdown paths — the "--no-mcp" early-return branch, or the
+// daemon-mode fallback reached after the MCP server exits (e.g. stdin
+// closed) — ever calls a2aSrv.Stop() after receiving SIGINT/SIGTERM. Both
+// blocks already wait on <-sigCh and log "shutdown signal received", but the
+// A2A HTTP listener (internal/a2a.Server, whose Stop() gracefully closes the
+// http.Server — see maturity_test.go) is left to be killed by process exit
+// instead of shutting down gracefully, unlike tracingShutdown/logShutdown
+// which already run via defer. Audited at the source level, like the other
+// shutdown/wiring tests in this file, because main() itself is not
+// unit-testable (it blocks on a signal channel and calls os.Exit).
+func TestShutdownStopsA2AServer(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	s := string(src)
+
+	noMCPIdx := strings.Index(s, `engine.Info("MCP server disabled (--no-mcp), A2A + scheduler running")`)
+	if noMCPIdx < 0 {
+		t.Fatal("main.go lost the --no-mcp shutdown branch")
+	}
+	daemonSigIdx := strings.Index(s, `engine.Info("bt-agent running in daemon mode (--no-mcp), scheduler + A2A active")`)
+	if daemonSigIdx < 0 {
+		t.Fatal("main.go lost the daemon-mode fallback shutdown branch")
+	}
+
+	noMCPBody := s[noMCPIdx:daemonSigIdx]
+	if !strings.Contains(noMCPBody, "a2aSrv.Stop()") {
+		t.Error("the --no-mcp shutdown branch must call a2aSrv.Stop() after receiving SIGINT/SIGTERM so the A2A HTTP listener closes gracefully instead of being killed by process exit")
+	}
+
+	daemonBody := s[daemonSigIdx:]
+	if !strings.Contains(daemonBody, "a2aSrv.Stop()") {
+		t.Error("the daemon-mode fallback shutdown branch (after the MCP server exits) must call a2aSrv.Stop() after receiving SIGINT/SIGTERM so the A2A HTTP listener closes gracefully instead of being killed by process exit")
+	}
+}

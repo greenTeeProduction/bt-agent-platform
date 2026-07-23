@@ -219,6 +219,9 @@ Consolidation notes (2026-07-16):
 | ADR-194 | `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research) | Accepted | 2026-07-23 |
 | ADR-195 | `AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2) | Accepted | 2026-07-23 |
 | ADR-196 | Deploy Adoption Deduplicates (Tree-Identity, Built-At-Head, Adoption Stamps, Gardener Self-Restart), Crisis Detection Fires on Decline Transitions Only, Stale Milestones Complete on a Charge-Time Red Pre-Check, and the Researcher Gains Slot Rotation + a Novelty Gate (Fleet Review 2026-07-23, Gaps 4–8) | Accepted | 2026-07-23 |
+| ADR-197 | Self-Fix Programs Preempt the General Program Queue (Fixes-First Scheduling) | Accepted | 2026-07-23 |
+| ADR-198 | `cmd/bt-agent`'s Two Shutdown Paths Call `a2aSrv.Stop()` on SIGINT/SIGTERM, Closing a Graceful-Shutdown Gap Left Open Since the A2A Server's Introduction (NotebookLM Research) | Accepted | 2026-07-23 |
+| ADR-199 | `Population.EvolveQLearning` Takes a `*ReinforcementLearner` Instead of Raw `epsilon`/`learningRate` Floats, Annealing Exploration via `DecayEpsilon` Once Per Generation (NotebookLM Research) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3535,6 +3538,35 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ A defect the platform found in itself is always the next thing a goap cycle works on; feature programs resume automatically once the self-fix backlog drains (done or blocked).
 - ✅ A self-fix program preempts even a partially-completed general program; the interrupted program's remaining milestones are untouched and resume next.
 - ⚠️ A wedged self-fix milestone occupies the head until the per-milestone attempt cap marks it blocked (`RecordAttemptAndMaybeBlock`) — the existing cap, not this decision, bounds that exposure.
+
+---
+
+## ADR-198: `cmd/bt-agent`'s Two Shutdown Paths Call `a2aSrv.Stop()` on SIGINT/SIGTERM, Closing a Graceful-Shutdown Gap Left Open Since the A2A Server's Introduction (NotebookLM Research)
+
+**Context (2026-07-23):** NotebookLM research on `cmd/bt-agent/main.go` found that neither shutdown branch — the `--no-mcp` early-return path, or the daemon-mode fallback reached after the MCP server exits (e.g. stdin closed) — ever called `a2aSrv.Stop()` after receiving `SIGINT`/`SIGTERM`. Both blocks already blocked on `<-sigCh` and logged `"bt-agent shutdown signal received"`, but `internal/a2a.Server.Stop()` (which gracefully closes the underlying `http.Server`) was never invoked from either one, so the A2A HTTP listener was left to be killed by process exit instead of shutting down gracefully — unlike `tracingShutdown`/`logShutdown`, which already run via `defer` on the same path.
+
+**Decision:** Both shutdown blocks in `main()` now call `a2aSrv.Stop()` immediately after logging the shutdown signal, guarded by the existing `a2aSrv != nil` nil-check (the server can be nil when A2A failed to start); a non-nil error is logged via `engine.Warn("a2a server stop failed", "error", err)` rather than aborting shutdown, matching this file's established degrade-and-continue idiom for best-effort cleanup (e.g. ADR-090's card-signing failure handling).
+
+**Status:** Accepted (2026-07-23) — pinned by `TestShutdownStopsA2AServer` (`cmd/bt-agent/main_test.go`), a source-level audit (like the sibling `TestDaemonWrapsSchedulerAndA2AStartWithSafeGo` from ADR-050) since `main()` blocks on a signal channel and calls `os.Exit`, so it cannot be driven directly by a unit test.
+
+**Consequences:**
+- ✅ `SIGINT`/`SIGTERM` now closes the A2A HTTP listener gracefully on both shutdown paths instead of relying on process-exit teardown, matching how the rest of `main()`'s shutdown sequence already behaves.
+- ⚠️ Coverage is a source-level string match, not a runtime assertion — a future refactor that renames or restructures the shutdown blocks without preserving the `a2aSrv.Stop()` call would need the test's string anchors updated alongside it.
+
+---
+
+## ADR-199: `Population.EvolveQLearning` Takes a `*ReinforcementLearner` Instead of Raw `epsilon`/`learningRate` Floats, Annealing Exploration via `DecayEpsilon` Once Per Generation (NotebookLM Research)
+
+**Context (2026-07-23):** ADR-019 wired `bt_evolve_qlearning` to `Population.EvolveQLearning`, threading a single `epsilon`/`learningRate` float64 pair statically through every generation's `qLearnMutate` call. `ReinforcementLearner` (`internal/evolution/learning.go:822-836`) already implemented `DecayEpsilon`/`ConfigureEpsilonSchedule` for annealing exploration over time, but nothing in the Q-learning-guided evolution loop drove them — `EvolveQLearning` never touched a `ReinforcementLearner` at all — so `bt_evolve_qlearning` explored at the same fixed epsilon in generation 1 as in generation N regardless of how many generations the run requested.
+
+**Decision:** `EvolveQLearning`'s signature replaces its `epsilon, learningRate float64` parameters with `rl *ReinforcementLearner`; a nil `rl` now short-circuits to a nil best tree alongside the pre-existing empty-population/nil-`QTable` guards. Each generation's `qLearnMutate` call reads `rl.Epsilon`/`rl.LearningRate` (unchanged from the caller's perspective otherwise), and `rl.DecayEpsilon()` is called exactly once per generation, after the generation's fitness bookkeeping, so exploration anneals toward greedy exploitation as the run progresses. `bt_evolve_qlearning` (`cmd/bt-agent/tools.go`) constructs a `NewReinforcementLearner()`, sets `Epsilon`/`LearningRate` from the request's existing parameters, and passes it through — the tool's caller-visible request/response shape is unchanged, but the caller could read the final annealed `rl.Epsilon` back afterward if a future milestone surfaces it.
+
+**Status:** Accepted (2026-07-23) — pinned by `TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations` (`internal/evolution/learning_test.go`), which asserts `DecayEpsilon` fires exactly once per generation by comparing the driven learner's final `Epsilon` against an independently-decayed reference `ReinforcementLearner` run through the same number of `DecayEpsilon()` calls outside the function under test — pinning "once per generation," not a hardcoded float, so the test does not encode the decay math twice. `TestExpertKnowledge_ObservesLearnedPatternFromQLearning` and `TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp` (both pre-existing, ADR-095) were updated to the new signature.
+
+**Consequences:**
+- ✅ `bt_evolve_qlearning` now actually exercises the epsilon-decay schedule `ReinforcementLearner` already shipped, instead of exploring at one fixed rate for the whole run.
+- ✅ `EvolveQLearning` had exactly one production call site (`bt_evolve_qlearning`) plus tests, so the signature change is a clean cut with no back-compat shim needed.
+- ⚠️ `bt_evolve_qlearning` does not yet expose a request parameter for the decay rate or floor — every run anneals on `NewReinforcementLearner`'s fixed defaults (`EpsilonDecay: 0.995`, `MinEpsilon: 0.01`) regardless of the request's `generations` count, so a short run barely decays while a long one saturates at the floor early.
 
 ---
 

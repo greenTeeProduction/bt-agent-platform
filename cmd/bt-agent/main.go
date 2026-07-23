@@ -901,6 +901,11 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		engine.Info("bt-agent shutdown signal received")
+		if a2aSrv != nil {
+			if err := a2aSrv.Stop(); err != nil {
+				engine.Warn("a2a server stop failed", "error", err)
+			}
+		}
 		return
 	}
 
@@ -916,6 +921,11 @@ func main() {
 	engine.Info("bt-agent running in daemon mode (--no-mcp), scheduler + A2A active")
 	<-sigCh
 	engine.Info("bt-agent shutdown signal received")
+	if a2aSrv != nil {
+		if err := a2aSrv.Stop(); err != nil {
+			engine.Warn("a2a server stop failed", "error", err)
+		}
+	}
 }
 
 // runDLQReplayScanOnce performs a single tick of the drop-safe DLQ replay
