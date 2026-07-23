@@ -42,6 +42,14 @@ type Program struct {
 	Created    time.Time   `json:"created"`
 	Updated    time.Time   `json:"updated"`
 	Milestones []Milestone `json:"milestones"`
+	// ClaimedBy is the agent (cycle RunID) currently landing this program's
+	// head milestone, set by ClaimActiveForCycle. Empty when unclaimed.
+	ClaimedBy string `json:"claimed_by,omitempty"`
+	// ClaimedAt is when ClaimedBy claimed the program. A claim older than the
+	// lease window passed to ClaimActiveForCycle is stale — evidence the
+	// claiming cycle crashed or is simply long done — and is reclaimable by a
+	// different agent.
+	ClaimedAt time.Time `json:"claimed_at,omitempty"`
 }
 
 // NextMilestone returns the first pending milestone and its index, or (-1, nil).
@@ -207,6 +215,54 @@ func (ps *ProgramStore) Active() *Program {
 		}
 	}
 	return nil
+}
+
+// ClaimActiveForCycle returns Active() claimed for agentID (stamping
+// ClaimedBy + ClaimedAt), unless it is already claimed by a DIFFERENT agent
+// within the lease window — evidence a sibling cycle is still landing it,
+// in which case it returns nil so the caller charges nothing this cycle
+// rather than stealing the claim (the loop-runner burned 3 cycles 2026-07-23
+// 12:38-14:55 doing exactly that). A claim older than lease is stale — the
+// claiming cycle crashed, or is simply long done — and is overwritten. The
+// SAME agent may always re-claim its own program (e.g. a retried cycle
+// reuses its own RunID), refreshing ClaimedAt.
+func (ps *ProgramStore) ClaimActiveForCycle(agentID string, lease time.Duration) *Program {
+	p := ps.Active()
+	if p == nil {
+		return nil
+	}
+	if p.ClaimedBy != "" && p.ClaimedBy != agentID && time.Since(p.ClaimedAt) < lease {
+		return nil
+	}
+	now := time.Now().UTC()
+	p.ClaimedBy = agentID
+	p.ClaimedAt = now
+	p.Updated = now
+	return p
+}
+
+// ReleaseClaim clears agentID's claim on program programID — the counterpart
+// to ClaimActiveForCycle, called from the charging cycle's deferred handler
+// once it finishes (refunded or abandoned) so a sibling cycle need not wait
+// out the full lease window to plan the same program (2026-07-23 loop-runner
+// treadmill). A no-op when the program is unclaimed or claimed by a
+// DIFFERENT agent — a stale claim a sibling already reclaimed must never be
+// stolen back by this cycle's belated release. Reports whether anything
+// changed.
+func (ps *ProgramStore) ReleaseClaim(programID, agentID string) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if p.ClaimedBy == "" || p.ClaimedBy != agentID {
+			return false
+		}
+		p.ClaimedBy = ""
+		p.ClaimedAt = time.Time{}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
 }
 
 // Add registers a new program unless one with the same title-key already

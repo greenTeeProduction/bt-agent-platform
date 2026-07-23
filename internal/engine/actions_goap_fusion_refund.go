@@ -168,6 +168,10 @@ func refundGoapMilestoneAttemptForInfraFailure(bb *Blackboard) bool {
 	var refunded bool
 	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
 		refunded = ps.RefundAttempt(programID, idx, goapProgramMaxMilestoneAttempts)
+		// This cycle is giving up on the milestone — release its program claim
+		// (if it still holds one) so a sibling cycle need not wait out the full
+		// lease window before it can plan the same program.
+		ps.ReleaseClaim(programID, bb.RunID)
 		return nil
 	})
 	if err != nil || !refunded {
@@ -295,7 +299,10 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 
 // resetGoapMilestoneRedPassStreak clears the charged milestone's red-pass
 // streak — a genuine implementation failure proves the milestone's tests can
-// still fail, killing the already-landed hypothesis.
+// still fail, killing the already-landed hypothesis. It also releases this
+// cycle's program claim (if any): a milestone circling the abandon budget
+// must not ALSO wedge a sibling agent out of the whole program for up to the
+// full lease window.
 func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	programID, idx, ok := goapChargedMilestoneRef(bb)
 	if !ok {
@@ -303,6 +310,7 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	}
 	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
 		ps.ResetRedPassStreak(programID, idx)
+		ps.ReleaseClaim(programID, bb.RunID)
 		return nil
 	}); err != nil {
 		Info("goap fusion: red-pass streak reset not persisted", "error", err.Error())
