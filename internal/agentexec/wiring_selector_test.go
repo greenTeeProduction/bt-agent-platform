@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
 // Learned Selector reordering at resolve time is STRICTLY opt-in: success-rate
@@ -29,5 +30,41 @@ func TestWireSelectorReorderIsOptIn(t *testing.T) {
 	}
 	if got := domains.SelectorStatsPathFn("domain:goap_fusion"); !strings.HasSuffix(got, "selector-stats/domain_goap_fusion.json") {
 		t.Fatalf("wired resolver must yield the per-tree stats path, got %q", got)
+	}
+}
+
+// TestWireSelectorReorder_SelectsStrategyFromEnv pins milestone 4/5 of the
+// Selector-reordering consolidation program: evolution.OrderByIG/OrderByGini/
+// OrderByHybrid have zero production callers because
+// internal/domains/tree_resolver.go's applyLearnedSelectorOrdering hardcodes
+// evolution.OrderBySuccessRate. wireSelectorReorder must read
+// BT_SELECTOR_ORDERING_STRATEGY and set domains.SelectorOrderingStrategy so
+// the resolve-time reorder pass can actually use IG/Gini/Hybrid instead of
+// only ever exercising OrderBySuccessRate. Unset (or unrecognized) must keep
+// today's OrderBySuccessRate behavior — this pass is already live for every
+// BT_SELECTOR_REORDER=1 deployment (TestWireSelectorReorderIsOptIn above), so
+// silently changing its ranking would change production behavior for
+// existing opt-ins, not just activate dead code.
+func TestWireSelectorReorder_SelectsStrategyFromEnv(t *testing.T) {
+	prevPath := domains.SelectorStatsPathFn
+	prevStrategy := domains.SelectorOrderingStrategy
+	t.Cleanup(func() {
+		domains.SelectorStatsPathFn = prevPath
+		domains.SelectorOrderingStrategy = prevStrategy
+	})
+	t.Setenv("BT_SELECTOR_REORDER", "1")
+
+	t.Setenv("BT_SELECTOR_ORDERING_STRATEGY", "")
+	wireSelectorReorder()
+	if domains.SelectorOrderingStrategy != evolution.OrderBySuccessRate {
+		t.Errorf("default SelectorOrderingStrategy = %q, want %q (unset env must not change existing behavior)",
+			domains.SelectorOrderingStrategy, evolution.OrderBySuccessRate)
+	}
+
+	t.Setenv("BT_SELECTOR_ORDERING_STRATEGY", "information_gain")
+	wireSelectorReorder()
+	if domains.SelectorOrderingStrategy != evolution.OrderByIG {
+		t.Errorf("SelectorOrderingStrategy = %q, want %q when BT_SELECTOR_ORDERING_STRATEGY=information_gain — OrderByIG is otherwise unreachable in production",
+			domains.SelectorOrderingStrategy, evolution.OrderByIG)
 	}
 }

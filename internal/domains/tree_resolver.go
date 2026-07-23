@@ -52,6 +52,15 @@ var SelectorStatsPath string
 // that tree. Wired (opt-in) by internal/agentexec.
 var SelectorStatsPathFn func(treeID string) string
 
+// SelectorOrderingStrategy picks the ranking algorithm
+// applyLearnedSelectorOrdering uses once a stats file resolves —
+// evolution.OrderByIG/OrderByGini/OrderByHybrid were otherwise unreachable in
+// production despite being fully implemented (Selector-reordering
+// consolidation milestone 4). Defaults to evolution.OrderBySuccessRate, the
+// pass's original behavior; wired (opt-in) by internal/agentexec alongside
+// SelectorStatsPathFn.
+var SelectorOrderingStrategy = evolution.OrderBySuccessRate
+
 // DTStatsPath points at a durable DTAnalyzer telemetry file
 // (evolution.DTAnalyzer.Save format). When non-empty, every tree returned by
 // ResolveTreeID has its Selector children additionally reordered by
@@ -110,7 +119,7 @@ func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
 		path = SelectorStatsPath
 	}
 	if path != "" {
-		so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+		so := evolution.NewSelectorOptimizer(SelectorOrderingStrategy)
 		if err := so.LoadSelectorStats(path); err == nil {
 			so.ApplyLearnedOrdering(tree)
 		}
