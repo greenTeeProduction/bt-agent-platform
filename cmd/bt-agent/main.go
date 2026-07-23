@@ -162,11 +162,14 @@ func endpointsFromCards(cards map[string]*a2acard.AgentCard, selfBaseURL string)
 }
 
 // newLocalAgentExecutor builds the in-process executor the router falls back to
-// when no remote peer handles a task: it runs the named agent through the
-// daemon's own RunDeps and adapts the RunResult to a reliability.AgentResult.
-func newLocalAgentExecutor(nodeURL string, runner *agent.RunDeps) *reliability.LocalExecutor {
-	return reliability.NewLocalExecutor(nodeURL, func(agentName, task string) (*reliability.AgentResult, error) {
-		res, err := runner.RunOnce(context.Background(), agentName, task, agent.RunOptions{
+// when no remote peer handles a task: it runs the named agent through the given
+// RunOnce (the daemon's RunDeps.RunOnce in production) and adapts the RunResult
+// to a reliability.AgentResult. The caller's context flows into RunOnce so a
+// scheduler job deadline actually bounds the attempt — the previous
+// context.Background() detached every routed attempt from its deadline.
+func newLocalAgentExecutor(nodeURL string, runOnce func(ctx context.Context, agentName, task string, opts agent.RunOptions) (*agent.RunResult, error)) *reliability.LocalExecutor {
+	return reliability.NewLocalExecutor(nodeURL, func(ctx context.Context, agentName, task string) (*reliability.AgentResult, error) {
+		res, err := runOnce(ctx, agentName, task, agent.RunOptions{
 			InjectMemory:   true,
 			EnforceQuality: true,
 		})
@@ -204,6 +207,64 @@ func routedRunResult(agentName, task string, ar *reliability.AgentResult) *agent
 		Quality:   ar.QualityScore,
 		Duration:  ar.Duration,
 	}
+}
+
+// schedulerDeadLetter builds the dead-letter entry for a scheduled run whose
+// retry envelope ended in error. Attempts is the REAL number of attempts that
+// ran — the entry previously hardcoded 3, archiving single-attempt rejections
+// as "retry exhausted ×3" and misleading DLQ forensics (false entry #239).
+func schedulerDeadLetter(agentName, task string, err error, attempts int, buildRevision string) reliability.DeadLetterEntry {
+	return reliability.DeadLetterEntry{
+		ID:            fmt.Sprintf("%s-%d", agentName, time.Now().UnixNano()),
+		Task:          task,
+		Agent:         agentName,
+		Error:         err.Error(),
+		Attempts:      attempts,
+		FailedAt:      time.Now(),
+		Circuit:       "scheduler",
+		BuildRevision: buildRevision,
+	}
+}
+
+// isGoapCycleTree reports whether treeName is one of the self-persisting goap
+// fusion cycle trees. Accepts both the engine "domain:x" and bare registry
+// forms.
+func isGoapCycleTree(treeName string) bool {
+	name := strings.TrimPrefix(treeName, "domain:")
+	return name == "goap_fusion_loop" || name == "goap_fusion"
+}
+
+// schedulerRetryPolicy builds the per-run retry policy for a scheduled agent.
+// Goap fusion cycles get exactly ONE attempt per slot: they are
+// self-persisting work units (plans, worktrees, pending patches, refunds)
+// whose natural retry is the next scheduled cycle — an in-slot retry re-runs
+// a full multi-hour cycle for no benefit (2026-07-22/23: two healthy ~90m
+// attempts blind-retried into SLO failures and false DLQ entry #239). All
+// other agents keep the configured retry budget and backoff shape.
+func schedulerRetryPolicy(cfg *config.Config, treeName string) reliability.RetryPolicy {
+	policy := reliability.RetryPolicy{
+		MaxRetries:   cfg.RetryMaxRetries,
+		Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
+		MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
+		LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
+		RetryUnknown: true, // retry unknown errors to match legacy behavior
+	}
+	if isGoapCycleTree(treeName) {
+		policy.MaxRetries = 1
+	}
+	switch cfg.RetryJitter {
+	case "no_jitter":
+		policy.Jitter = reliability.NoJitter
+	case "full_jitter":
+		policy.Jitter = reliability.FullJitterStrategy
+	case "equal_jitter":
+		policy.Jitter = reliability.EqualJitterStrategy
+	case "decorrelated_jitter":
+		policy.Jitter = reliability.DecorrelatedJitterStrategy
+	default:
+		policy.Jitter = reliability.FullJitterStrategy
+	}
+	return policy
 }
 
 // attemptOutcomeError builds the per-attempt error the scheduler retry policy
@@ -248,10 +309,20 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 		return nil
 	}
 	slo.RecordFailure(latency)
-	if runErr != nil {
-		return runErr
+	attemptErr := runErr
+	if attemptErr == nil {
+		attemptErr = attemptOutcomeError(outcome, output)
 	}
-	return attemptOutcomeError(outcome, output)
+	// Evidence-shape rejections are deterministic within a binary: the
+	// reporter and validator ship together, so retrying the cycle reproduces
+	// the identical rejection (2026-07-22/23: two healthy ~90m landings were
+	// blind-retried into SLO failures and false DLQ entry #239). Surface the
+	// failure — it is a genuine reporter/validator drift signal worth one DLQ
+	// entry — but refuse the retry.
+	if strings.Contains(output, engine.GoapEvidenceShapeRejection) {
+		return reliability.NewCategorizedError(reliability.ErrCatValidation, attemptErr)
+	}
+	return attemptErr
 }
 
 // dlqReplayOutcomeError classifies a drop-safe DLQ replay's RunResult into
@@ -555,7 +626,7 @@ func main() {
 	if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
 		a2aBaseURL = u
 	}
-	localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner)
+	localExec := newLocalAgentExecutor(a2aBaseURL, agentRunner.RunOnce)
 	agentRouter := reliability.NewRouterFromEndpoints(localExec, nil)
 
 	// Sibling gate (2026-07-15): only the daemon (noMCPMode) runs the cron
@@ -577,25 +648,7 @@ func main() {
 					treeName = inst.Definition.Tree
 				}
 
-				policy := reliability.RetryPolicy{
-					MaxRetries:   cfg.RetryMaxRetries,
-					Base:         time.Duration(cfg.RetryBaseDelayMs) * time.Millisecond,
-					MaxDelay:     time.Duration(cfg.RetryMaxDelayMs) * time.Millisecond,
-					LLMBase:      time.Duration(cfg.RetryLLMBaseMs) * time.Millisecond,
-					RetryUnknown: true, // retry unknown errors to match legacy behavior
-				}
-				switch cfg.RetryJitter {
-				case "no_jitter":
-					policy.Jitter = reliability.NoJitter
-				case "full_jitter":
-					policy.Jitter = reliability.FullJitterStrategy
-				case "equal_jitter":
-					policy.Jitter = reliability.EqualJitterStrategy
-				case "decorrelated_jitter":
-					policy.Jitter = reliability.DecorrelatedJitterStrategy
-				default:
-					policy.Jitter = reliability.FullJitterStrategy
-				}
+				policy := schedulerRetryPolicy(cfg, treeName)
 				// SLO evidence (B1): record per-attempt outcomes so the gardener's
 				// validation gate has real execution data to judge deployments by.
 				slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
@@ -607,7 +660,9 @@ func main() {
 					// agentRunner.RunOnce directly, so a scheduled run can reach a
 					// remote peer once one joins the registry (single-node
 					// deployments fall through to the local executor unchanged).
-					routedRes, runErr := agentRouter.Execute(ctx.AgentName, task)
+					// The job context rides along so the attempt — not just the
+					// retry sleeps — is bounded by the job deadline.
+					routedRes, runErr := agentRouter.Execute(ctx.Context, ctx.AgentName, task)
 					attemptRes := routedRunResult(ctx.AgentName, task, routedRes)
 					if attemptRes != nil {
 						outcome = attemptRes.Outcome
@@ -629,16 +684,7 @@ func main() {
 					_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
 					dlqSpan.SetAttribute("agent", ctx.AgentName)
 					dlqSpan.RecordError(err)
-					dlq.Push(reliability.DeadLetterEntry{
-						ID:            fmt.Sprintf("%s-%d", ctx.AgentName, time.Now().UnixNano()),
-						Task:          task,
-						Agent:         ctx.AgentName,
-						Error:         err.Error(),
-						Attempts:      3,
-						FailedAt:      time.Now(),
-						Circuit:       "scheduler",
-						BuildRevision: buildID.Revision,
-					})
+					dlq.Push(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision))
 					dlqSpan.End()
 				}
 
@@ -677,11 +723,12 @@ func main() {
 		dlq.SetReplayExecutor(func(e reliability.DeadLetterEntry) error {
 			// Dispatch through agentRouter instead of calling
 			// agentRunner.RunOnce directly, so a replayed dead letter can
-			// reach a remote peer once one joins the registry. The
-			// AgentExecutor contract carries no context, so the previous
-			// 30-minute deadline no longer applies to routed replays — an
-			// inherent limit of the router seam, not of this call site.
-			routedRes, runErr := agentRouter.Execute(e.Agent, e.Task)
+			// reach a remote peer once one joins the registry. The router
+			// seam now carries a context, restoring the 30-minute replay
+			// deadline that direct RunOnce replays had before routing.
+			replayCtx, cancelReplay := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancelReplay()
+			routedRes, runErr := agentRouter.Execute(replayCtx, e.Agent, e.Task)
 			if runErr != nil {
 				return runErr
 			}

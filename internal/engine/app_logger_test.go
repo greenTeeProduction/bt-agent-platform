@@ -3,8 +3,11 @@ package engine
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recordingHandler is a minimal slog.Handler that records every message it
@@ -78,5 +81,46 @@ func TestSetAsDefaultFollowsHandlerRebuild(t *testing.T) {
 	slog.Info(probe2)
 	if !rec.received(probe2) {
 		t.Fatalf("late-attached handler did not receive package-level slog.Info record (msgs seen: %v)", rec.msgs)
+	}
+}
+
+// TestBuildBaseHandlerUnderGoTest_DoesNotOpenLogFile pins the test-process
+// log-isolation guard: under `go test` (testing.Testing()), buildBaseHandler
+// must never open — let alone rotate — the bt.log file logger. Before this
+// guard every test that touched the engine logger wrote real JSON records into
+// the operator's live ~/.go-bt-evolve/logs/bt.log; on 2026-07-22 a test
+// process ROTATED the live log mid-flight (daemons kept writing to the renamed
+// bt.log.1 for ~an hour) and accumulated test records inflated log-derived
+// operational counts by 4–1000×.
+func TestBuildBaseHandlerUnderGoTest_DoesNotOpenLogFile(t *testing.T) {
+	// Point HOME at a throwaway dir so even the RED run of this test cannot
+	// touch the real log; after the guard, buildBaseHandler must not consult
+	// HOME at all.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	mu.Lock()
+	prevRot := rotWriter
+	rotWriter = nil
+	h := buildBaseHandler()
+	gotRot := rotWriter
+	rotWriter = prevRot
+	mu.Unlock()
+
+	if gotRot != nil {
+		_ = gotRot.Close()
+		t.Fatal("buildBaseHandler opened a rotating file writer under go test; test processes must not write (or rotate) the production log")
+	}
+	logPath := filepath.Join(home, ".go-bt-evolve", "logs", "bt.log")
+	if _, err := os.Stat(logPath); err == nil {
+		t.Fatalf("buildBaseHandler created %s under go test; the file logger must be disabled in test processes", logPath)
+	}
+
+	// The under-test handler must still be usable: records flow to stderr.
+	if h == nil {
+		t.Fatal("buildBaseHandler returned nil handler")
+	}
+	if err := h.Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "app_logger_test: under-test probe", 0)); err != nil {
+		t.Fatalf("under-test base handler failed to handle a record: %v", err)
 	}
 }

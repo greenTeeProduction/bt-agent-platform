@@ -10,20 +10,35 @@ import (
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 )
 
-// TestMain isolates the fleet-wide Claude backoff store for the WHOLE engine
-// test binary: no test may arm or clear the operator's live
-// ~/.go-bt-evolve/claude_backoff.json — the same pollution class that
-// silently blocked live milestone 0977b1fa on 2026-07-10. Tests whose
-// assertions depend on store contents additionally call
-// isolateClaudeBackoffStore(t) for a private, deterministic path.
+// TestMain isolates operator-live state for the WHOLE engine test binary:
+//
+//   - the fleet-wide Claude backoff store: no test may arm or clear the live
+//     ~/.go-bt-evolve/claude_backoff.json — the pollution class that silently
+//     blocked live milestone 0977b1fa on 2026-07-10;
+//   - the Superpowers runs directory: no test may scan or write the live
+//     docs/superpowers/runs — tests running actions that embed the saturation
+//     scan, pending-patch recovery, or orphaned-branch reap passes previously
+//     walked hundreds of real run artifacts, inflating log-derived counts
+//     4–1000× and misleading the 2026-07-23 fleet review three times.
+//
+// Tests whose assertions depend on store/dir contents additionally call
+// isolateClaudeBackoffStore(t) / isolateSuperpowersRunsDir(t) for a private,
+// deterministic path.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "engine-claude-backoff-*")
 	if err == nil {
 		goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")
 	}
+	runsDir, runsErr := os.MkdirTemp("", "engine-superpowers-runs-*")
+	if runsErr == nil {
+		superpowersRunsDir = runsDir
+	}
 	code := m.Run()
 	if dir != "" {
 		os.RemoveAll(dir)
+	}
+	if runsDir != "" {
+		os.RemoveAll(runsDir)
 	}
 	os.Exit(code)
 }

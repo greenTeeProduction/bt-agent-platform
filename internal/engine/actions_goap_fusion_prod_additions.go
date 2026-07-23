@@ -31,6 +31,16 @@ func init() {
 	registerGoapFusionProductionAdditions()
 }
 
+// GoapEvidenceShapeRejection is the evidence-gate reason emitted when a
+// Superpowers completion report lacks the run/artifact/apply-status/commit
+// evidence the validator's recognition list accepts. The reporter and
+// validator ship in the same binary, so the rejection is deterministic per
+// binary — retrying the cycle reproduces it exactly (2026-07-22/23: two
+// healthy landings were blind-retried into false DLQ entry #239 this way).
+// cmd/bt-agent's scheduler classifies attempts carrying this marker as
+// non-retryable via this shared const.
+const GoapEvidenceShapeRejection = "Superpowers completion missing run/artifact/committed/commit evidence"
+
 func registerGoapFusionProductionAdditions() {
 	RegisterAction("RunGraphifyUpdate", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
@@ -217,7 +227,7 @@ func registerGoapFusionProductionAdditions() {
 		if strings.Contains(out, "## Superpowers Implementation Complete") {
 			applyStatusEvidence := strings.Contains(out, "Apply status: `committed`") || strings.Contains(out, "Apply status: `committed_pr_opened`")
 			if !strings.Contains(out, "Run: `") || !strings.Contains(out, "Artifacts: `") || !applyStatusEvidence || !strings.Contains(out, "Commit: `") {
-				return fail("Superpowers completion missing run/artifact/committed/commit evidence")
+				return fail(GoapEvidenceShapeRejection)
 			}
 			artifactPath := goapBacktickValueAfter(out, "Artifacts: `")
 			if artifactPath == "" {

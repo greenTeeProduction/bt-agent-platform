@@ -13,7 +13,12 @@ import (
 )
 
 const superpowersRepoDir = "/home/nico/go-bt-evolve"
-const superpowersRunsDir = "/home/nico/go-bt-evolve/docs/superpowers/runs"
+
+// superpowersRunsDir is a var (not const) so tests can scope run-artifact
+// reads and writes away from the operator's live runs directory: TestMain
+// redirects it for the whole engine test binary, and
+// isolateSuperpowersRunsDir(t) gives a test a private, deterministic dir.
+var superpowersRunsDir = "/home/nico/go-bt-evolve/docs/superpowers/runs"
 
 func newSuperpowersRunID(task string, now time.Time) string {
 	return fmt.Sprintf("%s-%s", now.Format("20060102T150405"), superpowersTaskHashSuffix(task))

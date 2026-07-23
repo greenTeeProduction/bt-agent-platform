@@ -217,6 +217,7 @@ Consolidation notes (2026-07-16):
 | ADR-192 | `bt_gardener_dt_diagnostics` MCP Tool Surfaces `Gardener.AnalyzeTreeDiagnostics` for HITL Review, Closing ADR-172's Flagged "No Production Caller" Gap (Q2 Evolvability) | Accepted | 2026-07-23 |
 | ADR-193 | `reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
 | ADR-194 | `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research) | Accepted | 2026-07-23 |
+| ADR-195 | `AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3480,6 +3481,25 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ `execFusion` now honors the same cancellation contract as every other `chains.go` executor (ADR-136): a canceled `bb.TraceContext` stops an in-flight fusion call instead of running to completion regardless.
 - ✅ `fusion.RunPanel`'s new `ctx.Err()` check benefits every caller, not just `execFusion` — any future caller passing a context that's canceled before dispatch now fails fast without spawning per-model goroutines first.
 - No further milestones are open for this fix; it does not extend an existing multi-milestone program.
+
+---
+
+## ADR-195: `AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2)
+
+**Context (2026-07-23):** The scheduler bounds every job with a 2h context and wraps attempts in a retry policy, but the `AgentExecutor`/`AgentRouter` seam dropped the context entirely (`Execute(agent, task string)`): the local executor called `RunOnce(context.Background(), …)`, so the deadline applied only to retry *sleeps* — never to attempts. On 2026-07-22 the 22:37 goap-fusion-loop cycle ran attempt 1 for 92m and attempt 2 for 56m (2h29m total against the 2h ctx, attempt 2 running 28m past the deadline); *both attempts landed real commits* (`0895c05`, `78610aa`) that the pre-ADR-185 evidence gate rejected on report shape, so the retry envelope blind-retried healthy work, recorded three SLO failures, and pushed false DLQ entry #239 — hardcoded as `Attempts: 3` regardless of what actually ran. Three independent defects compounded: attempts detached from their deadline, in-slot retries of self-persisting cycles that can never benefit from them, and deterministic evidence-shape rejections classified as retryable unknowns.
+
+**Decision:** (1) `reliability.AgentExecutor.Execute` takes `ctx context.Context`; `AgentRouter.Execute` propagates it to every executor, stops failover (including the adopted-local re-try) once `ctx.Err() != nil`, `LocalExecutor` callbacks receive it (the daemon's threads it into `RunOnce`), `RemoteExecutor` derives its per-call HTTP timeout from it, and DLQ replays regain a 30-minute deadline through the seam. (2) `schedulerRetryPolicy` (extracted from the scheduler closure, `cmd/bt-agent/main.go`) gives the self-persisting goap fusion cycle trees (`goap_fusion_loop`, `goap_fusion`) `MaxRetries: 1` — their plans, worktrees, pending patches, and refunds survive the slot, so their natural retry is the next scheduled cycle, not an in-slot re-run of a multi-hour cycle. (3) `recordSchedulerAttempt` classifies attempts whose output carries `engine.GoapEvidenceShapeRejection` (the shared const the `VerifyGoapFusionEvidence` gate itself emits) as `ErrCatValidation` — reporter and validator ship in the same binary, so the rejection is deterministic per binary; the failure still surfaces (one DLQ entry — it is a genuine reporter/validator drift signal) but is never blind-retried. (4) `schedulerDeadLetter` records the real attempt count.
+
+**Rejected alternative:** sizing the job timeout to `retries × cycle budget` (≥270m) instead of single-attempt cycles was rejected — it keeps blind in-slot retries of work whose bookkeeping already self-completes across cycles and triples worst-case slot occupancy; the 30-minute loop cadence is a strictly better retry channel. Leaving the executor seam context-less and bounding only inside `RunOnce` was rejected because the seam is shared by scheduler, DLQ replay, and A2A-facing routing — each caller needs its own envelope, which only a propagated context provides.
+
+**Status:** Accepted (2026-07-23) — operator-landed fix for the 2026-07-23 fleet review's gap 2. Pinned by `TestAgentRouterExecute_PropagatesCallerContext` / `TestAgentRouterExecute_StopsFailoverWhenContextDone` (`internal/reliability/executor_context_test.go`), `TestNewLocalAgentExecutor_ThreadsContextIntoRunOnce` (`cmd/bt-agent/scheduler_ctx_test.go`), and `TestSchedulerRetryPolicy_GoapCyclesGetSingleAttempt`, `TestSchedulerRetryPolicy_PreservesConfiguredBackoff`, `TestRecordSchedulerAttempt_EvidenceShapeRejectionNotRetried`, `TestSchedulerDeadLetter_RecordsActualAttempts` (`cmd/bt-agent/scheduler_retry_test.go`).
+
+**Consequences:**
+- ✅ A scheduled attempt now observes its job deadline mid-flight: `RunOnce` receives the job ctx, so the a087c47 "cycle budget exhausted" refund markers can fire at the scheduler envelope too, not only at the per-run budget.
+- ✅ A goap cycle slot costs at most one cycle run; rate-limit carryover and healthy no-code outcomes were already terminal before the retry loop and are unaffected.
+- ✅ DLQ forensics can trust `Attempts` again; existing consumers only merge-max and display it.
+- ⚠️ The same commit fixes the review's gap 1 (test processes isolated from production state: `testing.Testing()` guard in `buildBaseHandler`, `superpowersRunsDir` var seam + engine `TestMain` redirect) and gap 3 (`runSelfReview`'s Complete path stamps `QualityScore`/`QualityAuthoritative` so quality-retry cannot overwrite a Complete report with a Skip) — engineering fixes recorded here for the audit trail, not separate architectural decisions.
+- ⚠️ The reporter/validator ApplyStatus recognition lists remain two hand-maintained lists (ADR-185's ⚠ stands); the non-retryable classification bounds the blast radius of the *next* drift to a single attempt, it does not remove the drift class — the one-canonical-classifier ask from the 2026-07-17 review is still open.
 
 ---
 

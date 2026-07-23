@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -76,14 +77,14 @@ func TestEndpointsFromCardsSingleNodeYieldsNoPeers(t *testing.T) {
 		t.Fatalf("single-node registry must yield no peers, got %d: %+v", len(eps), eps)
 	}
 
-	local := reliability.NewLocalExecutor("solo", func(agentName, task string) (*reliability.AgentResult, error) {
+	local := reliability.NewLocalExecutor("solo", func(_ context.Context, agentName, task string) (*reliability.AgentResult, error) {
 		return &reliability.AgentResult{Agent: agentName, Task: task, Success: true, Output: "local"}, nil
 	})
 	router := reliability.NewRouterFromEndpoints(local, eps)
 	if n := len(router.Executors()); n != 0 {
 		t.Fatalf("expected router with no remote executors, got %d", n)
 	}
-	res, err := router.Execute("agent", "task")
+	res, err := router.Execute(context.Background(), "agent", "task")
 	if err != nil || res.Output != "local" {
 		t.Fatalf("empty router must route to local; got res=%+v err=%v", res, err)
 	}

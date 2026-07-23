@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 )
 
 var (
@@ -49,6 +50,15 @@ func buildLogger() {
 // buildBaseHandler creates the base JSON handler writing to the rotating
 // log file and stderr (or a stderr-only text handler as a fallback).
 func buildBaseHandler() slog.Handler {
+	// Test processes must never open — let alone rotate — the production
+	// bt.log: `go test` runs wrote real records into the operator's live
+	// ~/.go-bt-evolve/logs/bt.log (once rotating it mid-flight, 2026-07-22),
+	// inflating every log-derived operational count. Under go test, records
+	// go to stderr only.
+	if testing.Testing() {
+		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: envLogLevel()})
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
