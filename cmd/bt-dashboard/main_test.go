@@ -179,6 +179,48 @@ func TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness(t *testing.T) {
 	}
 }
 
+// TestHandleHealth_UsesDashboardHealthJSON pins the NotebookLM research goal:
+// handleHealth must delegate to the existing dashboard.HealthJSON(version)
+// instead of hand-rolling its own response map with a literal "operational"
+// uptime string and static "packages"/"trees" counts that immediately go
+// stale as the platform grows.
+func TestHandleHealth_UsesDashboardHealthJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	rr := httptest.NewRecorder()
+	handleHealth(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var got dashboard.HealthResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+	}
+
+	if got.GoVersion == "" {
+		t.Errorf("go_version missing from response; handler still hand-rolls its own map instead of calling dashboard.HealthJSON. body=%s", rr.Body.String())
+	}
+	if got.Uptime == "operational" {
+		t.Errorf(`uptime = %q, want a real elapsed-time string from dashboard.HealthJSON (time.Since(...).String()), not the hardcoded literal "operational"`, got.Uptime)
+	}
+	if _, err := time.ParseDuration(got.Uptime); err != nil {
+		t.Errorf("uptime %q does not parse as a Go duration; dashboard.HealthJSON formats it via time.Since(startTime).String(): %v", got.Uptime, err)
+	}
+
+	// A handler that truly delegates to dashboard.HealthJSON produces exactly
+	// the HealthResponse fields — no leftover hand-rolled "packages"/"trees" keys.
+	var raw map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	for _, stale := range []string{"packages", "trees"} {
+		if _, present := raw[stale]; present {
+			t.Errorf("response still contains hand-rolled %q field; want handler to call dashboard.HealthJSON instead", stale)
+		}
+	}
+}
+
 // TestHandleScalability_ReflectsInjectedQueueAndRouter pins milestone 3/5 of the
 // horizontal-scaling adoption program: the /api/scalability endpoint must surface
 // the injected TaskQueue depth and AgentRouter executor health instead of the

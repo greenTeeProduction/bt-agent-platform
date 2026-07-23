@@ -2015,7 +2015,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// milestone requires to be handled cleanly rather than panicking. A
 			// corrupt file is surfaced non-fatally under stats_load_error so the
 			// empty-telemetry contract still holds.
-			so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+			so := evolution.NewSelectorOptimizer(evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY")))
 			result := map[string]interface{}{"tree": params.Tree}
 			if params.StatsPath != "" {
 				if err := so.LoadSelectorStats(params.StatsPath); err != nil {
