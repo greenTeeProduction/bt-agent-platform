@@ -1189,13 +1189,8 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 // If apiKey is empty, all requests pass through (no auth required).
 // If apiKey is set, requests must include X-API-Key header matching the key.// handleHealth returns platform health status.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	_ = encodeJSON(w, map[string]interface{}{
-		"status":   "ok",
-		"version":  "1.0.0",
-		"uptime":   "operational",
-		"packages": 19,
-		"trees":    38,
-	})
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(dashboard.HealthJSON("1.0.0"))
 }
 
 // ─── Session Management Handlers ──────────────────────────────────────────────

@@ -585,6 +585,61 @@ func TestPushLandingNotifiesOnDirectPush(t *testing.T) {
 	}
 }
 
+// TestShipLandingToPRSerializesOnPRShepherdMu pins the fix for the fleet-PR
+// race (actions_pr_shepherd.go:31-34): shipLandingToPR pushes the shared
+// fleet branch and reads/writes the same durable prShepherdState that
+// runPRShepherd's ShepherdFleetPR pass mutates under prShepherdMu, but two
+// separate scheduled agents in one daemon process can overlap their cycles —
+// one agent's ShepherdFleetPR pass racing the other's landing-tail push could
+// double-create PRs or race the branch push. shipLandingToPR must therefore
+// serialize on the SAME prShepherdMu runPRShepherd already holds for exactly
+// this reason.
+func TestShipLandingToPRSerializesOnPRShepherdMu(t *testing.T) {
+	gh := &fakeGitHub{t: t}
+	srv := gh.server()
+	t.Cleanup(srv.Close)
+	prevFactory := landingPRClientFactory
+	prevDir := prShepherdDirOverride
+	t.Cleanup(func() { landingPRClientFactory = prevFactory; prShepherdDirOverride = prevDir })
+	landingPRClientFactory = func(_ context.Context, _ CommandRunner, _ string) (*githubPRClient, error) {
+		return &githubPRClient{base: srv.URL, owner: "o", repo: "r", token: "t", hc: srv.Client()}, nil
+	}
+	prShepherdDirOverride = t.TempDir()
+	runner := &prShepherdScriptRunner{}
+
+	prShepherdMu.Lock()
+	released := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-released:
+		default:
+			prShepherdMu.Unlock()
+		}
+	})
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = shipLandingToPR(context.Background(), runner, t.TempDir())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("shipLandingToPR returned while prShepherdMu was held by another goroutine — it must acquire prShepherdMu for the duration of its fleet-branch push and state read/write, matching runPRShepherd's critical section")
+	case <-time.After(150 * time.Millisecond):
+		// Still blocked, as expected.
+	}
+
+	prShepherdMu.Unlock()
+	close(released)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("shipLandingToPR never completed after prShepherdMu was released")
+	}
+}
+
 func TestShepherdFleetPRActionRegistered(t *testing.T) {
 	if GetAction("ShepherdFleetPR") == nil {
 		t.Fatal("ShepherdFleetPR is not registered — the goap fusion trees' node would silently no-op")

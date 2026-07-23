@@ -4475,6 +4475,102 @@ func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
 	}
 }
 
+// TestBTEvolveSelectorsHonorsEnvOrderingStrategy pins the residual gap left by
+// the Selector-ordering consolidation program (NotebookLM research,
+// tools.go:2018): bt_evolve_selectors hardcodes
+// evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate) instead of
+// evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY")),
+// unlike the other two production wiring sites (cmd/bt-gardener/config.go,
+// internal/agentexec/wiring.go). The seeded telemetry below is deliberately
+// chosen so OrderBySuccessRate and OrderByGini disagree on ranking: "Cheap" is
+// low-success but perfectly predictable (low Gini impurity), "Reliable" has a
+// higher success rate but more outcome variance (higher Gini impurity). With
+// BT_SELECTOR_ORDERING_STRATEGY=gini_impurity honored, the persisted Router
+// selector must rank Cheap ahead of Reliable; the hardcoded success-rate
+// optimizer ranks Reliable first regardless of the environment variable.
+func TestBTEvolveSelectorsHonorsEnvOrderingStrategy(t *testing.T) {
+	injectSelectorProbeTree(t)
+
+	statsPath := filepath.Join(t.TempDir(), "gini_stats.json")
+	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
+	rec := func(child, outcome string, n int) {
+		for i := 0; i < n; i++ {
+			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
+		}
+	}
+	rec("Cheap", "success", 1)
+	rec("Cheap", "failure", 9) // success rate 0.10, gini impurity 0.18 (predictable)
+	rec("Reliable", "success", 6)
+	rec("Reliable", "failure", 4)  // success rate 0.60, gini impurity 0.48 (less predictable)
+	rec("Fallback", "success", 10) // perfect success rate, but stays last regardless
+	if err := so.SaveSelectorStats(statsPath); err != nil {
+		t.Fatalf("SaveSelectorStats: %v", err)
+	}
+
+	t.Setenv("BT_SELECTOR_ORDERING_STRATEGY", "gini_impurity")
+
+	dir := t.TempDir()
+	treeStore, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{treeStore: treeStore})
+
+	args := json.RawMessage(fmt.Sprintf(`{"tree":"domain:selector_probe","stats_path":%q}`, statsPath))
+	res, ok := server.Invoke("bt_evolve_selectors", args)
+	if !ok {
+		t.Fatal("Invoke(bt_evolve_selectors) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_evolve_selectors returned no content")
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_evolve_selectors result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if persisted, _ := out["persisted"].(bool); !persisted {
+		t.Fatalf("bt_evolve_selectors must persist the reordered tree when a tree store is configured; got %v", out)
+	}
+
+	loaded, err := treeStore.LoadNamed("domain:selector_probe")
+	if err != nil {
+		t.Fatalf("LoadNamed(domain:selector_probe): %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("bt_evolve_selectors reported persisted=true but the tree store has nothing under domain:selector_probe")
+	}
+
+	var router *evolution.SerializableNode
+	var walk func(n *evolution.SerializableNode)
+	walk = func(n *evolution.SerializableNode) {
+		if n == nil || router != nil {
+			return
+		}
+		if n.Name == "Router" {
+			router = n
+			return
+		}
+		for i := range n.Children {
+			walk(&n.Children[i])
+		}
+	}
+	walk(loaded)
+	if router == nil {
+		t.Fatal("persisted tree has no 'Router' Selector node")
+	}
+	if len(router.Children) != 3 {
+		t.Fatalf("expected Router to retain 3 children, got %d", len(router.Children))
+	}
+	if router.Children[0].Name != "Cheap" {
+		names := make([]string, len(router.Children))
+		for i, c := range router.Children {
+			names[i] = c.Name
+		}
+		t.Errorf("bt_evolve_selectors must honor BT_SELECTOR_ORDERING_STRATEGY=gini_impurity via evolution.ParseSelectorOrderingStrategy(os.Getenv(...)) — matching the other two production wiring sites — instead of hardcoding evolution.OrderBySuccessRate; expected Cheap ranked first (lower Gini impurity) under the Gini strategy but got order %v", names)
+	}
+}
+
 // The DLQ's agent surface (c8094002 ms3): bt_dlq_list exposes retained entries
 // and bt_dlq_replay requeue-flags one entry for drop-safe re-execution. With
 // wait=true the replay runs synchronously through the configured executor so

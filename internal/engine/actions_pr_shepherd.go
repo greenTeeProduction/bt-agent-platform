@@ -731,6 +731,14 @@ func shipLandingToPR(ctx context.Context, runner CommandRunner, repoDir string) 
 	if err != nil {
 		return 0, err
 	}
+
+	// Serialize with runPRShepherd's ShepherdFleetPR pass: both push the same
+	// fleet branch and read/write the same durable prShepherdState, and two
+	// separate scheduled agents in one daemon process can overlap their
+	// cycles (see prShepherdMu's doc comment above).
+	prShepherdMu.Lock()
+	defer prShepherdMu.Unlock()
+
 	branch := fleetPRBranch()
 	// Best-effort prune first: a remote-tracking ref left behind by a merged
 	// branch's API deletion would fail the lease below with "stale info".
