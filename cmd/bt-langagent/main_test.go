@@ -129,15 +129,15 @@ func TestHandleFitness(t *testing.T) {
 	}{
 		{
 			// refStore and treeStore share the same ~/.go-bt-reflections
-			// directory, so LoadAll picks up tree.json as an extra
-			// zero-value (non-failure) record — same quirk pinned for
-			// cmd/bt-evaluator's ev_evaluate handler.
-			name:           "no seeded reflections still counts the tree.json quirk record",
+			// directory; LoadAll must filter to the reflection-*.json files
+			// Save writes so tree.json isn't decoded as a phantom record —
+			// same fix pinned for cmd/bt-evaluator's ev_evaluate handler.
+			name:           "no seeded reflections excludes the tree.json sibling file",
 			records:        nil,
-			wantTotalTasks: 1,
-			wantSuccesses:  1,
+			wantTotalTasks: 0,
+			wantSuccesses:  0,
 			wantFailures:   0,
-			wantRate:       "100.0%",
+			wantRate:       "0.0%",
 		},
 		{
 			name: "mixed outcomes",
@@ -146,10 +146,10 @@ func TestHandleFitness(t *testing.T) {
 				{TaskID: "t2", Task: "two", Outcome: evolution.Failure},
 				{TaskID: "t3", Task: "three", Outcome: evolution.Failure},
 			},
-			wantTotalTasks: 4,
-			wantSuccesses:  2,
+			wantTotalTasks: 3,
+			wantSuccesses:  1,
 			wantFailures:   2,
-			wantRate:       "50.0%",
+			wantRate:       "33.3%",
 		},
 	}
 

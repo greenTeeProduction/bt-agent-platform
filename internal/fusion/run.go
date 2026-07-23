@@ -130,6 +130,9 @@ func RunPanel(ctx context.Context, caller ModelCaller, cfg Config, prompt string
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !fusionBreaker.Allow() {
 		return nil, fmt.Errorf("fusion panel: circuit breaker open")
 	}

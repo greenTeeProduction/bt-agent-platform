@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -99,13 +100,21 @@ func NewStore(dir string) (*Store, error) {
 // Dir returns the store's directory path.
 func (s *Store) Dir() string { return s.dir }
 
+// reflectionFilePrefix is the filename prefix Save uses for reflection
+// record files. The store directory is shared with sibling stores (the
+// tree Store's tree.json / tree-<id>.json, the evaluator's
+// transposition.json), so LoadAll must filter to this prefix rather than
+// globbing every *.json file, or those siblings unmarshal as zero-value
+// phantom records.
+const reflectionFilePrefix = "reflection-"
+
 // Save writes a record to a JSON file.
 func (s *Store) Save(r *Record) error {
 	r.Timestamp = time.Now().UnixMilli()
 	if r.TaskID == "" {
 		r.TaskID = fmt.Sprintf("task-%d", r.Timestamp)
 	}
-	path := filepath.Join(s.dir, fmt.Sprintf("reflection-%s.json", r.TaskID))
+	path := filepath.Join(s.dir, fmt.Sprintf("%s%s.json", reflectionFilePrefix, r.TaskID))
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -133,7 +142,7 @@ func (s *Store) LoadAll() ([]Record, error) {
 	}
 	records := make([]Record, 0, 64)
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || !strings.HasPrefix(e.Name(), reflectionFilePrefix) {
 			continue
 		}
 		path := filepath.Join(s.dir, e.Name())

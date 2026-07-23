@@ -89,14 +89,14 @@ func TestHandleEvaluate_WithTreeAndRecordsReportsFitnessFields(t *testing.T) {
 		}
 	}
 	// refStore and treeStore share the same directory (mirroring production's
-	// shared ~/.go-bt-reflections layout), so LoadAll picks up tree.json as an
-	// extra zero-value record alongside the 2 seeded ones — pinning that
-	// existing quirk rather than the 2-record count a caller might expect.
-	if got := out["total_tasks"]; got != float64(3) {
-		t.Fatalf("total_tasks = %v, want 3", got)
+	// shared ~/.go-bt-reflections layout); LoadAll must filter to the
+	// reflection-*.json files Save writes so tree.json isn't decoded as an
+	// extra phantom record alongside the 2 seeded ones.
+	if got := out["total_tasks"]; got != float64(2) {
+		t.Fatalf("total_tasks = %v, want 2", got)
 	}
-	if got := out["success_rate"]; got != "33.3%" {
-		t.Fatalf("success_rate = %v, want \"33.3%%\"", got)
+	if got := out["success_rate"]; got != "50.0%" {
+		t.Fatalf("success_rate = %v, want \"50.0%%\"", got)
 	}
 }
 

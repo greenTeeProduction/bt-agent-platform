@@ -3379,3 +3379,65 @@ func TestExecRetrievalQA_UsesConfiguredMaxTokens(t *testing.T) {
 		t.Errorf("expected configured MaxTokens=999 to be passed through, got %d", mock.receivedMaxTokens)
 	}
 }
+
+// ctxAwareFusionMockLLM implements GenerateWithModel (in addition to the base
+// llm.LLM interface) and returns ctx.Err() whenever the context handed to it
+// is already canceled, so tests can observe whether a canceled bb.TraceContext
+// actually reaches fusion.Run's panel calls.
+type ctxAwareFusionMockLLM struct{}
+
+func (m *ctxAwareFusionMockLLM) Generate(_ string) (string, error) { return "mock response", nil }
+func (m *ctxAwareFusionMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *ctxAwareFusionMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
+	return m.Generate(prompt)
+}
+func (m *ctxAwareFusionMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
+func (m *ctxAwareFusionMockLLM) GeneratePlan(_, _ string) string         { return "1. a\n2. b" }
+func (m *ctxAwareFusionMockLLM) Reflect(_, _, _ string) (string, string) { return "ok", "better" }
+
+func (m *ctxAwareFusionMockLLM) GenerateWithModel(ctx context.Context, _, _, _ string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	// Valid for every stage: usable as panel/synthesize content verbatim, and
+	// parses cleanly as the judge's required Analysis JSON.
+	return `{"consensus":[],"contradictions":[],"partial_coverage":[],"unique_insights":[],"blind_spots":[]}`, nil
+}
+
+var _ llm.LLM = (*ctxAwareFusionMockLLM)(nil)
+
+// TestExecFusion_UsesTraceContext pins the fix for execFusion (chains.go:915):
+// fusion.Run must be given chainContext(bb) — the same helper
+// generateWithRetryPolicy already uses (chains.go:297) — instead of a bare
+// context.Background(), so that a canceled bb.TraceContext (e.g. a caller
+// tearing down the run) actually reaches the panel/judge/synthesize calls
+// instead of being silently ignored.
+func TestExecFusion_UsesTraceContext(t *testing.T) {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	bb := &Blackboard{
+		Task:         "investigate the incident",
+		LLM:          &ctxAwareFusionMockLLM{},
+		TraceContext: canceledCtx,
+	}
+	cfg := ChainConfig{
+		ChainType: string(ChainFusion),
+		Prompt:    "investigate the incident",
+		Params:    map[string]string{"analysis_models": "test-model"},
+	}
+
+	status := execFusion(cfg, bb)
+
+	if status != -1 {
+		t.Fatalf("execFusion status = %d, want -1 (fusion.Run should have observed the canceled bb.TraceContext and failed)", status)
+	}
+	if bb.Outcome != "chain_failed" {
+		t.Errorf("bb.Outcome = %q, want %q — fusion.Run must run under bb.TraceContext (via chainContext(bb)), not a bare context.Background() that ignores cancellation", bb.Outcome, "chain_failed")
+	}
+	if !strings.Contains(bb.Result, context.Canceled.Error()) {
+		t.Errorf("bb.Result = %q, want it to surface %q from the canceled context reaching fusion.Run", bb.Result, context.Canceled.Error())
+	}
+}

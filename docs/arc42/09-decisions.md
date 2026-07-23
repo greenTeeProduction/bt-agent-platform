@@ -215,6 +215,8 @@ Consolidation notes (2026-07-16):
 | ADR-190 | `domains.ExpectedDomainIDs` Becomes the One Canonical `ExpectedDomains` Conversion, and `cmd/bt-dashboard` Wires It So `bt_kg_coverage_gaps` Can Actually Go Non-Zero, Closing a Self-Fix Gap in ADR-182 (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
 | ADR-191 | `wireDTOrdering` Sets `Config.DTStatsPath`/`EvolveV2Config.DTOrdering` on the Live Gardener Daemon, Closing ADR-171's Flagged DT-Reordering Production-Wiring Gap (Q2 Evolvability) | Accepted | 2026-07-23 |
 | ADR-192 | `bt_gardener_dt_diagnostics` MCP Tool Surfaces `Gardener.AnalyzeTreeDiagnostics` for HITL Review, Closing ADR-172's Flagged "No Production Caller" Gap (Q2 Evolvability) | Accepted | 2026-07-23 |
+| ADR-193 | `reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
+| ADR-194 | `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research) | Accepted | 2026-07-23 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3444,6 +3446,40 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ An HITL reviewer can now request `DeadPathsRemoved`/`OverlappingPaths`/`ReorderChanges` counts for a named tree through the same MCP surface every other operator-invoked tool uses, instead of `AnalyzeTreeDiagnostics` being reachable only from `internal/gardener`'s own tests.
 - ✅ The tool takes no destructive action against the live registry tree — `resolveTree` returns the live `*evolution.SerializableNode`, but `AnalyzeTreeDiagnostics`'s own `cloneTreeForGardener` step (ADR-172) isolates it before analysis, so this new call site inherits that safety property rather than needing to reimplement it.
 - ⚠️ The tool constructs a fresh `gardener.NewGardener(gardener.Config{DTStatsPath: params.StatsPath})` per call rather than reusing the daemon's own wired `Config` (ADR-191) — an operator must pass the same `dt-stats.json` path the daemon uses (or accept an unseeded analysis) to get diagnostics consistent with what the live `DTOrdering` pass would apply; the two are not automatically kept in sync.
+
+---
+
+## ADR-193: `reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22)
+
+**Context (2026-07-23):** `internal/evolution/reflection_store.go`'s `Store.LoadAll` globbed every `*.json` file in the store directory and unmarshalled each into a `Record`. In production, `Store`'s directory (`~/.go-bt-reflections`) is shared with sibling stores — the tree registry's `tree.json`/`tree-<id>.json` and the evaluator's `transposition.json` — none of which are `Record` JSON. `json.Unmarshal` doesn't error on a structurally-different-but-valid JSON object; it silently produces a zero-value `Record{}`, whose `Outcome` is the empty string. `cmd/bt-evaluator`'s `ev_evaluate` and `cmd/bt-langagent`'s `la_fitness` handlers both compute `total_tasks`/`success_rate` by iterating `LoadAll`'s result, so each phantom sibling-file record inflated `total_tasks` by one and — since an empty-string `Outcome` isn't `evolution.Failure` — was counted as a success, skewing `success_rate` upward. Commit 7d853dc's characterization tests deliberately pinned this as an observed quirk rather than treating it as correct; fleet review 2026-07-22 flagged it as a genuine bug to fix rather than leave pinned.
+
+**Decision:** `Save` already named every record file with a `reflection-` prefix (`fmt.Sprintf("reflection-%s.json", r.TaskID)`); the fix makes that prefix an exported invariant `LoadAll` also enforces. `internal/evolution/reflection_store.go` gains a package-level `const reflectionFilePrefix = "reflection-"`, which both `Save` (building the filename) and `LoadAll` (filtering `os.ReadDir` entries via `strings.HasPrefix`) now reference, so the writer and reader can't drift independently. `LoadAll`'s directory-entry filter becomes `e.IsDir() || filepath.Ext(e.Name()) != ".json" || !strings.HasPrefix(e.Name(), reflectionFilePrefix)` — `tree.json`, `tree-<id>.json`, and `transposition.json` all fail the added prefix check and are skipped, since none of them start with `reflection-`.
+
+**Rejected alternative:** giving each store's sibling data its own subdirectory (e.g. `reflections/`, `trees/`) was rejected as a larger, riskier change — it would require migrating on-disk layout for every existing deployment and touch every caller that constructs a `Store`/tree `Registry` with a shared directory path, for a fix that a filename-prefix filter (matching what `Save` already wrote) solves with no migration and no behavior change to any other store.
+
+**Status:** Accepted (2026-07-23) — closes the milestone the fleet review opened; single milestone, no further parts. Pinned by new characterization cases in `internal/evolution/reflection_store_test.go` asserting a non-`reflection-`-prefixed `.json` file is excluded from `LoadAll`'s results, and by the corrected `cmd/bt-evaluator/main_test.go`/`cmd/bt-langagent/main_test.go` pins (`TestHandleEvaluate_WithTreeAndRecordsReportsFitnessFields`, `TestHandleFitness`), which now assert `tree.json` is excluded from `total_tasks`/`success_rate` instead of pinning it as a counted phantom record.
+
+**Consequences:**
+- ✅ `ev_evaluate` and `la_fitness` now report `total_tasks`/`success_rate` computed only from genuine reflection records — a store directory shared with `tree.json`/`transposition.json` no longer silently inflates the task count or the success rate.
+- ✅ The fix is confined to `internal/evolution/reflection_store.go`; no caller of `LoadAll` needed to change, since the phantom records simply stop appearing rather than requiring downstream filtering.
+- ⚠️ Any other future file written into a `Store`'s directory that happens to end in `.json` but isn't `reflection-`-prefixed is now silently skipped by `LoadAll` rather than erroring — consistent with the store's existing silent-skip behavior for non-`.json` files, but still a fail-open design a future caller should be aware of if it ever needs to detect an unexpected file in the directory.
+
+---
+
+## ADR-194: `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research)
+
+**Context (2026-07-23):** `internal/engine/chains.go`'s `execFusion` (`ChainFusion`'s executor) called `fusion.Run(context.Background(), caller, fcfg, prompt, fusionToolsFromBB(bb))` — a fresh, never-cancelable context — while every other chain executor in the same file (`execLLMCall`, `execRAGQuery`, `execStructuredOutput`, `execRetrievalQA`, `execMapReduce`, `execRefine`, per ADR-136) already runs its LLM call under `chainContext(bb)` (`chains.go:261`), which returns `bb.TraceContext` when the caller set one and only falls back to `context.Background()` otherwise. `execFusion` was the one remaining chain executor substituting a hardcoded background context for the tree's actual cancellation signal — a caller tearing down a run (timeout, HITL abort, shutdown) had no way to stop an in-flight fusion panel/judge/synthesize call, unlike every sibling executor.
+
+**Decision:** `execFusion`'s `fusion.Run` call is changed to pass `chainContext(bb)` in place of `context.Background()` — a one-line change reusing the existing helper, with no new function added. Separately, `internal/fusion/run.go`'s `RunPanel` (which `fusion.Run` calls first) gains an early `if err := ctx.Err(); err != nil { return nil, err }` check immediately after `cfg.Validate()` and before the circuit-breaker/goroutine-dispatch logic, so a context that is already canceled by the time `RunPanel` is entered fails fast with the context's own error instead of the (previously unreachable, now newly-reachable) per-model calls each independently discovering cancellation via `GenerateWithModel`.
+
+**Rejected alternative:** relying solely on the per-model `GenerateWithModel` calls to observe `ctx.Err()` without an early check in `RunPanel` was rejected — it would still work in principle once `chainContext(bb)` began threading real cancellation through, but would let a canceled context reach `fusionBreaker.Allow()` and spawn every per-model goroutine before any of them observed the cancellation, wasting the dispatch and breaker-accounting work `RunPanel` had already done. Checking `ctx.Err()` once at the top, matching the pattern immediately after `cfg.Validate()`, fails fast instead.
+
+**Status:** Accepted (2026-07-23) — single-milestone fix, no further parts. Pinned by `TestExecFusion_UsesTraceContext` (`internal/engine/chains_test.go`), which sets `bb.TraceContext` to an already-canceled `context.Context`, asserts `execFusion` returns status `-1`/`bb.Outcome == "chain_failed"`, and that `bb.Result` surfaces `context.Canceled` — proving cancellation actually reaches `fusion.Run` rather than being silently ignored by a bare `context.Background()`.
+
+**Consequences:**
+- ✅ `execFusion` now honors the same cancellation contract as every other `chains.go` executor (ADR-136): a canceled `bb.TraceContext` stops an in-flight fusion call instead of running to completion regardless.
+- ✅ `fusion.RunPanel`'s new `ctx.Err()` check benefits every caller, not just `execFusion` — any future caller passing a context that's canceled before dispatch now fails fast without spawning per-model goroutines first.
+- No further milestones are open for this fix; it does not extend an existing multi-milestone program.
 
 ---
 

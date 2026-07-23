@@ -912,7 +912,7 @@ func execFusion(cfg ChainConfig, bb *Blackboard) int {
 	prompt := expandTemplate(cfg.Prompt, bb)
 	fcfg := fusionConfigFromParams(cfg.Params)
 	caller := fusionCaller{llm: bb.LLM}
-	result, err := fusion.Run(context.Background(), caller, fcfg, prompt, fusionToolsFromBB(bb))
+	result, err := fusion.Run(chainContext(bb), caller, fcfg, prompt, fusionToolsFromBB(bb))
 	if bb.ChainState == nil {
 		bb.ChainState = map[string]any{}
 	}
