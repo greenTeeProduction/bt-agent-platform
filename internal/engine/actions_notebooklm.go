@@ -24,47 +24,6 @@ func init() {
 // script check/login/re-check sequences without the real CLI.
 var nlmAuthRun = nlmRun
 
-// nlmResearchSynthesesDir is where ResearchNotebookLM writes its per-run
-// synthesis report; a var so tests never touch the live research vault.
-var nlmResearchSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
-
-// nlmResearchQuerySeenWindow is the novelty-gate recency window: the same
-// research query re-derived within it (the 2-hour scheduled cadence hitting
-// one topic 4×/day, 2026-07-23 review gap 7) is skipped instead of burning
-// web-research quota on a near-identical synthesis. Just under a day, so a
-// topic legitimately re-arms on its next daily rotation.
-const nlmResearchQuerySeenWindow = 20 * time.Hour
-
-// nlmResearchQueryKeyContent is the knowledge-store content identity of one
-// research query — distinct from the report content Record'ed after a run,
-// so gating never depends on report wording.
-func nlmResearchQueryKeyContent(query string) string {
-	return "nlm research query: " + query
-}
-
-// nlmResearchQueryRecentlySeen reports whether query completed a research run
-// within the novelty-gate window.
-func nlmResearchQueryRecentlySeen(query string) bool {
-	store, err := research.Open(btFusionKnowledgePath)
-	if err != nil {
-		return false
-	}
-	e, ok := store.Entries[research.Key(nlmResearchQueryKeyContent(query))]
-	return ok && nlmResearchNowFn().UTC().Sub(e.LastSeen) < nlmResearchQuerySeenWindow
-}
-
-// nlmMarkResearchQueryDone records a completed research run's query, arming
-// the novelty gate for the window. Best-effort: a store failure only costs a
-// duplicate run later.
-func nlmMarkResearchQueryDone(query string) {
-	store, err := research.Open(btFusionKnowledgePath)
-	if err != nil {
-		return
-	}
-	store.Record("nlm:research-query", query, nlmResearchQueryKeyContent(query))
-	_ = store.Save()
-}
-
 // nlmAuthNeedsRefresh reports whether an auth-check output warrants an
 // `nlm login` attempt. "expired" matters: a stored Chrome profile often
 // re-authenticates non-interactively, and failing without trying left the
@@ -142,17 +101,6 @@ func registerNotebookLMActions() {
 		query := deriveNotebookLMResearchQuery(bb.Task)
 		fmt.Fprintf(&report, "**Query:** %s\n\n", query)
 
-		// Novelty gate (2026-07-23 review gap 7): a query researched within
-		// the recency window burns web-research quota to produce a
-		// near-identical synthesis — the notebook already holds this run's
-		// sources and the knowledge store its findings. Skip healthily
-		// BEFORE any nlm invocation.
-		if nlmResearchQueryRecentlySeen(query) {
-			bb.Result = fmt.Sprintf("## NotebookLM Research Skipped (novelty gate)\n\n**Query:** %s\n\nAlready researched within the last %s — web-research quota preserved.", query, nlmResearchQuerySeenWindow)
-			bb.Outcome = "no_change"
-			return 1
-		}
-
 		// Step 1: Get current notebook state
 		beforeOut := nlmRun(30*time.Second, "notebook", "get", nbID, "--json")
 		report.WriteString("### Before\n```json\n" + beforeOut + "\n```\n\n")
@@ -199,7 +147,7 @@ func registerNotebookLMActions() {
 		// Step 6: Save to vault — timestamped: the old per-day filename made
 		// every run overwrite the previous run's results.
 		dateStr := time.Now().Format("2006-01-02T150405")
-		savePath := fmt.Sprintf("%s/nlm-research-%s.md", nlmResearchSynthesesDir, dateStr)
+		savePath := fmt.Sprintf("/mnt/ssd/clawd/wiki/bt-research/syntheses/nlm-research-%s.md", dateStr)
 		saveErr := writeString(savePath, report.String())
 		if saveErr != nil {
 			fmt.Fprintf(&report, "⚠ Save error: %v\n", saveErr)
@@ -213,8 +161,6 @@ func registerNotebookLMActions() {
 			store.Record("nlm:research", query, report.String())
 			_ = store.Save()
 		}
-		// Arm the novelty gate: this query is done for the window.
-		nlmMarkResearchQueryDone(query)
 
 		bb.Result = report.String()
 		bb.ChainState["nlm_task_id"] = taskID

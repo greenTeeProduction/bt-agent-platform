@@ -219,24 +219,6 @@ func isGoapRedUnexpectedlyPassed(result string) bool {
 	return strings.Contains(result, "RED command unexpectedly passed")
 }
 
-// extractRedPassCommand pulls the RED command out of the executor's refusal
-// line ("RED command unexpectedly passed; refusing to run GREEN without
-// failing regression evidence: <cmd>") — the command is the rest of that
-// line. Empty when the marker is absent or malformed; RecordRedPass treats
-// an empty command as "keep the previous record".
-func extractRedPassCommand(result string) string {
-	const marker = "failing regression evidence: "
-	i := strings.Index(result, marker)
-	if i < 0 {
-		return ""
-	}
-	rest := result[i+len(marker):]
-	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-		rest = rest[:nl]
-	}
-	return strings.TrimSpace(rest)
-}
-
 // classifyGoapCycleFailure routes a failed cycle to red-pass, infra, or
 // genuine handling.
 func classifyGoapCycleFailure(outcome, result string) string {
@@ -273,9 +255,7 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 	var streak int
 	var completed bool
 	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-		// The passing RED command rides along so the NEXT cycle's charge-time
-		// pre-check can re-run it without burning a Claude plan phase.
-		streak = ps.RecordRedPass(programID, idx, extractRedPassCommand(bb.Result))
+		streak = ps.RecordRedPass(programID, idx)
 		if streak >= goapRedPassCompleteStreak {
 			completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
 		}

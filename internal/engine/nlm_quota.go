@@ -318,15 +318,5 @@ func deriveNotebookLMResearchQuery(task string) string {
 			"multi-agent coordination benchmarks and evaluation for heterogeneous agent fleets",
 		}
 	}
-	// Rotate per 2-hour SLOT, not per day: the researcher runs every 2 hours,
-	// and the old YearDay-only index served one topic all day — the same
-	// query 4×/day producing near-identical syntheses for quota it cannot
-	// spare (2026-07-23 review gap 7).
-	now := nlmResearchNowFn()
-	slot := now.YearDay()*12 + now.Hour()/2
-	return topics[slot%len(topics)]
+	return topics[time.Now().YearDay()%len(topics)]
 }
-
-// nlmResearchNowFn is the researcher's clock; a package var so tests pin the
-// rotation slot and the novelty-gate recency window.
-var nlmResearchNowFn = time.Now

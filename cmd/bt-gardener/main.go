@@ -201,15 +201,6 @@ func main() {
 			RepoDir:         repoDir,
 			RunningRevision: buildID.Revision,
 			AutoRebuild:     agent.AutoRebuildEnabled(),
-			// Self-adoption (2026-07-23 review gap 4): without AutoRestart the
-			// gardener rebuilt the same head every 20-minute tick and then ran
-			// the OLD binary up to ~50 minutes until bt-agent's sibling sweep
-			// saved it. Restarting our own unit does not violate the sweep's
-			// single-ownership rule (RestartSiblings stays bt-agent-only), and
-			// the adoption stamp written on restart tells the sweep to skip us.
-			// Evolution cycles exit gracefully on SIGTERM; a lost cycle costs
-			// minutes.
-			AutoRestart: agent.AutoRestartEnabled(),
 			// Own binary only: the fleet-wide sweep (and sibling restarts)
 			// is owned by cmd/bt-agent's watcher.
 			Targets: agent.GardenerRebuildTargets(repoDir),

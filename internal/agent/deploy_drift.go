@@ -2,17 +2,12 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"testing"
 	"time"
-
-	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Deploy-drift detection (program 94b0b31, "Close the automated deploy-drift
@@ -25,23 +20,6 @@ import (
 // driftHeadFn resolves a repo's HEAD revision; a package var so tests can stub
 // the git call.
 var driftHeadFn = defaultDriftHead
-
-// driftTreeFn resolves a revision's tree object id; a package var so tests can
-// stub the git call. Used to distinguish content drift from pure revision
-// bumps (a PR-merge commit of an already-adopted landing).
-var driftTreeFn = defaultDriftTree
-
-// defaultDriftTree shells `git -C <repoDir> rev-parse <rev>^{tree}` with the
-// same env scrubbing as defaultDriftHead.
-func defaultDriftTree(repoDir, rev string) (string, error) {
-	cmd := exec.Command("git", "-C", repoDir, "rev-parse", rev+"^{tree}")
-	cmd.Env = scrubGitEnv()
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git rev-parse %s^{tree} in %s: %w", rev, repoDir, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
 
 // driftRebuildFn performs the actual rebuild+swap; a package var (defaults to
 // RebuildBinaries) so DriftWatchOnce can be tested without a toolchain.
@@ -130,20 +108,7 @@ func DriftStatus(repoDir, runningRevision string) (head string, stale bool, err 
 	if runningRevision == "" || runningRevision == "unknown" {
 		return head, false, nil
 	}
-	if head == runningRevision {
-		return head, false, nil
-	}
-	// A revision bump with an identical tree — the PR-merge commit of an
-	// already-adopted landing — carries no content drift: rebuilding produces
-	// the same code with a different stamp and restarting adopts nothing
-	// (double-bump restarts, 2026-07-23 review gap 4). Tree resolution
-	// failure falls back to the revision comparison.
-	if headTree, terr := driftTreeFn(repoDir, head); terr == nil {
-		if runTree, rerr := driftTreeFn(repoDir, runningRevision); rerr == nil && headTree == runTree {
-			return head, false, nil
-		}
-	}
-	return head, true, nil
+	return head, head != runningRevision, nil
 }
 
 // DriftWatchConfig configures a single drift check.
@@ -210,60 +175,6 @@ type DriftResult struct {
 	Restarted bool
 }
 
-// adoptionStampDir overrides where per-unit adoption stamps live (tests set
-// it to a temp dir). Empty resolves to <home>/.go-bt-evolve/deploy-adoption —
-// except under `go test`, where an unset override resolves to a process-
-// scoped temp dir so tests can never touch the operator's live stamps.
-var adoptionStampDir string
-
-func resolveAdoptionStampDir() string {
-	if adoptionStampDir != "" {
-		return adoptionStampDir
-	}
-	if testing.Testing() {
-		adoptionStampDir = filepath.Join(os.TempDir(), fmt.Sprintf("bt-adoption-stamps-test-%d", os.Getpid()))
-		return adoptionStampDir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/home/nico"
-	}
-	return filepath.Join(home, ".go-bt-evolve", "deploy-adoption")
-}
-
-// adoptionStamp is the per-unit record of the last head a restart adopted.
-type adoptionStamp struct {
-	Head      string    `json:"head"`
-	AdoptedAt time.Time `json:"adopted_at"`
-}
-
-// writeAdoptionStamp records that unit was (asked to be) restarted onto head.
-// Written after every successful driftRestartFn call — by the unit's own
-// watcher on self-restart and by the fleet sweep for siblings — so the sweep
-// can skip units that already adopted the head instead of re-restarting them
-// (double gardener restarts, 2026-07-23 review gap 4). Best-effort: a write
-// failure only costs an extra restart later.
-func writeAdoptionStamp(unit, head string) {
-	dir := resolveAdoptionStampDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return
-	}
-	_ = util.SaveJSONAtomic(filepath.Join(dir, unit+".json"), adoptionStamp{Head: head, AdoptedAt: time.Now().UTC()})
-}
-
-// adoptionStampHead returns the head unit last adopted, or "" when unknown.
-func adoptionStampHead(unit string) string {
-	b, err := os.ReadFile(filepath.Join(resolveAdoptionStampDir(), unit+".json"))
-	if err != nil {
-		return ""
-	}
-	var s adoptionStamp
-	if json.Unmarshal(b, &s) != nil {
-		return ""
-	}
-	return s.Head
-}
-
 // DriftWatchOnce performs one drift check: it WARNs on drift and, only when
 // AutoRebuild is set, rebuilds+swaps the targets. A rebuild failure is returned
 // (and leaves Rebuilt false) but is not fatal to the caller's loop.
@@ -282,38 +193,29 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	if !cfg.AutoRebuild {
 		return res, nil
 	}
-	// A head the backoff already recorded as built needs no rebuild — the
-	// binaries on disk come from it; only adoption may still be pending
-	// (deferred restart, or a daemon that cannot restart itself). The old
-	// flow re-ran the whole rebuild on every tick in that state.
-	alreadyBuilt := cfg.Backoff != nil && cfg.Backoff.BuiltAt(head)
-	if !alreadyBuilt {
-		if cfg.Backoff != nil && !cfg.Backoff.Allow(head) {
-			slog.Warn("deploy drift: rebuild attempt blocked by backoff guard",
-				"binary", cfg.Binary, "head_revision", head)
-			return res, nil
-		}
-		if cfg.InFlightFn != nil && cfg.InFlightFn() {
-			slog.Warn("deploy drift: rebuild attempt skipped — a scheduled job is in-flight",
-				"binary", cfg.Binary, "head_revision", head)
-			return res, nil
-		}
-		if err := driftRebuildFn(cfg.RepoDir, cfg.Targets); err != nil {
-			if cfg.Backoff != nil {
-				cfg.Backoff.RecordFailure(head)
-			}
-			return res, fmt.Errorf("deploy-drift rebuild: %w", err)
-		}
-		if cfg.Backoff != nil {
-			cfg.Backoff.RecordSuccess(head)
-		}
-		res.Rebuilt = true
+	if cfg.Backoff != nil && !cfg.Backoff.Allow(head) {
+		slog.Warn("deploy drift: rebuild attempt blocked by backoff guard",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
 	}
-	if !cfg.AutoRestart {
-		if res.Rebuilt {
-			slog.Warn("deploy drift: rebuilt binaries from repo HEAD — restart to adopt",
-				"binary", cfg.Binary, "head_revision", head)
+	if cfg.InFlightFn != nil && cfg.InFlightFn() {
+		slog.Warn("deploy drift: rebuild attempt skipped — a scheduled job is in-flight",
+			"binary", cfg.Binary, "head_revision", head)
+		return res, nil
+	}
+	if err := driftRebuildFn(cfg.RepoDir, cfg.Targets); err != nil {
+		if cfg.Backoff != nil {
+			cfg.Backoff.RecordFailure(head)
 		}
+		return res, fmt.Errorf("deploy-drift rebuild: %w", err)
+	}
+	if cfg.Backoff != nil {
+		cfg.Backoff.RecordSuccess(head)
+	}
+	res.Rebuilt = true
+	if !cfg.AutoRestart {
+		slog.Warn("deploy drift: rebuilt binaries from repo HEAD — restart to adopt",
+			"binary", cfg.Binary, "head_revision", head)
 		return res, nil
 	}
 	// Adopt the rebuilt binary by restarting the daemon. RebuildBinaries has
@@ -323,13 +225,6 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	if binPath := cfg.selfBinaryPath(); binPath != "" {
 		if err := driftSmokeTestFn(binPath); err != nil {
 			restoreErr := restorePreviousBinaryFn(binPath)
-			if cfg.Backoff != nil {
-				// The swap was rolled back: the on-disk binary is no longer
-				// built-from-head, so clear the built mark (and advance the
-				// failure backoff) — otherwise the next tick would skip the
-				// rebuild and restart onto the rolled-back OLD binary in a loop.
-				cfg.Backoff.RecordFailure(head)
-			}
 			slog.Error("deploy drift: rebuilt binary failed smoke test — rolled back, NOT restarting",
 				"binary", cfg.Binary, "head_revision", head, "err", err, "rollback_err", restoreErr)
 			return res, fmt.Errorf("deploy-drift smoke test failed for %s: %w", binPath, err)
@@ -359,11 +254,6 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			if t.Unit == "" || t.Name == cfg.Binary {
 				continue
 			}
-			// A sibling whose own watcher already adopted this head (its
-			// adoption stamp matches) needs no second restart.
-			if adoptionStampHead(t.Unit) == head {
-				continue
-			}
 			if err := driftSmokeTestFn(t.OutPath); err != nil {
 				restoreErr := restorePreviousBinaryFn(t.OutPath)
 				slog.Error("deploy drift: sibling binary failed smoke test — rolled back, NOT restarting",
@@ -375,9 +265,7 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			if err := driftRestartFn(t.Unit); err != nil {
 				slog.Error("deploy drift: sibling unit restart failed",
 					"binary", cfg.Binary, "unit", t.Unit, "err", err)
-				continue
 			}
-			writeAdoptionStamp(t.Unit, head)
 		}
 	}
 	slog.Warn("deploy drift: restarting to adopt rebuilt binary",
@@ -385,7 +273,6 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	if err := driftRestartFn(cfg.Binary); err != nil {
 		return res, fmt.Errorf("deploy-drift restart: %w", err)
 	}
-	writeAdoptionStamp(cfg.Binary, head)
 	res.Restarted = true
 	return res, nil
 }

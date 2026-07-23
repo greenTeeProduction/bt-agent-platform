@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
@@ -306,13 +304,6 @@ func registerGoapFusionActions() {
 		bb := ctx.Blackboard
 		gapsStr, _ := bb.ChainState["goap_fusion_improvement_gaps"].(string)
 		goals := []string{}
-
-		// Red pre-check (2026-07-23 review gap 5): head milestones carrying
-		// prior red-pass evidence get their recorded RED re-run BEFORE any
-		// charge or Claude plan phase — a stale milestone (work already
-		// landed) completes here for the cost of one test run instead of
-		// burning two full plan cycles on the RedPassStreak treadmill.
-		precheckGoapStaleMilestones(bb)
 
 		// P0: Verifiable correctness (test blockers, build failures)
 		// P1: New capability (domain tree, condition node, action)
@@ -845,100 +836,6 @@ func clearSuperpowersPlanState(bb *Blackboard) {
 
 // Claude rate-limit backoff state (save/load/active/clear, reset-hint
 // parsing, and the fleet-wide store) lives in goap_claude_backoff.go.
-
-// goapRedPrecheckTimeout bounds one charge-time RED re-run. RED commands are
-// scoped `go test -run X ./pkg` invocations; on the tegra a cold engine
-// compile takes a few minutes, so the bound guards a wedged run, not a slow
-// one.
-const goapRedPrecheckTimeout = 8 * time.Minute
-
-// goapRedPrecheckMaxPerCycle caps how many stale milestones one cycle may
-// pre-check-complete, bounding the charge-time cost when a whole program
-// landed out-of-band.
-const goapRedPrecheckMaxPerCycle = 3
-
-// errGoapRedPrecheckUnavailable marks a pre-check that could not run at all —
-// distinct from a failing RED, which is evidence. The unstubbed default
-// returns it under `go test` so a test that forgets to stub the runner can
-// neither exec real shells nor clear live red-pass evidence (the gap-1
-// test-pollution class).
-var errGoapRedPrecheckUnavailable = errors.New("goap red pre-check unavailable")
-
-// goapRedPrecheckRunFn runs a recorded RED command against the HEAD-
-// materialized main checkout; a package var so tests stub the shell.
-var goapRedPrecheckRunFn = func(cmd string) (string, error) {
-	if testing.Testing() {
-		return "", errGoapRedPrecheckUnavailable
-	}
-	return runGoapShellTimeout(cmd, goapRedPrecheckTimeout)
-}
-
-// precheckGoapStaleMilestones re-runs the recorded RED command of head
-// milestones that already red-passed once (RedPassStreak ≥ 1): a second pass
-// completes the milestone on the spot (evidence `red-evidence-precheck:`),
-// letting the cycle charge and plan the NEXT genuinely-pending milestone in
-// the same slot; a failing RED kills the already-landed hypothesis (streak +
-// command cleared) and the milestone proceeds to a real implementation
-// attempt. The shell runs OUTSIDE the program-store flock — only the
-// bookkeeping takes the lock, with the milestone re-validated under it.
-func precheckGoapStaleMilestones(bb *Blackboard) {
-	for i := 0; i < goapRedPrecheckMaxPerCycle; i++ {
-		var programID, cmd string
-		var idx int
-		found := false
-		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
-			if p := ps.Active(); p != nil {
-				if mIdx, m := p.NextMilestone(); m != nil && m.RedPassStreak >= 1 && strings.TrimSpace(m.LastRedCmd) != "" {
-					programID, idx, cmd, found = p.ID, mIdx, m.LastRedCmd, true
-				}
-			}
-		}
-		if !found {
-			return
-		}
-
-		if _, err := goapRedPrecheckRunFn(cmd); err != nil {
-			if errors.Is(err, errGoapRedPrecheckUnavailable) {
-				// Could not run at all — no evidence either way; leave the
-				// recorded red-pass state untouched.
-				return
-			}
-			// RED still fails: the predicted regression exists, the work is
-			// genuinely missing — hypothesis dead, plan it for real.
-			_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-				ps.ResetRedPassStreak(programID, idx)
-				return nil
-			})
-			Info("goap fusion: red pre-check still fails — milestone needs real work",
-				"milestone", fmt.Sprintf("%s:%d", programID, idx), "red_cmd", cmd)
-			return
-		}
-
-		var streak int
-		var completed bool
-		if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-			// Re-validate under the lock: another writer may have completed,
-			// blocked, or re-evidenced the milestone while the shell ran.
-			for _, p := range ps.Programs {
-				if p.ID != programID {
-					continue
-				}
-				if idx >= len(p.Milestones) || p.Milestones[idx].Status != "pending" || p.Milestones[idx].LastRedCmd != cmd {
-					return nil
-				}
-			}
-			streak = ps.RecordRedPass(programID, idx, cmd)
-			if streak >= goapRedPassCompleteStreak {
-				completed = ps.MarkDone(programID, idx, "red-evidence-precheck:"+bb.RunID)
-			}
-			return nil
-		}); err != nil || !completed {
-			return
-		}
-		Info("goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed",
-			"milestone", fmt.Sprintf("%s:%d", programID, idx), "streak", streak)
-	}
-}
 
 func runGoapShell(command string) (string, error) {
 	return runGoapShellTimeout(command, 120*time.Second)

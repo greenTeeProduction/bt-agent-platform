@@ -232,12 +232,12 @@ func seedCodeFixProgram(sig, title, milestoneGoal, source string) (bool, string)
 	if source == "" {
 		// Preserve the "self-fix:" prefix the cap counter keys on even if a
 		// caller forgets to tag the source.
-		source = "self-fix:" + sig
-	} else if !strings.HasPrefix(source, "self-fix:") {
+		source = research.SelfFixSourcePrefix + sig
+	} else if !strings.HasPrefix(source, research.SelfFixSourcePrefix) {
 		// A non-empty but MIS-tagged source (missing the prefix) would
 		// otherwise escape the cap count entirely, since the cap keys on the
 		// "self-fix:" prefix (step below). Normalize rather than trust callers.
-		source = "self-fix:" + source
+		source = research.SelfFixSourcePrefix + source
 	}
 
 	// Serialize the whole ledger+store read-modify-write (in-process mutex +
@@ -274,7 +274,7 @@ func seedCodeFixProgram(sig, title, milestoneGoal, source string) (bool, string)
 		// Cap: count OPEN (has a pending milestone) self-fix programs.
 		open := 0
 		for _, p := range ps.Programs {
-			if !strings.HasPrefix(p.Source, "self-fix:") {
+			if !strings.HasPrefix(p.Source, research.SelfFixSourcePrefix) {
 				continue
 			}
 			if _, m := p.NextMilestone(); m != nil {

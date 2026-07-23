@@ -874,15 +874,6 @@ const pendingPatchRecoveryCheckName = "pending-patch-recovery"
 // that keeps failing to land cannot spin the scheduler forever.
 const pendingPatchRecoveryMaxAttempts = 2
 
-// superpowersApplyStatusPendingPatchAbandoned is the terminal ApplyStatus a
-// parked pending_patch run is rewritten to when its recovery attempt budget
-// is exhausted. The transition is written exactly once: later recovery scans
-// skip the run at the status filter instead of re-warning every pass (15
-// exhausted runs warned on every scan forever, 2026-07-23 review gap 8), and
-// superpowersBranchRunAbandoned recognizes it so the run's branch keeps its
-// 7d force-reap eligibility.
-const superpowersApplyStatusPendingPatchAbandoned = "pending_patch_abandoned"
-
 // recoverGoapFusionPendingPatchesInDir is the bounded pending_patch recovery
 // pass for the scheduled runtime cycle (Q3 Reliability & Q5 Consistency —
 // non-destructive goap-fusion materializer, milestone 4/5). It scans every
@@ -912,13 +903,6 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 			continue
 		}
 		if pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts {
-			// Transition, not state: rewrite the run to the terminal status so
-			// every later scan skips it at the pending_patch filter above.
-			// This branch is reachable exactly once per run.
-			run.ApplyStatus = superpowersApplyStatusPendingPatchAbandoned
-			if err := writeSuperpowersRunJSON(run); err != nil {
-				Warn("goap fusion: failed to persist abandoned status for parked run", "run", run.ID, "error", err.Error())
-			}
 			Warn(fmt.Sprintf("goap fusion: parked run %s abandoned — pending-patch recovery attempts exhausted", run.ID),
 				"attempts", pendingPatchRecoveryAttempts(run))
 			continue // abandoned: attempt budget exhausted, never retried again

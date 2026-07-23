@@ -228,7 +228,6 @@ type RebuildBackoff struct {
 	head     string
 	attempts int
 	lastFail time.Time
-	built    bool // last completed rebuild was against head (adoption may still be pending)
 }
 
 // NewRebuildBackoff returns a RebuildBackoff with production defaults: up to
@@ -260,7 +259,6 @@ func (g *RebuildBackoff) Allow(head string) bool {
 	if head != g.head {
 		g.head = head
 		g.attempts = 0
-		g.built = false
 		return true
 	}
 	if g.attempts == 0 {
@@ -294,31 +292,14 @@ func (g *RebuildBackoff) RecordFailure(head string) {
 	}
 	g.attempts++
 	g.lastFail = g.now()
-	// A failure at this head (rebuild error or smoke-test rollback) means the
-	// on-disk binaries can no longer be trusted as built-from-head.
-	g.built = false
 }
 
-// RecordSuccess clears the failure count for head and marks it built — a
-// later drift tick at the same head skips the (pointless) rebuild and goes
-// straight to adoption.
+// RecordSuccess clears the failure count for head — a later, working rebuild
+// means the next drift at this head starts fresh.
 func (g *RebuildBackoff) RecordSuccess(head string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	g.head = head
 	g.attempts = 0
-	g.built = true
-}
-
-// BuiltAt reports whether the last completed rebuild was against head: the
-// binaries on disk already come from it, so another rebuild is pointless —
-// only adoption (restart) may still be pending. The gardener previously
-// rebuilt the same head on every 20-minute tick because it could not restart
-// itself and nothing remembered the build (2026-07-23 review, gap 4). A head
-// change or a recorded failure clears the mark.
-func (g *RebuildBackoff) BuiltAt(head string) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.built && head == g.head
 }

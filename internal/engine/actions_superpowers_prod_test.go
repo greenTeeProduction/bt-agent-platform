@@ -1326,13 +1326,13 @@ func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T
 	// same durable-artifact shape every other apply-time check already uses
 	// (superpowers_apply.go's verifySuperpowersRuntimeInDir).
 	const pendingPatchRecoveryCheckName = "pending-patch-recovery"
-	countAttempts := func(wantStatus string) int {
+	countAttempts := func() int {
 		reloaded, err := readSuperpowersRunJSON(runJSONPath)
 		if err != nil {
 			t.Fatalf("reload run.json: %v", err)
 		}
-		if reloaded.ApplyStatus != wantStatus {
-			t.Fatalf("ApplyStatus = %q, want %q", reloaded.ApplyStatus, wantStatus)
+		if reloaded.ApplyStatus != "pending_patch" {
+			t.Fatalf("ApplyStatus = %q, want pending_patch (recovery kept failing, run stays parked)", reloaded.ApplyStatus)
 		}
 		n := 0
 		for _, v := range reloaded.Verification {
@@ -1345,7 +1345,7 @@ func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T
 
 	// Cycle 1: one bounded attempt, recorded, run stays parked.
 	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	if got := countAttempts("pending_patch"); got != 1 {
+	if got := countAttempts(); got != 1 {
 		t.Fatalf("attempts recorded after cycle 1 = %d, want 1", got)
 	}
 	callsAfterCycle1 := len(runner.calls)
@@ -1355,7 +1355,7 @@ func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T
 
 	// Cycle 2: second (and final, per the 2-total-attempts budget) attempt.
 	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	if got := countAttempts("pending_patch"); got != 2 {
+	if got := countAttempts(); got != 2 {
 		t.Fatalf("attempts recorded after cycle 2 = %d, want 2", got)
 	}
 	callsAfterCycle2 := len(runner.calls)
@@ -1363,11 +1363,10 @@ func TestRecoverGoapFusionPendingPatches_BoundsAttemptsThenAbandons(t *testing.T
 		t.Fatalf("expected a second recovery attempt to issue new commands; calls stayed at %d", callsAfterCycle2)
 	}
 
-	// Cycle 3: 2 total attempts already recorded — the run must be abandoned:
-	// skipped with NO new commands issued, no 3rd attempt recorded, and its
-	// status rewritten to the durable terminal form.
+	// Cycle 3: 2 total attempts already recorded — the run must be abandoned,
+	// i.e. skipped with NO new commands issued and no 3rd attempt recorded.
 	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	if got := countAttempts(superpowersApplyStatusPendingPatchAbandoned); got != 2 {
+	if got := countAttempts(); got != 2 {
 		t.Fatalf("attempts recorded after cycle 3 = %d, want still 2 (abandoned, no 3rd attempt)", got)
 	}
 	if len(runner.calls) != callsAfterCycle2 {
@@ -1404,19 +1403,14 @@ func (h *superpowersLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return h 
 func (h *superpowersLogRecorder) WithGroup(string) slog.Handler      { return h }
 
 func (h *superpowersLogRecorder) hasRecord(level slog.Level, substr string) bool {
-	return h.countRecords(level, substr) > 0
-}
-
-func (h *superpowersLogRecorder) countRecords(level slog.Level, substr string) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	n := 0
 	for _, r := range h.records {
 		if r.level == level && strings.Contains(r.msg, substr) {
-			n++
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 // attachSuperpowersLogRecorder wires rec into the global engine logger's
@@ -1467,77 +1461,6 @@ func TestRecoverGoapFusionPendingPatches_WarnsWhenAbandoned(t *testing.T) {
 	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
 	if !rec.hasRecord(slog.LevelWarn, run.ID) {
 		t.Fatalf("expected a Warn log mentioning abandoned run %s once its recovery attempts are exhausted; records: %+v", run.ID, rec.records)
-	}
-}
-
-// TestRecoverGoapFusionPendingPatches_AbandonmentIsDurable pins the state
-// transition the abandonment Warn was missing: discovering an exhausted run
-// must rewrite its run.json to the terminal pending_patch_abandoned status,
-// so every LATER scan skips it at the status filter — before this, the Warn
-// re-fired on every scan forever (15 exhausted runs × every recovery pass on
-// the live fleet, per the 2026-07-23 review), logging state instead of a
-// transition.
-func TestRecoverGoapFusionPendingPatches_AbandonmentIsDurable(t *testing.T) {
-	runsDir := t.TempDir()
-	planText := buildDeterministicImplementationPlan("unknown fix")
-	run := writeParkedSuperpowersRun(t, runsDir, "run-durable-abandon", planText)
-	runJSONPath := filepath.Join(runsDir, "run-durable-abandon", "run.json")
-
-	// Pre-record the full attempt budget so the very first scan discovers
-	// exhaustion.
-	for i := 0; i < pendingPatchRecoveryMaxAttempts; i++ {
-		run.Verification = append(run.Verification, VerificationCheck{
-			Name: "pending-patch-recovery", Command: "recovery attempt", Passed: false,
-		})
-	}
-	if err := writeSuperpowersRunJSON(run); err != nil {
-		t.Fatal(err)
-	}
-
-	prevKnowledge := btFusionKnowledgePath
-	btFusionKnowledgePath = filepath.Join(t.TempDir(), "knowledge.json")
-	t.Cleanup(func() { btFusionKnowledgePath = prevKnowledge })
-
-	runner := &recoveryScriptRunner{branchExists: true, headBranch: run.WorktreeBranch, alwaysFailReapply: true}
-	rec := &superpowersLogRecorder{}
-	attachSuperpowersLogRecorder(t, rec)
-
-	// Scan 1: discovery — warn once AND rewrite the status durably.
-	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	reloaded, err := readSuperpowersRunJSON(runJSONPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reloaded.ApplyStatus != superpowersApplyStatusPendingPatchAbandoned {
-		t.Fatalf("ApplyStatus after discovery = %q, want %q (durable terminal state)", reloaded.ApplyStatus, superpowersApplyStatusPendingPatchAbandoned)
-	}
-	if got := rec.countRecords(slog.LevelWarn, run.ID); got != 1 {
-		t.Fatalf("Warn records mentioning %s after discovery = %d, want exactly 1", run.ID, got)
-	}
-	bytesAfterScan1, err := os.ReadFile(runJSONPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Scans 2 and 3: the terminal status must short-circuit — no re-warn, no
-	// rewrite (file byte-identical).
-	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)
-	if got := rec.countRecords(slog.LevelWarn, run.ID); got != 1 {
-		t.Fatalf("Warn records mentioning %s after 3 scans = %d, want still 1 — abandonment must log the transition, not the state", run.ID, got)
-	}
-	bytesAfterScan3, err := os.ReadFile(runJSONPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(bytesAfterScan1) != string(bytesAfterScan3) {
-		t.Fatal("run.json changed on post-abandonment scans; the terminal status must be written exactly once")
-	}
-
-	// The reaper must still recognize the durably-abandoned run so its
-	// superpowers/* branch stays eligible for the 7d force-reap.
-	if !superpowersBranchRunAbandoned(runsDir, "run-durable-abandon") {
-		t.Fatal("superpowersBranchRunAbandoned must treat the durable status as abandoned — otherwise the branch age-out loses eligibility")
 	}
 }
 

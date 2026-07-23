@@ -308,11 +308,6 @@ func superpowersBranchRunAbandoned(runsDir, runID string) bool {
 	if err != nil {
 		return false
 	}
-	if run.ApplyStatus == superpowersApplyStatusPendingPatchAbandoned {
-		return true
-	}
-	// Legacy form: exhausted runs parked before the durable status rewrite
-	// existed still read as pending_patch with a spent attempt ledger.
 	return run.ApplyStatus == "pending_patch" && pendingPatchRecoveryAttempts(run) >= pendingPatchRecoveryMaxAttempts
 }
 
