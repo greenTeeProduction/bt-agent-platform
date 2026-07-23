@@ -790,6 +790,18 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 	return trees
 }
 
+// ExpectedDomainIDs converts a domain tree registry (as returned by
+// AllDomainTrees) into the "domain:<name>" ID form knowledge.KnowledgeGraph's
+// ExpectedDomains expects, so every process wiring the live registry into
+// CoverageGaps shares one canonical conversion instead of duplicating it.
+func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string {
+	ids := make([]string, 0, len(registry))
+	for name := range registry {
+		ids = append(ids, "domain:"+name)
+	}
+	return ids
+}
+
 // Descriptions maps tree names to descriptions.
 var Descriptions = map[string]string{
 	"code_review":               "Bug detection, security review, style checking for any language",

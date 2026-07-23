@@ -169,7 +169,11 @@ pointers only.
                                and the automatic fail-closed rollback —
                                → ADR-093, ADR-115), selector-stats.json
                                (durable per-Selector telemetry for the
-                               learned-ordering pass — → ADR-029, ADR-079)
+                               learned-ordering pass — → ADR-029, ADR-079),
+                               dt-stats.json (durable DTAnalyzer entropy/Gini
+                               path telemetry backing the mirrored
+                               domain-tree reordering pass, opt-in via
+                               wireDTOrdering — → ADR-171, ADR-172)
 
 /mnt/ssd/
 ├── .hermes/                 — Hermes Agent runtime

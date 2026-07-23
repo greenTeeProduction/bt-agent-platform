@@ -140,3 +140,15 @@ func wireSelectorOrdering(cfg gardener.Config, metricsDir string) (gardener.Conf
 	v2Cfg.SelectorOrderingStrategy = evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY"))
 	return cfg, v2Cfg
 }
+
+// wireDTOrdering enables the domain-tree (DT) entropy/Gini-based reordering
+// pass (internal/gardener/evolve_v2.go's applyDTOptimizerOrdering), mirroring
+// wireSelectorOrdering above: it points cfg at a durable DTAnalyzer stats
+// file under metricsDir and flips EvolveV2Config.DTOrdering on. It takes and
+// returns the same v2Cfg threaded through wireSelectorOrdering so both passes
+// can be wired back-to-back without clobbering each other.
+func wireDTOrdering(cfg gardener.Config, v2Cfg gardener.EvolveV2Config, metricsDir string) (gardener.Config, gardener.EvolveV2Config) {
+	cfg.DTStatsPath = filepath.Join(metricsDir, "dt-stats.json")
+	v2Cfg.DTOrdering = true
+	return cfg, v2Cfg
+}

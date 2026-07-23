@@ -21,6 +21,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
+	"github.com/nico/go-bt-evolve/internal/gardener"
 	"github.com/nico/go-bt-evolve/internal/hitl"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
@@ -427,7 +428,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
 	}
 }
 
-// registerMCPTools registers all 82 MCP tools on the server.
+// registerMCPTools registers all 83 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -2044,6 +2045,31 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// deps) is reported alongside the reorder count.
 			persistGeneratedTree(deps, params.Tree, baseTree, result)
 			data, _ := json.Marshal(result)
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
+		})
+
+	server.RegisterTool("bt_gardener_dt_diagnostics", "Run the Gardener's decision-tree diagnostic (entropy, Gini impurity, best-split condition, dead-path and overlapping-path counts, overall score) against a named tree for HITL review, without persisting or mutating the live tree",
+		map[string]engine.Property{
+			"tree":       {Type: "string", Description: "Base tree ID to analyze"},
+			"stats_path": {Type: "string", Description: "Path to durable DTAnalyzer telemetry (BTOptimizer stats JSON); an empty or missing file yields an unseeded diagnostic rather than an error"},
+		},
+		[]string{"tree"},
+		func(args json.RawMessage) *engine.ToolResult {
+			var params struct {
+				Tree      string `json:"tree"`
+				StatsPath string `json:"stats_path"`
+			}
+			_ = json.Unmarshal(args, &params)
+			baseTree := resolveTree(params.Tree)
+			if baseTree == nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
+			}
+			// AnalyzeTreeDiagnostics clones the tree before running its
+			// destructive analysis passes, so this is read-only from the
+			// caller's perspective, unlike bt_evolve_selectors above.
+			g := gardener.NewGardener(gardener.Config{DTStatsPath: params.StatsPath})
+			report := g.AnalyzeTreeDiagnostics(gardener.TreeEntry{Name: params.Tree, Tree: baseTree})
+			data, _ := json.Marshal(report)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
