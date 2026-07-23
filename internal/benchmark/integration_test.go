@@ -211,8 +211,10 @@ func TestDomainTree_Registration(t *testing.T) {
 		len(financeTrees), len(researchTrees), len(domainTrees))
 }
 
-// TestSuiteForTree_CoversAllRegisteredTrees validates SuiteForTree() returns a
-// non-empty suite for every known tree name.
+// TestSuiteForTree_CoversAllRegisteredTrees validates SuiteForTree() resolves
+// every known tree name to a suite matched by an explicit case, not to the
+// default fallback (GoDevSuite()). A silent fallback means the tree is being
+// benchmark-gated on the unrelated GoDev suite during evolution.
 func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 	// Collect all tree names
 	treeNames := make([]string, 0, 16)
@@ -228,18 +230,30 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 		treeNames = append(treeNames, "domain_"+name)
 	}
 
+	// SuiteForTree's default case always falls back to GoDevSuite(), so its
+	// non-empty Name/Tasks can never signal "uncategorized" on its own. A
+	// tree name that doesn't itself reference "godev" but still resolves to
+	// the GoDev suite was never matched by an explicit case in the switch —
+	// it silently fell through to the default and is being benchmark-gated
+	// on the unrelated GoDev suite.
+	godevName := GoDevSuite().Name
+
 	uncategorized := []string{}
 	for _, name := range treeNames {
 		suite := SuiteForTree(name)
 		if suite.Name == "" || len(suite.Tasks) == 0 {
-			uncategorized = append(uncategorized, name)
+			uncategorized = append(uncategorized, name+" (empty suite)")
+			continue
+		}
+		if suite.Name == godevName && !strings.Contains(name, "godev") {
+			uncategorized = append(uncategorized, name+" (default GoDev fallback)")
 		}
 	}
 
 	if len(uncategorized) > 0 {
-		t.Logf("%d trees without matching benchmark suite:", len(uncategorized))
+		t.Errorf("%d trees resolve to SuiteForTree's default fallback instead of an explicit benchmark suite:", len(uncategorized))
 		for _, name := range uncategorized {
-			t.Logf("  %s", name)
+			t.Errorf("  %s", name)
 		}
 	}
 }

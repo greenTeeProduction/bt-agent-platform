@@ -198,6 +198,15 @@ func TestSuiteForTree_Matching(t *testing.T) {
 		{"domain_goap_research", "goap"},
 		{"default", "default"},
 		{"unknown_tree", "godev"}, // default fallback
+		// NotebookLM family: domain_notebooklm, domain_notebooklm_consumer, and
+		// domain_notebooklm_plan_implement are three structurally distinct trees
+		// (see internal/domains/notebooklm.go, notebooklm_consumer.go, and
+		// internal/evolution/notebooklm_workflow.go) that must each get their own
+		// suite reflecting their own real node names — not all three collapsed
+		// into one NotebookLMSuite() by a blanket containsStr(treeName, "notebooklm").
+		{"domain_notebooklm", "notebooklm"},
+		{"domain_notebooklm_consumer", "notebooklm_consumer"},
+		{"domain_notebooklm_plan_implement", "notebooklm_plan_implement"},
 	}
 	for _, tt := range tests {
 		suite := SuiteForTree(tt.treeName)

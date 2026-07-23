@@ -696,6 +696,150 @@ func TradingSignalSuite() Suite {
 	}
 }
 
+// NotebookLMSuite tests the zero-LLM NotebookLM tree (domain_notebooklm,
+// internal/domains/notebooklm.go). Its StrategyRouter dispatches to the
+// tree's own ResearchPath/QueryPath/DefaultPath Sequence nodes, so
+// ExpectedPath reflects those real node names instead of the
+// keyword-guessed "NotebookLMPath" fallback.
+func NotebookLMSuite() Suite {
+	return Suite{
+		Name: "notebooklm",
+		Tasks: []TaskCase{
+			{Task: "run deep research on BT optimization and save sources to the vault", ExpectedPath: "ResearchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "ask the notebook what the key findings are across its sources", ExpectedPath: "QueryPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check notebooklm auth and refresh the session before querying", ExpectedPath: "DefaultPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// NotebookLMConsumerSuite tests the NotebookLM consumer tree
+// (domain_notebooklm_consumer, internal/domains/notebooklm_consumer.go).
+// It is a linear PreGate → ChainAction → ReflectOnOutcome → OutcomeSelector
+// pipeline reading synthesis files from the vault — it has no StrategyRouter,
+// so it is scored by success/output rather than a fabricated strategy path.
+func NotebookLMConsumerSuite() Suite {
+	return Suite{
+		Name: "notebooklm_consumer",
+		Tasks: []TaskCase{
+			{Task: "consume the latest notebooklm synthesis and report on source trends", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check whether the newest nlm-research synthesis file is stale and needs regeneration", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// NotebookLMPlanImplementSuite tests the research→grill→plan→implement→
+// verify→deploy pipeline (domain_notebooklm_plan_implement,
+// internal/evolution/notebooklm_workflow.go). It is a linear Sequence with
+// no StrategyRouter, so it is scored by success/output rather than a
+// fabricated strategy path.
+func NotebookLMPlanImplementSuite() Suite {
+	return Suite{
+		Name: "notebooklm_plan_implement",
+		Tasks: []TaskCase{
+			{Task: "run the research, grill, plan, implement, verify, deploy pipeline for the new algorithm", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// HermesUpdateSuite tests the daily Hermes update tree routing.
+func HermesUpdateSuite() Suite {
+	return Suite{
+		Name: "hermes_update",
+		Tasks: []TaskCase{
+			{Task: "check for a new hermes version and update if available", ExpectedPath: "UpdatePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "fetch the latest git changes and report the update status", ExpectedPath: "UpdatePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the daily hermes update routine", ExpectedPath: "UpdatePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// AuctionDemoSuite tests the announce-bid-award auction delegation tree routing.
+func AuctionDemoSuite() Suite {
+	return Suite{
+		Name: "auction_demo",
+		Tasks: []TaskCase{
+			{Task: "announce the task to candidate agents and collect bids", ExpectedPath: "AuctionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "award the task to the winning bidder in the auction", ExpectedPath: "AuctionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "delegate the task through the auction allocation process", ExpectedPath: "AuctionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// BTFusionSuite tests the BT fusion research-and-apply cycle tree routing
+// (domain_bt_fusion, internal/domains/bt_fusion.go). Its StrategyRouter
+// dispatches to the tree's own BTFusion_NoNewResearch/BTFusion_NewResearch
+// Sequence nodes, so ExpectedPath reflects those real node names instead of
+// the keyword-guessed, non-existent "FusionPath" fallback. Benchmark scoring
+// runs actions in Sandbox mode, which stubs SearchForBTPatterns and
+// QueryNotebookLMResearch — the actions that would record new knowledge-store
+// entries — so bt_fusion_research_new_count always reads 0 and every task
+// below reaches BTFusion_NoNewResearch, the only strategy branch a benchmark
+// run can ever take.
+func BTFusionSuite() Suite {
+	return Suite{
+		Name: "bt_fusion",
+		Tasks: []TaskCase{
+			{Task: "gather new research knowledge and synthesize fusion candidates", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "run the gated fusion apply path with verification", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "scan vault research notes for new BT pattern candidates", ExpectedPath: "BTFusion_NoNewResearch", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// BTManagerSuite tests the post-execution agent-repair/bootstrap meta-agent
+// tree routing (domain_bt_manager, internal/domains/bt_manager.go). Its
+// StrategyRouter dispatches to the tree's own DegradedPerformancePath/
+// NewAgentBootstrapPath/HealthyReportPath Sequence nodes, so ExpectedPath
+// reflects those real node names instead of the keyword-guessed,
+// non-existent "ManagerPath" fallback. Unlike BTFusion, BTManager's routing
+// conditions (IsDegradedAgent/IsNewAgent/IsHealthy) read directly from the
+// reflection store rather than from Sandboxed action output, but RunSuite
+// never seeds bb.Reflections, so an empty store always routes new-agent
+// bootstrapping.
+func BTManagerSuite() Suite {
+	return Suite{
+		Name: "bt_manager",
+		Tasks: []TaskCase{
+			{Task: "diagnose the degraded agent and apply a targeted mutation", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "bootstrap a new agent instance from the registry", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "report the health of all managed agents", ExpectedPath: "NewAgentBootstrapPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// SuperpowersWorkflowSuite tests the brainstorm/design/grill-loop/HITL workflow tree routing.
+func SuperpowersWorkflowSuite() Suite {
+	return Suite{
+		Name: "superpowers_workflow",
+		Tasks: []TaskCase{
+			{Task: "brainstorm a design and validate it through the grill loop", ExpectedPath: "WorkflowPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "split the plan into independently gradable tasks", ExpectedPath: "WorkflowPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "escalate the design to human-in-the-loop review", ExpectedPath: "WorkflowPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// SelfReviewSuite tests the autonomous-commit self-review tree routing.
+func SelfReviewSuite() Suite {
+	return Suite{
+		Name: "self_review",
+		Tasks: []TaskCase{
+			{Task: "review autonomous commits since the last self-review", ExpectedPath: "SelfReviewPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "seed a code-fix program for the confirmed defect", ExpectedPath: "SelfReviewPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "advance the self-review state to the latest commit SHA", ExpectedPath: "SelfReviewPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
 // Arc42Suite tests arc42 architecture documentation tree routing.
 func Arc42Suite() Suite {
 	return Suite{
@@ -775,6 +919,24 @@ func SuiteForTree(treeName string) Suite {
 		return TradingSignalSuite()
 	case containsStr(treeName, "arc42"):
 		return Arc42Suite()
+	case containsStr(treeName, "notebooklm_plan_implement"):
+		return NotebookLMPlanImplementSuite()
+	case containsStr(treeName, "notebooklm_consumer"):
+		return NotebookLMConsumerSuite()
+	case containsStr(treeName, "notebooklm"):
+		return NotebookLMSuite()
+	case containsStr(treeName, "hermes_update"):
+		return HermesUpdateSuite()
+	case containsStr(treeName, "auction_demo"):
+		return AuctionDemoSuite()
+	case containsStr(treeName, "bt_fusion"):
+		return BTFusionSuite()
+	case containsStr(treeName, "bt_manager"):
+		return BTManagerSuite()
+	case containsStr(treeName, "superpowers_workflow"):
+		return SuperpowersWorkflowSuite()
+	case containsStr(treeName, "self_review"):
+		return SelfReviewSuite()
 	case treeName == "default":
 		return DefaultSuite()
 	default:
