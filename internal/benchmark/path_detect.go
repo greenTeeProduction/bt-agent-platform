@@ -18,6 +18,16 @@ func detectPath(_ string, bb *engine.Blackboard) string {
 	// FALLBACK: keyword matching on task description (backward compat only)
 	task := bb.Task
 	switch {
+	// Cron domain must be matched BEFORE the generic HealthPath case below
+	// (which captures the bare "capacity planning" keyword), otherwise
+	// cron-specific capacity-planning tasks silently fall through to
+	// HealthPath and never reach CronPath — the ExpectedPath the eval suites
+	// declare for the whole Cron() domain. Keywords are deliberately
+	// "cron "-prefixed so a generic (non-cron) capacity-planning task stays
+	// HealthPath.
+	case containsStr(task, "cron job"), containsStr(task, "cron audit"), containsStr(task, "cron capacity"),
+		containsStr(task, "cron governance"):
+		return "CronPath"
 	case containsStr(task, "health"), containsStr(task, "agent status"), containsStr(task, "disk usage"),
 		containsStr(task, "capacity planning"), containsStr(task, "sre"), containsStr(task, "sla"),
 		containsStr(task, "chaos"):
@@ -25,9 +35,6 @@ func detectPath(_ string, bb *engine.Blackboard) string {
 	case containsStr(task, "meeting"), containsStr(task, "transcribe"), containsStr(task, "standup"),
 		containsStr(task, "minutes"), containsStr(task, "diarize"):
 		return "MeetingPath"
-	case containsStr(task, "cron job"), containsStr(task, "cron audit"), containsStr(task, "cron capacity"),
-		containsStr(task, "cron governance"):
-		return "CronPath"
 	case containsStr(task, "tree fitness"), containsStr(task, "mutation candidate"), containsStr(task, "evolution safety"),
 		containsStr(task, "ensemble evolution"), containsStr(task, "multi-objective evolution"), containsStr(task, "fleet-wide"):
 		return "EvolutionPath"
