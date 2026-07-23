@@ -185,6 +185,34 @@ func TestWireSelectorOrdering_SelectsStrategyFromEnv(t *testing.T) {
 	}
 }
 
+// TestWireDTOrdering_EnablesDTStatsPath pins the mirrored wiring for
+// domain-tree (DT) reordering: wireDTOrdering must set Config.DTStatsPath
+// under metricsDir and flip EvolveV2Config.DTOrdering on, mirroring
+// wireSelectorOrdering above. main.go calls both wireSelectorOrdering and
+// wireDTOrdering back-to-back on the same v2Cfg, so wireDTOrdering must also
+// preserve the SelectorOrdering wiring it's handed rather than clobbering it
+// with a freshly built EvolveV2Config. Without this function,
+// applyDTOptimizerOrdering (internal/gardener/evolve_v2.go) only ever runs
+// inside evolve_v2_test.go, never in the daemon or the langchain
+// gardener_run_cycle tool.
+func TestWireDTOrdering_EnablesDTStatsPath(t *testing.T) {
+	metricsDir := t.TempDir()
+
+	cfg, v2Cfg := wireSelectorOrdering(gardener.Config{}, metricsDir)
+	cfg, v2Cfg = wireDTOrdering(cfg, v2Cfg, metricsDir)
+
+	wantPath := filepath.Join(metricsDir, "dt-stats.json")
+	if cfg.DTStatsPath != wantPath {
+		t.Errorf("DTStatsPath = %q, want %q", cfg.DTStatsPath, wantPath)
+	}
+	if !v2Cfg.DTOrdering {
+		t.Error("DTOrdering = false, want true — domain-tree reordering pass silently disabled in production")
+	}
+	if !v2Cfg.SelectorOrdering {
+		t.Error("SelectorOrdering = false — wireDTOrdering must not clobber the existing Selector-ordering wiring already present in the EvolveV2Config it's handed")
+	}
+}
+
 // TestBuildGardenerConfig_FeedbackPersistenceArmed pins Q2 Evolvability
 // milestone 3/4: buildGardenerConfig must arm the KnowledgeGraph's debounced
 // feedback writer (kg.ConfigureFeedbackPersistence) against the shared

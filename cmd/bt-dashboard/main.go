@@ -178,6 +178,11 @@ func buildDashboardKnowledgeGraph(path string) *knowledge.KnowledgeGraph {
 	if err := kg.LoadFeedback(path); err != nil {
 		slog.Warn("load knowledge graph feedback", "path", path, "error", err)
 	}
+	// Inject the live domain registry as the expected-domain set, mirroring
+	// cmd/bt-agent's wiring (ADR-182), so knowledge.CoverageGaps audits this
+	// process's own graph against the real registry instead of always
+	// falling back to the always-satisfied defaultExpectedDomains slice.
+	kg.ExpectedDomains = domains.ExpectedDomainIDs(domains.AllDomainTrees())
 	return kg
 }
 

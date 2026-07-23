@@ -252,6 +252,9 @@ func main() {
 	// wireSelectorOrdering enables the milestone-4 learned-Selector-ordering
 	// pass — DefaultEvolveV2Config() leaves it off by design (opt-in).
 	cfg, v2Cfg := wireSelectorOrdering(cfg, metricsDir)
+	// wireDTOrdering enables the domain-tree (DT) entropy/Gini-based
+	// reordering pass — mirrors wireSelectorOrdering above.
+	cfg, v2Cfg = wireDTOrdering(cfg, v2Cfg, metricsDir)
 	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 
 	g := gardener.NewGardener(cfg)

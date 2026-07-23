@@ -443,10 +443,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: %d domain tree validation error(s), see log above\n", len(msgs))
 		os.Exit(1)
 	}
-	expectedDomains := make([]string, 0, len(domainRegistry))
-	for name := range domainRegistry {
-		expectedDomains = append(expectedDomains, "domain:"+name)
-	}
+	expectedDomains := domains.ExpectedDomainIDs(domainRegistry)
 	kg.ExpectedDomains = expectedDomains
 	// Wire the NotebookLM domain fitness function into the graph's per-tree
 	// fitness update so genuine notebooklm/notebooklm_consumer runs are scored

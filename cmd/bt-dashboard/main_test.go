@@ -179,6 +179,78 @@ func TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness(t *testing.T) {
 	}
 }
 
+// TestBuildDashboardKnowledgeGraph_SetsExpectedDomainsAndSurfacesGaps pins the
+// self-fix (review 2026-07-22) for ADR-182: cmd/bt-dashboard wires
+// dashboard.KGAnalyticsRefreshFn and publishes the bt_kg_coverage_gaps gauge
+// — the very metric Prometheus scrapes — but buildDashboardKnowledgeGraph
+// never sets kg.ExpectedDomains, only cmd/bt-agent/main.go does. Without it,
+// knowledge.CoverageGaps falls back to the 8-entry defaultExpectedDomains
+// (internal/knowledge/graph.go), every one of which is always present in the
+// static catalog, so the gauge is structurally pinned at 0 in bt-dashboard.
+//
+// This pins two things: (1) buildDashboardKnowledgeGraph must populate
+// ExpectedDomains from the same live domain registry cmd/bt-agent uses
+// (domains.AllDomainTrees()), and (2) once wired, a dashboard-built graph
+// missing one expected domain must surface a non-zero bt_kg_coverage_gaps
+// count in the actual /metrics exposition, not just an internal slice.
+func TestBuildDashboardKnowledgeGraph_SetsExpectedDomainsAndSurfacesGaps(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "feedback.json")
+
+	kg := buildDashboardKnowledgeGraph(path)
+
+	registry := domains.AllDomainTrees()
+	wantExpected := make([]string, 0, len(registry))
+	for name := range registry {
+		wantExpected = append(wantExpected, "domain:"+name)
+	}
+	sort.Strings(wantExpected)
+
+	gotExpected := append([]string(nil), kg.ExpectedDomains...)
+	sort.Strings(gotExpected)
+
+	if len(gotExpected) != len(wantExpected) {
+		t.Fatalf("buildDashboardKnowledgeGraph: kg.ExpectedDomains has %d entries, want %d "+
+			"(the same live domain registry cmd/bt-agent uses via domains.AllDomainTrees()); got=%v",
+			len(gotExpected), len(wantExpected), gotExpected)
+	}
+	for i := range wantExpected {
+		if gotExpected[i] != wantExpected[i] {
+			t.Fatalf("buildDashboardKnowledgeGraph: kg.ExpectedDomains[%d] = %q, want %q "+
+				"(mismatch against domains.AllDomainTrees())", i, gotExpected[i], wantExpected[i])
+		}
+	}
+
+	// Simulate a genuinely missing expected domain: delete a tree that both
+	// the static catalog and the live registry agree should exist.
+	const missing = "domain:code_review"
+	if _, ok := kg.Trees[missing]; !ok {
+		t.Fatalf("test setup: %q must be registered in the static catalog before deletion", missing)
+	}
+	delete(kg.Trees, missing)
+
+	origFn := dashboard.KGAnalyticsRefreshFn
+	t.Cleanup(func() { dashboard.KGAnalyticsRefreshFn = origFn })
+	dashboard.KGAnalyticsRefreshFn = func() {
+		a := kg.ComputeAnalytics()
+		dashboard.RecordKGAnalytics(len(a.CoverageGaps), len(a.Bottlenecks), len(a.SelectionPressure))
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	dashboard.PrometheusHandler().ServeHTTP(rec, req)
+	body := rec.Body.String()
+
+	if strings.Contains(body, "bt_kg_coverage_gaps 0\n") {
+		t.Errorf("bt_kg_coverage_gaps is still 0 after deleting expected domain %q from the "+
+			"dashboard-wired graph; ADR-182's headline gauge must go non-zero when this process's "+
+			"own graph is missing an expected domain. /metrics body:\n%s", missing, body)
+	}
+	if !strings.Contains(body, "bt_kg_coverage_gaps 1\n") {
+		t.Errorf("expected exactly \"bt_kg_coverage_gaps 1\" after deleting one expected domain, got body:\n%s", body)
+	}
+}
+
 // TestHandleHealth_UsesDashboardHealthJSON pins the NotebookLM research goal:
 // handleHealth must delegate to the existing dashboard.HealthJSON(version)
 // instead of hand-rolling its own response map with a literal "operational"

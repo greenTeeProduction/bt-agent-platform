@@ -4571,6 +4571,76 @@ func TestBTEvolveSelectorsHonorsEnvOrderingStrategy(t *testing.T) {
 	}
 }
 
+// bt_gardener_dt_diagnostics MCP tool (NotebookLM research): mirroring
+// bt_evolve_selectors' registration shape (required "tree" plus optional
+// "stats_path" arguments, the shared {"error":"unknown tree"} boundary), this
+// tool must call gardener.Gardener.AnalyzeTreeDiagnostics for a named tree and
+// surface the resulting evolution.DTImprovementReport as JSON for HITL
+// review — read-only, unlike bt_evolve_selectors which persists.
+func TestBTGardenerDTDiagnosticsRegisteredAndReturnsReport(t *testing.T) {
+	injectSelectorProbeTree(t)
+
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{})
+
+	if !server.HasTool("bt_gardener_dt_diagnostics") {
+		t.Fatal("bt_gardener_dt_diagnostics tool must be registered by registerMCPTools")
+	}
+
+	args := json.RawMessage(`{"tree":"domain:selector_probe"}`)
+	res, ok := server.Invoke("bt_gardener_dt_diagnostics", args)
+	if !ok {
+		t.Fatal("Invoke(bt_gardener_dt_diagnostics) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_gardener_dt_diagnostics returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_gardener_dt_diagnostics result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_gardener_dt_diagnostics unexpectedly returned an error for a resolvable tree: %v", out)
+	}
+
+	// The report must identify the tree it analyzed and its node count
+	// (evolution.DTImprovementReport's json tags: tree_name, node_count).
+	if name, _ := out["tree_name"].(string); name != "domain:selector_probe" {
+		t.Errorf("bt_gardener_dt_diagnostics must report tree_name=%q; got %v", "domain:selector_probe", out["tree_name"])
+	}
+	// The probe tree has 5 nodes: Root, Router, Cheap, Reliable, Fallback.
+	if nodeCount, isNum := out["node_count"].(float64); !isNum || int(nodeCount) != 5 {
+		t.Errorf("bt_gardener_dt_diagnostics must report node_count=5 for the probe tree; got %T (%v)", out["node_count"], out["node_count"])
+	}
+
+	// The rest of DTImprovementReport's numeric fields must be present so a
+	// HITL reviewer can see the full diagnostic, even when unseeded (zero
+	// values rather than missing keys).
+	for _, key := range []string{"entropy", "gini_impurity", "reorder_changes", "dead_paths_removed", "overlapping_paths", "overall_score"} {
+		if _, isNum := out[key].(float64); !isNum {
+			t.Errorf("bt_gardener_dt_diagnostics must report a numeric %q field; got %T (%v)", key, out[key], out[key])
+		}
+	}
+
+	// Unknown tree: the shared unknown-tree error shape, matching
+	// bt_evolve_selectors and every other resolveTree-backed tool.
+	unknown, ok := server.Invoke("bt_gardener_dt_diagnostics", json.RawMessage(`{"tree":"domain:__no_such_tree__"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_gardener_dt_diagnostics) reported the tool as unregistered on the error path")
+	}
+	if unknown == nil || len(unknown.Content) == 0 {
+		t.Fatal("bt_gardener_dt_diagnostics returned no content for an unknown tree")
+	}
+	var errOut map[string]interface{}
+	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
+		t.Fatalf("bt_gardener_dt_diagnostics unknown-tree result is not valid JSON: %v", err)
+	}
+	if errOut["error"] != "unknown tree" {
+		t.Fatalf("bt_gardener_dt_diagnostics unknown tree should return {\"error\":\"unknown tree\"}; got %v", errOut)
+	}
+}
+
 // The DLQ's agent surface (c8094002 ms3): bt_dlq_list exposes retained entries
 // and bt_dlq_replay requeue-flags one entry for drop-safe re-execution. With
 // wait=true the replay runs synchronously through the configured executor so

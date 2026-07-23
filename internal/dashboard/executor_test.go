@@ -373,6 +373,42 @@ func TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier(t *t
 	}
 }
 
+// TestRecordBlockFitnessMetric_RunErrorOverridesOutcomeSuccessString pins the
+// concrete defect from the 2026-07-22 fleet review: recordBlockFitnessMetric
+// computes success via agent.IsBreakerSuccess, which is false whenever runErr
+// is non-nil — but a zero-Quality run whose res.Outcome string is still
+// literally "success" (e.g. stale outcome labeling) must not score 75
+// (healthy) purely because of that string. The explicit failure signaled by
+// a non-nil runErr must win, scoring 25.
+func TestRecordBlockFitnessMetric_RunErrorOverridesOutcomeSuccessString(t *testing.T) {
+	exec := &AgentExecutor{}
+
+	const agentName = "run-error-block-fitness-agent"
+	const treeID = "run-error-block-fitness-tree"
+	exec.recordBlockFitnessMetric(agentName, treeID, &agent.RunResult{
+		AgentName: agentName,
+		Outcome:   "success",
+		Quality:   0,
+	}, errors.New("boom"))
+
+	snap := BlockFitnessSnapshot()
+	var score int64
+	var found bool
+	for key, val := range snap {
+		if strings.Contains(key, treeID) && strings.Contains(key, agentName) {
+			score = val
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("BlockFitnessSnapshot() has no entry for tree %q / agent %q — recordBlockFitnessMetric must call RecordBlockFitness", treeID, agentName)
+	}
+	if score != 25 {
+		t.Errorf("block fitness score for %q/%q = %d, want 25 (a non-nil runErr must not be overridden by an outcome string that still says \"success\")", treeID, agentName, score)
+	}
+}
+
 // recordBlockFitnessMetric duplicates reliability.ScoreOutcome's formula (Q5
 // Consistency & Reuse milestone 1 extracted the canonical version; milestones
 // 2-3 already delegated internal/blocks.ScoreFromBlackboard and

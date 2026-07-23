@@ -1941,15 +1941,37 @@ func TestScoreOutcome_ZeroQualityWithSuccessTrueFallsBackTo75(t *testing.T) {
 	}
 }
 
-func TestScoreOutcome_ZeroQualityOutcomeSuccessCaseInsensitiveFallsBackTo75(t *testing.T) {
-	if got := ScoreOutcome("SUCCESS", 0, false); got != 75 {
-		t.Errorf("ScoreOutcome(SUCCESS, 0, false) = %v, want 75", got)
+// TestScoreOutcome_ZeroQualitySuccessFalseOutcomeSuccessCaseInsensitiveFallsBackTo25
+// pins the 2026-07-22 fleet-review fix: an explicit success=false must win
+// over an outcome string that merely says "success" — the fallback must not
+// re-derive healthiness from the string once the caller has already told it
+// the run failed. This test previously asserted 75, pinning the bug.
+func TestScoreOutcome_ZeroQualitySuccessFalseOutcomeSuccessCaseInsensitiveFallsBackTo25(t *testing.T) {
+	if got := ScoreOutcome("SUCCESS", 0, false); got != 25 {
+		t.Errorf("ScoreOutcome(SUCCESS, 0, false) = %v, want 25 (success=false must not be overridden by the outcome string)", got)
 	}
 }
 
-func TestScoreOutcome_ZeroQualityOutcomeCompletedCaseInsensitiveFallsBackTo75(t *testing.T) {
-	if got := ScoreOutcome("Completed", 0, false); got != 75 {
-		t.Errorf("ScoreOutcome(Completed, 0, false) = %v, want 75", got)
+// TestScoreOutcome_ZeroQualitySuccessFalseOutcomeCompletedCaseInsensitiveFallsBackTo25
+// is the "completed" counterpart of the test above. Previously asserted 75,
+// pinning the bug.
+func TestScoreOutcome_ZeroQualitySuccessFalseOutcomeCompletedCaseInsensitiveFallsBackTo25(t *testing.T) {
+	if got := ScoreOutcome("Completed", 0, false); got != 25 {
+		t.Errorf("ScoreOutcome(Completed, 0, false) = %v, want 25 (success=false must not be overridden by the outcome string)", got)
+	}
+}
+
+// TestScoreOutcome_ExplicitSuccessFalseNotOverriddenByOutcomeString is the
+// core regression test from the 2026-07-22 fleet review: internal/dashboard/
+// executor.go's recordBlockFitnessMetric computes success via
+// agent.IsBreakerSuccess (false whenever runErr != nil) but still passes the
+// raw outcome string through. Before the fix, a zero-quality run with a real
+// error but res.Outcome literally "success" scored 75 (healthy) instead of
+// 25 — ADR-181's claim that this is behavior-preserving vs. the pre-ADR-181
+// inline formula (which only checked success) was false.
+func TestScoreOutcome_ExplicitSuccessFalseNotOverriddenByOutcomeString(t *testing.T) {
+	if got := ScoreOutcome("success", 0, false); got != 25 {
+		t.Errorf("ScoreOutcome(success, 0, false) = %v, want 25 (explicit success=false must win over the outcome string)", got)
 	}
 }
 
