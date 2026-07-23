@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/benchmark"
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
@@ -2086,4 +2088,47 @@ func TestAnalyzeTreeDiagnostics_NilTree(t *testing.T) {
 	if report != nil {
 		t.Errorf("expected nil report for nil tree, got %+v", report)
 	}
+}
+
+// TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes guards the
+// production call site at evolve_v2.go's "suite :=
+// benchmark.SuiteForTree(entry.Name)" — milestone 5/5 of the SuiteForTree
+// benchmark-gating fix. Registry.addBuiltin names every domain tree
+// "domain_"+name (gardener.go), exactly what entry.Name holds during a real
+// evolution cycle, so this test mirrors the production lookup precisely. A
+// suite whose ExpectedPath values don't occur anywhere in the tree it's
+// scoring can never register a path-matched success during
+// RunSuite/ScoreMutation, silently starving that tree's mutation scoring of
+// signal during evolution.
+func TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes(t *testing.T) {
+	for name, tree := range domains.AllDomainTrees() {
+		entryName := "domain_" + name
+		suite := benchmark.SuiteForTree(entryName)
+		for _, tc := range suite.Tasks {
+			if tc.ExpectedPath == "" {
+				continue
+			}
+			if !hasNodeNamed(tree, tc.ExpectedPath) {
+				t.Errorf("%s: task %q declares ExpectedPath %q, which is not a real node anywhere in its tree (suite=%s)",
+					entryName, tc.Task, tc.ExpectedPath, suite.Name)
+			}
+		}
+	}
+}
+
+// hasNodeNamed reports whether name occurs anywhere in tree (root or any
+// descendant).
+func hasNodeNamed(node *evolution.SerializableNode, name string) bool {
+	if node == nil {
+		return false
+	}
+	if node.Name == name {
+		return true
+	}
+	for i := range node.Children {
+		if hasNodeNamed(&node.Children[i], name) {
+			return true
+		}
+	}
+	return false
 }

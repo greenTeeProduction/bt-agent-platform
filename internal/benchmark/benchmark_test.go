@@ -193,9 +193,13 @@ func TestSuiteForTree_Matching(t *testing.T) {
 		{"domain_alert_router", "alert_router"},
 		{"domain_trading_signal", "trading_signal"},
 		{"domain_arc42:section1", "arc42"},
+		{"domain_arc42:docsync", "arc42_docsync"},
+		{"domain_arc42_seeder", "arc42_seeder"},
 		{"domain_goap_devops", "goap"},
 		{"domain_goap_planning", "goap"},
 		{"domain_goap_research", "goap"},
+		{"domain_goap_fusion", "goap_fusion"},
+		{"domain_goap_fusion_loop", "goap_fusion"},
 		{"default", "default"},
 		{"unknown_tree", "godev"}, // default fallback
 		// NotebookLM family: domain_notebooklm, domain_notebooklm_consumer, and

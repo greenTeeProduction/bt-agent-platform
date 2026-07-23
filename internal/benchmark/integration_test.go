@@ -1,8 +1,10 @@
 package benchmark
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -213,8 +215,18 @@ func TestDomainTree_Registration(t *testing.T) {
 
 // TestSuiteForTree_CoversAllRegisteredTrees validates SuiteForTree() resolves
 // every known tree name to a suite matched by an explicit case, not to the
-// default fallback (GoDevSuite()). A silent fallback means the tree is being
-// benchmark-gated on the unrelated GoDev suite during evolution.
+// default fallback (GoDevSuite()), AND that every domain_* tree's suite
+// declares ExpectedPath values that actually occur among that tree's own
+// nodes. A silent GoDev fallback means the tree is being benchmark-gated on
+// an unrelated suite; a matched-but-wrong suite (ExpectedPath referencing a
+// node name that exists nowhere in the tree) is the same blind spot in a
+// quieter form — RunSuite/ScoreMutation can never register a path-matched
+// success for it during real evolution (see evolve_v2.go's
+// `benchmark.SuiteForTree(entry.Name)` call site), silently starving that
+// tree's mutation scoring of signal. Milestones 2-4 fixed this for
+// NotebookLM/BTFusion/BTManager/SelfReview/HermesUpdate/AuctionDemo/
+// SuperpowersWorkflow individually; this is the final sweep across every
+// registered domain_* tree.
 func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 	// Collect all tree names
 	treeNames := make([]string, 0, 16)
@@ -226,7 +238,8 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 	for name := range evolution.ResearchTrees() {
 		treeNames = append(treeNames, "research_"+name)
 	}
-	for name := range domains.AllDomainTrees() {
+	domainTrees := domains.AllDomainTrees()
+	for name := range domainTrees {
 		treeNames = append(treeNames, "domain_"+name)
 	}
 
@@ -256,6 +269,48 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 			t.Errorf("  %s", name)
 		}
 	}
+
+	// Assertive check: for every domain_* tree, its suite's ExpectedPath
+	// values must be real node names somewhere in that tree — not just a
+	// non-empty suite matched by name.
+	pathMismatches := []string{}
+	for name, tree := range domainTrees {
+		suite := SuiteForTree("domain_" + name)
+		for _, tc := range suite.Tasks {
+			if tc.ExpectedPath == "" {
+				continue
+			}
+			if !hasNodeName(tree, tc.ExpectedPath) {
+				pathMismatches = append(pathMismatches, fmt.Sprintf(
+					"domain_%s: task %q declares ExpectedPath %q, which is not a real node anywhere in its tree (suite=%s)",
+					name, tc.Task, tc.ExpectedPath, suite.Name))
+			}
+		}
+	}
+	if len(pathMismatches) > 0 {
+		sort.Strings(pathMismatches)
+		t.Errorf("%d domain tasks declare ExpectedPath values that don't occur in their own tree:", len(pathMismatches))
+		for _, m := range pathMismatches {
+			t.Errorf("  %s", m)
+		}
+	}
+}
+
+// hasNodeName reports whether name occurs anywhere in tree (root or any
+// descendant).
+func hasNodeName(node *evolution.SerializableNode, name string) bool {
+	if node == nil {
+		return false
+	}
+	if node.Name == name {
+		return true
+	}
+	for i := range node.Children {
+		if hasNodeName(&node.Children[i], name) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestFullTreeIntegration_SmokeCheck validates all trees build and run the
