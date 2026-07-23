@@ -24,8 +24,8 @@ type CrisisDetector struct {
 
 	// Per-tree state
 	mu            sync.Mutex
-	stagnation    map[string]int     // treeName → consecutive epochs w/o improvement
-	lastBestFit   map[string]float64 // treeName → last best composite fitness
+	stagnation    map[string]int     // treeName → accumulated strict-decline epochs
+	lastBestFit   map[string]float64 // treeName → last OBSERVED composite fitness
 	lastDiversity float64            // most recent diversity score
 
 	// Plan #4: population-level state
@@ -69,7 +69,15 @@ func (c *CrisisDetector) Detect(state CrisisState) (crisis bool, reason string) 
 		return true, "diversity_collapse"
 	}
 
-	// Check stagnation: fitness has not improved over N consecutive cycles
+	// Stagnation = fitness ACTIVELY DECLINING for more than StagnationLimit
+	// observations. Flat fitness is a plateau, not a crisis: a converged
+	// production tree reports the identical composite every cycle, and the
+	// old `<=` comparison latched every plateaued tree in permanent crisis
+	// (50 trees × every cycle ≈ 4,185 intervention lines/day, 2026-07-23
+	// review gap 6). Decline accumulates evidence, any upward move resets it
+	// (recovery is measured against the previous observation, not the
+	// all-time best — chasing the historic best would count a genuine
+	// rebound as decline), and flat leaves the counter unchanged.
 	lastFit, exists := c.lastBestFit[treeName]
 	if !exists {
 		c.lastBestFit[treeName] = state.CurrentFitness
@@ -77,21 +85,16 @@ func (c *CrisisDetector) Detect(state CrisisState) (crisis bool, reason string) 
 		return false, ""
 	}
 
-	if state.CurrentFitness <= lastFit {
-		c.stagnation[treeName]++
-	} else {
-		// Improvement — reset stagnation counter
+	switch {
+	case state.CurrentFitness > lastFit:
 		c.stagnation[treeName] = 0
-		c.lastBestFit[treeName] = state.CurrentFitness
+	case state.CurrentFitness < lastFit:
+		c.stagnation[treeName]++
 	}
+	c.lastBestFit[treeName] = state.CurrentFitness
 
 	if c.stagnation[treeName] > c.StagnationLimit {
 		return true, "stagnation"
-	}
-
-	// Update last best if improved
-	if state.CurrentFitness > lastFit {
-		c.lastBestFit[treeName] = state.CurrentFitness
 	}
 
 	return false, ""
@@ -108,11 +111,19 @@ type InterveneAction struct {
 // Intervene returns the action to take for a detected crisis.
 // Caller should force mutation rate to the emergency level and inject
 // a diverse individual into the population.
+//
+// Intervening CONSUMES the accumulated stagnation evidence: the intervention
+// happened, so re-firing on every subsequent cycle would be noise, not
+// signal — a crisis is a transition, not a state. A new intervention
+// requires a fresh StagnationLimit run of declines.
 func (c *CrisisDetector) Intervene(treeName string, reason string) InterveneAction {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	stag := c.stagnation[treeName]
+	if reason == "stagnation" {
+		c.stagnation[treeName] = 0
+	}
 
 	return InterveneAction{
 		EmergencyMode:    true,

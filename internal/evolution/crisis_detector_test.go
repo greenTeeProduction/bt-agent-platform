@@ -72,59 +72,6 @@ func TestCrisisDetector_Detect_DiversityZero(t *testing.T) {
 	}
 }
 
-func TestCrisisDetector_Detect_Stagnation(t *testing.T) {
-	cd := NewCrisisDetector()
-	cd.StagnationLimit = 3
-
-	// First call — initializes best fit, no crisis
-	state1 := CrisisState{
-		TreeName:            "stagnation-tree",
-		CurrentFitness:      0.5,
-		BehavioralDiversity: 0.8,
-	}
-	crisis, _ := cd.Detect(state1)
-	if crisis {
-		t.Error("expected no crisis on first call (initialization)")
-	}
-
-	// Second call — same fitness, stagnation counter increments
-	state2 := CrisisState{
-		TreeName:            "stagnation-tree",
-		CurrentFitness:      0.5,
-		BehavioralDiversity: 0.8,
-	}
-	crisis, _ = cd.Detect(state2)
-	if crisis {
-		t.Error("expected no crisis after 1 stagnation (limit=3, need >3)")
-	}
-
-	// Third call — stagnation=2
-	crisis, _ = cd.Detect(state2)
-	if crisis {
-		t.Error("expected no crisis after 2 stagnation (limit=3, need >3)")
-	}
-
-	// Fourth call — stagnation=3, 3 > 3 is false, need one more
-	crisis, _ = cd.Detect(state2)
-	if crisis {
-		t.Error("expected no crisis after 3 stagnation (limit=3, condition is > not >=")
-	}
-
-	// Fifth call — stagnation=4, 4 > 3 → crisis!
-	state5 := CrisisState{
-		TreeName:            "stagnation-tree",
-		CurrentFitness:      0.5,
-		BehavioralDiversity: 0.8,
-	}
-	crisis, reason := cd.Detect(state5)
-	if !crisis {
-		t.Error("expected crisis due to stagnation after 4 stagnant cycles (limit=3, > check)")
-	}
-	if reason != "stagnation" {
-		t.Errorf("expected reason 'stagnation', got '%s'", reason)
-	}
-}
-
 func TestCrisisDetector_Detect_ImprovementResetsStagnation(t *testing.T) {
 	cd := NewCrisisDetector()
 	cd.StagnationLimit = 3
@@ -153,13 +100,105 @@ func TestCrisisDetector_Detect_ImprovementResetsStagnation(t *testing.T) {
 	}
 }
 
+// Flat fitness is a plateau, not a crisis. A converged production tree
+// reports the identical composite every cycle; counting that as stagnation
+// permanently latched every plateaued tree in crisis (50 trees × every
+// cycle ≈ 4,185 intervention log lines/day, `CrisisIntervened` telemetry
+// meaningless — 2026-07-23 review gap 6). Only strict decline accumulates
+// stagnation evidence; flat leaves the counter unchanged.
+func TestCrisisDetector_Detect_FlatFitnessIsPlateauNotStagnation(t *testing.T) {
+	cd := NewCrisisDetector()
+	cd.StagnationLimit = 3
+
+	state := CrisisState{TreeName: "plateau-tree", CurrentFitness: 0.5}
+	for i := 0; i < 20; i++ {
+		if crisis, reason := cd.Detect(state); crisis {
+			t.Fatalf("cycle %d: flat fitness fired a crisis (%s); plateau must be neutral", i, reason)
+		}
+	}
+	if got := cd.StagnationCount("plateau-tree"); got != 0 {
+		t.Fatalf("stagnation count after 20 flat cycles = %d, want 0", got)
+	}
+}
+
+// Strict decline is the real stagnation signal: fitness actively falling for
+// more than StagnationLimit observations fires a crisis, with flat cycles in
+// between neither counting nor resetting.
+func TestCrisisDetector_Detect_DeclineRunsFireStagnation(t *testing.T) {
+	cd := NewCrisisDetector()
+	cd.StagnationLimit = 2
+
+	fire := func(fit float64) (bool, string) {
+		return cd.Detect(CrisisState{TreeName: "decline-tree", CurrentFitness: fit})
+	}
+	if crisis, _ := fire(1.0); crisis { // init
+		t.Fatal("init must not fire")
+	}
+	if crisis, _ := fire(0.9); crisis { // decline 1
+		t.Fatal("decline 1 must not fire (limit 2)")
+	}
+	if crisis, _ := fire(0.9); crisis { // flat — neutral
+		t.Fatal("flat between declines must not fire")
+	}
+	if crisis, _ := fire(0.8); crisis { // decline 2
+		t.Fatal("decline 2 must not fire (limit 2, condition is >)")
+	}
+	crisis, reason := fire(0.7) // decline 3 → 3 > 2
+	if !crisis || reason != "stagnation" {
+		t.Fatalf("third decline must fire stagnation, got crisis=%v reason=%q", crisis, reason)
+	}
+
+	// Any upward move is recovery: the counter resets.
+	cd2 := NewCrisisDetector()
+	cd2.StagnationLimit = 2
+	cd2.Detect(CrisisState{TreeName: "recover-tree", CurrentFitness: 1.0})
+	cd2.Detect(CrisisState{TreeName: "recover-tree", CurrentFitness: 0.8})
+	cd2.Detect(CrisisState{TreeName: "recover-tree", CurrentFitness: 0.6})
+	cd2.Detect(CrisisState{TreeName: "recover-tree", CurrentFitness: 0.7}) // up (still below the all-time best)
+	if got := cd2.StagnationCount("recover-tree"); got != 0 {
+		t.Fatalf("stagnation after recovery = %d, want 0 — improvement is measured against the previous observation, not the all-time best", got)
+	}
+}
+
+// Intervening consumes the accumulated stagnation evidence: the intervention
+// happened, so re-firing every subsequent cycle is noise, not signal. A new
+// crisis requires a fresh StagnationLimit run of declines.
+func TestCrisisDetector_Intervene_ConsumesStagnation(t *testing.T) {
+	cd := NewCrisisDetector()
+	cd.StagnationLimit = 1
+
+	cd.Detect(CrisisState{TreeName: "consume-tree", CurrentFitness: 1.0})
+	cd.Detect(CrisisState{TreeName: "consume-tree", CurrentFitness: 0.9})
+	crisis, reason := cd.Detect(CrisisState{TreeName: "consume-tree", CurrentFitness: 0.8})
+	if !crisis {
+		t.Fatal("two declines past limit 1 must fire")
+	}
+
+	action := cd.Intervene("consume-tree", reason)
+	if action.StagnationEpochs < 2 {
+		t.Fatalf("intervention must report the accumulated epochs, got %d", action.StagnationEpochs)
+	}
+	if got := cd.StagnationCount("consume-tree"); got != 0 {
+		t.Fatalf("stagnation after intervention = %d, want 0 (consumed)", got)
+	}
+
+	// The very next flat cycle must NOT re-fire — transition, not state.
+	if crisis, _ := cd.Detect(CrisisState{TreeName: "consume-tree", CurrentFitness: 0.8}); crisis {
+		t.Fatal("cycle after an intervention re-fired on flat fitness; interventions must consume the evidence")
+	}
+	// A single further decline is below the re-arm threshold.
+	if crisis, _ := cd.Detect(CrisisState{TreeName: "consume-tree", CurrentFitness: 0.7}); crisis {
+		t.Fatal("one decline after an intervention must not immediately re-fire (limit 1 needs >1)")
+	}
+}
+
 func TestCrisisDetector_Intervene(t *testing.T) {
 	cd := NewCrisisDetector()
 	cd.EmergencyRate = 0.60
 
-	// Set up some stagnation
+	// Set up some stagnation (strict declines; flat is a neutral plateau)
 	cd.Detect(CrisisState{TreeName: "crisis-tree", CurrentFitness: 0.5, BehavioralDiversity: 0.8})
-	cd.Detect(CrisisState{TreeName: "crisis-tree", CurrentFitness: 0.5, BehavioralDiversity: 0.8})
+	cd.Detect(CrisisState{TreeName: "crisis-tree", CurrentFitness: 0.4, BehavioralDiversity: 0.8})
 
 	action := cd.Intervene("crisis-tree", "stagnation")
 	if !action.EmergencyMode {
@@ -179,9 +218,9 @@ func TestCrisisDetector_Intervene(t *testing.T) {
 func TestCrisisDetector_ResetStagnation(t *testing.T) {
 	cd := NewCrisisDetector()
 
-	// Build up stagnation
+	// Build up stagnation (strict declines; flat is a neutral plateau)
 	cd.Detect(CrisisState{TreeName: "reset-tree", CurrentFitness: 0.5, BehavioralDiversity: 0.8})
-	cd.Detect(CrisisState{TreeName: "reset-tree", CurrentFitness: 0.5, BehavioralDiversity: 0.8})
+	cd.Detect(CrisisState{TreeName: "reset-tree", CurrentFitness: 0.4, BehavioralDiversity: 0.8})
 
 	before := cd.StagnationCount("reset-tree")
 	if before <= 0 {

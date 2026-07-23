@@ -194,10 +194,15 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	maxMutations := g.cfg.MaxMutations
 	crisisIntervened := false
 	if g.cfg.CrisisDetector != nil {
+		// BehavioralDiversity is deliberately left zero: the old wiring fed
+		// the detector its OWN LastDiversity() back — which nothing else ever
+		// set, so the value was permanently 0 and the diversity-collapse
+		// branch was dead code pretending to be live (2026-07-23 review gap
+		// 6). Zero means "no data" to Detect; wire a real MAP-Elites/archive
+		// diversity signal here if the branch is ever to fire.
 		state := evolution.CrisisState{
-			TreeName:            entry.Name,
-			CurrentFitness:      baseFitness.Composite,
-			BehavioralDiversity: g.cfg.CrisisDetector.LastDiversity(),
+			TreeName:       entry.Name,
+			CurrentFitness: baseFitness.Composite,
 		}
 		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
 			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
@@ -401,11 +406,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 
-	// A successful crisis intervention resets the stagnation counter so the
-	// next cycle starts from a clean slate.
-	if crisisIntervened && applied > 0 && g.cfg.CrisisDetector != nil {
-		g.cfg.CrisisDetector.ResetStagnation(entry.Name)
-	}
+	// Crisis bookkeeping needs no post-cycle reset here: Intervene() itself
+	// consumes the stagnation evidence at fire time (transition semantics),
+	// so the old `crisisIntervened && applied > 0` reset — whose applied>0
+	// condition was unsatisfiable for exactly the plateaued trees that kept
+	// firing — is gone with the latch it tried to paper over.
 
 	// Deep search (Q2 Evolvability milestone 2/3): probe further ahead from
 	// the post-cycle tree with the Stockfish-style transposition-table
