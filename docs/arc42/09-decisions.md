@@ -227,11 +227,12 @@ Consolidation notes (2026-07-16):
 | ADR-202 | `goapFusionApplyAlreadyLanded` Makes a Committed `ApplyStatus` Authoritative Over the No-Plan Guard, Closing Milestone 1/2 of the Partial-Apply-Landings-Misclassified-as-Failed Program (Q3 Reliability) | Accepted | 2026-07-23 |
 | ADR-203 | `dtStatsPathFor` Resolves DT-Reordering Telemetry from the Real Per-Tree `agent.DecisionTreeStatsFile`, Not Only the Producer-less `Config.DTStatsPath`, Closing ADR-191's Inert-Activation Gap (Q2 Evolvability, Milestones 1–2/2) | Accepted | 2026-07-23 |
 | ADR-204 | `RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-205 | A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-24 |
+| ADR-205 | A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3 — Superseded by ADR-210 for Milestone 3/3) | Accepted | 2026-07-24 |
 | ADR-206 | `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2) | Accepted | 2026-07-23 |
 | ADR-207 | A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability) | Accepted | 2026-07-24 |
 | ADR-208 | `ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-209 | `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
+| ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3662,7 +3663,7 @@ A new `TestAllRegisteredSuites_BaselinePathMatchRate` (`internal/benchmark/integ
 
 ---
 
-## ADR-205: A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3)
+## ADR-205: A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3 — Superseded by ADR-210 for Milestone 3/3)
 
 **Context (2026-07-24):** Program "Q3 Reliability — Program claim/lease: a sibling agent must not plan a program another cycle is actively landing." `research.ProgramStore.Active()` always returns the same head program to *any* caller, with no notion of which cycle is currently landing it — `PrioritizeGoapGoals`' charge pass and the read-only queueing re-open both called it unconditionally. When two goap-fusion cycles overlapped (e.g. a scheduled cron tick firing while a prior cycle's Claude call was still in flight), a sibling cycle would plan and attempt to charge milestones the other cycle was already actively landing, burning a full cycle for no gain. This is exactly what happened on 2026-07-23 12:38–14:55: the loop-runner burned 3 cycles re-planning milestones a concurrently-running cycle was landing.
 
@@ -3676,7 +3677,7 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ A sibling cycle overlapping an in-flight charging cycle now sees `ClaimActiveForCycle` return `nil` and charges nothing that cycle, instead of re-planning or re-charging milestones already being landed — closing the 2026-07-23 loop-runner treadmill's root cause.
 - ✅ Both failure/abandon deferred-handler paths release the claim immediately rather than waiting out the full lease, so a genuinely failed or refunded cycle doesn't additionally lock a sibling out of the whole program for up to an hour.
 - ✅ A claim from a crashed cycle (no deferred handler ever runs) still self-heals: once `lease` elapses, `ClaimActiveForCycle` treats it as stale and lets a different agent take over — the queue can never wedge permanently on a dead claim.
-- ⚠️ The successful-completion path (`ProgramStore.MarkDone`, reached via `goap_research_goals.go` and the red-evidence pre-check paths in `actions_goap_fusion.go`/`actions_goap_fusion_refund.go`) does not yet call `ReleaseClaim` — a cycle that lands its milestone cleanly still leaves the claim in place until the lease expires, so a sibling cycle can be blocked from picking up the program's *next* milestone for up to `goapProgramClaimLease` after a successful landing. Closing that gap is milestone 3/3.
+- ✅ The successful-completion path is now also covered — see ADR-210, which closes milestone 3/3.
 - Pinned by the tests named above.
 
 ---
@@ -3742,6 +3743,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Delegating a task to another behavior tree via `core:delegate` now always requires human approval when `side_effect_class` classification is consulted, closing the same class of silent-bypass gap ADR-165 closed for A2A handoff — the platform's two external-dispatch blocks (`A2AHandoffBlock`, `DelegateBlock`) are now consistent in where they place this metadata.
 - ⚠️ No sweep was made for a third instance of this pattern elsewhere in `internal/blocks`; any other composable block that sets `side_effect_class` on a non-`HumanApprovalGate` ancestor instead of the gate node itself would have the same silent-bypass defect and remains unaudited.
 - Pinned by the tests named above.
+
+---
+
+## ADR-210: `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability)
+
+**Context (2026-07-24):** ADR-205 (milestones 1–2/3) added a claim/lease on `research.Program` so a sibling goap-fusion cycle can't plan or charge a program another cycle is actively landing, and released that claim on both deferred-failure paths (`refundGoapMilestoneAttemptForInfraFailure`, `resetGoapMilestoneRedPassStreak`). It explicitly flagged the successful-completion path as unaddressed: `completeGoapProgramMilestone` (`internal/engine/goap_research_goals.go`) called `ps.MarkDone(ref.programID, ref.idx, run.ID)` inside its `research.UpdatePrograms` closure but never released the claim afterward, and the red-evidence pre-check completion branch in `precheckGoapStaleMilestones` (`internal/engine/actions_goap_fusion.go`) had the identical gap around its own `ps.MarkDone(programID, idx, "red-evidence-precheck:"+bb.RunID)` call. Either way, a cycle that landed its milestone cleanly still left `ClaimedBy`/`ClaimedAt` stamped until the full `goapProgramClaimLease` (one hour) expired, blocking a sibling cycle from picking up the program's *next* milestone for up to an hour after a successful landing — the same class of wedge ADR-205 closed for the failure paths, but on the success path.
+
+**Decision:** Both `MarkDone` call sites now call `ps.ReleaseClaim(programID, bb.RunID)` immediately after a successful completion, inside the same `UpdatePrograms` closure that performed the write (per ADR-183/ADR-184, every `ProgramStore` read-modify-write goes through `UpdatePrograms`'s file lock, so the release is atomic with the completion it follows). No new primitive was needed: `research.ProgramStore.ReleaseClaim` (introduced in ADR-205 milestone 2) is already a safe no-op when the program is unclaimed or claimed by a different agent, so calling it unconditionally after every successful `MarkDone` is correct without extra guards.
+
+**Status:** Accepted (2026-07-24) — milestone 3/3, closing the ADR-205 program-claim/lease program. Pinned by `TestCompleteGoapProgramMilestone_ReleasesClaim` (`internal/engine/actions_goap_fusion_refund_test.go`), which stamps a claim, drives `completeGoapProgramMilestone` through a milestone whose file anchor the run's `ChangedFiles` satisfy, and asserts `ClaimedBy`/`ClaimedAt` are cleared once the milestone is marked done.
+
+**Consequences:**
+- ✅ A cycle that successfully lands a milestone no longer leaves the program claimed for up to an hour afterward — a sibling cycle can immediately pick up the program's next milestone instead of waiting out the stale lease.
+- ✅ The red-evidence pre-check completion branch (`precheckGoapStaleMilestones`) gets the identical fix, since it reaches `MarkDone` through a separate call site than `completeGoapProgramMilestone`.
+- ✅ Closes the ADR-205 program end-to-end: all three ways a charging cycle can stop holding a claim (infra-refund, abandon-reset, successful completion) now release it immediately rather than relying solely on lease expiry.
+- Pinned by the test named above.
 
 ---
 

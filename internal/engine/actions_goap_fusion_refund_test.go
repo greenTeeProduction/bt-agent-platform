@@ -427,6 +427,50 @@ func TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive(t *testing.T) {
 	}
 }
 
+// completeGoapProgramMilestone must release the program claim once it marks
+// a milestone done — otherwise the claim (stamped by ClaimActiveForCycle at
+// planning time) outlives the cycle that landed the work and wedges a
+// sibling agent out of the whole program for up to the full lease window,
+// even though nothing is landing anymore (same class of bug as the refund
+// and abandon paths covered above, but on the SUCCESS path).
+func TestCompleteGoapProgramMilestone_ReleasesClaim(t *testing.T) {
+	id := seedRefundProgram(t, 0, "pending")
+	const agentID = "cycle-complete-probe"
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		ps.Programs[0].ClaimedBy = agentID
+		ps.Programs[0].ClaimedAt = time.Now().UTC()
+		ps.Programs[0].Milestones[0].Goal = "Wire bid evaluation in internal/engine/actions_a2a.go"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bb := &Blackboard{
+		RunID: agentID,
+		ChainState: map[string]any{
+			"goap_fusion_program_milestone": id + ":0",
+		},
+	}
+	run := &SuperpowersRun{
+		ID:           "run-complete-probe",
+		ApplyStatus:  "committed",
+		ChangedFiles: []string{"internal/engine/actions_a2a.go"},
+	}
+	completeGoapProgramMilestone(bb, run)
+
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps.Programs[0].Milestones[0].Status != "done" {
+		t.Fatalf("precondition: milestone must be marked done by the run, got %+v", ps.Programs[0].Milestones[0])
+	}
+	if ps.Programs[0].ClaimedBy != "" || !ps.Programs[0].ClaimedAt.IsZero() {
+		t.Fatalf("successful completion must release the claiming cycle's program claim, got ClaimedBy=%q ClaimedAt=%v",
+			ps.Programs[0].ClaimedBy, ps.Programs[0].ClaimedAt)
+	}
+}
+
 // End-to-end wiring: a scheduled runtime cycle that dies on the rate-limit
 // entry guard (durable Claude backoff active) must refund the attempt charged
 // earlier in the same cycle — external quota windows cannot consume the
