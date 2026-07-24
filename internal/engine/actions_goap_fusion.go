@@ -952,6 +952,9 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 			streak = ps.RecordRedPass(programID, idx, cmd)
 			if streak >= goapRedPassCompleteStreak {
 				completed = ps.MarkDone(programID, idx, "red-evidence-precheck:"+bb.RunID)
+				if completed {
+					ps.ReleaseClaim(programID, bb.RunID)
+				}
 			}
 			return nil
 		}); err != nil || !completed {

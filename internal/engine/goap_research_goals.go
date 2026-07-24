@@ -482,6 +482,7 @@ func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
 			}
 			if ps.MarkDone(ref.programID, ref.idx, run.ID) {
 				completed = append(completed, fmt.Sprintf("%s:%d", ref.programID, ref.idx))
+				ps.ReleaseClaim(ref.programID, bb.RunID)
 			}
 		}
 		return nil
