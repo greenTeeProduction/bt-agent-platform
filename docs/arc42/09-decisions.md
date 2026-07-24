@@ -241,6 +241,7 @@ Consolidation notes (2026-07-16):
 | ADR-216 | `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-217 | `gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-218 | `BuildKnowledgeGraph` Registers the 13 Bare Resolver-Special-Case Tree IDs `AllDomainTrees()` Never Returns, and `ComputeAnalytics` Audits Them Alongside `ExpectedDomains`, Extending the ADR-157/ADR-190 Registry-Drift Guard to a Second Drift Source (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-219 | `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3896,6 +3897,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ All 13 previously-invisible resolver-special-case trees — including `notebooklm-bridge`'s 4-hour cron and `fusion` — now have their run outcomes captured by `ComputeAnalytics`/`RegisterDomainFitness` and factored into gardener prioritization instead of being silently dropped by `RecordRun`'s no-op-on-unknown-ID behavior, closing the same class of gap ADR-157 closed for `AllDomainTrees()`-sourced trees.
 - ✅ `ComputeAnalytics`'s `CoverageGaps` mechanism now audits two independently-drifting ID spaces — `ExpectedDomains` (ADR-190) and `resolverSpecialCaseTreeIDs` — so a future resolver ID added to `tree_resolver.go` without a matching `Register` call surfaces automatically as a coverage gap and suggested action, instead of depending on periodic manual review of `tree_resolver.go` against `registry.go` to rediscover it.
 - ⚠️ `resolverSpecialCaseTreeIDs` is a hand-maintained list duplicated between `internal/knowledge/registry.go` and `internal/domains/kg_registry_coverage_test.go`, each kept in sync with `tree_resolver.go`'s actual special-case branches by hand rather than through a shared import (to avoid a `knowledge`→`domains` cycle) — both copies can still drift from `tree_resolver.go` itself if a special case is added without updating either list; only the two coverage tests staying green closes that loop.
+
+---
+
+## ADR-219: `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-097 wired `domains.NotebookLMFitness` into the knowledge graph's per-tree fitness override hook for `"notebooklm"` and `"notebooklm_consumer"` (underscore) — but `"notebooklm_consumer"` is `internal/knowledge/registry.go`'s `"domain:notebooklm_consumer"` domain-category node (registry.go:581), not the consumer chain-agent's actual tree. The real production tree ID is the bare, hyphenated `"notebooklm-consumer"`: `internal/domains/tree_resolver.go:200` special-cases it directly, `registry.go:948` registers its own `TreeMeta` for it (distinct from the `"domain:"`-prefixed node), `registry.go:1130`'s `resolverSpecialCaseTreeIDs` list (ADR-218) enumerates it, and `internal/agent/pipeline_map.go:25` maps the `"session-indexer"` chain-agent's dispatch-time `RunRecord.TreeID` to exactly this hyphenated ID. Because `RecordRun`'s `domainFitness` lookup (ADR-097) is keyed on an exact tree-ID string match, every genuine `notebooklm-consumer` run the chain-agent actually recorded fell through to the generic runtime-success EMA (ADR-028) instead of `NotebookLMFitness`'s anti-fabrication-aware score — the one tree ADR-097 most needed to cover was never the one it registered.
+
+**Decision:** `RegisterNotebookLMFitness` (`internal/domains/notebooklm_fitness.go`) adds a third `kg.RegisterDomainFitness("notebooklm-consumer", fn)` call alongside the existing `"notebooklm"` and `"notebooklm_consumer"` registrations. The underscore registration is kept, not replaced, for backward compatibility with the separate `"domain:notebooklm_consumer"` category node's own recorded runs.
+
+**Status:** Accepted (2026-07-24).
+
+**Consequences:**
+- ✅ The consumer chain-agent's real production runs (dispatched via `pipeline_map.go`'s `"session-indexer"` mapping) now drive `Fitness` through `NotebookLMFitness`'s anti-fabrication scoring, closing the gap between ADR-097's stated intent and what it actually registered.
+- ✅ No regression to whatever, if anything, already depends on the underscore `"notebooklm_consumer"` domain-category node's `Fitness` — that registration is unchanged.
+- ⚠️ Two near-identical tree IDs (`"notebooklm_consumer"` and `"notebooklm-consumer"`) now share the same scoring function while representing conceptually distinct graph nodes (a domain-category node vs. the real chain-agent tree) — the underscore/hyphen naming collision remains a latent source of confusion for anyone reading the registry without this ADR.
+- Pinned by `TestRegisterNotebookLMFitness_WiresIntoRealProductionTree` (`internal/domains/notebooklm_fitness_wiring_test.go`), which records runs under `"notebooklm-consumer"` against a real `BuildKnowledgeGraph()` and asserts `Fitness` matches `NotebookLMFitness`'s output rather than the generic EMA.
 
 ---
 

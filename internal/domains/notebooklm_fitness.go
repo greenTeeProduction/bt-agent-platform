@@ -57,9 +57,13 @@ func NotebookLMFitness(runs []NotebookLMRunSummary) float64 {
 
 // RegisterNotebookLMFitness wires NotebookLMFitness into kg's per-tree fitness
 // update (see knowledge.KnowledgeGraph.RegisterDomainFitness) for the
-// "notebooklm" and "notebooklm_consumer" trees, so their recorded run history
+// "notebooklm" tree and both the "notebooklm_consumer" (underscore) and
+// "notebooklm-consumer" (hyphen) tree IDs, so their recorded run history
 // drives Fitness through this domain-aware, anti-fabrication-penalizing score
-// instead of the generic runtime-success EMA.
+// instead of the generic runtime-success EMA. The hyphenated ID is the real
+// production chain-agent tree ID (see tree_resolver.go, knowledge/registry.go,
+// agent/pipeline_map.go); the underscore ID also exists as a separate
+// domain-category node and is kept wired for backward compatibility.
 func RegisterNotebookLMFitness(kg *knowledge.KnowledgeGraph) {
 	fn := func(runs []knowledge.RunSummary) float64 {
 		converted := make([]NotebookLMRunSummary, len(runs))
@@ -70,4 +74,5 @@ func RegisterNotebookLMFitness(kg *knowledge.KnowledgeGraph) {
 	}
 	kg.RegisterDomainFitness("notebooklm", fn)
 	kg.RegisterDomainFitness("notebooklm_consumer", fn)
+	kg.RegisterDomainFitness("notebooklm-consumer", fn)
 }
