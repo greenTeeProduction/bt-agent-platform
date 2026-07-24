@@ -539,6 +539,11 @@ type Gardener struct {
 	// Lazily opened transposition table (see transpositionTable in evolve_v2.go).
 	ttMu sync.Mutex
 	tt   *evaluator.TranspositionTable
+
+	// Lazily created per-tree behavioral-diversity archives, keyed by tree
+	// name (see treeDiversityGrid in evolve_v2.go).
+	diversityGridsMu sync.Mutex
+	diversityGrids   map[string]*evolution.MAPElitesGrid
 }
 
 // NewGardener creates a tree gardener.

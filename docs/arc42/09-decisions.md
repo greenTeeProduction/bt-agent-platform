@@ -229,6 +229,7 @@ Consolidation notes (2026-07-16):
 | ADR-204 | `RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research) | Accepted | 2026-07-23 |
 | ADR-205 | A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-24 |
 | ADR-206 | `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2) | Accepted | 2026-07-23 |
+| ADR-207 | A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3691,6 +3692,24 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Fix-red commits (`runPRShepherdFix`) are still applied directly to the pinned head, since that push is targeted at making the *current* batch pass, not folding in new unrelated work.
 - ⚠️ New landings that accrue while a PR is pinned sit on local master, unshipped, until the pinned PR merges and a fresh batch opens — deferred, not lost, but milestone 2/2 (not yet scoped in code as of this ADR) is expected to address any follow-on batching/ordering concern this raises.
 - Pinned by the test named above.
+
+---
+
+## ADR-207: A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability)
+
+**Context (2026-07-24):** ADR-196 (Gap 6) fixed `CrisisDetector.Detect`'s stagnation trigger to fire on decline transitions rather than every flat-fitness plateau, but left its `diversity_collapse` branch untouched and explicitly deferred: `evolveTreeV2` fed the detector its own never-set `LastDiversity()` back, so `CrisisState.BehavioralDiversity` was permanently the hardcoded zero value and `Detect`'s `BehavioralDiversity > 0` "meaningful data" guard made the branch structurally dead code pretending to be live. ADR-196 rejected wiring a real signal at the time ("a feature project, not a review fix — the branch stays dormant awaiting real data"). Meanwhile every other evolution algorithm in `internal/evolution` that measures behavioral diversity (island-model QD, `bt_evolve_qd`) already does so through the ADR-033 `MAPElitesGrid`/`Descriptor` primitives, which the gardener's own cycle had never used.
+
+**Decision:** Give `*Gardener` a lazily-created, name-keyed archive of `*evolution.MAPElitesGrid`, using the same lazy-singleton-under-mutex idiom as `g.tt`/`g.ttMu` (ADR-094) but keyed per tree name rather than one shared instance: `treeDiversityGrid(name string)` (`internal/gardener/evolve_v2.go`) returns the same grid for repeated calls with the same name and a distinct grid per distinct name, backed by a new `diversityGridsMu sync.Mutex` / `diversityGrids map[string]*evolution.MAPElitesGrid` pair on `Gardener` (`gardener.go`). Per-tree keying, not a single gardener-wide grid, was chosen because `MAPElitesGrid` niches bucket on `NodeCount`/`MaxDepth` (default bucket sizes 10/2) — pooling every domain tree the gardener manages, which range from a handful of nodes to hundreds, into one grid would blur any single tree's collapse signal behind the aggregate spread of all the others. `recordDiversityObservation(name, tree, fitness)` inserts `evolution.Descriptor(tree, "")` + `&evolution.Individual{Tree: tree, Fitness: fitness}` via `Grid.Insert`; `evolveTreeV2` calls it once per cycle, right after the cycle's tree/fitness are settled (post rollback-restore, before the `improved` comparison), so every processed cycle — not just accepted mutations — contributes an observation. `CrisisState.BehavioralDiversity` is now read from `g.treeDiversityGrid(entry.Name).DiversityScore()` immediately before `Detect()` is called, replacing the removed self-feedback read.
+
+**Rejected alternatives:** a single gardener-wide grid mirroring `g.tt`'s one-instance-for-every-lookup shape — rejected for the niche-blurring reason above, which the per-(tree,task) transposition-table cache doesn't have to worry about since it isn't measuring structural diversity. Persisting the archive to disk now via `MAPElitesGrid.Save`/`Load` (already implemented and used by the ADR-033/ADR-043 durable QD archives) — deferred; this decision's scope is making the crisis detector's diversity signal live at all, not giving it cross-restart durability, and the transposition table itself landed its own persistence wiring in two separate stages (ADR-094 then ADR-114).
+
+**Status:** Accepted (2026-07-24). Pinned by `TestGardener_TreeDiversityGrid_PerTreeIsolationAndAccumulation` (lazy per-name singleton identity, cross-tree isolation, same-niche re-recording leaves `DiversityScore` unchanged) and `TestEvolveTreeV2_DiversityCollapse_CanFireCrisis` (six sparsely-spread chain trees populate the archive to a non-zero `DiversityScore` below the detector's default threshold, and `evolveTreeV2` sets `CrisisIntervened` from it) — both `internal/gardener/evolve_v2_test.go`.
+
+**Consequences:**
+- ✅ The `diversity_collapse` branch ADR-196 explicitly left dormant can now fire from real accumulated data instead of being permanently suppressed by a hardcoded-zero `BehavioralDiversity`.
+- ✅ Reuses the ADR-033 `MAPElitesGrid`/`Descriptor` primitives already exercised by island-model QD and `bt_evolve_qd`, rather than inventing a second diversity metric.
+- ⚠️ The archive is in-memory only: `treeDiversityGrid` never calls `MAPElitesGrid.Save`/`Load`, so every gardener restart resets each tree's diversity history to the cold-start `DiversityScore() == 0` even though the underlying type supports durable persistence (ADR-033). Diversity-collapse detection is only as good as the observations accumulated since the process last started.
+- ⚠️ `diversityGridEliteSize` (20) bounds only `Elites()`'s return size, not the grid's own `Cells` map — `NewMAPElitesGrid` here leaves `Cap` at its zero value (unbounded), so a long-running gardener's per-tree cell count can grow without eviction for the life of the process, unlike the capped `ExperienceBank`/`QTable` archives elsewhere in the package.
 
 ---
 

@@ -107,6 +107,39 @@ func (g *Gardener) transpositionTable() *evaluator.TranspositionTable {
 	return g.tt
 }
 
+// diversityGridEliteSize bounds the elite individuals evolution.Elites()
+// returns per tree diversity archive; the grid itself grows one cell per
+// occupied behavioral niche regardless of this cap.
+const diversityGridEliteSize = 20
+
+// treeDiversityGrid lazily creates (and caches) the per-tree MAP-Elites
+// archive that tracks behavioral diversity of tree structures produced for
+// name across evolution cycles, mirroring the transpositionTable lazy-
+// singleton pattern above. Same name always returns the same *MAPElitesGrid
+// instance; distinct names get distinct grids.
+func (g *Gardener) treeDiversityGrid(name string) *evolution.MAPElitesGrid {
+	g.diversityGridsMu.Lock()
+	defer g.diversityGridsMu.Unlock()
+	if g.diversityGrids == nil {
+		g.diversityGrids = make(map[string]*evolution.MAPElitesGrid)
+	}
+	grid, ok := g.diversityGrids[name]
+	if !ok {
+		grid = evolution.NewMAPElitesGrid(diversityGridEliteSize)
+		g.diversityGrids[name] = grid
+	}
+	return grid
+}
+
+// recordDiversityObservation feeds tree's behavioral descriptor and fitness
+// into name's diversity grid, so BehavioralDiversity (evolveTreeV2) can
+// eventually read a live DiversityScore instead of the placeholder 0.
+func (g *Gardener) recordDiversityObservation(name string, tree *evolution.SerializableNode, fitness float64) {
+	grid := g.treeDiversityGrid(name)
+	desc := evolution.Descriptor(tree, "")
+	grid.Insert(desc, &evolution.Individual{Tree: tree, Fitness: fitness})
+}
+
 // lastFailureTask returns the Task text of the most recent (by Timestamp)
 // record in records whose Outcome is evolution.Failure, so ExperienceBank
 // entries recorded during this cycle can carry ADR-109 failing-task context
@@ -195,15 +228,17 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	maxMutations := g.cfg.MaxMutations
 	crisisIntervened := false
 	if g.cfg.CrisisDetector != nil {
-		// BehavioralDiversity is deliberately left zero: the old wiring fed
-		// the detector its OWN LastDiversity() back — which nothing else ever
-		// set, so the value was permanently 0 and the diversity-collapse
-		// branch was dead code pretending to be live (2026-07-23 review gap
-		// 6). Zero means "no data" to Detect; wire a real MAP-Elites/archive
-		// diversity signal here if the branch is ever to fire.
+		// BehavioralDiversity is read from this tree's own MAP-Elites archive
+		// (treeDiversityGrid), fed each cycle by recordDiversityObservation
+		// below — replacing the old wiring that fed the detector its OWN
+		// LastDiversity() back, which nothing else ever set, permanently
+		// zero, and made the diversity-collapse branch dead code pretending
+		// to be live (2026-07-23 review gap 6). A grid with no observations
+		// yet still scores 0, which Detect correctly treats as "no data".
 		state := evolution.CrisisState{
-			TreeName:       entry.Name,
-			CurrentFitness: baseFitness.Composite,
+			TreeName:            entry.Name,
+			CurrentFitness:      baseFitness.Composite,
+			BehavioralDiversity: g.treeDiversityGrid(entry.Name).DiversityScore(),
 		}
 		if crisis, reason := g.cfg.CrisisDetector.Detect(state); crisis {
 			action := g.cfg.CrisisDetector.Intervene(entry.Name, reason)
@@ -376,6 +411,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		applied = 0
 		rollbacks++
 	}
+	// Feed this cycle's settled tree/fitness into the tree's diversity
+	// archive so BehavioralDiversity above reflects real accumulated shape
+	// exploration on the next cycle, not just the cold-start 0.
+	g.recordDiversityObservation(entry.Name, tree, newFitness.Composite)
 	improved := newFitness.Composite > baseFitness.Composite
 	if applied > 0 {
 		// ── Validation gate — prevent persisting evolved trees that fail

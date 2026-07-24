@@ -2220,3 +2220,104 @@ func hasNodeNamed(node *evolution.SerializableNode, name string) bool {
 	}
 	return false
 }
+
+// ============================================================================
+// Per-tree behavioral-diversity archive tests (evolve_v2.go) — milestone 1
+// ============================================================================
+
+// TestGardener_TreeDiversityGrid_PerTreeIsolationAndAccumulation pins
+// milestone 1 of the behavioral-diversity crisis-detection wiring:
+// treeDiversityGrid must lazily create and cache one evolution.MAPElitesGrid
+// per tree name (same name -> same instance, distinct names -> distinct
+// grids), and recordDiversityObservation must feed that tree's grid via
+// Grid.Insert so a structurally novel tree raises DiversityScore() off its
+// zero-value cold-start baseline while re-recording an already-seen shape
+// leaves the score unchanged (same niche, not a new cell).
+func TestGardener_TreeDiversityGrid_PerTreeIsolationAndAccumulation(t *testing.T) {
+	g := &Gardener{}
+
+	gridA1 := g.treeDiversityGrid("a")
+	if gridA1 == nil {
+		t.Fatal("treeDiversityGrid should never return nil")
+	}
+	if gridA1.DiversityScore() != 0 {
+		t.Fatalf("a freshly created grid should start empty, got DiversityScore=%f", gridA1.DiversityScore())
+	}
+
+	gridA2 := g.treeDiversityGrid("a")
+	if gridA1 != gridA2 {
+		t.Fatal("treeDiversityGrid(\"a\") called twice should return the same grid instance")
+	}
+
+	gridB := g.treeDiversityGrid("b")
+	if gridB == gridA1 {
+		t.Fatal("treeDiversityGrid should return distinct grids for distinct tree names")
+	}
+
+	shallow := &evolution.SerializableNode{Type: "Action", Name: "Leaf"}
+
+	g.recordDiversityObservation("a", shallow, 0.5)
+	afterFirst := gridA1.DiversityScore()
+	if afterFirst <= 0 {
+		t.Fatalf("recording a tree should raise DiversityScore above its cold-start 0, got %f", afterFirst)
+	}
+
+	// Re-recording the same-shaped tree lands in the same MAP-Elites niche, so
+	// the occupied-cell count — and therefore DiversityScore — must not change.
+	g.recordDiversityObservation("a", shallow, 0.6)
+	afterRepeat := gridA1.DiversityScore()
+	if afterRepeat != afterFirst {
+		t.Fatalf("re-recording a same-shaped tree changed DiversityScore: before=%f after=%f", afterFirst, afterRepeat)
+	}
+
+	// "b"'s grid must remain untouched by "a"'s observations (per-tree isolation).
+	if gridB.DiversityScore() != 0 {
+		t.Fatalf("recording observations for tree \"a\" leaked into tree \"b\"'s grid: DiversityScore=%f", gridB.DiversityScore())
+	}
+}
+
+// TestEvolveTreeV2_DiversityCollapse_CanFireCrisis pins milestone 2 of the
+// behavioral-diversity crisis-detection wiring: evolveTreeV2 must read a live
+// score from g.treeDiversityGrid(name).DiversityScore() into
+// CrisisState.BehavioralDiversity before calling CrisisDetector.Detect, so the
+// diversity_collapse branch — structurally dead today because
+// BehavioralDiversity is always the hardcoded zero value, and Detect's
+// "meaningful data" guard requires BehavioralDiversity > 0 — can actually
+// fire once the archive holds a sparse-but-nonzero spread of observations.
+func TestEvolveTreeV2_DiversityCollapse_CanFireCrisis(t *testing.T) {
+	g, entry, _ := crisisMetricsGardener(t, "diversity_tree", 1)
+	v2cfg := crisisV2Config()
+
+	// Populate the tree's diversity archive with 6 distinct, sparsely spread
+	// shapes: each chain occupies its own (node-bucket, depth-bucket) niche
+	// (default MAPElitesGrid bucket sizes 10 and 2), so the grid's
+	// occupied/estimated-total ratio (DiversityScore) works out to 6/36 ≈
+	// 0.167 — below the detector's default 0.2 threshold, but non-zero so
+	// Detect's "no meaningful data" guard (BehavioralDiversity > 0) does not
+	// suppress it.
+	for _, depth := range []int{0, 10, 20, 30, 40, 50} {
+		g.recordDiversityObservation("diversity_tree", chainTree(depth), 0.5)
+	}
+
+	score := g.treeDiversityGrid("diversity_tree").DiversityScore()
+	if score <= 0 || score >= g.cfg.CrisisDetector.DiversityThreshold {
+		t.Fatalf("test setup sanity check failed: DiversityScore = %v, want in (0, %v)", score, g.cfg.CrisisDetector.DiversityThreshold)
+	}
+
+	m := g.evolveTreeV2(entry, v2cfg)
+
+	if !m.CrisisIntervened {
+		t.Fatalf("expected CrisisIntervened == true from diversity collapse (archive DiversityScore=%v, threshold=%v), got false (metrics=%+v)", score, g.cfg.CrisisDetector.DiversityThreshold, m)
+	}
+}
+
+// chainTree builds a linear Sequence chain depth nodes deep, terminated by a
+// single Action leaf — giving it a predictable CountNodes (depth+1) and
+// MaxDepth (depth) for MAP-Elites niche placement in tests.
+func chainTree(depth int) *evolution.SerializableNode {
+	node := evolution.SerializableNode{Type: "Action", Name: "Leaf"}
+	for i := 0; i < depth; i++ {
+		node = evolution.SerializableNode{Type: "Sequence", Name: "Seq", Children: []evolution.SerializableNode{node}}
+	}
+	return &node
+}
