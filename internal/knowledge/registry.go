@@ -829,6 +829,189 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 		},
 	})
 
+	// ── RESOLVER SPECIAL-CASE TREES (bare, non-"domain:"-prefixed IDs) ──────
+	// These IDs are special-cased directly in
+	// internal/domains/tree_resolver.go's resolveTreeIDWithResolver instead of
+	// going through a category-prefixed lookup table, so they were missing
+	// from the knowledge graph entirely — knowledge.RecordRun silently
+	// dropped their run outcomes (e.g. notebooklm-bridge's 4h cron), same
+	// failure mode as the "previously-unregistered domain trees" above (see
+	// kg_registry_coverage_test.go's TestKnowledgeGraphRegistersResolverSpecialCaseTrees).
+
+	kg.Register(&TreeMeta{
+		ID:          "vault_manager",
+		Category:    "core",
+		Name:        "Vault Manager",
+		Description: "Obsidian vault management: session start, ingest raw sources, synthesize wiki, cross-link, update index, session end, weekly sweep",
+		NodeCount:   32,
+		Keywords:    []string{"vault", "obsidian", "ingest", "synthesize", "wiki", "session"},
+		Capabilities: []Capability{
+			{Action: "manage_vault", Domain: "productivity", Strength: 0.9},
+			{Action: "synthesize_knowledge", Domain: "productivity", Strength: 0.85},
+			{Action: "ingest_source", Domain: "productivity", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:task_creator",
+		Category:    "domain",
+		Name:        "Kanban Task Creator",
+		Description: "Create a DoR-ready Focalboard card in BACKLOG from a raw task request",
+		NodeCount:   9,
+		Keywords:    []string{"kanban", "task", "create", "card", "backlog", "focalboard"},
+		Capabilities: []Capability{
+			{Action: "create_card", Domain: "productivity", Strength: 0.9},
+			{Action: "draft_acceptance_criteria", Domain: "productivity", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:refiner",
+		Category:    "domain",
+		Name:        "Kanban Refiner",
+		Description: "Refine a TODO Focalboard card into REFINED with a complete Definition of Ready",
+		NodeCount:   9,
+		Keywords:    []string{"kanban", "refine", "dor", "todo", "card"},
+		Capabilities: []Capability{
+			{Action: "refine_card", Domain: "productivity", Strength: 0.9},
+			{Action: "verify_dor", Domain: "productivity", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:qa",
+		Category:    "domain",
+		Name:        "Kanban QA",
+		Description: "Validate a QA Focalboard card and move it to REVIEW or back to IN PROGRESS",
+		NodeCount:   9,
+		Keywords:    []string{"kanban", "qa", "validate", "review", "card"},
+		Capabilities: []Capability{
+			{Action: "validate_card", Domain: "engineering", Strength: 0.9},
+			{Action: "run_qa_checklist", Domain: "engineering", Strength: 0.85},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:monitor",
+		Category:    "domain",
+		Name:        "Kanban Board Monitor",
+		Description: "Scan the Focalboard Kanban for stale cards, bottlenecks, dispatchable work, and standup summaries",
+		NodeCount:   15,
+		Keywords:    []string{"kanban", "monitor", "stale", "bottleneck", "dispatch", "standup"},
+		Capabilities: []Capability{
+			{Action: "monitor_health", Domain: "engineering", Strength: 0.85},
+			{Action: "detect_bottleneck", Domain: "engineering", Strength: 0.8},
+			{Action: "dispatch_card", Domain: "engineering", Strength: 0.75},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:workflow",
+		Category:    "domain",
+		Name:        "Kanban Workflow",
+		Description: "Orchestrate create, refine, QA, and board-scan operations across the Focalboard pipeline",
+		NodeCount:   21,
+		Keywords:    []string{"kanban", "workflow", "orchestrate", "pipeline", "dod"},
+		Capabilities: []Capability{
+			{Action: "orchestrate_pipeline", Domain: "productivity", Strength: 0.85},
+			{Action: "verify_dod", Domain: "productivity", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "kanban:autopilot",
+		Category:    "domain",
+		Name:        "Kanban Autopilot",
+		Description: "Automatically scan every column and advance dispatchable Focalboard cards through the pipeline",
+		NodeCount:   10,
+		Keywords:    []string{"kanban", "autopilot", "automatic", "dispatch", "pipeline"},
+		Capabilities: []Capability{
+			{Action: "automate_pipeline", Domain: "productivity", Strength: 0.9},
+			{Action: "advance_card", Domain: "productivity", Strength: 0.85},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "notebooklm",
+		Category:    "research",
+		Name:        "NotebookLM CLI",
+		Description: "Zero-LLM NotebookLM operations via deterministic nlm CLI exec: research→import→save, query, auth/info default path — no LLM calls, no fabrication possible",
+		NodeCount:   25,
+		Keywords:    []string{"notebooklm", "nlm", "cli", "deterministic", "research", "query"},
+		Capabilities: []Capability{
+			{Action: "research_notebook", Domain: "research", Strength: 0.85},
+			{Action: "query_notebook", Domain: "research", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "notebooklm-consumer",
+		Category:    "research",
+		Name:        "NotebookLM Consumer",
+		Description: "Chain-agent consumer that reads the newest nlm-research synthesis via shell_exec/file_read, computes source trends, and writes a real summary back to the vault",
+		NodeCount:   9,
+		Keywords:    []string{"notebooklm", "consumer", "synthesis", "chain-agent", "vault"},
+		Capabilities: []Capability{
+			{Action: "consume_research", Domain: "research", Strength: 0.85},
+			{Action: "summarize_trends", Domain: "research", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "notebooklm-bridge",
+		Category:    "research",
+		Name:        "NotebookLM Bridge",
+		Description: "Bridge NotebookLM to the BT platform: check auth, scan notebooks for new content, download artifacts, index summaries to the Obsidian vault, report bridge health",
+		NodeCount:   13,
+		Keywords:    []string{"notebooklm", "bridge", "scan", "download", "vault", "health"},
+		Capabilities: []Capability{
+			{Action: "scan_notebooks", Domain: "research", Strength: 0.85},
+			{Action: "index_to_vault", Domain: "research", Strength: 0.8},
+			{Action: "report_health", Domain: "engineering", Strength: 0.7},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "hermes_obsidian",
+		Category:    "core",
+		Name:        "Hermes Obsidian Optimizer",
+		Description: "Full Hermes+Obsidian vault pipeline: session continuity, knowledge capture (ingest/synthesize/cross-link), automated sweeps, quality audits, publish, and skill improvement",
+		NodeCount:   28,
+		Keywords:    []string{"hermes", "obsidian", "vault", "session", "audit", "publish"},
+		Capabilities: []Capability{
+			{Action: "run_vault_pipeline", Domain: "productivity", Strength: 0.9},
+			{Action: "audit_knowledge", Domain: "productivity", Strength: 0.8},
+			{Action: "publish_output", Domain: "productivity", Strength: 0.75},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "superpowers_pipeline",
+		Category:    "domain",
+		Name:        "Superpowers Pipeline",
+		Description: "Production Superpowers SDLC: design artifact → safe worktree/baseline → implementation plan → native HITL → Claude Code TDD execution → verification → finish evidence",
+		NodeCount:   28,
+		Keywords:    []string{"superpowers", "sdlc", "tdd", "hitl", "plan", "verify"},
+		Capabilities: []Capability{
+			{Action: "run_sdlc_pipeline", Domain: "engineering", Strength: 0.9},
+			{Action: "gate_hitl", Domain: "engineering", Strength: 0.75},
+			{Action: "verify_evidence", Domain: "engineering", Strength: 0.8},
+		},
+	})
+
+	kg.Register(&TreeMeta{
+		ID:          "fusion",
+		Category:    "core",
+		Name:        "Fusion Deliberation",
+		Description: "Native reproduction of OpenRouter Fusion: pre-gate setup, conditional multi-model deliberation with fallback to a direct LLM call, reflection, and adaptation",
+		NodeCount:   18,
+		Keywords:    []string{"fusion", "deliberation", "multi-model", "reflect", "adapt"},
+		Capabilities: []Capability{
+			{Action: "deliberate_multi_model", Domain: "meta", Strength: 0.85},
+			{Action: "reflect_on_performance", Domain: "meta", Strength: 0.75},
+		},
+	})
+
 	// ── EVOLUTION TREES ─────────────────────────────────────────────────────
 
 	kg.Register(&TreeMeta{
@@ -920,5 +1103,33 @@ func BuildKnowledgeGraph() *KnowledgeGraph {
 	return kg
 }
 
-// GlobalGraph is the pre-built knowledge graph containing all 67 behavior trees.
+// GlobalGraph is the pre-built knowledge graph containing all 81 behavior trees.
 var GlobalGraph = BuildKnowledgeGraph()
+
+// resolverSpecialCaseTreeIDs lists the bare (non-"domain:"-prefixed) tree IDs
+// that internal/domains/tree_resolver.go's resolveTreeIDWithResolver
+// special-cases directly instead of routing through AllDomainTrees(). It
+// mirrors internal/domains/kg_registry_coverage_test.go's
+// resolverSpecialCaseTreeIDs — a knowledge→domains import isn't possible
+// without an import cycle (same reason ExpectedDomains is injected rather
+// than read from domains.AllDomainTrees() directly), so this list is kept in
+// sync with tree_resolver.go by hand, same as the domains-package copy.
+// ComputeAnalytics audits it alongside ExpectedDomains so a resolver ID added
+// without a matching Register call above surfaces as a CoverageGaps entry
+// automatically, instead of depending on periodic manual review to
+// rediscover it.
+var resolverSpecialCaseTreeIDs = []string{
+	"vault_manager",
+	"kanban:task_creator",
+	"kanban:refiner",
+	"kanban:qa",
+	"kanban:monitor",
+	"kanban:workflow",
+	"kanban:autopilot",
+	"notebooklm",
+	"notebooklm-consumer",
+	"notebooklm-bridge",
+	"hermes_obsidian",
+	"superpowers_pipeline",
+	"fusion",
+}
