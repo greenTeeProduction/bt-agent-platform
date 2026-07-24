@@ -145,6 +145,46 @@ func TestMainWiresKGAnalyticsRefreshFn(t *testing.T) {
 	}
 }
 
+// TestMainWiresAuctionCardsFn pins the NotebookLM research goal: cmd/bt-dashboard
+// must install a2a.AuctionCardsFn from its own live agent card registry,
+// mirroring cmd/bt-agent/main.go:868's
+// `a2a_mod.AuctionCardsFn = a2aSrv.AuctionCardSource()`.
+//
+// internal/a2a/auction.go's runAuction reads the package-level AuctionCardsFn
+// seam to find candidate bidders; it is nil until something assigns it.
+// cmd/bt-agent/main.go is the only production call site in the repo — verified
+// via repo-wide grep, it assigns it right after constructing its A2A server.
+// cmd/bt-dashboard/main.go never imports internal/a2a and never sets this seam,
+// even though internal/dashboard/executor.go's PickTreeForTask routes any
+// auction-keyword task to auction_demo, which runs in-process via
+// agentexec.NewRunDeps() — the same engine that wires the AuctionDelegate BT
+// action and consults this same global. So every auction-shaped task
+// submitted through the dashboard UI deterministically finds zero bidders and
+// fails with "auction produced no bidders and no delegate_tree_id fallback is
+// configured", while the identical tree run via cmd/bt-agent completes real
+// auctions. This audits main.go at the source level (same style as
+// TestMainWiresKGAnalyticsRefreshFn above) because the wiring happens inline
+// during dashboard startup setup, not inside a separately callable function.
+func TestMainWiresAuctionCardsFn(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	source := string(src)
+
+	if !strings.Contains(source, "github.com/nico/go-bt-evolve/internal/a2a") {
+		t.Error("main.go must import internal/a2a so it can wire the production auction " +
+			"card source, mirroring cmd/bt-agent/main.go")
+	}
+	if !strings.Contains(source, "AuctionCardsFn = ") {
+		t.Error("main.go must set a2a.AuctionCardsFn from the dashboard's own live agent " +
+			"registry (mirroring cmd/bt-agent/main.go:868's " +
+			"a2a_mod.AuctionCardsFn = a2aSrv.AuctionCardSource()), so auction-shaped tasks " +
+			"routed to auction_demo via the dashboard's in-process executor find real " +
+			"bidders instead of deterministically zero")
+	}
+}
+
 // TestBuildDashboardKnowledgeGraph_LoadsFeedbackFitness pins milestone 4/4 of
 // the Q2 Evolvability KG-adoption program: buildDashboardKnowledgeGraph must
 // register the static catalog (via knowledge.BuildKnowledgeGraph) and then

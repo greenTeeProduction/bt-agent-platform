@@ -234,6 +234,7 @@ Consolidation notes (2026-07-16):
 | ADR-209 | `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
 | ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-212 | `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3776,6 +3777,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ The scheduler and DLQ-replay paths are unaffected in observed behavior: both route through `newLocalAgentExecutor`, which sets `SkipSLORecording`, so `recordSchedulerAttempt` remains the sole recorder there and DLQ replays still record no evidence, exactly as before this change.
 - ⚠️ SLO evidence is now flushed to disk on every non-opted-out `RunOnce` call — one `SaveSLOMetrics` write per interactive/MCP invocation — rather than only once per scheduled cycle.
 - Pinned by the tests named above.
+
+---
+
+## ADR-212: `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-008 wired `engine.AuctionDelegateFn` and its candidate source, `a2a.AuctionCardsFn`, into `cmd/bt-agent`'s daemon so the `AuctionDelegate` BT action could auction over the real A2A transport instead of reporting "not configured." ADR-073 later gave `cmd/bt-dashboard` its own path into that same machinery: `dashboard.PickTreeForTask` routes any auction/delegation-shaped task text to the `auction_demo` tree, which the dashboard runs in-process via its own `agentexec`-based executor. But `cmd/bt-dashboard/main.go` never imported `internal/a2a` and never assigned `a2a.AuctionCardsFn` — that package-level seam is process-global, and `cmd/bt-agent` was the sole production writer of it (confirmed by a repo-wide grep). Because the dashboard runs as its own separate process with its own agent registry, an auction-shaped task submitted through the dashboard UI reached `AuctionDelegate` with the seam still nil and deterministically found zero bidders, failing with "auction produced no bidders and no delegate_tree_id fallback is configured" — even though the identical tree run through `cmd/bt-agent` completed real auctions.
+
+**Decision:** `cmd/bt-dashboard/main.go` constructs its own `*a2a.Server` from the dashboard's own `runner.Registry` and `sharedLLM` (the same registry `dashboard.AgentRegistry` and the in-process executor already use), immediately after that registry is built during startup, and assigns `a2a.AuctionCardsFn = a2aSrv.AuctionCardSource()` — mirroring `cmd/bt-agent/main.go`'s own `a2a_mod.AuctionCardsFn = a2aSrv.AuctionCardSource()` call. The A2A port and base URL follow the same `BT_A2A_PORT`/`BT_A2A_BASE_URL` env-override resolution the daemon uses, so the dashboard's auction cards advertise endpoints consistent with whichever A2A server is actually reachable; construction failure only logs a warning (`slog.Warn`) rather than failing dashboard startup, since the auction seam is an enhancement over the existing `DelegateToTreeFn` fallback, not a hard dependency.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestMainWiresAuctionCardsFn` (`cmd/bt-dashboard/main_test.go`), a source-level audit of `main.go` (mirroring the existing `TestMainWiresKGAnalyticsRefreshFn` pattern, used because the wiring happens inline in the startup sequence rather than in a separately callable function) that asserts `main.go` imports `internal/a2a` and assigns `AuctionCardsFn =`.
+
+**Consequences:**
+- ✅ Auction-shaped tasks submitted through the dashboard UI now find real bidders from the dashboard's own live agent registry instead of deterministically failing the auction — closing the dashboard-side half of the gap ADR-008 (daemon-only) and ADR-073 (routing-only, no candidate source) left open.
+- ✅ Card-source construction failure degrades to a log warning, not a startup failure — consistent with the auction being an optional enhancement over the tree's `DelegateToTreeFn` fallback (ADR-008).
+- ⚠️ The dashboard now runs a second in-process `a2a.Server` purely as a card source; it does not serve the dashboard's own agents over HTTP A2A endpoints (that remains `cmd/bt-agent`'s role) — this is candidate-discovery wiring only, not a second A2A transport surface.
+- Pinned by the test named above.
 
 ---
 
