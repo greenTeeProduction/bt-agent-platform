@@ -501,16 +501,15 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	if err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\n%v", err)
 	}
-	if pr == nil || pr.Head.SHA != localSHA {
-		// The branch is ALWAYS pushed from local master (fix commits land on
-		// master first), so force-with-lease can never destroy work.
+	if pr == nil {
+		// No open PR: this is a fresh batch, so push local master and open
+		// one. The branch is ALWAYS pushed from local master (fix commits
+		// land on master first), so force-with-lease can never destroy work.
 		push := deps.runner.Run(ctx, deps.repoDir, "git", "push", "--force-with-lease", "origin", "refs/heads/master:refs/heads/"+branch)
 		if push.Err != nil {
 			return prShepherdSkip(bb, "pr_shepherd_push_failed",
 				"## PR Shepherd Skipped\n\nBranch push failed:\n```\n%s\n```", truncateGoap(push.Output, 800))
 		}
-	}
-	if pr == nil {
 		title, body := fleetPRTitleAndBody(ctx, deps.runner, deps.repoDir)
 		created, err := api.createPR(ctx, branch, title, body)
 		if err != nil {
@@ -522,7 +521,15 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	}
 	state.PRNumber = pr.Number
 
-	runs, err := api.listCheckRuns(ctx, localSHA)
+	// The open PR's head is PINNED for this batch: local-master commits that
+	// land while its CI is still in flight must NOT be pushed onto it — every
+	// push restarted CI and starved PR #25 for hours (2026-07-23 incident).
+	// New landings accumulate on local master for the NEXT batch, opened only
+	// after this PR merges. CI is therefore always checked against the pinned
+	// head, never against local master's possibly-advanced tip.
+	pinnedSHA := pr.Head.SHA
+
+	runs, err := api.listCheckRuns(ctx, pinnedSHA)
 	if err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\ncheck-runs query failed: %v", err)
 	}
@@ -540,7 +547,7 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	}
 	if len(failed) == 0 && pending {
 		return prShepherdSkip(bb, "pr_shepherd_ci_pending",
-			"## PR Shepherd Waiting\n\nPR #%d CI still running for %s (%d check runs); checked again next cycle.", pr.Number, localSHA[:min(12, len(localSHA))], len(runs))
+			"## PR Shepherd Waiting\n\nPR #%d CI still running for %s (%d check runs); checked again next cycle.", pr.Number, pinnedSHA[:min(12, len(pinnedSHA))], len(runs))
 	}
 
 	if len(failed) == 0 {
@@ -559,7 +566,9 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 			"## PR Shepherd Merged PR #%d\n\nPipeline green; merged and fast-forwarded local master.", pr.Number)
 	}
 
-	return runPRShepherdFix(ctx, bb, deps, api, &state, branch, localSHA, pr.Number, failed, now)
+	// Fix-red commits for the pinned head are the one exception allowed to
+	// update the open PR's branch while a batch is in flight.
+	return runPRShepherdFix(ctx, bb, deps, api, &state, branch, pinnedSHA, pr.Number, failed, now)
 }
 
 // runPRShepherdFix runs ONE bounded Claude fix attempt for a red pipeline:
