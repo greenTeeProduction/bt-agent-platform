@@ -244,6 +244,7 @@ Consolidation notes (2026-07-16):
 | ADR-219 | `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-220 | `internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-221 | `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-222 | `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3947,6 +3948,21 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `TelegramClarifyTree` is now reachable end-to-end via `ResolveTreeID`/`bt_delegate_to_tree`, consistent with its already-wired conditions/actions.
 - ⚠️ `"telegram_clarify"` is **not** added to `resolverSpecialCaseTreeIDs` in either `internal/knowledge/registry.go` or `internal/domains/kg_registry_coverage_test.go` (ADR-218's hand-maintained lists), and `BuildKnowledgeGraph` registers no `TreeMeta` for it. ADR-218's own `CoverageGaps` auditor only checks entries already present in that hand-maintained list, so it cannot detect that this 14th resolver special case is unregistered — `knowledge.RecordRun` will silently no-op on any `"telegram_clarify"` run the same way it did for the 13 IDs ADR-218 closed, and this specific gap is invisible to the very drift-guard ADR-218 built, because that guard audits the hand list rather than `tree_resolver.go`'s actual branches directly. A future change should extend both `resolverSpecialCaseTreeIDs` copies and `BuildKnowledgeGraph`'s registration to include `"telegram_clarify"`, or the resolver's newly-reachable tree will accumulate run history that `ComputeAnalytics`/gardener tree-prioritization never sees.
 - Rejected: registering `"telegram_clarify"` into the knowledge graph as part of this same change — out of scope for this goal (tree-resolver reachability only), left as a follow-up rather than silently expanding scope.
+
+---
+
+## ADR-222: `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-220 added `reliability.CircuitBreakerStore` as the generic, reusable form of the named-breaker registry pattern, but flagged as a consequence that `internal/llm`, `internal/a2a`, and `internal/agent/webhook_publisher.go` still each hand-rolled their own `map[string]*CircuitBreaker` registry, unconsolidated. `WebhookPublisher.breakers` (`internal/agent/webhook_publisher.go`) was one such registry, built and populated once in `NewWebhookPublisher` from `secrets` and read/written directly by `handleEvent`. Separately, `replayDeadLetters` — the background sweep `handleEvent` triggers after any subscription's successful delivery — replayed every queued DLQ entry via `dlq.Requeue`/the shared `SetReplayExecutor` regardless of which subscription it belonged to, with no `breakers.Allowed()` check at all: a successful `bt-evolution-event` delivery re-hammered a still-open `bt-agent-alert` breaker's endpoint instead of leaving its queued entry alone until its own breaker recovered.
+
+**Decision:** `WebhookPublisher.breakers` changes type from `map[string]*reliability.CircuitBreaker` to `*reliability.CircuitBreakerStore`, constructed once via `reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{Threshold: webhookCircuitBreakerThreshold, Cooldown: webhookCircuitBreakerCooldown})` instead of pre-populating one breaker per subscription; `handleEvent` calls the store's `Allowed`/`Get(...).RecordOutcome`/`RecordSuccess` in place of the old nil-checked map lookups. Separately, `replayDeadLetters` now skips any DLQ entry whose subscription is `!p.breakers.Allowed(e.Agent)` before calling `dlq.Requeue`, so a recovery signal on one subscription no longer bypasses another subscription's still-open breaker or burns a requeue attempt on it.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestWebhookPublisher_BreakersUseCircuitBreakerStore` and `TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker` (`internal/agent/webhook_publisher_test.go`), plus the existing `TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker` and `TestWebhookPublisher_CircuitBreakerTripsAndRecovers`, both updated to construct/inspect breakers through the store API.
+
+**Consequences:**
+- ✅ Closes one of the three unconsolidated registries ADR-220 flagged; `internal/llm` and `internal/a2a` remain hand-rolled and unconsolidated.
+- ✅ `replayDeadLetters` now respects each entry's own subscription breaker instead of replaying the whole DLQ on any single subscription's recovery, closing a cross-subscription breaker-bypass that previously let one working endpoint's success re-hammer a different, still-broken endpoint.
+- Pinned by the tests named above.
 
 ---
 

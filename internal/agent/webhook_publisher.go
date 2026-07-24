@@ -62,7 +62,7 @@ type WebhookPublisher struct {
 	stopCh   chan struct{}
 	eventCh  <-chan AgentEvent
 	throttle *routineThrottle
-	breakers map[string]*reliability.CircuitBreaker
+	breakers *reliability.CircuitBreakerStore
 	dlq      *reliability.DeadLetterQueue
 	// replaying guards the background dead-letter replay sweep: at most one
 	// runs at a time (see replayDeadLetters).
@@ -71,10 +71,10 @@ type WebhookPublisher struct {
 
 // NewWebhookPublisher creates a publisher with Hermes webhook base URL and secrets.
 func NewWebhookPublisher(baseURL string, secrets WebhookSecrets) *WebhookPublisher {
-	breakers := make(map[string]*reliability.CircuitBreaker, len(secrets))
-	for subscription := range secrets {
-		breakers[subscription] = reliability.NewCircuitBreaker(subscription, webhookCircuitBreakerThreshold, webhookCircuitBreakerCooldown)
-	}
+	breakers := reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{
+		Threshold: webhookCircuitBreakerThreshold,
+		Cooldown:  webhookCircuitBreakerCooldown,
+	})
 	pub := &WebhookPublisher{
 		baseURL:  baseURL,
 		secrets:  secrets,
@@ -196,8 +196,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	// single half-open probe and then returned without recording an outcome,
 	// wedging the breaker HalfOpen forever (Allow() then always returns false)
 	// so every later deliverable event was silently dropped.
-	breaker := p.breakers[subscription]
-	if breaker != nil && !breaker.Allow() {
+	if !p.breakers.Allowed(subscription) {
 		slog.Warn("webhook: circuit breaker open, skipping delivery", "subscription", subscription)
 		return
 	}
@@ -211,13 +210,11 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 
 	if err != nil {
 		slog.Warn("webhook: POST failed after retries", "subscription", subscription, "status", lastStatus, "error", err)
-		if breaker != nil {
-			// Only infrastructure failures (5xx/transport, per postSigned's
-			// typed classification) walk the breaker toward open: a payload
-			// Hermes rejects with 4xx must not suppress deliverable events for
-			// the whole cooldown. A consumed half-open probe is still resolved.
-			breaker.RecordOutcome(err)
-		}
+		// Only infrastructure failures (5xx/transport, per postSigned's typed
+		// classification) walk the breaker toward open: a payload Hermes
+		// rejects with 4xx must not suppress deliverable events for the whole
+		// cooldown. A consumed half-open probe is still resolved.
+		p.breakers.Get(subscription).RecordOutcome(err)
 		p.dlq.Push(reliability.DeadLetterEntry{
 			Agent: subscription,
 			Task:  string(body),
@@ -226,9 +223,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		return
 	}
 
-	if breaker != nil {
-		breaker.RecordSuccess()
-	}
+	p.breakers.RecordSuccess(subscription)
 	// A successful delivery is the recovery signal: replay queued dead
 	// letters in the background through the same signed single-shot path
 	// (SetReplayExecutor). Without this the DLQ was write-only — entries
@@ -248,6 +243,14 @@ func (p *WebhookPublisher) replayDeadLetters() {
 	reliability.SafeGo("webhook-dlq-replay", func() {
 		defer p.replaying.Store(false)
 		for _, e := range p.dlq.List() {
+			// A successful delivery on one subscription is not a recovery
+			// signal for a DIFFERENT subscription's still-open breaker: skip
+			// entries whose breaker isn't Allowed so an unrelated event
+			// doesn't re-hammer a target that's still down, and don't burn a
+			// Requeue attempt on them either.
+			if !p.breakers.Allowed(e.Agent) {
+				continue
+			}
 			if _, ok := p.dlq.Requeue(e.ID); !ok {
 				continue // abandoned or budget exhausted
 			}

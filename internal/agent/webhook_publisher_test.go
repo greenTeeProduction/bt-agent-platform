@@ -39,9 +39,8 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 	// Replace the minute-cooldown breaker with a short-cooldown one already
 	// tripped open and past its cooldown — primed to serve exactly one
 	// half-open probe on the next Allow().
-	cb := reliability.NewCircuitBreaker(sub, 1, time.Millisecond)
-	cb.RecordFailure() // threshold 1 -> Open
-	pub.breakers[sub] = cb
+	pub.breakers = reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{Threshold: 1, Cooldown: time.Millisecond})
+	pub.breakers.RecordFailure(sub)   // threshold 1 -> Open
 	time.Sleep(10 * time.Millisecond) // let the cooldown elapse
 
 	// An event whose Data cannot be JSON-marshaled (a channel value) must NOT
@@ -570,9 +569,7 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	// Inject a fast breaker (threshold=1, short cooldown) for the
 	// "bt-agent-alert" subscription so the test doesn't have to wait out a
 	// production-sized cooldown window.
-	pub.breakers = map[string]*reliability.CircuitBreaker{
-		"bt-agent-alert": reliability.NewCircuitBreaker("bt-agent-alert", 1, 250*time.Millisecond),
-	}
+	pub.breakers = reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{Threshold: 1, Cooldown: 250 * time.Millisecond})
 	pub.Attach(bus)
 	defer pub.Close()
 
@@ -588,7 +585,7 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 		t.Fatalf("expected exactly %d requests from the first (failing) delivery attempt, got %d", failThreshold, got)
 	}
 
-	breaker := pub.breakers["bt-agent-alert"]
+	breaker := pub.breakers.Get("bt-agent-alert")
 	deadline = time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) && breaker.State() != reliability.CircuitOpen {
 		time.Sleep(10 * time.Millisecond)
@@ -629,6 +626,32 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	}
 	if breaker.State() != reliability.CircuitClosed {
 		t.Fatalf("expected circuit breaker to recover to closed after a successful delivery post-cooldown, got %v", breaker.State())
+	}
+}
+
+// ─── CircuitBreakerStore adoption ───
+
+// TestWebhookPublisher_BreakersUseCircuitBreakerStore is the regression test
+// for adopting reliability.CircuitBreakerStore (reliability.go:1782), the
+// canonical named-breaker registry introduced specifically to replace
+// hand-rolled map[string]*CircuitBreaker registries like WebhookPublisher's
+// own `breakers` field (docs/arc42/09-decisions.md ADR-007;
+// NewAgentRouter's own registry at reliability.go:1194 already uses it).
+// WebhookPublisher must keep its per-subscription breakers in a
+// *reliability.CircuitBreakerStore instead of a bespoke map, so it inherits
+// Status()/ResetAll() for free instead of every caller re-deriving them.
+func TestWebhookPublisher_BreakersUseCircuitBreakerStore(t *testing.T) {
+	pub := NewWebhookPublisher("http://localhost:8644", DefaultWebhookSecrets())
+
+	for i := 0; i < webhookCircuitBreakerThreshold; i++ {
+		pub.breakers.RecordFailure("bt-agent-alert")
+	}
+	if pub.breakers.Allowed("bt-agent-alert") {
+		t.Fatalf("expected bt-agent-alert breaker to be open (not allowed) after %d recorded failures", webhookCircuitBreakerThreshold)
+	}
+	summary := pub.breakers.Status()["bt-agent-alert"]
+	if summary.State != reliability.CircuitOpen {
+		t.Fatalf("expected bt-agent-alert breaker state Open, got %v", summary.State)
 	}
 }
 
@@ -696,5 +719,68 @@ func TestWebhookPublisher_DLQReplayRedeliversAfterRecovery(t *testing.T) {
 
 	if got := pub.dlq.Len(); got != 0 {
 		t.Fatalf("expected the dead letter entry to be removed after a successful replay, got %d remaining", got)
+	}
+}
+
+// TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker is the regression test
+// for a gap in replayDeadLetters (webhook_publisher.go): the background
+// replay sweep is triggered by ANY subscription's successful delivery (see
+// handleEvent's call to p.replayDeadLetters() after RecordSuccess), but it
+// then calls dlq.Replay for every queued entry — including ones belonging to
+// a DIFFERENT subscription whose breaker is still Open — via the
+// SetReplayExecutor path, which POSTs straight through postSigned with no
+// p.breakers.Allowed() check at all. That defeats the breaker: once
+// bt-agent-alert trips open because Hermes is down for it, every unrelated
+// successful bt-evolution-event delivery re-hammers the still-broken
+// bt-agent-alert endpoint instead of respecting its open circuit.
+func TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker(t *testing.T) {
+	var alertRequests int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "bt-agent-alert") {
+			atomic.AddInt64(&alertRequests, 1)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
+	// Long cooldown: the bt-agent-alert breaker must stay Open (not
+	// half-open) for the whole test so any replay attempt against it is
+	// unambiguously a breaker-check bypass, not a legitimate probe.
+	pub.breakers = reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{Threshold: 1, Cooldown: time.Hour})
+
+	// bt-agent-alert is down: delivery exhausts retries, lands in the DLQ,
+	// and trips its breaker open (threshold 1).
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "down", Timestamp: time.Now()})
+	if got := pub.dlq.Len(); got != 1 {
+		t.Fatalf("dlq.Len() = %d, want 1 after bt-agent-alert delivery failed", got)
+	}
+	if state := pub.breakers.Get("bt-agent-alert").State(); state != reliability.CircuitOpen {
+		t.Fatalf("bt-agent-alert breaker state = %v, want Open", state)
+	}
+	if pub.breakers.Allowed("bt-agent-alert") {
+		t.Fatalf("bt-agent-alert breaker should not be Allowed while Open with a long cooldown")
+	}
+	requestsBeforeReplay := atomic.LoadInt64(&alertRequests)
+
+	// A wholly unrelated subscription (bt-evolution-event) delivers
+	// successfully, which triggers the background replay sweep over the
+	// entire DLQ — including the bt-agent-alert entry.
+	pub.handleEvent(AgentEvent{Type: "evolution_step", Source: "x", Message: "ok", Timestamp: time.Now()})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && pub.replaying.Load() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond) // settle any just-started replay goroutine
+
+	if got := atomic.LoadInt64(&alertRequests); got != requestsBeforeReplay {
+		t.Fatalf("replay sweep sent %d more request(s) to the open-breaker bt-agent-alert endpoint; "+
+			"replayDeadLetters must skip entries whose subscription breaker is not Allowed", got-requestsBeforeReplay)
+	}
+	if got := pub.dlq.Len(); got != 1 {
+		t.Fatalf("dlq.Len() = %d, want 1 (bt-agent-alert entry must be retained, not replayed, while its breaker is open)", got)
 	}
 }
