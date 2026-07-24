@@ -166,6 +166,50 @@ func TestNewFileWriteTool_EmptyPath(t *testing.T) {
 	}
 }
 
+func TestNewFileWriteTool_RejectsShellMetacharacterPaths(t *testing.T) {
+	// Regression: the notebooklm consumer LLM sometimes passes its shell_exec
+	// command string as the file_write path, creating literal junk paths like
+	// "ls -lt /mnt/.../plans/ 2>/dev/null | head -5" in the repo checkout.
+	dir := t.TempDir()
+	tool := newFileWriteTool()
+	badPaths := []string{
+		filepath.Join(dir, "plans") + " 2>_devnull | head -5",
+		filepath.Join(dir, "date +%Y-%m-%d"),
+		filepath.Join(dir, "notes;echo hi"),
+		filepath.Join(dir, "out`whoami`.txt"),
+		filepath.Join(dir, "$HOME.txt"),
+		filepath.Join(dir, "glob*.md"),
+		filepath.Join(dir, "redirect>out.txt"),
+		filepath.Join(dir, "single'quote.txt"),
+	}
+	for _, p := range badPaths {
+		result := tool.Call(p + "\ncontent")
+		if !strings.Contains(result, "error") || !strings.Contains(result, "shell metacharacter") {
+			t.Errorf("path %q: expected shell-metacharacter rejection, got %q", p, result)
+		}
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("path %q: file was created despite rejection", p)
+		}
+	}
+}
+
+func TestNewFileWriteTool_AllowsPlainPathsWithBenignPunctuation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nlm-research-2026-07-24T102420+r1%.md")
+	tool := newFileWriteTool()
+	result := tool.Call(path + "\nreport body")
+	if !strings.Contains(result, "written") {
+		t.Errorf("expected success for benign punctuation path, got %q", result)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "report body" {
+		t.Errorf("expected 'report body', got %q", string(data))
+	}
+}
+
 // ─── newGoBuildTool — execution tests ───
 
 func TestNewGoBuildTool_DefaultArgs(t *testing.T) {
