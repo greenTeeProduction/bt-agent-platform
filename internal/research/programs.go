@@ -265,6 +265,30 @@ func (ps *ProgramStore) ReleaseClaim(programID, agentID string) bool {
 	return false
 }
 
+// ClearClaim unconditionally clears programID's claim, whoever holds it — for
+// callers that complete a program's milestone on behalf of a DIFFERENT
+// agent's claim (the red pre-check re-runs a PRIOR cycle's recorded RED
+// command before this cycle ever claims the program itself, so there is no
+// agentID to compare against as ReleaseClaim requires). The completing cycle
+// has already re-validated the milestone under the store lock, so clearing
+// whatever claim is present is safe: no one is still landing it. A no-op
+// when already unclaimed. Reports whether anything changed.
+func (ps *ProgramStore) ClearClaim(programID string) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if p.ClaimedBy == "" {
+			return false
+		}
+		p.ClaimedBy = ""
+		p.ClaimedAt = time.Time{}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
 // Add registers a new program unless one with the same title-key already
 // exists (research may re-propose the same program across cycles).
 func (ps *ProgramStore) Add(title, source string, milestones []string) *Program {

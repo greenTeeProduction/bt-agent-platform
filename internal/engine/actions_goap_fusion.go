@@ -953,7 +953,12 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 			if streak >= goapRedPassCompleteStreak {
 				completed = ps.MarkDone(programID, idx, "red-evidence-precheck:"+bb.RunID)
 				if completed {
-					ps.ReleaseClaim(programID, bb.RunID)
+					// This precheck runs BEFORE the cycle's own
+					// ClaimActiveForCycle call, so any claim on the program
+					// belongs to an EARLIER cycle's RunID, not bb.RunID —
+					// ReleaseClaim's agentID match can never succeed here.
+					// Clear whatever claim is present instead.
+					ps.ClearClaim(programID)
 				}
 			}
 			return nil

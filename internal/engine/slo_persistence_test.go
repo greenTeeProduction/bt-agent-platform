@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -63,6 +65,50 @@ func TestSaveSLOMetrics_AtomicNoTmpLeftBehind(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
 		t.Errorf("tmp file left behind after save")
+	}
+}
+
+// cmd/bt-dashboard's WorkerPool runs up to 4 agent tasks concurrently, and
+// each RunOnce call defers a SaveSLOMetrics(SLOMetricsFile()) write to the
+// same fixed path (internal/agent/runner.go). SaveSLOMetrics writes to a
+// shared "path.tmp" name before renaming into place, so concurrent callers
+// race on that tmp file: an interleaved write/rename can either corrupt the
+// persisted JSON or make a later os.Rename fail because an earlier caller
+// already consumed the tmp file. This must be serialized.
+func TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "slo", "slo-metrics.json")
+
+	const rounds = 40
+	const writers = 8
+
+	for round := 0; round < rounds; round++ {
+		GetSLOMetrics(fmt.Sprintf("concurrent-agent-%d", round), "concurrent-tree").RecordSuccess(time.Millisecond)
+
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		errs := make(chan error, writers)
+		for i := 0; i < writers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				errs <- SaveSLOMetrics(path)
+			}()
+		}
+		close(start)
+		wg.Wait()
+		close(errs)
+
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: concurrent SaveSLOMetrics returned error: %v", round, err)
+			}
+		}
+
+		if _, err := LoadSLOEvidence(path); err != nil {
+			t.Fatalf("round %d: persisted SLO evidence corrupted by concurrent writers: %v", round, err)
+		}
 	}
 }
 
