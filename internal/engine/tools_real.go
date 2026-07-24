@@ -143,17 +143,25 @@ func newFileReadTool() *realTool {
 	}
 }
 
+// fileWritePathDeny matches shell metacharacters and interior whitespace in a
+// file_write path — the signature of an LLM passing a shell command string
+// (e.g. "ls -lt /x 2>/dev/null | head -5") where the path belongs.
+var fileWritePathDeny = regexp.MustCompile("[\\s|<>;&`$*?\"'()\\\\]")
+
 // newFileWriteTool creates a tool that writes content to a file.
 func newFileWriteTool() *realTool {
 	return &realTool{
 		name: "file_write",
-		desc: "Write content to a file. Input format: 'FILEPATH\\nCONTENT' (first line is path, rest is content). Creates parent directories.",
+		desc: "Write content to a file. Input format: 'FILEPATH\\nCONTENT' (first line is path, rest is content). Creates parent directories. The path must be a plain file path without spaces or shell metacharacters.",
 		fn: func(input string) string {
 			parts := strings.SplitN(input, "\n", 2)
 			if len(parts) < 2 {
 				return "error: input must be 'FILEPATH\\nCONTENT'"
 			}
 			path := strings.TrimSpace(parts[0])
+			if fileWritePathDeny.MatchString(path) {
+				return fmt.Sprintf("error: invalid path %q: contains shell metacharacters or whitespace — the first input line must be a plain file path, not a shell command", path)
+			}
 			content := parts[1]
 			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 				return fmt.Sprintf("error creating directories: %v", err)

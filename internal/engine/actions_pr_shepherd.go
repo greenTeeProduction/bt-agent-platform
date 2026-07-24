@@ -607,7 +607,7 @@ func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, 
 
 	short := headSHA[:min(8, len(headSHA))]
 	fixBranch := "pr-fix-" + short
-	wtPath := filepath.Join("/tmp/worktrees", fixBranch)
+	wtPath := shepherdFixWorktreePath(fixBranch)
 	if wt := deps.runner.Run(ctx, deps.repoDir, "git", "worktree", "add", "-b", fixBranch, wtPath, "refs/heads/master"); wt.Err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
 			"## PR Shepherd Fix Failed\n\nWorktree setup failed:\n```\n%s\n```", truncateGoap(wt.Output, 800))
