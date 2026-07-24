@@ -174,6 +174,60 @@ func TestRunOnce_AuctionAwardAttributesHistoryToWinner(t *testing.T) {
 	}
 }
 
+// TestRunOnce_RecordsSLOMetricsOnSuccess pins the NotebookLM-research finding
+// that the gardener's validation gate (internal/gardener/validation_gate.go)
+// only ever gets SLO evidence from the cron-scheduler closure in
+// cmd/bt-agent/main.go (recordSchedulerAttempt) — RunOnce itself, the
+// dominant interactive/chat/MCP-driven execution path (bt_agent_run), never
+// touches engine.SLOMetrics. That leaves AllowUnverified=true a permanent
+// no-op for every tree that is only ever run through chat/MCP instead of the
+// scheduler. RunOnce must record success/failure evidence itself so the
+// validation gate has real data regardless of which path executed the run.
+func TestRunOnce_RecordsSLOMetricsOnSuccess(t *testing.T) {
+	tree := &evolution.SerializableNode{Type: "AlwaysSucceed", Name: "ok"}
+	d := &RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode { return tree },
+	}
+
+	const agentName = "slo-evidence-success-agent"
+	if _, err := d.RunOnce(context.Background(), agentName, "do the thing", RunOptions{}); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	snap := engine.GetSLOMetrics(agentName, agentName).Snapshot()
+	if snap.TotalCalls != 1 || snap.SuccessfulCalls != 1 {
+		t.Fatalf("expected RunOnce to record one successful SLO call for the interactive/MCP path, "+
+			"got TotalCalls=%d SuccessfulCalls=%d — RunOnce never records to engine.SLOMetrics today, "+
+			"so the gardener validation gate has no evidence for chat/MCP-driven trees",
+			snap.TotalCalls, snap.SuccessfulCalls)
+	}
+}
+
+// TestRunOnce_RecordsSLOMetricsOnFailure is the failure-path twin of
+// TestRunOnce_RecordsSLOMetricsOnSuccess above.
+func TestRunOnce_RecordsSLOMetricsOnFailure(t *testing.T) {
+	engine.RegisterAction("TestRunOnceSLOFailureAction", func(ctx *btcore.BTContext[engine.Blackboard]) int {
+		return -1
+	})
+	tree := &evolution.SerializableNode{Type: "Action", Name: "TestRunOnceSLOFailureAction"}
+	d := &RunDeps{
+		ResolveTree: func(_ string) *evolution.SerializableNode { return tree },
+	}
+
+	const agentName = "slo-evidence-failure-agent"
+	if _, err := d.RunOnce(context.Background(), agentName, "do the thing", RunOptions{}); err == nil {
+		t.Fatal("expected RunOnce to return an error for a failing tree")
+	}
+
+	snap := engine.GetSLOMetrics(agentName, agentName).Snapshot()
+	if snap.TotalCalls != 1 || snap.FailedCalls != 1 {
+		t.Fatalf("expected RunOnce to record one failed SLO call for the interactive/MCP path, "+
+			"got TotalCalls=%d FailedCalls=%d — RunOnce never records to engine.SLOMetrics today, "+
+			"so the gardener validation gate has no evidence for chat/MCP-driven trees",
+			snap.TotalCalls, snap.FailedCalls)
+	}
+}
+
 func TestHistoryQualityScore_UsesSpecWhenHigher(t *testing.T) {
 	inst := &Instance{
 		Definition: Definition{

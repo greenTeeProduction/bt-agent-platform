@@ -167,11 +167,20 @@ func endpointsFromCards(cards map[string]*a2acard.AgentCard, selfBaseURL string)
 // to a reliability.AgentResult. The caller's context flows into RunOnce so a
 // scheduler job deadline actually bounds the attempt — the previous
 // context.Background() detached every routed attempt from its deadline.
+//
+// SkipSLORecording is set because every caller that routes through this
+// executor already owns its own SLO accounting for the attempt: the
+// scheduler closure below calls recordSchedulerAttempt on the same
+// engine.GetSLOMetrics key right after agentRouter.Execute returns, and the
+// DLQ replay executor deliberately records no SLO evidence for replays
+// (a drop-safe replay is not a fresh scheduled attempt). Without this, a
+// scheduler-driven run would double-count the same attempt.
 func newLocalAgentExecutor(nodeURL string, runOnce func(ctx context.Context, agentName, task string, opts agent.RunOptions) (*agent.RunResult, error)) *reliability.LocalExecutor {
 	return reliability.NewLocalExecutor(nodeURL, func(ctx context.Context, agentName, task string) (*reliability.AgentResult, error) {
 		res, err := runOnce(ctx, agentName, task, agent.RunOptions{
-			InjectMemory:   true,
-			EnforceQuality: true,
+			InjectMemory:     true,
+			EnforceQuality:   true,
+			SkipSLORecording: true,
 		})
 		return localAgentResult(agentName, task, res, err)
 	})

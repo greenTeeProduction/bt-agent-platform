@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/agentexec"
 	"github.com/nico/go-bt-evolve/internal/api"
@@ -300,6 +301,32 @@ func main() {
 		dashAgentRunner = runner
 		dashboard.AgentRegistry = runner.Registry
 		slog.Info("In-process agent runner initialized")
+
+		// Auction card source (mirrors cmd/bt-agent/main.go's a2a_mod.AuctionCardsFn
+		// = a2aSrv.AuctionCardSource() wiring): the dashboard runs auction_demo
+		// in-process via this same registry (internal/dashboard/executor.go's
+		// PickTreeForTask routes auction-keyword tasks there), and
+		// internal/a2a/auction.go's AuctionDelegate reads the package-level
+		// AuctionCardsFn seam to find candidate bidders. Without this, every
+		// auction-shaped task submitted through the dashboard UI deterministically
+		// finds zero bidders. The base URL is env-overridable and matches
+		// cmd/bt-agent's own resolution so these cards point at the same A2A
+		// endpoints the daemon actually serves.
+		a2aPort := 8686
+		if p := os.Getenv("BT_A2A_PORT"); p != "" {
+			_, _ = fmt.Sscanf(p, "%d", &a2aPort)
+		}
+		a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
+		if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
+			a2aBaseURL = u
+		}
+		if a2aSrv, err := a2a.NewServer(runner.Registry, sharedLLM, a2aPort, a2aBaseURL); err != nil {
+			slog.Warn("auction card source unavailable", "error", err)
+		} else {
+			a2a.AuctionCardsFn = a2aSrv.AuctionCardSource()
+			slog.Info("auction card source wired from dashboard's agent registry",
+				"agents", len(a2aSrv.CardCache))
+		}
 	}
 
 	if store, err := persona.NewStore(agent.UsersDir()); err != nil {

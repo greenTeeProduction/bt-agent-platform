@@ -233,6 +233,9 @@ Consolidation notes (2026-07-16):
 | ADR-208 | `ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-209 | `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
+| ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-212 | `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-213 | `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3759,6 +3762,53 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ The red-evidence pre-check completion branch (`precheckGoapStaleMilestones`) gets the identical fix, since it reaches `MarkDone` through a separate call site than `completeGoapProgramMilestone`.
 - ✅ Closes the ADR-205 program end-to-end: all three ways a charging cycle can stop holding a claim (infra-refund, abandon-reset, successful completion) now release it immediately rather than relying solely on lease expiry.
 - Pinned by the test named above.
+
+---
+
+## ADR-211: `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research)
+
+**Context (2026-07-24):** `gardener.ValidationGate` (`internal/gardener/validation_gate.go`) reads `engine.SLOMetrics` (in-process) with a file-based fallback (`EvidencePath`, `AllowUnverified`) so a mutation with no observed runs can still pass. But the *only* writer of `engine.SLOMetrics` was `recordSchedulerAttempt` (`cmd/bt-agent/main.go`, ADR-025), called exclusively from the cron-scheduler closure right after `agentRouter.Execute` returns. `agent.RunOnce` (`internal/agent/runner.go`) — the method every other execution path calls directly, including the `bt_agent_run` MCP tool and the `thinktank:synthesis` chat tool (`cmd/bt-agent/tools.go`) and the CLI (`cmd/bt-agent-cli/main.go`) — never touched `engine.SLOMetrics` at all. Any tree exercised only through chat/MCP therefore never accumulated evidence, making `AllowUnverified=true` a permanent, silent no-op for it rather than the "no data yet" escape hatch it was designed as.
+
+**Decision:** `RunOnce` now records its own outcome into `engine.SLOMetrics` via a `defer` keyed on `engine.GetSLOMetrics(agentName, treeName)`, mirroring `recordSchedulerAttempt`'s own success/deferred/failure classification: a `nil` error with `Outcome == "success"` calls `RecordSuccess`; `agent.IsRateLimitCarryover(Outcome)` or any other outcome `isHealthyOutcome` recognizes (short of `"success"`) calls `RecordDeferred`; anything else calls `RecordFailure`. The snapshot is then flushed with `engine.SaveSLOMetrics(SLOMetricsFile())` — `SLOMetricsFile()` is a new `internal/agent/paths.go` accessor pointing at the same cross-process file `ValidationGate.EvidencePath` and the daemon's `platformHome`-derived path already agree on, so `RunOnce` writes into the exact file the gate's fallback already reads; a save failure only logs (`engine.Error`) and does not fail the run. Because the scheduler closure in `cmd/bt-agent/main.go` still separately calls `recordSchedulerAttempt` on the same SLO key immediately after `agentRouter.Execute` returns, a new `RunOptions.SkipSLORecording` field lets `newLocalAgentExecutor` (the `LocalExecutor` both the scheduler and DLQ replay route through) opt that one call path out, so a scheduler-driven attempt is recorded exactly once instead of twice; DLQ replay, which deliberately never called `recordSchedulerAttempt` either, continues to record no evidence, unchanged from before this decision.
+
+**Status:** Accepted (2026-07-24) — single milestone, no further parts. Pinned by `TestRunOnce_RecordsSLOMetricsOnSuccess` and `TestRunOnce_RecordsSLOMetricsOnFailure` (`internal/agent/runner_test.go`), which drive `RunOnce` through an `AlwaysSucceed` and a failing tree respectively with a bare `RunOptions{}` (no opt-out) and assert `engine.GetSLOMetrics(agentName, agentName).Snapshot()` reflects one recorded call each.
+
+**Consequences:**
+- ✅ Every `RunOnce` caller that doesn't opt out — `bt_agent_run`, `thinktank:synthesis`, the CLI, and any future direct/chat-driven caller — now feeds `ValidationGate` real evidence, so `AllowUnverified` stops being a silent no-op for trees only ever run outside the cron scheduler.
+- ✅ The scheduler and DLQ-replay paths are unaffected in observed behavior: both route through `newLocalAgentExecutor`, which sets `SkipSLORecording`, so `recordSchedulerAttempt` remains the sole recorder there and DLQ replays still record no evidence, exactly as before this change.
+- ⚠️ SLO evidence is now flushed to disk on every non-opted-out `RunOnce` call — one `SaveSLOMetrics` write per interactive/MCP invocation — rather than only once per scheduled cycle.
+- Pinned by the tests named above.
+
+---
+
+## ADR-212: `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-008 wired `engine.AuctionDelegateFn` and its candidate source, `a2a.AuctionCardsFn`, into `cmd/bt-agent`'s daemon so the `AuctionDelegate` BT action could auction over the real A2A transport instead of reporting "not configured." ADR-073 later gave `cmd/bt-dashboard` its own path into that same machinery: `dashboard.PickTreeForTask` routes any auction/delegation-shaped task text to the `auction_demo` tree, which the dashboard runs in-process via its own `agentexec`-based executor. But `cmd/bt-dashboard/main.go` never imported `internal/a2a` and never assigned `a2a.AuctionCardsFn` — that package-level seam is process-global, and `cmd/bt-agent` was the sole production writer of it (confirmed by a repo-wide grep). Because the dashboard runs as its own separate process with its own agent registry, an auction-shaped task submitted through the dashboard UI reached `AuctionDelegate` with the seam still nil and deterministically found zero bidders, failing with "auction produced no bidders and no delegate_tree_id fallback is configured" — even though the identical tree run through `cmd/bt-agent` completed real auctions.
+
+**Decision:** `cmd/bt-dashboard/main.go` constructs its own `*a2a.Server` from the dashboard's own `runner.Registry` and `sharedLLM` (the same registry `dashboard.AgentRegistry` and the in-process executor already use), immediately after that registry is built during startup, and assigns `a2a.AuctionCardsFn = a2aSrv.AuctionCardSource()` — mirroring `cmd/bt-agent/main.go`'s own `a2a_mod.AuctionCardsFn = a2aSrv.AuctionCardSource()` call. The A2A port and base URL follow the same `BT_A2A_PORT`/`BT_A2A_BASE_URL` env-override resolution the daemon uses, so the dashboard's auction cards advertise endpoints consistent with whichever A2A server is actually reachable; construction failure only logs a warning (`slog.Warn`) rather than failing dashboard startup, since the auction seam is an enhancement over the existing `DelegateToTreeFn` fallback, not a hard dependency.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestMainWiresAuctionCardsFn` (`cmd/bt-dashboard/main_test.go`), a source-level audit of `main.go` (mirroring the existing `TestMainWiresKGAnalyticsRefreshFn` pattern, used because the wiring happens inline in the startup sequence rather than in a separately callable function) that asserts `main.go` imports `internal/a2a` and assigns `AuctionCardsFn =`.
+
+**Consequences:**
+- ✅ Auction-shaped tasks submitted through the dashboard UI now find real bidders from the dashboard's own live agent registry instead of deterministically failing the auction — closing the dashboard-side half of the gap ADR-008 (daemon-only) and ADR-073 (routing-only, no candidate source) left open.
+- ✅ Card-source construction failure degrades to a log warning, not a startup failure — consistent with the auction being an optional enhancement over the tree's `DelegateToTreeFn` fallback (ADR-008).
+- ⚠️ The dashboard now runs a second in-process `a2a.Server` purely as a card source; it does not serve the dashboard's own agents over HTTP A2A endpoints (that remains `cmd/bt-agent`'s role) — this is candidate-discovery wiring only, not a second A2A transport surface.
+- Pinned by the test named above.
+
+---
+
+## ADR-213: `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness)
+
+**Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/fanout.go` and 2 more (Q1 Correctness)," milestone 1 of 3. `fanout.go` had no direct test file of its own; the milestone's mandate was to pin `ParallelFanoutBlock`/`MergeResultsBlock`'s currently-observed behavior with a new `fanout_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing `TestMergeResultsBlock_Validates` exposed one: `MergeResultsBlock()` returns a `Sequence` named `"MergeResults"` wrapping a single child `Action` also named `"MergeResults"` — a common idiom for a composite that exists only to host one leaf step under a descriptive name. `SerializableNode.validateRecursive`'s cycle detection (`internal/evolution/node_types.go`) tracked every named node, leaf or not, in a `visited` map keyed by name and flagged a repeat as `"cycle detected — duplicate name in ancestry path"`; since the child leaf's name matched its immediate composite parent's, this same-name-by-convention idiom was misdiagnosed as an ancestry cycle, and `Validate()` failed a tree with no actual cycle in it.
+
+**Decision:** Fix minimally, in place, with no other behavior change: `validateRecursive`'s cycle-tracking condition (`internal/evolution/node_types.go:254`) gains `&& len(n.Children) > 0` alongside the existing `n.Name != ""` guard. A childless leaf (`Action`, `Condition`, and similar) cannot itself recurse into a descendant, so it can never be part of an ancestry loop — only composite nodes (nodes with children) need to be tracked in `visited` for cycle purposes. Restricting the check to nodes with children eliminates the false positive on the composite/lone-child same-name idiom while leaving real cycle detection (a composite node appearing as its own descendant by name) unchanged.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestMergeResultsBlock_Validates` and `TestParallelFanoutBlock_Validates` (`internal/blocks/fanout_test.go`), each asserting `Validate()` returns no errors for the block's current tree shape.
+
+**Consequences:**
+- ✅ Trees following the composite-wraps-lone-same-named-child idiom (at least `MergeResultsBlock`; likely others authored the same way) now pass `Validate()` instead of being incorrectly rejected as cyclic.
+- ✅ Real cycles — a composite node with children whose name recurs in its own ancestry — are still caught; only the childless-leaf case was ever a false positive.
+- Pinned by the tests named above.
 
 ---
 
