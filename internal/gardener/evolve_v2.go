@@ -860,7 +860,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 
 	// ── SLO metrics collection ──
 	// Collect per-agent SLO data after each cycle for dashboard export.
-	sloData := CollectAgentSLOs()
+	sloData := CollectAgentSLOs(g.cfg.ValidationGate.EvidencePath)
 	if len(sloData) > 0 {
 		sloPath := filepath.Join(filepath.Dir(g.cfg.MetricsTracker.path), "slo-metrics.json")
 		if data, err := json.MarshalIndent(sloData, "", "  "); err == nil {

@@ -588,27 +588,41 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// CollectAgentSLOs reads all registered SLO metrics from the engine and returns
-// a flat map of key metrics per agent. The gardener calls this after each
-// evolution cycle to collect and export SLO data.
+// CollectAgentSLOs reads persisted cross-process SLO evidence from
+// evidencePath and returns a flat map of key metrics per agent/tree pair.
+// The gardener process never executes trees itself, so the in-process-only
+// engine.AllSLOMetrics() sync.Map is always empty here — evidence must come
+// from the file the agent process writes, mirroring the fallback pattern in
+// ValidationGate (see validation_gate.go).
 //
-// Keys follow the pattern: <agentName>/<metric>, e.g.:
+// Keys follow the pattern: <agentName>:<treeName>/<metric>, e.g.:
 //
-//	"default/success_rate", "default/recovery_rate", "default/avg_latency"
-func CollectAgentSLOs() map[string]float64 {
-	all := engine.AllSLOMetrics()
-	if len(all) == 0 {
+//	"default:default/success_rate", "default:default/recovery_rate", "default:default/avg_latency"
+func CollectAgentSLOs(evidencePath string) map[string]float64 {
+	if evidencePath == "" {
+		return nil
+	}
+	snapshots, err := engine.LoadSLOEvidence(evidencePath)
+	if err != nil {
+		return nil
+	}
+	if len(snapshots) == 0 {
 		return nil
 	}
 
-	result := make(map[string]float64, len(all)*3)
-	for key, m := range all {
-		prefix := key + "/"
-		result[prefix+"success_rate"] = m.SuccessRate()
-		result[prefix+"recovery_rate"] = m.RecoveryRate()
-		result[prefix+"avg_latency"] = m.AvgLatencyMs()
+	result := make(map[string]float64, len(snapshots)*3)
+	for _, s := range snapshots {
+		prefix := s.AgentName + ":" + s.TreeName + "/"
+		result[prefix+"success_rate"] = s.SuccessRate()
+		result[prefix+"recovery_rate"] = s.RecoveryRate()
+		var avgLatency float64
+		if s.TotalCalls > 0 {
+			avgLatency = float64(s.TotalLatencyMs) / float64(s.TotalCalls)
+		}
+		result[prefix+"avg_latency"] = avgLatency
 
-		fmt.Printf("[gardener] SLO %s\n", m.Summary())
+		fmt.Printf("[gardener] SLO %s/%s success=%.1f%% recovery=%.1f%% avg_latency=%.0fms calls=%d\n",
+			s.AgentName, s.TreeName, s.SuccessRate()*100, s.RecoveryRate()*100, avgLatency, s.TotalCalls)
 	}
 	return result
 }
