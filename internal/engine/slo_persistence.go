@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -58,10 +59,20 @@ func (m *SLOMetrics) Snapshot() SLOSnapshot {
 	}
 }
 
+// saveSLOMetricsMu serializes SaveSLOMetrics calls. cmd/bt-dashboard's worker
+// pool runs multiple agent tasks concurrently, and each defers a
+// SaveSLOMetrics(SLOMetricsFile()) call to the same fixed path; without this
+// lock, concurrent callers race on the shared "path.tmp" name and can corrupt
+// the persisted JSON or fail os.Rename outright.
+var saveSLOMetricsMu sync.Mutex
+
 // SaveSLOMetrics writes all registered SLO metrics to path as a JSON array,
 // atomically (tmp + rename per ADR-003). The parent directory is created if
-// missing.
+// missing. Safe for concurrent use.
 func SaveSLOMetrics(path string) error {
+	saveSLOMetricsMu.Lock()
+	defer saveSLOMetricsMu.Unlock()
+
 	var snapshots []SLOSnapshot
 	sloRegistry.Range(func(_, value any) bool {
 		snapshots = append(snapshots, value.(*SLOMetrics).Snapshot())

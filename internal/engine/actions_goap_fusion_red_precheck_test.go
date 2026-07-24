@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/research"
 
@@ -140,6 +141,49 @@ func TestPrecheckGoapStaleMilestones_DefaultRunnerInertUnderTest(t *testing.T) {
 	head := reloadPrecheckMilestone(t, 0)
 	if head.Status != "pending" || head.RedPassStreak != 1 || head.LastRedCmd == "" {
 		t.Fatalf("unstubbed pre-check under go test mutated the store: %+v — the default runner must be inert in test processes", head)
+	}
+}
+
+// precheckGoapStaleMilestones runs BEFORE this cycle's own ClaimActiveForCycle
+// call (PrioritizeGoapGoals calls it at the top, claiming happens later in the
+// same function) — so a stale head milestone it completes was necessarily
+// claimed by an EARLIER cycle's RunID, not this cycle's. Releasing with this
+// cycle's bb.RunID therefore compares against the wrong agent ID and can never
+// match, leaking the prior cycle's claim forever (until the lease expires)
+// even though the milestone is now done.
+func TestPrecheckGoapStaleMilestones_ReleasesClaimHeldByPriorCycle(t *testing.T) {
+	id := seedPrecheckProgram(t)
+	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		if p := ps.ClaimActiveForCycle("prior-cycle-run-id", time.Hour); p == nil {
+			t.Fatal("ClaimActiveForCycle: expected the seeded program to be claimable")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stubRedPrecheck(t, "ok: TestBar passed", nil)
+
+	precheckGoapStaleMilestones(&Blackboard{RunID: "current-cycle-run-id", ChainState: map[string]any{}})
+
+	head := reloadPrecheckMilestone(t, 0)
+	if head.Status != "done" {
+		t.Fatalf("stale milestone status = %q, want done", head.Status)
+	}
+	ps, err := research.OpenPrograms(goapProgramsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prog *research.Program
+	for _, p := range ps.Programs {
+		if p.ID == id {
+			prog = p
+		}
+	}
+	if prog == nil {
+		t.Fatalf("program %q not found after precheck", id)
+	}
+	if prog.ClaimedBy != "" {
+		t.Fatalf("ClaimedBy = %q, want cleared — stale-milestone auto-completion must release whatever claim is on the program (here, the prior cycle's), not compare against this cycle's own different RunID", prog.ClaimedBy)
 	}
 }
 

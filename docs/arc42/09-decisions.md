@@ -236,6 +236,9 @@ Consolidation notes (2026-07-16):
 | ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-212 | `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-213 | `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
+| ADR-214 | `composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
+| ADR-215 | `precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-216 | `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3809,6 +3812,57 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Trees following the composite-wraps-lone-same-named-child idiom (at least `MergeResultsBlock`; likely others authored the same way) now pass `Validate()` instead of being incorrectly rejected as cyclic.
 - ✅ Real cycles — a composite node with children whose name recurs in its own ancestry — are still caught; only the childless-leaf case was ever a false positive.
 - Pinned by the tests named above.
+
+---
+
+## ADR-214: `composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness)
+
+**Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/fanout.go` and 2 more (Q1 Correctness)," milestone 3 of 3 (milestone 1, `fanout.go`, closed by ADR-213). The mandate was to pin `internal/blocks/hitl.go`'s exported behavior in a new `hitl_test.go`, no production change unless a test exposes a real bug. `ComposeTaskTreeWithHITL` builds a `ComposeSpec{Blocks: DefaultTaskBlocksWithHITL, Middle: strategy}` — five blocks (`core:pre_gate`, `core:tools_default`, `core:human_gate`, `core:tool_execution`, `core:error_handling`) — and hands it to `composeWithMiddle` (`internal/blocks/compose.go`, added alongside the blocks package in PR #8, June 2026). But `composeWithMiddle` never read `spec.Blocks` at all: it unconditionally emitted the fixed sequence `core:pre_gate` → `[middle]` → `core:tool_execution` → `core:error_handling`, a copy of `ComposeTaskTree`'s own 3-block default. Writing `TestComposeTaskTreeWithHITL_IncludesHumanGate` — asserting the composed tree references `core:human_gate`, per the function's own doc comment ("composes the task pipeline with human approval before execution") and the `bt_hitl_compose_task` MCP tool built on it — failed: every tree `ComposeTaskTreeWithHITL` had ever produced silently omitted both `core:human_gate` and `core:tools_default`, meaning no tool profile and no human approval checkpoint were ever actually inserted, despite the function's name and documented contract.
+
+**Decision:** Fix minimally, in place: `composeWithMiddle` now loops over `spec.Blocks` in order via the existing `addBlock` helper, inserting `spec.Middle` (when set) immediately after the first block — matching the insertion point the old hardcoded version used (`pre_gate`, then middle, then the rest). `ComposeTaskTree`'s own call site (`internal/blocks/compose.go`) already passes the identical 3-block list the old hardcoded body assumed, so its output is unchanged; `ComposeTaskTreeWithHITL` is the only caller whose behavior actually changes, because it is the only caller whose `spec.Blocks` ever differed from that fixed 3-block list.
+
+**Status:** Accepted (2026-07-24) — milestone 3/3, closing the `fanout.go`-and-2-more characterization program. Pinned by `TestComposeTaskTreeWithHITL_IncludesHumanGate` and `TestComposeTaskTreeWithHITL_WithStrategy` (`internal/blocks/hitl_test.go`), plus the pre-existing `TestComposeTaskTree_*` suite (`internal/blocks/compose_test.go`), which continues to pass unchanged.
+
+**Consequences:**
+- ✅ `ComposeTaskTreeWithHITL` (and the `bt_hitl_compose_task` MCP tool built on it) now actually inserts `core:human_gate` and `core:tools_default` into the composed tree, restoring the human-approval checkpoint the function has always claimed to provide.
+- ⚠️ Any tree previously composed via `ComposeTaskTreeWithHITL` since the `blocks` package's introduction (PR #8, June 2026) ran without a human approval gate or tool profile in its serialized form; existing persisted trees are not retroactively repaired by this change and would need to be recomposed to pick up the fix.
+- ✅ `ComposeTaskTree`'s output is unchanged — its `spec.Blocks` already matched the old hardcoded sequence.
+- Pinned by the tests named above.
+
+---
+
+## ADR-215: `precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-210 stated that both `completeGoapProgramMilestone` and the red-evidence pre-check completion branch in `precheckGoapStaleMilestones` (`internal/engine/actions_goap_fusion.go`) call `ps.ReleaseClaim(programID, bb.RunID)` immediately after a successful `MarkDone`, closing the ADR-205 program-claim/lease program end-to-end. That was wrong for the pre-check branch: `precheckGoapStaleMilestones` runs at the top of `PrioritizeGoapGoals`, before that same cycle's own `ClaimActiveForCycle` call later in the function. Any claim it finds on a program it completes was therefore necessarily taken out by an *earlier* cycle's `RunID`, not the current cycle's `bb.RunID` — and `ReleaseClaim` only clears a claim when its `agentID` argument matches `ClaimedBy` exactly. The call as written could never succeed, silently leaking the prior cycle's claim until the full one-hour `goapProgramClaimLease` expired, on every stale-milestone auto-completion.
+
+**Decision:** Add `ProgramStore.ClearClaim(programID)` (`internal/research/programs.go`) — an unconditional clear that doesn't compare against an `agentID`, for callers completing a milestone on behalf of a claim they don't themselves hold. The pre-check completion branch now calls `ps.ClearClaim(programID)` instead of `ps.ReleaseClaim(programID, bb.RunID)`. `completeGoapProgramMilestone`'s own `ReleaseClaim(programID, bb.RunID)` call is untouched and remains correct, since that path runs *after* the current cycle's own claim and so is genuinely releasing its own agent ID.
+
+**Rejected alternative:** having the pre-check thread through and reuse the *prior* cycle's `RunID` (recovered from the persisted red-pass evidence) as the `agentID` argument to `ReleaseClaim` was rejected: it would work, but only by relying on that historical `RunID` still being available and correct at pre-check time, coupling claim release to bookkeeping that exists for an unrelated purpose (recording the RED command). An unconditional `ClearClaim` is simpler and correct regardless of who holds the claim, and matches the pre-check's actual authority — it has already re-validated the milestone under the store lock, so nothing is still "landing" the program.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestPrecheckGoapStaleMilestones_ReleasesClaimHeldByPriorCycle` (`internal/engine/actions_goap_fusion_red_precheck_test.go`), which stamps a claim under a `"prior-cycle-run-id"` agent, drives the precheck under a *different* `bb.RunID` (`"current-cycle-run-id"`), and asserts `ClaimedBy` is cleared — a scenario ADR-210's own regression test (`TestCompleteGoapProgramMilestone_ReleasesClaim`) never covered, since it only exercises `completeGoapProgramMilestone`, not the pre-check branch.
+
+**Consequences:**
+- ✅ Stale-milestone auto-completion via the red-evidence pre-check now actually releases the program for the next cycle, instead of leaking the prior cycle's claim for up to an hour.
+- ✅ `ClearClaim` is a general-purpose primitive available to any future caller with the same "complete on behalf of a claim I don't hold" shape, rather than a one-off special case.
+- Corrects the historical record: ADR-210's "both `MarkDone` call sites now call `ps.ReleaseClaim`... closing the ADR-205 program end-to-end" is false as written for the pre-check branch and should be read with this caveat rather than edited in place, per this file's practice of amending rather than rewriting prior entries (see ADR-188 amending ADR-151, ADR-189 correcting ADR-180/ADR-181).
+- Pinned by the test named above.
+
+---
+
+## ADR-216: `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-211 made `agent.RunOnce` self-record SLO evidence via `defer engine.SaveSLOMetrics(SLOMetricsFile())`, reachable from every `RunOnce` caller including `bt_agent_run` and `cmd/bt-dashboard`'s in-process executor. `cmd/bt-dashboard` runs its worker pool with multiple concurrent agent tasks, each independently deferring a `SaveSLOMetrics` call to the same fixed path. `SaveSLOMetrics` writes atomically per ADR-003 (tmp file + `os.Rename`), but the tmp file uses a single fixed name (`path + ".tmp"`) with no per-caller uniqueness or locking — concurrent callers race on that shared tmp file, either corrupting the persisted JSON (one writer's partial write overwritten mid-flight by another) or failing `os.Rename` outright when an earlier caller already consumed the tmp file first.
+
+**Decision:** Add a package-level `sync.Mutex` (`saveSLOMetricsMu`, `internal/engine/slo_persistence.go`) held for the duration of `SaveSLOMetrics`, serializing all callers onto one writer at a time.
+
+**Rejected alternative:** a per-caller-unique tmp filename (e.g. PID- or goroutine-suffixed) was rejected: it avoids filename collisions but not the underlying race, since the goal is a fully consistent snapshot of `sloRegistry` on disk after each save, not merely avoiding collisions — two concurrent saves computing snapshots at different instants and renaming into place out of order would still leave the file reflecting a stale snapshot even with unique tmp names. A mutex makes the read-snapshot-then-write sequence atomic end-to-end instead.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorrupt` (`internal/engine/slo_persistence_test.go`), which drives 8 concurrent `SaveSLOMetrics` calls against the same path across 40 rounds and asserts every call returns no error and the file remains parseable via `LoadSLOEvidence` after every round.
+
+**Consequences:**
+- ✅ Concurrent `RunOnce` calls from `cmd/bt-dashboard`'s worker pool (the concurrency ADR-211 introduced) can no longer corrupt or fail to write `SLOMetricsFile()`.
+- ⚠️ Callers now serialize on a single mutex for every SLO save; given saves are infrequent (once per `RunOnce` completion) and the write itself is small, this is not expected to be a throughput bottleneck.
+- Pinned by the test named above.
 
 ---
 

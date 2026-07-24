@@ -99,18 +99,14 @@ func composeWithMiddle(reg *Registry, spec ComposeSpec, inline bool) (*evolution
 		return nil
 	}
 
-	// pre_gate, middle (strategy), tool_execution, error_handling
-	if err := addBlock("core:pre_gate"); err != nil {
-		return nil, err
-	}
-	if spec.Middle != nil {
-		children = append(children, *cloneTree(spec.Middle))
-	}
-	if err := addBlock("core:tool_execution"); err != nil {
-		return nil, err
-	}
-	if err := addBlock("core:error_handling"); err != nil {
-		return nil, err
+	// spec.Blocks in order, with middle (strategy) inserted right after the first block.
+	for i, id := range spec.Blocks {
+		if err := addBlock(id); err != nil {
+			return nil, err
+		}
+		if i == 0 && spec.Middle != nil {
+			children = append(children, *cloneTree(spec.Middle))
+		}
 	}
 
 	name := spec.Name
