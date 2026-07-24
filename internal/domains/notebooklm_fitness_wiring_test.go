@@ -42,6 +42,32 @@ func TestRegisterNotebookLMFitness_WiresIntoKnowledgeGraph(t *testing.T) {
 	}
 }
 
+// The consumer chain-agent's real, live production tree ID is
+// "notebooklm-consumer" (hyphen) — see tree_resolver.go:200,
+// knowledge/registry.go:948, and agent/pipeline_map.go:25 (dispatch-time
+// TreeID fed into RunRecord). RegisterNotebookLMFitness must wire the
+// anti-fabrication fitness function under that exact ID against the real
+// production knowledge graph, not a throwaway self-registered tree, so a
+// future ID rename can't silently reintroduce a mismatch.
+func TestRegisterNotebookLMFitness_WiresIntoRealProductionTree(t *testing.T) {
+	kg := knowledge.BuildKnowledgeGraph()
+
+	RegisterNotebookLMFitness(kg)
+
+	kg.RecordRun(knowledge.RunRecord{TreeID: "notebooklm-consumer", Outcome: "chain_success", Quality: 0.9})
+	kg.RecordRun(knowledge.RunRecord{TreeID: "notebooklm-consumer", Outcome: "failure", Quality: 0.1})
+
+	want := NotebookLMFitness([]NotebookLMRunSummary{
+		{Outcome: "chain_success", Quality: 0.9},
+		{Outcome: "failure", Quality: 0.1},
+	}) * 100
+
+	got := kg.Trees["notebooklm-consumer"].Fitness
+	if got != want {
+		t.Errorf("expected Fitness=%.4f (NotebookLMFitness output *100) for production tree ID %q, got %.4f — RegisterNotebookLMFitness is wired under the wrong (underscore) tree ID, so real notebooklm-consumer runs fall through to the generic EMA", want, "notebooklm-consumer", got)
+	}
+}
+
 // A tree ID other than the two NotebookLM trees must be unaffected by
 // RegisterNotebookLMFitness — the wiring must be scoped to those tree IDs only.
 func TestRegisterNotebookLMFitness_DoesNotAffectOtherTrees(t *testing.T) {
