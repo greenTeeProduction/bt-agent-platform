@@ -11,7 +11,22 @@ import (
 
 // superpowersWorktreeBase is the parent directory for all Superpowers run
 // worktrees. A var (not const) so sweep tests can point it at a temp dir.
-var superpowersWorktreeBase = "/tmp/worktrees"
+// Overridable via BT_WORKTREE_BASE so operators can move worktree churn off
+// the root filesystem (e.g. onto an NVMe mount).
+var superpowersWorktreeBase = resolveSuperpowersWorktreeBase()
+
+func resolveSuperpowersWorktreeBase() string {
+	if v := strings.TrimSpace(os.Getenv("BT_WORKTREE_BASE")); v != "" {
+		return v
+	}
+	return "/tmp/worktrees"
+}
+
+// shepherdFixWorktreePath places PR-shepherd fix worktrees under the same
+// configurable base as superpowers run worktrees.
+func shepherdFixWorktreePath(fixBranch string) string {
+	return filepath.Join(superpowersWorktreeBase, fixBranch)
+}
 
 // staleSuperpowersWorktreeMaxAge is the grace period before an abandoned run
 // worktree is reaped by sweepStaleSuperpowersWorktrees. Failed runs keep
