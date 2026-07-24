@@ -215,6 +215,9 @@ func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.Ser
 	if id == "fusion" || id == "fusion_deliberation" {
 		return evolution.FusionDeliberationTree()
 	}
+	if id == "telegram_clarify" {
+		return evolution.TelegramClarifyTree()
+	}
 	// Category-prefixed IDs: builtin catalog first; on a miss, consult the
 	// dynamic resolver before preserving the branch's legacy miss behavior —
 	// factory-generated tree IDs use exactly these "<category>:<name>" shapes

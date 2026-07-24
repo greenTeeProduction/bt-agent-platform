@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ── AgentCircuitBreaker Unit Tests ──────────────────────────────────────────
@@ -29,27 +31,24 @@ func TestCircuitState_String(t *testing.T) {
 
 func TestNewAgentCircuitBreaker_Defaults(t *testing.T) {
 	cb := NewAgentCircuitBreaker("test-agent", 0, 0)
-	if cb.name != "test-agent" {
-		t.Errorf("name = %q, want %q", cb.name, "test-agent")
+	if cb.Threshold() != 3 {
+		t.Errorf("default threshold = %d, want 3", cb.Threshold())
 	}
-	if cb.threshold != 3 {
-		t.Errorf("default threshold = %d, want 3", cb.threshold)
+	if cb.Cooldown() != 5*time.Minute {
+		t.Errorf("default cooldown = %v, want 5m", cb.Cooldown())
 	}
-	if cb.cooldown != 5*time.Minute {
-		t.Errorf("default cooldown = %v, want 5m", cb.cooldown)
-	}
-	if cb.state != CircuitClosed {
-		t.Errorf("initial state = %v, want closed", cb.state)
+	if cb.State() != CircuitClosed {
+		t.Errorf("initial state = %v, want closed", cb.State())
 	}
 }
 
 func TestNewAgentCircuitBreaker_Custom(t *testing.T) {
 	cb := NewAgentCircuitBreaker("custom", 2, 30*time.Second)
-	if cb.threshold != 2 {
-		t.Errorf("threshold = %d, want 2", cb.threshold)
+	if cb.Threshold() != 2 {
+		t.Errorf("threshold = %d, want 2", cb.Threshold())
 	}
-	if cb.cooldown != 30*time.Second {
-		t.Errorf("cooldown = %v, want 30s", cb.cooldown)
+	if cb.Cooldown() != 30*time.Second {
+		t.Errorf("cooldown = %v, want 30s", cb.Cooldown())
 	}
 }
 
@@ -224,9 +223,6 @@ func TestAgentCircuitBreakerStore_Get_Creates(t *testing.T) {
 	if cb == nil {
 		t.Fatal("Get should not return nil")
 	}
-	if cb.name != "new-agent" {
-		t.Errorf("cb.name = %q, want %q", cb.name, "new-agent")
-	}
 	// Second call should return same instance
 	cb2 := store.Get("new-agent")
 	if cb != cb2 {
@@ -352,6 +348,48 @@ func TestReportAgentOutcome_Failure(t *testing.T) {
 	cb := store.Get("agent")
 	if cb.FailureCount() != 1 {
 		t.Errorf("failure should increment count, got %d", cb.FailureCount())
+	}
+}
+
+// ── Consolidation onto internal/reliability.CircuitBreaker ─────────────────
+//
+// AgentCircuitBreaker/AgentCircuitBreakerStore duplicate the 3-state circuit
+// breaker internal/reliability.CircuitBreaker already implements. These tests
+// pin the consolidated design: AgentCircuitBreaker (and its state/summary
+// types) must become true aliases for the canonical reliability types rather
+// than a parallel reimplementation, so behavior can only diverge in one
+// place. They fail to COMPILE today because the agent-package types are
+// distinct named types from their reliability counterparts.
+
+func TestAgentCircuitBreaker_IsReliabilityCircuitBreaker(t *testing.T) {
+	var cb = NewAgentCircuitBreaker("x", 1, time.Minute)
+	if cb == nil {
+		t.Fatal("expected non-nil circuit breaker")
+	}
+}
+
+func TestCircuitState_IsReliabilityCircuitState(t *testing.T) {
+	var s = CircuitClosed
+	if s != reliability.CircuitClosed {
+		t.Errorf("CircuitClosed should equal reliability.CircuitClosed, got %v", s)
+	}
+}
+
+func TestAgentCircuitBreakerStore_GetReturnsReliabilityCircuitBreaker(t *testing.T) {
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{})
+	var cb = store.Get("agent")
+	if cb == nil {
+		t.Fatal("expected non-nil circuit breaker")
+	}
+}
+
+func TestCircuitSummary_IsReliabilityCircuitSummary(t *testing.T) {
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1})
+	store.RecordFailure("agent")
+	status := store.Status()
+	var summary = status["agent"]
+	if summary.State != reliability.CircuitOpen {
+		t.Errorf("summary.State = %v, want open", summary.State)
 	}
 }
 

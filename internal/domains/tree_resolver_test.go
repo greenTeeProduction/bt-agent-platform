@@ -286,3 +286,19 @@ func TestResolveTreeID_NoDTStatsLeavesTreeUnchanged(t *testing.T) {
 			got.Children[0].Name, got.Children[1].Name)
 	}
 }
+
+// TestResolveTreeID_TelegramClarify pins evolution.TelegramClarifyTree() as
+// reachable via ResolveTreeID under the "telegram_clarify" ID, matching how
+// its sibling standalone trees (vault_manager, notebooklm-bridge, fusion) are
+// wired as bare special-case IDs in resolveTreeIDWithResolver. Without this
+// wiring, TelegramClarifyTree is unreachable via bt_delegate_to_tree even
+// though its conditions/actions are registered (internal/engine/telegram_init.go).
+func TestResolveTreeID_TelegramClarify(t *testing.T) {
+	got := ResolveTreeID("telegram_clarify")
+	if got == nil {
+		t.Fatal(`ResolveTreeID("telegram_clarify") returned nil`)
+	}
+	if got.Name != "TelegramClarify" {
+		t.Fatalf(`ResolveTreeID("telegram_clarify").Name = %q, want "TelegramClarify"`, got.Name)
+	}
+}

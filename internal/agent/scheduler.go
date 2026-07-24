@@ -616,7 +616,7 @@ func (s *Scheduler) tick(runner AgentRunner) {
 			if !s.cbStore.Allowed(job.AgentName) {
 				cb := s.cbStore.Get(job.AgentName)
 				slog.Warn("scheduler: skipping agent — circuit breaker open",
-					"agent", job.AgentName, "state", cb.State(), "failures", cb.FailureCount(), "cooldown", cb.cooldown)
+					"agent", job.AgentName, "state", cb.State(), "failures", cb.FailureCount(), "cooldown", cb.Cooldown())
 				continue
 			}
 		}

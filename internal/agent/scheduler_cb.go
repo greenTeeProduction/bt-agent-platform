@@ -1,8 +1,15 @@
-// This file extends the Scheduler with per-agent circuit breakers.
-// After repeated consecutive failures, the circuit breaker opens and
-// prevents the agent from running again until the cooldown expires.
-// This prevents the scheduler from hammering a persistently broken
+// This file extends the Scheduler with per-agent circuit breakers, built on
+// internal/reliability.CircuitBreaker — the platform's canonical 3-state
+// circuit breaker. After repeated consecutive failures, the circuit breaker
+// opens and prevents the agent from running again until the cooldown
+// expires. This prevents the scheduler from hammering a persistently broken
 // agent every tick cycle.
+//
+// The types below are aliases onto internal/reliability so the state machine
+// is implemented in exactly one place; this file retains only what is
+// specific to the scheduler/dashboard: the named-agent registry, the
+// dashboard-shaped JSON persistence (Save/Load), and the A2A winner-breaker
+// key coexistence rules for the shared on-disk file.
 
 package agent
 
@@ -15,50 +22,29 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
-// CircuitState represents the state of an agent circuit breaker.
-type CircuitState int
+// CircuitState is an alias for reliability.CircuitState.
+type CircuitState = reliability.CircuitState
 
+// Circuit state constants, aliased from reliability so existing callers
+// (internal/a2a, internal/dashboard, cmd/bt-agent, cmd/bt-dashboard) keep
+// compiling unchanged.
 const (
-	// CircuitClosed means the agent is allowed to run normally.
-	CircuitClosed CircuitState = iota
-	// CircuitOpen means the agent is blocked from running until cooldown.
-	CircuitOpen
-	// CircuitHalfOpen means a single test request is allowed.
-	CircuitHalfOpen
+	CircuitClosed   = reliability.CircuitClosed
+	CircuitOpen     = reliability.CircuitOpen
+	CircuitHalfOpen = reliability.CircuitHalfOpen
 )
 
-// String returns the human-readable circuit state name.
-func (cs CircuitState) String() string {
-	switch cs {
-	case CircuitClosed:
-		return "closed"
-	case CircuitOpen:
-		return "open"
-	case CircuitHalfOpen:
-		return "half_open"
-	default:
-		return "unknown"
-	}
-}
+// AgentCircuitBreaker is an alias for the platform's canonical circuit
+// breaker, internal/reliability.CircuitBreaker.
+type AgentCircuitBreaker = reliability.CircuitBreaker
 
-// AgentCircuitBreaker tracks consecutive failures for a single agent job.
-// When the threshold is exceeded, the circuit opens and remains open
-// for the cooldown duration before transitioning to half-open.
-type AgentCircuitBreaker struct {
-	mu              sync.Mutex
-	name            string
-	state           CircuitState
-	failureCount    int
-	successCount    int
-	threshold       int           // consecutive failures before opening
-	cooldown        time.Duration // time to stay open
-	lastFailureTime time.Time
-	lastStateChange time.Time
-}
-
-// NewAgentCircuitBreaker creates a circuit breaker for an agent.
+// NewAgentCircuitBreaker creates a circuit breaker for an agent, applying
+// the scheduler's historical defaults (3 consecutive failures / 5 minute
+// cooldown) when threshold or cooldown are not positive.
 func NewAgentCircuitBreaker(name string, threshold int, cooldown time.Duration) *AgentCircuitBreaker {
 	if threshold <= 0 {
 		threshold = 3 // default: open after 3 consecutive failures
@@ -66,111 +52,29 @@ func NewAgentCircuitBreaker(name string, threshold int, cooldown time.Duration) 
 	if cooldown <= 0 {
 		cooldown = 5 * time.Minute // default: 5 minute cooldown
 	}
-	return &AgentCircuitBreaker{
-		name:      name,
-		state:     CircuitClosed,
-		threshold: threshold,
-		cooldown:  cooldown,
-	}
+	return reliability.NewCircuitBreaker(name, threshold, cooldown)
 }
 
-// Allow checks whether this agent is allowed to execute.
-func (cb *AgentCircuitBreaker) Allow() bool {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+// CircuitBreakerOptions is an alias for reliability.CircuitBreakerOptions.
+type CircuitBreakerOptions = reliability.CircuitBreakerOptions
 
-	switch cb.state {
-	case CircuitClosed:
-		return true
-	case CircuitOpen:
-		if time.Since(cb.lastStateChange) >= cb.cooldown {
-			cb.state = CircuitHalfOpen
-			cb.lastStateChange = time.Now()
-			return true // allow one test request
-		}
-		return false
-	case CircuitHalfOpen:
-		// Half-open only allows one request; this is a subsequent one.
-		return false
-	}
-	return false
+// DefaultCircuitBreakerOptions returns sensible defaults.
+func DefaultCircuitBreakerOptions() CircuitBreakerOptions {
+	return reliability.DefaultCircuitBreakerOptions()
 }
 
-// RecordSuccess records a successful execution and resets the circuit.
-func (cb *AgentCircuitBreaker) RecordSuccess() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+// CircuitSummary is an alias for reliability.CircuitSummary.
+type CircuitSummary = reliability.CircuitSummary
 
-	cb.failureCount = 0
-	cb.successCount++
-	switch cb.state {
-	case CircuitHalfOpen:
-		cb.state = CircuitClosed
-		cb.lastStateChange = time.Now()
-	case CircuitOpen:
-		cb.state = CircuitClosed
-		cb.lastStateChange = time.Now()
-	}
-}
-
-// RecordFailure records a failed execution and potentially opens the circuit.
-func (cb *AgentCircuitBreaker) RecordFailure() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	cb.failureCount++
-	cb.lastFailureTime = time.Now()
-
-	if cb.state == CircuitHalfOpen || (cb.state == CircuitClosed && cb.failureCount >= cb.threshold) {
-		cb.state = CircuitOpen
-		cb.lastStateChange = time.Now()
-	}
-}
-
-// State returns the current circuit state.
-func (cb *AgentCircuitBreaker) State() CircuitState {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	return cb.state
-}
-
-// FailureCount returns the current consecutive failure count.
-func (cb *AgentCircuitBreaker) FailureCount() int {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	return cb.failureCount
-}
-
-// Reset resets the circuit breaker to closed state.
-func (cb *AgentCircuitBreaker) Reset() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.state = CircuitClosed
-	cb.failureCount = 0
-	cb.lastStateChange = time.Now()
-}
-
-// AgentCircuitBreakerStore manages per-agent circuit breakers for the scheduler.
+// AgentCircuitBreakerStore manages per-agent circuit breakers for the
+// scheduler. It is a thin named registry over reliability.CircuitBreaker;
+// what it adds beyond the state machine itself is the dashboard-shaped JSON
+// persistence (Save/Load) and the A2A winner-breaker key coexistence rules
+// for the file the two owners share.
 type AgentCircuitBreakerStore struct {
 	mu      sync.RWMutex
 	agents  map[string]*AgentCircuitBreaker
 	options CircuitBreakerOptions
-}
-
-// CircuitBreakerOptions configures default circuit breaker behavior for agents.
-type CircuitBreakerOptions struct {
-	// Threshold is the default consecutive failure count before opening (default: 3).
-	Threshold int
-	// Cooldown is the default duration the circuit stays open (default: 5m).
-	Cooldown time.Duration
-}
-
-// DefaultCircuitBreakerOptions returns sensible defaults.
-func DefaultCircuitBreakerOptions() CircuitBreakerOptions {
-	return CircuitBreakerOptions{
-		Threshold: 3,
-		Cooldown:  5 * time.Minute,
-	}
 }
 
 // NewAgentCircuitBreakerStore creates a new circuit breaker store.
@@ -222,15 +126,13 @@ func (s *AgentCircuitBreakerStore) Status() map[string]CircuitSummary {
 
 	result := make(map[string]CircuitSummary, len(s.agents))
 	for name, cb := range s.agents {
-		cb.mu.Lock()
 		result[name] = CircuitSummary{
-			State:        cb.state,
-			FailureCount: cb.failureCount,
-			SuccessCount: cb.successCount,
-			Threshold:    cb.threshold,
-			Cooldown:     cb.cooldown,
+			State:        cb.State(),
+			FailureCount: cb.FailureCount(),
+			SuccessCount: cb.SuccessCount(),
+			Threshold:    cb.Threshold(),
+			Cooldown:     cb.Cooldown(),
 		}
-		cb.mu.Unlock()
 	}
 	return result
 }
@@ -243,15 +145,6 @@ func (s *AgentCircuitBreakerStore) ResetAll() {
 	for _, cb := range s.agents {
 		cb.Reset()
 	}
-}
-
-// CircuitSummary provides a snapshot of a circuit breaker's state.
-type CircuitSummary struct {
-	State        CircuitState  `json:"state"`
-	FailureCount int           `json:"failure_count"`
-	SuccessCount int           `json:"success_count"`
-	Threshold    int           `json:"threshold"`
-	Cooldown     time.Duration `json:"cooldown"`
 }
 
 // A2AWinnerBreakerKeyPrefix namespaces the auction-winner circuit breakers
@@ -299,15 +192,13 @@ func (s *AgentCircuitBreakerStore) Save(path string) error {
 
 	s.mu.RLock()
 	for name, cb := range s.agents {
-		cb.mu.Lock()
 		entry := circuitBreakerFileEntry{
-			Status:   cb.state.String(),
-			Failures: cb.failureCount,
+			Status:   cb.State().String(),
+			Failures: cb.FailureCount(),
 		}
-		if !cb.lastFailureTime.IsZero() {
-			entry.LastFailure = cb.lastFailureTime.Format(time.RFC3339)
+		if lastFailure := cb.LastFailureTime(); !lastFailure.IsZero() {
+			entry.LastFailure = lastFailure.Format(time.RFC3339)
 		}
-		cb.mu.Unlock()
 		out.Breakers[name] = entry
 	}
 	s.mu.RUnlock()
@@ -370,25 +261,24 @@ func (s *AgentCircuitBreakerStore) Load(path string) error {
 			continue
 		}
 		cb := NewAgentCircuitBreaker(name, s.options.Threshold, s.options.Cooldown)
-		cb.failureCount = entry.Failures
+		state := CircuitClosed
 		switch entry.Status {
 		case "open":
-			cb.state = CircuitOpen
+			state = CircuitOpen
 		case "half_open":
 			// A persisted half-open has no in-flight probe in this process and
 			// no time-based escape (Allow() in HalfOpen always refuses), so
 			// restoring it verbatim would wedge the breaker forever. Map it to
 			// Open with a fresh cooldown clock so a probe can be re-issued.
-			cb.state = CircuitOpen
-		default:
-			cb.state = CircuitClosed
+			state = CircuitOpen
 		}
+		var lastFailure time.Time
 		if entry.LastFailure != "" {
 			if t, err := time.Parse(time.RFC3339, entry.LastFailure); err == nil {
-				cb.lastFailureTime = t
+				lastFailure = t
 			}
 		}
-		cb.lastStateChange = time.Now()
+		cb.RestoreState(state, entry.Failures, lastFailure)
 		s.agents[name] = cb
 	}
 	return nil
@@ -404,7 +294,7 @@ func validateAgentRun(store *AgentCircuitBreakerStore, agentName string) error {
 	if !store.Allowed(agentName) {
 		cb := store.Get(agentName)
 		return fmt.Errorf("agent %q circuit breaker is %s (%d consecutive failures, cooldown %v)",
-			agentName, cb.State(), cb.FailureCount(), cb.cooldown)
+			agentName, cb.State(), cb.FailureCount(), cb.Cooldown())
 	}
 	return nil
 }
