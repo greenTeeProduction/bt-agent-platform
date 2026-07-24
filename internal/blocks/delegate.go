@@ -9,9 +9,6 @@ func DelegateBlock() evolution.SerializableNode {
 		Type:        "Sequence",
 		Name:        "Delegate",
 		Description: "Run task through another behavior tree",
-		Metadata: map[string]any{
-			"side_effect_class": "external",
-		},
 		Children: []evolution.SerializableNode{
 			{Type: "Condition", Name: "HasDelegateTarget", Description: "delegate_tree_id in chain state"},
 			{
@@ -19,7 +16,8 @@ func DelegateBlock() evolution.SerializableNode {
 				Name:        "DelegateApproval",
 				Description: "Approve delegation to external tree",
 				Metadata: map[string]any{
-					"prompt": "Approve running this task on a delegated behavior tree?",
+					"side_effect_class": "external",
+					"prompt":            "Approve running this task on a delegated behavior tree?",
 				},
 				Children: []evolution.SerializableNode{
 					{Type: "Action", Name: "DelegateToTree", Description: "Execute delegated tree"},

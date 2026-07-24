@@ -79,7 +79,9 @@ func ComposePresetWithTools(reg *Registry, preset, toolsProfile, name string, st
 	}
 	switch base {
 	case "default", "":
-		blocks := PipelineWithToolsProfile(append([]string{}, DefaultTaskBlocks...), profileOrDefault(profile))
+		blocks := PipelineWithToolsProfile([]string{
+			"core:pre_gate", "core:tool_execution", "core:error_handling",
+		}, profileOrDefault(profile))
 		if strategy != nil {
 			return composeOrderedWithMiddle(reg, name, blocks, "core:pre_gate", strategy, false)
 		}
@@ -93,7 +95,9 @@ func ComposePresetWithTools(reg *Registry, preset, toolsProfile, name string, st
 		}
 		return composeOrderedWithMiddle(reg, name, blocks, "core:plan", strategy, false)
 	case "hitl":
-		blocks := PipelineWithToolsProfile(append([]string{}, DefaultTaskBlocksWithHITL...), profileOrDefault(profile))
+		blocks := PipelineWithToolsProfile([]string{
+			"core:pre_gate", "core:human_gate", "core:tool_execution", "core:error_handling",
+		}, profileOrDefault(profile))
 		if strategy == nil {
 			return Compose(reg, ComposeSpec{Name: name, Blocks: blocks}, false)
 		}
