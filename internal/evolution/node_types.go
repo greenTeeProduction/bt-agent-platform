@@ -245,8 +245,13 @@ func (n *SerializableNode) validateRecursive(errors *[]string, visited map[strin
 		return
 	}
 
-	// Cycle detection
-	if n.Name != "" {
+	// Cycle detection. Only meaningful for nodes with children: a childless
+	// leaf (Action, Condition, ...) cannot itself recurse, so it can't be
+	// part of an ancestry loop. Checking leaves too produced false positives
+	// on the common idiom of a composite node sharing its name with its lone
+	// child leaf (e.g. a "MergeResults" Sequence wrapping a "MergeResults"
+	// Action), which is a naming coincidence, not a cycle.
+	if n.Name != "" && len(n.Children) > 0 {
 		if visited[n.Name] {
 			*errors = append(*errors, "node "+n.Name+": cycle detected — duplicate name in ancestry path")
 			return

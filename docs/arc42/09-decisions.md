@@ -235,6 +235,7 @@ Consolidation notes (2026-07-16):
 | ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
 | ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-212 | `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-213 | `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3793,6 +3794,21 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Card-source construction failure degrades to a log warning, not a startup failure — consistent with the auction being an optional enhancement over the tree's `DelegateToTreeFn` fallback (ADR-008).
 - ⚠️ The dashboard now runs a second in-process `a2a.Server` purely as a card source; it does not serve the dashboard's own agents over HTTP A2A endpoints (that remains `cmd/bt-agent`'s role) — this is candidate-discovery wiring only, not a second A2A transport surface.
 - Pinned by the test named above.
+
+---
+
+## ADR-213: `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness)
+
+**Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/fanout.go` and 2 more (Q1 Correctness)," milestone 1 of 3. `fanout.go` had no direct test file of its own; the milestone's mandate was to pin `ParallelFanoutBlock`/`MergeResultsBlock`'s currently-observed behavior with a new `fanout_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing `TestMergeResultsBlock_Validates` exposed one: `MergeResultsBlock()` returns a `Sequence` named `"MergeResults"` wrapping a single child `Action` also named `"MergeResults"` — a common idiom for a composite that exists only to host one leaf step under a descriptive name. `SerializableNode.validateRecursive`'s cycle detection (`internal/evolution/node_types.go`) tracked every named node, leaf or not, in a `visited` map keyed by name and flagged a repeat as `"cycle detected — duplicate name in ancestry path"`; since the child leaf's name matched its immediate composite parent's, this same-name-by-convention idiom was misdiagnosed as an ancestry cycle, and `Validate()` failed a tree with no actual cycle in it.
+
+**Decision:** Fix minimally, in place, with no other behavior change: `validateRecursive`'s cycle-tracking condition (`internal/evolution/node_types.go:254`) gains `&& len(n.Children) > 0` alongside the existing `n.Name != ""` guard. A childless leaf (`Action`, `Condition`, and similar) cannot itself recurse into a descendant, so it can never be part of an ancestry loop — only composite nodes (nodes with children) need to be tracked in `visited` for cycle purposes. Restricting the check to nodes with children eliminates the false positive on the composite/lone-child same-name idiom while leaving real cycle detection (a composite node appearing as its own descendant by name) unchanged.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestMergeResultsBlock_Validates` and `TestParallelFanoutBlock_Validates` (`internal/blocks/fanout_test.go`), each asserting `Validate()` returns no errors for the block's current tree shape.
+
+**Consequences:**
+- ✅ Trees following the composite-wraps-lone-same-named-child idiom (at least `MergeResultsBlock`; likely others authored the same way) now pass `Validate()` instead of being incorrectly rejected as cyclic.
+- ✅ Real cycles — a composite node with children whose name recurs in its own ancestry — are still caught; only the childless-leaf case was ever a false positive.
+- Pinned by the tests named above.
 
 ---
 
