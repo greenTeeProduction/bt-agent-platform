@@ -206,6 +206,61 @@ func TestComputeAnalytics_CoverageGapsUseExpectedDomains(t *testing.T) {
 	}
 }
 
+// TestComputeAnalytics_CoverageGapsIncludeResolverSpecialCases pins
+// ComputeAnalytics's CoverageGaps to also audit the bare (non-"domain:"-
+// prefixed) tree IDs that internal/domains/tree_resolver.go's
+// resolveTreeIDWithResolver special-cases (vault_manager, kanban:*,
+// notebooklm*, hermes_obsidian, superpowers_pipeline, fusion — see
+// internal/domains/kg_registry_coverage_test.go's resolverSpecialCaseTreeIDs
+// for the full enumerated set). Previously CoverageGaps only checked
+// ExpectedDomains/defaultExpectedDomains, so a resolver ID added without a
+// matching kg.Register call was invisible to ComputeAnalytics — the gap only
+// surfaced via periodic manual review of tree_resolver.go against
+// registry.go, or the separate hand-maintained test in the domains package.
+// This test requires that gap to surface automatically through the same
+// production CoverageGaps/SuggestedActions signal the dashboard and gardener
+// already consume for domain trees.
+func TestComputeAnalytics_CoverageGapsIncludeResolverSpecialCases(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	// Register only one of the resolver special-case trees; leave the rest
+	// unregistered so they must surface as gaps.
+	kg.Register(&TreeMeta{ID: "vault_manager", Name: "Vault Manager", Category: "core"})
+
+	a := kg.ComputeAnalytics()
+
+	gaps := map[string]bool{}
+	for _, g := range a.CoverageGaps {
+		gaps[g] = true
+	}
+
+	unregisteredResolverSpecialCases := []string{
+		"kanban:task_creator", "kanban:refiner", "kanban:qa",
+		"kanban:monitor", "kanban:workflow", "kanban:autopilot",
+		"notebooklm", "notebooklm-consumer", "notebooklm-bridge",
+		"hermes_obsidian", "superpowers_pipeline", "fusion",
+	}
+	for _, id := range unregisteredResolverSpecialCases {
+		if !gaps[id] {
+			t.Errorf("expected unregistered resolver special-case %q to surface as a coverage gap, got: %v", id, a.CoverageGaps)
+		}
+	}
+	if gaps["vault_manager"] {
+		t.Errorf("registered resolver special-case 'vault_manager' should not be a coverage gap, got: %v", a.CoverageGaps)
+	}
+
+	// The gap must also drive a suggested action, mirroring how domain-tree
+	// coverage gaps already do.
+	hasAction := false
+	for _, action := range a.SuggestedActions {
+		if strings.Contains(action, "fusion") {
+			hasAction = true
+		}
+	}
+	if !hasAction {
+		t.Errorf("expected a suggested action for unregistered resolver special-case 'fusion', got: %v", a.SuggestedActions)
+	}
+}
+
 func TestComputeAnalytics_SelectionPressure(t *testing.T) {
 	kg := NewKnowledgeGraph()
 	// Proven but underbred: high fitness, low run count — the loop should surface

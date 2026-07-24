@@ -110,11 +110,21 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 	// expected set is injected via ExpectedDomains (populated by the daemon from
 	// the live domain registry) so this stays registry-accurate instead of tied
 	// to a stale hardcoded slice. Fall back to defaultExpectedDomains when unset.
+	// Also audit resolverSpecialCaseTreeIDs — the bare, non-"domain:"-prefixed
+	// IDs that tree_resolver.go special-cases outside AllDomainTrees() — so a
+	// resolver ID added without a matching registry.go Register call surfaces
+	// here automatically instead of depending on periodic manual review of
+	// tree_resolver.go against registry.go to rediscover it.
 	expectedDomains := kg.ExpectedDomains
 	if len(expectedDomains) == 0 {
 		expectedDomains = defaultExpectedDomains
 	}
 	for _, id := range expectedDomains {
+		if _, ok := kg.Trees[id]; !ok {
+			a.CoverageGaps = append(a.CoverageGaps, id)
+		}
+	}
+	for _, id := range resolverSpecialCaseTreeIDs {
 		if _, ok := kg.Trees[id]; !ok {
 			a.CoverageGaps = append(a.CoverageGaps, id)
 		}
