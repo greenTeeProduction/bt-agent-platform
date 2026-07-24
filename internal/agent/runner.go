@@ -65,6 +65,12 @@ type RunOptions struct {
 	SessionID           string            // pipeline session scope (future promote)
 	DisableBlackboard   bool              // when true, skip run-scoped blackboard tools
 	DisableAgentPromote bool              // when true, skip runs/latest/* on agent scope after success
+	// SkipSLORecording opts a caller out of RunOnce's own SLO evidence
+	// recording (engine.GetSLOMetrics). Set by cmd/bt-agent's scheduler local
+	// executor, whose closure already calls recordSchedulerAttempt on every
+	// attempt — without this, a scheduler-driven run routed through RunOnce
+	// would be counted twice for the same attempt.
+	SkipSLORecording bool
 }
 
 // RunResult is the outcome of RunOnce.
@@ -91,7 +97,14 @@ type RunResult struct {
 }
 
 // RunOnce executes an agent (registry name or tree ID) through its behavior tree.
-func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunOptions) (*RunResult, error) {
+//
+// It records SLO evidence itself (engine.GetSLOMetrics) so the gardener's
+// validation gate (internal/gardener/validation_gate.go) has real data for
+// the interactive/MCP execution path (bt_agent_run), not only the
+// cron-scheduler closure in cmd/bt-agent/main.go — see
+// recordSchedulerAttempt there for the equivalent success/deferred/failure
+// classification this mirrors.
+func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunOptions) (result *RunResult, err error) {
 	if d == nil || d.ResolveTree == nil {
 		return nil, fmt.Errorf("RunDeps not configured")
 	}
@@ -103,10 +116,32 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	start := time.Now()
-	result := &RunResult{
+	result = &RunResult{
 		AgentName: agentName,
 		Task:      task,
 		StartedAt: start,
+	}
+	if !opts.SkipSLORecording {
+		defer func() {
+			treeName := result.TreeID
+			if treeName == "" {
+				treeName = agentName
+			}
+			slo := engine.GetSLOMetrics(agentName, treeName)
+			switch {
+			case err == nil && result.Outcome == "success":
+				slo.RecordSuccess(time.Since(start))
+			case IsRateLimitCarryover(result.Outcome):
+				slo.RecordDeferred()
+			case err == nil && isHealthyOutcome(result.Outcome) && result.Outcome != "success":
+				slo.RecordDeferred()
+			default:
+				slo.RecordFailure(time.Since(start))
+			}
+			if saveErr := engine.SaveSLOMetrics(SLOMetricsFile()); saveErr != nil {
+				engine.Error("failed to persist SLO evidence", "error", saveErr)
+			}
+		}()
 	}
 
 	var def *Definition

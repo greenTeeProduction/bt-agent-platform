@@ -44,6 +44,12 @@ func NotificationThrottleFile() string {
 }
 func LogsDir() string { return filepath.Join(HomeDir(), "logs") }
 
+// SLOMetricsFile is the cross-process SLO evidence file the gardener's
+// validation gate falls back to (internal/gardener/validation_gate.go
+// EvidencePath) when its own in-memory metrics are empty. Matches the path
+// cmd/bt-agent/main.go's daemon builds from platformHome.
+func SLOMetricsFile() string { return filepath.Join(HomeDir(), "slo", "slo-metrics.json") }
+
 // UsersDir is the root of per-user personalization workspaces (ADR-133):
 // users/<user>/{profile.json, interactions.jsonl, trees, goals, memory,
 // reflections, experience}. Layout inside is owned by internal/persona.

@@ -233,6 +233,7 @@ Consolidation notes (2026-07-16):
 | ADR-208 | `ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-209 | `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
+| ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3759,6 +3760,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ The red-evidence pre-check completion branch (`precheckGoapStaleMilestones`) gets the identical fix, since it reaches `MarkDone` through a separate call site than `completeGoapProgramMilestone`.
 - ✅ Closes the ADR-205 program end-to-end: all three ways a charging cycle can stop holding a claim (infra-refund, abandon-reset, successful completion) now release it immediately rather than relying solely on lease expiry.
 - Pinned by the test named above.
+
+---
+
+## ADR-211: `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research)
+
+**Context (2026-07-24):** `gardener.ValidationGate` (`internal/gardener/validation_gate.go`) reads `engine.SLOMetrics` (in-process) with a file-based fallback (`EvidencePath`, `AllowUnverified`) so a mutation with no observed runs can still pass. But the *only* writer of `engine.SLOMetrics` was `recordSchedulerAttempt` (`cmd/bt-agent/main.go`, ADR-025), called exclusively from the cron-scheduler closure right after `agentRouter.Execute` returns. `agent.RunOnce` (`internal/agent/runner.go`) — the method every other execution path calls directly, including the `bt_agent_run` MCP tool and the `thinktank:synthesis` chat tool (`cmd/bt-agent/tools.go`) and the CLI (`cmd/bt-agent-cli/main.go`) — never touched `engine.SLOMetrics` at all. Any tree exercised only through chat/MCP therefore never accumulated evidence, making `AllowUnverified=true` a permanent, silent no-op for it rather than the "no data yet" escape hatch it was designed as.
+
+**Decision:** `RunOnce` now records its own outcome into `engine.SLOMetrics` via a `defer` keyed on `engine.GetSLOMetrics(agentName, treeName)`, mirroring `recordSchedulerAttempt`'s own success/deferred/failure classification: a `nil` error with `Outcome == "success"` calls `RecordSuccess`; `agent.IsRateLimitCarryover(Outcome)` or any other outcome `isHealthyOutcome` recognizes (short of `"success"`) calls `RecordDeferred`; anything else calls `RecordFailure`. The snapshot is then flushed with `engine.SaveSLOMetrics(SLOMetricsFile())` — `SLOMetricsFile()` is a new `internal/agent/paths.go` accessor pointing at the same cross-process file `ValidationGate.EvidencePath` and the daemon's `platformHome`-derived path already agree on, so `RunOnce` writes into the exact file the gate's fallback already reads; a save failure only logs (`engine.Error`) and does not fail the run. Because the scheduler closure in `cmd/bt-agent/main.go` still separately calls `recordSchedulerAttempt` on the same SLO key immediately after `agentRouter.Execute` returns, a new `RunOptions.SkipSLORecording` field lets `newLocalAgentExecutor` (the `LocalExecutor` both the scheduler and DLQ replay route through) opt that one call path out, so a scheduler-driven attempt is recorded exactly once instead of twice; DLQ replay, which deliberately never called `recordSchedulerAttempt` either, continues to record no evidence, unchanged from before this decision.
+
+**Status:** Accepted (2026-07-24) — single milestone, no further parts. Pinned by `TestRunOnce_RecordsSLOMetricsOnSuccess` and `TestRunOnce_RecordsSLOMetricsOnFailure` (`internal/agent/runner_test.go`), which drive `RunOnce` through an `AlwaysSucceed` and a failing tree respectively with a bare `RunOptions{}` (no opt-out) and assert `engine.GetSLOMetrics(agentName, agentName).Snapshot()` reflects one recorded call each.
+
+**Consequences:**
+- ✅ Every `RunOnce` caller that doesn't opt out — `bt_agent_run`, `thinktank:synthesis`, the CLI, and any future direct/chat-driven caller — now feeds `ValidationGate` real evidence, so `AllowUnverified` stops being a silent no-op for trees only ever run outside the cron scheduler.
+- ✅ The scheduler and DLQ-replay paths are unaffected in observed behavior: both route through `newLocalAgentExecutor`, which sets `SkipSLORecording`, so `recordSchedulerAttempt` remains the sole recorder there and DLQ replays still record no evidence, exactly as before this change.
+- ⚠️ SLO evidence is now flushed to disk on every non-opted-out `RunOnce` call — one `SaveSLOMetrics` write per interactive/MCP invocation — rather than only once per scheduled cycle.
+- Pinned by the tests named above.
 
 ---
 
