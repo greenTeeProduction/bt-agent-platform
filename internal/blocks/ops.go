@@ -8,13 +8,16 @@ func TraceCheckpointBlock(label string) evolution.SerializableNode {
 		label = "checkpoint"
 	}
 	return evolution.SerializableNode{
-		Type:        "Sequence",
-		Name:        "TraceCheckpoint",
+		Type: "Sequence",
+		// Must differ from the child Action's name below, or ValidateTreeFull's
+		// cycle detector (name reused in ancestry path) rejects the tree.
+		Name:        "TraceCheckpointBlock",
 		Description: "Record trace checkpoint for observability",
 		Metadata: map[string]any{
 			"checkpoint": label,
 		},
 		Children: []evolution.SerializableNode{
+			// Name must stay "TraceCheckpoint" — it's the key engine.RegisterAction uses.
 			{Type: "Action", Name: "TraceCheckpoint", Description: "Emit span event: " + label},
 		},
 	}
