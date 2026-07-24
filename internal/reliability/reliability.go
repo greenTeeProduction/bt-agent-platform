@@ -1712,6 +1712,155 @@ func (cb *CircuitBreaker) LastFailureTime() time.Time {
 	return cb.lastFailureTime
 }
 
+// Threshold returns the configured consecutive-failure threshold.
+func (cb *CircuitBreaker) Threshold() int {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.threshold
+}
+
+// Cooldown returns the configured open-state cooldown duration.
+func (cb *CircuitBreaker) Cooldown() time.Duration {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.cooldown
+}
+
+// Reset resets the circuit breaker to closed state, clearing the failure
+// count. Used by callers (e.g. an operator-triggered reset) that need to
+// force a breaker back to healthy without waiting out its cooldown.
+func (cb *CircuitBreaker) Reset() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.state = CircuitClosed
+	cb.failureCount = 0
+	cb.lastStateChange = time.Now()
+}
+
+// RestoreState sets the breaker's state and failure/last-failure data
+// directly, bypassing the normal transition rules. This is the seam callers
+// that persist breaker state to disk (e.g. internal/agent's
+// AgentCircuitBreakerStore.Load) use to rebuild a breaker from a saved
+// snapshot; lastStateChange is reset to now so a restored Open state's
+// cooldown clock starts fresh rather than replaying an already-expired one.
+func (cb *CircuitBreaker) RestoreState(state CircuitState, failureCount int, lastFailureTime time.Time) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.state = state
+	cb.failureCount = failureCount
+	cb.lastFailureTime = lastFailureTime
+	cb.lastStateChange = time.Now()
+}
+
+// CircuitSummary provides a snapshot of a circuit breaker's state, suitable
+// for status reporting without exposing the breaker itself.
+type CircuitSummary struct {
+	State        CircuitState  `json:"state"`
+	FailureCount int           `json:"failure_count"`
+	SuccessCount int           `json:"success_count"`
+	Threshold    int           `json:"threshold"`
+	Cooldown     time.Duration `json:"cooldown"`
+}
+
+// CircuitBreakerOptions configures the default threshold and cooldown a
+// CircuitBreakerStore applies to breakers it creates.
+type CircuitBreakerOptions struct {
+	// Threshold is the default consecutive failure count before opening (default: 3).
+	Threshold int
+	// Cooldown is the default duration the circuit stays open (default: 5m).
+	Cooldown time.Duration
+}
+
+// DefaultCircuitBreakerOptions returns sensible defaults.
+func DefaultCircuitBreakerOptions() CircuitBreakerOptions {
+	return CircuitBreakerOptions{
+		Threshold: 3,
+		Cooldown:  5 * time.Minute,
+	}
+}
+
+// CircuitBreakerStore manages a named registry of circuit breakers, creating
+// one lazily per name on first use. This is the canonical form of the
+// map[string]*CircuitBreaker registry pattern duplicated across callers
+// (internal/agent's scheduler, internal/llm, internal/a2a); new callers
+// needing a named breaker registry should use this instead of hand-rolling
+// their own.
+type CircuitBreakerStore struct {
+	mu      sync.RWMutex
+	agents  map[string]*CircuitBreaker
+	options CircuitBreakerOptions
+}
+
+// NewCircuitBreakerStore creates a new circuit breaker store. Zero-value
+// Threshold/Cooldown in opts fall back to DefaultCircuitBreakerOptions.
+func NewCircuitBreakerStore(opts CircuitBreakerOptions) *CircuitBreakerStore {
+	if opts.Threshold <= 0 {
+		opts.Threshold = 3
+	}
+	if opts.Cooldown <= 0 {
+		opts.Cooldown = 5 * time.Minute
+	}
+	return &CircuitBreakerStore{
+		agents:  make(map[string]*CircuitBreaker),
+		options: opts,
+	}
+}
+
+// Get returns the circuit breaker for the named entry, creating it if needed.
+func (s *CircuitBreakerStore) Get(name string) *CircuitBreaker {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cb, ok := s.agents[name]
+	if !ok {
+		cb = NewCircuitBreaker(name, s.options.Threshold, s.options.Cooldown)
+		s.agents[name] = cb
+	}
+	return cb
+}
+
+// Allowed checks whether the named entry is allowed to execute.
+func (s *CircuitBreakerStore) Allowed(name string) bool {
+	return s.Get(name).Allow()
+}
+
+// RecordSuccess records a successful execution for the named entry.
+func (s *CircuitBreakerStore) RecordSuccess(name string) {
+	s.Get(name).RecordSuccess()
+}
+
+// RecordFailure records a failed execution for the named entry.
+func (s *CircuitBreakerStore) RecordFailure(name string) {
+	s.Get(name).RecordFailure()
+}
+
+// Status returns circuit state summaries for all tracked entries.
+func (s *CircuitBreakerStore) Status() map[string]CircuitSummary {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make(map[string]CircuitSummary, len(s.agents))
+	for name, cb := range s.agents {
+		cb.mu.Lock()
+		result[name] = CircuitSummary{
+			State:        cb.state,
+			FailureCount: cb.failureCount,
+			SuccessCount: cb.successCount,
+			Threshold:    cb.threshold,
+			Cooldown:     cb.cooldown,
+		}
+		cb.mu.Unlock()
+	}
+	return result
+}
+
+// ResetAll resets all tracked circuit breakers to closed state.
+func (s *CircuitBreakerStore) ResetAll() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, cb := range s.agents {
+		cb.Reset()
+	}
+}
+
 // ─── Outcome Scoring ────────────────────────────────────────────────────────
 
 // ScoreOutcome derives a 0-100 fitness score from execution state: the
