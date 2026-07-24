@@ -239,6 +239,7 @@ Consolidation notes (2026-07-16):
 | ADR-214 | `composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
 | ADR-215 | `precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-216 | `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-217 | `gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research) | Accepted | 2026-07-24 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3863,6 +3864,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Concurrent `RunOnce` calls from `cmd/bt-dashboard`'s worker pool (the concurrency ADR-211 introduced) can no longer corrupt or fail to write `SLOMetricsFile()`.
 - ⚠️ Callers now serialize on a single mutex for every SLO save; given saves are infrequent (once per `RunOnce` completion) and the write itself is small, this is not expected to be a throughput bottleneck.
 - Pinned by the test named above.
+
+---
+
+## ADR-217: `gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research)
+
+**Context (2026-07-24):** `gardener.CollectAgentSLOs` (`internal/gardener/gardener.go`) read `engine.AllSLOMetrics()` — the same in-process `sync.Map` registry ADR-211/ADR-216 established is only ever written by `agent.RunOnce`, which runs in the `bt-agent`/`bt-dashboard` processes, never in the separate `bt-gardener` process. `RunCycleV2` (`internal/gardener/evolve_v2.go`) called `CollectAgentSLOs()` after every evolution cycle and exported its result to `slo-metrics.json` for the dashboard's `GardenerMetrics.SLOs` field, but since the gardener process never populates `engine.AllSLOMetrics()`, that call unconditionally returned `nil` in production — the exact cross-process gap `ValidationGate` (`internal/gardener/validation_gate.go`) already solves for its own read path via a file-based fallback (`EvidencePath`, reading through `loadTreeEvidence`/`engine.LoadSLOEvidence`).
+
+**Decision:** `CollectAgentSLOs` takes an `evidencePath string` parameter and reads exclusively via `engine.LoadSLOEvidence(evidencePath)` — the same persisted-file reader `ValidationGate` already uses — instead of `engine.AllSLOMetrics()`; an empty path or a load error both return `nil`, matching the function's existing "no evidence" contract. `RunCycleV2` passes `g.cfg.ValidationGate.EvidencePath`, the field the gate's own file fallback already reads, so no new path needs to be threaded through gardener config. The exported metric key changes from `<agentName>/<metric>` to `<agentName>:<treeName>/<metric>` because `engine.SLOSnapshot` (the persisted-evidence shape) is keyed by agent *and* tree, unlike the in-process registry's agent-only keys; `avg_latency` is now computed directly from the snapshot's `TotalLatencyMs`/`TotalCalls` rather than a pre-computed `AvgLatencyMs()` method, since `SLOSnapshot` carries only the raw totals.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestCollectAgentSLOs_ReadsPersistedFileEvidence` and `TestCollectAgentSLOs_NoMemoryNoFile_ReturnsNil` (`internal/gardener/gardener_test.go`), plus `TestRunCycleV2_SLOExport_ReadsFileEvidence`, which drives a full `RunCycleV2` cycle against a `ValidationGateConfig.EvidencePath` fixture and asserts the exported `slo-metrics.json` reflects the file-sourced snapshot.
+
+**Consequences:**
+- ✅ `slo-metrics.json` and the dashboard's `GardenerMetrics.SLOs` field are now populated from real cross-process evidence instead of being permanently empty in production.
+- ⚠️ `CollectAgentSLOs` returns `nil` whenever `ValidationGateConfig.EvidencePath` is unset (the pre-existing default in some deployments), same as before this change but now for an explicit, checkable reason rather than a silent in-process-registry miss.
+- ⚠️ Exported key format changes from `<agentName>/<metric>` to `<agentName>:<treeName>/<metric>`; any downstream consumer of the old flat-by-agent key shape (dashboard rendering, if any) needs to parse the new `agent:tree` prefix.
+- Pinned by the tests named above.
 
 ---
 

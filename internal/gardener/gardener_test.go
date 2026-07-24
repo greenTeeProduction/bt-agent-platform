@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
@@ -715,5 +716,108 @@ func TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction(t *testing.T) {
 	}
 	if !found {
 		t.Error("Rescan() did not pick up the personal tree added to usersRoot after construction")
+	}
+}
+
+// CollectAgentSLOs must read persisted cross-process evidence
+// (engine.LoadSLOEvidence), not the in-process-only engine.AllSLOMetrics()
+// sync.Map — the gardener process never executes trees, so that registry is
+// always empty there, exactly like ValidationGate's file-fallback (see
+// validation_gate.go). Without this, gardener.CollectAgentSLOs()
+// unconditionally returns nil in production and the dashboard's
+// GardenerMetrics.SLOs field is permanently empty.
+func TestCollectAgentSLOs_ReadsPersistedFileEvidence(t *testing.T) {
+	path := writeEvidenceFile(t, []engine.SLOSnapshot{
+		{AgentName: "domain_goap_fusion", TreeName: "domain_goap_fusion", TotalCalls: 10, SuccessfulCalls: 8, FailedCalls: 2, RecoveredCalls: 1, TotalLatencyMs: 500},
+	})
+
+	got := CollectAgentSLOs(path)
+
+	key := "domain_goap_fusion:domain_goap_fusion"
+	if got == nil {
+		t.Fatalf("CollectAgentSLOs(%q) = nil; want metrics read from file evidence (the gardener process never populates the in-process SLO registry)", path)
+	}
+	if sr, ok := got[key+"/success_rate"]; !ok || sr != 0.8 {
+		t.Errorf("%s/success_rate = %v (ok=%v), want 0.8", key, sr, ok)
+	}
+	if rr, ok := got[key+"/recovery_rate"]; !ok || rr != 0.5 {
+		t.Errorf("%s/recovery_rate = %v (ok=%v), want 0.5", key, rr, ok)
+	}
+	if lat, ok := got[key+"/avg_latency"]; !ok || lat != 50 {
+		t.Errorf("%s/avg_latency = %v (ok=%v), want 50", key, lat, ok)
+	}
+}
+
+func TestCollectAgentSLOs_NoMemoryNoFile_ReturnsNil(t *testing.T) {
+	got := CollectAgentSLOs(filepath.Join(t.TempDir(), "missing-evidence.json"))
+	if got != nil {
+		t.Errorf("CollectAgentSLOs with no in-process metrics and no evidence file = %v, want nil", got)
+	}
+}
+
+// RunCycleV2 must thread its ValidationGateConfig.EvidencePath — already
+// wired from cmd/bt-gardener/main.go into g.cfg.ValidationGate.EvidencePath
+// for ValidationGate's own file fallback — through to CollectAgentSLOs so
+// the exported slo-metrics.json the dashboard reads is populated from
+// cross-process evidence instead of the always-empty in-process registry.
+func TestRunCycleV2_SLOExport_ReadsFileEvidence(t *testing.T) {
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	mkTree := func(name string) *evolution.SerializableNode {
+		return &evolution.SerializableNode{
+			Type: "Sequence", Name: name,
+			Children: []evolution.SerializableNode{
+				{Type: "Action", Name: "Step"},
+			},
+		}
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "slo_export_tree", Description: "test", Tree: mkTree("slo_export_tree"), FilePath: dir + "/tree-slo_export_tree.json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	evidencePath := writeEvidenceFile(t, []engine.SLOSnapshot{
+		{AgentName: "agent-x", TreeName: "slo_export_tree", TotalCalls: 4, SuccessfulCalls: 4},
+	})
+
+	validationGate := DefaultValidationGateConfig()
+	validationGate.EvidencePath = evidencePath
+	validationGate.AllowUnverified = true
+
+	g := NewGardener(Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   1,
+		UseRealLLM:     false,
+		ValidationGate: validationGate,
+	})
+
+	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err != nil {
+		t.Fatalf("RunCycleV2: %v", err)
+	}
+
+	sloPath := filepath.Join(dir, "slo-metrics.json")
+	data, err := os.ReadFile(sloPath)
+	if err != nil {
+		t.Fatalf("expected RunCycleV2 to export %s from file evidence, but it wasn't written: %v", sloPath, err)
+	}
+	var exported map[string]float64
+	if err := json.Unmarshal(data, &exported); err != nil {
+		t.Fatalf("unmarshal exported slo-metrics.json: %v", err)
+	}
+	if v, ok := exported["agent-x:slo_export_tree/success_rate"]; !ok || v != 1.0 {
+		t.Errorf("exported SLO map = %v; want agent-x:slo_export_tree/success_rate = 1.0 sourced from file evidence", exported)
 	}
 }
