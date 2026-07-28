@@ -58,6 +58,10 @@ func init() {
 // research trees), so it must never become an ambient default. When enabled,
 // every resolved tree reorders from its OWN per-tree telemetry file
 // (agent.SelectorStatsFile), which the agent runner populates on every run.
+// The same opt-in also wires the DTAnalyzer/BTOptimizer sibling pass from its
+// own per-tree file (agent.DecisionTreeStatsFile), closing ADR-191's
+// inert-activation gap for the resolve-time path (mirroring ADR-203's fix for
+// the gardener's evolution-time dtStatsPathFor).
 //
 // BT_SELECTOR_ORDERING_STRATEGY additionally lets operators opt into
 // evolution.OrderByIG/OrderByGini/OrderByHybrid instead of the default
@@ -66,6 +70,7 @@ func init() {
 func wireSelectorReorder() {
 	if os.Getenv("BT_SELECTOR_REORDER") == "1" {
 		domains.SelectorStatsPathFn = agent.SelectorStatsFile
+		domains.DTStatsPathFn = agent.DecisionTreeStatsFile
 	}
 	domains.SelectorOrderingStrategy = evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY"))
 }

@@ -33,6 +33,36 @@ func TestWireSelectorReorderIsOptIn(t *testing.T) {
 	}
 }
 
+// TestWireSelectorReorderWiresDTStatsPathFn pins the DTAnalyzer/BTOptimizer
+// sibling of TestWireSelectorReorderIsOptIn above: domains.DTStatsPath has no
+// production writer wired at resolve time (ADR-191's activation was inert
+// without agent.DecisionTreeStatsFile — see gardener's dtStatsPathFor, which
+// already got this per-tree-first fix for the evolution-time path). This pins
+// the same fix for the resolve-time path, mirroring how
+// domains.SelectorStatsPathFn is wired under the same BT_SELECTOR_REORDER=1
+// gate: opt-in only, and per-tree so unrelated trees' DT telemetry can never
+// pollute each other's learned ordering.
+func TestWireSelectorReorderWiresDTStatsPathFn(t *testing.T) {
+	prev := domains.DTStatsPathFn
+	t.Cleanup(func() { domains.DTStatsPathFn = prev })
+
+	domains.DTStatsPathFn = nil
+	t.Setenv("BT_SELECTOR_REORDER", "")
+	wireSelectorReorder()
+	if domains.DTStatsPathFn != nil {
+		t.Fatal("without BT_SELECTOR_REORDER=1 the resolve-time DT reorder must stay unwired")
+	}
+
+	t.Setenv("BT_SELECTOR_REORDER", "1")
+	wireSelectorReorder()
+	if domains.DTStatsPathFn == nil {
+		t.Fatal("BT_SELECTOR_REORDER=1 must wire the per-tree DT stats resolver")
+	}
+	if got := domains.DTStatsPathFn("domain:goap_fusion"); !strings.HasSuffix(got, "selector-stats/domain_goap_fusion-dt.json") {
+		t.Fatalf("wired DT resolver must yield the per-tree DT stats path, got %q", got)
+	}
+}
+
 // TestWireSelectorReorder_SelectsStrategyFromEnv pins milestone 4/5 of the
 // Selector-reordering consolidation program: evolution.OrderByIG/OrderByGini/
 // OrderByHybrid have zero production callers because

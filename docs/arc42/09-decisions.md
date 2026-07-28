@@ -248,6 +248,8 @@ Consolidation notes (2026-07-16):
 | ADR-223 | `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research) | Accepted | 2026-07-28 |
 | ADR-224 | `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness) | Accepted | 2026-07-28 |
 | ADR-225 | `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-226 | `evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-227 | `wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability) | Accepted | 2026-07-28 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4014,6 +4016,36 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ The zone comes from the message itself (`Europe/Berlin` or whatever the CLI reports), so the deadline is correct regardless of the host process's `time.Local`.
 - ⚠️ Still a heuristic on the message format: an unrecognized future weekly-quota phrasing falls through to the wall-clock/epoch parsers or the fixed fallback window, the same degradation ADR-016 already accepted for its own heuristic.
 - Cross-reference: → ADR-016 for the original persisted-backoff decision and its flagged heuristic-window gap, which this ADR narrows for the weekly-quota case only.
+
+---
+
+## ADR-226: `evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research)
+
+**Context (2026-07-28):** `evaluateCondition` (`internal/dashboard/workflow_orchestrator.go`), the workflow engine's condition gate for `StepConditional`/branching steps, expanded a step's condition template against the run's `wfState` and then tested the result with `len(expanded) > 3 && expanded[:4] == "true"` — a prefix check, not an equality check. Any expanded string that merely *starts with* `"true"` matched: `"truest"`, `"truthfully, that is correct"`, or LLM-generated condition text like `"true but only partially"` all evaluated as condition-met, even though none of them is the clean boolean `"true"` a condition template is meant to expand to. Since condition text can come from templated step output — including LLM-authored text — this false-positive class was reachable in production, not just from adversarial input.
+
+**Decision:** Replace the prefix check with an exact match: `if expanded == "true" { return true }`, leaving the two other exact-match branches (`"condition_met"`, `"success"`) immediately below it unchanged.
+
+**Status:** Accepted (2026-07-28). Pinned by `TestEvaluateCondition_ExactTrueMatchOnly` (`internal/dashboard/workflow_orchestrator_test.go`), which asserts `"true"` still matches while `"truest"`, `"true but only partially"`, and `"truthfully, that is correct"` no longer do.
+
+**Consequences:**
+- ✅ A workflow condition no longer evaluates as met just because its expanded text happens to start with the four characters `"true"` — closing a class of false-positive branching that was reachable from any templated or LLM-generated condition value, not only hand-authored ones.
+- ⚠️ `evaluateCondition` remains a small set of string-equality checks, not a real expression evaluator — the function's own comment already flags this ("Full expression evaluation would need a proper expression engine"); this fix narrows one false-positive source within that existing design, it does not add expression evaluation.
+
+---
+
+## ADR-227: `wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability)
+
+**Context (2026-07-28):** ADR-171 (milestone 2) gave `domains.applyLearnedSelectorOrdering` an `applyDTOptimizerOrdering` pass that reordered a resolved tree's Selector children by information gain, seeded from the shared `domains.DTStatsPath` package var, and flagged at acceptance that no `cmd/` entry point or `internal/agentexec` wiring ever set it. ADR-191/ADR-203 later closed the *evolution-time* half of that flagged gap — `gardener.Config.DTStatsPath`/`EvolveV2Config.DTOrdering`, resolved per-tree by `dtStatsPathFor` — but neither touched the *resolve-time* `domains.DTStatsPath` seam ADR-171 named alongside it; `internal/agentexec`'s `wireSelectorReorder` (ADR-079's resolve-time analogue) wired only `domains.SelectorStatsPathFn` under `BT_SELECTOR_REORDER=1`, leaving `domains.DTStatsPath` — and its `applyDTOptimizerOrdering` consumer — unwired and inert for every tree resolved via `domains.ResolveTreeID` in production, the same "second optimizer wired at evolution time but not at resolve time" gap the DTAnalyzer program had already closed once on the gardener side.
+
+**Decision:** `internal/domains/tree_resolver.go` gains `var DTStatsPathFn func(treeID string) string`, the DTAnalyzer/BTOptimizer sibling of the existing `SelectorStatsPathFn`. `applyDTOptimizerOrdering` gains an `id` parameter and now resolves its stats path per-tree-first, mirroring `applyLearnedSelectorOrdering`'s existing `SelectorStatsPathFn`-then-`SelectorStatsPath` fallback exactly: `DTStatsPathFn(id)` if `DTStatsPathFn != nil` and non-empty, else the shared `DTStatsPath`. `internal/agentexec`'s `wireSelectorReorder`, under the same `BT_SELECTOR_REORDER=1` opt-in gate that already sets `domains.SelectorStatsPathFn = agent.SelectorStatsFile`, now also sets `domains.DTStatsPathFn = agent.DecisionTreeStatsFile` — the same per-tree DT sidecar file `gardener.dtStatsPathFor` (ADR-203) already reads on the evolution-time path.
+
+**Status:** Accepted (2026-07-28) — closes ADR-171's resolve-time `domains.DTStatsPath` production-wiring residual; ADR-191/ADR-203 are unaffected and remain the closure for the gardener's separate evolution-time `gardener.Config.DTStatsPath` wiring. Pinned by `TestWireSelectorReorderWiresDTStatsPathFn` (`internal/agentexec/wiring_selector_test.go`), which asserts `domains.DTStatsPathFn` stays `nil` unless `BT_SELECTOR_REORDER=1` and then yields the per-tree DT stats path, and `TestResolveTreeID_PerTreeDTStatsFn` (`internal/domains/tree_resolver_test.go`), which seeds DT telemetry for only one of two trees sharing an identical Selector name and asserts each tree reorders (or doesn't) from its own file only.
+
+**Consequences:**
+- ✅ A tree resolved at request time (`domains.ResolveTreeID`) now applies entropy/Gini DT reordering from its own per-tree telemetry file when `BT_SELECTOR_REORDER=1` is set — the resolve-time counterpart to ADR-203's evolution-time per-tree fix, closing the same "equal selector names in unrelated trees pollute each other's learned ordering" risk the shared `DTStatsPath` fallback alone would still carry.
+- ✅ Reuses the exact opt-in gate (`BT_SELECTOR_REORDER=1`) and per-tree-first/shared-fallback precedence already established for `SelectorStatsPathFn`/`SelectorStatsPath` (this file) and for `dtStatsPathFor` (ADR-203, gardener), rather than inventing a third wiring convention for the same class of seam.
+- ⚠️ Off by default like its `SelectorStatsPathFn` sibling — a deployment that has not set `BT_SELECTOR_REORDER=1` still resolves trees with both `domains.DTStatsPath` and `domains.DTStatsPathFn` unset, matching ADR-171's original opt-in intent; this closes the "no wiring exists" gap, not the "off by default" one.
+- Cross-reference: → ADR-171 (original resolve-time seam and its flagged gap) and → ADR-191/ADR-203 (the evolution-time `gardener.Config.DTStatsPath` wiring and per-tree fix this mirrors).
 
 ---
 

@@ -65,6 +65,31 @@ func TestWorkflow_Conditional(t *testing.T) {
 	}
 }
 
+func TestEvaluateCondition_ExactTrueMatchOnly(t *testing.T) {
+	state := &wfState{prev: map[string]StepResult{}}
+
+	cases := []struct {
+		name string
+		cond string
+		want bool
+	}{
+		{"exact true", "true", true},
+		{"prefix truest", "truest", false},
+		{"prefix true with trailing text", "true but only partially", false},
+		{"prefix truthfully", "truthfully, that is correct", false},
+		{"exact false", "false", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evaluateCondition(tc.cond, state)
+			if got != tc.want {
+				t.Errorf("evaluateCondition(%q) = %v, want %v", tc.cond, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWorkflow_Parallel(t *testing.T) {
 	runner := &Runner{
 		RunAgent: func(ctx context.Context, agentName, _, _ string) (string, string, error) {
