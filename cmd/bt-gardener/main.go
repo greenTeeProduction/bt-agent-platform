@@ -196,6 +196,12 @@ func main() {
 	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
 	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
 	// into out-of-place rebuild+swap.
+	//
+	// g is declared here and assigned below once the gardener is constructed;
+	// InFlightFn's nil check covers the startup window before that assignment
+	// (nil-safe: no gardener yet means "assume busy" and defer the restart,
+	// mirroring cmd/bt-agent's globalSched wiring).
+	var g *gardener.Gardener
 	if repoDir, wdErr := os.Getwd(); wdErr == nil {
 		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
 			RepoDir:         repoDir,
@@ -208,13 +214,15 @@ func main() {
 			// single-ownership rule (RestartSiblings stays bt-agent-only), and
 			// the adoption stamp written on restart tells the sweep to skip us.
 			// Evolution cycles exit gracefully on SIGTERM; a lost cycle costs
-			// minutes.
+			// minutes — InFlightFn below now defers that restart until the
+			// current cycle finishes instead of eating the loss.
 			AutoRestart: agent.AutoRestartEnabled(),
 			// Own binary only: the fleet-wide sweep (and sibling restarts)
 			// is owned by cmd/bt-agent's watcher.
-			Targets: agent.GardenerRebuildTargets(repoDir),
-			Binary:  "bt-gardener",
-			Backoff: agent.NewRebuildBackoff(),
+			Targets:    agent.GardenerRebuildTargets(repoDir),
+			Binary:     "bt-gardener",
+			Backoff:    agent.NewRebuildBackoff(),
+			InFlightFn: func() bool { return g == nil || g.AnyInFlight() },
 		}, agent.DefaultDriftCheckInterval)
 	}
 
@@ -266,7 +274,7 @@ func main() {
 	cfg, v2Cfg = wireDTOrdering(cfg, v2Cfg, metricsDir)
 	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
 
-	g := gardener.NewGardener(cfg)
+	g = gardener.NewGardener(cfg)
 
 	// Ollama LLM for langchain agent — uses platform config
 	llmCfg := llm.DefaultConfig()

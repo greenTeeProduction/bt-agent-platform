@@ -1,11 +1,16 @@
 package a2a
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -169,6 +174,43 @@ func TestVerifyAgentCard_RejectsUnkeyedForgery(t *testing.T) {
 	}
 	if valid {
 		t.Error("expected an unkeyed SHA-256 forgery to be rejected by a real keyed signature scheme")
+	}
+}
+
+// TestLoadOrCreateSigningKey_LogsWarningOnPersistFailure is the regression
+// test for the persistence-failure path: when the generated key can't be
+// written to disk, loadOrCreateSigningKey must still return a usable key
+// (best-effort persistence) but must log a warning instead of silently
+// swallowing the write error — an operator needs to know every process
+// restart will regenerate a fresh key, breaking cross-process verification.
+func TestLoadOrCreateSigningKey_LogsWarningOnPersistFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	// A regular file standing in for what should be a directory forces both
+	// os.MkdirAll and os.WriteFile to fail deterministically, regardless of
+	// whether the test runs as root.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0600); err != nil {
+		t.Fatalf("setup: write blocker file: %v", err)
+	}
+	keyPath := filepath.Join(blocker, "subdir", "a2a_signing.key")
+
+	var logBuf bytes.Buffer
+	origLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(origLogger) })
+
+	key := loadOrCreateSigningKey(keyPath)
+
+	if len(key) != 32 {
+		t.Errorf("expected a 32-byte key even when persistence fails, got %d bytes", len(key))
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, "level=WARN") {
+		t.Errorf("expected a warning to be logged when signing-key persistence fails, got log output: %q", logged)
+	}
+	if !strings.Contains(logged, keyPath) {
+		t.Errorf("expected the logged warning to mention the failed path %q, got: %q", keyPath, logged)
 	}
 }
 

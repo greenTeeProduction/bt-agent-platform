@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -62,9 +63,17 @@ func loadOrCreateSigningKey(path string) []byte {
 		panic("a2a: generate signing key: " + err.Error())
 	}
 	if dir := filepath.Dir(path); dir != "" {
-		_ = os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			slog.Warn("a2a: persist signing key: create directory failed; key will not survive a restart", "path", path, "error", err)
+			return key
+		}
 	}
-	_ = os.WriteFile(path, key, 0600) // best-effort; an unwritable dir just re-generates the key next process
+	// best-effort; an unwritable dir just re-generates the key next process, but
+	// an operator needs to know so they can fix it before cross-process
+	// verification silently breaks.
+	if err := os.WriteFile(path, key, 0600); err != nil {
+		slog.Warn("a2a: persist signing key: write failed; key will not survive a restart", "path", path, "error", err)
+	}
 	return key
 }
 

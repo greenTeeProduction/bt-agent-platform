@@ -1162,6 +1162,61 @@ func TestNoDomainTreeHasUnregisteredActions(t *testing.T) {
 	}
 }
 
+// TestDomainTreeSuitesReachAllStrategyBranches closes the "condition coverage"
+// gap the per-node Description guards above cannot see: a PreGate Condition
+// (e.g. IsCIBuildTask) whose keyword set is NARROWER than the StrategyRouter
+// branch Conditions it protects (e.g. NeedsTestRun, NeedsLinting) rejects the
+// task before the router is ever reached — the branch is fully described and
+// registered, yet practically unreachable dead code for exactly the phrasing
+// it was designed to handle. Each domain's dedicated benchmark.SuiteForTree
+// suite already encodes a realistic representative task per branch
+// (TaskCase.ExpectedPath); running every ShouldSucceed task through the real
+// tree with the mock LLM (Sandbox mode, no side effects) and asserting a
+// "success" outcome verifies the branch is actually reachable, not just
+// nominally present. Exercises the same runtime-state exemptions as
+// TestAllDomainTrees (git/nlm/claude-dependent trees can't run offline).
+func TestDomainTreeSuitesReachAllStrategyBranches(t *testing.T) {
+	exempt := map[string]bool{
+		"goap_fusion": true, "goap_fusion_loop": true, "bt_manager": true,
+		"bt_fusion": true, "notebooklm": true, "notebooklm_consumer": true,
+		"notebooklm_plan_implement": true, "superpowers_workflow": true,
+		"hermes_update": true, "auction_demo": true, "arc42_seeder": true,
+		"self_review": true,
+		// meeting_notes' benchmark.MeetingNotesSuite() task "document the
+		// decision log from the quarterly review" matches neither
+		// IsMeetingTask (PreGate) nor its declared IsSummaryRequest branch
+		// condition — a benchmark-suite task-wording gap, not a
+		// domains-package tree defect, and out of this goal's file scope
+		// (internal/domains/trees.go, internal/domains/domains_test.go).
+		"meeting_notes": true,
+	}
+
+	mock := benchmark.DefaultMock()
+	for name, tree := range AllDomainTrees() {
+		if strings.HasPrefix(name, "arc42:") || exempt[name] {
+			continue
+		}
+		suite := benchmark.SuiteForTree(name)
+		metrics := benchmark.RunSuite(tree, suite, mock)
+		for _, r := range metrics.Results {
+			var tc *benchmark.TaskCase
+			for i := range suite.Tasks {
+				if suite.Tasks[i].Task == r.Task {
+					tc = &suite.Tasks[i]
+					break
+				}
+			}
+			if tc == nil || !tc.ShouldSucceed {
+				continue
+			}
+			if !r.Success {
+				t.Errorf("tree %q: task %q (expected path %q) should succeed but got outcome=%q — a StrategyRouter branch condition is unreachable through the tree's PreGate gate",
+					name, r.Task, tc.ExpectedPath, r.Outcome)
+			}
+		}
+	}
+}
+
 // TestGoapFusionLoopSeedsBeforeResearch pins the tree ordering that keeps the
 // self-seeder reachable: BacklogReplenish must appear BEFORE ResearchRouter,
 // so a cycle whose research phase fails still seeds a program. And

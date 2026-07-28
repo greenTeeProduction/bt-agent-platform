@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/a2a"
@@ -42,6 +43,28 @@ var staticFS embed.FS
 var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
 var dashAgentRunner *agent.RunDeps
+
+// dashRequestsInFlight counts HTTP requests currently being served. Plugged
+// into agent.DriftWatchConfig.InFlightFn (via dashAnyInFlight) so the
+// deploy-drift AutoRestart wiring below can never SIGTERM the dashboard
+// mid-request, mirroring bt-agent's Scheduler.AnyInFlight guard and
+// gardener.Gardener.AnyInFlight.
+var dashRequestsInFlight atomic.Int64
+
+// dashAnyInFlight reports whether an HTTP request is currently being served.
+func dashAnyInFlight() bool {
+	return dashRequestsInFlight.Load() > 0
+}
+
+// inFlightMiddleware tracks requests for dashAnyInFlight for the full
+// duration each request spends in the handler chain it wraps.
+func inFlightMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dashRequestsInFlight.Add(1)
+		defer dashRequestsInFlight.Add(-1)
+		next.ServeHTTP(w, r)
+	})
+}
 
 // dashPersonaStore is the shared per-user personalization store, loaded once
 // at startup from agent.UsersDir(). It backs dashboard.PersonaStore/
@@ -238,6 +261,7 @@ func main() {
 			Targets:         agent.DashboardRebuildTargets(repoDir),
 			Binary:          "bt-dashboard",
 			Backoff:         agent.NewRebuildBackoff(),
+			InFlightFn:      dashAnyInFlight,
 		}, agent.DefaultDriftCheckInterval)
 	}
 
@@ -506,6 +530,7 @@ func main() {
 		},
 		Enforce: dashConfig.APIEnforceResponseValidation, // controlled by BT_API_ENFORCE_RESPONSE_VALIDATION env var or config file
 	})(handler)
+	handler = inFlightMiddleware(handler) // tracks dashAnyInFlight for the deploy-drift watcher above
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
 	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
