@@ -821,3 +821,27 @@ func TestRunCycleV2_SLOExport_ReadsFileEvidence(t *testing.T) {
 		t.Errorf("exported SLO map = %v; want agent-x:slo_export_tree/success_rate = 1.0 sourced from file evidence", exported)
 	}
 }
+
+// TestGardener_AnyInFlight verifies the Gardener exposes a mid-cycle guard
+// mirroring bt-agent's Scheduler.AnyInFlight (see
+// TestScheduler_AnyInFlight in internal/agent/scheduler_test.go): the
+// deploy-drift AutoRestart wiring in cmd/bt-gardener/main.go consults this
+// before restarting the daemon's own binary, so a rebuild adoption can no
+// longer SIGTERM the gardener mid-evolution-cycle.
+func TestGardener_AnyInFlight(t *testing.T) {
+	g := NewGardener(Config{})
+
+	if g.AnyInFlight() {
+		t.Fatal("AnyInFlight = true before any cycle started, want false")
+	}
+
+	g.cycleInFlight.Store(true)
+	if !g.AnyInFlight() {
+		t.Fatal("AnyInFlight = false with a cycle marked in-flight, want true")
+	}
+
+	g.cycleInFlight.Store(false)
+	if g.AnyInFlight() {
+		t.Fatal("AnyInFlight = true after cycle completed, want false")
+	}
+}

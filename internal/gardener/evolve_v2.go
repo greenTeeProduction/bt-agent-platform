@@ -818,6 +818,9 @@ func treePriorityRank(ranks map[string]int, name string) int {
 
 // RunCycleV2 executes one full evolution cycle using the v2 pipeline.
 func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
+	g.cycleInFlight.Store(true)
+	defer g.cycleInFlight.Store(false)
+
 	entries := g.cfg.Registry.List()
 	ranks := g.treePriorityRanks()
 	sort.SliceStable(entries, func(i, j int) bool {

@@ -325,6 +325,9 @@ func registerDomainActions() {
 			bb.Result += "\ntarget_validation: no existing target path supplied; load will be skipped.\n"
 			return 1
 		}
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
 		bb.ChainState["data_target_path"] = target
 		bb.Result += fmt.Sprintf("\ntarget_validation: target path parsed `%s`.\n", target)
 		return 1
@@ -634,6 +637,9 @@ func registerDomainActions() {
 			bb.Task, previousResults,
 		)
 		out := nlmRun(180*time.Second, "notebook", "query", nbID, grillQuery)
+		if bb.ChainState == nil {
+			bb.ChainState = map[string]any{}
+		}
 		bb.ChainState["nlm_grill_query"] = grillQuery
 		bb.Result = "## NotebookLM Grill-Me Review\n\n" + out + "\n"
 		bb.Outcome = "success"

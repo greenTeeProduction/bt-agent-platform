@@ -250,6 +250,9 @@ Consolidation notes (2026-07-16):
 | ADR-225 | `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research) | Accepted | 2026-07-28 |
 | ADR-226 | `evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research) | Accepted | 2026-07-28 |
 | ADR-227 | `wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability) | Accepted | 2026-07-28 |
+| ADR-228 | `bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-229 | `loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-230 | `IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research) | Accepted | 2026-07-28 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -1127,7 +1130,7 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 **Consequences:**
 - ✅ All three daemons now throttle rebuild attempts against a broken HEAD via `RebuildBackoff` instead of retrying every 20-minute tick indefinitely. Pinned by `TestDaemonDriftWatcherWiresBackoffAndInFlightGuard` and `TestGardenerDriftWatcherWiresRebuildBackoff` (`cmd/bt-agent/main_test.go`) and `TestDashboardDriftWatcherWiresRebuildBackoff` (`cmd/bt-dashboard/main_test.go`) — each a source-level audit for the wiring, since `main()` can't run inside a unit test.
 - ✅ `bt-agent`'s watcher now skips a rebuild while any scheduled job is mid-execution. `DriftWatchOnce`'s new `InFlightFn` check is exercised end-to-end (not just source-audited) by `TestDriftWatchOnce_SkipsRebuildWhileJobInFlight` (`internal/agent/deploy_drift_test.go`), which also confirms a `nil` `InFlightFn` — `bt-dashboard`'s and `bt-gardener`'s case — leaves existing rebuild behavior unchanged.
-- ⚠️ `bt-dashboard` and `bt-gardener` still have no in-flight guard of their own — neither owns a `Scheduler` instance, so there is nothing to plug into `InFlightFn` today; a rebuild triggered by either could still swap its own binary mid-request (`bt-dashboard`) or mid-cycle (`bt-gardener`). Only `bt-agent`'s scheduled-job case is covered.
+- ⚠️ ~~`bt-dashboard` and `bt-gardener` still have no in-flight guard of their own — neither owns a `Scheduler` instance, so there is nothing to plug into `InFlightFn` today; a rebuild triggered by either could still swap its own binary mid-request (`bt-dashboard`) or mid-cycle (`bt-gardener`). Only `bt-agent`'s scheduled-job case is covered.~~ — resolved 2026-07-28 (ADR-228): both daemons now track their own in-flight state and wire it into `InFlightFn` without needing a `Scheduler`.
 - Pinned by the tests named above.
 
 ## ADR-051: Extending the Self-Healing Envelope to NSGA-II, the Last Zero-Observability Evolve Variant
@@ -4046,6 +4049,49 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Reuses the exact opt-in gate (`BT_SELECTOR_REORDER=1`) and per-tree-first/shared-fallback precedence already established for `SelectorStatsPathFn`/`SelectorStatsPath` (this file) and for `dtStatsPathFor` (ADR-203, gardener), rather than inventing a third wiring convention for the same class of seam.
 - ⚠️ Off by default like its `SelectorStatsPathFn` sibling — a deployment that has not set `BT_SELECTOR_REORDER=1` still resolves trees with both `domains.DTStatsPath` and `domains.DTStatsPathFn` unset, matching ADR-171's original opt-in intent; this closes the "no wiring exists" gap, not the "off by default" one.
 - Cross-reference: → ADR-171 (original resolve-time seam and its flagged gap) and → ADR-191/ADR-203 (the evolution-time `gardener.Config.DTStatsPath` wiring and per-tree fix this mirrors).
+
+---
+
+## ADR-228: `bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-050 (2026-07-12) wired `RebuildBackoff` into all three daemons' `DriftWatchConfig` but explicitly flagged, as a ⚠️ consequence, that only `bt-agent` also wired `InFlightFn` (`globalSched.AnyInFlight`) — `bt-dashboard` and `bt-gardener` had no equivalent guard because neither owned a `Scheduler` instance, so a deploy-drift-triggered `AutoRestart` could still `SIGTERM` `bt-dashboard` mid-HTTP-request or `bt-gardener` mid-evolution-cycle.
+
+**Decision:** Each daemon gains its own minimal in-flight tracker instead of trying to share `bt-agent`'s `Scheduler`-based one. `cmd/bt-dashboard/main.go` adds a package-level `atomic.Int64` (`dashRequestsInFlight`), a `dashAnyInFlight()` reader, and an `inFlightMiddleware` that increments on request entry and decrements via `defer` on exit; it's the outermost wrapper in the handler chain (`handler = inFlightMiddleware(handler)`, applied after validation/TLS middleware) so it spans the actual full request-serving duration, and `dashAnyInFlight` is wired as `InFlightFn` in the dashboard's `DriftWatchConfig`. `internal/gardener.Gardener` gains an `atomic.Bool` field `cycleInFlight`, set `true` at the top of `RunCycleV2` and reset to `false` via `defer`, exposed through a new `AnyInFlight()` method. `cmd/bt-gardener/main.go` declares its `g *gardener.Gardener` variable before starting the drift watcher (the watcher starts before `gardener.NewGardener(cfg)` runs) and wires `InFlightFn: func() bool { return g == nil || g.AnyInFlight() }` — the nil branch treats the pre-construction startup window as busy, conservatively deferring any restart attempt that lands before the gardener exists rather than risking a false "not in flight".
+
+**Status:** Accepted (2026-07-28) — closes the gap ADR-050 flagged as unresolved for `bt-dashboard`/`bt-gardener`. Pinned by `TestGardener_AnyInFlight` (`internal/gardener/gardener_test.go`), which asserts `AnyInFlight()` tracks `cycleInFlight` through false→true→false. There is no dashboard-side or `main.go`-level wiring test analogous to ADR-050's `TestDaemonDriftWatcherWiresBackoffAndInFlightGuard`/`TestDashboardDriftWatcherWiresRebuildBackoff` — this change was not source-audited at the `cmd/` level the way ADR-050's was.
+
+**Consequences:**
+- ✅ All three daemons (`bt-agent`, `bt-dashboard`, `bt-gardener`) now defer `AutoRestart` until nothing is in flight — the last gap ADR-050 left open is closed.
+- ✅ Neither new tracker depends on a `Scheduler`; each daemon owns the minimal state it actually needs (an HTTP request counter for the dashboard, a single cycle flag for the gardener), avoiding a forced dependency on `bt-agent`'s scheduler type.
+- ⚠️ Unlike `internal/agent/deploy_drift_test.go`'s `TestDriftWatchOnce_SkipsRebuildWhileJobInFlight`, which exercises the `InFlightFn` skip path end-to-end, this change has no equivalent end-to-end test for the dashboard's HTTP-in-flight case or the gardener's `main.go` wiring — only the gardener's `AnyInFlight()` unit itself is pinned.
+- Cross-reference: → ADR-050 (original `InFlightFn`/`RebuildBackoff` wiring and its flagged gap).
+
+## ADR-229: `loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-223 introduced HMAC-SHA256 agent-card signing keyed by a process-wide key persisted at `agent.HomeDir()/a2a_signing.key` so every process on a machine signs and verifies with the same key across restarts. `loadOrCreateSigningKey` (`internal/a2a/signing.go`) treated both the parent-directory creation and the key write as best-effort, discarding each error (`_ = os.MkdirAll(...)`, `_ = os.WriteFile(...)`) behind a comment noting only that "an unwritable dir just re-generates the key next process" — true, but silent: an operator whose `HomeDir` became unwritable would see every process restart mint a fresh key and cross-process card verification start failing, with nothing in the logs pointing at why.
+
+**Decision:** Both failure paths now call `slog.Warn` with the target path and the underlying error before falling through to the unchanged best-effort behavior — the function still returns the freshly generated in-memory key either way, so signing keeps working for the life of the current process; only the silent discard of the persistence error is removed.
+
+**Status:** Accepted (2026-07-28). Pinned by `TestLoadOrCreateSigningKey_LogsWarningOnPersistFailure` (`internal/a2a/signing_test.go`), which points the key path at a subdirectory of a regular file (forcing both `os.MkdirAll` and `os.WriteFile` to fail deterministically) and asserts the captured log output contains a `WARN`-level line naming the failed path, while the returned key is still a usable 32 bytes.
+
+**Consequences:**
+- ✅ An operator now gets an immediate log signal when signing-key persistence fails, instead of discovering it indirectly through unexplained cross-process verification failures.
+- The best-effort recovery itself (regenerate the key in memory and continue) is unchanged — this closes the silent-failure gap only, not the underlying unwritable-directory scenario.
+- Cross-reference: → ADR-223 (the keyed-signature mechanism this persistence path serves).
+
+## ADR-230: `IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research)
+
+**Context (2026-07-28):** `DevOpsCITree`'s `PreGate` condition `IsCIBuildTask` (`internal/engine/conditions_domain.go`) only matched `"build", "deploy", "ci", "cd", "pipeline", "release"`, while its own `StrategyRouter` gated a `TestPath` on `NeedsTestRun` and a `LintPath` on `NeedsLinting` — a task phrased around testing or linting (e.g. "run the tests", "lint this file") would fail the narrower `PreGate` and never reach either branch, leaving them fully described, registered, and benchmark-covered yet practically unreachable through the tree's own gate. `TradingSignalTree`'s `PreGate` condition `IsTradingTask` had the same shape of gap against its `TechnicalAnalysis` branch, gated by `IsTAPath` ("technical/indicator/pattern" keywords) but absent from `IsTradingTask`'s own list. Both gaps existed because the `PreGate` and `StrategyRouter` conditions are maintained independently and nothing previously checked that a `PreGate`'s keyword set was a superset of every branch condition it protects. A new test, `TestDomainTreeSuitesReachAllStrategyBranches` (`internal/domains/domains_test.go`), closes that blind spot generically: for every non-exempt domain tree, it runs each `ShouldSucceed` task from that tree's `benchmark.SuiteForTree` suite through the real tree with the mock LLM and asserts a `"success"` outcome, catching exactly this "described and registered but PreGate-blocked" class of defect across all domains at once rather than per-tree by hand.
+
+**Decision:** `IsCIBuildTask` gains `"test"` and `"lint"`; `IsTradingTask` gains `"technical"`, `"indicator"`, and `"pattern"` — both additive, keyword-only changes to existing `util.ContainsAnyStr` calls, restoring each `PreGate` to a superset of the `StrategyRouter` branch conditions it gates. One further tree-level gap the new test surfaced (`meeting_notes`'s benchmark task wording matching neither its `PreGate` nor its declared `IsSummaryRequest` branch) was left as an explicit exemption in the test rather than fixed, since it is a benchmark-suite task-wording mismatch, not a `domains`-package condition defect, and out of this change's scope.
+
+**Status:** Accepted (2026-07-28). Pinned by `TestDomainTreeSuitesReachAllStrategyBranches` (`internal/domains/domains_test.go`), which now passes for `DevOpsCITree` and `TradingSignalTree` with the widened conditions; `internal/engine/condition_fallback_test.go`'s existing `TestCondFallback_IsCIBuildTask`/`TestCondFallback_IsTradingTask` cover the conditions' own fallback matching.
+
+**Consequences:**
+- ✅ `DevOpsCITree`'s `TestPath`/`LintPath` and `TradingSignalTree`'s `TechnicalAnalysis` branch are now actually reachable for the task phrasing their own benchmark suites already claimed to exercise, closing a class of dead-but-documented `StrategyRouter` branches.
+- ✅ `TestDomainTreeSuitesReachAllStrategyBranches` is a standing, cross-domain regression guard against this same PreGate-narrower-than-branch defect shape recurring in any other tree, not just the two it found here.
+- ⚠️ `meeting_notes` is left with a known, explicitly-exempted gap of the same shape (task wording that doesn't match its own declared branch condition) — deferred as a benchmark-suite fix, not a `domains` condition fix.
+- Cross-reference: → ADR-014 (mandatory per-node descriptions in curated domain trees, the sibling coverage guard this test complements from the condition-reachability angle instead of the description-presence one).
 
 ---
 

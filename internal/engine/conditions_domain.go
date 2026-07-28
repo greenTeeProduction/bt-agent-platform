@@ -114,7 +114,7 @@ func init() {
 		return util.ContainsAnyStr(bb.Task, "style", "lint", "format", "naming", "clean")
 	})
 	RegisterCondition("IsCIBuildTask", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "build", "deploy", "ci", "cd", "pipeline", "release")
+		return util.ContainsAnyStr(bb.Task, "build", "deploy", "ci", "cd", "pipeline", "release", "test", "lint")
 	})
 	RegisterCondition("NeedsBuild", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Task, "build", "compile")
@@ -223,7 +223,7 @@ func init() {
 		return util.ContainsAnyStr(bb.Task, "retreat", "flee", "escape", "heal")
 	})
 	RegisterCondition("IsTradingTask", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "trading", "signal", "market", "price", "stock", "alert", "critical", "incident", "notify", "route", "severity", "disk", "security", "health")
+		return util.ContainsAnyStr(bb.Task, "trading", "signal", "market", "price", "stock", "alert", "critical", "incident", "notify", "route", "severity", "disk", "security", "health", "technical", "indicator", "pattern")
 	})
 	RegisterCondition("IsDataRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Task, "data", "fetch", "pull", "price")

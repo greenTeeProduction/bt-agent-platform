@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
@@ -544,11 +545,24 @@ type Gardener struct {
 	// name (see treeDiversityGrid in evolve_v2.go).
 	diversityGridsMu sync.Mutex
 	diversityGrids   map[string]*evolution.MAPElitesGrid
+
+	// cycleInFlight is set for the duration of RunCycleV2 (see AnyInFlight)
+	// so the deploy-drift AutoRestart wiring in cmd/bt-gardener/main.go can
+	// defer a self-restart until the current evolution cycle finishes,
+	// mirroring bt-agent's Scheduler.AnyInFlight guard.
+	cycleInFlight atomic.Bool
 }
 
 // NewGardener creates a tree gardener.
 func NewGardener(cfg Config) *Gardener {
 	return &Gardener{cfg: cfg}
+}
+
+// AnyInFlight reports whether an evolution cycle is currently executing.
+// Plugged into agent.DriftWatchConfig.InFlightFn so an out-of-place rebuild
+// or AutoRestart can never SIGTERM the gardener mid-cycle.
+func (g *Gardener) AnyInFlight() bool {
+	return g.cycleInFlight.Load()
 }
 
 // The v1 RunCycle/evolveTree pipeline was retired in ADR-133 Phase 6.
