@@ -57,31 +57,61 @@ func isolateClaudeBackoffStore(t *testing.T) {
 func TestParseClaudeRateLimitReset(t *testing.T) {
 	now := time.Date(2026, 7, 15, 1, 0, 0, 0, time.Local)
 	epoch := now.Add(3 * time.Hour).Unix()
+
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("loading Europe/Berlin location: %v", err)
+	}
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("loading America/New_York location: %v", err)
+	}
+	weeklyNow := time.Date(2026, 7, 3, 10, 0, 0, 0, time.UTC)
+
 	cases := []struct {
 		name string
 		text string
+		now  time.Time
 		want time.Time
 		ok   bool
 	}{
-		{"pipe epoch seconds", fmt.Sprintf("Claude AI usage limit reached|%d", epoch), time.Unix(epoch, 0), true},
-		{"pipe epoch millis", fmt.Sprintf("usage limit reached|%d", epoch*1000), time.Unix(epoch, 0), true},
-		{"observed CLI 2.1.x pipe+clock", "Claude AI usage limit reached|resets 3pm", time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
-		{"executor-wrapped multiline", "red-phase claude failed: session limit reached; resets at 3pm\nClaude Code session limit reached.", time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
-		{"resets am same day", "5-hour limit reached ∙ resets 3am", time.Date(2026, 7, 15, 3, 0, 0, 0, time.Local), true},
-		{"resets pm with minutes", "usage limit reached — resets 11:30pm", time.Date(2026, 7, 15, 23, 30, 0, 0, time.Local), true},
-		{"resets at 24h clock", "rate limit: resets at 15:00", time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
-		{"resets rolls to tomorrow", "resets 12:30am", time.Date(2026, 7, 16, 0, 30, 0, 0, time.Local), true},
-		{"resets 12pm is noon", "resets 12pm", time.Date(2026, 7, 15, 12, 0, 0, 0, time.Local), true},
-		{"resets 12am is midnight", "resets 12am", time.Date(2026, 7, 16, 0, 0, 0, 0, time.Local), true},
-		{"bare hour rejected", "resets 3", time.Time{}, false},
-		{"weekly date form falls back (real DLQ shape)", "You've hit your weekly limit · resets Jul 7", time.Time{}, false},
-		{"past epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(-time.Hour).Unix()), time.Time{}, false},
-		{"absurd epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(30*24*time.Hour).Unix()), time.Time{}, false},
-		{"no hint", "green-phase claude failed: exit status 1", time.Time{}, false},
+		{"pipe epoch seconds", fmt.Sprintf("Claude AI usage limit reached|%d", epoch), time.Time{}, time.Unix(epoch, 0), true},
+		{"pipe epoch millis", fmt.Sprintf("usage limit reached|%d", epoch*1000), time.Time{}, time.Unix(epoch, 0), true},
+		{"observed CLI 2.1.x pipe+clock", "Claude AI usage limit reached|resets 3pm", time.Time{}, time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
+		{"executor-wrapped multiline", "red-phase claude failed: session limit reached; resets at 3pm\nClaude Code session limit reached.", time.Time{}, time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
+		{"resets am same day", "5-hour limit reached ∙ resets 3am", time.Time{}, time.Date(2026, 7, 15, 3, 0, 0, 0, time.Local), true},
+		{"resets pm with minutes", "usage limit reached — resets 11:30pm", time.Time{}, time.Date(2026, 7, 15, 23, 30, 0, 0, time.Local), true},
+		{"resets at 24h clock", "rate limit: resets at 15:00", time.Time{}, time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local), true},
+		{"resets rolls to tomorrow", "resets 12:30am", time.Time{}, time.Date(2026, 7, 16, 0, 30, 0, 0, time.Local), true},
+		{"resets 12pm is noon", "resets 12pm", time.Time{}, time.Date(2026, 7, 15, 12, 0, 0, 0, time.Local), true},
+		{"resets 12am is midnight", "resets 12am", time.Time{}, time.Date(2026, 7, 16, 0, 0, 0, 0, time.Local), true},
+		{"bare hour rejected", "resets 3", time.Time{}, time.Time{}, false},
+		{"weekly date form falls back without time/zone", "You've hit your weekly limit · resets Jul 7", time.Time{}, time.Time{}, false},
+		{
+			"weekly quota with explicit date and zone",
+			"You've hit your weekly limit · resets Jul 7, 11pm (Europe/Berlin)",
+			weeklyNow,
+			time.Date(2026, 7, 7, 23, 0, 0, 0, berlin),
+			true,
+		},
+		{
+			"weekly quota time-only with zone",
+			"resets 11pm (America/New_York)",
+			weeklyNow,
+			time.Date(2026, 7, 3, 23, 0, 0, 0, newYork),
+			true,
+		},
+		{"past epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(-time.Hour).Unix()), time.Time{}, time.Time{}, false},
+		{"absurd epoch rejected", fmt.Sprintf("limit reached|%d", now.Add(30*24*time.Hour).Unix()), time.Time{}, time.Time{}, false},
+		{"no hint", "green-phase claude failed: exit status 1", time.Time{}, time.Time{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := parseClaudeRateLimitReset(tc.text, now)
+			useNow := tc.now
+			if useNow.IsZero() {
+				useNow = now
+			}
+			got, ok := parseClaudeRateLimitReset(tc.text, useNow)
 			if ok != tc.ok || (ok && !got.Equal(tc.want)) {
 				t.Fatalf("parseClaudeRateLimitReset(%q) = (%v, %v), want (%v, %v)", tc.text, got, ok, tc.want, tc.ok)
 			}
@@ -109,6 +139,18 @@ func TestClaudeBackoffDeadline(t *testing.T) {
 		got := claudeBackoffDeadline(fmt.Sprintf("limit reached|%d", now.Add(48*time.Hour).Unix()), now, time.Hour)
 		if want := now.Add(24 * time.Hour); !got.Equal(want) {
 			t.Fatalf("deadline = %v, want the 24h cap %v: a mis-parse must not idle the fleet for days", got, want)
+		}
+	})
+	t.Run("weekly quota multi-day deadline is not clipped to 24h", func(t *testing.T) {
+		berlin, err := time.LoadLocation("Europe/Berlin")
+		if err != nil {
+			t.Fatalf("loading Europe/Berlin location: %v", err)
+		}
+		weeklyNow := time.Date(2026, 7, 3, 10, 0, 0, 0, time.UTC)
+		got := claudeBackoffDeadline("You've hit your weekly limit · resets Jul 7, 11pm (Europe/Berlin)", weeklyNow, time.Hour)
+		want := time.Date(2026, 7, 7, 23, 0, 0, 0, berlin).Add(claudeResetMargin)
+		if !got.Equal(want) {
+			t.Fatalf("deadline = %v, want reset+margin %v: a weekly-quota reset more than 24h out must not be clipped to now+24h", got, want)
 		}
 	})
 }

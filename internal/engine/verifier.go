@@ -53,8 +53,12 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 	}
 
 	// Cycle check: if this node's name is already in the ancestry path, we have a cycle.
-	// Empty-name nodes are allowed (anonymous inner nodes).
-	if node.Name != "" {
+	// Empty-name nodes are allowed (anonymous inner nodes). Only meaningful for
+	// nodes with children: a childless leaf (Action, Condition, ...) cannot
+	// itself recurse, so it can't be part of an ancestry loop. Checking leaves
+	// too produced false positives on the common idiom of a composite node
+	// sharing its name with its lone child leaf.
+	if node.Name != "" && len(node.Children) > 0 {
 		if visitedNames[node.Name] {
 			info.Errors = append(info.Errors, fmt.Sprintf("node %q: cycle detected — node name appears twice in ancestry path at depth %d", node.Name, depth))
 			return

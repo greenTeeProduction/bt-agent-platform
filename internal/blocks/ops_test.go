@@ -1,9 +1,11 @@
 package blocks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -64,6 +66,27 @@ func TestTraceCheckpointBlock_BuildAndValidate(t *testing.T) {
 	code := cmd.Run(btcore.NewBTContext(t.Context(), bb))
 	if code != 1 {
 		t.Fatalf("expected success, got %d", code)
+	}
+}
+
+func TestValidateTreeFull_SameNameLeafIdiomNoCycle(t *testing.T) {
+	// Regression: TraceCheckpointBlock's pre-rename shape was a Sequence named
+	// "TraceCheckpoint" whose only child was an Action also named
+	// "TraceCheckpoint" — the same-name-composite-wrapping-same-name-leaf idiom.
+	// engine.ValidateTreeFull's cycle detector must not flag this as a cycle:
+	// a childless leaf can't itself be part of an ancestry loop.
+	tree := &evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "TraceCheckpoint",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "TraceCheckpoint"},
+		},
+	}
+	info := engine.ValidateTreeFull(tree)
+	for _, e := range info.Errors {
+		if strings.Contains(e, "cycle detected") {
+			t.Fatalf("same-name leaf idiom must not trigger cycle detection, got: %v", info.Errors)
+		}
 	}
 }
 

@@ -244,6 +244,10 @@ Consolidation notes (2026-07-16):
 | ADR-219 | `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-220 | `internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-221 | `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-222 | `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-223 | `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-224 | `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness) | Accepted | 2026-07-28 |
+| ADR-225 | `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research) | Accepted | 2026-07-28 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3947,6 +3951,69 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `TelegramClarifyTree` is now reachable end-to-end via `ResolveTreeID`/`bt_delegate_to_tree`, consistent with its already-wired conditions/actions.
 - ⚠️ `"telegram_clarify"` is **not** added to `resolverSpecialCaseTreeIDs` in either `internal/knowledge/registry.go` or `internal/domains/kg_registry_coverage_test.go` (ADR-218's hand-maintained lists), and `BuildKnowledgeGraph` registers no `TreeMeta` for it. ADR-218's own `CoverageGaps` auditor only checks entries already present in that hand-maintained list, so it cannot detect that this 14th resolver special case is unregistered — `knowledge.RecordRun` will silently no-op on any `"telegram_clarify"` run the same way it did for the 13 IDs ADR-218 closed, and this specific gap is invisible to the very drift-guard ADR-218 built, because that guard audits the hand list rather than `tree_resolver.go`'s actual branches directly. A future change should extend both `resolverSpecialCaseTreeIDs` copies and `BuildKnowledgeGraph`'s registration to include `"telegram_clarify"`, or the resolver's newly-reachable tree will accumulate run history that `ComputeAnalytics`/gardener tree-prioritization never sees.
 - Rejected: registering `"telegram_clarify"` into the knowledge graph as part of this same change — out of scope for this goal (tree-resolver reachability only), left as a follow-up rather than silently expanding scope.
+
+---
+
+## ADR-222: `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research)
+
+**Context (2026-07-24):** ADR-220 added `reliability.CircuitBreakerStore` as the generic, reusable form of the named-breaker registry pattern, but flagged as a consequence that `internal/llm`, `internal/a2a`, and `internal/agent/webhook_publisher.go` still each hand-rolled their own `map[string]*CircuitBreaker` registry, unconsolidated. `WebhookPublisher.breakers` (`internal/agent/webhook_publisher.go`) was one such registry, built and populated once in `NewWebhookPublisher` from `secrets` and read/written directly by `handleEvent`. Separately, `replayDeadLetters` — the background sweep `handleEvent` triggers after any subscription's successful delivery — replayed every queued DLQ entry via `dlq.Requeue`/the shared `SetReplayExecutor` regardless of which subscription it belonged to, with no `breakers.Allowed()` check at all: a successful `bt-evolution-event` delivery re-hammered a still-open `bt-agent-alert` breaker's endpoint instead of leaving its queued entry alone until its own breaker recovered.
+
+**Decision:** `WebhookPublisher.breakers` changes type from `map[string]*reliability.CircuitBreaker` to `*reliability.CircuitBreakerStore`, constructed once via `reliability.NewCircuitBreakerStore(reliability.CircuitBreakerOptions{Threshold: webhookCircuitBreakerThreshold, Cooldown: webhookCircuitBreakerCooldown})` instead of pre-populating one breaker per subscription; `handleEvent` calls the store's `Allowed`/`Get(...).RecordOutcome`/`RecordSuccess` in place of the old nil-checked map lookups. Separately, `replayDeadLetters` now skips any DLQ entry whose subscription is `!p.breakers.Allowed(e.Agent)` before calling `dlq.Requeue`, so a recovery signal on one subscription no longer bypasses another subscription's still-open breaker or burns a requeue attempt on it.
+
+**Status:** Accepted (2026-07-24). Pinned by `TestWebhookPublisher_BreakersUseCircuitBreakerStore` and `TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker` (`internal/agent/webhook_publisher_test.go`), plus the existing `TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker` and `TestWebhookPublisher_CircuitBreakerTripsAndRecovers`, both updated to construct/inspect breakers through the store API.
+
+**Consequences:**
+- ✅ Closes one of the three unconsolidated registries ADR-220 flagged; `internal/llm` and `internal/a2a` remain hand-rolled and unconsolidated.
+- ✅ `replayDeadLetters` now respects each entry's own subscription breaker instead of replaying the whole DLQ on any single subscription's recovery, closing a cross-subscription breaker-bypass that previously let one working endpoint's success re-hammer a different, still-broken endpoint.
+- Pinned by the tests named above.
+
+---
+
+## ADR-223: `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-090 wired `SignAgentCard`/`VerifyAgentCard` (`internal/a2a/signing.go`) into the card-serving and card-consuming paths but explicitly flagged, as a ⚠️ consequence, that the "signature" was an unkeyed SHA-256 hash of the card's JSON encoding: it caught accidental corruption or staleness but authenticated nothing, since anyone — including an adversary forging a card — could compute a valid hash with no secret at all. `auctionCandidates` (`internal/a2a/auction.go`) trusts `cardSignatureValid` to gate which cards are eligible auction candidates, so the gap meant that trust check provided integrity-of-cache only, not origin authentication.
+
+**Decision:** `SignAgentCard` now computes an HMAC-SHA256 over the card's JSON encoding, keyed by a process-wide `signingKey()`: the `A2A_SIGNING_KEY` env var when set (for sharing one key across a fleet), otherwise a random 32-byte key generated on first use and persisted at `agent.HomeDir()/a2a_signing.key` so every process on a machine signs and verifies with the same key across restarts without operator setup. `VerifyAgentCard` recomputes the expected HMAC and compares against the decoded signature with `crypto/subtle.ConstantTimeCompare`, rather than a plain string `==`, so verification time doesn't leak how much of the signature matched. `cardSignatureValid`'s trust semantics in `auction.go` are unchanged: a card with no `Signatures` is still trusted (signing remains opt-in), and a card whose trailing signature fails to verify is still rejected — the fix is in what a passing verification now proves, not in when it's checked.
+
+**Status:** Accepted (2026-07-28). Pinned by `internal/a2a/signing_test.go`, extended to cover HMAC production/verification, the constant-time comparison path, and malformed-hex signatures.
+
+**Consequences:**
+- ✅ Closes ADR-090's flagged authentication gap: producing a valid signature now requires the process's signing key, not just the card's serialized bytes, so an adversary who can forge a card can no longer also forge a passing signature over it.
+- ✅ A generated key persists at `agent.HomeDir()/a2a_signing.key` (mode 0600) so restarts don't invalidate previously-signed cards; `A2A_SIGNING_KEY` lets a fleet share one key explicitly instead of relying on per-process file generation.
+- ⚠️ Key persistence to disk is best-effort — a write failure (e.g. unwritable home dir) silently falls back to regenerating a fresh key next process start, which invalidates prior signatures for that process without an explicit warning.
+- Cross-reference: → ADR-090 for the original card-serving/card-consuming wiring, which this ADR does not change.
+
+---
+
+## ADR-224: `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness)
+
+**Context (2026-07-28):** ADR-213 (2026-07-24) fixed `SerializableNode.validateRecursive` (`internal/evolution/node_types.go`) so its cycle detector no longer flags the common composite-wraps-lone-same-named-child idiom as a false-positive ancestry cycle. `engine.ValidateTreeFull`'s own cycle check in `walkValidate` (`internal/engine/verifier.go`) is a separate, independently-maintained implementation of the same idea and was never given the equivalent fix: it tracked every named node — leaf or composite — in `visitedNames`, so a `Sequence` named `"X"` wrapping a single `Action` also named `"X"` still failed `ValidateTreeFull` with a spurious "cycle detected" error. `internal/blocks/ops.go`'s `TraceCheckpointBlock` carries a workaround for exactly this: its composite is named `"TraceCheckpointBlock"` while its child `Action` is named `"TraceCheckpoint"`, purely to dodge this checker, with two comments citing `ValidateTreeFull`'s cycle detector as the reason the names must differ.
+
+**Decision:** Fix minimally, in place, identically to ADR-213's reasoning applied to the second implementation: `walkValidate`'s cycle-tracking condition (`internal/engine/verifier.go`, ~line 56) gains `&& len(node.Children) > 0` alongside the existing `node.Name != ""` guard. A childless leaf cannot recurse into a descendant, so it can never itself be part of an ancestry loop — only composite nodes need to be tracked in `visitedNames` for cycle purposes. Restricting the check to nodes with children eliminates the false positive on the same-name idiom while leaving real cycle detection (a composite node recurring by name in its own ancestry) unchanged. `TraceCheckpointBlock`'s differently-named workaround in `ops.go` is left as-is by this change — it is no longer necessary but reverting it to the simpler shared name is optional follow-up cleanup, not required for correctness.
+
+**Status:** Accepted (2026-07-28). Pinned by `TestValidateTreeFull_SameNameLeafIdiomNoCycle` (`internal/blocks/ops_test.go`), which builds a tree shaped like `TraceCheckpointBlock`'s pre-workaround form (`Sequence` named `"TraceCheckpoint"` wrapping an `Action` also named `"TraceCheckpoint"`) and asserts `engine.ValidateTreeFull` reports no cycle error.
+
+**Consequences:**
+- ✅ `engine.ValidateTreeFull` and `evolution.SerializableNode.Validate` now agree on the same-name-leaf idiom instead of one accepting it and the other rejecting it.
+- ✅ `TraceCheckpointBlock`'s name-divergence workaround (and its two comments citing the cycle detector) is no longer load-bearing; it remains in place but can be reverted to the shared `"TraceCheckpoint"` name in a follow-up without reintroducing a validation failure.
+- Real cycles — a composite node with children whose name recurs in its own ancestry — are still caught by both implementations; only the childless-leaf case was ever a false positive.
+- Cross-reference: → ADR-213 for the original `internal/evolution` fix this mirrors.
+
+---
+
+## ADR-225: `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-016 (2026-07-08) persisted the Claude rate-limit signal across GOAP fusion ticks but flagged, as a ⚠️ consequence, that the CLI's "resets \<time\>" hint was not machine-parsed — the backoff window was a fixed heuristic. `parseClaudeRateLimitReset` (`internal/engine/goap_claude_backoff.go`) later gained wall-clock (`"resets 3pm"`) and unix-epoch parsing, but `claudeBackoffDeadline` still capped any parsed deadline at `now+24h`, which is correct for the rolling-window case but wrong for Claude's separate weekly-quota message (`"You've hit your weekly limit · resets Jul 7, 11pm (Europe/Berlin)"`), whose real reset can legitimately be several days out — the 24h cap would clip a multi-day weekly deadline down to a doomed same-day re-probe.
+
+**Decision:** Add `claudeResetWeeklyRe` and `parseClaudeWeeklyRateLimitReset`, checked first inside `parseClaudeRateLimitReset`, to recognize the weekly-quota shape and its explicit IANA zone (`"(Europe/Berlin)"`) and optional month/day (`"Jul 7"`). Unlike the plain wall-clock form, this shape carries its own zone, so it is resolved via `time.LoadLocation` and `now.In(loc)` rather than assumed to be `time.Local`; when no month/day is present the reset is taken as the next occurrence of that time in that zone. `claudeBackoffDeadline` skips its `now+24h` cap specifically when `claudeResetWeeklyRe.MatchString(errText)` — trusting the weekly form's explicit date/zone verbatim, since a multi-day gap until the weekly quota reopens is the expected case for this message, not a mis-parse to guard against. The plain wall-clock and epoch forms keep the existing 24h cap unchanged.
+
+**Status:** Accepted (2026-07-28). Pinned by `internal/engine/goap_claude_backoff_test.go`, extended to cover the weekly-quota message with and without an explicit month/day, and to assert `claudeBackoffDeadline` no longer clips it to `now+24h`.
+
+**Consequences:**
+- ✅ A weekly-quota rate limit now produces an accurate multi-day backoff deadline instead of a 24h-capped one that would re-probe a still-closed quota every day until the real reset.
+- ✅ The zone comes from the message itself (`Europe/Berlin` or whatever the CLI reports), so the deadline is correct regardless of the host process's `time.Local`.
+- ⚠️ Still a heuristic on the message format: an unrecognized future weekly-quota phrasing falls through to the wall-clock/epoch parsers or the fixed fallback window, the same degradation ADR-016 already accepted for its own heuristic.
+- Cross-reference: → ADR-016 for the original persisted-backoff decision and its flagged heuristic-window gap, which this ADR narrows for the weekly-quota case only.
 
 ---
 

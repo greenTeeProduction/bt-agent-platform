@@ -178,19 +178,36 @@ const claudeResetMargin = 2 * time.Minute
 var (
 	claudeResetEpochRe = regexp.MustCompile(`(?i)limit[^|\n]{0,60}\|\s*(\d{10,13})`)
 	claudeResetClockRe = regexp.MustCompile(`(?i)\bresets\b(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`)
+
+	// claudeResetWeeklyRe matches the weekly-quota shape, which — unlike the
+	// plain wall-clock form — carries an explicit IANA zone (and optionally a
+	// month/day), so the reset can be resolved without assuming time.Local
+	// and can legitimately land more than 24h out.
+	//
+	//	"You've hit your weekly limit · resets Jul 7, 11pm (Europe/Berlin)"
+	//	"resets 11pm (Europe/Berlin)"
+	claudeResetWeeklyRe = regexp.MustCompile(`(?i)\bresets\b(?:\s+at)?\s+(?:([A-Za-z]{3})\s+(\d{1,2}),?\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)`)
 )
 
 // parseClaudeRateLimitReset extracts the quota-reset instant from Claude CLI
-// rate-limit output. Two observed shapes:
+// rate-limit output. Three observed shapes:
 //
-//	"Claude AI usage limit reached|resets 3pm"   → wall-clock (CLI 2.1.x here)
-//	"…limit reached|1752537600"                  → unix epoch (s or ms)
+//	"Claude AI usage limit reached|resets 3pm"                    → wall-clock (CLI 2.1.x here)
+//	"…limit reached|1752537600"                                    → unix epoch (s or ms)
+//	"weekly limit · resets Jul 7, 11pm (Europe/Berlin)"             → weekly quota, explicit zone
 //
-// The wall-clock form carries no date or zone — the CLI prints the user's
-// local time, so the next occurrence after now in time.Local is used. A bare
-// hour with neither am/pm nor minutes is too ambiguous and is rejected, as is
-// an epoch in the past or further than 7 days out.
+// The plain wall-clock form carries no date or zone — the CLI prints the
+// user's local time, so the next occurrence after now in time.Local is used.
+// A bare hour with neither am/pm nor minutes is too ambiguous and is
+// rejected, as is an epoch in the past or further than 7 days out. The
+// weekly-quota form carries its own IANA zone (and optionally a month/day),
+// so it is resolved in that zone rather than time.Local and — being the
+// weekly quota, not the rolling window — is allowed to land more than 24h
+// out (see claudeBackoffDeadline).
 func parseClaudeRateLimitReset(text string, now time.Time) (time.Time, bool) {
+	if t, ok := parseClaudeWeeklyRateLimitReset(text, now); ok {
+		return t, true
+	}
 	if m := claudeResetEpochRe.FindStringSubmatch(text); m != nil {
 		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil {
 			if len(m[1]) == 13 {
@@ -231,17 +248,73 @@ func parseClaudeRateLimitReset(text string, now time.Time) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// parseClaudeWeeklyRateLimitReset resolves the weekly-quota shape (see
+// claudeResetWeeklyRe) in its own explicit IANA zone rather than time.Local.
+// When no month/day is present, the reset falls on "now" as observed in that
+// zone; when a month/day is present, it is taken in now's year in that zone.
+func parseClaudeWeeklyRateLimitReset(text string, now time.Time) (time.Time, bool) {
+	m := claudeResetWeeklyRe.FindStringSubmatch(text)
+	if m == nil {
+		return time.Time{}, false
+	}
+	loc, err := time.LoadLocation(m[6])
+	if err != nil {
+		return time.Time{}, false
+	}
+	hour, err := strconv.Atoi(m[3])
+	if err != nil || hour > 12 {
+		return time.Time{}, false
+	}
+	mins := 0
+	if m[4] != "" {
+		mins, _ = strconv.Atoi(m[4])
+	}
+	if mins > 59 {
+		return time.Time{}, false
+	}
+	switch strings.ToLower(m[5]) {
+	case "pm":
+		if hour < 12 {
+			hour += 12
+		}
+	case "am":
+		if hour == 12 {
+			hour = 0
+		}
+	}
+
+	nowInLoc := now.In(loc)
+	year, month, day := nowInLoc.Date()
+	if m[1] != "" && m[2] != "" {
+		parsedMonth, merr := time.Parse("Jan", m[1])
+		if merr != nil {
+			return time.Time{}, false
+		}
+		d, derr := strconv.Atoi(m[2])
+		if derr != nil {
+			return time.Time{}, false
+		}
+		month, day = parsedMonth.Month(), d
+	}
+	return time.Date(year, month, day, hour, mins, 0, 0, loc), true
+}
+
 // claudeBackoffDeadline converts rate-limited CLI output into the backoff
-// deadline: the CLI-reported reset plus claudeResetMargin when parseable —
-// capped at now+24h so a mis-parse cannot idle the fleet for days — otherwise
-// now+fallback (the fixed-window behavior this replaces). The fixed 6h window
-// slept ~3h past the real reset on 2026-07-14/15; the parsed deadline wakes
-// the fleet when the quota actually reopens.
+// deadline: the CLI-reported reset plus claudeResetMargin when parseable,
+// otherwise now+fallback (the fixed-window behavior this replaces). The
+// reset is capped at now+24h so a mis-parse cannot idle the fleet for days —
+// except for the weekly-quota shape (claudeResetWeeklyRe), whose explicit
+// date/zone is trusted verbatim since a multi-day gap until the weekly quota
+// reopens is the expected, not mis-parsed, case. The fixed 6h window slept
+// ~3h past the real reset on 2026-07-14/15; the parsed deadline wakes the
+// fleet when the quota actually reopens.
 func claudeBackoffDeadline(errText string, now time.Time, fallback time.Duration) time.Time {
 	if reset, ok := parseClaudeRateLimitReset(errText, now); ok {
 		deadline := reset.Add(claudeResetMargin)
-		if maxDeadline := now.Add(24 * time.Hour); deadline.After(maxDeadline) {
-			deadline = maxDeadline
+		if !claudeResetWeeklyRe.MatchString(errText) {
+			if maxDeadline := now.Add(24 * time.Hour); deadline.After(maxDeadline) {
+				deadline = maxDeadline
+			}
 		}
 		return deadline
 	}
