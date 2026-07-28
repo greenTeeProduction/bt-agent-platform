@@ -246,6 +246,8 @@ Consolidation notes (2026-07-16):
 | ADR-221 | `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-222 | `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-223 | `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-224 | `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness) | Accepted | 2026-07-28 |
+| ADR-225 | `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research) | Accepted | 2026-07-28 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3980,6 +3982,38 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ A generated key persists at `agent.HomeDir()/a2a_signing.key` (mode 0600) so restarts don't invalidate previously-signed cards; `A2A_SIGNING_KEY` lets a fleet share one key explicitly instead of relying on per-process file generation.
 - ⚠️ Key persistence to disk is best-effort — a write failure (e.g. unwritable home dir) silently falls back to regenerating a fresh key next process start, which invalidates prior signatures for that process without an explicit warning.
 - Cross-reference: → ADR-090 for the original card-serving/card-consuming wiring, which this ADR does not change.
+
+---
+
+## ADR-224: `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness)
+
+**Context (2026-07-28):** ADR-213 (2026-07-24) fixed `SerializableNode.validateRecursive` (`internal/evolution/node_types.go`) so its cycle detector no longer flags the common composite-wraps-lone-same-named-child idiom as a false-positive ancestry cycle. `engine.ValidateTreeFull`'s own cycle check in `walkValidate` (`internal/engine/verifier.go`) is a separate, independently-maintained implementation of the same idea and was never given the equivalent fix: it tracked every named node — leaf or composite — in `visitedNames`, so a `Sequence` named `"X"` wrapping a single `Action` also named `"X"` still failed `ValidateTreeFull` with a spurious "cycle detected" error. `internal/blocks/ops.go`'s `TraceCheckpointBlock` carries a workaround for exactly this: its composite is named `"TraceCheckpointBlock"` while its child `Action` is named `"TraceCheckpoint"`, purely to dodge this checker, with two comments citing `ValidateTreeFull`'s cycle detector as the reason the names must differ.
+
+**Decision:** Fix minimally, in place, identically to ADR-213's reasoning applied to the second implementation: `walkValidate`'s cycle-tracking condition (`internal/engine/verifier.go`, ~line 56) gains `&& len(node.Children) > 0` alongside the existing `node.Name != ""` guard. A childless leaf cannot recurse into a descendant, so it can never itself be part of an ancestry loop — only composite nodes need to be tracked in `visitedNames` for cycle purposes. Restricting the check to nodes with children eliminates the false positive on the same-name idiom while leaving real cycle detection (a composite node recurring by name in its own ancestry) unchanged. `TraceCheckpointBlock`'s differently-named workaround in `ops.go` is left as-is by this change — it is no longer necessary but reverting it to the simpler shared name is optional follow-up cleanup, not required for correctness.
+
+**Status:** Accepted (2026-07-28). Pinned by `TestValidateTreeFull_SameNameLeafIdiomNoCycle` (`internal/blocks/ops_test.go`), which builds a tree shaped like `TraceCheckpointBlock`'s pre-workaround form (`Sequence` named `"TraceCheckpoint"` wrapping an `Action` also named `"TraceCheckpoint"`) and asserts `engine.ValidateTreeFull` reports no cycle error.
+
+**Consequences:**
+- ✅ `engine.ValidateTreeFull` and `evolution.SerializableNode.Validate` now agree on the same-name-leaf idiom instead of one accepting it and the other rejecting it.
+- ✅ `TraceCheckpointBlock`'s name-divergence workaround (and its two comments citing the cycle detector) is no longer load-bearing; it remains in place but can be reverted to the shared `"TraceCheckpoint"` name in a follow-up without reintroducing a validation failure.
+- Real cycles — a composite node with children whose name recurs in its own ancestry — are still caught by both implementations; only the childless-leaf case was ever a false positive.
+- Cross-reference: → ADR-213 for the original `internal/evolution` fix this mirrors.
+
+---
+
+## ADR-225: `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-016 (2026-07-08) persisted the Claude rate-limit signal across GOAP fusion ticks but flagged, as a ⚠️ consequence, that the CLI's "resets \<time\>" hint was not machine-parsed — the backoff window was a fixed heuristic. `parseClaudeRateLimitReset` (`internal/engine/goap_claude_backoff.go`) later gained wall-clock (`"resets 3pm"`) and unix-epoch parsing, but `claudeBackoffDeadline` still capped any parsed deadline at `now+24h`, which is correct for the rolling-window case but wrong for Claude's separate weekly-quota message (`"You've hit your weekly limit · resets Jul 7, 11pm (Europe/Berlin)"`), whose real reset can legitimately be several days out — the 24h cap would clip a multi-day weekly deadline down to a doomed same-day re-probe.
+
+**Decision:** Add `claudeResetWeeklyRe` and `parseClaudeWeeklyRateLimitReset`, checked first inside `parseClaudeRateLimitReset`, to recognize the weekly-quota shape and its explicit IANA zone (`"(Europe/Berlin)"`) and optional month/day (`"Jul 7"`). Unlike the plain wall-clock form, this shape carries its own zone, so it is resolved via `time.LoadLocation` and `now.In(loc)` rather than assumed to be `time.Local`; when no month/day is present the reset is taken as the next occurrence of that time in that zone. `claudeBackoffDeadline` skips its `now+24h` cap specifically when `claudeResetWeeklyRe.MatchString(errText)` — trusting the weekly form's explicit date/zone verbatim, since a multi-day gap until the weekly quota reopens is the expected case for this message, not a mis-parse to guard against. The plain wall-clock and epoch forms keep the existing 24h cap unchanged.
+
+**Status:** Accepted (2026-07-28). Pinned by `internal/engine/goap_claude_backoff_test.go`, extended to cover the weekly-quota message with and without an explicit month/day, and to assert `claudeBackoffDeadline` no longer clips it to `now+24h`.
+
+**Consequences:**
+- ✅ A weekly-quota rate limit now produces an accurate multi-day backoff deadline instead of a 24h-capped one that would re-probe a still-closed quota every day until the real reset.
+- ✅ The zone comes from the message itself (`Europe/Berlin` or whatever the CLI reports), so the deadline is correct regardless of the host process's `time.Local`.
+- ⚠️ Still a heuristic on the message format: an unrecognized future weekly-quota phrasing falls through to the wall-clock/epoch parsers or the fixed fallback window, the same degradation ADR-016 already accepted for its own heuristic.
+- Cross-reference: → ADR-016 for the original persisted-backoff decision and its flagged heuristic-window gap, which this ADR narrows for the weekly-quota case only.
 
 ---
 
