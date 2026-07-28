@@ -51,6 +51,9 @@ func signingKey() []byte {
 // loadOrCreateSigningKey reads a previously generated key from path, or
 // generates and persists a fresh random 32-byte key when none exists yet.
 func loadOrCreateSigningKey(path string) []byte {
+	// #nosec G304 -- path is always signingKeyFile(), built from agent.HomeDir()
+	// (an operator-controlled env var / OS home dir) plus a fixed filename, never
+	// user/network input.
 	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
 		return data
 	}
