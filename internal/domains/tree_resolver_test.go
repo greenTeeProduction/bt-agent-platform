@@ -287,6 +287,53 @@ func TestResolveTreeID_NoDTStatsLeavesTreeUnchanged(t *testing.T) {
 	}
 }
 
+// TestResolveTreeID_PerTreeDTStatsFn pins the per-tree DT telemetry consumer —
+// the DTAnalyzer/BTOptimizer sibling of TestResolveTreeID_PerTreeStatsFn above.
+// When DTStatsPathFn is wired (agentexec, behind BT_SELECTOR_REORDER=1,
+// mirroring SelectorStatsPathFn), each resolved tree must reorder from its OWN
+// DT stats file rather than the single shared DTStatsPath: a single shared
+// file would let equal selector NAMES in unrelated trees pollute each other's
+// learned ordering, exactly as SelectorStatsPathFn was fixed to avoid for the
+// SelectorOptimizer pass.
+func TestResolveTreeID_PerTreeDTStatsFn(t *testing.T) {
+	origFn := DynamicResolveFn
+	defer func() { DynamicResolveFn = origFn }()
+	origDTPathFn := DTStatsPathFn
+	defer func() { DTStatsPathFn = origDTPathFn }()
+	origDTPath := DTStatsPath
+	defer func() { DTStatsPath = origDTPath }()
+	DTStatsPath = ""
+
+	// DT telemetry exists ONLY for core:dt-a — same "DTRouter" selector name in
+	// both trees.
+	statsA := writeDTStats(t, map[string]int{
+		"TypeA":      6,
+		"TypeAExtra": 3,
+	})
+	DTStatsPathFn = func(treeID string) string {
+		if treeID == "core:dt-a" {
+			return statsA
+		}
+		return ""
+	}
+
+	trees := map[string]*evolution.SerializableNode{
+		"core:dt-a": dtRouterTree(),
+		"core:dt-b": dtRouterTree(),
+	}
+	DynamicResolveFn = func(id string) *evolution.SerializableNode { return trees[id] }
+
+	a := ResolveTreeID("core:dt-a")
+	if a == nil || a.Children[0].Name != "TypeAExtra" || a.Children[1].Name != "TypeA" {
+		t.Fatalf("core:dt-a must reorder from its own DT telemetry; children = %v", a)
+	}
+	b := ResolveTreeID("core:dt-b")
+	if b == nil || b.Children[0].Name != "TypeA" || b.Children[1].Name != "TypeAExtra" {
+		t.Fatalf("core:dt-b has no DT telemetry and must keep authored order; got [%s, %s]",
+			b.Children[0].Name, b.Children[1].Name)
+	}
+}
+
 // TestResolveTreeID_TelegramClarify pins evolution.TelegramClarifyTree() as
 // reachable via ResolveTreeID under the "telegram_clarify" ID, matching how
 // its sibling standalone trees (vault_manager, notebooklm-bridge, fusion) are

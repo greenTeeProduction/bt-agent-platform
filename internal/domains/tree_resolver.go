@@ -71,6 +71,14 @@ var SelectorOrderingStrategy = evolution.OrderBySuccessRate
 // SelectorStatsPath's nil-tolerant, opt-in convention.
 var DTStatsPath string
 
+// DTStatsPathFn resolves the durable DTAnalyzer telemetry file for ONE tree
+// id and takes precedence over the shared DTStatsPath — the DTAnalyzer/
+// BTOptimizer sibling of SelectorStatsPathFn. Per-tree files keep equal
+// selector NAMES in unrelated trees from polluting each other's learned DT
+// ordering. Returning "" for an id disables DT reordering for that tree.
+// Wired (opt-in) by internal/agentexec.
+var DTStatsPathFn func(treeID string) string
+
 // ResolveTreeID maps a tree identifier string to a serializable behavior tree,
 // then applies any learned Selector ordering (SelectorStatsPath) so accumulated
 // telemetry reorders Selector children before the tree reaches the engine.
@@ -125,22 +133,30 @@ func applyLearnedSelectorOrdering(id string, tree *evolution.SerializableNode) {
 		}
 	}
 
-	applyDTOptimizerOrdering(tree)
+	applyDTOptimizerOrdering(id, tree)
 }
 
-// applyDTOptimizerOrdering loads DTStatsPath into a fresh DTAnalyzer and, when
-// telemetry exists, applies evolution.BTOptimizer.OptimizeSelectors to
-// information-gain-reorder the tree's Selector children in place. A missing/
-// empty DTStatsPath, a load error, or a Selector with no recorded stats
+// applyDTOptimizerOrdering loads the tree's durable DT telemetry (per-tree
+// DTStatsPathFn first, shared DTStatsPath as fallback) into a fresh DTAnalyzer
+// and, when telemetry exists, applies evolution.BTOptimizer.OptimizeSelectors
+// to information-gain-reorder the tree's Selector children in place. A
+// missing/empty path, a load error, or a Selector with no recorded stats
 // leaves the tree's (possibly already SelectorOptimizer-reordered) order
 // untouched — OptimizeSelectors itself is a no-op when the analyzer has no
 // telemetry.
-func applyDTOptimizerOrdering(tree *evolution.SerializableNode) {
-	if DTStatsPath == "" {
+func applyDTOptimizerOrdering(id string, tree *evolution.SerializableNode) {
+	path := ""
+	if DTStatsPathFn != nil {
+		path = DTStatsPathFn(id)
+	}
+	if path == "" {
+		path = DTStatsPath
+	}
+	if path == "" {
 		return
 	}
 	da := evolution.NewDTAnalyzer()
-	if err := da.Load(DTStatsPath); err != nil {
+	if err := da.Load(path); err != nil {
 		return
 	}
 	(&evolution.BTOptimizer{Analyzer: da}).OptimizeSelectors(tree)

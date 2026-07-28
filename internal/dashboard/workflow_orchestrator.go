@@ -438,7 +438,7 @@ func evaluateCondition(cond string, state *wfState) bool {
 	expanded := expandTemplate(cond, state)
 	// Very simple: string contains check
 	// Full expression evaluation would need a proper expression engine
-	if len(expanded) > 3 && expanded[:4] == "true" {
+	if expanded == "true" {
 		return true
 	}
 	if expanded == "condition_met" || expanded == "success" {
