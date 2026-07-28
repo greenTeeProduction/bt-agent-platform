@@ -245,6 +245,7 @@ Consolidation notes (2026-07-16):
 | ADR-220 | `internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-221 | `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research) | Accepted | 2026-07-24 |
 | ADR-222 | `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research) | Accepted | 2026-07-24 |
+| ADR-223 | `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research) | Accepted | 2026-07-28 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -3963,6 +3964,22 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Closes one of the three unconsolidated registries ADR-220 flagged; `internal/llm` and `internal/a2a` remain hand-rolled and unconsolidated.
 - ✅ `replayDeadLetters` now respects each entry's own subscription breaker instead of replaying the whole DLQ on any single subscription's recovery, closing a cross-subscription breaker-bypass that previously let one working endpoint's success re-hammer a different, still-broken endpoint.
 - Pinned by the tests named above.
+
+---
+
+## ADR-223: `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research)
+
+**Context (2026-07-28):** ADR-090 wired `SignAgentCard`/`VerifyAgentCard` (`internal/a2a/signing.go`) into the card-serving and card-consuming paths but explicitly flagged, as a ⚠️ consequence, that the "signature" was an unkeyed SHA-256 hash of the card's JSON encoding: it caught accidental corruption or staleness but authenticated nothing, since anyone — including an adversary forging a card — could compute a valid hash with no secret at all. `auctionCandidates` (`internal/a2a/auction.go`) trusts `cardSignatureValid` to gate which cards are eligible auction candidates, so the gap meant that trust check provided integrity-of-cache only, not origin authentication.
+
+**Decision:** `SignAgentCard` now computes an HMAC-SHA256 over the card's JSON encoding, keyed by a process-wide `signingKey()`: the `A2A_SIGNING_KEY` env var when set (for sharing one key across a fleet), otherwise a random 32-byte key generated on first use and persisted at `agent.HomeDir()/a2a_signing.key` so every process on a machine signs and verifies with the same key across restarts without operator setup. `VerifyAgentCard` recomputes the expected HMAC and compares against the decoded signature with `crypto/subtle.ConstantTimeCompare`, rather than a plain string `==`, so verification time doesn't leak how much of the signature matched. `cardSignatureValid`'s trust semantics in `auction.go` are unchanged: a card with no `Signatures` is still trusted (signing remains opt-in), and a card whose trailing signature fails to verify is still rejected — the fix is in what a passing verification now proves, not in when it's checked.
+
+**Status:** Accepted (2026-07-28). Pinned by `internal/a2a/signing_test.go`, extended to cover HMAC production/verification, the constant-time comparison path, and malformed-hex signatures.
+
+**Consequences:**
+- ✅ Closes ADR-090's flagged authentication gap: producing a valid signature now requires the process's signing key, not just the card's serialized bytes, so an adversary who can forge a card can no longer also forge a passing signature over it.
+- ✅ A generated key persists at `agent.HomeDir()/a2a_signing.key` (mode 0600) so restarts don't invalidate previously-signed cards; `A2A_SIGNING_KEY` lets a fleet share one key explicitly instead of relying on per-process file generation.
+- ⚠️ Key persistence to disk is best-effort — a write failure (e.g. unwritable home dir) silently falls back to regenerating a fresh key next process start, which invalidates prior signatures for that process without an explicit warning.
+- Cross-reference: → ADR-090 for the original card-serving/card-consuming wiring, which this ADR does not change.
 
 ---
 

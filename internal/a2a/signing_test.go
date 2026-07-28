@@ -1,6 +1,8 @@
 package a2a
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -137,6 +139,36 @@ func TestSignAgentCard_NilCard(t *testing.T) {
 	_, err := SignAgentCard(nil)
 	if err != nil {
 		t.Fatalf("SignAgentCard(nil) should not error, got: %v", err)
+	}
+}
+
+// TestVerifyAgentCard_RejectsUnkeyedForgery is the regression test for the
+// "fake signature" vulnerability: the pre-fix SignAgentCard was a bare,
+// unkeyed SHA-256 hash of the card's JSON encoding, so anyone — with no
+// access to any secret — could compute the exact same hash themselves and
+// forge a signature VerifyAgentCard would accept. A real keyed scheme
+// (HMAC-SHA256 with a secret key, or ed25519) must reject a signature
+// produced this way, since producing a valid signature must require
+// knowledge of the secret, not just the card's serialized bytes.
+func TestVerifyAgentCard_RejectsUnkeyedForgery(t *testing.T) {
+	card := &a2a.AgentCard{
+		Name:        "forge-target",
+		Description: "attacker-controlled card",
+	}
+
+	data, err := json.Marshal(card)
+	if err != nil {
+		t.Fatalf("marshal card: %v", err)
+	}
+	hash := sha256.Sum256(data)
+	forged := hex.EncodeToString(hash[:])
+
+	valid, err := VerifyAgentCard(card, forged)
+	if err != nil {
+		t.Fatalf("VerifyAgentCard failed: %v", err)
+	}
+	if valid {
+		t.Error("expected an unkeyed SHA-256 forgery to be rejected by a real keyed signature scheme")
 	}
 }
 

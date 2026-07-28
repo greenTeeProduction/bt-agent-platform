@@ -6,7 +6,8 @@ import "github.com/nico/go-bt-evolve/internal/evolution"
 
 // ─── Arc42 Documentation Generator Trees ────────────────────────────────
 
-// Arc42Trees returns all 13 arc42 generation trees (12 sections + 1 assembly).
+// Arc42Trees returns all 12 arc42 section generation trees. The monolith
+// assembly tree was retired in 1fb9c70; per-section generation trees stay.
 func Arc42Trees() map[string]*evolution.SerializableNode {
 	return map[string]*evolution.SerializableNode{
 		"arc42:section1":  section1IntroGoals(),
