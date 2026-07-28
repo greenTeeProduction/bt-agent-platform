@@ -256,6 +256,12 @@ func AgentMonitorTree() *evolution.SerializableNode {
 			},
 			{Type: "HumanApprovalGate", Name: "ApproveRestart", Description: "Requires human approval before restarting agents",
 				Edges: []evolution.TypedEdge{approval("human-approval-restart")},
+				Metadata: map[string]any{
+					"phase":             "pre",
+					"side_effect_class": "local_reversible",
+					"hitl_prompt":       "Agent monitor will restart dead bt-* processes via systemctl.",
+					"auto_approve":      true,
+				},
 			},
 			{Type: "Action", Name: "RestartDeadAgents", Description: "Restart dead bt-* processes via systemctl, clear stale in_flight",
 				Edges: []evolution.TypedEdge{
