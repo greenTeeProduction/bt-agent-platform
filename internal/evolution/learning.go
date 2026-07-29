@@ -1017,8 +1017,17 @@ func CloneMetadata(src map[string]any) map[string]any {
 	return out
 }
 
+// hashTree fingerprints the full subtree — recursively including Children,
+// Edges, and Metadata — so structurally or semantically different trees never
+// collide into the same genome. json.Marshal sorts map keys, so the encoding
+// (and therefore the hash) is deterministic regardless of Metadata insertion
+// order.
 func hashTree(t *SerializableNode) string {
-	h := sha256.Sum256([]byte(t.Name + t.Type + strconv.Itoa(len(t.Children))))
+	data, err := json.Marshal(t)
+	if err != nil {
+		data = []byte(t.Name + t.Type + strconv.Itoa(len(t.Children)))
+	}
+	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])[:16]
 }
 

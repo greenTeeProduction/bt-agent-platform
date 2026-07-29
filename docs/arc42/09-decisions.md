@@ -256,6 +256,9 @@ Consolidation notes (2026-07-16):
 | ADR-231 | `evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research) | Accepted | 2026-07-29 |
 | ADR-232 | `internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research) | Accepted | 2026-07-29 |
 | ADR-233 | `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-234 | `hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-235 | `RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-236 | `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research) | Accepted | 2026-07-29 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4143,6 +4146,74 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Callers other than the dashboard HTTP handler (e.g. a future MCP tool or script driving `TaskStore`/`Workflow` directly) get correct HITL resolution for free, since it now happens inside the store/workflow methods rather than being the HTTP layer's responsibility.
 - ⚠️ `cmd/bt-dashboard`'s `handleTaskApprove`/`handleTaskReject` needed a compensating `pendingHITLBeforeResolve` snapshot-before-resolve step to keep reporting `hitl_request_id`/`hitl_resolved_from` in their JSON response, since the request they used to look up *after* resolving is now already resolved by the time the handler would check it a second time.
 - Rejected: keeping HTTP-handler-only HITL resolution and adding a second, handler-shaped call into `Workflow.ApproveTask`/`RejectTask` instead of a shared helper — rejected as recreating, one level deeper, the two-parallel-model divergence risk this ADR's own goal is to close.
+
+---
+
+## ADR-234: `hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research)
+
+**Context (2026-07-29):** Every evolution algorithm in `internal/evolution` identifies an `Individual` by `Individual.Genome`, produced by `hashTree(t *SerializableNode)` in `learning.go`. `hashTree` previously hashed only `t.Name + t.Type + strconv.Itoa(len(t.Children))` — the root node's shape, ignoring everything beneath it. Two trees with an identical root but different grandchildren, `Edges`, or `Metadata` collided into the same genome. That genome feeds `Population.Diversity()` (`seen[ind.Genome]`) and the ADR-031 crisis detector's `diversity_collapse` reason: a collision could make a genuinely varied population read as collapsed, or mask a real collapse as synthetic variety, either way corrupting the self-healing envelope's (ADR-038/051/121) crisis signal across all eight evolve variants.
+
+**Evaluation criteria:** Correctness of the identity function evolution's diversity and dedup logic depends on (must not under- or over-count distinct trees); determinism (must hash identically across runs/processes so archives and comparisons stay stable); no dependency on `Metadata` map insertion order, which is not itself semantically meaningful.
+
+**Decision:** `hashTree` now `json.Marshal`s the whole `*SerializableNode` — recursively covering `Children`, `Edges`, and `Metadata` — and hashes the resulting bytes with SHA-256, keeping the existing 16-hex-character truncation. Go's `encoding/json` sorts map keys during marshaling, so the encoding (and hash) is deterministic regardless of `Metadata` insertion order, without needing a custom canonicalization step. A marshal error (not expected for this type, but not provably impossible) falls back to the original root-only string so `hashTree` never panics or returns an empty genome. This closes a related aliasing bug in the same pass: `hashTree`'s correctness depends on `Metadata` being genuinely copied rather than shared, so the recursive `CloneMetadata` helper (ADR-231) — not `cloneTree`'s old shallow top-level-map copy — is what backs any mutation that touches nested `Metadata` values on a clone.
+
+**Alternatives considered:**
+- Keep the root-only hash and instead widen `Population.Diversity()` to walk full subtrees for its own comparison — rejected: leaves every *other* consumer of `Genome` (archive merge-keys in `island.go`, tie-breaking in `pareto.go`) still working off the collision-prone root-only identity, duplicating the real fix at each call site instead of fixing it once at the source.
+- Hand-roll a recursive string concatenation (name+type+children, recursively) instead of `json.Marshal` — rejected: would need its own canonical key-ordering logic for `Metadata` and `Edges`, reimplementing what `encoding/json`'s sorted-map-key marshaling already guarantees for free.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestHashTree_DistinguishesChildContent`, `TestHashTree_DistinguishesGrandchildren`, `TestHashTree_DistinguishesEdges`, `TestHashTree_DistinguishesMetadata`, and `TestHashTree_StableAndDeterministic` (`internal/evolution/learning_test.go`).
+
+**Consequences:**
+- ✅ `Population.Diversity()` and the crisis detector's `diversity_collapse` signal now reflect the population's actual structural/semantic variety instead of only its root-node shape.
+- ✅ Fixes every `Genome` consumer at once (dedup, archive merge-keys, tie-breaking) since they all read the one `hashTree` output.
+- ⚠️ Genome values computed by the old root-only hash are not stable across this change — any durable archive keyed by `Genome` (rather than by tree ID) sees prior entries re-key as if they were new individuals on first load after upgrade. No such archive currently keys on `Genome` directly (island/MAP-Elites archives key by tree ID and behavioral descriptor respectively — ADR-033/034/040/043), so no migration was needed in practice.
+- Rejected: a hand-rolled canonical string encoding, in favor of `encoding/json`'s existing deterministic map-key ordering (see Alternatives).
+
+---
+
+## ADR-235: `RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research)
+
+**Context (2026-07-29):** The knowledge-graph feedback persistence lifecycle (§8.4, ADR-105) assumes every feedback-producing caller either goes through the scheduler's `persistRunFeedback` — which explicitly calls `MarkFeedbackDirty` after `RecordRun` — or otherwise remembers to mark the graph dirty itself. `internal/gardener`'s `recordEvolvedRun` (`evolve_v2.go`) does neither: at the end of every `evolveTreeV2` cycle it calls `KnowledgeGraph.RecordRun` directly with `Outcome: "evolved"`, updating `EvolvedCount`/`StructuralFitness` in memory, but never flags the graph dirty. A configured `FlushFeedback` never picked up evolved-tree feedback, so it was silently lost on process restart even though genuine-run feedback (routed through the scheduler) persisted correctly.
+
+**Evaluation criteria:** Closing the gap by construction (covering every current and future `RecordRun` caller) versus by caller discipline (auditing and fixing each call site individually); avoiding a second lock acquisition given `RecordRun` already holds `kg.mu` for its own mutation.
+
+**Decision:** `RecordRun` (`internal/knowledge/feedback.go`) now sets `kg.feedbackPersist.dirty = true` directly at the end of every call, rather than calling the exported `MarkFeedbackDirty` helper — `kg.mu` is a non-reentrant lock `RecordRun` already holds for the duration of the method, so re-entering through the locking helper would deadlock. Setting the field directly is safe because it happens under the same `kg.mu` critical section that already guards the rest of `RecordRun`'s state. This makes every `RecordRun` call site — the scheduler's genuine runs, the gardener's evolved-run bookkeeping, and any future caller — dirty-mark the graph by construction, instead of depending on each caller to remember to do it separately.
+
+**Alternatives considered:**
+- Add the missing `MarkFeedbackDirty()` call at the one known gap (`recordEvolvedRun` in `internal/gardener/evolve_v2.go`) — rejected: fixes today's known caller but leaves the same footgun for the next `RecordRun` call site that forgets to mark dirty; the reused-existing `MarkFeedbackDirty()` (`internal/knowledge/feedback_persist.go:70`) remains available for callers outside `RecordRun`'s own lock scope.
+- Have `persistRunFeedback` become the only sanctioned way to call `RecordRun` (wrap/hide direct access) — rejected: `RecordRun` is the graph's public mutation API and is called from multiple packages for different reasons (genuine execution vs. evolved-tree bookkeeping); centralizing the dirty flag inside it is simpler than restructuring call sites.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestRecordRun_MarksFeedbackDirty` and `TestRecordRun_Evolved_MarksFeedbackDirty` (`internal/knowledge/feedback_test.go`).
+
+**Consequences:**
+- ✅ Evolved-tree feedback (`EvolvedCount`, `StructuralFitness`) now survives a restart via the existing `FlushFeedback`/debounced-writer lifecycle (§8.4) instead of being silently dropped.
+- ✅ Every future `RecordRun` caller is covered automatically — no per-call-site dirty-marking discipline required.
+- Rejected: patching only the known gardener gap, in favor of fixing the shared mutation point (see Alternatives).
+
+---
+
+## ADR-236: `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research)
+
+**Context (2026-07-29):** `dashboard.Workflow.ExecuteSprint`/`RunFullPipeline`/`SetTaskStatus` (`internal/dashboard/workflow_engine.go`) mutate a `*startup.CompanyState` reached via `w.Company`, previously guarded only by `w.mu` — the `Workflow`'s own private mutex. But `cmd/bt-dashboard/main.go` mints a fresh, uncontended `*Workflow` per HTTP request (`handleAnalyze`, `handleThinktankRun`, `handleDefaultCompany`, …) against one shared package-level `companyState`, and `startup.CompanyOrchestrator.RunSprint`/`RunQuarter`/`Summary` (`internal/startup/orchestrator.go`) reach the same `*CompanyState` pointer through yet another wrapper with no lock of its own. Each `*Workflow`'s `w.mu` only ever serialized that one instance's own fields (`Tasks`, `UpdatedAt`, …); two concurrent requests, each minting its own private `w.mu`, raced unguarded on the shared `CompanyState.CurrentSprint`/`SprintGoal`/`MRR`/etc. fields underneath — a classic shared-mutable-state-behind-independent-locks race, invisible to `go vet` and only surfaced by `-race` under concurrent load.
+
+**Evaluation criteria:** Correctness under concurrent HTTP requests sharing one `companyState` (must eliminate the race, verifiable under `go test -race`); avoiding deadlock given `CompanyOrchestrator.RunSprint` already needs to lock the same state internally when called from inside `Workflow.ExecuteSprint`, which itself needs to lock around adjacent `w.Company` field access; minimizing lock scope so a slow `orch.RunSprint()` call doesn't hold `CompanyState`'s lock (or `w.mu`) longer than necessary.
+
+**Decision:** `startup.CompanyState` (`internal/startup/company.go`) now carries its own unexported `sync.Mutex` behind exported `Lock()`/`Unlock()` methods, making the state self-serializing regardless of which wrapper (`Workflow`, `CompanyOrchestrator`, or a future one) touches it. Every accessor across both packages that reads or writes `CompanyState` fields now takes this lock:
+- `Workflow.SetTaskStatus`/`ExecuteSprint`/`RunFullPipeline` lock narrowly around only the specific `w.Company.*` reads/writes, and deliberately *never* hold `CompanyState`'s lock across a call into `orch.RunSprint()` — `ExecuteSprint` releases `w.mu` before calling `orch.RunSprint()` and re-acquires it after, since the real `CompanyOrchestrator.RunSprint` locks the same `CompanyState` internally and the mutex is not reentrant.
+- `CompanyOrchestrator.RunSprint`/`Summary` hold the lock for their whole body; `RunQuarter` snapshots the fields it needs under the lock immediately before and after its 12-sprint loop rather than holding the lock across those `RunSprint` calls (each of which takes the lock itself).
+- `cmd/bt-dashboard/main.go`'s `handleDefaultCompany` takes the same lock before `encodeJSON(w, companyState)`.
+
+**Alternatives considered:**
+- Serialize all `Company`-mutating `Workflow` calls behind one shared package-level lock in `cmd/bt-dashboard` instead of a lock owned by `CompanyState` itself — rejected: only protects call sites that happen to go through that one package's HTTP handlers; `startup.CompanyOrchestrator`'s own methods (`RunSprint`, `RunQuarter`, `Summary`) are called directly by non-dashboard code paths today and would remain unprotected, silently reopening the exact race this decision closes.
+- Give each `Workflow`/`CompanyOrchestrator` wrapper a shared (not private) mutex reference passed in at construction — rejected: pushes correct wiring onto every construction site (today's and any future one) instead of making the invariant impossible to violate by attaching the lock to the shared state itself.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestExecuteSprint_ConcurrentWorkflowsShareCompanyState` (`internal/dashboard/workflow_engine_test.go`), which drives two separate `*Workflow` instances wrapping one `CompanyState` from concurrent goroutines and requires clean `go test -race` output.
+
+**Consequences:**
+- ✅ Concurrent HTTP requests sharing `companyState` no longer race on its fields, regardless of which wrapper (`Workflow` or `CompanyOrchestrator`) touches it or in what combination.
+- ✅ The invariant lives on `CompanyState` itself, so any future wrapper around the same pointer is safe by construction rather than by remembering to reuse a shared lock.
+- ⚠️ Lock scoping is now hand-managed per call site to avoid the non-reentrant deadlock between `Workflow`'s and `CompanyOrchestrator`'s locking (e.g. `ExecuteSprint` releasing `w.mu` mid-method before calling `orch.RunSprint()`) — a future accessor that naively holds `CompanyState`'s lock across a call into another method that also locks it will deadlock; there is no compiler-enforced guard against this beyond the `-race` test and the doc comments on `Lock`/`Unlock` and `ExecuteSprint`.
+- Rejected: a single shared external lock in `cmd/bt-dashboard`, in favor of a lock owned by `CompanyState` itself (see Alternatives) — → [§5.1](05-building-blocks.md)/[§8.6](08-crosscutting-concepts.md) for the accessor-level mechanism.
 
 ---
 

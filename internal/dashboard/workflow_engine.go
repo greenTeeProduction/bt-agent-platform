@@ -263,9 +263,11 @@ func (w *Workflow) SetTaskStatus(taskID string, status WorkflowTaskStatus) *Work
 		if status == StatusCompleted {
 			now := time.Now()
 			w.Tasks[i].CompletedAt = &now
+			w.Company.Lock()
 			if w.Tasks[i].SprintTarget > w.Company.CurrentSprint {
 				w.Company.CurrentSprint = w.Tasks[i].SprintTarget
 			}
+			w.Company.Unlock()
 		}
 		w.UpdatedAt = time.Now()
 		return &w.Tasks[i]
@@ -343,11 +345,21 @@ func (w *Workflow) PendingApprovals() []WorkflowTask {
 // ─── Company Integration ───
 
 // ExecuteSprint runs approved tasks through the company simulation.
+//
+// w.mu only ever protects this *Workflow instance's own fields (Tasks,
+// UpdatedAt, ...); it does nothing to serialize concurrent writes to
+// w.Company from a *different* *Workflow instance wrapping the same
+// *startup.CompanyState pointer (see cmd/bt-dashboard, which mints a
+// fresh, uncontended *Workflow per request against one shared
+// package-level companyState). Company field reads/writes are therefore
+// guarded by w.Company's own mutex instead, held only around those
+// specific accesses — and never while calling orch.RunSprint(), since the
+// real CompanyOrchestrator.RunSprint locks the same CompanyState
+// internally and the mutex is not reentrant.
 func (w *Workflow) ExecuteSprint(sprintNum int, orch interface {
 	RunSprint() *startup.SprintResult
 }) *startup.SprintResult {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	// Set sprint goal from approved tasks
 	tasks := w.getTasksBySprintLocked(sprintNum)
@@ -359,16 +371,22 @@ func (w *Workflow) ExecuteSprint(sprintNum int, orch interface {
 	}
 
 	if approved > 0 {
+		w.Company.Lock()
 		w.Company.CurrentSprint = sprintNum
 		w.Company.SprintGoal = fmt.Sprintf("Execute %d approved tasks", approved)
+		w.Company.Unlock()
 		for i := range w.Tasks {
 			if w.Tasks[i].SprintTarget == sprintNum && w.Tasks[i].Status == StatusApproved {
 				w.Tasks[i].Status = StatusInProgress
 			}
 		}
 	}
+	w.mu.Unlock()
 
 	result := orch.RunSprint()
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	// Mark completed tasks
 	for i := range w.Tasks {
@@ -458,10 +476,12 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 	// WorkflowTask requires an explicit human/HITL decision via
 	// ApproveTask/RejectTask before ExecuteSprint will move it forward.
 	w.Status = "executing"
+	w.Company.Lock()
 	w.Company.CurrentSprint = 1
 	if len(w.Tasks) > 0 {
 		w.Company.SprintGoal = w.Tasks[0].Title
 	}
+	w.Company.Unlock()
 	for _, sprintNum := range w.distinctSprintTargets() {
 		w.ExecuteSprint(sprintNum, compOrch)
 	}

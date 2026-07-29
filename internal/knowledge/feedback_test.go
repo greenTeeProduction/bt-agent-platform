@@ -218,6 +218,55 @@ func TestRecordRun_ChainSuccess(t *testing.T) {
 }
 
 // =============================================================================
+// RecordRun must mark feedback dirty (NotebookLM research finding: gardener's
+// evolved-tree feedback never got flagged dirty, so FlushFeedback never
+// persisted it — RecordRun is the one call site every feedback-producing path
+// (scheduler, gardener) already funnels through, so marking dirty there closes
+// the gap for all callers at once instead of requiring every call site to
+// remember MarkFeedbackDirty individually).
+// =============================================================================
+
+// TestRecordRun_MarksFeedbackDirty pins the genuine-execution path: once
+// persistence is configured, a real RecordRun call must flip the debounced
+// writer's dirty flag so a later FlushFeedback actually persists it.
+func TestRecordRun_MarksFeedbackDirty(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:dirty", Name: "Dirty Test", Category: "test"})
+	kg.ConfigureFeedbackPersistence(t.TempDir()+"/feedback.json", time.Minute)
+
+	if kg.feedbackPersist.dirty {
+		t.Fatal("dirty flag should start false before any RecordRun")
+	}
+
+	kg.RecordRun(RunRecord{TreeID: "tree:dirty", Task: "run", Outcome: "success"})
+
+	if !kg.feedbackPersist.dirty {
+		t.Error("RecordRun did not mark feedback dirty — FlushFeedback will silently skip this write")
+	}
+}
+
+// TestRecordRun_Evolved_MarksFeedbackDirty pins the evolved-tree path
+// specifically: this is the path the gardener's recordEvolvedRun (evolve_v2.go)
+// exercises, and the one NotebookLM research found was falling through —
+// evolved-tree feedback was computed in memory but never flagged dirty, so it
+// was silently dropped on the next restart.
+func TestRecordRun_Evolved_MarksFeedbackDirty(t *testing.T) {
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:evolved-dirty", Name: "Evolved Dirty Test", Category: "test"})
+	kg.ConfigureFeedbackPersistence(t.TempDir()+"/feedback.json", time.Minute)
+
+	if kg.feedbackPersist.dirty {
+		t.Fatal("dirty flag should start false before any RecordRun")
+	}
+
+	kg.RecordRun(RunRecord{TreeID: "tree:evolved-dirty", Task: "evolve", Outcome: "evolved", Quality: 75.0})
+
+	if !kg.feedbackPersist.dirty {
+		t.Error("RecordRun(\"evolved\") did not mark feedback dirty — evolved-tree feedback will not persist")
+	}
+}
+
+// =============================================================================
 // Evolved fitness write-back (QD/island elites → KnowledgeGraph)
 // =============================================================================
 

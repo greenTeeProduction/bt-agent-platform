@@ -61,6 +61,11 @@ func (kg *KnowledgeGraph) RecordRun(rec RunRecord) {
 		toolID := "tool:" + tool
 		kg.connectLocked(rec.TreeID, toolID, "uses_tool")
 	}
+
+	// Mark feedback dirty so a later FlushFeedback persists this update. Set
+	// the field directly rather than calling MarkFeedbackDirty: kg.mu is a
+	// non-reentrant sync.RWMutex already held (Lock) by this method.
+	kg.feedbackPersist.dirty = true
 }
 
 // connectLocked adds an edge without locking (caller must hold kg.mu).

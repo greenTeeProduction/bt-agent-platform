@@ -3,6 +3,7 @@ package dashboard
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1125,6 +1126,47 @@ func TestWorkflow_ApproveTask_SynchronizesOnMutex(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("ApproveTask never completed after wf.mu was released")
 	}
+}
+
+// ─── Concurrency guard: shared CompanyState across separate Workflow instances ───
+
+// TestExecuteSprint_ConcurrentWorkflowsShareCompanyState pins the requirement
+// that startup.CompanyState be safe to mutate concurrently across multiple
+// *Workflow instances that wrap the very same *startup.CompanyState pointer —
+// exactly what cmd/bt-dashboard/main.go does: every handleAnalyze /
+// handleThinktankRun call runs dashboard.NewWorkflow(..., companyState)
+// against the same package-level companyState, minting a brand-new *Workflow
+// (and therefore a brand-new, uncontended w.mu) each time. ExecuteSprint locks
+// its own w.mu before writing w.Company.CurrentSprint/SprintGoal, but that
+// mutex only ever protects the one *Workflow instance's own fields — it does
+// nothing to serialize two different Workflow instances' concurrent writes to
+// the *shared* CompanyState underneath. Two goroutines below each drive their
+// own Workflow (own w.mu) against the same CompanyState with no common lock;
+// under `go test -race` this must be reported as a data race until
+// CompanyState (or a shared package-level lock) actually serializes access.
+func TestExecuteSprint_ConcurrentWorkflowsShareCompanyState(t *testing.T) {
+	company := &startup.CompanyState{Name: "TestCo", BurnRate: 1000, CashInBank: 100000}
+
+	wf1 := NewWorkflow("wf1", nil, company)
+	wf2 := NewWorkflow("wf2", nil, company)
+
+	orch1 := &mockOrch{}
+	orch2 := &mockOrch{}
+
+	run := func(wf *Workflow, orch *mockOrch) {
+		for i := 0; i < 200; i++ {
+			wf.mu.Lock()
+			wf.Tasks = []WorkflowTask{{ID: "t", SprintTarget: 1, Status: StatusApproved}}
+			wf.mu.Unlock()
+			wf.ExecuteSprint(1, orch)
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); run(wf1, orch1) }()
+	go func() { defer wg.Done(); run(wf2, orch2) }()
+	wg.Wait()
 }
 
 // ─── Format helpers ───

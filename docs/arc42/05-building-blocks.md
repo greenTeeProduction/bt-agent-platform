@@ -80,7 +80,7 @@ alphabetical within each layer (matching the diagram order):
 | Service | `internal/dashboard` | Dashboard API, metrics collection, SSE streaming (5.4) |
 | Service | `internal/domains` | Domain-specific behavior trees (catalog below); `ExpectedDomainIDs` converts a tree registry to the `domain:<name>` ID form `knowledge.KnowledgeGraph.ExpectedDomains` expects, giving `cmd/bt-agent` and `cmd/bt-dashboard` one canonical conversion instead of each duplicating it (→ ADR-182) |
 | Service | `internal/hitl` | Human-in-the-loop approval for behavior tree execution |
-| Service | `internal/startup` | Startup-company simulation |
+| Service | `internal/startup` | Startup-company simulation; `CompanyState` owns its own `sync.Mutex` (`Lock`/`Unlock`) because multiple `*Workflow` (`internal/dashboard`) and `*CompanyOrchestrator` wrappers routinely share one underlying `*CompanyState` pointer (`cmd/bt-dashboard`'s package-level `companyState`), and each wrapper's own private mutex only ever serialized that wrapper's own fields, not the shared state underneath it |
 | Service | `internal/thinktank` | Collaborative analytical think tank |
 | Core Engine | `internal/engine` | Behavior tree runtime: BuildTree, RunTask, Blackboard, chains (5.5), action/condition registry (inventory in [§1.1](01-introduction-goals.md)), GOAP/planner nodes (5.2), event bus |
 | Evolution | `internal/evaluator` | Stockfish-adapted tree evaluator behind the `bt-evaluator` MCP server |
@@ -163,15 +163,22 @@ Key flow: `RunTask(bb, tree)` → `BuildTree(serTree, bb)` → `buildNode()` →
 
 ## 5.3 Evolution Engine
 
-Level 2 whitebox of `internal/evolution`. Two shared mechanisms, stated once:
-all durable archives use one persistence idiom — atomic tmp+rename under the
-`acquireExperienceLock` sidecar flock, merge-on-load, optional cap,
-missing-file cold start, corrupt-file error (→ ADR-024, ADR-033) — and all
+Level 2 whitebox of `internal/evolution`. Three shared mechanisms, stated
+once: all durable archives use one persistence idiom — atomic tmp+rename
+under the `acquireExperienceLock` sidecar flock, merge-on-load, optional cap,
+missing-file cold start, corrupt-file error (→ ADR-024, ADR-033) — all
 eight evolve variants (`Evolve`, `EvolveWithExperience`, `EvolveQLearning`,
 `MemeticEvolve`, `EvolvePareto`, `EvolveAll`, NSGA-II `Evolve`,
 `EvolveMAPElites`) run the shared per-generation self-healing envelope:
 crisis detect → emergency mutation rate → specialist-elite observe →
-reproduce → resurrect → streak reset (→ ADR-038, ADR-051, ADR-121).
+reproduce → resurrect → streak reset (→ ADR-038, ADR-051, ADR-121) — and
+every algorithm identifies an `Individual` by the one `hashTree` fingerprint
+in `learning.go`, which hashes the full subtree (`Children`, `Edges`,
+`Metadata`, JSON-marshaled for deterministic key ordering) rather than just
+the root's `Name`+`Type`+child count, so structurally or semantically
+different trees can no longer collide into the same `Genome`; consumed for
+population dedup (`learning.go`, `island.go`), archive merge-keys
+(`island.go`), and deterministic tie-breaking (`pareto.go`).
 Rows ordered alphabetically by (first) filename:
 
 | Block | Responsibility | Interface |
@@ -184,7 +191,7 @@ Rows ordered alphabetically by (first) filename:
 | `file_lock.go` | Cross-process exclusive advisory flock on the `.lock` sidecar, held across merge→rename; excludes two opens even within one process; idempotent release (→ ADR-024) | `acquireExperienceLock` |
 | `finance_trees.go`, `fusion_trees.go`, `goap_trees.go`, `research_trees.go` | Built-in tree definitions living beside the algorithms (catalog in 5.1) | `AllFinanceTrees()` |
 | `island.go` | Island model with periodic migration and per-domain durable merge archive bounded by `Cap`/`IslandCap` with observable eviction (→ ADR-033, ADR-034, ADR-040); cross-domain experience transfer riding migration via optional `Bank` (→ ADR-062, ADR-076); cross-island winner benchmark-gated (→ ADR-096); real within-island breeding + optional `ExpertKnowledge` (→ ADR-104, ADR-106) | `IslandModel.EvolveAll`/`Migrate`/`Save`/`Load`, `TotalMigrations`; driven by `bt_evolve_island` |
-| `learning.go` | GA core: `Population`/`Individual` types, sole deep-copy (`cloneTree`), home of the shared self-healing envelope; Q-learning evolution with durable bounded QTable (→ ADR-041, ADR-095); read-only health snapshot (→ ADR-032); top-K experience retrieval; exported `CloneMetadata` recursively deep-copies node metadata (nested maps/`[]any`/`[]string`) and is reused by `internal/gardener`'s `cloneTreeForGardener` in place of a second, previously-diverging hand-rolled copy | `Population.Evolve`/`EvolveWithExperience`/`EvolveQLearning`, `selfHealGeneration`, `QTable.Save/Load` (`Cap`), `HealthSnapshot`, `RetrieveExperienceHints`, `CloneMetadata` |
+| `learning.go` | GA core: `Population`/`Individual` types, sole deep-copy (`cloneTree`), sole genome fingerprint (`hashTree`, whole-subtree), home of the shared self-healing envelope; Q-learning evolution with durable bounded QTable (→ ADR-041, ADR-095); read-only health snapshot (→ ADR-032); top-K experience retrieval; exported `CloneMetadata` recursively deep-copies node metadata (nested maps/`[]any`/`[]string`) and is reused by `internal/gardener`'s `cloneTreeForGardener` in place of a second, previously-diverging hand-rolled copy | `Population.Evolve`/`EvolveWithExperience`/`EvolveQLearning`, `selfHealGeneration`, `QTable.Save/Load` (`Cap`), `HealthSnapshot`, `RetrieveExperienceHints`, `CloneMetadata`, `hashTree` |
 | `local_search.go` | Memetic refinement (hill-climb / simulated annealing / tabu) with the breeding step inside the shared envelope (→ ADR-121) | `LocalSearcher`, `Population.MemeticEvolve`; driven by `bt_evolve_memetic` |
 | `map_elites.go` | MAP-Elites quality diversity over behavioral descriptors; durable capped merge-safe grid (→ ADR-033, ADR-043); shared envelope replaced its hand-inlined crisis loop, fixing a single-niche-collapse blind spot in `DiversityScore()` (→ ADR-121); optional `ExpertKnowledge` (→ ADR-104) | `BehavioralDescriptor`, `MAPElitesGrid.Save/Load` (`Cap`), `MAPElitesPopulation.EvolveMAPElites`; driven by `bt_evolve_qd` (→ ADR-110, gate → ADR-111) |
 | `mcts_mutate.go`, `llm_supervisor.go` | MCTS-guided mutation search; deterministic, `-short`-safe heuristic supervisor mirroring the LLM policy contract (→ ADR-110) | `MCTSMutator.Mutate`, `LLMSupervisor.Guide` |
@@ -215,7 +222,7 @@ first, then `internal/dashboard`), alphabetical by filename within each:
 | `internal/dashboard/hitl_handlers.go` | HITL approval REST surface; `AgentRegistry`/`PersonaStore` package vars are `main.go`'s injection hooks (nil-safe no-op until wired); on approve/reject, `finalizeHITLResolution` calls `persona.FinalizeAutomationApproval`/`persona.FinalizeFeedbackEscalation` (same shared functions the MCP `bt_hitl_approve`/`bt_hitl_reject` tools call, 5.1 Personalization) so a dashboard-resolved automation activates, resumes, or quarantines its tree exactly like the MCP path | `GET /api/hitl/pending`, `POST /api/hitl/{id}/{approve,reject,escalate}`, `finalizeHITLResolution` |
 | `internal/dashboard/metrics.go` | Platform metrics assembly; parses the aggregate gardener-metrics document (→ ADR-032); ranks live knowledge-graph `TreeSnapshot`s into `TopWinners` — no UI panel reads it yet (→ ADR-126); `DLQCategoriesFn` injection hook (nil-safe, wired to `dlq.CategoryCounts` in main.go) fills `Metrics.DLQCategories` when set | `Collect`, `GardenerMetrics`, `DLQCategoriesFn` |
 | `internal/dashboard/tasks.go` | Task CRUD with Approval audit records and priority-then-sprint dispatch ordering (→ ADR-072); atomic tmp+rename persistence, fail-loud on corruption (→ ADR-101); `Approve`/`Reject` also resolve the pending `hitl.Request` for the task via the package-level `resolveHITLAudit` helper — shared with `workflow_engine.go`'s `Workflow.ApproveTask`/`RejectTask` below — so both Task and Workflow approval code paths land on the one `hitl.DefaultStore` audit-trail record instead of each keeping its own `Approval` field in sync separately | `TaskStore.Approve`/`Reject`/`Approved` |
-| `internal/dashboard/workflow_engine.go` | Workflow orchestration (Workflow/WorkflowTask/Approval, priority ordinals); production-wired task derivation, HTTP approval gates, and full-pipeline execution; bidirectional task-store sync (→ ADR-080, ADR-081, ADR-082, ADR-086, ADR-089, ADR-116); `ApproveTask`/`RejectTask` call `tasks.go`'s `resolveHITLAudit` (see above) | `RecommendationsToTasks`, `Prioritize`, `PendingApprovals`/`ApproveTask`/`RejectTask`, `ExecuteSprint`, `RunFullPipeline`, `SetTaskStatus` |
+| `internal/dashboard/workflow_engine.go` | Workflow orchestration (Workflow/WorkflowTask/Approval, priority ordinals); production-wired task derivation, HTTP approval gates, and full-pipeline execution; bidirectional task-store sync (→ ADR-080, ADR-081, ADR-082, ADR-086, ADR-089, ADR-116); `ApproveTask`/`RejectTask` call `tasks.go`'s `resolveHITLAudit` (see above); `ExecuteSprint`/`RunFullPipeline`/`SetTaskStatus` guard `w.Company` field access with `CompanyState.Lock`/`Unlock` (`internal/startup`, 5.1) rather than `w.mu`, since `w.mu` protects only this `*Workflow`'s own fields when several `*Workflow`s share one `*CompanyState` pointer; never held across `orch.RunSprint()`, which locks the same `CompanyState` internally and the mutex is not reentrant | `RecommendationsToTasks`, `Prioritize`, `PendingApprovals`/`ApproveTask`/`RejectTask`, `ExecuteSprint`, `RunFullPipeline`, `SetTaskStatus` |
 | `internal/dashboard/workflow_orchestrator.go` | Multi-agent workflow coordination | — |
 
 ## 5.5 Chain Types

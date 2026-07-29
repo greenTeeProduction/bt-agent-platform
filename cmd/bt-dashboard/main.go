@@ -828,6 +828,8 @@ func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
+	companyState.Lock()
+	defer companyState.Unlock()
 	_ = encodeJSON(w, companyState)
 }
 

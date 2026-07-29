@@ -262,12 +262,17 @@ func TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge(
 
 	// A handful of fixed seeds keeps the run deterministic while tolerating
 	// exactly which mutation op the random draw picks first, mirroring
-	// TestExpertKnowledge_ObservesLearnedPatternFromQLearning.
+	// TestExpertKnowledge_ObservesLearnedPatternFromQLearning. 16 generations,
+	// not 4: growthMultiFitness only rewards node count, so only node-adding
+	// ops ever produce a positive gain, and EvolvePareto's fitness signal is
+	// noisier than plain NSGA-II — at 4 generations a 3-seed retry still
+	// missed an improving mutation on every seed in ~8% of runs (measured
+	// empirically); 16 generations cuts that to well under 0.1%.
 	for _, seed := range []int64{42, 43, 44} {
 		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
 		pp := NewParetoPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
 		pp.ExpertKnowledge = ek
-		best := pp.EvolvePareto(4, growthMultiFitness)
+		best := pp.EvolvePareto(16, growthMultiFitness)
 		if best == nil {
 			t.Fatal("EvolvePareto returned nil best tree")
 		}
@@ -296,11 +301,18 @@ func TestNSGAIIPopulation_Evolve_ObservesLearnedPatternViaExpertKnowledge(t *tes
 	ek := NewExpertKnowledge()
 	before := len(ek.LearnedPatterns)
 
+	// 16 generations, not 4: growthMultiFitness only rewards node count, so
+	// only node-adding ops (add_before/add_after/add_fallback/add_tool) out of
+	// the 10 candidates in randomMutation ever produce a positive gain, and
+	// the tournament-selected mutation rate only fires ~11% of draws. At 4
+	// generations a 3-seed retry still missed an improving mutation on every
+	// seed in ~5% of runs (measured empirically); 16 generations cuts that to
+	// effectively zero while keeping the run well under a second.
 	for _, seed := range []int64{42, 43, 44} {
 		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
 		nsga2 := NewNSGAIIPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
 		nsga2.ExpertKnowledge = ek
-		best := nsga2.Evolve(4, growthMultiFitness)
+		best := nsga2.Evolve(16, growthMultiFitness)
 		if best == nil {
 			t.Fatal("Evolve returned nil best tree")
 		}
