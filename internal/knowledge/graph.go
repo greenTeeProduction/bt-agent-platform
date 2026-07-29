@@ -500,6 +500,21 @@ func (kg *KnowledgeGraph) ListByCategory(category string) []*TreeMeta {
 	return result
 }
 
+// TreeCapabilities returns the registered Capability list for treeID — the
+// canonical "what can this tree do" model — or nil when treeID is not
+// registered. Safe for concurrent use; callers outside this package (e.g.
+// internal/a2a's capability-based skill tagging) should use this instead of
+// reaching into kg.Trees directly.
+func (kg *KnowledgeGraph) TreeCapabilities(treeID string) []Capability {
+	kg.mu.RLock()
+	defer kg.mu.RUnlock()
+	tree, ok := kg.Trees[treeID]
+	if !ok {
+		return nil
+	}
+	return tree.Capabilities
+}
+
 // Query returns trees matching a capability.
 func (kg *KnowledgeGraph) Query(capability string) []*TreeMeta {
 	kg.mu.RLock()

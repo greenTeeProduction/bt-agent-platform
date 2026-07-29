@@ -7,6 +7,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/hitl"
 )
 
 // Task represents a workflow task in the pipeline.
@@ -154,6 +156,7 @@ func (s *TaskStore) Approve(id, approver string) error {
 				ApprovedAt: &now,
 				IsApproved: true,
 			}
+			resolveHITLAudit(id, approver, "", true)
 			return s.saveLocked()
 		}
 	}
@@ -174,10 +177,29 @@ func (s *TaskStore) Reject(id, rejector, reason string) error {
 				Reason:     reason,
 				IsApproved: false,
 			}
+			resolveHITLAudit(id, rejector, reason, false)
 			return s.saveLocked()
 		}
 	}
 	return fmt.Errorf("task %s not found", id)
+}
+
+// resolveHITLAudit resolves the pending (or escalated) hitl.Request recorded
+// for taskID, if any, so an approve/reject decision made through TaskStore or
+// Workflow always lands on the same audit-trail record a dashboard operator
+// or MCP tool would see via hitl.DefaultStore — instead of each model keeping
+// its own Approval field in sync with a separately-driven HITL resolution.
+// Most tasks are not HITL-gated, so a missing request is not an error.
+func resolveHITLAudit(taskID, reviewer, reason string, approved bool) {
+	store := hitl.DefaultStore
+	if store == nil {
+		return
+	}
+	if approved {
+		_, _ = store.ApproveByTaskID(taskID, reviewer, reason)
+	} else {
+		_, _ = store.RejectByTaskID(taskID, reviewer, reason)
+	}
 }
 
 func (s *TaskStore) SetOutput(id, output, outcome string) error {

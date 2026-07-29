@@ -113,14 +113,18 @@ func TestBTAgentClient_TreeSkillName(t *testing.T) {
 	}
 }
 
+// TestBTAgentClient_TreeTags pins treeTags' current behavior: a tree
+// registered in knowledge.GlobalGraph yields its real capability action
+// strings (the canonical "what can this tree do" model), while an
+// unregistered tree ID falls back to the legacy ad hoc string split.
 func TestBTAgentClient_TreeTags(t *testing.T) {
 	tests := []struct {
 		treeID   string
 		expected []string
 	}{
-		{"domain:code_review", []string{"domain", "code", "review"}},
-		{"research:deep_research", []string{"research", "deep", "research"}},
-		{"finance:pitch_agent", []string{"finance", "pitch", "agent"}},
+		{"domain:code_review", []string{"review_code", "detect_bugs", "suggest_improvements", "audit_security"}},
+		{"research:deep_research", []string{"conduct_research", "synthesize_findings", "generate_report", "quality_gate"}},
+		{"finance:pitch_agent", []string{"analyze_financials", "build_pitch_deck", "run_dcf", "run_lbo", "comparable_analysis"}},
 		{"simple-tree", []string{"simple-tree"}},
 		{"", []string{""}},
 	}

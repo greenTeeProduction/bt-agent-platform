@@ -253,6 +253,9 @@ Consolidation notes (2026-07-16):
 | ADR-228 | `bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research) | Accepted | 2026-07-28 |
 | ADR-229 | `loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research) | Accepted | 2026-07-28 |
 | ADR-230 | `IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research) | Accepted | 2026-07-28 |
+| ADR-231 | `evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-232 | `internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-233 | `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research) | Accepted | 2026-07-29 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4092,6 +4095,54 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `TestDomainTreeSuitesReachAllStrategyBranches` is a standing, cross-domain regression guard against this same PreGate-narrower-than-branch defect shape recurring in any other tree, not just the two it found here.
 - ⚠️ `meeting_notes` is left with a known, explicitly-exempted gap of the same shape (task wording that doesn't match its own declared branch condition) — deferred as a benchmark-suite fix, not a `domains` condition fix.
 - Cross-reference: → ADR-014 (mandatory per-node descriptions in curated domain trees, the sibling coverage guard this test complements from the condition-reachability angle instead of the description-presence one).
+
+---
+
+## ADR-231: `evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research)
+
+**Context (2026-07-29):** `cloneTree` (`internal/evolution/learning.go`) is documented as evolution's "sole deep-copy" (→ §5.4) but its `Metadata` copy was a single-level `for k, v := range` shallow copy — a nested `map[string]any`, `[]any`, or `[]string` value reachable from a cloned node's `Metadata` was shared with the original, not copied, so a mutation reached through the clone (GA mutation/breeding, or a gardener rollback snapshot) could leak back into the pre-mutation tree it was supposed to be isolated from. Separately, `internal/gardener/evolve_v2.go`'s `cloneTreeForGardener` already had the correct recursive deep-copy behavior in a private `cloneMetadataForGardener` — the same nested map/slice recursion — but scoped to gardener only, so evolution's own mutation/rollback path never benefited from it: the platform carried two independently-maintained implementations of the same deep-copy contract, one shallow and wrong, one correct.
+
+**Decision:** `cloneTree`'s `Metadata` copy is replaced with a call to a new exported `evolution.CloneMetadata` — gardener's `cloneMetadataForGardener` recursion (the `map[string]any`/`[]any`/`[]string` cases), promoted into `internal/evolution/learning.go` and exported. `gardener`'s `cloneTreeForGardener` switches to calling `evolution.CloneMetadata` directly, and the private `cloneMetadataForGardener` is deleted, leaving one canonical implementation instead of two.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestCloneTree_DeepCopiesNestedMetadata` (`internal/evolution/learning_test.go`), which clones a node whose `Metadata` holds a nested map, `[]any`, and `[]string`, and asserts mutating each through the clone leaves the original unchanged; gardener's existing `cloneTreeForGardener` coverage continues to pass unchanged against the promoted implementation.
+
+**Consequences:**
+- ✅ Tree mutation/rollback — evolution's GA mutation/breeding and gardener's snapshot/rollback alike — now shares one correct, recursive `Metadata` deep-copy instead of evolution's shallow copy risking a mutation leaking into a tree gardener/evolution believed was isolated.
+- ✅ A future fix to the copy semantics (e.g. a case for a new nested reference type) lands once in `evolution.CloneMetadata` instead of needing to be ported to a second, easy-to-miss private copy.
+- Rejected: leaving `cloneTree`'s shallow copy in place and only fixing gardener's — rejected because `evolution.cloneTree` is documented as the package's "sole deep-copy" (→ §5.4) and mutation/breeding routes through it directly, so the shallow-copy leak risk was real for evolution's own callers, not only gardener's.
+- Rejected: keeping `cloneMetadataForGardener` private and duplicating its body into `evolution.CloneMetadata` — rejected as exactly the two-copy drift risk (ADR-220's circuit-breaker precedent) this change closes; gardener now imports evolution's exported function instead of maintaining its own copy.
+
+---
+
+## ADR-232: `internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research)
+
+**Context (2026-07-29):** An `AgentCard`'s skill tags — what an auction announcement's `RequiredTags` is matched against by `cardCoversTags`/`EligibleBidders` during bidding (→ §8 A2A Auction Task Allocation) — were derived by `treeTags` via an ad hoc string split of the tree ID (`"domain:code_review"` → `["domain", "code", "review"]`), fragments of the ID string rather than real capabilities. `internal/knowledge` already maintains the canonical "what can this tree do" model: `KnowledgeGraph.Trees[id].Capabilities`, the fitness-weighted list `Discover`/`Query` consume, registering `"domain:code_review"` with real capability actions like `review_code`, `detect_bugs`, `suggest_improvements`, `audit_security`. The two models had diverged: an auction `RequiredTags` query for a real capability like `"review_code"` could never match any card, because no card ever carried that tag — only the ad hoc ID fragments.
+
+**Decision:** `KnowledgeGraph` gains an exported `TreeCapabilities(treeID) []Capability` accessor (`internal/knowledge/graph.go`) so callers outside the package can read a tree's registered `Capabilities` without reaching into `kg.Trees` directly. `internal/a2a/card.go`'s `treeTags` calls `knowledge.GlobalGraph.TreeCapabilities` and renders the result to a deduplicated list of `Capability.Action` strings when the tree is registered; a tree not yet registered in the graph (e.g. an ad hoc/test tree) falls back to the legacy ad hoc split, renamed `legacyTreeTags`, so it still gets some discoverable tags rather than none. `auction.go`'s own matching logic (`cardCoversTags`, `EligibleBidders`) is unchanged — it already just walks `card.Skills[].Tags` — so the routing is entirely a change to what tags a card carries, not to how they are matched.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestConvertToAgentCard_SkillTagsFromKnowledgeGraphCapabilities` and `TestEligibleBidders_MatchesOnKnowledgeGraphCapabilityActions` (`internal/a2a/card_test.go`), plus updated fixtures in `maturity_test.go` and `server_test.go` asserting the real capability-action tag sets for `domain:code_review`/`research:deep_research`/`finance:pitch_agent`.
+
+**Consequences:**
+- ✅ Auction `RequiredTags` matching now keys on the same capability-action vocabulary `internal/knowledge.Discover`/`Query` already use, so "which agent/tree can do this task" has one canonical model instead of two (fitness-weighted `Capability` vs. ad hoc ID-fragment tags) that could silently diverge.
+- ✅ A registered tree's skill tags are now real, human-meaningful capability actions (e.g. `review_code`) rather than opaque ID fragments (`domain`, `code`, `review`) — a `RequiredTags` query for a genuine capability can now actually match.
+- ⚠️ A tree not registered in `knowledge.GlobalGraph` still falls back to `legacyTreeTags`' ad hoc split — the consolidation is not total; an unregistered tree's auction bids stay keyed on ID fragments until it is registered in the knowledge graph (→ ADR-157/ADR-190/ADR-218's registry-drift guards).
+- Rejected: requiring every tree to be knowledge-graph-registered before it can bid in an auction — rejected as too disruptive to existing ad hoc/test trees; the fallback keeps them functional, just not capability-accurate.
+
+---
+
+## ADR-233: `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research)
+
+**Context (2026-07-29):** `internal/dashboard` carries two parallel task models — `TaskStore`'s `Task`/`Approval` (`tasks.go`) and `Workflow`'s `WorkflowTask`/`Approval` (`workflow_engine.go`) — each with its own `Approve`/`Reject` method that only flipped its own in-memory `Approval` field. Resolving the corresponding `hitl.Request` (the actual HITL audit-trail record dashboard operators and MCP tools see via `hitl.DefaultStore`) was previously done only by `cmd/bt-dashboard`'s HTTP handlers (`handleTaskApprove`/`handleTaskReject`), which called `hitl.DefaultStore.ApproveByTaskID`/`RejectByTaskID` directly after the `TaskStore` call succeeded — and only for the Task path. `Workflow.ApproveTask`/`RejectTask` never touched `hitl.DefaultStore` at all, so a workflow-level decision on a HITL-gated task left its `hitl.Request` pending indefinitely even though the `WorkflowTask` itself already showed approved/rejected.
+
+**Decision:** A new package-level `resolveHITLAudit(taskID, reviewer, reason string, approved bool)` in `internal/dashboard/tasks.go` resolves the pending/escalated `hitl.Request` for `taskID` via `hitl.DefaultStore.ApproveByTaskID`/`RejectByTaskID` (a no-op when `hitl.DefaultStore` is nil or no request is pending — most tasks are not HITL-gated). `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` both call it after updating their own `Approval` field, so a decision made through either model lands on the same `hitl.Request`. `cmd/bt-dashboard`'s `handleTaskApprove`/`handleTaskReject` no longer resolve the HITL request themselves — that now happens inside `taskStore.Approve`/`Reject` — so they instead snapshot the pending request's ID/status via a new `pendingHITLBeforeResolve` *before* calling `taskStore.Approve`/`Reject`, letting the HTTP response still report `hitl_request_id`/`hitl_resolved_from` after the store's own resolution has already consumed the "pending" record.
+
+**Status:** Accepted (2026-07-29). Pinned by `TestTaskStore_ApproveRejectRecordHITLAuditTrail` and `TestWorkflow_ApproveRejectTaskRecordHITLAuditTrail` (`internal/dashboard/tasks_test.go`), which create a pending `hitl.Request` keyed by `task_id`, drive the decision through `TaskStore`/`Workflow` directly (bypassing the HTTP handler entirely), and assert the request resolves with the correct reviewer/status.
+
+**Consequences:**
+- ✅ HITL approve/reject has one canonical audit-trail code path (`resolveHITLAudit`) shared by both parallel task models, instead of only the HTTP handler resolving it for one of them — a Workflow-level decision on a HITL-gated task now resolves its `hitl.Request` exactly like a Task-level decision does.
+- ✅ Callers other than the dashboard HTTP handler (e.g. a future MCP tool or script driving `TaskStore`/`Workflow` directly) get correct HITL resolution for free, since it now happens inside the store/workflow methods rather than being the HTTP layer's responsibility.
+- ⚠️ `cmd/bt-dashboard`'s `handleTaskApprove`/`handleTaskReject` needed a compensating `pendingHITLBeforeResolve` snapshot-before-resolve step to keep reporting `hitl_request_id`/`hitl_resolved_from` in their JSON response, since the request they used to look up *after* resolving is now already resolved by the time the handler would check it a second time.
+- Rejected: keeping HTTP-handler-only HITL resolution and adding a second, handler-shaped call into `Workflow.ApproveTask`/`RejectTask` instead of a shared helper — rejected as recreating, one level deeper, the two-parallel-model divergence risk this ADR's own goal is to close.
 
 ---
 

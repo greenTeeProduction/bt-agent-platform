@@ -981,10 +981,7 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 		TimeoutMs:   t.TimeoutMs,
 	}
 	if t.Metadata != nil {
-		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata {
-			c.Metadata[k] = v
-		}
+		c.Metadata = CloneMetadata(t.Metadata)
 	}
 	if t.Edges != nil {
 		c.Edges = make([]TypedEdge, len(t.Edges))
@@ -994,6 +991,30 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 		c.Children = append(c.Children, *cloneTree(&ch))
 	}
 	return c
+}
+
+// CloneMetadata performs a recursive deep copy of a tree node's Metadata map,
+// so mutating a nested map, []any, or []string value reachable from the
+// returned copy never leaks back into src.
+func CloneMetadata(src map[string]any) map[string]any {
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		switch vv := v.(type) {
+		case []any:
+			cp := make([]any, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case []string:
+			cp := make([]string, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case map[string]any:
+			out[k] = CloneMetadata(vv)
+		default:
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func hashTree(t *SerializableNode) string {

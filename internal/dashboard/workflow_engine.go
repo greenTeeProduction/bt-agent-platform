@@ -217,6 +217,7 @@ func (w *Workflow) ApproveTask(taskID, approver string) *WorkflowTask {
 			}
 			w.Tasks[i].Status = StatusApproved
 			w.UpdatedAt = now
+			resolveHITLAudit(taskID, approver, "", true)
 			return &w.Tasks[i]
 		}
 	}
@@ -238,6 +239,7 @@ func (w *Workflow) RejectTask(taskID, rejector, reason string) *WorkflowTask {
 			}
 			w.Tasks[i].Status = StatusRejected
 			w.UpdatedAt = now
+			resolveHITLAudit(taskID, rejector, reason, false)
 			return &w.Tasks[i]
 		}
 	}

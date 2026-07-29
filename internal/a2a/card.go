@@ -7,6 +7,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 // ConvertToAgentCard creates an A2A AgentCard from a BT agent Definition.
@@ -56,9 +57,43 @@ func treeSkillName(treeID string) string {
 	return treeID
 }
 
-// treeTags extracts search tags from a tree ID.
-// "domain:code_review" → ["domain", "code", "review"]
+// treeTags derives a tree's auction/discovery tags from
+// internal/knowledge.GlobalGraph's fitness-weighted Capability list — the
+// canonical "what can this tree do" model — so a card's skill tags are real
+// capability actions (e.g. "review_code") rather than fragments of the tree
+// ID string. "domain:code_review" → ["review_code", "detect_bugs",
+// "suggest_improvements", "audit_security"].
+//
+// A tree unregistered in the knowledge graph falls back to the legacy ad hoc
+// split of the tree ID, so agents whose trees have not yet been registered
+// (e.g. ad hoc/test trees) still get some discoverable tags.
 func treeTags(treeID string) []string {
+	if caps := knowledge.GlobalGraph.TreeCapabilities(treeID); len(caps) > 0 {
+		return capabilityActionTags(caps)
+	}
+	return legacyTreeTags(treeID)
+}
+
+// capabilityActionTags renders a Capability list into a deduplicated,
+// order-preserving list of capability action strings.
+func capabilityActionTags(caps []knowledge.Capability) []string {
+	seen := make(map[string]struct{}, len(caps))
+	tags := make([]string, 0, len(caps))
+	for _, cap := range caps {
+		if _, ok := seen[cap.Action]; ok {
+			continue
+		}
+		seen[cap.Action] = struct{}{}
+		tags = append(tags, cap.Action)
+	}
+	return tags
+}
+
+// legacyTreeTags extracts search tags from a tree ID by ad hoc string
+// splitting. Used only as a fallback for trees the knowledge graph does not
+// know about.
+// "domain:code_review" → ["domain", "code", "review"]
+func legacyTreeTags(treeID string) []string {
 	parts := strings.SplitN(treeID, ":", 2)
 	tags := []string{parts[0]}
 	if len(parts) == 2 {

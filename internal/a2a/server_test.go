@@ -227,7 +227,8 @@ func TestBidderAuctioneerRoundTrip(t *testing.T) {
 
 // executorForAgent builds a BTAgentExecutor backed by a registry holding a
 // single agent whose tree ID determines its auction capabilities (via
-// treeTags): "domain:code_review" advertises tags domain/code/review.
+// treeTags, sourced from knowledge.GlobalGraph): "domain:code_review"
+// advertises tags review_code/detect_bugs/suggest_improvements/audit_security.
 func executorForAgent(t *testing.T, name, tree string) *BTAgentExecutor {
 	t.Helper()
 	// resolveTreeByID is a package global; TestSetTreeResolver leaves a resolver
@@ -308,11 +309,12 @@ func eventKinds(events []a2a.Event) string {
 }
 
 func TestExecute_AnnouncementYieldsBidNotTreeRun(t *testing.T) {
-	// The agent's tree tags (domain, code, review) cover the announcement's
-	// RequiredTags, so it should bid rather than run any tree.
+	// The agent's tree tags (its knowledge-graph capability actions, e.g.
+	// review_code) cover the announcement's RequiredTags, so it should bid
+	// rather than run any tree.
 	exec := executorForAgent(t, "coder", "domain:code_review")
 
-	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"domain", "code"}, MinConfidence: 0.3}
+	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"review_code", "detect_bugs"}, MinConfidence: 0.3}
 	payload, err := json.Marshal(ann)
 	if err != nil {
 		t.Fatalf("marshal announcement: %v", err)
@@ -336,11 +338,12 @@ func TestExecute_AnnouncementYieldsBidNotTreeRun(t *testing.T) {
 }
 
 func TestExecute_IneligibleAnnouncementDeclinesWithoutRunningTree(t *testing.T) {
-	// The agent's tree tags (research, deep) cannot cover the announcement, so it
-	// must decline silently — not mis-execute the announcement as a task and fail.
+	// The agent's tree tags (research capability actions, e.g. conduct_research)
+	// cannot cover the announcement's review_code requirement, so it must
+	// decline silently — not mis-execute the announcement as a task and fail.
 	exec := executorForAgent(t, "researcher", "research:deep_research")
 
-	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"domain", "code"}, MinConfidence: 0.3}
+	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"review_code"}, MinConfidence: 0.3}
 	payload, err := json.Marshal(ann)
 	if err != nil {
 		t.Fatalf("marshal announcement: %v", err)

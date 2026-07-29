@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
 func TestConvertToAgentCard_Basic(t *testing.T) {
@@ -115,5 +117,85 @@ created_at: 2026-01-01T00:00:00Z
 		t.Error("expected card for 'test-agent'")
 	} else if card.Name != "test-agent" {
 		t.Errorf("expected name 'test-agent', got %q", card.Name)
+	}
+}
+
+// TestConvertToAgentCard_SkillTagsFromKnowledgeGraphCapabilities pins the goal
+// of this task: a card's skill tags must come from
+// internal/knowledge.GlobalGraph's real, fitness-weighted Capability list for
+// the tree (the canonical "what can this tree do" model), not from an ad hoc
+// split of the tree ID string (the old treeTags behavior, which for
+// "domain:code_review" produced ["domain", "code", "review"] — none of which
+// are real capabilities). knowledge.GlobalGraph registers "domain:code_review"
+// with capabilities review_code, detect_bugs, suggest_improvements, and
+// audit_security (internal/knowledge/registry.go) — those actions are what
+// the auction's capability matching must key on.
+func TestConvertToAgentCard_SkillTagsFromKnowledgeGraphCapabilities(t *testing.T) {
+	def := agent.Definition{
+		Name:        "code-reviewer",
+		Description: "Reviews code for bugs and style",
+		Version:     "1.0.0",
+		Tree:        "domain:code_review",
+	}
+
+	card, err := ConvertToAgentCard(def, "http://localhost:8686")
+	if err != nil {
+		t.Fatalf("ConvertToAgentCard failed: %v", err)
+	}
+	if len(card.Skills) == 0 {
+		t.Fatal("expected at least one skill")
+	}
+
+	treeMeta, ok := knowledge.GlobalGraph.Trees[def.Tree]
+	if !ok {
+		t.Fatalf("expected %q registered in knowledge.GlobalGraph", def.Tree)
+	}
+
+	tags := make(map[string]bool)
+	for _, tag := range card.Skills[0].Tags {
+		tags[tag] = true
+	}
+	for _, cap := range treeMeta.Capabilities {
+		if !tags[cap.Action] {
+			t.Errorf("expected skill tags to include capability action %q from knowledge.GlobalGraph, got tags=%v", cap.Action, card.Skills[0].Tags)
+		}
+	}
+	if tags["domain"] || tags["code"] {
+		t.Errorf("expected skill tags to no longer contain the ad hoc tree-ID split fragments, got tags=%v", card.Skills[0].Tags)
+	}
+}
+
+// TestEligibleBidders_MatchesOnKnowledgeGraphCapabilityActions verifies the
+// auction side of the same routing: an announcement whose RequiredTags name a
+// real capability action (e.g. "review_code", from
+// internal/knowledge.GlobalGraph's Capability list for "domain:code_review")
+// must find the agent eligible. Under the old ad hoc treeTags splitter the
+// card only ever carried tags like "domain", "code", "review" — never the
+// actual capability action strings — so this requirement could never be
+// satisfied.
+func TestEligibleBidders_MatchesOnKnowledgeGraphCapabilityActions(t *testing.T) {
+	def := agent.Definition{
+		Name:        "code-reviewer",
+		Description: "Reviews code for bugs and style",
+		Version:     "1.0.0",
+		Tree:        "domain:code_review",
+	}
+	card, err := ConvertToAgentCard(def, "http://localhost:8686")
+	if err != nil {
+		t.Fatalf("ConvertToAgentCard failed: %v", err)
+	}
+
+	ann := TaskAnnouncement{TaskID: "t1", RequiredTags: []string{"review_code"}}
+	cards := map[string]*a2a.AgentCard{"code-reviewer": card}
+	eligible := EligibleBidders(cards, ann)
+
+	found := false
+	for _, name := range eligible {
+		if name == "code-reviewer" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected %q eligible for RequiredTags %v (a real knowledge-graph capability action), got eligible=%v", "code-reviewer", ann.RequiredTags, eligible)
 	}
 }

@@ -960,3 +960,43 @@ func contextsOf(entries []ExperienceEntry) []string {
 	}
 	return out
 }
+
+// TestCloneTree_DeepCopiesNestedMetadata verifies that cloneTree performs a
+// recursive deep copy of Metadata, matching gardener's
+// cloneMetadataForGardener semantics: mutating a nested map, []any, or
+// []string value reachable from the clone's Metadata must never be visible
+// through the original tree's Metadata.
+//
+// cloneTree currently copies Metadata with a single-level `c.Metadata[k] = v`
+// assignment, so nested reference types (maps, slices) are shared between the
+// original and the clone rather than copied.
+func TestCloneTree_DeepCopiesNestedMetadata(t *testing.T) {
+	original := &SerializableNode{
+		Type: "action",
+		Name: "root",
+		Metadata: map[string]any{
+			"nestedMap": map[string]any{
+				"inner": "original",
+			},
+			"anySlice": []any{"a", "b"},
+			"strSlice": []string{"x", "y"},
+		},
+	}
+
+	clone := cloneTree(original)
+
+	// Mutate nested reference values reachable from the clone.
+	clone.Metadata["nestedMap"].(map[string]any)["inner"] = "mutated"
+	clone.Metadata["anySlice"].([]any)[0] = "mutated"
+	clone.Metadata["strSlice"].([]string)[0] = "mutated"
+
+	if got := original.Metadata["nestedMap"].(map[string]any)["inner"]; got != "original" {
+		t.Errorf("mutating clone's nested map leaked into original: got %q, want %q", got, "original")
+	}
+	if got := original.Metadata["anySlice"].([]any)[0]; got != "a" {
+		t.Errorf("mutating clone's []any leaked into original: got %v, want %q", got, "a")
+	}
+	if got := original.Metadata["strSlice"].([]string)[0]; got != "x" {
+		t.Errorf("mutating clone's []string leaked into original: got %q, want %q", got, "x")
+	}
+}
