@@ -5,10 +5,23 @@
 // like MRR, ARR, runway, and team size.
 package startup
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // CompanyState holds the simulated startup's state — the shared blackboard for all role trees.
+//
+// A single *CompanyState is routinely shared across multiple *Workflow
+// instances (internal/dashboard) and *CompanyOrchestrator instances, each
+// minting its own private, uncontended mutex. That private mutex protects
+// only the wrapper's own fields, not the CompanyState underneath it, so
+// CompanyState carries its own mutex here and callers must Lock/Unlock
+// around any read or write that must be consistent with concurrent access
+// from another wrapper sharing this pointer.
 type CompanyState struct {
+	mu sync.Mutex
+
 	Name     string    `json:"name"`
 	Founded  time.Time `json:"founded"`
 	Mission  string    `json:"mission"`
@@ -53,6 +66,13 @@ type CompanyState struct {
 	Decisions     []Decision             `json:"decisions"`
 	Metrics       map[string]interface{} `json:"custom_metrics"`
 }
+
+// Lock acquires the CompanyState's mutex, serializing concurrent access from
+// every *Workflow / *CompanyOrchestrator sharing this pointer.
+func (c *CompanyState) Lock() { c.mu.Lock() }
+
+// Unlock releases the mutex acquired by Lock.
+func (c *CompanyState) Unlock() { c.mu.Unlock() }
 
 // Decision records a strategic choice made by the CEO or leadership.
 type Decision struct {

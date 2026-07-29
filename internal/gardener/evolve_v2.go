@@ -898,7 +898,7 @@ func cloneTreeForGardener(t *evolution.SerializableNode) *evolution.Serializable
 		TimeoutMs:   t.TimeoutMs,
 	}
 	if t.Metadata != nil {
-		c.Metadata = cloneMetadataForGardener(t.Metadata)
+		c.Metadata = evolution.CloneMetadata(t.Metadata)
 	}
 	if t.Edges != nil {
 		c.Edges = make([]evolution.TypedEdge, len(t.Edges))
@@ -908,25 +908,4 @@ func cloneTreeForGardener(t *evolution.SerializableNode) *evolution.Serializable
 		c.Children = append(c.Children, *cloneTreeForGardener(&ch))
 	}
 	return c
-}
-
-func cloneMetadataForGardener(src map[string]any) map[string]any {
-	out := make(map[string]any, len(src))
-	for k, v := range src {
-		switch vv := v.(type) {
-		case []any:
-			cp := make([]any, len(vv))
-			copy(cp, vv)
-			out[k] = cp
-		case []string:
-			cp := make([]string, len(vv))
-			copy(cp, vv)
-			out[k] = cp
-		case map[string]any:
-			out[k] = cloneMetadataForGardener(vv)
-		default:
-			out[k] = v
-		}
-	}
-	return out
 }

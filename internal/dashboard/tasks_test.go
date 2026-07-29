@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/hitl"
 )
 
 // TestTaskStore_ApproveRejectAuditPersistsAcrossSaveLoad pins milestone 2/3 of
@@ -195,4 +198,158 @@ func TestTaskStore_SaveAtomicWriteLeavesOriginalIntactOnFailure(t *testing.T) {
 	if string(after) != string(original) {
 		t.Errorf("tasks.json content changed after a failed save; atomic save must leave the original file untouched on failure.\noriginal: %s\nafter:    %s", original, after)
 	}
+}
+
+// newHITLTestStore initializes a scratch HITL store with a permissive,
+// non-auto-approving policy so the requests it creates stay pending until a
+// test explicitly resolves them, and registers it as hitl.DefaultStore.
+func newHITLTestStore(t *testing.T) *hitl.Store {
+	t.Helper()
+	dir := t.TempDir()
+	store, err := hitl.InitStore(dir)
+	if err != nil {
+		t.Fatalf("hitl.InitStore: %v", err)
+	}
+	origPolicy := hitl.GetPolicy()
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Hour, DefaultPrompt: "test"})
+	t.Cleanup(func() { hitl.SetPolicy(origPolicy) })
+	return store
+}
+
+// TestTaskStore_ApproveRejectRecordHITLAuditTrail pins the "single
+// audit-trail code path" half of the Task/Approval-model consolidation goal:
+// approving or rejecting a Task through TaskStore must resolve the matching
+// pending hitl.Request (found via task_id), not just flip the in-memory
+// Task.Approval field. Before consolidation, only the dashboard HTTP handler
+// (cmd/bt-dashboard's handleTaskApprove/handleTaskReject) called into hitl
+// separately — TaskStore.Approve/Reject themselves never touched the HITL
+// store, so any other caller of TaskStore.Approve/Reject (e.g.
+// Workflow-mirrored decisions) silently left the HITL audit trail pending
+// forever.
+func TestTaskStore_ApproveRejectRecordHITLAuditTrail(t *testing.T) {
+	t.Run("approve", func(t *testing.T) {
+		hstore := newHITLTestStore(t)
+		req := hitl.NewRequest("t1", "DashboardTask", "approve me", "", "", "", map[string]any{"task_id": "t1"})
+		if err := hstore.Create(req); err != nil {
+			t.Fatalf("hstore.Create: %v", err)
+		}
+
+		store := NewTaskStore(filepath.Join(t.TempDir(), "tasks.json"))
+		if err := store.Create(Task{ID: "t1", Title: "approve me"}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.Approve("t1", "alice"); err != nil {
+			t.Fatalf("Approve: %v", err)
+		}
+
+		if _, pending := hstore.FindPendingByTaskID("t1"); pending {
+			t.Fatal("HITL request for t1 is still pending after TaskStore.Approve; approving a Task must resolve its HITL audit-trail entry too")
+		}
+		resolved, ok := hstore.Get(req.ID)
+		if !ok {
+			t.Fatal("HITL request not found after TaskStore.Approve")
+		}
+		if resolved.Status != hitl.StatusApproved {
+			t.Errorf("HITL request status = %q, want %q", resolved.Status, hitl.StatusApproved)
+		}
+		if resolved.Reviewer != "alice" {
+			t.Errorf("HITL request reviewer = %q, want %q", resolved.Reviewer, "alice")
+		}
+	})
+
+	t.Run("reject", func(t *testing.T) {
+		hstore := newHITLTestStore(t)
+		req := hitl.NewRequest("t2", "DashboardTask", "reject me", "", "", "", map[string]any{"task_id": "t2"})
+		if err := hstore.Create(req); err != nil {
+			t.Fatalf("hstore.Create: %v", err)
+		}
+
+		store := NewTaskStore(filepath.Join(t.TempDir(), "tasks.json"))
+		if err := store.Create(Task{ID: "t2", Title: "reject me"}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.Reject("t2", "bob", "not ready"); err != nil {
+			t.Fatalf("Reject: %v", err)
+		}
+
+		if _, pending := hstore.FindPendingByTaskID("t2"); pending {
+			t.Fatal("HITL request for t2 is still pending after TaskStore.Reject; rejecting a Task must resolve its HITL audit-trail entry too")
+		}
+		resolved, ok := hstore.Get(req.ID)
+		if !ok {
+			t.Fatal("HITL request not found after TaskStore.Reject")
+		}
+		if resolved.Status != hitl.StatusRejected {
+			t.Errorf("HITL request status = %q, want %q", resolved.Status, hitl.StatusRejected)
+		}
+		if resolved.Reviewer != "bob" {
+			t.Errorf("HITL request reviewer = %q, want %q", resolved.Reviewer, "bob")
+		}
+	})
+}
+
+// TestWorkflow_ApproveRejectTaskRecordHITLAuditTrail pins the other half of
+// the consolidation goal: Workflow.ApproveTask/RejectTask — the WorkflowTask
+// model's own approve/reject path — must resolve the matching HITL request
+// exactly like TaskStore.Approve/Reject does. Before consolidation this path
+// never touched hitl.DefaultStore at all (cmd/bt-dashboard's
+// handleWorkflowApprove/handleWorkflowReject only mirrored the decision into
+// taskStore, not into the HITL store), so a workflow-level decision left no
+// HITL audit-trail record even though a task-level decision on the same
+// underlying task_id did. Consolidating onto one audit-trail code path closes
+// that gap.
+func TestWorkflow_ApproveRejectTaskRecordHITLAuditTrail(t *testing.T) {
+	t.Run("approve", func(t *testing.T) {
+		hstore := newHITLTestStore(t)
+		req := hitl.NewRequest("wf1-wt1", "WorkflowApproval", "approve me", "", "", "", map[string]any{"task_id": "wf1-wt1"})
+		if err := hstore.Create(req); err != nil {
+			t.Fatalf("hstore.Create: %v", err)
+		}
+
+		wf := &Workflow{ID: "wf1", Tasks: []WorkflowTask{{ID: "wf1-wt1", Status: StatusPending}}}
+		if task := wf.ApproveTask("wf1-wt1", "carol"); task == nil {
+			t.Fatal("ApproveTask returned nil for an existing task")
+		}
+
+		if _, pending := hstore.FindPendingByTaskID("wf1-wt1"); pending {
+			t.Fatal("HITL request for wf1-wt1 is still pending after Workflow.ApproveTask; approving a WorkflowTask must resolve its HITL audit-trail entry too")
+		}
+		resolved, ok := hstore.Get(req.ID)
+		if !ok {
+			t.Fatal("HITL request not found after Workflow.ApproveTask")
+		}
+		if resolved.Status != hitl.StatusApproved {
+			t.Errorf("HITL request status = %q, want %q", resolved.Status, hitl.StatusApproved)
+		}
+		if resolved.Reviewer != "carol" {
+			t.Errorf("HITL request reviewer = %q, want %q", resolved.Reviewer, "carol")
+		}
+	})
+
+	t.Run("reject", func(t *testing.T) {
+		hstore := newHITLTestStore(t)
+		req := hitl.NewRequest("wf1-wt2", "WorkflowApproval", "reject me", "", "", "", map[string]any{"task_id": "wf1-wt2"})
+		if err := hstore.Create(req); err != nil {
+			t.Fatalf("hstore.Create: %v", err)
+		}
+
+		wf := &Workflow{ID: "wf1", Tasks: []WorkflowTask{{ID: "wf1-wt2", Status: StatusPending}}}
+		if task := wf.RejectTask("wf1-wt2", "dave", "not ready"); task == nil {
+			t.Fatal("RejectTask returned nil for an existing task")
+		}
+
+		if _, pending := hstore.FindPendingByTaskID("wf1-wt2"); pending {
+			t.Fatal("HITL request for wf1-wt2 is still pending after Workflow.RejectTask; rejecting a WorkflowTask must resolve its HITL audit-trail entry too")
+		}
+		resolved, ok := hstore.Get(req.ID)
+		if !ok {
+			t.Fatal("HITL request not found after Workflow.RejectTask")
+		}
+		if resolved.Status != hitl.StatusRejected {
+			t.Errorf("HITL request status = %q, want %q", resolved.Status, hitl.StatusRejected)
+		}
+		if resolved.Reviewer != "dave" {
+			t.Errorf("HITL request reviewer = %q, want %q", resolved.Reviewer, "dave")
+		}
+	})
 }

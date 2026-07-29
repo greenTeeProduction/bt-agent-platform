@@ -960,3 +960,175 @@ func contextsOf(entries []ExperienceEntry) []string {
 	}
 	return out
 }
+
+// TestCloneTree_DeepCopiesNestedMetadata verifies that cloneTree performs a
+// recursive deep copy of Metadata, matching gardener's
+// cloneMetadataForGardener semantics: mutating a nested map, []any, or
+// []string value reachable from the clone's Metadata must never be visible
+// through the original tree's Metadata.
+//
+// cloneTree currently copies Metadata with a single-level `c.Metadata[k] = v`
+// assignment, so nested reference types (maps, slices) are shared between the
+// original and the clone rather than copied.
+func TestCloneTree_DeepCopiesNestedMetadata(t *testing.T) {
+	original := &SerializableNode{
+		Type: "action",
+		Name: "root",
+		Metadata: map[string]any{
+			"nestedMap": map[string]any{
+				"inner": "original",
+			},
+			"anySlice": []any{"a", "b"},
+			"strSlice": []string{"x", "y"},
+		},
+	}
+
+	clone := cloneTree(original)
+
+	// Mutate nested reference values reachable from the clone.
+	clone.Metadata["nestedMap"].(map[string]any)["inner"] = "mutated"
+	clone.Metadata["anySlice"].([]any)[0] = "mutated"
+	clone.Metadata["strSlice"].([]string)[0] = "mutated"
+
+	if got := original.Metadata["nestedMap"].(map[string]any)["inner"]; got != "original" {
+		t.Errorf("mutating clone's nested map leaked into original: got %q, want %q", got, "original")
+	}
+	if got := original.Metadata["anySlice"].([]any)[0]; got != "a" {
+		t.Errorf("mutating clone's []any leaked into original: got %v, want %q", got, "a")
+	}
+	if got := original.Metadata["strSlice"].([]string)[0]; got != "x" {
+		t.Errorf("mutating clone's []string leaked into original: got %q, want %q", got, "x")
+	}
+}
+
+// TestHashTree_DistinguishesChildContent verifies hashTree hashes the full
+// subtree rather than just the root's Name+Type+len(Children). Two trees
+// sharing an identical root but with differently-named children must hash
+// differently, or genomes collide and Population.Diversity()/NicheDiversity()
+// silently under-count distinct individuals.
+func TestHashTree_DistinguishesChildContent(t *testing.T) {
+	a := &SerializableNode{
+		Type: "Sequence",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Action", Name: "Alpha"},
+		},
+	}
+	b := &SerializableNode{
+		Type: "Sequence",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Action", Name: "Beta"},
+		},
+	}
+
+	if hashTree(a) == hashTree(b) {
+		t.Errorf("hashTree(a) == hashTree(b) = %q; want different hashes for differently-named children", hashTree(a))
+	}
+}
+
+// TestHashTree_DistinguishesGrandchildren verifies hashTree recurses past the
+// immediate children into deeper descendants, since len(Children) alone
+// cannot see structural differences several levels down.
+func TestHashTree_DistinguishesGrandchildren(t *testing.T) {
+	a := &SerializableNode{
+		Type: "Sequence",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Sequence", Name: "mid", Children: []SerializableNode{
+				{Type: "Action", Name: "Deep1"},
+			}},
+		},
+	}
+	b := &SerializableNode{
+		Type: "Sequence",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Sequence", Name: "mid", Children: []SerializableNode{
+				{Type: "Action", Name: "Deep2"},
+			}},
+		},
+	}
+
+	if hashTree(a) == hashTree(b) {
+		t.Errorf("hashTree(a) == hashTree(b) = %q; want different hashes for differing grandchildren", hashTree(a))
+	}
+}
+
+// TestHashTree_DistinguishesEdges verifies hashTree accounts for Edges, since
+// two structurally identical trees with different typed-edge relationships
+// (e.g. a fallback edge vs. a plain child edge) represent different behavior.
+func TestHashTree_DistinguishesEdges(t *testing.T) {
+	a := &SerializableNode{
+		Type: "Selector",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Action", Name: "Alpha"},
+		},
+		Edges: []TypedEdge{
+			{Type: EdgeChild, ChildIndex: 0},
+		},
+	}
+	b := &SerializableNode{
+		Type: "Selector",
+		Name: "root",
+		Children: []SerializableNode{
+			{Type: "Action", Name: "Alpha"},
+		},
+		Edges: []TypedEdge{
+			{Type: EdgeFallback, ChildIndex: 0},
+		},
+	}
+
+	if hashTree(a) == hashTree(b) {
+		t.Errorf("hashTree(a) == hashTree(b) = %q; want different hashes for differing edge types", hashTree(a))
+	}
+}
+
+// TestHashTree_DistinguishesMetadata verifies hashTree accounts for Metadata,
+// since mutations that only rewrite chain config (e.g. max_tokens) must not
+// collide with the unmutated genome.
+func TestHashTree_DistinguishesMetadata(t *testing.T) {
+	a := &SerializableNode{
+		Type:     "ChainAction",
+		Name:     "root",
+		Metadata: map[string]any{"max_tokens": "100"},
+	}
+	b := &SerializableNode{
+		Type:     "ChainAction",
+		Name:     "root",
+		Metadata: map[string]any{"max_tokens": "200"},
+	}
+
+	if hashTree(a) == hashTree(b) {
+		t.Errorf("hashTree(a) == hashTree(b) = %q; want different hashes for differing metadata", hashTree(a))
+	}
+}
+
+// TestHashTree_StableAndDeterministic verifies hashTree is a pure function of
+// tree content: hashing the same tree twice, or hashing two independently
+// built but content-identical trees, must produce identical hashes so genome
+// equality remains meaningful after the fix stops truncating to the root.
+func TestHashTree_StableAndDeterministic(t *testing.T) {
+	build := func() *SerializableNode {
+		return &SerializableNode{
+			Type: "Sequence",
+			Name: "root",
+			Children: []SerializableNode{
+				{Type: "Action", Name: "Alpha", Metadata: map[string]any{"k": "v"}},
+			},
+			Edges: []TypedEdge{
+				{Type: EdgeChild, ChildIndex: 0},
+			},
+		}
+	}
+
+	a, b := build(), build()
+	if hashTree(a) != hashTree(b) {
+		t.Errorf("hashTree(a) = %q, hashTree(b) = %q; want equal hashes for content-identical trees", hashTree(a), hashTree(b))
+	}
+	first, second := hashTree(a), hashTree(a)
+	if first != second {
+		t.Errorf("hashTree(a) not stable across repeated calls: first=%q second=%q", first, second)
+	}
+}

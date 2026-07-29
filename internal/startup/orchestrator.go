@@ -63,6 +63,9 @@ func (o *CompanyOrchestrator) runTree(tree *evolution.SerializableNode, task str
 // It updates the CompanyState metrics based on the outcomes and returns a SprintResult.
 func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 	state := o.State
+	state.Lock()
+	defer state.Unlock()
+
 	sprintNum := state.CurrentSprint + 1
 	state.CurrentSprint = sprintNum
 
@@ -152,48 +155,58 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 	state := o.State
 	quarterNum := len(o.QuarterHistory) + 1
 
+	state.Lock()
 	startMRR := state.MRR
 	startUsers := state.Users
 	startCash := state.CashInBank
+	state.Unlock()
 
-	// Run 12 sprints (2-week sprints = 24 weeks ≈ 1 quarter)
+	// Run 12 sprints (2-week sprints = 24 weeks ≈ 1 quarter). RunSprint locks
+	// state itself per call, so the lock must be released here first —
+	// state.Lock() is not reentrant.
 	for i := 0; i < 12; i++ {
 		o.RunSprint()
 	}
 
+	state.Lock()
 	endMRR := state.MRR
 	endUsers := state.Users
+	churnRate := state.ChurnRate
+	cashInBank := state.CashInBank
+	burnRate := state.BurnRate
+	quarterGoals := append([]string(nil), state.QuarterGoals...)
+	state.Unlock()
 
 	result := &QuarterResult{
 		Quarter:     quarterNum,
-		Revenue:     state.MRR * 3, // quarterly revenue
+		Revenue:     endMRR * 3, // quarterly revenue
 		Growth:      ((endMRR - startMRR) / startMRR) * 100,
 		UsersAdded:  endUsers - startUsers,
-		Churn:       state.ChurnRate,
-		CashBurned:  startCash - state.CashInBank,
+		Churn:       churnRate,
+		CashBurned:  startCash - cashInBank,
 		Highlights:  []string{},
 		Lowlights:   []string{},
 		OKRProgress: map[string]float64{},
 	}
 
 	// Evaluate quarter goals
-	for _, goal := range state.QuarterGoals {
+	for _, goal := range quarterGoals {
 		result.OKRProgress[goal] = 0.8 // nominal progress, refined by agent decision
 	}
 
 	if result.Growth > 10 {
 		result.Highlights = append(result.Highlights,
 			fmt.Sprintf("Strong growth: %.1f%% MRR increase", result.Growth),
-			fmt.Sprintf("Added %d users to reach %d total", result.UsersAdded, state.Users),
+			fmt.Sprintf("Added %d users to reach %d total", result.UsersAdded, endUsers),
 		)
 	}
-	if result.CashBurned > state.BurnRate*4 {
+	if result.CashBurned > burnRate*4 {
 		result.Lowlights = append(result.Lowlights,
 			fmt.Sprintf("Cash burn exceeded: $%.0f burned this quarter", result.CashBurned))
 	}
-	if state.ChurnRate > 0.05 {
+	if churnRate > 0.05 {
 		result.Lowlights = append(result.Lowlights,
-			fmt.Sprintf("Churn elevated at %.1f%% — retention work needed", state.ChurnRate*100))
+			fmt.Sprintf("Churn elevated at %.1f%% — retention work needed", churnRate*100))
 	}
 
 	o.QuarterHistory = append(o.QuarterHistory, *result)
@@ -213,6 +226,8 @@ func (o *CompanyOrchestrator) RunYear() []QuarterResult {
 // Summary returns a human-readable summary of the company's current state.
 func (o *CompanyOrchestrator) Summary() string {
 	state := o.State
+	state.Lock()
+	defer state.Unlock()
 	return fmt.Sprintf(
 		"%s (%s) — %s\n"+
 			"  Stage: %s | Sprint: %d | Team: %d (eng=%d, sales=%d, mkt=%d)\n"+

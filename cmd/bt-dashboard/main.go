@@ -828,6 +828,8 @@ func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
+	companyState.Lock()
+	defer companyState.Unlock()
 	_ = encodeJSON(w, companyState)
 }
 
@@ -880,8 +882,32 @@ func handleTasks(w http.ResponseWriter, _ *http.Request) {
 	_ = encodeJSON(w, out)
 }
 
+// pendingHITLBeforeResolve looks up the pending/escalated hitl.Request for
+// taskID before a Task/WorkflowTask decision resolves it, since
+// TaskStore.Approve/Reject (and Workflow.ApproveTask/RejectTask) now resolve
+// the HITL audit trail themselves as part of the single consolidated
+// approve/reject code path — leaving nothing pending for this handler to
+// resolve a second time. The pre-resolve lookup captures the request ID and
+// whether it started escalated so the HTTP response can still report
+// hitl_request_id/hitl_resolved_from once the decision lands.
+func pendingHITLBeforeResolve(taskID string) (id, resolvedFrom string) {
+	if hitl.DefaultStore == nil {
+		return "", ""
+	}
+	pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID)
+	if !ok {
+		return "", ""
+	}
+	resolvedFrom = "pending"
+	if pending.Status == hitl.StatusEscalated {
+		resolvedFrom = "escalated"
+	}
+	return pending.ID, resolvedFrom
+}
+
 func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
+	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
@@ -889,16 +915,12 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]string{"status": "approved", "id": taskID}
 	if hitl.DefaultStore != nil {
-		resolvedFrom := "pending"
-		if pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID); ok && pending.Status == hitl.StatusEscalated {
-			resolvedFrom = "escalated"
-		}
-		if req, err := hitl.DefaultStore.ApproveByTaskID(taskID, "dashboard", "task approved via dashboard"); err == nil {
+		if req, ok := hitl.DefaultStore.Get(pendingID); pendingID != "" && ok {
 			resp["hitl_request_id"] = req.ID
 			resp["hitl_status"] = string(req.Status)
 			resp["hitl_resolved_from"] = resolvedFrom
 		} else {
-			resp["hitl_note"] = err.Error()
+			resp["hitl_note"] = fmt.Sprintf("hitl: no pending request for task %q", taskID)
 		}
 	}
 	if err := encodeJSON(w, resp); err != nil {
@@ -912,6 +934,7 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = "task rejected via dashboard"
 	}
+	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
 		w.WriteHeader(404)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
@@ -919,16 +942,12 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]string{"status": "rejected", "id": taskID}
 	if hitl.DefaultStore != nil {
-		resolvedFrom := "pending"
-		if pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID); ok && pending.Status == hitl.StatusEscalated {
-			resolvedFrom = "escalated"
-		}
-		if req, err := hitl.DefaultStore.RejectByTaskID(taskID, "dashboard", "task rejected via dashboard"); err == nil {
+		if req, ok := hitl.DefaultStore.Get(pendingID); pendingID != "" && ok {
 			resp["hitl_request_id"] = req.ID
 			resp["hitl_status"] = string(req.Status)
 			resp["hitl_resolved_from"] = resolvedFrom
 		} else {
-			resp["hitl_note"] = err.Error()
+			resp["hitl_note"] = fmt.Sprintf("hitl: no pending request for task %q", taskID)
 		}
 	}
 	if err := encodeJSON(w, resp); err != nil {

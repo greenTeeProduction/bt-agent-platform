@@ -981,10 +981,7 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 		TimeoutMs:   t.TimeoutMs,
 	}
 	if t.Metadata != nil {
-		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata {
-			c.Metadata[k] = v
-		}
+		c.Metadata = CloneMetadata(t.Metadata)
 	}
 	if t.Edges != nil {
 		c.Edges = make([]TypedEdge, len(t.Edges))
@@ -996,8 +993,41 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 	return c
 }
 
+// CloneMetadata performs a recursive deep copy of a tree node's Metadata map,
+// so mutating a nested map, []any, or []string value reachable from the
+// returned copy never leaks back into src.
+func CloneMetadata(src map[string]any) map[string]any {
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		switch vv := v.(type) {
+		case []any:
+			cp := make([]any, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case []string:
+			cp := make([]string, len(vv))
+			copy(cp, vv)
+			out[k] = cp
+		case map[string]any:
+			out[k] = CloneMetadata(vv)
+		default:
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// hashTree fingerprints the full subtree — recursively including Children,
+// Edges, and Metadata — so structurally or semantically different trees never
+// collide into the same genome. json.Marshal sorts map keys, so the encoding
+// (and therefore the hash) is deterministic regardless of Metadata insertion
+// order.
 func hashTree(t *SerializableNode) string {
-	h := sha256.Sum256([]byte(t.Name + t.Type + strconv.Itoa(len(t.Children))))
+	data, err := json.Marshal(t)
+	if err != nil {
+		data = []byte(t.Name + t.Type + strconv.Itoa(len(t.Children)))
+	}
+	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])[:16]
 }
 
