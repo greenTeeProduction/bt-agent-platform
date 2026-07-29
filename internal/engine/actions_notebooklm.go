@@ -28,6 +28,10 @@ var nlmAuthRun = nlmRun
 // synthesis report; a var so tests never touch the live research vault.
 var nlmResearchSynthesesDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
 
+// nlmFindingsSaveDir is where SaveNotebookLMFindings writes its report;
+// a var so tests never touch the live research vault.
+var nlmFindingsSaveDir = "/mnt/ssd/clawd/wiki/bt-research/syntheses"
+
 // nlmResearchQuerySeenWindow is the novelty-gate recency window: the same
 // research query re-derived within it (the 2-hour scheduled cadence hitting
 // one topic 4×/day, 2026-07-23 review gap 7) is skipped instead of burning
@@ -237,7 +241,7 @@ func registerNotebookLMActions() {
 	RegisterAction("SaveNotebookLMFindings", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		dateStr := time.Now().Format("2006-01-02")
-		savePath := fmt.Sprintf("/mnt/ssd/clawd/wiki/bt-research/syntheses/nlm-findings-%s.md", dateStr)
+		savePath := fmt.Sprintf("%s/nlm-findings-%s.md", nlmFindingsSaveDir, dateStr)
 		content := fmt.Sprintf("# NotebookLM Findings — %s\n\n## Task\n%s\n\n## Results\n%s\n",
 			dateStr, bb.Task, bb.Result)
 		saveErr := writeString(savePath, content)
@@ -293,7 +297,8 @@ func extractTaskID(output string) string {
 		if strings.HasPrefix(line, "task_id") || strings.Contains(line, "task_id") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				id := strings.TrimSpace(strings.Trim(parts[1], `"',`))
+				id := strings.TrimSpace(parts[1])
+				id = strings.TrimSpace(strings.Trim(id, `"',`))
 				if id != "" {
 					return id
 				}
