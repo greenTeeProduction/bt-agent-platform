@@ -1426,3 +1426,47 @@ func TestWrapWithErrorHandlerIsIdempotentAndNilSafe(t *testing.T) {
 		t.Errorf("wrapWithErrorHandler(fresh) children = %+v, want [Fresh]", wrapped.Children)
 	}
 }
+
+// TestAlertRouterSuiteReachesDeclaredPaths pins that every AlertRouterSuite
+// task with a declared ExpectedPath actually reaches that StrategyRouter
+// branch. IsCritical/IsHealthAlert's keyword sets are narrower than the
+// suite's own realistic phrasing, so tasks like "escalate the P0 incident to
+// the senior team" and "send warning notification for high memory usage"
+// silently fall through to GeneralAlert instead of matching CriticalAlert/
+// HealthAlert.
+func TestAlertRouterSuiteReachesDeclaredPaths(t *testing.T) {
+	suite := benchmark.AlertRouterSuite()
+	metrics := benchmark.RunSuite(AlertRouterTree(), suite, benchmark.DefaultMock())
+
+	for i, r := range metrics.Results {
+		tc := suite.Tasks[i]
+		if tc.ExpectedPath == "" {
+			continue
+		}
+		if !r.PathMatched {
+			t.Errorf("task %q: expected path %q, got path %q", r.Task, tc.ExpectedPath, r.Path)
+		}
+	}
+}
+
+// TestTradingSignalSuiteReachesDeclaredPaths pins that every TradingSignalSuite
+// task with a declared ExpectedPath actually reaches that StrategyRouter
+// branch. IsTAPath's "rsi" keyword is a raw substring match, so it also fires
+// on unrelated words like "reversion" (which contains "rsi"), sending the
+// deliberately keyword-free "backtest the mean reversion trading strategy on
+// historical hourly bars" task (ExpectedPath: ExecutionPath) into
+// TechnicalAnalysis instead.
+func TestTradingSignalSuiteReachesDeclaredPaths(t *testing.T) {
+	suite := benchmark.TradingSignalSuite()
+	metrics := benchmark.RunSuite(TradingSignalTree(), suite, benchmark.DefaultMock())
+
+	for i, r := range metrics.Results {
+		tc := suite.Tasks[i]
+		if tc.ExpectedPath == "" {
+			continue
+		}
+		if !r.PathMatched {
+			t.Errorf("task %q: expected path %q, got path %q", r.Task, tc.ExpectedPath, r.Path)
+		}
+	}
+}
