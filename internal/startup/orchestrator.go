@@ -61,26 +61,64 @@ func (o *CompanyOrchestrator) runTree(tree *evolution.SerializableNode, task str
 
 // RunSprint executes one sprint: EngineerTree, MarketingTree, SalesTree in sequence.
 // It updates the CompanyState metrics based on the outcomes and returns a SprintResult.
+//
+// The three o.runTree() calls each carry a 120s timeout and run against a
+// real LLM in production, so they must not run while state's mutex is held —
+// otherwise every concurrent reader (e.g. the dashboard's
+// /api/company/default handler, or Summary()) blocks for the full sprint
+// duration. Instead, the state needed for the tree tasks is snapshotted
+// under a short lock, the trees run unlocked, and the lock is re-acquired
+// only to apply the resulting mutations.
 func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 	state := o.State
-	state.Lock()
-	defer state.Unlock()
 
+	state.Lock()
 	sprintNum := state.CurrentSprint + 1
 	state.CurrentSprint = sprintNum
+	sprintGoal := state.SprintGoal
+	productStage := state.ProductStage
+	features := append([]string(nil), state.Features...)
+	technicalDebt := state.TechnicalDebt
+	engineers := state.Engineers
+	users := state.Users
+	mrr := state.MRR
+	arr := state.ARR
+	churnRate := state.ChurnRate
+	cac := state.CAC
+	ltv := state.LTV
+	state.Unlock()
 
 	result := &SprintResult{
 		SprintNum: sprintNum,
-		Goal:      state.SprintGoal,
+		Goal:      sprintGoal,
 	}
 
 	// 1. Run EngineerTree
 	engTask := fmt.Sprintf(
 		"Sprint %d goal: %s. Product stage: %s. Features: %v. Tech debt: %.0f/100. Team: %d engineers.",
-		sprintNum, state.SprintGoal, state.ProductStage, state.Features, state.TechnicalDebt, state.Engineers,
+		sprintNum, sprintGoal, productStage, features, technicalDebt, engineers,
 	)
-	if err := o.runTree(EngineerTree(), engTask); err != nil {
-		result.Deferred = append(result.Deferred, fmt.Sprintf("engineering: %v", err))
+	engErr := o.runTree(EngineerTree(), engTask)
+
+	// 2. Run MarketingTree
+	mktTask := fmt.Sprintf(
+		"Sprint %d: %d users, $%.0f MRR, %.1f%% churn, $%.0f CAC. Plan content and campaigns.",
+		sprintNum, users, mrr, churnRate*100, cac,
+	)
+	mktErr := o.runTree(MarketingTree(), mktTask)
+
+	// 3. Run SalesTree
+	salesTask := fmt.Sprintf(
+		"Sprint %d: $%.0f MRR, $%.0f ARR, %.1f%% churn, $%.0f CAC, $%.0f LTV. Close deals and optimize pricing.",
+		sprintNum, mrr, arr, churnRate*100, cac, ltv,
+	)
+	salesErr := o.runTree(SalesTree(), salesTask)
+
+	state.Lock()
+	defer state.Unlock()
+
+	if engErr != nil {
+		result.Deferred = append(result.Deferred, fmt.Sprintf("engineering: %v", engErr))
 	} else {
 		// Simulate feature completion and tech debt reduction
 		completedFeature := fmt.Sprintf("feature_sprint_%d", sprintNum)
@@ -96,13 +134,8 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 		result.Velocity = float64(len(result.Completed)) * 3.0
 	}
 
-	// 2. Run MarketingTree
-	mktTask := fmt.Sprintf(
-		"Sprint %d: %d users, $%.0f MRR, %.1f%% churn, $%.0f CAC. Plan content and campaigns.",
-		sprintNum, state.Users, state.MRR, state.ChurnRate*100, state.CAC,
-	)
-	if err := o.runTree(MarketingTree(), mktTask); err != nil {
-		result.Deferred = append(result.Deferred, fmt.Sprintf("marketing: %v", err))
+	if mktErr != nil {
+		result.Deferred = append(result.Deferred, fmt.Sprintf("marketing: %v", mktErr))
 	} else {
 		// Simulate user acquisition from marketing
 		newUsers := state.MarketingStaff * 50 // ~50 users per marketer per sprint
@@ -116,13 +149,8 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 		state.CAC *= cacImprovement
 	}
 
-	// 3. Run SalesTree
-	salesTask := fmt.Sprintf(
-		"Sprint %d: $%.0f MRR, $%.0f ARR, %.1f%% churn, $%.0f CAC, $%.0f LTV. Close deals and optimize pricing.",
-		sprintNum, state.MRR, state.ARR, state.ChurnRate*100, state.CAC, state.LTV,
-	)
-	if err := o.runTree(SalesTree(), salesTask); err != nil {
-		result.Deferred = append(result.Deferred, fmt.Sprintf("sales: %v", err))
+	if salesErr != nil {
+		result.Deferred = append(result.Deferred, fmt.Sprintf("sales: %v", salesErr))
 	} else {
 		// Simulate MRR growth from closed deals
 		newMRR := float64(state.SalesPeople) * 2000.0 // ~$2k per salesperson per sprint
