@@ -3,7 +3,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"sort"
 	"strings"
@@ -159,7 +158,8 @@ func (d *DTAnalyzer) RecordHit(selectorName, pathName, condition string, success
 	}
 }
 
-// Entropy computes Shannon entropy for a set of path probabilities.
+// Entropy computes Shannon entropy for a set of path probabilities via the
+// canonical Entropy helper in selector_optimizer.go.
 // H(S) = -sum(p_i * log2(p_i))
 func (d *DTAnalyzer) Entropy(selectorName string) float64 {
 	ss, ok := d.Stats[selectorName]
@@ -167,14 +167,11 @@ func (d *DTAnalyzer) Entropy(selectorName string) float64 {
 		return 0
 	}
 
-	entropy := 0.0
-	for _, p := range ss.Paths {
-		prob := float64(p.HitCount) / float64(ss.TotalTasks)
-		if prob > 0 {
-			entropy -= prob * math.Log2(prob)
-		}
+	probs := make([]float64, len(ss.Paths))
+	for i, p := range ss.Paths {
+		probs[i] = float64(p.HitCount) / float64(ss.TotalTasks)
 	}
-	return entropy
+	return Entropy(probs...)
 }
 
 // InformationGain computes how much a condition reduces entropy.
@@ -229,33 +226,29 @@ func pathEntropy(paths []PathStats, condition string, match bool) float64 {
 		return 0
 	}
 
-	entropy := 0.0
+	var probs []float64
 	for _, p := range paths {
 		matches := strings.Contains(strings.ToLower(p.Condition), strings.ToLower(condition))
 		if matches == match {
-			prob := float64(p.HitCount) / float64(total)
-			if prob > 0 {
-				entropy -= prob * math.Log2(prob)
-			}
+			probs = append(probs, float64(p.HitCount)/float64(total))
 		}
 	}
-	return entropy
+	return Entropy(probs...)
 }
 
-// GiniImpurity computes Gini impurity = 1 - sum(p_i^2)
-// Lower is better (more pure splits).
+// GiniImpurity computes Gini impurity via the canonical GiniImpurityFromProbs
+// helper in selector_optimizer.go. Lower is better (more pure splits).
 func (d *DTAnalyzer) GiniImpurity(selectorName string) float64 {
 	ss, ok := d.Stats[selectorName]
 	if !ok || ss == nil || ss.TotalTasks == 0 {
 		return 1.0
 	}
 
-	sumSq := 0.0
-	for _, p := range ss.Paths {
-		prob := float64(p.HitCount) / float64(ss.TotalTasks)
-		sumSq += prob * prob
+	probs := make([]float64, len(ss.Paths))
+	for i, p := range ss.Paths {
+		probs[i] = float64(p.HitCount) / float64(ss.TotalTasks)
 	}
-	return 1.0 - sumSq
+	return GiniImpurityFromProbs(probs...)
 }
 
 // BestSplitCondition finds the condition with highest information gain.
