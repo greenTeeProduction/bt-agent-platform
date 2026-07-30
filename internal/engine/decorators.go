@@ -103,8 +103,10 @@ func BuildCircuitBreaker(node *evolution.SerializableNode, bb *Blackboard) btcor
 			}
 			return code
 		}
-		delete(bb.ChainState, failKey)
-		delete(bb.ChainState, key+"_open")
+		if code == 1 {
+			delete(bb.ChainState, failKey)
+			delete(bb.ChainState, key+"_open")
+		}
 		return code
 	})
 }

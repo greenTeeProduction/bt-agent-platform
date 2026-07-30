@@ -4,7 +4,11 @@
 // decision logic for its domain with keyword-based condition routing.
 package domains
 
-import "github.com/nico/go-bt-evolve/internal/evolution"
+import (
+	"sort"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
+)
 
 // seq creates a Sequence node with a stage description and children.
 func seq(name, desc string, children ...evolution.SerializableNode) evolution.SerializableNode {
@@ -825,6 +829,7 @@ func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string
 	for name := range registry {
 		ids = append(ids, "domain:"+name)
 	}
+	sort.Strings(ids)
 	return ids
 }
 

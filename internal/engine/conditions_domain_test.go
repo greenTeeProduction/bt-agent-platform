@@ -405,6 +405,112 @@ func TestConditionsDomain_PersistentFailures(t *testing.T) {
 	}
 }
 
+// TestConditionsDomain_TaskKeywordConditions_CaseInsensitive documents the
+// target contract for this file: every keyword-matching condition should
+// route bb.Task through a single lowercasing step before calling
+// util.ContainsAnyStr, the same way IsStudioTask, IsResearchTask,
+// IsKanbanTask, IsSecurityCheck, IsRestartRequest, and IsResearchQuery
+// already do. It re-runs the positive cases from
+// TestConditionsDomain_TaskKeywordConditions with the task text upper-cased;
+// today most of these conditions match bb.Task case-sensitively and fail to
+// fire on upper-cased input.
+func TestConditionsDomain_TaskKeywordConditions_CaseInsensitive(t *testing.T) {
+	runDomainCondCases(t, []domainCondCase{
+		{"IsBoardCheck", &Blackboard{Task: "CHECK THE KANBAN BOARD"}, true},
+		{"NeedsDispatch", &Blackboard{Task: "DISPATCH THE NEXT TASK"}, true},
+		{"IsStandup", &Blackboard{Task: "DAILY STANDUP MEETING"}, true},
+		{"IsCreateTask", &Blackboard{Task: "CREATE A NEW CARD"}, true},
+		{"IsRefinement", &Blackboard{Task: "REFINE THE REQUIREMENTS"}, true},
+		{"IsQA", &Blackboard{Task: "RUN QA CHECKS"}, true},
+		{"IsSessionStart", &Blackboard{Task: "SESSION START ROUTINE"}, true},
+		{"HasNewContent", &Blackboard{Task: "INGEST THE NEW TRANSCRIPT"}, true},
+		{"NeedsSynthesis", &Blackboard{Task: "SYNTHESIZE A WIKI NOTE"}, true},
+		{"NeedsCrossLinks", &Blackboard{Task: "AUDIT ORPHAN PAGES"}, true},
+		{"NeedsIndexUpdate", &Blackboard{Task: "UPDATE THE INDEX"}, true},
+		{"IsSessionEnd", &Blackboard{Task: "SESSION END WRAP UP"}, true},
+		{"IsComparisonQuery", &Blackboard{Task: "COMPARE A VS B"}, true},
+		{"IsCodeTask", &Blackboard{Task: "FIX THIS CODE"}, true},
+		{"IsBugCheck", &Blackboard{Task: "THERE'S A BUG TO FIX"}, true},
+		{"IsStyleCheck", &Blackboard{Task: "RUN LINT CHECKS"}, true},
+		{"IsCIBuildTask", &Blackboard{Task: "RUN THE CI PIPELINE"}, true},
+		{"NeedsBuild", &Blackboard{Task: "BUILD THE PROJECT"}, true},
+		{"NeedsTestRun", &Blackboard{Task: "RUN TESTS NOW"}, true},
+		{"NeedsLinting", &Blackboard{Task: "RUN LINT TOOL"}, true},
+		{"NeedsDeploy", &Blackboard{Task: "DEPLOY TO PROD"}, true},
+		{"IsMonitorTask", &Blackboard{Task: "MONITOR AGENT HEALTH"}, true},
+		{"IsMetricsRequest", &Blackboard{Task: "SHOW METRICS REPORT"}, true},
+		{"IsRefactorTask", &Blackboard{Task: "REFACTOR THE MODULE"}, true},
+		{"IsSmellCheck", &Blackboard{Task: "CHECK CODE SMELL"}, true},
+		{"IsPatternRequest", &Blackboard{Task: "REVIEW DESIGN PATTERN"}, true},
+		{"NeedsVerification", &Blackboard{Task: "VERIFY THE RESULTS"}, true},
+		{"IsSecurityTask", &Blackboard{Task: "RUN SECURITY AUDIT"}, true},
+		{"IsSASTRequest", &Blackboard{Task: "RUN SAST SCAN"}, true},
+		{"IsDepScanRequest", &Blackboard{Task: "SCAN DEPENDENCY FOR CVE"}, true},
+		{"IsSecretScan", &Blackboard{Task: "SCAN FOR SECRET LEAKS"}, true},
+		{"IsThreatModel", &Blackboard{Task: "BUILD THREAT MODEL"}, true},
+		{"IsExtractRequest", &Blackboard{Task: "EXTRACT DATA FROM SOURCE"}, true},
+		{"IsTransformRequest", &Blackboard{Task: "TRANSFORM THE DATASET"}, true},
+		{"IsLoadRequest", &Blackboard{Task: "LOAD DATA INTO DB"}, true},
+		{"IsActionExtraction", &Blackboard{Task: "EXTRACT ACTION ITEMS"}, true},
+		{"IsSummaryRequest", &Blackboard{Task: "WRITE MEETING SUMMARY"}, true},
+		{"IsFollowUp", &Blackboard{Task: "SEND A FOLLOW UP REMINDER"}, true},
+		{"IsCrashTask", &Blackboard{Task: "APP CRASH WITH STACK TRACE"}, true},
+		{"HasStackTrace", &Blackboard{Task: "GOROUTINE 5 PANIC"}, true},
+		{"IsRootCauseRequest", &Blackboard{Task: "FIND ROOT CAUSE"}, true},
+		{"IsPreventionRequest", &Blackboard{Task: "PREVENT FUTURE ISSUES"}, true},
+		{"IsGameTask", &Blackboard{Task: "UPDATE NPC BEHAVIOR"}, true},
+		{"IsPatrolState", &Blackboard{Task: "NPC SHOULD PATROL AREA"}, true},
+		{"IsDetectState", &Blackboard{Task: "DETECT THE PLAYER"}, true},
+		{"IsChaseState", &Blackboard{Task: "CHASE THE TARGET"}, true},
+		{"IsCombatState", &Blackboard{Task: "ENTER COMBAT MODE"}, true},
+		{"IsRetreatState", &Blackboard{Task: "RETREAT AND HEAL"}, true},
+		{"IsTradingTask", &Blackboard{Task: "TRADING SIGNAL DETECTED"}, true},
+		{"IsDataRequest", &Blackboard{Task: "FETCH MARKET DATA"}, true},
+		{"IsTAPath", &Blackboard{Task: "CHECK RSI INDICATOR"}, true},
+		{"IsSignalRequest", &Blackboard{Task: "BUY SIGNAL DETECTED"}, true},
+		{"IsRiskCheck", &Blackboard{Task: "CHECK RISK EXPOSURE"}, true},
+		{"IsAssessRequest", &Blackboard{Task: "ASSESS SYSTEM MATURITY"}, true},
+		{"IsSyncRequest", &Blackboard{Task: "SYNC DATA ACROSS SYSTEMS"}, true},
+		{"IsResearchRequest", &Blackboard{Task: "RESEARCH AND ANALYZE DATA"}, true},
+		{"IsGraphifyRequest", &Blackboard{Task: "RUN GRAPHIFY ON CODEBASE"}, true},
+		{"IsBuildRequest", &Blackboard{Task: "GO BUILD THE BINARY"}, true},
+		{"IsImplementRequest", &Blackboard{Task: "IMPLEMENT THE NEW FEATURE"}, true},
+	})
+}
+
+// TestConditionsDomain_IsSimpleQuery_CaseInsensitive and its siblings pin the
+// same case-insensitive contract for the length-plus-keyword conditions,
+// where an upper-cased complexity keyword should still be recognized.
+func TestConditionsDomain_IsSimpleQuery_CaseInsensitive(t *testing.T) {
+	fn := GetCondition("IsSimpleQuery")
+	if fn == nil {
+		t.Fatal("GetCondition(\"IsSimpleQuery\") returned nil")
+	}
+	if fn(&Blackboard{Task: "COMPARE two options quickly"}) {
+		t.Error("expected false for a short task containing the upper-cased keyword COMPARE")
+	}
+}
+
+func TestConditionsDomain_IsDeepQuery_CaseInsensitive(t *testing.T) {
+	fn := GetCondition("IsDeepQuery")
+	if fn == nil {
+		t.Fatal("GetCondition(\"IsDeepQuery\") returned nil")
+	}
+	if !fn(&Blackboard{Task: "Give me a COMPREHENSIVE analysis"}) {
+		t.Error("expected true for a task containing the upper-cased keyword COMPREHENSIVE")
+	}
+}
+
+func TestConditionsDomain_IsAmbiguousQuery_CaseInsensitive(t *testing.T) {
+	fn := GetCondition("IsAmbiguousQuery")
+	if fn == nil {
+		t.Fatal("GetCondition(\"IsAmbiguousQuery\") returned nil")
+	}
+	if fn(&Blackboard{Task: "WHY DOES THE SERVER CRASH TODAY"}) {
+		t.Error("expected false for a long task containing the upper-cased question keyword WHY and no ambiguous substrings")
+	}
+}
+
 // TestConditionsDomain_IsRestartRequest_CaseInsensitive documents the intended
 // contract for IsRestartRequest: like its sibling conditions in the same file
 // (IsStudioTask, IsResearchTask, IsKanbanTask, IsSecurityCheck, IsResearchQuery

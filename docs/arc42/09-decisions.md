@@ -263,6 +263,9 @@ Consolidation notes (2026-07-16):
 | ADR-238 | `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research) | Accepted | 2026-07-30 |
 | ADR-239 | `CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research) | Accepted | 2026-07-30 |
 | ADR-240 | Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-241 | Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-242 | `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness) | Accepted | 2026-07-30 |
+| ADR-243 | `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness) | Accepted | 2026-07-30 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4303,6 +4306,51 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `GoapPlanningTree`, `GoapResearchTree`, and `GoapDevopsTree` can now actually reach and execute the real GOAP A* planner branch their descriptions already claimed to try first, instead of always falling through to the keyword-based or general-agent fallback.
 - ✅ The new test fails loudly, naming the specific unreachable-condition consequence, if a future edit to any of the three trees drops the `SetupGoapTools` call — the existing "branch is present" tests would not have caught that regression.
 - Rejected: a lazy-seeding fix inside `engine.goap_nodes.go` or folding the seed into the existing tool-setup actions, in favor of matching `merged.go`'s explicit-call pattern at each of the three call sites (see Alternatives) — → [§5](05-building-blocks.md) for the domain-tree composition pattern.
+
+---
+
+## ADR-241: Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research)
+
+**Context (2026-07-30):** `internal/engine/conditions_domain.go` registers roughly fifty keyword-matching `Condition`s, nearly all shaped as `util.ContainsAnyStr(bb.Task, "keyword", ...)`. A handful — `IsStudioTask`, `IsResearchTask`, `IsKanbanTask`, `IsSecurityCheck`, `IsRestartRequest`, and `IsResearchQuery` — already lowercased `bb.Task` first (`util.ContainsAnyStr(strings.ToLower(bb.Task), ...)`), but the rest matched `bb.Task` raw, so a task phrased in upper case or mixed case (e.g. a caller that title-cases or shouts a task string) silently failed to route through most of the file's own conditions while still matching the few that already lowercased. The inconsistency was invisible in existing tests because every prior `TestConditionsDomain_TaskKeywordConditions` case happened to use already-lower-case task text.
+
+**Decision:** Every remaining `util.ContainsAnyStr(bb.Task, ...)` call in `conditions_domain.go` is rewritten to `util.ContainsAnyStr(strings.ToLower(bb.Task), ...)`, matching the pattern the six already-correct conditions established, so the whole file's ~50 keyword conditions are uniformly case-insensitive rather than a majority-raw/minority-lowered mix.
+
+**Status:** Accepted (2026-07-30). Pinned by a new `TestConditionsDomain_TaskKeywordConditions_CaseInsensitive` (`internal/engine/conditions_domain_test.go`), which re-runs the existing positive keyword cases with the task text upper-cased and asserts each condition still fires.
+
+**Consequences:**
+- ✅ A task string's casing no longer determines whether a `StrategyRouter`/`PreGate` keyword condition fires — every condition in the file now matches consistently regardless of case, closing a silent routing-miss class of defect for any caller that doesn't already normalize task text to lower case before it reaches the blackboard.
+- ✅ New conditions added to this file have one established pattern (`strings.ToLower(bb.Task)` once, then `util.ContainsAnyStr`) to follow instead of two competing ones.
+- No alternatives considered beyond the uniform lowercase-once rewrite: the six existing conditions already fixed on this exact pattern, so the only real choice was applying it everywhere versus leaving the inconsistency in place.
+
+---
+
+## ADR-242: `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness)
+
+**Context (2026-07-30):** `internal/engine` carries two independent circuit-breaker implementations: `reliability_decorators.go`'s `circuitBreakerCmd.Run` (backing `buildCircuitBreaker`, lower-case) and `decorators.go`'s `BuildCircuitBreaker` (exported, used by a different construction path). `circuitBreakerCmd.Run` only clears its breaker's failure state on `code == 1` (success) and only records a failure on `code < 0`; a `code == 0` (running) tick is left untouched, since a still-running child has neither succeeded nor failed. `BuildCircuitBreaker`, added and characterized while writing `internal/engine/decorators_test.go`'s table-driven coverage for this file, did not carry the same guard: after its `code < 0` failure-handling branch, it unconditionally deleted the failure-count and open-state `ChainState` entries for *any* other code, including `0` (running) — a running tick would silently clear an in-progress failure streak, and could even force-close an already-open circuit before its cooldown expired.
+
+**Decision:** `BuildCircuitBreaker`'s post-child-run cleanup is narrowed from an unconditional `delete(bb.ChainState, failKey)` / `delete(bb.ChainState, key+"_open")` to only running when `code == 1`, mirroring `circuitBreakerCmd.Run`'s existing success/failure/running distinction exactly. A running tick (`code == 0`) now falls through and returns unchanged, leaving any accumulated failure count and open state intact.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestBuildCircuitBreaker_RunningChildDoesNotResetFailureCount` (`internal/engine/decorators_test.go`), which scripts a fail/running/fail sequence via a test-only sequencing action and asserts the breaker still trips on the second failure instead of the running tick having reset the streak; the file's other `TestBuildCircuitBreaker_*` cases pin the surrounding threshold, cooldown, open-circuit-short-circuit, and per-node-namespacing behavior unchanged.
+
+**Consequences:**
+- ✅ `BuildCircuitBreaker` now shares the same success/failure/running semantics as its sibling `circuitBreakerCmd.Run`, instead of the two implementations silently disagreeing on what a running tick does to breaker state.
+- ✅ A long-running child (e.g. a multi-tick action) can no longer mask an accumulating failure streak, or reopen an already-tripped breaker early, simply by reporting "still running" on an intermediate tick.
+- Rejected: leaving the two circuit-breaker implementations independently diverged — rejected because this file's characterization-test pass is specifically about pinning `decorators.go`'s actual exported behavior, and an unconditional reset on a running tick is not behavior worth pinning as correct once the sibling implementation's stricter guard was right there to compare against.
+
+---
+
+## ADR-243: `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness)
+
+**Context (2026-07-30):** `domains.ExpectedDomainIDs` (`internal/domains/trees.go`) builds its `[]string` result with a plain `for name := range registry` loop over a `map[string]*evolution.SerializableNode` — Go randomizes map iteration order per process, so the returned slice was a different permutation on every run. `cmd/bt-dashboard/main_test.go`'s existing caller happened to sort the result before comparing, masking the gap, and `ExpectedDomainIDs` itself had zero direct test coverage before this change. This slice ultimately feeds `knowledge.KnowledgeGraph.ExpectedDomains`, the seam driving the `bt_kg_coverage_gaps` gauge and `CoverageGaps` reporting (→ §8.4) — any future consumer that logs, diffs, or exposes it directly (rather than re-sorting defensively like the one existing caller) would see non-reproducible output across runs.
+
+**Decision:** `ExpectedDomainIDs` calls `sort.Strings(ids)` before returning, guaranteeing a stable, deterministic order at the source rather than relying on every caller to re-sort defensively.
+
+**Status:** Accepted (2026-07-30). Pinned by a new `TestExpectedDomainIDsIsSortedAndComplete` (`internal/domains/domains_test.go`), which asserts the output is exactly one `"domain:<name>"` per registry entry (no drops or extras) and that `sort.StringsAreSorted(ids)` holds.
+
+**Consequences:**
+- ✅ `ExpectedDomainIDs`'s output is now reproducible across runs and processes, so any future direct consumer (logging, diffing, dashboard exposition) gets stable output without needing to know to re-sort it first.
+- ✅ The existing `cmd/bt-dashboard/main_test.go` caller's own defensive sort becomes redundant but harmless, since sorting an already-sorted slice is a no-op.
+- Rejected: leaving the non-deterministic order in place on the grounds that the one existing caller already compensates — rejected because that compensation is caller-side discipline, not a guarantee, and the coverage-gap reporting seam this function feeds (→ §8.4) is exactly the kind of surface where silent non-determinism is worth closing at the source.
 
 ---
 
