@@ -56,8 +56,8 @@ func registerSuperpowersConditions() {
 		idx, _ := bb.ChainState["current_task_index"].(int)
 		tasks, ok := bb.ChainState["task_batch"].([]map[string]string)
 		if !ok {
-			// Try interface slice
-			tasksI, ok := bb.ChainState["task_batch"].([]map[string]string)
+			// Try interface slice (e.g. task_batch decoded from JSON).
+			tasksI, ok := bb.ChainState["task_batch"].([]interface{})
 			if !ok {
 				size, _ := bb.ChainState["task_batch_size"].(int)
 				return idx < size
