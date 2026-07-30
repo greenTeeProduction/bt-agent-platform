@@ -1,10 +1,16 @@
 package engine
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/util"
 )
+
+// taAmbiguousKeywordRe matches the short IsTAPath keywords ("rsi", "sma") only
+// as whole words, since as raw substrings they collide with unrelated English
+// words (e.g. "rsi" inside "reversion").
+var taAmbiguousKeywordRe = regexp.MustCompile(`\b(rsi|sma)\b`)
 
 func init() {
 	RegisterCondition("IsStudioTask", func(bb *Blackboard) bool {
@@ -230,7 +236,8 @@ func init() {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task), "data", "fetch", "pull", "price")
 	})
 	RegisterCondition("IsTAPath", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(strings.ToLower(bb.Task), "technical", "indicator", "pattern", "rsi", "macd", "sma")
+		task := strings.ToLower(bb.Task)
+		return util.ContainsAnyStr(task, "technical", "indicator", "pattern", "macd") || taAmbiguousKeywordRe.MatchString(task)
 	})
 	RegisterCondition("IsSignalRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task), "signal", "buy", "sell", "entry")

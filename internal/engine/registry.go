@@ -790,7 +790,7 @@ func init() {
 func registerAlertRouterNodes() {
 	// Alert Router conditions
 	RegisterCondition("IsCritical", func(b *Blackboard) bool {
-		return containsAnyLower(b.Task, "critical", "emergency", "urgent", "severe")
+		return containsAnyLower(b.Task, "critical", "emergency", "urgent", "severe", "p0", "incident", "escalate")
 	})
 	RegisterCondition("IsSecurity", func(b *Blackboard) bool {
 		return containsAnyLower(b.Task, "security", "breach", "attack", "intrusion", "unauthorized", "ssh", "brute")
@@ -802,7 +802,7 @@ func registerAlertRouterNodes() {
 		return containsAnyLower(b.Task, "disk", "storage", "filesystem", "sda", "nvme", "space")
 	})
 	RegisterCondition("IsHealthAlert", func(b *Blackboard) bool {
-		return containsAnyLower(b.Task, "health", "monitor", "down", "failure", "crash", "unreachable")
+		return containsAnyLower(b.Task, "health", "monitor", "down", "failure", "crash", "unreachable", "memory", "warning")
 	})
 
 	// Alert Router actions

@@ -266,6 +266,7 @@ Consolidation notes (2026-07-16):
 | ADR-241 | Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research) | Accepted | 2026-07-30 |
 | ADR-242 | `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness) | Accepted | 2026-07-30 |
 | ADR-243 | `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness) | Accepted | 2026-07-30 |
+| ADR-244 | `IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research) | Accepted | 2026-07-30 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4351,6 +4352,28 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `ExpectedDomainIDs`'s output is now reproducible across runs and processes, so any future direct consumer (logging, diffing, dashboard exposition) gets stable output without needing to know to re-sort it first.
 - ✅ The existing `cmd/bt-dashboard/main_test.go` caller's own defensive sort becomes redundant but harmless, since sorting an already-sorted slice is a no-op.
 - Rejected: leaving the non-deterministic order in place on the grounds that the one existing caller already compensates — rejected because that compensation is caller-side discipline, not a guarantee, and the coverage-gap reporting seam this function feeds (→ §8.4) is exactly the kind of surface where silent non-determinism is worth closing at the source.
+
+---
+
+## ADR-244: `IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research)
+
+**Context (2026-07-30):** `AlertRouterTree`'s `PreGate`-gated `StrategyRouter` branches `IsCritical` and `IsHealthAlert` (`internal/engine/registry.go`) matched only a narrow keyword set each, while their own declared benchmark suite (`benchmark.AlertRouterSuite()`, `internal/benchmark/benchmark.go`) already carried realistic task phrasing neither list covered: `"escalate the P0 incident to the senior team"` (`ExpectedPath: "CriticalAlert"`) matched none of `IsCritical`'s `"critical", "emergency", "urgent", "severe"`, and `"send warning notification for high memory usage"` (`ExpectedPath: "HealthAlert"`) matched none of `IsHealthAlert`'s `"health", "monitor", "down", "failure", "crash", "unreachable"`. Both tasks silently fell through to `GeneralAlert` instead — the same "described, registered, and benchmark-covered yet practically unreachable branch" shape ADR-230 closed for `IsCIBuildTask`/`IsTradingTask`, recurring here in a sibling tree the earlier fix didn't touch. Separately, `IsTAPath`'s `"rsi"` keyword (`internal/engine/conditions_domain.go`) was a raw `util.ContainsAnyStr` substring match, so it also fired inside unrelated English words containing that letter sequence — `TradingSignalSuite`'s `"backtest the mean reversion trading strategy on historical hourly bars"` task (`ExpectedPath: "ExecutionPath"`, deliberately worded to avoid any TA keyword) matched `"rsi"` inside "reve**rsi**on" and routed into `TechnicalAnalysis` instead of the execution branch its suite entry declared.
+
+**Evaluation criteria:** Restoring each condition to actually match the realistic phrasing its own declared benchmark suite already asserts it should, mirroring ADR-230's precedent of additive keyword coverage over rewriting the routing shape; for `IsTAPath` specifically, fixing the false-positive without narrowing genuine `"rsi"`/`"sma"` matches (e.g. "the RSI indicator") — a plain substring match is wrong in either direction once a short, common-letter-sequence keyword is involved.
+
+**Decision:** `IsCritical` gains `"p0"`, `"incident"`, and `"escalate"`; `IsHealthAlert` gains `"memory"` and `"warning"` — both additive, keyword-only changes to their existing `containsAnyLower` calls. `IsTAPath`'s two short, collision-prone keywords (`"rsi"`, `"sma"`) move out of the plain `util.ContainsAnyStr` list into a new package-level `taAmbiguousKeywordRe = regexp.MustCompile(`\b(rsi|sma)\b`)`, matched with a word-boundary regex `OR`-ed against the remaining `util.ContainsAnyStr` call for `"technical"`, `"indicator"`, `"pattern"`, `"macd"` (left untouched, since none of those collide with common English words the same way).
+
+**Alternatives considered:**
+- Word-bound every `IsTAPath` keyword, not just `"rsi"`/`"sma"` — rejected: `"technical"`, `"indicator"`, `"pattern"`, and `"macd"` are long enough that they don't collide with unrelated words as substrings, so regex-wrapping them would add matching cost and a second pattern to maintain for no reachability benefit.
+- Fix the `"rsi"` collision by removing it from `IsTAPath` entirely and relying on `"technical"`/`"indicator"`/`"pattern"` — rejected: would silently stop matching genuine short-form phrasing like "check the RSI", regressing real coverage instead of just removing the false positive.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestAlertRouterSuiteReachesDeclaredPaths` and `TestTradingSignalSuiteReachesDeclaredPaths` (`internal/domains/domains_test.go`), which run each suite's tasks through `benchmark.RunSuite` and fail if any task with a declared `ExpectedPath` doesn't reach it.
+
+**Consequences:**
+- ✅ `AlertRouterTree`'s `CriticalAlert`/`HealthAlert` branches and `TradingSignalTree`'s `ExecutionPath` branch are now actually reachable (or, for `ExecutionPath`, no longer wrongly bypassed) for the task phrasing their own benchmark suites already claimed to exercise.
+- ✅ `IsTAPath`'s word-boundary fix removes the "rsi"-inside-"reversion" class of false positive without narrowing genuine short-keyword matches, unlike a blanket keyword removal would have.
+- ⚠️ `taAmbiguousKeywordRe` is a second matching mechanism alongside `util.ContainsAnyStr` inside the same condition — a future keyword added to `IsTAPath` needs a judgment call on whether it's collision-prone enough to need the regex path too, the same maintenance-burden shape ADR-230 already accepted for keyword-list changes generally.
+- Cross-reference: → ADR-230 (the same PreGate/branch-condition keyword-coverage gap shape, in `DevOpsCITree`/`TradingSignalTree`'s `IsCIBuildTask`/`IsTradingTask`); → ADR-014 (mandatory per-node descriptions, the sibling coverage guard this complements from the condition-reachability angle).
 
 ---
 
