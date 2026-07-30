@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 )
@@ -229,8 +230,12 @@ func bbToolSessionList(h *blackboard.Handle, input string) string {
 
 func formatBBEntry(e blackboard.Entry) string {
 	if len(e.Value) > bbReadMaxDisplay {
+		cut := bbReadMaxDisplay
+		for cut > 0 && !utf8.RuneStart(e.Value[cut]) {
+			cut--
+		}
 		return fmt.Sprintf("key=%s summary=%s value=%s... [truncated, %d bytes total]",
-			e.Key, e.Summary, e.Value[:bbReadMaxDisplay], len(e.Value))
+			e.Key, e.Summary, e.Value[:cut], len(e.Value))
 	}
 	if e.Summary != "" && e.Summary != e.Value {
 		return fmt.Sprintf("key=%s summary=%s value=%s", e.Key, e.Summary, e.Value)
