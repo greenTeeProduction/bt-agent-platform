@@ -1,7 +1,6 @@
 package gardener
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,6 +16,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // EvolveV2Config controls the v2 evolution pipeline: a structural quick-check
@@ -886,18 +886,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 // crash mid-write never leaves a truncated slo-metrics.json for the dashboard
 // to read.
 func exportSLOMetrics(path string, sloData map[string]float64) error {
-	data, err := json.MarshalIndent(sloData, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal SLO metrics: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write SLO metrics %q: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename SLO metrics %q: %w", path, err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, sloData)
 }
 
 // ─── Helpers (avoid import cycles, keep in gardener package) ───

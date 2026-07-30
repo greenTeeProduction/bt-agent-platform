@@ -107,17 +107,18 @@ alphabetical within each layer (matching the diagram order):
 ### Tree Catalog
 
 ~75 built-in trees (counts by category in [§1.1](01-introduction-goals.md));
-the two main registries:
+three registries:
 
 | Registry | Notable trees |
 |---|---|
 | `domains.AllDomainTrees()` (`internal/domains/trees.go` + `arc42_trees.go`) | Self-improvement/GOAP: `goap_fusion`, `goap_fusion_loop`, `goap_planning`, `goap_research`, `goap_devops` · research/fusion: `bt_fusion`, `notebooklm`, `notebooklm_consumer`, `notebooklm_plan_implement` · automation: `superpowers_workflow`, `hermes_update`, `bt_manager`, `arc42_seeder`, `auction_demo` · dev/ops: `code_review`, `devops_ci`, `refactoring`, `security_audit`, `crash_investigator`, `agent_monitor`, `alert_router`, `data_pipeline` · general: `meeting_notes`, `game_ai`, `trading_signal` · docs: `arc42:section1`…`arc42:section12`, `arc42:assemble` (root wrapping: 5.2) |
 | `evolution.AllFinanceTrees()` (`internal/evolution/finance_trees.go`) | `pitch_agent`, `earnings_reviewer`, `market_researcher`, `model_builder`, `meeting_prep`, `valuation_reviewer`, `gl_reconciler`, `month_end_closer`, `statement_auditor`, `kyc_screener` |
+| `domains.KanbanAndHermesDomainTrees()` (`internal/domains/trees.go`) | Kanban workflow (`kanban.go`): `kanban_task_creator`, `kanban_refiner`, `kanban_qa`, `kanban_monitor`, `kanban_workflow`, `kanban_autopilot` · Hermes self-evolution (`hermes_evolve.go`, `hermes_obsidian.go`): `hermes_evolve`, `hermes_obsidian`; deliberately excluded from `AllDomainTrees()` — not part of the gardener/dashboard registry surface — but given the same `BuildTree` smoke coverage and condition-description coverage via a dedicated test |
 
-Research, startup-role, thinktank, kanban, evolution, composed-block, and core
-trees live beside these in `internal/evolution` (`research_trees.go`,
-`goap_trees.go`, `fusion_trees.go`), `internal/startup`, `internal/thinktank`,
-and `internal/domains/kanban.go`.
+Research, startup-role, thinktank, evolution, composed-block, and core trees
+live beside these in `internal/evolution` (`research_trees.go`,
+`goap_trees.go`, `fusion_trees.go`), `internal/startup`, and
+`internal/thinktank`.
 
 ### MCP Tool Families (`cmd/bt-agent`)
 

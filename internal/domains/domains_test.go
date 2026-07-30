@@ -1217,6 +1217,63 @@ func TestDomainTreeSuitesReachAllStrategyBranches(t *testing.T) {
 	}
 }
 
+// tasksForKanbanAndHermesTrees returns a representative smoke task for each
+// tree in KanbanAndHermesDomainTrees().
+func tasksForKanbanAndHermesTrees() map[string]string {
+	return map[string]string{
+		"kanban_task_creator": "kanban: create a task card for the new feature",
+		"kanban_refiner":      "kanban: refine the acceptance criteria on card #17",
+		"kanban_qa":           "qa: validate card #42 before merge",
+		"kanban_monitor":      "kanban: monitor the board for stale cards",
+		"kanban_workflow":     "kanban: run the full task workflow for card #9",
+		"kanban_autopilot":    "kanban: autopilot the board end to end",
+		"hermes_evolve":       "hermes: evolve the self-improvement loop",
+		"hermes_obsidian":     "hermes: optimize the obsidian vault structure",
+	}
+}
+
+// TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage gives the kanban and
+// hermes-evolve trees the same smoke-test and condition-description coverage
+// AllDomainTrees()-driven guards already enforce for the curated registry.
+// These trees are intentionally excluded from AllDomainTrees() (they are not
+// part of the gardener/dashboard registry surface), so
+// KanbanAndHermesDomainTrees() is a dedicated registry scoped to this guard.
+// The trees shell out to real board/vault state (hermes_update,
+// notebooklm-style side effects), so — matching the precedent set by
+// TestAllDomainTrees for similarly runtime-state-dependent trees — this only
+// smoke-tests BuildTree structurally rather than running benchmark.RunSuite.
+func TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage(t *testing.T) {
+	trees := KanbanAndHermesDomainTrees()
+	tasks := tasksForKanbanAndHermesTrees()
+	mock := benchmark.DefaultMock()
+
+	if len(trees) != len(tasks) {
+		t.Errorf("kanban/hermes tree registry/task mismatch: got %d registered trees and %d smoke tasks", len(trees), len(tasks))
+	}
+
+	for name, tree := range trees {
+		if tree == nil {
+			t.Errorf("tree %q is nil", name)
+			continue
+		}
+		task, ok := tasks[name]
+		if !ok {
+			t.Errorf("no smoke task defined for tree %q", name)
+			continue
+		}
+
+		bb := &engine.Blackboard{Task: task, LLM: mock}
+		cmd := engine.BuildTree(tree, bb)
+		if cmd == nil {
+			t.Errorf("tree %q: BuildTree returned nil", name)
+		}
+
+		for _, gap := range conditionDescriptionGaps(*tree) {
+			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", name, gap)
+		}
+	}
+}
+
 // TestGoapFusionLoopSeedsBeforeResearch pins the tree ordering that keeps the
 // self-seeder reachable: BacklogReplenish must appear BEFORE ResearchRouter,
 // so a cycle whose research phase fails still seeds a program. And

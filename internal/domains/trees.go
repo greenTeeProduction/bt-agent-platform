@@ -796,6 +796,23 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 	return trees
 }
 
+// KanbanAndHermesDomainTrees returns the kanban workflow and hermes
+// self-evolution trees. They are intentionally excluded from
+// AllDomainTrees() (not part of the gardener/dashboard registry surface)
+// but still need the same smoke and condition-description coverage.
+func KanbanAndHermesDomainTrees() map[string]*evolution.SerializableNode {
+	return map[string]*evolution.SerializableNode{
+		"kanban_task_creator": KanbanTaskCreatorTree(),
+		"kanban_refiner":      KanbanRefinerTree(),
+		"kanban_qa":           KanbanQATree(),
+		"kanban_monitor":      KanbanBoardMonitorTree(),
+		"kanban_workflow":     KanbanWorkflowTree(),
+		"kanban_autopilot":    KanbanAutoPilotTree(),
+		"hermes_evolve":       HermesSelfEvolutionTree(),
+		"hermes_obsidian":     HermesObsidianOptimizerTree(),
+	}
+}
+
 // ExpectedDomainIDs converts a domain tree registry (as returned by
 // AllDomainTrees) into the "domain:<name>" ID form knowledge.KnowledgeGraph's
 // ExpectedDomains expects, so every process wiring the live registry into

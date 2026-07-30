@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // --- Multi-dimensional Fitness (Stockfish: Evaluation Function) ---
@@ -331,13 +332,7 @@ func (tt *TranspositionTable) Path() string { return tt.path }
 func (tt *TranspositionTable) Save() error {
 	tt.mu.RLock()
 	defer tt.mu.RUnlock()
-	data, err := json.MarshalIndent(tt.entries, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := tt.path + ".tmp"
-	_ = os.WriteFile(tmp, data, 0644)
-	return os.Rename(tmp, tt.path)
+	return util.SaveJSONAtomic(tt.path, tt.entries)
 }
 
 func (tt *TranspositionTable) load() {

@@ -17,11 +17,43 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ============================================================================
 // Helper function tests (evolve_v2.go)
 // ============================================================================
+
+func TestExportSLOMetrics_CreatesMissingParentDirs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "slo-metrics.json")
+	sloData := map[string]float64{"agentA": 0.97}
+
+	if err := exportSLOMetrics(path, sloData); err != nil {
+		t.Fatalf("exportSLOMetrics returned error: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected file to exist at %q: %v", path, err)
+	}
+}
+
+func TestExportSLOMetrics_RoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "slo-metrics.json")
+	sloData := map[string]float64{"agentA": 0.97}
+
+	if err := exportSLOMetrics(path, sloData); err != nil {
+		t.Fatalf("exportSLOMetrics returned error: %v", err)
+	}
+
+	var got map[string]float64
+	if err := util.LoadJSON(path, &got); err != nil {
+		t.Fatalf("util.LoadJSON returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(got, sloData) {
+		t.Errorf("round-tripped data = %v, want %v", got, sloData)
+	}
+}
 
 func TestCloneTreeForGardener_Nil(t *testing.T) {
 	got := cloneTreeForGardener(nil)

@@ -259,6 +259,8 @@ Consolidation notes (2026-07-16):
 | ADR-234 | `hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research) | Accepted | 2026-07-29 |
 | ADR-235 | `RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research) | Accepted | 2026-07-29 |
 | ADR-236 | `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research) | Accepted | 2026-07-29 |
+| ADR-237 | `TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-238 | `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research) | Accepted | 2026-07-30 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4214,6 +4216,48 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ The invariant lives on `CompanyState` itself, so any future wrapper around the same pointer is safe by construction rather than by remembering to reuse a shared lock.
 - ⚠️ Lock scoping is now hand-managed per call site to avoid the non-reentrant deadlock between `Workflow`'s and `CompanyOrchestrator`'s locking (e.g. `ExecuteSprint` releasing `w.mu` mid-method before calling `orch.RunSprint()`) — a future accessor that naively holds `CompanyState`'s lock across a call into another method that also locks it will deadlock; there is no compiler-enforced guard against this beyond the `-race` test and the doc comments on `Lock`/`Unlock` and `ExecuteSprint`.
 - Rejected: a single shared external lock in `cmd/bt-dashboard`, in favor of a lock owned by `CompanyState` itself (see Alternatives) — → [§5.1](05-building-blocks.md)/[§8.6](08-crosscutting-concepts.md) for the accessor-level mechanism.
+
+---
+
+## ADR-237: `TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research)
+
+**Context (2026-07-30):** ADR-176 made `util.SaveJSONAtomic` the one canonical implementation of ADR-003's write-`.tmp`-then-rename pattern and migrated six call sites onto it, but two more had drifted the same way and were missed. `TranspositionTable.Save` (`internal/evaluator/stockfish.go`) discarded its `os.WriteFile` error via `_ =` and then unconditionally renamed the (possibly partial or absent) tmp file over the live transposition-table file — the exact error-discarding hazard ADR-154 had already fixed once in `gardener.Registry.SaveTree`/`MetricsTracker.Save`. `Gardener.RunCycleV2`'s inline SLO-metrics persistence block (`internal/gardener/evolve_v2.go`) hand-rolled the same write-`.tmp`-then-rename idiom correctly (it did check the write error before renaming) but as an inline block with no name of its own, so it was untestable except by driving a full cycle run, and — like the pre-ADR-176 call sites — never created missing parent directories.
+
+**Evaluation criteria:** Consistency with the ADR-176 canonical helper over a seventh hand-copied variant of the same pattern; testability — extracting the inline SLO-metrics block into a named function with a stable signature makes it unit-testable in isolation; parent-directory creation for paths that may not yet exist, which neither hand-rolled site had.
+
+**Decision:** `TranspositionTable.Save` now delegates directly to `util.SaveJSONAtomic(tt.path, tt.entries)` in place of its own marshal→write-`.tmp`→rename. The inline SLO-metrics block in `RunCycleV2` is extracted into a standalone `exportSLOMetrics(path string, sloData map[string]float64) error` that also delegates to `util.SaveJSONAtomic`, and `RunCycleV2` calls it instead of inlining the logic.
+
+**Alternatives considered:**
+- Fix the error-discarding bug in `TranspositionTable.Save` in place with a hand-rolled check-then-rename, mirroring how ADR-154 fixed `Registry.SaveTree`/`MetricsTracker.Save` before ADR-176 existed — rejected: ADR-176 already exists specifically to prevent a seventh hand-copied variant of this pattern; a new fix should adopt the canonical helper directly rather than repeating a since-superseded fix style.
+- Leave `RunCycleV2`'s SLO-metrics persistence inline and only fix the missing parent-directory creation — rejected: keeps the logic reachable only through a full cycle run; extracting it into `exportSLOMetrics` costs one function boundary and buys direct round-trip and parent-dir tests.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestTranspositionTable_Save_CreatesMissingParentDirs` and `TestTranspositionTable_Save_NoLeftoverTmpFile` (`internal/evaluator/stockfish_test.go`), and `TestExportSLOMetrics_CreatesMissingParentDirs` and `TestExportSLOMetrics_RoundTrip` (`internal/gardener/evolve_v2_test.go`).
+
+**Consequences:**
+- ✅ `TranspositionTable.Save` no longer silently discards a write error before renaming over the last-known-good transposition-table file; a failed write now aborts instead of risking a partial/stale file being committed.
+- ✅ Both call sites now create missing parent directories automatically, which neither hand-rolled version did.
+- ✅ `RunCycleV2`'s SLO-metrics persistence is now unit-testable in isolation via `exportSLOMetrics` rather than only reachable through a full cycle run.
+- Rejected: hand-rolled per-site fixes, in favor of migrating both remaining stragglers onto the ADR-176 canonical helper (see Alternatives) — → [§8](08-crosscutting-concepts.md) for the shared atomic-write pattern.
+
+## ADR-238: `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research)
+
+**Context (2026-07-30):** `KanbanTaskCreatorTree`, `KanbanRefinerTree`, `KanbanQATree`, `KanbanBoardMonitorTree`, `KanbanWorkflowTree`, and `KanbanAutoPilotTree` (`internal/domains/kanban.go`), plus `HermesSelfEvolutionTree` (`internal/domains/hermes_evolve.go`) and `HermesObsidianOptimizerTree` (`internal/domains/hermes_obsidian.go`), were never registered in `AllDomainTrees()`, so every `AllDomainTrees()`-driven guard in `internal/domains/domains_test.go` — the `TestAllDomainTrees` smoke run, `TestAllDomainTreesHaveDescriptionsAndLeafCoverage`, `TestAllDomainTreeConditionsHaveDescriptions`, and `TestAllDomainTreeSelectorsHaveDescriptions` — silently excluded all eight. Only a non-nil structural check (`engine_domain_execution_test.go`) and a `Validate()` max-tokens check (`kanban_test.go`) touched them; no test ever ran `engine.BuildTree` against a representative task or enforced condition/leaf-description coverage the way the curated registry gets for free.
+
+**Evaluation criteria:** Closing the coverage gap without folding these trees into `AllDomainTrees()` itself, since `AllDomainTrees()` feeds the gardener/dashboard registry surface (tree selection, evolution population, dashboard listings) and these eight trees are deliberately scoped to their own kanban/Hermes entry points rather than that surface; matching the precedent `TestAllDomainTrees` already set for runtime-state-dependent trees — a structural `BuildTree` smoke test rather than a full `benchmark.RunSuite`, since these trees shell out to real board/vault state.
+
+**Decision:** `internal/domains/trees.go` gains `KanbanAndHermesDomainTrees()`, a dedicated registry map of the eight trees kept deliberately separate from `AllDomainTrees()`. `internal/domains/domains_test.go` gains `TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage`, which runs `engine.BuildTree` against a representative per-tree smoke task for each entry and asserts no `Condition` node has an empty `Description`, mirroring the shape of the existing `AllDomainTrees()`-driven guards without extending their registry surface.
+
+**Alternatives considered:**
+- Register all eight trees directly in `AllDomainTrees()` so the existing guards cover them for free — rejected: would pull them into the gardener/dashboard registry surface and change production tree-selection behavior far beyond test coverage.
+- Add only the missing condition-description check, without a `BuildTree` smoke run — rejected: `engine_domain_execution_test.go` already covers non-nil structurally; the actual gap `AllDomainTrees()`'s own smoke test closes for the curated registry is exercising `BuildTree` against a real task, and this decision restores that same parity for the excluded eight.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage` (`internal/domains/domains_test.go`).
+
+**Consequences:**
+- ✅ The eight kanban/Hermes trees now get the same `BuildTree`-smoke and condition-description coverage every `AllDomainTrees()`-registered tree already had, without changing which trees the gardener/dashboard actually select.
+- ✅ `KanbanAndHermesDomainTrees()` gives future guards (e.g. a leaf-coverage or selector-description check) one place to extend without touching `AllDomainTrees()`'s production semantics.
+- ⚠️ Being a second, parallel registry, a ninth kanban/Hermes tree added later must be registered here by hand — nothing enforces that `KanbanAndHermesDomainTrees()` stays exhaustive over every tree constructor in `kanban.go`/`hermes_evolve.go`/`hermes_obsidian.go`, a drift risk similar in shape to the one ADR-218 flagged for `AllDomainTrees()` itself.
+- Rejected: folding these trees into `AllDomainTrees()`, in favor of a scoped, separate registry (see Alternatives) — → [§5](05-building-blocks.md) for the domain-tree registry structure.
 
 ---
 
