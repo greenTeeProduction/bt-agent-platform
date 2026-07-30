@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 )
@@ -275,6 +276,42 @@ func TestConditionOverlap(t *testing.T) {
 	overlap2 := conditionOverlap("IsCodeReview", "IsBuildTask")
 	if overlap2 > 0.3 {
 		t.Errorf("expected no overlap for different conditions, got %.2f", overlap2)
+	}
+}
+
+// TestGiniImpurityFromProbs_Canonical exercises the canonical, generic
+// Gini-impurity helper in selector_optimizer.go that decision_tree.go's
+// DTAnalyzer.GiniImpurity must be consolidated onto, instead of carrying its
+// own private copy of the 1-Σp² formula.
+func TestGiniImpurityFromProbs_Canonical(t *testing.T) {
+	if g := GiniImpurityFromProbs(1.0, 0.0); g > 0.0001 {
+		t.Errorf("pure distribution gini = %.4f, want ~0", g)
+	}
+	if g := GiniImpurityFromProbs(0.5, 0.5); g < 0.49 || g > 0.51 {
+		t.Errorf("balanced binary gini = %.4f, want ~0.5", g)
+	}
+	want := 1.0 - (0.3*0.3 + 0.7*0.7)
+	if g := GiniImpurityFromProbs(0.3, 0.7); math.Abs(g-want) > 1e-9 {
+		t.Errorf("GiniImpurityFromProbs(0.3, 0.7) = %.6f, want %.6f", g, want)
+	}
+}
+
+// TestDTAnalyzer_GiniImpurity_MatchesCanonicalGiniImpurityFromProbs verifies
+// DTAnalyzer.GiniImpurity is computed via the canonical GiniImpurityFromProbs
+// helper (same formula, single source) rather than a duplicated private
+// implementation, so the two never drift.
+func TestDTAnalyzer_GiniImpurity_MatchesCanonicalGiniImpurityFromProbs(t *testing.T) {
+	d := NewDTAnalyzer()
+	for i := 0; i < 3; i++ {
+		d.RecordHit("SR", "A", "x", true)
+	}
+	for i := 0; i < 7; i++ {
+		d.RecordHit("SR", "B", "y", true)
+	}
+	got := d.GiniImpurity("SR")
+	want := GiniImpurityFromProbs(0.3, 0.7)
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("DTAnalyzer.GiniImpurity = %.6f, want %.6f (canonical GiniImpurityFromProbs)", got, want)
 	}
 }
 

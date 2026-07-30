@@ -1,7 +1,10 @@
 package dashboard
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -79,7 +82,10 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			Reason   string `json:"reason"`
 		}
 		if r.Method == http.MethodPost {
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+				encodeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed request body: " + err.Error()})
+				return
+			}
 		}
 		if body.Reviewer == "" {
 			body.Reviewer = "dashboard"
@@ -145,12 +151,17 @@ func finalizeHITLResolution(req *hitl.Request, approved bool) {
 }
 
 func encodeJSON(w http.ResponseWriter, status int, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if status != 0 {
 		w.WriteHeader(status)
 	}
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		slog.Warn("dashboard: write HITL response failed", "err", err)
 	}
 }
 

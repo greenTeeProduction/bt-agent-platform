@@ -119,8 +119,21 @@ func InformationGain(child *ChildStats, allStats *SelectorStats) float64 {
 
 // ─── Gini Impurity (CART metric) ─────────────────────────────────────────
 
+// GiniImpurityFromProbs computes the Gini impurity of a probability
+// distribution: Gini = 1 - Σ p_i². This is the canonical formula shared by
+// every Gini computation in this package — callers pass whatever
+// probabilities their outcome space uses (success/failure/running,
+// hit-count shares, etc.) rather than duplicating the 1-Σp² arithmetic.
+// Low Gini = predictable outcomes (a distribution concentrated on one class).
+func GiniImpurityFromProbs(probs ...float64) float64 {
+	sumSq := 0.0
+	for _, p := range probs {
+		sumSq += p * p
+	}
+	return 1.0 - sumSq
+}
+
 // GiniImpurity computes the Gini impurity for a child node.
-// Gini = 1 - Σ p_i²
 // Low Gini = predictable outcomes (almost always succeeds or almost always fails).
 func GiniImpurity(child *ChildStats) float64 {
 	t := float64(child.Total())
@@ -130,7 +143,7 @@ func GiniImpurity(child *ChildStats) float64 {
 	s := float64(child.Successes) / t
 	f := float64(child.Failures) / t
 	r := float64(child.Running) / t
-	return 1.0 - (s*s + f*f + r*r)
+	return GiniImpurityFromProbs(s, f, r)
 }
 
 // ─── Ordering Strategies ─────────────────────────────────────────────────
