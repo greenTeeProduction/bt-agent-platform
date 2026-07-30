@@ -325,6 +325,38 @@ func TestGoapDevopsRunsRealGOAPPlannerFirst(t *testing.T) {
 	}
 }
 
+// TestGoapTreesSeedGoapToolsBeforeGOAPRoot closes a condition-coverage gap in
+// the GOAP_Root branch that TestGoapPlanningRunsRealGOAPPlannerFirst,
+// TestGoapResearchRunsRealGOAPPlannerFirst, and
+// TestGoapDevopsRunsRealGOAPPlannerFirst only check is present, not reachable:
+// GOAP_Root's first child, the HasGoapGoal condition (engine/goap_nodes.go),
+// only returns true once the blackboard's ChainState already holds a
+// "goap_goals" entry — seeded exclusively by the SetupGoapTools action
+// (engine/goap_nodes.go: "seeds goap_actions, goap_goals, goap_config so that
+// HasGoapGoal and PlanGoapActions can operate without external seeding").
+// internal/evolution/merged.go's GoapPlanningPath calls SetupGoapTools in its
+// PreGate before routing into the shared GOAP_Root shape (MergedTree), but
+// the domains-package trees only call SetupUniversalTools/SetupResearchTools/
+// SetupDevTools — none of which touch goap_goals. Without SetupGoapTools,
+// HasGoapGoal can never be true, so the "real GOAP A* planner" these trees
+// claim to try first is permanently unreachable dead code: a Condition node
+// with a description and a registered engine implementation, but zero
+// possible runtime coverage. This guards that each GOAP-fronted domain tree
+// seeds GOAP tool state (an action named SetupGoapTools, matching
+// merged.go's pattern) before its StrategyRouter can ever reach GOAP_Root.
+func TestGoapTreesSeedGoapToolsBeforeGOAPRoot(t *testing.T) {
+	trees := map[string]*evolution.SerializableNode{
+		"goap_planning": GoapPlanningTree(false),
+		"goap_research": GoapResearchTree(false),
+		"goap_devops":   GoapDevopsTree(false),
+	}
+	for name, tree := range trees {
+		if findNode(*tree, "SetupGoapTools") == nil {
+			t.Errorf("%s: tree never calls the SetupGoapTools action, so GOAP_Root's HasGoapGoal condition can never see goap_goals in ChainState and is permanently false — the wired-in real GOAP A* planner branch is unreachable dead code", name)
+		}
+	}
+}
+
 func TestNotebooklmPlanImplement(t *testing.T) {
 	tree := evolution.NotebooklmPlanImplementTree()
 	mock := benchmark.DefaultMock()

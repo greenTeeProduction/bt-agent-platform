@@ -261,6 +261,8 @@ Consolidation notes (2026-07-16):
 | ADR-236 | `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research) | Accepted | 2026-07-29 |
 | ADR-237 | `TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research) | Accepted | 2026-07-30 |
 | ADR-238 | `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-239 | `CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-240 | Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research) | Accepted | 2026-07-30 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4202,7 +4204,7 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 **Decision:** `startup.CompanyState` (`internal/startup/company.go`) now carries its own unexported `sync.Mutex` behind exported `Lock()`/`Unlock()` methods, making the state self-serializing regardless of which wrapper (`Workflow`, `CompanyOrchestrator`, or a future one) touches it. Every accessor across both packages that reads or writes `CompanyState` fields now takes this lock:
 - `Workflow.SetTaskStatus`/`ExecuteSprint`/`RunFullPipeline` lock narrowly around only the specific `w.Company.*` reads/writes, and deliberately *never* hold `CompanyState`'s lock across a call into `orch.RunSprint()` — `ExecuteSprint` releases `w.mu` before calling `orch.RunSprint()` and re-acquires it after, since the real `CompanyOrchestrator.RunSprint` locks the same `CompanyState` internally and the mutex is not reentrant.
-- `CompanyOrchestrator.RunSprint`/`Summary` hold the lock for their whole body; `RunQuarter` snapshots the fields it needs under the lock immediately before and after its 12-sprint loop rather than holding the lock across those `RunSprint` calls (each of which takes the lock itself).
+- `CompanyOrchestrator.RunSprint`/`Summary` hold the lock for their whole body; `RunQuarter` snapshots the fields it needs under the lock immediately before and after its 12-sprint loop rather than holding the lock across those `RunSprint` calls (each of which takes the lock itself). — amended 2026-07-30, see ADR-239: `RunSprint` no longer holds the lock for its whole body; that entry explains why whole-body locking on `RunSprint` specifically was itself a re-introduction of the every-caller-blocks problem this ADR set out to fix.
 - `cmd/bt-dashboard/main.go`'s `handleDefaultCompany` takes the same lock before `encodeJSON(w, companyState)`.
 
 **Alternatives considered:**
@@ -4258,6 +4260,49 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `KanbanAndHermesDomainTrees()` gives future guards (e.g. a leaf-coverage or selector-description check) one place to extend without touching `AllDomainTrees()`'s production semantics.
 - ⚠️ Being a second, parallel registry, a ninth kanban/Hermes tree added later must be registered here by hand — nothing enforces that `KanbanAndHermesDomainTrees()` stays exhaustive over every tree constructor in `kanban.go`/`hermes_evolve.go`/`hermes_obsidian.go`, a drift risk similar in shape to the one ADR-218 flagged for `AllDomainTrees()` itself.
 - Rejected: folding these trees into `AllDomainTrees()`, in favor of a scoped, separate registry (see Alternatives) — → [§5](05-building-blocks.md) for the domain-tree registry structure.
+
+---
+
+## ADR-239: `CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research)
+
+**Context (2026-07-30):** ADR-236 gave `CompanyState` its own mutex specifically to stop concurrent readers from racing on its fields, and as part of that decision had `CompanyOrchestrator.RunSprint` take `state.Lock()` for its entire body via `defer state.Unlock()`. But `RunSprint`'s body runs three sequential `o.runTree()` calls (`EngineerTree`, `MarketingTree`, `SalesTree`), each carrying a 120s timeout and, in production, a real LLM round-trip — up to ~6 minutes worst case per sprint. Because `cmd/bt-dashboard/main.go`'s `handleDefaultCompany` (fetched by `app.js:18` on every dashboard page load) and `CompanyOrchestrator.Summary` both take that same `state.Lock()` before reading, ADR-236's whole-body locking on `RunSprint` reintroduced the exact blocking failure mode it was meant to close: any GET to `/api/company/default` or `Summary()` call now stalls for the full sprint duration whenever `handleWorkflowRunFullPipeline` is running `wf.RunFullPipeline` synchronously in a request goroutine.
+
+**Evaluation criteria:** Eliminating multi-minute lock contention on `CompanyState` from a single in-flight `RunSprint`, verifiable by a concurrent-lock-latency test rather than only `-race`; preserving ADR-236's original race-safety guarantee — every read/mutation of `CompanyState` fields must still happen under the lock; keeping the fix local to `RunSprint` and mirroring the unlock-around-slow-call pattern `dashboard/workflow_engine.go`'s `ExecuteSprint` already uses for this exact reason, rather than inventing a second pattern.
+
+**Decision:** `RunSprint` now takes `state.Lock()` only twice, both briefly: once at the top to read the sprint-input fields it needs (`SprintGoal`, `ProductStage`, `Features`, `TechnicalDebt`, `Engineers`, `Users`, `MRR`, `ARR`, `ChurnRate`, `CAC`, `LTV`) into local variables and increment `CurrentSprint`, then `state.Unlock()` before running any tree; and once after all three `o.runTree()` calls return, to apply the resulting mutations (`state.Features`, `state.TechnicalDebt`, `state.Users`, `state.CAC`, `state.MRR`, `state.ARR`, `state.BurnRate`, `state.CashInBank`, `state.Runway`, `state.ChurnRate`) under `defer state.Unlock()`. The three `runTree` calls themselves run fully unlocked.
+
+**Alternatives considered:**
+- Leave `RunSprint` holding the lock for its whole body, and instead have `handleDefaultCompany`/`Summary` use a `TryLock`-with-fallback or a cached/stale read to avoid blocking — rejected: papers over the root cause (the lock is held far longer than the data access it protects) and would make every future reader responsible for defending against a slow writer, instead of fixing the writer once.
+- Move `CurrentSprint`'s increment into the same post-tree-execution lock instead of the pre-execution one — rejected: `SprintNum`/`result.Goal` are derived from `CurrentSprint`/`SprintGoal` before the trees run and are used to build the per-tree task strings passed into `runTree`, so the sprint number must be committed and read before the unlocked section starts, exactly mirroring `RunQuarter`'s existing snapshot-before/apply-after shape for its 12-sprint loop.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestRunSprint_DoesNotHoldStateLockAcrossTreeExecution` (`internal/startup/orchestrator_test.go`), which runs `RunSprint` against a `slowLLM` test double on one goroutine and asserts a concurrent `state.Lock()`/`Unlock()` completes within a 250ms budget instead of blocking for the simulated tree-execution duration.
+
+**Consequences:**
+- ✅ `/api/company/default` and `Summary()` no longer block for the duration of an in-flight sprint's LLM tree executions; they only ever wait for the two short snapshot/apply critical sections.
+- ✅ `RunSprint` now matches the unlock-around-slow-call shape `dashboard/workflow_engine.go`'s `ExecuteSprint` already uses when calling into `orch.RunSprint()` itself, and the shape ADR-236 already used for `RunQuarter`'s 12-sprint loop — one consistent pattern for "lock only around the state access, not the slow work" across all three call sites instead of two of three.
+- ⚠️ The pre-execution snapshot means a `RunSprint` call's tree tasks are built from state as of the moment execution starts, not as of when the resulting mutations are applied; a concurrent writer that changes `MRR`/`Users`/etc. mid-sprint (there is none today, since `RunSprint` is the only writer of those fields) would not be reflected in that in-flight sprint's task prompts — an accepted staleness window, not a race, since all mutation still happens under the lock.
+- Amends ADR-236's decision text for `RunSprint`/`Summary`, leaving `Summary` unchanged (a single read with no slow call in between, so whole-body locking there is not the same hazard) — → [§6](06-runtime-view.md) for the sprint-execution sequence.
+
+---
+
+## ADR-240: Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research)
+
+**Context (2026-07-30):** `GoapPlanningTree`, `GoapResearchTree`, and `GoapDevopsTree` (`internal/domains/trees.go`) each front their `StrategyRouter` selector with `*evolution.GOAPPlanningTree()`/`GOAPResearchTree()`/`GOAPDevOpsTree()` — the shared `GOAP_Root` shape whose first child is the `HasGoapGoal` condition (`internal/engine/goap_nodes.go`), gating the real GOAP A* planner. `HasGoapGoal` only returns true once the blackboard's `ChainState` already holds a `goap_goals` entry, which is seeded exclusively by the `SetupGoapTools` action — the same action `internal/evolution/merged.go`'s `GoapPlanningPath` calls in its `PreGate` before routing into that identical `GOAP_Root` shape. But the three `domains` package trees only called `SetupUniversalTools`/`SetupResearchTools`/`SetupDevTools` beforehand, none of which touch `goap_goals`. `HasGoapGoal` could therefore never be true for any of the three trees, making the "real GOAP A* planner" branch each tree's own `Description` advertises as tried first permanently unreachable dead code — a `Condition` node with a description and a registered engine implementation, but zero possible runtime coverage. The existing `TestGoapPlanningRunsRealGOAPPlannerFirst`/`TestGoapResearchRunsRealGOAPPlannerFirst`/`TestGoapDevopsRunsRealGOAPPlannerFirst` tests only asserted the branch was *present* in the tree shape, not that it was ever *reachable*.
+
+**Evaluation criteria:** Matching `merged.go`'s established pattern for wiring `GOAP_Root` (call `SetupGoapTools` before it) rather than inventing a second way to seed `goap_goals`; closing the gap with a coverage test that actually proves reachability (does the tree call the seeding action) rather than one that only proves the branch node exists, since the latter is exactly the kind of test that let this gap ship unnoticed.
+
+**Decision:** `GoapPlanningTree`, `GoapResearchTree`, and `GoapDevopsTree` each gain an `act("SetupGoapTools", "Initialize GOAP planning state: actions, goals, config, world state")` step, inserted immediately after their existing tool-setup action and before `PreGate`/`StrategyRouter` — mirroring `merged.go`'s `GoapPlanningPath` ordering. `internal/domains/domains_test.go` gains `TestGoapTreesSeedGoapToolsBeforeGOAPRoot`, which walks all three trees and fails if `SetupGoapTools` is absent, explicitly naming the consequence (`HasGoapGoal` permanently false, the wired-in real planner branch unreachable) in the failure message.
+
+**Alternatives considered:**
+- Have `HasGoapGoal` (or `GOAP_Root` itself) seed default `goap_goals` lazily on first evaluation instead of requiring an upstream `SetupGoapTools` call — rejected: changes `engine.goap_nodes.go` behavior for every `GOAP_Root` consumer including `merged.go`'s already-correct `GoapPlanningPath`, to work around a gap that exists only in the three `domains` package trees.
+- Extend `SetupUniversalTools`/`SetupResearchTools`/`SetupDevTools` themselves to also seed `goap_goals` — rejected: conflates two independently-composable setup concerns (general chain-agent tool access vs. GOAP-specific planning state) and would seed `goap_goals` even for trees that never route into `GOAP_Root` at all.
+
+**Status:** Accepted (2026-07-30). Pinned by `TestGoapTreesSeedGoapToolsBeforeGOAPRoot` (`internal/domains/domains_test.go`).
+
+**Consequences:**
+- ✅ `GoapPlanningTree`, `GoapResearchTree`, and `GoapDevopsTree` can now actually reach and execute the real GOAP A* planner branch their descriptions already claimed to try first, instead of always falling through to the keyword-based or general-agent fallback.
+- ✅ The new test fails loudly, naming the specific unreachable-condition consequence, if a future edit to any of the three trees drops the `SetupGoapTools` call — the existing "branch is present" tests would not have caught that regression.
+- Rejected: a lazy-seeding fix inside `engine.goap_nodes.go` or folding the seed into the existing tool-setup actions, in favor of matching `merged.go`'s explicit-call pattern at each of the three call sites (see Alternatives) — → [§5](05-building-blocks.md) for the domain-tree composition pattern.
 
 ---
 
