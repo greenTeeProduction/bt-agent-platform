@@ -2,6 +2,7 @@ package domains
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -1341,5 +1342,87 @@ func TestGoapFusionLoopSeedsBeforeResearch(t *testing.T) {
 	}
 	if _, ok := order["SeedNextProgram"]; !ok {
 		t.Fatal("SeedNextProgram must be present in the tree")
+	}
+}
+
+// TestExpectedDomainIDsIsSortedAndComplete closes the last uncovered corner of
+// trees.go for the goal "all domain trees have smoke tests, descriptions, and
+// condition coverage": ExpectedDomainIDs (used by cmd/bt-dashboard and
+// cmd/bt-agent to build knowledge.KnowledgeGraph.ExpectedDomains, the seam
+// that drives the bt_kg_coverage_gaps gauge and CoverageGaps reporting) had
+// zero direct test coverage before this guard. Two things must hold: (1) the
+// output is exactly one "domain:<name>" entry per registry key, with no drops
+// or extras, and (2) the output is returned in sorted order. Go map iteration
+// order is randomized per process, so a naive `for name := range registry`
+// implementation produces a different, unsorted permutation on every run —
+// any consumer that logs, diffs, or exposes this slice directly (dashboard
+// metrics, coverage-gap reports) gets non-reproducible output. Callers that
+// happen to sort before comparing (cmd/bt-dashboard/main_test.go) mask this,
+// but the exported helper itself should guarantee a stable order rather than
+// relying on every caller to re-sort.
+func TestExpectedDomainIDsIsSortedAndComplete(t *testing.T) {
+	registry := AllDomainTrees()
+	ids := ExpectedDomainIDs(registry)
+
+	if len(ids) != len(registry) {
+		t.Fatalf("ExpectedDomainIDs returned %d ids, want %d (one per registry entry)", len(ids), len(registry))
+	}
+
+	want := make(map[string]bool, len(registry))
+	for name := range registry {
+		want["domain:"+name] = true
+	}
+	for _, id := range ids {
+		if !want[id] {
+			t.Errorf("ExpectedDomainIDs produced unexpected id %q", id)
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		t.Errorf("ExpectedDomainIDs is missing ids: %v", want)
+	}
+
+	if !sort.StringsAreSorted(ids) {
+		t.Errorf("ExpectedDomainIDs(registry) is not sorted: %v", ids)
+	}
+}
+
+// TestWrapWithErrorHandlerIsIdempotentAndNilSafe directly exercises
+// wrapWithErrorHandler's guard branch, which TestAllDomainTreesWrappedInClaude-
+// ErrorHandler (error_handler_wrap_test.go) only ever observes indirectly
+// through AllDomainTrees() — and AllDomainTrees() always calls it with a
+// freshly built, never-wrapped tree, so the nil-tree and already-wrapped
+// branches of the guard are never actually executed by any existing test
+// (confirmed by coverage: wrapWithErrorHandler sits at 66.7%, the lowest of
+// any function in trees.go besides the previously 0%-covered
+// ExpectedDomainIDs). A nil tree must round-trip to nil so a broken tree
+// constructor cannot be masked into a wrapped-looking non-nil value, and an
+// already-wrapped ClaudeErrorHandler root must be returned unchanged rather
+// than nested a second time.
+func TestWrapWithErrorHandlerIsIdempotentAndNilSafe(t *testing.T) {
+	if got := wrapWithErrorHandler("nil_case", nil); got != nil {
+		t.Errorf("wrapWithErrorHandler(name, nil) = %+v, want nil", got)
+	}
+
+	already := &evolution.SerializableNode{
+		Type: "ClaudeErrorHandler", Name: "already_ErrorHandler",
+		Description: "pre-wrapped",
+		Children:    []evolution.SerializableNode{{Type: "Sequence", Name: "Inner", Description: "inner"}},
+	}
+	got := wrapWithErrorHandler("already", already)
+	if got != already {
+		t.Errorf("wrapWithErrorHandler on an already-wrapped tree returned a different node, want the same pointer unchanged")
+	}
+	if got.Type != "ClaudeErrorHandler" || len(got.Children) != 1 || got.Children[0].Type == "ClaudeErrorHandler" {
+		t.Errorf("wrapWithErrorHandler double-wrapped an already-wrapped tree: %+v", got)
+	}
+
+	fresh := &evolution.SerializableNode{Type: "Sequence", Name: "Fresh", Description: "fresh"}
+	wrapped := wrapWithErrorHandler("fresh", fresh)
+	if wrapped.Type != "ClaudeErrorHandler" || wrapped.Name != "fresh_ErrorHandler" {
+		t.Errorf("wrapWithErrorHandler(fresh) = %+v, want ClaudeErrorHandler named fresh_ErrorHandler", wrapped)
+	}
+	if len(wrapped.Children) != 1 || wrapped.Children[0].Name != "Fresh" {
+		t.Errorf("wrapWithErrorHandler(fresh) children = %+v, want [Fresh]", wrapped.Children)
 	}
 }
