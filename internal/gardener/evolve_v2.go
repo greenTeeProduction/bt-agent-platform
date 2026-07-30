@@ -1,7 +1,6 @@
 package gardener
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,6 +16,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // EvolveV2Config controls the v2 evolution pipeline: a structural quick-check
@@ -866,11 +866,9 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	sloData := CollectAgentSLOs(g.cfg.ValidationGate.EvidencePath)
 	if len(sloData) > 0 {
 		sloPath := filepath.Join(filepath.Dir(g.cfg.MetricsTracker.path), "slo-metrics.json")
-		if data, err := json.MarshalIndent(sloData, "", "  "); err == nil {
-			tmp := sloPath + ".tmp"
-			if err := os.WriteFile(tmp, data, 0644); err == nil {
-				_ = os.Rename(tmp, sloPath)
-			}
+		if err := exportSLOMetrics(sloPath, sloData); err != nil {
+			slog.Error("gardener/v2: exporting SLO metrics failed, dashboard snapshot is stale", "path", sloPath, "error", err)
+			errs = append(errs, fmt.Errorf("exporting SLO metrics: %w", err))
 		}
 	}
 
@@ -882,6 +880,13 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		return results, errors.Join(errs...)
 	}
 	return results, nil
+}
+
+// exportSLOMetrics writes sloData to path via a temp-file-then-rename so a
+// crash mid-write never leaves a truncated slo-metrics.json for the dashboard
+// to read.
+func exportSLOMetrics(path string, sloData map[string]float64) error {
+	return util.SaveJSONAtomic(path, sloData)
 }
 
 // ─── Helpers (avoid import cycles, keep in gardener package) ───

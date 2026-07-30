@@ -13,14 +13,47 @@ import (
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ============================================================================
 // Helper function tests (evolve_v2.go)
 // ============================================================================
+
+func TestExportSLOMetrics_CreatesMissingParentDirs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "slo-metrics.json")
+	sloData := map[string]float64{"agentA": 0.97}
+
+	if err := exportSLOMetrics(path, sloData); err != nil {
+		t.Fatalf("exportSLOMetrics returned error: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected file to exist at %q: %v", path, err)
+	}
+}
+
+func TestExportSLOMetrics_RoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "slo-metrics.json")
+	sloData := map[string]float64{"agentA": 0.97}
+
+	if err := exportSLOMetrics(path, sloData); err != nil {
+		t.Fatalf("exportSLOMetrics returned error: %v", err)
+	}
+
+	var got map[string]float64
+	if err := util.LoadJSON(path, &got); err != nil {
+		t.Fatalf("util.LoadJSON returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(got, sloData) {
+		t.Errorf("round-tripped data = %v, want %v", got, sloData)
+	}
+}
 
 func TestCloneTreeForGardener_Nil(t *testing.T) {
 	got := cloneTreeForGardener(nil)
@@ -379,6 +412,70 @@ func TestRunCycleV2_MetricsSaveFailurePropagates(t *testing.T) {
 
 	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err == nil {
 		t.Fatal("RunCycleV2 returned a nil error despite every MetricsTracker.Save() call failing — the write failure is being silently discarded instead of propagated")
+	}
+}
+
+// TestRunCycleV2_SLOMetricsExportFailurePropagates pins the fix for the
+// "SLO metrics collection" block (evolve_v2.go, near the end of RunCycleV2):
+// every error from json.MarshalIndent, os.WriteFile, and os.Rename there was
+// silently discarded (`if data, err := ...; err == nil { ... }`, `_ =
+// os.Rename(...)`), so a failed slo-metrics.json export was indistinguishable
+// from a successful one. Pre-creating slo-metrics.json as an empty directory
+// forces the block's os.Rename(tmp, sloPath) to fail — renaming a file onto
+// an existing directory is rejected by the OS — while MetricsTracker.Save()
+// itself succeeds cleanly. RunCycleV2 must surface that failure through its
+// existing error return instead of swallowing it.
+func TestRunCycleV2_SLOMetricsExportFailurePropagates(t *testing.T) {
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	simpleTree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: "default", Description: "default", Tree: simpleTree, FilePath: dir + "/tree-default.json", Active: true},
+	}
+	reg.mu.Unlock()
+
+	// CollectAgentSLOs only attempts an export when the evidence file is
+	// non-empty, so seed it with one snapshot.
+	evidencePath := writeEvidenceFile(t, []engine.SLOSnapshot{
+		{AgentName: "default", TreeName: "default", TotalCalls: 10, SuccessfulCalls: 9, FailedCalls: 1, RecoveredCalls: 1},
+	})
+
+	// slo-metrics.json sits next to MetricsTracker's file (same dir). Pre-create
+	// it as an empty directory so the export's final os.Rename fails.
+	sloPath := filepath.Join(dir, "slo-metrics.json")
+	if err := os.Mkdir(sloPath, 0o755); err != nil {
+		t.Fatalf("Mkdir slo-metrics.json: %v", err)
+	}
+
+	cfg := Config{
+		Registry:                 reg,
+		MetricsTracker:           mt,
+		RefStore:                 refStore,
+		MaxMutations:             1,
+		EvolveWithoutReflections: true,
+		UseRealLLM:               false,
+		ValidationGate:           ValidationGateConfig{EvidencePath: evidencePath},
+	}
+	g := NewGardener(cfg)
+
+	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err == nil {
+		t.Fatal("RunCycleV2 returned a nil error despite the SLO-metrics export rename failing — the export failure is being silently discarded instead of propagated")
 	}
 }
 

@@ -40,7 +40,8 @@ func registerStockfishActions() {
 	RegisterAction("StoreInTranspositionTable", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
 		if bb.ChainState != nil {
-			bb.ChainState["tt_hits"] = bb.ChainState["tt_hits"].(int) + 1
+			hits, _ := bb.ChainState["tt_hits"].(int)
+			bb.ChainState["tt_hits"] = hits + 1
 			// Store current fitness as cached
 			if bb.Result != "" {
 				bb.ChainState["cached_result"] = bb.Result

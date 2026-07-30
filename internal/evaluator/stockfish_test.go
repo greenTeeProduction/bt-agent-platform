@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -87,6 +89,48 @@ func TestTranspositionTable_SaveLoadRoundTrip(t *testing.T) {
 	}
 	if entryA.InsertedAt >= entryB.InsertedAt {
 		t.Errorf("expected task-a InsertedAt (%d) < task-b InsertedAt (%d) after reload", entryA.InsertedAt, entryB.InsertedAt)
+	}
+}
+
+// ─── Save persists atomically ───
+
+// TestTranspositionTable_Save_CreatesMissingParentDirs verifies that Save can
+// write to a path whose parent directories don't yet exist. NewTranspositionTable
+// always creates its dir up front, so this test builds the struct directly to
+// exercise the case a caller-supplied path is missing its nested parents.
+func TestTranspositionTable_Save_CreatesMissingParentDirs(t *testing.T) {
+	tt := &TranspositionTable{
+		entries: map[string]TranspositionEntry{
+			"key-a": {Outcome: "success", SuccessRate: 0.9, InsertedAt: 1},
+		},
+		path:    filepath.Join(t.TempDir(), "nested", "sub", "transposition.json"),
+		maxSize: 10,
+	}
+
+	if err := tt.Save(); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	if _, err := os.Stat(tt.path); err != nil {
+		t.Fatalf("expected file to exist at %s: %v", tt.path, err)
+	}
+}
+
+// TestTranspositionTable_Save_NoLeftoverTmpFile mirrors
+// util/persist_test.go's TestSaveJSONAtomic_NoLeftoverTmpFile.
+func TestTranspositionTable_Save_NoLeftoverTmpFile(t *testing.T) {
+	tt := &TranspositionTable{
+		entries: map[string]TranspositionEntry{
+			"key-a": {Outcome: "success", SuccessRate: 0.9, InsertedAt: 1},
+		},
+		path:    filepath.Join(t.TempDir(), "transposition.json"),
+		maxSize: 10,
+	}
+
+	if err := tt.Save(); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	if _, err := os.Stat(tt.path + ".tmp"); !os.IsNotExist(err) {
+		t.Errorf("expected no leftover .tmp file, stat err = %v", err)
 	}
 }
 
