@@ -139,7 +139,7 @@ func init() {
 		return util.ContainsAnyStr(bb.Task, "metrics", "stats", "report")
 	})
 	RegisterCondition("IsRestartRequest", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Task, "restart", "dead", "down", "revive", "resurrect")
+		return util.ContainsAnyStr(strings.ToLower(bb.Task), "restart", "dead", "down", "revive", "resurrect")
 	})
 	RegisterCondition("IsRefactorTask", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(bb.Task, "refactor", "improve", "clean", "rewrite")
