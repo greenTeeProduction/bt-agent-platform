@@ -533,6 +533,29 @@ func conditionDescriptionGaps(node evolution.SerializableNode) []string {
 	return gaps
 }
 
+// edgeMetadataGaps walks node and its descendants and returns the Name of
+// every node carrying a TypedEdge with a blank Label, a blank Condition on an
+// EdgeGuard edge, or a blank Effect on an EdgeEffect edge. It mirrors
+// conditionDescriptionGaps but closes the one metadata field on domain-tree
+// nodes that no existing coverage guard inspects: Description coverage is
+// fully guarded above, but nothing checks the Edges[] typed-edge metadata
+// those same nodes carry.
+func edgeMetadataGaps(node evolution.SerializableNode) []string {
+	var gaps []string
+	for _, edge := range node.Edges {
+		if strings.TrimSpace(edge.Label) == "" ||
+			(edge.Type == evolution.EdgeGuard && strings.TrimSpace(edge.Condition) == "") ||
+			(edge.Type == evolution.EdgeEffect && strings.TrimSpace(edge.Effect) == "") {
+			gaps = append(gaps, node.Name)
+			break
+		}
+	}
+	for _, child := range node.Children {
+		gaps = append(gaps, edgeMetadataGaps(child)...)
+	}
+	return gaps
+}
+
 // TestAllDomainTreeConditionsHaveDescriptions guards condition coverage: every
 // Condition node in every registered curated (non-arc42) domain tree must carry
 // a non-empty Description. The bt-agent switch_tree tool and the gardener surface
@@ -625,6 +648,77 @@ func TestConditionDescriptionWalkerDetectsBlankDescriptions(t *testing.T) {
 
 	if len(gaps) != 1 || gaps[0] != "SyntheticBlankCondition" {
 		t.Fatalf("conditionDescriptionGaps did not catch the blank-description Condition: got %v, want [SyntheticBlankCondition]", gaps)
+	}
+}
+
+// TestEdgeMetadataWalkerDetectsBlankFields is a meta-regression guard for the
+// edge-metadata walker (edgeMetadataGaps), mirroring
+// TestConditionDescriptionWalkerDetectsBlankDescriptions but for TypedEdge
+// metadata: Description coverage on domain-tree nodes is fully guarded above,
+// but nothing inspects the Edges[] typed-edge metadata those same nodes carry
+// (Label on every edge, Condition on EdgeGuard edges, Effect on EdgeEffect
+// edges). This test feeds the shared walker a synthetic tree with a node
+// missing its edge Label, an EdgeGuard edge missing Condition, an EdgeEffect
+// edge missing Effect, and a fully-populated edge, asserting all three
+// violations are caught and the clean node is not flagged.
+func TestEdgeMetadataWalkerDetectsBlankFields(t *testing.T) {
+	synthetic := evolution.SerializableNode{
+		Type: "Sequence",
+		Name: "SyntheticRoot",
+		Children: []evolution.SerializableNode{
+			{
+				Type: "Action",
+				Name: "BlankLabelNode",
+				Edges: []evolution.TypedEdge{
+					{Type: evolution.EdgeQualityGate, Label: "", ChildIndex: -1},
+				},
+			},
+			{
+				Type: "Condition",
+				Name: "BlankGuardConditionNode",
+				Edges: []evolution.TypedEdge{
+					{Type: evolution.EdgeGuard, Label: "guard-label", Condition: "", ChildIndex: -1},
+				},
+			},
+			{
+				Type: "Action",
+				Name: "BlankEffectNode",
+				Edges: []evolution.TypedEdge{
+					{Type: evolution.EdgeEffect, Label: "effect-label", Effect: "", ChildIndex: -1},
+				},
+			},
+			{
+				Type: "Action",
+				Name: "FullyPopulatedNode",
+				Edges: []evolution.TypedEdge{
+					{Type: evolution.EdgeGuard, Label: "ok-label", Condition: "ok-condition", ChildIndex: -1},
+					{Type: evolution.EdgeEffect, Label: "ok-label2", Effect: "ok-effect", ChildIndex: -1},
+				},
+			},
+		},
+	}
+
+	gaps := edgeMetadataGaps(synthetic)
+
+	want := map[string]bool{
+		"BlankLabelNode":          true,
+		"BlankGuardConditionNode": true,
+		"BlankEffectNode":         true,
+	}
+	got := map[string]bool{}
+	for _, g := range gaps {
+		got[g] = true
+	}
+	for name := range want {
+		if !got[name] {
+			t.Errorf("edgeMetadataGaps did not catch expected violation %q: got %v", name, gaps)
+		}
+	}
+	if got["FullyPopulatedNode"] {
+		t.Errorf("edgeMetadataGaps flagged a fully-populated edge: got %v", gaps)
+	}
+	if len(gaps) != len(want) {
+		t.Errorf("edgeMetadataGaps returned unexpected gap count: got %v, want exactly %v", gaps, want)
 	}
 }
 
