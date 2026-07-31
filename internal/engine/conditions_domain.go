@@ -206,7 +206,13 @@ func init() {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task), "root cause", "why", "debug")
 	})
 	RegisterCondition("HasProposedFix", func(bb *Blackboard) bool {
-		return util.ContainsAnyStr(bb.Result, "fix", "patch", "change")
+		if util.ContainsAnyStr(bb.Result, "fix", "patch", "change") {
+			return true
+		}
+		// A fresh single-shot task can also state its own fix is already in
+		// hand ("apply the proposed fix ..."), not just a prior action's
+		// bb.Result — see TestCrashInvestigatorStrategyBranchesAreReachable.
+		return util.ContainsAnyStr(strings.ToLower(bb.Task), "apply the fix", "apply the proposed fix", "apply this fix")
 	})
 	RegisterCondition("IsPreventionRequest", func(bb *Blackboard) bool {
 		return util.ContainsAnyStr(strings.ToLower(bb.Task), "prevent", "harden", "guard")

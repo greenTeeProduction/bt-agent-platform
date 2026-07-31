@@ -1564,3 +1564,54 @@ func TestTradingSignalSuiteReachesDeclaredPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestCrashInvestigatorStrategyBranchesAreReachable extends the per-domain
+// reachability guards (TestAlertRouterSuiteReachesDeclaredPaths,
+// TestTradingSignalSuiteReachesDeclaredPaths) to CrashInvestigatorTree, whose
+// own benchmark.CrashInvestigatorSuite() never exercises ParseStackTrace,
+// FixAndVerify, or PreventionPath — only RootCauseAnalysis and the
+// ExecutionPath fallback — so those three StrategyRouter branches have zero
+// direct-reachability coverage today despite each being fully described and
+// registered.
+//
+// ParseStackTrace and PreventionPath ARE reachable from task text alone
+// (asserted here as the passing control group). FixAndVerify is not:
+// HasProposedFix (engine/conditions_domain.go) checks bb.Result, not bb.Task,
+// and bb.Result is only ever populated by a prior action such as GenerateFix
+// in the RootCauseAnalysis branch. StrategyRouter is a Selector, so
+// RootCauseAnalysis and FixAndVerify are mutually exclusive within one tree
+// execution — RootCauseAnalysis never runs when FixAndVerify's condition is
+// being evaluated, and a fresh single-shot task (bb.Result starts empty, as
+// in every benchmark.RunSuite call and every first-turn bt_run_task
+// invocation) can never make HasProposedFix true. FixAndVerify is therefore
+// permanently unreachable dead code — the same class of gap
+// TestGoapTreesSeedGoapToolsBeforeGOAPRoot guards against for the GOAP_Root
+// branch.
+func TestCrashInvestigatorStrategyBranchesAreReachable(t *testing.T) {
+	mock := benchmark.DefaultMock()
+	tree := CrashInvestigatorTree()
+
+	cases := []struct {
+		task string
+		want string
+	}{
+		{"parse this stack trace: goroutine 1 [running]: main.foo() at /app/main.go:42", "ParseStackTrace"},
+		{"debug the root cause of the race condition crash in the scheduler", "RootCauseAnalysis"},
+		{"apply the proposed fix and verify the crash no longer reproduces", "FixAndVerify"},
+		{"harden the code and add guards to prevent this crash from recurring", "PreventionPath"},
+	}
+
+	for _, tc := range cases {
+		suite := benchmark.Suite{Name: "crash_investigator_branch", Tasks: []benchmark.TaskCase{
+			{Task: tc.task, ExpectedPath: tc.want, ShouldSucceed: true, MinResultLen: 5},
+		}}
+		metrics := benchmark.RunSuite(tree, suite, mock)
+		if len(metrics.Results) != 1 {
+			t.Fatalf("task %q: expected 1 result, got %d", tc.task, len(metrics.Results))
+		}
+		r := metrics.Results[0]
+		if !r.PathMatched {
+			t.Errorf("task %q: expected StrategyRouter branch %q, got path %q — branch is unreachable given task text alone", tc.task, tc.want, r.Path)
+		}
+	}
+}
