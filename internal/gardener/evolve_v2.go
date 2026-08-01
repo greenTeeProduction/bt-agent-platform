@@ -497,9 +497,30 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// exploration on the next cycle, not just the cold-start 0.
 	g.recordDiversityObservation(entry.Name, tree, newFitness.Composite)
 	improved := newFitness.Composite > baseFitness.Composite
+	// ── Local-search parameter refinement — run evolution.LocalSearcher over
+	// the settled tree's mutable parameters (MaxRetries, TimeoutMs, metadata
+	// knobs), scored by the same cascade fitness function that scored the
+	// structural candidates above. Structural mutation can add, remove, and
+	// rewire nodes but cannot resize an existing node's parameters, so this is
+	// the only pass that can recover a tree whose remaining slack is purely
+	// numeric. The tuned tree is committed only when it beats the settled
+	// fitness through the acceptance gate.
+	//
+	// This runs ABOVE the validation gate on purpose: the refinement mutates
+	// the live tree and independently forces the save below, so running it
+	// after the gate would let a tuned tree the gate just rejected reach disk
+	// unvalidated. Sitting here, its delta is covered by the same gate.
+	localSearchDelta := g.refineTreeParameters(tree, entry, cfg, records, newFitness.Composite)
+	if localSearchDelta > 0 {
+		newFitness = evaluator.EvaluateTree(tree, records)
+		nodesAfter = evolution.CountNodes(tree)
+		improved = newFitness.Composite > baseFitness.Composite
+	}
+
 	// A reseed changes the persisted tree on its own, so it must clear the
-	// validation gate even when no structural mutation applied on top of it.
-	if applied > 0 || eliteReseed {
+	// validation gate even when no structural mutation applied on top of it —
+	// and so does a local-search refinement.
+	if applied > 0 || eliteReseed || localSearchDelta > 0 {
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
@@ -513,21 +534,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			nodesAfter = nodesBefore
 			applied = 0
 			eliteReseed = false
+			// The restore above reverted the tuned parameters too, so this
+			// cycle refined nothing — clearing the delta keeps the reported
+			// metrics honest and stops it from forcing the save below.
+			localSearchDelta = 0
 		}
-	}
-	// ── Local-search parameter refinement — run evolution.LocalSearcher over
-	// the settled tree's mutable parameters (MaxRetries, TimeoutMs, metadata
-	// knobs), scored by the same cascade fitness function that scored the
-	// structural candidates above. Structural mutation can add, remove, and
-	// rewire nodes but cannot resize an existing node's parameters, so this is
-	// the only pass that can recover a tree whose remaining slack is purely
-	// numeric. The tuned tree is committed only when it beats the settled
-	// fitness through the acceptance gate.
-	localSearchDelta := g.refineTreeParameters(tree, entry, cfg, records, newFitness.Composite)
-	if localSearchDelta > 0 {
-		newFitness = evaluator.EvaluateTree(tree, records)
-		nodesAfter = evolution.CountNodes(tree)
-		improved = newFitness.Composite > baseFitness.Composite
 	}
 
 	// ── Learned Selector ordering (milestone 4) — apply real-telemetry child

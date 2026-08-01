@@ -534,3 +534,67 @@ func TestMultiFitness_String(t *testing.T) {
 		t.Errorf("scores = %d, want 2", len(mf.Scores))
 	}
 }
+
+// ─── NSGA-II/Pareto acceptance ──────────────────────────────────────────────
+
+// TestParetoAccepts_RejectsDominatedCandidate pins the reject half of the
+// multi-objective acceptance rule the gardener's validation gate needs: a
+// candidate that a baseline Pareto-dominates never reaches front 0 of
+// baselines ∪ {candidate}, so it must be refused.
+func TestParetoAccepts_RejectsDominatedCandidate(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 75, DimStability: 10}}
+
+	if ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate %v is dominated by baseline %v, want rejection", candidate, baseline)
+	}
+}
+
+// TestParetoAccepts_AcceptsTradeoff is the whole point of replacing scalar
+// acceptance: a candidate that loses ground on one objective while gaining
+// more on another is non-dominated, so it belongs on the front and must be
+// accepted — a scalar per-dimension threshold check would refuse it on the
+// dimension it lost.
+func TestParetoAccepts_AcceptsTradeoff(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 75, DimStability: 100}}
+
+	if !ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate %v trades success rate for stability against %v, want acceptance", candidate, baseline)
+	}
+}
+
+// TestParetoAccepts_AcceptsEqualCandidate pins that "no regression" is
+// acceptance: Dominates requires a strict win on some dimension, so a
+// candidate that merely ties the baseline everywhere shares front 0 with it.
+func TestParetoAccepts_AcceptsEqualCandidate(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+
+	if !ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate equal to baseline %v must not count as a regression", baseline)
+	}
+}
+
+// TestParetoAccepts_NoBaselinesAcceptsEverything pins the degenerate case: with
+// nothing to compare against, the candidate is trivially non-dominated.
+func TestParetoAccepts_NoBaselinesAcceptsEverything(t *testing.T) {
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 1, DimStability: 1}}
+	if !ParetoAccepts(candidate, nil) {
+		t.Error("a candidate with no baselines has nothing to be dominated by, want acceptance")
+	}
+}
+
+// TestParetoAccepts_RejectsWhenAnyBaselineDominates pins the multi-baseline
+// case: acceptance is membership in front 0 of the whole set, so one
+// dominating baseline is enough to refuse the candidate even when others do
+// not dominate it.
+func TestParetoAccepts_RejectsWhenAnyBaselineDominates(t *testing.T) {
+	harmless := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 10, DimStability: 95}}
+	dominating := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 90, DimStability: 90}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 50, DimStability: 50}}
+
+	if ParetoAccepts(candidate, []MultiFitness{harmless, dominating}) {
+		t.Errorf("candidate %v is dominated by %v, want rejection", candidate, dominating)
+	}
+}

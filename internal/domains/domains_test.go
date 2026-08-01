@@ -1615,3 +1615,104 @@ func TestCrashInvestigatorStrategyBranchesAreReachable(t *testing.T) {
 		}
 	}
 }
+
+// conditionGuardEdgeGaps walks node and its descendants and returns the Name of
+// every Condition node that carries no machine-readable EdgeGuard typed edge —
+// i.e. no edge of type evolution.EdgeGuard with both a non-blank Label and a
+// non-blank Condition. It is the guard-edge counterpart to
+// conditionDescriptionGaps: that walker covers the human-readable half of
+// condition coverage (Description), this one covers the machine-readable half
+// (TypedEdge.Condition, the precondition string engine/typed_edges.go and
+// engine/utility_selector.go actually evaluate, and the field
+// evolution.ValidateEdge requires on every guard edge).
+func conditionGuardEdgeGaps(node evolution.SerializableNode) []string {
+	var gaps []string
+	if node.Type == "Condition" {
+		described := false
+		for _, edge := range node.Edges {
+			if edge.Type == evolution.EdgeGuard &&
+				strings.TrimSpace(edge.Label) != "" &&
+				strings.TrimSpace(edge.Condition) != "" {
+				described = true
+				break
+			}
+		}
+		if !described {
+			gaps = append(gaps, node.Name)
+		}
+	}
+	for _, child := range node.Children {
+		gaps = append(gaps, conditionGuardEdgeGaps(child)...)
+	}
+	return gaps
+}
+
+// TestDomainTreeConditionEdgeMetadataCoverage closes the last open leg of the
+// goal "all domain trees have smoke tests, descriptions, and condition
+// coverage": the machine-readable half of condition coverage.
+//
+// Every existing condition-coverage guard in this file checks only
+// node.Description — the human-readable routing rationale. The typed-edge
+// metadata those same Condition nodes carry (evolution.TypedEdge with
+// Type=EdgeGuard, a Label, and a Condition precondition string) is what
+// production code actually reads: engine/typed_edges.go
+// (guardConditionForChild) and engine/utility_selector.go (ScoreChild) gate
+// execution on it, and evolution.ValidateEdge rejects a guard edge whose
+// Condition is blank. Two hand-built trees already set the precedent —
+// AgentMonitorTree and HermesUpdateTree attach guard("non-empty-task", "task
+// string must not be empty") style edges to every PreGate/router Condition —
+// but every tree built through the shared cond() helper in trees.go declares
+// its Condition nodes with a Description and no Edges at all, so their
+// preconditions exist only as prose.
+//
+// Two things must hold:
+//
+//   - guard-edges: every Condition node in every registered domain tree
+//     (AllDomainTrees, arc42 included — the arc42 trees are built with the same
+//     cond() helper) carries an EdgeGuard edge with a non-blank Label and a
+//     non-blank Condition. Scoped to the registry for the same reason
+//     TestAllDomainTreeConditionsHaveDescriptions is: AllDomainTrees is the
+//     gardener/switch_tree surface. The non-registry trees (kanban_*,
+//     hermes_evolve, hermes_obsidian) declare their Condition nodes as inline
+//     literals rather than via cond() and stay covered by the
+//     edge-metadata-populated subtest below.
+//
+//   - edge-metadata-populated: the edgeMetadataGaps walker — which until now
+//     was only ever fed the synthetic fixture in
+//     TestEdgeMetadataWalkerDetectsBlankFields, never a real tree — is applied
+//     to every production domain tree in the package (registry, non-registry
+//     smoke extras, and resolver-reachable extras). Without this, a regression
+//     that blanked out an existing guard Condition or edge Label in
+//     AgentMonitorTree would pass every test in the package.
+func TestDomainTreeConditionEdgeMetadataCoverage(t *testing.T) {
+	t.Run("guard-edges", func(t *testing.T) {
+		for name, tree := range AllDomainTrees() {
+			for _, gap := range conditionGuardEdgeGaps(*tree) {
+				t.Errorf("tree %q: Condition node %q carries no EdgeGuard typed edge with a Label and a Condition (machine-readable condition coverage gap)", name, gap)
+			}
+		}
+	})
+
+	t.Run("edge-metadata-populated", func(t *testing.T) {
+		walkAll := func(label string, trees map[string]*evolution.SerializableNode) {
+			for name, tree := range trees {
+				if tree == nil {
+					t.Errorf("%s tree %q is nil", label, name)
+					continue
+				}
+				for _, gap := range edgeMetadataGaps(*tree) {
+					t.Errorf("%s tree %q: node %q carries a typed edge with a blank Label, guard Condition, or effect Effect (edge metadata gap)", label, name, gap)
+				}
+			}
+		}
+
+		walkAll("registered", AllDomainTrees())
+		walkAll("non-registry", KanbanAndHermesDomainTrees())
+
+		resolver := map[string]*evolution.SerializableNode{}
+		for name, fn := range resolverReachableExtraDomainTrees() {
+			resolver[name] = fn()
+		}
+		walkAll("resolver-reachable", resolver)
+	})
+}

@@ -19,6 +19,11 @@ const (
 	DimNodeEfficiency FitnessDimension = "node_efficiency"
 	DimExecutionSpeed FitnessDimension = "execution_speed"
 	DimComposite      FitnessDimension = "composite"
+	// DimRecoveryRate scores how much of a tree's observed failure volume it
+	// recovered from. Sourced from SLO evidence rather than tree structure, so
+	// StructuralMultiFitness leaves it unset; the gardener's validation gate
+	// uses it as the second axis of its multi-objective acceptance check.
+	DimRecoveryRate FitnessDimension = "recovery_rate"
 )
 
 // MultiFitness is a vector of fitness scores across multiple objectives.
@@ -90,6 +95,40 @@ func (mf MultiFitness) Dominates(other MultiFitness) bool {
 		}
 	}
 	return better // strictly better in at least one dimension
+}
+
+// ParetoAccepts reports whether candidate survives multi-objective acceptance
+// against a set of baselines: it is accepted exactly when it lands on front 0
+// of a non-dominated sort over baselines ∪ {candidate}, i.e. when no baseline
+// Pareto-dominates it.
+//
+// This is the acceptance rule that replaces scalar-fitness comparison. A
+// scalar check collapses the objectives into one number (or, worse, tests each
+// against its own threshold in isolation, making every objective a hard
+// constraint) and so refuses any candidate that gives up ground on one axis —
+// even when it gains far more on another. Non-domination accepts exactly the
+// trade-offs and refuses exactly the strict regressions. A candidate that ties
+// every baseline on every dimension is accepted: Dominates requires a strict
+// win somewhere, so a tie is not a regression.
+//
+// With no baselines there is nothing to be dominated by, so the candidate is
+// trivially on the front.
+func ParetoAccepts(candidate MultiFitness, baselines []MultiFitness) bool {
+	vecs := make([]MultiFitness, 0, len(baselines)+1)
+	vecs = append(vecs, baselines...)
+	candidateIdx := len(vecs)
+	vecs = append(vecs, candidate)
+
+	fronts := nonDominatedSort(vecs)
+	if len(fronts) == 0 {
+		return true
+	}
+	for _, idx := range fronts[0].Indices {
+		if idx == candidateIdx {
+			return true
+		}
+	}
+	return false
 }
 
 // String returns a compact representation.

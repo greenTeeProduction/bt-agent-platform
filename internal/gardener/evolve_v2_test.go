@@ -2547,6 +2547,129 @@ func TestEvolveTreeV2_LocalSearchDisabled_LeavesParamsUntouched(t *testing.T) {
 	}
 }
 
+// localSearchGateTree combines both fixtures the gate/local-search interaction
+// test needs: gateDisabledTestTree's PreGate-without-HasClearTask shape (which
+// reliably yields a high-score structural candidate when paired with failure
+// records) wrapped around a Retry node whose MaxRetries (8) sits outside the
+// evaluator's rewarded [1,5] band, exactly like refinableTree. So one cycle can
+// both apply a structural mutation and find a purely numeric gain the
+// local-search pass would commit.
+func localSearchGateTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "PreGate"},
+			{
+				Type: "Retry", Name: "RetryStep", MaxRetries: 8,
+				Children: []evolution.SerializableNode{
+					{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+				},
+			},
+		},
+	}
+}
+
+// localSearchGateArm runs one evolveTreeV2 cycle over localSearchGateTree with
+// the given ValidationGate config and reports the cycle metrics, the tree's
+// serialized form before and after, and whether a tree file was persisted.
+func localSearchGateArm(t *testing.T, treeName string, vgCfg ValidationGateConfig) (m CycleMetrics, before, after []byte, persisted bool) {
+	t.Helper()
+	dir := t.TempDir()
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	tree := localSearchGateTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	filePath := filepath.Join(dir, "tree-"+treeName+".json")
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "local search vs validation gate", Tree: tree, FilePath: filePath, Active: true},
+	}
+	registry.mu.Unlock()
+
+	g := NewGardener(Config{
+		Registry:       registry,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   1,
+		ValidationGate: vgCfg,
+	})
+
+	entry := registry.List()[0]
+	before = marshalTree(t, entry.Tree)
+	m = g.evolveTreeV2(entry, EvolveV2Config{
+		CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled: false,
+		UseRealLLM:    false,
+	})
+	after = marshalTree(t, entry.Tree)
+
+	if _, statErr := os.Stat(filePath); statErr == nil {
+		persisted = true
+	} else if !os.IsNotExist(statErr) {
+		t.Fatalf("stat %s: %v", filePath, statErr)
+	}
+	return m, before, after, persisted
+}
+
+// TestEvolveTreeV2_LocalSearchRefinementRespectsValidationGate pins that the
+// post-structural-mutation local-search pass is covered by the same
+// ValidationGate as the rest of the cycle.
+//
+// evolve_v2.go runs refineTreeParameters AFTER the ValidationGate block, and
+// its delta independently forces the Registry.SaveTree at the bottom of the
+// cycle. So a cycle the gate rejected — tree restored to its pre-cycle state,
+// applied reset to 0 — could still have its tuned parameters written to disk,
+// smuggling an unvalidated change past a gate that just said no. The refinement
+// must either run above the gate (so the gate's rejection reverts it too) or be
+// skipped entirely once the gate has rejected this cycle.
+//
+// Two arms over the same fixture: the control arm (gate disabled) proves the
+// fixture really is refinable — without it, an all-zero result would look like
+// a pass for the wrong reason.
+func TestEvolveTreeV2_LocalSearchRefinementRespectsValidationGate(t *testing.T) {
+	// Control arm: ValidationGate off — the refinement must land and persist.
+	ctrl, ctrlBefore, ctrlAfter, ctrlPersisted := localSearchGateArm(t, "local_search_gate_control", ValidationGateConfig{Enabled: false})
+	if ctrl.LocalSearchDelta <= 0 {
+		t.Fatalf("precondition failed: expected the ungated arm to find a positive local-search gain, got LocalSearchDelta=%.4f (metrics=%+v)", ctrl.LocalSearchDelta, ctrl)
+	}
+	if bytes.Equal(ctrlBefore, ctrlAfter) {
+		t.Fatalf("precondition failed: expected the ungated arm to change the tree in memory, but it is unchanged")
+	}
+	if !ctrlPersisted {
+		t.Fatalf("precondition failed: expected the ungated arm to persist the refined tree")
+	}
+
+	// Gated arm: same fixture, but DefaultValidationGateConfig with no SLO
+	// evidence recorded for this tree name fails closed, so the gate rejects.
+	m, before, after, persisted := localSearchGateArm(t, "local_search_gate_reject", DefaultValidationGateConfig())
+
+	if m.LocalSearchDelta != 0 {
+		t.Errorf("expected LocalSearchDelta==0 when ValidationGate rejects the cycle, got %.4f (metrics=%+v)", m.LocalSearchDelta, m)
+	}
+	if m.NewFitness > m.BaseFitness+0.0001 {
+		t.Errorf("expected NewFitness==BaseFitness when ValidationGate rejects the cycle, got base=%.4f new=%.4f", m.BaseFitness, m.NewFitness)
+	}
+	if m.Improved {
+		t.Errorf("expected Improved==false when ValidationGate rejects the cycle (metrics=%+v)", m)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("local-search refinement mutated the in-memory tree past a rejecting ValidationGate\nbefore: %s\nafter:  %s", before, after)
+	}
+	if persisted {
+		t.Errorf("local-search refinement persisted a tree the ValidationGate rejected")
+	}
+}
+
 // ============================================================================
 // MAP-Elites active elitism (milestone 2/5) — the per-tree MAP-Elites archive
 // must stop being a write-only diversity signal. When CrisisDetector reports a
