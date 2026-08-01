@@ -7,32 +7,23 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
-	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
+// TestAllDomainTreesHaveExecutableStructure smoke-executes every domain tree
+// that is registered anywhere. The work list is derived from
+// SmokeTestableDomainTrees() — the canonical union of the curated registry and
+// the deliberately-off-registry kanban/hermes trees — rather than from a
+// hand-maintained literal, so registering a tree is what subjects it to this
+// smoke test and no separate opt-in list can fall behind.
+// TestSmokeExecutionFnsMapCoversRegistry in domains_test.go guards that
+// derivation.
 func TestAllDomainTreesHaveExecutableStructure(t *testing.T) {
-	fns := map[string]func() *evolution.SerializableNode{
-		"code_review":         CodeReviewTree,
-		"devops_ci":           DevOpsCITree,
-		"agent_monitor":       AgentMonitorTree,
-		"refactoring":         RefactoringTree,
-		"security_audit":      SecurityAuditTree,
-		"data_pipeline":       DataPipelineTree,
-		"meeting_notes":       MeetingNotesTree,
-		"crash_investigator":  CrashInvestigatorTree,
-		"game_ai":             GameAITree,
-		"trading_signal":      TradingSignalTree,
-		"hermes_evolve":       HermesSelfEvolutionTree,
-		"kanban_task_creator": KanbanTaskCreatorTree,
-		"kanban_refiner":      KanbanRefinerTree,
-		"kanban_qa":           KanbanQATree,
-		"kanban_monitor":      KanbanBoardMonitorTree,
-		"kanban_workflow":     KanbanWorkflowTree,
-		"kanban_autopilot":    KanbanAutoPilotTree,
+	trees := SmokeTestableDomainTrees()
+	if len(trees) == 0 {
+		t.Fatal("SmokeTestableDomainTrees() is empty; the smoke test has lost its subject")
 	}
-	for name, fn := range fns {
+	for name, tree := range trees {
 		t.Run(name, func(t *testing.T) {
-			tree := fn()
 			if tree == nil || len(tree.Children) == 0 {
 				t.Fatalf("%s tree invalid", name)
 			}
