@@ -69,6 +69,7 @@ func init() {
 		goal := arc42SeedTargetGoal()
 		if goal == nil {
 			bb.Outcome = "arc42_goals_unavailable"
+			bb.OutcomeRefinement = "degraded"
 			bb.Result = "## arc42 Program Seeding Skipped\n\nThe live arc42 document yielded no quality goals (docs/arc42/01-introduction-goals.md missing or its §1.2 table unparseable) — no program seeded. Fix the document; this agent never seeds from a static copy."
 			return 1
 		}
@@ -76,6 +77,7 @@ func init() {
 		ps, err := research.OpenPrograms(goapProgramsPath)
 		if err != nil {
 			bb.Outcome = "arc42_seeder_store_unreadable"
+			bb.OutcomeRefinement = "degraded"
 			bb.Result = "## arc42 Program Seeding Skipped\n\nProgram store unreadable: " + err.Error()
 			return 1
 		}
@@ -101,6 +103,14 @@ func init() {
 		})
 		if att.Spec == nil {
 			bb.Outcome = "arc42_seeder_rejected_proposal"
+			// The three failure branches refine to "degraded", NOT no_change. An
+			// UNREFINED tree success is recorded as plain "success": that is how
+			// 2026-07-18..08-01 — thirteen days seeding nothing — booked every
+			// rejected proposal as a healthy success at quality 0.8. "degraded"
+			// is still a healthy terminal outcome (no breaker trip, no
+			// dead-letter) but the routine notification throttle only suppresses
+			// no_change, so these actually reach the operator.
+			bb.OutcomeRefinement = "degraded"
 			bb.Result = fmt.Sprintf("## arc42 Program Seeding Rejected Proposal\n\nNo usable proposal for quality goal %s %s even after a feedback retry: %s. Will retry on the next schedule.", goal.ID, goal.Name, truncateGoap(strings.Join(att.Rejections, " | "), 400))
 			return 1
 		}
