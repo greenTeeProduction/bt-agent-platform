@@ -2,7 +2,11 @@ package domains
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -590,21 +594,7 @@ func TestAllDomainTreeConditionsHaveDescriptions(t *testing.T) {
 // descriptions as the human-readable routing rationale, and a blank one
 // advertises an unexplained gate to operators.
 func TestSmokeTestedDomainTreesHaveConditionDescriptions(t *testing.T) {
-	// Domain trees that have an executable-structure smoke test but are not part
-	// of the AllDomainTrees registry — mirrors the extra entries in the fns map
-	// of engine_domain_execution_test.go.
-	extraSmokeTrees := map[string]func() *evolution.SerializableNode{
-		"hermes_evolve":       HermesSelfEvolutionTree,
-		"kanban_task_creator": KanbanTaskCreatorTree,
-		"kanban_refiner":      KanbanRefinerTree,
-		"kanban_qa":           KanbanQATree,
-		"kanban_monitor":      KanbanBoardMonitorTree,
-		"kanban_workflow":     KanbanWorkflowTree,
-		"kanban_autopilot":    KanbanAutoPilotTree,
-	}
-
-	for name, fn := range extraSmokeTrees {
-		tree := fn()
+	for name, tree := range nonRegistrySmokeTestableTrees() {
 		if tree == nil {
 			t.Errorf("smoke-tested tree %q returned nil", name)
 			continue
@@ -613,6 +603,24 @@ func TestSmokeTestedDomainTreesHaveConditionDescriptions(t *testing.T) {
 			t.Errorf("tree %q: Condition node %q has an empty Description (condition coverage gap)", name, gap)
 		}
 	}
+}
+
+// nonRegistrySmokeTestableTrees returns the smoke-testable trees that
+// TestAllDomainTreeConditionsHaveDescriptions (and the other AllDomainTrees()-
+// driven guards) never walk: the canonical SmokeTestableDomainTrees() union
+// minus the curated registry. Deriving the set instead of hand-copying the
+// kanban/hermes names keeps this guard from drifting behind the registries the
+// way the copied literals it replaced did — a tree added to
+// KanbanAndHermesDomainTrees is covered here automatically.
+func nonRegistrySmokeTestableTrees() map[string]*evolution.SerializableNode {
+	registry := AllDomainTrees()
+	extra := map[string]*evolution.SerializableNode{}
+	for name, tree := range SmokeTestableDomainTrees() {
+		if _, inRegistry := registry[name]; !inRegistry {
+			extra[name] = tree
+		}
+	}
+	return extra
 }
 
 // TestConditionDescriptionWalkerDetectsBlankDescriptions is a meta-regression
@@ -722,18 +730,110 @@ func TestEdgeMetadataWalkerDetectsBlankFields(t *testing.T) {
 	}
 }
 
+// describableDomainTrees is the union of the two domain-tree registries:
+// AllDomainTrees() (the curated gardener/dashboard surface) and
+// KanbanAndHermesDomainTrees() (deliberately off that surface, but still real,
+// buildable trees). Every tree in the union is expected to be describable via
+// DescriptionFor, and no description entry may point outside it.
+func describableDomainTrees() map[string]*evolution.SerializableNode {
+	union := map[string]*evolution.SerializableNode{}
+	for name, tree := range AllDomainTrees() {
+		union[name] = tree
+	}
+	for name, tree := range KanbanAndHermesDomainTrees() {
+		union[name] = tree
+	}
+	return union
+}
+
 // TestDescriptionsHaveNoOrphans is the reverse guard to
-// TestAllDomainTreesHaveDescriptions: every entry in the Descriptions map must
-// correspond to a tree actually registered in AllDomainTrees. The gardener and
-// the bt-agent switch_tree tool surface these descriptions verbatim, so an
-// orphaned entry (left behind after a tree is renamed or removed) advertises a
-// builtin that can never be selected. arc42 trees carry curated entries like
-// every other registered tree, so they are covered too.
+// TestAllDomainTreesHaveDescriptions: every description entry — whether it
+// lives in the registry-only Descriptions map or in NonRegistryDescriptions —
+// must correspond to a tree actually registered in one of the two registries.
+// The gardener and the bt-agent switch_tree tool surface these descriptions
+// verbatim, so an orphaned entry (left behind after a tree is renamed or
+// removed) advertises a builtin that can never be selected. Checking against
+// the union rather than AllDomainTrees alone is what makes it legal to describe
+// the kanban/hermes trees at all, while still catching genuine dead entries.
 func TestDescriptionsHaveNoOrphans(t *testing.T) {
-	all := AllDomainTrees()
+	all := describableDomainTrees()
 	for name := range Descriptions {
 		if _, ok := all[name]; !ok {
-			t.Errorf("Descriptions has entry %q but no such tree is registered in AllDomainTrees", name)
+			t.Errorf("Descriptions has entry %q but no such tree is registered in AllDomainTrees or KanbanAndHermesDomainTrees", name)
+		}
+	}
+	for name := range NonRegistryDescriptions {
+		if _, ok := all[name]; !ok {
+			t.Errorf("NonRegistryDescriptions has entry %q but no such tree is registered in AllDomainTrees or KanbanAndHermesDomainTrees", name)
+		}
+	}
+}
+
+// TestEveryDomainTreeHasADescription closes the description gap for the eight
+// non-registry kanban/hermes trees. TestAllDomainTreesHaveDescriptions only
+// covers AllDomainTrees(), and TestDescriptionsHaveNoOrphans used to forbid
+// adding the kanban/hermes names to Descriptions, leaving those trees
+// structurally undescribable. DescriptionFor resolves against the union of
+// Descriptions and NonRegistryDescriptions, so it must answer for every tree in
+// either registry with a real sentence rather than a restated name.
+func TestEveryDomainTreeHasADescription(t *testing.T) {
+	const minDescLen = 20
+	for name := range describableDomainTrees() {
+		desc, ok := DescriptionFor(name)
+		if !ok {
+			t.Errorf("tree %q is registered but DescriptionFor returned ok=false", name)
+			continue
+		}
+		trimmed := strings.TrimSpace(desc)
+		if trimmed == "" {
+			t.Errorf("tree %q: DescriptionFor returned a blank description", name)
+			continue
+		}
+		if len(trimmed) < minDescLen {
+			t.Errorf("tree %q: description %q is only %d chars, want >= %d — descriptions must explain the tree, not restate its name",
+				name, trimmed, len(trimmed), minDescLen)
+		}
+	}
+}
+
+// TestDescriptionForPrefersRegistryAndRejectsUnknown pins DescriptionFor's
+// resolution order and its miss behaviour: registry entries win, non-registry
+// entries are reachable, and an unknown name reports a miss instead of an empty
+// string that callers would render as a blank builtin.
+func TestDescriptionForPrefersRegistryAndRejectsUnknown(t *testing.T) {
+	desc, ok := DescriptionFor("code_review")
+	if !ok {
+		t.Error(`DescriptionFor("code_review") returned ok=false, want the Descriptions entry`)
+	} else if desc != Descriptions["code_review"] {
+		t.Errorf(`DescriptionFor("code_review") = %q, want the Descriptions entry %q`, desc, Descriptions["code_review"])
+	}
+
+	desc, ok = DescriptionFor("kanban_qa")
+	if !ok {
+		t.Error(`DescriptionFor("kanban_qa") returned ok=false, want the NonRegistryDescriptions entry`)
+	} else if desc != NonRegistryDescriptions["kanban_qa"] {
+		t.Errorf(`DescriptionFor("kanban_qa") = %q, want the NonRegistryDescriptions entry %q`, desc, NonRegistryDescriptions["kanban_qa"])
+	}
+
+	if desc, ok := DescriptionFor("no_such_tree"); ok || desc != "" {
+		t.Errorf(`DescriptionFor("no_such_tree") = (%q, %v), want ("", false)`, desc, ok)
+	}
+}
+
+// TestNonRegistryDescriptionsHaveNoOrphans keeps the two description maps
+// disjoint and scoped. NonRegistryDescriptions exists solely to describe trees
+// that AllDomainTrees() deliberately omits, so every key must name a
+// KanbanAndHermesDomainTrees() tree and none may shadow a Descriptions entry —
+// a duplicate would make DescriptionFor's precedence silently decide which of
+// two divergent descriptions the gardener shows.
+func TestNonRegistryDescriptionsHaveNoOrphans(t *testing.T) {
+	nonRegistry := KanbanAndHermesDomainTrees()
+	for name := range NonRegistryDescriptions {
+		if _, ok := nonRegistry[name]; !ok {
+			t.Errorf("NonRegistryDescriptions has entry %q but no such tree is registered in KanbanAndHermesDomainTrees", name)
+		}
+		if _, ok := Descriptions[name]; ok {
+			t.Errorf("tree %q is described in both Descriptions and NonRegistryDescriptions — the two maps must be disjoint", name)
 		}
 	}
 }
@@ -1021,19 +1121,6 @@ func TestArc42DomainTreeNodesHaveDescriptions(t *testing.T) {
 // forbids non-registry entries), so this guard checks per-node Descriptions
 // only.
 func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
-	// Mirrors the extra entries in the fns map of
-	// engine_domain_execution_test.go, like
-	// TestSmokeTestedDomainTreesHaveConditionDescriptions.
-	extraSmokeTrees := map[string]func() *evolution.SerializableNode{
-		"hermes_evolve":       HermesSelfEvolutionTree,
-		"kanban_task_creator": KanbanTaskCreatorTree,
-		"kanban_refiner":      KanbanRefinerTree,
-		"kanban_qa":           KanbanQATree,
-		"kanban_monitor":      KanbanBoardMonitorTree,
-		"kanban_workflow":     KanbanWorkflowTree,
-		"kanban_autopilot":    KanbanAutoPilotTree,
-	}
-
 	var walk func(treeName string, node evolution.SerializableNode)
 	walk = func(treeName string, node evolution.SerializableNode) {
 		if strings.TrimSpace(node.Description) == "" {
@@ -1044,18 +1131,21 @@ func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
 		}
 	}
 
-	for _, trees := range []map[string]func() *evolution.SerializableNode{
-		extraSmokeTrees,
-		resolverReachableExtraDomainTrees(),
-	} {
-		for name, fn := range trees {
-			tree := fn()
-			if tree == nil {
-				t.Errorf("non-registry tree %q returned nil", name)
-				continue
-			}
-			walk(name, *tree)
+	// The smoke-testable extras come from the canonical
+	// SmokeTestableDomainTrees() union minus the curated registry, so this guard
+	// cannot fall behind the registries; the resolver-reachable extras are still
+	// enumerated by their builder functions.
+	trees := nonRegistrySmokeTestableTrees()
+	for name, fn := range resolverReachableExtraDomainTrees() {
+		trees[name] = fn()
+	}
+
+	for name, tree := range trees {
+		if tree == nil {
+			t.Errorf("non-registry tree %q returned nil", name)
+			continue
 		}
+		walk(name, *tree)
 	}
 }
 
@@ -1715,4 +1805,210 @@ func TestDomainTreeConditionEdgeMetadataCoverage(t *testing.T) {
 		}
 		walkAll("resolver-reachable", resolver)
 	})
+}
+
+// TestSmokeTestableDomainTreesIsTheUnion pins SmokeTestableDomainTrees as the
+// single source of truth for "which domain trees must carry a smoke test".
+// Today that set is spelled out three separate times — AllDomainTrees(), the
+// hand-written fns map in engine_domain_execution_test.go, and the hand-copied
+// extraSmokeTrees literal in TestSmokeTestedDomainTreesHaveConditionDescriptions
+// — and nothing fails when a newly registered tree is added to one but not the
+// others, so it is simply, silently unexercised. This guard fixes the union's
+// definition (the curated registry plus the deliberately-off-registry kanban and
+// hermes trees), requires every value to be a real buildable tree, and requires
+// the returned map to be a fresh defensive copy so a caller that filters or
+// mutates it cannot corrupt the canonical enumeration for the next caller.
+func TestSmokeTestableDomainTreesIsTheUnion(t *testing.T) {
+	want := map[string]bool{}
+	for name := range AllDomainTrees() {
+		want[name] = true
+	}
+	for name := range KanbanAndHermesDomainTrees() {
+		want[name] = true
+	}
+
+	got := SmokeTestableDomainTrees()
+
+	for name := range want {
+		if _, ok := got[name]; !ok {
+			t.Errorf("SmokeTestableDomainTrees() is missing %q, which is registered in AllDomainTrees()/KanbanAndHermesDomainTrees(); the union must be exhaustive or a registered tree escapes smoke coverage", name)
+		}
+	}
+	for name, tree := range got {
+		if !want[name] {
+			t.Errorf("SmokeTestableDomainTrees() returned %q, which belongs to neither registry; the union must not invent names", name)
+		}
+		if tree == nil {
+			t.Errorf("SmokeTestableDomainTrees()[%q] is nil; every entry must be a buildable tree", name)
+		}
+	}
+
+	// Defensive copy: mutating one call's result must not be visible to the next.
+	const sentinel = "zz_smoke_union_sentinel"
+	got[sentinel] = &evolution.SerializableNode{Type: "Action", Name: "Sentinel"}
+	for name := range got {
+		if name != sentinel {
+			delete(got, name)
+		}
+	}
+
+	fresh := SmokeTestableDomainTrees()
+	if _, leaked := fresh[sentinel]; leaked {
+		t.Error("SmokeTestableDomainTrees() leaks shared state: a key added to one call's map showed up in the next; it must build a fresh map every call")
+	}
+	if len(fresh) != len(want) {
+		t.Errorf("SmokeTestableDomainTrees() returned %d entries after the previous result was mutated, want %d; it must build a fresh map every call", len(fresh), len(want))
+	}
+}
+
+// TestEverySmokeTestableTreeIsSmokeExecuted is the self-enforcing half of the
+// coverage guarantee: it runs the shared structural smoke assertions over
+// SmokeTestableDomainTrees() itself, so registry membership alone is what
+// causes a tree to be exercised. There is no opt-in list here to fall behind —
+// registering a tree in either registry automatically subjects it to these
+// checks, which is exactly what does not happen today (a new AllDomainTrees()
+// entry with no matching fns/extraSmokeTrees entry is silently unexercised).
+// The assertions are deliberately structural (no LLM, no runtime state) so they
+// hold for every tree in the union, including the arc42 sections and the
+// runtime-dependent goap/notebooklm flows that TestAllDomainTrees can only
+// build rather than execute.
+func TestEverySmokeTestableTreeIsSmokeExecuted(t *testing.T) {
+	for name, tree := range SmokeTestableDomainTrees() {
+		t.Run(name, func(t *testing.T) {
+			if tree == nil {
+				t.Fatalf("tree %q is nil", name)
+			}
+			if strings.TrimSpace(tree.Name) == "" {
+				t.Errorf("tree %q: root node has an empty Name", name)
+			}
+			if strings.TrimSpace(tree.Description) == "" {
+				t.Errorf("tree %q: root node has an empty Description", name)
+			}
+			if len(tree.Children) == 0 {
+				t.Errorf("tree %q: root node has no children", name)
+			}
+
+			var actions int
+			var blankTypes []string
+			var walk func(evolution.SerializableNode)
+			walk = func(node evolution.SerializableNode) {
+				if node.Type == "Action" {
+					actions++
+				}
+				if strings.TrimSpace(node.Type) == "" {
+					blankTypes = append(blankTypes, node.Name)
+				}
+				for _, child := range node.Children {
+					walk(child)
+				}
+			}
+			walk(*tree)
+
+			if actions == 0 {
+				t.Errorf("tree %q: contains no Action node, so it can never do any work", name)
+			}
+			for _, blank := range blankTypes {
+				t.Errorf("tree %q: node %q has an empty Type, so engine.BuildTree cannot dispatch it", name, blank)
+			}
+		})
+	}
+}
+
+// smokeExecutionFile is the test file whose smoke map must not drift away from
+// the canonical SmokeTestableDomainTrees() enumeration.
+const smokeExecutionFile = "engine_domain_execution_test.go"
+
+// smokeExecutedTreeNames parses smokeExecutionFile and reports which domain
+// trees TestAllDomainTreesHaveExecutableStructure actually smoke-executes. It
+// returns the explicit string keys of the `fns` composite literal, plus whether
+// that test derives its work list from SmokeTestableDomainTrees() — in which
+// case the coverage is complete by construction and no key list applies.
+func smokeExecutedTreeNames(t *testing.T) (names map[string]bool, derivesFromRegistry bool) {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, smokeExecutionFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", smokeExecutionFile, err)
+	}
+
+	const smokeTest = "TestAllDomainTreesHaveExecutableStructure"
+	var body *ast.BlockStmt
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Name.Name == smokeTest {
+			body = fn.Body
+			break
+		}
+	}
+	if body == nil {
+		t.Fatalf("%s no longer declares %s; the domain-tree smoke test must keep a single, findable entry point", smokeExecutionFile, smokeTest)
+	}
+
+	names = map[string]bool{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			if ident, ok := node.Fun.(*ast.Ident); ok && ident.Name == "SmokeTestableDomainTrees" {
+				derivesFromRegistry = true
+			}
+		case *ast.AssignStmt:
+			for i, lhs := range node.Lhs {
+				ident, ok := lhs.(*ast.Ident)
+				if !ok || ident.Name != "fns" || i >= len(node.Rhs) {
+					continue
+				}
+				lit, ok := node.Rhs[i].(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				for _, elt := range lit.Elts {
+					kv, ok := elt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					key, ok := kv.Key.(*ast.BasicLit)
+					if !ok || key.Kind != token.STRING {
+						continue
+					}
+					unquoted, err := strconv.Unquote(key.Value)
+					if err != nil {
+						continue
+					}
+					names[unquoted] = true
+				}
+			}
+		}
+		return true
+	})
+	return names, derivesFromRegistry
+}
+
+// TestSmokeExecutionFnsMapCoversRegistry is the drift guard on the third copy
+// of the list: the hand-written `fns` map inside
+// TestAllDomainTreesHaveExecutableStructure. It must cover every
+// SmokeTestableDomainTrees() key — either by listing them all explicitly, or
+// (preferred) by deriving its work list from SmokeTestableDomainTrees() so the
+// literal cannot fall behind at all. Today it lists 17 of the ~47 trees in the
+// union, so every unlisted registered tree has no executable-structure smoke
+// test and nothing reports that fact.
+func TestSmokeExecutionFnsMapCoversRegistry(t *testing.T) {
+	names, derivesFromRegistry := smokeExecutedTreeNames(t)
+	if derivesFromRegistry {
+		return // work list comes from the registry; coverage is complete by construction
+	}
+
+	var missing []string
+	for name := range SmokeTestableDomainTrees() {
+		if !names[name] {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		t.Errorf("the fns map in %s is missing %d of the %d SmokeTestableDomainTrees() entries, so those trees are silently unexercised by the executable-structure smoke test: %v\n"+
+			"Fix by ranging over SmokeTestableDomainTrees() instead of maintaining a hand-copied literal.",
+			smokeExecutionFile, len(missing), len(SmokeTestableDomainTrees()), missing)
+	}
 }

@@ -1204,94 +1204,279 @@ func GOAPFusionSuite() Suite {
 	}
 }
 
+// KanbanTaskCreatorSuite tests the kanban_task_creator tree routing
+// (KanbanTaskCreatorTree, internal/domains/kanban.go). The tree is a plain
+// linear Sequence — PreGate → card-creation LLM step → ReflectOnOutcome →
+// OutcomeSelector — with no router, so ExpectedPath names the real gate and
+// outcome nodes it actually traverses rather than a keyword-guessed branch.
+func KanbanTaskCreatorSuite() Suite {
+	return Suite{
+		Name: "kanban_task_creator",
+		Tasks: []TaskCase{
+			{Task: "create a DoR-ready card in BACKLOG for the new export feature", ExpectedPath: "TaskCreator_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "draft acceptance criteria, priority, and AQAL quadrant for a raw request", ExpectedPath: "ValidateInput", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "file a new task card and report the card ID", ExpectedPath: "OutcomeSelector", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// KanbanRefinerSuite tests the kanban_refiner tree routing (KanbanRefinerTree,
+// internal/domains/kanban.go). The tree is linear and gated on IsKanbanTask,
+// so ExpectedPath names that gate and the surrounding real nodes instead of a
+// branch the tree does not have.
+func KanbanRefinerSuite() Suite {
+	return Suite{
+		Name: "kanban_refiner",
+		Tasks: []TaskCase{
+			{Task: "refine card KAN-42 through the Definition of Ready gate", ExpectedPath: "Refiner_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "expand the description of card KAN-42 with implementation context", ExpectedPath: "IsKanbanTask", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "make the acceptance criteria on card KAN-42 testable and move it TODO to REFINED", ExpectedPath: "OutcomeSelector", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// KanbanQASuite tests the kanban_qa tree routing (KanbanQATree,
+// internal/domains/kanban.go). Like the refiner tree it is linear behind the
+// IsKanbanTask gate, so ExpectedPath uses that gate and the real QA_Main /
+// OutcomeSelector nodes.
+func KanbanQASuite() Suite {
+	return Suite{
+		Name: "kanban_qa",
+		Tasks: []TaskCase{
+			{Task: "run QA validation on card KAN-42 and move it to REVIEW on pass", ExpectedPath: "QA_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "check every acceptance criterion on card KAN-42 is ticked", ExpectedPath: "IsKanbanTask", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "scan card KAN-42 for regressions and report PASS or FAIL", ExpectedPath: "OutcomeSelector", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// KanbanBoardMonitorSuite tests the kanban_monitor tree routing
+// (KanbanBoardMonitorTree, internal/domains/kanban.go). This tree does branch:
+// MonitorRouter selects StaleCheck (IsBoardCheck), DispatchPath
+// (NeedsDispatch), or StandupPath (IsStandup), so each ExpectedPath names one
+// of those real branches and the tasks carry that branch's routing keywords.
+func KanbanBoardMonitorSuite() Suite {
+	return Suite{
+		Name: "kanban_monitor",
+		Tasks: []TaskCase{
+			{Task: "scan the board and check for stale cards and column bottlenecks", ExpectedPath: "StaleCheck", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "dispatch the next ready card to its pipeline agent", ExpectedPath: "DispatchPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "generate the daily standup status with velocity", ExpectedPath: "StandupPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// KanbanWorkflowSuite tests the kanban_workflow tree routing
+// (KanbanWorkflowTree, internal/domains/kanban.go). WorkflowRouter selects
+// CreatePath (IsCreateTask), RefinePath (IsRefinement), QAPath (IsQA), or the
+// unconditional ScanPath default, so ExpectedPath covers all four real
+// branches — including ScanPath, which is only reachable when no keyword hits.
+func KanbanWorkflowSuite() Suite {
+	return Suite{
+		Name: "kanban_workflow",
+		Tasks: []TaskCase{
+			{Task: "create a new card for the billing rewrite", ExpectedPath: "CreatePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "refine the card and expand it with implementation detail", ExpectedPath: "RefinePath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "validate the finished card with a qa pass", ExpectedPath: "QAPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "how healthy is the board right now", ExpectedPath: "ScanPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// KanbanAutoPilotSuite tests the kanban_autopilot tree routing
+// (KanbanAutoPilotTree, internal/domains/kanban.go). The tree is a linear
+// sweep-then-audit Sequence with no router, so ExpectedPath names the real
+// AutoPilot_Main / ValidateInput / OutcomeSelector nodes it always walks.
+func KanbanAutoPilotSuite() Suite {
+	return Suite{
+		Name: "kanban_autopilot",
+		Tasks: []TaskCase{
+			{Task: "sweep TODO, APPROVED, QA, and IN PROGRESS and advance every dispatchable card", ExpectedPath: "AutoPilot_Main", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "move cards whose column gate is met and report the movements", ExpectedPath: "ValidateInput", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "audit the transitions for skipped columns and moves needing human approval", ExpectedPath: "OutcomeSelector", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// HermesEvolveSuite tests the hermes_evolve tree routing
+// (HermesSelfEvolutionTree, internal/domains/hermes_evolve.go). EvolutionRouter
+// selects SelfMonitorPath (IsPeriodicCheck), SkillEvolutionPath (HasSkillGaps),
+// StrategyOptPath (HasWorkflowInefficiencies), ModelTuningPath
+// (HasModelToolIssues), or the unconditional KnowledgeSynthesisPath default —
+// every ExpectedPath below names one of those five real branches.
+func HermesEvolveSuite() Suite {
+	return Suite{
+		Name: "hermes_evolve",
+		Tasks: []TaskCase{
+			{Task: "run the periodic check over the last 10 sessions and categorize the failures", ExpectedPath: "SelfMonitorPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "close the detected skill gaps with concrete SKILL.md updates", ExpectedPath: "SkillEvolutionPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "remove the redundant tool calls causing workflow inefficiency", ExpectedPath: "StrategyOptPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "tune model selection and fix the tool configuration issues", ExpectedPath: "ModelTuningPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "consolidate recent learnings into a self-evolution report", ExpectedPath: "KnowledgeSynthesisPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
+// HermesObsidianSuite tests the hermes_obsidian tree routing
+// (HermesObsidianOptimizerTree, internal/domains/hermes_obsidian.go).
+// PipelineRouter selects SessionStartPath (IsSessionStart), IngestPath
+// (HasNewContent), SweepPath (NeedsSweep), AuditPath (NeedsAudit),
+// PublishPath (NeedsPublish), or the unconditional ImproveSkillPath default,
+// so ExpectedPath covers all six real vault-pipeline branches.
+func HermesObsidianSuite() Suite {
+	return Suite{
+		Name: "hermes_obsidian",
+		Tasks: []TaskCase{
+			{Task: "session start: load context and the previous handoff from the vault", ExpectedPath: "SessionStartPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "ingest this new transcript into raw and synthesize the wiki note", ExpectedPath: "IngestPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "sweep the vault and refresh the people and project notes", ExpectedPath: "SweepPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "audit the vault for knowledge gaps and broken wikilinks", ExpectedPath: "AuditPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "publish a briefing report from the wiki notes", ExpectedPath: "PublishPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "harden the agent against the edge cases seen in recent logs", ExpectedPath: "ImproveSkillPath", ShouldSucceed: true, MinResultLen: 20},
+			{Task: "", ExpectedPath: "", ShouldSucceed: false, MinResultLen: 0},
+		},
+	}
+}
+
 // SuiteForTree returns the best benchmark suite for a given tree name.
+//
+// Every TaskCase.ExpectedPath a suite declares must name a real node in the
+// tree the suite is selected for. That is not a convention but a build-enforced
+// invariant: internal/domains' TestSuiteForTreeExpectedPathsExistInEveryDomainTree
+// sweeps the whole SmokeTestableDomainTrees() registry and fails if any
+// resolved suite declares a path that exists nowhere in its tree. An
+// ExpectedPath naming a node the tree does not have can never be satisfied by
+// real execution, so the suite's condition coverage silently measures nothing.
+//
+// Callers that need to distinguish a deliberate match from the generic default
+// fallback should use SuiteForTreeNamed instead.
 func SuiteForTree(treeName string) Suite {
+	suite, _ := SuiteForTreeNamed(treeName)
+	return suite
+}
+
+// SuiteForTreeNamed returns the benchmark suite for a tree name along with
+// whether the name actually matched a suite written for it. SuiteForTree alone
+// cannot express this: it returns GoDevSuite both for the godev tree (a real
+// match) and for any unrecognized name (a silent fallback), so a newly added
+// tree inheriting an unrelated suite's ExpectedPath values is indistinguishable
+// from a deliberate selection. The second return value is false only on the
+// default branch.
+func SuiteForTreeNamed(treeName string) (Suite, bool) {
 	switch {
 	case containsStr(treeName, "goap_fusion"):
-		return GOAPFusionSuite()
+		return GOAPFusionSuite(), true
 	case containsStr(treeName, "goap"):
-		return GOAPSuite()
+		return GOAPSuite(), true
 	case containsStr(treeName, "godev"):
-		return GoDevSuite()
+		return GoDevSuite(), true
 	case containsStr(treeName, "code_review"):
-		return CodeReviewSuite()
+		return CodeReviewSuite(), true
 	case containsStr(treeName, "devops"):
-		return DevOpsSuite()
+		return DevOpsSuite(), true
 	// Each of the 10 Anthropic finance agents only implements the subset of
 	// StrategyRouter branches its own workflow needs (see finance_trees.go),
 	// so they get their own bespoke suites instead of sharing one generic
 	// FinanceSuite — a shared suite's ExpectedPath values only reflect real
 	// branches for whichever single tree they were written against.
 	case containsStr(treeName, "pitch_agent"):
-		return PitchAgentSuite()
+		return PitchAgentSuite(), true
 	case containsStr(treeName, "earnings_reviewer"):
-		return EarningsReviewerSuite()
+		return EarningsReviewerSuite(), true
 	case containsStr(treeName, "market_researcher"):
-		return MarketResearcherSuite()
+		return MarketResearcherSuite(), true
 	case containsStr(treeName, "model_builder"):
-		return ModelBuilderSuite()
+		return ModelBuilderSuite(), true
 	case containsStr(treeName, "meeting_prep"):
-		return MeetingPrepSuite()
+		return MeetingPrepSuite(), true
 	case containsStr(treeName, "valuation_reviewer"):
-		return ValuationReviewerSuite()
+		return ValuationReviewerSuite(), true
 	case containsStr(treeName, "gl_reconciler"):
-		return GLReconcilerSuite()
+		return GLReconcilerSuite(), true
 	case containsStr(treeName, "month_end_closer"):
-		return MonthEndCloserSuite()
+		return MonthEndCloserSuite(), true
 	case containsStr(treeName, "statement_auditor"):
-		return StatementAuditorSuite()
+		return StatementAuditorSuite(), true
 	case containsStr(treeName, "kyc_screener"):
-		return KYCScreenerSuite()
+		return KYCScreenerSuite(), true
 	case containsStr(treeName, "finance"):
-		return FinanceSuite()
+		return FinanceSuite(), true
 	case containsStr(treeName, "agent_monitor"):
-		return AgentMonitorSuite()
+		return AgentMonitorSuite(), true
 	case containsStr(treeName, "security_audit"):
-		return SecuritySuite()
+		return SecuritySuite(), true
 	case containsStr(treeName, "research"):
-		return ResearchSuite()
+		return ResearchSuite(), true
 	case containsStr(treeName, "data_pipeline"):
-		return DataPipelineSuite()
+		return DataPipelineSuite(), true
 	case containsStr(treeName, "game_ai"):
-		return GameAISuite()
+		return GameAISuite(), true
 	case containsStr(treeName, "refactoring"):
-		return RefactoringSuite()
+		return RefactoringSuite(), true
 	case containsStr(treeName, "crash_investigator") || containsStr(treeName, "domain_crash"):
-		return CrashInvestigatorSuite()
+		return CrashInvestigatorSuite(), true
 	case containsStr(treeName, "meeting_notes"):
-		return MeetingNotesSuite()
+		return MeetingNotesSuite(), true
 	case containsStr(treeName, "alert_router"):
-		return AlertRouterSuite()
+		return AlertRouterSuite(), true
 	case containsStr(treeName, "trading_signal") || containsStr(treeName, "domain_trading"):
-		return TradingSignalSuite()
+		return TradingSignalSuite(), true
 	case containsStr(treeName, "arc42:docsync"):
-		return Arc42DocsyncSuite()
+		return Arc42DocsyncSuite(), true
 	case containsStr(treeName, "arc42_seeder"):
-		return Arc42SeederSuite()
+		return Arc42SeederSuite(), true
 	case containsStr(treeName, "arc42"):
-		return Arc42Suite()
+		return Arc42Suite(), true
 	case containsStr(treeName, "notebooklm_plan_implement"):
-		return NotebookLMPlanImplementSuite()
+		return NotebookLMPlanImplementSuite(), true
 	case containsStr(treeName, "notebooklm_consumer"):
-		return NotebookLMConsumerSuite()
+		return NotebookLMConsumerSuite(), true
 	case containsStr(treeName, "notebooklm"):
-		return NotebookLMSuite()
+		return NotebookLMSuite(), true
 	case containsStr(treeName, "hermes_update"):
-		return HermesUpdateSuite()
+		return HermesUpdateSuite(), true
 	case containsStr(treeName, "auction_demo"):
-		return AuctionDemoSuite()
+		return AuctionDemoSuite(), true
 	case containsStr(treeName, "bt_fusion"):
-		return BTFusionSuite()
+		return BTFusionSuite(), true
 	case containsStr(treeName, "bt_manager"):
-		return BTManagerSuite()
+		return BTManagerSuite(), true
 	case containsStr(treeName, "superpowers_workflow"):
-		return SuperpowersWorkflowSuite()
+		return SuperpowersWorkflowSuite(), true
 	case containsStr(treeName, "self_review"):
-		return SelfReviewSuite()
+		return SelfReviewSuite(), true
+	// The kanban and hermes trees live off the AllDomainTrees() registry (see
+	// domains.KanbanAndHermesDomainTrees) but are just as selectable by name,
+	// and each has its own router shape — sharing the generic GoDevSuite gave
+	// them CodeReviewPath/BuildPath/TestPath ExpectedPath values that exist
+	// nowhere in their trees.
+	case containsStr(treeName, "kanban_task_creator"):
+		return KanbanTaskCreatorSuite(), true
+	case containsStr(treeName, "kanban_refiner"):
+		return KanbanRefinerSuite(), true
+	case containsStr(treeName, "kanban_qa"):
+		return KanbanQASuite(), true
+	case containsStr(treeName, "kanban_monitor"):
+		return KanbanBoardMonitorSuite(), true
+	case containsStr(treeName, "kanban_workflow"):
+		return KanbanWorkflowSuite(), true
+	case containsStr(treeName, "kanban_autopilot"):
+		return KanbanAutoPilotSuite(), true
+	case containsStr(treeName, "hermes_evolve"):
+		return HermesEvolveSuite(), true
+	case containsStr(treeName, "hermes_obsidian"):
+		return HermesObsidianSuite(), true
 	case treeName == "default":
-		return DefaultSuite()
+		return DefaultSuite(), true
 	default:
-		return GoDevSuite()
+		return GoDevSuite(), false
 	}
 }
 

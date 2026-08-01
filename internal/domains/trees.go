@@ -881,6 +881,31 @@ func KanbanAndHermesDomainTrees() map[string]*evolution.SerializableNode {
 	}
 }
 
+// SmokeTestableDomainTrees returns the canonical enumeration of every domain
+// tree that must carry smoke coverage: the curated AllDomainTrees() registry
+// plus the deliberately-off-registry trees from KanbanAndHermesDomainTrees().
+// Coverage guards derive their work list from this union rather than from
+// hand-copied literals, so a newly registered tree cannot be silently
+// unexercised — any tree that is not reachable from here has no smoke test.
+// Add new trees to one of the two underlying registries; do not special-case
+// them here.
+//
+// A fresh map is built on every call, so callers may filter or mutate the
+// result without corrupting the enumeration seen by the next caller.
+func SmokeTestableDomainTrees() map[string]*evolution.SerializableNode {
+	registry := AllDomainTrees()
+	nonRegistry := KanbanAndHermesDomainTrees()
+
+	trees := make(map[string]*evolution.SerializableNode, len(registry)+len(nonRegistry))
+	for name, tree := range registry {
+		trees[name] = tree
+	}
+	for name, tree := range nonRegistry {
+		trees[name] = tree
+	}
+	return trees
+}
+
 // ExpectedDomainIDs converts a domain tree registry (as returned by
 // AllDomainTrees) into the "domain:<name>" ID form knowledge.KnowledgeGraph's
 // ExpectedDomains expects, so every process wiring the live registry into
@@ -894,7 +919,13 @@ func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string
 	return ids
 }
 
-// Descriptions maps tree names to descriptions.
+// Descriptions maps tree names to descriptions for the AllDomainTrees()
+// registry only — the curated gardener/dashboard surface. Trees that live
+// outside that registry (the kanban/hermes trees returned by
+// KanbanAndHermesDomainTrees) are described in NonRegistryDescriptions
+// instead; the two maps are kept disjoint. Callers that want a description for
+// an arbitrary tree name should use DescriptionFor rather than indexing either
+// map directly, so a non-registry tree still resolves.
 var Descriptions = map[string]string{
 	"code_review":               "Bug detection, security review, style checking for any language",
 	"devops_ci":                 "Build → test → lint → deploy → verify → rollback pipeline",
@@ -935,4 +966,38 @@ var Descriptions = map[string]string{
 	"arc42:section10":           "Generate arc42 section 10 (Quality Requirements): quality tree and concrete quality scenarios",
 	"arc42:section11":           "Generate arc42 section 11 (Risks and Technical Debt): known risks and technical debt inventory",
 	"arc42:section12":           "Generate arc42 section 12 (Glossary): domain and technical term definitions",
+}
+
+// NonRegistryDescriptions describes the trees returned by
+// KanbanAndHermesDomainTrees — real, buildable trees that are deliberately kept
+// off the AllDomainTrees() gardener/dashboard registry. They are just as
+// selectable by name as registry trees, so leaving them undescribed made them
+// render as bare identifiers wherever descriptions are surfaced. This map must
+// stay disjoint from Descriptions: a name in both would make DescriptionFor's
+// precedence silently pick one of two divergent descriptions.
+var NonRegistryDescriptions = map[string]string{
+	"kanban_task_creator": "Create a DoR-ready Focalboard card from a raw request: validate input → draft an actionable title, testable acceptance criteria, priority and AQAL quadrant → file it in BACKLOG, with LLM failure diagnosis on a bad board or card format",
+	"kanban_refiner":      "Refine a TODO card through the Definition of Ready gate: expand the description with implementation context and architecture constraints, make acceptance criteria testable, then walk the card TODO → PLANNING → REFINED",
+	"kanban_qa":           "Run QA validation on a card: check every acceptance criterion is ticked, verify the implementation matches the description, scan for regressions, then move the card QA → REVIEW on PASS or back to IN PROGRESS with issues on FAIL",
+	"kanban_monitor":      "Scan the board and route to stale-check, dispatch, or standup: flag idle IN PROGRESS and unrefined TODO cards, detect column bottlenecks, dispatch the next ready card to its pipeline agent, or generate the daily standup with velocity",
+	"kanban_workflow":     "Orchestrate the whole Kanban pipeline behind one entry point: route the task to the create, refine, QA, or default board-scan path, then verify the Definition of Done before closing",
+	"kanban_autopilot":    "Automatically advance dispatchable cards: sweep TODO, APPROVED, QA, and IN PROGRESS, move cards whose column gate is met, then audit the transitions for skipped columns and moves that require human approval",
+	"hermes_evolve":       "Meta-cognitive self-improvement loop for Hermes Agent: categorize recent session failures as skill gap, tool misuse, model limitation, or workflow inefficiency, then route to skill evolution, workflow optimization, model/tool tuning, or knowledge synthesis and emit a Self-Evolution Report",
+	"hermes_obsidian":     "Run the Hermes+Obsidian vault pipeline: route to session-start context load, raw/ ingest with wiki synthesis, derivative-note sweep, knowledge audit, or publish, then enforce the source-quote and immutable-raw quality gates plus an AQAL rating",
+}
+
+// DescriptionFor resolves the description for a domain tree by name across both
+// registries, so callers do not have to know whether a tree is part of the
+// curated AllDomainTrees() surface or the KanbanAndHermesDomainTrees() set.
+// Descriptions wins over NonRegistryDescriptions when a name somehow appears in
+// both. A whitespace-only entry is reported as a miss rather than returned: a
+// blank description would otherwise be rendered as an unexplained builtin,
+// which is exactly the state this lookup exists to prevent.
+func DescriptionFor(name string) (string, bool) {
+	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions} {
+		if desc, ok := m[name]; ok && strings.TrimSpace(desc) != "" {
+			return desc, true
+		}
+	}
+	return "", false
 }
