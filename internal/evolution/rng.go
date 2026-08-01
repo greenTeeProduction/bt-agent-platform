@@ -64,7 +64,7 @@ func evoIntn(n int) int {
 	r := evolutionRand
 	if r == nil {
 		evolutionRandMu.Unlock()
-		return rand.Intn(n)
+		return rand.Intn(n) //#nosec G404 -- non-crypto PRNG for evolution heuristics
 	}
 	v := r.Intn(n)
 	evolutionRandMu.Unlock()
@@ -80,7 +80,7 @@ func evoFloat64() float64 {
 	r := evolutionRand
 	if r == nil {
 		evolutionRandMu.Unlock()
-		return rand.Float64()
+		return rand.Float64() //#nosec G404 -- non-crypto PRNG for evolution heuristics
 	}
 	v := r.Float64()
 	evolutionRandMu.Unlock()
