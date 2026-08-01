@@ -137,10 +137,10 @@ func (p *Population) Select() []*SerializableNode {
 		// -1.0: fitness functions (e.g. structuralFitnessFn's unbounded
 		// anti-pattern penalty) can legitimately return values <= -1.0, which
 		// would otherwise leave best unset and index Individuals[-1].
-		best := rand.Intn(len(p.Individuals))
+		best := evoIntn(len(p.Individuals))
 		bestFit := p.Individuals[best].Fitness
 		for k := 1; k < 3; k++ {
-			idx := rand.Intn(len(p.Individuals))
+			idx := evoIntn(len(p.Individuals))
 			if p.Individuals[idx].Fitness > bestFit {
 				bestFit = p.Individuals[idx].Fitness
 				best = idx
@@ -156,9 +156,9 @@ func Crossover(a, b *SerializableNode) *SerializableNode {
 	child := cloneTree(a)
 	// Pick a random node in child and replace with random node from b
 	if len(child.Children) > 0 {
-		childIdx := rand.Intn(len(child.Children))
+		childIdx := evoIntn(len(child.Children))
 		if len(b.Children) > 0 {
-			bIdx := rand.Intn(len(b.Children))
+			bIdx := evoIntn(len(b.Children))
 			child.Children[childIdx] = *cloneTree(&b.Children[bIdx])
 		}
 	}
@@ -1041,7 +1041,7 @@ func randomMutation(tree *SerializableNode) []MutationOp {
 		"replace_node", "replace_children", "reorder_children",
 		"increase_retries", "prune_node", "increase_iterations", "add_tool",
 	}
-	op := allOps[rand.Intn(len(allOps))]
+	op := allOps[evoIntn(len(allOps))]
 	// Find a random target node
 	target := randomNodeName(tree, tree.Name)
 	if target == "" {
@@ -1055,7 +1055,7 @@ func randomNodeName(node *SerializableNode, fallback string) string {
 	if len(names) == 0 {
 		return fallback
 	}
-	return names[rand.Intn(len(names))]
+	return names[evoIntn(len(names))]
 }
 
 func collectNodeNames(node *SerializableNode) []string {

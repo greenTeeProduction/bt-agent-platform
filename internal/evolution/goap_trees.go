@@ -184,6 +184,29 @@ var goapNodeDescriptions = map[string]string{
 	"ReflectGoapOutcome": "Finalize the outcome and result of the GOAP planning run",
 }
 
+// goapNodeGuards is the machine-readable counterpart to goapNodeDescriptions:
+// the description is prose, but engine/typed_edges.go and
+// engine/utility_selector.go gate execution on TypedEdge.Condition, and
+// ValidateEdge rejects a guard edge with a blank Condition. goap.SerializableNode
+// carries no Edges field, so — like the descriptions — the guard metadata for
+// the fixed Condition node names is attached here on conversion, keeping the
+// converted trees compliant with the domains package's condition-coverage
+// convention (every Condition node carries a labelled guard edge).
+var goapNodeGuards = map[string]TypedEdge{
+	"HasGoapGoal": {
+		Type:       EdgeGuard,
+		Label:      "has-goap-goal",
+		Condition:  "task requires multi-step planning and a GOAP goal can be derived from it",
+		ChildIndex: -1,
+	},
+	"HasMoreGoapSteps": {
+		Type:       EdgeGuard,
+		Label:      "has-more-goap-steps",
+		Condition:  "the computed GOAP plan has remaining unexecuted steps",
+		ChildIndex: -1,
+	},
+}
+
 func convertGoapChildren(children []goap.SerializableNode) []SerializableNode {
 	if len(children) == 0 {
 		return nil
@@ -195,6 +218,9 @@ func convertGoapChildren(children []goap.SerializableNode) []SerializableNode {
 			Name:        c.Name,
 			Description: goapNodeDescriptions[c.Name],
 			Metadata:    c.Metadata,
+		}
+		if guard, ok := goapNodeGuards[c.Name]; ok {
+			node.Edges = []TypedEdge{guard}
 		}
 		if len(c.Children) > 0 {
 			node.Children = convertGoapChildren(c.Children)

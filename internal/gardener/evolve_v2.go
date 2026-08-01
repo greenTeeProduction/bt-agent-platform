@@ -61,6 +61,38 @@ type EvolveV2Config struct {
 	// preserving short-circuit semantics. Off by default so the pass is a
 	// no-op until explicitly enabled.
 	DTOrdering bool
+
+	// DisableLocalSearch turns off the post-structural-mutation local-search
+	// refinement pass (evolution.LocalSearcher over the settled tree's mutable
+	// parameters). The pass is ON by default — parameter tuning is the one
+	// improvement no MutationOp can express, so a tree whose only remaining
+	// slack is a badly-sized MaxRetries/TimeoutMs would otherwise never improve.
+	DisableLocalSearch bool
+
+	// LocalSearchStrategy picks which evolution.LocalSearcher strategy the
+	// refinement pass runs. The zero value is evolution.HillClimbSearch.
+	LocalSearchStrategy evolution.LocalSearchStrategy
+
+	// MCTSStructuralSearch, when true, lets evolution.MCTSMutator compete as a
+	// SECOND structural-mutation generator alongside evaluator.OrderMutations.
+	// Its search proposals are merged into ONE scored competition
+	// (evolution.MergeScoredMutations) before the per-candidate benchmark /
+	// pre-score / quality-gate loop, so an MCTS candidate has to earn its place
+	// against the heuristic ones on exactly the same evidence — it is never
+	// applied on the search's word alone. Whether the search actually runs for
+	// a given tree is decided per tree by evolution.SelectStructuralStrategy.
+	MCTSStructuralSearch bool
+
+	// MCTSIterations bounds the per-tree search budget. Each iteration costs one
+	// evaluator.EvaluateTree call (no benchmark, no LLM). Zero falls back to
+	// defaultMCTSCandidateIterations.
+	MCTSIterations int
+
+	// Specialists supplies the archetype half of the per-tree strategy choice.
+	// Nil means "no archetype knowledge", which biases toward running the
+	// search; DefaultEvolveV2Config seeds it from the benchmark-validated
+	// specialists so a tree matching a preserved archetype is not gambled on.
+	Specialists *evolution.SpecialistRegistry
 }
 
 // DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
@@ -71,8 +103,17 @@ func DefaultEvolveV2Config() EvolveV2Config {
 		BlockConfig:              evolution.DefaultBlockConfig(),
 		UseRealLLM:               false, // use mock by default for speed
 		SelectorOrderingStrategy: evolution.OrderBySuccessRate,
+		MCTSStructuralSearch:     true,
+		MCTSIterations:           defaultMCTSCandidateIterations,
+		Specialists:              evolution.SeedSpecialistRegistry(),
 	}
 }
+
+// defaultMCTSCandidateIterations is the per-tree MCTS search budget when
+// MCTSIterations is unset. It is deliberately close to len(AllMutationOps) so
+// the search gets one shot at each root-level operation before it starts
+// deepening — the root level is where replayable candidates come from.
+const defaultMCTSCandidateIterations = 12
 
 // transpositionTableMaxSize bounds the number of cached (tree,task)
 // evaluations the gardener's transposition table keeps in memory/on disk.
@@ -227,6 +268,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// QualityGate below.
 	maxMutations := g.cfg.MaxMutations
 	crisisIntervened := false
+	crisisReason := ""
 	if g.cfg.CrisisDetector != nil {
 		// BehavioralDiversity is read from this tree's own MAP-Elites archive
 		// (treeDiversityGrid), fed each cycle by recordDiversityObservation
@@ -253,6 +295,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 				maxMutations = 1
 			}
 			crisisIntervened = true
+			crisisReason = reason
 			slog.Info("gardener/v2: crisis intervention — boosting mutation budget",
 				"tree", entry.Name, "reason", reason,
 				"stagnation_epochs", action.StagnationEpochs,
@@ -260,10 +303,36 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		}
 	}
 
+	// ── MAP-Elites active elitism (milestone 2/5) ──
+	// A diversity collapse means this tree's archive says every recent shape
+	// lands in the same handful of behavioral niches, so mutating current-best
+	// once more explores the cell we are already stuck in. Answer it by
+	// reseeding this cycle from the archive's fittest elite in a DIFFERENT
+	// niche — promoting the grid from the write-only diversity signal it was to
+	// an actual elitism source. preReseedTree keeps the pre-cycle lineage as
+	// the rollback target, so a later regression or validation-gate rejection
+	// discards the reseed along with the mutations built on top of it.
+	preReseedTree := cloneTreeForGardener(tree)
+	seedFitness := baseFitness
+	eliteReseed := false
+	if crisisIntervened && crisisReason == evolution.CrisisDiversityCollapse {
+		if reseeded, ok := g.reseedFromDiversityArchive(tree, entry.Name, records, baseFitness.Composite); ok {
+			seedFitness = reseeded
+			eliteReseed = true
+		}
+	}
+
 	// ── Generate and filter mutations ──
 	// Personal trees bias against (and record into) the owning user's bank.
 	bank := g.bankFor(entry)
-	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, baseFitness), lastFailureTask(records))
+	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, seedFitness), lastFailureTask(records))
+
+	// ── MCTS as a second structural-mutation generator (milestone 4/5) ──
+	// The heuristic ordering can only propose mutations its hand-written rules
+	// know how to look for. Merge in whatever a bounded MCTS search found to
+	// actually raise this tree's fitness, so both generators compete on one
+	// scored list before the benchmark/gate loop below.
+	candidates = g.augmentWithMCTSCandidates(tree, entry.Name, records, seedFitness, candidates, cfg)
 
 	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
@@ -307,6 +376,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	if g.cfg.Gate != nil && g.cfg.Gate.IsDisabledFor(entry.Name) {
 		slog.Warn("gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart",
 			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
+		// Fail closed on the reseed too: a tree whose gate is disabled is being
+		// restored to its last-known-good revision, so this cycle's speculative
+		// archive seed must not survive in memory either.
+		if eliteReseed {
+			*tree = *preReseedTree
+		}
 		rolledBack := 0
 		if g.cfg.SnapshotDir != "" {
 			if err := g.cfg.Registry.RollbackTree(entry.Name, g.cfg.SnapshotDir); err != nil {
@@ -330,8 +405,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// baseFitness alongside each revision (SnapshotTreeWithFitness) is what
 	// lets RestoreTreeBeforeRegressionStreak later walk back past a
 	// multi-cycle regression streak instead of just the latest cycle.
+	// The snapshot pairs a tree with the fitness it scored, so it takes the
+	// pre-reseed lineage and baseFitness — reseeding is part of this cycle's
+	// speculative work, not a durable last-known-good revision.
 	if g.cfg.SnapshotDir != "" {
-		if _, err := evolution.SnapshotTreeWithFitness(tree, entry.Name, g.cfg.SnapshotDir, baseFitness.Composite); err != nil {
+		if _, err := evolution.SnapshotTreeWithFitness(preReseedTree, entry.Name, g.cfg.SnapshotDir, baseFitness.Composite); err != nil {
 			slog.Warn("gardener/v2: pre-mutation snapshot failed", "tree", entry.Name, "error", err)
 		}
 	}
@@ -339,8 +417,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	applied := 0
 	rejected := 0
 	rollbacks := 0
-	originalTree := cloneTreeForGardener(tree)
-	currentFitness := baseFitness
+	originalTree := preReseedTree
+	currentFitness := seedFitness
 	for i := 0; i < len(candidates) && applied < maxMutations; i++ {
 		if candidates[i].Score < 0.45 {
 			break
@@ -410,13 +488,39 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		nodesAfter = nodesBefore
 		applied = 0
 		rollbacks++
+		// originalTree is the pre-reseed lineage, so the restore above undid
+		// the archive seed as well — this cycle no longer reseeded anything.
+		eliteReseed = false
 	}
 	// Feed this cycle's settled tree/fitness into the tree's diversity
 	// archive so BehavioralDiversity above reflects real accumulated shape
 	// exploration on the next cycle, not just the cold-start 0.
 	g.recordDiversityObservation(entry.Name, tree, newFitness.Composite)
 	improved := newFitness.Composite > baseFitness.Composite
-	if applied > 0 {
+	// ── Local-search parameter refinement — run evolution.LocalSearcher over
+	// the settled tree's mutable parameters (MaxRetries, TimeoutMs, metadata
+	// knobs), scored by the same cascade fitness function that scored the
+	// structural candidates above. Structural mutation can add, remove, and
+	// rewire nodes but cannot resize an existing node's parameters, so this is
+	// the only pass that can recover a tree whose remaining slack is purely
+	// numeric. The tuned tree is committed only when it beats the settled
+	// fitness through the acceptance gate.
+	//
+	// This runs ABOVE the validation gate on purpose: the refinement mutates
+	// the live tree and independently forces the save below, so running it
+	// after the gate would let a tuned tree the gate just rejected reach disk
+	// unvalidated. Sitting here, its delta is covered by the same gate.
+	localSearchDelta := g.refineTreeParameters(tree, entry, cfg, records, newFitness.Composite)
+	if localSearchDelta > 0 {
+		newFitness = evaluator.EvaluateTree(tree, records)
+		nodesAfter = evolution.CountNodes(tree)
+		improved = newFitness.Composite > baseFitness.Composite
+	}
+
+	// A reseed changes the persisted tree on its own, so it must clear the
+	// validation gate even when no structural mutation applied on top of it —
+	// and so does a local-search refinement.
+	if applied > 0 || eliteReseed || localSearchDelta > 0 {
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
@@ -429,8 +533,14 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			improved = false
 			nodesAfter = nodesBefore
 			applied = 0
+			eliteReseed = false
+			// The restore above reverted the tuned parameters too, so this
+			// cycle refined nothing — clearing the delta keeps the reported
+			// metrics honest and stops it from forcing the save below.
+			localSearchDelta = 0
 		}
 	}
+
 	// ── Learned Selector ordering (milestone 4) — apply real-telemetry child
 	// ordering to the evolved tree just before it is persisted. Flag-gated and
 	// seeded from the durable stats; fallback/AlwaysSucceed children stay last
@@ -442,7 +552,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// to the same tree just before persistence.
 	reordered += g.applyDTOptimizerOrdering(tree, entry.Name, cfg)
 	saveFailed := false
-	if applied > 0 || reordered > 0 {
+	// A refinement — or a diversity-crisis reseed — is itself a persistable
+	// change, like the Selector/DT reordering passes: it must force a save even
+	// when no mutation applied.
+	if applied > 0 || reordered > 0 || localSearchDelta > 0 || eliteReseed {
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
 			slog.Error("gardener/v2: saving evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
 			saveFailed = true
@@ -543,13 +656,96 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		CrisisIntervention: crisisIntervened,
 		CrisisIntervened:   crisisIntervened,
 		MutationBudget:     maxMutations,
+		EliteReseed:        eliteReseed,
 
 		DeepSearchUsed:  deepSearchUsed,
 		DeepSearchDepth: deepSearchDepth,
 		TTHitRate:       ttHitRate,
 
+		LocalSearchDelta: localSearchDelta,
+
 		SaveFailed: saveFailed,
 	}
+}
+
+// reseedFromDiversityArchive answers a diversity-collapse crisis for name by
+// replacing tree's contents, in place, with the fittest elite from a DIFFERENT
+// niche of the tree's MAP-Elites archive — the active-elitism half of
+// milestone 2/5. Before this, treeDiversityGrid was written every cycle and
+// read only for its DiversityScore; the archived elites themselves were never
+// used for anything.
+//
+// The archive's own recorded fitness only decides which elite is worth
+// considering (MAPElitesGrid.EliteSeed, floored at the live tree's fitness).
+// Adoption is decided by re-scoring the candidate against THIS tree's current
+// reflection records — an elite archived cycles ago under different evidence
+// can easily be stale — so a reseed only lands when the elite genuinely beats
+// the live tree right now. The elite is cloned before adoption: the grid keeps
+// pointers to its cell winners, and the caller mutates tree.
+//
+// Returns the adopted seed's fitness and true on reseed; the tree is left
+// untouched and ok is false otherwise.
+func (g *Gardener) reseedFromDiversityArchive(
+	tree *evolution.SerializableNode,
+	name string,
+	records []evolution.Record,
+	floor float64,
+) (evaluator.FitnessScore, bool) {
+	if tree == nil {
+		return evaluator.FitnessScore{}, false
+	}
+	elite := g.treeDiversityGrid(name).EliteSeed(evolution.Descriptor(tree, ""), floor)
+	if elite == nil {
+		return evaluator.FitnessScore{}, false
+	}
+
+	seed := cloneTreeForGardener(elite.Tree)
+	seedFitness := evaluator.EvaluateTree(seed, records)
+	if seedFitness.Composite <= floor+0.0001 {
+		return evaluator.FitnessScore{}, false
+	}
+
+	*tree = *seed
+	slog.Info("gardener/v2: diversity collapse — reseeding from MAP-Elites elite",
+		"tree", name, "base_fitness", floor, "seed_fitness", seedFitness.Composite,
+		"archived_fitness", elite.Fitness, "seed_nodes", evolution.CountNodes(tree))
+	return seedFitness, true
+}
+
+// refineTreeParameters runs evolution.LocalSearcher over tree's mutable
+// parameters using the same evaluator.EvaluateTree cascade fitness that scored
+// this cycle's structural candidates, and commits the tuned tree in place only
+// when RefineGated accepts it — i.e. when it strictly beats settledFitness and
+// clears the quality gate. Returns the composite gain, or 0 when the pass is
+// disabled, finds nothing tunable, or its result is rejected.
+//
+// The gate is consulted non-recordingly (RefineGated → QualityGate.Probe): a
+// speculative tuning attempt that fails is not a regression of the live tree,
+// so it must never burn the tree's consecutive-failure streak toward
+// fail-closed.
+func (g *Gardener) refineTreeParameters(
+	tree *evolution.SerializableNode,
+	entry TreeEntry,
+	cfg EvolveV2Config,
+	records []evolution.Record,
+	settledFitness float64,
+) float64 {
+	if cfg.DisableLocalSearch || tree == nil {
+		return 0
+	}
+
+	searcher := evolution.NewLocalSearcher(cfg.LocalSearchStrategy)
+	res := searcher.RefineGated(tree, settledFitness, func(candidate *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(candidate, records).Composite
+	}, g.cfg.Gate, entry.Name)
+	if !res.Accepted || res.Tree == nil {
+		return 0
+	}
+
+	*tree = *res.Tree
+	slog.Info("gardener/v2: local search refined tree parameters",
+		"tree", entry.Name, "delta", res.Delta, "fitness", res.Fitness)
+	return res.Delta
 }
 
 // recordEvolvedRun writes an "evolved" RunRecord for treeID back into the
@@ -584,9 +780,23 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 	if !cfg.SelectorOrdering || tree == nil {
 		return 0
 	}
+	so := g.seedSelectorOptimizer(treeID, cfg)
+	if so == nil {
+		return 0
+	}
+	return so.ApplyLearnedOrdering(tree)
+}
+
+// seedSelectorOptimizer builds a SelectorOptimizer seeded from the durable
+// per-tree Selector telemetry for treeID (selectorStatsPathFor's per-tree-first
+// resolution). Returns nil when no stats path resolves or the file cannot be
+// read, so callers degrade to "no learned signal" rather than to an optimizer
+// silently pretending it has one. Shared by the ordering pass above and by the
+// MCTS strategy choice, which needs the same telemetry read-only.
+func (g *Gardener) seedSelectorOptimizer(treeID string, cfg EvolveV2Config) *evolution.SelectorOptimizer {
 	path := g.selectorStatsPathFor(treeID)
 	if path == "" {
-		return 0
+		return nil
 	}
 	strategy := cfg.SelectorOrderingStrategy
 	if strategy == "" {
@@ -594,11 +804,94 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 	}
 	so := evolution.NewSelectorOptimizer(strategy)
 	if err := so.LoadSelectorStats(path); err != nil {
-		slog.Warn("gardener/v2: loading selector stats failed, skipping ordering",
+		slog.Warn("gardener/v2: loading selector stats failed",
 			"path", path, "error", err)
-		return 0
+		return nil
 	}
-	return so.ApplyLearnedOrdering(tree)
+	return so
+}
+
+// augmentWithMCTSCandidates merges evolution.MCTSMutator's search proposals
+// into the heuristic candidate list, producing ONE descending-score competition
+// for evolveTreeV2's per-candidate benchmark / pre-score / quality-gate loop.
+//
+// Whether the search runs at all is a per-tree decision made by
+// evolution.SelectStructuralStrategy from two independent "what do we already
+// know about this tree" signals: the specialist registry's archetype knowledge
+// and the Selector optimizer's learned-ordering telemetry. A tree that is a
+// preserved archetype AND whose Selectors are fully telemetered keeps today's
+// heuristic-only ordering — those are exactly the trees where speculative
+// search is most likely to break something already proven.
+//
+// The search is scored with evaluator.EvaluateTree (records-derived fitness, no
+// benchmark and no LLM), so its cost is MCTSIterations cheap evaluations. Its
+// output is only ever an ORDERING input: every merged candidate still has to
+// clear the same benchmark, pre-score, quality gate and meta-validation as a
+// heuristic one before it is applied.
+func (g *Gardener) augmentWithMCTSCandidates(
+	tree *evolution.SerializableNode,
+	treeID string,
+	records []evolution.Record,
+	seedFitness evaluator.FitnessScore,
+	heuristic []evaluator.MutationCandidate,
+	cfg EvolveV2Config,
+) []evaluator.MutationCandidate {
+	if !cfg.MCTSStructuralSearch || tree == nil {
+		return heuristic
+	}
+	strategy := evolution.SelectStructuralStrategy(cfg.Specialists, g.seedSelectorOptimizer(treeID, cfg), tree)
+	if strategy != evolution.StrategyMCTSAugmented {
+		return heuristic
+	}
+
+	iterations := cfg.MCTSIterations
+	if iterations <= 0 {
+		iterations = defaultMCTSCandidateIterations
+	}
+	mutator := evolution.NewMCTSMutator()
+	mutator.Iterations = iterations
+	mutator.SetFitnessEvaluator(func(candidate *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(candidate, records).Composite
+	})
+
+	found := mutator.Candidates(tree, seedFitness.Composite)
+	if len(found) == 0 {
+		return heuristic
+	}
+
+	merged := candidatesFromScored(evolution.MergeScoredMutations(scoredFromCandidates(heuristic), found))
+	slog.Info("gardener/v2: MCTS search joined the structural-mutation competition",
+		"tree", treeID, "heuristic_candidates", len(heuristic),
+		"mcts_candidates", len(found), "merged_candidates", len(merged))
+	return merged
+}
+
+// scoredFromCandidates converts the evaluator package's heuristic candidates
+// into the shared evolution.ScoredMutation currency MergeScoredMutations
+// speaks. The two shapes are identical by design — evaluator imports evolution,
+// so the shared type has to live on the evolution side.
+func scoredFromCandidates(candidates []evaluator.MutationCandidate) []evolution.ScoredMutation {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]evolution.ScoredMutation, len(candidates))
+	for i, c := range candidates {
+		out[i] = evolution.ScoredMutation{Op: c.Op, Score: c.Score, Reason: c.Reason}
+	}
+	return out
+}
+
+// candidatesFromScored is the inverse of scoredFromCandidates, handing the
+// merged competition back to evolveTreeV2's existing candidate loop unchanged.
+func candidatesFromScored(scored []evolution.ScoredMutation) []evaluator.MutationCandidate {
+	if len(scored) == 0 {
+		return nil
+	}
+	out := make([]evaluator.MutationCandidate, len(scored))
+	for i, s := range scored {
+		out[i] = evaluator.MutationCandidate{Op: s.Op, Score: s.Score, Reason: s.Reason}
+	}
+	return out
 }
 
 // selectorStatsPathFor resolves the durable Selector telemetry path for
@@ -816,6 +1109,136 @@ func treePriorityRank(ranks map[string]int, name string) int {
 	return treePriorityDefaultRank
 }
 
+const (
+	// defaultIslandInterval is how many cycles apart the island-exploration
+	// pass runs when Config.IslandInterval is unset — at the production
+	// 5-minute cycle interval, roughly hourly.
+	defaultIslandInterval = 12
+
+	// islandPopulationSize is how many individuals a freshly warm-started
+	// domain island holds (the live tree plus randomly mutated variants of it).
+	// Small on purpose: every individual is re-scored against the domain's
+	// reflection records on each pass.
+	islandPopulationSize = 8
+)
+
+// islandInterval resolves the configured island-pass interval, falling back to
+// defaultIslandInterval for non-positive values.
+func (g *Gardener) islandInterval() int {
+	if g.cfg.IslandInterval > 0 {
+		return g.cfg.IslandInterval
+	}
+	return defaultIslandInterval
+}
+
+// islandPassDue reports whether the 1-based cycle number cycle should run the
+// island-exploration pass: cycle 1 always, then every islandInterval()-th cycle
+// after it (with interval 3: cycles 1, 4, 7, …).
+func (g *Gardener) islandPassDue(cycle int) bool {
+	if g.cfg.IslandModel == nil || cycle < 1 {
+		return false
+	}
+	return (cycle-1)%g.islandInterval() == 0
+}
+
+// runIslandExploration runs one evolution.IslandModel.EvolveAll generation
+// across one island per active domain and migrates each island's winner back
+// into the domain's live TreeEntry state, returning the set of tree names that
+// adopted one.
+//
+// This is the population-exploration half of the daemon's evolution: the
+// per-tree pipeline (evolveTreeV2) only ever mutates current-best, so a tree
+// whose improvement needs several coordinated changes at once can never be
+// reached from there. An island holds a whole subpopulation per domain, breeds
+// it with crossover + mutation, and keeps it across cycles, so those multi-step
+// shapes get explored off to the side of the live tree.
+//
+// EvolveAll scores every island with one shared fitness function, so
+// exploration is scored against the whole reflection corpus. Adoption is
+// decided separately, per domain, against that domain's own records (the same
+// re-score-before-adopting discipline reseedFromDiversityArchive uses), so a
+// coarse exploration score can never push a tree backwards.
+func (g *Gardener) runIslandExploration(entries []TreeEntry) map[string]bool {
+	im := g.cfg.IslandModel
+	if im == nil {
+		return nil
+	}
+
+	active := make([]TreeEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Active && entry.Tree != nil {
+			active = append(active, entry)
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+
+	allRecords, err := g.cfg.RefStore.LoadAll()
+	if err != nil {
+		slog.Warn("gardener/v2: loading reflections for island pass failed, skipping exploration", "error", err)
+		return nil
+	}
+
+	// One island per active domain, warm-started from that domain's current
+	// tree. Domains that already carry an island keep the subpopulation they
+	// have been evolving across earlier passes.
+	for _, entry := range active {
+		if im.SeedIsland(entry.Name, entry.Tree, islandPopulationSize) {
+			slog.Info("gardener/v2: island seeded for domain", "tree", entry.Name, "size", islandPopulationSize)
+		}
+	}
+
+	im.EvolveAll(func(tree *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(tree, allRecords).Composite
+	})
+
+	adopted := make(map[string]bool, len(active))
+	for _, entry := range active {
+		if g.adoptIslandWinner(entry, recordsForEntry(allRecords, entry)) {
+			adopted[entry.Name] = true
+		}
+	}
+	return adopted
+}
+
+// adoptIslandWinner migrates entry's island champion into the live tree, in
+// place, and persists it — but only when that champion genuinely beats the live
+// tree under entry's own reflection records and stays within the same bloat cap
+// evolveTreeV2 enforces (an island breeds with random mutation, so it can grow
+// individuals the per-tree pipeline would refuse to evolve further). Returns
+// whether the migration happened.
+func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record) bool {
+	if entry.Tree == nil {
+		return false
+	}
+	score := func(tree *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(tree, records).Composite
+	}
+	live := score(entry.Tree)
+
+	winner, winnerFitness := g.cfg.IslandModel.BestIndividualFor(entry.Name, score)
+	if winner == nil || winnerFitness <= live+0.0001 {
+		return false
+	}
+	if nodes := evolution.CountNodes(winner); nodes > baseNodeCount(entry.Name)*20 {
+		slog.Warn("gardener/v2: island winner exceeds bloat cap, not migrating",
+			"tree", entry.Name, "winner_nodes", nodes)
+		return false
+	}
+
+	*entry.Tree = *winner
+	slog.Info("gardener/v2: island exploration — migrating winner into live tree",
+		"tree", entry.Name, "base_fitness", live, "winner_fitness", winnerFitness,
+		"winner_nodes", evolution.CountNodes(entry.Tree))
+
+	if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: entry.Tree, FilePath: entry.FilePath}); err != nil {
+		slog.Error("gardener/v2: saving migrated island winner failed, migration is not durably persisted",
+			"tree", entry.Name, "error", err)
+	}
+	return true
+}
+
 // RunCycleV2 executes one full evolution cycle using the v2 pipeline.
 func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	g.cycleInFlight.Store(true)
@@ -831,6 +1254,15 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		return entries[i].Name < entries[j].Name
 	})
 
+	// ── Island-model population exploration ──
+	// Runs before the per-tree pipeline so a migrated winner becomes this
+	// cycle's baseline: evolveTreeV2 then mutates the champion the island
+	// surfaced instead of the tree it superseded.
+	var islandAdopted map[string]bool
+	if cycle := int(g.cycleCount.Add(1)); g.islandPassDue(cycle) {
+		islandAdopted = g.runIslandExploration(entries)
+	}
+
 	results := make([]CycleMetrics, 0, len(entries))
 	var errs []error
 
@@ -842,6 +1274,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 		start := time.Now()
 		metrics := g.evolveTreeV2(entry, cfg)
 		metrics.DurationMs = time.Since(start).Milliseconds()
+		metrics.IslandAdopted = islandAdopted[entry.Name]
 		results = append(results, metrics)
 		if metrics.SaveFailed {
 			errs = append(errs, fmt.Errorf("tree %q: saving evolved tree failed", entry.Name))

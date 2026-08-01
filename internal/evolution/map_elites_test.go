@@ -394,3 +394,60 @@ func TestMAPElitesPopulation_EvolveMAPElites_ResurrectsExtinctSpecialist(t *test
 		t.Fatal("expected EvolveMAPElites to resurrect the extinct goap specialist via the shared selfHealGeneration envelope")
 	}
 }
+
+// eliteSeedChain builds a linear Sequence chain depth nodes deep, terminated by
+// a single Action leaf, so its CountNodes (depth+1) and MaxDepth (depth) place
+// it in a predictable MAP-Elites niche.
+func eliteSeedChain(depth int) *SerializableNode {
+	node := SerializableNode{Type: "Action", Name: "Leaf"}
+	for i := 0; i < depth; i++ {
+		node = SerializableNode{Type: "Sequence", Name: "Seq", Children: []SerializableNode{node}}
+	}
+	return &node
+}
+
+// TestMAPElitesGrid_EliteSeed pins the active-elitism accessor the gardener's
+// diversity-crisis reseed draws from: the fittest archived elite that occupies
+// a DIFFERENT niche than the caller's current tree and strictly beats the
+// caller's fitness floor. Same-niche elites are never returned — reseeding into
+// the niche we are already collapsed in is not an escape — and a floor no elite
+// clears yields nil rather than a downgrade.
+func TestMAPElitesGrid_EliteSeed(t *testing.T) {
+	g := NewMAPElitesGrid(10)
+
+	current := eliteSeedChain(0) // 1 node, depth 0 → niche "n0|d0|"
+	currentDesc := Descriptor(current, "")
+
+	if seed := g.EliteSeed(currentDesc, 0); seed != nil {
+		t.Fatalf("empty grid should yield no elite seed, got %+v", seed)
+	}
+
+	// Fittest individual in the whole grid, but it shares the current tree's
+	// niche, so it must never be selected.
+	sameNiche := eliteSeedChain(0)
+	g.Insert(Descriptor(sameNiche, ""), &Individual{Tree: sameNiche, Fitness: 99})
+
+	weak := eliteSeedChain(10) // niche "n10|d10|"
+	g.Insert(Descriptor(weak, ""), &Individual{Tree: weak, Fitness: 0.5})
+
+	strong := eliteSeedChain(20) // niche "n20|d20|"
+	g.Insert(Descriptor(strong, ""), &Individual{Tree: strong, Fitness: 5})
+
+	mid := eliteSeedChain(30) // niche "n30|d30|"
+	g.Insert(Descriptor(mid, ""), &Individual{Tree: mid, Fitness: 2})
+
+	seed := g.EliteSeed(currentDesc, 1)
+	if seed == nil {
+		t.Fatal("expected an elite seed from a different niche above the fitness floor, got nil")
+	}
+	if seed.Fitness != 5 {
+		t.Errorf("EliteSeed returned fitness %.2f, want the fittest qualifying elite (5) — 99 shares the current niche", seed.Fitness)
+	}
+	if CountNodes(seed.Tree) != CountNodes(strong) {
+		t.Errorf("EliteSeed returned a tree with %d nodes, want the 21-node strong elite", CountNodes(seed.Tree))
+	}
+
+	if seed := g.EliteSeed(currentDesc, 10); seed != nil {
+		t.Errorf("EliteSeed should return nil when no different-niche elite clears the fitness floor, got fitness %.2f", seed.Fitness)
+	}
+}

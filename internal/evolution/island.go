@@ -3,7 +3,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -66,6 +65,65 @@ func (im *IslandModel) GetIsland(domain string) *Population {
 	return im.Islands[domain]
 }
 
+// SeedIsland warm-starts domain's island from seed — a fresh NewPopulation of
+// size individuals, i.e. the seed tree plus randomly mutated variants of it —
+// and reports whether it created one. A domain that already holds a non-empty
+// island is left untouched, so a caller running this every exploration pass
+// (the gardener's periodic per-domain pass) keeps the subpopulation it has been
+// evolving instead of resetting it each time. The check-and-create happens
+// under a single write lock, so concurrent seeders cannot both observe "no
+// island" and clobber each other's population.
+func (im *IslandModel) SeedIsland(domain string, seed *SerializableNode, size int) bool {
+	if seed == nil || size <= 0 {
+		return false
+	}
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	if im.Islands == nil {
+		im.Islands = make(map[string]*Population)
+	}
+	if pop := im.Islands[domain]; pop != nil && len(pop.Individuals) > 0 {
+		return false
+	}
+	im.Islands[domain] = NewPopulation(size, seed)
+	return true
+}
+
+// BestIndividualFor returns a clone of the individual in domain's island that
+// scores highest under score, together with that score — the migration-out half
+// of the island model, letting a caller pull a domain's current champion back
+// into its own state without reaching into (or racing on) the live population.
+// Scoring is the caller's own fitness function rather than the individuals'
+// recorded Fitness, because an island's recorded fitness comes from whatever
+// coarse function EvolveAll last ran, which need not be the caller's notion of
+// fit. Returns (nil, 0) for an unknown or empty island.
+func (im *IslandModel) BestIndividualFor(domain string, score func(*SerializableNode) float64) (*SerializableNode, float64) {
+	im.mu.RLock()
+	defer im.mu.RUnlock()
+
+	pop := im.Islands[domain]
+	if pop == nil || score == nil {
+		return nil, 0
+	}
+	var best *SerializableNode
+	bestScore := 0.0
+	for i := range pop.Individuals {
+		tree := pop.Individuals[i].Tree
+		if tree == nil {
+			continue
+		}
+		s := score(tree)
+		if best == nil || s > bestScore {
+			best = tree
+			bestScore = s
+		}
+	}
+	if best == nil {
+		return nil, 0
+	}
+	return cloneTree(best), bestScore
+}
+
 // Migrate performs inter-island migration: top individuals from each island
 // are copied to random other islands, replacing their worst individuals.
 // This is the AlphaEvolve-style periodic cross-pollination.
@@ -92,7 +150,7 @@ func (im *IslandModel) Migrate() int {
 		// Pick a random target domain (different from source)
 		var tgtDomain string
 		for {
-			tgtDomain = domains[rand.Intn(len(domains))]
+			tgtDomain = domains[evoIntn(len(domains))]
 			if tgtDomain != srcDomain {
 				break
 			}
@@ -180,7 +238,7 @@ func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[
 			for i := eliteCount; i < len(pop.Individuals); i++ {
 				parents := pop.Select()
 				child := Crossover(parents[0], parents[1])
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])
@@ -200,8 +258,10 @@ func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[
 		bestTrees[domain] = pop.BestTree
 	}
 
-	// Periodic migration
-	if im.Generation%im.MigrationInterval == 0 {
+	// Periodic migration. A non-positive MigrationInterval means "never
+	// migrate" rather than a division-by-zero panic, so a model built as a bare
+	// struct literal (instead of via NewIslandModel) still evolves.
+	if im.MigrationInterval > 0 && im.Generation%im.MigrationInterval == 0 {
 		im.mu.Unlock() // Migrate handles its own locking
 		im.Migrate()
 		im.mu.Lock()

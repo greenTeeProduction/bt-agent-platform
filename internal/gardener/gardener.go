@@ -290,6 +290,23 @@ type CycleMetrics struct {
 	// (DeepeningResult.TTProbeHits / TTProbes) for this cycle's deep search.
 	// Zero when DeepSearchUsed is false.
 	TTHitRate float64 `json:"tt_hit_rate,omitempty"`
+	// EliteReseed marks a cycle where a diversity-collapse crisis was answered
+	// by adopting an elite from a different niche of the tree's MAP-Elites
+	// archive as the cycle's mutation seed, instead of mutating current-best
+	// again. False when no crisis fired, when the crisis was stagnation rather
+	// than diversity collapse, when no archived elite in another niche beat the
+	// live tree, or when the reseed was later rolled back.
+	EliteReseed bool `json:"elite_reseed,omitempty"`
+	// LocalSearchDelta is the composite gain the post-structural-mutation
+	// local-search refinement pass contributed this cycle (0 when the pass is
+	// disabled, found nothing to tune, or its result was rejected).
+	LocalSearchDelta float64 `json:"local_search_delta,omitempty"`
+	// IslandAdopted marks a cycle where the periodic island-model exploration
+	// pass (RunCycleV2, Config.IslandModel) migrated a fitter individual out of
+	// this tree's domain island and into its persisted TreeEntry state. False
+	// when the pass is disabled, the cycle was not due, or the island held
+	// nothing that beat the live tree under its own reflection records.
+	IslandAdopted bool `json:"island_adopted,omitempty"`
 	// SaveFailed marks a cycle where persisting the evolved tree via
 	// Registry.SaveTree failed (Q3 Reliability milestone 3) — the in-memory
 	// mutation was applied, but it is not durably saved, so it must not be
@@ -527,6 +544,22 @@ type Config struct {
 	// goes to trees that need attention instead of round-robining blindly.
 	// Nil preserves the historical alphabetical-only ordering.
 	KnowledgeGraph *knowledge.KnowledgeGraph
+	// IslandModel, when non-nil, turns on RunCycleV2's periodic per-domain
+	// population-exploration pass: every active tree gets its own island,
+	// warm-started from that tree, one evolution.IslandModel.EvolveAll
+	// generation runs across all of them, and an island individual that is
+	// genuinely fitter than the live tree under that tree's own reflection
+	// records is migrated back into its persisted TreeEntry state. Without it
+	// the island model is only reachable from the MCP tools, so the 24/7 daemon
+	// never explores a population at all — it only ever mutates current-best.
+	// Nil disables the pass entirely.
+	IslandModel *evolution.IslandModel
+	// IslandInterval is how many RunCycleV2 cycles apart the island pass runs;
+	// cycle 1 is always due, then every IslandInterval-th cycle after it. The
+	// pass evolves a whole subpopulation per domain, so it is deliberately a
+	// periodic side channel rather than per-cycle work. Non-positive values
+	// fall back to defaultIslandInterval.
+	IslandInterval int
 }
 
 // Gardener is the 24/7 tree evolution agent.
@@ -551,6 +584,11 @@ type Gardener struct {
 	// defer a self-restart until the current evolution cycle finishes,
 	// mirroring bt-agent's Scheduler.AnyInFlight guard.
 	cycleInFlight atomic.Bool
+
+	// cycleCount is the 1-based number of RunCycleV2 cycles this gardener has
+	// started, driving the periodic island-exploration pass's due check (see
+	// islandPassDue in evolve_v2.go).
+	cycleCount atomic.Int64
 }
 
 // NewGardener creates a tree gardener.

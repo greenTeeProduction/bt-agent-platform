@@ -102,6 +102,59 @@ func (r *SpecialistRegistry) Resurrect(specialistType string, generation int) (I
 	return Individual{Tree: tree, Fitness: archetype.Fitness, Genome: hashTree(tree)}, meta, true
 }
 
+// MCTSAffinity reports, on [0,1], how much a speculative MCTS structural
+// search is worth for tree from the registry's point of view — 1.0 when the
+// registry knows nothing about this shape, 0.0 when the shape IS a preserved
+// specialist archetype.
+//
+// A registered archetype is a validated, high-fitness tree the registry exists
+// to keep alive across generations; gambling extra structural mutations on the
+// very shape crisis recovery would resurrect works against that purpose, so
+// such a tree scores no affinity. A nil or empty registry has no archetype
+// knowledge at all and therefore cannot argue against the search.
+// See [SelectStructuralStrategy], which combines this with
+// [SelectorOptimizer.MCTSAffinity].
+func (r *SpecialistRegistry) MCTSAffinity(tree *SerializableNode) float64 {
+	if r == nil || tree == nil || len(r.Archetypes) == 0 {
+		return 1.0
+	}
+	shape := treeShapeSignature(tree)
+	if shape == "" {
+		return 1.0
+	}
+	for _, archetype := range r.Archetypes {
+		if archetype.Tree == nil {
+			continue
+		}
+		if treeShapeSignature(archetype.Tree) == shape {
+			return 0.0
+		}
+	}
+	return 1.0
+}
+
+// treeShapeSignature renders a tree's structural skeleton — node types and
+// nesting only, no names — as a comparable string. Matching on shape rather
+// than on an exact tree hash is what makes "this is a known archetype" survive
+// the node renaming that ordinary evolution performs.
+func treeShapeSignature(node *SerializableNode) string {
+	if node == nil {
+		return ""
+	}
+	sig := node.Type
+	if len(node.Children) == 0 {
+		return sig
+	}
+	sig += "("
+	for i := range node.Children {
+		if i > 0 {
+			sig += ","
+		}
+		sig += treeShapeSignature(&node.Children[i])
+	}
+	return sig + ")"
+}
+
 func firstSpecialistType(tags []string) string {
 	const prefix = "specialist:"
 	for _, tag := range tags {

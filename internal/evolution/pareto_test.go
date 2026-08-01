@@ -1,7 +1,6 @@
 package evolution
 
 import (
-	"math/rand"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -260,29 +259,30 @@ func TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge(
 	ek := NewExpertKnowledge()
 	before := len(ek.LearnedPatterns)
 
-	// A handful of fixed seeds keeps the run deterministic while tolerating
-	// exactly which mutation op the random draw picks first, mirroring
+	// Each attempt installs its own source via the package seam, so the run is
+	// genuinely reproducible while still tolerating exactly which mutation op
+	// the draw picks first, mirroring
 	// TestExpertKnowledge_ObservesLearnedPatternFromQLearning. 16 generations,
 	// not 4: growthMultiFitness only rewards node count, so only node-adding
 	// ops ever produce a positive gain, and EvolvePareto's fitness signal is
 	// noisier than plain NSGA-II — at 4 generations a 3-seed retry still
 	// missed an improving mutation on every seed in ~8% of runs (measured
 	// empirically); 16 generations cuts that to well under 0.1%.
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		pp := NewParetoPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
-		pp.ExpertKnowledge = ek
-		best := pp.EvolvePareto(16, growthMultiFitness)
-		if best == nil {
-			t.Fatal("EvolvePareto returned nil best tree")
-		}
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			pp := NewParetoPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
+			pp.ExpertKnowledge = ek
+			if best := pp.EvolvePareto(16, growthMultiFitness); best == nil {
+				t.Fatal("EvolvePareto returned nil best tree")
+			}
+		})
 		if len(ek.LearnedPatterns) > before {
 			break
 		}
 	}
 
 	if len(ek.LearnedPatterns) <= before {
-		t.Fatal("expected EvolvePareto to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+		t.Fatalf("expected EvolvePareto to grow ExpertKnowledge.LearnedPatterns via Observe across %d seeded runs; archive is unchanged", len(observeSeeds))
 	}
 	for _, lp := range ek.LearnedPatterns {
 		if lp.Gain <= 0 {
@@ -308,21 +308,21 @@ func TestNSGAIIPopulation_Evolve_ObservesLearnedPatternViaExpertKnowledge(t *tes
 	// generations a 3-seed retry still missed an improving mutation on every
 	// seed in ~5% of runs (measured empirically); 16 generations cuts that to
 	// effectively zero while keeping the run well under a second.
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		nsga2 := NewNSGAIIPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
-		nsga2.ExpertKnowledge = ek
-		best := nsga2.Evolve(16, growthMultiFitness)
-		if best == nil {
-			t.Fatal("Evolve returned nil best tree")
-		}
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			nsga2 := NewNSGAIIPopulation(8, DefaultTree(), []FitnessDimension{DimNodeEfficiency})
+			nsga2.ExpertKnowledge = ek
+			if best := nsga2.Evolve(16, growthMultiFitness); best == nil {
+				t.Fatal("Evolve returned nil best tree")
+			}
+		})
 		if len(ek.LearnedPatterns) > before {
 			break
 		}
 	}
 
 	if len(ek.LearnedPatterns) <= before {
-		t.Fatal("expected NSGA-II Evolve to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+		t.Fatalf("expected NSGA-II Evolve to grow ExpertKnowledge.LearnedPatterns via Observe across %d seeded runs; archive is unchanged", len(observeSeeds))
 	}
 	for _, lp := range ek.LearnedPatterns {
 		if lp.Gain <= 0 {
@@ -532,5 +532,69 @@ func TestMultiFitness_String(t *testing.T) {
 	// Should contain both dimensions
 	if len(mf.Scores) != 2 {
 		t.Errorf("scores = %d, want 2", len(mf.Scores))
+	}
+}
+
+// ─── NSGA-II/Pareto acceptance ──────────────────────────────────────────────
+
+// TestParetoAccepts_RejectsDominatedCandidate pins the reject half of the
+// multi-objective acceptance rule the gardener's validation gate needs: a
+// candidate that a baseline Pareto-dominates never reaches front 0 of
+// baselines ∪ {candidate}, so it must be refused.
+func TestParetoAccepts_RejectsDominatedCandidate(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 75, DimStability: 10}}
+
+	if ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate %v is dominated by baseline %v, want rejection", candidate, baseline)
+	}
+}
+
+// TestParetoAccepts_AcceptsTradeoff is the whole point of replacing scalar
+// acceptance: a candidate that loses ground on one objective while gaining
+// more on another is non-dominated, so it belongs on the front and must be
+// accepted — a scalar per-dimension threshold check would refuse it on the
+// dimension it lost.
+func TestParetoAccepts_AcceptsTradeoff(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 75, DimStability: 100}}
+
+	if !ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate %v trades success rate for stability against %v, want acceptance", candidate, baseline)
+	}
+}
+
+// TestParetoAccepts_AcceptsEqualCandidate pins that "no regression" is
+// acceptance: Dominates requires a strict win on some dimension, so a
+// candidate that merely ties the baseline everywhere shares front 0 with it.
+func TestParetoAccepts_AcceptsEqualCandidate(t *testing.T) {
+	baseline := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 80, DimStability: 30}}
+
+	if !ParetoAccepts(candidate, []MultiFitness{baseline}) {
+		t.Errorf("candidate equal to baseline %v must not count as a regression", baseline)
+	}
+}
+
+// TestParetoAccepts_NoBaselinesAcceptsEverything pins the degenerate case: with
+// nothing to compare against, the candidate is trivially non-dominated.
+func TestParetoAccepts_NoBaselinesAcceptsEverything(t *testing.T) {
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 1, DimStability: 1}}
+	if !ParetoAccepts(candidate, nil) {
+		t.Error("a candidate with no baselines has nothing to be dominated by, want acceptance")
+	}
+}
+
+// TestParetoAccepts_RejectsWhenAnyBaselineDominates pins the multi-baseline
+// case: acceptance is membership in front 0 of the whole set, so one
+// dominating baseline is enough to refuse the candidate even when others do
+// not dominate it.
+func TestParetoAccepts_RejectsWhenAnyBaselineDominates(t *testing.T) {
+	harmless := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 10, DimStability: 95}}
+	dominating := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 90, DimStability: 90}}
+	candidate := MultiFitness{Scores: map[FitnessDimension]float64{DimSuccessRate: 50, DimStability: 50}}
+
+	if ParetoAccepts(candidate, []MultiFitness{harmless, dominating}) {
+		t.Errorf("candidate %v is dominated by %v, want rejection", candidate, dominating)
 	}
 }

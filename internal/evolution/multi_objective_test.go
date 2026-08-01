@@ -3,6 +3,7 @@ package evolution
 import (
 	"math"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -414,5 +415,119 @@ func TestNSGAIIPopulation_Load_MergeKeepsFitterCopy(t *testing.T) {
 	}
 	if run2.Archive.Individuals[0].Fitness != 50 {
 		t.Fatalf("merged archive kept fitness %.0f, want the fitter in-memory copy (50)", run2.Archive.Individuals[0].Fitness)
+	}
+}
+
+// ─── Q5: one canonical NSGA-II implementation ───────────────────────────────
+
+// tradeoffVecs is a fixed population whose members span both a Pareto front and
+// a dominated tail, so a non-dominated sort over it produces more than one
+// front and the crowding distances over front 0 are non-trivial.
+func tradeoffVecs() []MultiFitness {
+	return []MultiFitness{
+		{Scores: map[FitnessDimension]float64{DimSuccessRate: 90, DimStability: 10}}, // 0: front 0 boundary
+		{Scores: map[FitnessDimension]float64{DimSuccessRate: 60, DimStability: 55}}, // 1: front 0 interior
+		{Scores: map[FitnessDimension]float64{DimSuccessRate: 30, DimStability: 90}}, // 2: front 0 boundary
+		{Scores: map[FitnessDimension]float64{DimSuccessRate: 20, DimStability: 5}},  // 3: dominated by all
+		{Scores: map[FitnessDimension]float64{DimSuccessRate: 50, DimStability: 50}}, // 4: dominated by 1
+	}
+}
+
+// frontIndexSets renders fronts as comparable sorted index slices.
+func frontIndexSets(fronts []NSGAIIFront) [][]int {
+	out := make([][]int, len(fronts))
+	for i, f := range fronts {
+		idx := make([]int, len(f.Indices))
+		copy(idx, f.Indices)
+		sort.Ints(idx)
+		out[i] = idx
+	}
+	return out
+}
+
+func sameFronts(a, b []NSGAIIFront) bool {
+	as, bs := frontIndexSets(a), frontIndexSets(b)
+	if len(as) != len(bs) {
+		return false
+	}
+	for i := range as {
+		if len(as[i]) != len(bs[i]) {
+			return false
+		}
+		for j := range as[i] {
+			if as[i][j] != bs[i][j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// TestNSGAII_CanonicalNonDominatedSort_SharedByBothCallers pins Q5 of the
+// "evolveTreeV2 actually uses the evolution package's non-heuristic algorithms"
+// program: multi_objective.go carried TWO near-identical copies of NSGA-II's
+// fast non-dominated sort — NSGAIIPopulation.fastNonDominatedSort (read by
+// Evaluate) and NSGAIISorter's private copy (read by Evolve's offspring
+// replacement step). Two copies means a correctness fix can land in one and
+// silently miss the other, so both must delegate to ONE canonical package-level
+// nonDominatedSort. That canonical function does not exist yet, so this fails
+// to compile.
+func TestNSGAII_CanonicalNonDominatedSort_SharedByBothCallers(t *testing.T) {
+	dims := []FitnessDimension{DimSuccessRate, DimStability}
+	vecs := tradeoffVecs()
+
+	canonical := nonDominatedSort(vecs)
+	if len(canonical) < 2 {
+		t.Fatalf("canonical sort produced %d fronts, want at least 2 for %v", len(canonical), frontIndexSets(canonical))
+	}
+	if got := frontIndexSets(canonical)[0]; len(got) != 3 {
+		t.Fatalf("canonical front 0 = %v, want the 3 mutually non-dominated members {0,1,2}", got)
+	}
+
+	sorter := NewNSGAIISorter(dims)
+	if got := sorter.fastNonDominatedSort(vecs); !sameFronts(got, canonical) {
+		t.Errorf("NSGAIISorter fronts %v diverge from canonical %v", frontIndexSets(got), frontIndexSets(canonical))
+	}
+
+	pop := NewNSGAIIPopulation(len(vecs), &SerializableNode{Name: "root", Type: "Selector"}, dims)
+	if got := pop.fastNonDominatedSort(vecs); !sameFronts(got, canonical) {
+		t.Errorf("NSGAIIPopulation fronts %v diverge from canonical %v", frontIndexSets(got), frontIndexSets(canonical))
+	}
+}
+
+// TestNSGAII_CanonicalCrowdingDistance_SharedByBothCallers is the crowding-
+// distance half of the same Q5 deduplication: NSGAIIPopulation.assignCrowding
+// Distance writes a slice and NSGAIISorter.assignCrowdingDistance returns a
+// map, but the arithmetic between them must come from ONE canonical
+// crowdingDistances implementation rather than two hand-maintained copies.
+func TestNSGAII_CanonicalCrowdingDistance_SharedByBothCallers(t *testing.T) {
+	dims := []FitnessDimension{DimSuccessRate, DimStability}
+	vecs := tradeoffVecs()
+	front0 := []int{0, 1, 2}
+
+	canonical := crowdingDistances(front0, vecs, dims)
+	// Boundaries are infinitely crowded-apart; the interior member must carry a
+	// finite, positive distance or the sort has nothing to rank diversity by.
+	if !math.IsInf(canonical[0], 1) || !math.IsInf(canonical[2], 1) {
+		t.Fatalf("canonical boundary distances = %v/%v, want +Inf", canonical[0], canonical[2])
+	}
+	if math.IsInf(canonical[1], 1) || canonical[1] <= 0 {
+		t.Fatalf("canonical interior distance = %v, want finite positive", canonical[1])
+	}
+
+	sorter := NewNSGAIISorter(dims)
+	for _, idx := range front0 {
+		if got := sorter.assignCrowdingDistance(front0, vecs)[idx]; got != canonical[idx] {
+			t.Errorf("NSGAIISorter distance[%d] = %v, canonical = %v", idx, got, canonical[idx])
+		}
+	}
+
+	pop := NewNSGAIIPopulation(len(vecs), &SerializableNode{Name: "root", Type: "Selector"}, dims)
+	pop.FitnessVecs = vecs
+	pop.assignCrowdingDistance(front0)
+	for _, idx := range front0 {
+		if pop.CrowdingDist[idx] != canonical[idx] {
+			t.Errorf("NSGAIIPopulation distance[%d] = %v, canonical = %v", idx, pop.CrowdingDist[idx], canonical[idx])
+		}
 	}
 }

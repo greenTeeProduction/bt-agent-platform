@@ -707,27 +707,28 @@ func TestExpertKnowledge_ObservesLearnedPatternFromQLearning(t *testing.T) {
 	// growthFitness (experience_bank_test.go) is monotone in node count and
 	// bounded in (0,1), so any mutation that adds nodes strictly improves
 	// fitness — matching the "run that finds a genuine improvement"
-	// requirement. A handful of fixed seeds keeps the run deterministic while
-	// tolerating exactly which mutation category the epsilon-greedy loop
-	// draws first, mirroring TestEvolveWithExperience_RecordsImprovingMutations.
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		pop := NewPopulation(8, DefaultTree())
-		qt := NewQTable()
-		rl := NewReinforcementLearner()
-		rl.Epsilon = 0.5
-		rl.LearningRate = 0.5
-		best := pop.EvolveQLearning(4, growthFitness, qt, "learn_test", rl, ek)
-		if best == nil {
-			t.Fatal("EvolveQLearning returned nil best tree")
-		}
+	// requirement. Each attempt installs its own source via the package seam,
+	// so the run is genuinely reproducible while still tolerating exactly which
+	// mutation category the epsilon-greedy loop draws first, mirroring
+	// TestEvolveWithExperience_RecordsImprovingMutations.
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			pop := NewPopulation(8, DefaultTree())
+			qt := NewQTable()
+			rl := NewReinforcementLearner()
+			rl.Epsilon = 0.5
+			rl.LearningRate = 0.5
+			if best := pop.EvolveQLearning(16, growthFitness, qt, "learn_test", rl, ek); best == nil {
+				t.Fatal("EvolveQLearning returned nil best tree")
+			}
+		})
 		if len(ek.LearnedPatterns) > before {
 			break
 		}
 	}
 
 	if len(ek.LearnedPatterns) <= before {
-		t.Fatal("expected EvolveQLearning to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+		t.Fatalf("expected EvolveQLearning to grow ExpertKnowledge.LearnedPatterns via Observe across %d seeded runs; archive is unchanged", len(observeSeeds))
 	}
 	for _, lp := range ek.LearnedPatterns {
 		if lp.Gain <= 0 {
@@ -741,7 +742,7 @@ func TestExpertKnowledge_ObservesLearnedPatternFromQLearning(t *testing.T) {
 // none) must see zero behavior change when qLearnMutate's ek.Observe call
 // reaches a nil *ExpertKnowledge.
 func TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	pop := NewPopulation(6, DefaultTree())
 	qt := NewQTable()
 	rl := NewReinforcementLearner()
@@ -770,7 +771,7 @@ func TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp(t *testing.T) {
 // signature does not exist yet, so this test fails to compile until the
 // change lands.
 func TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	pop := NewPopulation(6, DefaultTree())
 	qt := NewQTable()
 
@@ -824,7 +825,7 @@ func TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations(t *testing.T
 // those entries via Retrieve's similarity ranking, because Retrieve is not
 // filtered by tree type at all.
 func TestEvolveWithExperienceContext_QueryRetrievesAcrossTreeTypes(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	dir := t.TempDir()
 	eb, err := NewExperienceBank(dir)
 	if err != nil {
@@ -872,7 +873,7 @@ func TestEvolveWithExperienceContext_QueryRetrievesAcrossTreeTypes(t *testing.T)
 // empty-query path ever switched to bank.Retrieve("", ...) it would still
 // find nothing to score against and the entry would go unreused.
 func TestEvolveWithExperienceContext_EmptyQueryFallsBackToTreeType(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	dir := t.TempDir()
 	eb, err := NewExperienceBank(dir)
 	if err != nil {
@@ -922,22 +923,22 @@ func TestEvolveWithExperienceContext_RecordsFailingTaskInContext(t *testing.T) {
 
 	// growthFitness is monotone in node count, so improving mutations are
 	// guaranteed across a run — but WHICH generation produces one is
-	// seed-sensitive, so retry a few fixed seeds like
+	// seed-sensitive, so retry the shared fixed-seed budget like
 	// TestEvolveWithExperience_RecordsImprovingMutations does.
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		pop := NewPopulation(8, DefaultTree())
-		best := pop.EvolveWithExperienceContext(3, growthFitness, eb, query)
-		if best == nil {
-			t.Fatal("EvolveWithExperienceContext returned nil best tree")
-		}
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			pop := NewPopulation(8, DefaultTree())
+			if best := pop.EvolveWithExperienceContext(3, growthFitness, eb, query); best == nil {
+				t.Fatal("EvolveWithExperienceContext returned nil best tree")
+			}
+		})
 		if eb.Count() > 0 {
 			break
 		}
 	}
 
 	if eb.Count() == 0 {
-		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation across three seeded runs; bank is empty")
+		t.Fatalf("expected fitness-improving mutations to be recorded via AddFromMutation across %d seeded runs; bank is empty", len(observeSeeds))
 	}
 
 	found := false

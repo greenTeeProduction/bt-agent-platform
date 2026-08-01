@@ -2418,3 +2418,787 @@ func chainTree(depth int) *evolution.SerializableNode {
 	}
 	return &node
 }
+
+// ============================================================================
+// Local-search parameter refinement (milestone 1/5) — evolveTreeV2 must run
+// the evolution package's LocalSearcher as a post-structural-mutation
+// refinement pass over the settled tree's mutable parameters, scored by the
+// same cascade fitness function that scores structural candidates, and commit
+// the tuned tree only when it beats baseFitness through the acceptance gate.
+// ============================================================================
+
+// refinableTree carries a Retry node whose MaxRetries (8) is outside the
+// evaluator's rewarded [1,5] band, so estimateStructuralQuality withholds its
+// 0.20 retry credit. Tuning MaxRetries into the band is a pure-parameter
+// change worth +1.6 composite points — no structural mutation can produce it,
+// which is exactly what the local-search pass is for.
+func refinableTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "HasClearTask"},
+			{
+				Type: "Retry", Name: "RetryStep", MaxRetries: 8,
+				Children: []evolution.SerializableNode{{Type: "Action", Name: "Step"}},
+			},
+		},
+	}
+}
+
+// refineGardener wires a single-tree gardener with reflection records (so the
+// evidence gate passes and EvaluateTree produces a non-zero composite) and
+// MaxMutations 0, isolating the refinement pass from structural mutation.
+func refineGardener(t *testing.T, treeName string) (*Gardener, TreeEntry, *evolution.SerializableNode) {
+	t.Helper()
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	for i, outcome := range []evolution.Outcome{evolution.Success, evolution.Failure, evolution.Success} {
+		if err := refStore.Save(&evolution.Record{
+			TaskID:     "refine-" + string(rune('a'+i)),
+			TreeName:   treeName,
+			Task:       "refine tunable parameters",
+			Plan:       "plan",
+			Outcome:    outcome,
+			DurationMs: 1000,
+		}); err != nil {
+			t.Fatalf("save reflection: %v", err)
+		}
+	}
+
+	tree := refinableTree()
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: treeName, Description: "refinement", Tree: tree, FilePath: filepath.Join(dir, "tree-"+treeName+".json"), Active: true},
+	}
+	reg.mu.Unlock()
+
+	cfg := Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   0, // isolate the refinement pass from structural mutations
+		UseRealLLM:     false,
+	}
+	return NewGardener(cfg), reg.List()[0], tree
+}
+
+// TestEvolveTreeV2_LocalSearchRefinesParams pins the milestone: after the
+// structural-mutation loop, evolveTreeV2 refines the tree's mutable
+// parameters, keeps the result only because it beats baseFitness, reports the
+// gain on CycleMetrics, and persists the tuned tree (a refinement is a
+// persistable change on its own, like the Selector/DT reordering passes).
+func TestEvolveTreeV2_LocalSearchRefinesParams(t *testing.T) {
+	g, entry, tree := refineGardener(t, "refine_tree")
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{
+		CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled: false,
+		UseRealLLM:    false,
+	})
+
+	if got := tree.Children[1].MaxRetries; got < 1 || got > 5 {
+		t.Fatalf("local search did not tune MaxRetries into the rewarded band: got %d, want a value in [1,5]", got)
+	}
+	if m.LocalSearchDelta <= 0 {
+		t.Errorf("CycleMetrics.LocalSearchDelta = %.4f, want the positive refinement gain (metrics=%+v)", m.LocalSearchDelta, m)
+	}
+	if m.NewFitness <= m.BaseFitness {
+		t.Errorf("NewFitness %.4f did not beat BaseFitness %.4f after refinement", m.NewFitness, m.BaseFitness)
+	}
+	if !m.Improved {
+		t.Errorf("expected Improved == true after an accepted refinement (metrics=%+v)", m)
+	}
+
+	var saved evolution.SerializableNode
+	if err := util.LoadJSON(entry.FilePath, &saved); err != nil {
+		t.Fatalf("tuned tree was not persisted to %s: %v", entry.FilePath, err)
+	}
+	if got := saved.Children[1].MaxRetries; got != tree.Children[1].MaxRetries {
+		t.Errorf("persisted MaxRetries = %d, want the in-memory tuned value %d", got, tree.Children[1].MaxRetries)
+	}
+}
+
+// TestEvolveTreeV2_LocalSearchDisabled_LeavesParamsUntouched pins the opt-out:
+// with DisableLocalSearch set, the tree's parameters are left exactly as they
+// were and no refinement gain is reported.
+func TestEvolveTreeV2_LocalSearchDisabled_LeavesParamsUntouched(t *testing.T) {
+	g, entry, tree := refineGardener(t, "no_refine_tree")
+
+	m := g.evolveTreeV2(entry, EvolveV2Config{
+		CascadeCfg:         evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled:      false,
+		UseRealLLM:         false,
+		DisableLocalSearch: true,
+	})
+
+	if got := tree.Children[1].MaxRetries; got != 8 {
+		t.Errorf("DisableLocalSearch still tuned MaxRetries: got %d, want the original 8", got)
+	}
+	if m.LocalSearchDelta != 0 {
+		t.Errorf("CycleMetrics.LocalSearchDelta = %.4f with local search disabled, want 0", m.LocalSearchDelta)
+	}
+}
+
+// localSearchGateTree combines both fixtures the gate/local-search interaction
+// test needs: gateDisabledTestTree's PreGate-without-HasClearTask shape (which
+// reliably yields a high-score structural candidate when paired with failure
+// records) wrapped around a Retry node whose MaxRetries (8) sits outside the
+// evaluator's rewarded [1,5] band, exactly like refinableTree. So one cycle can
+// both apply a structural mutation and find a purely numeric gain the
+// local-search pass would commit.
+func localSearchGateTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "Root",
+		Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "PreGate"},
+			{
+				Type: "Retry", Name: "RetryStep", MaxRetries: 8,
+				Children: []evolution.SerializableNode{
+					{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+				},
+			},
+		},
+	}
+}
+
+// localSearchGateArm runs one evolveTreeV2 cycle over localSearchGateTree with
+// the given ValidationGate config and reports the cycle metrics, the tree's
+// serialized form before and after, and whether a tree file was persisted.
+func localSearchGateArm(t *testing.T, treeName string, vgCfg ValidationGateConfig) (m CycleMetrics, before, after []byte, persisted bool) {
+	t.Helper()
+	dir := t.TempDir()
+
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	tree := localSearchGateTree()
+	seedFailureRecords(t, refStore, treeName)
+
+	filePath := filepath.Join(dir, "tree-"+treeName+".json")
+	registry := &Registry{dir: dir}
+	registry.mu.Lock()
+	registry.entries = []TreeEntry{
+		{Name: treeName, Description: "local search vs validation gate", Tree: tree, FilePath: filePath, Active: true},
+	}
+	registry.mu.Unlock()
+
+	g := NewGardener(Config{
+		Registry:       registry,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   1,
+		ValidationGate: vgCfg,
+	})
+
+	entry := registry.List()[0]
+	before = marshalTree(t, entry.Tree)
+	m = g.evolveTreeV2(entry, EvolveV2Config{
+		CascadeCfg:    evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled: false,
+		UseRealLLM:    false,
+	})
+	after = marshalTree(t, entry.Tree)
+
+	if _, statErr := os.Stat(filePath); statErr == nil {
+		persisted = true
+	} else if !os.IsNotExist(statErr) {
+		t.Fatalf("stat %s: %v", filePath, statErr)
+	}
+	return m, before, after, persisted
+}
+
+// TestEvolveTreeV2_LocalSearchRefinementRespectsValidationGate pins that the
+// post-structural-mutation local-search pass is covered by the same
+// ValidationGate as the rest of the cycle.
+//
+// evolve_v2.go runs refineTreeParameters AFTER the ValidationGate block, and
+// its delta independently forces the Registry.SaveTree at the bottom of the
+// cycle. So a cycle the gate rejected — tree restored to its pre-cycle state,
+// applied reset to 0 — could still have its tuned parameters written to disk,
+// smuggling an unvalidated change past a gate that just said no. The refinement
+// must either run above the gate (so the gate's rejection reverts it too) or be
+// skipped entirely once the gate has rejected this cycle.
+//
+// Two arms over the same fixture: the control arm (gate disabled) proves the
+// fixture really is refinable — without it, an all-zero result would look like
+// a pass for the wrong reason.
+func TestEvolveTreeV2_LocalSearchRefinementRespectsValidationGate(t *testing.T) {
+	// Control arm: ValidationGate off — the refinement must land and persist.
+	ctrl, ctrlBefore, ctrlAfter, ctrlPersisted := localSearchGateArm(t, "local_search_gate_control", ValidationGateConfig{Enabled: false})
+	if ctrl.LocalSearchDelta <= 0 {
+		t.Fatalf("precondition failed: expected the ungated arm to find a positive local-search gain, got LocalSearchDelta=%.4f (metrics=%+v)", ctrl.LocalSearchDelta, ctrl)
+	}
+	if bytes.Equal(ctrlBefore, ctrlAfter) {
+		t.Fatalf("precondition failed: expected the ungated arm to change the tree in memory, but it is unchanged")
+	}
+	if !ctrlPersisted {
+		t.Fatalf("precondition failed: expected the ungated arm to persist the refined tree")
+	}
+
+	// Gated arm: same fixture, but DefaultValidationGateConfig with no SLO
+	// evidence recorded for this tree name fails closed, so the gate rejects.
+	m, before, after, persisted := localSearchGateArm(t, "local_search_gate_reject", DefaultValidationGateConfig())
+
+	if m.LocalSearchDelta != 0 {
+		t.Errorf("expected LocalSearchDelta==0 when ValidationGate rejects the cycle, got %.4f (metrics=%+v)", m.LocalSearchDelta, m)
+	}
+	if m.NewFitness > m.BaseFitness+0.0001 {
+		t.Errorf("expected NewFitness==BaseFitness when ValidationGate rejects the cycle, got base=%.4f new=%.4f", m.BaseFitness, m.NewFitness)
+	}
+	if m.Improved {
+		t.Errorf("expected Improved==false when ValidationGate rejects the cycle (metrics=%+v)", m)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("local-search refinement mutated the in-memory tree past a rejecting ValidationGate\nbefore: %s\nafter:  %s", before, after)
+	}
+	if persisted {
+		t.Errorf("local-search refinement persisted a tree the ValidationGate rejected")
+	}
+}
+
+// ============================================================================
+// MAP-Elites active elitism (milestone 2/5) — the per-tree MAP-Elites archive
+// must stop being a write-only diversity signal. When CrisisDetector reports a
+// diversity collapse, evolveTreeV2 must draw an alternate mutation seed from a
+// DIFFERENT niche of that tree's grid instead of mutating current-best again,
+// adopt it only when it is genuinely fitter under the tree's own records, and
+// persist the reseeded lineage.
+// ============================================================================
+
+// eliteSeedTree is the fitter alternate seed the diversity-crisis reseed must
+// adopt. Under identical records it scores strictly above the plain
+// Sequence→Action tree eliteSeedGardener starts from, because its validation
+// gate and in-band Retry earn full estimateStructuralQuality credit (1.0 vs
+// 0.55). It also lands in a different MAP-Elites niche — 4 nodes / depth 2
+// ("n0|d2|") versus the current best's 2 nodes / depth 1 ("n0|d0|") — so it is
+// a real escape from the collapsed niche rather than a same-cell shuffle.
+func eliteSeedTree() *evolution.SerializableNode {
+	return &evolution.SerializableNode{
+		Type: "Sequence", Name: "EliteRoot",
+		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "HasClearTask"},
+			{
+				Type: "Retry", Name: "RetryStep", MaxRetries: 3,
+				Children: []evolution.SerializableNode{{Type: "Action", Name: "Step"}},
+			},
+		},
+	}
+}
+
+// eliteSeedGardener wires a single-tree gardener with a fresh CrisisDetector
+// and three reflection records — so the evidence gate passes and
+// evaluator.EvaluateTree yields a non-zero composite that actually
+// discriminates between tree shapes — around a deliberately weak current-best
+// tree (no validation gate, no retry bound). MaxMutations is 0 so the pipeline
+// has no structural-mutation budget of its own to confuse the reseed signal
+// with. Returns the gardener, its registry entry, and the live tree pointer.
+func eliteSeedGardener(t *testing.T, treeName string) (*Gardener, TreeEntry, *evolution.SerializableNode) {
+	t.Helper()
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+	for i, outcome := range []evolution.Outcome{evolution.Success, evolution.Failure, evolution.Success} {
+		if err := refStore.Save(&evolution.Record{
+			TaskID:     "elite-" + string(rune('a'+i)),
+			TreeName:   treeName,
+			Task:       "escape the collapsed niche",
+			Plan:       "plan",
+			Outcome:    outcome,
+			DurationMs: 1000,
+		}); err != nil {
+			t.Fatalf("save reflection: %v", err)
+		}
+	}
+
+	tree := &evolution.SerializableNode{
+		Type: "Sequence", Name: "Tree",
+		Children: []evolution.SerializableNode{
+			{Type: "Action", Name: "Step"},
+		},
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = []TreeEntry{
+		{Name: treeName, Description: "elite reseed", Tree: tree, FilePath: filepath.Join(dir, "tree-"+treeName+".json"), Active: true},
+	}
+	reg.mu.Unlock()
+
+	cfg := Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   0,
+		UseRealLLM:     false,
+		CrisisDetector: evolution.NewCrisisDetector(),
+	}
+	return NewGardener(cfg), reg.List()[0], tree
+}
+
+// eliteSeedV2Config keeps the cascade quick-check and blocks out of the way and
+// disables the local-search pass, so the only thing that can change the tree
+// (or force a save) in these tests is the diversity-crisis reseed itself.
+func eliteSeedV2Config() EvolveV2Config {
+	return EvolveV2Config{
+		CascadeCfg:         evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled:      false,
+		UseRealLLM:         false,
+		DisableLocalSearch: true,
+	}
+}
+
+// entryRecords resolves the reflection records evolveTreeV2 itself will score
+// entry against, so a test can predict baseFitness exactly.
+func entryRecords(t *testing.T, g *Gardener, entry TreeEntry) []evolution.Record {
+	t.Helper()
+	all, err := g.cfg.RefStore.LoadAll()
+	if err != nil {
+		t.Fatalf("RefStore.LoadAll: %v", err)
+	}
+	return recordsForEntry(all, entry)
+}
+
+// seedCollapsedArchive fills name's diversity archive with six sparsely spread
+// chain shapes, each in its own (node-bucket, depth-bucket) niche, giving a
+// DiversityScore of 6/36 ≈ 0.167 — below the detector's default 0.2 threshold
+// but non-zero, so Detect's "no meaningful data" guard does not suppress the
+// diversity_collapse branch. Every shape is archived at fitness, letting the
+// caller decide whether these niches are worth reseeding from.
+func seedCollapsedArchive(g *Gardener, name string, fitness float64) {
+	for _, depth := range []int{0, 10, 20, 30, 40, 50} {
+		g.recordDiversityObservation(name, chainTree(depth), fitness)
+	}
+}
+
+// TestEvolveTreeV2_DiversityCrisis_ReseedsFromMAPElitesElite pins the
+// milestone: on a diversity-collapse crisis, evolveTreeV2 must sample an elite
+// from the tree's MAP-Elites grid as the cycle's mutation seed instead of
+// mutating current-best, adopt it in place (it is fitter under this tree's own
+// records), report it on CycleMetrics, and persist it — a reseed is a
+// persistable change on its own, like the Selector/DT reordering passes.
+func TestEvolveTreeV2_DiversityCrisis_ReseedsFromMAPElitesElite(t *testing.T) {
+	g, entry, tree := eliteSeedGardener(t, "elite_reseed_tree")
+	records := entryRecords(t, g, entry)
+
+	baseComposite := evaluator.EvaluateTree(tree, records).Composite
+	eliteComposite := evaluator.EvaluateTree(eliteSeedTree(), records).Composite
+	if eliteComposite <= baseComposite {
+		t.Fatalf("test setup sanity check failed: elite composite %.4f must beat current-best %.4f", eliteComposite, baseComposite)
+	}
+
+	// The chain niches are archived BELOW the current tree's fitness, so the
+	// only elite worth reseeding from is the genuinely fitter one.
+	seedCollapsedArchive(g, entry.Name, baseComposite-1)
+	g.recordDiversityObservation(entry.Name, eliteSeedTree(), eliteComposite)
+
+	score := g.treeDiversityGrid(entry.Name).DiversityScore()
+	if score <= 0 || score >= g.cfg.CrisisDetector.DiversityThreshold {
+		t.Fatalf("test setup sanity check failed: DiversityScore = %v, want in (0, %v)", score, g.cfg.CrisisDetector.DiversityThreshold)
+	}
+
+	m := g.evolveTreeV2(entry, eliteSeedV2Config())
+
+	if !m.CrisisIntervened {
+		t.Fatalf("test setup sanity check failed: expected a diversity-collapse crisis (DiversityScore=%v, threshold=%v), got metrics=%+v",
+			score, g.cfg.CrisisDetector.DiversityThreshold, m)
+	}
+	if !m.EliteReseed {
+		t.Fatalf("expected CycleMetrics.EliteReseed == true — the grid held a fitter elite in a different niche (metrics=%+v)", m)
+	}
+	if !hasNodeNamed(tree, "HasClearTask") {
+		t.Errorf("live tree was not reseeded from the grid elite (still %s/%q with %d nodes)", tree.Type, tree.Name, evolution.CountNodes(tree))
+	}
+	if m.NewFitness < eliteComposite-0.0001 {
+		t.Errorf("NewFitness = %.4f, want at least the adopted elite's composite %.4f (metrics=%+v)", m.NewFitness, eliteComposite, m)
+	}
+	if !m.Improved {
+		t.Errorf("expected Improved == true after adopting a fitter elite seed (metrics=%+v)", m)
+	}
+
+	var saved evolution.SerializableNode
+	if err := util.LoadJSON(entry.FilePath, &saved); err != nil {
+		t.Fatalf("reseeded tree was not persisted to %s: %v", entry.FilePath, err)
+	}
+	if !hasNodeNamed(&saved, "HasClearTask") {
+		t.Errorf("persisted tree is not the reseeded lineage: %+v", saved)
+	}
+}
+
+// TestEvolveTreeV2_DiversityCrisis_NoFitterElite_KeepsCurrentBest pins the
+// safety half of the milestone: a diversity collapse alone must not hand the
+// cycle over to the archive. Every archived niche here is weaker than the live
+// tree, so the reseed must decline and the cycle must go on mutating
+// current-best.
+func TestEvolveTreeV2_DiversityCrisis_NoFitterElite_KeepsCurrentBest(t *testing.T) {
+	g, entry, tree := eliteSeedGardener(t, "weak_archive_tree")
+	records := entryRecords(t, g, entry)
+	baseComposite := evaluator.EvaluateTree(tree, records).Composite
+
+	seedCollapsedArchive(g, entry.Name, baseComposite-1)
+
+	score := g.treeDiversityGrid(entry.Name).DiversityScore()
+	if score <= 0 || score >= g.cfg.CrisisDetector.DiversityThreshold {
+		t.Fatalf("test setup sanity check failed: DiversityScore = %v, want in (0, %v)", score, g.cfg.CrisisDetector.DiversityThreshold)
+	}
+
+	m := g.evolveTreeV2(entry, eliteSeedV2Config())
+
+	if !m.CrisisIntervened {
+		t.Fatalf("test setup sanity check failed: expected a diversity-collapse crisis, got metrics=%+v", m)
+	}
+	if m.EliteReseed {
+		t.Errorf("expected EliteReseed == false — every archived niche is weaker than the live tree (metrics=%+v)", m)
+	}
+	if m.NewFitness < baseComposite-0.0001 {
+		t.Errorf("declining the reseed still regressed the tree: NewFitness %.4f < base %.4f", m.NewFitness, baseComposite)
+	}
+}
+
+// TestEvolveTreeV2_NoCrisis_DoesNotReseed pins the gate: elite reseeding is a
+// crisis response, not a standing policy. With a healthy archive (no crisis)
+// the fitter elite must be left alone and the live tree must keep its own
+// lineage.
+func TestEvolveTreeV2_NoCrisis_DoesNotReseed(t *testing.T) {
+	g, entry, tree := eliteSeedGardener(t, "healthy_archive_tree")
+	records := entryRecords(t, g, entry)
+	eliteComposite := evaluator.EvaluateTree(eliteSeedTree(), records).Composite
+
+	// A single occupied niche scores DiversityScore 1.0 — well above the
+	// detector's threshold — so no crisis fires even though a fitter elite is
+	// sitting in the archive.
+	g.recordDiversityObservation(entry.Name, eliteSeedTree(), eliteComposite)
+
+	m := g.evolveTreeV2(entry, eliteSeedV2Config())
+
+	if m.CrisisIntervened {
+		t.Fatalf("test setup sanity check failed: expected no crisis with a healthy archive, got metrics=%+v", m)
+	}
+	if m.EliteReseed {
+		t.Errorf("expected EliteReseed == false outside a crisis (metrics=%+v)", m)
+	}
+	if hasNodeNamed(tree, "HasClearTask") {
+		t.Errorf("live tree was reseeded from the archive without a crisis: %+v", tree)
+	}
+}
+
+// ============================================================================
+// Island-model population exploration (milestone 3/5): RunCycleV2 must run
+// evolution.IslandModel.EvolveAll as a periodic per-domain exploration pass —
+// one island per active tree — and migrate a winning individual back into the
+// tree's persisted TreeEntry state, so the island model stops being an
+// MCP-tool-only algorithm the 24/7 daemon never exercises.
+// ============================================================================
+
+// islandGardener wires a gardener over one deliberately weak tree per name in
+// names, each backed by three reflection records so the evidence gate passes
+// and evaluator.EvaluateTree yields a composite that discriminates between tree
+// shapes. An IslandModel is configured with a per-cycle pass (IslandInterval
+// 1) and MaxMutations is 0, so the structural-mutation loop has no budget of
+// its own: anything that moves a tree here came from the island pass. Returns
+// the gardener, its registry, and the island model.
+func islandGardener(t *testing.T, names ...string) (*Gardener, *Registry, *evolution.IslandModel) {
+	t.Helper()
+	dir := t.TempDir()
+	refStore, err := evolution.NewStore(filepath.Join(dir, "reflections"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mt, err := NewMetricsTracker(dir)
+	if err != nil {
+		t.Fatalf("NewMetricsTracker: %v", err)
+	}
+
+	entries := make([]TreeEntry, 0, len(names))
+	for _, name := range names {
+		for i, outcome := range []evolution.Outcome{evolution.Success, evolution.Failure, evolution.Success} {
+			if err := refStore.Save(&evolution.Record{
+				TaskID:     name + "-" + string(rune('a'+i)),
+				TreeName:   name,
+				Task:       "explore the domain population",
+				Plan:       "plan",
+				Outcome:    outcome,
+				DurationMs: 1000,
+			}); err != nil {
+				t.Fatalf("save reflection: %v", err)
+			}
+		}
+		entries = append(entries, TreeEntry{
+			Name:        name,
+			Description: "island domain",
+			Tree: &evolution.SerializableNode{
+				Type: "Sequence", Name: "Tree",
+				Children: []evolution.SerializableNode{{Type: "Action", Name: "Step"}},
+			},
+			FilePath: filepath.Join(dir, "tree-"+name+".json"),
+			Active:   true,
+		})
+	}
+
+	reg := &Registry{dir: dir}
+	reg.mu.Lock()
+	reg.entries = entries
+	reg.mu.Unlock()
+
+	im := evolution.NewIslandModel(5, 0.25)
+	return NewGardener(Config{
+		Registry:       reg,
+		MetricsTracker: mt,
+		RefStore:       refStore,
+		MaxMutations:   0,
+		UseRealLLM:     false,
+		IslandModel:    im,
+		IslandInterval: 1,
+	}), reg, im
+}
+
+// islandV2Config keeps the cascade quick-check and blocks out of the way and
+// disables the local-search pass, so the island exploration pass is the only
+// thing in the cycle that can change a tree or force a save.
+func islandV2Config() EvolveV2Config {
+	return EvolveV2Config{
+		CascadeCfg:         evaluator.CascadeConfig{QuickThreshold: 0},
+		BlocksEnabled:      false,
+		UseRealLLM:         false,
+		DisableLocalSearch: true,
+	}
+}
+
+// metricsForTree returns the cycle metrics RunCycleV2 reported for name.
+func metricsForTree(t *testing.T, results []CycleMetrics, name string) CycleMetrics {
+	t.Helper()
+	for _, m := range results {
+		if m.TreeName == name {
+			return m
+		}
+	}
+	t.Fatalf("no CycleMetrics reported for tree %q (got %+v)", name, results)
+	return CycleMetrics{}
+}
+
+// TestRunCycleV2_IslandPass_MigratesWinnerIntoPersistedTree pins the core of
+// the milestone: when a domain's island holds an individual that is genuinely
+// fitter than the live tree under that tree's own reflection records, the
+// exploration pass must migrate it back into the registry's TreeEntry, persist
+// it, and report the migration on CycleMetrics.
+func TestRunCycleV2_IslandPass_MigratesWinnerIntoPersistedTree(t *testing.T) {
+	g, reg, im := islandGardener(t, "island_tree")
+	entry := reg.List()[0]
+	records := entryRecords(t, g, entry)
+
+	baseComposite := evaluator.EvaluateTree(entry.Tree, records).Composite
+	winner := eliteSeedTree()
+	winnerComposite := evaluator.EvaluateTree(winner, records).Composite
+	if winnerComposite <= baseComposite {
+		t.Fatalf("test setup sanity check failed: island winner composite %.4f must beat the live tree's %.4f", winnerComposite, baseComposite)
+	}
+
+	// The domain's island already carries an exploring subpopulation: one
+	// genuinely fitter individual (an elite, so EvolveAll carries it through
+	// the generation untouched) among weaker clones of the live tree.
+	pop := &evolution.Population{
+		Individuals: []evolution.Individual{{Tree: winner, Fitness: winnerComposite}},
+	}
+	for i := 0; i < 5; i++ {
+		pop.Individuals = append(pop.Individuals, evolution.Individual{
+			Tree:    cloneTreeForGardener(entry.Tree),
+			Fitness: baseComposite,
+		})
+	}
+	im.AddIsland(entry.Name, pop)
+
+	results, err := g.RunCycleV2(islandV2Config())
+	if err != nil {
+		t.Fatalf("RunCycleV2: %v", err)
+	}
+
+	m := metricsForTree(t, results, entry.Name)
+	if !m.IslandAdopted {
+		t.Errorf("expected CycleMetrics.IslandAdopted == true — the domain's island held a fitter individual (metrics=%+v)", m)
+	}
+
+	live := reg.List()[0].Tree
+	if got := evaluator.EvaluateTree(live, records).Composite; got < winnerComposite-0.0001 {
+		t.Errorf("live registry tree composite = %.4f, want at least the island winner's %.4f — the winning individual was not migrated back into TreeEntry state", got, winnerComposite)
+	}
+
+	var saved evolution.SerializableNode
+	if err := util.LoadJSON(entry.FilePath, &saved); err != nil {
+		t.Fatalf("island winner was not persisted to %s: %v", entry.FilePath, err)
+	}
+	if got := evaluator.EvaluateTree(&saved, records).Composite; got < winnerComposite-0.0001 {
+		t.Errorf("persisted tree composite = %.4f, want at least the island winner's %.4f (persisted tree = %+v)", got, winnerComposite, saved)
+	}
+}
+
+// TestRunCycleV2_IslandPass_SeedsAnIslandPerActiveDomain pins the "per-domain"
+// half: every active tree gets its own island, warm-started from that tree, and
+// a due cycle runs exactly one EvolveAll generation across all of them.
+func TestRunCycleV2_IslandPass_SeedsAnIslandPerActiveDomain(t *testing.T) {
+	g, reg, im := islandGardener(t, "island_a", "island_b")
+
+	if _, err := g.RunCycleV2(islandV2Config()); err != nil {
+		t.Fatalf("RunCycleV2: %v", err)
+	}
+
+	if im.Generation != 1 {
+		t.Errorf("IslandModel.Generation = %d after one due cycle, want 1 — RunCycleV2 must run exactly one EvolveAll pass per due cycle", im.Generation)
+	}
+	for _, entry := range reg.List() {
+		pop := im.GetIsland(entry.Name)
+		if pop == nil {
+			t.Errorf("no island for active domain %q — the exploration pass must seed one island per active tree", entry.Name)
+			continue
+		}
+		if len(pop.Individuals) == 0 {
+			t.Errorf("island for domain %q holds no individuals — it must be warm-started from the domain's current tree", entry.Name)
+		}
+	}
+}
+
+// TestRunCycleV2_IslandPass_RunsOnConfiguredInterval pins the "periodic" half:
+// the pass is a population-exploration side channel, not per-cycle work, so
+// with IslandInterval=3 only cycles 1 and 4 of four may advance the model.
+func TestRunCycleV2_IslandPass_RunsOnConfiguredInterval(t *testing.T) {
+	g, _, im := islandGardener(t, "island_interval_tree")
+	g.cfg.IslandInterval = 3
+
+	for cycle := 1; cycle <= 4; cycle++ {
+		if _, err := g.RunCycleV2(islandV2Config()); err != nil {
+			t.Fatalf("RunCycleV2 (cycle %d): %v", cycle, err)
+		}
+	}
+
+	if im.Generation != 2 {
+		t.Errorf("IslandModel.Generation = %d after 4 cycles with IslandInterval=3, want 2 (cycles 1 and 4 are due; 2 and 3 are not)", im.Generation)
+	}
+}
+
+// ============================================================================
+// MCTS as a second structural-mutation generator (milestone 4/5)
+// ============================================================================
+
+// TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition pins the
+// gardener half of the wiring: when the per-tree strategy says to augment,
+// evolution.MCTSMutator's search proposals must enter the SAME scored
+// candidate list evaluator.OrderMutations produced — one descending-score
+// competition handed to the existing benchmark/pre-score/gate loop, not a
+// separate side channel.
+func TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := recordsForEntry(allRecords, entry)
+	seedFitness := evaluator.EvaluateTree(entry.Tree, records)
+	heuristic := evaluator.OrderMutations(entry.Tree, records, seedFitness)
+	if len(heuristic) == 0 {
+		t.Fatal("setup produced no heuristic candidates — the merge assertions below would be vacuous")
+	}
+
+	cfg := EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: 12}
+	merged := g.augmentWithMCTSCandidates(entry.Tree, entry.Name, records, seedFitness, heuristic, cfg)
+
+	if len(merged) <= len(heuristic) {
+		t.Fatalf("merged competition has %d candidates, want more than the %d heuristic ones — the MCTS search contributed nothing",
+			len(merged), len(heuristic))
+	}
+	mctsSourced := 0
+	for _, c := range merged {
+		if strings.Contains(strings.ToLower(c.Reason), "mcts") {
+			mctsSourced++
+		}
+		if c.Op.Operation == "" || c.Op.Target == "" {
+			t.Errorf("merged candidate %+v is not applicable — ApplyMutations needs an operation and a target", c.Op)
+		}
+	}
+	if mctsSourced == 0 {
+		t.Error("no merged candidate is attributed to the MCTS search")
+	}
+	for i := 1; i < len(merged); i++ {
+		if merged[i-1].Score < merged[i].Score {
+			t.Errorf("merged candidates not sorted by descending score: [%d]=%.4f < [%d]=%.4f",
+				i-1, merged[i-1].Score, i, merged[i].Score)
+		}
+	}
+
+	// Every merged candidate must apply on its own, since evolveTreeV2 runs
+	// them one at a time against a clone of the live tree.
+	for _, c := range merged {
+		clone := cloneTreeForGardener(entry.Tree)
+		if evolution.ApplyMutations(clone, []evolution.MutationOp{c.Op}) == 0 {
+			t.Errorf("merged candidate %s/%s did not apply to the tree", c.Op.Operation, c.Op.Target)
+		}
+	}
+}
+
+// TestAugmentWithMCTSCandidates_RespectsStrategySelection pins the other half:
+// the search is a per-tree decision, so a disabled flag and a tree the
+// heuristics already cover both leave the heuristic ordering untouched.
+func TestAugmentWithMCTSCandidates_RespectsStrategySelection(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := recordsForEntry(allRecords, entry)
+	seedFitness := evaluator.EvaluateTree(entry.Tree, records)
+	heuristic := evaluator.OrderMutations(entry.Tree, records, seedFitness)
+
+	off := g.augmentWithMCTSCandidates(entry.Tree, entry.Name, records, seedFitness, heuristic,
+		EvolveV2Config{MCTSStructuralSearch: false})
+	if len(off) != len(heuristic) {
+		t.Errorf("MCTSStructuralSearch=false changed the candidate list: %d vs %d", len(off), len(heuristic))
+	}
+
+	// A tree that BOTH heuristics already cover — its shape is a preserved
+	// specialist archetype and every one of its Selectors is fully informed by
+	// durable telemetry — keeps today's heuristic-only ordering. One signal
+	// alone is not enough (see TestSelectStructuralStrategy), so this needs
+	// both.
+	covered := selectorOrderingTree()
+	statsPath := filepath.Join(t.TempDir(), "selector-stats.json")
+	seedSelectorStats(t, statsPath)
+	g.cfg.SelectorStatsPath = statsPath
+
+	reg := evolution.NewSpecialistRegistry()
+	reg.Observe(&evolution.EvolutionMetadata{
+		TreeID:   "covered",
+		Fitness:  evolution.FitnessRecord{Score: 0.95, Validated: true},
+		Tags:     []string{"specialist:gardener"},
+		Genotype: "archetype",
+	}, covered, 1)
+
+	coveredFitness := evaluator.EvaluateTree(covered, records)
+	coveredHeuristic := evaluator.OrderMutations(covered, records, coveredFitness)
+	known := g.augmentWithMCTSCandidates(covered, "covered", records, coveredFitness, coveredHeuristic,
+		EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: 12, Specialists: reg})
+	if len(known) != len(coveredHeuristic) {
+		t.Errorf("a preserved archetype with fully-informed Selectors still got the search: %d candidates vs %d heuristic",
+			len(known), len(coveredHeuristic))
+	}
+}

@@ -6,6 +6,8 @@ package domains
 
 import (
 	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -20,9 +22,68 @@ func sel(name, desc string, children ...evolution.SerializableNode) evolution.Se
 	return evolution.SerializableNode{Type: "Selector", Name: name, Description: desc, Children: children}
 }
 
+// guardLabel derives a stable kebab-case edge label from a CamelCase node name
+// ("IsSASTRequest" → "is-sast-request", "Section1Done" → "section1-done"), so
+// every cond() node gets the same hand-written label style the pre-existing
+// guard edges in HermesUpdateTree and AgentMonitorTree use. Characters that are
+// neither letters nor digits act as separators; the result never has leading,
+// trailing, or repeated dashes.
+func guardLabel(name string) string {
+	runes := []rune(name)
+	var b strings.Builder
+	for i, r := range runes {
+		switch {
+		case unicode.IsUpper(r):
+			// Start a new word at a lower→upper boundary (IsCode → is-code) and
+			// at the tail of an acronym run (SASTRequest → sast-request).
+			prevLower := i > 0 && (unicode.IsLower(runes[i-1]) || unicode.IsDigit(runes[i-1]))
+			nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+			if b.Len() > 0 && (prevLower || (i > 0 && unicode.IsUpper(runes[i-1]) && nextLower)) {
+				b.WriteRune('-')
+			}
+			b.WriteRune(unicode.ToLower(r))
+		case unicode.IsLower(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		default:
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+				b.WriteRune('-')
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
 // cond creates a Condition node.
+//
+// Every Condition node also carries a machine-readable EdgeGuard typed edge:
+// the Description alone is prose, but engine/typed_edges.go
+// (guardConditionForChild) and engine/utility_selector.go (ScoreChild) gate
+// execution on TypedEdge.Condition, and evolution.ValidateEdge rejects a guard
+// edge whose Condition is blank. ChildIndex is -1 ("applies to all children"),
+// matching the hand-built guard edges in HermesUpdateTree — Condition nodes are
+// leaves, so the edge is metadata only and does not change how the tree runs.
 func cond(name, desc string) evolution.SerializableNode {
-	return evolution.SerializableNode{Type: "Condition", Name: name, Description: desc}
+	label := guardLabel(name)
+	if label == "" {
+		label = "guard"
+	}
+	condition := strings.TrimSpace(desc)
+	if condition == "" {
+		// Guard edges must have a non-blank Condition (evolution.ValidateEdge);
+		// fall back to the node name when a caller omits the description.
+		condition = name + " must hold"
+	}
+	return evolution.SerializableNode{
+		Type:        "Condition",
+		Name:        name,
+		Description: desc,
+		Edges: []evolution.TypedEdge{{
+			Type:       evolution.EdgeGuard,
+			Label:      label,
+			Condition:  condition,
+			ChildIndex: -1,
+		}},
+	}
 }
 
 // act creates an Action node.

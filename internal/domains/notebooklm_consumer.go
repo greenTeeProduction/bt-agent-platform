@@ -17,7 +17,7 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 				Type: "Sequence", Name: "PreGate",
 				Description: "Validate the task and grant the chain agent real shell/file tools",
 				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+					cond("ValidateInput", "Non-empty task"),
 					{Type: "Action", Name: "SetupUniversalTools", Description: "Grant the chain agent shell_exec, file_read and file_write so it executes commands instead of describing them"},
 				},
 			},

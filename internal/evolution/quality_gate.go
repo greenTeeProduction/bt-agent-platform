@@ -95,6 +95,35 @@ func (q *QualityGate) ValidateFor(treeKey string, preComposite, postComposite fl
 	return GateAccepted
 }
 
+// Probe returns the gate's verdict on a pre→post composite pair WITHOUT
+// recording anything: no failure-streak increment, no streak reset, no
+// disabling. It is the read-only counterpart to Validate/ValidateFor, for
+// speculative changes a caller may discard — LocalSearcher.RefineGated's
+// parameter tuning, for one. A tuning attempt that does not pan out is not a
+// regression of the live tree, so it must not push the tree toward
+// fail-closed.
+//
+// The verdict order differs deliberately from Validate: rollback outranks the
+// composite floor when the baseline itself was healthy. A tree at or above
+// MinComposite that drops more than MaxRegressionRate has a known-good state
+// worth restoring (GateRollback), whereas a tree already below the floor that
+// declines further has no such baseline and is simply refused (GateRejected).
+func (q *QualityGate) Probe(preComposite, postComposite float64) GateResult {
+	// Regression from a healthy baseline — there is a known-good state to
+	// roll back to.
+	if preComposite >= q.MinComposite && postComposite < preComposite*(1-q.MaxRegressionRate) {
+		return GateRollback
+	}
+
+	// Fitness floor — below the floor even small declines are refused.
+	// Improvements below the floor pass: weak trees must be allowed to climb out.
+	if postComposite < q.MinComposite && postComposite < preComposite {
+		return GateRejected
+	}
+
+	return GateAccepted
+}
+
 // IsDisabled returns true if consecutive failures have exceeded the threshold.
 //
 // NOTE (A2 fail-closed semantics): once disabled, nothing in production

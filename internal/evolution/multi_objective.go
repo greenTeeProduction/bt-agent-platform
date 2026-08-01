@@ -2,7 +2,6 @@ package evolution
 
 import (
 	"math"
-	"math/rand"
 	"sort"
 )
 
@@ -148,12 +147,19 @@ func (nsga2 *NSGAIIPopulation) Evaluate(fitnessFn func(*SerializableNode) MultiF
 	}
 }
 
-// ─── Fast Non-Dominated Sort ────────────────────────────────────────────────
+// ─── Fast Non-Dominated Sort (canonical) ────────────────────────────────────
 
-// fastNonDominatedSort performs NSGA-II's O(MN²) non-dominated sorting.
-// Returns fronts where front[0] is the Pareto-optimal set, front[1] is the
-// second-best set, etc.
-func (nsga2 *NSGAIIPopulation) fastNonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
+// nonDominatedSort is THE implementation of NSGA-II's O(MN²) fast
+// non-dominated sort. Returns fronts where front[0] is the Pareto-optimal set,
+// front[1] is the second-best set, etc.
+//
+// Both NSGAIIPopulation.fastNonDominatedSort (read by Evaluate) and
+// NSGAIISorter.fastNonDominatedSort (read by Evolve's offspring replacement
+// step) delegate here. They used to carry byte-for-byte copies of this loop,
+// which meant a correctness fix could land in one caller's path and silently
+// miss the other's — Evaluate's fronts and Evolve's replacement fronts could
+// disagree about the same population.
+func nonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
 	n := len(fitnessVecs)
 
 	// dominationCount[i] = number of individuals dominating i
@@ -205,51 +211,73 @@ func (nsga2 *NSGAIIPopulation) fastNonDominatedSort(fitnessVecs []MultiFitness) 
 	return fronts[:len(fronts)-1]
 }
 
-// ─── Crowding Distance ────────────────────────────────────────────────────
+// fastNonDominatedSort sorts fitnessVecs into Pareto fronts. Thin wrapper over
+// the canonical nonDominatedSort.
+func (nsga2 *NSGAIIPopulation) fastNonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
+	return nonDominatedSort(fitnessVecs)
+}
 
-// assignCrowdingDistance computes crowding distance for a set of front indices.
-// Higher crowding distance = more isolated in objective space (preferred for diversity).
-func (nsga2 *NSGAIIPopulation) assignCrowdingDistance(indices []int) {
-	m := len(nsga2.Dimensions)
-	if m == 0 || len(indices) <= 2 {
-		// Boundary individuals get infinite distance
+// ─── Crowding Distance (canonical) ─────────────────────────────────────────
+
+// crowdingDistances is THE implementation of NSGA-II's crowding-distance
+// assignment for one front. Higher distance = more isolated in objective space
+// (preferred for diversity); the two boundary members along any dimension are
+// infinitely far apart and always survive truncation.
+//
+// Both NSGAIIPopulation.assignCrowdingDistance (slice-valued, indexed by
+// individual) and NSGAIISorter.assignCrowdingDistance (map-valued) delegate
+// here so the arithmetic exists once. indices is never mutated.
+func crowdingDistances(indices []int, fitnessVecs []MultiFitness, dims []FitnessDimension) map[int]float64 {
+	dist := make(map[int]float64, len(indices))
+	if len(dims) == 0 || len(indices) <= 2 {
+		// Degenerate front: every member is a boundary member.
 		for _, i := range indices {
-			nsga2.CrowdingDist[i] = math.Inf(1)
+			dist[i] = math.Inf(1)
 		}
-		return
+		return dist
 	}
 
 	n := len(indices)
 	for _, i := range indices {
-		nsga2.CrowdingDist[i] = 0
+		dist[i] = 0
 	}
 
-	for _, dim := range nsga2.Dimensions {
-		// Sort indices by this dimension
-		sorted := make([]int, n)
+	sorted := make([]int, n)
+	for _, dim := range dims {
+		// Sort a copy of the front by this dimension, ascending.
 		copy(sorted, indices)
 		sort.Slice(sorted, func(a, b int) bool {
-			return nsga2.FitnessVecs[sorted[a]].Get(dim) < nsga2.FitnessVecs[sorted[b]].Get(dim)
+			return fitnessVecs[sorted[a]].Get(dim) < fitnessVecs[sorted[b]].Get(dim)
 		})
 
-		// Boundary points get infinite distance
-		nsga2.CrowdingDist[sorted[0]] = math.Inf(1)
-		nsga2.CrowdingDist[sorted[n-1]] = math.Inf(1)
+		// Boundary points get infinite distance.
+		dist[sorted[0]] = math.Inf(1)
+		dist[sorted[n-1]] = math.Inf(1)
 
-		// Normalization factor
-		fMin := nsga2.FitnessVecs[sorted[0]].Get(dim)
-		fMax := nsga2.FitnessVecs[sorted[n-1]].Get(dim)
+		// Normalization factor.
+		fMin := fitnessVecs[sorted[0]].Get(dim)
+		fMax := fitnessVecs[sorted[n-1]].Get(dim)
 		range_ := fMax - fMin
 		if range_ == 0 {
 			range_ = 1
 		}
 
-		// Interior points
+		// Interior points accumulate their normalized neighbour gap.
 		for k := 1; k < n-1; k++ {
-			prev := nsga2.FitnessVecs[sorted[k-1]].Get(dim)
-			next := nsga2.FitnessVecs[sorted[k+1]].Get(dim)
-			nsga2.CrowdingDist[sorted[k]] += (next - prev) / range_
+			prev := fitnessVecs[sorted[k-1]].Get(dim)
+			next := fitnessVecs[sorted[k+1]].Get(dim)
+			dist[sorted[k]] += (next - prev) / range_
 		}
+	}
+	return dist
+}
+
+// assignCrowdingDistance computes crowding distance for a set of front indices
+// and writes it into the population's parallel CrowdingDist slice. Thin
+// wrapper over the canonical crowdingDistances.
+func (nsga2 *NSGAIIPopulation) assignCrowdingDistance(indices []int) {
+	for idx, d := range crowdingDistances(indices, nsga2.FitnessVecs, nsga2.Dimensions) {
+		nsga2.CrowdingDist[idx] = d
 	}
 }
 
@@ -288,7 +316,7 @@ func (nsga2 *NSGAIIPopulation) TournamentSelect(k int) []*SerializableNode {
 	for j := 0; j < 2; j++ {
 		best := -1
 		for t := 0; t < k; t++ {
-			idx := rand.Intn(len(nsga2.Individuals))
+			idx := evoIntn(len(nsga2.Individuals))
 			if best == -1 || nsga2.crowdedComparison(idx, best) {
 				best = idx
 			}
@@ -333,7 +361,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 				parents := nsga2.TournamentSelect(3)
 				child := Crossover(parents[0], parents[1])
 				// Mutation
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])
@@ -414,87 +442,15 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 
 // ─── Standalone NSGA-II Sorter (for external use) ──────────────────────────
 
-// fastNonDominatedSort on NSGAIISorter (static method variant).
+// fastNonDominatedSort sorts fitnessVecs into Pareto fronts (standalone
+// variant, for callers holding no population). Thin wrapper over the canonical
+// nonDominatedSort — see that function for why this is not a second copy.
 func (s *NSGAIISorter) fastNonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
-	n := len(fitnessVecs)
-	dominationCount := make([]int, n)
-	dominated := make([][]int, n)
-
-	for i := 0; i < n; i++ {
-		dominated[i] = make([]int, 0, n)
-		for j := 0; j < n; j++ {
-			if i == j {
-				continue
-			}
-			if fitnessVecs[i].Dominates(fitnessVecs[j]) {
-				dominated[i] = append(dominated[i], j)
-			} else if fitnessVecs[j].Dominates(fitnessVecs[i]) {
-				dominationCount[i]++
-			}
-		}
-	}
-
-	var fronts []NSGAIIFront
-	currentFront := NSGAIIFront{Indices: make([]int, 0)}
-	for i := 0; i < n; i++ {
-		if dominationCount[i] == 0 {
-			currentFront.Indices = append(currentFront.Indices, i)
-		}
-	}
-	fronts = append(fronts, currentFront)
-
-	frontIdx := 0
-	for len(fronts[frontIdx].Indices) > 0 {
-		nextFront := NSGAIIFront{Indices: make([]int, 0)}
-		for _, i := range fronts[frontIdx].Indices {
-			for _, j := range dominated[i] {
-				dominationCount[j]--
-				if dominationCount[j] == 0 {
-					nextFront.Indices = append(nextFront.Indices, j)
-				}
-			}
-		}
-		frontIdx++
-		fronts = append(fronts, nextFront)
-	}
-	return fronts[:len(fronts)-1]
+	return nonDominatedSort(fitnessVecs)
 }
 
 // assignCrowdingDistance computes crowding distances for a front (standalone).
+// Thin wrapper over the canonical crowdingDistances.
 func (s *NSGAIISorter) assignCrowdingDistance(indices []int, fitnessVecs []MultiFitness) map[int]float64 {
-	dist := make(map[int]float64)
-	m := len(s.Dimensions)
-	if m == 0 || len(indices) <= 2 {
-		for _, i := range indices {
-			dist[i] = math.Inf(1)
-		}
-		return dist
-	}
-
-	n := len(indices)
-	for _, i := range indices {
-		dist[i] = 0
-	}
-
-	for _, dim := range s.Dimensions {
-		sorted := make([]int, n)
-		copy(sorted, indices)
-		sort.Slice(sorted, func(a, b int) bool {
-			return fitnessVecs[sorted[a]].Get(dim) < fitnessVecs[sorted[b]].Get(dim)
-		})
-		dist[sorted[0]] = math.Inf(1)
-		dist[sorted[n-1]] = math.Inf(1)
-		fMin := fitnessVecs[sorted[0]].Get(dim)
-		fMax := fitnessVecs[sorted[n-1]].Get(dim)
-		range_ := fMax - fMin
-		if range_ == 0 {
-			range_ = 1
-		}
-		for k := 1; k < n-1; k++ {
-			prev := fitnessVecs[sorted[k-1]].Get(dim)
-			next := fitnessVecs[sorted[k+1]].Get(dim)
-			dist[sorted[k]] += (next - prev) / range_
-		}
-	}
-	return dist
+	return crowdingDistances(indices, fitnessVecs, s.Dimensions)
 }

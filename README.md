@@ -11,7 +11,7 @@
 
 ## What is this?
 
-A Go framework for building, executing, and evolving behavior-tree-based AI agents. Agents are YAML-defined, BT-driven, MCP-exposed, and continuously improved through 6 evolution algorithms.
+A Go framework for building, executing, and evolving behavior-tree-based AI agents. Agents are YAML-defined, BT-driven, MCP-exposed, and continuously improved through 7 evolution algorithms.
 
 ```
 Agent YAML → Registry → Scheduler → resolveTree() → BuildTree() → RunTask() → Blackboard
@@ -47,8 +47,8 @@ go run ./cmd/bt-agent/           # JSON-RPC 2.0 over stdio, 36 tools
 ├─────────────────────────────────────────────────────────┤
 │ CORE ENGINE   (tree execution, chains, blackboard)      │
 ├─────────────────────────────────────────────────────────┤
-│ EVOLUTION     (Stockfish, Pareto, MAP-Elites, Island,   │
-│                Q-Learning, Expert Knowledge)            │
+│ EVOLUTION     (Stockfish, MCTS, Pareto, MAP-Elites,     │
+│                Island, Q-Learning, Expert Knowledge)    │
 ├─────────────────────────────────────────────────────────┤
 │ KNOWLEDGE     (graph, embeddings, discovery, factory)   │
 ├─────────────────────────────────────────────────────────┤
@@ -61,7 +61,7 @@ go run ./cmd/bt-agent/           # JSON-RPC 2.0 over stdio, 36 tools
 - **41 Behavior Trees** across 7 categories: domain (10), finance (10), research (2), startup (8), thinktank (3), evolution (3), core (5)
 - **10 ChainAction types** for LLM integration: `llm_call`, `agent`, `rag_query`, `tool_call`, `structured_output`, `refine`, `map_reduce`, `conversation`, `retrieval_qa`, `tool_action`
 - **3 MCP Servers** (JSON-RPC 2.0 / stdio): bt-agent (36 tools), bt-evaluator (5), bt-langagent (2)
-- **6 Evolution Algorithms**: Stockfish (chess-adapted), Pareto front, MAP-Elites, Island model, Q-Learning, Expert Knowledge
+- **7 Evolution Algorithms**: Stockfish (chess-adapted), MCTS-guided structural search, Pareto front, MAP-Elites, Island model, Q-Learning, Expert Knowledge
 - **10 Mutation Operators**: add_before, add_after, wrap_retry, prune, swap_children, rename_node, change_type, insert_fallback, clone_subtree, delete_subtree
 - **YAML-Defined Agents**: 24 templates, registry, scheduler, circuit breakers, dead letter queue
 - **Web Dashboard** on :9800 with 8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents, MindMap)
@@ -83,7 +83,7 @@ cmd/                          # Entrypoints (7 binaries)
 
 internal/                     # Core libraries
 ├── engine/                   # BT runtime (tree, chains, registry)
-├── evolution/                # 6 algorithms, mutations, fitness
+├── evolution/                # 7 algorithms, mutations, fitness
 ├── knowledge/                # Knowledge graph, discovery, factory
 ├── agent/                    # Agent registry, scheduler, memory
 ├── dashboard/                # Dashboard backend
@@ -106,7 +106,7 @@ agents/                       # Agent YAML definitions
 └── workflows/                # 4 workflow definitions
 
 docs/                         # Documentation
-├── arc42/                    # 12-section arc42 documentation + ADR log (ADR-001–192)
+├── arc42/                    # 12-section arc42 documentation + ADR log (ADR-001–247)
 ├── GETTING_STARTED.md
 ├── API_REFERENCE.md
 └── TUTORIAL.md
@@ -155,15 +155,16 @@ Sequence "Main"
 ## Evolution Pipeline
 
 ```
-evaluate → order_mutations → apply_top → re-evaluate → accept (commit) / rollback
+evaluate → order_mutations (+ MCTS candidates, merged into one scored
+competition) → apply_top → re-evaluate → accept (commit) / rollback
 ```
 
-6 algorithms operate on this pipeline. Every accepted mutation is a git commit. Trees are versioned and reversible.
+7 algorithms operate on this pipeline. Every accepted mutation is a git commit. Trees are versioned and reversible.
 
 ## Documentation
 
 - [arc42 Architecture (12 sections)](docs/arc42/01-introduction-goals.md) — one file per section under `docs/arc42/`
-- [Architecture Decision Log](docs/arc42/09-decisions.md) (ADR-001–192)
+- [Architecture Decision Log](docs/arc42/09-decisions.md) (ADR-001–247)
 - [Getting Started](docs/GETTING_STARTED.md)
 - [BT Agents operator guide](docs/agents.md)
 - [API Reference](docs/API_REFERENCE.md)

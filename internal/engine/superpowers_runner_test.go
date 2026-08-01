@@ -13,8 +13,24 @@ import (
 func TestResolvedSuperpowersClaudeModelDefaultsToOpus(t *testing.T) {
 	t.Setenv("BT_SUPERPOWERS_CLAUDE_MODEL", "")
 
-	if got := resolvedSuperpowersClaudeModel(); got != "opus" {
-		t.Fatalf("resolvedSuperpowersClaudeModel() = %q, want opus", got)
+	if got := resolvedSuperpowersClaudeModel(); got != "claude-opus-5" {
+		t.Fatalf("resolvedSuperpowersClaudeModel() = %q, want claude-opus-5", got)
+	}
+}
+
+func TestResolvedSuperpowersClaudeEffortDefaultsToMax(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_EFFORT", "")
+
+	if got := resolvedSuperpowersClaudeEffort(); got != "max" {
+		t.Fatalf("resolvedSuperpowersClaudeEffort() = %q, want max", got)
+	}
+}
+
+func TestResolvedSuperpowersClaudeEffortAllowsExplicitAuto(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_EFFORT", "auto")
+
+	if got := resolvedSuperpowersClaudeEffort(); got != "" {
+		t.Fatalf("resolvedSuperpowersClaudeEffort() = %q, want empty auto/default effort", got)
 	}
 }
 
@@ -28,11 +44,26 @@ func TestResolvedSuperpowersClaudeModelAllowsExplicitAuto(t *testing.T) {
 
 func TestExecClaudeRunnerPassesDefaultModel(t *testing.T) {
 	t.Setenv("BT_SUPERPOWERS_CLAUDE_MODEL", "")
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_EFFORT", "")
 	t.Setenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS", "")
 
 	args := captureExecClaudeArgs(t)
-	if len(args) < 2 || args[0] != "--model" || args[1] != "opus" {
-		t.Fatalf("claude args = %q, want explicit default --model opus", args)
+	if len(args) < 4 || args[0] != "--model" || args[1] != "claude-opus-5" {
+		t.Fatalf("claude args = %q, want explicit default --model claude-opus-5", args)
+	}
+	if args[2] != "--effort" || args[3] != "max" {
+		t.Fatalf("claude args = %q, want explicit default --effort max", args)
+	}
+}
+
+func TestExecClaudeRunnerOmitsEffortWhenAuto(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_MODEL", "")
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_EFFORT", "auto")
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS", "")
+
+	args := captureExecClaudeArgs(t)
+	if strings.Contains(strings.Join(args, "\n"), "--effort") {
+		t.Fatalf("claude args = %q, did not expect --effort when set to auto", args)
 	}
 }
 

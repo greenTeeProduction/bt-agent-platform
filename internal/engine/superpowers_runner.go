@@ -78,6 +78,7 @@ func (r execClaudeRunner) buildClaudeArgs(prompt string) []string {
 	if !r.ForceReadOnly && strings.EqualFold(os.Getenv("BT_SUPERPOWERS_CLAUDE_SKIP_PERMISSIONS"), "true") {
 		args = []string{"--print", "--dangerously-skip-permissions", "-p", prompt}
 	}
+	args = withSuperpowersClaudeEffort(args, resolvedSuperpowersClaudeEffort())
 	return withSuperpowersClaudeModel(args, resolvedSuperpowersClaudeModel())
 }
 
@@ -104,8 +105,17 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 // defaultSuperpowersClaudeModel is passed as --model to the claude CLI when
 // BT_SUPERPOWERS_CLAUDE_MODEL is unset. NOTE: this pins the model explicitly —
 // deployments that relied on the CLI's own configured default must set the
-// env var to "auto" (or "default"/"none") to omit the flag.
-const defaultSuperpowersClaudeModel = "opus"
+// env var to "auto" (or "default"/"none") to omit the flag. The bare "opus"
+// alias tracks whatever the CLI currently considers latest-Opus; the fleet
+// pins the exact ID so a CLI-side alias move can never silently reroute
+// autonomous cycles onto a different model (and a different quota pool).
+const defaultSuperpowersClaudeModel = "claude-opus-5"
+
+// defaultSuperpowersClaudeEffort is passed as --effort to the claude CLI when
+// BT_SUPERPOWERS_CLAUDE_EFFORT is unset. Autonomous cycles are long-horizon
+// agentic work where correctness beats token spend, so the fleet runs the top
+// tier. Valid levels: low | medium | high | xhigh | max.
+const defaultSuperpowersClaudeEffort = "max"
 
 // resolvedSuperpowersClaudeModel returns the model for superpowers and
 // GOAP-fusion claude runs. BT_SUPERPOWERS_CLAUDE_MODEL semantics:
@@ -128,6 +138,29 @@ func withSuperpowersClaudeModel(args []string, model string) []string {
 		return args
 	}
 	return append([]string{"--model", model}, args...)
+}
+
+// resolvedSuperpowersClaudeEffort mirrors resolvedSuperpowersClaudeModel's
+// semantics for --effort: unset/empty → defaultSuperpowersClaudeEffort;
+// "auto"/"default"/"none" → "" (no --effort flag, CLI/settings default);
+// anything else → used verbatim.
+func resolvedSuperpowersClaudeEffort() string {
+	effort := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_CLAUDE_EFFORT"))
+	if strings.EqualFold(effort, "auto") || strings.EqualFold(effort, "default") || strings.EqualFold(effort, "none") {
+		return ""
+	}
+	if effort != "" {
+		return effort
+	}
+	return defaultSuperpowersClaudeEffort
+}
+
+func withSuperpowersClaudeEffort(args []string, effort string) []string {
+	effort = strings.TrimSpace(effort)
+	if effort == "" {
+		return args
+	}
+	return append([]string{"--effort", effort}, args...)
 }
 
 func getenvDefault(key, fallback string) string {
