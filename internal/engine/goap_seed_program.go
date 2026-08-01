@@ -137,11 +137,18 @@ func isValidProgramMilestone(m string) bool {
 }
 
 // goapFusionRepoFileExistsFn checks whether a repo-relative path exists at
-// HEAD of the (bare) main repo. Var for test override.
+// HEAD of the (bare) main repo. Var for test override. Callers that must not
+// confuse "absent" with "could not tell" use goapFusionRepoFileStateFn instead;
+// this one deliberately collapses both to false, the conservative answer for
+// its only question ("is this milestone grounded in a file that exists?").
+//
+// It used to shell `git cat-file -e HEAD:<path>` directly. That command cannot
+// express the distinction at all — an absent path exits 128, the same code a
+// real git error produces — so routing through the tri-state probe both removes
+// a duplicate shell-out and makes the two callers agree on one source of truth.
 var goapFusionRepoFileExistsFn = func(relPath string) bool {
-	out, err := runGoapShellTimeout(fmt.Sprintf("git cat-file -e HEAD:%s", relPath), 10*time.Second)
-	_ = out
-	return err == nil
+	exists, _ := goapFusionRepoFileStateFn(relPath)
+	return exists
 }
 
 // milestoneTouchesExistingFile reports whether the milestone names at least
