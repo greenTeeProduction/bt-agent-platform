@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -73,11 +74,41 @@ func SaveSLOMetrics(path string) error {
 	saveSLOMetricsMu.Lock()
 	defer saveSLOMetricsMu.Unlock()
 
-	var snapshots []SLOSnapshot
+	// MERGE, never overwrite. sloRegistry is a package-level PER-PROCESS global
+	// but this path is shared by every bt-agent in the deployment — the daemon,
+	// the MCP sibling each goap cycle's Claude session boots, bt-agent-cli, the
+	// dashboard's worker pool — and RunOnce defers a save on EVERY run in every
+	// one of them. A plain overwrite therefore replaces the whole fleet's
+	// evidence with whichever process wrote last: measured 2026-08-01, the live
+	// file held four agents that are not in the registry at all and none of the
+	// eleven real ones, while the gardener's validation gate and the dashboard
+	// were reading it as fleet health.
+	//
+	// This process is authoritative for the keys it tracks — its counters are
+	// already cumulative, so summing with the on-disk row would double-count on
+	// every save — and keys it does not track are other processes' evidence,
+	// preserved verbatim. A missing or corrupt file is not a reason to drop this
+	// process's own metrics, so a read error falls through to a plain write.
+	merged := map[string]SLOSnapshot{}
+	if existing, err := LoadSLOEvidence(path); err == nil {
+		for _, s := range existing {
+			merged[s.AgentName+":"+s.TreeName] = s
+		}
+	}
 	sloRegistry.Range(func(_, value any) bool {
-		snapshots = append(snapshots, value.(*SLOMetrics).Snapshot())
+		s := value.(*SLOMetrics).Snapshot()
+		merged[s.AgentName+":"+s.TreeName] = s
 		return true
 	})
+	keys := make([]string, 0, len(merged))
+	for k := range merged {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // deterministic file (map iteration order is random)
+	snapshots := make([]SLOSnapshot, 0, len(merged))
+	for _, k := range keys {
+		snapshots = append(snapshots, merged[k])
+	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create SLO dir: %w", err)
