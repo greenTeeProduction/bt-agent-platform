@@ -22,7 +22,7 @@ All notable changes to this project will be documented in this file.
 
 - **(agents):** Dashboard and CLI execute agents in-process via `RunOnce()` (Hermes CLI fallback only when runner unavailable).
 - **(agents):** Agent delete clears scheduler jobs across dashboard, CLI, MCP, and `bt-assistant`.
-- **(engine):** Superpowers/GOAP-fusion claude runs default to `--model opus` when `BT_SUPERPOWERS_CLAUDE_MODEL` is unset — set the env var to `auto` (or `default`/`none`) to restore the CLI's own default model. Skip-permissions mode no longer drops the model flag.
+- **(engine):** Superpowers/GOAP-fusion claude runs default to `--model claude-opus-5 --effort max` when `BT_SUPERPOWERS_CLAUDE_MODEL` / the new `BT_SUPERPOWERS_CLAUDE_EFFORT` are unset — set either env var to `auto` (or `default`/`none`) to drop that flag and inherit the CLI's own default. The exact model ID is pinned instead of the `opus` alias so a CLI-side alias move cannot silently reroute autonomous cycles onto a different model and quota pool. Skip-permissions mode no longer drops the model flag.
 - **(agents):** Webhook event fields `failure_reason` and `nodes` carry raw values (error message, `a → b → c` node trace) without embedded display labels — consumer templates do the labeling.
 - **(logging):** All library packages log through structured slog (`log.Printf` eliminated from `internal/`); binaries call `engine.SetAsDefault()` to install the logger as the slog default.
 
