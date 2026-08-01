@@ -19,6 +19,15 @@ func BuildMemSelector(node *evolution.SerializableNode, bb *Blackboard) btcore.C
 	key := "memsel/" + node.Name
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 		start, _ := chainStateInt(ctx.Blackboard, key)
+		if start < 0 {
+			// ChainState is JSON-persisted and externally writable, so the
+			// cursor is untrusted: a negative value would index children[-1]
+			// and panic mid-tick. Restart the pass instead, matching the
+			// range check the sibling bandit selector applies to its own
+			// resume cursor. Cursors past the last child need no clamp — the
+			// loop falls straight through to FAILURE.
+			start = 0
+		}
 		for i := start; i < len(children); i++ {
 			switch code := children[i].Run(ctx); {
 			case code == 0:
