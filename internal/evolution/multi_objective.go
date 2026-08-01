@@ -2,7 +2,6 @@ package evolution
 
 import (
 	"math"
-	"math/rand"
 	"sort"
 )
 
@@ -288,7 +287,7 @@ func (nsga2 *NSGAIIPopulation) TournamentSelect(k int) []*SerializableNode {
 	for j := 0; j < 2; j++ {
 		best := -1
 		for t := 0; t < k; t++ {
-			idx := rand.Intn(len(nsga2.Individuals))
+			idx := evoIntn(len(nsga2.Individuals))
 			if best == -1 || nsga2.crowdedComparison(idx, best) {
 				best = idx
 			}
@@ -333,7 +332,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 				parents := nsga2.TournamentSelect(3)
 				child := Crossover(parents[0], parents[1])
 				// Mutation
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])

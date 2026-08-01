@@ -3,7 +3,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -299,7 +298,7 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 			for i := eliteCount; i < len(mp.Individuals); i++ {
 				parents := mp.SelectElites()
 				child := Crossover(parents[0], parents[1])
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])

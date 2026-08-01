@@ -3,7 +3,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -407,7 +406,7 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 			for i := eliteCount; i < len(pp.Individuals); i++ {
 				parents := pp.SelectPareto()
 				child := Crossover(parents[0], parents[1])
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])
@@ -446,9 +445,9 @@ func materializeMutationOp(op MutationOp) MutationOp {
 	}
 	switch op.Operation {
 	case "add_before", "add_after":
-		op.Node = &SerializableNode{Type: "Condition", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, rand.Intn(1_000_000))}
+		op.Node = &SerializableNode{Type: "Condition", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, evoIntn(1_000_000))}
 	case "add_fallback":
-		op.Node = &SerializableNode{Type: "Action", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, rand.Intn(1_000_000))}
+		op.Node = &SerializableNode{Type: "Action", Name: fmt.Sprintf("Evolved_%s_%d", op.Operation, evoIntn(1_000_000))}
 	}
 	return op
 }

@@ -1,7 +1,7 @@
 # 9. Architecture Decisions
 
 This is the platform's append-only architecture decision log, ADR-001 through
-ADR-167. Early entries (001–007) record the founding decisions; the rest is
+ADR-245. Early entries (001–007) record the founding decisions; the rest is
 the running log the autonomous goap-fusion loop appends to as changes land.
 Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
 
@@ -267,6 +267,7 @@ Consolidation notes (2026-07-16):
 | ADR-242 | `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness) | Accepted | 2026-07-30 |
 | ADR-243 | `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness) | Accepted | 2026-07-30 |
 | ADR-244 | `IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research) | Accepted | 2026-07-30 |
+| ADR-245 | A Package-Level Injectable Random Source (`SetEvolutionRand`) Replaces the No-Op `rand.Seed` Across `internal/evolution`'s Shared Breeding Path (Q1 Correctness / Q2 Evolvability) | Accepted | 2026-08-01 |
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -4374,6 +4375,30 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ `IsTAPath`'s word-boundary fix removes the "rsi"-inside-"reversion" class of false positive without narrowing genuine short-keyword matches, unlike a blanket keyword removal would have.
 - ⚠️ `taAmbiguousKeywordRe` is a second matching mechanism alongside `util.ContainsAnyStr` inside the same condition — a future keyword added to `IsTAPath` needs a judgment call on whether it's collision-prone enough to need the regex path too, the same maintenance-burden shape ADR-230 already accepted for keyword-list changes generally.
 - Cross-reference: → ADR-230 (the same PreGate/branch-condition keyword-coverage gap shape, in `DevOpsCITree`/`TradingSignalTree`'s `IsCIBuildTask`/`IsTradingTask`); → ADR-014 (mandatory per-node descriptions, the sibling coverage guard this complements from the condition-reachability angle).
+
+---
+
+## ADR-245: A Package-Level Injectable Random Source (`SetEvolutionRand`) Replaces the No-Op `rand.Seed` Across `internal/evolution`'s Shared Breeding Path (Q1 Correctness / Q2 Evolvability)
+
+**Context (2026-08-01):** Every deterministic evolve tool of the ADR-009 family is "deterministic" only in the sense of being LLM-free — the breeding path itself draws from the process-global `math/rand` source. `internal/evolution`'s tests compensated by calling top-level `rand.Seed(42)` (carrying `//nolint:staticcheck` for the deprecation), but since Go 1.20 that function is a no-op, and the project builds on Go 1.26 — so those calls bought no reproducibility at all. The `ObservesLearnedPatternViaExpertKnowledge` tests across `island_test.go`, `pareto_test.go`, `learning_test.go`, and `experience_bank_test.go` were therefore rolling genuinely unseeded dice against a per-seed miss rate of a few percent, an intermittent-failure shape the same class as the `TestCMAESOptimizer_Convergence` flake this repo already documents. The seam was also missing on the production side: nothing outside the package could obtain a replayable evolution run, and ADR-027's `Factory.SetSeed` (`internal/knowledge`) had solved only the breeding-parent draw in the knowledge graph, not the mutation stream in `internal/evolution` itself (→ §8.5).
+
+**Evaluation criteria:** Reproducibility must be obtainable without changing production behavior or any exported `Evolve*` signature — the four Evolve variants and `NewPopulation` are called from `cmd/bt-agent`'s tool registry and from `internal/gardener`, so a signature change would ripple through every MCP entry point. Coverage had to be judged by whether a same-seed replay actually holds end to end, not by how many call sites were converted: an injected source that covers only the mutation primitives reproduces *what* a mutation does but not *whom* it is applied to, which is no reproducibility at all. The seam also had to be race-free, since `selfHealGeneration` callbacks reproduce concurrently.
+
+**Decision:** Add a package-level, mutex-guarded source in a new `internal/evolution/rng.go`. `SetEvolutionRand(*rand.Rand) (restore func())` installs a source and returns a `sync.Once`-guarded restore func (idempotent, so an explicit call plus a `t.Cleanup` cannot re-pin a later test to a stale source); the internal `evoIntn`/`evoFloat64` helpers read it under the mutex and **delegate to top-level `math/rand` when nothing is installed**, so production callers — none of which call `SetEvolutionRand` — keep the global source and their current behavior exactly. Two families of draw move onto the seam: the shared mutation primitives (`randomMutation`, `randomNodeName`, `materializeMutationOp`'s name suffix, `applyReorderChildren`'s coin flip) and the breeding loops that decide whom to apply them to (`Population.Select`'s tournament and `Crossover`'s subtree picks in `learning.go`, `NSGAIIPopulation.TournamentSelect`, `IslandModel.Migrate`'s target choice, and the `< mutationRate` gate in `EvolveMAPElites`, `IslandModel.EvolveAll`, `EvolvePareto`, and NSGA-II `Evolve`). Every `rand.Seed` call and its `//nolint:staticcheck` comment is deleted from the package's tests in favor of a `withEvolutionSeed` helper; the four `Observe`-style tests additionally raise their sample budget (attempt loop 3 → 16 seeds, generations 4 → 16) so the observation is overwhelmingly likely even setting determinism aside.
+
+**Alternatives considered:**
+- Thread a `*rand.Rand` parameter or a `Population.rng` field through the evolve APIs, mirroring ADR-027's per-`Factory` `SetSeed` — rejected: the mutation primitives are free functions shared by all four Evolve variants plus `internal/gardener`, so a field would still leave them on the global source, and a parameter would change exported signatures every MCP tool in `cmd/bt-agent/tools.go` calls, for a capability only tests use.
+- Keep `rand.Seed` and suppress the deprecation, treating the flakes as acceptable — rejected: the call is a literal no-op under this toolchain, so the `//nolint:staticcheck` was documenting a guarantee that had not existed for several Go releases.
+- Fix only the sample budget (more seeds, more generations) and leave the draws unseeded — rejected: it lowers the flake rate without making any run replayable, so a future intermittent evolution failure still could not be reproduced from its seed.
+
+**Status:** Accepted (2026-08-01). Pinned by `internal/evolution/rng_test.go` (`TestEvolutionRand_SeededIsReproducible`, `_DefaultIsNonDeterministic`, `_RestoreIsIdempotent`) and, for the end-to-end property, `TestEvolveMAPElites_SameSeedSameArchive` (`internal/evolution/island_test.go`) — two same-seed `EvolveMAPElites(16, …)` runs must record identical `LearnedPatterns` in identical order with identical gains, with an explicit non-vacuity guard; reintroducing a bare `rand.Float64`/`rand.Intn` anywhere on that path fails it. `TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternRepeatedly` exercises the formerly flaky body 20× under 20 distinct seeds in one run.
+
+**Consequences:**
+- ✅ A `SetEvolutionRand`-injected source makes the MAP-Elites path replay exactly, and by construction covers the same shared primitives the island, Pareto, and NSGA-II variants breed through — an intermittent evolution failure is now reproducible from its seed instead of only re-rollable.
+- ✅ Production behavior is unchanged and no exported signature moved: with no source installed the helpers are thin pass-throughs to the global `math/rand`, so every ADR-009-family tool and the gardener keep their current draw stream.
+- ⚠️ Coverage is partial and the seam is not a package-wide determinism guarantee. `Population.Evolve` and `EvolveWithExperienceContext`'s own mutation-rate gates, `mutateAndRecord`'s operator/hint draws, `QTable.SelectAction`'s epsilon draw (`learning.go`), the `MCTSMutator` (`mcts_mutate.go`), CMA-ES's Gaussian sampling (`cmaes.go`), and `local_search.go` all still read the global source — so the plain GA path behind `bt_evolve_genetic`/`bt_evolve_bottlenecks` (→ ADR-017, ADR-020) is *not* yet same-seed reproducible, and the documented `TestCMAESOptimizer_Convergence` flake is untouched by this change.
+- ⚠️ A package-level source serialized by one mutex is global mutable state: tests that install a source cannot run in parallel with each other, and a caller that forgets its restore func would pin the rest of the process to a fixed stream. The `sync.Once` restore and the `withEvolutionSeed` helper bound that risk rather than eliminating it; a per-`Population` source would not have this property, at the cost the alternatives above describe.
+- Cross-reference: → §8.5 (Evolution Pipeline, the shared breeding path this seam sits under); → ADR-027 (`Factory.SetSeed`, the same seedable-draw idea applied earlier to knowledge-graph parent selection); → ADR-009 (the "deterministic, LLM-free" tool family whose determinism claim this narrows to what is actually replayable); → §11 (the residual unseeded call sites above belong to the technical-debt register, not here).
 
 ---
 

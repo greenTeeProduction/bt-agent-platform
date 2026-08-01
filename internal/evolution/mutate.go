@@ -22,7 +22,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 )
@@ -456,7 +455,7 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 			len(tree.Children[i].Children) >= 2 {
 			children := tree.Children[i].Children
 			// Cyclic shift: move first child to end (or vice versa)
-			if rand.Intn(2) == 0 {
+			if evoIntn(2) == 0 {
 				// Shift first to last
 				first := children[0]
 				tree.Children[i].Children = append(tree.Children[i].Children[1:], first)

@@ -145,29 +145,31 @@ func TestIslandModel_EvolveAllObservesLearnedPatternViaExpertKnowledge(t *testin
 	ek := NewExpertKnowledge()
 	before := len(ek.LearnedPatterns)
 
-	// A handful of fixed seeds keeps the run deterministic while tolerating
-	// exactly which mutation op the random draw picks first, mirroring
+	// Each attempt installs its own source via the package seam, so the run is
+	// genuinely reproducible while still tolerating exactly which mutation op
+	// the draw picks first — mirroring
 	// TestParetoPopulation_EvolvePareto_ObservesLearnedPatternViaExpertKnowledge.
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed)                 //nolint:staticcheck // deterministic evolution run for reproducibility
-		im := NewIslandModel(1000, 0.5) // migration interval far beyond this test's generations
-		im.ExpertKnowledge = ek
-		im.AddIsland("go", NewPopulation(8, DefaultTree()))
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			im := NewIslandModel(1000, 0.5) // migration interval far beyond this test's generations
+			im.ExpertKnowledge = ek
+			im.AddIsland("go", NewPopulation(8, DefaultTree()))
 
-		var bestTrees map[string]*SerializableNode
-		for gen := 0; gen < 4; gen++ {
-			bestTrees = im.EvolveAll(growthFitness)
-		}
-		if bestTrees["go"] == nil {
-			t.Fatal("EvolveAll returned no best tree for island 'go'")
-		}
+			var bestTrees map[string]*SerializableNode
+			for gen := 0; gen < 16; gen++ {
+				bestTrees = im.EvolveAll(growthFitness)
+			}
+			if bestTrees["go"] == nil {
+				t.Fatal("EvolveAll returned no best tree for island 'go'")
+			}
+		})
 		if len(ek.LearnedPatterns) > before {
 			break
 		}
 	}
 
 	if len(ek.LearnedPatterns) <= before {
-		t.Fatal("expected EvolveAll to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+		t.Fatalf("expected EvolveAll to grow ExpertKnowledge.LearnedPatterns via Observe across %d seeded runs; archive is unchanged", len(observeSeeds))
 	}
 	for _, lp := range ek.LearnedPatterns {
 		if lp.Gain <= 0 {
@@ -186,26 +188,105 @@ func TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternViaExpertKnow
 	ek := NewExpertKnowledge()
 	before := len(ek.LearnedPatterns)
 
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		mp := NewMAPElitesPopulation(8, DefaultTree(), "go")
-		mp.ExpertKnowledge = ek
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			mp := NewMAPElitesPopulation(8, DefaultTree(), "go")
+			mp.ExpertKnowledge = ek
 
-		best := mp.EvolveMAPElites(4, growthFitness)
-		if best == nil {
-			t.Fatal("EvolveMAPElites returned nil best tree")
-		}
+			best := mp.EvolveMAPElites(16, growthFitness)
+			if best == nil {
+				t.Fatal("EvolveMAPElites returned nil best tree")
+			}
+		})
 		if len(ek.LearnedPatterns) > before {
 			break
 		}
 	}
 
 	if len(ek.LearnedPatterns) <= before {
-		t.Fatal("expected EvolveMAPElites to grow ExpertKnowledge.LearnedPatterns via Observe across three seeded runs; archive is unchanged")
+		t.Fatalf("expected EvolveMAPElites to grow ExpertKnowledge.LearnedPatterns via Observe across %d seeded runs; archive is unchanged", len(observeSeeds))
 	}
 	for _, lp := range ek.LearnedPatterns {
 		if lp.Gain <= 0 {
 			t.Errorf("learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", lp)
+		}
+	}
+}
+
+// TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternRepeatedly is
+// the de-flake guard for the Observe tests above. Each of those tests only
+// samples the evolution loop until one attempt succeeds, so they would go green
+// on a single lucky seed even if most seeds still recorded nothing. This test
+// takes no such escape hatch: it exercises the same body 20 times in a single
+// run, each iteration with a *fresh* ExpertKnowledge and its own injected
+// source, and every one of the 20 must record a pattern. Any residual
+// per-iteration flake therefore surfaces here instead of intermittently in CI.
+// It also guards the seam itself — before EvolveMAPElites's mutation gate went
+// through evoFloat64 (map_elites.go) the injected source was ignored, since
+// `rand.Seed` has been a no-op since Go 1.20.
+func TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternRepeatedly(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		// A distinct source per iteration: reproducible, but not the same
+		// stream 20 times over, so this covers 20 independent draws of the
+		// mutation schedule rather than one repeated 20 times.
+		withEvolutionSeed(int64(1000+i), func() {
+			ek := NewExpertKnowledge()
+			mp := NewMAPElitesPopulation(8, DefaultTree(), "go")
+			mp.ExpertKnowledge = ek
+
+			best := mp.EvolveMAPElites(16, growthFitness)
+			if best == nil {
+				t.Fatalf("iteration %d: EvolveMAPElites returned nil best tree", i)
+			}
+			if len(ek.LearnedPatterns) == 0 {
+				t.Fatalf("iteration %d (seed %d): EvolveMAPElites recorded no learned patterns over 16 generations; growthFitness rewards every node-adding mutation, so an empty archive means the mutation gate never consumed the injected source", i, 1000+i)
+			}
+			for _, lp := range ek.LearnedPatterns {
+				if lp.Gain <= 0 {
+					t.Errorf("iteration %d: learned pattern %+v recorded a non-positive gain; Observe must only retain genuine improvements", i, lp)
+				}
+			}
+		})
+	}
+}
+
+// TestEvolveMAPElites_SameSeedSameArchive pins the property the seeds in the
+// Observe tests above silently failed to provide from Go 1.20 (which made the
+// top-level rand.Seed a no-op) until the seam landed: two EvolveMAPElites runs
+// under the *same* injected source must record the same learned patterns, in
+// the same order, with the same gains. It holds only while every draw the
+// evolution loop makes goes through the package seam — the mutation-rate gate
+// in map_elites.go plus the tournament and Crossover draws in learning.go that
+// pick each generation's parents. Reintroducing a bare rand.Float64/rand.Intn
+// on that path fails here.
+func TestEvolveMAPElites_SameSeedSameArchive(t *testing.T) {
+	const seed = 20260801
+
+	run := func() []LearnedPattern {
+		restore := SetEvolutionRand(rand.New(rand.NewSource(seed)))
+		defer restore()
+
+		ek := NewExpertKnowledge()
+		mp := NewMAPElitesPopulation(8, DefaultTree(), "go")
+		mp.ExpertKnowledge = ek
+		if best := mp.EvolveMAPElites(16, growthFitness); best == nil {
+			t.Fatal("EvolveMAPElites returned nil best tree")
+		}
+		return append([]LearnedPattern(nil), ek.LearnedPatterns...)
+	}
+
+	first, second := run(), run()
+
+	// Guard against the assertion below passing vacuously on two empty runs.
+	if len(first) == 0 {
+		t.Fatal("EvolveMAPElites recorded no learned patterns at all; the determinism comparison below would be vacuous")
+	}
+	if len(first) != len(second) {
+		t.Fatalf("same-seed runs recorded different numbers of learned patterns: %d then %d — EvolveMAPElites is still drawing from the global math/rand source", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("same-seed runs diverged at learned pattern %d: %+v vs %+v — EvolveMAPElites is still drawing from the global math/rand source", i, first[i], second[i])
 		}
 	}
 }

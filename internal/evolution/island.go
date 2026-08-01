@@ -3,7 +3,6 @@ package evolution
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -92,7 +91,7 @@ func (im *IslandModel) Migrate() int {
 		// Pick a random target domain (different from source)
 		var tgtDomain string
 		for {
-			tgtDomain = domains[rand.Intn(len(domains))]
+			tgtDomain = domains[evoIntn(len(domains))]
 			if tgtDomain != srcDomain {
 				break
 			}
@@ -180,7 +179,7 @@ func (im *IslandModel) EvolveAll(fitnessFn func(*SerializableNode) float64) map[
 			for i := eliteCount; i < len(pop.Individuals); i++ {
 				parents := pop.Select()
 				child := Crossover(parents[0], parents[1])
-				if rand.Float64() < mutationRate {
+				if evoFloat64() < mutationRate {
 					ops := randomMutation(child)
 					if len(ops) > 0 {
 						ops[0] = materializeMutationOp(ops[0])

@@ -556,21 +556,20 @@ func TestEvolveWithExperience_RecordsImprovingMutations(t *testing.T) {
 	// mutation OCCURS is stochastic; that every recorded mutation is improving
 	// (asserted below) is the real invariant. Try a few seeds: a genuine
 	// AddFromMutation wiring regression fails all of them deterministically.
-	var best *SerializableNode
-	for _, seed := range []int64{42, 43, 44} {
-		rand.Seed(seed) //nolint:staticcheck // deterministic evolution run for reproducibility
-		pop := NewPopulation(8, DefaultTree())
-		best = pop.EvolveWithExperience(3, growthFitness, eb)
-		if best == nil {
-			t.Fatal("EvolveWithExperience returned nil best tree")
-		}
+	for _, seed := range observeSeeds {
+		withEvolutionSeed(seed, func() {
+			pop := NewPopulation(8, DefaultTree())
+			if best := pop.EvolveWithExperience(3, growthFitness, eb); best == nil {
+				t.Fatal("EvolveWithExperience returned nil best tree")
+			}
+		})
 		if eb.Count() > 0 {
 			break
 		}
 	}
 
 	if eb.Count() == 0 {
-		t.Fatal("expected fitness-improving mutations to be recorded via AddFromMutation across three seeded runs; bank is empty")
+		t.Fatalf("expected fitness-improving mutations to be recorded via AddFromMutation across %d seeded runs; bank is empty", len(observeSeeds))
 	}
 	for i, e := range eb.Entries {
 		if e.FitnessDelta <= 0 {
@@ -584,7 +583,7 @@ func TestEvolveWithExperience_RecordsImprovingMutations(t *testing.T) {
 }
 
 func TestEvolveWithExperience_WarmStartConsultsBankHints(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	dir := t.TempDir()
 	eb, err := NewExperienceBank(dir)
 	if err != nil {
@@ -621,7 +620,7 @@ func TestEvolveWithExperience_WarmStartConsultsBankHints(t *testing.T) {
 }
 
 func TestEvolveWithExperience_NilBankStillEvolves(t *testing.T) {
-	rand.Seed(42) //nolint:staticcheck // deterministic evolution run for reproducibility
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
 	pop := NewPopulation(6, DefaultTree())
 	best := pop.EvolveWithExperience(2, growthFitness, nil)
 	if best == nil {
