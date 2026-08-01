@@ -44,6 +44,24 @@ func NewCrisisDetector() *CrisisDetector {
 	}
 }
 
+// Crisis reason strings returned by Detect/DetectPopulation. They are exported
+// because consumers branch on WHICH crisis fired, not merely that one did — the
+// gardener answers a diversity collapse by reseeding from its MAP-Elites
+// archive, which would be the wrong response to stagnation.
+const (
+	// CrisisDiversityCollapse means behavioral diversity fell below
+	// DiversityThreshold while still being non-zero (i.e. real data, not a
+	// cold start).
+	CrisisDiversityCollapse = "diversity_collapse"
+	// CrisisStagnation means fitness declined for more than StagnationLimit
+	// consecutive observations.
+	CrisisStagnation = "stagnation"
+	// CrisisRegressionSpiral and CrisisQualityCrash are population-level
+	// reasons reported by DetectPopulation.
+	CrisisRegressionSpiral = "regression_spiral"
+	CrisisQualityCrash     = "quality_crash"
+)
+
 // CrisisState describes the current health of a tree's evolution cycle.
 type CrisisState struct {
 	TreeName            string
@@ -66,7 +84,7 @@ func (c *CrisisDetector) Detect(state CrisisState) (crisis bool, reason string) 
 	c.lastDiversity = state.BehavioralDiversity
 	if state.BehavioralDiversity < c.DiversityThreshold && state.BehavioralDiversity > 0 {
 		// Only fire if we have meaningful diversity data (non-zero)
-		return true, "diversity_collapse"
+		return true, CrisisDiversityCollapse
 	}
 
 	// Stagnation = fitness ACTIVELY DECLINING for more than StagnationLimit
@@ -94,7 +112,7 @@ func (c *CrisisDetector) Detect(state CrisisState) (crisis bool, reason string) 
 	c.lastBestFit[treeName] = state.CurrentFitness
 
 	if c.stagnation[treeName] > c.StagnationLimit {
-		return true, "stagnation"
+		return true, CrisisStagnation
 	}
 
 	return false, ""
@@ -166,7 +184,7 @@ func (c *CrisisDetector) DetectPopulation(state *PopulationState) (crisis bool, 
 	// Diversity collapse
 	if state.DiversityMetrics.BehavioralDiversity < c.DiversityThreshold &&
 		state.DiversityMetrics.BehavioralDiversity > 0 {
-		reasons = append(reasons, "diversity_collapse")
+		reasons = append(reasons, CrisisDiversityCollapse)
 	}
 
 	// Regression spiral: >50% regression rate for 3+ consecutive generations
@@ -176,7 +194,7 @@ func (c *CrisisDetector) DetectPopulation(state *PopulationState) (crisis bool, 
 		c.regressionStreak = 0
 	}
 	if c.regressionStreak >= 3 {
-		reasons = append(reasons, "regression_spiral")
+		reasons = append(reasons, CrisisRegressionSpiral)
 	}
 
 	// Quality crash: <30% working ratio
@@ -186,7 +204,7 @@ func (c *CrisisDetector) DetectPopulation(state *PopulationState) (crisis bool, 
 		c.qualityCrash = 0
 	}
 	if c.qualityCrash >= 2 {
-		reasons = append(reasons, "quality_crash")
+		reasons = append(reasons, CrisisQualityCrash)
 	}
 
 	return len(reasons) > 0, reasons

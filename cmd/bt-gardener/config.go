@@ -18,6 +18,18 @@ import (
 // config knob yet, so this is a fixed constant.
 const feedbackFlushInterval = 30 * time.Second
 
+const (
+	// islandMigrationInterval is how many island-exploration passes apart the
+	// IslandModel cross-pollinates domains (evolution.IslandModel.Migrate):
+	// every 4th pass, so islands get a few generations of independent drift
+	// before elites move between them.
+	islandMigrationInterval = 4
+
+	// islandMigrationRate is the fraction of a target island replaced by
+	// migrating elites when a migration is due.
+	islandMigrationRate = 0.2
+)
+
 // experienceBankDir resolves the on-disk directory backing the gardener's
 // ExperienceBank. It deliberately matches bt-agent's experienceBankDir()
 // (agent.HomeDir()/"experience") so both binaries accumulate mutation
@@ -118,6 +130,15 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// (bottlenecks and underbred-but-proven trees first) instead of the
 		// alphabetical fallback (Q2 Evolvability milestone 1).
 		KnowledgeGraph: kg,
+
+		// IslandModel activates RunCycleV2's periodic per-domain
+		// population-exploration pass: without it the island model is reachable
+		// only from bt-agent's MCP tools, so the 24/7 daemon never explores a
+		// population and only ever mutates current-best. IslandInterval is left
+		// at the gardener's own default (defaultIslandInterval — roughly hourly
+		// at the 5-minute cycle interval above), since the pass evolves a whole
+		// subpopulation per tree and is deliberately a side channel.
+		IslandModel: evolution.NewIslandModel(islandMigrationInterval, islandMigrationRate),
 	}, nil
 }
 

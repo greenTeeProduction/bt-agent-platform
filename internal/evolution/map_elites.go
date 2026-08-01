@@ -136,6 +136,35 @@ func (g *MAPElitesGrid) Elites() []*Individual {
 	return elites
 }
 
+// EliteSeed returns the fittest archived elite that occupies a niche OTHER
+// than current's and whose fitness strictly beats fitnessFloor — the active-
+// elitism accessor a caller uses to escape a collapsed niche by reseeding from
+// the archive instead of mutating its current best again.
+//
+// Same-niche elites are never returned: reseeding into the cell we are already
+// collapsed in is not an escape, however fit that cell's winner happens to be.
+// A floor no other-niche elite clears yields nil rather than a downgrade, so
+// the caller can safely treat nil as "keep the current best".
+func (g *MAPElitesGrid) EliteSeed(current BehavioralDescriptor, fitnessFloor float64) *Individual {
+	if g == nil || len(g.Cells) == 0 {
+		return nil
+	}
+	currentKey := g.Key(current)
+	var best *Individual
+	for key, ind := range g.Cells {
+		if ind == nil || ind.Tree == nil || key == currentKey {
+			continue
+		}
+		if ind.Fitness <= fitnessFloor {
+			continue
+		}
+		if best == nil || ind.Fitness > best.Fitness {
+			best = ind
+		}
+	}
+	return best
+}
+
 // DiversityScore returns the fraction of occupied cells (0-1).
 // Higher = more behavioral diversity.
 func (g *MAPElitesGrid) DiversityScore() float64 {
