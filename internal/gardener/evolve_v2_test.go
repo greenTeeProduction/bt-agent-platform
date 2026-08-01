@@ -2969,3 +2969,113 @@ func TestRunCycleV2_IslandPass_RunsOnConfiguredInterval(t *testing.T) {
 		t.Errorf("IslandModel.Generation = %d after 4 cycles with IslandInterval=3, want 2 (cycles 1 and 4 are due; 2 and 3 are not)", im.Generation)
 	}
 }
+
+// ============================================================================
+// MCTS as a second structural-mutation generator (milestone 4/5)
+// ============================================================================
+
+// TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition pins the
+// gardener half of the wiring: when the per-tree strategy says to augment,
+// evolution.MCTSMutator's search proposals must enter the SAME scored
+// candidate list evaluator.OrderMutations produced — one descending-score
+// competition handed to the existing benchmark/pre-score/gate loop, not a
+// separate side channel.
+func TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := recordsForEntry(allRecords, entry)
+	seedFitness := evaluator.EvaluateTree(entry.Tree, records)
+	heuristic := evaluator.OrderMutations(entry.Tree, records, seedFitness)
+	if len(heuristic) == 0 {
+		t.Fatal("setup produced no heuristic candidates — the merge assertions below would be vacuous")
+	}
+
+	cfg := EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: 12}
+	merged := g.augmentWithMCTSCandidates(entry.Tree, entry.Name, records, seedFitness, heuristic, cfg)
+
+	if len(merged) <= len(heuristic) {
+		t.Fatalf("merged competition has %d candidates, want more than the %d heuristic ones — the MCTS search contributed nothing",
+			len(merged), len(heuristic))
+	}
+	mctsSourced := 0
+	for _, c := range merged {
+		if strings.Contains(strings.ToLower(c.Reason), "mcts") {
+			mctsSourced++
+		}
+		if c.Op.Operation == "" || c.Op.Target == "" {
+			t.Errorf("merged candidate %+v is not applicable — ApplyMutations needs an operation and a target", c.Op)
+		}
+	}
+	if mctsSourced == 0 {
+		t.Error("no merged candidate is attributed to the MCTS search")
+	}
+	for i := 1; i < len(merged); i++ {
+		if merged[i-1].Score < merged[i].Score {
+			t.Errorf("merged candidates not sorted by descending score: [%d]=%.4f < [%d]=%.4f",
+				i-1, merged[i-1].Score, i, merged[i].Score)
+		}
+	}
+
+	// Every merged candidate must apply on its own, since evolveTreeV2 runs
+	// them one at a time against a clone of the live tree.
+	for _, c := range merged {
+		clone := cloneTreeForGardener(entry.Tree)
+		if evolution.ApplyMutations(clone, []evolution.MutationOp{c.Op}) == 0 {
+			t.Errorf("merged candidate %s/%s did not apply to the tree", c.Op.Operation, c.Op.Target)
+		}
+	}
+}
+
+// TestAugmentWithMCTSCandidates_RespectsStrategySelection pins the other half:
+// the search is a per-tree decision, so a disabled flag and a tree the
+// heuristics already cover both leave the heuristic ordering untouched.
+func TestAugmentWithMCTSCandidates_RespectsStrategySelection(t *testing.T) {
+	bank, err := evolution.NewExperienceBank(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewExperienceBank: %v", err)
+	}
+	g, entry := experienceRecordingGardener(t, bank)
+
+	allRecords, _ := g.cfg.RefStore.LoadAll()
+	records := recordsForEntry(allRecords, entry)
+	seedFitness := evaluator.EvaluateTree(entry.Tree, records)
+	heuristic := evaluator.OrderMutations(entry.Tree, records, seedFitness)
+
+	off := g.augmentWithMCTSCandidates(entry.Tree, entry.Name, records, seedFitness, heuristic,
+		EvolveV2Config{MCTSStructuralSearch: false})
+	if len(off) != len(heuristic) {
+		t.Errorf("MCTSStructuralSearch=false changed the candidate list: %d vs %d", len(off), len(heuristic))
+	}
+
+	// A tree that BOTH heuristics already cover — its shape is a preserved
+	// specialist archetype and every one of its Selectors is fully informed by
+	// durable telemetry — keeps today's heuristic-only ordering. One signal
+	// alone is not enough (see TestSelectStructuralStrategy), so this needs
+	// both.
+	covered := selectorOrderingTree()
+	statsPath := filepath.Join(t.TempDir(), "selector-stats.json")
+	seedSelectorStats(t, statsPath)
+	g.cfg.SelectorStatsPath = statsPath
+
+	reg := evolution.NewSpecialistRegistry()
+	reg.Observe(&evolution.EvolutionMetadata{
+		TreeID:   "covered",
+		Fitness:  evolution.FitnessRecord{Score: 0.95, Validated: true},
+		Tags:     []string{"specialist:gardener"},
+		Genotype: "archetype",
+	}, covered, 1)
+
+	coveredFitness := evaluator.EvaluateTree(covered, records)
+	coveredHeuristic := evaluator.OrderMutations(covered, records, coveredFitness)
+	known := g.augmentWithMCTSCandidates(covered, "covered", records, coveredFitness, coveredHeuristic,
+		EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: 12, Specialists: reg})
+	if len(known) != len(coveredHeuristic) {
+		t.Errorf("a preserved archetype with fully-informed Selectors still got the search: %d candidates vs %d heuristic",
+			len(known), len(coveredHeuristic))
+	}
+}

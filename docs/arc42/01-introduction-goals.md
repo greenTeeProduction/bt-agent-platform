@@ -34,10 +34,11 @@ autonomously over time.
   multi-cycle change programs executed one milestone per cycle.
 - **3 MCP Servers** — bt-agent (79 tools), bt-evaluator (5 tools),
   bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
-- **Evolution Engine** — six evolution algorithms: Stockfish-adapted mutation
-  ordering, Pareto multi-objective front, MAP-Elites quality diversity,
-  Island Model with migration, Q-Learning epsilon-greedy, and Expert
-  Knowledge.
+- **Evolution Engine** — seven evolution algorithms: Stockfish-adapted mutation
+  ordering, MCTS-guided structural search (competing in the same scored
+  mutation contest as the heuristic ordering), Pareto multi-objective front,
+  MAP-Elites quality diversity, Island Model with migration, Q-Learning
+  epsilon-greedy, and Expert Knowledge.
 - **Agent Platform & Observability** — YAML-defined agents with registry,
   scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent)
   protocol, memory store, and webhook publishing; dashboard on :9800 with
@@ -76,7 +77,7 @@ Closing loop: `observe → goal → plan → tree → run → reflect → evolve
 | # | Quality Goal | Motivation |
 |---|---|---|
 | Q1 | **Correctness** | Trees must route correctly through PreGate→StrategyRouter→OutcomeSelector. All registered engine actions/conditions (§1.1) must register and invoke properly. ChainAction nodes must produce valid LLM output. |
-| Q2 | **Evolvability** | The platform must improve over time. The six evolution algorithms (§1.1) drive mutation and selection. Git-versioned trees enable rollback. Benchmarks gate acceptance. |
+| Q2 | **Evolvability** | The platform must improve over time. The seven evolution algorithms (§1.1) drive mutation and selection. Git-versioned trees enable rollback. Benchmarks gate acceptance. |
 | Q3 | **Reliability** | Panic recovery (SafeGo), circuit breakers (3-state), retry with exponential backoff (full jitter), dead letter queue, and output quality validation ensure the platform degrades gracefully rather than failing silently. |
 | Q4 | **Personalization & Self-Growth** | The agent must adapt to its user: observe interactions, derive goals, generate its own GOAP behavior trees, and improve them from user feedback. Every generated tree must be executable (resolver-visible), validated, and evolvable. New automations require HITL approval. |
 | Q5 | **Consistency & Reuse** | One canonical implementation per concept: no duplicated Go functionality across packages and daemons (shared concerns like outcome classification, retry, persistence have exactly one owner package), no semantically duplicate trees in the catalog, no near-copy actions in the registry. New features must fit the framework, not a single tree — capabilities land as engine actions, decorators, or composed blocks registered in the knowledge graph so any tree can reuse them, and project conventions apply uniformly across engine, daemons, and MCP tools. Detected duplication seeds a consolidation program. |

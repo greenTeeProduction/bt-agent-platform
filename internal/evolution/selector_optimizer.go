@@ -514,6 +514,77 @@ func isSelectorFallback(child *SerializableNode) bool {
 	return child.Type == "AlwaysSucceed" || isDefaultPath(child)
 }
 
+// ─── MCTS Affinity (structural-strategy selection) ───────────────────────
+
+// MCTSAffinity reports, on [0,1], how much a speculative MCTS structural
+// search is worth for tree from the learned-ordering point of view: the
+// fraction of the tree's Selector nodes this optimizer has NO usable signal for
+// (fewer than MinSamples recorded outcomes, the same threshold OrderChildren
+// gates on).
+//
+// 1.0 means every Selector is cold — the learned ordering cannot improve this
+// tree at all, so the search has nothing to duplicate. 0.0 means every Selector
+// is fully informed and the cheap, evidence-backed reordering already covers
+// the decision points a search would blunder through. A tree with no Selector
+// at all, a nil tree, or a nil optimizer likewise offers this heuristic nothing
+// to lean on, so it returns 1.0.
+// See [SelectStructuralStrategy], which combines this with
+// [SpecialistRegistry.MCTSAffinity].
+func (so *SelectorOptimizer) MCTSAffinity(tree *SerializableNode) float64 {
+	if so == nil || tree == nil {
+		return 1.0
+	}
+	names := collectSelectorNames(tree, nil)
+	if len(names) == 0 {
+		return 1.0
+	}
+	informed := 0
+	for _, name := range names {
+		if so.hasEnoughSamples(name) {
+			informed++
+		}
+	}
+	return 1.0 - float64(informed)/float64(len(names))
+}
+
+// hasEnoughSamples reports whether selectorName has accumulated at least
+// MinSamples recorded outcomes — the same threshold OrderChildren requires
+// before it will propose an ordering at all.
+func (so *SelectorOptimizer) hasEnoughSamples(selectorName string) bool {
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	stats, ok := so.Stats[selectorName]
+	if !ok || stats == nil {
+		return false
+	}
+	total := 0
+	for _, cs := range stats.Children {
+		total += cs.Total()
+	}
+	return total >= so.MinSamples
+}
+
+// collectSelectorNames returns the distinct names of every Selector node in the
+// tree, in pre-order. Unnamed Selectors are skipped — telemetry is keyed by
+// name, so they can never be informed.
+func collectSelectorNames(node *SerializableNode, seen map[string]bool) []string {
+	if node == nil {
+		return nil
+	}
+	if seen == nil {
+		seen = make(map[string]bool)
+	}
+	var names []string
+	if node.Type == "Selector" && node.Name != "" && !seen[node.Name] {
+		seen[node.Name] = true
+		names = append(names, node.Name)
+	}
+	for i := range node.Children {
+		names = append(names, collectSelectorNames(&node.Children[i], seen)...)
+	}
+	return names
+}
+
 // ─── Alpha-Beta Pruning for Selectors ────────────────────────────────────
 
 // ShouldPrune determines if a child can be skipped based on statistical

@@ -72,6 +72,27 @@ type EvolveV2Config struct {
 	// LocalSearchStrategy picks which evolution.LocalSearcher strategy the
 	// refinement pass runs. The zero value is evolution.HillClimbSearch.
 	LocalSearchStrategy evolution.LocalSearchStrategy
+
+	// MCTSStructuralSearch, when true, lets evolution.MCTSMutator compete as a
+	// SECOND structural-mutation generator alongside evaluator.OrderMutations.
+	// Its search proposals are merged into ONE scored competition
+	// (evolution.MergeScoredMutations) before the per-candidate benchmark /
+	// pre-score / quality-gate loop, so an MCTS candidate has to earn its place
+	// against the heuristic ones on exactly the same evidence — it is never
+	// applied on the search's word alone. Whether the search actually runs for
+	// a given tree is decided per tree by evolution.SelectStructuralStrategy.
+	MCTSStructuralSearch bool
+
+	// MCTSIterations bounds the per-tree search budget. Each iteration costs one
+	// evaluator.EvaluateTree call (no benchmark, no LLM). Zero falls back to
+	// defaultMCTSCandidateIterations.
+	MCTSIterations int
+
+	// Specialists supplies the archetype half of the per-tree strategy choice.
+	// Nil means "no archetype knowledge", which biases toward running the
+	// search; DefaultEvolveV2Config seeds it from the benchmark-validated
+	// specialists so a tree matching a preserved archetype is not gambled on.
+	Specialists *evolution.SpecialistRegistry
 }
 
 // DefaultEvolveV2Config returns sensible defaults for the v2 pipeline.
@@ -82,8 +103,17 @@ func DefaultEvolveV2Config() EvolveV2Config {
 		BlockConfig:              evolution.DefaultBlockConfig(),
 		UseRealLLM:               false, // use mock by default for speed
 		SelectorOrderingStrategy: evolution.OrderBySuccessRate,
+		MCTSStructuralSearch:     true,
+		MCTSIterations:           defaultMCTSCandidateIterations,
+		Specialists:              evolution.SeedSpecialistRegistry(),
 	}
 }
+
+// defaultMCTSCandidateIterations is the per-tree MCTS search budget when
+// MCTSIterations is unset. It is deliberately close to len(AllMutationOps) so
+// the search gets one shot at each root-level operation before it starts
+// deepening — the root level is where replayable candidates come from.
+const defaultMCTSCandidateIterations = 12
 
 // transpositionTableMaxSize bounds the number of cached (tree,task)
 // evaluations the gardener's transposition table keeps in memory/on disk.
@@ -296,6 +326,13 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// Personal trees bias against (and record into) the owning user's bank.
 	bank := g.bankFor(entry)
 	candidates := biasCandidatesWithExperience(bank, tree, evaluator.OrderMutations(tree, records, seedFitness), lastFailureTask(records))
+
+	// ── MCTS as a second structural-mutation generator (milestone 4/5) ──
+	// The heuristic ordering can only propose mutations its hand-written rules
+	// know how to look for. Merge in whatever a bounded MCTS search found to
+	// actually raise this tree's fitness, so both generators compete on one
+	// scored list before the benchmark/gate loop below.
+	candidates = g.augmentWithMCTSCandidates(tree, entry.Name, records, seedFitness, candidates, cfg)
 
 	// Evolution blocks — filter mutations targeting frozen blocks
 	if cfg.BlocksEnabled && len(candidates) > 0 {
@@ -732,9 +769,23 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 	if !cfg.SelectorOrdering || tree == nil {
 		return 0
 	}
+	so := g.seedSelectorOptimizer(treeID, cfg)
+	if so == nil {
+		return 0
+	}
+	return so.ApplyLearnedOrdering(tree)
+}
+
+// seedSelectorOptimizer builds a SelectorOptimizer seeded from the durable
+// per-tree Selector telemetry for treeID (selectorStatsPathFor's per-tree-first
+// resolution). Returns nil when no stats path resolves or the file cannot be
+// read, so callers degrade to "no learned signal" rather than to an optimizer
+// silently pretending it has one. Shared by the ordering pass above and by the
+// MCTS strategy choice, which needs the same telemetry read-only.
+func (g *Gardener) seedSelectorOptimizer(treeID string, cfg EvolveV2Config) *evolution.SelectorOptimizer {
 	path := g.selectorStatsPathFor(treeID)
 	if path == "" {
-		return 0
+		return nil
 	}
 	strategy := cfg.SelectorOrderingStrategy
 	if strategy == "" {
@@ -742,11 +793,94 @@ func (g *Gardener) applyLearnedSelectorOrdering(tree *evolution.SerializableNode
 	}
 	so := evolution.NewSelectorOptimizer(strategy)
 	if err := so.LoadSelectorStats(path); err != nil {
-		slog.Warn("gardener/v2: loading selector stats failed, skipping ordering",
+		slog.Warn("gardener/v2: loading selector stats failed",
 			"path", path, "error", err)
-		return 0
+		return nil
 	}
-	return so.ApplyLearnedOrdering(tree)
+	return so
+}
+
+// augmentWithMCTSCandidates merges evolution.MCTSMutator's search proposals
+// into the heuristic candidate list, producing ONE descending-score competition
+// for evolveTreeV2's per-candidate benchmark / pre-score / quality-gate loop.
+//
+// Whether the search runs at all is a per-tree decision made by
+// evolution.SelectStructuralStrategy from two independent "what do we already
+// know about this tree" signals: the specialist registry's archetype knowledge
+// and the Selector optimizer's learned-ordering telemetry. A tree that is a
+// preserved archetype AND whose Selectors are fully telemetered keeps today's
+// heuristic-only ordering — those are exactly the trees where speculative
+// search is most likely to break something already proven.
+//
+// The search is scored with evaluator.EvaluateTree (records-derived fitness, no
+// benchmark and no LLM), so its cost is MCTSIterations cheap evaluations. Its
+// output is only ever an ORDERING input: every merged candidate still has to
+// clear the same benchmark, pre-score, quality gate and meta-validation as a
+// heuristic one before it is applied.
+func (g *Gardener) augmentWithMCTSCandidates(
+	tree *evolution.SerializableNode,
+	treeID string,
+	records []evolution.Record,
+	seedFitness evaluator.FitnessScore,
+	heuristic []evaluator.MutationCandidate,
+	cfg EvolveV2Config,
+) []evaluator.MutationCandidate {
+	if !cfg.MCTSStructuralSearch || tree == nil {
+		return heuristic
+	}
+	strategy := evolution.SelectStructuralStrategy(cfg.Specialists, g.seedSelectorOptimizer(treeID, cfg), tree)
+	if strategy != evolution.StrategyMCTSAugmented {
+		return heuristic
+	}
+
+	iterations := cfg.MCTSIterations
+	if iterations <= 0 {
+		iterations = defaultMCTSCandidateIterations
+	}
+	mutator := evolution.NewMCTSMutator()
+	mutator.Iterations = iterations
+	mutator.SetFitnessEvaluator(func(candidate *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(candidate, records).Composite
+	})
+
+	found := mutator.Candidates(tree, seedFitness.Composite)
+	if len(found) == 0 {
+		return heuristic
+	}
+
+	merged := candidatesFromScored(evolution.MergeScoredMutations(scoredFromCandidates(heuristic), found))
+	slog.Info("gardener/v2: MCTS search joined the structural-mutation competition",
+		"tree", treeID, "heuristic_candidates", len(heuristic),
+		"mcts_candidates", len(found), "merged_candidates", len(merged))
+	return merged
+}
+
+// scoredFromCandidates converts the evaluator package's heuristic candidates
+// into the shared evolution.ScoredMutation currency MergeScoredMutations
+// speaks. The two shapes are identical by design — evaluator imports evolution,
+// so the shared type has to live on the evolution side.
+func scoredFromCandidates(candidates []evaluator.MutationCandidate) []evolution.ScoredMutation {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]evolution.ScoredMutation, len(candidates))
+	for i, c := range candidates {
+		out[i] = evolution.ScoredMutation{Op: c.Op, Score: c.Score, Reason: c.Reason}
+	}
+	return out
+}
+
+// candidatesFromScored is the inverse of scoredFromCandidates, handing the
+// merged competition back to evolveTreeV2's existing candidate loop unchanged.
+func candidatesFromScored(scored []evolution.ScoredMutation) []evaluator.MutationCandidate {
+	if len(scored) == 0 {
+		return nil
+	}
+	out := make([]evaluator.MutationCandidate, len(scored))
+	for i, s := range scored {
+		out[i] = evaluator.MutationCandidate{Op: s.Op, Score: s.Score, Reason: s.Reason}
+	}
+	return out
 }
 
 // selectorStatsPathFor resolves the durable Selector telemetry path for

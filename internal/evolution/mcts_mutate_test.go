@@ -515,3 +515,271 @@ func TestMCTSMutation_FitnessGap(t *testing.T) {
 		t.Error("MCTS produced negative fitness")
 	}
 }
+
+// ─── MCTS as a second structural-mutation strategy (milestone 4/5) ──────────
+//
+// evolveTreeV2 scores structural candidates from evaluator.OrderMutations only,
+// so MCTSMutator's search never competes for the mutation budget. These tests
+// pin the three pieces that let it: MCTSMutator.Candidates (search → scored,
+// individually applicable MutationOps), MergeScoredMutations (one competition
+// across both generators), and SelectStructuralStrategy (per-tree choice driven
+// by the SpecialistRegistry/SelectorOptimizer heuristics).
+
+// mctsSelectorTree is a two-Selector tree used by the strategy-selection tests:
+// one Selector accumulates telemetry, the other stays cold.
+func mctsSelectorTree() *SerializableNode {
+	return &SerializableNode{
+		Type: "Sequence",
+		Name: "Root",
+		Children: []SerializableNode{
+			{Type: "Selector", Name: "SelHot", Children: []SerializableNode{
+				{Type: "Action", Name: "HotA"},
+				{Type: "Action", Name: "HotB"},
+			}},
+			{Type: "Selector", Name: "SelCold", Children: []SerializableNode{
+				{Type: "Action", Name: "ColdA"},
+				{Type: "Action", Name: "ColdB"},
+			}},
+		},
+	}
+}
+
+func TestMCTSMutator_Candidates_ScoredSortedAndApplicable(t *testing.T) {
+	m := NewMCTSMutator()
+	m.Iterations = 24
+	m.SetFitnessEvaluator(mockFitnessEvaluator)
+
+	parent := testBaseTree()
+	parentNodes := CountNodes(parent)
+	cands := m.Candidates(parent, mockFitnessEvaluator(parent))
+
+	if len(cands) == 0 {
+		t.Fatal("Candidates returned none; the MCTS search must surface its improving root mutations as scored candidates")
+	}
+	if CountNodes(parent) != parentNodes {
+		t.Errorf("Candidates mutated the parent tree: %d nodes before, %d after", parentNodes, CountNodes(parent))
+	}
+
+	known := make(map[string]bool, len(AllMutationOps))
+	for _, op := range AllMutationOps {
+		known[op] = true
+	}
+	seen := make(map[string]bool, len(cands))
+	for i, c := range cands {
+		if !known[c.Op.Operation] {
+			t.Errorf("candidate %d: operation %q is not one of AllMutationOps", i, c.Op.Operation)
+		}
+		if c.Op.Target == "" {
+			t.Errorf("candidate %d (%s): empty Target — the concrete MutationOp must be applicable via ApplyMutations, not just an op name",
+				i, c.Op.Operation)
+		}
+		if seen[c.Op.Operation+"\x00"+c.Op.Target] {
+			t.Errorf("candidate %d: duplicate op/target %s/%s", i, c.Op.Operation, c.Op.Target)
+		}
+		seen[c.Op.Operation+"\x00"+c.Op.Target] = true
+
+		// Scores must land in the same normalized band evaluator.OrderMutations
+		// uses, otherwise the merged competition is decided by scale, not merit.
+		if c.Score <= 0.5 || c.Score > 1.0 {
+			t.Errorf("candidate %d (%s): score %.4f outside the (0.5, 1.0] band shared with the heuristic candidates",
+				i, c.Op.Operation, c.Score)
+		}
+		if !strings.Contains(strings.ToLower(c.Reason), "mcts") {
+			t.Errorf("candidate %d (%s): reason %q must attribute the candidate to the MCTS search", i, c.Op.Operation, c.Reason)
+		}
+		if i > 0 && cands[i-1].Score < c.Score {
+			t.Errorf("candidates not sorted by descending score: [%d]=%.4f < [%d]=%.4f", i-1, cands[i-1].Score, i, c.Score)
+		}
+	}
+
+	// Every returned candidate must be individually applicable to the parent —
+	// that is what lets evolveTreeV2 run them through the same per-candidate
+	// benchmark/pre-score/gate loop as the heuristic ones.
+	for _, c := range cands {
+		clone := cloneTree(parent)
+		if ApplyMutations(clone, []MutationOp{c.Op}) == 0 {
+			t.Errorf("candidate %s/%s did not apply to the parent tree", c.Op.Operation, c.Op.Target)
+		}
+	}
+}
+
+func TestMCTSMutator_Candidates_OnlyImprovingVariants(t *testing.T) {
+	m := NewMCTSMutator()
+	m.Iterations = 30
+	// Fitness is flat, so no mutation can beat the parent — MCTS must not feed
+	// the competition candidates it has no evidence for.
+	m.SetFitnessEvaluator(func(*SerializableNode) float64 { return 1.0 })
+
+	if cands := m.Candidates(testBaseTree(), 1.0); len(cands) != 0 {
+		t.Errorf("expected no candidates when no variant beats the parent, got %d (first: %s/%s score %.4f)",
+			len(cands), cands[0].Op.Operation, cands[0].Op.Target, cands[0].Score)
+	}
+}
+
+func TestMCTSMutator_Candidates_NoEvaluatorOrNilParent(t *testing.T) {
+	withEval := NewMCTSMutator()
+	withEval.SetFitnessEvaluator(mockFitnessEvaluator)
+	if cands := withEval.Candidates(nil, 0); cands != nil {
+		t.Errorf("expected nil candidates for a nil parent, got %d", len(cands))
+	}
+
+	// Without a fitness evaluator there is nothing to score the search with, so
+	// Candidates must decline rather than emit unscored guesses.
+	if cands := NewMCTSMutator().Candidates(testBaseTree(), 0); cands != nil {
+		t.Errorf("expected nil candidates without a fitness evaluator, got %d", len(cands))
+	}
+}
+
+func TestMergeScoredMutations_OneCompetition(t *testing.T) {
+	heuristic := []ScoredMutation{
+		{Op: MutationOp{Operation: "add_before", Target: "Action1"}, Score: 0.90, Reason: "killer move"},
+		{Op: MutationOp{Operation: "prune_node", Target: "Cond1"}, Score: 0.50, Reason: "history heuristic"},
+	}
+	mcts := []ScoredMutation{
+		{Op: MutationOp{Operation: "add_before", Target: "Action1"}, Score: 0.95, Reason: "mcts gain"},
+		{Op: MutationOp{Operation: "add_fallback", Target: "Root"}, Score: 0.70, Reason: "mcts gain"},
+	}
+
+	merged := MergeScoredMutations(heuristic, mcts)
+	if len(merged) != 3 {
+		t.Fatalf("expected 3 merged candidates (duplicate op/target collapsed), got %d: %+v", len(merged), merged)
+	}
+	for i := 1; i < len(merged); i++ {
+		if merged[i-1].Score < merged[i].Score {
+			t.Errorf("merged candidates not sorted by descending score: [%d]=%.4f < [%d]=%.4f",
+				i-1, merged[i-1].Score, i, merged[i].Score)
+		}
+	}
+	if merged[0].Op.Operation != "add_before" || math.Abs(merged[0].Score-0.95) > 1e-9 {
+		t.Errorf("expected the higher-scored duplicate to win, got %s/%s score %.4f",
+			merged[0].Op.Operation, merged[0].Op.Target, merged[0].Score)
+	}
+	if !strings.Contains(strings.ToLower(merged[0].Reason), "mcts") {
+		t.Errorf("winning duplicate must keep its own reason, got %q", merged[0].Reason)
+	}
+	if merged[1].Op.Operation != "add_fallback" || merged[2].Op.Operation != "prune_node" {
+		t.Errorf("unexpected merged ordering: %s then %s", merged[1].Op.Operation, merged[2].Op.Operation)
+	}
+
+	// The heuristic side wins the duplicate when it scores higher.
+	heuristicWins := MergeScoredMutations(
+		[]ScoredMutation{{Op: MutationOp{Operation: "add_before", Target: "Action1"}, Score: 0.99, Reason: "killer move"}},
+		[]ScoredMutation{{Op: MutationOp{Operation: "add_before", Target: "Action1"}, Score: 0.60, Reason: "mcts gain"}},
+	)
+	if len(heuristicWins) != 1 {
+		t.Fatalf("expected 1 merged candidate, got %d", len(heuristicWins))
+	}
+	if math.Abs(heuristicWins[0].Score-0.99) > 1e-9 || heuristicWins[0].Reason != "killer move" {
+		t.Errorf("expected the heuristic entry to win, got score %.4f reason %q",
+			heuristicWins[0].Score, heuristicWins[0].Reason)
+	}
+
+	// No MCTS candidates → the heuristic ordering survives untouched.
+	only := MergeScoredMutations(heuristic, nil)
+	if len(only) != len(heuristic) {
+		t.Fatalf("expected %d candidates with no MCTS side, got %d", len(heuristic), len(only))
+	}
+	for i := range only {
+		// MutationOp carries a Metadata map, so it is not comparable with != —
+		// op/target identity is what "unchanged" means for an ordering anyway.
+		if only[i].Op.Operation != heuristic[i].Op.Operation ||
+			only[i].Op.Target != heuristic[i].Op.Target ||
+			only[i].Score != heuristic[i].Score {
+			t.Errorf("candidate %d changed with an empty MCTS side: %+v vs %+v", i, only[i], heuristic[i])
+		}
+	}
+}
+
+func TestSpecialistRegistry_MCTSAffinity(t *testing.T) {
+	tree := mctsSelectorTree()
+
+	var nilReg *SpecialistRegistry
+	if got := nilReg.MCTSAffinity(tree); got != 1.0 {
+		t.Errorf("nil registry: expected affinity 1.0 (no archetype knowledge), got %.2f", got)
+	}
+
+	reg := NewSpecialistRegistry()
+	if got := reg.MCTSAffinity(tree); got != 1.0 {
+		t.Errorf("empty registry: expected affinity 1.0 for an unknown tree, got %.2f", got)
+	}
+
+	reg.Observe(&EvolutionMetadata{
+		TreeID:   "go_developer",
+		Genotype: "seq(sel,sel)",
+		Fitness:  FitnessRecord{Score: 0.9, Validated: true},
+		Tags:     []string{"specialist:go"},
+	}, tree, 1)
+	if got := reg.MCTSAffinity(tree); got != 0.0 {
+		t.Errorf("proven specialist archetype: expected affinity 0.0 (do not gamble on a preserved shape), got %.2f", got)
+	}
+
+	// A different shape is still unknown to the registry.
+	if got := reg.MCTSAffinity(testBaseTree()); got != 1.0 {
+		t.Errorf("unrelated tree: expected affinity 1.0, got %.2f", got)
+	}
+}
+
+func TestSelectorOptimizer_MCTSAffinity(t *testing.T) {
+	tree := mctsSelectorTree()
+
+	var nilSO *SelectorOptimizer
+	if got := nilSO.MCTSAffinity(tree); got != 1.0 {
+		t.Errorf("nil optimizer: expected affinity 1.0 (no learned ordering signal), got %.2f", got)
+	}
+
+	so := NewSelectorOptimizer(OrderBySuccessRate)
+	if got := so.MCTSAffinity(tree); got != 1.0 {
+		t.Errorf("cold optimizer: expected affinity 1.0, got %.2f", got)
+	}
+
+	// Half the Selectors reach MinSamples → half the tree still has no signal.
+	for i := 0; i < so.MinSamples+2; i++ {
+		so.Record("SelHot", NodeExecutionRecord{NodeName: "HotA", Outcome: "success"})
+	}
+	if got := so.MCTSAffinity(tree); math.Abs(got-0.5) > 1e-9 {
+		t.Errorf("one of two Selectors informed: expected affinity 0.5, got %.2f", got)
+	}
+
+	for i := 0; i < so.MinSamples+2; i++ {
+		so.Record("SelCold", NodeExecutionRecord{NodeName: "ColdA", Outcome: "failure"})
+	}
+	if got := so.MCTSAffinity(tree); got != 0.0 {
+		t.Errorf("fully informed optimizer: expected affinity 0.0, got %.2f", got)
+	}
+
+	// A tree with no Selector at all offers the learned-ordering heuristic
+	// nothing to lean on either.
+	if got := so.MCTSAffinity(testBaseTree()); got != 1.0 {
+		t.Errorf("Selector-free tree: expected affinity 1.0, got %.2f", got)
+	}
+}
+
+func TestSelectStructuralStrategy(t *testing.T) {
+	tree := mctsSelectorTree()
+
+	if got := SelectStructuralStrategy(nil, nil, tree); got != StrategyMCTSAugmented {
+		t.Errorf("cold start: expected %q, got %q", StrategyMCTSAugmented, got)
+	}
+
+	reg := NewSpecialistRegistry()
+	reg.Observe(&EvolutionMetadata{
+		TreeID:   "go_developer",
+		Genotype: "seq(sel,sel)",
+		Fitness:  FitnessRecord{Score: 0.9, Validated: true},
+		Tags:     []string{"specialist:go"},
+	}, tree, 1)
+	so := NewSelectorOptimizer(OrderBySuccessRate)
+	for i := 0; i < so.MinSamples+2; i++ {
+		so.Record("SelHot", NodeExecutionRecord{NodeName: "HotA", Outcome: "success"})
+		so.Record("SelCold", NodeExecutionRecord{NodeName: "ColdA", Outcome: "success"})
+	}
+
+	if got := SelectStructuralStrategy(reg, so, tree); got != StrategyHeuristicOnly {
+		t.Errorf("proven specialist with full Selector telemetry: expected %q, got %q", StrategyHeuristicOnly, got)
+	}
+
+	// Telemetry alone is not enough: an unknown shape still earns the search.
+	if got := SelectStructuralStrategy(NewSpecialistRegistry(), so, tree); got != StrategyMCTSAugmented {
+		t.Errorf("informed Selectors but unknown archetype: expected %q, got %q", StrategyMCTSAugmented, got)
+	}
+}
