@@ -200,19 +200,53 @@ const SelfFixSourcePrefix = "self-fix:"
 // starve behind a continuously refilling feature backlog, ADR-197), then the
 // oldest general program that still has a pending milestone. Within each
 // class, array order (seed order) decides.
+// CoverageFillerSource tags the deterministic coverage backlog — the floor the
+// loop seeds from production files lacking a sibling _test.go when research is
+// unusable. It is deliberately FILLER: something to do when there is nothing
+// better, never a reason to stop looking for something better.
+//
+// 2026-08-01: treating it like real work starved the fleet. The arc42 seeder
+// skipped 15 of its last 18 runs with "a program is still active" and seeded
+// nothing from 2026-07-18 onward, because a coverage program was essentially
+// always active; programs created after 07-22 are almost entirely coverage. The
+// fleet spent Opus-at-max-effort cycles writing characterization tests for its
+// own files because nothing else could get queued behind the filler.
+const CoverageFillerSource = "auto-seed:coverage"
+
+// IsFiller reports whether the program is deterministic filler rather than
+// research- or review-grounded work.
+func (p *Program) IsFiller() bool { return p.Source == CoverageFillerSource }
+
+// Active returns the program the loop should work on next, in priority order:
+// self-fix (the platform repairing itself) > real work > filler. Filler never
+// outranks real work — otherwise seeding past it (see ActiveExcludingFiller)
+// would queue arc42 goals that never get picked up.
 func (ps *ProgramStore) Active() *Program {
-	for _, p := range ps.Programs {
-		if !strings.HasPrefix(p.Source, SelfFixSourcePrefix) {
-			continue
-		}
-		if _, m := p.NextMilestone(); m != nil {
-			return p
+	tiers := []func(*Program) bool{
+		func(p *Program) bool { return strings.HasPrefix(p.Source, SelfFixSourcePrefix) },
+		func(p *Program) bool { return !strings.HasPrefix(p.Source, SelfFixSourcePrefix) && !p.IsFiller() },
+		func(p *Program) bool { return true },
+	}
+	for _, want := range tiers {
+		for _, p := range ps.Programs {
+			if !want(p) {
+				continue
+			}
+			if _, m := p.NextMilestone(); m != nil {
+				return p
+			}
 		}
 	}
-	for _, p := range ps.Programs {
-		if _, m := p.NextMilestone(); m != nil {
-			return p
-		}
+	return nil
+}
+
+// ActiveExcludingFiller is Active() for the SEEDERS' question — "is real work
+// already queued?" — and answers nil when the only thing in flight is filler.
+// One-program-at-a-time still holds for real programs; it just no longer lets
+// the coverage floor crowd out the research-grounded seeding it stands in for.
+func (ps *ProgramStore) ActiveExcludingFiller() *Program {
+	if p := ps.Active(); p != nil && !p.IsFiller() {
+		return p
 	}
 	return nil
 }

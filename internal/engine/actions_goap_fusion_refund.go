@@ -266,28 +266,67 @@ const goapRedPassCompleteStreak = 2
 // milestones, burned 16 minutes, and reported a "degraded" alarm — without
 // the streak loop-breaker the refund alone would retry that no-op every cycle.
 func handleGoapRedPassCycleFailure(bb *Blackboard) {
-	refundGoapMilestoneAttemptForInfraFailure(bb)
 	programID, idx, ok := goapChargedMilestoneRef(bb)
 	if !ok {
 		// No milestone charged: the head plan task came from the charged
 		// research goal (if any), so the red-pass evidence belongs to it.
+		refundGoapMilestoneAttemptForInfraFailure(bb)
 		recordGoapResearchGoalRedPass(bb)
 		return
 	}
+	ref := fmt.Sprintf("%s:%d", programID, idx)
+
+	// Deliverable post-condition (2026-08-01). A red-pass only means "the work
+	// already landed" when the RED command can DISCRIMINATE. For a milestone
+	// whose goal names a _test.go it is supposed to create, the recorded RED
+	// command is the existing package suite — which passes precisely BECAUSE
+	// that file was never written. Completing on that is an inverted inference:
+	// an audit found 41 of 47 checkable red-evidence completions named a
+	// _test.go that does not exist and, per git log, never did.
+	//
+	// The probe shells out, so it runs OUTSIDE the program-store flock.
+	verdict := goapRedPassDeliverableVerdict(goapMilestoneGoalText(programID, idx))
+	if verdict == goapDeliverablesMissing {
+		// Certain the deliverable is absent. Do NOT refund: a milestone whose
+		// RED command cannot discriminate must consume its attempt budget and
+		// block visibly, rather than refunding forever — the refund is exactly
+		// what let one milestone treadmill 82 cycles / ~40h with zero output.
+		// Charging the attempt is the loop-breaker, but this cycle is still
+		// giving up on the milestone — release the program claim so a sibling
+		// cycle need not wait out the full lease before planning the program's
+		// OTHER milestones. Refund is the only other caller of ReleaseClaim on
+		// this path, and we deliberately skip it, so release explicitly.
+		_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+			ps.ReleaseClaim(programID, bb.RunID)
+			return nil
+		})
+		bb.Result += fmt.Sprintf("\n\n## Red-Pass Rejected — Deliverable Missing\n\nMilestone %s: the RED command passed, but the deliverable the goal names is absent at HEAD, so the pass is evidence the work was NOT done — not that it already landed. Attempt charged; the milestone blocks after its budget instead of retrying forever. It needs a RED command that fails until its deliverable exists.", ref)
+		Info("goap fusion: red-pass rejected, named deliverable missing at HEAD", "milestone", ref)
+		return
+	}
+
+	refundGoapMilestoneAttemptForInfraFailure(bb)
 	var streak int
 	var completed bool
 	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
 		// The passing RED command rides along so the NEXT cycle's charge-time
 		// pre-check can re-run it without burning a Claude plan phase.
 		streak = ps.RecordRedPass(programID, idx, extractRedPassCommand(bb.Result))
-		if streak >= goapRedPassCompleteStreak {
+		// The red-pass itself is known and is recorded either way; only the
+		// COMPLETION decision waits for a determined deliverable probe, so a
+		// transient git outage delays completion without losing evidence.
+		if streak >= goapRedPassCompleteStreak && verdict == goapDeliverablesSatisfied {
 			completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
 		}
 		return nil
 	}); err != nil {
 		return
 	}
-	ref := fmt.Sprintf("%s:%d", programID, idx)
+	if !completed && verdict == goapDeliverablesUnknown {
+		bb.Result += fmt.Sprintf("\n\n## Red-Pass Undetermined\n\nMilestone %s: RED passed (streak %d/%d) but the deliverable probe could not reach HEAD, so completion is withheld this cycle. Attempt refunded; evidence recorded.", ref, streak, goapRedPassCompleteStreak)
+		Info("goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable", "milestone", ref, "streak", streak)
+		return
+	}
 	if completed {
 		bb.Result += fmt.Sprintf("\n\n## Milestone Completed On Red-Pass Evidence\n\nMilestone %s: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Marked done (`red-evidence:%s`) instead of retrying.", ref, streak, bb.RunID)
 		Info("goap fusion: milestone completed on repeated red-pass evidence", "milestone", ref, "streak", streak)

@@ -31,6 +31,7 @@ func NotebookLMConsumerTree() *evolution.SerializableNode {
 				},
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Assess whether the consumer chain produced a real synthesis summary before deciding success"},
+			{Type: "Action", Name: "AssessNotebookLMPipelineHealth", Description: "Refine the run to degraded when the producer's own syntheses show the pipeline is broken, so a monitor that reports breakage is not itself recorded as a success"},
 			{
 				Type: "Selector", Name: "OutcomeSelector",
 				Description: "Route the outcome: mark success once a synthesis summary was written, else run the debug fallback agent",

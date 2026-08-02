@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,9 +98,16 @@ func TestPrioritizeGoapGoals_RedPrecheckCompletesStaleMilestone(t *testing.T) {
 // still exists — the already-landed hypothesis is dead. The evidence is
 // cleared (streak + command) and the milestone is charged for a genuine
 // implementation attempt.
+//
+// The fake must carry a process EXIT CODE, not a bare errors.New: since
+// goapRedRunProducedVerdict only reads an exit-coded error as a test verdict, a
+// bare error models "the shell never produced a result" — which is a different
+// case with a deliberately different outcome (evidence preserved, see
+// TestPrecheck_UnrunnableRedCommandKeepsEvidence). A real failing `go test`
+// returns *exec.ExitError, so this is the faithful stand-in.
 func TestPrioritizeGoapGoals_RedPrecheckFailingRedClearsHypothesis(t *testing.T) {
 	id := seedPrecheckProgram(t)
-	calls := stubRedPrecheck(t, "--- FAIL: TestBar", errors.New("exit status 1"))
+	calls := stubRedPrecheck(t, "--- FAIL: TestBar", &stubPrecheckExitError{code: 1})
 
 	prioritize := GetAction("PrioritizeGoapGoals")
 	bb := &Blackboard{ChainState: map[string]any{}}

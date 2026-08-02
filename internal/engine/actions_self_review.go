@@ -59,7 +59,24 @@ func selfReviewStatePath(dir string) string { return filepath.Join(dir, "state.j
 // has finished seeding — see runSelfReview.
 type selfReviewState struct {
 	LastReviewedSHA string `json:"last_reviewed_sha"`
+	// LastReport/LastReviewedAt/LastOutcome carry the finished review forward so
+	// a SECOND pass over the same range can re-emit it instead of erasing it.
+	// The scheduler retries an attempt, and the retry's scan sees the SHA the
+	// first pass just advanced: from 2026-07-18 to 2026-08-01 that meant every
+	// single recorded run — including the four that seeded real code-fix
+	// programs — stored "## Self-Review Skipped / No new autonomous commits
+	// since <the SHA we just wrote>" at quality 0.5, so the only agent reliably
+	// finding real defects looked inert everywhere an operator would look.
+	LastReport     string    `json:"last_report,omitempty"`
+	LastOutcome    string    `json:"last_outcome,omitempty"`
+	LastReviewedAt time.Time `json:"last_reviewed_at,omitempty"`
 }
+
+// selfReviewReEmitWindow bounds how long a finished review may stand in for a
+// later "nothing new" pass. Long enough to cover a retried attempt of the same
+// scheduled run (minutes), far short of the daily schedule, so yesterday's
+// findings can never be reported as today's.
+const selfReviewReEmitWindow = time.Hour
 
 // loadSelfReviewState reads state.json from dir; a missing file reads as the
 // zero value (first run — reviews from the beginning of history). A genuine
@@ -90,7 +107,15 @@ func saveSelfReviewState(dir string, s selfReviewState) error {
 // in this repo's history (superpowers: apply verified run <ts>-<hash>); other
 // prefixes (fix/feat/refactor/docs/...) are hand-authored or reviewed work
 // and out of scope for this agent.
-const selfReviewAutonomousPrefix = "superpowers: apply"
+// selfReviewAutonomousPrefixes identify autonomous (unreviewed-by-a-human)
+// commit subjects. "superpowers: apply" is the dominant shape (superpowers:
+// apply verified run <ts>-<hash>); "fleet:" is the PR shepherd's own
+// Claude-authored CI repair (e.g. 4b7e025 "fleet: fix CI for PR #53 head
+// aaf6d966 (attempt 1)"), which lands on master through fleet/landing exactly
+// like an apply commit, with no human review, and was silently out of scope
+// until 2026-08-01. Other prefixes (fix/feat/refactor/docs/...) are
+// hand-authored or reviewed work.
+var selfReviewAutonomousPrefixes = []string{"superpowers: apply", "fleet:"}
 
 // selfReviewDiffLimit reuses the goap review fallback's diff truncation
 // budget (goapReviewDiffLimit) so the Claude prompt stays bounded.
@@ -276,8 +301,11 @@ func filterAutonomousCommits(oneline string) string {
 		if len(parts) < 2 {
 			continue
 		}
-		if strings.HasPrefix(parts[1], selfReviewAutonomousPrefix) {
-			kept = append(kept, l)
+		for _, prefix := range selfReviewAutonomousPrefixes {
+			if strings.HasPrefix(parts[1], prefix) {
+				kept = append(kept, l)
+				break
+			}
 		}
 	}
 	return strings.Join(kept, "\n")
@@ -482,6 +510,24 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	// lower bound.
 
 	if strings.TrimSpace(commitLog) == "" {
+		// A finished review from moments ago means this is a repeat pass over a
+		// range the previous pass already reviewed and whose SHA it advanced —
+		// NOT a quiet day. Re-emit that result rather than overwriting it with a
+		// skip; re-reviewing is not an option either, since the range is gone.
+		if state.LastReport != "" && !state.LastReviewedAt.IsZero() &&
+			now().Sub(state.LastReviewedAt) < selfReviewReEmitWindow {
+			bb.Outcome = state.LastOutcome
+			if bb.Outcome == "" {
+				bb.Outcome = "self_review_clean"
+			}
+			if bb.Outcome == "self_review_clean" {
+				bb.OutcomeRefinement = "no_change"
+			}
+			bb.QualityScore = 0.9
+			bb.QualityAuthoritative = true
+			bb.Result = state.LastReport
+			return 1
+		}
 		sinceDesc := lastSHA
 		if sinceDesc == "" {
 			sinceDesc = "the beginning"
@@ -547,19 +593,18 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 		}
 	}
 
-	// Advance state ONLY after the seed loop completes — even when every
-	// finding was cooldown/cap-skipped (they were still reviewed), and even
-	// on a clean verdict (those commits were reviewed and are clean).
-	if err := saveSelfReviewState(deps.stateDir, selfReviewState{LastReviewedSHA: head}); err != nil {
-		Error("self-review: failed to persist last-reviewed SHA; next run will re-review this range", "err", err)
-	}
-
 	// self_review_seeded claims a program was actually seeded — that must
 	// track seededCount, not len(findings): findings that were all
 	// cooldown/cap-skipped (kill switch, dedup) produced zero programs, so
 	// the outcome must not claim "seeded" for them either.
 	if seededCount == 0 {
 		bb.Outcome = "self_review_clean"
+		// A clean review changed nothing, so let the notification throttle
+		// suppress the repeats — but a run that SEEDED is real work and stays
+		// unrefined, so it reaches the operator instead of being throttled as
+		// routine. Before 2026-08-01 every run, seeding or not, recorded
+		// no_change.
+		bb.OutcomeRefinement = "no_change"
 	} else {
 		bb.Outcome = "self_review_seeded"
 	}
@@ -577,5 +622,19 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	}
 	bb.Result = fmt.Sprintf("## Self-Review Complete\n\nReviewed: %s\n\nConfirmed findings: %d (dropped %d invalid)\nPrograms seeded: %d\n\n%s",
 		rangeDesc, len(findings), dropped, seededCount, summary)
+
+	// Advance state ONLY after the seed loop completes — even when every finding
+	// was cooldown/cap-skipped (they were still reviewed), and even on a clean
+	// verdict (those commits were reviewed and are clean). The finished report
+	// rides along so a retried pass over the now-consumed range re-emits it
+	// instead of erasing it with a skip.
+	if err := saveSelfReviewState(deps.stateDir, selfReviewState{
+		LastReviewedSHA: head,
+		LastReport:      bb.Result,
+		LastOutcome:     bb.Outcome,
+		LastReviewedAt:  now(),
+	}); err != nil {
+		Error("self-review: failed to persist last-reviewed SHA; next run will re-review this range", "err", err)
+	}
 	return 1
 }

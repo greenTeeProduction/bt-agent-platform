@@ -47,6 +47,19 @@ func NewFileJobStore(path string) *FileJobStore {
 // was observed overwriting the live scheduler-jobs.json with a literal [] —
 // the long-unattributed job-table wipe. Losing that save is harmless (the
 // daemon rewrites the file on its next cycle); losing the table is not.
+//
+// The guard deliberately does NOT cover an OWNING process (one that loaded or
+// saved a non-empty table) emptying the table: removing the last agent is a real
+// operation and must persist — see TestFileJobStore_AllowsLegitimateEmptyAfterOwnership.
+//
+// That exemption is also the remaining hole. On 2026-08-01 23:50:32 the live
+// file was 2 bytes while the daemon ran 9 jobs from memory, and four processes
+// that day logged "no persisted job state found". The writer therefore owned a
+// populated table and then emptied it, which no known removal path explains.
+// Until it is attributed, the truncating save is at least made loud and
+// identifiable: an owning process that empties a populated table says so, with
+// its pid, so the next occurrence names its writer instead of being inferred
+// from a file size after the fact.
 func (fs *FileJobStore) Save(jobs []ScheduledJob) error {
 	if fs.path == "" {
 		return nil
@@ -54,11 +67,15 @@ func (fs *FileJobStore) Save(jobs []ScheduledJob) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	if len(jobs) == 0 && !fs.sawNonEmpty {
+	if len(jobs) == 0 {
 		if fi, err := os.Stat(fs.path); err == nil && fi.Size() > 4 {
-			slog.Warn("jobstore: refusing to overwrite a non-empty job table with an empty one this process never loaded",
-				"path", fs.path, "existing_size", fi.Size())
-			return nil
+			if !fs.sawNonEmpty {
+				slog.Warn("jobstore: refusing to overwrite a non-empty job table with an empty one this process never loaded",
+					"path", fs.path, "existing_size", fi.Size())
+				return nil
+			}
+			slog.Warn("jobstore: TRUNCATING a populated job table to empty — run history (last_run/run_count) is lost; if this was not an operator removing the last agent it is the job-table wipe",
+				"path", fs.path, "existing_size", fi.Size(), "pid", os.Getpid())
 		}
 	}
 	if len(jobs) > 0 {
