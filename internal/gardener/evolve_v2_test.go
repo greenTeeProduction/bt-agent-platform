@@ -3093,6 +3093,123 @@ func TestRunCycleV2_IslandPass_RunsOnConfiguredInterval(t *testing.T) {
 	}
 }
 
+// islandAdoptionFixture builds exactly the setup
+// TestRunCycleV2_IslandPass_MigratesWinnerIntoPersistedTree proves DOES adopt:
+// a single-tree island gardener whose island already holds an individual
+// strictly fitter than the live tree under that tree's own reflection records.
+// The pre-pass tree is persisted first, so "the file on disk did not change"
+// compares real bytes rather than the absence of a file. Returns the gardener,
+// its registry entry, the island model, and the tree's records.
+func islandAdoptionFixture(t *testing.T, treeName string) (*Gardener, TreeEntry, *evolution.IslandModel, []evolution.Record) {
+	t.Helper()
+	g, reg, im := islandGardener(t, treeName)
+	entry := reg.List()[0]
+	records := entryRecords(t, g, entry)
+
+	baseComposite := evaluator.EvaluateTree(entry.Tree, records).Composite
+	winner := eliteSeedTree()
+	winnerComposite := evaluator.EvaluateTree(winner, records).Composite
+	if winnerComposite <= baseComposite {
+		t.Fatalf("test setup sanity check failed: island winner composite %.4f must beat the live tree's %.4f", winnerComposite, baseComposite)
+	}
+
+	pop := &evolution.Population{
+		Individuals: []evolution.Individual{{Tree: winner, Fitness: winnerComposite}},
+	}
+	for i := 0; i < 5; i++ {
+		pop.Individuals = append(pop.Individuals, evolution.Individual{
+			Tree:    cloneTreeForGardener(entry.Tree),
+			Fitness: baseComposite,
+		})
+	}
+	im.AddIsland(entry.Name, pop)
+
+	if err := g.cfg.Registry.SaveTree(entry); err != nil {
+		t.Fatalf("seeding the pre-pass tree file: %v", err)
+	}
+	return g, entry, im, records
+}
+
+// assertIslandAdoptionSkipped runs one exploration pass and pins that the
+// safety gate under test stopped it: nothing adopted, the live tree unchanged,
+// its on-disk file byte-identical. The closing check keeps the assertion
+// honest — the island must STILL hold a strictly fitter champion afterwards, so
+// "nothing adopted" means the gate refused a migration that was genuinely on
+// the table, not that this generation's breeding left nothing worth adopting.
+func assertIslandAdoptionSkipped(t *testing.T, g *Gardener, entry TreeEntry, im *evolution.IslandModel, records []evolution.Record) {
+	t.Helper()
+	score := func(tree *evolution.SerializableNode) float64 {
+		return evaluator.EvaluateTree(tree, records).Composite
+	}
+	liveBefore := marshalTree(t, entry.Tree)
+	// Scored before the pass on purpose: the pass migrates in place, so reading
+	// the live tree afterwards would compare the champion against itself.
+	liveScoreBefore := score(entry.Tree)
+	diskBefore, err := os.ReadFile(entry.FilePath)
+	if err != nil {
+		t.Fatalf("reading the seeded tree file: %v", err)
+	}
+
+	adopted := g.runIslandExploration(g.cfg.Registry.List())
+
+	if len(adopted) != 0 {
+		t.Errorf("runIslandExploration adopted %v — a gated tree must adopt nothing", adopted)
+	}
+	if liveAfter := marshalTree(t, entry.Tree); !bytes.Equal(liveBefore, liveAfter) {
+		t.Errorf("island winner was migrated into the live tree past the gate\nbefore: %s\nafter:  %s", liveBefore, liveAfter)
+	}
+	diskAfter, err := os.ReadFile(entry.FilePath)
+	if err != nil {
+		t.Fatalf("reading the tree file after the island pass: %v", err)
+	}
+	if !bytes.Equal(diskBefore, diskAfter) {
+		t.Errorf("island winner was persisted past the gate\nbefore: %s\nafter:  %s", diskBefore, diskAfter)
+	}
+
+	champion, championFitness := im.BestIndividualFor(entry.Name, score)
+	if champion == nil || championFitness <= liveScoreBefore+0.0001 {
+		t.Fatalf("assertion is vacuous: after the pass the island's best individual scores %.4f against the pre-pass live tree's %.4f, so nothing would have been adopted regardless of the gate",
+			championFitness, liveScoreBefore)
+	}
+}
+
+// TestAdoptIslandWinner_SkipsWhenQualityGateDisabled pins the fail-closed half
+// of the island pass. A tree whose quality gate is disabled has regressed
+// ConsecutiveFails times in a row; evolveTreeV2 answers that state by pausing
+// evolution and rolling the tree back to its last known-good revision. The
+// island pass runs BEFORE that per-tree loop (RunCycleV2), so unless it fails
+// closed on the same signal it writes a randomly bred individual over the very
+// tree the rollback is about to restore — and persists it.
+func TestAdoptIslandWinner_SkipsWhenQualityGateDisabled(t *testing.T) {
+	g, entry, im, records := islandAdoptionFixture(t, "island_gate_disabled")
+
+	gate := evolution.NewQualityGate(t.TempDir())
+	gate.ConsecutiveFails = 1
+	gate.ValidateFor(entry.Name, 50, 0.01) // force per-tree disable
+	if !gate.IsDisabledFor(entry.Name) {
+		t.Fatalf("precondition: quality gate must be disabled for %q", entry.Name)
+	}
+	g.cfg.Gate = gate
+
+	assertIslandAdoptionSkipped(t, g, entry, im, records)
+}
+
+// TestAdoptIslandWinner_SkipsWhenValidationGateRejects pins the other gate the
+// island pass bypasses: ValidationGate, the check every other persist path in
+// evolve_v2.go clears before a tree reaches disk. With the fail-closed default
+// config and no SLO evidence anywhere for this tree, the gate rejects, so the
+// island winner must not reach the live tree or its file.
+func TestAdoptIslandWinner_SkipsWhenValidationGateRejects(t *testing.T) {
+	g, entry, im, records := islandAdoptionFixture(t, "island_validation_gate")
+
+	g.cfg.ValidationGate = DefaultValidationGateConfig() // enabled, no evidence → fail-closed
+	if err := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate); err == nil {
+		t.Fatalf("precondition: ValidationGate must reject %q with no SLO evidence", entry.Name)
+	}
+
+	assertIslandAdoptionSkipped(t, g, entry, im, records)
+}
+
 // ============================================================================
 // MCTS as a second structural-mutation generator (milestone 4/5)
 // ============================================================================
