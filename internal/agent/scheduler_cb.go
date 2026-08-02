@@ -232,9 +232,12 @@ type circuitBreakersFile struct {
 func (s *AgentCircuitBreakerStore) Save(path string) error {
 	// Before the lock: the sidecar is created beside path, so the directory
 	// has to exist first.
+	// 0750, not 0755: every writer of this path (daemon, dashboard, a2a winner
+	// store) runs as the same user, so owner+group access is all that's needed
+	// and world-execute on a state directory is what gosec G301 rejects.
 	dir := filepath.Dir(path)
 	if dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return fmt.Errorf("create circuit breaker state dir: %w", err)
 		}
 	}
