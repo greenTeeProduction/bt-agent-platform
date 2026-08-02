@@ -61,7 +61,10 @@ func init() {
 		if err != nil {
 			return false
 		}
-		return ps.Active() == nil
+		// Filler does not count as "we already have a program": see
+		// research.CoverageFillerSource — an active coverage backlog must not
+		// stop the loop looking for research-grounded work.
+		return ps.ActiveExcludingFiller() == nil
 	})
 
 	RegisterAction("SeedNextProgram", func(ctx *btcore.BTContext[Blackboard]) int {
@@ -71,7 +74,7 @@ func init() {
 			bb.Result += "\n\n## Backlog Seeding Skipped\n\nProgram store unreadable: " + err.Error()
 			return 1
 		}
-		if ps.Active() != nil {
+		if ps.ActiveExcludingFiller() != nil {
 			bb.Result += "\n\n## Backlog Seeding Skipped\n\nA program is still active."
 			return 1
 		}
@@ -93,6 +96,18 @@ func init() {
 		// fall back to the DETERMINISTIC coverage backlog so an idle fleet
 		// always gets grounded Q1 work. The fallback spec still passes the
 		// standard validation (grounding via the repo listing).
+		//
+		// But only when NOTHING is in flight, filler included. The gate above
+		// uses ActiveExcludingFiller so RESEARCH can seed past an active
+		// coverage program — that is the starvation fix. Applying the same
+		// leniency here would stack filler on filler: with research down (nlm
+		// OAuth corrupt since ~2026-07-31) every cycle would fail the research
+		// attempt and seed another coverage program, without bound.
+		if ps.Active() != nil {
+			bb.Result += "\n\n## Backlog Seeding Skipped\n\nResearch produced no usable proposal and a deterministic coverage program is already in flight — not stacking another."
+			setGoapState(bb, "seed_outcome", "research unusable; coverage program already active, none stacked")
+			return 1
+		}
 		var existing []string
 		for _, p := range ps.Programs {
 			existing = append(existing, p.Title)
@@ -103,7 +118,7 @@ func init() {
 		if fspec := buildUntestedFilesProgramSpec(existing, goapFusionListRepoGoFilesFn()); fspec != nil {
 			if fv := validateGoapProgramMilestones(fspec.Milestones); fv.acceptable() {
 				fspec.Milestones = fv.Valid
-				persistGoapProgram(bb, fspec, "auto-seed:coverage")
+				persistGoapProgram(bb, fspec, research.CoverageFillerSource)
 				bb.Result += fmt.Sprintf("\n\n## Backlog Seeded (Deterministic Coverage Fallback)\n\nResearch produced no usable proposal (%s); seeded %q with %d grounded coverage milestones instead.", truncateGoap(strings.Join(att.Rejections, " | "), 300), fspec.Title, len(fspec.Milestones))
 				setGoapState(bb, "seed_outcome", fmt.Sprintf("research unusable; seeded deterministic coverage program %q (%d milestones)", fspec.Title, len(fspec.Milestones)))
 				bb.Result += programContinueNote()

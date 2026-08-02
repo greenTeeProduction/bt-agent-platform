@@ -81,7 +81,11 @@ func init() {
 			bb.Result = "## arc42 Program Seeding Skipped\n\nProgram store unreadable: " + err.Error()
 			return 1
 		}
-		if active := ps.Active(); active != nil {
+		// ActiveExcludingFiller, not Active: an in-flight coverage program is
+		// the deterministic FLOOR, not real work, and letting it block seeding
+		// is what starved this agent from 2026-07-18 onward (15 of 18 runs
+		// skipped here). Real programs still block, one at a time as designed.
+		if active := ps.ActiveExcludingFiller(); active != nil {
 			bb.Outcome = "arc42_seeder_program_active"
 			bb.Result = fmt.Sprintf("## arc42 Program Seeding Skipped\n\nProgram %q is still active — nothing seeded (one program at a time; targeted quality goal this run would have been %s %s).", active.Title, goal.ID, goal.Name)
 			// One-program-at-a-time is the expected steady state, so this skip
