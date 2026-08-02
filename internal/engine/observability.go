@@ -42,8 +42,20 @@ func (o *observedCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
 	defer func() { ctx.Context = prevCtx }()
 
 	start := time.Now()
+	// A panicking child unwinds past the recording below, which would leave the
+	// loudest possible failure with no tick at all — a crash-looping node reads
+	// as idle on the dashboard. Record it as a failure from a defer instead; the
+	// panic keeps propagating to RunTask's recovery, as tracedAction intends.
+	returned := false
+	defer func() {
+		if !returned && RecordNodeTickFn != nil {
+			RecordNodeTickFn(o.nodeType, o.nodeName, o.parentName, o.blockID, "failure", time.Since(start).Milliseconds())
+		}
+	}()
+
 	code := o.child.Run(ctx)
 	durMs := time.Since(start).Milliseconds()
+	returned = true
 
 	status := tickStatusLabel(code)
 	if RecordNodeTickFn != nil {

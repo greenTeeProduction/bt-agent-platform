@@ -39,6 +39,8 @@ Hermes Agent                    bt-agent (MCP)                 Engine           
 
 **Error Path:** ChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue.
 
+**A panicking node now reports a tick (2026-08-02):** on the error path above, the Engine's per-node metrics wrapper (`observedCommand.Run`) recorded nothing when a node panicked — the panic unwound past its `RecordNodeTickFn` call, so the loudest failure in the tick loop left `bt_node_ticks_total`/`bt_node_errors_total` unincremented and a crash-looping node read as idle on the dashboard. The wrapper now emits that node's tick as `status="failure"` with its elapsed duration from a deferred recorder, and the panic continues to unwind unchanged into `RunTask`'s tree-level recovery, which sets `bb.Outcome` to failure with a `TREE PANIC: …` result as before ([§8.11](08-crosscutting-concepts.md) Observability).
+
 **Terminal backstop (ADR-085):** Regardless of whether a tree routes through `OutcomeSelector` at all, `RunTask`'s final `validateOutputQuality` call now flips `bb.Outcome` to failure when the resolved result is low-quality, non-empty, and not a recognized structured/zero-LLM result or a `bb.Sandbox` run — covering trees (e.g. compiled GOAP fusion trees) whose terminal leaf never reaches `MarkSuccessful`/`SelfCorrect`/`EscalateToDeepSeek`.
 
 ## 6.2 Evolution Cycle
