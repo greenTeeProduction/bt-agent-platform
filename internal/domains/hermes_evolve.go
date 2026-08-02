@@ -23,7 +23,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 				Name:        "PreGate",
 				Description: "Input validation gate that must pass before the evolution cycle runs",
 				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "ValidateInput", Description: "Check input is non-empty"},
+					cond("ValidateInput", "Check input is non-empty"),
 					{Type: "Action", Name: "SetupDefaultTools", Description: "Populate tools for analysis and skill management"},
 				},
 			},
@@ -39,7 +39,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 						Name:        "SelfMonitorPath",
 						Description: "Periodic review of recent session outcomes",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsPeriodicCheck", Description: "Trigger every N tasks or on performance drop"},
+							cond("IsPeriodicCheck", "Trigger every N tasks or on performance drop"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Review the last 10 Hermes Agent sessions. Identify patterns: what tasks succeeded? What failed? Are there recurring error types? Categorize each failure as skill_gap, tool_misuse, model_limitation, or workflow_inefficiency. Output structured findings.",
@@ -63,7 +63,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 						Name:        "SkillEvolutionPath",
 						Description: "Update skills to close detected gaps",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "HasSkillGaps", Description: "Detected missing or outdated skills"},
+							cond("HasSkillGaps", "Detected missing or outdated skills"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Analyze the current skill set of Hermes Agent. Which skills are effective? Which are outdated? What new skills would address the identified failure patterns? Propose specific skill updates with concrete improvements.",
@@ -87,7 +87,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 						Name:        "StrategyOptPath",
 						Description: "Streamline inefficient workflows",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "HasWorkflowInefficiencies", Description: "Detected redundant steps or suboptimal patterns"},
+							cond("HasWorkflowInefficiencies", "Detected redundant steps or suboptimal patterns"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Analyze Hermes Agent's recent workflows. Look for: redundant tool calls, unnecessarily verbose responses, suboptimal model choices for task types, missed opportunities to delegate or parallelize. Propose concrete workflow optimizations.",
@@ -108,7 +108,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 						Name:        "ModelTuningPath",
 						Description: "Tune model and tool selection",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "HasModelToolIssues", Description: "Model selection or tool configuration issues detected"},
+							cond("HasModelToolIssues", "Model selection or tool configuration issues detected"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Evaluate Hermes Agent's model and tool usage. Which models perform best for which task types? Are tools being used correctly? Are there configuration issues (timeouts, rate limits, missing tools)? Recommend specific changes.",
@@ -160,7 +160,7 @@ func HermesSelfEvolutionTree() *evolution.SerializableNode {
 				Name:        "OutcomeSelector",
 				Description: "Confirm success or fall through to self-correction",
 				Children: []evolution.SerializableNode{
-					{Type: "Condition", Name: "WasSuccessful", Description: "Evolution cycle completed successfully"},
+					cond("WasSuccessful", "Evolution cycle completed successfully"),
 					{
 						Type:        "ChainAction",
 						Name:        "llm_call:Self-correct the evolution process. What went wrong in the self-analysis? Fix any errors in reasoning and produce a corrected assessment.",

@@ -906,6 +906,35 @@ func SmokeTestableDomainTrees() map[string]*evolution.SerializableNode {
 	return trees
 }
 
+// ResolverReachableDomainTrees returns the third class of domain tree: the
+// domains-package trees that are selectable in production through ResolveTreeID
+// (tree_resolver.go — used by bt-agent's switch_tree, A2A, and template
+// validation) but belong to neither AllDomainTrees() nor
+// KanbanAndHermesDomainTrees(), so SmokeTestableDomainTrees() cannot see them.
+//
+// This is the canonical coverage work list for that class and the home registry
+// for ResolverReachableDescriptions keys: membership here is what subjects a
+// tree to the smoke-structure, condition-description, and description guards.
+// Add a new resolver-only tree here rather than special-casing it in a test —
+// a tree_resolver.go branch with no entry in any registry is a tree operators
+// can switch onto with no coverage at all.
+//
+// It must stay disjoint from SmokeTestableDomainTrees(): a name in both has two
+// legitimate description homes, which makes the pairwise-disjoint invariant on
+// Descriptions / NonRegistryDescriptions / ResolverReachableDescriptions
+// unenforceable. So a tree that later joins one of the two smoke registries
+// moves out of here rather than being listed twice — hermes_obsidian is
+// resolver-reachable but lives in KanbanAndHermesDomainTrees(), which already
+// subjects it to every guard, and it is therefore deliberately absent below.
+//
+// A fresh map is built on every call, so callers may filter or mutate the
+// result without corrupting the enumeration seen by the next caller.
+func ResolverReachableDomainTrees() map[string]*evolution.SerializableNode {
+	return map[string]*evolution.SerializableNode{
+		"superpowers_pipeline": SuperpowersPipelineTree(),
+	}
+}
+
 // ExpectedDomainIDs converts a domain tree registry (as returned by
 // AllDomainTrees) into the "domain:<name>" ID form knowledge.KnowledgeGraph's
 // ExpectedDomains expects, so every process wiring the live registry into
@@ -1000,6 +1029,16 @@ var NonRegistryDescriptions = map[string]string{
 // stay disjoint from the other two for the same reason they are disjoint from
 // each other: a name in two maps makes DescriptionFor's precedence silently
 // choose between divergent descriptions.
+//
+// The registry this map is orphan-guarded against is
+// ResolverReachableDomainTrees(), exactly as Descriptions is guarded against
+// AllDomainTrees() and NonRegistryDescriptions against
+// KanbanAndHermesDomainTrees(). Every key here must name a tree that registry
+// builds (TestResolverReachableDescriptionsHaveNoOrphans), and every tree it
+// builds must have a key here (TestResolverReachableDomainTreesHaveDescriptions)
+// — so adding a resolver-only tree to that registry without describing it here,
+// or describing a tree here that no longer resolves, both fail rather than
+// silently rendering a bare identifier.
 var ResolverReachableDescriptions = map[string]string{
 	"superpowers_pipeline": "Production Superpowers SDLC run: design artifact → safe worktree with a verified baseline build → strictly validated implementation plan → dry-run artifacts or a HITL-gated Claude Code TDD apply path → layered verification → finish report with evidence",
 }
@@ -1038,7 +1077,9 @@ var ResolverIDAliases = map[string]string{
 // DescriptionFor resolves the description for a domain tree by name across all
 // three description maps, so callers do not have to know whether a tree is part
 // of the curated AllDomainTrees() surface, the KanbanAndHermesDomainTrees() set,
-// or the ResolveTreeID-only extras. Resolution runs registry → non-registry →
+// or the ResolveTreeID-only extras in ResolverReachableDomainTrees() — the three
+// registries the three maps are respectively orphan-guarded against, one map per
+// registry. Resolution runs registry → non-registry →
 // resolver-reachable, so a curated entry wins if a name somehow appears in more
 // than one map. A whitespace-only entry is reported as a miss rather than
 // returned: a blank description would otherwise be rendered as an unexplained

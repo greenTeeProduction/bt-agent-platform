@@ -16,7 +16,7 @@ func KanbanTaskCreatorTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "TaskCreator_Main", Description: "Create a DoR-ready card in BACKLOG from a raw task request",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+				cond("ValidateInput", "Non-empty task"),
 				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate the default toolset for board operations"},
 			}},
 			{
@@ -30,7 +30,7 @@ func KanbanTaskCreatorTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Record what worked and what to improve for the next run"},
 			{Type: "Selector", Name: "OutcomeSelector", Description: "Confirm success or fall through to LLM failure diagnosis", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
+				cond("WasSuccessful", "Prior action reported success"),
 				{Type: "ChainAction", Name: "llm_call:Card creation failed. Check: is the board accessible? Is the column name correct? Is the card format valid?", Description: "Diagnose why card creation failed", Metadata: map[string]any{"max_tokens": float64(128)}},
 			}},
 		},
@@ -43,8 +43,8 @@ func KanbanRefinerTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "Refiner_Main", Description: "Refine a TODO card into REFINED with a complete DoR",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
-				{Type: "Condition", Name: "IsKanbanTask", Description: "Has card ID or task reference"},
+				cond("ValidateInput", "Non-empty task"),
+				cond("IsKanbanTask", "Has card ID or task reference"),
 			}},
 			{
 				Type:        "ChainAction",
@@ -57,7 +57,7 @@ func KanbanRefinerTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Record what worked and what to improve for the next run"},
 			{Type: "Selector", Name: "OutcomeSelector", Description: "Confirm success or fall through to LLM failure diagnosis", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
+				cond("WasSuccessful", "Prior action reported success"),
 				{Type: "ChainAction", Name: "llm_call:Refinement failed. Possible issues: card not in TODO column, board permissions, invalid card format. Diagnose and retry.", Description: "Diagnose why refinement failed and retry", Metadata: map[string]any{"max_tokens": float64(128)}},
 			}},
 		},
@@ -70,8 +70,8 @@ func KanbanQATree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "QA_Main", Description: "Validate a QA card and move it to REVIEW or back to IN PROGRESS",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
-				{Type: "Condition", Name: "IsKanbanTask", Description: "Has card ID or task reference"},
+				cond("ValidateInput", "Non-empty task"),
+				cond("IsKanbanTask", "Has card ID or task reference"),
 			}},
 			{
 				Type:        "ChainAction",
@@ -84,7 +84,7 @@ func KanbanQATree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Record what worked and what to improve for the next run"},
 			{Type: "Selector", Name: "OutcomeSelector", Description: "Confirm success or fall through to LLM failure diagnosis", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
+				cond("WasSuccessful", "Prior action reported success"),
 				{Type: "ChainAction", Name: "llm_call:QA check failed to execute. Verify board access and card state. Retry with corrected approach.", Description: "Diagnose why the QA check could not run", Metadata: map[string]any{"max_tokens": float64(128)}},
 			}},
 		},
@@ -97,7 +97,7 @@ func KanbanBoardMonitorTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "BoardMonitor_Main", Description: "Scan the board for stale cards, bottlenecks, and dispatchable work",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+				cond("ValidateInput", "Non-empty task"),
 				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate the default toolset for board operations"},
 			}},
 			{
@@ -106,7 +106,7 @@ func KanbanBoardMonitorTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "StaleCheck", Description: "Flag stale and stuck cards across the board",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsBoardCheck", Description: "Task mentions scan, check, monitor, or stale"},
+							cond("IsBoardCheck", "Task mentions scan, check, monitor, or stale"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Scan the Focalboard Kanban for issues: 1) IN PROGRESS cards idle > 2 days → flag as stale. 2) TODO cards > 1 week without refinement → flag for refiner. 3) REVIEW cards waiting > 3 days → notify for human review. 4) APPROVED cards without developer assignment → flag. 5) Bottleneck detection: which column has the most cards? 6) Report: stale count, bottlenecks, recommendations.",
@@ -122,7 +122,7 @@ func KanbanBoardMonitorTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "DispatchPath", Description: "Dispatch the next ready card to its pipeline agent",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "NeedsDispatch", Description: "Task mentions dispatch, next, assign, or start"},
+							cond("NeedsDispatch", "Task mentions dispatch, next, assign, or start"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Find the next dispatchable card: 1) Scan TODO column → dispatch refiner. 2) Scan APPROVED column → dispatch developer. 3) Scan QA column → dispatch QA agent. 4) For each: verify the card meets the column gate before moving. 5) Report: cards dispatched, agent assignments.",
@@ -138,7 +138,7 @@ func KanbanBoardMonitorTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "StandupPath", Description: "Produce the daily standup summary",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsStandup", Description: "Task mentions standup, daily, or status"},
+							cond("IsStandup", "Task mentions standup, daily, or status"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Generate a daily standup summary: 1) Cards completed (moved to DONE). 2) Cards in progress with status. 3) Blocked cards and blockers. 4) Upcoming cards ready for review. 5) Velocity: cards completed this week vs last week. Format as concise standup report.",
@@ -163,7 +163,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "KanbanWorkflow_Main", Description: "Orchestrate create, refine, QA, and scan operations across the pipeline",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+				cond("ValidateInput", "Non-empty task"),
 				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate the default toolset for board operations"},
 			}},
 			{
@@ -172,7 +172,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "CreatePath", Description: "Create a new DoR-ready card",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsCreateTask", Description: "Task mentions create, new card, add"},
+							cond("IsCreateTask", "Task mentions create, new card, add"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Create a new task card following DoR standards: actionable title, description, acceptance criteria (- [ ] items), priority (critical/high/medium/low), AQAL quadrant (q-i/q-it/q-we/q-its/q-all). Place in BACKLOG column.",
@@ -185,7 +185,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "RefinePath", Description: "Refine a TODO card through the DoR gate",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsRefinement", Description: "Task mentions refine, expand, detail"},
+							cond("IsRefinement", "Task mentions refine, expand, detail"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Refine a TODO card: expand description, add implementation notes, ensure AC are testable, add architecture constraints. Move TODO→PLANNING→REFINED. Verify DoR gate passes.",
@@ -198,7 +198,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 					{
 						Type: "Sequence", Name: "QAPath", Description: "Run QA on a card and move it by result",
 						Children: []evolution.SerializableNode{
-							{Type: "Condition", Name: "IsQA", Description: "Task mentions qa, test, validate, verify"},
+							cond("IsQA", "Task mentions qa, test, validate, verify"),
 							{
 								Type:        "ChainAction",
 								Name:        "llm_call:Run QA on a card: check all AC are [x], verify implementation, check for regressions, generate PASS/FAIL report. PASS → move QA→REVIEW. FAIL → move back to IN PROGRESS with issues.",
@@ -230,7 +230,7 @@ func KanbanWorkflowTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Record what worked and what to improve for the next run"},
 			{Type: "Selector", Name: "OutcomeSelector", Description: "Confirm success or fall through to LLM failure diagnosis", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
+				cond("WasSuccessful", "Prior action reported success"),
 				{Type: "ChainAction", Name: "llm_call:Kanban operation failed. Verify board is accessible, check column names, validate card format.", Description: "Diagnose why the Kanban operation failed", Metadata: map[string]any{"max_tokens": float64(128)}},
 			}},
 		},
@@ -244,7 +244,7 @@ func KanbanAutoPilotTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "AutoPilot_Main", Description: "Automatically advance dispatchable cards through the pipeline",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate", Description: "Input validation gate that must pass before any board work runs", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "ValidateInput", Description: "Non-empty task"},
+				cond("ValidateInput", "Non-empty task"),
 				{Type: "Action", Name: "SetupDefaultTools", Description: "Populate the default toolset for board operations"},
 			}},
 			{
@@ -265,7 +265,7 @@ func KanbanAutoPilotTree() *evolution.SerializableNode {
 			},
 			{Type: "Action", Name: "ReflectOnOutcome", Description: "Record what worked and what to improve for the next run"},
 			{Type: "Selector", Name: "OutcomeSelector", Description: "Confirm success or fall through to LLM failure diagnosis", Children: []evolution.SerializableNode{
-				{Type: "Condition", Name: "WasSuccessful", Description: "Prior action reported success"},
+				cond("WasSuccessful", "Prior action reported success"),
 				{Type: "ChainAction", Name: "llm_call:Autopilot issue. Check board connectivity, agent availability, card state.", Description: "Diagnose autopilot connectivity or card-state issues", Metadata: map[string]any{"max_tokens": float64(128)}},
 			}},
 		},
