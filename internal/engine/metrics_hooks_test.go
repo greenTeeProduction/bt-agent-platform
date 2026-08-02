@@ -443,3 +443,94 @@ func TestRecordNodeTickFn_RecordsFailureWhenTheNodePanics(t *testing.T) {
 		})
 	}
 }
+
+// TestRecordNodeTickFn_PanicAlsoRecordsTheChildTick pins the other half of the
+// panic path — the half the metrics fix above left behind.
+//
+// observedCommand.Run has two per-tick side effects that both feed failure
+// diagnosis, and a node that returns FAILURE normally lands in both: the metrics
+// hook (RecordNodeTickFn) and the run's terminal child-tick log
+// (Blackboard.recordChildTick, guarded by `code != 0 && parentName != ""`). A
+// node that *panics* currently lands in the metrics hook only, because the
+// deferred recorder covers RecordNodeTickFn and stops there.
+//
+// The panic path is live, not theoretical: RunTask recovers at the tree root
+// (tree.go — "TREE PANIC") and marks the run failed, so the run survives to be
+// reported on. internal/agent/runner.go then reads bb.ChildTicks() into
+// RunResult.ChildTicks, which knowledge.StepsFromChildTicks turns into
+// DecisionTrace.Steps for ExplainLastFailure. So the one node that actually
+// crashed the run is the one node missing from the trace that exists to explain
+// why the run failed — while the dashboard's bt_node_ticks_total does count it.
+// Two views of the same tick disagree, and the quieter one is the diagnostic.
+//
+// The fix is to move recordChildTick alongside the deferred hook call with the
+// same "failure" status; the table's non-panicking and no-parent rows pin the
+// boundaries that fix must not cross.
+func TestRecordNodeTickFn_PanicAlsoRecordsTheChildTick(t *testing.T) {
+	tests := []struct {
+		name string
+		// panics: child panics instead of returning code.
+		panics bool
+		code   int
+		parent string
+		want   []ChildTick
+	}{
+		// Baseline: the normal terminal paths, already logged today.
+		{
+			name:   "NormalFailureIsLogged",
+			code:   -1,
+			parent: "Root",
+			want:   []ChildTick{{Parent: "Root", Child: "Boom", Status: "failure"}},
+		},
+		{
+			name:   "NormalSuccessIsLogged",
+			code:   1,
+			parent: "Root",
+			want:   []ChildTick{{Parent: "Root", Child: "Boom", Status: "success"}},
+		},
+		// A panic is a terminal failure and belongs in the log with them.
+		{
+			name:   "PanicIsLoggedAsFailure",
+			panics: true,
+			parent: "Root",
+			want:   []ChildTick{{Parent: "Root", Child: "Boom", Status: "failure"}},
+		},
+		// Boundaries the fix must not cross: RUNNING is not terminal, and a node
+		// with no parent has nothing to attribute the tick to.
+		{name: "RunningIsNotTerminalSoNotLogged", code: 0, parent: "Root"},
+		{name: "PanicWithNoParentIsNotAttributed", panics: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			captureNodeTicks(t) // keep the real dashboard recorder out of this
+			node := &evolution.SerializableNode{Type: "Action", Name: "Boom"}
+			child := btleaf.NewAction(func(_ *btcore.BTContext[Blackboard]) int {
+				if tc.panics {
+					panic("boom")
+				}
+				return tc.code
+			})
+			cmd := observeNode(node, tc.parent, child)
+			bb := newTestBlackboard()
+
+			func() {
+				defer func() {
+					if r := recover(); r != nil && !tc.panics {
+						t.Errorf("unexpected panic: %v", r)
+					}
+				}()
+				cmd.Run(newTestBTContext(bb))
+			}()
+
+			got := bb.ChildTicks()
+			if len(got) != len(tc.want) {
+				t.Fatalf("ChildTicks() = %+v (%d), want %+v (%d)", got, len(got), tc.want, len(tc.want))
+			}
+			for i, w := range tc.want {
+				if got[i] != w {
+					t.Errorf("ChildTicks()[%d] = %+v, want %+v", i, got[i], w)
+				}
+			}
+		})
+	}
+}
