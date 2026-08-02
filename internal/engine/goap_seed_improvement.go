@@ -83,6 +83,17 @@ func fetchAcceptableGoapProgram(prompt string, gate func(*goapProgramSpec) strin
 		att.Fetches++
 		answer := seedProgramFetchFn(current)
 		spec := extractGoapProgram(answer)
+		if strings.TrimSpace(answer) == "" {
+			// No answer at all is an OUTAGE, not a formatting problem — the
+			// NotebookLM query failed and the Claude fallback errored too. Say
+			// so: from 2026-07-18 the arc42 seeder reported "no parseable
+			// PROGRAM/MILESTONEn block" for both, and an operator could not tell
+			// "re-authenticate nlm" from "fix the prompt". And do NOT append the
+			// feedback block below — asking a model that never answered to
+			// correct a proposal it never made just burns the single retry.
+			att.Rejections = append(att.Rejections, "proposal source returned no answer (NotebookLM query and Claude fallback both produced nothing)")
+			continue
+		}
 		if spec == nil {
 			att.Rejections = append(att.Rejections, "returned no parseable PROGRAM/MILESTONEn block")
 		} else {

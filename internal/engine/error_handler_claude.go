@@ -245,6 +245,76 @@ var errorHandlerActionAllowlist = map[string]bool{
 // polluting the production allowlist above.
 var errorHandlerExtraAllowedActions map[string]bool
 
+// errorHandlerDeclarativeActions classifies every allowlisted action by whether
+// its ENTIRE effect is to declare something about the fault — append prose to
+// bb.Result, blank the error markers, set Outcome=success — rather than attempt
+// anything about it. Values are read off the implementations, not guessed.
+//
+// 2026-07-31T19:08:37, one minute after the eMMC filled, the handler grafted
+// GoapFusionResourceExhaustedHandler = Sequence[Condition, SendAlert,
+// EscalateToOperator, UpdateBlackboard]. All three only touch bb and always
+// return 1, so the Sequence always succeeded, error_handler_node.go accepted it
+// as a recovery, and 24 consecutive cycles reported success/q=0.9 on a 100%-full
+// disk — breaker reset to CLOSED, alerts suppressed as routine, SLO 100%.
+//
+// The gate is STATIC, at graft time, on purpose: a runtime "did the fault
+// clear?" probe reads blackboard fields that allowlisted actions are themselves
+// allowed to blank (ClearNodeError -> recordNodeSuccess), so a single
+// allowlisted action defeats it. Whether a recovery CAN act on a fault is a
+// property of its composition, checkable before it ever runs.
+var errorHandlerDeclarativeActions = map[string]bool{
+	// Declarative only — cannot change anything about the fault.
+	"SendAlert":          true, // bb.Result += "⚠ Alert sent to operator."
+	"EscalateToOperator": true, // bb.Result += "Escalated for human intervention."
+	"RollbackOnFailure":  true, // bb.Result += "Rollback: not needed (deploy succeeded)."
+	"UpdateBlackboard":   true, // ChainState bookkeeping only
+	"MarkSuccessful":     true, // sets Outcome = success
+	"ClearNodeError":     true, // blanks last_error_category / last_error_node
+
+	// Effectful — each either redoes the work or degrades the outcome honestly
+	// instead of declaring victory.
+	//
+	// The Handle* family is a WEAK yes. They set Outcome=Partial, but RunTask
+	// overwrites it: tree.go's terminal switch does `case code == 1: bb.Outcome
+	// = Success` unconditionally, so Partial is unobservable on any recovered
+	// path. They are counted effectful only because they encode a real
+	// retry/backoff contract the fleet depends on (the live
+	// GoapFusionRateLimitBackoff, successes=134, is Sequence[rate_limit,
+	// HandleTransientError, UpdateBlackboard, MarkSuccessful]). That weakness is
+	// exactly why the category deny-list below exists: for a fault no
+	// allowlisted action can touch, one Handle* leaf would otherwise satisfy
+	// this gate and re-create the 24-fake-success incident with a single
+	// substitution.
+	"DefaultFallback":       false, // produces a real fallback result for the task
+	"SelfCorrect":           false, // bounded LLM call that redoes the work
+	"EscalateToDeepSeek":    false, // bounded LLM call at higher effort
+	"HandleTimeoutError":    false, // Outcome=Partial + records the categorized failure
+	"HandleTransientError":  false, // Outcome=Partial
+	"HandleCircuitOpen":     false, // Outcome=Partial
+	"HandleValidationError": false, // fails the node (-1)
+}
+
+// errorHandlerUnrecoverableCategories are fault categories that NO composition
+// of allowlisted actions can address, so any "recovery" guarded on them can
+// only ever be a false claim of success.
+//
+// This follows directly from the allowlist's own contract above: every entry is
+// blackboard-only or a single bounded LLM call, none mutating the repo, fleet,
+// filesystem, or external services. A full filesystem or an expired OAuth
+// session is repaired by exactly the kind of external action the allowlist
+// forbids — so the honest outcome is to refuse the graft, let the failure
+// surface, and let the existing unresolvable -> seedCodeFixProgram escalation
+// take it (that path works: it seeded d9b72137f551d89c for a real flaky-test
+// defect on 2026-08-01).
+//
+// Both handlers the live store accumulated for these categories were
+// declarative-only: GoapFusionResourceExhaustedHandler (24 fake successes on a
+// 100%-full disk) and AuthErrorRecovery.
+var errorHandlerUnrecoverableCategories = map[string]bool{
+	"resource_exhausted": true, // disk full / OOM — needs an external actor
+	"auth":               true, // expired credentials — needs an external actor
+}
+
 // firstTickedLeaf follows first children down to the leaf a tick reaches
 // first — the proposal's guard position.
 func firstTickedLeaf(n *evolution.SerializableNode) *evolution.SerializableNode {
@@ -307,6 +377,11 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 	if !isParameterizedErrorGuard(guard.Name) {
 		return fmt.Errorf("proposal guard %q must be %s<category> or %s<node> with a non-empty value", guard.Name, errorCategoryCondPrefix, errorNodeCondPrefix)
 	}
+	// A recovery for a fault no allowlisted action can touch is a false success
+	// by construction — refuse it so the failure surfaces and escalates.
+	if cat := strings.TrimPrefix(guard.Name, errorCategoryCondPrefix); cat != guard.Name && errorHandlerUnrecoverableCategories[cat] {
+		return fmt.Errorf("category %q is not recoverable by any allowlisted action (they are blackboard-only or a single LLM call); it must escalate, not be marked recovered", cat)
+	}
 	// The guard must be reachable through Sequence nodes only: a Succeeder/
 	// Inverter/Selector above it can neutralize the guard so the composition
 	// succeeds even when the guard fails.
@@ -316,6 +391,7 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 		}
 	}
 	actionLeafCount := 0
+	effectfulLeafCount := 0
 	var walk func(n *evolution.SerializableNode) error
 	walk = func(n *evolution.SerializableNode) error {
 		if !errorHandlerAllowedNodeTypes[n.Type] {
@@ -330,6 +406,11 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 				return fmt.Errorf("action %q is not in the recovery-safe allowlist", n.Name)
 			}
 			actionLeafCount++
+			// An action outside the production allowlist is a test action; treat
+			// it as effectful so allowErrorHandlerTestActions keeps working.
+			if declarative, classified := errorHandlerDeclarativeActions[n.Name]; !classified || !declarative {
+				effectfulLeafCount++
+			}
 		case "Condition":
 			if GetCondition(n.Name) == nil && errorHandlerConditionFor(n.Name) == nil {
 				return fmt.Errorf("condition %q is not registered", n.Name)
@@ -351,6 +432,12 @@ func validateErrorHandlerProposal(node *evolution.SerializableNode, takenNames m
 	// signal the tree relies on.
 	if actionLeafCount == 0 {
 		return fmt.Errorf("proposal must contain at least one Action node (a guard-only recovery masks failures)")
+	}
+	// A recovery whose every action is declarative cannot address any fault, so
+	// accepting it converts a real outage into a reported success. See
+	// errorHandlerDeclarativeActions for the 2026-07-31 full-disk case.
+	if effectfulLeafCount == 0 {
+		return fmt.Errorf("proposal is declarative-only (every action merely reports or marks success); a recovery must contain at least one action that acts on the fault")
 	}
 	return nil
 }

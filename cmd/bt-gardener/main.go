@@ -45,6 +45,12 @@ func (t *GardenerStatusTool) Call(_ context.Context, _ string) (string, error) {
 	return string(data), nil
 }
 
+// gardenerIdleForceInterval bounds how long the idle gate may skip cycles when
+// no new reflection data arrives. Evolution is genuinely idle in that state, but
+// a reflection writer that stalls (or a probe bug) must not be able to freeze it
+// permanently — so one cycle runs regardless at this cadence.
+const gardenerIdleForceInterval = 6 * time.Hour
+
 type GardenerRunCycleTool struct {
 	gardener *gardener.Gardener
 	v2Cfg    gardener.EvolveV2Config
@@ -348,6 +354,16 @@ Question: {{.input}}`,
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 
+	// Skip cycles with nothing new to learn from. The population converged long
+	// ago (9,829 cycles, 0 improvements, every candidate rejected as a no-op or
+	// a regression) and RunCycleV2 scores candidates against reflection records,
+	// so an unchanged reflection store means an unchanged verdict — at ~247
+	// cycles/day of Jetson CPU that the agents PRODUCING those records compete
+	// for. gardenerIdleForceInterval still runs one periodically so a stalled
+	// reflection writer cannot freeze evolution.
+	idleGate := &gardener.IdleGate{Dir: refDir, ForceAfter: gardenerIdleForceInterval}
+	idleGate.ShouldRunCycle(time.Now()) // the initial cycle above already ran
+
 	cycleCount := 1
 	for {
 		select {
@@ -364,6 +380,10 @@ Question: {{.input}}`,
 			}
 			return
 		case <-ticker.C:
+		}
+		if run, reason := idleGate.ShouldRunCycle(time.Now()); !run {
+			engine.Debug("bt-gardener: cycle skipped", "reason", reason)
+			continue
 		}
 		cycleCount++
 		fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))

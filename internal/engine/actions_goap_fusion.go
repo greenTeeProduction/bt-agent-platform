@@ -919,10 +919,35 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 			return
 		}
 
+		// Cheapest evidence first (2026-08-01). When the goal names a _test.go
+		// deliverable that is provably absent at HEAD, the work definitively has
+		// not been done — so no test run can support the already-landed
+		// hypothesis, and shelling one costs a whole package suite (bounded at
+		// goapRedPrecheckTimeout) every cycle to re-derive what the file system
+		// answers in milliseconds. Discard the hypothesis and let the milestone
+		// take a real implementation attempt.
+		//
+		// The ORDER is load-bearing: with this probe placed after the shell the
+		// branch is unreachable in production, because recorded RED commands are
+		// whole-package runs and the bare main checkout fails two environment
+		// tests unconditionally, so the error branch below always returns first.
+		if goapRedPassDeliverableVerdict(goapMilestoneGoalText(programID, idx)) == goapDeliverablesMissing {
+			_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+				ps.ResetRedPassStreak(programID, idx)
+				return nil
+			})
+			Info("goap fusion: red pre-check hypothesis discarded — named deliverable missing at HEAD",
+				"milestone", fmt.Sprintf("%s:%d", programID, idx), "red_cmd", cmd)
+			return
+		}
+
 		if _, err := goapRedPrecheckRunFn(cmd); err != nil {
-			if errors.Is(err, errGoapRedPrecheckUnavailable) {
-				// Could not run at all — no evidence either way; leave the
-				// recorded red-pass state untouched.
+			if !goapRedRunProducedVerdict(err) {
+				// The command produced no verdict — the shell timed out, could
+				// not start, or is the inert under-test runner. No evidence
+				// either way; leave the recorded red-pass state untouched.
+				Info("goap fusion: red pre-check produced no verdict — evidence left untouched",
+					"milestone", fmt.Sprintf("%s:%d", programID, idx), "red_cmd", cmd, "err", err)
 				return
 			}
 			// RED still fails: the predicted regression exists, the work is

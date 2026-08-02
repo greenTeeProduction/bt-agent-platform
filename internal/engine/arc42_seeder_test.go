@@ -153,10 +153,17 @@ func TestArc42SeederReportsWhenGoalsUnavailable(t *testing.T) {
 	if !strings.Contains(strings.ToLower(bb.Result), "arc42") {
 		t.Fatalf("report must explain the arc42 doc is unavailable: %s", bb.Result)
 	}
-	// Unlike the program-active skip, a missing/unparseable arc42 doc is a
-	// real problem the operator must see — it must NOT be refined into the
-	// throttleable no_change state.
-	if bb.OutcomeRefinement != "" {
-		t.Fatalf("OutcomeRefinement = %q, want empty — goals-unavailable is not a routine no-op", bb.OutcomeRefinement)
+	// Unlike the program-active skip, a missing/unparseable arc42 doc is a real
+	// problem the operator must see. That requires TWO things, and leaving the
+	// refinement empty only delivers one of them: an unrefined tree success is
+	// recorded as plain "success", which is how 2026-07-18..08-01 booked thirteen
+	// days of seeding nothing as healthy. "degraded" is the refinement that is
+	// both un-throttleable (the routine throttle only suppresses no_change) and
+	// honestly not a success.
+	if bb.OutcomeRefinement == "no_change" {
+		t.Fatal("goals-unavailable must not be refined into the throttleable no_change state")
+	}
+	if bb.OutcomeRefinement != "degraded" {
+		t.Fatalf("OutcomeRefinement = %q, want \"degraded\" — an unrefined failure is recorded as a success", bb.OutcomeRefinement)
 	}
 }
