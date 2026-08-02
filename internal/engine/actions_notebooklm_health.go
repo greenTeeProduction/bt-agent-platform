@@ -95,6 +95,9 @@ func assessNotebookLMPipelineHealth(dir string, now time.Time) []string {
 		reasons = append(reasons, fmt.Sprintf("newest research %s is %s old (stale after %s)",
 			filepath.Base(path), age.Truncate(time.Hour), nlmHealthStaleAfter))
 	}
+	// #nosec G304 -- path is never user input: newestNLMResearchFile joins dir
+	// with an entry name returned by os.ReadDir(dir), so it cannot escape dir,
+	// and dir is the nlmHealthSynthesesDir package var (test seam only).
 	body, err := os.ReadFile(path)
 	if err != nil {
 		return append(reasons, fmt.Sprintf("newest research %s is unreadable: %v", filepath.Base(path), err))
