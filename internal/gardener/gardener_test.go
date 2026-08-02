@@ -4,13 +4,38 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
+
+// relocateDomainDescription moves name's description out of
+// domains.Descriptions and into domains.ResolverReachableDescriptions for the
+// duration of the test, restoring both maps afterwards. It reproduces the
+// legitimate maintenance state in which a tree registered in AllDomainTrees()
+// is described by one of the other two description maps: domains.DescriptionFor
+// still resolves the name, a direct domains.Descriptions index no longer does.
+//
+// Safe as a global mutation because no test in this package calls t.Parallel().
+func relocateDomainDescription(t *testing.T, name string) string {
+	t.Helper()
+	desc, ok := domains.Descriptions[name]
+	if !ok || strings.TrimSpace(desc) == "" {
+		t.Fatalf("fixture assumption broken: domains.Descriptions[%q] = %q, want a non-blank description", name, desc)
+	}
+	delete(domains.Descriptions, name)
+	domains.ResolverReachableDescriptions[name] = desc
+	t.Cleanup(func() {
+		domains.Descriptions[name] = desc
+		delete(domains.ResolverReachableDescriptions, name)
+	})
+	return desc
+}
 
 func TestRegistry_Count(t *testing.T) {
 	tempDir := t.TempDir()
@@ -35,6 +60,49 @@ func TestRegistry_List_AllDomains(t *testing.T) {
 		if !nameMap[name] {
 			t.Errorf("expected entry %q in registry, but not found", name)
 		}
+	}
+}
+
+// TestRegistry_DomainDescriptionsResolveThroughDescriptionFor pins that
+// loadAll resolves each domain tree's description through
+// domains.DescriptionFor instead of indexing domains.Descriptions directly.
+//
+// The domains package deliberately splits descriptions across three maps —
+// Descriptions (the curated AllDomainTrees surface), NonRegistryDescriptions,
+// and ResolverReachableDescriptions — and DescriptionFor is the single lookup
+// spanning all three, so callers need not know which map holds a given name
+// (ADR-251, ADR-255). A direct index silently yields "" the moment a registry
+// tree's description lives in one of the other two maps, which is exactly what
+// a tree promoted onto AllDomainTrees() without its description entry moving
+// along with it looks like. The gardener then registers that builtin with a
+// blank Description, and every surface listing registry entries renders an
+// unexplained tree — the failure mode DescriptionFor exists to prevent.
+//
+// RED before the migration: addBuiltin is fed domains.Descriptions[name], so
+// the relocated entry resolves to "" and the registered Description is blank.
+func TestRegistry_DomainDescriptionsResolveThroughDescriptionFor(t *testing.T) {
+	const treeName = "code_review"
+	want := relocateDomainDescription(t, treeName)
+
+	r := NewRegistry(t.TempDir())
+
+	const entryName = "domain_" + treeName
+	var entry *TreeEntry
+	for _, e := range r.List() {
+		if e.Name == entryName {
+			found := e
+			entry = &found
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("registry has no entry named %q", entryName)
+	}
+
+	if entry.Description != want {
+		t.Errorf("registry entry %q Description = %q, want %q — loadAll must resolve domain descriptions "+
+			"via domains.DescriptionFor(%q), which spans all three description maps, instead of indexing "+
+			"domains.Descriptions directly", entryName, entry.Description, want, treeName)
 	}
 }
 

@@ -674,7 +674,13 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
-			result := map[string]interface{}{"switched": true, "tree": params.Tree, "description": domains.Descriptions[params.Tree], "node_count": evolution.CountNodes(tree)}
+			// domains.DescriptionFor spans all three description maps; indexing
+			// domains.Descriptions directly would confirm the switch with an
+			// empty description for any registry tree described outside the
+			// curated map, telling the caller nothing about the tree it just
+			// moved onto.
+			desc, _ := domains.DescriptionFor(params.Tree)
+			result := map[string]interface{}{"switched": true, "tree": params.Tree, "description": desc, "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})

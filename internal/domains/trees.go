@@ -1012,6 +1012,15 @@ var ResolverReachableDescriptions = map[string]string{
 // than one map. A whitespace-only entry is reported as a miss rather than
 // returned: a blank description would otherwise be rendered as an unexplained
 // builtin, which is exactly the state this lookup exists to prevent.
+//
+// This is the only supported way to describe a tree by name. Every production
+// consumer goes through it — gardener.Registry.loadAll (builtin registration),
+// bt-dashboard's /api/trees handler (the Create-Agent dropdown), and bt-agent's
+// bt_use_domain_tree tool (the switch confirmation) — because indexing a single
+// map directly yields "" the moment a registry tree's description lives in one
+// of the other two, which is what a tree promoted onto AllDomainTrees() without
+// its description entry moving along with it looks like. That failure is silent:
+// the surface renders a bare identifier rather than reporting a miss.
 func DescriptionFor(name string) (string, bool) {
 	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions, ResolverReachableDescriptions} {
 		if desc, ok := m[name]; ok && strings.TrimSpace(desc) != "" {
